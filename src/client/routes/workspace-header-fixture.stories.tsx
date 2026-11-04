@@ -226,6 +226,7 @@ export const PendingActions: Story = {
   args: { pendingActions: true },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
+    const inlineIde = canvas.queryByRole('button', { name: 'Opening in VS Code…' });
     await userEvent.click(canvas.getByRole('button', { name: 'More actions' }));
     const body = within(canvasElement.ownerDocument.body);
     await expect(await body.findByRole('menuitem', { name: 'Archiving…' })).toHaveAttribute(
@@ -236,7 +237,7 @@ export const PendingActions: Story = {
     if (ide) {
       await expect(ide).toHaveAttribute('aria-disabled', 'true');
     } else {
-      await expect(canvas.getByRole('button', { name: 'Opening in VS Code…' })).toBeDisabled();
+      await expect(inlineIde).toBeDisabled();
     }
     await userEvent.keyboard('{Escape}');
     await userEvent.click(await canvas.findByRole('button', { name: /Stop dev server/ }));
