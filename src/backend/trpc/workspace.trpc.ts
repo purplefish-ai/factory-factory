@@ -126,14 +126,14 @@ export const workspaceCoreRouter = router({
       throw new Error(`Workspace not found: ${input.id}`);
     }
     const flowState = deriveWorkspaceFlowStateFromWorkspace(workspace);
-    const sessionSummaries = buildWorkspaceSessionSummaries(workspace.agentSessions ?? [], (id) =>
-      sessionLifecycleService.getRuntimeSnapshot(id)
+    const pendingRequests = sessionDomainService.getAllPendingRequests();
+    const sessionSummaries = buildWorkspaceSessionSummaries(
+      workspace.agentSessions ?? [],
+      (id) => sessionLifecycleService.getRuntimeSnapshot(id),
+      pendingRequests
     );
     const sessionIds = workspace.agentSessions?.map((session) => session.id) ?? [];
-    const pendingRequestType = computePendingRequestType(
-      sessionIds,
-      sessionDomainService.getAllPendingRequests()
-    );
+    const pendingRequestType = computePendingRequestType(sessionIds, pendingRequests);
     const derivedState = assembleWorkspaceDerivedState(
       toWorkspaceDerivedStateInput(
         { ...workspace, hasMergeConflict: workspace.prHasMergeConflict },

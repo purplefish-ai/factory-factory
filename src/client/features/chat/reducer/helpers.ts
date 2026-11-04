@@ -578,6 +578,7 @@ export function convertPendingRequest(
     request: {
       requestId: req.requestId,
       toolName: req.toolName,
+      ...(req.rawToolName ? { rawToolName: req.rawToolName } : {}),
       toolInput: req.input,
       ...(req.elicitation ? { elicitation: req.elicitation } : {}),
       timestamp: req.timestamp,

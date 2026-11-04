@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router';
-import { useChatWebSocket } from '@/client/features/chat';
+import { getChatPendingRequestType, useChatWebSocket } from '@/client/features/chat';
 import { getLiveSessionControlId } from '@/client/features/session-controls';
 import {
   ArchiveGitLockDialog,
@@ -153,6 +153,9 @@ export function WorkspaceDetailContainer() {
     processStatus.state === 'unknown' &&
     hasUserMessageWithoutAgentMessage(messages);
 
+  // Summaries retain request metadata like snapshots do. Their consumers apply
+  // canonical lifecycle precedence; the chat footer additionally requires a running prompt.
+  const livePendingRequestType = getChatPendingRequestType(pendingRequest);
   const sessionSummariesById = useMemo(
     () =>
       buildSessionSummariesById({
@@ -160,6 +163,7 @@ export function WorkspaceDetailContainer() {
         sessions,
         selectedSessionId: selectedDbSessionId,
         liveRuntime: sessionRuntime,
+        livePendingRequestType,
         runtimeSessionId,
         chatConnected: connected,
       }),
@@ -168,6 +172,7 @@ export function WorkspaceDetailContainer() {
       sessions,
       selectedDbSessionId,
       sessionRuntime,
+      livePendingRequestType,
       runtimeSessionId,
       connected,
     ]

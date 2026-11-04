@@ -113,6 +113,36 @@ describe('deriveSessionUiStatusKind', () => {
     ).toBe('unexpected-exit');
   });
 
+  it('reports a pending request as awaiting input ahead of working', () => {
+    for (const pendingRequestType of [
+      'permission_request',
+      'user_question',
+      'plan_approval',
+    ] as const) {
+      expect(
+        deriveSessionUiStatusKind(
+          makeInput({ phase: 'running', activity: 'WORKING', pendingRequestType })
+        )
+      ).toBe('awaiting-input');
+    }
+    expect(
+      deriveSessionUiStatusKind(makeInput({ activity: 'WORKING', pendingRequestType: null }))
+    ).toBe('working');
+  });
+
+  it('lets lifecycle, error and exit states win over a stale pending request', () => {
+    const pendingRequestType = 'permission_request' as const;
+    expect(deriveSessionUiStatusKind(makeInput({ phase: 'stopping', pendingRequestType }))).toBe(
+      'stopping'
+    );
+    expect(deriveSessionUiStatusKind(makeInput({ phase: 'error', pendingRequestType }))).toBe(
+      'error'
+    );
+    expect(
+      deriveSessionUiStatusKind(makeInput({ processState: 'stopped', pendingRequestType }))
+    ).toBe('stopped');
+  });
+
   it('treats activity WORKING or phase running as working', () => {
     expect(deriveSessionUiStatusKind(makeInput({ activity: 'WORKING' }))).toBe('working');
     expect(deriveSessionUiStatusKind(makeInput({ phase: 'running' }))).toBe('working');
@@ -142,6 +172,15 @@ describe('sessionUiStatusKindFromSummary', () => {
         lastExit: null,
       })
     ).toBe('working');
+    expect(
+      sessionUiStatusKindFromSummary({
+        runtimePhase: 'running',
+        processState: 'alive',
+        activity: 'WORKING',
+        lastExit: null,
+        pendingRequestType: 'user_question',
+      })
+    ).toBe('awaiting-input');
   });
 });
 

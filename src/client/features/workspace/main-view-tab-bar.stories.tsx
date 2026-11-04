@@ -273,3 +273,105 @@ export const CloseSessionWithQueuedMessagesConfirms: Story = {
     await expect(closeSession).not.toHaveBeenCalled();
   },
 };
+
+function sessionSummary(
+  sessionId: string,
+  overrides: Partial<WorkspaceSessionRuntimeSummary> = {}
+): WorkspaceSessionRuntimeSummary {
+  return {
+    sessionId,
+    name: sessionId,
+    workflow: null,
+    model: 'sonnet',
+    persistedStatus: 'RUNNING',
+    runtimePhase: 'running',
+    processState: 'alive',
+    activity: 'WORKING',
+    updatedAt: '2026-11-04T00:00:00Z',
+    lastExit: null,
+    ...overrides,
+  };
+}
+
+function AwaitingInputTabBar() {
+  return (
+    <WorkspacePanelProvider workspaceId="awaiting-input-story">
+      <MainViewTabBar
+        workspaceId="awaiting-input-story"
+        sessions={[
+          { id: 'permission', name: 'Migrate schema', status: 'RUNNING', provider: 'CLAUDE' },
+          { id: 'question', name: 'Pick a branch', status: 'RUNNING', provider: 'CLAUDE' },
+          { id: 'plan', name: 'Plan refactor', status: 'RUNNING', provider: 'CLAUDE' },
+          { id: 'ci', name: 'Fix CI', workflow: 'ci-fix', status: 'RUNNING', provider: 'CLAUDE' },
+          { id: 'working', name: 'Write docs', status: 'RUNNING', provider: 'CLAUDE' },
+          { id: 'idle', name: 'Docs pass', status: 'IDLE', provider: 'CLAUDE' },
+        ]}
+        currentSessionId="permission"
+        sessionSummariesById={
+          new Map([
+            [
+              'permission',
+              sessionSummary('permission', { pendingRequestType: 'permission_request' }),
+            ],
+            ['question', sessionSummary('question', { pendingRequestType: 'user_question' })],
+            ['plan', sessionSummary('plan', { pendingRequestType: 'plan_approval' })],
+            [
+              'ci',
+              sessionSummary('ci', {
+                workflow: 'ci-fix',
+                pendingRequestType: 'permission_request',
+              }),
+            ],
+            ['working', sessionSummary('working')],
+            [
+              'idle',
+              sessionSummary('idle', {
+                persistedStatus: 'IDLE',
+                runtimePhase: 'idle',
+                activity: 'IDLE',
+              }),
+            ],
+          ])
+        }
+        onCreateSession={fn()}
+      />
+    </WorkspacePanelProvider>
+  );
+}
+
+export const AwaitingInput: Story = {
+  render: () => <AwaitingInputTabBar />,
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'Sessions blocked on a permission request, a question or a plan approval use the "needs you" tone with an icon per request kind, instead of the running pulse. A blocked CI-fix session swaps its wrench for the request icon.',
+      },
+    },
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const approval = canvas.getAllByRole('img', { name: 'Needs approval' });
+    await expect(approval).toHaveLength(2);
+    for (const icon of approval) {
+      await expect(icon).toHaveClass('text-warning');
+      await expect(icon).not.toHaveClass('animate-pulse');
+    }
+    await expect(canvas.getByRole('img', { name: 'Needs answer' })).toHaveClass('text-warning');
+    await expect(canvas.getByRole('img', { name: 'Needs plan review' })).toHaveClass(
+      'text-warning'
+    );
+    await expect(canvas.getByRole('img', { name: 'Running' })).toHaveClass('animate-pulse');
+    await expect(canvas.getByRole('img', { name: 'Idle' })).toBeInTheDocument();
+
+    await userEvent.hover(approval[0] as HTMLElement);
+    await expect(
+      await within(canvasElement.ownerDocument.body).findByRole('tooltip')
+    ).toHaveTextContent('Waiting for your permission to continue');
+  },
+};
+
+export const AwaitingInputDark: Story = {
+  render: () => <AwaitingInputTabBar />,
+  globals: { theme: 'dark' },
+};

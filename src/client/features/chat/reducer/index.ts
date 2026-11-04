@@ -236,6 +236,7 @@ function handlePermissionRequestMessage(data: WebSocketMessage): ChatAction | nu
       payload: {
         requestId: data.requestId,
         toolName: data.toolName,
+        ...(data.rawToolName ? { rawToolName: data.rawToolName } : {}),
         toolInput: data.toolInput ?? {},
         ...(data.elicitation ? { elicitation: data.elicitation } : {}),
         timestamp: new Date().toISOString(),

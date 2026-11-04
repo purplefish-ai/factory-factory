@@ -1,5 +1,9 @@
 import type { SessionStatus as DbSessionStatus } from '@/shared/core';
 import {
+  getPendingRequestType,
+  type PendingRequestClassificationInput,
+} from '@/shared/pending-request-types';
+import {
   hasWorkingSessionSummary as hasWorkingRuntimeSessionSummary,
   isSessionSummaryWorking as isRuntimeSessionSummaryWorking,
   type SessionRuntimeState,
@@ -16,12 +20,19 @@ interface SessionLike {
   status: DbSessionStatus;
 }
 
+/**
+ * Builds the tab/board session summaries. `pendingRequests` is the live
+ * session-id → pending interactive request map (`getAllPendingRequests()`), so
+ * each summary says whether that session is blocked on the user.
+ */
 export function buildWorkspaceSessionSummaries(
   sessions: SessionLike[],
-  getRuntimeSnapshot: (sessionId: string) => SessionRuntimeState
+  getRuntimeSnapshot: (sessionId: string) => SessionRuntimeState,
+  pendingRequests: ReadonlyMap<string, PendingRequestClassificationInput>
 ): SessionSummary[] {
   return sessions.map((session) => {
     const runtime = getRuntimeSnapshot(session.id);
+    const pendingRequest = pendingRequests.get(session.id);
     return {
       sessionId: session.id,
       name: session.name,
@@ -36,6 +47,7 @@ export function buildWorkspaceSessionSummaries(
       updatedAt: runtime.updatedAt,
       lastExit: runtime.lastExit ?? null,
       errorMessage: runtime.errorMessage ?? null,
+      pendingRequestType: pendingRequest ? getPendingRequestType(pendingRequest) : null,
     };
   });
 }

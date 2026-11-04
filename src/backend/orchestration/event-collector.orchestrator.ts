@@ -378,11 +378,15 @@ function refreshWorkspaceSessionSummaries(
   coalescer: EventCoalescer,
   workspaceId: string,
   source: string,
-  options?: { includeWorking?: boolean }
+  options?: SessionSummaryRefreshOptions
 ): void {
   state.sessionRefreshes.run(`summaries:${workspaceId}`, () =>
     loadWorkspaceSessionSummaries(state, coalescer, workspaceId, source, options)
   );
+}
+
+interface SessionSummaryRefreshOptions {
+  includeWorking?: boolean;
 }
 
 async function loadWorkspaceSessionSummaries(
@@ -390,7 +394,7 @@ async function loadWorkspaceSessionSummaries(
   coalescer: EventCoalescer,
   workspaceId: string,
   source: string,
-  options?: { includeWorking?: boolean }
+  options?: SessionSummaryRefreshOptions
 ): Promise<void> {
   try {
     if (state.activeCoalescer !== coalescer) {
@@ -401,12 +405,20 @@ async function loadWorkspaceSessionSummaries(
     if (state.activeCoalescer !== coalescer) {
       return;
     }
-    const sessionSummaries = buildWorkspaceSessionSummaries(sessions, (sessionId) =>
-      state.dependencies.sessionLifecycleService.getRuntimeSnapshot(sessionId)
+    const pendingRequests = state.dependencies.chatEventForwarderService.getAllPendingRequests();
+    const sessionSummaries = buildWorkspaceSessionSummaries(
+      sessions,
+      (sessionId) => state.dependencies.sessionLifecycleService.getRuntimeSnapshot(sessionId),
+      pendingRequests
+    );
+    const pendingRequestType = state.dependencies.computePendingRequestType(
+      sessions.map((s) => s.id),
+      pendingRequests
     );
     coalescer.enqueue(
       workspaceId,
       {
+        pendingRequestType,
         sessionSummaries,
         ...(sessionSummaries.length > 0 ? { hasHadSessions: true } : {}),
         ...(options?.includeWorking
@@ -437,37 +449,12 @@ async function refreshWorkspacePendingRequestType(
     if (!workspaceId || state.activeCoalescer !== coalescer) {
       return;
     }
-    state.sessionRefreshes.run(`pending-request:${workspaceId}`, () =>
-      loadWorkspacePendingRequestType(state, coalescer, workspaceId, source)
-    );
+    refreshWorkspaceSessionSummaries(state, coalescer, workspaceId, source, {
+      includeWorking: true,
+    });
   } catch (error) {
     state.logger.warn('Failed to refresh workspace pending request type', {
       sessionId,
-      error: error instanceof Error ? error.message : String(error),
-    });
-  }
-}
-
-async function loadWorkspacePendingRequestType(
-  state: EventCollectorState,
-  coalescer: EventCoalescer,
-  workspaceId: string,
-  source: string
-): Promise<void> {
-  try {
-    const sessions =
-      await state.dependencies.sessionDataService.findAgentSessionsByWorkspaceId(workspaceId);
-    if (state.activeCoalescer !== coalescer) {
-      return;
-    }
-    const pendingRequestType = state.dependencies.computePendingRequestType(
-      sessions.map((s) => s.id),
-      state.dependencies.chatEventForwarderService.getAllPendingRequests()
-    );
-    coalescer.enqueue(workspaceId, { pendingRequestType }, source);
-  } catch (error) {
-    state.logger.warn('Failed to refresh workspace pending request type', {
-      workspaceId,
       error: error instanceof Error ? error.message : String(error),
     });
   }

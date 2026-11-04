@@ -257,35 +257,39 @@ describe('session-replay-builder', () => {
     expect(replayedRejectedIds).not.toContain('q1');
   });
 
-  it('replays legacy tool-input requests with questions as user_question', () => {
-    const store = createStore();
-    store.pendingInteractiveRequest = {
-      requestId: 'req-q',
-      toolName: 'Tool input request',
-      toolUseId: 'tool-q',
-      input: {
-        questions: [
-          {
-            question: 'Choose one',
-            options: [{ label: 'A', description: 'a' }],
-          },
-        ],
-      },
-      planContent: null,
-      acpOptions: [{ optionId: 'allow', name: 'Allow', kind: 'allow_once' }],
-      timestamp: '2026-02-01T00:00:03.000Z',
-    };
+  it.each(['Tool input request', 'ExitPlanMode'])(
+    'replays question request identity %s',
+    (toolName) => {
+      const store = createStore();
+      store.pendingInteractiveRequest = {
+        requestId: 'req-q',
+        toolName,
+        toolUseId: 'tool-q',
+        input: {
+          questions: [
+            {
+              question: 'Choose one',
+              options: [{ label: 'A', description: 'a' }],
+            },
+          ],
+        },
+        planContent: null,
+        acpOptions: [{ optionId: 'allow', name: 'Allow', kind: 'allow_once' }],
+        timestamp: '2026-02-01T00:00:03.000Z',
+      };
 
-    const replayEvents = buildReplayEvents(store);
-    expect(replayEvents).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          type: 'user_question',
-          requestId: 'req-q',
-        }),
-      ])
-    );
-  });
+      const replayEvents = buildReplayEvents(store);
+      expect(replayEvents).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            type: 'user_question',
+            requestId: 'req-q',
+            toolName,
+          }),
+        ])
+      );
+    }
+  );
 
   it.each(
     [[], [{ prompt: 'Survey question' }], [{ question: 'Usable', options: [] }]].map(
@@ -308,6 +312,7 @@ describe('session-replay-builder', () => {
       expect.objectContaining({
         type: 'permission_request',
         requestId: 'mcp-question',
+        rawToolName: request.rawToolName,
         toolInput: { questions },
         acpOptions: request.acpOptions,
       })

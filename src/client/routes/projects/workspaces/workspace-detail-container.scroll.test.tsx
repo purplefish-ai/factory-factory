@@ -3,6 +3,7 @@
 import { act, useEffect } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { PendingRequest } from '@/client/features/chat/reducer/types';
 import type { MainViewTab } from '@/client/features/workspace';
 import type { ChatContentProps } from './workspace-detail-chat-content';
 import type { WorkspaceDetailViewProps } from './workspace-detail-view';
@@ -15,6 +16,7 @@ const mocks = vi.hoisted(() => ({
     messages: [],
     queuedMessages: [] as { id: string }[],
     connected: true,
+    pendingRequest: { type: 'none' } as PendingRequest,
     chatCapabilities: { attachments: { enabled: true, kinds: ['image'] } },
     sessionStatus: { phase: 'ready' },
     processStatus: { state: 'alive' },
@@ -79,7 +81,14 @@ vi.mock('react-router', () => ({
   useSearchParams: () => [mocks.searchParams, mocks.setSearchParams],
   useLocation: () => ({ key: 'navigation' }),
 }));
-vi.mock('@/client/features/chat', () => ({ useChatWebSocket: mocks.useChatWebSocket }));
+vi.mock('@/client/features/chat', async () => ({
+  useChatWebSocket: mocks.useChatWebSocket,
+  getChatPendingRequestType: (
+    await vi.importActual<typeof import('@/client/features/chat/pending-request-type')>(
+      '@/client/features/chat/pending-request-type'
+    )
+  ).getChatPendingRequestType,
+}));
 vi.mock('@/client/features/workspace', () => ({
   useWorkspacePanel: () => mocks.panel,
   useChatTranscriptPersistence: mocks.usePersistence,
@@ -182,6 +191,7 @@ beforeEach(() => {
   mocks.transport.runtimeSessionId = 'session-a';
   mocks.transport.queuedMessages = [];
   mocks.transport.connected = true;
+  mocks.transport.pendingRequest = { type: 'none' };
   mocks.transport.sessionStatus.phase = 'ready';
   mocks.transport.sessionRuntime.phase = 'idle';
   mocks.persistence.ready = true;
@@ -206,6 +216,27 @@ afterEach(async () => {
 });
 
 describe('WorkspaceDetailContainer transcript composition', () => {
+  it('overlays the live classified request and clears it when resolved without a runtime change', async () => {
+    mocks.transport.pendingRequest = {
+      type: 'permission',
+      request: {
+        requestId: 'r',
+        toolName: 'Bash',
+        toolInput: {},
+        timestamp: '2026-11-04T00:00:00Z',
+      },
+    };
+    await render();
+    expect(latest().sessionTabs.sessionSummariesById.get('session-a')?.pendingRequestType).toBe(
+      'permission_request'
+    );
+    mocks.transport.pendingRequest = { type: 'none' };
+    await render();
+    expect(
+      latest().sessionTabs.sessionSummariesById.get('session-a')?.pendingRequestType
+    ).toBeNull();
+  });
+
   it.each([
     ['chat', true],
     ['file-a', false],
