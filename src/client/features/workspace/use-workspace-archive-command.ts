@@ -16,8 +16,8 @@ interface ArchiveTarget {
 export function useWorkspaceArchiveCommand() {
   const queryClient = useQueryClient();
   const utils = trpc.useUtils();
-  const single = trpc.workspace.archive.useMutation();
-  const bulk = trpc.workspace.bulkArchive.useMutation();
+  const single = trpc.workspace.archive.useMutation({ meta: { errorToast: false } });
+  const bulk = trpc.workspace.bulkArchive.useMutation({ meta: { errorToast: false } });
 
   const [active, setActive] = useState({ single: 0, bulk: 0 });
 

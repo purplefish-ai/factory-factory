@@ -182,7 +182,7 @@ export function ProcessesSection({ processes }: ProcessesSectionProps) {
   const { data: maxSessions } = trpc.session.getMaxSessionsPerWorkspace.useQuery();
   const utils = trpc.useUtils();
 
-  const stopSession = trpc.admin.stopSession.useMutation();
+  const stopSession = trpc.admin.stopSession.useMutation({ meta: { errorToast: false } });
 
   const handleStopSession = useCallback(
     async (sessionId: string) => {

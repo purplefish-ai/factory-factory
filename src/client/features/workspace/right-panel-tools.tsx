@@ -90,14 +90,14 @@ export function TopPanelArea({
         />
         {periodicTaskId && (
           <TabButton
-            label="Agent"
+            label="Scheduled agent"
             icon={<RobotIcon className="h-3.5 w-3.5" />}
             isActive={showPeriodicTask}
             onSelect={() => onTopTabChange('periodic-task')}
           />
         )}
         <TabButton
-          label="Sessions"
+          label="Sub-agents"
           icon={<TreeStructureIcon className="h-3.5 w-3.5" />}
           isActive={showAgents}
           onSelect={() => onTopTabChange('agents')}

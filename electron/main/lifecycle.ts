@@ -5,6 +5,7 @@ import type {
   OpenDialogOptions,
   OpenDialogReturnValue,
 } from 'electron';
+import { classifyNavigation, getAppOrigin } from './external-links.js';
 import { LOADING_PAGE_URL } from './loading-page.js';
 
 interface PreventableEventLike {
@@ -23,12 +24,20 @@ interface AppLike {
 // WebFrameMain type.
 type WebFrameLike = object;
 
+interface NavigationEventLike extends PreventableEventLike {
+  url: string;
+  isMainFrame: boolean;
+}
+
 interface BrowserWindowLike {
   loadURL(url: string): Promise<void>;
   on(event: 'focus' | 'blur' | 'closed', listener: () => void): void;
   webContents: {
     send(channel: string, focused: boolean): void;
     mainFrame: WebFrameLike;
+    setWindowOpenHandler(handler: (details: { url: string }) => { action: 'deny' }): void;
+    on(event: 'will-navigate', listener: (event: NavigationEventLike) => void): void;
+    on(event: 'will-redirect', listener: (event: NavigationEventLike) => void): void;
   };
   destroy(): void;
   isDestroyed(): boolean;
@@ -76,6 +85,10 @@ interface IpcMainLike {
   ): void;
 }
 
+interface ShellLike {
+  openExternal(url: string): Promise<void>;
+}
+
 interface ServerManagerLike {
   start(): Promise<string>;
   stop(): Promise<void>;
@@ -98,6 +111,7 @@ export interface ElectronLifecycleDependencies {
   platform: NodeJS.Platform;
   preloadPath: string;
   serverManager: ServerManagerLike;
+  shell: ShellLike;
 }
 
 export interface ElectronLifecycleController {
@@ -161,8 +175,12 @@ export function createElectronLifecycle({
   platform,
   preloadPath,
   serverManager,
+  shell,
 }: ElectronLifecycleDependencies): ElectronLifecycleController {
   let mainWindow: BrowserWindowLike | null = null;
+  // Origin of the app URL last loaded into the window; null until then, so the
+  // loading page treats every web URL as external.
+  let appOrigin: string | null = null;
   let createWindowPromise: Promise<BrowserWindowLike | null> | null = null;
   let stopServerPromise: Promise<void> | null = null;
   // Set once quitting starts: the backend is being stopped for good.
@@ -207,7 +225,61 @@ export function createElectronLifecycle({
     return stopServerPromise;
   };
 
+  const openExternally = (url: string): void => {
+    shell.openExternal(url).catch((error: unknown) => {
+      // The URL is untrusted and may carry tokens, so it is not logged, even
+      // when the platform error message repeats it.
+      const message = error instanceof Error ? error.message : String(error);
+      logger.error(
+        '[electron] Failed to open a link in the system browser:',
+        message.split(url).join('<url>')
+      );
+    });
+  };
+
+  // Keep the app window on the app: links leaving its origin open in the
+  // system browser, and URLs with other schemes are refused.
+  const registerNavigationHandlers = (window: BrowserWindowLike): void => {
+    // Never create in-app windows: they would inherit the preload bridge and
+    // have no lifecycle handling. Same-origin targets (such as a relative
+    // Markdown link) open in the browser too, which serves the same app.
+    window.webContents.setWindowOpenHandler(({ url }) => {
+      const decision = classifyNavigation(url, null);
+      if (decision.action === 'external') {
+        openExternally(decision.url);
+      } else {
+        logger.log('[electron] Blocked opening a window for an unsupported URL');
+      }
+      return { action: 'deny' };
+    });
+
+    const guardTopLevelNavigation = (event: NavigationEventLike): void => {
+      if (!event.isMainFrame) {
+        return;
+      }
+      const decision = classifyNavigation(event.url, appOrigin);
+      if (decision.action === 'internal') {
+        return;
+      }
+      event.preventDefault();
+      if (decision.action === 'external') {
+        openExternally(decision.url);
+      } else {
+        logger.log('[electron] Blocked navigation to an unsupported URL');
+      }
+    };
+    window.webContents.on('will-navigate', guardTopLevelNavigation);
+    window.webContents.on('will-redirect', guardTopLevelNavigation);
+  };
+
+  const loadApp = (window: BrowserWindowLike, url: string): Promise<void> => {
+    appOrigin = getAppOrigin(url);
+    return window.loadURL(url);
+  };
+
   const registerWindowHandlers = (window: BrowserWindowLike): void => {
+    registerNavigationHandlers(window);
+
     window.on('focus', () => {
       window.webContents.send('window-focus-changed', true);
     });
@@ -306,7 +378,7 @@ export function createElectronLifecycle({
       return null;
     }
 
-    await window.loadURL(url);
+    await loadApp(window, url);
     logger.log('[electron] App URL loaded');
     return window;
   };
@@ -405,7 +477,7 @@ export function createElectronLifecycle({
     const stopRequestCountAtStart = stopRequestCount;
     try {
       const url = await serverManager.start();
-      await window.loadURL(url);
+      await loadApp(window, url);
     } catch (error) {
       handleCreateWindowFailure(window, error, stopRequestCountAtStart);
     }

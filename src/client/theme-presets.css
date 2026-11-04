@@ -3,9 +3,14 @@
  *
  * The default "factory" scheme is the base palette in globals.css. Each preset
  * below redefines the same custom properties for light mode and, under the
- * next-themes `.dark` class, for dark mode. Status colors (success, warning,
- * destructive, info) and charts are inherited from the base palette unless a
- * preset needs a different accent.
+ * next-themes `.dark` class, for dark mode. Charts are inherited from the base
+ * palette unless a preset needs a different accent.
+ *
+ * Status colors (running, success, warning, destructive, info, merged) use
+ * each palette's own hues, adjusted where needed so that text meets WCAG AA
+ * on the preset's backgrounds and tints. Declare them in both the light and
+ * the dark block: `:root[...]` outranks `.dark`, so a light-only declaration
+ * would leak into dark mode. src/client/status-palette.test.ts checks this.
  *
  * The scheme id is written to `data-color-scheme` on <html> by
  * src/client/lib/appearance.ts; `:root[...]` beats the base `:root`/`.dark`
@@ -45,6 +50,19 @@
   --sidebar-accent-foreground: #1f2328;
   --sidebar-border: #d1d9e0;
   --sidebar-ring: #0969da;
+  /* Status */
+  --running: #8c5a00;
+  --success: #167130;
+  --warning: #a84200;
+  --destructive: #bb192b;
+  --info: #0860c8;
+  --merged: #7445cc;
+  --running-foreground: #ffffff;
+  --success-foreground: #ffffff;
+  --warning-foreground: #ffffff;
+  --destructive-foreground: #ffffff;
+  --info-foreground: #ffffff;
+  --merged-foreground: #ffffff;
 }
 
 :root[data-color-scheme='github'].dark {
@@ -76,6 +94,19 @@
   --sidebar-accent-foreground: #e6edf3;
   --sidebar-border: #30363d;
   --sidebar-ring: #4493f8;
+  /* Status */
+  --running: #d29922;
+  --success: #3fb950;
+  --warning: #db6d28;
+  --destructive: #f85149;
+  --info: #4493f8;
+  --merged: #ab7df8;
+  --running-foreground: #0d1117;
+  --success-foreground: #0d1117;
+  --warning-foreground: #0d1117;
+  --destructive-foreground: #ffffff;
+  --info-foreground: #0d1117;
+  --merged-foreground: #0d1117;
 }
 
 /* ------------------------------------------------------------------------ */
@@ -111,6 +142,19 @@
   --sidebar-accent-foreground: #383a42;
   --sidebar-border: #dbdbdc;
   --sidebar-ring: #4078f2;
+  /* Status */
+  --running: #8a6200;
+  --success: #336a33;
+  --warning: #a14a12;
+  --destructive: #b33328;
+  --info: #2a5ac6;
+  --merged: #9020a0;
+  --running-foreground: #ffffff;
+  --success-foreground: #ffffff;
+  --warning-foreground: #ffffff;
+  --destructive-foreground: #ffffff;
+  --info-foreground: #ffffff;
+  --merged-foreground: #ffffff;
 }
 
 :root[data-color-scheme='one'].dark {
@@ -142,6 +186,19 @@
   --sidebar-accent-foreground: #dcdfe4;
   --sidebar-border: #181a1f;
   --sidebar-ring: #61afef;
+  /* Status */
+  --running: #e5c07b;
+  --success: #98c379;
+  --warning: #d19a66;
+  --destructive: #ef8a92;
+  --info: #61afef;
+  --merged: #d293e6;
+  --running-foreground: #282c34;
+  --success-foreground: #282c34;
+  --warning-foreground: #282c34;
+  --destructive-foreground: #ffffff;
+  --info-foreground: #282c34;
+  --merged-foreground: #282c34;
 }
 
 /* ------------------------------------------------------------------------ */
@@ -177,6 +234,19 @@
   --sidebar-accent-foreground: #073642;
   --sidebar-border: #d6cfb8;
   --sidebar-ring: #268bd2;
+  /* Status */
+  --running: #7d5e00;
+  --success: #5c6a00;
+  --warning: #a83c0f;
+  --destructive: #c0282a;
+  --info: #1a639c;
+  --merged: #5a5fb0;
+  --running-foreground: #ffffff;
+  --success-foreground: #ffffff;
+  --warning-foreground: #ffffff;
+  --destructive-foreground: #ffffff;
+  --info-foreground: #ffffff;
+  --merged-foreground: #ffffff;
 }
 
 :root[data-color-scheme='solarized'].dark {
@@ -208,6 +278,19 @@
   --sidebar-accent-foreground: #eee8d5;
   --sidebar-border: #0a3a47;
   --sidebar-ring: #268bd2;
+  /* Status */
+  --running: #e0aa1a;
+  --success: #a8bb10;
+  --warning: #f58a5c;
+  --destructive: #ff8580;
+  --info: #6ab8f4;
+  --merged: #aaaef0;
+  --running-foreground: #002b36;
+  --success-foreground: #002b36;
+  --warning-foreground: #002b36;
+  --destructive-foreground: #ffffff;
+  --info-foreground: #002b36;
+  --merged-foreground: #002b36;
 }
 
 /* ------------------------------------------------------------------------ */
@@ -231,8 +314,6 @@
   --accent-foreground: #000000;
   --brand: #0000cc;
   --brand-foreground: #ffffff;
-  --destructive: #b00000;
-  --destructive-foreground: #ffffff;
   --border: #000000;
   --input: #000000;
   --ring: #0000cc;
@@ -245,6 +326,19 @@
   --sidebar-accent-foreground: #000000;
   --sidebar-border: #000000;
   --sidebar-ring: #0000cc;
+  /* Status */
+  --running: #5c4a00;
+  --success: #005f1a;
+  --warning: #8a3300;
+  --destructive: #b00000;
+  --info: #0000cc;
+  --merged: #5b1a99;
+  --running-foreground: #ffffff;
+  --success-foreground: #ffffff;
+  --warning-foreground: #ffffff;
+  --destructive-foreground: #ffffff;
+  --info-foreground: #ffffff;
+  --merged-foreground: #ffffff;
 }
 
 :root[data-color-scheme='high-contrast'].dark {
@@ -264,8 +358,6 @@
   --accent-foreground: #ffffff;
   --brand: #ffff00;
   --brand-foreground: #000000;
-  --destructive: #ff5c5c;
-  --destructive-foreground: #000000;
   --border: #ffffff;
   --input: #ffffff;
   --ring: #ffff00;
@@ -278,4 +370,17 @@
   --sidebar-accent-foreground: #ffffff;
   --sidebar-border: #ffffff;
   --sidebar-ring: #ffff00;
+  /* Status */
+  --running: #ffff00;
+  --success: #4dff88;
+  --warning: #ffa94d;
+  --destructive: #ff6666;
+  --info: #7ab8ff;
+  --merged: #d6a8ff;
+  --running-foreground: #000000;
+  --success-foreground: #000000;
+  --warning-foreground: #000000;
+  --destructive-foreground: #ffffff;
+  --info-foreground: #000000;
+  --merged-foreground: #000000;
 }

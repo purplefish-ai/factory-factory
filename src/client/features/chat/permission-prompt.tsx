@@ -2,7 +2,7 @@ import { FileTextIcon } from '@phosphor-icons/react/dist/csr/FileText';
 import { ShieldCheckIcon } from '@phosphor-icons/react/dist/csr/ShieldCheck';
 import { ShieldSlashIcon } from '@phosphor-icons/react/dist/csr/ShieldSlash';
 import { TerminalIcon } from '@phosphor-icons/react/dist/csr/Terminal';
-import { useEffect, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import { MarkdownRenderer } from '@/client/components/markdown';
 import { Button } from '@/components/ui/button';
 import { PromptCard } from '@/components/ui/prompt-card';
@@ -11,6 +11,7 @@ import type { PermissionRequest } from '@/lib/chat-protocol';
 import { cn } from '@/lib/utils';
 import { extractPlanText } from '@/shared/acp-protocol/plan-content';
 import { type PlanViewMode, usePlanViewMode } from './plan-view-preference';
+import { usePromptAutoFocus } from './prompt-auto-focus';
 
 // =============================================================================
 // Types
@@ -86,22 +87,6 @@ function formatToolInput(input: Record<string, unknown>): string {
   } catch {
     return String(input);
   }
-}
-
-function useAutoFocusPermissionButton(
-  buttonRef: React.RefObject<HTMLButtonElement | null>,
-  permissionRequestId: string | undefined
-) {
-  useEffect(() => {
-    if (!permissionRequestId) {
-      return;
-    }
-    // Small delay to ensure the element is rendered and focusable.
-    const timeoutId = setTimeout(() => {
-      buttonRef.current?.focus();
-    }, 100);
-    return () => clearTimeout(timeoutId);
-  }, [permissionRequestId, buttonRef]);
 }
 
 function PermissionDecisionActions({
@@ -263,7 +248,7 @@ function PlanApprovalPrompt({ permission, onApprove, className }: PermissionProm
   const [viewMode, setViewMode] = usePlanViewMode();
   const permissionRequestId = permission?.requestId;
 
-  useAutoFocusPermissionButton(firstActionButtonRef, permissionRequestId);
+  usePromptAutoFocus(permissionRequestId, firstActionButtonRef);
 
   if (!permission) {
     return null;
@@ -378,13 +363,7 @@ function AcpPermissionPrompt({ permission, onApprove, className }: PermissionPro
   const firstButtonRef = useRef<HTMLButtonElement>(null);
   const permissionRequestId = permission?.requestId;
 
-  useEffect(() => {
-    if (!permissionRequestId) {
-      return;
-    }
-    const timeoutId = setTimeout(() => firstButtonRef.current?.focus(), 100);
-    return () => clearTimeout(timeoutId);
-  }, [permissionRequestId]);
+  usePromptAutoFocus(permissionRequestId, firstButtonRef);
 
   if (!permission?.acpOptions) {
     return null;
@@ -473,7 +452,7 @@ export function PermissionPrompt({ permission, onApprove, className }: Permissio
   const allowButtonRef = useRef<HTMLButtonElement>(null);
   const permissionRequestId =
     permission?.toolName === 'ExitPlanMode' ? undefined : permission?.requestId;
-  useAutoFocusPermissionButton(allowButtonRef, permissionRequestId);
+  usePromptAutoFocus(permissionRequestId, allowButtonRef);
 
   if (!permission) {
     return null;
@@ -528,7 +507,7 @@ export function PermissionPromptExpanded({
   className,
 }: PermissionPromptProps) {
   const allowButtonRef = useRef<HTMLButtonElement>(null);
-  useAutoFocusPermissionButton(allowButtonRef, permission?.requestId);
+  usePromptAutoFocus(permission?.requestId, allowButtonRef);
 
   if (!permission) {
     return null;

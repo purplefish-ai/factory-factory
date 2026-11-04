@@ -151,7 +151,16 @@ export const BrowserChrome: Story = {
   },
 };
 
-export const Results: Story = { args: { query: 'search' } };
+export const Results: Story = {
+  args: { query: 'search' },
+  play: async ({ canvasElement }) => {
+    // Session results use the glossary term "Chat", matching the chat tabs they open.
+    const option = await within(canvasElement.ownerDocument.body).findByRole('option', {
+      name: /Search interaction polish/,
+    });
+    await expect(option).toHaveTextContent('Chat');
+  },
+};
 export const Empty: Story = { args: { query: 'missing', results: [] } };
 export const Loading: Story = { args: { query: 'search', loading: true } };
 export const Unavailable: Story = {

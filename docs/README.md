@@ -9,6 +9,7 @@ context, not a new task or a substitute for current repository guidance.
 | Need                                          | Start here                                                                                            |
 | --------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
 | Install and run                               | [README](../README.md)                                                                                |
+| Product vocabulary and UI labels              | [Workspace glossary](workspaces.md#glossary)                                                          |
 | Logo source and installation icons            | [Brand assets](brand-assets.md)                                                                       |
 | Contribute and verify changes                 | [Verification](../CONTRIBUTING.md#verification) and [agent guide](../AGENTS.md)                       |
 | Service boundaries and subsystem contracts    | [Architecture notes](architecture/README.md)                                                          |
@@ -18,6 +19,7 @@ context, not a new task or a substitute for current repository guidance.
 | User and project configuration                | [Settings](admin-settings.md)                                                                         |
 | Maintain UI primitives and dependencies       | [shadcn](shadcn.md) and [Knip](knip.md)                                                               |
 | Write and organize Storybook stories          | [Storybook](storybook.md)                                                                             |
+| Theme tokens and status colors                | [Status colors](status-colors.md)                                                                     |
 | Audit vulnerabilities and dependency updates  | [Dependency security](dependency-security.md)                                                         |
 
 For implementation work, search the relevant source area and current guides
@@ -36,8 +38,9 @@ notes before using their examples.
 
 ## Historical work
 
-- [Workspace progression](workspaces.md): the former Ratchet fixer and PR-state
-  model; use the current workspace state and PR monitoring notes above.
+- [Workspace progression](workspaces.md#historical-progression-model): the
+  former Ratchet fixer and PR-state model; use the current workspace state and
+  PR monitoring notes above.
 
 - [Milestone planning and generated maps](../.planning/README.md): completed
   milestone records plus codebase snapshots from earlier revisions.
