@@ -48,6 +48,18 @@ export function resumeScan(scan: AgentSourceScan): AgentSourceScan {
   return scan;
 }
 
+function rewindCaptureOverlap(scan: AgentSourceScan, actual: string, offset: number) {
+  // Only page boundaries can replay a prefix after a head insertion.
+  if (offset !== 0) {
+    discontinuity();
+  }
+  const earlier = scan.resumeIds.slice(0, scan.overlapOffset ?? 0).lastIndexOf(actual);
+  scan.overlapOffset = Math.max(0, earlier);
+  // Unknown head identities require seeking the first window identity again,
+  // then re-proving every member. A known prefix can be re-consumed directly.
+  return earlier >= 0;
+}
+
 function consumeOverlap(scan: AgentSourceScan, ids: string[]): number {
   if (scan.overlapOffset === null) {
     return 0;
@@ -59,20 +71,8 @@ function consumeOverlap(scan: AgentSourceScan, ids: string[]): number {
     if (scan.overlapOffset === 0 && actual !== expected) {
       continue;
     }
-    if (actual !== expected) {
-      const earlier = scan.resumeIds.slice(0, scan.overlapOffset).lastIndexOf(actual);
-      // A prepend can replay a consumed prefix at the next page boundary.
-      // Within a page the overlap must still be one contiguous ordered run.
-      if (offset !== 0) {
-        discontinuity();
-      }
-      if (earlier < 0) {
-        // A larger shift can put new head identities before the whole window.
-        // Seek its first identity again, then re-prove every member in order.
-        scan.overlapOffset = 0;
-        continue;
-      }
-      scan.overlapOffset = earlier;
+    if (actual !== expected && !rewindCaptureOverlap(scan, actual, offset)) {
+      continue;
     }
     scan.overlapOffset++;
     if (scan.overlapOffset === scan.resumeIds.length) {
