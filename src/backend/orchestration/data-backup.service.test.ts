@@ -413,7 +413,6 @@ function createImportData(
         preferredIde: 'cursor',
         customIdeCommand: null,
         playSoundOnComplete: true,
-        ticketDispatchPrompt: 'Implement the ticket and run tests.',
         childWorkspacesEnabled: false,
         notificationSoundPath: '/path/to/sound.mp3',
         ratchetEnabled: true,
@@ -745,6 +744,24 @@ describe('DataBackupService', () => {
   });
 
   describe('importData', () => {
+    it('round-trips a custom ticket prompt through the current backup format', async () => {
+      vi.mocked(prisma.project.findMany).mockResolvedValue([]);
+      vi.mocked(prisma.workspace.findMany).mockResolvedValue([]);
+      vi.mocked(prisma.agentSession.findMany).mockResolvedValue([]);
+      vi.mocked(prisma.terminalSession.findMany).mockResolvedValue([]);
+      vi.mocked(prisma.userSettings.findFirst).mockResolvedValue(mockUserSettings);
+      vi.mocked(mockTx.userSettings.findFirst).mockResolvedValue(null);
+      vi.mocked(mockTx.userSettings.create).mockResolvedValue(mockUserSettings);
+      const exported = await dataBackupService.exportData('test');
+      expect(exported.meta.schemaVersion).toBe(8);
+      await dataBackupService.importData(exported);
+      expect(mockTx.userSettings.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          ticketDispatchPrompt: mockUserSettings.ticketDispatchPrompt,
+        }),
+      });
+    });
+
     it('imports strict v4 data', async () => {
       const exportedData = createImportData();
 
@@ -819,7 +836,7 @@ describe('DataBackupService', () => {
       expect(mockTx.userSettings.create).toHaveBeenCalledWith({
         data: expect.objectContaining({
           ratchetReviewTriggerMode: 'ALL_REVIEW_FEEDBACK',
-          ticketDispatchPrompt: 'Implement the ticket and run tests.',
+          ticketDispatchPrompt: null,
           childWorkspacesEnabled: false,
           reviewerSessionProvider: SessionProvider.CLAUDE,
           reviewerClaudeModel: 'opus',
