@@ -59,6 +59,7 @@ import {
   SidebarSeparator,
   useSidebar,
 } from '@/components/ui/sidebar';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 import {
   clampSidebarWidth,
@@ -329,14 +330,37 @@ function ProjectFooterLinks({
     section === 'workspaces' ? isProjectBoardPath(pathname) : activeSection === section;
   const badges: Partial<Record<ProjectSection, ReactNode>> = {
     workspaces: showBoardCounts ? (
-      <span id={boardDescriptionId} className="ml-auto flex shrink-0 gap-1">
-        <Badge variant="secondary" className="h-5 px-1.5 text-[10px] tabular-nums">
-          Working {workingCount}
-        </Badge>
-        <Badge variant="warning" className="h-5 px-1.5 text-[10px] tabular-nums">
-          Waiting {waitingCount}
-        </Badge>
-      </span>
+      <>
+        <span className="ml-auto flex shrink-0 gap-1">
+          <Tooltip disableHoverableContent>
+            <TooltipTrigger asChild>
+              <Badge
+                aria-hidden="true"
+                variant="secondary"
+                className="h-5 min-w-5 px-1.5 text-xs tabular-nums"
+              >
+                {workingCount}
+              </Badge>
+            </TooltipTrigger>
+            <TooltipContent>Working</TooltipContent>
+          </Tooltip>
+          <Tooltip disableHoverableContent>
+            <TooltipTrigger asChild>
+              <Badge
+                aria-hidden="true"
+                variant="warning"
+                className="h-5 min-w-5 px-1.5 text-xs tabular-nums"
+              >
+                {waitingCount}
+              </Badge>
+            </TooltipTrigger>
+            <TooltipContent>Waiting</TooltipContent>
+          </Tooltip>
+        </span>
+        <span id={boardDescriptionId} className="sr-only">
+          Working {workingCount} Waiting {waitingCount}
+        </span>
+      </>
     ) : null,
     agents: <AgentNavigationBadge summary={summary} descriptionId={descriptionId} />,
     reviews:

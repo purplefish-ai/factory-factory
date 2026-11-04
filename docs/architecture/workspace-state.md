@@ -868,9 +868,12 @@ unchanged.
 ## Board views and Waiting intervals
 
 The sidebar's Board link shows Working and Waiting workspace counts for the
-selected project, including zero counts. They follow the same Kanban column
-groups as the sidebar lists and update with workspace snapshots. Counts stay
-hidden until workspace data is available for the project the Board link opens.
+selected project as two count-only chips, including zero counts. The neutral
+chip is Working and the orange chip is Waiting; hover tooltips explain each, and
+the Board link retains both labels for screen readers. They follow the same
+Kanban column groups as the sidebar lists and update with workspace snapshots.
+Counts stay hidden until workspace data is available for the project the Board
+link opens.
 
 The board and sidebar use Todo, Working, Waiting, Done order. Todo opens the
 in-app issue launch sheet; external issue links remain explicit. Issue loading,
