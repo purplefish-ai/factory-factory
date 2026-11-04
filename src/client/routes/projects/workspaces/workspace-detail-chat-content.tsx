@@ -1,6 +1,7 @@
 import { memo, useCallback, useEffect, useMemo } from 'react';
 import type { useChatWebSocket } from '@/client/features/chat';
 import {
+  AgentErrorStrip,
   ChatInput,
   getChatPendingRequestType,
   PermissionPrompt,
@@ -20,9 +21,10 @@ import { VoiceModeToggle } from '@/client/features/voice';
 import { getPendingRequestPresentation } from '@/client/lib/pending-request-presentation';
 import type { CommandInfo, TokenStats } from '@/lib/chat-protocol';
 import type { PendingRequestType } from '@/shared/pending-request-types';
-import { getSessionRuntimeErrorMessage, type SessionRuntimeState } from '@/shared/session-runtime';
+import type { SessionRuntimeState } from '@/shared/session-runtime';
 import type { WorkspaceInitBanner } from '@/shared/workspace-init';
 import type { WorkspaceRetryAvailability } from '@/shared/workspace-init-retry';
+import { useAgentErrorRecovery } from './use-agent-error-recovery';
 import { useRetryWorkspaceInit } from './use-retry-workspace-init';
 import { InitStatusBanner, type InitStatusBannerProps } from './workspace-init-status-banner';
 
@@ -47,6 +49,7 @@ export interface ChatContentProps {
   controlsHydrated?: boolean;
   sendMessage: ReturnType<typeof useChatWebSocket>['sendMessage'];
   stopChat: ReturnType<typeof useChatWebSocket>['stopChat'];
+  restartSession?: ReturnType<typeof useChatWebSocket>['restartSession'];
   inputRef: ReturnType<typeof useChatWebSocket>['inputRef'];
   chatSettings: ReturnType<typeof useChatWebSocket>['chatSettings'];
   chatCapabilities: ReturnType<typeof useChatWebSocket>['chatCapabilities'];
@@ -139,26 +142,10 @@ function getVisibleInitBanner(
 }
 
 function createTranscriptHeader(
-  runtimeBanner: WorkspaceInitBanner | null,
   initBanner: WorkspaceInitBanner | null,
   actions: Omit<InitStatusBannerProps, 'banner'>
 ) {
-  if (!(runtimeBanner || initBanner)) {
-    return undefined;
-  }
-  return (
-    <>
-      {runtimeBanner && (
-        <InitStatusBanner
-          banner={runtimeBanner}
-          retryPending={false}
-          onRetry={() => undefined}
-          onPlay={() => undefined}
-        />
-      )}
-      {initBanner && <InitStatusBanner banner={initBanner} {...actions} />}
-    </>
-  );
+  return initBanner ? <InitStatusBanner banner={initBanner} {...actions} /> : undefined;
 }
 
 function useSubagentNavigation(
@@ -205,18 +192,6 @@ function useSubagentNavigation(
     onOpenSingleSubagent: canOpen && singleSubagentId ? openSingleSubagent : undefined,
     runningSubagentList,
   };
-}
-
-function useSessionRuntimeBanner(sessionRuntime: SessionRuntimeState) {
-  const message =
-    sessionRuntime.phase === 'error' ? getSessionRuntimeErrorMessage(sessionRuntime) : null;
-  return useMemo<WorkspaceInitBanner | null>(
-    () =>
-      message
-        ? { kind: 'error', message, showRetry: false, showPlay: false, showDismiss: false }
-        : null,
-    [message]
-  );
 }
 
 export const ChatContent = memo(function ChatContent(props: ChatContentProps) {
@@ -277,25 +252,28 @@ export const ChatContent = memo(function ChatContent(props: ChatContentProps) {
     sessionRuntime: props.sessionRuntime,
     messageCount: props.messages.length,
   });
-  const sessionRuntimeBanner = useSessionRuntimeBanner(props.sessionRuntime);
+  // The runtime error is pinned above the composer so it never scrolls away.
+  const agentError = useAgentErrorRecovery({
+    sessionId: props.sessionId,
+    sessionRuntime: props.sessionRuntime,
+    messages: props.messages,
+    queuedMessageIds,
+    connected: props.connected,
+    hasPendingMessages: props.pendingMessages.size > 0,
+    sendMessage: props.sendMessage,
+    restartSession: props.restartSession,
+  });
   const visibleInitBanner = getVisibleInitBanner(props.initBanner, props.isScriptFailed);
   const { retryAvailability, resumeQueuedMessages } = props;
   const header = useMemo(
     () =>
-      createTranscriptHeader(sessionRuntimeBanner, visibleInitBanner, {
+      createTranscriptHeader(visibleInitBanner, {
         retryAvailability,
         retryPending: retryInit.isPending,
         onRetry: retry,
         onPlay: resumeQueuedMessages,
       }),
-    [
-      sessionRuntimeBanner,
-      visibleInitBanner,
-      retryAvailability,
-      retryInit.isPending,
-      retry,
-      resumeQueuedMessages,
-    ]
+    [visibleInitBanner, retryAvailability, retryInit.isPending, retry, resumeQueuedMessages]
   );
 
   return (
@@ -337,6 +315,7 @@ export const ChatContent = memo(function ChatContent(props: ChatContentProps) {
         initBanner={props.initBanner}
       />
       <div className="z-20 flex max-h-full min-h-0 flex-col border-t bg-background pb-safe">
+        {agentError && <AgentErrorStrip className="shrink-0" {...agentError} />}
         <PermissionPrompt
           permission={
             props.pendingRequest.type === 'permission' ? props.pendingRequest.request : null
