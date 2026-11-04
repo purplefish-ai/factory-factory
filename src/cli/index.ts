@@ -20,6 +20,7 @@ import { buildHttpOrigin, buildServeEnv } from './serve-env';
 import { checkServePrerequisites } from './serve-prerequisites';
 import { runServeSession } from './serve-session';
 import { registerServeShutdownHandlers, removeServePortFile } from './serve-shutdown';
+import { ensureServeTools } from './setup-prerequisites.mjs';
 import { registerStudioCommand } from './studio';
 import { registerTailscaleCommand } from './tailscale';
 
@@ -192,6 +193,11 @@ program
 
     // Show startup banner
     console.log(chalk.cyan(`\n  🏭🏭 FACTORY ${chalk.bold('FACTORY')}\n`));
+
+    if (!(await ensureServeTools())) {
+      process.exitCode = 1;
+      return;
+    }
 
     const prerequisiteIssues = checkServePrerequisites(PROJECT_ROOT, !!options.dev);
     if (prerequisiteIssues.length) {
