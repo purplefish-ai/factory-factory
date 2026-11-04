@@ -1,8 +1,8 @@
 import type { Meta, StoryObj } from '@storybook/react';
 import { Navigate, Route, Routes } from 'react-router';
 import { expect, userEvent, within } from 'storybook/test';
-import AdminDashboardPage from '../admin-page';
-import { SettingsStoryLayout } from '../admin/settings-page-layout.story-fixtures';
+import AdminDashboardPage from '@/client/routes/admin-page';
+import { SettingsStoryLayout } from '@/client/routes/admin/settings-page-layout.story-fixtures';
 import ProjectSettingsRedirect from './settings';
 
 const project = {
