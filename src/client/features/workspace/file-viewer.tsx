@@ -46,7 +46,7 @@ export function FileViewer({ workspaceId, filePath, tabId }: FileViewerProps) {
     return <Loading message="Loading file…" />;
   }
 
-  if (error) {
+  if (error && !data) {
     return (
       <QueryErrorState
         title="Couldn't load file"

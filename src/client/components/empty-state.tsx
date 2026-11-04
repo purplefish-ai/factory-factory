@@ -73,12 +73,12 @@ export function EmptyState({
       ) : null}
       <div className="max-w-sm space-y-1">
         <p className={cn('font-medium text-foreground', styles.title)}>{title}</p>
-        {description ? (
+        {description !== undefined && description !== null ? (
           <p className={cn('text-muted-foreground', styles.description)}>{description}</p>
         ) : null}
       </div>
       {children}
-      {action ? (
+      {action !== undefined && action !== null ? (
         <div className="flex flex-wrap items-center justify-center gap-2">{action}</div>
       ) : null}
     </div>

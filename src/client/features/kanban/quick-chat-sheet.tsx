@@ -115,7 +115,7 @@ export function QuickChatSheet({ workspaceId, onClose }: QuickChatSheetProps) {
               transcriptScroll={transcriptScroll}
             />
           ) : workspaceId ? (
-            <Loading message="Loading sessions…" />
+            <Loading size="compact" message="Loading sessions…" />
           ) : null}
         </div>
       </SheetContent>

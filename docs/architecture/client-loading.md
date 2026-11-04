@@ -66,10 +66,10 @@ Pick the loading pattern by what the user is waiting for:
 Spinners inherit the surrounding text color. `Loading` places them in muted
 text, so a page-level wait reads as muted, and a button spinner matches the
 button's label on every variant. Don't color spinners with `text-brand`: brand
-is the `--running` status color (see `docs/status-colors.md`), and a loading
-spinner is not an agent that is running. Status icons that do mean "running",
-such as the tool-call and session indicators, keep their tone from
-`status-tones.ts`.
+is the Factory Yellow accent, which the default themes also use for the
+`running` status (see `docs/status-colors.md`), so a brand spinner reads as an
+agent at work rather than a wait. Status icons that do mean "running", such as
+the tool-call and session indicators, keep their tone from `status-tones.ts`.
 
 Under `prefers-reduced-motion: reduce`, `globals.css` stops `animate-spin`,
 `animate-pulse`, `animate-ping` and `animate-bounce` everywhere. Spinners keep
@@ -91,12 +91,15 @@ data still renders when only a background refetch fails. Write branches by hand
 when a panel combines several queries, as `CombinedChangesPanel` does.
 
 Render errors are caught by `ErrorBoundary` (`src/client/error-boundary.tsx`).
-The app root and the routed page area each have one; the page boundary resets
-when the pathname changes and offers Try again. The built-in fallback offers
-Reload and Copy details (message, URL, stack and component trace). Panels and
-lazy chunks use `variant="compact"` with a specific `title`, such as "Couldn't
-load the viewer". Offer `showRetry` only where re-rendering can succeed: a
-failed lazy import stays failed until the app reloads.
+The app root and the routed page area each have one. The page boundary resets
+when the URL changes and offers Try again, which helps when a page crashed on
+data that has since changed; a page whose route chunk failed to load needs
+Reload, which is the primary action. The built-in fallback offers Reload and
+Copy details (message, URL, stack and component trace). Panels and lazy chunks
+use `variant="compact"` with a specific `title`, such as "Couldn't load the
+viewer". Offer `showRetry` only where re-rendering can succeed: a failed lazy
+import stays failed until the app reloads, so the viewer and form boundaries
+omit it.
 
 ## Query and mutation failures
 

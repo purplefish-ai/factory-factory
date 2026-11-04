@@ -47,7 +47,7 @@ function RootLayout() {
       <CLIHealthBanner />
       <ModelCatalogWarning />
       <AppLayout className="flex-1 overflow-hidden">
-        <ErrorBoundary resetKey={pathname} showRetry>
+        <ErrorBoundary resetKey={`${pathname}${search}`} showRetry>
           <Suspense fallback={<Loading message="Loading page…" />}>
             <Outlet />
           </Suspense>

@@ -164,7 +164,7 @@ export function FileTree({ workspaceId, path = '', depth = 0, onFileSelect }: Fi
     );
   }
 
-  if (error) {
+  if (error && !data) {
     return (
       <div
         className="px-2 py-1 text-sm text-destructive"

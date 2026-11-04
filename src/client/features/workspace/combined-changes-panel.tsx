@@ -257,7 +257,7 @@ export function CombinedChangesPanel({ workspaceId }: CombinedChangesPanelProps)
   const {
     data: gitData,
     isLoading: isGitLoading,
-    error: gitError,
+    error: gitQueryError,
     isFetching: isGitFetching,
     refetch: refetchGit,
   } = trpc.workspace.getGitStatus.useQuery(
@@ -267,7 +267,7 @@ export function CombinedChangesPanel({ workspaceId }: CombinedChangesPanelProps)
   const {
     data: diffData,
     isLoading: isDiffLoading,
-    error: diffError,
+    error: diffQueryError,
     isFetching: isDiffFetching,
     refetch: refetchDiff,
   } = trpc.workspace.getDiffVsMain.useQuery(
@@ -277,7 +277,9 @@ export function CombinedChangesPanel({ workspaceId }: CombinedChangesPanelProps)
   const {
     data: unpushedData,
     isLoading: isUnpushedLoading,
-    error: unpushedError,
+    error: unpushedQueryError,
+    isFetching: isUnpushedFetching,
+    refetch: refetchUnpushed,
   } = trpc.workspace.getUnpushedFiles.useQuery(
     { workspaceId },
     { refetchInterval: 15_000, staleTime: 10_000 }
@@ -287,6 +289,12 @@ export function CombinedChangesPanel({ workspaceId }: CombinedChangesPanelProps)
     return <Loading size="compact" message="Loading changes…" />;
   }
 
+  // Cached results stay visible while a background refetch fails; only a query
+  // with no data counts as failed.
+  const gitError = gitData ? null : gitQueryError;
+  const diffError = diffData ? null : diffQueryError;
+  const unpushedError = unpushedData ? null : unpushedQueryError;
+
   if (gitError && diffError) {
     return (
       <QueryErrorState
@@ -295,8 +303,9 @@ export function CombinedChangesPanel({ workspaceId }: CombinedChangesPanelProps)
         onRetry={() => {
           void refetchGit();
           void refetchDiff();
+          void refetchUnpushed();
         }}
-        isRetrying={isGitFetching || isDiffFetching}
+        isRetrying={isGitFetching || isDiffFetching || isUnpushedFetching}
         className="h-full"
       />
     );

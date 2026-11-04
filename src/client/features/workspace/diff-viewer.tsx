@@ -53,7 +53,7 @@ function MarkdownPreview({ workspaceId, filePath }: MarkdownPreviewProps) {
     return <Loading message="Loading preview…" />;
   }
 
-  if (fileError) {
+  if (fileError && !fileData) {
     return (
       <QueryErrorState
         title="Couldn't load file"
@@ -135,7 +135,7 @@ export function DiffViewer({ workspaceId, filePath, tabId }: DiffViewerProps) {
     return <Loading message="Loading diff…" />;
   }
 
-  if (error) {
+  if (error && !data) {
     return (
       <QueryErrorState
         title="Couldn't load diff"

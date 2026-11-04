@@ -72,7 +72,12 @@ export const TitleAndDescription: Story = {
 };
 
 export const TitleOnly: Story = {
-  args: { icon: undefined, title: 'No diff available', description: undefined },
+  args: {
+    icon: undefined,
+    title: 'No diff available',
+    description: undefined,
+    className: 'h-full',
+  },
 };
 
 /** Compact size for narrow side panels and lists. */
