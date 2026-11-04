@@ -146,7 +146,7 @@ export const Projects: Story = {
     await expect(await canvas.findByText('Factory configuration')).toBeVisible();
     await expect(canvas.getByText('Issue tracking')).toBeVisible();
     await userEvent.click(alpha);
-    await expect(canvas.queryByText('Factory configuration')).not.toBeInTheDocument();
+    await expect(canvas.getByText('Factory configuration')).not.toBeVisible();
   },
 };
 export const ProjectsOnPhone: Story = {

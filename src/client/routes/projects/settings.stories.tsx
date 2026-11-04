@@ -181,3 +181,19 @@ export const LongCommandsOnPhone: Story = {
     await expect(page.scrollWidth).toBeLessThanOrEqual(page.clientWidth);
   },
 };
+
+export const LinearDraftSurvivesCollapse: Story = {
+  parameters: {
+    trpc: { handlers: { 'project.list': () => [{ ...project, issueProvider: 'LINEAR' }] } },
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const apiKey = await canvas.findByLabelText('API key');
+    await userEvent.type(apiKey, 'unsaved-linear-key');
+    const trigger = canvas.getByRole('button', { name: 'Beta' });
+    await userEvent.click(trigger);
+    await expect(apiKey).not.toBeVisible();
+    await userEvent.click(trigger);
+    await expect(await canvas.findByLabelText('API key')).toHaveValue('unsaved-linear-key');
+  },
+};

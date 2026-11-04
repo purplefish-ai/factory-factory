@@ -32,6 +32,7 @@ function RootLayout() {
       projects?.length === 0 &&
       !pathname.startsWith('/projects/new') &&
       !isProjectSpecificRoute &&
+      !/^\/admin\/project\/?$/i.test(pathname) &&
       !hasExplicitLegacyProjectOwner(pathname, search)
     ) {
       void navigate('/projects/new');

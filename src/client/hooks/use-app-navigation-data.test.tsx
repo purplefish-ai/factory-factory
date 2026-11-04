@@ -1,11 +1,21 @@
 import { act, createElement } from 'react';
 import { flushSync } from 'react-dom';
 import { createRoot } from 'react-dom/client';
-import { Link, MemoryRouter } from 'react-router';
+import { Link, MemoryRouter, Route, Routes } from 'react-router';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { SELECTED_PROJECT_KEY } from '@/client/lib/project-selection';
-// @vitest-environment jsdom
 import { trpc } from '@/client/lib/trpc';
+// @vitest-environment jsdom
+import AdminDashboardPage from '@/client/routes/admin-page';
+import ProjectSettingsRedirect from '@/client/routes/projects/settings';
+
+vi.mock('@/client/routes/admin/settings-page-layout', () => ({
+  SettingsPageLayout: ({ children }: { children: import('react').ReactNode }) => children,
+}));
+vi.mock('@/client/routes/admin/ProjectSettingsSection', () => ({
+  ProjectSettingsSection: ({ project }: { project: { slug: string } }) =>
+    createElement('section', { 'data-project': project.slug }),
+}));
 
 const mocks = vi.hoisted(() => ({
   listForProject: vi.fn(() => ({ data: { workspaces: [], reviewCount: 0 } })),
@@ -170,6 +180,35 @@ describe('project route selection', () => {
       }
     }
   );
+
+  it('preserves the persisted global selection through a legacy redirect and inline editors', async () => {
+    localStorage.setItem(SELECTED_PROJECT_KEY, 'alpha');
+    window.history.replaceState({}, '', '/projects/new/settings');
+    const container = document.createElement('div');
+    const root = createRoot(container);
+    const selected: { selectedProjectSlug?: string; selectedProjectId?: string } = {};
+    try {
+      await act(() =>
+        root.render(
+          <MemoryRouter initialEntries={['/projects/new/settings']}>
+            <NavigationHarness selected={selected} />
+            <Routes>
+              <Route path="/projects/:slug/settings" element={<ProjectSettingsRedirect />} />
+              <Route path="/admin/:section" element={<AdminDashboardPage />} />
+            </Routes>
+          </MemoryRouter>
+        )
+      );
+      expect(container.querySelector('[data-project]')?.getAttribute('data-project')).toBe('new');
+      expect(selected.selectedProjectSlug).toBe('alpha');
+      expect(selected.selectedProjectId).toBe('alpha-id');
+      expect(localStorage.getItem(SELECTED_PROJECT_KEY)).toBe('alpha');
+    } finally {
+      await act(() => root.unmount());
+      localStorage.clear();
+      window.history.replaceState({}, '', '/');
+    }
+  });
 
   it.each(['', 'missing', 'alpha'])(
     'resolves the global fallback independently of scoped settings with stored=%s',

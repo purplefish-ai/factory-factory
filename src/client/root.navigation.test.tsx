@@ -70,6 +70,8 @@ it.each([
   ['/reviews?repo=archived/repository&pr=12', '/reviews?repo=archived/repository&pr=12'],
   ['/Reviews/?repo=archived/repository&pr=12', '/Reviews/?repo=archived/repository&pr=12'],
   ['/projects/archived/agents/agent', '/projects/archived/agents/agent'],
+  ['/admin/project?project=archived', '/admin/project?project=archived'],
+  ['/admin/project', '/admin/project'],
   ['/agents', '/projects/new'],
   ['/reviews', '/projects/new'],
 ])(

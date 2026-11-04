@@ -1,4 +1,4 @@
-import { NavLink } from 'react-router';
+import { NavLink, useLocation } from 'react-router';
 import { cn } from '@/lib/utils';
 
 export const SETTINGS_SECTIONS = [
@@ -13,12 +13,13 @@ export const SETTINGS_SECTIONS = [
 ];
 
 export function SettingsTabsList() {
+  const { pathname, search } = useLocation();
   return (
     <nav aria-label="Settings sections" className="flex flex-wrap gap-1 border-b pb-3">
       {SETTINGS_SECTIONS.map(({ path, label }) => (
         <NavLink
           key={path}
-          to={path}
+          to={pathname === path ? { pathname: path, search } : path}
           end
           className={({ isActive }) =>
             cn(
