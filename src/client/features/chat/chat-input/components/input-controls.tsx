@@ -12,6 +12,7 @@ import type { AcpConfigOption } from '@/client/features/chat/reducer';
 import { AttachmentPreview } from '@/client/features/composer';
 import { ProviderModelPicker } from '@/client/features/session-selection';
 import { ShortcutKeys } from '@/client/features/shortcuts';
+import { formatShortcut } from '@/client/lib/keyboard-shortcuts';
 import { Button } from '@/components/ui/button';
 import { InputGroupButton } from '@/components/ui/input-group';
 import {
@@ -349,7 +350,6 @@ export const LeftControls = memo(function LeftControls(props: LeftControlsProps)
 });
 
 export const RightControls = memo(function RightControls({
-  modLabel = '⌘',
   pendingMessageCount,
   running,
   promptInFlight = running,
@@ -361,7 +361,6 @@ export const RightControls = memo(function RightControls({
   children,
 }: {
   children?: React.ReactNode;
-  modLabel?: string;
   pendingMessageCount: number;
   running: boolean;
   promptInFlight?: boolean;
@@ -401,7 +400,7 @@ export const RightControls = memo(function RightControls({
                 </Button>
               </span>
             </TooltipTrigger>
-            <TooltipContent>Stop agent ({modLabel}+.)</TooltipContent>
+            <TooltipContent>Stop agent ({formatShortcut('composer.stop')})</TooltipContent>
           </Tooltip>
         </TooltipProvider>
       )}

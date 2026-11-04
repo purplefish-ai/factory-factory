@@ -319,7 +319,6 @@ export const ChatInput = memo(function ChatInput({
 
           {/* Right side: Sending indicator + Stop button (when running) + Send button */}
           <RightControls
-            modLabel={modLabel}
             pendingMessageCount={pendingMessageCount}
             running={running}
             promptInFlight={promptInFlight}
