@@ -59,3 +59,22 @@ describe('SessionPublisher.forwardSnapshot', () => {
     expect(listener).toHaveBeenCalledOnce();
   });
 });
+
+it('includes explicit removals for clients retaining older pages', () => {
+  const listener = vi.fn();
+  sessionEventBus.on(SESSION_OUTBOUND_EVENT, listener);
+  try {
+    const store = new SessionStoreRegistry().getOrCreate('retained-history');
+    new SessionPublisher().forwardSnapshot(store, {
+      reason: 'remove_transcript_message',
+      removedMessageIds: ['old-message'],
+    });
+    expect(listener).toHaveBeenCalledWith(
+      expect.objectContaining({
+        payload: expect.objectContaining({ removedMessageIds: ['old-message'] }),
+      })
+    );
+  } finally {
+    sessionEventBus.off(SESSION_OUTBOUND_EVENT, listener);
+  }
+});

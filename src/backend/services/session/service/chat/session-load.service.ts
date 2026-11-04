@@ -1,7 +1,9 @@
+import { ApplicationError } from '@/backend/lib/application-error';
 import type { ResolvedSessionConfigProjection } from '@/backend/services/session/service/lifecycle/session-config-projection';
 import type { ProviderHistorySession } from '@/backend/services/session/service/lifecycle/session-provider-history-hydrator';
 import type { SessionDomainService } from '@/backend/services/session/service/session-domain.service';
 import { finalizeInterruptedTranscriptToolCalls } from '@/backend/services/session/service/store/session-tool-call-recovery';
+import { selectTranscriptPage } from '@/backend/services/session/service/store/session-transcript-page';
 import {
   commandNameKey,
   isWorkspaceScopedCommandName,
@@ -79,6 +81,20 @@ export class SessionLoadService {
       provider: session.provider,
       worktreePath: session.workspace.worktreePath,
     };
+  }
+
+  /** Browse the loaded transcript without rehydration, which can renumber history.
+   * An evicted/replaced cursor requires a fresh conversation load instead.
+   */
+  async readTranscriptPage(input: { sessionId: string; beforeMessageId: string }) {
+    const session = await this.deps.findSession(input.sessionId);
+    if (!session) {
+      throw new ApplicationError('NOT_FOUND', 'Session not found');
+    }
+    return selectTranscriptPage(
+      this.deps.domain.getTranscriptSnapshot(input.sessionId),
+      input.beforeMessageId
+    );
   }
 
   /** Capture runtime, recovery, and replay without yielding before the adapter publishes it. */

@@ -33,6 +33,7 @@ import {
   parseHydrationLoadError,
   scheduleConnectLoadingStart,
 } from './use-chat-websocket-hydration';
+import { useTranscriptHistory, type TranscriptHistoryControls } from './use-transcript-history';
 
 const LOAD_SESSION_RETRY_TIMEOUT_MS = 10_000;
 
@@ -52,6 +53,8 @@ export interface UseChatWebSocketOptions {
 export interface UseChatWebSocketReturn {
   // State
   messages: ChatMessage[];
+  transcriptHistory?: TranscriptHistoryControls;
+  transcriptPageBoundaries?: ReadonlySet<string>;
   connected: boolean;
   // Session lifecycle status (replaces running, stopping, loadingSession, startingSession)
   sessionStatus: SessionStatus;
@@ -364,9 +367,27 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
     restartSessionMutate({ id: dbSessionId });
   }, [dbSessionId, restartSessionMutate]);
 
+  const utils = trpc.useUtils();
+  const transcriptHistory = useTranscriptHistory({
+    sessionId: dbSessionId,
+    enabled:
+      transport.connected &&
+      controlHydratedSessionIdRef.current === dbSessionId &&
+      chat.sessionStatus.phase !== 'loading',
+    messages: chat.messages,
+    history: chat.transcriptHistory,
+    dispatch: chat.dispatch,
+    fetchPage: useCallback(
+      (input, signal) => utils.client.session.readTranscriptPage.query(input, { signal }),
+      [utils.client]
+    ),
+  });
+
   return {
     // State from chat
     messages: chat.messages,
+    transcriptHistory,
+    transcriptPageBoundaries: chat.transcriptPageBoundaries,
     connected: transport.connected,
     runtimeSessionId: hydratedSessionIdRef.current,
     controlsHydrated:

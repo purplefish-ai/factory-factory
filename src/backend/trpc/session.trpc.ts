@@ -240,6 +240,12 @@ export const sessionRouter = router({
       }
     }),
 
+  readTranscriptPage: publicProcedure
+    .input(z.object({ sessionId: z.string().min(1), beforeMessageId: z.string().min(1).max(1000) }))
+    .query(({ ctx, input }) =>
+      ctx.appContext.services.sessionLoadService.readTranscriptPage(input)
+    ),
+
   listSubagents: publicProcedure.input(subagentListParamsSchema).query(async ({ ctx, input }) => {
     const { acpRuntimeManager, sessionLifecycleService } = ctx.appContext.services;
     await sessionLifecycleService.ensureSubagentBrowseSession(input.sessionId);

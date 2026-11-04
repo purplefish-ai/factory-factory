@@ -40,8 +40,11 @@ function useSameKeys(keys: string[]) {
 export function useTranscriptScroll(
   viewport: HTMLDivElement | null,
   keys: string[],
-  options: TranscriptScrollOptions
+  options: TranscriptScrollOptions,
+  anchorHeaderToContent = false
 ) {
+  const headerAnchoring = useRef(anchorHeaderToContent);
+  headerAnchoring.current = anchorHeaderToContent;
   const latest = useRef(options);
   latest.current = options;
   const controller = useRef<TranscriptScrollController | null>(null);
@@ -83,7 +86,12 @@ export function useTranscriptScroll(
         Math.abs(entry.height - node.getBoundingClientRect().height) <= 1
       );
     };
-    const positioner = createTranscriptPositioner(viewport, engine, measured);
+    const positioner = createTranscriptPositioner(
+      viewport,
+      engine,
+      measured,
+      () => headerAnchoring.current
+    );
     const current = createTranscriptScrollController({
       initialIntent: latest.current.initialIntent,
       port: {

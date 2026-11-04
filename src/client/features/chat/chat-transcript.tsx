@@ -1,12 +1,14 @@
 import { ArrowDownIcon } from '@phosphor-icons/react/dist/csr/ArrowDown';
-import { memo, type ReactNode, useState } from 'react';
+import { memo, type ReactNode, useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import type { PendingRequestType } from '@/shared/pending-request-types';
 import { ThinkingFooter } from './thinking-footer';
 import type { TranscriptDisplayProps } from './transcript-display.types';
+import { TranscriptHistoryHeader } from './transcript-history-header';
 import { useTranscriptLayout } from './transcript-layout';
 import { TranscriptRows } from './transcript-rows';
 import type { TranscriptScrollOptions } from './transcript-scroll.types';
+import type { TranscriptHistoryControls } from './use-transcript-history';
 import { useTranscriptScroll } from './use-transcript-scroll';
 
 export interface ChatTranscriptProps extends TranscriptDisplayProps {
@@ -16,6 +18,7 @@ export interface ChatTranscriptProps extends TranscriptDisplayProps {
   /** A request blocking the agent on the user; the footer says so instead of "working". */
   pendingRequestType?: PendingRequestType | null;
   header?: ReactNode;
+  history?: TranscriptHistoryControls;
   label?: string;
   contentClassName?: string;
 }
@@ -24,7 +27,8 @@ function TranscriptInstance({
   scroll,
   thinkingInFooter = false,
   pendingRequestType = null,
-  header,
+  header: banner,
+  history,
   label = 'Conversation',
   contentClassName,
   ...props
@@ -40,12 +44,42 @@ function TranscriptInstance({
     !display.loadingSession &&
     (props.running || autonomousTurn) &&
     (props.work?.promptInFlight !== false || autonomousTurn);
+  const header = history ? (
+    <>
+      {banner}
+      <TranscriptHistoryHeader history={history} />
+    </>
+  ) : (
+    banner
+  );
   const layout = useTranscriptLayout(display, Boolean(header));
   const { engine, totalSize, state, hasContentBelow, jumpToLatest } = useTranscriptScroll(
     viewport,
     layout.keys,
-    scroll
+    scroll,
+    Boolean(history)
   );
+  useEffect(() => {
+    if (
+      !(viewport && history) ||
+      history.status !== 'idle' ||
+      history.enabled === false ||
+      state.intent !== 'reading' ||
+      state.phase !== 'ready' ||
+      !scroll.active ||
+      display.loadingSession
+    ) {
+      return;
+    }
+    const loadNearTop = () => {
+      if (viewport.scrollTop < 400) {
+        history.loadOlder();
+      }
+    };
+    loadNearTop();
+    viewport.addEventListener('scroll', loadNearTop, { passive: true });
+    return () => viewport.removeEventListener('scroll', loadNearTop);
+  }, [viewport, history, state.intent, state.phase, scroll.active, display.loadingSession]);
   return (
     <div className="flex flex-1 min-h-24 h-full min-w-0 flex-col">
       <div className="relative flex-1 min-h-0">

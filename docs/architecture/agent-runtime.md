@@ -111,6 +111,32 @@ batches above 128 MiB explicitly. Framing bounds each message, rather than
 reducing total replay bytes or adding pagination; the existing renderer
 transcript window and full backend transcript retention still apply.
 
+Main and quick-chat transcripts initially load the newest 1,000 entries. While
+reading near the top, the client requests older pages of up to 500 entries from
+`session.readTranscriptPage`, using the first loaded persisted message ID as an
+exclusive cursor. A page starts at a render-safe boundary; preceding fragments
+remain available on the next request. The read uses the already loaded backend
+transcript without provider hydration, startup, configuration, or queue
+dispatch. An evicted or replaced cursor fails explicitly and requires reloading
+the chat.
+
+Requested history stays in renderer memory until a hydration snapshot, replay,
+clear, or session switch. Nonempty live snapshots replace only their recent
+window and preserve the loaded prefix; explicit removals filter the listed
+message IDs from retained history and in-flight page responses. An empty live
+snapshot authoritatively clears the transcript and resets paging, fencing
+responses from requests started before the clear. The existing virtualizer
+bounds mounted rows. History merges by ID with current live entries taking
+precedence, without replaying old runtime, usage, thinking, or task effects.
+Request identities fence stale completions. Loading failures and connection
+interruptions retain visible messages and offer Retry. Failed requests restore
+the previous renderer limit and page boundaries; unavailable connections disable
+paging controls. Prepending preserves the content anchor, including when the
+loading header is visible at the very top. Reaching the oldest entry shows a
+beginning marker. Tool groups stay split at loaded page boundaries so prepending
+adjacent tools preserves existing row keys and expansion state; late results
+still pair across those boundaries.
+
 Both managed providers accept image and text attachments. Connected conversation
 composers accept image drops, uploads, and the upload shortcut while an agent is
 working, so follow-up messages can be queued with attachments.

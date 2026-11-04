@@ -217,15 +217,26 @@ it('keeps virtualizer key callbacks stable until the row keys change', async () 
 });
 
 let state: TranscriptScrollState | undefined;
-function SendProbe({ request }: { request?: object }) {
-  ({ state, engine } = useTranscriptScroll(viewport, ['row'], {
-    identity: 'send',
-    active: true,
-    ready: true,
-    initialIntent: 'reading',
-    initialPosition: null,
-    followRequest: request,
-  }));
+function SendProbe({
+  request,
+  anchorHeaderToContent = false,
+}: {
+  request?: object;
+  anchorHeaderToContent?: boolean;
+}) {
+  ({ state, engine } = useTranscriptScroll(
+    viewport,
+    ['row'],
+    {
+      identity: 'send',
+      active: true,
+      ready: true,
+      initialIntent: 'reading',
+      initialPosition: null,
+      followRequest: request,
+    },
+    anchorHeaderToContent
+  ));
   return null;
 }
 
@@ -267,4 +278,14 @@ it('resumes following on a send request, but preserves reading on ordinary rende
   expect(state?.intent).toBe('following');
   await act(flushFrame);
   expect(scrollToEnd).toHaveBeenCalledWith({ behavior: 'instant' });
+});
+
+it('keeps the scroll controller active when history anchoring changes', async () => {
+  vi.stubGlobal('requestAnimationFrame', () => 1);
+  vi.stubGlobal('cancelAnimationFrame', () => undefined);
+  Object.defineProperty(viewport, 'clientHeight', { get: () => 400 });
+  await act(() => root.render(<SendProbe />));
+  await act(() => root.render(<SendProbe anchorHeaderToContent />));
+  await act(() => root.render(<SendProbe anchorHeaderToContent request={{}} />));
+  expect(state?.intent).toBe('following');
 });

@@ -11,6 +11,7 @@ import {
 
 export interface IncrementalChatGroupingOptions {
   filterDuplicateResults?: boolean;
+  groupBoundaries?: ReadonlySet<string>;
 }
 
 interface GroupedSegment {
@@ -178,16 +179,59 @@ function isToolMessageResult(message: ChatMessage): boolean {
   return Boolean(message.message && isToolResultMessage(message.message));
 }
 
-function prepareMessages(messages: ChatMessage[], filterDuplicateResults: boolean): ChatMessage[] {
+function prepareMessages(
+  messages: ChatMessage[],
+  filterDuplicateResults: boolean,
+  boundaries?: ReadonlySet<string>
+): ChatMessage[] {
   const deduplicated = filterDuplicateResults ? filterDuplicateResultMessages(messages) : messages;
-  return deduplicated.filter(isRenderableGroupedMessage);
+  const prepared = deduplicated.filter(isRenderableGroupedMessage);
+  if (!(filterDuplicateResults && boundaries?.size)) {
+    return prepared;
+  }
+  // A result that was the first visible row must survive even when an older
+  // page reveals matching assistant text; otherwise its reading anchor vanishes.
+  const visibleBoundaries = projectGroupingBoundaries(
+    messages,
+    messages.filter(isRenderableGroupedMessage),
+    boundaries
+  );
+  const retainedIds = new Set(prepared.map((message) => message.id));
+  return messages.filter(
+    (message) =>
+      isRenderableGroupedMessage(message) &&
+      (retainedIds.has(message.id) || visibleBoundaries?.has(message.id))
+  );
+}
+
+/** Hidden thinking and duplicate results must not erase a page boundary. */
+function projectGroupingBoundaries(
+  messages: ChatMessage[],
+  prepared: ChatMessage[],
+  boundaries?: ReadonlySet<string>
+): ReadonlySet<string> | undefined {
+  if (!boundaries?.size) {
+    return boundaries;
+  }
+  const retained = new Set(prepared.map((message) => message.id));
+  const projected = new Set<string>();
+  let pending = false;
+  for (const message of messages) {
+    pending ||= boundaries.has(message.id);
+    if (pending && retained.has(message.id)) {
+      projected.add(message.id);
+      pending = false;
+    }
+  }
+  return projected;
 }
 
 function createFullSnapshot(
   messages: ChatMessage[],
-  previous?: GroupingSnapshot
+  previous?: GroupingSnapshot,
+  boundaries?: ReadonlySet<string>
 ): GroupingSnapshot {
-  const freshlyGrouped = groupAdjacentToolCalls(messages);
+  const freshlyGrouped = groupAdjacentToolCalls(messages, undefined, boundaries);
   const freshSegments = deriveSegments(messages, freshlyGrouped);
   const grouped = previous
     ? reuseToolSequencesByAnchor(previous, messages, freshlyGrouped, freshSegments)
@@ -257,7 +301,8 @@ function findLateResultRecomputeStart(
 function createIncrementalSnapshot(
   previous: GroupingSnapshot,
   messages: ChatMessage[],
-  commonPrefix: number
+  commonPrefix: number,
+  boundaries?: ReadonlySet<string>
 ): GroupingSnapshot {
   let recomputeStart = Math.min(
     rewindToolRun(previous.messages, commonPrefix),
@@ -271,12 +316,12 @@ function createIncrementalSnapshot(
     rangeContainsToolResult(previous.messages, recomputeStart, commonPrefix) ||
     rangeContainsToolResult(messages, recomputeStart, commonPrefix)
   ) {
-    return createFullSnapshot(messages, previous);
+    return createFullSnapshot(messages, previous, boundaries);
   }
 
   const reusable = previous.segments.filter((segment) => segment.start < recomputeStart);
   const suffixMessages = messages.slice(recomputeStart);
-  const freshlyGroupedSuffix = groupAdjacentToolCalls(suffixMessages);
+  const freshlyGroupedSuffix = groupAdjacentToolCalls(suffixMessages, undefined, boundaries);
   const freshSuffixSegments = deriveSegments(suffixMessages, freshlyGroupedSuffix).map(
     (segment) => ({ ...segment, start: segment.start + recomputeStart })
   );
@@ -310,9 +355,10 @@ export function createIncrementalChatGrouper(
         return snapshot.grouped;
       }
 
-      const prepared = prepareMessages(messages, filterDuplicateResults);
+      const prepared = prepareMessages(messages, filterDuplicateResults, options.groupBoundaries);
+      const boundaries = projectGroupingBoundaries(messages, prepared, options.groupBoundaries);
       if (!snapshot) {
-        snapshot = createFullSnapshot(prepared);
+        snapshot = createFullSnapshot(prepared, undefined, boundaries);
       } else {
         const commonPrefix = commonPrefixLength(snapshot.messages, prepared);
         if (commonPrefix !== snapshot.messages.length || commonPrefix !== prepared.length) {
@@ -322,8 +368,8 @@ export function createIncrementalChatGrouper(
             !hasChangedHistoricalToolResult(snapshot.messages, prepared, commonPrefix) &&
             !rewindCrossesHistoricalToolResult(snapshot.messages, prepared, commonPrefix);
           snapshot = canReusePrefix
-            ? createIncrementalSnapshot(snapshot, prepared, commonPrefix)
-            : createFullSnapshot(prepared, snapshot);
+            ? createIncrementalSnapshot(snapshot, prepared, commonPrefix, boundaries)
+            : createFullSnapshot(prepared, snapshot, boundaries);
         }
       }
 

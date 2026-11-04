@@ -21,7 +21,13 @@ export class SessionPublisher {
 
   forwardSnapshot(
     store: SessionStore,
-    options?: { loadRequestId?: string; reason?: SnapshotReason; includeParitySnapshot?: boolean }
+    options?: {
+      loadRequestId?: string;
+      reason?: SnapshotReason;
+      includeParitySnapshot?: boolean;
+      removedMessageIds?: string[];
+      resetTranscript?: boolean;
+    }
   ): void {
     // Building a snapshot walks the whole transcript. Unviewed sessions skip it:
     // a client that starts viewing hydrates through load_session, which replays
@@ -32,6 +38,8 @@ export class SessionPublisher {
     const snapshotMessages = buildSnapshotMessages(store);
     const payload: WebSocketMessage = {
       type: 'session_snapshot',
+      ...(options?.resetTranscript ? { resetTranscript: true } : {}),
+      ...(options?.removedMessageIds ? { removedMessageIds: options.removedMessageIds } : {}),
       messages: snapshotMessages,
       queuedMessages: [...store.queue],
       pendingInteractiveRequest: store.pendingInteractiveRequest,

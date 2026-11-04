@@ -14,7 +14,8 @@ interface PositionEngine {
 export function captureTranscriptPosition(
   viewport: HTMLDivElement,
   engine: PositionEngine,
-  intent: TranscriptIntent
+  intent: TranscriptIntent,
+  anchorHeaderToContent = false
 ): TranscriptPosition {
   const top = Math.max(0, viewport.scrollTop);
   let row = engine.getVirtualItemForOffset(top);
@@ -23,6 +24,11 @@ export function captureTranscriptPosition(
     if (next && next.index !== row.index) {
       row = next;
     }
+  }
+  // The history header stays at index zero during a prepend. Anchoring it
+  // would jump straight into the new page instead of keeping the old content.
+  if (anchorHeaderToContent && row?.key === 'transcript:header') {
+    row = engine.getVirtualItems().find((item) => item.index === 1) ?? row;
   }
   return {
     intent,
@@ -36,7 +42,8 @@ export function captureTranscriptPosition(
 export function createTranscriptPositioner(
   viewport: HTMLDivElement,
   engine: PositionEngine,
-  isMeasured: (key: string) => boolean
+  isMeasured: (key: string) => boolean,
+  anchorHeaderToContent: () => boolean = () => false
 ) {
   let target: TranscriptPosition | null = null;
   let mounting: number | null = null;
@@ -108,6 +115,7 @@ export function createTranscriptPositioner(
     restore,
     cancel,
     scrollToEnd,
-    capture: (intent: TranscriptIntent) => captureTranscriptPosition(viewport, engine, intent),
+    capture: (intent: TranscriptIntent) =>
+      captureTranscriptPosition(viewport, engine, intent, anchorHeaderToContent()),
   };
 }

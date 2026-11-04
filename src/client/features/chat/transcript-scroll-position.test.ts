@@ -140,3 +140,14 @@ it('following requires a measured last row and re-evaluates growing extent', () 
   h.positioner.cancel();
   expect(h.engine.cancelScroll).toHaveBeenCalled();
 });
+
+it('anchors content rather than the history header when paging at the very top', () => {
+  const h = harness();
+  h.rows[0] = { ...h.rows[0]!, key: 'transcript:header' };
+  const position = captureTranscriptPosition(h.viewport, h.engine, 'reading', true);
+  expect(position.anchor).toEqual({ key: 'b', offset: -100 });
+  h.rows[1] = { ...h.rows[1]!, start: 1100, end: 2300 };
+  h.measure();
+  h.positioner.restore(position);
+  expect(h.viewport.scrollTop).toBe(1000);
+});

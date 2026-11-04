@@ -547,3 +547,133 @@ test('thinking completion preserves focus outside the preview', async ({ page })
   await toggle.evaluate((button) => button.click());
   await expect(outside).toBeFocused();
 });
+
+test('older history loads near the top, preserves content at the top, and keeps rows virtualized', async ({
+  page,
+}) => {
+  await page.goto('/__transcript-scroll?history=1');
+  const viewport = page.getByTestId('transcript-viewport');
+  await expect.poll(() => gap(viewport)).toBeLessThanOrEqual(1);
+  await expect(page.getByText('History requests: 0')).toBeVisible();
+  await viewport.hover();
+  await page.mouse.wheel(0, -100_000);
+  await expect(page.getByRole('button', { name: 'Scroll to bottom', exact: true })).toBeVisible();
+  await viewport.evaluate((element) => {
+    element.scrollTop = 0;
+  });
+  await expect(page.getByText('Loading earlier messages…')).toBeVisible();
+  await expect(page.getByText('History requests: 1')).toBeVisible();
+  const original = viewport.locator('[data-transcript-key="m-0"]');
+  const relativeTop = () =>
+    original.evaluate(
+      (element) =>
+        element.getBoundingClientRect().top -
+        (element.closest('[data-testid="transcript-viewport"]')?.getBoundingClientRect().top ?? 0)
+    );
+  const before = await relativeTop();
+  await page.getByRole('button', { name: 'Resolve history page', exact: true }).click();
+  await expect.poll(relativeTop).toBe(before);
+  expect(await viewport.locator('[data-transcript-key]').count()).toBeLessThan(25);
+  await viewport.evaluate((element) => {
+    element.scrollTop = 0;
+  });
+  await expect(page.getByText('Beginning of conversation')).toBeVisible();
+  await expect(page.getByText('History requests: 1')).toBeVisible();
+});
+
+test('failed older history stays visible until an explicit retry', async ({ page }) => {
+  await page.goto('/__transcript-scroll?history=1');
+  const viewport = page.getByTestId('transcript-viewport');
+  await expect.poll(() => gap(viewport)).toBeLessThanOrEqual(1);
+  await viewport.hover();
+  await page.mouse.wheel(0, -100_000);
+  await viewport.evaluate((element) => {
+    element.scrollTop = 0;
+  });
+  await expect(page.getByText('Loading earlier messages…')).toBeVisible();
+  await page.getByRole('button', { name: 'Fail history page', exact: true }).click();
+  await expect(page.getByText('History temporarily unavailable')).toBeVisible();
+  await expect(page.getByText('History requests: 1')).toBeVisible();
+  await expect(viewport.locator('[data-transcript-key="m-0"]')).toBeVisible();
+  await page.getByRole('button', { name: 'Retry', exact: true }).click();
+  await expect(page.getByText('History requests: 2')).toBeVisible();
+  await page.getByRole('button', { name: 'Resolve history page', exact: true }).click();
+  await viewport.evaluate((element) => {
+    element.scrollTop = 0;
+  });
+  await expect(page.getByText('Beginning of conversation')).toBeVisible();
+});
+
+test('paging adjacent tools preserves the expanded existing group and its anchor', async ({
+  page,
+}) => {
+  await page.goto('/__transcript-scroll?history-tools=1');
+  const viewport = page.getByTestId('transcript-viewport');
+  await expect.poll(() => gap(viewport)).toBeLessThanOrEqual(1);
+  await viewport.hover();
+  await page.mouse.wheel(0, -100_000);
+  await expect(page.getByText('Loading earlier messages…')).toBeVisible();
+  const group = viewport.locator('[data-transcript-key="tool-seq-tool-100"]');
+  const toggle = group.locator('button[aria-expanded]').first();
+  await toggle.click();
+  await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+  // Expansion and the wheel interaction can finish on later frames. Capture
+  // the anchor only after the original content has settled.
+  await viewport.evaluate(async (element) => {
+    let previous = '';
+    let stable = 0;
+    for (let frame = 0; frame < 120; frame++) {
+      await new Promise(requestAnimationFrame);
+      const current = `${element.scrollTop}:${element.scrollHeight}`;
+      stable = current === previous ? stable + 1 : 0;
+      previous = current;
+      if (stable >= 6) {
+        return;
+      }
+    }
+    throw new Error('Expanded tool geometry did not settle');
+  });
+  const relativeTop = () =>
+    group.evaluate(
+      (element) =>
+        element.getBoundingClientRect().top -
+        (element.closest('[data-testid="transcript-viewport"]')?.getBoundingClientRect().top ?? 0)
+    );
+  const before = await relativeTop();
+  await page.getByRole('button', { name: 'Resolve tools page', exact: true }).click();
+  await expect.poll(relativeTop).toBe(before);
+  await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+  await page.getByRole('button', { name: 'Publish live snapshot', exact: true }).click();
+  await expect.poll(relativeTop).toBe(before);
+  await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+  await expect(
+    group.getByRole('button', { name: 'Reading file-100.ts Running', exact: true })
+  ).toBeVisible();
+  await viewport.evaluate((element) => {
+    element.scrollTop = 0;
+  });
+  await expect(page.getByText('Beginning of conversation')).toBeVisible();
+  await expect(viewport.locator('[data-transcript-key="tool-seq-tool-0"]')).toBeVisible();
+});
+
+test('history fixture keeps paging state separate across sessions', async ({ page }) => {
+  await page.goto('/__transcript-scroll?history=1');
+  const viewport = page.getByTestId('transcript-viewport');
+  await expect.poll(() => gap(viewport)).toBeLessThanOrEqual(1);
+  await viewport.hover();
+  await page.mouse.wheel(0, -100_000);
+  await expect(page.getByText('Loading earlier messages…')).toBeVisible();
+  await page.getByRole('button', { name: 'Resolve history page', exact: true }).click();
+  await page.getByRole('button', { name: 'Switch session', exact: true }).click();
+  await expect(page.getByText('Session B', { exact: true })).toBeVisible();
+  await expect(page.getByText('History requests: 0')).toBeVisible();
+  await viewport.hover();
+  await page.mouse.wheel(0, -100_000);
+  await expect(page.getByText('Loading earlier messages…')).toBeVisible();
+  await expect(page.getByText('History requests: 1')).toBeVisible();
+  await page.getByRole('button', { name: 'Switch session', exact: true }).click();
+  await viewport.evaluate((element) => {
+    element.scrollTop = 0;
+  });
+  await expect(page.getByText('Beginning of conversation')).toBeVisible();
+});

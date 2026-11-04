@@ -541,6 +541,7 @@ describe('SessionDomainService', () => {
       expect.objectContaining({
         type: 'session_snapshot',
         messages: [],
+        removedMessageIds: ['u1'],
       })
     );
   });
@@ -773,4 +774,12 @@ describe('SessionDomainService additional behavior', () => {
 
     expect(sessionDomainService.getTranscriptSnapshot('s1').length).toBe(3);
   });
+});
+
+it('marks provider identity replacement as a complete transcript reset', () => {
+  sessionDomainService.resetProviderHistory('replacement-snapshot', 'replacement-provider');
+  expect(publishToSessionMock).toHaveBeenCalledWith(
+    'replacement-snapshot',
+    expect.objectContaining({ type: 'session_snapshot', resetTranscript: true })
+  );
 });

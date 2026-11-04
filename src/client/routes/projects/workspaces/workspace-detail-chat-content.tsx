@@ -40,6 +40,8 @@ export interface ChatContentProps {
   onOpenSubagent?: (selection: SubagentSelection) => void;
   parentSessionName?: string | null;
   messages: ReturnType<typeof useChatWebSocket>['messages'];
+  history?: ReturnType<typeof useChatWebSocket>['transcriptHistory'];
+  transcriptPageBoundaries?: ReadonlySet<string>;
   acpPlan?: ReturnType<typeof useChatWebSocket>['acpPlan'];
   sessionStatus: ReturnType<typeof useChatWebSocket>['sessionStatus'];
   sessionRuntime: SessionRuntimeState;
@@ -211,6 +213,7 @@ export const ChatContent = memo(function ChatContent(props: ChatContentProps) {
   );
   const groupedMessages = useGroupedChatMessages(timeline.messages, {
     filterDuplicateResults: true,
+    groupBoundaries: props.transcriptPageBoundaries,
   });
   const subagentNavigation = useSubagentNavigation(props, timeline);
   const queuedMessageIds = useMemo(
@@ -295,6 +298,7 @@ export const ChatContent = memo(function ChatContent(props: ChatContentProps) {
         header={header}
         workspaceId={props.workspaceId}
         messages={groupedMessages}
+        history={props.history}
         subagentTimelineError={timeline.error}
         runningSubagentIconIndices={timeline.runningSubagentIconIndices}
         {...subagentNavigation}

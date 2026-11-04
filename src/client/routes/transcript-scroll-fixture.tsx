@@ -5,6 +5,7 @@ import { TRPCProvider } from '@/client/lib/providers';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { type GroupedMessageItem, isToolSequence } from '@/lib/chat-protocol';
 import { TranscriptEngineFixture } from './transcript-engine-fixture';
+import { TranscriptHistoryFixture } from './transcript-history-fixture';
 
 function message(index: number): GroupedMessageItem {
   return {
@@ -45,6 +46,26 @@ function TranscriptFixtureContent({ workspaceId }: { workspaceId: string }) {
   const [narrow, setNarrow] = useState(false);
   const [headerHeight, setHeaderHeight] = useState(24);
   const [draft, setDraft] = useState('');
+  const historyMode = new URLSearchParams(location.search).get('history') === '1';
+  const [historyBySession, setHistoryBySession] = useState<
+    Record<'A' | 'B', { status: 'idle' | 'loading' | 'complete' | 'error'; requests: number }>
+  >({
+    A: { status: 'idle', requests: 0 },
+    B: { status: 'idle', requests: 0 },
+  });
+  const { status: historyStatus, requests: historyRequests } = historyBySession[session];
+  const setHistoryStatus = (status: typeof historyStatus) =>
+    setHistoryBySession((previous) => ({
+      ...previous,
+      [session]: { ...previous[session], status },
+    }));
+  const setHistoryRequests = (updateRequests: (count: number) => number) =>
+    setHistoryBySession((previous) => ({
+      ...previous,
+      [session]: { ...previous[session], requests: updateRequests(previous[session].requests) },
+    }));
+  const currentHistoryStatus = useRef(historyStatus);
+  currentHistoryStatus.current = historyStatus;
   const composer = new URLSearchParams(location.search).get('composer') === '1';
   const persistence = useChatTranscriptPersistence({ workspaceId, sessionId: session });
   const update = (change: (messages: GroupedMessageItem[]) => GroupedMessageItem[]) =>
@@ -118,6 +139,26 @@ function TranscriptFixtureContent({ workspaceId }: { workspaceId: string }) {
         <button type="button" onClick={() => setLongThinking((value) => !value)}>
           Change thinking
         </button>
+        {historyMode && (
+          <>
+            <output>History requests: {historyRequests}</output>
+            <button
+              type="button"
+              onClick={() => {
+                update((items) => [
+                  ...Array.from({ length: 100 }, (_, index) => message(index - 100)),
+                  ...items,
+                ]);
+                setHistoryStatus('complete');
+              }}
+            >
+              Resolve history page
+            </button>
+            <button type="button" onClick={() => setHistoryStatus('error')}>
+              Fail history page
+            </button>
+          </>
+        )}
         <output>Session {session}</output>
       </div>
       <div
@@ -128,6 +169,21 @@ function TranscriptFixtureContent({ workspaceId }: { workspaceId: string }) {
           <ChatTranscript
             thinkingInFooter={new URLSearchParams(location.search).get('footer') === '1'}
             messages={data[session]}
+            history={
+              historyMode
+                ? {
+                    status: historyStatus,
+                    error: 'History temporarily unavailable',
+                    loadOlder: () => {
+                      if (historyStatus === 'loading' || historyStatus === 'complete') {
+                        return;
+                      }
+                      setHistoryStatus('loading');
+                      setHistoryRequests((count) => count + 1);
+                    },
+                  }
+                : undefined
+            }
             running={running}
             acpPlan={
               showTasks
@@ -177,6 +233,9 @@ function TranscriptFixtureContent({ workspaceId }: { workspaceId: string }) {
 
 export default function TranscriptScrollFixture() {
   const [workspaceId, setWorkspaceId] = useState('fixture-W1');
+  if (new URLSearchParams(location.search).get('history-tools') === '1') {
+    return <TranscriptHistoryFixture />;
+  }
   if (new URLSearchParams(location.search).get('engine') === '1') {
     return <TranscriptEngineFixture />;
   }

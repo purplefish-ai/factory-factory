@@ -14,6 +14,8 @@ export function reduceMessageResetSlice(state: ChatState, action: ChatAction): C
       return {
         ...state,
         ...createBaseResetState(),
+        rendererTranscriptLimit:
+          state.transcriptPageBoundaries.size > 0 ? undefined : state.rendererTranscriptLimit,
         sessionStatus,
         chatSettings: clampChatSettingsForCapabilities(
           DEFAULT_CHAT_SETTINGS,

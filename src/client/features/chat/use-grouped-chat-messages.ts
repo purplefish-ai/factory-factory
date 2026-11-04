@@ -13,12 +13,21 @@ export function useGroupedChatMessages(
   const filterDuplicateResults = options.filterDuplicateResults ?? false;
   const cacheRef = useRef<{
     filterDuplicateResults: boolean;
+    groupBoundaries?: ReadonlySet<string>;
     grouper: IncrementalChatGrouper;
   } | null>(null);
-  if (!cacheRef.current || cacheRef.current.filterDuplicateResults !== filterDuplicateResults) {
+  if (
+    !cacheRef.current ||
+    cacheRef.current.filterDuplicateResults !== filterDuplicateResults ||
+    cacheRef.current.groupBoundaries !== options.groupBoundaries
+  ) {
     cacheRef.current = {
       filterDuplicateResults,
-      grouper: createIncrementalChatGrouper({ filterDuplicateResults }),
+      groupBoundaries: options.groupBoundaries,
+      grouper: createIncrementalChatGrouper({
+        filterDuplicateResults,
+        groupBoundaries: options.groupBoundaries,
+      }),
     };
   }
   return cacheRef.current.grouper.group(messages);

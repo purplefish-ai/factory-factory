@@ -77,7 +77,15 @@ function isAgentMessagePayload(data: unknown): boolean {
   return nested.type !== 'session_lifecycle' || isSessionLifecyclePayload(nested.lifecycle);
 }
 
+const snapshotRemovalSchema = z.object({
+  removedMessageIds: z.array(z.string()).optional(),
+  resetTranscript: z.boolean().optional(),
+});
+
 function hasValidSnapshotLifecycleMessages(data: object): boolean {
+  if (!snapshotRemovalSchema.safeParse(data).success) {
+    return false;
+  }
   const messages = (data as { messages?: unknown }).messages;
   if (!Array.isArray(messages)) {
     return false;
@@ -751,7 +759,8 @@ function applyLateToolResult(
  */
 export function groupAdjacentToolCalls(
   messages: ChatMessage[],
-  trace?: ToolGroupingTrace
+  trace?: ToolGroupingTrace,
+  breakBeforeIds?: ReadonlySet<string>
 ): GroupedMessageItem[] {
   const result: GroupedMessageItem[] = [];
   let currentToolSequence: ChatMessage[] = [];
@@ -783,6 +792,9 @@ export function groupAdjacentToolCalls(
   };
 
   for (const message of messages.filter(isRenderableGroupedMessage)) {
+    if (breakBeforeIds?.has(message.id)) {
+      flushToolSequence();
+    }
     const lateToolResultInfo =
       message.message && isToolResultMessage(message.message)
         ? extractToolResultInfo(message.message, trace !== undefined)

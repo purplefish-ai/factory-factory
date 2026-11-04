@@ -427,3 +427,54 @@ export const SendWhileReadingOnPhone: Story = {
   ...SendWhileReading,
   globals: { viewport: { value: 'phone', isRotated: false } },
 };
+
+export const LoadingEarlierMessages: Story = {
+  args: {
+    loadingSession: false,
+    messages: [startupMessage],
+    history: { status: 'loading', loadOlder: () => undefined },
+    scroll: {
+      identity: 'history',
+      active: true,
+      ready: true,
+      initialIntent: 'reading',
+      initialPosition: null,
+    },
+  },
+};
+
+export const EarlierMessagesFailed: Story = {
+  args: {
+    ...LoadingEarlierMessages.args,
+    history: {
+      status: 'error',
+      error: 'Could not load earlier messages.',
+      loadOlder: () => undefined,
+    },
+  },
+  play: async ({ canvasElement }) => {
+    await expect(within(canvasElement).getByRole('button', { name: /^Retry$/ })).toBeVisible();
+  },
+};
+
+export const BeginningOfConversation: Story = {
+  args: {
+    ...LoadingEarlierMessages.args,
+    history: { status: 'complete', loadOlder: () => undefined },
+  },
+  play: async ({ canvasElement }) => {
+    await expect(within(canvasElement).getByText('Beginning of conversation')).toBeVisible();
+  },
+};
+
+export const EarlierMessagesDisconnected: Story = {
+  args: {
+    ...LoadingEarlierMessages.args,
+    history: { status: 'idle', enabled: false, loadOlder: () => undefined },
+  },
+  play: async ({ canvasElement }) => {
+    await expect(
+      within(canvasElement).getByRole('button', { name: 'Load earlier messages' })
+    ).toBeDisabled();
+  },
+};

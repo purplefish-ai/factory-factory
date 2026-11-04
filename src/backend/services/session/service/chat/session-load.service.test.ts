@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { ChatMessage, QueuedMessage, SessionDeltaEvent } from '@/shared/acp-protocol';
 import { EMPTY_CHAT_BAR_CAPABILITIES } from '@/shared/chat-capabilities';
 import type { SessionRuntimeState } from '@/shared/session-runtime';
@@ -44,7 +44,7 @@ function setup() {
       finishLoad: () => {
         calls.push('runtime');
       },
-      getTranscriptSnapshot: () => transcript,
+      getTranscriptSnapshot: vi.fn(() => transcript),
       replaceTranscript: (_id, next) => {
         calls.push('recover');
         transcript = next;
@@ -118,6 +118,31 @@ function setup() {
 }
 
 describe('SessionLoadService', () => {
+  it('browses older history without configuration, runtime publication, or initial dispatch', async () => {
+    const test = setup();
+    test.setInitial('Must stay unsent');
+    test.setTranscript([
+      { id: 'first', source: 'user', text: 'Hello', order: 0, timestamp: stopped.updatedAt },
+      { id: 'next', source: 'user', text: 'Next', order: 1, timestamp: stopped.updatedAt },
+    ]);
+    expect(
+      await test.service.readTranscriptPage({ sessionId: 's', beforeMessageId: 'next' })
+    ).toEqual({ messages: [test.getTranscript()[0]], hasMore: false });
+    expect(test.calls).toEqual([]);
+    expect(test.queue).toEqual([]);
+    expect(test.deltas).toEqual([]);
+  });
+
+  it('rejects a missing history session before creating an empty store', async () => {
+    const test = setup();
+    test.removeSession();
+    await expect(
+      test.service.readTranscriptPage({ sessionId: 'missing', beforeMessageId: 'cursor' })
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    expect(test.deps.domain.getTranscriptSnapshot).not.toHaveBeenCalled();
+    expect(test.calls).toEqual([]);
+  });
+
   it('returns a typed missing-session error without hydration or activation', async () => {
     const test = setup();
     test.removeSession();

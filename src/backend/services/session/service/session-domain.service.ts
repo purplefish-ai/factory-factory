@@ -404,7 +404,10 @@ export class SessionDomainService extends EventEmitter {
     }
     const removed = removeTranscriptMessageById(store, messageId, options);
     if (removed && options?.emitSnapshot !== false) {
-      this.publisher.forwardSnapshot(store, { reason: 'remove_transcript_message' });
+      this.publisher.forwardSnapshot(store, {
+        reason: 'remove_transcript_message',
+        removedMessageIds: [messageId],
+      });
     }
     return removed;
   }
@@ -593,10 +596,15 @@ export class SessionDomainService extends EventEmitter {
     });
   }
 
-  emitSessionSnapshot(sessionId: string, loadRequestId?: string): void {
+  emitSessionSnapshot(
+    sessionId: string,
+    loadRequestId?: string,
+    removedMessageIds?: string[]
+  ): void {
     const store = this.registry.getOrCreate(sessionId);
     this.publisher.forwardSnapshot(store, {
       loadRequestId,
+      ...(removedMessageIds ? { removedMessageIds } : {}),
       reason: 'manual_emit',
       includeParitySnapshot: true,
     });
@@ -764,7 +772,7 @@ export class SessionDomainService extends EventEmitter {
     this.clearHistoryRetryCooldown(sessionId);
     // Stop evidence belongs to the AgentSession; provider messages belong to the archived identity.
     this.replaceTranscript(sessionId, store.transcript.filter(isLocalTranscriptMessage));
-    this.publisher.forwardSnapshot(store, { reason: 'manual_emit' });
+    this.publisher.forwardSnapshot(store, { reason: 'manual_emit', resetTranscript: true });
   }
 
   isHistoryHydrated(sessionId: string): boolean {

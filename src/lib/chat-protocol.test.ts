@@ -538,3 +538,20 @@ describe('ACP context occupancy', () => {
     expect(updated.inputTokens).toBe(50_000);
   });
 });
+
+it('validates snapshot history removal and reset metadata', () => {
+  expect(
+    isWebSocketMessage({
+      type: 'session_snapshot',
+      messages: [],
+      removedMessageIds: ['older'],
+      resetTranscript: true,
+    })
+  ).toBe(true);
+  expect(
+    isWebSocketMessage({ type: 'session_snapshot', messages: [], removedMessageIds: [42] })
+  ).toBe(false);
+  expect(
+    isWebSocketMessage({ type: 'session_snapshot', messages: [], resetTranscript: 'yes' })
+  ).toBe(false);
+});

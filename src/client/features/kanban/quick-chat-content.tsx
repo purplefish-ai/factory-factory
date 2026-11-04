@@ -43,6 +43,7 @@ export function QuickChatContent({
   );
   const groupedMessages = useGroupedChatMessages(timeline.messages, {
     filterDuplicateResults: true,
+    groupBoundaries: chatState.transcriptPageBoundaries,
   });
   const queuedMessageIds = useMemo(
     () => new Set(chatState.queuedMessages.map((message) => message.id)),
@@ -74,6 +75,7 @@ export function QuickChatContent({
         pendingRequestType={running ? pendingRequestType : null}
         workspaceId={workspaceId}
         messages={groupedMessages}
+        history={chatState.transcriptHistory}
         subagentTimelineError={timeline.error}
         runningSubagentIconIndices={timeline.runningSubagentIconIndices}
         acpPlan={chatState.acpPlan}

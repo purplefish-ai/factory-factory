@@ -93,15 +93,21 @@ export class SessionLifecycleEventService {
     );
   }
 
-  private publish(sessionId: string, message: ChatMessage, forceSnapshot = false): void {
+  private publish(sessionId: string, message: ChatMessage, removedMessageId?: string): void {
     const inserted = this.dependencies.sessionDomainService.upsertLifecycleMessage(
       sessionId,
       message
     );
-    if (!(inserted || forceSnapshot)) {
+    if (!(inserted || removedMessageId)) {
       return;
     }
-    this.dependencies.sessionDomainService.emitSessionSnapshot(sessionId);
+    if (removedMessageId) {
+      this.dependencies.sessionDomainService.emitSessionSnapshot(sessionId, undefined, [
+        removedMessageId,
+      ]);
+    } else {
+      this.dependencies.sessionDomainService.emitSessionSnapshot(sessionId);
+    }
   }
 
   private publishBestEffort(
@@ -117,7 +123,11 @@ export class SessionLifecycleEventService {
           transientLifecycleMessageId(input),
           { emitSnapshot: false }
         );
-      this.publish(input.sessionId, message, removedTransient);
+      this.publish(
+        input.sessionId,
+        message,
+        removedTransient ? transientLifecycleMessageId(input) : undefined
+      );
     } catch (error) {
       logger.error('Failed publishing session lifecycle event', toError(error), {
         ...lifecycleEventLogContext(input),
