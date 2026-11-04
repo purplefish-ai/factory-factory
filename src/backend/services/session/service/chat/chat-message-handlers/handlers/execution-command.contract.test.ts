@@ -34,6 +34,9 @@ it('acknowledges queued input on the session channel before dispatch without wai
   const calls: string[] = [];
   const guard = () => true;
   const domain = {
+    hasQueuedMessage: vi.fn(() => true),
+    holdMessageForAdmission: vi.fn(() => vi.fn()),
+    removeQueuedMessage: vi.fn(),
     enqueue: vi.fn(() => {
       calls.push('enqueue');
       return { position: 2 };
@@ -99,8 +102,7 @@ it('completes direct input while both provider turn and background resume are pe
     void result.then(() => {
       completed = true;
     });
-    await Promise.resolve();
-    expect(completed).toBe(true);
+    await vi.waitFor(() => expect(completed).toBe(true));
     expect(await result).toEqual({ replies: [] });
     expect(calls).toEqual(['send', 'resume']);
     expect(sendSessionMessage).toHaveBeenCalledWith('plain-session', 'human');
@@ -184,7 +186,11 @@ it('returns startup failure as a typed requester error after marking domain stat
 });
 
 it('returns cancellation feedback without giving the command a socket', () => {
-  const domain = { removeQueuedMessage: vi.fn(() => false), emitDelta: vi.fn() };
+  const domain = {
+    removeQueuedMessage: vi.fn(() => false),
+    emitDelta: vi.fn(),
+    waitForMessageAdmission: vi.fn(),
+  };
   const handler = createRemoveQueuedMessageHandler({ domain });
   expect(handler(context, { type: 'remove_queued_message', messageId: 'pr-event-held' })).toEqual({
     replies: [{ type: 'error', error: { kind: 'background_monitoring_required' } }],

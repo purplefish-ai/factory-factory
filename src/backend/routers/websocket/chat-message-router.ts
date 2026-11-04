@@ -1,6 +1,7 @@
 import type { ApplicationServices } from '@/backend/app-context';
 import type {
   SessionCommandConfigService,
+  SessionCommandContext,
   SessionCommandFactories,
   SessionCommandHandler,
   SessionCommandOutcome,
@@ -64,11 +65,13 @@ export function createChatCommandRegistry(
       backgroundDelivery: services.execution.backgroundDelivery,
     }),
     user_input: createUserInputHandler({
+      humanMessageAccepted: services.execution.humanMessageAccepted,
       acpRuntimeManager: services.runtime,
       sessionService: services.prompt,
       backgroundDelivery: services.execution.backgroundDelivery,
     }),
     queue_message: createQueueMessageHandler({
+      humanMessageAccepted: services.execution.humanMessageAccepted,
       domain: services.execution.domain,
       backgroundDelivery: services.execution.backgroundDelivery,
       tryDispatchNextMessage: dispatch,
@@ -114,7 +117,8 @@ export function createChatMessageRouter(services: ChatMessageRouterServices) {
     async handleMessage(
       sessionId: string | null,
       workingDir: string,
-      message: ChatMessageInput
+      message: ChatMessageInput,
+      onAsyncOutcome?: SessionCommandContext['onAsyncOutcome']
     ): Promise<SessionCommandOutcome> {
       if (!sessionId) {
         return {
@@ -130,7 +134,7 @@ export function createChatMessageRouter(services: ChatMessageRouterServices) {
           ],
         };
       }
-      const context = { sessionId, workingDir };
+      const context = { sessionId, workingDir, onAsyncOutcome };
       switch (message.type) {
         case 'start':
           return await registry.start(context, message);
@@ -182,11 +186,13 @@ export function createChatMessageRouterForApplication(
     | 'sessionLoadService'
     | 'sessionEventBus'
     | 'sessionFileLogger'
+    | 'acceptWorkspaceFollowUp'
   >
 ) {
   return createChatMessageRouter({
     factories: services.sessionCommandFactories,
     execution: {
+      humanMessageAccepted: services.acceptWorkspaceFollowUp,
       domain: services.sessionDomainService,
       lifecycle: services.sessionLifecycleService,
       backgroundDelivery: services.sessionBackgroundDeliveryService,

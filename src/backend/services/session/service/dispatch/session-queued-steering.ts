@@ -77,6 +77,9 @@ export class SessionQueuedSteering {
       throw new QueuedMessageNotFoundError();
     }
     assertSteerableMessage(message, Boolean(mail));
+    if (domain.isMessageAdmissionPending(message)) {
+      throw new Error('Message admission is still pending. The selected message remains queued.');
+    }
     if (!this.ports.isPromptInFlight(sessionId)) {
       if (domain.peekNextMessage(sessionId) !== message) {
         throw new Error('No active turn to steer. The selected message remains queued.');

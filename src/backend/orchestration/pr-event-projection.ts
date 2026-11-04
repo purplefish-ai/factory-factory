@@ -62,6 +62,11 @@ export function projectPrEvent(
   const prs = [...(previous?.prs ?? [])];
   const index = prs.findIndex((pr) => pr.id === prId);
   const existing = index >= 0 ? prs[index] : undefined;
+  // Legacy events carry no persisted revision; copying it would bless stale facts.
+  // Their authoritative collection refresh supplies the accepted revision instead.
+  if (existing?.revision !== undefined) {
+    return {};
+  }
   const pr: WorkspacePullRequest = {
     id: prId,
     url,

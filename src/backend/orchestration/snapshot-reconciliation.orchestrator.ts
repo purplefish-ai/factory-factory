@@ -226,6 +226,7 @@ export class SnapshotReconciliationService {
       branchName: ws.branchName,
       hasHadSessions: ws.hasHadSessions,
       prs: ws.prs,
+      prCollectionRevision: ws.prCollectionRevision,
       prSummary: ws.prSummary,
       prUrl: ws.prUrl,
       prNumber: ws.prNumber,

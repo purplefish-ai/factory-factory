@@ -38,6 +38,7 @@ import {
   persistChildNotification,
   persistParentNotification,
 } from './orchestration/workspace-children.orchestrator';
+import { createWorkspaceFollowUp } from './orchestration/workspace-follow-up.orchestrator';
 import { executeStartupScriptPipeline } from './orchestration/workspace-init-script-pipeline';
 import {
   initializeWorkspaceWorktree,
@@ -251,6 +252,7 @@ export type ApplicationServices = BridgeServices & {
     source: Parameters<typeof launchWorkspace>[0]
   ) => ReturnType<typeof launchWorkspace>;
   renameWorkspace: ReturnType<typeof createWorkspaceRename>['rename'];
+  acceptWorkspaceFollowUp: ReturnType<typeof createWorkspaceFollowUp>;
   fireLifecycleNotification: typeof fireLifecycleNotification;
   persistChildNotification: typeof persistChildNotification;
   persistParentNotification: typeof persistParentNotification;
@@ -471,6 +473,8 @@ export function createDefaultApplicationDependencies(): ApplicationDependencies 
     workspaceCreationService,
     workspaceDataService,
     renameWorkspace: workspaceRename.rename,
+    acceptWorkspaceFollowUp: (sessionId, acceptedAt) =>
+      createWorkspaceFollowUp(services)(sessionId, acceptedAt),
     workspaceMaintenanceService,
     workspaceGitStateService,
     workspaceNotificationService,

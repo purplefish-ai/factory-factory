@@ -1,4 +1,36 @@
+import { randomUUID } from 'node:crypto';
 import type { SessionCommandError, SessionCommandOutcome } from '@/backend/services/session';
+import { type MessageAttachment, MessageState, type WebSocketMessage } from '@/shared/acp-protocol';
+import { DirectInputContentItemSchema } from '@/shared/websocket/direct-input-content.schema';
+
+function recoverDirectInput(content: string | unknown[]) {
+  const attachments: MessageAttachment[] = [];
+  if (typeof content === 'string') {
+    return { text: content };
+  }
+  const text: string[] = [];
+  for (const rawItem of content) {
+    const parsed = DirectInputContentItemSchema.safeParse(rawItem);
+    if (!parsed.success) {
+      continue;
+    }
+    const item = parsed.data;
+    if (item.type === 'text') {
+      text.push(item.text);
+    } else if (item.type === 'image') {
+      const { data, media_type: mediaType } = item.source;
+      attachments.push({
+        id: randomUUID(),
+        name: `image.${mediaType.slice('image/'.length)}`,
+        type: mediaType,
+        contentType: 'image',
+        size: Buffer.byteLength(data, 'base64'),
+        data,
+      });
+    }
+  }
+  return { text: text.join('\n'), ...(attachments.length ? { attachments } : {}) };
+}
 
 function getErrorMessage(error: unknown): string {
   if (error instanceof Error) {
@@ -47,6 +79,8 @@ function formatCommandError(error: SessionCommandError): string {
       return 'Message not found in queue';
     case 'queue_input_invalid':
       return error.reason;
+    case 'user_input_failed':
+      return 'Could not send message. Try again.';
     case 'set_config_option_failed':
       return `Failed to set config option: ${getErrorMessage(error.cause)}`;
     default: {
@@ -67,6 +101,23 @@ function formatCommandError(error: SessionCommandError): string {
   }
 }
 
+/** Build the same recoverable rejection for immediate and later provider failures. */
+function buildUserInputRejection(
+  error: Extract<SessionCommandError, { kind: 'user_input_failed' }>
+): Extract<WebSocketMessage, { type: 'message_state_changed' }> {
+  return {
+    type: 'message_state_changed',
+    id: randomUUID(),
+    newState: MessageState.REJECTED,
+    errorMessage: formatCommandError(error),
+    userMessage: {
+      ...recoverDirectInput(error.content),
+      sessionId: error.sessionId,
+      timestamp: new Date().toISOString(),
+    },
+  };
+}
+
 /** Format requester outcomes; configuration publication belongs to the serialized service. */
 export function applySessionCommandOutcome(
   requester: { send(payload: string): void },
@@ -77,6 +128,10 @@ export function applySessionCommandOutcome(
   }
   for (const reply of outcome.replies) {
     if (reply.type === 'error') {
+      if (reply.error.kind === 'user_input_failed') {
+        requester.send(JSON.stringify(buildUserInputRejection(reply.error)));
+        continue;
+      }
       requester.send(
         JSON.stringify({
           type: 'error',

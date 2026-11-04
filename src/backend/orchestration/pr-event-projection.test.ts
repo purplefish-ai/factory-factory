@@ -43,6 +43,10 @@ const event = {
   prCiStatus: 'SUCCESS',
   prReviewState: null,
 };
+it('defers legacy events for persisted revisioned PRs to the authoritative projection', () => {
+  const row = { ...pr('a', 'https://github.com/o/r/pull/1', 1), revision: 2 };
+  expect(projectPrEvent(previous([row]), event)).toEqual({});
+});
 it.each([true, false])(
   'resolves legacy observations to their PR without a stable ID (URL: %s)',
   (withUrl) => {

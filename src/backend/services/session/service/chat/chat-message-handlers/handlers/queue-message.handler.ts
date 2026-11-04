@@ -8,11 +8,22 @@ import type {
   SessionCommandHandler,
   SessionExecutionCommandServices,
 } from '@/backend/services/session/service/chat/session-command.types';
+import type { QueuedMessage } from '@/shared/acp-protocol';
 import { PR_EVENT_MESSAGE_ID_PREFIX } from '@/shared/pr-monitoring';
 import type { QueueMessageInput } from '@/shared/websocket';
 import { WORKSPACE_NOTIFICATION_MESSAGE_ID_PREFIX } from '@/shared/workspace-notifications';
 
 const logger = createLogger('chat-message-handlers');
+
+function rejectFailedAdmission(
+  domain: Pick<SessionExecutionCommandServices['domain'], 'removeQueuedMessage' | 'rejectMessage'>,
+  sessionId: string,
+  message: QueuedMessage
+): void {
+  if (domain.removeQueuedMessage(sessionId, message.id, { expectedMessage: message })) {
+    domain.rejectMessage(sessionId, message.id, 'Could not reopen workspace. Try again.');
+  }
+}
 
 function validateAttachments(attachments: QueueMessageInput['attachments']): string | null {
   if (!attachments?.length) {
@@ -54,10 +65,15 @@ function validateQueueMessageInput(
 }
 
 export function createQueueMessageHandler(
-  deps: Pick<SessionExecutionCommandServices, 'backgroundDelivery'> & {
+  deps: Pick<SessionExecutionCommandServices, 'backgroundDelivery' | 'humanMessageAccepted'> & {
     domain: Pick<
       SessionExecutionCommandServices['domain'],
-      'enqueue' | 'emitDelta' | 'rejectMessage'
+      | 'enqueue'
+      | 'emitDelta'
+      | 'rejectMessage'
+      | 'removeQueuedMessage'
+      | 'holdMessageForAdmission'
+      | 'hasQueuedMessage'
     >;
     tryDispatchNextMessage: (sessionId: string) => Promise<void>;
   }
@@ -81,10 +97,29 @@ export function createQueueMessageHandler(
     const isCurrent = deps.backgroundDelivery.captureResumeGuard(sessionId);
     const messageId = message.id;
     const queuedMsg = buildQueuedMessage(messageId, message, text ?? '');
+    const acceptedAt = new Date();
+    const releaseAdmission = deps.domain.holdMessageForAdmission(queuedMsg);
     const result = deps.domain.enqueue(sessionId, queuedMsg);
 
     if ('error' in result) {
+      releaseAdmission();
       deps.domain.rejectMessage(sessionId, messageId, result.error);
+      return { replies: [] };
+    }
+
+    try {
+      await deps.humanMessageAccepted?.(sessionId, acceptedAt);
+    } catch (error) {
+      rejectFailedAdmission(deps.domain, sessionId, queuedMsg);
+      logger.warn('Failed to persist workspace follow-up', { sessionId, error });
+      releaseAdmission();
+      await deps.tryDispatchNextMessage(sessionId);
+      return { replies: [] };
+    } finally {
+      releaseAdmission();
+    }
+
+    if (!deps.domain.hasQueuedMessage(sessionId, messageId, queuedMsg)) {
       return { replies: [] };
     }
 

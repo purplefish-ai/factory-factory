@@ -9,9 +9,8 @@ import {
 import { WorkspaceStatus } from '@/shared/core';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 import { createChatMessageRouterForApplication } from './chat-message-router';
-const router = createChatMessageRouterForApplication(
-  createDefaultApplicationDependencies().services
-);
+const services = createDefaultApplicationDependencies().services;
+const router = createChatMessageRouterForApplication(services);
 
 describe('chat router application composition', () => {
   afterEach(() => {
@@ -46,6 +45,8 @@ describe('chat router application composition', () => {
   });
 
   it('routes user queue, manual resume, and stop requests through the public dispatcher', async () => {
+    const acceptWorkspaceFollowUp = vi.fn().mockResolvedValue(undefined);
+    const router = createChatMessageRouterForApplication({ ...services, acceptWorkspaceFollowUp });
     const dispatch = vi.spyOn(sessionDispatchService, 'tryDispatchNextMessage').mockResolvedValue();
     const resume = vi.spyOn(sessionDispatchService, 'setManualDispatchResume');
     const reset = vi.spyOn(sessionDispatchService, 'resetDispatchState');
@@ -62,6 +63,10 @@ describe('chat router application composition', () => {
       id: 'user-message',
       text: 'hello from the user',
     });
+    expect(acceptWorkspaceFollowUp).toHaveBeenCalledExactlyOnceWith(
+      'queued-session',
+      expect.any(Date)
+    );
     await router.handleMessage('queued-session', '/tmp/worktree', {
       type: 'resume_queued_messages',
     });

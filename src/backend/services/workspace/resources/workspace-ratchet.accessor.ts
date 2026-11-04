@@ -43,7 +43,7 @@ class WorkspaceRatchetAccessor {
       select: {
         status: true,
         prMonitoring: true,
-        prs: { where: { detachedAt: null }, orderBy: { id: 'asc' } },
+        prs: { orderBy: { id: 'asc' } },
         _count: { select: { prEvents: { where: pendingPREventWhere } } },
       },
     });
@@ -56,6 +56,7 @@ class WorkspaceRatchetAccessor {
     );
     const {
       prs,
+      prCollectionRevision,
       prSummary,
       selectedPrId,
       selectedPr,
@@ -66,11 +67,12 @@ class WorkspaceRatchetAccessor {
       prUpdatedAt,
       ratchetState,
       prHasMergeConflict,
-    } = projectWorkspacePRCollection(row.prs, row.prMonitoring?.enabled ?? false);
+    } = projectWorkspacePRCollection(row.prs, row.prMonitoring?.enabled ?? false, true);
     return {
       status: row.status,
       ...fields,
       prs,
+      prCollectionRevision,
       prSummary,
       selectedPrId,
       selectedPr,

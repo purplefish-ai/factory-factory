@@ -9,6 +9,8 @@ import type { ChatMessageInput } from '@/shared/websocket';
 export interface SessionCommandContext {
   sessionId: string;
   workingDir: string;
+  /** Later requester-only replies remain bound to the connection that submitted this command. */
+  onAsyncOutcome?(outcome: SessionCommandOutcome): void | Promise<void>;
 }
 
 export type SessionCommandError =
@@ -23,6 +25,12 @@ export type SessionCommandError =
         | 'message_not_queued';
     }
   | { kind: 'queue_input_invalid'; reason: string }
+  | {
+      kind: 'user_input_failed';
+      sessionId: string;
+      content: string | unknown[];
+      cause: unknown;
+    }
   | {
       kind:
         | 'set_model_failed'
@@ -76,9 +84,17 @@ export interface SessionCommandConfigService extends SessionModelCommandService 
 
 /** Execution capabilities; leaf commands neither own the runtime graph nor its transports. */
 export interface SessionExecutionCommandServices {
+  humanMessageAccepted?(sessionId: string, acceptedAt: Date): Promise<void>;
   domain: Pick<
     SessionDomainService,
-    'markError' | 'rejectMessage' | 'enqueue' | 'emitDelta' | 'removeQueuedMessage'
+    | 'markError'
+    | 'rejectMessage'
+    | 'enqueue'
+    | 'emitDelta'
+    | 'removeQueuedMessage'
+    | 'holdMessageForAdmission'
+    | 'waitForMessageAdmission'
+    | 'hasQueuedMessage'
   >;
   lifecycle: Pick<SessionLifecycleService, 'getSessionOptions' | 'stopSession'>;
   backgroundDelivery: Pick<SessionBackgroundDeliveryService, 'captureResumeGuard' | 'userResume'>;

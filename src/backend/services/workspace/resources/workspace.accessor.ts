@@ -116,7 +116,7 @@ function flatten<
     ...projectWorkspaceFamily({ parentWorkspace, _count }),
     conversationSummary: projectConversationSummary(conversationMetadata),
     ...ratchetFields,
-    ...projectWorkspacePRCollection(prs, ratchetFields.ratchetEnabled),
+    ...projectWorkspacePRCollection(prs, ratchetFields.ratchetEnabled, true),
     ...flattenPRDiscovery(prDiscovery),
     ...flattenWorkspaceRunScript(runScript),
   };
@@ -126,7 +126,7 @@ function flatten<
 const sideTables = {
   conversationMetadata: true,
   prMonitoring: true,
-  prs: { where: { detachedAt: null }, orderBy: { id: 'asc' } },
+  prs: { orderBy: { id: 'asc' } },
   prDiscovery: true,
   runScript: true,
   ...workspaceFamilyInclude,
@@ -165,7 +165,7 @@ export type WorkspaceWithSessions = WorkspaceWithAgentSessions;
 const projectAndPR = {
   project: true,
   prMonitoring: { select: { enabled: true } },
-  prs: { where: { detachedAt: null }, orderBy: { id: 'asc' } },
+  prs: { orderBy: { id: 'asc' } },
   prDiscovery: true,
 } satisfies Prisma.WorkspaceInclude;
 type WorkspaceWithProjectInclude = typeof projectAndPR;
@@ -183,7 +183,8 @@ function withProjectAndPR(
   // Project metadata reads expose PR facts without the full ratchet fields.
   const { ratchetState: _ratchetState, ...prFields } = projectWorkspacePRCollection(
     prs,
-    prMonitoring?.enabled ?? false
+    prMonitoring?.enabled ?? false,
+    true
   );
   return {
     ...rest,

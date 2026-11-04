@@ -95,6 +95,8 @@ export const WorkspaceSummarySchema = z.object({
   worktreePath: z.string().nullable(),
   initErrorMessage: z.string().nullable(),
   prs: z.array(WorkspacePullRequestSchema),
+  /** Sum of revision + 1 across retained associations, including detached tombstones. */
+  prCollectionRevision: z.number().int().nonnegative().optional(),
   prSummary: WorkspacePRSummarySchema,
   prUrl: z.string().nullable(),
   prNumber: z.number().nullable(),

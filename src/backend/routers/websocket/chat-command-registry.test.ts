@@ -4,6 +4,46 @@ import { EMPTY_CHAT_BAR_CAPABILITIES } from '@/shared/chat-capabilities';
 import { createChatCommandRegistry } from './chat-message-router';
 import { createChatRouterServices } from './chat-message-router.test-helpers';
 
+it('returns later provider failure to the per-request outcome callback', async () => {
+  const services = createChatRouterServices(sessionCommandFactories);
+  let fail!: (error: Error) => void;
+  const turn = new Promise<void>((_resolve, reject) => {
+    fail = reject;
+  });
+  const sendSessionMessage = vi.fn(() => turn);
+  const registry = createChatCommandRegistry({
+    ...services,
+    runtime: { isSessionRunning: () => true },
+    prompt: { sendSessionMessage },
+  });
+  const content = [
+    { type: 'text', text: 'original text' },
+    { type: 'image', source: { type: 'base64', media_type: 'image/png', data: 'aGVsbG8=' } },
+  ];
+  const onAsyncOutcome = vi.fn();
+  expect(
+    await registry.user_input(
+      { sessionId: 'recovery-session', workingDir: '/tmp', onAsyncOutcome },
+      { type: 'user_input', content }
+    )
+  ).toEqual({ replies: [] });
+  expect(services.eventBus.publishToSession).not.toHaveBeenCalled();
+  const cause = new Error('provider disconnected');
+  fail(cause);
+  await vi.waitFor(() =>
+    expect(onAsyncOutcome).toHaveBeenCalledExactlyOnceWith({
+      replies: [
+        {
+          type: 'error',
+          error: { kind: 'user_input_failed', sessionId: 'recovery-session', content, cause },
+        },
+      ],
+    })
+  );
+  expect(services.eventBus.publishToSession).not.toHaveBeenCalled();
+  expect(sendSessionMessage).toHaveBeenCalledTimes(1);
+});
+
 describe('socket-free command registry', () => {
   it('uses the supplied application capabilities for every migrated command', async () => {
     const sessionConfigService = {
@@ -19,6 +59,9 @@ describe('socket-free command registry', () => {
       ...createChatRouterServices(sessionCommandFactories),
       execution: {
         domain: {
+          hasQueuedMessage: vi.fn(() => true),
+          holdMessageForAdmission: vi.fn(() => vi.fn()),
+          waitForMessageAdmission: vi.fn(),
           markError: vi.fn(),
           rejectMessage: vi.fn(),
           enqueue: vi.fn(),
@@ -101,6 +144,9 @@ it('routes execution commands using injected application capabilities and typed 
     userResume: vi.fn().mockResolvedValue(undefined),
   };
   const domain = {
+    hasQueuedMessage: vi.fn(() => true),
+    holdMessageForAdmission: vi.fn(() => vi.fn()),
+    waitForMessageAdmission: vi.fn(),
     markError: vi.fn(),
     rejectMessage: vi.fn(),
     enqueue: vi.fn(() => ({ position: 0 })),
@@ -112,6 +158,7 @@ it('routes execution commands using injected application capabilities and typed 
     stopSession: vi.fn().mockResolvedValue(undefined),
   };
   const clearPendingRequest = vi.fn();
+  const humanMessageAccepted = vi.fn().mockResolvedValue(undefined);
   const resetDispatchState = vi.fn();
   const tryDispatchNextMessage = vi.fn().mockResolvedValue(undefined);
   const setManualDispatchResume = vi.fn();
@@ -119,7 +166,7 @@ it('routes execution commands using injected application capabilities and typed 
   const getOrCreateSessionClient = vi.fn().mockResolvedValue(undefined);
   const registry = createChatCommandRegistry({
     ...createChatRouterServices(sessionCommandFactories),
-    execution: { backgroundDelivery, domain, lifecycle, clearPendingRequest },
+    execution: { backgroundDelivery, domain, lifecycle, clearPendingRequest, humanMessageAccepted },
     runtime: { isSessionRunning: () => true },
     prompt: { sendSessionMessage },
     startup: { getSessionClient: vi.fn(), getOrCreateSessionClient },
@@ -161,6 +208,9 @@ it('routes execution commands using injected application capabilities and typed 
     expect.objectContaining({ model: 'requested' })
   );
   expect(sendSessionMessage).toHaveBeenCalledWith('injected-execution', 'direct');
+  expect(humanMessageAccepted).toHaveBeenCalledTimes(2);
+  expect(humanMessageAccepted).toHaveBeenNthCalledWith(1, 'injected-execution', expect.any(Date));
+  expect(humanMessageAccepted).toHaveBeenNthCalledWith(2, 'injected-execution', expect.any(Date));
   expect(domain.enqueue).toHaveBeenCalledWith(
     'injected-execution',
     expect.objectContaining({ id: 'queued', text: 'human' })

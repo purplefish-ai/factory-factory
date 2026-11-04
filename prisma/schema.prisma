@@ -355,6 +355,8 @@ model WorkspacePR {
   reviewState String?
   ciStatus CIStatus @default(UNKNOWN)
   hasMergeConflict Boolean @default(false)
+  completionDismissed Boolean @default(false)
+  terminalObservedAt DateTime?
   syncedAt DateTime?
   detachedAt DateTime?
   revision Int @default(0)

@@ -197,6 +197,8 @@ export const WorkspacePRScalarFieldEnum = {
   reviewState: 'reviewState',
   ciStatus: 'ciStatus',
   hasMergeConflict: 'hasMergeConflict',
+  completionDismissed: 'completionDismissed',
+  terminalObservedAt: 'terminalObservedAt',
   syncedAt: 'syncedAt',
   detachedAt: 'detachedAt',
   revision: 'revision',

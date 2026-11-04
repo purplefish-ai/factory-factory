@@ -2,9 +2,12 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { MessageState } from '@/shared/acp-protocol';
 
 const mocks = vi.hoisted(() => ({
+  hasQueuedMessage: vi.fn(() => true),
   enqueue: vi.fn(),
   emitDelta: vi.fn(),
   rejectMessage: vi.fn(),
+  removeQueuedMessage: vi.fn(() => true),
+  holdMessageForAdmission: vi.fn(() => vi.fn()),
 }));
 
 vi.mock('@/backend/services/session/service/session-domain.service', () => ({
@@ -21,6 +24,76 @@ import { createQueueMessageHandler } from './queue-message.handler';
 describe('createQueueMessageHandler', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  it('awaits durable human follow-up before acknowledgement and dispatch, excluding rejected input', async () => {
+    let release!: () => void;
+    const saved = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const humanMessageAccepted = vi.fn(() => saved);
+    const dispatch = vi.fn().mockResolvedValue(undefined);
+    const handler = createQueueMessageHandler({
+      domain: mocks,
+      backgroundDelivery: sessionBackgroundDeliveryService,
+      humanMessageAccepted,
+      tryDispatchNextMessage: dispatch,
+    });
+    mocks.enqueue.mockReturnValue({ position: 0 });
+    const outcome = handler(
+      { sessionId: 'session-1', workingDir: '/tmp/work' },
+      {
+        type: 'queue_message',
+        id: 'follow-up',
+        text: 'thanks',
+      }
+    );
+    expect(humanMessageAccepted).toHaveBeenCalledWith('session-1', expect.any(Date));
+    expect(mocks.emitDelta).not.toHaveBeenCalled();
+    expect(dispatch).not.toHaveBeenCalled();
+    release();
+    await outcome;
+    expect(dispatch).toHaveBeenCalledOnce();
+    mocks.enqueue.mockReturnValue({ error: 'Queue full' });
+    await handler(
+      { sessionId: 'session-1', workingDir: '/tmp/work' },
+      {
+        type: 'queue_message',
+        id: 'rejected',
+        text: 'more work',
+      }
+    );
+    expect(humanMessageAccepted).toHaveBeenCalledTimes(1);
+    expect(dispatch).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects and removes the queued message if follow-up persistence fails', async () => {
+    mocks.enqueue.mockReturnValue({ position: 0 });
+    const dispatch = vi.fn();
+    const handler = createQueueMessageHandler({
+      domain: mocks,
+      backgroundDelivery: sessionBackgroundDeliveryService,
+      humanMessageAccepted: vi.fn().mockRejectedValue(new Error('DB unavailable')),
+      tryDispatchNextMessage: dispatch,
+    });
+    await handler(
+      { sessionId: 'session-1', workingDir: '/tmp/work' },
+      {
+        type: 'queue_message',
+        id: 'follow-up',
+        text: 'continue',
+      }
+    );
+    expect(mocks.removeQueuedMessage).toHaveBeenCalledWith('session-1', 'follow-up', {
+      expectedMessage: expect.objectContaining({ id: 'follow-up' }),
+    });
+    expect(mocks.rejectMessage).toHaveBeenCalledWith(
+      'session-1',
+      'follow-up',
+      expect.stringContaining('Try again')
+    );
+    expect(mocks.emitDelta).not.toHaveBeenCalled();
+    expect(dispatch).toHaveBeenCalledOnce();
   });
 
   it('emits rejected state for empty queue messages with an id', async () => {

@@ -78,7 +78,7 @@ describe('workspaceAccessor', () => {
         include: {
           conversationMetadata: true,
           prMonitoring: true,
-          prs: { where: { detachedAt: null }, orderBy: { id: 'asc' } },
+          prs: { orderBy: { id: 'asc' } },
           prDiscovery: true,
           runScript: true,
           parentWorkspace: {
@@ -127,7 +127,7 @@ describe('workspaceAccessor', () => {
         include: {
           conversationMetadata: true,
           prMonitoring: true,
-          prs: { where: { detachedAt: null }, orderBy: { id: 'asc' } },
+          prs: { orderBy: { id: 'asc' } },
           prDiscovery: true,
           runScript: true,
           parentWorkspace: {
@@ -193,7 +193,7 @@ describe('workspaceAccessor', () => {
         terminalSessions: true,
         conversationMetadata: true,
         prMonitoring: true,
-        prs: { where: { detachedAt: null }, orderBy: { id: 'asc' } },
+        prs: { orderBy: { id: 'asc' } },
         prDiscovery: true,
         runScript: true,
         parentWorkspace: {
@@ -239,7 +239,7 @@ describe('workspaceAccessor', () => {
       include: {
         project: true,
         prMonitoring: { select: { enabled: true } },
-        prs: { where: { detachedAt: null }, orderBy: { id: 'asc' } },
+        prs: { orderBy: { id: 'asc' } },
         prDiscovery: true,
       },
     });
@@ -277,7 +277,7 @@ describe('workspaceAccessor', () => {
           include: expect.objectContaining({
             conversationMetadata: true,
             prMonitoring: true,
-            prs: { where: { detachedAt: null }, orderBy: { id: 'asc' } },
+            prs: { orderBy: { id: 'asc' } },
             prDiscovery: true,
             runScript: true,
           }),
@@ -366,7 +366,7 @@ describe('workspaceAccessor', () => {
         include: {
           project: true,
           prMonitoring: { select: { enabled: true } },
-          prs: { where: { detachedAt: null }, orderBy: { id: 'asc' } },
+          prs: { orderBy: { id: 'asc' } },
           prDiscovery: true,
         },
         orderBy: { updatedAt: 'asc' },

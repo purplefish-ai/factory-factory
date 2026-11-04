@@ -52,6 +52,8 @@ export type WorkspacePRMinAggregateOutputType = {
   reviewState: string | null
   ciStatus: $Enums.CIStatus | null
   hasMergeConflict: boolean | null
+  completionDismissed: boolean | null
+  terminalObservedAt: Date | null
   syncedAt: Date | null
   detachedAt: Date | null
   revision: number | null
@@ -75,6 +77,8 @@ export type WorkspacePRMaxAggregateOutputType = {
   reviewState: string | null
   ciStatus: $Enums.CIStatus | null
   hasMergeConflict: boolean | null
+  completionDismissed: boolean | null
+  terminalObservedAt: Date | null
   syncedAt: Date | null
   detachedAt: Date | null
   revision: number | null
@@ -98,6 +102,8 @@ export type WorkspacePRCountAggregateOutputType = {
   reviewState: number
   ciStatus: number
   hasMergeConflict: number
+  completionDismissed: number
+  terminalObservedAt: number
   syncedAt: number
   detachedAt: number
   revision: number
@@ -138,6 +144,8 @@ export type WorkspacePRMinAggregateInputType = {
   reviewState?: true
   ciStatus?: true
   hasMergeConflict?: true
+  completionDismissed?: true
+  terminalObservedAt?: true
   syncedAt?: true
   detachedAt?: true
   revision?: true
@@ -161,6 +169,8 @@ export type WorkspacePRMaxAggregateInputType = {
   reviewState?: true
   ciStatus?: true
   hasMergeConflict?: true
+  completionDismissed?: true
+  terminalObservedAt?: true
   syncedAt?: true
   detachedAt?: true
   revision?: true
@@ -184,6 +194,8 @@ export type WorkspacePRCountAggregateInputType = {
   reviewState?: true
   ciStatus?: true
   hasMergeConflict?: true
+  completionDismissed?: true
+  terminalObservedAt?: true
   syncedAt?: true
   detachedAt?: true
   revision?: true
@@ -295,6 +307,8 @@ export type WorkspacePRGroupByOutputType = {
   reviewState: string | null
   ciStatus: $Enums.CIStatus
   hasMergeConflict: boolean
+  completionDismissed: boolean
+  terminalObservedAt: Date | null
   syncedAt: Date | null
   detachedAt: Date | null
   revision: number
@@ -342,6 +356,8 @@ export type WorkspacePRWhereInput = {
   reviewState?: Prisma.StringNullableFilter<"WorkspacePR"> | string | null
   ciStatus?: Prisma.EnumCIStatusFilter<"WorkspacePR"> | $Enums.CIStatus
   hasMergeConflict?: Prisma.BoolFilter<"WorkspacePR"> | boolean
+  completionDismissed?: Prisma.BoolFilter<"WorkspacePR"> | boolean
+  terminalObservedAt?: Prisma.DateTimeNullableFilter<"WorkspacePR"> | Date | string | null
   syncedAt?: Prisma.DateTimeNullableFilter<"WorkspacePR"> | Date | string | null
   detachedAt?: Prisma.DateTimeNullableFilter<"WorkspacePR"> | Date | string | null
   revision?: Prisma.IntFilter<"WorkspacePR"> | number
@@ -369,6 +385,8 @@ export type WorkspacePROrderByWithRelationInput = {
   reviewState?: Prisma.SortOrderInput | Prisma.SortOrder
   ciStatus?: Prisma.SortOrder
   hasMergeConflict?: Prisma.SortOrder
+  completionDismissed?: Prisma.SortOrder
+  terminalObservedAt?: Prisma.SortOrderInput | Prisma.SortOrder
   syncedAt?: Prisma.SortOrderInput | Prisma.SortOrder
   detachedAt?: Prisma.SortOrderInput | Prisma.SortOrder
   revision?: Prisma.SortOrder
@@ -400,6 +418,8 @@ export type WorkspacePRWhereUniqueInput = Prisma.AtLeast<{
   reviewState?: Prisma.StringNullableFilter<"WorkspacePR"> | string | null
   ciStatus?: Prisma.EnumCIStatusFilter<"WorkspacePR"> | $Enums.CIStatus
   hasMergeConflict?: Prisma.BoolFilter<"WorkspacePR"> | boolean
+  completionDismissed?: Prisma.BoolFilter<"WorkspacePR"> | boolean
+  terminalObservedAt?: Prisma.DateTimeNullableFilter<"WorkspacePR"> | Date | string | null
   syncedAt?: Prisma.DateTimeNullableFilter<"WorkspacePR"> | Date | string | null
   detachedAt?: Prisma.DateTimeNullableFilter<"WorkspacePR"> | Date | string | null
   revision?: Prisma.IntFilter<"WorkspacePR"> | number
@@ -427,6 +447,8 @@ export type WorkspacePROrderByWithAggregationInput = {
   reviewState?: Prisma.SortOrderInput | Prisma.SortOrder
   ciStatus?: Prisma.SortOrder
   hasMergeConflict?: Prisma.SortOrder
+  completionDismissed?: Prisma.SortOrder
+  terminalObservedAt?: Prisma.SortOrderInput | Prisma.SortOrder
   syncedAt?: Prisma.SortOrderInput | Prisma.SortOrder
   detachedAt?: Prisma.SortOrderInput | Prisma.SortOrder
   revision?: Prisma.SortOrder
@@ -459,6 +481,8 @@ export type WorkspacePRScalarWhereWithAggregatesInput = {
   reviewState?: Prisma.StringNullableWithAggregatesFilter<"WorkspacePR"> | string | null
   ciStatus?: Prisma.EnumCIStatusWithAggregatesFilter<"WorkspacePR"> | $Enums.CIStatus
   hasMergeConflict?: Prisma.BoolWithAggregatesFilter<"WorkspacePR"> | boolean
+  completionDismissed?: Prisma.BoolWithAggregatesFilter<"WorkspacePR"> | boolean
+  terminalObservedAt?: Prisma.DateTimeNullableWithAggregatesFilter<"WorkspacePR"> | Date | string | null
   syncedAt?: Prisma.DateTimeNullableWithAggregatesFilter<"WorkspacePR"> | Date | string | null
   detachedAt?: Prisma.DateTimeNullableWithAggregatesFilter<"WorkspacePR"> | Date | string | null
   revision?: Prisma.IntWithAggregatesFilter<"WorkspacePR"> | number
@@ -482,6 +506,8 @@ export type WorkspacePRCreateInput = {
   reviewState?: string | null
   ciStatus?: $Enums.CIStatus
   hasMergeConflict?: boolean
+  completionDismissed?: boolean
+  terminalObservedAt?: Date | string | null
   syncedAt?: Date | string | null
   detachedAt?: Date | string | null
   revision?: number
@@ -509,6 +535,8 @@ export type WorkspacePRUncheckedCreateInput = {
   reviewState?: string | null
   ciStatus?: $Enums.CIStatus
   hasMergeConflict?: boolean
+  completionDismissed?: boolean
+  terminalObservedAt?: Date | string | null
   syncedAt?: Date | string | null
   detachedAt?: Date | string | null
   revision?: number
@@ -534,6 +562,8 @@ export type WorkspacePRUpdateInput = {
   reviewState?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   ciStatus?: Prisma.EnumCIStatusFieldUpdateOperationsInput | $Enums.CIStatus
   hasMergeConflict?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  completionDismissed?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  terminalObservedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   syncedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   detachedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   revision?: Prisma.IntFieldUpdateOperationsInput | number
@@ -561,6 +591,8 @@ export type WorkspacePRUncheckedUpdateInput = {
   reviewState?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   ciStatus?: Prisma.EnumCIStatusFieldUpdateOperationsInput | $Enums.CIStatus
   hasMergeConflict?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  completionDismissed?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  terminalObservedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   syncedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   detachedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   revision?: Prisma.IntFieldUpdateOperationsInput | number
@@ -587,6 +619,8 @@ export type WorkspacePRCreateManyInput = {
   reviewState?: string | null
   ciStatus?: $Enums.CIStatus
   hasMergeConflict?: boolean
+  completionDismissed?: boolean
+  terminalObservedAt?: Date | string | null
   syncedAt?: Date | string | null
   detachedAt?: Date | string | null
   revision?: number
@@ -610,6 +644,8 @@ export type WorkspacePRUpdateManyMutationInput = {
   reviewState?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   ciStatus?: Prisma.EnumCIStatusFieldUpdateOperationsInput | $Enums.CIStatus
   hasMergeConflict?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  completionDismissed?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  terminalObservedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   syncedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   detachedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   revision?: Prisma.IntFieldUpdateOperationsInput | number
@@ -634,6 +670,8 @@ export type WorkspacePRUncheckedUpdateManyInput = {
   reviewState?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   ciStatus?: Prisma.EnumCIStatusFieldUpdateOperationsInput | $Enums.CIStatus
   hasMergeConflict?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  completionDismissed?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  terminalObservedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   syncedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   detachedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   revision?: Prisma.IntFieldUpdateOperationsInput | number
@@ -673,6 +711,8 @@ export type WorkspacePRCountOrderByAggregateInput = {
   reviewState?: Prisma.SortOrder
   ciStatus?: Prisma.SortOrder
   hasMergeConflict?: Prisma.SortOrder
+  completionDismissed?: Prisma.SortOrder
+  terminalObservedAt?: Prisma.SortOrder
   syncedAt?: Prisma.SortOrder
   detachedAt?: Prisma.SortOrder
   revision?: Prisma.SortOrder
@@ -704,6 +744,8 @@ export type WorkspacePRMaxOrderByAggregateInput = {
   reviewState?: Prisma.SortOrder
   ciStatus?: Prisma.SortOrder
   hasMergeConflict?: Prisma.SortOrder
+  completionDismissed?: Prisma.SortOrder
+  terminalObservedAt?: Prisma.SortOrder
   syncedAt?: Prisma.SortOrder
   detachedAt?: Prisma.SortOrder
   revision?: Prisma.SortOrder
@@ -727,6 +769,8 @@ export type WorkspacePRMinOrderByAggregateInput = {
   reviewState?: Prisma.SortOrder
   ciStatus?: Prisma.SortOrder
   hasMergeConflict?: Prisma.SortOrder
+  completionDismissed?: Prisma.SortOrder
+  terminalObservedAt?: Prisma.SortOrder
   syncedAt?: Prisma.SortOrder
   detachedAt?: Prisma.SortOrder
   revision?: Prisma.SortOrder
@@ -846,6 +890,8 @@ export type WorkspacePRCreateWithoutWorkspaceInput = {
   reviewState?: string | null
   ciStatus?: $Enums.CIStatus
   hasMergeConflict?: boolean
+  completionDismissed?: boolean
+  terminalObservedAt?: Date | string | null
   syncedAt?: Date | string | null
   detachedAt?: Date | string | null
   revision?: number
@@ -871,6 +917,8 @@ export type WorkspacePRUncheckedCreateWithoutWorkspaceInput = {
   reviewState?: string | null
   ciStatus?: $Enums.CIStatus
   hasMergeConflict?: boolean
+  completionDismissed?: boolean
+  terminalObservedAt?: Date | string | null
   syncedAt?: Date | string | null
   detachedAt?: Date | string | null
   revision?: number
@@ -925,6 +973,8 @@ export type WorkspacePRScalarWhereInput = {
   reviewState?: Prisma.StringNullableFilter<"WorkspacePR"> | string | null
   ciStatus?: Prisma.EnumCIStatusFilter<"WorkspacePR"> | $Enums.CIStatus
   hasMergeConflict?: Prisma.BoolFilter<"WorkspacePR"> | boolean
+  completionDismissed?: Prisma.BoolFilter<"WorkspacePR"> | boolean
+  terminalObservedAt?: Prisma.DateTimeNullableFilter<"WorkspacePR"> | Date | string | null
   syncedAt?: Prisma.DateTimeNullableFilter<"WorkspacePR"> | Date | string | null
   detachedAt?: Prisma.DateTimeNullableFilter<"WorkspacePR"> | Date | string | null
   revision?: Prisma.IntFilter<"WorkspacePR"> | number
@@ -948,6 +998,8 @@ export type WorkspacePRCreateWithoutDedicatedSessionInput = {
   reviewState?: string | null
   ciStatus?: $Enums.CIStatus
   hasMergeConflict?: boolean
+  completionDismissed?: boolean
+  terminalObservedAt?: Date | string | null
   syncedAt?: Date | string | null
   detachedAt?: Date | string | null
   revision?: number
@@ -974,6 +1026,8 @@ export type WorkspacePRUncheckedCreateWithoutDedicatedSessionInput = {
   reviewState?: string | null
   ciStatus?: $Enums.CIStatus
   hasMergeConflict?: boolean
+  completionDismissed?: boolean
+  terminalObservedAt?: Date | string | null
   syncedAt?: Date | string | null
   detachedAt?: Date | string | null
   revision?: number
@@ -1014,6 +1068,8 @@ export type WorkspacePRUpdateWithoutDedicatedSessionInput = {
   reviewState?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   ciStatus?: Prisma.EnumCIStatusFieldUpdateOperationsInput | $Enums.CIStatus
   hasMergeConflict?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  completionDismissed?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  terminalObservedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   syncedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   detachedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   revision?: Prisma.IntFieldUpdateOperationsInput | number
@@ -1040,6 +1096,8 @@ export type WorkspacePRUncheckedUpdateWithoutDedicatedSessionInput = {
   reviewState?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   ciStatus?: Prisma.EnumCIStatusFieldUpdateOperationsInput | $Enums.CIStatus
   hasMergeConflict?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  completionDismissed?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  terminalObservedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   syncedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   detachedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   revision?: Prisma.IntFieldUpdateOperationsInput | number
@@ -1064,6 +1122,8 @@ export type WorkspacePRCreateWithoutEventsInput = {
   reviewState?: string | null
   ciStatus?: $Enums.CIStatus
   hasMergeConflict?: boolean
+  completionDismissed?: boolean
+  terminalObservedAt?: Date | string | null
   syncedAt?: Date | string | null
   detachedAt?: Date | string | null
   revision?: number
@@ -1090,6 +1150,8 @@ export type WorkspacePRUncheckedCreateWithoutEventsInput = {
   reviewState?: string | null
   ciStatus?: $Enums.CIStatus
   hasMergeConflict?: boolean
+  completionDismissed?: boolean
+  terminalObservedAt?: Date | string | null
   syncedAt?: Date | string | null
   detachedAt?: Date | string | null
   revision?: number
@@ -1130,6 +1192,8 @@ export type WorkspacePRUpdateWithoutEventsInput = {
   reviewState?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   ciStatus?: Prisma.EnumCIStatusFieldUpdateOperationsInput | $Enums.CIStatus
   hasMergeConflict?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  completionDismissed?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  terminalObservedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   syncedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   detachedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   revision?: Prisma.IntFieldUpdateOperationsInput | number
@@ -1156,6 +1220,8 @@ export type WorkspacePRUncheckedUpdateWithoutEventsInput = {
   reviewState?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   ciStatus?: Prisma.EnumCIStatusFieldUpdateOperationsInput | $Enums.CIStatus
   hasMergeConflict?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  completionDismissed?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  terminalObservedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   syncedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   detachedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   revision?: Prisma.IntFieldUpdateOperationsInput | number
@@ -1180,6 +1246,8 @@ export type WorkspacePRCreateManyWorkspaceInput = {
   reviewState?: string | null
   ciStatus?: $Enums.CIStatus
   hasMergeConflict?: boolean
+  completionDismissed?: boolean
+  terminalObservedAt?: Date | string | null
   syncedAt?: Date | string | null
   detachedAt?: Date | string | null
   revision?: number
@@ -1203,6 +1271,8 @@ export type WorkspacePRUpdateWithoutWorkspaceInput = {
   reviewState?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   ciStatus?: Prisma.EnumCIStatusFieldUpdateOperationsInput | $Enums.CIStatus
   hasMergeConflict?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  completionDismissed?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  terminalObservedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   syncedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   detachedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   revision?: Prisma.IntFieldUpdateOperationsInput | number
@@ -1228,6 +1298,8 @@ export type WorkspacePRUncheckedUpdateWithoutWorkspaceInput = {
   reviewState?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   ciStatus?: Prisma.EnumCIStatusFieldUpdateOperationsInput | $Enums.CIStatus
   hasMergeConflict?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  completionDismissed?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  terminalObservedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   syncedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   detachedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   revision?: Prisma.IntFieldUpdateOperationsInput | number
@@ -1253,6 +1325,8 @@ export type WorkspacePRUncheckedUpdateManyWithoutWorkspaceInput = {
   reviewState?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   ciStatus?: Prisma.EnumCIStatusFieldUpdateOperationsInput | $Enums.CIStatus
   hasMergeConflict?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  completionDismissed?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  terminalObservedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   syncedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   detachedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   revision?: Prisma.IntFieldUpdateOperationsInput | number
@@ -1308,6 +1382,8 @@ export type WorkspacePRSelect<ExtArgs extends runtime.Types.Extensions.InternalA
   reviewState?: boolean
   ciStatus?: boolean
   hasMergeConflict?: boolean
+  completionDismissed?: boolean
+  terminalObservedAt?: boolean
   syncedAt?: boolean
   detachedAt?: boolean
   revision?: boolean
@@ -1336,6 +1412,8 @@ export type WorkspacePRSelectCreateManyAndReturn<ExtArgs extends runtime.Types.E
   reviewState?: boolean
   ciStatus?: boolean
   hasMergeConflict?: boolean
+  completionDismissed?: boolean
+  terminalObservedAt?: boolean
   syncedAt?: boolean
   detachedAt?: boolean
   revision?: boolean
@@ -1361,6 +1439,8 @@ export type WorkspacePRSelectUpdateManyAndReturn<ExtArgs extends runtime.Types.E
   reviewState?: boolean
   ciStatus?: boolean
   hasMergeConflict?: boolean
+  completionDismissed?: boolean
+  terminalObservedAt?: boolean
   syncedAt?: boolean
   detachedAt?: boolean
   revision?: boolean
@@ -1386,6 +1466,8 @@ export type WorkspacePRSelectScalar = {
   reviewState?: boolean
   ciStatus?: boolean
   hasMergeConflict?: boolean
+  completionDismissed?: boolean
+  terminalObservedAt?: boolean
   syncedAt?: boolean
   detachedAt?: boolean
   revision?: boolean
@@ -1398,7 +1480,7 @@ export type WorkspacePRSelectScalar = {
   observationEpoch?: boolean
 }
 
-export type WorkspacePROmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "workspaceId" | "url" | "number" | "title" | "headRefName" | "baseRefName" | "state" | "reviewState" | "ciStatus" | "hasMergeConflict" | "syncedAt" | "detachedAt" | "revision" | "ciFailedAt" | "ciLastNotifiedAt" | "reviewLastCheckedAt" | "reviewLastCommentId" | "observation" | "transitionSequence" | "observationEpoch", ExtArgs["result"]["workspacePR"]>
+export type WorkspacePROmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "workspaceId" | "url" | "number" | "title" | "headRefName" | "baseRefName" | "state" | "reviewState" | "ciStatus" | "hasMergeConflict" | "completionDismissed" | "terminalObservedAt" | "syncedAt" | "detachedAt" | "revision" | "ciFailedAt" | "ciLastNotifiedAt" | "reviewLastCheckedAt" | "reviewLastCommentId" | "observation" | "transitionSequence" | "observationEpoch", ExtArgs["result"]["workspacePR"]>
 export type WorkspacePRInclude<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
   workspace?: boolean | Prisma.WorkspaceDefaultArgs<ExtArgs>
   events?: boolean | Prisma.WorkspacePR$eventsArgs<ExtArgs>
@@ -1431,6 +1513,8 @@ export type $WorkspacePRPayload<ExtArgs extends runtime.Types.Extensions.Interna
     reviewState: string | null
     ciStatus: $Enums.CIStatus
     hasMergeConflict: boolean
+    completionDismissed: boolean
+    terminalObservedAt: Date | null
     syncedAt: Date | null
     detachedAt: Date | null
     revision: number
@@ -1878,6 +1962,8 @@ export interface WorkspacePRFieldRefs {
   readonly reviewState: Prisma.FieldRef<"WorkspacePR", 'String'>
   readonly ciStatus: Prisma.FieldRef<"WorkspacePR", 'CIStatus'>
   readonly hasMergeConflict: Prisma.FieldRef<"WorkspacePR", 'Boolean'>
+  readonly completionDismissed: Prisma.FieldRef<"WorkspacePR", 'Boolean'>
+  readonly terminalObservedAt: Prisma.FieldRef<"WorkspacePR", 'DateTime'>
   readonly syncedAt: Prisma.FieldRef<"WorkspacePR", 'DateTime'>
   readonly detachedAt: Prisma.FieldRef<"WorkspacePR", 'DateTime'>
   readonly revision: Prisma.FieldRef<"WorkspacePR", 'Int'>

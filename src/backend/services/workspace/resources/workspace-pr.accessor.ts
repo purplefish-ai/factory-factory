@@ -95,13 +95,22 @@ export function flattenWorkspacePR(pr: WorkspacePR | null | undefined): Workspac
 }
 
 /** Collection facts are authoritative; the scalar link selects an active association. */
-export function projectWorkspacePRCollection(rows: WorkspacePRRow[], enabled: boolean) {
+export function projectWorkspacePRCollection(
+  rows: WorkspacePRRow[],
+  enabled: boolean,
+  allAssociationsIncluded = false
+) {
   const attached = rows.filter((pr) => !pr.detachedAt);
   const prs = attached.map(serializeWorkspacePR);
   const prSummary = deriveWorkspacePRSummary(prs, enabled);
   return {
     ...flattenWorkspacePR(selectWorkspacePR(attached)),
     prs,
+    // Detached rows retain their revision so removal also advances collection freshness.
+    // Attached-only reads cannot prove membership freshness and must omit this fence.
+    ...(allAssociationsIncluded
+      ? { prCollectionRevision: rows.reduce((total, pr) => total + pr.revision + 1, 0) }
+      : {}),
     ...deriveWorkspacePRSelection(prs),
     prSummary,
     prState: prSummary.state,
@@ -124,10 +133,14 @@ export function serializeWorkspacePR(pr: WorkspacePRRow): WorkspacePullRequest {
     ciStatus: pr.ciStatus,
     hasMergeConflict: pr.hasMergeConflict,
     syncedAt: pr.syncedAt?.toISOString() ?? null,
+    completionDismissed: pr.completionDismissed,
+    revision: pr.revision,
   };
 }
 
 const reattachmentFields = {
+  completionDismissed: false,
+  terminalObservedAt: null,
   detachedAt: null,
   state: 'NONE',
   number: null,
@@ -183,7 +196,39 @@ function findEquivalentPR(rows: PRUrlRow[], url: string): PRUrlRow | null {
 }
 
 export type WorkspacePRRecord = WorkspacePR;
+
+function completionDismissalUpdate(row: WorkspacePR, observation: PRObservation) {
+  if (observation.prState !== 'MERGED' && observation.prState !== 'CLOSED') {
+    return { completionDismissed: false, terminalObservedAt: null };
+  }
+  return row.state !== observation.prState
+    ? { completionDismissed: false, terminalObservedAt: new Date(observation.observedAt) }
+    : {};
+}
+
 class WorkspacePRAccessor {
+  /** User follow-ups retire only terminal facts already observed at admission. */
+  dismissCompletedPRs(workspaceId: string, acceptedAt: Date) {
+    return prisma.$transaction(async (tx) => {
+      const result = await tx.workspacePR.updateMany({
+        where: {
+          workspaceId,
+          detachedAt: null,
+          completionDismissed: false,
+          state: { in: ['MERGED', 'CLOSED'] },
+          OR: [{ terminalObservedAt: null }, { terminalObservedAt: { lte: acceptedAt } }],
+          workspace: { status: { notIn: ['ARCHIVING', 'ARCHIVED'] } },
+        },
+        data: { completionDismissed: true, revision: { increment: 1 } },
+      });
+      return result.count > 0
+        ? tx.workspacePR.findMany({
+            where: { workspaceId, detachedAt: null },
+            orderBy: { id: 'asc' },
+          })
+        : null;
+    });
+  }
   /** Detached associations also retain results until the workspace cascade. */
   listForDeletion(tx: Prisma.TransactionClient, workspaceId: string) {
     return tx.workspacePR.findMany({
@@ -270,6 +315,7 @@ class WorkspacePRAccessor {
           headRefName: observation.headBranch,
           baseRefName: observation.baseBranch,
           state: observation.prState,
+          ...completionDismissalUpdate(row, observation),
           ciStatus: observation.ciStatus,
           reviewState: observation.reviewState,
           hasMergeConflict: observation.hasMergeConflict,

@@ -178,6 +178,8 @@ const mockWorkspace: WorkspaceForExport = {
     {
       id: 'pr1',
       dedicatedSession: null,
+      completionDismissed: false,
+      terminalObservedAt: null,
       title: null,
       headRefName: null,
       baseRefName: null,

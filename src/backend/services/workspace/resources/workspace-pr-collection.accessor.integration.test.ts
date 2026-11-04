@@ -9,6 +9,7 @@ import type { Prisma, PrismaClient } from '@prisma-gen/client';
 import { workspacePrDiscoveryAccessor } from './workspace-pr-discovery.accessor';
 import {
   flattenWorkspacePR,
+  projectWorkspacePRCollection,
   WORKSPACE_PR_DEFAULTS,
   workspacePrAccessor,
 } from './workspace-pr.accessor';
@@ -64,6 +65,39 @@ it('uses fresh defaults when no PR exists', () => {
   expect(second.prNumber).toBeNull();
   expect(WORKSPACE_PR_DEFAULTS.prNumber).toBeNull();
   expect(second).toEqual(WORKSPACE_PR_DEFAULTS);
+});
+it('advances collection revision across attachment, detachment, and reattachment without exposing tombstones', async () => {
+  const row = await workspace('membership-revision');
+  const read = async (revision: number, ids: string[]) => {
+    for (const projection of [
+      await workspaceAccessor.findById(row.id),
+      await workspaceAccessor.findByIdWithProject(row.id),
+      await workspaceRatchetAccessor.findSnapshotProjection(row.id),
+      (await workspaceAccessor.findAllNonArchivedWithSessionsAndProject()).find(
+        (candidate) => candidate.id === row.id
+      ),
+    ]) {
+      expect(projection).toMatchObject({ prCollectionRevision: revision });
+      expect(projection?.prs.map((pr) => pr.id).sort()).toEqual(ids.slice().sort());
+    }
+  };
+  await read(0, []);
+  const first = await workspacePrAccessor.attach(row.id, 'https://github.com/org/repo/pull/1');
+  await read(1, [first.prId]);
+  await workspacePrAccessor.attach(row.id, 'https://github.com/org/repo/pull/1');
+  await read(1, [first.prId]);
+  const second = await workspacePrAccessor.attach(row.id, 'https://github.com/org/repo/pull/2');
+  await read(2, [first.prId, second.prId]);
+  await workspacePrAccessor.detach({ workspaceId: row.id, prId: first.prId });
+  await read(3, [second.prId]);
+  await workspacePrAccessor.detach({ workspaceId: row.id, prId: second.prId });
+  await read(4, []);
+  expect(
+    projectWorkspacePRCollection(await workspacePrAccessor.list(row.id), true)
+  ).not.toHaveProperty('prCollectionRevision');
+  expect(await db.prisma.workspacePR.count({ where: { workspaceId: row.id } })).toBe(2);
+  await workspacePrAccessor.attach(row.id, 'https://github.com/org/repo/pull/1');
+  await read(5, [first.prId]);
 });
 it('keeps same-numbered PRs in different repositories independent and duplicate attachment idempotent', async () => {
   await workspace('identity');
@@ -542,6 +576,8 @@ it.each<{
             : [
                 {
                   id: `${row.id}-${index}`,
+                  completionDismissed: false,
+                  revision: 0,
                   url: `https://github.com/org/repo/pull/${100 + index}`,
                   number: 100 + index,
                   title: `PR ${index}`,
