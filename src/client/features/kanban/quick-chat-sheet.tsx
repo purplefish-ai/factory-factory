@@ -27,6 +27,7 @@ function QuickChatSessionState({
   hasSessions,
   creating,
   disabled,
+  disabledReason,
   onCreate,
   error,
   retrying,
@@ -36,6 +37,7 @@ function QuickChatSessionState({
   hasSessions: boolean;
   creating: boolean;
   disabled: boolean;
+  disabledReason?: string | null;
   onCreate: () => void;
   error?: { message: string } | null;
   retrying?: boolean;
@@ -58,6 +60,7 @@ function QuickChatSessionState({
     <EmptyState
       size="compact"
       title="No chats yet"
+      description={disabledReason}
       action={
         <Button variant="outline" size="sm" onClick={onCreate} disabled={disabled}>
           New chat
@@ -65,6 +68,13 @@ function QuickChatSessionState({
       }
     />
   );
+}
+
+function getChatLimitUnavailableReason(query: { data?: number; isError: boolean }): string | null {
+  if (query.isError) {
+    return "Couldn't load the chat limit.";
+  }
+  return query.data === undefined ? 'Loading chat limit…' : null;
 }
 
 function QuickChatLimitError({
@@ -145,15 +155,15 @@ export function QuickChatSheet({ workspaceId, onClose }: QuickChatSheetProps) {
   // There are no tabs until sessions load, and new chats need the list for their defaults.
   const tabBarDisabled = isCreatingSession || !workspaceId || !sessionsLoaded;
   const maxSessions = maxSessionsQuery.data;
-  const newChatUnavailableReason = maxSessionsQuery.isError
-    ? "Couldn't load the chat limit."
-    : getNewChatUnavailableReason({
-        sessions: sessionsLoaded && maxSessions !== undefined ? sessions : undefined,
-        maxSessions,
-        hasWorktreePath: Boolean(workspace?.worktreePath),
-        isCreatingSession,
-        isDeletingSession,
-      });
+  const newChatUnavailableReason =
+    getChatLimitUnavailableReason(maxSessionsQuery) ??
+    getNewChatUnavailableReason({
+      sessions: sessionsLoaded && maxSessions !== undefined ? sessions : undefined,
+      maxSessions,
+      hasWorktreePath: Boolean(workspace?.worktreePath),
+      isCreatingSession,
+      isDeletingSession,
+    });
 
   return (
     <Sheet open={!!workspaceId} onOpenChange={(open) => !open && onClose()}>
@@ -208,6 +218,7 @@ export function QuickChatSheet({ workspaceId, onClose }: QuickChatSheetProps) {
               hasSessions={sessions.length > 0}
               creating={isCreatingSession}
               disabled={tabBarDisabled || Boolean(newChatUnavailableReason)}
+              disabledReason={newChatUnavailableReason}
               onCreate={() => handleNewChat()}
               error={sessionsError}
               retrying={isFetchingSessions}

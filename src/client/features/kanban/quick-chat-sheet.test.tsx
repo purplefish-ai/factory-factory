@@ -337,3 +337,24 @@ it('keeps new-chat actions disabled while a chat is closing', async () => {
     container.remove();
   }
 });
+
+it('explains why the first chat cannot start before workspace setup finishes', async () => {
+  mocks.empty = true;
+  mocks.worktreePath = null;
+  const container = document.createElement('div');
+  document.body.append(container);
+  const root = createRoot(container);
+  try {
+    await act(() => root.render(<QuickChatSheet workspaceId="workspace" onClose={vi.fn()} />));
+    expect(document.body.textContent).toContain(
+      'New chats can start once the workspace is set up.'
+    );
+    const create = [...document.querySelectorAll('button')].find(
+      (button) => button.textContent === 'New chat'
+    );
+    expect(create?.disabled).toBe(true);
+  } finally {
+    await act(() => root.unmount());
+    container.remove();
+  }
+});
