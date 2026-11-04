@@ -86,6 +86,9 @@ export const Desktop: Story = {
     }
     await userEvent.click(within(todo).getByRole('button', { name: 'New workspace' }));
     await expect(within(todo).getByPlaceholderText('What should the agent work on?')).toBeVisible();
+    await expect(
+      within(todo).queryByRole('button', { name: 'New workspace' })
+    ).not.toBeInTheDocument();
   },
 };
 
