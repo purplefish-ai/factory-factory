@@ -134,10 +134,13 @@ the previous renderer limit and page boundaries; unavailable connections disable
 Retry. Idle and completed history show no header text or load button, including
 during workspace initialization. Prepending preserves the content anchor,
 including when the loading header is visible at the very top. Content anchors
-skip zero-height rows such as hidden thinking blocks. Reaching the oldest entry
-stops paging without a beginning marker. Tool groups stay split at loaded page
-boundaries so prepending adjacent tools preserves existing row keys and
-expansion state; late results still pair across those boundaries.
+skip zero-height rows such as hidden thinking blocks. The stable history row
+shares the normal leading padding. At the top, header growth leaves loading
+feedback visible; header collapse compensates to preserve the content anchor.
+Reaching the oldest entry stops paging without a beginning marker. Tool groups
+stay split at loaded page boundaries so prepending adjacent tools preserves
+existing row keys and expansion state; late results still pair across those
+boundaries.
 
 Both managed providers accept image and text attachments. Connected conversation
 composers accept image drops, uploads, and the upload shortcut while an agent is

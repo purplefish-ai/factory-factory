@@ -570,6 +570,7 @@ test('older history loads near the top, preserves content at the top, and keeps 
     element.scrollTop = 0;
   });
   await expect(page.getByText('Loading earlier messages…')).toBeVisible();
+  await expect(page.getByText('Loading earlier messages…')).toBeInViewport({ ratio: 1 });
   await expect(page.getByText('History requests: 1')).toBeVisible();
   const original = viewport.locator('[data-transcript-key="m-0"]');
   const relativeTop = () =>
@@ -661,6 +662,18 @@ test('paging adjacent tools preserves the expanded existing group and its anchor
     element.scrollTop = 0;
   });
   await expectCompletedHistory(page, 'tool-seq-tool-0');
+  await expect
+    .poll(() =>
+      viewport
+        .locator('[data-transcript-key="tool-seq-tool-0"]')
+        .evaluate(
+          (element) =>
+            element.getBoundingClientRect().top -
+            (element.closest('[data-testid="transcript-viewport"]')?.getBoundingClientRect().top ??
+              0)
+        )
+    )
+    .toBe(16);
 });
 
 test('history fixture keeps paging state separate across sessions', async ({ page }) => {
@@ -683,4 +696,21 @@ test('history fixture keeps paging state separate across sessions', async ({ pag
     element.scrollTop = 0;
   });
   await expectCompletedHistory(page);
+});
+
+test('history loading feedback stays fully visible at the top', async ({ page }) => {
+  await page.goto('/__transcript-scroll?history-tools=1');
+  const viewport = page.getByTestId('transcript-viewport');
+  await expect.poll(() => gap(viewport)).toBeLessThanOrEqual(1);
+  await viewport.evaluate((element) => {
+    element.scrollTop = 0;
+  });
+  const loading = page.getByText('Loading earlier messages…');
+  await expect(loading).toBeVisible();
+  await viewport.evaluate(async () => {
+    for (let frame = 0; frame < 4; frame++) {
+      await new Promise(requestAnimationFrame);
+    }
+  });
+  await expect(loading).toBeInViewport({ ratio: 1 });
 });

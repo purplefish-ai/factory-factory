@@ -168,7 +168,8 @@ export function useTranscriptScroll(
     getItemKey,
     estimateSize: () => 80,
     overscan: 5,
-    paddingStart: 16,
+    // The stable history row already contributes one 8px gap before content.
+    paddingStart: leadingHeader && anchorHeaderToContent ? 8 : 16,
     paddingEnd: 16,
     gap: 8,
     rangeExtractor,
@@ -202,11 +203,12 @@ export function useTranscriptScroll(
   engineRef.current = engine;
   // Reading anchors skip the history header, even while it overlaps the viewport.
   // Compensate its collapse after paging so the anchored content stays in place.
-  engine.shouldAdjustScrollPositionOnItemSizeChange = (item, _delta, instance) =>
+  engine.shouldAdjustScrollPositionOnItemSizeChange = (item, delta, instance) =>
     item.end <= (instance.scrollOffset ?? 0) + 1 ||
     (headerAnchoring.current &&
       item.key === 'transcript:header' &&
-      stateRef.current.intent === 'reading');
+      stateRef.current.intent === 'reading' &&
+      delta < 0);
   const totalSize = engine.getTotalSize();
 
   useLayoutEffect(() => {
