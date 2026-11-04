@@ -429,6 +429,38 @@ export const SendWhileReadingOnPhone: Story = {
   globals: { viewport: { value: 'phone', isRotated: false } },
 };
 
+export const ScrollButtonOverlay: Story = {
+  ...ComposerResizing,
+  args: { ...ComposerResizing.args, thinkingInFooter: true },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const viewport = canvas.getByTestId('transcript-viewport');
+    const footer = canvas.getByTestId('thinking-footer');
+    const gap = () => viewport.scrollHeight - viewport.clientHeight - viewport.scrollTop;
+    await waitFor(() => expect(gap()).toBeLessThanOrEqual(1));
+    const height = viewport.clientHeight;
+    const footerTop = footer.getBoundingClientRect().top;
+    viewport.scrollTop = 0;
+    viewport.dispatchEvent(new Event('scroll'));
+    const button = await canvas.findByRole('button', { name: 'Scroll to bottom' });
+    await expect(viewport.clientHeight).toBe(height);
+    await expect(footer.getBoundingClientRect().top).toBe(footerTop);
+    const bounds = button.getBoundingClientRect();
+    const viewportBounds = viewport.getBoundingClientRect();
+    await expect(bounds.top).toBeGreaterThanOrEqual(viewportBounds.top);
+    await expect(bounds.bottom).toBeLessThanOrEqual(viewportBounds.bottom);
+    await userEvent.click(button);
+    await waitFor(() => expect(gap()).toBeLessThanOrEqual(1));
+    await expect(button).not.toBeInTheDocument();
+    await expect(viewport.clientHeight).toBe(height);
+  },
+};
+
+export const ScrollButtonOverlayOnPhone: Story = {
+  ...ScrollButtonOverlay,
+  globals: { viewport: { value: 'phone', isRotated: false } },
+};
+
 export const LoadingEarlierMessages: Story = {
   args: {
     loadingSession: false,
