@@ -1,4 +1,4 @@
-import { lazy, Suspense } from 'react';
+import { lazy, Suspense, useEffect, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -18,9 +18,10 @@ const TerminalInstance = lazy(() =>
 interface SetupTerminalModalProps {
   open: boolean;
   onClose: () => void;
+  initialProvider?: 'CLAUDE' | 'CODEX';
 }
 
-export function SetupTerminalModal({ open, onClose }: SetupTerminalModalProps) {
+export function SetupTerminalModal({ open, onClose, initialProvider }: SetupTerminalModalProps) {
   const {
     connected,
     gaveUp,
@@ -32,6 +33,16 @@ export function SetupTerminalModal({ open, onClose }: SetupTerminalModalProps) {
     handleData,
     handleResize,
   } = useSetupTerminal(open);
+
+  const startedLogin = useRef(false);
+  useEffect(() => {
+    if (!open) {
+      startedLogin.current = false;
+    } else if (connected && initialProvider && !startedLogin.current) {
+      startedLogin.current = true;
+      authenticate(initialProvider);
+    }
+  }, [open, connected, initialProvider, authenticate]);
 
   return (
     <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>

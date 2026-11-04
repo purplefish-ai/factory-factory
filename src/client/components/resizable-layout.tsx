@@ -15,9 +15,10 @@ import { cn } from '@/lib/utils';
 interface AppLayoutProps {
   children: ReactNode;
   className?: string;
+  banners?: ReactNode;
 }
 
-export function AppLayout({ children, className }: AppLayoutProps) {
+export function AppLayout({ children, className, banners }: AppLayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useRouteSidebarState();
   const navData = useAppNavigationData();
   const isFirstRun = navData.projects?.length === 0 && !navData.projectsError;
@@ -34,6 +35,7 @@ export function AppLayout({ children, className }: AppLayoutProps) {
             <AppHeaderProvider>
               <AppShortcuts navData={navData} />
               <AppHeader showSidebarToggle={!isFirstRun} />
+              {banners}
               <div className="flex flex-1 min-h-0 overflow-hidden">
                 {isFirstRun ? null : <AppSidebar navData={navData} />}
                 <main className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-background">

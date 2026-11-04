@@ -1,6 +1,8 @@
 import type { Meta, StoryObj } from '@storybook/react';
 import { expect, fn, userEvent, within } from 'storybook/test';
+import { WorkspaceHeaderPwaPreview } from '@/client/routes/workspace-header-pwa-preview';
 import { CLIHealthBannerContent, collectIssues } from './cli-health-banner';
+import { AppLayout } from './resizable-layout';
 
 const health = {
   claude: {
@@ -20,6 +22,7 @@ const meta = {
     isRefetching: false,
     onRecheck: fn(),
     onDismiss: fn(),
+    onSignIn: fn(),
   },
 } satisfies Meta<typeof CLIHealthBannerContent>;
 
@@ -29,10 +32,12 @@ type Story = StoryObj<typeof meta>;
 export const ClaudeSignInRequired: Story = {
   play: async ({ canvasElement, args }) => {
     const canvas = within(canvasElement);
-    await expect(canvas.getByRole('alert')).toHaveTextContent('setup terminal in Settings');
+    await expect(canvas.getByRole('alert')).toHaveTextContent('open the setup terminal');
     await expect(canvas.getByRole('alert')).toHaveTextContent('If ff is installed');
     await expect(canvas.queryByRole('link')).not.toBeInTheDocument();
     await expect(canvas.queryByRole('button', { name: 'Update Claude' })).not.toBeInTheDocument();
+    await userEvent.click(canvas.getByRole('button', { name: 'Sign in to Claude' }));
+    await expect(args.onSignIn).toHaveBeenCalledWith('CLAUDE');
     await userEvent.click(canvas.getByRole('button', { name: 'Recheck' }));
     await expect(args.onRecheck).toHaveBeenCalled();
     await userEvent.click(canvas.getByRole('button', { name: 'Dismiss' }));
@@ -98,4 +103,24 @@ export const Healthy: Story = {
 export const MissingToolsDark: typeof MissingTools = {
   ...MissingTools,
   globals: { theme: 'dark' },
+};
+
+export const DesktopPwaNotices: Story = {
+  parameters: { trpc: { handlers: { 'project.list': () => [] } } },
+  render: (args) => (
+    <WorkspaceHeaderPwaPreview side="left">
+      <AppLayout banners={<CLIHealthBannerContent {...args} />}>
+        <p>Workspace content</p>
+      </AppLayout>
+    </WorkspaceHeaderPwaPreview>
+  ),
+  play: async ({ canvasElement }) => {
+    const header = canvasElement.querySelector('header');
+    const alert = within(canvasElement).getByRole('alert');
+    await expect(header).not.toBeNull();
+    await expect(header!.getBoundingClientRect().top).toBe(0);
+    await expect(alert.getBoundingClientRect().top).toBeGreaterThanOrEqual(
+      header!.getBoundingClientRect().bottom
+    );
+  },
 };
