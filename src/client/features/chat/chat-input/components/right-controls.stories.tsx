@@ -46,4 +46,20 @@ export const StopShortcut: Story = {
 };
 export const ReadyToSend: Story = {
   args: { running: false, stopping: false, disabled: false, pendingMessageCount: 0 },
+  play: async ({ canvasElement }) => {
+    const send = within(canvasElement).getByRole('button', { name: 'Send message' });
+    await expect(send).toHaveAttribute('data-variant', 'default');
+    await userEvent.hover(send);
+    await expect(send).toBeVisible();
+  },
+};
+export const ReadyToSendDark: Story = { ...ReadyToSend, globals: { theme: 'dark' } };
+export const ReadyToQueue: Story = {
+  ...ReadyToSend,
+  args: { ...ReadyToSend.args, promptInFlight: true },
+  play: async ({ canvasElement }) => {
+    const queue = within(canvasElement).getByRole('button', { name: 'Queue message' });
+    await expect(queue).toHaveAttribute('data-variant', 'default');
+    await userEvent.hover(queue);
+  },
 };
