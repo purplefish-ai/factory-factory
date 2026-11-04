@@ -13,12 +13,27 @@ const subagentState = vi.hoisted(() => ({
   siblingStatus: 'completed' as 'completed' | 'starting' | 'waiting' | 'running',
 }));
 
+const defaultScrollProps = {
+  transcriptScroll: {
+    identity: 'test',
+    active: true,
+    ready: true,
+    initialIntent: 'following' as const,
+    initialPosition: null,
+  },
+};
+
 vi.mock('@/client/features/chat', async () => ({
   getChatPendingRequestType: (
     await vi.importActual<typeof import('@/client/features/chat/pending-request-type')>(
       '@/client/features/chat/pending-request-type'
     )
   ).getChatPendingRequestType,
+  useTranscriptSend: (
+    await vi.importActual<typeof import('@/client/features/chat/use-transcript-send')>(
+      '@/client/features/chat/use-transcript-send'
+    )
+  ).useTranscriptSend,
   AgentErrorStrip: (
     await vi.importActual<typeof import('@/client/features/chat/agent-error-strip')>(
       '@/client/features/chat/agent-error-strip'
@@ -44,6 +59,7 @@ describe('ChatContent init banner ownership', () => {
     'leaves %s script failures to the workspace banner',
     (kind) => {
       const props = {
+        ...defaultScrollProps,
         workspaceId: 'workspace-1',
         sessionId: 'session-1',
         messages: [],
@@ -93,6 +109,7 @@ describe('ChatContent runtime error placeholder', () => {
     },
   ])('uses accurate retry wording for $processState runtime errors', (runtime) => {
     const props = {
+      ...defaultScrollProps,
       workspaceId: 'workspace-1',
       sessionId: 'session-1',
       messages: [],
@@ -143,6 +160,7 @@ describe('ChatContent agent error strip', () => {
 
   function errorProps(overrides: Partial<ChatContentProps> = {}) {
     return {
+      ...defaultScrollProps,
       workspaceId: 'workspace-1',
       sessionId: 'session-1',
       messages: [
@@ -186,7 +204,9 @@ describe('ChatContent agent error strip', () => {
     const root = createRoot(container);
     try {
       flushSync(() => root.render(<ChatContent {...props} />));
+      expect(transcript.mock.lastCall?.[0].scroll.followRequest).toBeUndefined();
       flushSync(() => button(container, 'Retry')?.click());
+      expect(transcript.mock.lastCall?.[0].scroll.followRequest).toBeDefined();
       expect(props.sendMessage).toHaveBeenCalledWith('Run the migration again', {
         preserveInput: true,
         attachments: lastUserMessage.attachments,
@@ -261,6 +281,7 @@ describe('ChatContent message queue wording', () => {
     'uses prompt ownership when promptInFlight=$promptInFlight',
     ({ promptInFlight, placeholder }) => {
       const props = {
+        ...defaultScrollProps,
         workspaceId: 'workspace-1',
         sessionId: 'session-1',
         messages: [],
@@ -329,6 +350,7 @@ describe('ChatContent pending request wording', () => {
     },
   ])('says the agent waits on a $pendingRequestType', (testCase) => {
     const props = {
+      ...defaultScrollProps,
       workspaceId: 'workspace-1',
       sessionId: 'session-1',
       messages: [],
@@ -397,6 +419,7 @@ describe('ChatContent transcript ownership', () => {
       subagentState.siblingStatus = siblingStatus;
       const onOpenSubagent = vi.fn();
       const props = {
+        ...defaultScrollProps,
         workspaceId: 'workspace-1',
         sessionId: 'session-1',
         onOpenSubagent,
@@ -433,6 +456,7 @@ describe('ChatContent transcript ownership', () => {
   it.each(['agent-1', 'agent-2'])('opens lifecycle target %s in its parent session', (id) => {
     const onOpenSubagent = vi.fn();
     const props = {
+      ...defaultScrollProps,
       workspaceId: 'workspace-1',
       sessionId: 'session-1',
       parentSessionName: 'Main chat',
@@ -474,6 +498,7 @@ describe('ChatContent transcript ownership', () => {
   it('opens an active sub-agent transcript directly from the chat list', () => {
     const onOpenSubagent = vi.fn();
     const props = {
+      ...defaultScrollProps,
       workspaceId: 'workspace-1',
       sessionId: 'session-1',
       parentSessionName: 'Main chat',
@@ -517,6 +542,7 @@ describe('ChatContent transcript ownership', () => {
       initialPosition: null,
     };
     const props = {
+      ...defaultScrollProps,
       workspaceId: 'workspace-1',
       sessionId: 'session-1',
       messages: [],

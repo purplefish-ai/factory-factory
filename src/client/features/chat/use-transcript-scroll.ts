@@ -242,6 +242,17 @@ export function useTranscriptScroll(
       controller.current?.measurementReady();
     }
   });
+  const handledFollowRequest = useRef(options.followRequest);
+  useLayoutEffect(() => {
+    if (!enabled || handledFollowRequest.current === options.followRequest) {
+      return;
+    }
+    handledFollowRequest.current = options.followRequest;
+    if (options.followRequest) {
+      controller.current?.jumpToLatest();
+    }
+  }, [enabled, options.followRequest]);
+
   const updateContentBelow = useCallback(() => {
     setHasContentBelow(
       !!viewport &&

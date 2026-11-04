@@ -4,6 +4,7 @@ import { act, useRef } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { createTranscriptPositioner } from './transcript-scroll-position';
+import type { TranscriptScrollState } from './transcript-scroll.types';
 import { useTranscriptScroll } from './use-transcript-scroll';
 
 // Keep the real engine's options and element cache, without mounting its own
@@ -213,4 +214,57 @@ it('keeps virtualizer key callbacks stable until the row keys change', async () 
   expect(
     engine.options.rangeExtractor({ startIndex: 1, endIndex: 1, overscan: 0, count: 2 })
   ).toEqual([1]);
+});
+
+let state: TranscriptScrollState | undefined;
+function SendProbe({ request }: { request?: object }) {
+  ({ state, engine } = useTranscriptScroll(viewport, ['row'], {
+    identity: 'send',
+    active: true,
+    ready: true,
+    initialIntent: 'reading',
+    initialPosition: null,
+    followRequest: request,
+  }));
+  return null;
+}
+
+it('resumes following on a send request, but preserves reading on ordinary renders', async () => {
+  const frames = new Map<number, FrameRequestCallback>();
+  let frameId = 0;
+  vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+    frames.set(++frameId, callback);
+    return frameId;
+  });
+  vi.stubGlobal('cancelAnimationFrame', (id: number) => frames.delete(id));
+  const flushFrame = () => {
+    const callbacks = [...frames.values()];
+    frames.clear();
+    for (const callback of callbacks) {
+      callback(0);
+    }
+  };
+  Object.defineProperty(viewport, 'scrollHeight', { get: () => 1200 });
+  Object.defineProperty(viewport, 'clientHeight', { get: () => 400 });
+  await act(() => root.render(<SendProbe />));
+  expect(state?.intent).toBe('reading');
+  await act(() => root.render(<SendProbe />));
+  expect(state?.intent).toBe('reading');
+  const scrollToEnd = vi.spyOn(engine, 'scrollToEnd');
+  const request = {};
+  await act(() => root.render(<SendProbe request={request} />));
+  expect(state?.intent).toBe('following');
+  await act(flushFrame);
+  expect(scrollToEnd).toHaveBeenCalledWith({ behavior: 'instant' });
+  scrollToEnd.mockClear();
+  await act(() => viewport.dispatchEvent(new WheelEvent('wheel', { deltaY: -100 })));
+  expect(state?.intent).toBe('reading');
+  await act(() => root.render(<SendProbe request={request} />));
+  expect(state?.intent).toBe('reading');
+  await act(flushFrame);
+  expect(scrollToEnd).not.toHaveBeenCalled();
+  await act(() => root.render(<SendProbe request={{}} />));
+  expect(state?.intent).toBe('following');
+  await act(flushFrame);
+  expect(scrollToEnd).toHaveBeenCalledWith({ behavior: 'instant' });
 });
