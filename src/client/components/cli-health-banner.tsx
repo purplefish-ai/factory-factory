@@ -2,11 +2,16 @@ import { ArrowsClockwiseIcon } from '@phosphor-icons/react/dist/csr/ArrowsClockw
 import { ArrowSquareOutIcon } from '@phosphor-icons/react/dist/csr/ArrowSquareOut';
 import { WarningIcon } from '@phosphor-icons/react/dist/csr/Warning';
 import { XIcon } from '@phosphor-icons/react/dist/csr/X';
-import { useEffect, useState } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
+import { useCLIHealthRefresh } from '@/client/hooks/use-cli-health-refresh';
 import { runInBackground } from '@/client/lib/background-task';
 import { trpc } from '@/client/lib/trpc';
 import { Button } from '@/components/ui/button';
 import { Spinner } from '@/components/ui/spinner';
+
+const SetupTerminalModal = lazy(() =>
+  import('@/client/features/project').then((m) => ({ default: m.SetupTerminalModal }))
+);
 
 const CLI_HEALTH_WARNING_DISMISSED_KEY = 'ff_cli_health_warning_dismissed';
 
@@ -15,6 +20,7 @@ export interface HealthIssue {
   description: string;
   link?: string;
   linkLabel?: string;
+  signInProvider?: 'CLAUDE';
 }
 
 interface CliHealthForBanner {
@@ -46,8 +52,9 @@ export function collectIssues(health: CliHealthForBanner): HealthIssue[] {
   } else if (health.claude.isAuthenticated === false) {
     issues.push({
       title: 'Claude sign-in required',
+      signInProvider: 'CLAUDE',
       description:
-        'Open the setup terminal in Settings and choose Sign in to Claude. If ff is installed, run "ff claude auth login".',
+        'Use Sign in to Claude to open the setup terminal. If ff is installed, run "ff claude auth login".',
     });
   }
 
@@ -125,11 +132,13 @@ export function CLIHealthBannerContent({
   isRefetching,
   onRecheck,
   onDismiss,
+  onSignIn,
 }: {
   issues: HealthIssue[];
   isRefetching: boolean;
   onRecheck: () => void;
   onDismiss: () => void;
+  onSignIn?: (provider: 'CLAUDE') => void;
 }) {
   if (issues.length === 0) {
     return null;
@@ -150,6 +159,16 @@ export function CLIHealthBannerContent({
                   <p className="font-medium text-warning">{issue.title}</p>
                   <p className="text-muted-foreground [overflow-wrap:anywhere]">
                     {issue.description}
+                    {issue.signInProvider && onSignIn && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="ml-2"
+                        onClick={() => onSignIn('CLAUDE')}
+                      >
+                        Sign in to Claude
+                      </Button>
+                    )}
                     {issue.link && (
                       <a
                         href={issue.link}
@@ -204,6 +223,8 @@ export function CLIHealthBannerContent({
  * Shows on app launch and can be dismissed until the warning content changes.
  */
 export function CLIHealthBanner() {
+  const [terminalProvider, setTerminalProvider] = useState<'CLAUDE' | null>(null);
+  const { refresh } = useCLIHealthRefresh();
   const [dismissedFingerprint, setDismissedFingerprint] = useState(() =>
     readDismissedCLIHealthWarningFingerprint()
   );
@@ -247,16 +268,31 @@ export function CLIHealthBanner() {
   }
 
   return (
-    <CLIHealthBannerContent
-      issues={issues}
-      isRefetching={isRefetching}
-      onRecheck={() => {
-        runInBackground(refetch({ throwOnError: true }), "Couldn't check provider status.");
-      }}
-      onDismiss={() => {
-        rememberDismissedCLIHealthWarning(warningFingerprint);
-        setDismissedFingerprint(warningFingerprint);
-      }}
-    />
+    <>
+      {terminalProvider && (
+        <Suspense fallback={null}>
+          <SetupTerminalModal
+            open
+            initialProvider={terminalProvider}
+            onClose={() => {
+              setTerminalProvider(null);
+              void refresh();
+            }}
+          />
+        </Suspense>
+      )}
+      <CLIHealthBannerContent
+        onSignIn={setTerminalProvider}
+        issues={issues}
+        isRefetching={isRefetching}
+        onRecheck={() => {
+          runInBackground(refetch({ throwOnError: true }), "Couldn't check provider status.");
+        }}
+        onDismiss={() => {
+          rememberDismissedCLIHealthWarning(warningFingerprint);
+          setDismissedFingerprint(warningFingerprint);
+        }}
+      />
+    </>
   );
 }

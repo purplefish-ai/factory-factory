@@ -36,9 +36,9 @@ describe('SetupTerminalModal', () => {
   let container: HTMLDivElement;
   let root: ReturnType<typeof createRoot>;
 
-  async function render() {
+  async function render(open = true, initialProvider?: 'CLAUDE' | 'CODEX') {
     await act(async () => {
-      root.render(createElement(SetupTerminalModal, { open: true, onClose: vi.fn() }));
+      root.render(createElement(SetupTerminalModal, { open, initialProvider, onClose: vi.fn() }));
       await Promise.resolve();
     });
   }
@@ -48,6 +48,7 @@ describe('SetupTerminalModal', () => {
   }
 
   beforeEach(() => {
+    vi.mocked(setupTerminalState.authenticate).mockClear();
     setupTerminalState.authenticatingProvider = null;
     setupTerminalState.connected = false;
     setupTerminalState.gaveUp = false;
@@ -80,6 +81,22 @@ describe('SetupTerminalModal', () => {
     expect(button).toBeDefined();
     void act(() => button?.click());
     expect(setupTerminalState.authenticate).toHaveBeenCalledWith('CLAUDE');
+  });
+
+  it('starts the requested login once connected, but does not restart it on reconnect', async () => {
+    await render(true, 'CLAUDE');
+    expect(setupTerminalState.authenticate).not.toHaveBeenCalled();
+    setupTerminalState.connected = true;
+    await render(true, 'CLAUDE');
+    expect(setupTerminalState.authenticate).toHaveBeenCalledExactlyOnceWith('CLAUDE');
+    setupTerminalState.connected = false;
+    await render(true, 'CLAUDE');
+    setupTerminalState.connected = true;
+    await render(true, 'CLAUDE');
+    expect(setupTerminalState.authenticate).toHaveBeenCalledTimes(1);
+    await render(false, 'CLAUDE');
+    await render(true, 'CLAUDE');
+    expect(setupTerminalState.authenticate).toHaveBeenCalledTimes(2);
   });
 
   it('disables both sign-in actions while a login is active', async () => {

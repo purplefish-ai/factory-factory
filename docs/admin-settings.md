@@ -219,6 +219,12 @@ directly, including in desktop installs without a global `ff` or Node
 installation. Missing bundled runtimes require updating or reinstalling Factory
 Factory.
 
+Global update, CLI health, and model-catalog notices appear below the app
+header, keeping the installed desktop PWA's native window controls clear. The
+Claude sign-in notice offers **Sign in to Claude**: it opens the setup terminal
+and starts the bundled login command once connected. Closing the terminal
+refreshes authentication status.
+
 Missing tools and GitHub sign-in problems appear as amber notices with setup
 instructions. **Recheck** refreshes their status. Dismissing the strip keeps it
 hidden across reloads until the issue details change; resolved notices

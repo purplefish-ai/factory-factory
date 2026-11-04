@@ -54,3 +54,17 @@ it.each([
   expect(container.querySelector('main')?.textContent).toBe('Project content');
   await act(() => root.unmount());
 });
+
+it('places global notices after the header and before page content', async () => {
+  const container = document.createElement('div');
+  const root = createRoot(container);
+  await act(() =>
+    root.render(
+      <AppLayout banners={<div data-testid="notices">Setup warnings</div>}>Page content</AppLayout>
+    )
+  );
+  const header = container.querySelector('header');
+  expect(header?.nextElementSibling?.getAttribute('data-testid')).toBe('notices');
+  expect(container.querySelector('main')?.textContent).toBe('Page content');
+  await act(() => root.unmount());
+});

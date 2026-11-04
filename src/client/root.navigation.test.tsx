@@ -16,7 +16,12 @@ vi.mock('@/client/components/appearance-provider', () => ({
   AppearanceProvider: ({ children }: { children: ReactNode }) => children,
 }));
 vi.mock('@/client/components/resizable-layout', () => ({
-  AppLayout: ({ children }: { children: ReactNode }) => children,
+  AppLayout: ({ children, banners }: { children: ReactNode; banners?: ReactNode }) => (
+    <>
+      {banners}
+      {children}
+    </>
+  ),
 }));
 vi.mock('@/client/components/factory-update-banner', async (original) => {
   const { FactoryUpdateBannerContent } =
