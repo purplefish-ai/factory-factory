@@ -55,7 +55,7 @@ export function SlackConnectionsView(props: SlackConnectionsViewProps) {
           >
             <div className="min-w-0">
               <p className="break-words text-sm font-medium">{connection.name}</p>
-              <p className="text-xs text-muted-foreground">
+              <p className="break-words text-xs text-muted-foreground">
                 {connection.hasCredentials ? 'Token saved' : 'Disconnected'} ·{' '}
                 {connection.workspaceId}
               </p>
