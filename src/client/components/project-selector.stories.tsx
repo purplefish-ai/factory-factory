@@ -8,20 +8,22 @@ const projectChange = fn();
 const currentProject = fn();
 const retryProjects = fn();
 
-function ProjectPath({ path, children }: { path?: string; children: ReactNode }) {
+export function ProjectPath({ path, children }: { path?: string; children: ReactNode }) {
   const navigate = useNavigate();
   const { pathname, search } = useLocation();
+  const destination = path ?? '/';
   useEffect(() => {
-    if (path && `${pathname}${search}` !== path) {
-      void navigate(path);
+    if (`${pathname}${search}` !== destination) {
+      void navigate(destination, { replace: true });
     }
-  }, [path, pathname, search, navigate]);
+  }, [destination, pathname, search, navigate]);
   return children;
 }
 
 const meta = {
   title: 'Navigation/ProjectSelector',
   component: ProjectSelectorDropdown,
+  excludeStories: ['ProjectPath'],
   decorators: [
     (Story, context) => (
       <ProjectPath path={context.parameters.projectPath}>
