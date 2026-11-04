@@ -100,15 +100,20 @@ function TranscriptInstance({
             contentClassName={contentClassName}
           />
         </div>
+        {state.intent === 'reading' && scroll.ready && hasContentBelow && (
+          <div className="pointer-events-none absolute inset-x-0 bottom-2 z-10 flex justify-center">
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={jumpToLatest}
+              className="pointer-events-auto rounded-full"
+            >
+              <ArrowDownIcon className="h-4 w-4 mr-1" />
+              Scroll to bottom
+            </Button>
+          </div>
+        )}
       </div>
-      {state.intent === 'reading' && scroll.ready && hasContentBelow && (
-        <div className="z-10 flex shrink-0 justify-center py-1">
-          <Button variant="secondary" size="sm" onClick={jumpToLatest} className="rounded-full">
-            <ArrowDownIcon className="h-4 w-4 mr-1" />
-            Scroll to bottom
-          </Button>
-        </div>
-      )}
       {thinkingInFooter && (
         <ThinkingFooter
           active={thinkingActive}

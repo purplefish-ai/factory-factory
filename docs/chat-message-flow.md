@@ -394,7 +394,10 @@ batches run through the virtualizer's frame scheduler to avoid delivery loops
 when compensation mounts more rows. Headers and the final message's activity
 tail, inline tasks and subagent recovery status share the measured extent.
 Native CSS anchoring is disabled on the controlled viewport. The jump button
-overlays the viewport, so showing it cannot change its height.
+overlays the bottom of the viewport above the reserved thinking footer, so
+showing it cannot change the viewport's height or add a blank row above the
+composer. Only the button intercepts pointer input; the surrounding overlay
+allows interaction with the transcript beneath it.
 
 Canceled PR records remain available for recovery but do not create virtual
 rows. The empty state uses the filtered message model.
