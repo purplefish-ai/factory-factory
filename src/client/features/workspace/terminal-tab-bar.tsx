@@ -17,7 +17,7 @@ interface TerminalTabBarProps {
   tabs: TerminalTab[];
   activeTabId: string | null;
   onSelectTab: (id: string) => void;
-  onCloseTab: (id: string) => void;
+  onCloseTab?: (id: string) => void;
   onNewTab?: () => void;
   showNewButton?: boolean;
   renderNewButton?: (onNewTab: () => void) => ReactNode;
@@ -60,17 +60,19 @@ export function TerminalTabBar({
               <TerminalIcon className="h-3 w-3 flex-shrink-0" />
               <span>{tab.label}</span>
             </button>
-            <button
-              type="button"
-              aria-label={`Close ${tab.label}`}
-              onClick={() => onCloseTab(tab.id)}
-              className={cn(
-                'mr-1 p-0.5 rounded hover:bg-foreground/10 transition-colors',
-                activeTabId !== tab.id && 'hover-reveal'
-              )}
-            >
-              <XIcon className="h-3 w-3" />
-            </button>
+            {onCloseTab && (
+              <button
+                type="button"
+                aria-label={`Close ${tab.label}`}
+                onClick={() => onCloseTab(tab.id)}
+                className={cn(
+                  'mr-1 p-0.5 rounded hover:bg-foreground/10 transition-colors',
+                  activeTabId !== tab.id && 'hover-reveal'
+                )}
+              >
+                <XIcon className="h-3 w-3" />
+              </button>
+            )}
           </div>
         ))}
       </div>
