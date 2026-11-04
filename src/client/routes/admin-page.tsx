@@ -159,7 +159,7 @@ export default function AdminDashboardPage() {
                 isRetrying={projectsQuery.isFetching}
               />
             ) : (
-              <p className="text-sm text-muted-foreground">Loading projects...</p>
+              <Loading size="compact" message="Loading projects…" />
             )}
           </TabsContent>
 

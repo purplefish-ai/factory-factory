@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react';
-import { fn } from 'storybook/test';
+import { expect, fn, within } from 'storybook/test';
 import { InitStatusBanner } from './workspace-init-status-banner';
 
 const meta = {
@@ -32,6 +32,9 @@ type Story = StoryObj<typeof meta>;
 export const BeforeFirstSession: Story = {};
 export const RetryingSetup: Story = {
   args: { retryPending: true },
+  play: async ({ canvasElement }) => {
+    await expect(within(canvasElement).getByRole('button', { name: 'Retrying…' })).toBeDisabled();
+  },
   parameters: {
     docs: {
       description: {

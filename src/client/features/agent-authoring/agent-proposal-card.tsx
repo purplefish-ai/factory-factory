@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import type { z } from 'zod';
+import { Loading } from '@/client/components/loading';
 import { invalidateSavedAgentQueries } from '@/client/lib/agent-query-cache';
 import { withOccurrenceKeys } from '@/client/lib/list-keys';
 import { trpc } from '@/client/lib/trpc';
@@ -275,10 +276,12 @@ export function AgentProposalCard({ reference }: { reference: AgentProposalRefer
     }
   }, [reference.revision, query.data, refetch]);
   if (!query.data) {
-    return (
-      <p role={query.error ? 'alert' : 'status'} className="my-3 text-sm">
-        {query.error?.message ?? 'Loading agent proposal…'}
+    return query.error ? (
+      <p role="alert" className="my-3 text-sm">
+        {query.error.message}
       </p>
+    ) : (
+      <Loading size="compact" message="Loading agent proposal…" className="my-3" />
     );
   }
   return (

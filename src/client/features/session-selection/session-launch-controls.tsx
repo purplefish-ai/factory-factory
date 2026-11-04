@@ -15,6 +15,7 @@ import {
   DropdownMenuRadioItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { Spinner } from '@/components/ui/spinner';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 import type { ChatReasoningOption } from '@/shared/chat-capabilities';
@@ -135,7 +136,11 @@ function ThinkingLevelSelector({
       <DropdownMenuContent align="start" className="w-64 max-w-[calc(100vw-2rem)]">
         <DropdownMenuLabel>Thinking level</DropdownMenuLabel>
         {control.loading && (
-          <div role="status" className="px-2 py-1.5 text-xs text-muted-foreground">
+          <div
+            role="status"
+            className="inline-flex items-center gap-2 px-2 py-1.5 text-xs text-muted-foreground"
+          >
+            <Spinner className="size-3" aria-hidden="true" />
             Loading thinking levels…
           </div>
         )}

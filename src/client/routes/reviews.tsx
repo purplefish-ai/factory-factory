@@ -1,4 +1,5 @@
 import { useParams } from 'react-router';
+import { Loading } from '@/client/components/loading';
 import { ProjectHeader } from '@/client/components/project-header';
 import { getReviewRepository } from '@/client/hooks/use-project-review-requests';
 import { trpc } from '@/client/lib/trpc';
@@ -8,6 +9,9 @@ import { ReviewRouteState } from './reviews/route-state';
 export default function ReviewsPage() {
   const { slug = '' } = useParams<{ slug: string }>();
   const project = trpc.project.getBySlug.useQuery({ slug }, { enabled: !!slug });
+  if (slug && project.data === undefined && !project.error) {
+    return <Loading message="Loading project…" />;
+  }
   if (!project.data) {
     return (
       <ReviewRouteState
@@ -15,7 +19,7 @@ export default function ReviewsPage() {
         onRetry={() => {
           void project.refetch();
         }}
-        message={project.isLoading ? 'Loading project…' : 'Project not found'}
+        message="Project not found"
       />
     );
   }

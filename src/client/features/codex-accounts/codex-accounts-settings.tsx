@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { Loading } from '@/client/components/loading';
 import { trpc } from '@/client/lib/trpc';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -39,11 +40,7 @@ export function CodexAccountsView({
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
-        {loading && (
-          <p role="status" className="text-sm text-muted-foreground">
-            Loading accounts…
-          </p>
-        )}
+        {loading && <Loading size="compact" message="Loading accounts…" />}
         {error && (
           <p role="alert" className="text-sm text-muted-foreground">
             {error}

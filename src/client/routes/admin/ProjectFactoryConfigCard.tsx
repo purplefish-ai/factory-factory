@@ -5,11 +5,13 @@ import { PencilIcon } from '@phosphor-icons/react/dist/csr/Pencil';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { FactoryConfigScripts } from '@/client/components/factory-config-scripts';
+import { Loading } from '@/client/components/loading';
 import { DevServerSetupPanel } from '@/client/features/workspace/dev-server-setup-panel';
 import { runInBackground } from '@/client/lib/background-task';
 import { trpc } from '@/client/lib/trpc';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Spinner } from '@/components/ui/spinner';
 
 export function ProjectFactoryConfigCard({
   projectId,
@@ -117,20 +119,18 @@ export function ProjectFactoryConfigCard({
             disabled={refreshConfigs.isPending}
             className="w-full gap-2 sm:w-auto"
           >
-            <ArrowsClockwiseIcon
-              className={`w-4 h-4 ${refreshConfigs.isPending ? 'animate-spin' : ''}`}
-            />
+            {refreshConfigs.isPending ? (
+              <Spinner className="w-4 h-4" aria-hidden="true" />
+            ) : (
+              <ArrowsClockwiseIcon className="w-4 h-4" />
+            )}
             Refresh Workspaces
           </Button>
         </div>
       </div>
 
       <div className="p-4">
-        {isPending && (
-          <p role="status" className="text-sm text-muted-foreground">
-            Loading configuration...
-          </p>
-        )}
+        {isPending && <Loading size="compact" message="Loading configuration…" />}
         {isError && (
           <div role="alert" className="space-y-3">
             <p className="text-sm text-destructive">

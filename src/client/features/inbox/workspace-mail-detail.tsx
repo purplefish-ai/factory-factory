@@ -1,5 +1,6 @@
 import { ArrowLeftIcon } from '@phosphor-icons/react/dist/csr/ArrowLeft';
 import { useEffect, useState } from 'react';
+import { Loading } from '@/client/components/loading';
 import { trpc } from '@/client/lib/trpc';
 import { Button } from '@/components/ui/button';
 import type { WorkspaceMailSummary } from '@/shared/workspace-mail';
@@ -153,9 +154,7 @@ export function WorkspaceMailDetail({
           </div>
         )}
         {read.isPending && (
-          <p role="status" className="mt-3 text-sm text-muted-foreground">
-            Loading message…
-          </p>
+          <Loading size="compact" message="Loading message…" className="mt-3 h-auto" />
         )}
         {readError && (
           <div role="alert" className="mt-3 space-y-2 text-sm">

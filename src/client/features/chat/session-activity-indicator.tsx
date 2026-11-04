@@ -1,6 +1,7 @@
 import { CaretRightIcon } from '@phosphor-icons/react/dist/csr/CaretRight';
 import { TerminalIcon } from '@phosphor-icons/react/dist/csr/Terminal';
 import type { ReactNode } from 'react';
+import { Loading } from '@/client/components/loading';
 import { SubagentIcon } from '@/client/components/subagent-icon';
 import {
   SessionTargetStopButton,
@@ -168,9 +169,7 @@ export function SessionActivityIndicator({
           </CollapsibleTrigger>
           <CollapsibleContent>
             <div className="mt-2 max-h-64 overflow-y-auto rounded-md border">
-              {runningSubagentList ?? (
-                <p className="p-3 text-sm text-muted-foreground">Loading sub-agents…</p>
-              )}
+              {runningSubagentList ?? <Loading size="compact" message="Loading subagents…" />}
             </div>
           </CollapsibleContent>
         </Collapsible>

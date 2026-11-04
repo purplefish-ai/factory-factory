@@ -3,6 +3,7 @@ import { CaretRightIcon } from '@phosphor-icons/react/dist/csr/CaretRight';
 import { RobotIcon } from '@phosphor-icons/react/dist/csr/Robot';
 import { WarningCircleIcon } from '@phosphor-icons/react/dist/csr/WarningCircle';
 import { useEffect, useMemo, useState } from 'react';
+import { Loading } from '@/client/components/loading';
 import { SubagentIcon } from '@/client/components/subagent-icon';
 import {
   SessionTargetStopButton,
@@ -11,6 +12,7 @@ import {
 import { useRememberedDisclosure } from '@/client/hooks/use-remembered-disclosure';
 import { getSubagentIconIndices } from '@/client/lib/subagent-icon-indices';
 import { Button } from '@/components/ui/button';
+import { Spinner } from '@/components/ui/spinner';
 import { cn } from '@/lib/utils';
 import { isActiveSubagent } from './subagent-status';
 import type { SubagentListItem } from './types';
@@ -197,7 +199,14 @@ function EmptyReadyState({ state }: { state: Extract<SubagentListState, { kind: 
             disabled={state.loadingMore}
             onClick={state.onLoadMore}
           >
-            {state.loadingMore ? 'Loading more…' : 'Load more'}
+            {state.loadingMore ? (
+              <>
+                <Spinner className="size-3" aria-hidden="true" />
+                Loading more…
+              </>
+            ) : (
+              'Load more'
+            )}
           </Button>
         )}
       </div>
@@ -270,11 +279,7 @@ export function SubagentList({
   }
 
   if (state.kind === 'loading') {
-    return (
-      <div className="flex items-center justify-center px-4 py-8 text-sm text-muted-foreground">
-        Loading sub-agents…
-      </div>
-    );
+    return <Loading size="compact" message="Loading subagents…" />;
   }
 
   if (state.kind === 'error') {
@@ -357,7 +362,14 @@ export function SubagentList({
             disabled={state.loadingMore}
             onClick={state.onLoadMore}
           >
-            {state.loadingMore ? 'Loading more…' : 'Load more'}
+            {state.loadingMore ? (
+              <>
+                <Spinner className="size-3" aria-hidden="true" />
+                Loading more…
+              </>
+            ) : (
+              'Load more'
+            )}
           </Button>
         </div>
       )}

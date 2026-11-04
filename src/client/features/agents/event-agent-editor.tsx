@@ -3,6 +3,7 @@ import { AgentTriggerEditor } from '@/client/features/agent-authoring';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Spinner } from '@/components/ui/spinner';
 import { Textarea } from '@/components/ui/textarea';
 import { EventAgentInspection } from './event-agent-detail';
 import { EventDraftPreview, EventSourcesPreview } from './event-agent-preview';
@@ -281,7 +282,8 @@ function EditorFeedback({ editor, reloadAvailable }: { editor: Editor; reloadAva
         </Button>
       )}
       {editor.busy && editor.busy !== 'save' && (
-        <p role="status" className="text-sm">
+        <p role="status" className="inline-flex items-center gap-2 text-sm">
+          <Spinner className="size-3" aria-hidden="true" />
           {editor.busy === 'validate'
             ? 'Validating current draft…'
             : editor.busy === 'sources'

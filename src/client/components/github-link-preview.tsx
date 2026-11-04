@@ -1,5 +1,6 @@
 import { formatDistanceToNowStrict } from 'date-fns';
 import type { ComponentPropsWithoutRef, ReactElement, ReactNode } from 'react';
+import { Spinner } from '@/components/ui/spinner';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 
@@ -70,9 +71,14 @@ export function GitHubPreviewFrame({
         </>
       ) : (
         <div className="text-muted-foreground" role="status">
-          {isError
-            ? `Preview unavailable. Open the link to view this ${kind}.`
-            : `Loading ${kind}…`}
+          {isError ? (
+            `Preview unavailable. Open the link to view this ${kind}.`
+          ) : (
+            <span className="inline-flex items-center gap-2">
+              <Spinner className="size-3" aria-hidden="true" />
+              {`Loading ${kind}…`}
+            </span>
+          )}
         </div>
       )}
     </div>

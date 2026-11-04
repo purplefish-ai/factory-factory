@@ -17,6 +17,7 @@ import { WorkspaceInboxPanel } from './workspace-inbox-panel';
 type Scenario =
   | 'messages'
   | 'long-report'
+  | 'read-more-pending'
   | 'empty'
   | 'loading'
   | 'list-error'
@@ -78,7 +79,7 @@ const messages: WorkspaceMailSummary[] = [
   },
 ];
 function reportBody(scenario: Scenario) {
-  if (scenario === 'long-report') {
+  if (scenario === 'long-report' || scenario === 'read-more-pending') {
     return `The first section covers workspace permissions and background tasks.\n\n${'All workspace permission checks passed. '.repeat(230)}\n\nThe remaining checks passed. The review is complete.`;
   }
   return 'Please review the authentication choice before implementation continues.\n\nThe existing identity provider supports the required roles. Keeping one sign-in flow will make account administration easier.';
@@ -113,6 +114,9 @@ function createResponses(scenario: Scenario) {
     },
     'workspace.readMail': (input) => {
       const { ids, offset, maxChars } = readMailInputSchema.parse(input);
+      if (scenario === 'read-more-pending' && offset > 0) {
+        return new Promise(() => undefined);
+      }
       const fullBody = reportBody(scenario);
       let remaining = maxChars;
       return {
@@ -312,6 +316,24 @@ export const LongReport: Story = {
     await userEvent.click(await canvas.findByRole('button', { name: 'Read more' }));
     await expect(await canvas.findByText(/The remaining checks passed/)).toBeVisible();
     await expect(canvas.getByRole('button', { name: /^Acknowledge$/ })).toBeEnabled();
+  },
+};
+export const ReadMorePending: Story = {
+  args: { scenario: 'read-more-pending' },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(await canvas.findByRole('button', { name: /Review ready/ }));
+    const readMore = await canvas.findByRole('button', { name: 'Read more' });
+    const body = canvasElement.querySelector('.whitespace-pre-wrap');
+    const initialBody = body?.textContent;
+    await expect(initialBody).toHaveLength(8192);
+    await userEvent.click(readMore);
+    const status = await canvas.findByRole('status');
+    await expect(status).toHaveTextContent('Loading message…');
+    await expect(readMore).toBeDisabled();
+    await expect(canvas.getByRole('button', { name: /^Acknowledge$/ })).toBeDisabled();
+    await expect(body?.textContent).toBe(initialBody);
+    await expect(status.getBoundingClientRect().height).toBeLessThan(100);
   },
 };
 export const Empty: Story = { args: { scenario: 'empty' } };

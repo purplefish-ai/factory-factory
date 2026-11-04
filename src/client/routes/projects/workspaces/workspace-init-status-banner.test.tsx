@@ -37,7 +37,7 @@ describe('InitStatusBanner setup retry', () => {
       expect(onRetry).toHaveBeenCalledOnce();
       act(() => root.render(<InitStatusBanner {...props} retryPending />));
       expect(button?.disabled).toBe(true);
-      expect(button?.textContent).toContain('Retrying...');
+      expect(button?.textContent).toContain('Retrying…');
       expect(button?.querySelector('.animate-spin')).not.toBeNull();
       act(() => button?.click());
       expect(onRetry).toHaveBeenCalledOnce();
