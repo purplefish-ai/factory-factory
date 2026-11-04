@@ -24,6 +24,7 @@ import { malformedRecoveryCases } from '@/shared/testing/recovery-envelope.fixtu
 import periodicConfig from '@/shared/testing/recovery-periodic-config-v8.fixture.json';
 import periodicHistory from '@/shared/testing/recovery-periodic-history-v8.fixture.json';
 import periodicLinks from '@/shared/testing/recovery-periodic-links-v8.fixture.json';
+import slack from '@/shared/testing/recovery-slack-connections-v8.fixture.json';
 import type { PrismaClient } from '@prisma-gen/client';
 
 const database = vi.hoisted(() => ({ prisma: undefined as PrismaClient | undefined }));
@@ -183,12 +184,13 @@ it('roundtrips the complete base graph with explicit null task links from publis
       .sort((a, b) => a.id.localeCompare(b.id));
   expect(associations(exported.data.workspaces)).toEqual(associations(v7.data.workspaces));
   expect(exported.meta.schemaVersion).toBe(8);
-  expect(exported.meta).toHaveProperty('recovery', definitions.meta.recovery);
+  expect(exported.meta).toHaveProperty('recovery', slack.meta.recovery);
   expect(exported.data).toHaveProperty('recovery', {
     baseJson: { version: 1, jsonStorage: [] },
     periodicConfig: { version: 1, tasks: [] },
     periodicHistory: { version: 1, executions: [], jsonStorage: [] },
     automationDefinitions: { version: 1, definitions: [] },
+    slackConnections: { version: 1, connections: [] },
   });
   expect(exportDataSchema.parse(exported)).toEqual(exported);
   const expectedLinks = v7.data.workspaces
@@ -297,6 +299,7 @@ describe('cold profile recovery imports', () => {
     periodicLinks,
     periodicHistory,
     definitions,
+    slack,
   ])(
     'imports genuine $meta.recovery.profile with its exact manifest and definition authority',
     async (raw) => {
@@ -313,7 +316,26 @@ describe('cold profile recovery imports', () => {
       expect(await isolated.prisma.project.count()).toBe(raw.data.projects.length);
       expect(await isolated.prisma.workspace.count()).toBe(raw.data.workspaces.length);
       expect(result.recovery.manifest).toEqual(raw.meta.recovery);
-      if (raw === definitions) {
+      if (raw === slack) {
+        expect(result.recovery.slackConnections).toEqual({
+          model: 'AgentConnection',
+          imported: 2,
+          skipped: 0,
+          sourceEnabled: 1,
+          restoredDisabled: 2,
+          reasons: { EXISTING_IDENTITY: 0 },
+        });
+        expect(
+          await isolated.prisma.agentConnection.findMany({ orderBy: { id: 'asc' } })
+        ).toMatchObject([
+          { id: 'slack-recovered-disabled', isEnabled: false, credentialsEncrypted: null },
+          { id: 'slack-recovered-enabled', isEnabled: false, credentialsEncrypted: null },
+        ]);
+      } else {
+        expect(result.recovery).not.toHaveProperty('slackConnections');
+        expect(await isolated.prisma.agentConnection.count()).toBe(0);
+      }
+      if (raw === definitions || raw === slack) {
         expect(result.recovery.automationDefinitions).toEqual({
           model: 'AgentDefinition',
           imported: 1,

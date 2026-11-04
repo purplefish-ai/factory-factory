@@ -1,11 +1,3 @@
-/**
- * Tests for export-data schema enum synchronization with Prisma.
- *
- * These tests ensure that the Zod enum values stay in sync with Prisma-generated enums.
- * If Prisma schema enums are modified, these tests will fail, prompting updates to the
- * shared schema to prevent backup import failures.
- */
-
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_COLOR_SCHEME, DEFAULT_FONT_SCALE } from '@/shared/appearance';
 import {
@@ -17,12 +9,22 @@ import {
   WorkspaceCreationSource as PrismaWorkspaceCreationSource,
   WorkspaceStatus as PrismaWorkspaceStatus,
 } from '@/shared/core';
+/**
+ * Tests for export-data schema enum synchronization with Prisma.
+ *
+ * These tests ensure that the Zod enum values stay in sync with Prisma-generated enums.
+ * If Prisma schema enums are modified, these tests will fail, prompting updates to the
+ * shared schema to prevent backup import failures.
+ */
 import {
   DEEPGRAM_TTS_SPEED_MIN,
   DEFAULT_DEEPGRAM_TTS_MODEL,
   DEFAULT_DEEPGRAM_TTS_SPEED,
 } from '@/shared/deepgram-voices';
+import historyFixture from '@/shared/testing/recovery-periodic-history-v8.fixture.json';
+import slack from '@/shared/testing/recovery-slack-connections-v8.fixture.json';
 import { RatchetReviewTriggerMode as PrismaRatchetReviewTriggerMode } from '@prisma-gen/client';
+import { exportDataSchema } from './export-data.schema';
 import {
   exportedAgentSessionSchema,
   exportedProjectSchema,
@@ -346,3 +348,45 @@ describe('backup project path validation', () => {
     expect(exportedProjectSchema.shape[field].safeParse('').success).toBe(false);
   });
 });
+
+it.each(['task', 'definition', 'workspace-link', 'history'] as const)(
+  'validates inherited %s dependencies in Slack backups',
+  (kind) => {
+    const input = exportDataSchema.parse({
+      ...historyFixture,
+      meta: slack.meta,
+      data: {
+        ...historyFixture.data,
+        recovery: {
+          ...historyFixture.data.recovery,
+          automationDefinitions: { version: 1, definitions: [] },
+          slackConnections: slack.data.recovery.slackConnections,
+        },
+      },
+    });
+    if (!('recovery' in input.data)) {
+      throw new Error('Expected current recovery');
+    }
+    if (kind === 'definition') {
+      Object.assign(input.data.recovery, {
+        automationDefinitions: structuredClone(slack.data.recovery.automationDefinitions),
+      });
+      input.data.recovery.automationDefinitions!.definitions[0]!.projectId =
+        input.data.projects[0]!.id;
+    }
+    expect(exportDataSchema.safeParse(input).success).toBe(true);
+    if (kind === 'task') {
+      input.data.recovery.periodicConfig!.tasks[0]!.projectId = 'missing';
+    }
+    if (kind === 'definition') {
+      input.data.recovery.automationDefinitions!.definitions[0]!.projectId = 'missing';
+    }
+    if (kind === 'workspace-link') {
+      Object.assign(input.data.workspaces[0]!, { periodicTaskId: 'missing' });
+    }
+    if (kind === 'history') {
+      input.data.recovery.periodicHistory!.executions[0]!.periodicTaskId = 'missing';
+    }
+    expect(exportDataSchema.safeParse(input).success).toBe(false);
+  }
+);

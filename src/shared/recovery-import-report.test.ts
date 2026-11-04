@@ -5,6 +5,8 @@ import fixed from '@/shared/testing/recovery-base-v8.fixture.json';
 import periodic from '@/shared/testing/recovery-periodic-config-v8.fixture.json';
 import history from '@/shared/testing/recovery-periodic-history-v8.fixture.json';
 import links from '@/shared/testing/recovery-periodic-links-v8.fixture.json';
+import slackWire from '@/shared/testing/recovery-slack-connections-v8.fixture.json';
+import expectedSlack from '@/shared/testing/recovery-slack-import-report.fixture.json';
 import { createRecoveryImportReport } from './recovery-import-report';
 import { recoveryMetadataSchema } from './schemas/recovery-envelope.schema';
 import workspace from './testing/recovery-base-json-workspace-v8.fixture.json';
@@ -184,4 +186,51 @@ it('reports exact definition-body scope and retains every cumulative history/nul
     'Automation definition bodies restored disabled: 2 imported, 3 skipped; 4 enabled in the entire source section; 2 restored disabled. Skips by reason: existing definition ID: 1; project not created by this import: 2. Connections, event configuration, proposal provenance, activation and automation execution history are excluded. Inspect recovered bodies and author new complete event configuration where editing is available.'
   );
   expect(report.manifest).toEqual(definitions.meta.recovery);
+});
+
+it('matches the independently authored complete Slack report, exact ordering, counts and JSON', () => {
+  const counts = expectedSlack.recovery;
+  const report = createRecoveryImportReport(
+    recoveryMetadataSchema.parse(slackWire.meta.recovery),
+    {
+      model: 'PeriodicTask',
+      imported: 2,
+      skipped: 3,
+      sourceEnabled: 4,
+      restoredDisabled: 2,
+      reasons: { EXISTING_IDENTITY: 1, INCOMPLETE_DEPENDENCY: 2 },
+    },
+    { model: 'Workspace', imported: 2, skipped: 3, reasons: { INCOMPLETE_DEPENDENCY: 3 } },
+    {
+      model: 'PeriodicTaskExecution',
+      imported: 3,
+      skipped: 6,
+      sourceRunning: 5,
+      restoredHistoricalFailed: 2,
+      restoredSettled: 1,
+      reasons: {
+        EXISTING_IDENTITY: 1,
+        CONFLICTING_IDENTITY_OR_PARENT: 2,
+        INCOMPLETE_DEPENDENCY: 3,
+      },
+    },
+    {
+      model: 'AgentDefinition',
+      imported: 2,
+      skipped: 3,
+      sourceEnabled: 4,
+      restoredDisabled: 2,
+      reasons: { EXISTING_IDENTITY: 1, INCOMPLETE_DEPENDENCY: 2 },
+    },
+    {
+      model: 'AgentConnection',
+      imported: 2,
+      skipped: 3,
+      sourceEnabled: 4,
+      restoredDisabled: 2,
+      reasons: { EXISTING_IDENTITY: 3 },
+    }
+  );
+  expect(report).toEqual(counts);
+  expect(JSON.parse(JSON.stringify(report))).toEqual(counts);
 });

@@ -77,3 +77,39 @@ export const Interactive: Story = {
     return <SlackConnectionsView {...args} token={token} onTokenChange={setToken} />;
   },
 };
+
+export const RecoveredMetadata: Story = {
+  args: {
+    connections: [
+      {
+        id: 'slack-recovered-enabled',
+        name: 'Imported Slack A',
+        workspaceId: 'T-recovered-enabled',
+        hasCredentials: false,
+        isEnabled: false,
+      },
+      {
+        id: 'slack-recovered-disabled',
+        name: 'Imported Slack B',
+        workspaceId: 'T-recovered-disabled',
+        hasCredentials: false,
+        isEnabled: false,
+      },
+    ],
+  },
+  render: function Recovered(args) {
+    const [token, setToken] = useState('');
+    const [notice, setNotice] = useState('');
+    return (
+      <>
+        <SlackConnectionsView
+          {...args}
+          token={token}
+          onTokenChange={setToken}
+          onConnect={() => setNotice('Reconnect requested for the supplied bot token.')}
+        />
+        {notice && <p role="status">{notice}</p>}
+      </>
+    );
+  },
+};

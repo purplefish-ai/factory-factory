@@ -9,6 +9,7 @@ import fixed from '@/shared/testing/recovery-base-v8.fixture.json';
 import periodic from '@/shared/testing/recovery-periodic-config-v8.fixture.json';
 import history from '@/shared/testing/recovery-periodic-history-v8.fixture.json';
 import links from '@/shared/testing/recovery-periodic-links-v8.fixture.json';
+import slack from '@/shared/testing/recovery-slack-connections-v8.fixture.json';
 import { DataImportResultsProvider, useDataImportResults } from './data-import-results';
 
 type ImportResult = Parameters<ReturnType<typeof useDataImportResults>['publishImportResult']>[0];
@@ -247,6 +248,55 @@ export const AutomationDefinitionBodiesRecovery: Story = {
           sourceEnabled: 4,
           restoredDisabled: 2,
           reasons: { EXISTING_IDENTITY: 1, INCOMPLETE_DEPENDENCY: 2 },
+        }
+      ),
+    },
+  },
+};
+
+export const SlackConnectionMetadataRecovery: Story = {
+  args: {
+    result: {
+      ...mixed,
+      recovery: createRecoveryImportReport(
+        recoveryMetadataSchema.parse(slack.meta.recovery),
+        {
+          model: 'PeriodicTask',
+          imported: 2,
+          skipped: 3,
+          sourceEnabled: 4,
+          restoredDisabled: 2,
+          reasons: { EXISTING_IDENTITY: 1, INCOMPLETE_DEPENDENCY: 2 },
+        },
+        { model: 'Workspace', imported: 2, skipped: 3, reasons: { INCOMPLETE_DEPENDENCY: 3 } },
+        {
+          model: 'PeriodicTaskExecution',
+          imported: 3,
+          skipped: 6,
+          sourceRunning: 5,
+          restoredHistoricalFailed: 2,
+          restoredSettled: 1,
+          reasons: {
+            EXISTING_IDENTITY: 1,
+            CONFLICTING_IDENTITY_OR_PARENT: 2,
+            INCOMPLETE_DEPENDENCY: 3,
+          },
+        },
+        {
+          model: 'AgentDefinition',
+          imported: 2,
+          skipped: 3,
+          sourceEnabled: 4,
+          restoredDisabled: 2,
+          reasons: { EXISTING_IDENTITY: 1, INCOMPLETE_DEPENDENCY: 2 },
+        },
+        {
+          model: 'AgentConnection',
+          imported: 2,
+          skipped: 3,
+          sourceEnabled: 4,
+          restoredDisabled: 2,
+          reasons: { EXISTING_IDENTITY: 3 },
         }
       ),
     },

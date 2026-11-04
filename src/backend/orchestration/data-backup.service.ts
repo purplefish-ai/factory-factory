@@ -6,6 +6,9 @@
  */
 import type { z } from 'zod';
 import {
+  exportSlackConnectionsRecovery,
+  planSlackConnectionsRecovery,
+  restoreSlackConnectionsRecovery,
   exportAutomationDefinitionsRecovery,
   planAutomationDefinitionsRecovery,
   restoreAutomationDefinitionsRecovery,
@@ -560,6 +563,19 @@ async function importUserSettings(
 // Service Class
 // ============================================================================
 
+function planSlackConnectionImport(
+  tx: Prisma.TransactionClient,
+  section: Parameters<typeof planSlackConnectionsRecovery>[1] | undefined
+) {
+  return section ? planSlackConnectionsRecovery(tx, section) : undefined;
+}
+function restoreSlackConnectionImport(
+  tx: Prisma.TransactionClient,
+  plan: Awaited<ReturnType<typeof planSlackConnectionsRecovery>> | undefined
+) {
+  return plan ? restoreSlackConnectionsRecovery(tx, plan) : undefined;
+}
+
 class DataBackupService {
   /**
    * Export all data for backup/migration.
@@ -582,6 +598,7 @@ class DataBackupService {
       periodicConfig,
       periodicHistory,
       automationDefinitions,
+      slackConnections,
     } = await dataBackupAccessor.withExportSnapshot(async (tx) => ({
       ...(await dataBackupAccessor.getSnapshotForExport(tx)),
       codexAccounts: await exportCodexAccountMetadata(tx),
@@ -589,6 +606,7 @@ class DataBackupService {
       periodicConfig: await exportPeriodicConfigRecovery(tx),
       periodicHistory: await exportPeriodicHistoryRecovery(tx),
       automationDefinitions: await exportAutomationDefinitionsRecovery(tx),
+      slackConnections: await exportSlackConnectionsRecovery(tx),
     }));
 
     const exportData: ExportData = {
@@ -604,6 +622,7 @@ class DataBackupService {
           periodicConfig,
           periodicHistory,
           automationDefinitions,
+          slackConnections,
         },
         projects: projects.map((p) => ({
           id: p.id,
@@ -777,7 +796,8 @@ class DataBackupService {
           input.meta.recovery.profile === 'base-json-periodic-config-1' ||
           input.meta.recovery.profile === 'base-json-periodic-links-1' ||
           input.meta.recovery.profile === 'base-json-periodic-history-1' ||
-          input.meta.recovery.profile === 'base-json-automation-definitions-1'
+          input.meta.recovery.profile === 'base-json-automation-definitions-1' ||
+          input.meta.recovery.profile === 'base-json-slack-connections-1'
         ) {
           jsonNullIds.set(
             model,
@@ -791,6 +811,8 @@ class DataBackupService {
       }
     }
 
+    const slackSection =
+      'recovery' in input.data ? input.data.recovery.slackConnections : undefined;
     const automationSection =
       'recovery' in input.data ? input.data.recovery.automationDefinitions : undefined;
     const historySection =
@@ -799,7 +821,8 @@ class DataBackupService {
     const restoresPeriodicLinks =
       recoveryMetadata?.profile === 'base-json-periodic-links-1' ||
       recoveryMetadata?.profile === 'base-json-periodic-history-1' ||
-      recoveryMetadata?.profile === 'base-json-automation-definitions-1';
+      recoveryMetadata?.profile === 'base-json-automation-definitions-1' ||
+      recoveryMetadata?.profile === 'base-json-slack-connections-1';
     // Import in dependency order within a transaction for atomicity
     const results = await dataBackupAccessor.runInTransaction(async (tx) => {
       const admission = await planLegacyImport(tx, input.data);
@@ -818,6 +841,7 @@ class DataBackupService {
         automationSection,
         admission.createProjectIds
       );
+      const slackPlan = await planSlackConnectionImport(tx, slackSection);
       const inertTransforms = createInertImportReport();
       const createdProjectIds = new Set<string>();
       const projects = await importProjects(
@@ -826,6 +850,7 @@ class DataBackupService {
         admission.createProjectIds,
         createdProjectIds
       );
+      const slackConnections = await restoreSlackConnectionImport(tx, slackPlan);
       const automationDefinitions = automationPlan
         ? await restoreAutomationDefinitionsRecovery(tx, automationPlan, createdProjectIds)
         : undefined;
@@ -884,7 +909,8 @@ class DataBackupService {
           periodicConfig?.report,
           periodicWorkspaceLinks,
           periodicHistory,
-          automationDefinitions
+          automationDefinitions,
+          slackConnections
         ),
         inertTransforms,
         projects,

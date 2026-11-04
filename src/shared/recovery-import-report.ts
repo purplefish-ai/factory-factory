@@ -37,7 +37,16 @@ export interface PeriodicHistoryImportReport {
   };
 }
 
+export interface SlackConnectionsImportReport extends Omit<
+  PeriodicConfigImportReport,
+  'model' | 'reasons'
+> {
+  model: 'AgentConnection';
+  reasons: { EXISTING_IDENTITY: number };
+}
+
 export interface RecoveryImportReport {
+  slackConnections?: SlackConnectionsImportReport;
   automationDefinitions?: AutomationDefinitionsImportReport;
   periodicHistory?: PeriodicHistoryImportReport;
   periodicWorkspaceLinks?: PeriodicWorkspaceLinksImportReport;
@@ -50,7 +59,8 @@ export interface RecoveryImportReport {
 function includesPeriodicHistory(metadata: RecoveryMetadata | undefined): boolean {
   return (
     metadata?.profile === 'base-json-periodic-history-1' ||
-    metadata?.profile === 'base-json-automation-definitions-1'
+    metadata?.profile === 'base-json-automation-definitions-1' ||
+    metadata?.profile === 'base-json-slack-connections-1'
   );
 }
 function physicalFidelityWarning(metadata: RecoveryMetadata | undefined): string {
@@ -65,14 +75,32 @@ function physicalFidelityWarning(metadata: RecoveryMetadata | undefined): string
         : 'Partial logical metadata only; physical nullable-JSON fidelity is unproven. Omitted domains are not restored.';
 }
 
+function definitionConnectionScope(metadata: RecoveryMetadata | undefined): string {
+  return metadata?.profile === 'base-json-slack-connections-1'
+    ? 'Connection bindings'
+    : 'Connections';
+}
+
+function slackConnectionWarnings(
+  slackConnections: SlackConnectionsImportReport | undefined
+): string[] {
+  return slackConnections
+    ? [
+        `Slack connection metadata restored disabled: ${slackConnections.imported} imported, ${slackConnections.skipped} skipped; ${slackConnections.sourceEnabled} enabled in the entire source section; ${slackConnections.restoredDisabled} restored disabled without credentials. Skips by reason: existing connection ID or Slack workspace identity: ${slackConnections.reasons.EXISTING_IDENTITY}. Reconnect a workspace manually in Slack settings using a new bot token. GitHub connections, connection bindings, event configuration, activation and automation execution history are excluded.`,
+      ]
+    : [];
+}
+
 export function createRecoveryImportReport(
   metadata: RecoveryMetadata | undefined,
   periodicConfig?: PeriodicConfigImportReport,
   periodicWorkspaceLinks?: PeriodicWorkspaceLinksImportReport,
   periodicHistory?: PeriodicHistoryImportReport,
-  automationDefinitions?: AutomationDefinitionsImportReport
+  automationDefinitions?: AutomationDefinitionsImportReport,
+  slackConnections?: SlackConnectionsImportReport
 ): RecoveryImportReport {
   return {
+    ...(slackConnections ? { slackConnections } : {}),
     ...(automationDefinitions ? { automationDefinitions } : {}),
     ...(periodicHistory ? { periodicHistory } : {}),
     ...(periodicConfig ? { periodicConfig } : {}),
@@ -95,9 +123,10 @@ export function createRecoveryImportReport(
         : []),
       ...(automationDefinitions
         ? [
-            `Automation definition bodies restored disabled: ${automationDefinitions.imported} imported, ${automationDefinitions.skipped} skipped; ${automationDefinitions.sourceEnabled} enabled in the entire source section; ${automationDefinitions.restoredDisabled} restored disabled. Skips by reason: existing definition ID: ${automationDefinitions.reasons.EXISTING_IDENTITY}; project not created by this import: ${automationDefinitions.reasons.INCOMPLETE_DEPENDENCY}. Connections, event configuration, proposal provenance, activation and automation execution history are excluded. Inspect recovered bodies and author new complete event configuration where editing is available.`,
+            `Automation definition bodies restored disabled: ${automationDefinitions.imported} imported, ${automationDefinitions.skipped} skipped; ${automationDefinitions.sourceEnabled} enabled in the entire source section; ${automationDefinitions.restoredDisabled} restored disabled. Skips by reason: existing definition ID: ${automationDefinitions.reasons.EXISTING_IDENTITY}; project not created by this import: ${automationDefinitions.reasons.INCOMPLETE_DEPENDENCY}. ${definitionConnectionScope(metadata)}, event configuration, proposal provenance, activation and automation execution history are excluded. Inspect recovered bodies and author new complete event configuration where editing is available.`,
           ]
         : []),
+      ...slackConnectionWarnings(slackConnections),
       ...(periodicHistory
         ? [
             `Periodic execution history: ${periodicHistory.imported} imported, ${periodicHistory.skipped} skipped; ${periodicHistory.sourceRunning} RUNNING in the entire source section; ${periodicHistory.restoredHistoricalFailed} restored FAILED as historical only, provider outcome unknown; ${periodicHistory.restoredSettled} restored settled. Skips by reason: existing execution ID: ${periodicHistory.reasons.EXISTING_IDENTITY}; occupied workspace: ${periodicHistory.reasons.CONFLICTING_IDENTITY_OR_PARENT}; dependency not created by this import: ${periodicHistory.reasons.INCOMPLETE_DEPENDENCY}. Imported executions will not be resumed.`,

@@ -2,14 +2,14 @@ import { z } from 'zod';
 import { type PrismaModelName, prismaModelNames } from '@/backend/services/registry';
 import {
   type RecoveryMetadata,
-  automationDefinitionsModelCoverage,
+  slackConnectionsModelCoverage,
   recoveryMetadataSchema,
 } from '@/shared/schemas/recovery-envelope.schema';
 
 const coverage: Record<
   PrismaModelName,
   Omit<RecoveryMetadata['coverage'][number], 'model'>
-> = automationDefinitionsModelCoverage;
+> = slackConnectionsModelCoverage;
 
 export function assertRecoveryModelCoverage(modelNames: readonly string[]): void {
   const names = new Set(modelNames);
@@ -21,20 +21,21 @@ export function assertRecoveryModelCoverage(modelNames: readonly string[]): void
   }
 }
 export function createBaseRecoveryManifest(): RecoveryMetadata & {
-  profile: 'base-json-automation-definitions-1';
+  profile: 'base-json-slack-connections-1';
 } {
   assertRecoveryModelCoverage(prismaModelNames);
   return recoveryMetadataSchema
-    .safeExtend({ profile: z.literal('base-json-automation-definitions-1') })
+    .safeExtend({ profile: z.literal('base-json-slack-connections-1') })
     .parse({
       version: 1,
-      profile: 'base-json-automation-definitions-1',
+      profile: 'base-json-slack-connections-1',
       status: 'PARTIAL',
       capabilities: {
         baseJson: 1,
         periodicConfig: 1,
         periodicHistory: 1,
         automationDefinitions: 1,
+        slackConnections: 1,
       },
       coverage: Object.entries(coverage).map(([model, entry]) => ({ model, ...entry })),
       exclusions: recoveryMetadataSchema.shape.exclusions.element.options.filter(

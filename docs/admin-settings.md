@@ -49,26 +49,37 @@ open into the page below it, including the side-panel toggles.
 
 ## Backup imports
 
-New exports use schema version 8 with the frozen `base-json-1` partial coverage
-manifest. Only existing logical metadata is included; repository/worktree files,
-provider history bytes, archives, mail, automation, secrets, native account
-homes and live runtime authority are excluded. Paths and provider-session IDs
-may remain metadata. Workspace.creationMetadata, WorkspacePR.observation on
-actual included PR rows, and AgentSession.providerMetadata preserve SQL NULL
-versus top-level JSON null. The strict `baseJson` version 1 section records
-these JSON-null identities, including when no markers are needed. Frozen
-`base-1` and `base-json-workspace-1` imports retain their historical null
-semantics and warnings. Import requires all 37 canonical model classifications
-and the profile's exact global exclusions (five for `base-json-1`, six for older
-profiles), and rejects unknown capabilities or sections before opening the
-writer. Versions 4–7 remain accepted without inventing a versioned coverage
-declaration.
+New exports use schema version 8 with the frozen `base-json-slack-connections-1`
+partial coverage manifest. This cumulative profile includes base logical
+metadata, periodic configuration and workspace links, retained periodic
+execution history, automation definition bodies and Slack connection metadata.
+Repository/worktree files, provider history bytes, archives, mail, secrets,
+native account homes and live runtime authority remain excluded. Paths and
+provider-session IDs may remain metadata. Workspace.creationMetadata,
+WorkspacePR.observation on actual included PR rows,
+AgentSession.providerMetadata and PeriodicTaskExecution.launchSnapshot preserve
+SQL NULL versus top-level JSON null. All five version-1 recovery sections are
+required, including when empty. Frozen older profiles retain their historical
+capabilities, null semantics and warnings. Import requires all 37 canonical
+model classifications and the profile's exact global exclusions; unknown
+capabilities or sections reject before opening the writer. Versions 4–7 retain
+their legacy behavior and report no versioned coverage declaration.
 
 The current-session result and its exact JSON download include partial-coverage
 warnings and, for v8, the file's manifest. Four numeric primary counters and the
 user-settings booleans remain measured import outcomes. Embedded row totals and
 account remapping totals are explicitly unreported, not zero; inert changes may
 overlap those primary counts.
+
+Slack connection metadata restores disconnected, without tokens; reconnect
+manually in Slack settings. The report counts source enabled rows across the
+entire source section, imports restored disabled and skips for any existing
+connection ID or Slack workspace identity. Existing local connections stay
+unchanged. GitHub connections, connection bindings and event configuration are
+excluded. Definition bodies and execution preferences still restore disabled;
+inspect bodies and author complete event configuration where editing is
+available. Archived projects and definitions at their revision limit retain
+ordinary editing restrictions.
 
 Before opening the restore transaction, versions 4–8 validate the complete
 source graph after legacy normalization. Duplicate project identities or slugs,
