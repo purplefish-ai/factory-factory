@@ -133,6 +133,42 @@ describe('WorkspaceInboxPanel', () => {
     expect(requests.filter((request) => request.path === 'workspace.ackMail')).toHaveLength(0);
   });
 
+  it('refreshes shared counts when a pending read finishes after leaving its detail view', async () => {
+    showUnreadCount = true;
+    let unread = 1;
+    let complete: () => void = () => undefined;
+    const original = respond;
+    respond = (path, input) => {
+      if (path === 'workspace.unreadMailCounts') {
+        return { recipient: unread };
+      }
+      if (path === 'workspace.readMail') {
+        return new Promise((resolve) => {
+          complete = () => {
+            unread = 0;
+            resolve(original(path, input));
+          };
+        });
+      }
+      return original(path, input);
+    };
+    await render();
+    await act(async () => {
+      await vi.waitFor(() =>
+        expect(container.querySelector('[data-testid="unread-count"]')?.textContent).toBe('1')
+      );
+    });
+    await click('Review ready');
+    await click('Inbox');
+    await act(() => complete());
+    await act(async () => {
+      await vi.waitFor(() =>
+        expect(container.querySelector('[data-testid="unread-count"]')?.textContent).toBe('0')
+      );
+    });
+    expect(requests.filter((request) => request.path === 'workspace.ackMail')).toHaveLength(0);
+  });
+
   async function waitForText(text: string) {
     await act(async () => {
       await vi.waitFor(() => expect(container.textContent).toContain(text));
