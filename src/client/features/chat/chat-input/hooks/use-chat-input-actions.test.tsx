@@ -163,6 +163,7 @@ function claudeNativeConfigOptions(): AcpConfigOption[] {
       category: 'mode',
       currentValue: 'acceptEdits',
       options: [
+        { value: 'default', name: 'Default' },
         { value: 'acceptEdits', name: 'Accept edits' },
         { value: 'plan', name: 'Plan' },
       ],
@@ -394,7 +395,7 @@ describe('useChatInputActions keyboard shortcuts', () => {
         {
           group: 'Modes',
           options: [
-            { value: 'acceptEdits', name: 'Accept edits' },
+            { value: 'default', name: 'Default' },
             { value: 'plan', name: 'Plan' },
           ],
         },
@@ -407,7 +408,7 @@ describe('useChatInputActions keyboard shortcuts', () => {
       onSettingsChange,
     });
     dispatchModShiftShortcut(textarea, 'p');
-    expect(onSetConfigOption).toHaveBeenCalledWith('mode', 'acceptEdits');
+    expect(onSetConfigOption).toHaveBeenCalledWith('mode', 'default');
     expect(onSettingsChange).not.toHaveBeenCalled();
     root.unmount();
     container.remove();
@@ -445,11 +446,39 @@ describe('useChatInputActions keyboard shortcuts', () => {
       onSettingsChange,
     });
     flushSync(() => container.querySelector('button')!.click());
-    expect(onSetConfigOption).toHaveBeenCalledWith('mode', 'acceptEdits');
+    expect(onSetConfigOption).toHaveBeenCalledWith('mode', 'default');
     expect(onSettingsChange).not.toHaveBeenCalled();
     root.unmount();
     container.remove();
   });
+
+  it.each(['bypassPermissions', 'acceptEdits'])(
+    'does not choose %s to exit planning without an advertised default',
+    (mode) => {
+      const onSettingsChange = vi.fn();
+      const onSetConfigOption = vi.fn();
+      const options = claudeNativeConfigOptions();
+      options[0] = {
+        ...options[0]!,
+        currentValue: 'plan',
+        options: [
+          { value: mode, name: mode },
+          { value: 'plan', name: 'Plan' },
+        ],
+      };
+      const { root, container, textarea } = renderHarness({
+        capabilities: claudeChatBarCapabilities(),
+        acpConfigOptions: options,
+        onSetConfigOption,
+        onSettingsChange,
+      });
+      dispatchModShiftShortcut(textarea, 'p');
+      expect(onSetConfigOption).not.toHaveBeenCalled();
+      expect(onSettingsChange).not.toHaveBeenCalled();
+      root.unmount();
+      container.remove();
+    }
+  );
 
   it('does not invent a native exit mode or fall back to legacy planning', () => {
     const onSettingsChange = vi.fn();

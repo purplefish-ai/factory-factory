@@ -182,10 +182,7 @@ export function useChatInputActions({
         const choices = planningOption.options.flatMap((entry) =>
           'group' in entry ? entry.options : [entry]
         );
-        const returnValue = (
-          choices.find((choice) => choice.value === 'default') ??
-          choices.find((choice) => choice.value !== 'plan')
-        )?.value;
+        const returnValue = choices.find((choice) => choice.value === 'default')?.value;
         const target = pressed ? 'plan' : returnValue;
         if (!(target && choices.some((choice) => choice.value === target))) {
           return;
