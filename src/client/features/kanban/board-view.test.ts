@@ -15,11 +15,7 @@ describe('board view', () => {
       workspace('new', '2026-11-02T00:00:00Z', '2020-01-02'),
       workspace('old', '2026-11-01T00:00:00Z', '2020-01-03'),
     ];
-    expect(sortBoardWorkspaces(rows, 'default').map((row) => row.id)).toEqual([
-      'old',
-      'new',
-      'unknown',
-    ]);
+    expect(sortBoardWorkspaces(rows).map((row) => row.id)).toEqual(['old', 'new', 'unknown']);
     expect(rows[0]?.id).toBe('unknown');
   });
   it('filters names, branches and summary text case insensitively', () => {

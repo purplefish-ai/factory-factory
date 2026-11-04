@@ -239,6 +239,23 @@ describe('KanbanBoard', () => {
     }
   );
 
+  it.each([true, false])(
+    'keeps the filter without sort or selection controls (mobile=%s)',
+    (mobile) => {
+      mocks.isMobile = mobile;
+      mocks.columnProps.length = 0;
+      act(() => root.render(createElement(BoardWithHeader)));
+      expect(container.querySelector('input[aria-label="Filter board"]')).not.toBeNull();
+      expect(container.querySelector('[aria-label="Sort workspaces"]')).toBeNull();
+      expect(container.textContent).not.toContain('Archive selected');
+      expect(mocks.columnProps.length).toBeGreaterThan(0);
+      for (const props of mocks.columnProps) {
+        expect(props).not.toHaveProperty('onToggleSelected');
+        expect(props).not.toHaveProperty('selectedIds');
+      }
+    }
+  );
+
   it('keeps first-workspace guidance hidden during optimistic archive removal', async () => {
     mocks.workspaces = [];
     mocks.isArchiving = true;

@@ -8,7 +8,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { cn } from '@/lib/utils';
 import type { KanbanColumn as KanbanColumnType } from '@/shared/core';
-import { type BoardSort, filterBoardWorkspaces, sortBoardWorkspaces } from './board-view';
+import { filterBoardWorkspaces, sortBoardWorkspaces } from './board-view';
 import { BoardViewControls } from './board-view-controls';
 import { IssuesColumn } from './issues-column';
 import type { WorkspaceWithKanban } from './kanban-card';
@@ -98,7 +98,6 @@ function KanbanBoardContent() {
     togglingWorkspaceId,
     renameWorkspace,
     archiveWorkspace,
-    archiveSelectedWorkspaces,
     bulkArchiveColumn,
     archiveGitLockWorkspaceIds,
     dismissArchiveGitLock,
@@ -139,29 +138,6 @@ function KanbanBoardContent() {
   const [activeColumnId, setActiveColumnId] = useState<string>('WAITING');
   const hasPickedInitialTab = useRef(false);
   const [search, setSearch] = useState('');
-  const [sort, setSort] = useState<BoardSort>('default');
-  const [selectedIds, setSelectedIds] = useState<string[]>([]);
-  const [isSelectionArchiving, setIsSelectionArchiving] = useState(false);
-  const [selectionDialogOpen, setSelectionDialogOpen] = useState(false);
-  const toggleSelected = (id: string) =>
-    setSelectedIds((ids) =>
-      ids.includes(id) ? ids.filter((value) => value !== id) : [...ids, id]
-    );
-  const archiveSelected = async () => {
-    setIsSelectionArchiving(true);
-    try {
-      setSelectedIds(await archiveSelectedWorkspaces(selectedIds));
-    } finally {
-      setIsSelectionArchiving(false);
-    }
-  };
-  useEffect(() => {
-    if (!isSelectionArchiving) {
-      setSelectedIds((ids) =>
-        ids.filter((id) => workspaces?.some((workspace) => workspace.id === id))
-      );
-    }
-  }, [workspaces, isSelectionArchiving]);
   const [bulkArchiveDialogOpen, setBulkArchiveDialogOpen] = useState(false);
   const [bulkArchiveColumnId, setBulkArchiveColumnId] = useState<string | null>(null);
 
@@ -194,11 +170,11 @@ function KanbanBoardContent() {
     }
 
     for (const column of Object.keys(grouped) as KanbanColumnType[]) {
-      grouped[column] = sortBoardWorkspaces(grouped[column], sort);
+      grouped[column] = sortBoardWorkspaces(grouped[column]);
     }
 
     return grouped;
-  }, [workspaces, search, sort]);
+  }, [workspaces, search]);
 
   useRevealMobileInlineForm({ isMobile, showInlineForm, inlineFormRequest, setActiveColumnId });
 
@@ -284,12 +260,9 @@ function KanbanBoardContent() {
         togglingWorkspaceId={togglingWorkspaceId}
         onArchive={handleArchiveWorkspace}
         onBulkArchive={() => handleBulkArchive(column.id)}
-        isBulkArchiving={isBulkArchiving || isSelectionArchiving}
+        isBulkArchiving={isBulkArchiving}
         onOpenQuickChat={openQuickChat}
         onRename={handleRenameWorkspace}
-        selectedIds={selectedIds}
-        onToggleSelected={toggleSelected}
-        selectionDisabled={isSelectionArchiving}
       />
     );
   const columnArchiveCount = bulkArchiveColumnId
@@ -311,16 +284,7 @@ function KanbanBoardContent() {
           </Button>
         </div>
       )}
-      <BoardViewControls
-        search={search}
-        onSearchChange={setSearch}
-        sort={sort}
-        onSortChange={setSort}
-        selectedCount={selectedIds.length}
-        isArchiving={isSelectionArchiving || isBulkArchiving}
-        onArchive={() => setSelectionDialogOpen(true)}
-        onClear={() => setSelectedIds([])}
-      />
+      <BoardViewControls search={search} onSearchChange={setSearch} />
       {search &&
         Object.values(workspacesByColumn).every((rows) => rows.length === 0) &&
         visibleIssues.length === 0 && (
@@ -363,12 +327,6 @@ function KanbanBoardContent() {
           runInBackground(handleBulkArchiveConfirm(), "Couldn't archive workspaces.")
         }
         description={`This will archive all ${columnArchiveCount} ${columnArchiveCount === 1 ? 'workspace' : 'workspaces'} in this column, including any hidden by filters. Running agents and processes will stop. Uncommitted changes will be committed before the worktrees are removed. Chat history and branches are kept. Worktree removal cannot be undone in the app.`}
-      />
-      <ArchiveWorkspaceDialog
-        open={selectionDialogOpen}
-        onOpenChange={setSelectionDialogOpen}
-        onConfirm={() => runInBackground(archiveSelected(), "Couldn't archive workspaces.")}
-        description={`Archive ${selectedIds.length} selected ${selectedIds.length === 1 ? 'workspace' : 'workspaces'}? Running agents and processes will stop. Uncommitted changes will be committed before the worktrees are removed. Chat history and branches are kept. Worktree removal cannot be undone in the app. Failed archives remain selected for retry.`}
       />
       {archiveGitLockDialog}
       <QuickChatSheet workspaceId={quickChatWorkspaceId} onClose={closeQuickChat} />
