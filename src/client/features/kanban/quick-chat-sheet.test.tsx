@@ -17,6 +17,9 @@ const mocks = vi.hoisted(() => ({
   workspaceProvider: 'CLAUDE' as 'CLAUDE' | 'CODEX' | 'WORKSPACE_DEFAULT',
   content: vi.fn(),
   maxSessions: 2,
+  maxSessionsError: false,
+  retryLimit: vi.fn(),
+  deleting: false,
   worktreePath: '/tmp/worktree' as string | null,
 }));
 vi.mock('./kanban-context', () => ({
@@ -39,7 +42,15 @@ vi.mock('./quick-chat-content', () => ({
 }));
 vi.mock('@/client/lib/trpc', () => ({
   trpc: {
-    session: { getMaxSessionsPerWorkspace: { useQuery: () => ({ data: mocks.maxSessions }) } },
+    session: {
+      getMaxSessionsPerWorkspace: {
+        useQuery: () => ({
+          data: mocks.maxSessions,
+          isError: mocks.maxSessionsError,
+          refetch: mocks.retryLimit,
+        }),
+      },
+    },
     userSettings: { get: { useQuery: () => ({ data: { defaultSessionProvider: 'CODEX' } }) } },
     codexAccounts: {
       list: {
@@ -74,6 +85,7 @@ vi.mock('./use-quick-chat', () => ({
     handleNewChat: mocks.create,
     handleQuickAction: vi.fn(),
     isCreatingSession: false,
+    isDeletingSession: mocks.deleting,
     sessionsLoaded: mocks.loaded,
     sessionsError: mocks.error,
     refetchSessions: mocks.refetch,
@@ -90,6 +102,8 @@ beforeEach(() => {
   mocks.fetching = false;
   mocks.workspaceProvider = 'CLAUDE';
   mocks.maxSessions = 10;
+  mocks.maxSessionsError = false;
+  mocks.deleting = false;
   mocks.worktreePath = '/tmp/worktree';
   vi.clearAllMocks();
   Object.defineProperty(globalThis, 'IS_REACT_ACT_ENVIRONMENT', {
@@ -284,3 +298,42 @@ it.each([
     }
   }
 );
+
+it('reports and retries a failed chat-limit query instead of claiming chats are loading', async () => {
+  mocks.maxSessionsError = true;
+  const container = document.createElement('div');
+  document.body.append(container);
+  const root = createRoot(container);
+  try {
+    await act(() => root.render(<QuickChatSheet workspaceId="workspace" onClose={vi.fn()} />));
+    expect(mocks.content).toHaveBeenLastCalledWith(
+      expect.objectContaining({ newChatUnavailableReason: "Couldn't load the chat limit." })
+    );
+    const retry = [...document.querySelectorAll('button')].find(
+      (button) => button.textContent === 'Retry chat limit'
+    );
+    await act(() => retry?.click());
+    expect(mocks.retryLimit).toHaveBeenCalledOnce();
+  } finally {
+    await act(() => root.unmount());
+    container.remove();
+  }
+});
+it('keeps new-chat actions disabled while a chat is closing', async () => {
+  mocks.deleting = true;
+  const container = document.createElement('div');
+  document.body.append(container);
+  const root = createRoot(container);
+  try {
+    await act(() => root.render(<QuickChatSheet workspaceId="workspace" onClose={vi.fn()} />));
+    expect(mocks.content).toHaveBeenLastCalledWith(
+      expect.objectContaining({ newChatUnavailableReason: 'A chat is closing.' })
+    );
+    expect(document.querySelector<HTMLButtonElement>('[aria-label="New session"]')?.disabled).toBe(
+      true
+    );
+  } finally {
+    await act(() => root.unmount());
+    container.remove();
+  }
+});

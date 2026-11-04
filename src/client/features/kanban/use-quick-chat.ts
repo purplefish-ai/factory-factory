@@ -156,5 +156,6 @@ export function useQuickChat(workspaceId: string | null, workspaceProvider?: 'CL
     handleCloseSession,
     handleQuickAction,
     isCreatingSession: createSession.isPending,
+    isDeletingSession: deleteSession.isPending,
   };
 }
