@@ -252,7 +252,7 @@ export const DeletedTaskPreference: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await expect(await canvas.findByText('No changes')).toBeVisible();
-    await expect(canvas.queryByRole('button', { name: 'Agent' })).not.toBeInTheDocument();
+    await expect(canvas.queryByRole('button', { name: 'Scheduled agent' })).not.toBeInTheDocument();
     await expect(localStorage.getItem(`workspace-right-panel-tab-${workspaceId}`)).toBe('changes');
   },
 };
@@ -264,6 +264,25 @@ export const DeleteWhileOpen: Story = {
     await userEvent.click(canvas.getByRole('button', { name: 'Delete Agent' }));
     await expect(await canvas.findByText('No changes')).toBeVisible();
     await expect(localStorage.getItem(`workspace-right-panel-tab-${workspaceId}`)).toBe('changes');
+  },
+};
+
+/**
+ * Tool tab labels follow the glossary in docs/workspaces.md: the scheduled-agent
+ * origin panel is "Scheduled agent" (not the chat's coding agent), and the
+ * sub-agent/child-workspace panel is "Sub-agents" (not chat sessions). With no
+ * chat selected, that panel shows only Child Workspaces.
+ */
+export const ToolTabLabels: Story = {
+  args: { hasTask: true },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await canvas.findByText('Scheduled cleanup');
+    await expect(canvas.getByRole('button', { name: 'Scheduled agent' })).toBeVisible();
+    await expect(canvas.queryByRole('button', { name: 'Agent' })).not.toBeInTheDocument();
+    await expect(canvas.queryByRole('button', { name: 'Sessions' })).not.toBeInTheDocument();
+    await userEvent.click(canvas.getByRole('button', { name: 'Sub-agents' }));
+    await expect(await canvas.findByText('Child Workspaces')).toBeVisible();
   },
 };
 
@@ -288,7 +307,7 @@ export const OpenSubagentFromActivity: Story = {
     const canvas = within(canvasElement);
     await userEvent.click(canvas.getByRole('button', { name: '1 sub-agent running' }));
     await expect(canvas.getByRole('tab', { name: /Review code/, selected: true })).toBeVisible();
-    await expect(canvas.queryByRole('button', { name: 'Sessions' })).not.toBeInTheDocument();
+    await expect(canvas.queryByRole('button', { name: 'Sub-agents' })).not.toBeInTheDocument();
     await expect(localStorage.getItem(`workspace-panel-right-visible-${workspaceId}`)).toBe(
       'false'
     );

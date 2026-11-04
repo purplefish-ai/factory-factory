@@ -101,6 +101,13 @@ describe('SearchDialog', () => {
       author: { login: 'martin' },
     },
   };
+  it('labels session results Chat, matching the chat tabs they open', async () => {
+    await render({ query: 'review' });
+    const option = document.querySelector('[role="option"]');
+    expect(option?.textContent).toContain('Chat');
+    expect(option?.textContent).not.toContain('Conversation');
+  });
+
   it('offers GitHub issue results as Start issue actions with keyboard selection', async () => {
     const props = await render({
       results: [],

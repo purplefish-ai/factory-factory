@@ -140,13 +140,14 @@ disconnect while its files are being read.
 The board keeps one creation draft per project in this browser, including
 instructions, attachment contents, launch choices, PR updates, and
 periodic-agent schedules. Cancel clears the draft and restores user defaults for
-the next task. Escape and navigating away preserve the draft; **New Task**
-reopens it. Clear instructions by selecting and deleting the text; remove
-attachments with their individual remove controls. Navigation and refresh
-restore saved inputs. Browser storage failures appear in the form while editing
-remains available; keep the tab open when a warning says changes could not be
-saved. If a saved draft is unreadable, **Reset saved draft** appears beside the
-restore warning to remove the invalid stored record and keep the editor open.
+the next task. Escape and navigating away preserve the draft; **New Workspace**
+in the board header reopens it. Clear instructions by selecting and deleting the
+text; remove attachments with their individual remove controls. Navigation and
+refresh restore saved inputs. Browser storage failures appear in the form while
+editing remains available; keep the tab open when a warning says changes could
+not be saved. If a saved draft is unreadable, **Reset saved draft** appears
+beside the restore warning to remove the invalid stored record and keep the
+editor open.
 
 Creation request errors appear beside the retained inputs. An in-flight request
 continues to own its project draft across composer remounts, preventing
@@ -717,8 +718,8 @@ merges. See [PR update delivery and recovery](pull-requests.md).
 
 Below 1024 CSS pixels, workspace tools open in a right-side drawer with a strip
 of the session still visible. A compact 44px strip uses the shared underline
-tabs for Changes, Files, and Terminal. The overflow menu keeps sessions,
-screenshots, agent configuration, and logs available, marks the current
+tabs for Changes, Files, and Terminal. The overflow menu keeps sub-agents,
+screenshots, the scheduled agent, and logs available, marks the current
 selection, and shows the selected tool as an additional underlined tab. The tab
 strip scrolls on narrow screens while the overflow button stays visible. The
 selected tool survives closing and reopening the drawer in the workspace.

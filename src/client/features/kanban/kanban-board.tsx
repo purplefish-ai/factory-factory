@@ -1,5 +1,4 @@
 import { ArrowsClockwiseIcon } from '@phosphor-icons/react/dist/csr/ArrowsClockwise';
-import { PlusIcon } from '@phosphor-icons/react/dist/csr/Plus';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ArchiveGitLockDialog, ArchiveWorkspaceDialog } from '@/client/features/workspace';
 import { useStableCallback } from '@/client/hooks/use-stable-callback';
@@ -8,7 +7,6 @@ import type { NormalizedIssue } from '@/client/lib/issue-normalization';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { cn } from '@/lib/utils';
 import type { KanbanColumn as KanbanColumnType } from '@/shared/core';
@@ -20,28 +18,6 @@ import { type ColumnConfig, getKanbanColumns, KanbanColumn } from './kanban-colu
 import { useKanban } from './kanban-context';
 import { KanbanFamilyProvider } from './kanban-family-highlight';
 import { QuickChatSheet } from './quick-chat-sheet';
-
-export function KanbanControls() {
-  const { syncAndRefetch, isSyncing } = useKanban();
-
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <Button
-          variant="outline"
-          size="icon"
-          className="h-8 w-8"
-          onClick={() => syncAndRefetch()}
-          disabled={isSyncing}
-          aria-label="Refresh workspaces"
-        >
-          <ArrowsClockwiseIcon className={cn('h-4 w-4', isSyncing && 'animate-spin')} />
-        </Button>
-      </TooltipTrigger>
-      <TooltipContent>Refresh workspaces</TooltipContent>
-    </Tooltip>
-  );
-}
 
 interface WorkspacesByColumn {
   WORKING: WorkspaceWithKanban[];
@@ -58,6 +34,37 @@ export function KanbanBoard() {
       <KanbanBoardContent />
     </KanbanFamilyProvider>
   );
+}
+
+/**
+ * On mobile the inline form lives in the Todo tab. Switch to it when the form
+ * opens, and again on every header "New Workspace" request: the button can be
+ * pressed while the form is already open behind another tab.
+ */
+function useRevealMobileInlineForm({
+  isMobile,
+  showInlineForm,
+  inlineFormRequest,
+  setActiveColumnId,
+}: {
+  isMobile: boolean;
+  showInlineForm: boolean;
+  inlineFormRequest: number;
+  setActiveColumnId: (columnId: string) => void;
+}) {
+  useEffect(() => {
+    if (showInlineForm && isMobile) {
+      setActiveColumnId('ISSUES');
+    }
+  }, [showInlineForm, isMobile, setActiveColumnId]);
+
+  const [seenInlineFormRequest, setSeenInlineFormRequest] = useState(inlineFormRequest);
+  if (seenInlineFormRequest !== inlineFormRequest) {
+    setSeenInlineFormRequest(inlineFormRequest);
+    if (isMobile) {
+      setActiveColumnId('ISSUES');
+    }
+  }
 }
 
 function KanbanBoardContent() {
@@ -81,7 +88,7 @@ function KanbanBoardContent() {
     retryGitLockedArchives,
     isBulkArchiving,
     showInlineForm,
-    setShowInlineForm,
+    inlineFormRequest,
     quickChatWorkspaceId,
     openQuickChat,
     closeQuickChat,
@@ -114,11 +121,6 @@ function KanbanBoardContent() {
   const hasPickedInitialTab = useRef(false);
   const [bulkArchiveDialogOpen, setBulkArchiveDialogOpen] = useState(false);
   const [bulkArchiveColumnId, setBulkArchiveColumnId] = useState<string | null>(null);
-
-  const handleMobileNewTaskClick = () => {
-    setActiveColumnId('ISSUES');
-    setShowInlineForm(true);
-  };
 
   const handleBulkArchive = (columnId: string) => {
     setBulkArchiveColumnId(columnId);
@@ -158,12 +160,7 @@ function KanbanBoardContent() {
     return grouped;
   }, [workspaces]);
 
-  // Switch to ISSUES tab when inline form is opened from mobile.
-  useEffect(() => {
-    if (showInlineForm && isMobile) {
-      setActiveColumnId('ISSUES');
-    }
-  }, [showInlineForm, isMobile]);
+  useRevealMobileInlineForm({ isMobile, showInlineForm, inlineFormRequest, setActiveColumnId });
 
   // Pick the initial mobile tab once data loads
   useEffect(() => {
@@ -268,17 +265,6 @@ function KanbanBoardContent() {
             })}
           </div>
 
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="h-8 shrink-0 w-full"
-            onClick={handleMobileNewTaskClick}
-          >
-            <PlusIcon className="h-4 w-4" />
-            New Task
-          </Button>
-
           {/* Active column content */}
           <div key={activeColumn.id} className="flex-1 min-h-0 overflow-y-auto">
             {activeColumn.id === 'ISSUES' ? (
@@ -378,7 +364,6 @@ interface IssuesColumnProps {
 
 function IssuesColumn({ column, issues, projectId, onWorkspaceCreated }: IssuesColumnProps) {
   const { workspaces, showInlineForm, setShowInlineForm } = useKanban();
-  const isMobile = useIsMobile();
   const existingNames = useMemo(() => workspaces?.map((w) => w.name) ?? [], [workspaces]);
   const isEmpty = issues.length === 0;
   const [selectedIssue, setSelectedIssue] = useState<NormalizedIssue | null>(null);
@@ -423,15 +408,6 @@ function IssuesColumn({ column, issues, projectId, onWorkspaceCreated }: IssuesC
                 onWorkspaceCreated?.();
               }}
             />
-          ) : !isMobile ? (
-            <button
-              type="button"
-              onClick={() => setShowInlineForm(true)}
-              className="shrink-0 flex items-center gap-2 rounded-lg border border-dashed border-primary/40 bg-card px-3 py-5 text-sm text-primary hover:border-primary/70 hover:text-primary transition-colors cursor-pointer"
-            >
-              <PlusIcon className="h-4 w-4" />
-              New Task
-            </button>
           ) : null}
           {!isEmpty &&
             issues.map((issue) => (
