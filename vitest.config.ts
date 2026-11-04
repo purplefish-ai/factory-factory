@@ -48,6 +48,7 @@ const reusableSharedTests = [
 export default defineConfig({
   test: {
     globals: true,
+    globalSetup: ['./src/backend/testing/integration-db.global-setup.ts'],
     environment: 'node',
     // Let jsdom own browser storage instead of Node's experimental global.
     execArgv: ['--no-experimental-webstorage'],

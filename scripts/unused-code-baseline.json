@@ -105,6 +105,10 @@
       "disposition": "test-support",
       "reason": "Test harness or fixture support remains explicit in this inventory; production callers are not expected."
     },
+    "src/backend/testing/integration-db.global-setup.ts": {
+      "disposition": "test-support",
+      "reason": "Vitest global setup migrates a temporary SQLite template for isolated integration database copies; no production runtime consumer is expected."
+    },
     "src/backend/testing/integration-db.ts": {
       "disposition": "test-support",
       "reason": "Test harness or fixture support remains explicit in this inventory; production callers are not expected."
