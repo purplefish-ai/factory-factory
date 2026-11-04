@@ -128,7 +128,7 @@ export function AgentsDashboardShell({
         </div>
         <Button size="sm" onClick={onCreate} disabled={createDisabled}>
           <PlusIcon className="size-4" />
-          Create Agent
+          Create agent
         </Button>
       </header>
       <div className="flex min-h-0 min-w-0 flex-1 flex-col @[48rem]/agents:flex-row">

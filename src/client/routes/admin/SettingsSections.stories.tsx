@@ -327,7 +327,7 @@ export const CustomIde: Story = {
   ),
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    await canvas.findByLabelText('Custom Command');
+    await canvas.findByLabelText(/^custom command$/i);
     await userEvent.click(canvas.getByRole('button', { name: 'Test' }));
     await waitFor(() =>
       expect(onRequest).toHaveBeenCalledWith('userSettings.testCustomCommand', {
@@ -397,7 +397,7 @@ export const Ratchet: Story = {
         ratchetReviewTriggerMode: 'ALL_REVIEW_FEEDBACK',
       })
     );
-    await userEvent.click(await canvas.findByRole('button', { name: 'Check All PRs Now' }));
+    await userEvent.click(await canvas.findByRole('button', { name: /^check all prs now$/i }));
     await waitFor(() =>
       expect(onRequest).toHaveBeenCalledWith('admin.triggerRatchetCheck', undefined)
     );
@@ -453,7 +453,7 @@ export const WorktreeCleanup: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await canvas.findByText('Found 2 orphaned worktrees not used by any active workspace.');
-    await userEvent.click(canvas.getByRole('button', { name: 'Remove Orphaned Worktrees' }));
+    await userEvent.click(canvas.getByRole('button', { name: /^remove orphaned worktrees$/i }));
     const dialog = within(document.body);
     await userEvent.click(await dialog.findByRole('button', { name: 'Remove' }));
     await waitFor(() =>
@@ -481,7 +481,7 @@ export const CustomIdeFirstSetup: Story = {
     const canvas = within(canvasElement);
     await userEvent.click(await canvas.findByLabelText('Preferred IDE'));
     await userEvent.click(await within(document.body).findByRole('option', { name: 'Custom' }));
-    const command = await canvas.findByRole('textbox', { name: 'Custom Command' });
+    const command = await canvas.findByRole('textbox', { name: /^custom command$/i });
     await expect(onRequest).not.toHaveBeenCalledWith('userSettings.update', expect.anything());
     await userEvent.type(command, 'code-insiders {{workspace}');
     await userEvent.tab();
@@ -523,7 +523,7 @@ export const RejectedChatModel: Story = {
     );
     await waitFor(() => expect(model).toHaveTextContent('Sonnet 5'));
     await within(document.body).findByText(
-      'Failed to update chat defaults: Request rejected: userSettings.update'
+      "Couldn't update chat defaults. Request rejected: userSettings.update"
     );
   },
 };
@@ -572,10 +572,10 @@ export const FailedFactorySave: Story = {
     await userEvent.click(edit);
     const dialog = await within(document.body).findByRole('dialog');
     await expect(within(dialog).getByLabelText(/^Run Command/)).toHaveValue('pnpm dev');
-    await userEvent.click(within(dialog).getByRole('button', { name: 'Save Configuration' }));
+    await userEvent.click(within(dialog).getByRole('button', { name: /^save configuration$/i }));
     await within(dialog).findByText('Error: Request rejected: project.saveFactoryConfig');
     await within(document.body).findByText(
-      'Failed to save configuration: Request rejected: project.saveFactoryConfig'
+      "Couldn't save configuration. Request rejected: project.saveFactoryConfig"
     );
     await expect(dialog).toBeVisible();
   },
@@ -589,12 +589,12 @@ export const ServerLogs: Story = {
   ),
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    const link = canvas.getByRole('link', { name: 'View Logs' });
+    const link = canvas.getByRole('link', { name: /^view logs$/i });
     await expect(link).toHaveAttribute('href', '/logs');
     await expect(within(link).queryByRole('button')).not.toBeInTheDocument();
     link.focus();
     await userEvent.tab();
-    await expect(canvas.getByRole('button', { name: 'Download Log File' })).toHaveFocus();
+    await expect(canvas.getByRole('button', { name: /^download log file$/i })).toHaveFocus();
   },
 };
 
@@ -611,7 +611,7 @@ export const RefreshCLIAuthentication: Story = {
     await userEvent.click(canvas.getByRole('button', { name: 'Recheck' }));
     await waitFor(() => expect(canvas.getAllByText(/Ready/)).toHaveLength(3));
     await expect(
-      canvas.queryByRole('button', { name: 'Open Terminal to Log In' })
+      canvas.queryByRole('button', { name: /^open terminal to log in$/i })
     ).not.toBeInTheDocument();
   },
 };
@@ -624,7 +624,9 @@ export const ManagedProviderLoginActions: Story = {
   ),
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    await userEvent.click(await canvas.findByRole('button', { name: 'Open Terminal to Log In' }));
+    await userEvent.click(
+      await canvas.findByRole('button', { name: /^open terminal to log in$/i })
+    );
     const dialog = within(await within(document.body).findByRole('dialog', { name: 'Terminal' }));
     // The dialog fades in.
     await waitFor(() =>
@@ -691,7 +693,7 @@ export const RejectedChildWorkspaces: Story = {
       })
     );
     await within(canvasElement.ownerDocument.body).findByText(
-      'Failed to update settings: Request rejected: userSettings.update'
+      "Couldn't update settings. Request rejected: userSettings.update"
     );
     await expect(toggle).toBeChecked();
   },
@@ -705,7 +707,7 @@ export const FailedChildWorkspaceSettings: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await expect(await canvas.findByRole('alert')).toHaveTextContent(
-      'Could not load child workspace settings.'
+      "Couldn't load child workspace settings."
     );
     await expect(canvas.queryByRole('switch')).not.toBeInTheDocument();
   },

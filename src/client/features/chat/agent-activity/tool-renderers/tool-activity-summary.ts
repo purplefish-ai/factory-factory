@@ -15,8 +15,8 @@ import { isWebSearchToolName } from './web-search-parser';
 export type ToolActivityKind = 'command' | 'edit' | 'read' | 'search' | 'list' | 'mcp' | 'other';
 const VERBS = {
   command: { pending: 'Running', error: 'Failed', success: 'Ran' },
-  edit: { pending: 'Editing', error: 'Failed to edit', success: 'Edited' },
-  read: { pending: 'Reading', error: 'Failed to read', success: 'Read' },
+  edit: { pending: 'Editing', error: "Couldn't edit", success: 'Edited' },
+  read: { pending: 'Reading', error: "Couldn't read", success: 'Read' },
 };
 
 export function getToolActivityKind(name: string): ToolActivityKind {

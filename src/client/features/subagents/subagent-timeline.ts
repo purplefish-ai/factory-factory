@@ -14,7 +14,7 @@ export function createSubagentTimelineEvents(subagents: SubagentSummary[]): Chat
   const events = new Map<string, ChatMessage>();
   const iconIndices = getSubagentIconIndices(subagents);
   for (const agent of subagents) {
-    const name = agent.name?.trim() || 'Sub-agent';
+    const name = agent.name?.trim() || 'Subagent';
     const append = (phase: 'started' | 'finished', timestamp: string | null, label: string) => {
       const time = timestamp ? Date.parse(timestamp) : Number.NaN;
       if (!(timestamp && Number.isFinite(time))) {

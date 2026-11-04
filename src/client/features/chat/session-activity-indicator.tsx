@@ -23,7 +23,7 @@ function getActivityState(work?: SessionWorkState) {
       ? `Background ${backgroundKind} running`
       : `${backgroundTasks.length} background ${backgroundKind === 'process' ? 'processes' : 'tasks'} running`;
   const runningSubagents = work?.runningSubagents ?? 0;
-  const subagentLabel = `${runningSubagents} ${runningSubagents === 1 ? 'sub-agent' : 'sub-agents'} running`;
+  const subagentLabel = `${runningSubagents} ${runningSubagents === 1 ? 'subagent' : 'subagents'} running`;
   const activeGoals = work?.activeGoals ?? 0;
   const hasBackgroundActivity =
     backgroundTasks.length > 0 || runningSubagents > 0 || activeGoals > 0;
@@ -138,12 +138,12 @@ export function SessionActivityIndicator({
       )}
       {runningSubagents === 1 && (
         <div>
-          <span role="status" aria-label="Sub-agent activity" className="sr-only">
+          <span role="status" aria-label="Subagent activity" className="sr-only">
             {subagentLabel}
           </span>
           <button
             type="button"
-            title="Open sub-agent tab"
+            title="Open subagent tab"
             onClick={onOpenSingleSubagent}
             disabled={!onOpenSingleSubagent}
             className={subagentButtonClassName}
@@ -155,7 +155,7 @@ export function SessionActivityIndicator({
       )}
       {runningSubagents > 1 && (
         <Collapsible open={subagentsExpanded} onOpenChange={setSubagentsExpanded}>
-          <span role="status" aria-label="Sub-agent activity" className="sr-only">
+          <span role="status" aria-label="Subagent activity" className="sr-only">
             {subagentLabel}
           </span>
           <CollapsibleTrigger type="button" className={subagentButtonClassName}>
@@ -169,7 +169,7 @@ export function SessionActivityIndicator({
           <CollapsibleContent>
             <div className="mt-2 max-h-64 overflow-y-auto rounded-md border">
               {runningSubagentList ?? (
-                <p className="p-3 text-sm text-muted-foreground">Loading sub-agents…</p>
+                <p className="p-3 text-sm text-muted-foreground">Loading subagents…</p>
               )}
             </div>
           </CollapsibleContent>

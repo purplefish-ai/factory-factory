@@ -215,7 +215,7 @@ describe('NewProjectPage project query recovery', () => {
     expect(container.textContent).toContain('Unable to load projects');
     expect(container.textContent).toContain('Backend unavailable');
     expect(container.textContent).not.toContain('Loading projects');
-    expect(container.textContent).not.toContain('Get Started');
+    expect(container.textContent).not.toContain('Get started');
     expect(button('Retry')).toBeDefined();
     expect(container.querySelector('a[href="/projects"]')?.textContent).toBe('Back to Projects');
   });
@@ -231,13 +231,13 @@ describe('NewProjectPage project query recovery', () => {
       click(button('Retry'));
       await waitFor(() => expect(container.textContent).toContain('Loading projects'));
       expect(button('Retry')).toBeUndefined();
-      expect(container.textContent).not.toContain('Get Started');
+      expect(container.textContent).not.toContain('Get started');
       await act(async () => retry.resolve(result));
       await waitFor(() =>
         expect(container.querySelector('input[aria-label="GitHub URL"]')).not.toBeNull()
       );
       expect(container.querySelector('[role="alert"]')).toBeNull();
-      expect(container.textContent).toContain(result.length ? 'Add Project' : 'Get Started');
+      expect(container.textContent).toContain(result.length ? 'Add project' : 'Get started');
       if (result.length) {
         expect(
           container.querySelector(
@@ -260,7 +260,7 @@ describe('NewProjectPage project query recovery', () => {
     expect(container.textContent).toContain('Still unavailable');
     listProjects.mockResolvedValue([]);
     click(button('Retry'));
-    await waitFor(() => expect(container.textContent).toContain('Get Started'));
+    await waitFor(() => expect(container.textContent).toContain('Get started'));
   });
 
   it('waits on a genuinely pending query without flashing onboarding', async () => {
@@ -268,17 +268,17 @@ describe('NewProjectPage project query recovery', () => {
     listProjects.mockReturnValue(pending.promise);
     const { container } = renderPage();
     expect(container.textContent).toContain('Loading projects');
-    expect(container.textContent).not.toContain('Get Started');
+    expect(container.textContent).not.toContain('Get started');
     expect(container.querySelector('[role="alert"]')).toBeNull();
     await act(async () => pending.resolve(projects));
-    await waitFor(() => expect(container.textContent).toContain('Add Project'));
-    expect(container.textContent).not.toContain('Get Started');
+    await waitFor(() => expect(container.textContent).toContain('Add project'));
+    expect(container.textContent).not.toContain('Get started');
   });
 
   it('keeps cached projects and form input during a background failure', async () => {
     listProjects.mockResolvedValueOnce(projects).mockRejectedValue(new Error('Refetch failed'));
     const { container, client, click, button } = renderPage();
-    await waitFor(() => expect(container.textContent).toContain('Add Project'));
+    await waitFor(() => expect(container.textContent).toContain('Add project'));
     click(button('Local Path'));
     const input = container.querySelector<HTMLInputElement>('input[id="repoPath"]');
     expect(input).not.toBeNull();
@@ -336,7 +336,7 @@ describe('NewProjectPage project query recovery', () => {
       expect(container.querySelector('[data-testid="location"]')?.textContent).toBe(
         '/projects/beta/workspaces'
       );
-      expect(container.textContent).not.toContain('Get Started');
+      expect(container.textContent).not.toContain('Get started');
     }
   );
 });

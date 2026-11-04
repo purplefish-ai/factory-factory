@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 
 function BackgroundRefreshExample() {
   const refresh = (message: string) => {
-    runInBackground(Promise.reject(new Error(message)), 'Could not refresh data');
+    runInBackground(Promise.reject(new Error(message)), "Couldn't refresh data");
   };
   return (
     <div className="flex gap-2 p-4">
@@ -33,6 +33,6 @@ export const RepeatedRefreshFailure: Story = {
     await userEvent.click(canvas.getByRole('button', { name: 'Retry refresh' }));
     const second = await canvas.findByText('Still offline');
     await waitFor(() => expect(second).toBeVisible());
-    await expect(canvas.getAllByText('Could not refresh data')).toHaveLength(1);
+    await expect(canvas.getAllByText("Couldn't refresh data")).toHaveLength(1);
   },
 };

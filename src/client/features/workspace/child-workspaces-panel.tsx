@@ -65,7 +65,7 @@ function NewChildWorkspaceDialog({
       setReportBackOn('');
     },
     onError: (error) => {
-      toast.error(`Failed to create child workspace: ${error.message}`);
+      toast.error(`Couldn't create child workspace. ${error.message}`);
     },
   });
 
@@ -88,14 +88,14 @@ function NewChildWorkspaceDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>New Child Workspace</DialogTitle>
+          <DialogTitle>New child workspace</DialogTitle>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-1.5">
             <Label htmlFor="child-project">Project</Label>
             <Select value={projectId} onValueChange={setProjectId}>
               <SelectTrigger id="child-project">
-                <SelectValue placeholder="Select a project..." />
+                <SelectValue placeholder="Select a project…" />
               </SelectTrigger>
               <SelectContent>
                 {projects?.map((p) => (
@@ -131,7 +131,7 @@ function NewChildWorkspaceDialog({
               id="child-prompt"
               value={initialPrompt}
               onChange={(e) => setInitialPrompt(e.target.value)}
-              placeholder="Starting task for the child workspace..."
+              placeholder="Starting task for the child workspace…"
               rows={3}
             />
           </div>
@@ -149,7 +149,7 @@ function NewChildWorkspaceDialog({
               Cancel
             </Button>
             <Button type="submit" disabled={!(name.trim() && projectId) || createChild.isPending}>
-              {createChild.isPending ? 'Creating...' : 'Create'}
+              {createChild.isPending ? 'Creating…' : 'Create'}
             </Button>
           </DialogFooter>
         </form>
@@ -198,7 +198,7 @@ export function ChildWorkspacesPanel({ workspaceId, embedded = false }: ChildWor
       <div className="flex items-center justify-between px-3 py-2 border-b bg-muted/30">
         <div className="flex items-center gap-1.5">
           <TreeStructureIcon className="h-3.5 w-3.5 text-muted-foreground" />
-          <span className="text-xs font-medium">Child Workspaces</span>
+          <span className="text-xs font-medium">Child workspaces</span>
           {children && children.length > 0 && (
             <Badge variant="secondary" className="text-[10px] h-4 px-1.5">
               {children.length}

@@ -73,7 +73,7 @@ type Story = StoryObj<typeof meta>;
 export const ThreeSubagents: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    await userEvent.click(canvas.getByRole('button', { name: '3 sub-agents running' }));
+    await userEvent.click(canvas.getByRole('button', { name: '3 subagents running' }));
     await expect(canvas.getByRole('button', { name: /Review code/ })).toBeVisible();
   },
 };
@@ -87,7 +87,7 @@ export const OneSubagent: Story = {
   },
   play: async ({ args, canvasElement }) => {
     const canvas = within(canvasElement);
-    const button = canvas.getByRole('button', { name: '1 sub-agent running' });
+    const button = canvas.getByRole('button', { name: '1 subagent running' });
     await expect(button).not.toHaveAttribute('aria-expanded');
     await userEvent.click(button);
     await expect(args.onOpenSingleSubagent).toHaveBeenCalledOnce();
@@ -103,7 +103,7 @@ export const OneSubagentLoading: Story = {
   },
   play: async ({ canvasElement }) => {
     await expect(
-      within(canvasElement).getByRole('button', { name: '1 sub-agent running' })
+      within(canvasElement).getByRole('button', { name: '1 subagent running' })
     ).toBeDisabled();
   },
 };
@@ -139,7 +139,7 @@ export const RememberedExpansion: Story = {
   },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    const trigger = () => canvas.getByRole('button', { name: '3 sub-agents running' });
+    const trigger = () => canvas.getByRole('button', { name: '3 subagents running' });
     if (trigger().getAttribute('aria-expanded') === 'true') {
       await userEvent.click(trigger());
     }
@@ -253,14 +253,14 @@ export const LaterPageFailed: Story = {
           kind: 'ready',
           subagents: [],
           hasMore: true,
-          error: { message: 'Some sub-agent activity could not be loaded.', onRetry: fn() },
+          error: { message: 'Some subagent activity could not be loaded.', onRetry: fn() },
         }}
       />
     ),
   },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    await userEvent.click(canvas.getByRole('button', { name: '3 sub-agents running' }));
+    await userEvent.click(canvas.getByRole('button', { name: '3 subagents running' }));
     await expect(canvas.getByRole('button', { name: 'Retry' })).toBeVisible();
   },
 };

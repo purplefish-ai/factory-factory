@@ -334,7 +334,7 @@ function SingleSelectQuestion({
                     onChange(OTHER_OPTION_VALUE);
                   }
                 }}
-                placeholder="Type your response..."
+                placeholder="Type your response…"
                 className="min-h-[42px] text-sm py-1.5"
                 aria-invalid={
                   selectedValue === OTHER_OPTION_VALUE &&
@@ -474,7 +474,7 @@ function MultiSelectQuestion({
                     onChange([...selectedValues, OTHER_OPTION_VALUE]);
                   }
                 }}
-                placeholder="Type your response..."
+                placeholder="Type your response…"
                 className="min-h-[42px] text-sm py-1.5"
               />
             </div>

@@ -312,7 +312,7 @@ export const ReadFailure: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await userEvent.click(await canvas.findByRole('button', { name: /Review ready/ }));
-    await expect(await canvas.findByText(/Could not read message/)).toBeVisible();
+    await expect(await canvas.findByText(/Couldn't read message/)).toBeVisible();
   },
 };
 export const AcknowledgementFailure: Story = {
@@ -323,7 +323,7 @@ export const AcknowledgementFailure: Story = {
     const acknowledge = await canvas.findByRole('button', { name: /^Acknowledge$/ });
     await expect(acknowledge).toBeEnabled();
     await userEvent.click(acknowledge);
-    await expect(await canvas.findByText(/Could not acknowledge message/)).toBeVisible();
+    await expect(await canvas.findByText(/Couldn't acknowledge message/)).toBeVisible();
   },
 };
 
@@ -359,6 +359,6 @@ export const RetryNotificationFailure: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await userEvent.click(await canvas.findByRole('button', { name: 'Retry mail notification' }));
-    await expect(await canvas.findByText(/Could not retry mail notification/)).toBeVisible();
+    await expect(await canvas.findByText(/Couldn't retry mail notification/)).toBeVisible();
   },
 };

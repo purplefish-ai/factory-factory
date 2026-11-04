@@ -330,7 +330,7 @@ export function useChatInputActions({
 
       // Show error toasts for failed files
       for (const { fileName, message } of errors) {
-        toast.error(`Failed to upload ${fileName}: ${message}`);
+        toast.error(`Couldn't upload ${fileName}. ${message}`);
       }
 
       // Add successful attachments to state

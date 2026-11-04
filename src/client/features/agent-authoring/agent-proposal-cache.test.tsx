@@ -194,7 +194,7 @@ it('shows an explicit owner load problem and never updates against sidebar selec
       ?.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
   );
   await waitForReact(() =>
-    expect(container.textContent).toContain('Could not load the authoring workspace project')
+    expect(container.textContent).toContain("Couldn't load the authoring workspace project")
   );
   expect(requests.some((request) => request.path === 'agent.update')).toBe(false);
 });

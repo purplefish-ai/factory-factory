@@ -21,7 +21,7 @@ export function TerminalDisconnectBanner({ gaveUp, onReconnect }: TerminalDiscon
         <output className="text-xs text-warning">
           {gaveUp
             ? 'Terminal disconnected. Input will not be delivered until you reconnect.'
-            : 'Terminal disconnected — reconnecting... Input typed now will not be delivered.'}
+            : 'Terminal disconnected — reconnecting… Input typed now will not be delivered.'}
         </output>
         {gaveUp && (
           <button

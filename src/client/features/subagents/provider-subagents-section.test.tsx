@@ -133,14 +133,14 @@ describe('ProviderSubagentsSection', () => {
     };
     render(props);
 
-    expect(container.querySelector('[aria-label="Active sub-agents"]')?.textContent).toBe(
+    expect(container.querySelector('[aria-label="Active subagents"]')?.textContent).toBe(
       String(count)
     );
     expect(container.querySelectorAll('button[aria-pressed]')).toHaveLength(count);
 
     mocks.queryResult.data = { supported: true, subagents: [], nextCursor: null };
     render(props);
-    expect(container.querySelector('[aria-label="Active sub-agents"]')).toBeNull();
+    expect(container.querySelector('[aria-label="Active subagents"]')).toBeNull();
   });
 
   it('keeps the parent-scoped query disabled until the selected session is hydrated', () => {
@@ -171,7 +171,7 @@ describe('ProviderSubagentsSection', () => {
       { sessionId: 'session-1', cursor: null, limit: 100 },
       expect.objectContaining({ enabled: true, refetchOnMount: 'always' })
     );
-    expect(container.textContent).toContain('Sub-agents');
+    expect(container.textContent).toContain('Subagents');
   });
 
   it('invalidates the selected session before enabling its query on reconnect', async () => {
@@ -331,7 +331,7 @@ describe('ProviderSubagentsSection', () => {
     };
     render(props);
 
-    expect(container.querySelector('[aria-label="Active sub-agents"]')).toBeNull();
+    expect(container.querySelector('[aria-label="Active subagents"]')).toBeNull();
     expect(container.textContent).toContain('Completed · 1');
     expect(mocks.fetchNextPage).toHaveBeenCalledOnce();
 
@@ -339,7 +339,7 @@ describe('ProviderSubagentsSection', () => {
     mocks.infinitePages = [firstPage, { supported: true, subagents: [], nextCursor: 'third-page' }];
     render(props);
     expect(mocks.fetchNextPage).toHaveBeenCalledTimes(2);
-    expect(container.querySelector('[aria-label="Active sub-agents"]')).toBeNull();
+    expect(container.querySelector('[aria-label="Active subagents"]')).toBeNull();
 
     mocks.infinitePages = [
       ...mocks.infinitePages,
@@ -355,7 +355,7 @@ describe('ProviderSubagentsSection', () => {
     mocks.queryResult.hasNextPage = false;
     render(props);
 
-    expect(container.querySelector('[aria-label="Active sub-agents"]')?.textContent).toBe('2');
+    expect(container.querySelector('[aria-label="Active subagents"]')?.textContent).toBe('2');
     expect(container.textContent).toContain('Completed · 1');
   });
 
@@ -402,9 +402,9 @@ describe('ProviderSubagentsSection', () => {
       expect(mocks.fetchNextPage).not.toHaveBeenCalled();
       expect(container.textContent).toContain('Loaded agent');
       expect(container.textContent).toContain(
-        'The provider repeated a sub-agent page cursor. Retry to reload the list.'
+        'The provider repeated a subagent page cursor. Retry to reload the list.'
       );
-      expect(container.querySelector('[aria-label="Active sub-agents"]')).toBeNull();
+      expect(container.querySelector('[aria-label="Active subagents"]')).toBeNull();
       const retry = [...container.querySelectorAll('button')].find(
         (button) => button.textContent === 'Retry'
       );
@@ -442,7 +442,7 @@ describe('ProviderSubagentsSection', () => {
 
     expect(container.textContent).toContain('Keep this loaded agent');
     expect(container.textContent).toContain('Older sub-agent page failed');
-    expect(container.querySelector('[aria-label="Active sub-agents"]')).toBeNull();
+    expect(container.querySelector('[aria-label="Active subagents"]')).toBeNull();
     expect(mocks.fetchNextPage).not.toHaveBeenCalled();
     const retry = [...container.querySelectorAll('button')].find(
       (button) => button.textContent === 'Retry'
@@ -558,10 +558,10 @@ describe('ProviderSubagentsSection', () => {
         })
       )
     );
-    expect(container.querySelector('button[aria-label^="Stop sub-agent:"]')).not.toBeNull();
+    expect(container.querySelector('button[aria-label^="Stop subagent:"]')).not.toBeNull();
     render(props);
     expect(container.textContent).toContain('Child');
-    expect(container.querySelector('button[aria-label^="Stop sub-agent:"]')).toBeNull();
+    expect(container.querySelector('button[aria-label^="Stop subagent:"]')).toBeNull();
   });
   it('fences cached child controls until a successful refresh for the current live runtime', async () => {
     const child = {
@@ -592,9 +592,9 @@ describe('ProviderSubagentsSection', () => {
         })
     );
     await act(() => root.render(createElement(ProviderSubagentsSection, props)));
-    expect(container.querySelector('button[aria-label^="Stop sub-agent:"]')).toBeNull();
+    expect(container.querySelector('button[aria-label^="Stop subagent:"]')).toBeNull();
     await act(() => finish({ isError: false, data: mocks.queryResult.data, dataUpdatedAt: 20 }));
-    expect(container.querySelector('button[aria-label^="Stop sub-agent:"]')).not.toBeNull();
+    expect(container.querySelector('button[aria-label^="Stop subagent:"]')).not.toBeNull();
     await act(() =>
       root.render(
         createElement(ProviderSubagentsSection, { ...props, controlSessionId: undefined })
@@ -606,9 +606,9 @@ describe('ProviderSubagentsSection', () => {
       )
     );
     expect(container.textContent).toContain('Child');
-    expect(container.querySelector('button[aria-label^="Stop sub-agent:"]')).toBeNull();
+    expect(container.querySelector('button[aria-label^="Stop subagent:"]')).toBeNull();
     await act(() => finish({ isError: true, data: mocks.queryResult.data }));
-    expect(container.querySelector('button[aria-label^="Stop sub-agent:"]')).toBeNull();
+    expect(container.querySelector('button[aria-label^="Stop subagent:"]')).toBeNull();
     await act(() =>
       root.render(
         createElement(ProviderSubagentsSection, { ...props, controlSessionId: undefined })
@@ -624,9 +624,9 @@ describe('ProviderSubagentsSection', () => {
         createElement(ProviderSubagentsSection, { ...props, controlRuntimeId: 'new-runtime' })
       )
     );
-    expect(container.querySelector('button[aria-label^="Stop sub-agent:"]')).toBeNull();
+    expect(container.querySelector('button[aria-label^="Stop subagent:"]')).toBeNull();
     await act(() => finish({ isError: false, data: mocks.queryResult.data, dataUpdatedAt: 20 }));
-    expect(container.querySelector('button[aria-label^="Stop sub-agent:"]')).not.toBeNull();
+    expect(container.querySelector('button[aria-label^="Stop subagent:"]')).not.toBeNull();
   });
   it('hides cached controls when a repeated pagination cursor creates a client-side error', async () => {
     const child = {
@@ -664,6 +664,6 @@ describe('ProviderSubagentsSection', () => {
     );
     expect(container.textContent).toContain('Child');
     expect(container.textContent).toContain('Retry');
-    expect(container.querySelector('[aria-label^="Stop sub-agent"]')).toBeNull();
+    expect(container.querySelector('[aria-label^="Stop subagent"]')).toBeNull();
   });
 });

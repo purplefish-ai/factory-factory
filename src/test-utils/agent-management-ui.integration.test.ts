@@ -267,7 +267,7 @@ it('edits the exact saved set through the mixed page after real proposal removal
   expect(calls).not.toContain('periodicTask.listExecutions');
   expect(sources).not.toHaveBeenCalled();
   expect(native).not.toHaveBeenCalled();
-  await act(() => button('Edit Agent').click());
+  await act(() => button('Edit agent').click());
   const instructions = container.querySelector('textarea[aria-label="Instructions"]');
   await act(() => {
     Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')?.set?.call(
@@ -341,7 +341,7 @@ it('edits the exact saved set through the mixed page after real proposal removal
   );
   await act(() => queryClient.invalidateQueries({ queryKey: [['agent', 'get']] }));
   await waitForReact(() => expect(container.textContent).toContain('Exact membership is unknown'));
-  await act(() => button('Edit Agent').click());
+  await act(() => button('Edit agent').click());
   expect(container.querySelector('form')).toBeNull();
   await act(() => button('Replace complete specification').click());
   const replacement = container.querySelector<HTMLTextAreaElement>(

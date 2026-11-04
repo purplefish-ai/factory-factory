@@ -115,7 +115,7 @@ afterEach(() => {
   cleanupSubagentTabTestEnvironment();
 });
 
-describe('MainViewTabBar sub-agent tabs', () => {
+describe('MainViewTabBar subagent tabs', () => {
   it.each([
     ['starting', true],
     ['running', true],
@@ -124,7 +124,7 @@ describe('MainViewTabBar sub-agent tabs', () => {
     ['failed', false],
     ['cancelled', false],
     ['interrupted', false],
-  ] as const)('shows the assigned icon for a %s sub-agent tab', async (status, pulses) => {
+  ] as const)('shows the assigned icon for a %s subagent tab', async (status, pulses) => {
     const selection: SubagentSelection = {
       ...runningSelection,
       subagent: { ...runningSelection.subagent, status },
@@ -138,7 +138,7 @@ describe('MainViewTabBar sub-agent tabs', () => {
       const tab = [...container.querySelectorAll<HTMLElement>('[role="tab"]')].find((candidate) =>
         candidate.textContent?.includes('Security review')
       );
-      const indicator = tab?.querySelector(`[aria-label="${status} sub-agent"]`);
+      const indicator = tab?.querySelector(`[aria-label="${status} subagent"]`);
       const icon = indicator?.querySelector('svg');
       const expected = document.createElement('div');
       expected.innerHTML = renderToStaticMarkup(<SubagentIcon index={0} />);
@@ -152,7 +152,7 @@ describe('MainViewTabBar sub-agent tabs', () => {
     await act(() => root.unmount());
   });
 
-  it('matches the list icon when only a later sub-agent has an open tab', async () => {
+  it('matches the list icon when only a later subagent has an open tab', async () => {
     mocks.siblings = [
       {
         ...runningSelection.subagent,
@@ -163,7 +163,7 @@ describe('MainViewTabBar sub-agent tabs', () => {
     ];
     seedSubagentTab('workspace-second-icon', runningSelection);
     const { container, root } = await renderTabBar('workspace-second-icon');
-    const icon = container.querySelector('[aria-label="running sub-agent"] svg');
+    const icon = container.querySelector('[aria-label="running subagent"] svg');
     const expected = document.createElement('div');
     expected.innerHTML = renderToStaticMarkup(<SubagentIcon index={1} />);
     expect(icon?.innerHTML).toBe(expected.querySelector('svg')?.innerHTML);
@@ -171,7 +171,7 @@ describe('MainViewTabBar sub-agent tabs', () => {
     await act(() => root.unmount());
   });
 
-  it('refreshes and persists the status of an inactive sub-agent tab', async () => {
+  it('refreshes and persists the status of an inactive subagent tab', async () => {
     const workspaceId = 'workspace-provider-refresh';
     seedSubagentTab(workspaceId, runningSelection, 'chat');
     mocks.summary = {
@@ -182,7 +182,7 @@ describe('MainViewTabBar sub-agent tabs', () => {
     const { container, root } = await renderTabBar(workspaceId);
 
     await vi.waitFor(() => {
-      const icon = container.querySelector('[aria-label="completed sub-agent"] svg');
+      const icon = container.querySelector('[aria-label="completed subagent"] svg');
       expect(icon?.classList.contains('text-amber-600')).toBe(true);
       const stored = JSON.parse(
         localStorage.getItem(`workspace-panel-tabs-${workspaceId}`) ?? '[]'
@@ -193,7 +193,7 @@ describe('MainViewTabBar sub-agent tabs', () => {
     await act(() => root.unmount());
   });
 
-  it('opens the sub-agent tab in the hydrated running story', async () => {
+  it('opens the subagent tab in the hydrated running story', async () => {
     mocks.summary = { ...runningSelection.subagent };
     const container = document.createElement('div');
     document.body.appendChild(container);
@@ -202,7 +202,7 @@ describe('MainViewTabBar sub-agent tabs', () => {
     await act(() => root.render(<RunningSubagent />));
 
     await vi.waitFor(() => {
-      expect(container.querySelector('[aria-label="running sub-agent"] svg')).not.toBeNull();
+      expect(container.querySelector('[aria-label="running subagent"] svg')).not.toBeNull();
     });
     await act(() => root.unmount());
   });

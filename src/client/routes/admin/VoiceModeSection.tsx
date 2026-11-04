@@ -163,11 +163,11 @@ function DeepgramApiKeyField({
         />
       </div>
       <Button variant="outline" onClick={onValidate} disabled={validating || !apiKey}>
-        {validating ? 'Validating...' : 'Validate'}
+        {validating ? 'Validating…' : 'Validate'}
       </Button>
       {validated && (
         <Button onClick={onSave} disabled={saving}>
-          {saving ? 'Saving...' : 'Save'}
+          {saving ? 'Saving…' : 'Save'}
         </Button>
       )}
     </div>
@@ -281,9 +281,9 @@ export function VoiceModeSection() {
     onSuccess: (result) => {
       // Show the confirmed settings immediately while fetching any newer changes.
       utils.voice.getConfig.setData(undefined, result);
-      runInBackground(utils.voice.getConfig.invalidate(), 'Could not refresh data');
+      runInBackground(utils.voice.getConfig.invalidate(), "Couldn't refresh data");
     },
-    onError: (error) => toast.error(`Failed to save: ${error.message}`),
+    onError: (error) => toast.error(`Couldn't save voice settings. ${error.message}`),
   });
 
   if (isLoading) {
@@ -292,7 +292,7 @@ export function VoiceModeSection() {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <MicrophoneIcon className="w-5 h-5" />
-            Voice Mode
+            Voice mode
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -334,7 +334,7 @@ export function VoiceModeSection() {
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <MicrophoneIcon className="w-5 h-5" />
-          Voice Mode
+          Voice mode
         </CardTitle>
         <CardDescription>
           Talk to Claude/Codex sessions by voice using your own Deepgram API key for speech-to-text

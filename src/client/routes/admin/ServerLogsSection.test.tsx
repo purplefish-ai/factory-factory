@@ -16,7 +16,7 @@ it('renders the logs action as one link without nested interactive controls', ()
   const root = createRoot(container);
   flushSync(() => root.render(createElement(MemoryRouter, null, createElement(ServerLogsSection))));
   const link = container.querySelector('a[href="/logs"]');
-  expect(link?.textContent).toBe('View Logs');
+  expect(link?.textContent).toBe('View logs');
   expect(link?.querySelector('button')).toBeNull();
   root.unmount();
 });

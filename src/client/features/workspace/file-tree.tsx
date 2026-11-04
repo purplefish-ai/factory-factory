@@ -170,7 +170,7 @@ export function FileTree({ workspaceId, path = '', depth = 0, onFileSelect }: Fi
         className="px-2 py-1 text-sm text-destructive"
         style={{ paddingLeft: `${depth * 12 + 8}px` }}
       >
-        Couldn't load folder: {error.message}
+        Couldn't load folder. {error.message}
       </div>
     );
   }

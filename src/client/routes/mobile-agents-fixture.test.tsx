@@ -64,7 +64,7 @@ it('creates distinct fresh agents without inheriting the selected agent history 
   expect(container.querySelector('main')?.textContent).toContain('Paused');
   const createdIds: string[] = [];
   for (const name of ['First new agent', 'Second new agent']) {
-    actFlushSync(() => button('Create Agent').click());
+    actFlushSync(() => button('Create agent').click());
     fill('input[name="name"]', name);
     fill('textarea', 'Review changes');
     await act(() =>
@@ -145,7 +145,7 @@ it('uses actual saved detail, editor and blank replacement with explicit fixture
   );
   expect(container.querySelector('h2')?.textContent).toBe('Investigate labeled issues');
   expect(container.querySelector('main')?.textContent).not.toContain('Run history');
-  actFlushSync(() => button('Edit Agent').click());
+  actFlushSync(() => button('Edit agent').click());
   expect(container.querySelector('textarea[aria-label="Instructions"]')).not.toBeNull();
   await act(() => button('Validate draft').click());
   expect(container.textContent).toContain(
@@ -158,7 +158,7 @@ it('uses actual saved detail, editor and blank replacement with explicit fixture
       )
       ?.click()
   );
-  actFlushSync(() => button('Edit Agent').click());
+  actFlushSync(() => button('Edit agent').click());
   expect(container.querySelector('form')).toBeNull();
   actFlushSync(() => button('Replace complete specification').click());
   expect(
@@ -175,7 +175,7 @@ it('keeps explicit frontend-only Slack channel pages accessible in the saved edi
       )
       ?.click()
   );
-  actFlushSync(() => button('Edit Agent').click());
+  actFlushSync(() => button('Edit agent').click());
   const connection = container.querySelector<HTMLInputElement>('input[id$="-connection"]');
   actFlushSync(() => {
     Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(

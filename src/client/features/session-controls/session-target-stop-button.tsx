@@ -27,7 +27,7 @@ export function SessionTargetStopButton({
     () => isSessionTargetStopPending(sessionId, target),
     () => false
   );
-  const label = target.kind === 'task' ? 'Stop process' : 'Stop sub-agent';
+  const label = target.kind === 'task' ? 'Stop process' : 'Stop subagent';
   return (
     <TooltipProvider>
       <Tooltip>

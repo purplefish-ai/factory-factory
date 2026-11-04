@@ -82,7 +82,7 @@ function formatElapsed(subagent: SubagentListItem): string | null {
 
 function displayName(subagent: SubagentListItem): string {
   const providerName = subagent.name?.trim();
-  return providerName || `Sub-agent ${subagent.id.slice(0, 8)}`;
+  return providerName || `Subagent ${subagent.id.slice(0, 8)}`;
 }
 
 function statusLabel(status: SubagentListItem['status']): string {
@@ -187,7 +187,7 @@ function EmptyReadyState({ state }: { state: Extract<SubagentListState, { kind: 
       <div className="flex flex-col items-center justify-center gap-3 px-4 py-8 text-center">
         <div className="flex flex-col items-center gap-2">
           <RobotIcon className="h-7 w-7 text-muted-foreground/40" />
-          <p className="text-sm text-muted-foreground">No sub-agents for this session.</p>
+          <p className="text-sm text-muted-foreground">No subagents for this session.</p>
         </div>
         {state.hasMore && state.onLoadMore && !state.error && (
           <Button
@@ -272,7 +272,7 @@ export function SubagentList({
   if (state.kind === 'loading') {
     return (
       <div className="flex items-center justify-center px-4 py-8 text-sm text-muted-foreground">
-        Loading sub-agents…
+        Loading subagents…
       </div>
     );
   }

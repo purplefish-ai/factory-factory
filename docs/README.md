@@ -26,6 +26,9 @@ For implementation work, search the relevant source area and current guides
 first, for example `rg -n 'PR monitoring' docs/architecture`. Consult historical
 records when the task needs an earlier decision or migration.
 
+UI writing follows the [copy guide](architecture/client-copy.md); loading and
+query recovery follow [client loading](architecture/client-loading.md).
+
 ## Proposals and design records
 
 [Design records](design/README.md) distinguish proposals from implemented

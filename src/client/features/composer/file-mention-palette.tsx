@@ -165,7 +165,7 @@ export function FileMentionPalette({
         <CommandList>
           <CommandEmpty>
             {isLoading ? (
-              <span className="text-xs text-muted-foreground">Loading files...</span>
+              <span className="text-xs text-muted-foreground">Loading files…</span>
             ) : (
               'No files found'
             )}

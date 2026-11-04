@@ -22,7 +22,7 @@ describe('InlineWorkspaceForm', () => {
     const { container, root } = renderForm();
     try {
       expect(container.textContent).toContain('Launch');
-      expect(container.textContent).toContain('Create Agent');
+      expect(container.textContent).toContain('Create agent');
       expect(container.textContent).not.toMatch(/auto.iterat/i);
       expect(container.querySelector('#test-command')).toBeNull();
       expect(container.querySelector('#target-description')).toBeNull();
@@ -55,7 +55,7 @@ describe('InlineWorkspaceForm', () => {
   it('hides ignored workspace-only toolbar controls in periodic task mode', () => {
     const { container, root } = renderForm();
     const periodicTaskItem = Array.from(container.querySelectorAll('div')).find(
-      (element) => element.textContent === 'Create Agent'
+      (element) => element.textContent === 'Create agent'
     );
 
     if (!periodicTaskItem) {
@@ -129,7 +129,7 @@ describe('InlineWorkspaceForm', () => {
     const context = await mutationOptions.onMutate({
       type: 'MANUAL',
       projectId: getTestProjectId(),
-      name: 'New Workspace',
+      name: 'New workspace',
       ratchetEnabled: true,
     });
 
@@ -137,7 +137,7 @@ describe('InlineWorkspaceForm', () => {
     expect(mocks.workspaceListCache?.workspaces[0]).toMatchObject({
       id: context.optimisticWorkspaceId,
       worktreePath: null,
-      name: 'New Workspace',
+      name: 'New workspace',
       prMonitoring: {
         deliveryMode: 'MAIN',
         enabled: true,
@@ -157,7 +157,7 @@ describe('InlineWorkspaceForm', () => {
       'ws-live',
     ]);
     expect(mocks.workspaceListCache?.reviewCount).toBe(3);
-    expect(mocks.toastErrorMock).toHaveBeenCalledWith('Failed to create workspace: boom');
+    expect(mocks.toastErrorMock).toHaveBeenCalledWith("Couldn't create workspace. boom");
 
     actFlushSync(() => root.unmount());
     container.remove();
@@ -235,7 +235,7 @@ it.each(['loading', 'failed'])(
           )?.disabled
         ).toBe(true);
         const periodicMode = [...container.querySelectorAll('div')].find(
-          (element) => element.textContent === 'Create Agent'
+          (element) => element.textContent === 'Create agent'
         );
         actFlushSync(() => periodicMode?.click());
         const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')?.set;
@@ -244,7 +244,7 @@ it.each(['loading', 'failed'])(
           textarea.dispatchEvent(new Event('input', { bubbles: true }));
         });
         const create = [...container.querySelectorAll<HTMLButtonElement>('button')].find(
-          (button) => button.textContent === 'Create Agent'
+          (button) => button.textContent === 'Create agent'
         );
         expect(create?.disabled).toBe(false);
         actFlushSync(() => create?.click());
@@ -273,7 +273,7 @@ it('explains why keyboard workspace creation is blocked while defaults are unava
         new KeyboardEvent('keydown', { bubbles: true, key: 'Enter', metaKey: true })
       );
       expect(mocks.createWorkspaceMutateMock).not.toHaveBeenCalled();
-      expect(mocks.toastErrorMock).toHaveBeenCalledWith('Could not load chat defaults');
+      expect(mocks.toastErrorMock).toHaveBeenCalledWith("Couldn't load chat defaults");
     } finally {
       actFlushSync(() => root.unmount());
     }
@@ -285,7 +285,7 @@ it('creates an agent with shared schedule fields and clears time and timezone fo
   try {
     actFlushSync(() =>
       [...container.querySelectorAll('div')]
-        .find((element) => element.textContent === 'Create Agent')
+        .find((element) => element.textContent === 'Create agent')
         ?.click()
     );
     const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')?.set;
@@ -300,7 +300,7 @@ it('creates an agent with shared schedule fields and clears time and timezone fo
       time?.dispatchEvent(new Event('input', { bubbles: true }));
     });
     const create = [...container.querySelectorAll('button')].find(
-      (button) => button.textContent === 'Create Agent'
+      (button) => button.textContent === 'Create agent'
     );
     actFlushSync(() => create?.click());
     expect(mocks.createPeriodicTaskMutateMock).toHaveBeenLastCalledWith(
@@ -517,7 +517,7 @@ it('restores periodic schedules and explicit ratchet settings without applying l
   );
   actFlushSync(() =>
     [...mounted.container.querySelectorAll('button')]
-      .find((button) => button.textContent === 'Create Agent')
+      .find((button) => button.textContent === 'Create agent')
       ?.click()
   );
   expect(mocks.createPeriodicTaskMutateMock).toHaveBeenCalledWith(

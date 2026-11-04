@@ -82,7 +82,7 @@ function WorkspaceInbox({ workspaceId }: { workspaceId: string }) {
             </Button>
             {retryWake.isError && (
               <p role="alert" className="text-destructive">
-                Could not retry mail notification. {retryWake.error.message}
+                Couldn't retry mail notification. {retryWake.error.message}
               </p>
             )}
           </div>
@@ -94,7 +94,7 @@ function WorkspaceInbox({ workspaceId }: { workspaceId: string }) {
         )}
         {mail.isError && (
           <div role="alert" className="space-y-2 p-4 text-sm">
-            <p>Could not load inbox. {mail.error.message}</p>
+            <p>Couldn't load inbox. {mail.error.message}</p>
             <Button
               variant="outline"
               size="sm"

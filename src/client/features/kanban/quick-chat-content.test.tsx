@@ -24,9 +24,9 @@ vi.mock('@/client/features/chat', async (importOriginal) => {
 
 describe('QuickChatContent composer and queue controls', () => {
   it.each([
-    { promptInFlight: false, placeholder: 'Type a message...' },
-    { promptInFlight: true, placeholder: 'Message will be queued...' },
-    { promptInFlight: undefined, placeholder: 'Message will be queued...' },
+    { promptInFlight: false, placeholder: 'Type a message…' },
+    { promptInFlight: true, placeholder: 'Message will be queued…' },
+    { promptInFlight: undefined, placeholder: 'Message will be queued…' },
   ])(
     'uses prompt ownership when promptInFlight=$promptInFlight',
     ({ promptInFlight, placeholder }) => {

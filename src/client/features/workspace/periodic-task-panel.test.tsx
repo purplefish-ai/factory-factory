@@ -171,7 +171,7 @@ it('retains cached agent details and allows retrying a failed definition refresh
   try {
     expect(view.container.textContent).toContain('Review changes');
     expect(view.container.textContent).toContain(
-      'Could not refresh agent: Definition refresh unavailable'
+      "Couldn't refresh agent. Definition refresh unavailable"
     );
     const retry = [...view.container.querySelectorAll('button')].find(
       (button) => button.textContent === 'Retry agent'

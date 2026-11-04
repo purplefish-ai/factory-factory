@@ -5,10 +5,10 @@ import { runInBackground } from './background-task';
 describe('background client tasks', () => {
   it('reports rejected work through a contextual error toast', async () => {
     const before = toast.getHistory().length;
-    runInBackground(Promise.reject(new Error('Network unavailable')), 'Could not refresh data');
+    runInBackground(Promise.reject(new Error('Network unavailable')), "Couldn't refresh data");
     await Promise.resolve();
     expect(toast.getHistory().slice(before)).toMatchObject([
-      { type: 'error', title: 'Could not refresh data', description: 'Network unavailable' },
+      { type: 'error', title: "Couldn't refresh data", description: 'Network unavailable' },
     ]);
   });
 
@@ -25,14 +25,14 @@ describe('background client tasks', () => {
 
   it('accepts explicitly normalized synchronous navigation without reporting an error', async () => {
     const before = toast.getHistory().length;
-    runInBackground(Promise.resolve(undefined), 'Could not open workspace list');
+    runInBackground(Promise.resolve(undefined), "Couldn't open workspace list");
     await Promise.resolve();
     expect(toast.getHistory()).toHaveLength(before);
   });
 
   it('does not report an error for successful background work', async () => {
     const before = toast.getHistory().length;
-    runInBackground(Promise.resolve(), 'Could not refresh data');
+    runInBackground(Promise.resolve(), "Couldn't refresh data");
     await Promise.resolve();
     expect(toast.getHistory()).toHaveLength(before);
   });

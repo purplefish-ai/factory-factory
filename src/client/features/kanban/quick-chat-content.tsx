@@ -97,7 +97,7 @@ export function QuickChatContent({
           stopping={stopping}
           promptInFlight={promptInFlight}
           inputRef={chatState.inputRef}
-          placeholder={promptInFlight ? 'Message will be queued...' : 'Type a message...'}
+          placeholder={promptInFlight ? 'Message will be queued…' : 'Type a message…'}
           settings={chatState.chatSettings}
           capabilities={chatState.chatCapabilities}
           capabilitiesLoaded={chatState.chatCapabilitiesLoaded}

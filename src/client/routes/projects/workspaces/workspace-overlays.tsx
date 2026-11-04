@@ -138,7 +138,7 @@ export function ArchivingOverlay() {
         {/* Simple spinner */}
         <div className="h-5 w-5 animate-spin rounded-full border-2 border-muted-foreground/40 border-t-muted-foreground" />
         {/* Grayed out text */}
-        <p className="text-sm text-muted-foreground">Archiving...</p>
+        <p className="text-sm text-muted-foreground">Archiving…</p>
       </div>
     </div>
   );

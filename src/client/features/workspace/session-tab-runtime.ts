@@ -101,7 +101,7 @@ export function deriveSessionTabRuntime(
         pulse: false,
         spin: true,
         label: 'Loading',
-        description: 'Loading session...',
+        description: 'Loading session…',
         icon: SpinnerGapIcon,
         isRunning: false,
       };
@@ -112,7 +112,7 @@ export function deriveSessionTabRuntime(
         pulse: false,
         spin: true,
         label: 'Starting',
-        description: 'Launching agent...',
+        description: 'Launching agent…',
         icon: SpinnerGapIcon,
         isRunning: false,
       };
@@ -123,7 +123,7 @@ export function deriveSessionTabRuntime(
         pulse: false,
         spin: true,
         label: 'Stopping',
-        description: 'Finishing current request...',
+        description: 'Finishing current request…',
         icon: SpinnerGapIcon,
         isRunning: false,
       };

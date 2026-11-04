@@ -31,7 +31,7 @@ function truncateContent(content: string, maxLength: number): string {
   if (content.length <= maxLength) {
     return content;
   }
-  return `${content.slice(0, maxLength)}\n... (truncated)`;
+  return `${content.slice(0, maxLength)}\n… (truncated)`;
 }
 
 // =============================================================================
@@ -78,7 +78,7 @@ const TaskToolRenderer = memo(function TaskToolRenderer({
       <div className="flex items-center gap-1.5">
         <LightningIcon className="h-4 w-4 shrink-0 text-primary" />
         <span className="font-semibold text-sm">
-          {subagentType ? `${subagentType} Agent` : 'Sub-agent'}
+          {subagentType ? `${subagentType} Agent` : 'Subagent'}
         </span>
       </div>
       {description && <div className="text-xs text-muted-foreground italic">{description}</div>}

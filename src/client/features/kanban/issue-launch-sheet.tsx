@@ -119,13 +119,13 @@ export function IssueLaunchSheet({
 
       runInBackground(
         utils.workspace.listForProject.invalidate({ projectId }),
-        'Could not refresh data'
+        "Couldn't refresh data"
       );
       onOpenChange(false);
       onStarted?.();
     },
     onError: (error) => {
-      toast.error(error.message || 'Failed to start workspace');
+      toast.error(error.message || "Couldn't start workspace");
     },
   });
 
@@ -178,7 +178,7 @@ export function IssueLaunchSheet({
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent side="right" className="w-full sm:max-w-md flex flex-col">
         <SheetHeader>
-          <SheetTitle className="pr-6">Start Issue</SheetTitle>
+          <SheetTitle className="pr-6">Start issue</SheetTitle>
           <SheetDescription className="line-clamp-2">
             {issue.displayId} · {issue.title}
           </SheetDescription>
@@ -274,7 +274,7 @@ export function IssueLaunchSheet({
             className="w-full sm:w-auto"
           >
             <PlayIcon className="h-4 w-4 mr-2" />
-            {createWorkspaceMutation.isPending ? 'Starting...' : 'Start'}
+            {createWorkspaceMutation.isPending ? 'Starting…' : 'Start'}
           </Button>
         </SheetFooter>
       </SheetContent>

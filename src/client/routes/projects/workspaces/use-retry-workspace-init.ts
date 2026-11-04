@@ -19,7 +19,7 @@ export function useRetryWorkspaceInit(
     onSettled: () => {
       runInBackground(
         utils.workspace.getInitStatus.invalidate({ id: workspaceId }),
-        'Could not refresh data'
+        "Couldn't refresh data"
       );
     },
     onError: (error) => {

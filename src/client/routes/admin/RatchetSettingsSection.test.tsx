@@ -3,11 +3,14 @@
 import { createElement } from 'react';
 import { flushSync } from 'react-dom';
 import { createRoot } from 'react-dom/client';
+import { toast } from 'sonner';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { RatchetSettingsSection } from './RatchetSettingsSection';
 
 const mocks = vi.hoisted(() => ({
   updateSettingsMutate: vi.fn(),
+  onSaved: (() => undefined) as () => void,
+  invalidate: vi.fn().mockResolvedValue(undefined),
   userSettings: {
     ratchetEnabled: false,
     ratchetReplyToPrComments: true,
@@ -19,11 +22,16 @@ vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 vi.mock('@/client/lib/trpc', () => ({
   trpc: {
     useUtils: () => ({
-      userSettings: { get: { invalidate: vi.fn() } },
+      userSettings: { get: { invalidate: mocks.invalidate } },
     }),
     userSettings: {
       get: { useQuery: () => ({ data: mocks.userSettings, isLoading: false }) },
-      update: { useMutation: () => ({ mutate: mocks.updateSettingsMutate, isPending: false }) },
+      update: {
+        useMutation: (options: { onSuccess: () => void }) => {
+          mocks.onSaved = options.onSuccess;
+          return { mutate: mocks.updateSettingsMutate, isPending: false };
+        },
+      },
     },
     admin: { triggerRatchetCheck: { useMutation: () => ({ mutate: vi.fn(), isPending: false }) } },
   },
@@ -39,6 +47,18 @@ afterEach(() => {
 vi.mock('@/client/features/workspace', () => ({ RatchetWrenchIcon: () => createElement('span') }));
 
 describe('RatchetSettingsSection', () => {
+  it('refreshes autosaved settings without a success toast', () => {
+    const root = createRoot(document.createElement('div'));
+    try {
+      flushSync(() => root.render(createElement(RatchetSettingsSection)));
+      mocks.onSaved();
+      expect(mocks.invalidate).toHaveBeenCalledOnce();
+      expect(toast.success).not.toHaveBeenCalled();
+    } finally {
+      root.unmount();
+    }
+  });
+
   it('keeps Ratchet settings without auto-iteration permission controls', () => {
     const container = document.createElement('div');
     document.body.appendChild(container);

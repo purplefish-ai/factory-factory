@@ -42,7 +42,7 @@ export function ProjectLayout() {
       <>
         {error ? (
           <ProjectLoadError
-            message={`Could not refresh project: ${error.message}`}
+            message={`Couldn't refresh project. ${error.message}`}
             retry={retry}
             pending={isFetching}
           />
@@ -61,9 +61,7 @@ export function ProjectLayout() {
   }
   return (
     <ProjectLoadError
-      message={
-        error && !notFound ? `Could not load project: ${error.message}` : 'Project not found'
-      }
+      message={error && !notFound ? `Couldn't load project. ${error.message}` : 'Project not found'}
       retry={retry}
       pending={isFetching}
     />

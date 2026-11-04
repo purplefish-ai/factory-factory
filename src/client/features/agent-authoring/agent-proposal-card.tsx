@@ -77,7 +77,7 @@ function useProposalEditor({ proposal, onCreate }: EditorProps) {
       setEditing(false);
     } catch (failure) {
       setError(
-        failure instanceof Error ? failure.message : 'Could not create this agent. Try again.'
+        failure instanceof Error ? failure.message : "Couldn't create this agent. Try again."
       );
     } finally {
       submitting.current = false;
@@ -296,7 +296,7 @@ export function AgentProposalCard({ reference }: { reference: AgentProposalRefer
           projectId = owner.projectId;
         } catch {
           throw new Error(
-            'Could not load the authoring workspace project. Reload this proposal before saving.'
+            "Couldn't load the authoring workspace project. Reload this proposal before saving."
           );
         }
         let result: AgentProposal;

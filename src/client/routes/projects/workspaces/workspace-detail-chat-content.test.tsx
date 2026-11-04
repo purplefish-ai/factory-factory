@@ -109,7 +109,7 @@ describe('ChatContent runtime error placeholder', () => {
       );
       expect(transcript.mock.lastCall?.[0].header).toBeUndefined();
       expect(input.mock.lastCall?.[0].placeholder).toBe(
-        'Agent encountered an error. Type a message to retry...'
+        'Agent encountered an error. Type a message to retry…'
       );
     } finally {
       flushSync(() => root.unmount());
@@ -249,9 +249,9 @@ describe('ChatContent agent error strip', () => {
 
 describe('ChatContent message queue wording', () => {
   it.each([
-    { promptInFlight: false, placeholder: 'Type a message...' },
-    { promptInFlight: true, placeholder: 'Message will be queued...' },
-    { promptInFlight: undefined, placeholder: 'Message will be queued...' },
+    { promptInFlight: false, placeholder: 'Type a message…' },
+    { promptInFlight: true, placeholder: 'Message will be queued…' },
+    { promptInFlight: undefined, placeholder: 'Message will be queued…' },
   ])(
     'uses prompt ownership when promptInFlight=$promptInFlight',
     ({ promptInFlight, placeholder }) => {

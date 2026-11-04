@@ -46,7 +46,7 @@ describe('inline tasks', () => {
       expect(container.querySelectorAll('[aria-label="In progress"]')).toHaveLength(1);
       expect(container.textContent).not.toContain('Ready to start');
       expect(container.textContent?.indexOf('Implement tasks')).toBeLessThan(
-        container.textContent?.indexOf('Compacting context...') ?? -1
+        container.textContent?.indexOf('Compacting context…') ?? -1
       );
       render({
         ...plan,

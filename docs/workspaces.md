@@ -26,12 +26,12 @@ existing names, shown in parentheses where they differ.
   the project's **Agents** section that launches workspaces: a **scheduled
   agent** (`PeriodicTask`) or an **event agent**. Labels for saved agents name
   the kind, as in a workspace's **Scheduled agent** tool tab.
-- **Sub-agent** (`subagent`): a helper that the provider starts inside a chat.
-  It works in the chat's workspace and appears in the workspace's **Sub-agents**
-  tool tab and as a transcript tab. UI text spells it "sub-agent".
+- **Subagent** (`subagent`): a helper that the provider starts inside a chat. It
+  works in the chat's workspace and appears in the workspace's **Subagents**
+  tool tab and as a transcript tab. UI text spells it "subagent".
 - **Child workspace**: a separate workspace, with its own branch and chats, that
   a workspace's agent creates for delegated work. The parent lists its children
-  under **Child Workspaces** in the **Sub-agents** tab, next to the other
+  under **Child workspaces** in the **Subagents** tab, next to the other
   delegated work; board cards link parents and children.
 - **Issue**: a GitHub or Linear issue assigned to you, shown in the board's Todo
   column and the sidebar's Todo group. Starting an issue creates a linked

@@ -26,7 +26,7 @@ function createHarness(
 
 it('keeps a sub-agent timeline load error visible and offers retry without messages', () => {
   const onRetry = vi.fn();
-  const message = 'Some sub-agent activity could not be loaded.';
+  const message = 'Some subagent activity could not be loaded.';
   const harness = createHarness({ subagentTimelineError: { message, onRetry } });
   try {
     expect(harness.container.querySelector('[role="status"]')?.textContent).toContain(message);
@@ -43,7 +43,7 @@ it('keeps a sub-agent timeline load error visible and offers retry without messa
 });
 
 it('keeps inline tasks visible alongside sub-agent history recovery', () => {
-  const message = 'Some sub-agent activity could not be loaded.';
+  const message = 'Some subagent activity could not be loaded.';
   const harness = createHarness({
     acpPlan: {
       entries: [{ content: 'Verify recovery', status: 'in_progress', priority: 'high' }],

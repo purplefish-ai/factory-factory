@@ -65,7 +65,7 @@ export default function AdminDashboardPage() {
 
   const resetApiStats = trpc.admin.resetApiUsageStats.useMutation({
     onSuccess: () => {
-      runInBackground(refetch(), 'Could not refresh data');
+      runInBackground(refetch(), "Couldn't refresh data");
     },
     onError: (error) => {
       toast.error("Couldn't reset API usage stats", { description: error.message });
@@ -76,7 +76,7 @@ export default function AdminDashboardPage() {
 
   // Show full loading only when stats are loading (first load)
   if (isLoadingStats) {
-    return <Loading message="Loading settings..." />;
+    return <Loading message="Loading settings…" />;
   }
 
   return (
@@ -159,7 +159,7 @@ export default function AdminDashboardPage() {
                 isRetrying={projectsQuery.isFetching}
               />
             ) : (
-              <p className="text-sm text-muted-foreground">Loading projects...</p>
+              <p className="text-sm text-muted-foreground">Loading projects…</p>
             )}
           </TabsContent>
 

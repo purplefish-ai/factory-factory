@@ -19,8 +19,10 @@ export function IdeSettingsSection() {
   const utils = trpc.useUtils();
   const [isConfiguringCustomIde, setIsConfiguringCustomIde] = useState(false);
   const updateSettings = trpc.userSettings.update.useMutation({
-    onSuccess: async () => {
-      toast.success('IDE settings updated');
+    onSuccess: async (_settings, variables) => {
+      if (variables.customIdeCommand !== undefined) {
+        toast.success('IDE command saved');
+      }
       await Promise.all([
         utils.userSettings.get.invalidate(),
         utils.workspace.getAvailableIdes.invalidate(),
@@ -28,16 +30,16 @@ export function IdeSettingsSection() {
       setIsConfiguringCustomIde(false);
     },
     onError: (error) => {
-      toast.error(`Failed to update settings: ${error.message}`);
+      toast.error(`Couldn't update settings. ${error.message}`);
     },
   });
 
   const testCommand = trpc.userSettings.testCustomCommand.useMutation({
     onSuccess: () => {
-      toast.success('Command executed successfully!');
+      toast.success('Command executed');
     },
     onError: (error) => {
-      toast.error(`Command test failed: ${error.message}`);
+      toast.error(`Couldn't test the command. ${error.message}`);
     },
   });
 
@@ -83,7 +85,7 @@ export function IdeSettingsSection() {
     return (
       <Card>
         <CardHeader>
-          <CardTitle>IDE Settings</CardTitle>
+          <CardTitle>IDE settings</CardTitle>
           <CardDescription>Configure your preferred IDE for opening workspaces</CardDescription>
         </CardHeader>
         <CardContent>
@@ -96,7 +98,7 @@ export function IdeSettingsSection() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>IDE Settings</CardTitle>
+        <CardTitle>IDE settings</CardTitle>
         <CardDescription>Configure your preferred IDE for opening workspaces</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -120,7 +122,7 @@ export function IdeSettingsSection() {
 
         {selectedIde === 'custom' && (
           <div className="space-y-2">
-            <Label htmlFor="custom-command">Custom Command</Label>
+            <Label htmlFor="custom-command">Custom command</Label>
             <div className="flex flex-col gap-2 sm:flex-row">
               <Input
                 id="custom-command"
@@ -136,7 +138,7 @@ export function IdeSettingsSection() {
                 onClick={handleTestCommand}
                 disabled={testCommand.isPending || !localCustomCommand.trim()}
               >
-                {testCommand.isPending ? 'Testing...' : 'Test'}
+                {testCommand.isPending ? 'Testing…' : 'Test'}
               </Button>
             </div>
             <p className="text-xs text-muted-foreground">

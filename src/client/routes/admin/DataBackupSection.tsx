@@ -36,7 +36,7 @@ export function DataBackupSection() {
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <FileCodeIcon className="w-5 h-5" />
-          Data Backup
+          Data backup
         </CardTitle>
         <CardDescription>
           Export and import partial logical metadata for backup or migration
@@ -46,14 +46,14 @@ export function DataBackupSection() {
         <div className="flex flex-col gap-2 sm:flex-row sm:gap-4">
           <Button
             onClick={() => {
-              runInBackground(handleExport(), 'Could not export backup');
+              runInBackground(handleExport(), "Couldn't export backup");
             }}
             disabled={isExporting}
             variant="outline"
             className="w-full sm:w-auto"
           >
             <DownloadIcon className="w-4 h-4 mr-2" />
-            {isExporting ? 'Exporting...' : 'Export Data'}
+            {isExporting ? 'Exporting…' : 'Export data'}
           </Button>
           <DataImportButton variant="outline" className="w-full sm:w-auto" />
         </div>

@@ -227,7 +227,7 @@ describe('Root import results', () => {
       'Import completed'
     );
     await importBackup('{invalid');
-    expect(rpc.error.mock.calls.flat().join(' ')).toContain('Failed to read file');
+    expect(rpc.error.mock.calls.flat().join(' ')).toContain("Couldn't read file");
     expect(document.querySelector('[role="alertdialog"]')?.textContent).toContain(
       'Import completed'
     );

@@ -110,7 +110,7 @@ function LaunchControlsPreview({
           options,
           defaultValue: provider === 'CLAUDE' ? 'default' : 'low',
           loading: state === 'loading',
-          error: state === 'error' ? 'Could not load thinking and planning options' : undefined,
+          error: state === 'error' ? "Couldn't load thinking and planning options" : undefined,
           invalid,
           onChange: (effort) => update({ effort }),
           onRetry: () => undefined,
@@ -126,7 +126,7 @@ function LaunchControlsPreview({
           enabled: draft.plan,
           supported: state !== 'unsupported',
           loading: state === 'loading',
-          error: state === 'error' ? 'Could not load thinking and planning options' : undefined,
+          error: state === 'error' ? "Couldn't load thinking and planning options" : undefined,
           onChange: (plan) => update({ plan }),
         }}
       />

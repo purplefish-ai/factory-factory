@@ -35,7 +35,6 @@ export function ChatProviderDefaultsSection() {
     onMutate: () => utils.userSettings.get.cancel(),
     onSuccess: async (savedSettings) => {
       utils.userSettings.get.setData(undefined, savedSettings);
-      toast.success('Chat defaults updated');
       await utils.userSettings.get.invalidate();
     },
     onError: (error, variables) => {
@@ -60,7 +59,7 @@ export function ChatProviderDefaultsSection() {
             : model
         );
       }
-      toast.error(`Failed to update chat defaults: ${error.message}`);
+      toast.error(`Couldn't update chat defaults. ${error.message}`);
     },
   });
 
@@ -76,7 +75,7 @@ export function ChatProviderDefaultsSection() {
     return (
       <Card>
         <CardHeader>
-          <CardTitle>Chat Defaults</CardTitle>
+          <CardTitle>Chat defaults</CardTitle>
           <CardDescription>Default provider for new chats</CardDescription>
         </CardHeader>
         <CardContent>
@@ -141,7 +140,7 @@ export function ChatProviderDefaultsSection() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Chat Defaults</CardTitle>
+        <CardTitle>Chat defaults</CardTitle>
         <CardDescription>
           Default provider used when a workspace defers provider selection
         </CardDescription>

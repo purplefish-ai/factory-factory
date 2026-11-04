@@ -140,7 +140,7 @@ describe('ProjectFactoryConfigCard', () => {
     expect(save).toBeDefined();
     flushSync(() => save?.click());
     expect(toast.error).toHaveBeenCalledWith(
-      'Failed to save configuration: Write permission denied'
+      "Couldn't save configuration. Write permission denied"
     );
     renderCard();
     expect(document.querySelector('[role="dialog"]')?.textContent).toContain(

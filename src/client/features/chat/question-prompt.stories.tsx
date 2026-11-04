@@ -349,7 +349,7 @@ function ComposerFocusHarness({ question, onAnswer }: React.ComponentProps<typeo
       <div className="border-t p-3">
         <Textarea
           aria-label="Message composer"
-          placeholder="Type a message..."
+          placeholder="Type a message…"
           onChange={() => setQuestionVisible(true)}
         />
       </div>

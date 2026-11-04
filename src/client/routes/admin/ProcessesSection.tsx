@@ -149,7 +149,7 @@ export function ProcessesSectionSkeleton() {
     <Card>
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
-          Active Processes
+          Active processes
           <Skeleton className="h-5 w-16 ml-2" />
         </CardTitle>
         <CardDescription>Agent and Terminal processes currently running</CardDescription>
@@ -194,10 +194,10 @@ export function ProcessesSection({ processes }: ProcessesSectionProps) {
         } else {
           toast.info('Session was already stopped');
         }
-        runInBackground(utils.admin.getActiveProcesses.invalidate(), 'Could not refresh data');
+        runInBackground(utils.admin.getActiveProcesses.invalidate(), "Couldn't refresh data");
       } catch (error) {
         toast.error(
-          `Failed to stop session: ${error instanceof Error ? error.message : String(error)}`
+          `Couldn't stop session. ${error instanceof Error ? error.message : String(error)}`
         );
       } finally {
         setStoppingSessionIds((prev) => {
@@ -230,7 +230,7 @@ export function ProcessesSection({ processes }: ProcessesSectionProps) {
     <Card>
       <CardHeader>
         <CardTitle className="flex flex-wrap items-center gap-2">
-          Active Processes
+          Active processes
           {processes?.summary && (
             <>
               <Badge variant="secondary" className="ml-2">
@@ -266,7 +266,7 @@ export function ProcessesSection({ processes }: ProcessesSectionProps) {
                     process={process}
                     isStopping={stoppingSessionIds.has(process.sessionId)}
                     onStop={(sessionId) => {
-                      runInBackground(handleStopSession(sessionId), 'Could not stop process');
+                      runInBackground(handleStopSession(sessionId), "Couldn't stop process");
                     }}
                   />
                 ))}
@@ -330,7 +330,7 @@ export function ProcessesSection({ processes }: ProcessesSectionProps) {
                             onClick={() => {
                               runInBackground(
                                 handleStopSession(process.sessionId),
-                                'Could not stop process'
+                                "Couldn't stop process"
                               );
                             }}
                             disabled={

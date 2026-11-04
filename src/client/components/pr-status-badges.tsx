@@ -44,7 +44,7 @@ interface CIStatusDotProps {
 const CI_STATUS_TITLES: Record<CIStatus, string> = {
   PASSING: 'CI passed',
   FAILING: 'CI failed',
-  RUNNING: 'Checks running...',
+  RUNNING: 'Checks running…',
   UNKNOWN: 'CI unknown',
   NONE: 'No checks',
 };

@@ -39,12 +39,12 @@ export function ProjectFactoryConfigCard({
     onSuccess: () => {
       runInBackground(
         utils.workspace.getFactoryConfig.invalidate({ projectId }),
-        'Could not refresh data'
+        "Couldn't refresh data"
       );
       setEditPanelOpen(false);
     },
     onError: (error) => {
-      toast.error(`Failed to save configuration: ${error.message}`);
+      toast.error(`Couldn't save configuration. ${error.message}`);
     },
   });
 
@@ -59,7 +59,7 @@ export function ProjectFactoryConfigCard({
       }
     },
     onError: (error) => {
-      toast.error(`Failed to refresh configurations: ${error.message}`);
+      toast.error(`Couldn't refresh configurations. ${error.message}`);
     },
   });
 
@@ -134,7 +134,7 @@ export function ProjectFactoryConfigCard({
         {isError && (
           <div role="alert" className="space-y-3">
             <p className="text-sm text-destructive">
-              Failed to load configuration: {configError.message}
+              Couldn't load configuration. {configError.message}
             </p>
             <Button variant="outline" size="sm" onClick={() => void refetch()}>
               Retry

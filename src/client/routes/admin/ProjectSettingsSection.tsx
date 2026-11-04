@@ -61,7 +61,7 @@ export function ProjectSettingsSection({
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <FileCodeIcon className="w-5 h-5" />
-            Factory Configuration
+            Factory configuration
           </CardTitle>
           <CardDescription>
             Configuration for workspace setup and run scripts (factory-factory.json)
@@ -90,7 +90,7 @@ export function ProjectSettingsSection({
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <LinkIcon className="w-5 h-5" />
-            Issue Tracking
+            Issue tracking
           </CardTitle>
           <CardDescription>Configure the issue provider (GitHub Issues or Linear)</CardDescription>
         </CardHeader>

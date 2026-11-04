@@ -322,9 +322,9 @@ describe('WorkspacesBoardView project lifetime', () => {
   it('drops a pending column confirmation on project switch', async () => {
     await render('a');
     await click('Archive column');
-    expect(document.body.textContent).toContain('Archive Workspace');
+    expect(document.body.textContent).toContain('Archive workspace');
     await render('b');
-    expect(document.body.textContent).not.toContain('Archive Workspace');
+    expect(document.body.textContent).not.toContain('Archive workspace');
     expect(mocks.bulkArchive).not.toHaveBeenCalled();
     await click('Archive column');
     await click('Archive');

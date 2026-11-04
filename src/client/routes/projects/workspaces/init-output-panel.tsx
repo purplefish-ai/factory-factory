@@ -10,7 +10,7 @@ interface InitOutputPanelProps {
 export function InitOutputPanel({
   output,
   className,
-  emptyMessage = 'Waiting for output...',
+  emptyMessage = 'Waiting for output…',
 }: InitOutputPanelProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
 

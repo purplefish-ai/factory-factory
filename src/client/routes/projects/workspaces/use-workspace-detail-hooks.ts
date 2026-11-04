@@ -103,10 +103,7 @@ export function useWorkspaceInitStatus(
     // Invalidate workspace data when worktree becomes available so worktreePath,
     // agentSessions, etc. refresh immediately and the chat UI can connect.
     if (hasWorktreePath && !prevHasWorktreePathRef.current) {
-      runInBackground(
-        utils.workspace.get.invalidate({ id: workspaceId }),
-        'Could not refresh data'
-      );
+      runInBackground(utils.workspace.get.invalidate({ id: workspaceId }), "Couldn't refresh data");
     }
     prevHasWorktreePathRef.current = hasWorktreePath;
 
@@ -117,7 +114,7 @@ export function useWorkspaceInitStatus(
       if (isTransitionToReady || isStaleOnFirstLoad) {
         runInBackground(
           utils.workspace.get.invalidate({ id: workspaceId }),
-          'Could not refresh data'
+          "Couldn't refresh data"
         );
       }
     }

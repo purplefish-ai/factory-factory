@@ -33,7 +33,7 @@ type Story = StoryObj<typeof meta>;
 export const Desktop: Story = {
   play: async ({ canvasElement, args }) => {
     const canvas = within(canvasElement);
-    await userEvent.click(canvas.getByRole('button', { name: 'New Workspace' }));
+    await userEvent.click(canvas.getByRole('button', { name: 'New workspace' }));
     await expect(args.onNewWorkspace).toHaveBeenCalledOnce();
     await expect(canvas.queryByRole('button', { name: 'New Task' })).not.toBeInTheDocument();
   },
@@ -44,7 +44,7 @@ export const Mobile: Story = {
   args: { isMobile: true },
   globals: { viewport: { value: 'mobile1', isRotated: false } },
   play: async ({ canvasElement, args }) => {
-    const button = within(canvasElement).getByRole('button', { name: 'New Workspace' });
+    const button = within(canvasElement).getByRole('button', { name: 'New workspace' });
     await expect(button).toHaveTextContent(/^\s*$/);
     await userEvent.click(button);
     await expect(args.onNewWorkspace).toHaveBeenCalledOnce();

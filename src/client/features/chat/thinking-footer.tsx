@@ -52,7 +52,7 @@ export function ThinkingFooter({
             aria-label="Thinking preview"
             className="max-h-60 max-w-[calc(100vw-2rem)] overflow-y-auto whitespace-pre-wrap break-words text-sm motion-reduce:animate-none"
           >
-            {formatThinkingText(latestThinking) || 'Agent is working...'}
+            {formatThinkingText(latestThinking) || 'Agent is working…'}
           </PopoverContent>
         </Popover>
       </div>

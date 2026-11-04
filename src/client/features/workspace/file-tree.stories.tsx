@@ -165,5 +165,5 @@ export const LoadingDirectory: Story = {
 export const DirectoryError: Story = {
   args: { directoryState: 'error' },
   play: async ({ canvasElement }) =>
-    checkPlaceholder(canvasElement, 'Failed to load directory contents'),
+    checkPlaceholder(canvasElement, "Couldn't load directory contents"),
 };

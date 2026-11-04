@@ -509,7 +509,7 @@ describe.each<Surface>(['full', 'quick'])('%s chat session collection', (surface
 
   it.each([
     { message: 'Delete failed', notification: 'Delete failed' },
-    { message: '', notification: 'Failed to delete session' },
+    { message: '', notification: "Couldn't delete session" },
   ])(
     'reports deletion failure and rolls back the originating cache after navigation: $notification',
     async ({ message, notification }) => {

@@ -48,7 +48,7 @@ export function ProjectHeaderNavigation({
       />
       {projectsError ? (
         <span role="alert" className="sr-only">
-          Could not load projects: {projectsError.message}
+          Couldn't load projects. {projectsError.message}
         </span>
       ) : null}
     </div>

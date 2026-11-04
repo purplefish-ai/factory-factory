@@ -112,7 +112,7 @@ const MainViewTabSchema = z
     if (tab.type === 'subagent' && !tab.subagentSelection) {
       context.addIssue({
         code: z.ZodIssueCode.custom,
-        message: 'Sub-agent tabs require a selection snapshot',
+        message: 'Subagent tabs require a selection snapshot',
         path: ['subagentSelection'],
       });
     }
@@ -127,7 +127,7 @@ const SCROLL_STATE_PERSIST_DEBOUNCE_MS = 120;
 // =============================================================================
 
 function getSubagentTabLabel(selection: SubagentSelection): string {
-  return selection.subagent.name?.trim() || `Sub-agent ${selection.subagent.id.slice(0, 8)}`;
+  return selection.subagent.name?.trim() || `Subagent ${selection.subagent.id.slice(0, 8)}`;
 }
 
 function getSubagentTabId(selection: SubagentSelection): string {

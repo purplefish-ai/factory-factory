@@ -60,7 +60,7 @@ export const WorkspaceDetailHeaderSlot = memo(function WorkspaceDetailHeaderSlot
 
   const utils = trpc.useUtils();
   const renameMutation = trpc.workspace.rename.useMutation({
-    onError: (error) => toast.error(`Failed to rename workspace: ${error.message}`),
+    onError: (error) => toast.error(`Couldn't rename workspace. ${error.message}`),
   });
 
   const [detailsOpen, setDetailsOpen] = useState(false);
@@ -196,7 +196,7 @@ export const WorkspaceDetailHeaderSlot = memo(function WorkspaceDetailHeaderSlot
             running={running}
             isCreatingSession={isCreatingSession}
             handleQuickAction={(name, prompt) => {
-              runInBackground(handleQuickAction(name, prompt), 'Could not run quick action');
+              runInBackground(handleQuickAction(name, prompt), "Couldn't run quick action");
             }}
           />
           <div className="hidden @[72rem]/header:flex items-center gap-2">
@@ -245,10 +245,7 @@ export const WorkspaceDetailHeaderSlot = memo(function WorkspaceDetailHeaderSlot
                     running={running}
                     isCreatingSession={isCreatingSession}
                     handleQuickAction={(name, prompt) => {
-                      runInBackground(
-                        handleQuickAction(name, prompt),
-                        'Could not run quick action'
-                      );
+                      runInBackground(handleQuickAction(name, prompt), "Couldn't run quick action");
                     }}
                   />
                   <WorkspaceIssueLink workspace={workspace} renderAsMenuItem />

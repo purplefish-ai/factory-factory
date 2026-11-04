@@ -178,7 +178,7 @@ export const WorkspaceDetailView = memo(function WorkspaceDetailView({
   const { handleQuickAction: runSessionQuickAction } = sessionTabs;
   const handleQuickAction = useCallback(
     (name: string, prompt: string) => {
-      runInBackground(runSessionQuickAction(name, prompt), 'Could not run quick action');
+      runInBackground(runSessionQuickAction(name, prompt), "Couldn't run quick action");
     },
     [runSessionQuickAction]
   );

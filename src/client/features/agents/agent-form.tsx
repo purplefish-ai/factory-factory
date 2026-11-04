@@ -49,7 +49,7 @@ export function AgentForm({ initialValues, onSave, onCancel }: AgentFormProps) {
         ...resolveAgentSchedule({ cadence, scheduledTime }, baseline),
       });
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'Could not save agent. Please try again.');
+      setError(cause instanceof Error ? cause.message : "Couldn't save agent. Please try again.");
     } finally {
       pendingRef.current = false;
       setPending(false);
@@ -124,7 +124,7 @@ export function AgentForm({ initialValues, onSave, onCancel }: AgentFormProps) {
           Cancel
         </Button>
         <Button type="submit" disabled={pending}>
-          {pending ? 'Saving…' : baseline ? 'Save changes' : 'Create Agent'}
+          {pending ? 'Saving…' : baseline ? 'Save changes' : 'Create agent'}
         </Button>
       </div>
     </form>

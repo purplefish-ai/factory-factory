@@ -192,7 +192,7 @@ function SubagentTabItem({
       icon={
         <span
           role="img"
-          aria-label={`${subagent.status} sub-agent`}
+          aria-label={`${subagent.status} subagent`}
           className={cn(
             'inline-flex shrink-0',
             (subagent.status === 'starting' || subagent.status === 'running') &&

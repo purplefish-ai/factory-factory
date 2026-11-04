@@ -61,7 +61,7 @@ export const InitStatusBanner = memo(function InitStatusBanner({
                   ) : (
                     <ArrowsClockwiseIcon className="h-3.5 w-3.5 mr-1.5" />
                   )}
-                  {retryPending ? 'Retrying...' : 'Retry setup'}
+                  {retryPending ? 'Retrying…' : 'Retry setup'}
                 </Button>
               )}
               {banner.showPlay && (

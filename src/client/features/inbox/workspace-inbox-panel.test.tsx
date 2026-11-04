@@ -147,7 +147,7 @@ describe('WorkspaceInboxPanel', () => {
     await waitForText('Delivery could not be confirmed. Retrying may notify the agent again.');
     expect(requests.some((item) => item.path === 'workspace.retryMailWake')).toBe(false);
     await click('Retry mail notification');
-    await waitForText('Could not retry mail notification');
+    await waitForText("Couldn't retry mail notification");
     fail = false;
     await click('Retry mail notification');
     await waitForText('Retrying notification');
@@ -214,7 +214,7 @@ describe('WorkspaceInboxPanel', () => {
     await click('Review ready');
     await waitForText('Full report body');
     await click('Acknowledge');
-    await waitForText('Could not acknowledge message');
+    await waitForText("Couldn't acknowledge message");
     expect(container.textContent).not.toContain('Acknowledged');
   });
   it('confirms an idempotent acknowledgement using the exact selected message', async () => {
@@ -280,7 +280,7 @@ describe('WorkspaceInboxPanel', () => {
       await click('Review ready');
       await waitForText('Report');
       await click('Acknowledge');
-      await waitForText('Could not acknowledge message');
+      await waitForText("Couldn't acknowledge message");
       expect(reads).toBe(2);
       expect(container.textContent).not.toContain('Acknowledged');
     }
@@ -409,7 +409,7 @@ describe('WorkspaceInboxPanel', () => {
     render();
     await waitForText('Review ready');
     await click('Review ready');
-    await waitForText('Could not read message');
+    await waitForText("Couldn't read message");
     expect(container.querySelector<HTMLButtonElement>('[data-mail-ack]')?.disabled).toBe(true);
     fail = false;
     await click('Try again');
@@ -422,7 +422,7 @@ describe('WorkspaceInboxPanel', () => {
     };
     render();
     expect(container.textContent).toContain('Loading inbox');
-    await waitForText('Could not load inbox');
+    await waitForText("Couldn't load inbox");
     respond = () => ({ items: [], revision: 0, nextCursor: null });
     await click('Try again');
     await waitForText('No messages yet');

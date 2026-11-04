@@ -126,7 +126,7 @@ describe('TranscriptRenderingFixture loading status', () => {
       expect(container.querySelectorAll('.animate-spin')).toHaveLength(1);
 
       render(null);
-      expect(container.textContent).toBe('Loading session...');
+      expect(container.textContent).toBe('Loading session…');
       expect(container.querySelectorAll('.animate-spin')).toHaveLength(1);
     } finally {
       root.unmount();

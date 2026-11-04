@@ -88,7 +88,7 @@ for (const width of [768, 810, 1024, 1280]) {
     await page.setViewportSize({ width, height: 1000 });
     await assertEditorBounds(page);
     await page.getByRole('button', { name: 'Cancel', exact: true }).click();
-    await page.getByRole('button', { name: 'Create Agent', exact: true }).click();
+    await page.getByRole('button', { name: 'Create agent', exact: true }).click();
     await assertEditorBounds(page);
     const name = page.getByRole('textbox', { name: 'Name', exact: true });
     const instructions = page.getByRole('textbox', { name: 'Instructions', exact: true });

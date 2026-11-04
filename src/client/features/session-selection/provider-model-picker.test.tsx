@@ -166,37 +166,37 @@ it('shows a compact retry action when selection defaults cannot load', () => {
     provider: null,
     model: undefined,
     models: [],
-    error: 'Could not load chat defaults',
+    error: "Couldn't load chat defaults",
     onRetry,
   });
   expect(trigger.textContent).toContain('Retry selection');
   expect(trigger.disabled).toBe(false);
-  expect(trigger.title).toBe('Could not load chat defaults');
+  expect(trigger.title).toBe("Couldn't load chat defaults");
   flushSync(() => trigger.click());
   expect(onRetry).toHaveBeenCalledOnce();
 });
 
 it('explains why an error retry is disabled while keeping its loading failure accessible', () => {
   const { trigger } = mount({
-    error: 'Could not load chat defaults',
+    error: "Couldn't load chat defaults",
     onRetry: vi.fn(),
     disabled: true,
     disabledReason: 'Maximum 3 sessions per workspace',
   });
   expect(trigger.disabled).toBe(true);
   expect(trigger.getAttribute('aria-description')).toBe('Maximum 3 sessions per workspace');
-  expect(trigger.getAttribute('aria-label')).toContain('Could not load chat defaults');
+  expect(trigger.getAttribute('aria-label')).toContain("Couldn't load chat defaults");
   expect(trigger.title).toContain('Maximum 3 sessions per workspace');
 });
 
 it('clears an obsolete disabled reason when retry becomes available', () => {
   const { trigger } = mount({
-    error: 'Could not load chat defaults',
+    error: "Couldn't load chat defaults",
     onRetry: vi.fn(),
     disabled: false,
     disabledReason: 'Maximum 3 sessions per workspace',
   });
   expect(trigger.disabled).toBe(false);
-  expect(trigger.title).toBe('Could not load chat defaults');
+  expect(trigger.title).toBe("Couldn't load chat defaults");
   expect(trigger.getAttribute('aria-description')).toBeNull();
 });

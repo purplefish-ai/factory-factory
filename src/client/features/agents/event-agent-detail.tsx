@@ -113,7 +113,7 @@ export function EventAgentDetail({
           {agent.managementRevision}
         </p>
         <Button onClick={onEdit} disabled={archived}>
-          Edit Agent
+          Edit agent
         </Button>
         {archived && (
           <p className="text-sm text-muted-foreground">

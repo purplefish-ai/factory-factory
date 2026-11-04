@@ -12,7 +12,7 @@ export function DevLogsPanel({
   output,
   outputEndRef,
   className,
-  emptyMessage = 'Waiting for dev server output...',
+  emptyMessage = 'Waiting for dev server output…',
 }: DevLogsPanelProps) {
   const containerRef = useRef<HTMLDivElement>(null);
 

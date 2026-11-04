@@ -106,7 +106,7 @@ export function UsageStatsPopover({ tokenStats }: UsageStatsPopoverProps) {
 
   return (
     <div className="p-3">
-      <h4 className="mb-3 text-sm font-medium">Session Usage</h4>
+      <h4 className="mb-3 text-sm font-medium">Session usage</h4>
 
       {/* Context Window Progress */}
       {tokenStats.contextWindow && usedTokens != null && (

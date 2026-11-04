@@ -145,7 +145,7 @@ vi.mock('@/client/features/workspace/workspace-content-view', () => ({
     return createElement(
       'main',
       null,
-      props.sessions?.length === 0 ? (props.emptyState ?? 'Start a Session') : props.children
+      props.sessions?.length === 0 ? (props.emptyState ?? 'Start a session') : props.children
     );
   },
 }));
@@ -532,7 +532,7 @@ describe('sessionless setup recovery', () => {
     props.sessionTabs.sessions = [];
     const { container, root } = renderView(props);
     try {
-      expect(container.textContent).toContain('Start a Session');
+      expect(container.textContent).toContain('Start a session');
       expect(container.textContent).not.toContain('Retry setup');
     } finally {
       act(() => root.unmount());

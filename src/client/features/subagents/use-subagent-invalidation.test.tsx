@@ -105,11 +105,11 @@ describe('live sub-agent list invalidation', () => {
           // Flush React Query's scheduled observer notifications inside act.
           await act(async () => new Promise((resolve) => setTimeout(resolve, 0)));
           expect(
-            container.querySelector('[data-session="session-a"] [aria-label="Active sub-agents"]')
+            container.querySelector('[data-session="session-a"] [aria-label="Active subagents"]')
               ?.textContent
           ).toBe(String(firstCount));
           expect(
-            container.querySelector('[data-session="session-b"] [aria-label="Active sub-agents"]')
+            container.querySelector('[data-session="session-b"] [aria-label="Active subagents"]')
               ?.textContent
           ).toBe(String(secondCount));
         },

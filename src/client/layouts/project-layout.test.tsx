@@ -148,8 +148,8 @@ function button(container: HTMLElement, label: string) {
   return match!;
 }
 async function editDraft(container: HTMLElement) {
-  await waitForReact(() => expect(container.textContent).toContain('Edit Agent'));
-  actFlushSync(() => button(container, 'Edit Agent').click());
+  await waitForReact(() => expect(container.textContent).toContain('Edit agent'));
+  actFlushSync(() => button(container, 'Edit agent').click());
   const input = container.querySelector<HTMLInputElement>('input[name="name"]');
   expect(input).not.toBeNull();
   actFlushSync(() => {
@@ -202,13 +202,13 @@ it('distinguishes first-load transport failure and retries the real outlet', asy
   expect(container.textContent).not.toContain('Scheduled review');
   projectRead.mockResolvedValue(projects[0]);
   actFlushSync(() => button(container, 'Retry project').click());
-  await waitForReact(() => expect(container.textContent).toContain('Edit Agent'));
+  await waitForReact(() => expect(container.textContent).toContain('Edit agent'));
 });
 it('reports actual first-load NOT_FOUND without exposing an Agent editor', async () => {
   projectRead.mockRejectedValue(notFound());
   const { container } = render();
   await waitForReact(() => expect(container.textContent).toContain('Project not found'));
-  expect(container.textContent).not.toContain('Could not load project');
+  expect(container.textContent).not.toContain("Couldn't load project");
   expect(container.querySelector('input[name="name"]')).toBeNull();
 });
 it('does not keep a deleted project outlet merely because cached data exists', async () => {

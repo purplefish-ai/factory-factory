@@ -128,7 +128,7 @@ export function SlashCommandPalette({
         <CommandList>
           <CommandEmpty>
             {isLoading ? (
-              <span className="text-xs text-muted-foreground">Loading commands...</span>
+              <span className="text-xs text-muted-foreground">Loading commands…</span>
             ) : (
               'No commands found'
             )}

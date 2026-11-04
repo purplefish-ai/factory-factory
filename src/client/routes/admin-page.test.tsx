@@ -43,20 +43,20 @@ vi.mock('@/client/features/workspace', () => ({
     createElement('a', { href: `/projects/${projectSlug}/workspaces` }, 'Back'),
 }));
 vi.mock('./admin/index', () => ({
-  AdversarialReviewSection: () => createElement('section', null, 'Adversarial Review'),
-  ApiUsageSection: () => createElement('section', null, 'API Usage'),
+  AdversarialReviewSection: () => createElement('section', null, 'Adversarial review'),
+  ApiUsageSection: () => createElement('section', null, 'API usage'),
   AppearanceSettingsSection: () => createElement('section', null, 'Appearance Settings'),
   ProcessesSection: () => createElement('section', null, 'Processes'),
   ProcessesSectionSkeleton: () => createElement('section', null, 'Processes Loading'),
   VoiceModeSection: () => createElement('section', null, 'Voice Mode'),
   NotificationSettingsSection: () => createElement('section', null, 'Notification Settings'),
   ProjectSettingsSection: () => createElement('section', null, 'Factory Configuration'),
-  AppInfoSection: () => createElement('section', null, 'App Info'),
-  ChatProviderDefaultsSection: () => createElement('section', null, 'Chat Defaults'),
-  ChildWorkspaceSettingsSection: () => createElement('section', null, 'Child Workspaces'),
+  AppInfoSection: () => createElement('section', null, 'App info'),
+  ChatProviderDefaultsSection: () => createElement('section', null, 'Chat defaults'),
+  ChildWorkspaceSettingsSection: () => createElement('section', null, 'Child workspaces'),
   CliAuthSection: () => createElement('section', null, 'CLI Authentication'),
   DataBackupSection: () => createElement('section', null, 'Data Backup'),
-  IdeSettingsSection: () => createElement('section', null, 'IDE Settings'),
+  IdeSettingsSection: () => createElement('section', null, 'IDE settings'),
   RatchetSettingsSection: () => createElement('section', null, 'Ratchet Pull Requests'),
   ServerLogsSection: () => createElement('section', null, 'Server Logs'),
   WorktreeCleanupSection: () => createElement('section', null, 'Worktree Cleanup'),
@@ -171,14 +171,14 @@ describe('AdminDashboardPage settings tabs', () => {
       root.render(createElement(AdminDashboardPage));
     });
 
-    expect(container.textContent).toContain('General Settings');
-    expect(container.textContent).toContain('Project Settings');
+    expect(container.textContent).toContain('General settings');
+    expect(container.textContent).toContain('Project settings');
     expect(container.textContent).not.toContain('Manage scheduled agents and their runs.');
     expect(container.querySelector('a[href="/projects/alpha/agents"]')).toBeNull();
     expect(container.textContent).not.toContain('Periodic Tasks');
     const tabs = Array.from(container.querySelectorAll('[role="tab"]')) as HTMLElement[];
-    const generalTab = tabs.find((tab) => tab.textContent?.includes('General Settings'));
-    const projectTab = tabs.find((tab) => tab.textContent?.includes('Project Settings'));
+    const generalTab = tabs.find((tab) => tab.textContent?.includes('General settings'));
+    const projectTab = tabs.find((tab) => tab.textContent?.includes('Project settings'));
 
     expect(generalTab).toBeDefined();
     expect(projectTab).not.toBeNull();
@@ -249,7 +249,11 @@ describe('AdminDashboardPage load failures', () => {
       expect.stringContaining("Couldn't load API usage"),
       expect.stringContaining("Couldn't load active processes"),
     ]);
-    expect(container.textContent).not.toContain('API Usage');
+    expect(
+      [...container.querySelectorAll('section')].some(
+        (section) => section.textContent === 'API usage'
+      )
+    ).toBe(false);
     expect(container.textContent).not.toContain('Processes');
     expect(container.textContent).toContain('Notification Settings');
 
@@ -266,7 +270,7 @@ describe('AdminDashboardPage load failures', () => {
     const { container, root } = renderAdmin();
 
     const projectTab = Array.from(container.querySelectorAll<HTMLElement>('[role="tab"]')).find(
-      (tab) => tab.textContent?.includes('Project Settings')
+      (tab) => tab.textContent?.includes('Project settings')
     );
     flushSync(() => {
       projectTab?.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0 }));
@@ -275,7 +279,7 @@ describe('AdminDashboardPage load failures', () => {
 
     const panel = container.querySelector('[role="tabpanel"][data-state="active"]');
     expect(panel?.querySelector('[role="alert"]')?.textContent).toContain("Couldn't load projects");
-    expect(panel?.textContent).not.toContain('Loading projects...');
+    expect(panel?.textContent).not.toContain('Loading projects…');
 
     clickButton(container, 'Retry');
     expect(mocks.refetchProjects).toHaveBeenCalledOnce();

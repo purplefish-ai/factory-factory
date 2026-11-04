@@ -228,7 +228,7 @@ function useNativeLaunchOptions(
   );
   // The query is keyed by input; confirmed native IDs may differ from requested aliases.
   const native = query.data?.provider === provider ? query.data : undefined;
-  const error = !native && query.error ? 'Could not load thinking and planning options' : undefined;
+  const error = !native && query.error ? "Couldn't load thinking and planning options" : undefined;
   return {
     native,
     error,
@@ -310,7 +310,7 @@ export function useSessionLaunchSelection(
   );
   const account = useCodexAccountControl(scopeKey, selection);
   const error =
-    options.error ?? (!settings && settingsError ? 'Could not load chat defaults' : undefined);
+    options.error ?? (!settings && settingsError ? "Couldn't load chat defaults" : undefined);
   const loading = selection.loading && !error;
   const retry = () => {
     if (!settings && settingsError) {

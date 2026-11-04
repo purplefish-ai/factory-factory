@@ -199,7 +199,7 @@ function MobileAgentsSession() {
                     ) : formMode ? (
                       <>
                         <h2 className="text-xl font-semibold">
-                          {formMode === 'edit' ? 'Edit Agent' : 'Create Agent'}
+                          {formMode === 'edit' ? 'Edit agent' : 'Create agent'}
                         </h2>
                         <AgentForm
                           key={`${formMode}-${selectedId}`}

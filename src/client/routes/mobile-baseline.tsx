@@ -216,7 +216,7 @@ function GeneralMobileBaselinePage() {
           </Button>
           <Button size="sm">
             <PlusIcon className="h-4 w-4 mr-2" />
-            New Workspace
+            New workspace
           </Button>
         </PageHeader>
 
@@ -238,8 +238,8 @@ function GeneralMobileBaselinePage() {
               event.preventDefault();
             }}
             isSubmitting={false}
-            submitLabel="Add Project"
-            submittingLabel="Adding..."
+            submitLabel="Add project"
+            submittingLabel="Adding…"
             footerActions={
               <Button variant="secondary" type="button">
                 Cancel
@@ -267,7 +267,7 @@ function GeneralMobileBaselinePage() {
           <Sheet open={reviewOpen} onOpenChange={setReviewOpen}>
             <SheetContent side="bottom" className="h-[88dvh] w-full max-w-none p-0">
               <SheetHeader className="sr-only">
-                <SheetTitle>Review Details</SheetTitle>
+                <SheetTitle>Review details</SheetTitle>
                 <SheetDescription>Mobile review request detail panel</SheetDescription>
               </SheetHeader>
               <PRDetailPanel

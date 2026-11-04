@@ -74,11 +74,11 @@ export function useSessionCollectionCommands({
     onSuccess: (_session, variables) => {
       runInBackground(
         utils.session.listSessions.invalidate({ workspaceId: variables.workspaceId }),
-        'Could not refresh data'
+        "Couldn't refresh data"
       );
     },
     onError: (error) => {
-      toast.error(error.message || 'Failed to create or start session');
+      toast.error(error.message || "Couldn't create or start session");
     },
   });
   const deleteSession = trpc.session.deleteSession.useMutation({
@@ -98,13 +98,13 @@ export function useSessionCollectionCommands({
           context.previousSessions
         );
       }
-      toast.error(error.message || 'Failed to delete session');
+      toast.error(error.message || "Couldn't delete session");
     },
     onSettled: (_data, _error, _variables, context) => {
       if (context?.workspaceId) {
         runInBackground(
           utils.session.listSessions.invalidate({ workspaceId: context.workspaceId }),
-          'Could not refresh data'
+          "Couldn't refresh data"
         );
       }
     },

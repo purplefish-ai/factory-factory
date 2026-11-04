@@ -31,11 +31,11 @@ export function useReviewActions({
 
   const { mutate: submitApproval, isPending: approving } = trpc.prReview.submitReview.useMutation({
     onSuccess: (_data, variables) => {
-      runInBackground(utils.prReview.listReviewRequests.invalidate(), 'Could not refresh data');
+      runInBackground(utils.prReview.listReviewRequests.invalidate(), "Couldn't refresh data");
       if (!mounted.current) {
         return;
       }
-      toast.success('PR approved successfully');
+      toast.success('PR approved');
 
       const approvedKey = `${variables.repo}#${variables.number}`;
       setPrDetails((prev) => {
@@ -51,7 +51,7 @@ export function useReviewActions({
     },
     onError: (err) => {
       if (mounted.current) {
-        toast.error(`Failed to approve PR: ${err.message}`);
+        toast.error(`Couldn't approve PR. ${err.message}`);
       }
     },
   });
@@ -72,7 +72,7 @@ export function useReviewActions({
       }
     } catch (_err) {
       if (mounted.current) {
-        toast.error('Failed to load diff');
+        toast.error("Couldn't load diff");
       }
     } finally {
       if (mounted.current) {
