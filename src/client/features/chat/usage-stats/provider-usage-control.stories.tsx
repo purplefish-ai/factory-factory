@@ -101,11 +101,14 @@ function ConnectedComposerPreview() {
   const [client] = useState(() =>
     trpc.createClient({
       links: [
-        () => () =>
-          observable((observer) => {
-            observer.next({ result: { data: plan } });
-            observer.complete();
-          }),
+        () =>
+          ({ op }) =>
+            observable((observer) => {
+              observer.next({
+                result: { data: op.path === 'session.listQuickActions' ? [] : plan },
+              });
+              observer.complete();
+            }),
       ],
     })
   );

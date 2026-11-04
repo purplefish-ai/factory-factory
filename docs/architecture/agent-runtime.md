@@ -1260,8 +1260,15 @@ and an archive warning when a parent has active children.
 ## Quick actions
 
 Workspace quick actions are markdown-driven from `prompts/quick-actions/`
-(frontmatter metadata + prompt body). Agent quick actions create follow-up
-sessions and auto-send the prompt content once the session is ready.
+(frontmatter metadata + prompt body); that directory is their only source. The
+composer's ⚡ **Quick actions** menu (`Cmd/Ctrl+Shift+A`) lists the agent
+actions and offers **Run in this chat**, which sends the prompt into the current
+chat, or **Run in new chat**, which creates a chat named after the action and
+auto-sends the prompt once it is ready. "Run in new chat" is disabled, with the
+reason shown, while a new chat can't start (workspace setup, the active chat
+limit, the chat list still loading, or a chat being created or closed).
+Composers without a workspace chat collection offer only "Run in this chat". The
+workspace header's **Create PR** runs the `create-pr` action in a new chat.
 
 `prompts/` is copied into `dist/` on build and packaged alongside the unpacked
 Electron backend, so a new prompt file ships without a code change.

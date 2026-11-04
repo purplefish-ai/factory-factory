@@ -36,6 +36,7 @@ interface SessionTabBarProps {
   onCreateSession: (codexAccountId?: string) => void;
   onCloseSession: (sessionId: string) => void;
   disabled?: boolean;
+  createDisabled?: boolean;
   className?: string;
   readOnly?: boolean;
 }
@@ -202,6 +203,7 @@ export function SessionTabBar({
   onCreateSession,
   onCloseSession,
   disabled = false,
+  createDisabled = false,
   className,
   readOnly = false,
 }: SessionTabBarProps) {
@@ -329,7 +331,7 @@ export function SessionTabBar({
         <NewSessionAccountAction
           provider={sessions[0]?.provider ?? workspaceProvider}
           onCreate={onCreateSession}
-          disabled={disabled}
+          disabled={disabled || createDisabled}
         />
       )}
     </div>

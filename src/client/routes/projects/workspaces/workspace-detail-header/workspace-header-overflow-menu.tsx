@@ -28,7 +28,27 @@ import { OpenDevAppAction } from './open-dev-app-action';
 import { OpenInIdeAction } from './open-in-ide-action';
 import type { WorkspaceHeaderWorkspace, WorkspaceSessionManagement } from './types';
 import { WorkspaceBranchLink } from './workspace-branch-link';
+import { WorkspaceDetailsDialog } from './workspace-details-dialog';
 import { WorkspaceProviderSettings } from './workspace-provider-settings';
+
+/**
+ * Controls that the header also shows inline at wider widths. Each inline
+ * wrapper carries `data-header-inline="<id>"`; the menu leaves out the ones
+ * visible when it opens, so it never repeats a control on screen.
+ */
+export type HeaderInlineControl = 'create-pr' | 'issue' | 'ide';
+
+function getVisibleInlineControls(trigger: HTMLElement | null): ReadonlySet<string> {
+  const header = trigger?.closest('header');
+  if (!header) {
+    return new Set();
+  }
+  return new Set(
+    [...header.querySelectorAll<HTMLElement>('[data-header-inline]')]
+      .filter((element) => element.getClientRects().length > 0)
+      .map((element) => element.dataset.headerInline ?? '')
+  );
+}
 
 export function WorkspaceHeaderOverflowMenu({
   workspace,
@@ -48,9 +68,13 @@ export function WorkspaceHeaderOverflowMenu({
   openInIde: WorkspaceSessionManagement['openInIde'];
   archivePending: boolean;
   onArchiveRequest: () => void;
-  statusContent?: ReactNode;
+  /** Items that are inline at wider widths; receives whether each is visible inline. */
+  statusContent?: (isInline: (control: HeaderInlineControl) => boolean) => ReactNode;
   isArchived: boolean;
 }) {
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const [inlineControls, setInlineControls] = useState<ReadonlySet<string>>(new Set());
+  const isInline = (control: HeaderInlineControl) => inlineControls.has(control);
   const [providerSettingsOpen, setProviderSettingsOpen] = useState(false);
   const [renameOpen, setRenameOpen] = useState(false);
   const [renameValue, setRenameValue] = useState('');
@@ -94,48 +118,18 @@ export function WorkspaceHeaderOverflowMenu({
     }
   };
 
-  const initialPrompt = workspace.initialPrompt;
-  const hasContent = workspace.description || initialPrompt;
-
   return (
     <>
-      <Dialog open={detailsOpen} onOpenChange={setDetailsOpen}>
-        <DialogContent className="sm:max-w-lg" aria-describedby={undefined}>
-          <DialogHeader>
-            <DialogTitle>Workspace details</DialogTitle>
-          </DialogHeader>
-          {hasContent ? (
-            <div className="flex flex-col gap-4">
-              {workspace.description && (
-                <div className="flex flex-col gap-1">
-                  <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                    Description
-                  </span>
-                  <p className="text-sm whitespace-pre-wrap">{workspace.description}</p>
-                </div>
-              )}
-              {initialPrompt && (
-                <div className="flex flex-col gap-1">
-                  <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                    Initial prompt
-                  </span>
-                  <p className="text-sm whitespace-pre-wrap">{initialPrompt}</p>
-                </div>
-              )}
-            </div>
-          ) : (
-            <p className="text-sm text-muted-foreground">
-              No description or initial prompt was provided for this workspace.
-            </p>
-          )}
-        </DialogContent>
-      </Dialog>
+      <WorkspaceDetailsDialog
+        open={detailsOpen}
+        onOpenChange={setDetailsOpen}
+        workspace={workspace}
+      />
       <WorkspaceProviderSettings
         workspace={workspace}
         workspaceId={workspaceId}
         open={providerSettingsOpen}
         onOpenChange={setProviderSettingsOpen}
-        showTrigger={false}
       />
       <Dialog open={renameOpen && !isArchived} onOpenChange={setRenameOpen}>
         <DialogContent className="sm:max-w-sm" aria-describedby={undefined}>
@@ -171,14 +165,21 @@ export function WorkspaceHeaderOverflowMenu({
           </DialogFooter>
         </DialogContent>
       </Dialog>
-      <DropdownMenu>
+      <DropdownMenu
+        onOpenChange={(open) => {
+          if (open) {
+            setInlineControls(getVisibleInlineControls(triggerRef.current));
+          }
+        }}
+      >
         <Tooltip>
           <TooltipTrigger asChild>
             <DropdownMenuTrigger asChild>
               <Button
+                ref={triggerRef}
                 variant="ghost"
                 size="icon"
-                className="h-6 w-6 md:h-9 md:w-9"
+                className="h-6 w-6 md:h-8 md:w-8"
                 aria-label="More actions"
               >
                 <DotsThreeIcon className="h-3 w-3 md:h-4 md:w-4" />
@@ -189,7 +190,7 @@ export function WorkspaceHeaderOverflowMenu({
         </Tooltip>
         <DropdownMenuContent align="end" className="w-60">
           <DropdownMenuLabel>Workspace actions</DropdownMenuLabel>
-          {statusContent}
+          {statusContent?.(isInline)}
           <DropdownMenuItem
             onSelect={(event) => {
               event.preventDefault();
@@ -226,14 +227,16 @@ export function WorkspaceHeaderOverflowMenu({
             Provider settings
           </DropdownMenuItem>
           <WorkspaceBranchLink workspace={workspace} renderAsMenuItem />
-          <OpenInIdeAction
-            workspaceId={workspaceId}
-            hasWorktreePath={Boolean(workspace.worktreePath)}
-            availableIdes={availableIdes}
-            preferredIde={preferredIde}
-            openInIde={openInIde}
-            renderAsMenuItem
-          />
+          {!isInline('ide') && (
+            <OpenInIdeAction
+              workspaceId={workspaceId}
+              hasWorktreePath={Boolean(workspace.worktreePath)}
+              availableIdes={availableIdes}
+              preferredIde={preferredIde}
+              openInIde={openInIde}
+              renderAsMenuItem
+            />
+          )}
           <OpenDevAppAction workspaceId={workspaceId} renderAsMenuItem />
           <DropdownMenuSeparator />
           <ArchiveActionButton

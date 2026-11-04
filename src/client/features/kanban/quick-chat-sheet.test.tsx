@@ -16,6 +16,11 @@ const mocks = vi.hoisted(() => ({
   refetch: vi.fn(),
   workspaceProvider: 'CLAUDE' as 'CLAUDE' | 'CODEX' | 'WORKSPACE_DEFAULT',
   content: vi.fn(),
+  maxSessions: 2,
+  maxSessionsError: false,
+  retryLimit: vi.fn(),
+  deleting: false,
+  worktreePath: '/tmp/worktree' as string | null,
 }));
 vi.mock('./kanban-context', () => ({
   useKanban: () => ({
@@ -23,6 +28,7 @@ vi.mock('./kanban-context', () => ({
       {
         id: 'workspace',
         name: 'Review workspace',
+        worktreePath: mocks.worktreePath,
         defaultSessionProvider: mocks.workspaceProvider,
       },
     ],
@@ -36,6 +42,15 @@ vi.mock('./quick-chat-content', () => ({
 }));
 vi.mock('@/client/lib/trpc', () => ({
   trpc: {
+    session: {
+      getMaxSessionsPerWorkspace: {
+        useQuery: () => ({
+          data: mocks.maxSessions,
+          isError: mocks.maxSessionsError,
+          refetch: mocks.retryLimit,
+        }),
+      },
+    },
     userSettings: { get: { useQuery: () => ({ data: { defaultSessionProvider: 'CODEX' } }) } },
     codexAccounts: {
       list: {
@@ -49,10 +64,12 @@ vi.mock('@/client/lib/trpc', () => ({
     },
   },
 }));
-vi.mock('@/client/features/workspace', () => ({
-  QuickActionsMenu: ({ disabled }: { disabled?: boolean }) =>
-    createElement('button', { disabled, 'aria-label': 'Quick actions' }),
-}));
+vi.mock('@/client/features/workspace', async () => {
+  const actual = await vi.importActual<typeof import('@/client/features/workspace')>(
+    '@/client/features/workspace'
+  );
+  return { getNewChatUnavailableReason: actual.getNewChatUnavailableReason };
+});
 vi.mock('./use-quick-chat', () => ({
   useQuickChat: () => ({
     sessions: mocks.empty
@@ -68,6 +85,7 @@ vi.mock('./use-quick-chat', () => ({
     handleNewChat: mocks.create,
     handleQuickAction: vi.fn(),
     isCreatingSession: false,
+    isDeletingSession: mocks.deleting,
     sessionsLoaded: mocks.loaded,
     sessionsError: mocks.error,
     refetchSessions: mocks.refetch,
@@ -83,6 +101,10 @@ beforeEach(() => {
   mocks.error = null;
   mocks.fetching = false;
   mocks.workspaceProvider = 'CLAUDE';
+  mocks.maxSessions = 10;
+  mocks.maxSessionsError = false;
+  mocks.deleting = false;
+  mocks.worktreePath = '/tmp/worktree';
   vi.clearAllMocks();
   Object.defineProperty(globalThis, 'IS_REACT_ACT_ENVIRONMENT', {
     configurable: true,
@@ -119,9 +141,16 @@ it.each([false, true])(
       }
       expect(document.body.querySelector('[aria-label^="New conversation provider"]')).toBeNull();
       expect(document.body.querySelector('[aria-label^="Thinking level"]')).toBeNull();
-      expect(
-        document.body.querySelector<HTMLButtonElement>('[aria-label="Quick actions"]')?.disabled
-      ).toBe(false);
+      // Quick actions live in the composer, which can also start them in a new chat.
+      if (!empty) {
+        expect(mocks.content).toHaveBeenLastCalledWith(
+          expect.objectContaining({
+            onRunQuickActionInNewChat: expect.any(Function),
+            newChatUnavailableReason: null,
+          })
+        );
+      }
+      expect(document.body.querySelector('[aria-label="Quick actions"]')).toBeNull();
       const create = empty
         ? [...document.body.querySelectorAll('button')].find(
             (button) => button.textContent === 'New chat'
@@ -137,7 +166,7 @@ it.each([false, true])(
   }
 );
 
-it('blocks new chats and quick actions until sessions load', async () => {
+it('blocks new chats until sessions load', async () => {
   mocks.empty = true;
   mocks.loaded = false;
   const container = document.createElement('div');
@@ -150,9 +179,8 @@ it('blocks new chats and quick actions until sessions load', async () => {
     expect(
       document.body.querySelector<HTMLButtonElement>('[aria-label="New session"]')?.disabled
     ).toBe(true);
-    expect(
-      document.body.querySelector<HTMLButtonElement>('[aria-label="Quick actions"]')?.disabled
-    ).toBe(true);
+    // No composer yet, so no quick actions either.
+    expect(mocks.content).not.toHaveBeenCalled();
   } finally {
     await act(() => root.unmount());
     container.remove();
@@ -234,6 +262,97 @@ it('offers session-list Retry after failure and disables only Retry while refetc
         (button) => button.textContent === 'Retrying…'
       )?.disabled
     ).toBe(true);
+  } finally {
+    await act(() => root.unmount());
+    container.remove();
+  }
+});
+
+it.each([
+  {
+    maxSessions: 2,
+    worktreePath: '/tmp/worktree',
+    reason: 'This workspace already has the maximum of 2 active chats.',
+  },
+  {
+    maxSessions: 10,
+    worktreePath: null,
+    reason: 'New chats can start once the workspace is set up.',
+  },
+])(
+  'disables new-chat actions when unavailable: $reason',
+  async ({ maxSessions, worktreePath, reason }) => {
+    mocks.maxSessions = maxSessions;
+    mocks.worktreePath = worktreePath;
+    const container = document.createElement('div');
+    document.body.append(container);
+    const root = createRoot(container);
+    try {
+      await act(() => root.render(<QuickChatSheet workspaceId="workspace" onClose={vi.fn()} />));
+      expect(mocks.content).toHaveBeenLastCalledWith(
+        expect.objectContaining({ newChatUnavailableReason: reason })
+      );
+    } finally {
+      await act(() => root.unmount());
+      container.remove();
+    }
+  }
+);
+
+it('reports and retries a failed chat-limit query instead of claiming chats are loading', async () => {
+  mocks.maxSessionsError = true;
+  const container = document.createElement('div');
+  document.body.append(container);
+  const root = createRoot(container);
+  try {
+    await act(() => root.render(<QuickChatSheet workspaceId="workspace" onClose={vi.fn()} />));
+    expect(mocks.content).toHaveBeenLastCalledWith(
+      expect.objectContaining({ newChatUnavailableReason: "Couldn't load the chat limit." })
+    );
+    const retry = [...document.querySelectorAll('button')].find(
+      (button) => button.textContent === 'Retry chat limit'
+    );
+    await act(() => retry?.click());
+    expect(mocks.retryLimit).toHaveBeenCalledOnce();
+  } finally {
+    await act(() => root.unmount());
+    container.remove();
+  }
+});
+it('keeps new-chat actions disabled while a chat is closing', async () => {
+  mocks.deleting = true;
+  const container = document.createElement('div');
+  document.body.append(container);
+  const root = createRoot(container);
+  try {
+    await act(() => root.render(<QuickChatSheet workspaceId="workspace" onClose={vi.fn()} />));
+    expect(mocks.content).toHaveBeenLastCalledWith(
+      expect.objectContaining({ newChatUnavailableReason: 'A chat is closing.' })
+    );
+    expect(document.querySelector<HTMLButtonElement>('[aria-label="New session"]')?.disabled).toBe(
+      true
+    );
+  } finally {
+    await act(() => root.unmount());
+    container.remove();
+  }
+});
+
+it('explains why the first chat cannot start before workspace setup finishes', async () => {
+  mocks.empty = true;
+  mocks.worktreePath = null;
+  const container = document.createElement('div');
+  document.body.append(container);
+  const root = createRoot(container);
+  try {
+    await act(() => root.render(<QuickChatSheet workspaceId="workspace" onClose={vi.fn()} />));
+    expect(document.body.textContent).toContain(
+      'New chats can start once the workspace is set up.'
+    );
+    const create = [...document.querySelectorAll('button')].find(
+      (button) => button.textContent === 'New chat'
+    );
+    expect(create?.disabled).toBe(true);
   } finally {
     await act(() => root.unmount());
     container.remove();

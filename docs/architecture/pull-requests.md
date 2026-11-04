@@ -75,15 +75,27 @@ deletions inside hunks remain diff content.
 
 ## Workspace PR menu
 
-The top-right wrench and chevron form one dropdown button on desktop and mobile.
-Opening it shows attached PRs, review and attachment actions, and PR update
-settings; it does not toggle monitoring. The wrench retains its enabled and
-activity states. Archived and archiving workspaces retain PR links but hide
-attachment, review, and monitoring controls.
+The workspace header's PR chip is one dropdown button on desktop and mobile. It
+shows the selected PR's number ("#123"), a count of any other attached PRs, and
+the one state that most needs attention: merged, closed, conflicts and failing
+CI first, then requested changes, running CI, approval or draft, then passing
+CI. An unsynced PR reads "Syncing"; unknown CI falls back to the review state,
+including "Open" (`getPrChipStatus` in
+`src/client/features/workspace/workspace-pr-status.ts`). Labels and tones match
+the sidebar and board chips; below the header's 48rem breakpoint the label
+collapses to a status dot, and the accessible name keeps the full text. The
+wrench inside the chip retains its enabled and activity states. Without a PR the
+chip reads "No PR".
 
-The workspace header and its narrow-screen overflow omit the standalone PR/CI
-status chip. Open the wrench menu to inspect each attached PR's state and CI;
-sidebar and Kanban status indicators remain available.
+Opening the chip shows attached PRs, review and attachment actions, and PR
+update settings, including the updates toggle; opening it does not toggle
+monitoring. Archived and archiving workspaces retain PR links but hide
+attachment, review, and monitoring controls. When the workspace has changes, the
+agent is idle, and the current branch has no open PR, **Create PR** is available
+even after an earlier PR was closed or merged. At 48rem and wider it appears
+beside the chip; below that it is in More actions. It starts a new chat with the
+`create-pr` quick action. Loading or failed action catalogs retain loading or
+retry feedback.
 
 ## PR event delivery destinations
 

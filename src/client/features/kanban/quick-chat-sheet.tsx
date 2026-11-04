@@ -3,7 +3,7 @@ import { EmptyState } from '@/client/components/empty-state';
 import { Loading } from '@/client/components/loading';
 import { QueryErrorState } from '@/client/components/query-error-state';
 import { type SessionData, SessionTabBar } from '@/client/features/chat';
-import { QuickActionsMenu } from '@/client/features/workspace';
+import { getNewChatUnavailableReason } from '@/client/features/workspace';
 import { trpc } from '@/client/lib/trpc';
 import { Button } from '@/components/ui/button';
 import {
@@ -27,6 +27,7 @@ function QuickChatSessionState({
   hasSessions,
   creating,
   disabled,
+  disabledReason,
   onCreate,
   error,
   retrying,
@@ -36,6 +37,7 @@ function QuickChatSessionState({
   hasSessions: boolean;
   creating: boolean;
   disabled: boolean;
+  disabledReason?: string | null;
   onCreate: () => void;
   error?: { message: string } | null;
   retrying?: boolean;
@@ -58,12 +60,42 @@ function QuickChatSessionState({
     <EmptyState
       size="compact"
       title="No chats yet"
+      description={disabledReason}
       action={
         <Button variant="outline" size="sm" onClick={onCreate} disabled={disabled}>
           New chat
         </Button>
       }
     />
+  );
+}
+
+function getChatLimitUnavailableReason(query: { data?: number; isError: boolean }): string | null {
+  if (query.isError) {
+    return "Couldn't load the chat limit.";
+  }
+  return query.data === undefined ? 'Loading chat limit…' : null;
+}
+
+function QuickChatLimitError({
+  visible,
+  retrying,
+  onRetry,
+}: {
+  visible: boolean;
+  retrying: boolean;
+  onRetry: () => void;
+}) {
+  if (!visible) {
+    return null;
+  }
+  return (
+    <div role="alert" className="flex items-center gap-2 border-b px-4 py-2 text-sm">
+      <span>Couldn't load the chat limit.</span>
+      <Button size="sm" variant="outline" disabled={retrying} onClick={onRetry}>
+        Retry chat limit
+      </Button>
+    </div>
   );
 }
 
@@ -82,6 +114,9 @@ export function QuickChatSheet({ workspaceId, onClose }: QuickChatSheetProps) {
     enabled: !!workspaceId && !explicitWorkspaceProvider,
     staleTime: 30_000,
   });
+  const maxSessionsQuery = trpc.session.getMaxSessionsPerWorkspace.useQuery(undefined, {
+    enabled: !!workspaceId,
+  });
   const workspaceProvider = explicitWorkspaceProvider ?? settings.data?.defaultSessionProvider;
 
   const {
@@ -95,6 +130,7 @@ export function QuickChatSheet({ workspaceId, onClose }: QuickChatSheetProps) {
     handleCloseSession,
     handleQuickAction,
     isCreatingSession,
+    isDeletingSession,
     sessionsLoaded,
     sessionsError,
     refetchSessions,
@@ -118,6 +154,16 @@ export function QuickChatSheet({ workspaceId, onClose }: QuickChatSheetProps) {
 
   // There are no tabs until sessions load, and new chats need the list for their defaults.
   const tabBarDisabled = isCreatingSession || !workspaceId || !sessionsLoaded;
+  const maxSessions = maxSessionsQuery.data;
+  const newChatUnavailableReason =
+    getChatLimitUnavailableReason(maxSessionsQuery) ??
+    getNewChatUnavailableReason({
+      sessions: sessionsLoaded && maxSessions !== undefined ? sessions : undefined,
+      maxSessions,
+      hasWorktreePath: Boolean(workspace?.worktreePath),
+      isCreatingSession,
+      isDeletingSession,
+    });
 
   return (
     <Sheet open={!!workspaceId} onOpenChange={(open) => !open && onClose()}>
@@ -144,17 +190,16 @@ export function QuickChatSheet({ workspaceId, onClose }: QuickChatSheetProps) {
               onCreateSession={handleNewChat}
               onCloseSession={handleCloseSession}
               disabled={tabBarDisabled}
+              createDisabled={Boolean(newChatUnavailableReason)}
             />
           </div>
-          <QuickActionsMenu
-            onExecuteAgent={(action) => {
-              if (action.content) {
-                handleQuickAction(action.name, action.content);
-              }
-            }}
-            disabled={tabBarDisabled}
-          />
         </div>
+
+        <QuickChatLimitError
+          visible={maxSessionsQuery.isError}
+          retrying={maxSessionsQuery.isFetching}
+          onRetry={() => void maxSessionsQuery.refetch()}
+        />
 
         {/* Chat content */}
         <div className="flex-1 min-h-0">
@@ -164,13 +209,16 @@ export function QuickChatSheet({ workspaceId, onClose }: QuickChatSheetProps) {
               codexAccountId={selectedCodexAccountId}
               chatState={chatState}
               transcriptScroll={transcriptScroll}
+              onRunQuickActionInNewChat={handleQuickAction}
+              newChatUnavailableReason={newChatUnavailableReason}
             />
           ) : workspaceId ? (
             <QuickChatSessionState
               sessionsLoaded={sessionsLoaded}
               hasSessions={sessions.length > 0}
               creating={isCreatingSession}
-              disabled={tabBarDisabled}
+              disabled={tabBarDisabled || Boolean(newChatUnavailableReason)}
+              disabledReason={newChatUnavailableReason}
               onCreate={() => handleNewChat()}
               error={sessionsError}
               retrying={isFetchingSessions}

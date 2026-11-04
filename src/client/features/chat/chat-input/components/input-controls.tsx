@@ -121,6 +121,9 @@ export interface LeftControlsProps {
   supportedImageTypes: readonly string[];
   disabled: boolean;
   onQuickAction: (action: string) => void;
+  /** Lets quick actions start a new chat; omit where only this chat applies. */
+  onRunQuickActionInNewChat?: (name: string, prompt: string) => void;
+  newChatUnavailableReason?: string | null;
   quickActionsOpen: boolean;
   onQuickActionsOpenChange: (open: boolean) => void;
   acpConfigOptions?: AcpConfigOption[] | null;
@@ -343,8 +346,10 @@ export const LeftControls = memo(function LeftControls(props: LeftControlsProps)
         />
       )}
       <QuickActionsDropdown
-        onAction={props.onQuickAction}
-        disabled={props.disabled}
+        onRunInThisChat={props.onQuickAction}
+        thisChatDisabled={props.disabled}
+        onRunInNewChat={props.onRunQuickActionInNewChat}
+        newChatUnavailableReason={props.newChatUnavailableReason}
         open={props.quickActionsOpen}
         onOpenChange={props.onQuickActionsOpenChange}
         shortcut={`${props.modLabel}+Shift+A`}

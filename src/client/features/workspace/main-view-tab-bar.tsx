@@ -1,5 +1,4 @@
 import { ArchiveIcon } from '@phosphor-icons/react/dist/csr/Archive';
-import { ArrowsClockwiseIcon } from '@phosphor-icons/react/dist/csr/ArrowsClockwise';
 import { CameraIcon } from '@phosphor-icons/react/dist/csr/Camera';
 import { FileCodeIcon } from '@phosphor-icons/react/dist/csr/FileCode';
 import { GitDiffIcon } from '@phosphor-icons/react/dist/csr/GitDiff';
@@ -15,8 +14,8 @@ import { TabButton } from '@/components/ui/tab-button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 import type { SessionStatus as DbSessionStatus } from '@/shared/core';
+import { ChatActionsMenu } from './chat-actions-menu';
 import { ClosedSessionsDropdown } from './closed-sessions-dropdown';
-import { QuickActionsMenu } from './quick-actions-menu';
 import { RatchetWrenchIcon } from './ratchet-wrench-icon';
 import {
   describeSessionCloseRisk,
@@ -272,7 +271,6 @@ interface MainViewTabBarProps {
   onSelectSession?: (sessionId: string) => void;
   onCreateSession?: (codexAccountId?: string) => void;
   onCloseSession?: (sessionId: string) => void;
-  onQuickAction?: (name: string, prompt: string) => void;
   onSelectClosedSession?: (sessionId: string) => void;
   onRestartSession?: () => void;
   disabled?: boolean;
@@ -290,7 +288,6 @@ export function MainViewTabBar({
   onSelectSession,
   onCreateSession,
   onCloseSession,
-  onQuickAction,
   onSelectClosedSession,
   onRestartSession,
   disabled,
@@ -331,6 +328,12 @@ export function MainViewTabBar({
   const isAtLimit = isWorkspaceSessionLimitReached(sessions, maxSessions);
   // New sessions inherit the first session's provider/model, so wait for the list.
   const isButtonDisabled = disabled || isAtLimit || sessions === undefined;
+  const currentSessionIndex =
+    sessions?.findIndex((session) => session.id === currentSessionId) ?? -1;
+  const currentSession = currentSessionIndex >= 0 ? sessions?.[currentSessionIndex] : undefined;
+  const currentSessionLabel = currentSession
+    ? getSessionDisplayName(currentSession, `Chat ${currentSessionIndex + 1}`)
+    : null;
 
   return (
     <div className={cn('flex items-center bg-muted/50', className)}>
@@ -363,19 +366,6 @@ export function MainViewTabBar({
             />
           );
         })}
-
-        {onQuickAction && (
-          <div className="ml-0.5 shrink-0">
-            <QuickActionsMenu
-              onExecuteAgent={(action) => {
-                if (action.content) {
-                  onQuickAction(action.name, action.content);
-                }
-              }}
-              disabled={isButtonDisabled}
-            />
-          </div>
-        )}
 
         {onSelectClosedSession && (
           <div className="ml-0.5 shrink-0">
@@ -434,30 +424,14 @@ export function MainViewTabBar({
         </div>
       )}
 
-      {/* Restart button — pinned to the right, outside the scrollable area */}
+      {/* Chat actions (Restart) — pinned to the right, outside the scrollable area */}
       {onRestartSession && (
         <div className="shrink-0 pr-1">
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <button
-                type="button"
-                onClick={onRestartSession}
-                disabled={disabled}
-                className={cn(
-                  'flex h-7 items-center gap-1.5 rounded-md px-2 text-xs font-medium',
-                  'text-muted-foreground hover:bg-sidebar-accent hover:text-foreground',
-                  'transition-colors disabled:pointer-events-none disabled:opacity-50'
-                )}
-                aria-label="Restart agent"
-              >
-                <ArrowsClockwiseIcon className="h-3.5 w-3.5" />
-                Restart
-              </button>
-            </TooltipTrigger>
-            <TooltipContent side="bottom">
-              Stop and restart the agent, resuming from where it left off
-            </TooltipContent>
-          </Tooltip>
+          <ChatActionsMenu
+            chatLabel={currentSessionLabel}
+            onRestartSession={onRestartSession}
+            disabled={disabled}
+          />
         </div>
       )}
 
