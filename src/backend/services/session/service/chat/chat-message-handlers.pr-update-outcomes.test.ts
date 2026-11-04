@@ -1,4 +1,5 @@
 import { afterEach, expect, it } from 'vitest';
+import { rollbackStoppedDispatchMessage } from '@/backend/services/session/service/dispatch/session-dispatch-batch';
 import { createTestSessionDispatcher } from '@/backend/services/session/service/dispatch/session-dispatch.test-helpers';
 import { sessionBackgroundDeliveryService } from '@/backend/services/session/service/lifecycle/session-background-delivery.service';
 import { sessionDomainService } from '@/backend/services/session/service/session-domain.service';
@@ -57,15 +58,38 @@ it.each(['failed', 'cancelled'] as const)(
   }
 );
 
-it.each([true, false])('still rolls back an unsettled message (PR update=%s)', (isPRUpdate) => {
+it('rolls back an unsettled PR update after stop', () => {
   const message = createPRMessage();
-  if (!isPRUpdate) {
-    message.id = 'human-stale-dispatch';
-    message.source = undefined;
-  }
   sessionDomainService.commitSentUserMessage('session', message);
 
   rollBackStoppedDispatch(message);
+
+  expect(sessionDomainService.getTranscriptSnapshot('session')).toEqual([]);
+});
+
+it('retains the initial user prompt in stop snapshots when the interrupted turn rejects', () => {
+  const message = createPRMessage();
+  message.id = 'initial-user-prompt';
+  message.source = undefined;
+  sessionDomainService.commitSentUserMessage('session', message);
+  const beforeStop = sessionDomainService.getTranscriptSnapshot('session');
+
+  rollBackStoppedDispatch(message);
+  sessionDomainService.clearQueuedWork('session', { emitSnapshot: true });
+
+  expect(sessionDomainService.getTranscriptSnapshot('session')).toEqual(beforeStop);
+  expect(beforeStop).toEqual([expect.objectContaining({ id: message.id, text: message.text })]);
+});
+
+it('still rolls back a stopped workspace notification rather than proving delivery', () => {
+  const message = createPRMessage();
+  message.id = 'workspace-notification-pending';
+  message.source = undefined;
+  sessionDomainService.commitSentUserMessage('session', message);
+
+  rollbackStoppedDispatchMessage('session', message, {
+    isNotificationMessage: (id) => id === message.id,
+  });
 
   expect(sessionDomainService.getTranscriptSnapshot('session')).toEqual([]);
 });

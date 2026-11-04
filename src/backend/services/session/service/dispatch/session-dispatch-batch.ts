@@ -11,6 +11,20 @@ import type {
 
 const logger = createLogger('session-dispatch-batch');
 
+/** A stopped RPC can reject after delivery; only background evidence must roll back. */
+export function rollbackStoppedDispatchMessage(
+  sessionId: string,
+  message: QueuedMessage,
+  notifications: Pick<SessionDispatchNotificationDeliveryService, 'isNotificationMessage'> | null
+): void {
+  if (message.source || notifications?.isNotificationMessage(message.id)) {
+    sessionDomainService.removeTranscriptMessageById(sessionId, message.id, {
+      emitSnapshot: false,
+      preservePRUpdateOutcome: true,
+    });
+  }
+}
+
 /** Slash commands must remain standalone so providers interpret them as commands. */
 function isCommand(message: QueuedMessage): boolean {
   return !message.source && message.text.trimStart().startsWith('/');
