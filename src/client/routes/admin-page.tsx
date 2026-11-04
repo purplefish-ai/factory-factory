@@ -1,174 +1,126 @@
-import { useState } from 'react';
-import { toast } from 'sonner';
-import { HeaderLeftExtraSlot, useAppHeader } from '@/client/components/app-header-context';
+import { Link, Navigate, useParams } from 'react-router';
+import { useAppHeader } from '@/client/components/app-header-context';
 import { Loading } from '@/client/components/loading';
 import { QueryErrorState } from '@/client/components/query-error-state';
 import { CodexAccountsSettings } from '@/client/features/codex-accounts';
 import { SlackSettings } from '@/client/features/slack';
-import { WorkspacesBackLink } from '@/client/features/workspace';
-import { runInBackground } from '@/client/lib/background-task';
-import { resolveSelectedProjectSlug } from '@/client/lib/project-selection';
 import { trpc } from '@/client/lib/trpc';
-import { Badge } from '@/components/ui/badge';
-import { Card, CardContent } from '@/components/ui/card';
-import { Tabs, TabsContent } from '@/components/ui/tabs';
 import {
   AdversarialReviewSection,
-  ApiUsageSection,
   AppearanceSettingsSection,
-  AppInfoSection,
   ChatProviderDefaultsSection,
   ChildWorkspaceSettingsSection,
   TicketDispatchSettingsSection,
   CliAuthSection,
-  DataBackupSection,
   IdeSettingsSection,
   NotificationSettingsSection,
-  ProcessesSection,
-  ProcessesSectionSkeleton,
-  ProjectSettingsSection,
   RatchetSettingsSection,
-  ServerLogsSection,
   VoiceModeSection,
-  WorktreeCleanupSection,
 } from './admin/index';
 import { SettingsTabsList } from './admin/settings-tabs-list';
+import { SystemSettingsSection } from './admin/SystemSettingsSection';
 
-type SettingsTab = 'general' | 'appearance' | 'project' | 'voice';
-
-function SectionQueryError(props: React.ComponentProps<typeof QueryErrorState>) {
+function ProjectSettingsLinks() {
+  const query = trpc.project.list.useQuery();
+  if (!query.data) {
+    return query.error ? (
+      <QueryErrorState
+        title="Couldn't load projects"
+        error={query.error}
+        onRetry={() => void query.refetch()}
+        isRetrying={query.isFetching}
+      />
+    ) : (
+      <Loading size="compact" message="Loading projects…" />
+    );
+  }
   return (
-    <Card>
-      <CardContent className="p-0">
-        <QueryErrorState {...props} />
-      </CardContent>
-    </Card>
+    <section className="space-y-3">
+      <h2 className="text-lg font-semibold">Project settings</h2>
+      <p className="text-sm text-muted-foreground">
+        Choose a project to configure its scripts and issue tracking.
+      </p>
+      {query.data.length ? (
+        <ul className="space-y-2">
+          {query.data.map((project) => (
+            <li key={project.id}>
+              <Link className="underline" to={`/projects/${project.slug}/settings`}>
+                {project.name}
+              </Link>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="text-sm text-muted-foreground">
+          No projects yet.{' '}
+          <Link className="underline" to="/projects/new">
+            Add a project
+          </Link>
+        </p>
+      )}
+    </section>
   );
 }
 
-export default function AdminDashboardPage() {
-  useAppHeader({ title: 'Settings' });
-  const [settingsTab, setSettingsTab] = useState<SettingsTab>('general');
-
-  const statsQuery = trpc.admin.getSystemStats.useQuery(undefined, {
-    refetchInterval: 5000,
-  });
-  const { data: stats, isLoading: isLoadingStats, refetch } = statsQuery;
-
-  const processesQuery = trpc.admin.getActiveProcesses.useQuery(undefined, {
-    refetchInterval: 5000,
-  });
-  const { data: processes, isLoading: isLoadingProcesses } = processesQuery;
-
-  // Get all projects for factory config section
-  const projectsQuery = trpc.project.list.useQuery();
-  const { data: projects } = projectsQuery;
-
-  const resetApiStats = trpc.admin.resetApiUsageStats.useMutation({
-    onSuccess: () => {
-      runInBackground(refetch(), "Couldn't refresh data.");
-    },
-    onError: (error) => {
-      toast.error("Couldn't reset API usage stats.", { description: error.message });
-    },
-  });
-
-  const projectSlug = resolveSelectedProjectSlug(projects);
-
-  // Show full loading only when stats are loading (first load)
-  if (isLoadingStats) {
-    return <Loading message="Loading settings…" />;
+function SettingsContent({ section }: { section: string }) {
+  switch (section) {
+    case 'general':
+      return (
+        <>
+          <NotificationSettingsSection />
+          <IdeSettingsSection />
+          <ChatProviderDefaultsSection />
+        </>
+      );
+    case 'workspace':
+      return (
+        <>
+          <ChildWorkspaceSettingsSection />
+          <TicketDispatchSettingsSection />
+          <RatchetSettingsSection />
+          <AdversarialReviewSection />
+        </>
+      );
+    case 'integrations':
+      return (
+        <>
+          <CodexAccountsSettings />
+          <CliAuthSection />
+          <SlackSettings />
+        </>
+      );
+    case 'appearance':
+      return <AppearanceSettingsSection />;
+    case 'voice':
+      return <VoiceModeSection />;
+    case 'system':
+      return <SystemSettingsSection />;
+    case 'project':
+      return <ProjectSettingsLinks />;
+    default:
+      return <Navigate to="/admin" replace />;
   }
+}
 
+export default function AdminDashboardPage() {
+  const { section = 'general' } = useParams<{ section: string }>();
+  useAppHeader({ title: 'Settings' });
   return (
     <div className="h-full overflow-y-auto">
-      {projectSlug && (
-        <HeaderLeftExtraSlot>
-          <WorkspacesBackLink projectSlug={projectSlug} />
-        </HeaderLeftExtraSlot>
-      )}
       <div className="space-y-6 p-3 md:p-6">
-        <Tabs value={settingsTab} onValueChange={(value) => setSettingsTab(value as SettingsTab)}>
-          <SettingsTabsList />
-
-          <TabsContent value="general" className="space-y-6 mt-4">
-            {statsQuery.error && !stats ? (
-              <SectionQueryError
-                title="Couldn't load API usage"
-                error={statsQuery.error}
-                onRetry={() => void refetch()}
-                isRetrying={statsQuery.isFetching}
-              />
-            ) : (
-              <ApiUsageSection
-                apiUsage={stats?.apiUsage}
-                onReset={() => resetApiStats.mutateAsync()}
-                isResetting={resetApiStats.isPending}
-              />
-            )}
-
-            {isLoadingProcesses ? (
-              <ProcessesSectionSkeleton />
-            ) : processesQuery.error && !processes ? (
-              <SectionQueryError
-                title="Couldn't load active processes"
-                error={processesQuery.error}
-                onRetry={() => void processesQuery.refetch()}
-                isRetrying={processesQuery.isFetching}
-              />
-            ) : (
-              <ProcessesSection processes={processes} />
-            )}
-
-            {/* Environment Info */}
-            <Card className="bg-muted/50">
-              <CardContent className="py-4">
-                <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
-                  <span className="font-medium">Environment:</span>
-                  <Badge variant="outline">{stats?.environment || 'unknown'}</Badge>
-                </div>
-              </CardContent>
-            </Card>
-
-            <NotificationSettingsSection />
-            <IdeSettingsSection />
-            <ChatProviderDefaultsSection />
-            <ChildWorkspaceSettingsSection />
-            <TicketDispatchSettingsSection />
-            <CodexAccountsSettings />
-            <CliAuthSection />
-            <SlackSettings />
-            <RatchetSettingsSection />
-            <AdversarialReviewSection />
-            <AppInfoSection />
-            <DataBackupSection />
-            <WorktreeCleanupSection />
-            <ServerLogsSection />
-          </TabsContent>
-
-          <TabsContent value="appearance" className="mt-4">
-            <AppearanceSettingsSection />
-          </TabsContent>
-
-          <TabsContent value="project" className="mt-4">
-            {projects ? (
-              <ProjectSettingsSection projects={projects} />
-            ) : projectsQuery.error ? (
-              <SectionQueryError
-                title="Couldn't load projects"
-                error={projectsQuery.error}
-                onRetry={() => void projectsQuery.refetch()}
-                isRetrying={projectsQuery.isFetching}
-              />
-            ) : (
-              <Loading size="compact" message="Loading projects…" />
-            )}
-          </TabsContent>
-
-          <TabsContent value="voice" className="mt-4">
-            <VoiceModeSection />
-          </TabsContent>
-        </Tabs>
+        <nav aria-label="Breadcrumb" className="text-sm text-muted-foreground">
+          <Link className="underline" to="/">
+            Board
+          </Link>{' '}
+          /{' '}
+          <Link className="underline" to="/admin">
+            Settings
+          </Link>
+        </nav>
+        <SettingsTabsList />
+        <div className="space-y-6">
+          <SettingsContent section={section} />
+        </div>
       </div>
     </div>
   );

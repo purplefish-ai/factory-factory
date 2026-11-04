@@ -8,6 +8,7 @@ import { AppearanceSettingsSection } from './AppearanceSettingsSection';
 
 const mocks = vi.hoisted(() => ({
   updateSettingsMutate: vi.fn(),
+  pending: false,
   mutationOptions: null as null | { onError?: (error: Error) => void },
   setTheme: vi.fn(),
   userSettings: {
@@ -34,7 +35,7 @@ vi.mock('@/client/lib/trpc', () => ({
       update: {
         useMutation: (options: { onError?: (error: Error) => void }) => {
           mocks.mutationOptions = options;
-          return { mutate: mocks.updateSettingsMutate, isPending: false };
+          return { mutate: mocks.updateSettingsMutate, isPending: mocks.pending };
         },
       },
     },
@@ -111,6 +112,7 @@ beforeEach(() => {
   // jsdom has no canvas, which the rendered-color probe needs; it falls back.
   vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null);
   mocks.mutationOptions = null;
+  mocks.pending = false;
   mocks.userSettings.appearanceColorScheme = 'factory';
   mocks.userSettings.appearanceBackgroundColor = null;
   mocks.userSettings.appearanceForegroundColor = null;
@@ -247,14 +249,55 @@ describe('AppearanceSettingsSection', () => {
     expect(input).not.toBeNull();
 
     typeInto(input, 'OpenDyslexic, sans-serif');
+    expect(mocks.updateSettingsMutate).not.toHaveBeenCalled();
+    flushSync(() =>
+      container
+        .querySelector<HTMLButtonElement>('button[aria-label="Save interface font"]')
+        ?.click()
+    );
     expect(mocks.updateSettingsMutate).toHaveBeenCalledWith({
       appearanceFontSans: 'OpenDyslexic, sans-serif',
     });
 
     mocks.updateSettingsMutate.mockClear();
     typeInto(input, 'Inter; background: url(x)');
+    flushSync(() =>
+      container
+        .querySelector<HTMLButtonElement>('button[aria-label="Save interface font"]')
+        ?.click()
+    );
     expect(mocks.updateSettingsMutate).not.toHaveBeenCalled();
     expect(container.querySelector('[role="alert"]')?.textContent).toContain('Font family');
+  });
+
+  it('retains a custom-font draft after a save failure for retry', () => {
+    const container = render();
+    selectOption(container, 'appearance-font-sans', 'Custom…');
+    const input = container.querySelector<HTMLInputElement>('#appearance-font-sans-custom');
+    typeInto(input, 'OpenDyslexic, sans-serif');
+    flushSync(() =>
+      container
+        .querySelector<HTMLButtonElement>('button[aria-label="Save interface font"]')
+        ?.click()
+    );
+    expect(mocks.updateSettingsMutate).toHaveBeenCalledWith({
+      appearanceFontSans: 'OpenDyslexic, sans-serif',
+    });
+    flushSync(() => mocks.mutationOptions?.onError?.(new Error('offline')));
+    expect(container.querySelector<HTMLInputElement>('#appearance-font-sans-custom')?.value).toBe(
+      'OpenDyslexic, sans-serif'
+    );
+  });
+
+  it('does not label a custom font as saving when another appearance change is pending', () => {
+    mocks.userSettings.appearanceFontSans = 'OpenDyslexic, sans-serif';
+    mocks.pending = true;
+    const container = render();
+    const save = container.querySelector<HTMLButtonElement>(
+      'button[aria-label="Save interface font"]'
+    );
+    expect(save?.disabled).toBe(true);
+    expect(save?.textContent).toBe('Save');
   });
 
   it('returns the font selector to the saved font when the save fails', () => {

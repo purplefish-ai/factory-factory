@@ -61,7 +61,12 @@ export function IdeSettingsSection() {
   const handleIdeChange = (value: string) => {
     if (value === 'custom') {
       setIsConfiguringCustomIde(true);
-      saveCustomCommand(localCustomCommand);
+      if (settings?.customIdeCommand?.trim()) {
+        updateSettings.mutate({
+          preferredIde: 'custom',
+          customIdeCommand: settings.customIdeCommand,
+        });
+      }
     } else if (value === 'cursor' || value === 'vscode') {
       setIsConfiguringCustomIde(false);
       updateSettings.mutate({ preferredIde: value });
@@ -120,24 +125,36 @@ export function IdeSettingsSection() {
         {selectedIde === 'custom' && (
           <div className="space-y-2">
             <Label htmlFor="custom-command">Custom command</Label>
-            <div className="flex flex-col gap-2 sm:flex-row">
+            <form
+              className="flex flex-col gap-2 sm:flex-row"
+              onSubmit={(event) => {
+                event.preventDefault();
+                saveCustomCommand(localCustomCommand);
+              }}
+            >
               <Input
                 id="custom-command"
                 value={localCustomCommand}
                 onChange={(e) => setLocalCustomCommand(e.target.value)}
-                onBlur={() => saveCustomCommand(localCustomCommand)}
                 placeholder="code-insiders {workspace}"
                 className="font-mono text-sm flex-1"
                 disabled={updateSettings.isPending}
               />
               <Button
+                type="submit"
+                disabled={updateSettings.isPending || !localCustomCommand.trim()}
+              >
+                {updateSettings.isPending ? 'Saving…' : 'Save'}
+              </Button>
+              <Button
+                type="button"
                 variant="outline"
                 onClick={handleTestCommand}
                 disabled={testCommand.isPending || !localCustomCommand.trim()}
               >
                 {testCommand.isPending ? 'Testing…' : 'Test'}
               </Button>
-            </div>
+            </form>
             <p className="text-xs text-muted-foreground">
               Use <code className="bg-muted px-1 py-0.5 rounded">{'{workspace}'}</code> as a
               placeholder for the workspace path. Example:{' '}

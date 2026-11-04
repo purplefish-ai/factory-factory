@@ -1,4 +1,4 @@
-import { Outlet, useParams } from 'react-router';
+import { Link, Outlet, useParams } from 'react-router';
 import { Loading } from '@/client/components/loading';
 import { trpc } from '@/client/lib/trpc';
 import { Button } from '@/components/ui/button';
@@ -7,17 +7,25 @@ function ProjectLoadError({
   message,
   retry,
   pending,
+  notFound = false,
 }: {
   message: string;
   retry: () => void;
   pending: boolean;
+  notFound?: boolean;
 }) {
   return (
     <div role="alert" className="space-y-3 p-6 text-center">
       <p className="text-sm text-muted-foreground">{message}</p>
-      <Button variant="outline" onClick={retry} disabled={pending}>
-        Retry project
-      </Button>
+      {notFound ? (
+        <Button variant="outline" asChild>
+          <Link to="/projects">Go to projects</Link>
+        </Button>
+      ) : (
+        <Button variant="outline" onClick={retry} disabled={pending}>
+          Retry project
+        </Button>
+      )}
     </div>
   );
 }
@@ -26,7 +34,6 @@ export function ProjectLayout() {
   const { slug = '' } = useParams<{ slug: string }>();
   const {
     data: project,
-    isLoading,
     isFetching,
     error,
     refetch,
@@ -52,14 +59,16 @@ export function ProjectLayout() {
       </>
     );
   }
-  if (isLoading) {
+  // Paused and disabled queries can be unresolved without actively fetching.
+  if (!error) {
     return <Loading message="Loading project…" className="h-64" />;
   }
   return (
     <ProjectLoadError
-      message={error && !notFound ? `Couldn't load project. ${error.message}` : 'Project not found'}
+      message={notFound ? 'Project not found' : `Couldn't load project. ${error.message}`}
       retry={retry}
       pending={isFetching}
+      notFound={notFound}
     />
   );
 }

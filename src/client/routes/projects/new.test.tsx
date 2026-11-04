@@ -119,7 +119,8 @@ vi.mock('@/components/ui/card', () => ({
 }));
 
 vi.mock('@/components/ui/tabs', () => ({
-  Tabs: ({ children }: { children: ReactNode }) => createElement('div', null, children),
+  Tabs: ({ children, value }: { children: ReactNode; value: string }) =>
+    createElement('div', { 'data-source': value }, children),
   TabsContent: ({ children }: { children: ReactNode }) => createElement('div', null, children),
   TabsList: ({ children }: { children: ReactNode }) => createElement('div', null, children),
   TabsTrigger: ({ children }: { children: ReactNode }) =>
@@ -351,4 +352,25 @@ it('forces CLI authentication refresh when the setup terminal closes', async () 
     container.remove();
     projects.push(...existingProjects);
   }
+});
+
+describe('NewProjectPage source defaults', () => {
+  it('defaults to GitHub URL in the browser', () => {
+    const { container, root } = renderPage({ projects: [] });
+    expect(container.querySelector('[data-source]')?.getAttribute('data-source')).toBe('github');
+    root.unmount();
+  });
+  it('defaults to Local Path in Electron', () => {
+    Object.defineProperty(window, 'electronAPI', {
+      configurable: true,
+      value: { isElectron: true },
+    });
+    try {
+      const { container, root } = renderPage({ projects: [] });
+      expect(container.querySelector('[data-source]')?.getAttribute('data-source')).toBe('local');
+      root.unmount();
+    } finally {
+      Object.defineProperty(window, 'electronAPI', { configurable: true, value: undefined });
+    }
+  });
 });

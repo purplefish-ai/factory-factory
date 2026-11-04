@@ -1,58 +1,86 @@
 import type { Meta, StoryObj } from '@storybook/react';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { TRPCClientError } from '@trpc/client';
-import { observable } from '@trpc/server/observable';
-import { useState } from 'react';
-import { expect, within } from 'storybook/test';
+import { Navigate, Route, Routes } from 'react-router';
+import { expect, userEvent, within } from 'storybook/test';
 import { AppHeaderProvider } from '@/client/components/app-header-context';
 import { DataImportResultsProvider } from '@/client/features/data-import';
-import { trpc } from '@/client/lib/trpc';
+import { STORY_TRPC_PENDING } from '@/client/lib/storybook-trpc';
 import AdminDashboardPage from './admin-page';
-
-/** Every request fails, as when the backend is down or restarting. */
-function BackendUnavailableStory() {
-  const [queryClient] = useState(
-    () => new QueryClient({ defaultOptions: { queries: { retry: false } } })
-  );
-  const [client] = useState(() =>
-    trpc.createClient({
-      links: [
-        () => () =>
-          observable((observer) => {
-            observer.error(new TRPCClientError('Service unavailable'));
-          }),
-      ],
-    })
-  );
-  return (
-    <trpc.Provider client={client} queryClient={queryClient}>
-      <QueryClientProvider client={queryClient}>
-        <AppHeaderProvider>
-          <DataImportResultsProvider>
-            <div className="h-screen">
-              <AdminDashboardPage />
-            </div>
-          </DataImportResultsProvider>
-        </AppHeaderProvider>
-      </QueryClientProvider>
-    </trpc.Provider>
-  );
-}
 
 const meta = {
   title: 'Settings/SettingsPage',
-  component: BackendUnavailableStory,
+  component: AdminDashboardPage,
   parameters: { layout: 'fullscreen' },
-} satisfies Meta<typeof BackendUnavailableStory>;
-
+  render: () => (
+    <AppHeaderProvider>
+      <DataImportResultsProvider>
+        <div className="h-screen">
+          <Routes>
+            <Route path="/" element={<Navigate to="/admin" replace />} />
+            <Route path="/admin/:section?" element={<AdminDashboardPage />} />
+          </Routes>
+        </div>
+      </DataImportResultsProvider>
+    </AppHeaderProvider>
+  ),
+} satisfies Meta<typeof AdminDashboardPage>;
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-/** Failed stats and process queries show errors with Retry instead of zeroed counters. */
-export const BackendUnavailable: Story = {
+export const GeneralWhileDiagnosticsPending: Story = {
+  parameters: {
+    trpc: {
+      handlers: {
+        'userSettings.get': () => ({ preferredIde: 'cursor' }),
+        'admin.getSystemStats': () => STORY_TRPC_PENDING,
+        'admin.getActiveProcesses': () => STORY_TRPC_PENDING,
+      },
+    },
+  },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
+    await expect(
+      await canvas.findByRole('navigation', { name: 'Settings sections' })
+    ).toBeVisible();
+    await expect(await canvas.findByText('Preferred IDE')).toBeVisible();
+    await expect(canvas.getByRole('link', { name: 'System' })).toHaveAttribute(
+      'href',
+      '/admin/system'
+    );
+  },
+};
+
+export const Phone: Story = {
+  ...GeneralWhileDiagnosticsPending,
+  globals: { viewport: { value: 'phone', isRotated: false } },
+};
+
+export const SystemBackendUnavailable: Story = {
+  parameters: {
+    trpc: {
+      handlers: {
+        'admin.getSystemStats': () => {
+          throw new Error('Service unavailable');
+        },
+        'admin.getActiveProcesses': () => {
+          throw new Error('Service unavailable');
+        },
+      },
+    },
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(await canvas.findByRole('link', { name: 'System' }));
     await expect(await canvas.findByText("Couldn't load API usage")).toBeVisible();
     await expect(await canvas.findByText("Couldn't load active processes")).toBeVisible();
+    await expect(canvas.getByRole('link', { name: 'General' })).toBeVisible();
+  },
+};
+export const SystemPending: Story = {
+  parameters: GeneralWhileDiagnosticsPending.parameters,
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(await canvas.findByRole('link', { name: 'System' }));
+    await expect(await canvas.findByText('Loading API usage…')).toBeVisible();
+    await expect(canvas.getByRole('link', { name: 'General' })).toBeVisible();
   },
 };

@@ -20,7 +20,7 @@ export function ServerLogsSection() {
       </CardHeader>
       <CardContent className="flex flex-col gap-2 sm:flex-row sm:gap-3">
         <Button variant="outline" className="w-full sm:w-auto" asChild>
-          <RouterLink to="/logs">View logs</RouterLink>
+          <RouterLink to="/admin/logs">View logs</RouterLink>
         </Button>
         <Button
           variant="outline"

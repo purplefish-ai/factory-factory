@@ -19,6 +19,7 @@ interface AppLayoutProps {
 export function AppLayout({ children, className }: AppLayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useRouteSidebarState();
   const navData = useAppNavigationData();
+  const isFirstRun = navData.projects?.length === 0 && !navData.projectsError;
 
   return (
     <div className={cn('flex min-h-0 flex-1 flex-col', className)}>
@@ -30,9 +31,9 @@ export function AppLayout({ children, className }: AppLayoutProps) {
         >
           <AppNavigationDataProvider value={navData}>
             <AppHeaderProvider>
-              <AppHeader />
+              <AppHeader showSidebarToggle={!isFirstRun} />
               <div className="flex flex-1 min-h-0 overflow-hidden">
-                <AppSidebar navData={navData} />
+                {isFirstRun ? null : <AppSidebar navData={navData} />}
                 <main className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-background">
                   {children}
                 </main>

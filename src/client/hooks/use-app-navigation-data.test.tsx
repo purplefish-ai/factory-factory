@@ -1,7 +1,7 @@
-import { createElement } from 'react';
+import { act, createElement } from 'react';
 import { flushSync } from 'react-dom';
 import { createRoot } from 'react-dom/client';
-import { MemoryRouter } from 'react-router';
+import { Link, MemoryRouter } from 'react-router';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { SELECTED_PROJECT_KEY } from '@/client/lib/project-selection';
 // @vitest-environment jsdom
@@ -128,6 +128,76 @@ describe('project route selection', () => {
     'recognizes the project slug in %s',
     (path) => {
       expect(getProjectSlugFromPath(path)).toBe('new');
+    }
+  );
+
+  it.each([true, false])(
+    'preserves global selection when opening project settings (direct=%s)',
+    async (direct) => {
+      localStorage.setItem(SELECTED_PROJECT_KEY, 'alpha');
+      window.history.replaceState(
+        {},
+        '',
+        direct ? '/projects/new/settings' : '/projects/alpha/workspaces'
+      );
+      const container = document.createElement('div');
+      const root = createRoot(container);
+      const selected: { selectedProjectSlug?: string; selectedProjectId?: string } = {};
+      try {
+        flushSync(() =>
+          root.render(
+            createElement(
+              MemoryRouter,
+              {
+                initialEntries: [direct ? '/projects/new/settings' : '/projects/alpha/workspaces'],
+              },
+              createElement(NavigationHarness, { selected }),
+              createElement(Link, { to: '/projects/new/settings' }, 'Project settings')
+            )
+          )
+        );
+        if (!direct) {
+          await act(async () => container.querySelector<HTMLAnchorElement>('a')?.click());
+        }
+        expect(selected.selectedProjectSlug).toBe('alpha');
+        expect(selected.selectedProjectId).toBe('alpha-id');
+        expect(localStorage.getItem(SELECTED_PROJECT_KEY)).toBe('alpha');
+      } finally {
+        flushSync(() => root.unmount());
+        localStorage.clear();
+        window.history.replaceState({}, '', '/');
+      }
+    }
+  );
+
+  it.each(['', 'missing', 'alpha'])(
+    'resolves the global fallback independently of scoped settings with stored=%s',
+    async (stored) => {
+      localStorage.clear();
+      if (stored) {
+        localStorage.setItem(SELECTED_PROJECT_KEY, stored);
+      }
+      window.history.replaceState({}, '', '/projects/new/settings');
+      const root = createRoot(document.createElement('div'));
+      const selected: { selectedProjectSlug?: string; selectedProjectId?: string } = {};
+      try {
+        await act(async () =>
+          root.render(
+            createElement(
+              MemoryRouter,
+              { initialEntries: ['/projects/new/settings'] },
+              createElement(NavigationHarness, { selected })
+            )
+          )
+        );
+        expect(selected.selectedProjectSlug).toBe('alpha');
+        expect(selected.selectedProjectId).toBe('alpha-id');
+        expect(localStorage.getItem(SELECTED_PROJECT_KEY)).toBe('alpha');
+      } finally {
+        flushSync(() => root.unmount());
+        localStorage.clear();
+        window.history.replaceState({}, '', '/');
+      }
     }
   );
 
