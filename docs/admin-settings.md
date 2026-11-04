@@ -72,7 +72,8 @@ The title bar, sidebar, and pane/tab headers share a theme-relative surface,
 while content keeps its own background. Dark mode raises the navigation surface
 and strengthens pane boundaries. High Contrast retains its black/white surfaces.
 The installed-app title bar keeps a visible separator when navigation is
-collapsed.
+collapsed. Its separator sits below the native window-control area so the line
+stays visible across the full window width.
 
 In the installed desktop PWA, the browser-owned corner backgrounds follow the
 page color and dim with search and other dialog backdrops. Closing a dialog

@@ -18,7 +18,7 @@ const meta = {
       story: { inline: false, iframeHeight: 120 },
       description: {
         component:
-          'The installed desktop PWA uses compact controls centered in the browser-reported title-bar area. A flat full-width divider sits below a header background that matches the native window-control corners in every theme. Larger fonts can grow the row without clipping. Empty space drags the window; interactive controls remain clickable. PWA stories simulate native geometry using the production CSS. Browser tabs and unsupported installations retain the standard header.',
+          'The installed desktop PWA uses compact controls centered in the browser-reported title-bar area. A full-width border sits below the native title-bar area so window controls cannot cover its ends. The header background matches the native window-control corners in every theme. Larger fonts can grow the row without clipping. Empty space drags the window; interactive controls remain clickable. PWA stories simulate native geometry using the production CSS. Browser tabs and unsupported installations retain the standard header.',
       },
     },
   },
@@ -115,7 +115,20 @@ export const PhoneMoreActions: Story = {
 export const Project: Story = { args: { variant: 'project' } };
 export const Generic: Story = { args: { variant: 'generic' } };
 
+const expectDividerBelowNativeControls: NonNullable<Story['play']> = async ({ canvasElement }) => {
+  const header = canvasElement.querySelector('header')!;
+  const controls = header.querySelector('.app-header-controls')!;
+  const bounds = header.getBoundingClientRect();
+  const styles = getComputedStyle(header);
+  const border = Number.parseFloat(styles.borderBottomWidth);
+  await expect(border).toBe(1);
+  await expect(bounds.bottom - border).toBeGreaterThanOrEqual(bounds.top + 32);
+  await expect(bounds.bottom - border).toBe(controls.getBoundingClientRect().bottom);
+  await expect(getComputedStyle(header, '::after').content).toBe('none');
+};
+
 export const InstalledPwaControlsLeft: Story = {
+  play: expectDividerBelowNativeControls,
   globals: { theme: 'dark' },
   decorators: [
     (Story) => (
@@ -126,6 +139,7 @@ export const InstalledPwaControlsLeft: Story = {
   ],
 };
 export const InstalledPwaControlsRight: Story = {
+  play: expectDividerBelowNativeControls,
   globals: { theme: 'dark' },
   decorators: [
     (Story) => (
@@ -138,8 +152,10 @@ export const InstalledPwaControlsRight: Story = {
 export const InstalledPwaLight: Story = {
   globals: { theme: 'light' },
   decorators: InstalledPwaControlsLeft.decorators,
+  play: expectDividerBelowNativeControls,
 };
 export const InstalledPwaLargeText: Story = {
+  play: expectDividerBelowNativeControls,
   args: { variant: 'family' },
   globals: { theme: 'dark' },
   decorators: [

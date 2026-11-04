@@ -61,8 +61,7 @@ for (const { platform, left, right } of [
     await expect(header).toHaveCSS('padding-left', '8px');
     await expect(header).toHaveCSS('-webkit-app-region', 'none');
     expect(await emulateTitleBar(page, left, right)).toBe(true);
-    await expectHeaderFits(page);
-    await expect(header).toHaveCSS('height', '32px');
+    await expect(header).toHaveCSS('height', '33px');
     await expect(header).toHaveCSS('-webkit-app-region', 'drag');
     const controls = header.locator('button, a, [role="combobox"]:not(button)');
     for (const control of await controls.all()) {
@@ -85,6 +84,7 @@ for (const { platform, left, right } of [
       ).toBeLessThanOrEqual(0.5);
       await expect(control).toHaveCSS('-webkit-app-region', 'no-drag');
     }
+    await expectHeaderFits(page, 33);
     await expect(header).toHaveScreenshot(`installed-pwa-header-${platform}.png`);
     await page.getByRole('button', { name: 'Open project menu' }).click();
     await expect(page.getByRole('menu')).toBeVisible();
@@ -103,9 +103,9 @@ for (const scenario of [
     scale: 100,
     height: 32,
     top: 0,
-    row: 32,
+    row: 33,
   },
-  { variant: 'family', width: 1100, left: 0, right: 140, scale: 150, height: 32, top: 0, row: 40 },
+  { variant: 'family', width: 1100, left: 0, right: 140, scale: 150, height: 32, top: 0, row: 41 },
   {
     variant: 'workspace',
     width: 810,
@@ -114,10 +114,10 @@ for (const scenario of [
     scale: 200,
     height: 32,
     top: 0,
-    row: 52,
+    row: 53,
   },
-  { variant: 'project', width: 768, left: 0, right: 140, scale: 100, height: 40, top: 6, row: 46 },
-  { variant: 'generic', width: 640, left: 86, right: 40, scale: 150, height: 32, top: 0, row: 40 },
+  { variant: 'project', width: 768, left: 0, right: 140, scale: 100, height: 40, top: 6, row: 47 },
+  { variant: 'generic', width: 640, left: 86, right: 40, scale: 150, height: 32, top: 0, row: 41 },
 ]) {
   test(`installed PWA ${scenario.variant} fits at ${scenario.width}px and ${scenario.scale}% font`, async ({
     page,
@@ -136,6 +136,11 @@ for (const scenario of [
     ).toBe(true);
     const header = page.locator('header');
     await expect(header).toHaveCSS('height', `${scenario.row}px`);
+    const dividerTop = await header.evaluate((element) => {
+      const border = Number.parseFloat(getComputedStyle(element).borderBottomWidth);
+      return element.getBoundingClientRect().bottom - border;
+    });
+    expect(dividerTop).toBeGreaterThanOrEqual(scenario.top + scenario.height);
     await expectHeaderFits(page, scenario.row);
     for (const control of await header.locator('button, a').all()) {
       if (!(await control.isVisible())) {

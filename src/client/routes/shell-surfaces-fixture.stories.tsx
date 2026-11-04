@@ -117,9 +117,9 @@ async function checkSurfaces(canvasElement: HTMLElement, native = false) {
       await expect(getComputedStyle(controls, '::before').content).toBe('none');
     }
     await expect(getComputedStyle(tabs).backgroundColor).toBe(sidebarColor);
-    const border = native ? getComputedStyle(header, '::after') : getComputedStyle(header);
-    await expect(native ? border.height : border.borderBottomWidth).toBe('1px');
-    const borderColor = native ? border.backgroundColor : border.borderBottomColor;
+    const border = getComputedStyle(header);
+    await expect(border.borderBottomWidth).toBe('1px');
+    const borderColor = border.borderBottomColor;
     await expect(borderColor).not.toBe(headerColor);
     await expect(
       contrastRatio(renderedRgb(getComputedStyle(header).color), renderedRgb(sidebarColor))
