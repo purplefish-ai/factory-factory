@@ -50,9 +50,33 @@ for (const width of [375, 820]) {
         .toBe('block');
     });
 
+    test('icon controls and close actions have 44px touch targets', async ({ page }) => {
+      await page.goto('/__mobile-baseline?surface=hover-actions');
+      for (const name of [
+        'Rename workspace',
+        'Archive workspace',
+        'Close File',
+        'Close Inactive',
+        'Delete screenshot Home',
+      ]) {
+        const control = page.getByRole('button', { name, exact: true }).first();
+        await expect(control).toBeVisible();
+        const bounds = await control.boundingBox();
+        expect(bounds?.width, name).toBeGreaterThanOrEqual(44);
+        expect(bounds?.height, name).toBeGreaterThanOrEqual(44);
+      }
+      expect(
+        await page.evaluate(() => document.documentElement.scrollWidth - innerWidth)
+      ).toBeLessThanOrEqual(1);
+    });
+
     test('screenshot deletion removes the thumbnail', async ({ page }) => {
       await page.goto('/__mobile-baseline?surface=hover-actions');
       await page.getByRole('button', { name: 'Delete screenshot Home' }).tap();
+      const confirmation = page.getByRole('alertdialog', { name: 'Delete screenshot?' });
+      await expect(confirmation).toBeVisible();
+      await expect(page.locator('button[aria-label="Open screenshot Home"]')).toHaveCount(1);
+      await confirmation.getByRole('button', { name: 'Delete', exact: true }).tap();
       await expect(page.getByRole('button', { name: 'Open screenshot Home' })).toHaveCount(0);
       await expect(page.getByText('No screenshots yet', { exact: true })).toBeVisible();
     });

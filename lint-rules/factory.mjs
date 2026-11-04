@@ -48,7 +48,101 @@ function reportRawPaletteClass(context, node, text) {
   }
 }
 
+function hasButtonText(node) {
+  if (node.type === 'JSXText') {
+    return Boolean(node.value.trim());
+  }
+  if (node.type === 'JSXExpressionContainer') {
+    return (
+      node.expression.type === 'Literal' &&
+      typeof node.expression.value === 'string' &&
+      Boolean(node.expression.value.trim())
+    );
+  }
+  if (node.type !== 'JSXElement') {
+    return false;
+  }
+  const hidden = node.openingElement.attributes.some(
+    (attribute) =>
+      attribute.type === 'JSXAttribute' &&
+      attribute.name.name === 'aria-hidden' &&
+      (attribute.value?.value === 'true' || attribute.value?.expression?.value === true)
+  );
+  return !hidden && node.children.some(hasButtonText);
+}
+
 const rules = {
+  'icon-button-name': {
+    create(context) {
+      return {
+        JSXElement(node) {
+          const opening = node.openingElement;
+          if (!['button', 'Button'].includes(opening.name.name)) {
+            return;
+          }
+          const attributes = opening.attributes.filter(
+            (attribute) => attribute.type === 'JSXAttribute'
+          );
+          const hasName = attributes.some(
+            (attribute) =>
+              ['aria-label', 'aria-labelledby', 'title'].includes(attribute.name.name) &&
+              attribute.value &&
+              !(attribute.value.type === 'Literal' && !attribute.value.value?.trim())
+          );
+          if (hasName) {
+            return;
+          }
+          const children = node.children.filter(
+            (child) =>
+              !(child.type === 'JSXText' && !child.value.trim()) &&
+              !(
+                child.type === 'JSXExpressionContainer' &&
+                child.expression.type === 'JSXEmptyExpression'
+              )
+          );
+          const iconOnly =
+            children.length > 0 &&
+            children.every(
+              (child) =>
+                child.type === 'JSXElement' &&
+                (child.openingElement.name.name === 'svg' ||
+                  /Icon$/.test(child.openingElement.name.name))
+            );
+          const iconSize = attributes.some(
+            (attribute) =>
+              attribute.name.name === 'size' &&
+              attribute.value?.type === 'Literal' &&
+              /^icon(?:-|$)/.test(attribute.value.value)
+          );
+          const hasText = children.some(hasButtonText);
+          const forwardsProps = opening.attributes.some(
+            (attribute) => attribute.type === 'JSXSpreadAttribute'
+          );
+          const delegatedName =
+            attributes.some((attribute) => attribute.name.name === 'asChild') &&
+            children.some(
+              (child) =>
+                child.type === 'JSXElement' &&
+                child.openingElement.attributes.some(
+                  (attribute) =>
+                    attribute.type === 'JSXAttribute' &&
+                    ['aria-label', 'aria-labelledby', 'title'].includes(attribute.name.name)
+                )
+            );
+          if (
+            !delegatedName &&
+            (iconOnly || (iconSize && !hasText && !(children.length === 0 && forwardsProps)))
+          ) {
+            context.report({
+              node: opening,
+              message:
+                'Give icon-only buttons an aria-label, aria-labelledby, title, or screen-reader text.',
+            });
+          }
+        },
+      };
+    },
+  },
   'no-raw-palette-classes': {
     meta: {
       schema: [

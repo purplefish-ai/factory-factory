@@ -55,6 +55,7 @@ describe('ChatInput file controls', () => {
     try {
       flushSync(() => root.render(createElement(ChatInput, { onSend, placeholder: 'First' })));
       flushSync(() => root.render(createElement(ChatInput, { onSend, placeholder: 'Second' })));
+      expect(container.querySelector('textarea')?.getAttribute('enterkeyhint')).toBe('send');
       expect(mocks.callbacks).toHaveLength(2);
       expect(mocks.callbacks[1]).toBe(mocks.callbacks[0]);
     } finally {

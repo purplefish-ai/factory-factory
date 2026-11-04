@@ -4,6 +4,7 @@
 @source '../../node_modules/streamdown/dist/*.js';
 @plugin '@tailwindcss/typography';
 @import './theme-presets.css';
+@import './fonts.css';
 @import './prose.css';
 @import './components/pwa-overlays.css';
 
@@ -403,4 +404,21 @@
 
 [data-sonner-toast] * {
   user-select: text !important;
+}
+
+/* Coarse pointers need usable targets even when a secondary mouse is present.
+ * Minimum sizes preserve layout flow instead of overlapping adjacent actions.
+ */
+@media (any-pointer: coarse) {
+  button,
+  a[data-slot='button'],
+  [role='tab'],
+  [role='button'] {
+    min-width: 44px;
+    min-height: 44px;
+  }
+}
+
+[data-slot='sheet-content'][data-side='bottom'] {
+  padding-bottom: calc(1rem + env(safe-area-inset-bottom));
 }

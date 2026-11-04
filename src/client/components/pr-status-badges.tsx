@@ -14,7 +14,7 @@ import {
   reduceCheckRollupToLatestRunAttempts,
 } from '@/shared/core';
 import type { GitHubStatusCheck, ReviewDecision } from '@/shared/github-types';
-import { StatusChip, StatusDot, StatusIcon } from './status-indicators';
+import { StatusChip, StatusIcon } from './status-indicators';
 
 export type CIStatus = CiVisualState;
 
@@ -51,7 +51,11 @@ const CI_STATUS_TITLES: Record<CIStatus, string> = {
 
 export function CIStatusDot({ checks, size = 'sm' }: CIStatusDotProps) {
   const status = getCIStatus(checks);
-  return <StatusDot tone={getCiStateTone(status)} size={size} label={CI_STATUS_TITLES[status]} />;
+  return (
+    <span role="img" aria-label={CI_STATUS_TITLES[status]} title={CI_STATUS_TITLES[status]}>
+      <StatusIcon tone={getCiStateTone(status)} className={size === 'sm' ? 'h-3 w-3' : 'h-4 w-4'} />
+    </span>
+  );
 }
 
 // Deduplicate checks by name, keeping the most relevant status

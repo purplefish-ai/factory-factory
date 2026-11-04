@@ -72,6 +72,7 @@ export function ProjectRepoForm({
           {isElectron && (
             <Button
               type="button"
+              aria-label="Browse project directories"
               variant="outline"
               onClick={() => {
                 runInBackground(handleBrowse(), "Couldn't browse project directories.");

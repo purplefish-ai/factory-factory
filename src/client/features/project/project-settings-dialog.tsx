@@ -79,7 +79,7 @@ export function ProjectSettingsDialog({
       <Tooltip>
         <TooltipTrigger asChild>
           <DialogTrigger asChild>
-            <Button variant="ghost" size="icon">
+            <Button variant="ghost" size="icon" aria-label="Project settings">
               <GearIcon className="h-4 w-4" />
             </Button>
           </DialogTrigger>

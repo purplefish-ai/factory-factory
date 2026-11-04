@@ -121,11 +121,7 @@ describe('status palette', () => {
     expect(new Set(values).size).toBe(STATUS_TOKENS.length);
   });
 
-  it.each(
-    (['factory', 'high-contrast'] as const).flatMap((scheme) =>
-      MODES.map((mode) => [scheme, mode] as const)
-    )
-  )('%s %s neutral status text is legible', (scheme, mode) => {
+  it.each(CASES)('%s %s neutral status text is legible', (scheme, mode) => {
     const { color } = palette(scheme, mode);
     for (const surface of ['background', 'card', 'muted']) {
       expect

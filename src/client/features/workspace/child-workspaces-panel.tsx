@@ -7,7 +7,8 @@ import { toast } from 'sonner';
 import { EmptyState } from '@/client/components/empty-state';
 import { Loading } from '@/client/components/loading';
 import { QueryErrorState } from '@/client/components/query-error-state';
-import { getStatusToneStyle } from '@/client/lib/status-tones';
+import { StatusIcon } from '@/client/components/status-indicators';
+import type { StatusTone } from '@/client/lib/status-tones';
 import { trpc } from '@/client/lib/trpc';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -163,20 +164,20 @@ function NewChildWorkspaceDialog({
 // Child Workspaces Panel
 // =============================================================================
 
-function statusColor(status: string): string {
+function statusTone(status: string): StatusTone {
   switch (status) {
     case 'READY':
-      return getStatusToneStyle('success').dot;
+      return 'success';
     case 'NEW':
     case 'PROVISIONING':
-      return cn(getStatusToneStyle('working').dot, 'animate-pulse motion-reduce:animate-none');
+      return 'working';
     case 'FAILED':
-      return getStatusToneStyle('danger').dot;
+      return 'danger';
     case 'ARCHIVED':
     case 'ARCHIVING':
-      return getStatusToneStyle('neutral').dot;
+      return 'neutral';
     default:
-      return getStatusToneStyle('info').dot;
+      return 'info';
   }
 }
 
@@ -265,11 +266,12 @@ export function ChildWorkspacesPanel({ workspaceId, embedded = false }: ChildWor
                   className="flex items-start gap-3 px-3 py-2.5 hover:bg-muted/50 transition-colors group"
                 >
                   <span
-                    className={cn(
-                      'mt-1.5 h-2 w-2 rounded-full shrink-0',
-                      statusColor(child.status)
-                    )}
-                  />
+                    className="mt-0.5"
+                    role="img"
+                    aria-label={child.status.toLowerCase().replaceAll('_', ' ')}
+                  >
+                    <StatusIcon tone={statusTone(child.status)} />
+                  </span>
                   <div className="flex-1 min-w-0 space-y-0.5">
                     <p className="text-sm font-medium truncate">{child.name}</p>
                     <p className="text-[11px] text-muted-foreground truncate">

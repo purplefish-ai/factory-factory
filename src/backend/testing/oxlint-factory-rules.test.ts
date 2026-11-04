@@ -10,6 +10,7 @@ const binary = resolve('node_modules/.bin/oxlint');
 const config = join(directory, '.oxlintrc.json');
 const rules = [
   'no-await-import',
+  'icon-button-name',
   'no-native-dialogs',
   'no-next-directives',
   'no-zod-any',
@@ -42,6 +43,15 @@ const reportSchema = z.object({
 
 describe('Oxlint project guardrails', () => {
   const rejectedSources: [string, string][] = [
+    ['icon-button-name', 'const x = <Button size="icon"><PlusIcon /></Button>;'],
+    ['icon-button-name', 'const x = <button><XIcon /></button>;'],
+    ['icon-button-name', 'const x = <Button size="icon" />;'],
+    ['icon-button-name', 'const x = <Button size="icon"><span /></Button>;'],
+    [
+      'icon-button-name',
+      'const x = <Button size="icon"><span aria-hidden="true">Close</span></Button>;',
+    ],
+    ['icon-button-name', 'const x = <Button size="icon" aria-label=""><PlusIcon /></Button>;'],
     ['no-await-import', 'async function load() { return await import("./module"); }'],
     ['no-native-dialogs', 'window.confirm("Continue?");'],
     ['no-native-dialogs', 'prompt("Name", "default");'],
@@ -70,6 +80,12 @@ describe('Oxlint project guardrails', () => {
   }));
 
   const acceptedFixtures = [
+    'const x = <Button size="icon" aria-label="Add workspace"><PlusIcon /></Button>;',
+    'const x = <button title="Close"><XIcon /></button>;',
+    'const x = <Button size="icon"><PlusIcon /><span className="sr-only">Add workspace</span></Button>;',
+    'const x = <Button><PlusIcon />Add workspace</Button>;',
+    'const x = <Button aria-labelledby={labelId}><PlusIcon /></Button>;',
+
     'import { example } from "./module";',
     'async function load() { return import("./module"); }',
     'const dialog = { confirm(value: string) { return value; } }; dialog.confirm("hello");',

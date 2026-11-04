@@ -145,3 +145,21 @@ with tooltips available on hover and keyboard focus. Each distinct state has an
 icon, repeated states show a count, and tooltips list their PR numbers. The PR
 menu continues to expose individual PR actions and details. The desktop sidebar
 preserves its open/closed preference across navigation.
+
+## Accessibility and offline defaults
+
+Muted text meets WCAG AA (4.5:1) against page, card and muted surfaces in all
+presets and both modes. The status palette test guards these combinations.
+Compact CI and child workspace indicators use distinct status icons with
+accessible labels, so their meaning survives monochrome display.
+
+Geist and Geist Mono variable fonts are served locally, including in Storybook,
+so default text remains available offline. The assets and SIL Open Font License
+are in `public/fonts/geist`, sourced from `vercel/geist-font` commit
+`a2357c1398c81d88ff84823a2f50af3152ee8733`. Optional alternate font families
+continue to use the existing Google Fonts stylesheet.
+
+Icon buttons and close controls have 44px minimum targets on devices with any
+coarse pointer. Bottom sheets include the device safe-area inset in addition to
+their normal padding; chat composers already use the shared safe-area helper.
+Looping spinners and pulses remain static when reduced motion is requested.
