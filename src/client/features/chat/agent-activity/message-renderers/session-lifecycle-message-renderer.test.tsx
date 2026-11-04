@@ -2,7 +2,7 @@
 
 import { createElement } from 'react';
 import { flushSync } from 'react-dom';
-import { createRoot } from 'react-dom/client';
+import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { AgentMessage } from '@/lib/chat-protocol';
 import { SessionLifecycleMessageRenderer } from './session-lifecycle-message-renderer';
@@ -23,7 +23,12 @@ function lifecycleMessage(
   } satisfies AgentMessage;
 }
 
+let copyTestRoot: Root | null = null;
+
 afterEach(() => {
+  copyTestRoot?.unmount();
+  copyTestRoot = null;
+  Reflect.deleteProperty(navigator, 'clipboard');
   document.body.innerHTML = '';
 });
 
@@ -94,6 +99,7 @@ describe('SessionLifecycleMessageRenderer', () => {
     const container = document.createElement('div');
     document.body.appendChild(container);
     const root = createRoot(container);
+    copyTestRoot = root;
 
     flushSync(() => {
       root.render(
@@ -127,12 +133,13 @@ describe('SessionLifecycleMessageRenderer', () => {
     await vi.waitFor(() =>
       expect(row?.querySelector('button[aria-label="Error copied"]')).not.toBeNull()
     );
+    expect(row?.querySelector('[role="status"]')?.textContent).toBe(
+      'Error copied to the clipboard'
+    );
 
     flushSync(() => toggle?.click());
     expect(row?.querySelector('p')?.classList.contains('truncate')).toBe(true);
     expect(row?.querySelectorAll('p')).toHaveLength(1);
-    root.unmount();
-    Reflect.deleteProperty(navigator, 'clipboard');
   });
 
   it('marks the severity icon as decorative', () => {

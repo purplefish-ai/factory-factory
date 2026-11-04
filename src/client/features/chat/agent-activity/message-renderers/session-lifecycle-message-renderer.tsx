@@ -95,11 +95,14 @@ function ErrorLifecycleRow({
             className={cn('transition-transform', expanded && 'rotate-180')}
           />
         </Button>
+        <span role="status" className="sr-only">
+          {copied ? 'Error copied to the clipboard' : ''}
+        </span>
       </div>
       {expanded && (
         <p
           id={detailsId}
-          className="max-h-80 overflow-y-auto whitespace-pre-wrap break-words px-3 pb-2 pl-9 text-foreground"
+          className="mx-1 mb-1 max-h-80 overflow-y-auto rounded-sm whitespace-pre-wrap break-words px-2 pb-1 pl-8 text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           {text}
         </p>
