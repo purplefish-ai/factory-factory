@@ -33,7 +33,7 @@ const PROJECTS = [
   },
 ];
 
-function ProjectsListStory({ response }: { response: ProjectsResponse }) {
+function ProjectsListStoryContent({ response }: { response: ProjectsResponse }) {
   const [queryClient] = useState(
     () => new QueryClient({ defaultOptions: { queries: { retry: false } } })
   );
@@ -65,6 +65,11 @@ function ProjectsListStory({ response }: { response: ProjectsResponse }) {
       </QueryClientProvider>
     </trpc.Provider>
   );
+}
+
+/** Keyed by the control so changing it rebuilds the mocked client and cache. */
+function ProjectsListStory({ response }: { response: ProjectsResponse }) {
+  return <ProjectsListStoryContent key={response} response={response} />;
 }
 
 const meta = {

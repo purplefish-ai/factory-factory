@@ -65,9 +65,9 @@ rejection goes to its caller. The rule is therefore:
   fallback stays quiet.
 - A mutation that reports errors per call, through a `mutateAsync` try/catch, or
   with inline error UI sets `meta: { errorToast: false }`.
-- Otherwise a failure shows an error toast. Set
-  `meta: { errorToast: "Couldn't {verb} {object}" }` for a specific title; the
-  server message becomes the description.
+- Otherwise a failure shows an error toast. For a specific title, set a literal
+  string such as `meta: { errorToast: "Couldn't start dev server" }`; it is
+  shown verbatim, and the server message becomes the description.
 
 Error toasts stay for 10 seconds and have a close button. `toast.error` gets
 these defaults from `src/components/ui/sonner.tsx`, because sonner has no

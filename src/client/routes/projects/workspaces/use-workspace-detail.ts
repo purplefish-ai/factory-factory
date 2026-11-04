@@ -50,8 +50,9 @@ export function useWorkspaceData({ workspaceId }: UseWorkspaceDataOptions) {
 
   // Sync PR status from GitHub on page load (if workspace has a PR)
   const syncPRStatus = trpc.workspace.syncPRStatus.useMutation({
-    // Background sync on page load; the PR badge already reflects stale state.
-    meta: { errorToast: false },
+    // Runs at most once per page load (hasSyncedRef below), so the fallback
+    // toast reports a failure without repeating on every poll.
+    meta: { errorToast: "Couldn't sync pull request status" },
     onSuccess: () => {
       // Refresh workspace data after PR sync
       runInBackground(

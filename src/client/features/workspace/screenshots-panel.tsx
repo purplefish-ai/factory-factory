@@ -1,7 +1,7 @@
 import { CameraIcon } from '@phosphor-icons/react/dist/csr/Camera';
 import { SpinnerGapIcon } from '@phosphor-icons/react/dist/csr/SpinnerGap';
 import { XIcon } from '@phosphor-icons/react/dist/csr/X';
-import { useCallback, useState } from 'react';
+import { type ReactNode, useCallback, useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { QueryErrorState } from '@/client/components/query-error-state';
 import { trpc } from '@/client/lib/trpc';
@@ -59,21 +59,26 @@ export function ScreenshotsPanel({
   );
 
   const screenshots = data?.screenshots ?? [];
+  const deleteTargetListed =
+    deleteTarget !== null && screenshots.some((shot) => shot.path === deleteTarget.path);
 
-  const handleTakeScreenshots = useCallback(() => {
-    onTakeScreenshots?.();
-  }, [onTakeScreenshots]);
+  // Close the confirmation if its screenshot leaves the list (deleted elsewhere,
+  // or the list emptied/failed), so it cannot reopen later with a stale target.
+  useEffect(() => {
+    if (deleteDialogOpen && !deleteMutation.isPending && !deleteTargetListed) {
+      setDeleteDialogOpen(false);
+    }
+  }, [deleteDialogOpen, deleteMutation.isPending, deleteTargetListed]);
 
+  let body: ReactNode;
   if (isLoading) {
-    return (
+    body = (
       <div className="flex items-center justify-center h-full">
         <SpinnerGapIcon className="h-6 w-6 animate-spin text-muted-foreground" />
       </div>
     );
-  }
-
-  if (error && !data) {
-    return (
+  } else if (error && !data) {
+    body = (
       <QueryErrorState
         title="Couldn't load screenshots"
         error={error}
@@ -84,59 +89,37 @@ export function ScreenshotsPanel({
         className="h-full"
       />
     );
-  }
-
-  if (screenshots.length === 0) {
-    return (
-      <div className="flex flex-col items-center justify-center h-full text-center p-4 gap-3">
-        <CameraIcon className="h-8 w-8 text-muted-foreground" />
-        <div>
-          {isTakingScreenshots ? (
-            <>
-              <p className="text-sm font-medium text-muted-foreground">Taking Screenshots...</p>
-              <p className="text-xs text-muted-foreground/70 mt-1">
-                The agent is capturing the dev app
-              </p>
-            </>
-          ) : (
-            <>
-              <p className="text-sm font-medium text-muted-foreground">No screenshots yet</p>
-              <p className="text-xs text-muted-foreground/70 mt-1">
-                Capture screenshots of the running dev app
-              </p>
-            </>
-          )}
+  } else if (screenshots.length === 0) {
+    body = (
+      <ScreenshotsEmptyState
+        isTakingScreenshots={isTakingScreenshots}
+        onTakeScreenshots={onTakeScreenshots}
+      />
+    );
+  } else {
+    body = (
+      <ScrollArea className="h-full">
+        <div className="p-2 grid grid-cols-2 gap-2">
+          {screenshots.map((screenshot) => (
+            <ScreenshotThumbnail
+              key={screenshot.path}
+              workspaceId={workspaceId}
+              screenshot={screenshot}
+              onClick={() => openTab('screenshot', screenshot.path, screenshot.name)}
+              onDelete={() => {
+                setDeleteTarget(screenshot);
+                setDeleteDialogOpen(true);
+              }}
+            />
+          ))}
         </div>
-        {isTakingScreenshots ? (
-          <SpinnerGapIcon className="h-5 w-5 animate-spin text-muted-foreground" />
-        ) : (
-          onTakeScreenshots && (
-            <Button variant="outline" size="sm" onClick={handleTakeScreenshots} className="gap-1.5">
-              <CameraIcon className="h-3.5 w-3.5" />
-              Take Screenshots
-            </Button>
-          )
-        )}
-      </div>
+      </ScrollArea>
     );
   }
 
   return (
-    <ScrollArea className="h-full">
-      <div className="p-2 grid grid-cols-2 gap-2">
-        {screenshots.map((screenshot) => (
-          <ScreenshotThumbnail
-            key={screenshot.path}
-            workspaceId={workspaceId}
-            screenshot={screenshot}
-            onClick={() => openTab('screenshot', screenshot.path, screenshot.name)}
-            onDelete={() => {
-              setDeleteTarget(screenshot);
-              setDeleteDialogOpen(true);
-            }}
-          />
-        ))}
-      </div>
+    <>
+      {body}
       <ConfirmDialog
         open={deleteDialogOpen}
         onOpenChange={(open) => {
@@ -155,7 +138,53 @@ export function ScreenshotsPanel({
           }
         }}
       />
-    </ScrollArea>
+    </>
+  );
+}
+
+// =============================================================================
+// Empty State
+// =============================================================================
+
+function ScreenshotsEmptyState({
+  isTakingScreenshots,
+  onTakeScreenshots,
+}: Pick<ScreenshotsPanelProps, 'isTakingScreenshots' | 'onTakeScreenshots'>) {
+  const handleTakeScreenshots = useCallback(() => {
+    onTakeScreenshots?.();
+  }, [onTakeScreenshots]);
+
+  return (
+    <div className="flex flex-col items-center justify-center h-full text-center p-4 gap-3">
+      <CameraIcon className="h-8 w-8 text-muted-foreground" />
+      <div>
+        {isTakingScreenshots ? (
+          <>
+            <p className="text-sm font-medium text-muted-foreground">Taking Screenshots...</p>
+            <p className="text-xs text-muted-foreground/70 mt-1">
+              The agent is capturing the dev app
+            </p>
+          </>
+        ) : (
+          <>
+            <p className="text-sm font-medium text-muted-foreground">No screenshots yet</p>
+            <p className="text-xs text-muted-foreground/70 mt-1">
+              Capture screenshots of the running dev app
+            </p>
+          </>
+        )}
+      </div>
+      {isTakingScreenshots ? (
+        <SpinnerGapIcon className="h-5 w-5 animate-spin text-muted-foreground" />
+      ) : (
+        onTakeScreenshots && (
+          <Button variant="outline" size="sm" onClick={handleTakeScreenshots} className="gap-1.5">
+            <CameraIcon className="h-3.5 w-3.5" />
+            Take Screenshots
+          </Button>
+        )
+      )}
+    </div>
   );
 }
 

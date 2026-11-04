@@ -287,4 +287,41 @@ describe('ScreenshotsPanel', () => {
 
     flushSync(() => root.unmount());
   });
+
+  it('keeps cached screenshots visible when a background refetch fails', () => {
+    mocks.screenshots = [{ name: 'home.png', path: 'home.png', size: 1 }];
+    mocks.listError = new Error('Background refresh failed');
+    mocks.listFetching = true;
+    const { container, root } = renderPanel();
+
+    expect(container.querySelector('[aria-label="Open screenshot home.png"]')).not.toBeNull();
+    expect(container.querySelector('[role="alert"]')).toBeNull();
+    expect(container.textContent).not.toContain("Couldn't load screenshots");
+
+    flushSync(() => root.unmount());
+  });
+
+  it('closes the delete confirmation when its screenshot leaves the list', async () => {
+    mocks.screenshots = [{ name: 'home.png', path: 'home.png', size: 1 }];
+    const { container, root, rerender } = renderPanel();
+
+    flushSync(() =>
+      container
+        .querySelector<HTMLButtonElement>('[aria-label="Delete screenshot home.png"]')
+        ?.click()
+    );
+    expect(container.querySelector('[role="alertdialog"]')).not.toBeNull();
+
+    mocks.screenshots = [];
+    rerender();
+    await vi.waitFor(() => expect(container.querySelector('[role="alertdialog"]')).toBeNull());
+
+    // A screenshot reappearing must not reopen the stale confirmation.
+    mocks.screenshots = [{ name: 'home.png', path: 'home.png', size: 1 }];
+    rerender();
+    expect(container.querySelector('[role="alertdialog"]')).toBeNull();
+    expect(mocks.deleteScreenshot).not.toHaveBeenCalled();
+
+    flushSync(() => root.unmount());
+  });
 });

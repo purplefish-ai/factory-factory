@@ -71,11 +71,12 @@ function resolveOperation(
       }
       return { success: true };
     default:
-      return null;
+      // Fail loudly so a new or mistyped panel request is not masked.
+      throw new TRPCClientError(`Unmocked tRPC path in ScreenshotsPanel story: ${path}`);
   }
 }
 
-function ScreenshotsStory(props: ScreenshotsStoryProps) {
+function ScreenshotsStoryContent(props: ScreenshotsStoryProps) {
   const { isTakingScreenshots = false } = props;
   const [queryClient] = useState(
     () => new QueryClient({ defaultOptions: { queries: { retry: false } } })
@@ -116,6 +117,12 @@ function ScreenshotsStory(props: ScreenshotsStoryProps) {
       </QueryClientProvider>
     </trpc.Provider>
   );
+}
+
+/** Keyed by the controls so changing them rebuilds the mocked client and cache. */
+function ScreenshotsStory(props: ScreenshotsStoryProps) {
+  const key = `${props.list}:${props.deleteFails ? 'fail' : 'ok'}`;
+  return <ScreenshotsStoryContent key={key} {...props} />;
 }
 
 async function openDeleteConfirmation(canvasElement: HTMLElement) {

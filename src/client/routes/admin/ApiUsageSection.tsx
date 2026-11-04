@@ -47,7 +47,7 @@ export function ApiUsageSection({ apiUsage, onReset, isResetting }: ApiUsageSect
           }
         }}
         title="Reset API usage stats?"
-        description="Request counts go back to zero. The previous numbers can't be recovered."
+        description="Total requests and per-agent usage go back to zero. Requests/min and Requests/hour follow the rate-limit window and are not reset. The previous totals can't be recovered."
         confirmText="Reset"
         variant="destructive"
         isPending={isResetting}
