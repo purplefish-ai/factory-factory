@@ -178,6 +178,8 @@ terminal connection, tab identity and selection alive, while hiding terminal
 content. An empty Terminal tab opens Terminal 1 on click, after the server
 terminal list loads; closing the last terminal while viewing it recreates
 Terminal 1. Closing it from Logs leaves the empty Terminal tab until selected.
+The server always sends the initial terminal list, including an empty list for
+workspaces with no running terminals, so first-terminal creation can proceed.
 
 Workspace terminal reconnects replace each existing tab's output with its server
 rolling buffer by terminal ID. Tab identity and selection are preserved; output

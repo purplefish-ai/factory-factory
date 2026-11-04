@@ -84,15 +84,13 @@ function sendExistingTerminals(
 ): void {
   const { terminalService } = services;
   const existingTerminals = terminalService.getTerminalsForWorkspace(workspaceId);
-  if (existingTerminals.length === 0) {
-    return;
-  }
 
   logger.info('Sending existing terminal list for restoration', {
     workspaceId,
     terminalCount: existingTerminals.length,
   });
 
+  // An empty list completes client restoration and allows the first terminal to open.
   ws.send(
     JSON.stringify({
       type: 'terminal_list',
