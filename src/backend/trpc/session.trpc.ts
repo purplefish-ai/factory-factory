@@ -55,7 +55,16 @@ function toSubagentApplicationError(error: unknown): unknown {
   return error;
 }
 
-async function createAgentSessionFromInput(
+function createAgentSessionFromInput(
+  ctx: Context,
+  input: z.infer<typeof createSessionInputSchema>
+) {
+  return ctx.appContext.services.applicationUpdateAdmission.run(() =>
+    createAdmittedAgentSession(ctx, input)
+  );
+}
+
+async function createAdmittedAgentSession(
   ctx: Context,
   input: z.infer<typeof createSessionInputSchema>
 ) {

@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 
+import { spawnSync } from 'node:child_process';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdir, rm } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import chalk from 'chalk';
@@ -8,7 +10,9 @@ import { Command } from 'commander';
 import { config } from 'dotenv';
 import open from 'open';
 import { runMigrations as runDbMigrations } from '@/backend/migrate';
-import { getLogFilePath } from '@/backend/services/logger.service';
+import { getCurrentProcessEnv, getLogFilePath } from '@/backend/services/logger.service';
+import { ApplicationUpdateInstaller } from './application-update-installer';
+import { recoverInterruptedApplicationUpdate } from './application-update-recovery';
 import { registerBuildCommand } from './build-command';
 import { registerClaudeCommand } from './claude';
 import { registerCodexCommand } from './codex';
@@ -16,9 +20,9 @@ import { resolveDatabasePath } from './database-path';
 import { runProxyCommand } from './proxy';
 import { ensureDataDir, findAvailablePort } from './runtime-utils';
 import { buildHttpOrigin, buildServeEnv } from './serve-env';
-import { runServeSession } from './serve-session';
 import { registerServeShutdownHandlers, removeServePortFile } from './serve-shutdown';
 import { registerStudioCommand } from './studio';
+import { runSupervisedServeSession } from './supervised-serve-session';
 import { registerTailscaleCommand } from './tailscale';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -198,7 +202,32 @@ program
     ensureDataDir(databasePath);
 
     const { frontendPort, backendPort } = await resolvePortsOrExit(options, verbose);
-    await runMigrationsOrExit(databasePath, verbose);
+    let runningMarker: string | undefined;
+    if (
+      !options.dev &&
+      (await new ApplicationUpdateInstaller({
+        packageRoot: PROJECT_ROOT,
+        env: getCurrentProcessEnv(),
+      }).isSupported())
+    ) {
+      runningMarker = join(dirname(PROJECT_ROOT), `.factory-factory-running-${process.pid}`);
+      await mkdir(runningMarker, { recursive: true });
+    }
+    try {
+      if (!options.dev && (await recoverInterruptedApplicationUpdate(PROJECT_ROOT, databasePath))) {
+        if (runningMarker) {
+          await rm(runningMarker, { recursive: true, force: true });
+        }
+        const restarted = spawnSync(process.execPath, process.argv.slice(1), { stdio: 'inherit' });
+        process.exit(restarted.status ?? 1);
+      }
+      await runMigrationsOrExit(databasePath, verbose);
+    } catch (error) {
+      if (runningMarker) {
+        await rm(runningMarker, { recursive: true, force: true });
+      }
+      throw error;
+    }
 
     const env = buildServeEnv(options, databasePath, frontendPort, backendPort);
 
@@ -233,7 +262,8 @@ program
     };
 
     try {
-      await runServeSession({
+      await runSupervisedServeSession({
+        databasePath,
         projectRoot: PROJECT_ROOT,
         env,
         host: options.host,

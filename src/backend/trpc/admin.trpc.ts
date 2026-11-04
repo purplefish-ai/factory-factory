@@ -1,12 +1,12 @@
+import { open } from 'node:fs/promises';
 /**
  * Admin tRPC Router
  *
  * Provides admin operations for managing system health.
  */
-
-import { open } from 'node:fs/promises';
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
+import { releaseVersionSchema } from '@/shared/application-updates';
 import { exportDataSchema } from '@/shared/schemas/export-data.schema';
 import type { DecisionLog } from '@prisma-gen/client';
 import { buildAgentProcesses, mergeAgentSessions } from './admin-active-processes';
@@ -18,6 +18,17 @@ const loggerName = 'admin-trpc';
 const getLogger = (ctx: Context) => ctx.appContext.services.createLogger(loggerName);
 
 export const adminRouter = router({
+  checkUpdates: publicProcedure.query(({ ctx }) =>
+    ctx.appContext.services.applicationUpdateService.checkUpdates()
+  ),
+  requestUpdate: trustedLocalProcedure
+    .input(z.object({ version: releaseVersionSchema }))
+    .mutation(({ ctx, input }) =>
+      ctx.appContext.services.applicationUpdateService.requestUpdate(input.version)
+    ),
+  cancelUpdate: trustedLocalProcedure.mutation(({ ctx }) =>
+    ctx.appContext.services.applicationUpdateService.cancelUpdate()
+  ),
   /**
    * Get server information (port, environment, etc.)
    */

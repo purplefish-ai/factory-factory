@@ -5,6 +5,7 @@ import {
   type ProviderCliHealthStatus,
 } from '@/backend/lib/provider-cli-availability';
 import type { initializeWorkspaceWorktree } from '@/backend/orchestration/workspace-init.orchestrator';
+import { applicationUpdateAdmission } from '@/backend/services/application-update-admission.service';
 import type { createLogger } from '@/backend/services/logger.service';
 import type {
   sessionDataService,
@@ -58,6 +59,13 @@ export interface WorkspaceLaunchPorts {
 
 /** Select the source policy; persistence and runtime remain with their capsule owners. */
 export function launchWorkspace(
+  source: WorkspaceLaunchSource,
+  ports: WorkspaceLaunchPorts
+): Promise<WorkspaceLaunchResult> {
+  return applicationUpdateAdmission.run(() => launchAdmittedWorkspace(source, ports));
+}
+
+function launchAdmittedWorkspace(
   source: WorkspaceLaunchSource,
   ports: WorkspaceLaunchPorts
 ): Promise<WorkspaceLaunchResult> {

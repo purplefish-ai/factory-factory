@@ -17,6 +17,15 @@ import {
 import { serverInstanceService } from './services/server-instance.service';
 
 describe('createApplication', () => {
+  it('injects its admission capability into the ACP runtime before startup', () => {
+    const graph = createFakeApplicationGraph();
+    const configureAdmission = vi.fn<typeof graph.services.acpRuntimeManager.configureAdmission>();
+    graph.services.acpRuntimeManager.configureAdmission = configureAdmission;
+    createApplication(graph);
+    expect(configureAdmission).toHaveBeenCalledExactlyOnceWith(
+      graph.services.applicationUpdateAdmission
+    );
+  });
   it('binds agent intake to its own application service graph', () => {
     const { services } = createDefaultApplicationDependencies();
     const getServices = runtimeWiring.create.mock.lastCall?.[0];

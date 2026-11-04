@@ -85,6 +85,7 @@
     "rebuild:electron": "node scripts/ensure-native-modules.mjs electron --force",
     "start:electron": "electron .",
     "postinstall": "node scripts/postinstall.mjs",
+    "prepack": "node scripts/prepare-runtime-metadata.mjs",
     "prepare": "husky",
     "deps:check": "depcruise src electron --config .dependency-cruiser.cjs",
     "knip": "knip --include files,dependencies,unlisted",

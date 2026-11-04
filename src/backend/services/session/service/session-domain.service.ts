@@ -1,4 +1,5 @@
 import { EventEmitter } from 'node:events';
+import { applicationUpdateAdmission } from '@/backend/services/application-update-admission.service';
 import { createLogger } from '@/backend/services/logger.service';
 import type {
   AgentMessage,
@@ -61,7 +62,12 @@ export class SessionDomainService extends EventEmitter {
   // Retain publication evidence through cancellation and ordinary store eviction.
   private readonly publishedInitialMessages = new Map<string, string>();
 
+  hasPendingUpdateWork(): boolean {
+    return this.initialMessages.size > 0 || this.registry.hasQueuedWork();
+  }
+
   storeInitialMessage(sessionId: string, text: string): void {
+    applicationUpdateAdmission.assertOpen();
     this.initialMessages.set(sessionId, text);
   }
 
@@ -254,6 +260,9 @@ export class SessionDomainService extends EventEmitter {
   }
 
   enqueue(sessionId: string, message: QueuedMessage): { position: number } | { error: string } {
+    if (applicationUpdateAdmission.isClosed()) {
+      return { error: 'An application update is preparing. Try again after reconnecting.' };
+    }
     const store = this.registry.getOrCreateActive(sessionId);
     const result = enqueueMessage(store, message);
     if ('error' in result) {
@@ -533,6 +542,7 @@ export class SessionDomainService extends EventEmitter {
   }
 
   clearQueuedWork(sessionId: string, options?: { emitSnapshot?: boolean }): void {
+    this.initialMessages.delete(sessionId);
     // Cleanup must not revive a deleted or preservation-only session.
     const store = this.registry.getExisting(sessionId);
     if (!store) {

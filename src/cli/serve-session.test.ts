@@ -249,3 +249,26 @@ it('cleans up the backend if spawning the frontend throws synchronously', async 
   ).rejects.toThrow('spawn failed');
   expect(treeKillAsync).toHaveBeenCalledExactlyOnceWith(4321, 'SIGTERM');
 });
+
+it('exposes an IPC backend to the update supervisor and accepts its expected exit', async () => {
+  let expectedExit = false;
+  const connected = vi.fn();
+  const session = runServeSession({
+    ...options,
+    dev: false,
+    signal: new AbortController().signal,
+    onBackend: connected,
+    isExpectedBackendExit: () => expectedExit,
+  });
+  await vi.waitFor(() => expect(onReady).toHaveBeenCalled());
+  expect(connected).toHaveBeenCalledWith(backend);
+  expect(vi.mocked(spawn).mock.calls[0]?.[2]?.stdio).toEqual([
+    'inherit',
+    'inherit',
+    'inherit',
+    'ipc',
+  ]);
+  expectedExit = true;
+  exit(backend);
+  await expect(session).resolves.toBeUndefined();
+});

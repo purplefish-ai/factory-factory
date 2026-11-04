@@ -1,6 +1,7 @@
 import { Suspense, useEffect } from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router';
 import { AppearanceProvider } from '@/client/components/appearance-provider';
+import { ApplicationUpdateBanner } from '@/client/components/application-update-banner';
 import { CLIHealthBanner } from '@/client/components/cli-health-banner';
 import { Loading } from '@/client/components/loading';
 import { ModelCatalogWarning } from '@/client/components/model-catalog-warning';
@@ -45,6 +46,7 @@ function RootLayout() {
       style={{ height: viewportHeight, transform: viewportTransform }}
     >
       <CLIHealthBanner />
+      <ApplicationUpdateBanner />
       <ModelCatalogWarning />
       <AppLayout className="flex-1 overflow-hidden">
         <ErrorBoundary resetKey={`${pathname}${search}`}>

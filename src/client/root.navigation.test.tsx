@@ -18,6 +18,9 @@ vi.mock('@/client/components/appearance-provider', () => ({
 vi.mock('@/client/components/resizable-layout', () => ({
   AppLayout: ({ children }: { children: ReactNode }) => children,
 }));
+vi.mock('@/client/components/application-update-banner', () => ({
+  ApplicationUpdateBanner: () => null,
+}));
 vi.mock('@/client/components/cli-health-banner', () => ({ CLIHealthBanner: () => null }));
 vi.mock('@/client/components/model-catalog-warning', () => ({ ModelCatalogWarning: () => null }));
 vi.mock('@/client/features/workspace/WorkspaceNotificationManager', () => ({

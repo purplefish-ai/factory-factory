@@ -1,4 +1,5 @@
 import { toError } from '@/backend/lib/error-utils';
+import { applicationUpdateAdmission } from '@/backend/services/application-update-admission.service';
 import { githubCLIService } from '@/backend/services/github';
 import { linearStateSyncService } from '@/backend/services/linear';
 import { createLogger } from '@/backend/services/logger.service';
@@ -903,6 +904,10 @@ export function enqueueWorkspaceInitializationTask<T>(
   workspaceId: string,
   task: () => Promise<T>
 ): Promise<T> {
+  return applicationUpdateAdmission.run(() => enqueueAdmittedInitialization(workspaceId, task));
+}
+
+function enqueueAdmittedInitialization<T>(workspaceId: string, task: () => Promise<T>): Promise<T> {
   const previousInitialization = workspaceInitializationTails.get(workspaceId) ?? Promise.resolve();
   const initialization = previousInitialization.catch(() => undefined).then(task);
 

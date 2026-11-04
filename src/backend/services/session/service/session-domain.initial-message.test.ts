@@ -1,4 +1,5 @@
 import { beforeEach, expect, it, vi } from 'vitest';
+import { applicationUpdateAdmission } from '@/backend/services/application-update-admission.service';
 import type { QueuedMessage } from '@/shared/acp-protocol';
 import { SessionDomainService } from './session-domain.service';
 
@@ -74,4 +75,33 @@ it('republishes an undelivered task after its queue is destructively cleared', (
   const retry = { ...message, id: 'retry' };
   expect(domain.enqueueInitialMessage('session-1', retry)).toEqual({ position: 0 });
   expect(domain.getQueueSnapshot('session-1')).toEqual([retry]);
+});
+
+it('counts queued and initial work and preserves rejected input during update preparation', () => {
+  expect(domain.hasPendingUpdateWork()).toBe(false);
+  domain.storeInitialMessage('s1', 'Initial');
+  expect(domain.hasPendingUpdateWork()).toBe(true);
+  domain.consumeInitialMessage('s1');
+  domain.enqueue('s1', message);
+  expect(domain.hasPendingUpdateWork()).toBe(true);
+  domain.removeQueuedMessage('s1', message.id);
+  expect(domain.hasPendingUpdateWork()).toBe(false);
+  applicationUpdateAdmission.tryClose(() => false);
+  try {
+    expect(domain.enqueue('s1', message)).toMatchObject({
+      error: expect.stringContaining('update'),
+    });
+    expect(domain.getQueueSnapshot('s1')).toEqual([]);
+    expect(() => domain.storeInitialMessage('s1', 'New')).toThrow('update');
+  } finally {
+    applicationUpdateAdmission.release();
+  }
+});
+
+it('does not retain discarded initial input as pending update work after stopping', () => {
+  domain.storeInitialMessage('s1', 'Not sent yet');
+  domain.enqueue('s1', message);
+  domain.clearQueuedWork('s1');
+  expect(domain.hasPendingUpdateWork()).toBe(false);
+  expect(domain.consumeInitialMessage('s1')).toBeNull();
 });

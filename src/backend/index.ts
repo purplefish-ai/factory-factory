@@ -28,10 +28,17 @@ const serverInstance = createServer(application);
 // Register the server instance globally for access by tRPC endpoints
 application.services.serverInstanceService.setInstance(serverInstance);
 
-serverInstance.start().catch((error) => {
-  logger.error('Failed to start server', toError(error));
-  process.exit(1);
-});
+serverInstance
+  .start()
+  .then(() => {
+    if (process.connected && process.send) {
+      process.send({ type: 'update-backend-ready' });
+    }
+  })
+  .catch((error) => {
+    logger.error('Failed to start server', toError(error));
+    process.exit(1);
+  });
 
 registerShutdownSignalHandlers({ logger, process, server: serverInstance });
 

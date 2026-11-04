@@ -98,6 +98,10 @@ export class SessionStoreRegistry {
     return pending;
   }
 
+  hasQueuedWork(): boolean {
+    return [...this.stores.values()].some((store) => store.queue.length > 0);
+  }
+
   getQueueLength(sessionId: string): number {
     return this.getExisting(sessionId)?.queue.length ?? 0;
   }

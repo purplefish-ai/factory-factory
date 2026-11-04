@@ -1,5 +1,11 @@
 # Background Jobs
 
+The `application-update-idle` job checks pending update readiness once per
+second while the application is alive. It performs no registry or installation
+work; the cached release service owns registry checks and the CLI supervisor
+owns installation. Readiness closes agent admission synchronously with the final
+idle check. Application shutdown stops this job before draining agent runtimes.
+
 Recurring backend work is declared to `jobRunner`
 (`src/backend/services/job-runner.service.ts`), which owns the loop lifecycle
 for the poll loops: the snapshot reconciliation safety net, the PR

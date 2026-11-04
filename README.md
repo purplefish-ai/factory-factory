@@ -109,6 +109,23 @@ npm install -g factory-factory
 ff serve
 ```
 
+When a newer stable release is available, the app shows an **Update** button.
+Each release notice can be dismissed independently; a later version appears
+again. Registry outages do not block startup or normal use.
+
+Automatic updates support writable global npm installations on macOS and Linux
+started with `ff serve`. The update waits for active agent work and queued
+messages to finish, prepares the replacement, and restarts at the same address.
+Restarting stops terminals and run scripts. Close other Factory Factory servers
+using the same installation before updating. The browser reconnects and reloads
+after the replacement is ready. Failed preparation keeps the current app
+running; failed migration or startup restores the previous package and database.
+
+Claude and Codex are bundled with Factory Factory. When a release includes newer
+runtime packages, their notices appear together and share the application
+update. Installing an unrelated global provider CLI does not update these
+bundled runtimes. Other installation methods show manual update guidance.
+
 Useful commands:
 
 ```bash

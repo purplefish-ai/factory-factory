@@ -7,6 +7,7 @@ import {
   readWorkspaceRetryAvailability,
 } from '@/backend/orchestration/workspace-retry-authority';
 import { agentManagementService } from '@/backend/services/agent-definition';
+import { applicationUpdateAdmission } from '@/backend/services/application-update-admission.service';
 import type {
   PreparedSessionLoad,
   SessionLoadDependencies,
@@ -32,6 +33,16 @@ vi.mock('@/backend/interceptors', () => ({
   registerInterceptors: vi.fn(),
   startInterceptors: vi.fn(),
   stopInterceptors: vi.fn(),
+}));
+vi.mock('@/backend/orchestration/application-update.service', () => ({
+  ApplicationUpdateService: class {
+    start = vi.fn();
+    stop = vi.fn(async () => undefined);
+  },
+  createProcessUpdateSupervisor: vi.fn(),
+}));
+vi.mock('@/backend/services/application-update', () => ({
+  applicationReleaseService: { getPackageRoot: () => '/installed/factory-factory' },
 }));
 vi.mock('@/backend/orchestration/cli-health.service', () => ({ cliHealthService: {} }));
 vi.mock('@/backend/orchestration/data-backup.service', () => ({ dataBackupService: {} }));
@@ -468,6 +479,20 @@ export function createFakeApplicationGraph(label = 'test'): FakeApplicationGraph
   }) satisfies typeof chatEventForwarderService;
 
   const services = {
+    applicationUpdateAdmission,
+    applicationUpdateService: {
+      start: vi.fn(),
+      stop: vi.fn(async () => undefined),
+      checkUpdates: vi.fn(async () => ({
+        currentVersion: '1.0.0',
+        notices: [],
+        automaticUpdate: false,
+        manualCommand: 'npm install -g factory-factory@latest',
+        status: { phase: 'idle' as const },
+      })),
+      requestUpdate: vi.fn(async () => ({ phase: 'waiting' as const })),
+      cancelUpdate: vi.fn(async () => ({ phase: 'idle' as const })),
+    },
     listVisibleReviewRequests: vi.fn(async () => []),
     ...defaultPRMonitoringServices,
     acpRuntimeManager: graphAcpRuntimeManager,
@@ -509,6 +534,7 @@ export function createFakeApplicationGraph(label = 'test'): FakeApplicationGraph
     agentManagementService,
     agentManagement: createAgentManagement((): ApplicationServices => services),
     agentRuntime: {
+      hasWork: vi.fn(() => false),
       start: vi.fn(),
       stop: vi.fn().mockResolvedValue(undefined),
       recovery: undefined,

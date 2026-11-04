@@ -1,5 +1,22 @@
 # Agent Runtime
 
+Application updates use a process-wide admission gate shared by session input,
+dispatch, runtime creation, workspace provisioning and background agent
+launches. The update job waits for active operations, pending initial/queued
+messages and active agent turns, then closes admission synchronously before
+notifying the CLI supervisor. Idle ACP processes do not hold the update. A
+rejected input remains available to retry after reconnecting. Failed preparation
+or cancellation reopens admission; shutdown keeps it closed until the process
+exits.
+
+The production CLI owns installation, recovery state and backend restart. It
+stages a pinned npm release before stopping the backend, backs up the database
+before migrations, and keeps the previous package until the replacement reports
+full startup readiness over IPC. Provider update notices compare
+adapter-resolved runtime package versions, published as
+`factoryFactoryRuntimeVersions` by the `prepack` script. They share the Factory
+Factory update action.
+
 Rejected or failed messages restore their text and attachments only when the
 current session composer is empty. A newer draft or attachment selection is
 preserved, and clearing it later does not replay the earlier recovery.

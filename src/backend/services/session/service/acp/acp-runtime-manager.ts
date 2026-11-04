@@ -34,6 +34,11 @@ export type ObservedAcpPrompt = {
   createObservation(source: ProviderSource, assertCurrent: () => void): AcpPromptObservation;
 };
 
+type AcpWorkAdmission = {
+  run<T>(operation: () => Promise<T>): Promise<T>;
+  assertOpen(): void;
+};
+
 export class AcpRuntimeManager {
   /** Reads only an installed live runtime; never starts one to obtain identity. */
   getRuntimeSource(sessionId: string): ProviderSource | null {
@@ -57,8 +62,15 @@ export class AcpRuntimeManager {
   private readonly configController = new AcpRuntimeConfigController();
   private readonly subagentBrowser = new AcpSubagentBrowser();
   private readonly supervisor: AcpRuntimeSupervisor;
+  private admission: AcpWorkAdmission = {
+    run: (operation) => operation(),
+    assertOpen: () => undefined,
+  };
 
-  constructor(options?: { acpStartupTimeoutMs?: number }) {
+  constructor(options?: { acpStartupTimeoutMs?: number; admission?: AcpWorkAdmission }) {
+    if (options?.admission) {
+      this.admission = options.admission;
+    }
     this.clientFactory = new AcpClientFactory(options);
     let supervisor!: AcpRuntimeSupervisor;
     this.promptController = new AcpPromptController({
@@ -74,6 +86,10 @@ export class AcpRuntimeManager {
 
   setAcpStartupTimeoutMs(timeoutMs: number): void {
     this.clientFactory.setAcpStartupTimeoutMs(timeoutMs);
+  }
+
+  configureAdmission(admission: AcpWorkAdmission): void {
+    this.admission = admission;
   }
 
   configureEnvironment(options: { childProcessEnvProvider: () => NodeJS.ProcessEnv }): void {
@@ -125,7 +141,9 @@ export class AcpRuntimeManager {
     purpose: AcpRuntimePurpose,
     operation: (registration: AcpClientCreationOperation) => Promise<T>
   ): Promise<T> {
-    return this.supervisor.runClientCreationOperation(sessionId, purpose, operation);
+    return this.admission.run(() =>
+      this.supervisor.runClientCreationOperation(sessionId, purpose, operation)
+    );
   }
 
   stopAndQuiesceObserved(
@@ -187,7 +205,9 @@ export class AcpRuntimeManager {
     handlers: AcpRuntimeEventHandlers,
     context: AcpRuntimeContext
   ): Promise<AcpProcessHandle> {
-    return this.supervisor.getOrCreateClient(sessionId, options, handlers, context);
+    return this.admission.run(() =>
+      this.supervisor.getOrCreateClient(sessionId, options, handlers, context)
+    );
   }
 
   beginShutdown(): string[] {
@@ -198,7 +218,19 @@ export class AcpRuntimeManager {
     return this.supervisor.stopClient(sessionId);
   }
 
-  async sendPrompt(
+  sendPrompt(
+    sessionId: string,
+    prompt: ContentBlock[],
+    timeoutMs?: number,
+    observed?: ObservedAcpPrompt,
+    guard?: { check(): Promise<void>; assertCurrent?(): void }
+  ): Promise<{ stopReason: string }> {
+    return this.admission.run(() =>
+      this.sendAdmittedPrompt(sessionId, prompt, timeoutMs, observed, guard)
+    );
+  }
+
+  private async sendAdmittedPrompt(
     sessionId: string,
     prompt: ContentBlock[],
     timeoutMs?: number,
@@ -271,6 +303,7 @@ export class AcpRuntimeManager {
       onLateNotInjected?: () => Promise<void>;
     }
   ): Promise<{ outcome: 'injected' | 'promptRequired' }> {
+    this.admission.assertOpen();
     const handle = this.supervisor.getInstalledHandle(sessionId);
     if (!handle?.isPromptInFlight) {
       return { outcome: 'promptRequired' };
