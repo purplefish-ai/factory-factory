@@ -1229,6 +1229,14 @@ URL. A failed start destroys the loading window before the startup error dialog
 and quit; closing it during startup stops the backend like closing any last
 window, and the app URL is never loaded into a closed window.
 
+The app window never opens child windows. `target="_blank"` links and
+`window.open` calls open in the system browser or mail client, even for app
+URLs, because a child window would inherit the preload bridge. Top-level
+navigation and redirects that leave the loaded app's origin are cancelled and
+opened externally. Only `http`, `https` and `mailto` URLs reach
+`shell.openExternal`; other schemes are blocked
+(`electron/main/external-links.ts`).
+
 On macOS a utility process runs from the Electron Helper binary, so Electron
 main also passes its own executable as `FF_NODE_EXEC_PATH`. Bundled adapters,
 provider CLIs and the child-workspace MCP server launch with

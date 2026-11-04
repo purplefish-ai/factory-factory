@@ -15,6 +15,14 @@ function deferred<T>() {
   return { promise, resolve };
 }
 
+interface FakeNavigationEvent {
+  url: string;
+  isMainFrame: boolean;
+  preventDefault(): void;
+}
+
+type NavigationEventName = 'will-navigate' | 'will-redirect';
+
 class FakeBrowserWindow implements ElectronLifecycleBrowserWindow {
   static windows: FakeBrowserWindow[] = [];
   static instances: FakeBrowserWindow[] = [];
@@ -26,10 +34,31 @@ class FakeBrowserWindow implements ElectronLifecycleBrowserWindow {
     return [...FakeBrowserWindow.windows];
   }
 
+  windowOpenHandler: ((details: { url: string }) => { action: 'deny' }) | null = null;
+  private readonly navigationListeners: Record<
+    NavigationEventName,
+    Array<(event: FakeNavigationEvent) => void>
+  > = { 'will-navigate': [], 'will-redirect': [] };
+
   readonly webContents = {
     send: vi.fn(),
     mainFrame: {},
+    setWindowOpenHandler: (handler: (details: { url: string }) => { action: 'deny' }) => {
+      this.windowOpenHandler = handler;
+    },
+    on: (event: NavigationEventName, listener: (event: FakeNavigationEvent) => void) => {
+      this.navigationListeners[event].push(listener);
+    },
   };
+
+  // Emits a navigation event and reports whether a listener prevented it.
+  navigate(event: NavigationEventName, url: string, { isMainFrame = true } = {}): boolean {
+    const navigation = { url, isMainFrame, preventDefault: vi.fn() };
+    for (const listener of this.navigationListeners[event]) {
+      listener(navigation);
+    }
+    return navigation.preventDefault.mock.calls.length > 0;
+  }
 
   readonly loadURL = vi.fn((url: string) => FakeBrowserWindow.loadUrlImpl(url));
   readonly destroy = vi.fn(() => this.close());
@@ -119,6 +148,10 @@ function createTestLifecycle(
     }),
   };
 
+  const shell: ElectronLifecycleDependencies['shell'] = {
+    openExternal: vi.fn().mockResolvedValue(undefined),
+  };
+
   const lifecycle = createElectronLifecycle({
     app,
     browserWindow: FakeBrowserWindow,
@@ -130,9 +163,10 @@ function createTestLifecycle(
     platform: overrides.platform ?? 'darwin',
     preloadPath: '/tmp/preload.js',
     serverManager,
+    shell,
   });
 
-  return { lifecycle, app, clipboard, dialog, ipcMain, serverManager };
+  return { lifecycle, app, clipboard, dialog, ipcMain, logger, serverManager, shell };
 }
 
 describe('electron lifecycle coordination', () => {
@@ -801,5 +835,102 @@ describe('clipboard:readImagePng IPC handler', () => {
     window?.destroy();
     resolveRead([imageItem('image/png', new Uint8Array([1]))]);
     expect(await result).toBeNull();
+  });
+});
+
+describe('links leaving the app window', () => {
+  async function createAppWindow() {
+    const serverManager = {
+      start: vi
+        .fn()
+        .mockResolvedValueOnce('http://127.0.0.1:3001/')
+        .mockResolvedValueOnce('http://127.0.0.1:3002/'),
+      stop: vi.fn().mockResolvedValue(undefined),
+    };
+    const test = createTestLifecycle({ serverManager });
+    await test.lifecycle.createWindow();
+    const window = FakeBrowserWindow.instances[0];
+    if (!window) {
+      throw new Error('Expected an app window');
+    }
+    return { ...test, window };
+  }
+
+  it('opens new-window requests in the system browser and never creates app windows', async () => {
+    const { window, shell } = await createAppWindow();
+
+    for (const url of [
+      'https://github.com/org/repo/pull/1',
+      // Same-origin targets also go to the browser rather than an in-app window.
+      'http://127.0.0.1:3001/projects',
+      'mailto:team@example.com',
+    ]) {
+      expect(window.windowOpenHandler?.({ url })).toEqual({ action: 'deny' });
+      expect(shell.openExternal).toHaveBeenLastCalledWith(url);
+    }
+
+    expect(shell.openExternal).toHaveBeenCalledTimes(3);
+    expect(FakeBrowserWindow.instances).toHaveLength(1);
+  });
+
+  it('refuses new-window requests for unsupported schemes', async () => {
+    const { window, shell } = await createAppWindow();
+
+    for (const url of ['file:///etc/passwd', 'javascript:alert(1)', 'vscode://file/x', 'nope']) {
+      expect(window.windowOpenHandler?.({ url })).toEqual({ action: 'deny' });
+    }
+
+    expect(shell.openExternal).not.toHaveBeenCalled();
+  });
+
+  it('keeps app-origin navigation in the window and opens other web origins externally', async () => {
+    const { window, shell } = await createAppWindow();
+
+    expect(window.navigate('will-navigate', 'http://127.0.0.1:3001/projects/a')).toBe(false);
+    expect(window.navigate('will-redirect', 'http://127.0.0.1:3001/login')).toBe(false);
+    expect(shell.openExternal).not.toHaveBeenCalled();
+
+    expect(window.navigate('will-navigate', 'https://linear.app/team/issue/ABC-1')).toBe(true);
+    expect(window.navigate('will-redirect', 'https://example.com/')).toBe(true);
+    expect(shell.openExternal).toHaveBeenCalledWith('https://linear.app/team/issue/ABC-1');
+    expect(shell.openExternal).toHaveBeenCalledWith('https://example.com/');
+  });
+
+  it('blocks top-level navigation to unsupported schemes without opening them', async () => {
+    const { window, shell } = await createAppWindow();
+
+    expect(window.navigate('will-navigate', 'file:///Users/me/secret')).toBe(true);
+    expect(window.navigate('will-navigate', 'custom-app://open')).toBe(true);
+
+    expect(shell.openExternal).not.toHaveBeenCalled();
+  });
+
+  it('leaves subframe redirects to the frame', async () => {
+    const { window, shell } = await createAppWindow();
+
+    expect(
+      window.navigate('will-redirect', 'https://example.com/embed', { isMainFrame: false })
+    ).toBe(false);
+    expect(shell.openExternal).not.toHaveBeenCalled();
+  });
+
+  it('follows the app origin when a restarted backend moves to a new URL', async () => {
+    const { window, lifecycle, shell } = await createAppWindow();
+
+    await lifecycle.handleBackendExit({ code: 1 });
+
+    expect(window.navigate('will-navigate', 'http://127.0.0.1:3002/projects')).toBe(false);
+    expect(window.navigate('will-navigate', 'http://127.0.0.1:3001/projects')).toBe(true);
+    expect(shell.openExternal).toHaveBeenCalledWith('http://127.0.0.1:3001/projects');
+  });
+
+  it('logs a failure to open a link without logging the URL', async () => {
+    const { window, shell, logger } = await createAppWindow();
+    vi.mocked(shell.openExternal).mockRejectedValueOnce(new Error('no handler'));
+
+    window.windowOpenHandler?.({ url: 'https://example.com/?token=secret' });
+    await vi.waitFor(() => expect(logger.error).toHaveBeenCalled());
+
+    expect(JSON.stringify(vi.mocked(logger.error).mock.calls)).not.toContain('secret');
   });
 });
