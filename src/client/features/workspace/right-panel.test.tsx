@@ -9,6 +9,15 @@ import { useWorkspacePanel, WorkspacePanelProvider } from './workspace-panel-con
 const mocks = vi.hoisted(() => ({
   agentsProps: vi.fn(),
   mobile: false,
+  terminalOptions: null as null | {
+    onCreated?: (id: string, requestId?: string, output?: string) => void;
+    onTerminalList?: (
+      terminals: Array<{ id: string; createdAt: string; outputBuffer?: string }>
+    ) => void;
+  },
+  selectTerminal: vi.fn(),
+  createTerminal: vi.fn(),
+  destroyTerminal: vi.fn(),
   workspaceData: undefined as undefined | { periodicTaskId: string | null; creationSource: string },
 }));
 
@@ -118,12 +127,24 @@ vi.mock('./periodic-task-panel', () => ({
 vi.mock('./screenshots-panel', () => ({ ScreenshotsPanel: () => null }));
 vi.mock('./setup-logs-panel', () => ({ SetupLogsPanel: () => null }));
 
-vi.mock('./terminal-panel', () => ({
-  TerminalPanel: () => null,
+vi.mock('@/client/components/terminal-instance', () => ({
+  TerminalInstance: ({ output }: { output: string }) =>
+    createElement('pre', { 'data-testid': 'terminal-output' }, output),
 }));
-
-vi.mock('./terminal-tab-bar', () => ({
-  TerminalTabBar: () => null,
+vi.mock('./use-terminal-websocket', () => ({
+  useTerminalWebSocket: (options: typeof mocks.terminalOptions) => {
+    mocks.terminalOptions = options;
+    return {
+      connected: true,
+      gaveUp: false,
+      reconnect: vi.fn(),
+      create: mocks.createTerminal,
+      sendInput: vi.fn(),
+      resize: vi.fn(),
+      destroy: mocks.destroyTerminal,
+      setActive: mocks.selectTerminal,
+    };
+  },
 }));
 
 function Navigation() {
@@ -160,6 +181,7 @@ describe('RightPanel Agents tab', () => {
     vi.stubGlobal('matchMedia', () => ({ matches: false }));
     localStorage.clear();
     mocks.mobile = false;
+    mocks.terminalOptions = null;
     mocks.workspaceData = {
       periodicTaskId: null,
       creationSource: 'MANUAL',
@@ -192,6 +214,65 @@ describe('RightPanel Agents tab', () => {
       )
     );
   }
+
+  it('keeps restored terminal tabs while viewing Logs and reopens the selected terminal', async () => {
+    render();
+    await act(async () => {
+      mocks.terminalOptions?.onTerminalList?.([
+        { id: 'first', createdAt: '', outputBuffer: 'first output' },
+        { id: 'second', createdAt: '', outputBuffer: 'second output' },
+      ]);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    const button = (label: string) =>
+      [...container.querySelectorAll('button')].find((b) => b.textContent === label)!;
+    expect(button('Terminal 2')).toBeDefined();
+    await act(async () => button('Terminal 2').click());
+    await vi.dynamicImportSettled();
+    expect(container.querySelector('[data-testid="terminal-output"]')?.textContent).toBe(
+      'second output'
+    );
+    act(() => button('Logs').click());
+    expect(button('Terminal 2')).toBeDefined();
+    expect(container.querySelector('[data-testid="terminal-output"]')).toBeNull();
+    await act(async () => button('Terminal 2').click());
+    expect(container.querySelector('[data-testid="terminal-output"]')?.textContent).toBe(
+      'second output'
+    );
+    expect(mocks.selectTerminal).toHaveBeenLastCalledWith('second');
+    expect(mocks.createTerminal).not.toHaveBeenCalled();
+  });
+
+  it('creates Terminal 1 when the empty Terminal tab is clicked', async () => {
+    render();
+    act(() =>
+      [...container.querySelectorAll('button')].find((b) => b.textContent === 'Logs')?.click()
+    );
+    act(() => mocks.terminalOptions?.onTerminalList?.([]));
+    expect(mocks.createTerminal).not.toHaveBeenCalled();
+    const terminal = [...container.querySelectorAll('button')].find(
+      (b) => b.textContent === 'Terminal'
+    )!;
+    await act(async () => terminal.click());
+    expect(mocks.createTerminal).toHaveBeenCalledTimes(1);
+    expect(container.textContent).toContain('Terminal 1');
+    expect(container.textContent).not.toContain('No terminal open');
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>('[aria-label="Close Terminal 1"]')?.click();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    expect(mocks.createTerminal).toHaveBeenCalledTimes(2);
+    expect(container.textContent).toContain('Terminal 1');
+    await act(async () =>
+      mocks.terminalOptions?.onCreated?.(
+        'new-terminal',
+        mocks.createTerminal.mock.calls[1]?.[0],
+        'ready $'
+      )
+    );
+    await vi.dynamicImportSettled();
+    expect(container.querySelector('[data-testid="terminal-output"]')?.textContent).toBe('ready $');
+  });
 
   it('opens Inbox from the toolbar and remembers the selection', () => {
     render();

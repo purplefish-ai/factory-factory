@@ -1,5 +1,4 @@
 import { PlusIcon } from '@phosphor-icons/react/dist/csr/Plus';
-import { TerminalIcon } from '@phosphor-icons/react/dist/csr/Terminal';
 import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { useWorkspaceUnreadCounts } from '@/client/features/inbox';
 import type { SubagentSelection } from '@/client/features/subagents';
@@ -14,7 +13,7 @@ import { RightPanelLayout } from './right-panel-layout';
 import { STORAGE_KEY_TOP_TAB_PREFIX } from './right-panel-state';
 import { TopPanelArea } from './right-panel-tools';
 import { SetupLogsPanel } from './setup-logs-panel';
-import { TerminalPanel, type TerminalPanelRef, type TerminalTabState } from './terminal-panel';
+import { TerminalPanel, type TerminalTabState } from './terminal-panel';
 import { TerminalTabBar } from './terminal-tab-bar';
 import { useLogStream } from './use-log-stream';
 import { type BottomPanelTab, useWorkspacePanel } from './workspace-panel-context';
@@ -68,7 +67,6 @@ export const RightPanel = memo(function RightPanel({
     setActiveTopTab: handleTopTabChange,
   } = useWorkspacePanel();
   const isMobile = useWorkspaceDrawer();
-  const terminalPanelRef = useRef<TerminalPanelRef>(null);
 
   // Single shared dev logs connection for both tab indicator and panel content
   const devLogs = useLogStream('/dev-logs', workspaceId, activeBottomTab === 'dev-logs');
@@ -172,11 +170,6 @@ export const RightPanel = memo(function RightPanel({
   const handleBottomTabChange = useCallback(
     (tab: BottomPanelTab) => {
       setActiveBottomTab(tab);
-      // Reset terminal tab state when switching away from terminal
-      // to avoid stale state when TerminalPanel remounts
-      if (tab !== 'terminal') {
-        setTerminalTabState(null);
-      }
     },
     [setActiveBottomTab]
   );
@@ -260,7 +253,6 @@ export const RightPanel = memo(function RightPanel({
           activeBottomTab={activeBottomTab}
           terminalTabState={terminalTabState}
           onTabChange={handleBottomTabChange}
-          onNewTab={() => terminalPanelRef.current?.createNewTerminal()}
         />
       </div>
 
@@ -320,15 +312,17 @@ export const RightPanel = memo(function RightPanel({
             emptyMessage="Waiting for post-run script output…"
           />
         )}
-        {activeBottomTab === 'terminal' && (
+        <div hidden={activeBottomTab !== 'terminal'} className="h-full">
           <TerminalPanel
-            ref={terminalPanelRef}
+            key={workspaceId}
+            isVisible={activeBottomTab === 'terminal' && (!isMobile || mobilePanel === 'bottom')}
+            autoCreateWhenEmpty
             workspaceId={workspaceId}
             className="h-full"
             hideHeader
             onStateChange={handleTerminalStateChange}
           />
-        )}
+        </div>
       </div>
     </div>
   );
@@ -421,38 +415,40 @@ function getLogsGroupStatus({
   return 'success';
 }
 
-function TerminalControls({
+export function TerminalControls({
   activeBottomTab,
   terminalTabState,
   onTabChange,
-  onNewTab,
 }: {
   activeBottomTab: BottomPanelTab;
   terminalTabState: TerminalTabState | null;
   onTabChange: (tab: BottomPanelTab) => void;
-  onNewTab: () => void;
 }) {
+  const hasTabs = terminalTabState !== null && terminalTabState.tabs.length > 0;
+  const openTerminal = () => onTabChange('terminal');
   return (
-    <>
-      {' '}
-      {/* Show Terminal tab only if no terminals are open, otherwise show inline terminal tabs */}
-      {activeBottomTab === 'terminal' && terminalTabState && terminalTabState.tabs.length > 0 ? (
-        <TerminalTabsInline terminalTabState={terminalTabState} />
-      ) : (
-        <>
-          <TabButton
-            label="Terminal"
-            icon={<TerminalIcon className="h-3.5 w-3.5" />}
-            isActive={activeBottomTab === 'terminal'}
-            onSelect={() => onTabChange('terminal')}
-          />
-          {/* Show + button when Terminal tab is active but no terminals exist */}
-          {activeBottomTab === 'terminal' && (
-            <NewTerminalButton onNewTab={terminalTabState?.onNewTab ?? onNewTab} />
-          )}
-        </>
-      )}
-    </>
+    <TerminalTabBar
+      tabs={hasTabs ? terminalTabState.tabs : [{ id: 'empty', label: 'Terminal' }]}
+      activeTabId={
+        activeBottomTab === 'terminal' ? (hasTabs ? terminalTabState.activeTabId : 'empty') : null
+      }
+      onSelectTab={(id) => {
+        openTerminal();
+        if (hasTabs) {
+          terminalTabState.onSelectTab(id);
+        }
+      }}
+      onCloseTab={hasTabs ? terminalTabState.onCloseTab : undefined}
+      onNewTab={() => {
+        openTerminal();
+        // Opening an empty panel creates its first terminal automatically.
+        if (hasTabs) {
+          terminalTabState.onNewTab();
+        }
+      }}
+      className="min-w-0 flex-1"
+      renderNewButton={(handleNewTab) => <NewTerminalButton onNewTab={handleNewTab} />}
+    />
   );
 }
 
@@ -479,26 +475,6 @@ function NewTerminalButton({ onNewTab }: NewTerminalButtonProps) {
         </TooltipContent>
       </Tooltip>
     </TooltipProvider>
-  );
-}
-
-interface TerminalTabsInlineProps {
-  terminalTabState: TerminalTabState;
-}
-
-function TerminalTabsInline({ terminalTabState }: TerminalTabsInlineProps) {
-  const { tabs, activeTabId, onSelectTab, onCloseTab, onNewTab } = terminalTabState;
-
-  return (
-    <TerminalTabBar
-      tabs={tabs}
-      activeTabId={activeTabId}
-      onSelectTab={onSelectTab}
-      onCloseTab={onCloseTab}
-      onNewTab={onNewTab}
-      className="min-w-0 flex-1"
-      renderNewButton={(handleNewTab) => <NewTerminalButton onNewTab={handleNewTab} />}
-    />
   );
 }
 

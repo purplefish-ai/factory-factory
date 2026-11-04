@@ -55,6 +55,8 @@ interface TerminalPanelProps {
   className?: string;
   /** When true, hides the header (tabs are rendered by parent) */
   hideHeader?: boolean;
+  isVisible?: boolean;
+  autoCreateWhenEmpty?: boolean;
   /** Callback to notify parent of tab state changes for inline rendering */
   onStateChange?: (state: TerminalTabState) => void;
 }
@@ -77,7 +79,18 @@ export interface TerminalPanelRef {
 // =============================================================================
 
 export const TerminalPanel = forwardRef<TerminalPanelRef, TerminalPanelProps>(
-  function TerminalPanel({ workspaceId, className, hideHeader = false, onStateChange }, ref) {
+  function TerminalPanel(
+    {
+      workspaceId,
+      className,
+      hideHeader = false,
+      isVisible = true,
+      autoCreateWhenEmpty = false,
+      onStateChange,
+    },
+    ref
+  ) {
+    const [hasReceivedTerminalList, setHasReceivedTerminalList] = useState(false);
     const [tabs, setTabs] = useState<TerminalTab[]>([]);
     const tabsRef = useRef<TerminalTab[]>([]);
     const updateTabs = useCallback((action: SetStateAction<TerminalTab[]>) => {
@@ -230,6 +243,7 @@ export const TerminalPanel = forwardRef<TerminalPanelRef, TerminalPanelProps>(
     // Restore tabs after refresh and replay server output after reconnect.
     const handleTerminalList = useCallback(
       (terminals: Array<{ id: string; createdAt: string; outputBuffer?: string }>) => {
+        setHasReceivedTerminalList(true);
         updateTabs((prev) => {
           if (prev.length > 0) {
             const buffers = new Map(
@@ -308,6 +322,32 @@ export const TerminalPanel = forwardRef<TerminalPanelRef, TerminalPanelProps>(
       create(requestId);
     }, [connected, create, setActiveTabId, updateTabs]);
 
+    useEffect(() => {
+      if (!connected) {
+        setHasReceivedTerminalList(false);
+      }
+    }, [connected]);
+
+    useEffect(() => {
+      if (
+        autoCreateWhenEmpty &&
+        isVisible &&
+        connected &&
+        hasReceivedTerminalList &&
+        tabs.length === 0 &&
+        tabsRef.current.length === 0
+      ) {
+        handleNewTab();
+      }
+    }, [
+      autoCreateWhenEmpty,
+      isVisible,
+      connected,
+      hasReceivedTerminalList,
+      tabs.length,
+      handleNewTab,
+    ]);
+
     // Expose createNewTerminal to parent via ref
     useImperativeHandle(
       ref,
@@ -350,7 +390,11 @@ export const TerminalPanel = forwardRef<TerminalPanelRef, TerminalPanelProps>(
               }
             }, 0);
           } else if (activeTabId === id) {
-            setTimeout(() => setActiveTabId(null), 0);
+            setTimeout(() => {
+              if (activeTabIdRef.current === id) {
+                setActiveTabId(null);
+              }
+            }, 0);
           }
 
           return filtered;
@@ -411,6 +455,11 @@ export const TerminalPanel = forwardRef<TerminalPanelRef, TerminalPanelProps>(
 
     const activeTab = tabs.find((tab) => tab.id === activeTabId);
 
+    // Restoring or creating the first terminal should not show a manual-create prompt.
+    if (tabs.length === 0 && autoCreateWhenEmpty && !gaveUp) {
+      return <Loading size="compact" message={connected ? 'Opening terminal…' : 'Connecting…'} />;
+    }
+
     // Empty state
     if (tabs.length === 0) {
       return (
@@ -457,7 +506,7 @@ export const TerminalPanel = forwardRef<TerminalPanelRef, TerminalPanelProps>(
 
         {/* Terminal content */}
         <div className="flex-1 overflow-hidden bg-background">
-          {activeTab && (
+          {activeTab && isVisible && (
             <Suspense fallback={<Loading size="compact" message="Loading terminal…" />}>
               <TerminalInstance
                 key={activeTab.id}
