@@ -10,7 +10,9 @@ export function createChatRouterServices(
     factories,
     execution: {
       domain: {
+        hasQueuedMessage: vi.fn(() => true),
         holdMessageForAdmission: vi.fn(() => vi.fn()),
+        waitForMessageAdmission: vi.fn(),
         markError: vi.fn(),
         rejectMessage: vi.fn(),
         enqueue: vi.fn(() => ({ position: 0 })),

@@ -8,11 +8,22 @@ import type {
   SessionCommandHandler,
   SessionExecutionCommandServices,
 } from '@/backend/services/session/service/chat/session-command.types';
+import type { QueuedMessage } from '@/shared/acp-protocol';
 import { PR_EVENT_MESSAGE_ID_PREFIX } from '@/shared/pr-monitoring';
 import type { QueueMessageInput } from '@/shared/websocket';
 import { WORKSPACE_NOTIFICATION_MESSAGE_ID_PREFIX } from '@/shared/workspace-notifications';
 
 const logger = createLogger('chat-message-handlers');
+
+function rejectFailedAdmission(
+  domain: Pick<SessionExecutionCommandServices['domain'], 'removeQueuedMessage' | 'rejectMessage'>,
+  sessionId: string,
+  message: QueuedMessage
+): void {
+  if (domain.removeQueuedMessage(sessionId, message.id, { expectedMessage: message })) {
+    domain.rejectMessage(sessionId, message.id, 'Could not reopen workspace. Try again.');
+  }
+}
 
 function validateAttachments(attachments: QueueMessageInput['attachments']): string | null {
   if (!attachments?.length) {
@@ -57,7 +68,12 @@ export function createQueueMessageHandler(
   deps: Pick<SessionExecutionCommandServices, 'backgroundDelivery' | 'humanMessageAccepted'> & {
     domain: Pick<
       SessionExecutionCommandServices['domain'],
-      'enqueue' | 'emitDelta' | 'rejectMessage' | 'removeQueuedMessage' | 'holdMessageForAdmission'
+      | 'enqueue'
+      | 'emitDelta'
+      | 'rejectMessage'
+      | 'removeQueuedMessage'
+      | 'holdMessageForAdmission'
+      | 'hasQueuedMessage'
     >;
     tryDispatchNextMessage: (sessionId: string) => Promise<void>;
   }
@@ -94,14 +110,17 @@ export function createQueueMessageHandler(
     try {
       await deps.humanMessageAccepted?.(sessionId, acceptedAt);
     } catch (error) {
-      deps.domain.removeQueuedMessage(sessionId, messageId, { expectedMessage: queuedMsg });
-      deps.domain.rejectMessage(sessionId, messageId, 'Could not reopen workspace. Try again.');
+      rejectFailedAdmission(deps.domain, sessionId, queuedMsg);
       logger.warn('Failed to persist workspace follow-up', { sessionId, error });
       releaseAdmission();
       await deps.tryDispatchNextMessage(sessionId);
       return { replies: [] };
     } finally {
       releaseAdmission();
+    }
+
+    if (!deps.domain.hasQueuedMessage(sessionId, messageId, queuedMsg)) {
+      return { replies: [] };
     }
 
     deps.domain.emitDelta(

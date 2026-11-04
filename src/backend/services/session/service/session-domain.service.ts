@@ -49,13 +49,29 @@ const RECENT_REJECTION_TTL_MS = 60_000;
 const MAX_RECENT_REJECTIONS = 100;
 
 export class SessionDomainService extends EventEmitter {
-  private readonly pendingAdmissions = new WeakSet<QueuedMessage>();
+  private readonly pendingAdmissions = new WeakMap<QueuedMessage, Promise<void>>();
 
   holdMessageForAdmission(message: QueuedMessage): () => void {
-    this.pendingAdmissions.add(message);
+    let resolve!: () => void;
+    const pending = new Promise<void>((done) => {
+      resolve = done;
+    });
+    this.pendingAdmissions.set(message, pending);
     return () => {
       this.pendingAdmissions.delete(message);
+      resolve();
     };
+  }
+
+  waitForMessageAdmission(
+    sessionId: string,
+    messageId: string
+  ): { settled: Promise<void>; message: QueuedMessage } | undefined {
+    const message = this.registry
+      .getExisting(sessionId)
+      ?.queue.find((queued) => queued.id === messageId);
+    const settled = message ? this.pendingAdmissions.get(message) : undefined;
+    return message && settled ? { settled, message } : undefined;
   }
 
   isMessageAdmissionPending(message: QueuedMessage): boolean {
@@ -729,8 +745,12 @@ export class SessionDomainService extends EventEmitter {
     return true;
   }
 
-  hasQueuedMessage(sessionId: string, messageId: string): boolean {
-    return this.registry.getQueueSnapshot(sessionId).some((message) => message.id === messageId);
+  hasQueuedMessage(sessionId: string, messageId: string, expectedMessage?: QueuedMessage): boolean {
+    return this.registry
+      .getQueueSnapshot(sessionId)
+      .some(
+        (message) => message.id === messageId && (!expectedMessage || message === expectedMessage)
+      );
   }
 
   getTranscriptSnapshot(sessionId: string): ChatMessage[] {

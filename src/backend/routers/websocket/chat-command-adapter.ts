@@ -1,4 +1,30 @@
+import { randomUUID } from 'node:crypto';
 import type { SessionCommandError, SessionCommandOutcome } from '@/backend/services/session';
+import { type AgentContentItem, type MessageAttachment, MessageState } from '@/shared/acp-protocol';
+
+function recoverDirectInput(content: string | AgentContentItem[]) {
+  const attachments: MessageAttachment[] = [];
+  if (typeof content === 'string') {
+    return { text: content };
+  }
+  const text: string[] = [];
+  for (const item of content) {
+    if (item.type === 'text') {
+      text.push(item.text);
+    } else if (item.type === 'image') {
+      const { data, media_type: mediaType } = item.source;
+      attachments.push({
+        id: randomUUID(),
+        name: `image.${mediaType.slice('image/'.length)}`,
+        type: mediaType,
+        contentType: 'image',
+        size: Buffer.byteLength(data, 'base64'),
+        data,
+      });
+    }
+  }
+  return { text: text.join('\n'), ...(attachments.length ? { attachments } : {}) };
+}
 
 function getErrorMessage(error: unknown): string {
   if (error instanceof Error) {
@@ -47,6 +73,8 @@ function formatCommandError(error: SessionCommandError): string {
       return 'Message not found in queue';
     case 'queue_input_invalid':
       return error.reason;
+    case 'user_input_failed':
+      return 'Could not send message. Try again.';
     case 'set_config_option_failed':
       return `Failed to set config option: ${getErrorMessage(error.cause)}`;
     default: {
@@ -77,6 +105,22 @@ export function applySessionCommandOutcome(
   }
   for (const reply of outcome.replies) {
     if (reply.type === 'error') {
+      if (reply.error.kind === 'user_input_failed') {
+        requester.send(
+          JSON.stringify({
+            type: 'message_state_changed',
+            id: randomUUID(),
+            newState: MessageState.REJECTED,
+            errorMessage: formatCommandError(reply.error),
+            userMessage: {
+              ...recoverDirectInput(reply.error.content),
+              sessionId: reply.error.sessionId,
+              timestamp: new Date().toISOString(),
+            },
+          })
+        );
+        continue;
+      }
       requester.send(
         JSON.stringify({
           type: 'error',

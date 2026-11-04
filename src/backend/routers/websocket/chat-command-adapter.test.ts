@@ -1,8 +1,61 @@
 import { describe, expect, it, vi } from 'vitest';
+import { MessageState } from '@/shared/acp-protocol';
 import { EMPTY_CHAT_BAR_CAPABILITIES } from '@/shared/chat-capabilities';
 import { applySessionCommandOutcome } from './chat-command-adapter';
 
 describe('applySessionCommandOutcome', () => {
+  it.each([
+    { content: 'original draft' },
+    {
+      content: [
+        { type: 'text' as const, text: 'original draft' },
+        {
+          type: 'image' as const,
+          source: { type: 'base64' as const, media_type: 'image/png', data: 'aGVsbG8=' },
+        },
+      ],
+    },
+  ])('restores failed direct input through the existing rejection event: %j', ({ content }) => {
+    const ws = { send: vi.fn() };
+    applySessionCommandOutcome(ws, {
+      replies: [
+        {
+          type: 'error',
+          error: {
+            kind: 'user_input_failed',
+            sessionId: 'session-1',
+            content,
+            cause: new Error('database unavailable'),
+          },
+        },
+      ],
+    });
+    expect(ws.send).toHaveBeenCalledExactlyOnceWith(expect.any(String));
+    expect(JSON.parse(ws.send.mock.calls[0]![0])).toMatchObject({
+      type: 'message_state_changed',
+      id: expect.any(String),
+      newState: MessageState.REJECTED,
+      errorMessage: 'Could not send message. Try again.',
+      userMessage: {
+        text: 'original draft',
+        sessionId: 'session-1',
+        timestamp: expect.any(String),
+      },
+    });
+    if (Array.isArray(content)) {
+      expect(JSON.parse(ws.send.mock.calls[0]![0]).userMessage.attachments).toEqual([
+        {
+          id: expect.any(String),
+          name: 'image.png',
+          type: 'image/png',
+          contentType: 'image',
+          size: 5,
+          data: 'aGVsbG8=',
+        },
+      ]);
+    }
+  });
+
   it.each([undefined, 'config-request'])(
     'delivers correlated requester errors without publishing configuration',
     (requestId) => {

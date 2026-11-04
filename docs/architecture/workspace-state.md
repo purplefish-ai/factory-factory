@@ -391,14 +391,17 @@ without a column is a compile error. WAITING is positively asserted — it means
 human owns the next action — and a code with no obvious home belongs in WORKING.
 Archived workspaces derive no column at all so they stay off the board.
 
-A merged or closed PR places an idle workspace in Done when no attached PR
-remains open. Accepting a human follow-up dismisses existing terminal PRs from
-completion across all workspace conversations. The PRs remain attached and
-visible as history. The workspace uses Working while the agent runs and Waiting
-(Ready for next prompt) once idle; pending user requests still take precedence.
-New PRs participate in completion normally, and observing a PR reopen resets its
-dismissal. Repeated terminal observations preserve the dismissal. It persists
-across restarts and backups; older backups default to undismissed PRs.
+A merged or closed PR places an idle workspace in Done when at least one
+attached terminal PR is undismissed and no attached PR is nonterminal, including
+an unsynced `NONE` association. Accepting a human follow-up dismisses existing
+terminal PRs from completion across all workspace conversations. The PRs remain
+attached and visible as history. The workspace uses Working while the agent runs
+and Waiting (Ready for next prompt) once idle; pending user requests still take
+precedence. New PRs participate in completion normally, and observing a PR
+reopen resets its dismissal. A change from closed to merged also starts a new
+completion, even if polling missed the intervening reopen. Repeated observations
+of the same terminal state preserve the dismissal. It persists across restarts
+and backups; older backups default to undismissed PRs.
 
 Only accepted human input dismisses completion, including messages such as
 "thanks". Rejected messages, transcript replay, background PR updates, and
@@ -410,6 +413,12 @@ new completion; reopening follows the PR facts already known to the application.
 Routine polling preserves the first terminal observation time so it cannot
 interfere with a follow-up already being admitted. Queued messages remain held
 from dispatch and steering until the follow-up persistence completes.
+Cancellation waits for admission to settle so Accepted precedes Cancelled.
+Direct input preserves arrival order through admission, rechecks stop guards
+before submission, and returns unsent text and images through composer recovery
+when admission fails. Persisted PR revisions fence older event and
+reconciliation projections; an archive during a follow-up read still wins
+publication.
 
 Codex tasks remain automation-owned between turns. An `active` goal keeps the
 workspace in WORKING even when no prompt is currently in flight; paused,

@@ -24,6 +24,12 @@ export type SessionCommandError =
     }
   | { kind: 'queue_input_invalid'; reason: string }
   | {
+      kind: 'user_input_failed';
+      sessionId: string;
+      content: string | AgentContentItem[];
+      cause: unknown;
+    }
+  | {
       kind:
         | 'set_model_failed'
         | 'set_config_option_failed'
@@ -85,6 +91,8 @@ export interface SessionExecutionCommandServices {
     | 'emitDelta'
     | 'removeQueuedMessage'
     | 'holdMessageForAdmission'
+    | 'waitForMessageAdmission'
+    | 'hasQueuedMessage'
   >;
   lifecycle: Pick<SessionLifecycleService, 'getSessionOptions' | 'stopSession'>;
   backgroundDelivery: Pick<SessionBackgroundDeliveryService, 'captureResumeGuard' | 'userResume'>;

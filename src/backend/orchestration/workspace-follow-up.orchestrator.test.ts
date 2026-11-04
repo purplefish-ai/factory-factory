@@ -26,8 +26,9 @@ it.each(['MERGED', 'CLOSED'] as const)(
       ciStatus: 'SUCCESS' as const,
       hasMergeConflict: false,
       syncedAt: null,
+      revision: 1,
     };
-    const prs = [{ ...historical, completionDismissed: true }];
+    const prs = [{ ...historical, completionDismissed: true, revision: 2 }];
     const prSummary = deriveWorkspacePRSummary(prs, true);
     const workspace = {
       id: 'ws',
@@ -76,6 +77,19 @@ it.each(['MERGED', 'CLOSED'] as const)(
         statusReason: { code: 'READY_FOR_NEXT_PROMPT' },
         prs: [expect.objectContaining({ state, completionDismissed: true })],
       });
+      // A projection read before admission can complete afterwards with a later clock.
+      store.upsert(
+        'ws',
+        {
+          prs: [historical],
+          prSummary: summary,
+          prState: summary.state,
+          ratchetState: summary.ratchetState,
+        },
+        'projection:pr_authoritative',
+        Date.now() + 1
+      );
+      expect(store.getByWorkspaceId('ws')?.kanbanColumn).toBe('WAITING');
       store.upsert('ws', { isWorking: true }, 'active', Date.now() + 10);
       expect(store.getByWorkspaceId('ws')?.kanbanColumn).toBe('WORKING');
       store.upsert('ws', { isWorking: false }, 'idle', Date.now() + 20);
@@ -97,3 +111,37 @@ it.each(['MERGED', 'CLOSED'] as const)(
     }
   }
 );
+
+it('does not resurrect a removed workspace when its READY follow-up read finishes later', async () => {
+  const store = new WorkspaceSnapshotStore();
+  store.configure({
+    deriveFlowState: (input) => deriveWorkspaceFlowState({ ...input, prUpdatedAt: null }),
+    deriveSidebarStatus: deriveWorkspaceSidebarStatus,
+  });
+  vi.useFakeTimers();
+  vi.setSystemTime(1000);
+  store.upsert('ws', { projectId: 'project', status: 'READY' }, 'seed', 1);
+  const followUp = createWorkspaceFollowUp(
+    unsafeCoerce<Parameters<typeof createWorkspaceFollowUp>[0]>({
+      sessionDataService: { findAgentSessionById: async () => ({ workspaceId: 'ws' }) },
+      workspacePrSnapshotService: { dismissCompletedPRs: async () => [] },
+      workspaceDataService: {
+        findById: () => {
+          const ready = { id: 'ws', projectId: 'project', status: 'READY', prs: [] };
+          vi.setSystemTime(1500);
+          store.remove('ws');
+          vi.setSystemTime(2000);
+          return Promise.resolve(ready);
+        },
+      },
+      workspaceSnapshotStore: store,
+    })
+  );
+  try {
+    await followUp('session', new Date(1000));
+    expect(store.getByWorkspaceId('ws')).toBeUndefined();
+  } finally {
+    store.clear();
+    vi.useRealTimers();
+  }
+});

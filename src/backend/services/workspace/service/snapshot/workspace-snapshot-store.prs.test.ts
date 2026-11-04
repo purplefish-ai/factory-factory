@@ -33,6 +33,136 @@ function createStore() {
 }
 
 describe('snapshot PR changes', () => {
+  it.each([200, 300])(
+    'preserves newer monitoring settings while accepting PR revision at clock %s',
+    (timestamp) => {
+      const store = createStore();
+      store.upsert(
+        'ws-1',
+        {
+          projectId: 'project-1',
+          prs: [{ ...first, revision: 1 }],
+          ratchetEnabled: true,
+          ratchetState: 'MERGED',
+        },
+        'seed',
+        100
+      );
+      const monitoring = {
+        enabled: true,
+        deliveryMode: 'MAIN' as const,
+        recipientSessionId: null,
+        bindingRevision: 1,
+        pauseReason: null,
+        pendingEventCount: 0,
+      };
+      const currentMonitoring = { ...monitoring, enabled: false, bindingRevision: 2 };
+      store.upsert(
+        'ws-1',
+        { ratchetEnabled: false, prMonitoring: currentMonitoring },
+        'user settings',
+        300
+      );
+      store.upsert(
+        'ws-1',
+        {
+          prs: [{ ...first, revision: 2 }],
+          ratchetState: 'IDLE',
+          ratchetEnabled: true,
+          prMonitoring: { ...monitoring, enabled: true, bindingRevision: 1 },
+        },
+        'older projection',
+        timestamp
+      );
+      expect(store.getByWorkspaceId('ws-1')).toMatchObject({
+        prs: [{ revision: 2 }],
+        ratchetState: 'IDLE',
+        ratchetEnabled: false,
+        prMonitoring: currentMonitoring,
+        fieldTimestamps: { ratchet: 300 },
+      });
+    }
+  );
+  it('orders persisted PR revisions independently of asynchronous publication clocks', () => {
+    const store = createStore();
+    const dismissed = {
+      ...first,
+      state: 'CLOSED' as const,
+      completionDismissed: true,
+      revision: 2,
+    };
+    store.upsert(
+      'ws-1',
+      { projectId: 'project-1', prs: [dismissed], prState: 'NONE', ratchetState: 'IDLE' },
+      'follow-up',
+      100
+    );
+    for (const source of ['projection:pr_authoritative', 'reconciliation']) {
+      store.upsert(
+        'ws-1',
+        {
+          prs: [{ ...dismissed, completionDismissed: false, revision: 1 }],
+          prState: 'CLOSED',
+          ratchetState: 'MERGED',
+        },
+        source,
+        200
+      );
+      expect(store.getByWorkspaceId('ws-1')).toMatchObject({
+        prs: [dismissed],
+        prState: 'NONE',
+        ratchetState: 'IDLE',
+      });
+    }
+    store.upsert('ws-1', { prs: [{ ...first, revision: 3 }], prState: 'OPEN' }, 'reopened', 100);
+    expect(store.getByWorkspaceId('ws-1')?.prState).toBe('OPEN');
+    store.upsert(
+      'ws-1',
+      { prs: [{ ...first, state: 'CLOSED', revision: 4 }], prState: 'CLOSED' },
+      'closed again',
+      100
+    );
+    expect(store.getByWorkspaceId('ws-1')?.prState).toBe('CLOSED');
+    store.upsert(
+      'ws-1',
+      {
+        prs: [
+          { ...first, state: 'CLOSED', revision: 4 },
+          { ...second, revision: 0 },
+        ],
+        prState: 'OPEN',
+      },
+      'new PR',
+      100
+    );
+    expect(store.getByWorkspaceId('ws-1')?.prState).toBe('OPEN');
+  });
+
+  it('does not trust scalar PR or ratchet facts without revision provenance after a revisioned collection', () => {
+    const store = createStore();
+    store.upsert(
+      'ws-1',
+      {
+        projectId: 'project-1',
+        prs: [{ ...first, revision: 2 }],
+        prState: 'OPEN',
+        ratchetState: 'IDLE',
+      },
+      'seed',
+      100
+    );
+    store.upsert(
+      'ws-1',
+      { prState: 'CLOSED', ratchetState: 'MERGED', ratchetEnabled: false },
+      'legacy event',
+      200
+    );
+    expect(store.getByWorkspaceId('ws-1')).toMatchObject({
+      prState: 'OPEN',
+      ratchetState: 'IDLE',
+      ratchetEnabled: false,
+    });
+  });
   it('ignores reordering without changing the stored order or emitting a snapshot', () => {
     const store = createStore();
     const handler = vi.fn();

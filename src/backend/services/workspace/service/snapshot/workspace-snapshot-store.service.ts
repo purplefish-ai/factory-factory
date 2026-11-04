@@ -44,6 +44,7 @@ import {
 } from '@/shared/workspace-snapshot';
 import type { WorkspaceStatusReason } from '@/shared/workspace-status-reason';
 import { BranchFreshness } from './branch-freshness';
+import { PrProjectionFreshness } from './pr-projection-freshness';
 
 export type { SnapshotFieldGroup, WorkspaceSnapshotEntry } from '@/shared/workspace-snapshot';
 
@@ -240,6 +241,7 @@ export class WorkspaceSnapshotStore extends EventEmitter {
   private hydratedFields = new Map<string, Set<SnapshotField>>();
   private rawSessionIsWorkingByWorkspaceId = new Map<string, boolean>();
   private readonly branches = new BranchFreshness();
+  private readonly prFreshness = new PrProjectionFreshness();
   /** Name freshness is independent of unrelated workspace/lifecycle observations. */
   private readonly nameTimestamps = new Map<string, number>();
   private deriveFns: SnapshotDerivationFns | null = null;
@@ -411,37 +413,66 @@ export class WorkspaceSnapshotStore extends EventEmitter {
     entry: WorkspaceSnapshotEntry,
     update: SnapshotUpdateInput,
     mapping: FieldGroupMapping,
-    timestamp: number
+    timestamp: number,
+    newerPrRevision: boolean
   ): boolean {
     if (
       !mapping.fields.some((field) => update[field] !== undefined) ||
-      timestamp <= (entry.fieldTimestamps[mapping.group] ?? 0)
+      (timestamp <= (entry.fieldTimestamps[mapping.group] ?? 0) &&
+        !(newerPrRevision && (mapping.group === 'pr' || mapping.group === 'ratchet')))
     ) {
       return false;
     }
     return true;
   }
 
+  private revisionGroupUpdate(
+    entry: WorkspaceSnapshotEntry,
+    update: SnapshotUpdateInput,
+    group: SnapshotFieldGroup,
+    timestamp: number,
+    newerPrRevision: boolean
+  ): SnapshotUpdateInput {
+    // PR revisions fence derived Ratchet state, not the user's monitoring settings.
+    return newerPrRevision &&
+      group === 'ratchet' &&
+      timestamp <= (entry.fieldTimestamps.ratchet ?? 0)
+      ? { ratchetState: update.ratchetState }
+      : update;
+  }
+
   private mergeFieldGroups(
     entry: WorkspaceSnapshotEntry,
     update: SnapshotUpdateInput,
-    ts: number
+    ts: number,
+    newerPrRevision: boolean
   ): { accepted: boolean; rawChanged: boolean } {
     let accepted = false;
     let rawChanged = false;
     const hydrated = this.hydratedFields.get(entry.workspaceId) ?? new Set<SnapshotField>();
     this.hydratedFields.set(entry.workspaceId, hydrated);
     for (const mapping of FIELD_GROUP_MAPPINGS) {
-      if (!this.canMergeGroup(entry, update, mapping, ts)) {
+      const groupUpdate = this.revisionGroupUpdate(
+        entry,
+        update,
+        mapping.group,
+        ts,
+        newerPrRevision
+      );
+      if (!this.canMergeGroup(entry, groupUpdate, mapping, ts, newerPrRevision)) {
         continue;
       }
       accepted = true;
-      entry.fieldTimestamps[mapping.group] = ts;
+      entry.fieldTimestamps[mapping.group] = Math.max(
+        ts,
+        entry.fieldTimestamps[mapping.group] ?? 0
+      );
+      this.prFreshness.accept(entry.workspaceId, groupUpdate, mapping.group);
       for (const field of mapping.fields) {
-        if (this.assignRawField(entry, update, field)) {
+        if (this.assignRawField(entry, groupUpdate, field)) {
           rawChanged = true;
         }
-        if (update[field] !== undefined) {
+        if (groupUpdate[field] !== undefined) {
           hydrated.add(field);
         }
       }
@@ -607,7 +638,8 @@ export class WorkspaceSnapshotStore extends EventEmitter {
     }
 
     // Field-level timestamp merge
-    const grouped = this.mergeFieldGroups(entry, update, ts);
+    const prProjection = this.prFreshness.prepare(workspaceId, update);
+    const grouped = this.mergeFieldGroups(entry, prProjection.update, ts, prProjection.newer);
     const name = this.mergeName(entry, update, ts);
     const branch = this.mergeBranch(entry, update, ts);
     const mergeResult = {
@@ -781,6 +813,7 @@ export class WorkspaceSnapshotStore extends EventEmitter {
     this.removalTimestamps.set(workspaceId, { removedAt, expiresAt, timer });
     this.nameTimestamps.delete(workspaceId);
     this.branches.remove(workspaceId);
+    this.prFreshness.remove(workspaceId);
 
     const entry = this.entries.get(workspaceId);
     if (!entry) {
@@ -872,6 +905,7 @@ export class WorkspaceSnapshotStore extends EventEmitter {
     this.rawSessionIsWorkingByWorkspaceId.clear();
     this.nameTimestamps.clear();
     this.branches.clear();
+    this.prFreshness.clear();
     for (const tombstone of this.removalTimestamps.values()) {
       clearTimeout(tombstone.timer);
     }

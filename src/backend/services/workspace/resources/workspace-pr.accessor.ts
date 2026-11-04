@@ -125,6 +125,7 @@ export function serializeWorkspacePR(pr: WorkspacePRRow): WorkspacePullRequest {
     hasMergeConflict: pr.hasMergeConflict,
     syncedAt: pr.syncedAt?.toISOString() ?? null,
     completionDismissed: pr.completionDismissed,
+    revision: pr.revision,
   };
 }
 
@@ -191,8 +192,8 @@ function completionDismissalUpdate(row: WorkspacePR, observation: PRObservation)
   if (observation.prState !== 'MERGED' && observation.prState !== 'CLOSED') {
     return { completionDismissed: false, terminalObservedAt: null };
   }
-  return row.state !== 'MERGED' && row.state !== 'CLOSED'
-    ? { terminalObservedAt: new Date(observation.observedAt) }
+  return row.state !== observation.prState
+    ? { completionDismissed: false, terminalObservedAt: new Date(observation.observedAt) }
     : {};
 }
 
@@ -209,7 +210,7 @@ class WorkspacePRAccessor {
           OR: [{ terminalObservedAt: null }, { terminalObservedAt: { lte: acceptedAt } }],
           workspace: { status: { notIn: ['ARCHIVING', 'ARCHIVED'] } },
         },
-        data: { completionDismissed: true },
+        data: { completionDismissed: true, revision: { increment: 1 } },
       });
       return result.count > 0
         ? tx.workspacePR.findMany({

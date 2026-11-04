@@ -124,3 +124,78 @@ it('sends human input when delivery resume persistence rejects', async () => {
     resume.mockRestore();
   }
 });
+
+it('returns recoverable original content when human admission fails', async () => {
+  const cause = new Error('database unavailable');
+  const deps = createDeps({ isSessionRunning: true });
+  const content = [{ type: 'text' as const, text: 'keep this draft' }];
+  const handler = createUserInputHandler({
+    ...deps,
+    humanMessageAccepted: vi.fn().mockRejectedValue(cause),
+  });
+
+  await expect(Promise.resolve(handler(context, { type: 'user_input', content }))).resolves.toEqual(
+    {
+      replies: [
+        {
+          type: 'error',
+          error: { kind: 'user_input_failed', sessionId: 'session-1', content, cause },
+        },
+      ],
+    }
+  );
+  expect(deps.sessionService.sendSessionMessage).not.toHaveBeenCalled();
+});
+
+it('serializes durable admission and submission without awaiting a full provider turn', async () => {
+  const admission = Promise.withResolvers<void>();
+  const providerTurn = Promise.withResolvers<void>();
+  const deps = createDeps({ isSessionRunning: true });
+  vi.mocked(deps.sessionService.sendSessionMessage).mockReturnValueOnce(providerTurn.promise);
+  const humanMessageAccepted = vi
+    .fn()
+    .mockReturnValueOnce(admission.promise)
+    .mockResolvedValue(undefined);
+  const handler = createUserInputHandler({ ...deps, humanMessageAccepted });
+
+  const first = handler(context, { type: 'user_input', text: 'first' });
+  const second = handler(context, { type: 'user_input', text: 'second' });
+  await Promise.resolve();
+  expect(humanMessageAccepted).toHaveBeenCalledTimes(1);
+  expect(deps.sessionService.sendSessionMessage).not.toHaveBeenCalled();
+
+  admission.resolve();
+  await Promise.all([first, second]);
+  expect(deps.sessionService.sendSessionMessage).toHaveBeenNthCalledWith(1, 'session-1', 'first');
+  expect(deps.sessionService.sendSessionMessage).toHaveBeenNthCalledWith(2, 'session-1', 'second');
+  providerTurn.resolve();
+});
+
+it('rejects inputs captured before stop even if the session is running again after admission', async () => {
+  const admission = Promise.withResolvers<void>();
+  let current = true;
+  const deps = createDeps({ isSessionRunning: true });
+  const handler = createUserInputHandler({
+    ...deps,
+    humanMessageAccepted: vi
+      .fn()
+      .mockReturnValueOnce(admission.promise)
+      .mockResolvedValue(undefined),
+    backgroundDelivery: {
+      captureResumeGuard: () => () => current,
+      userResume: vi.fn().mockResolvedValue(undefined),
+    },
+  });
+  const first = handler(context, { type: 'user_input', text: 'before stop' });
+  const second = handler(context, { type: 'user_input', text: 'also before stop' });
+  await Promise.resolve();
+  current = false;
+  admission.resolve();
+
+  for (const outcome of await Promise.all([first, second])) {
+    expect(outcome).toMatchObject({
+      replies: [{ type: 'error', error: { kind: 'user_input_failed' } }],
+    });
+  }
+  expect(deps.sessionService.sendSessionMessage).not.toHaveBeenCalled();
+});

@@ -2,10 +2,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { MessageState } from '@/shared/acp-protocol';
 
 const mocks = vi.hoisted(() => ({
+  hasQueuedMessage: vi.fn(() => true),
   enqueue: vi.fn(),
   emitDelta: vi.fn(),
   rejectMessage: vi.fn(),
-  removeQueuedMessage: vi.fn(),
+  removeQueuedMessage: vi.fn(() => true),
   holdMessageForAdmission: vi.fn(() => vi.fn()),
 }));
 

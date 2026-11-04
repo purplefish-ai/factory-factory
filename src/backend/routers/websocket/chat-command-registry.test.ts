@@ -19,7 +19,9 @@ describe('socket-free command registry', () => {
       ...createChatRouterServices(sessionCommandFactories),
       execution: {
         domain: {
+          hasQueuedMessage: vi.fn(() => true),
           holdMessageForAdmission: vi.fn(() => vi.fn()),
+          waitForMessageAdmission: vi.fn(),
           markError: vi.fn(),
           rejectMessage: vi.fn(),
           enqueue: vi.fn(),
@@ -102,7 +104,9 @@ it('routes execution commands using injected application capabilities and typed 
     userResume: vi.fn().mockResolvedValue(undefined),
   };
   const domain = {
+    hasQueuedMessage: vi.fn(() => true),
     holdMessageForAdmission: vi.fn(() => vi.fn()),
+    waitForMessageAdmission: vi.fn(),
     markError: vi.fn(),
     rejectMessage: vi.fn(),
     enqueue: vi.fn(() => ({ position: 0 })),
@@ -165,7 +169,8 @@ it('routes execution commands using injected application capabilities and typed 
   );
   expect(sendSessionMessage).toHaveBeenCalledWith('injected-execution', 'direct');
   expect(humanMessageAccepted).toHaveBeenCalledTimes(2);
-  expect(humanMessageAccepted).toHaveBeenCalledWith('injected-execution', expect.any(Date));
+  expect(humanMessageAccepted).toHaveBeenNthCalledWith(1, 'injected-execution', expect.any(Date));
+  expect(humanMessageAccepted).toHaveBeenNthCalledWith(2, 'injected-execution', expect.any(Date));
   expect(domain.enqueue).toHaveBeenCalledWith(
     'injected-execution',
     expect.objectContaining({ id: 'queued', text: 'human' })

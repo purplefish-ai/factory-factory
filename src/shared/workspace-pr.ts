@@ -16,6 +16,8 @@ export const WorkspacePullRequestSchema = z.object({
   hasMergeConflict: z.boolean(),
   /** Historical terminal PRs remain visible but no longer complete follow-up work. */
   completionDismissed: z.boolean().optional(),
+  /** Persisted association revision fences polling facts against human follow-ups. */
+  revision: z.number().int().nonnegative().optional(),
   syncedAt: z.string().nullable(),
 });
 export type WorkspacePullRequest = z.infer<typeof WorkspacePullRequestSchema>;

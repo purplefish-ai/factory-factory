@@ -543,6 +543,7 @@ it.each<{
                 {
                   id: `${row.id}-${index}`,
                   completionDismissed: false,
+                  revision: 0,
                   url: `https://github.com/org/repo/pull/${100 + index}`,
                   number: 100 + index,
                   title: `PR ${index}`,
