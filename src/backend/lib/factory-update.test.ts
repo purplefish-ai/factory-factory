@@ -105,3 +105,15 @@ it('reports a registry failure to the caller for diagnostics', async () => {
   expect(await new FactoryReleaseChecker().getLatestVersion(onError)).toBeNull();
   expect(onError).toHaveBeenCalledWith(error);
 });
+
+it('keeps registry failures non-blocking even if diagnostics throw', async () => {
+  const fetcher = vi.fn().mockRejectedValue(new Error('offline'));
+  vi.stubGlobal('fetch', fetcher);
+  const checker = new FactoryReleaseChecker();
+  const onError = () => {
+    throw new Error('logging failed');
+  };
+  expect(await checker.getLatestVersion(onError)).toBeNull();
+  expect(await checker.getLatestVersion(onError)).toBeNull();
+  expect(fetcher).toHaveBeenCalledTimes(1);
+});

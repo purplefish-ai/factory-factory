@@ -53,9 +53,13 @@ export class FactoryReleaseChecker {
       this.latest = release.version;
       this.expiresAt = Date.now() + 60 * 60 * 1000;
     } catch (error) {
-      onError?.(error);
       // An optional update check must never block use of Factory or discard known data.
       this.expiresAt = Date.now() + 5 * 60 * 1000;
+      try {
+        onError?.(error);
+      } catch {
+        // Diagnostics are best-effort and must not bypass the failure backoff.
+      }
     }
     return this.latest;
   }
