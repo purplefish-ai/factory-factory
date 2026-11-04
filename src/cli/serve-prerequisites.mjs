@@ -51,8 +51,9 @@ function execute(command, args, visible) {
       }
     };
     const stop = (signal, code) => {
+      // A terminal signal can reach both the launcher and this process.
+      // Keep the first grace period even when the launcher forwards it again.
       if (cancelled) {
-        terminate('SIGKILL');
         return;
       }
       cancelled = code;
@@ -81,23 +82,26 @@ function execute(command, args, visible) {
   });
 }
 
-/** @returns {SetupIO} */
-export function createSetupIO() {
+/**
+ * @param {{ input?: import('node:stream').Readable & { isTTY?: boolean },
+ * output?: import('node:stream').Writable & { isTTY?: boolean } }} [streams]
+ * @returns {SetupIO}
+ */
+export function createSetupIO({ input = process.stdin, output = process.stdout } = {}) {
   return {
     platform: process.platform,
-    interactive: Boolean(process.stdin.isTTY && process.stdout.isTTY),
+    interactive: Boolean(input.isTTY && output.isTTY),
     print: (message) => process.stderr.write(`  ${message}\n`),
     probe: (command, args) => execute(command, args, false),
     run: (command, args) => execute(command, args, true),
     ask: (question) =>
       new Promise((resolve) => {
-        const terminal = createInterface({ input: process.stdin, output: process.stdout });
-        const finish = (answer = '') => {
-          terminal.close();
-          resolve(answer);
-        };
+        const terminal = createInterface({ input, output });
         terminal.once('close', () => resolve(''));
-        terminal.once('SIGINT', () => finish());
+        terminal.once('SIGINT', () => {
+          terminal.close();
+          process.exit(130);
+        });
         terminal.question(question, (answer) => {
           // Resolve before closing: close also fires on EOF.
           resolve(answer);
@@ -178,7 +182,7 @@ async function ensureTool(tool, io) {
     return true;
   }
   io.print(
-    `Could not verify ${tool}. Check your PATH (a new terminal may be needed), then retry serve.`
+    `Could not verify ${tool}. Check your PATH (a new terminal may be needed).${tool === 'git' ? ' Then retry serve.' : ' Continuing without GitHub integration.'}`
   );
   return false;
 }

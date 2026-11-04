@@ -59,8 +59,8 @@ Factory Factory opens in your browser and stores its database in
 fixing, it shows the command and offers to run it with
 `Run this command? [y/N]`. **The default is No**: press Enter to decline.
 Commands run only after an explicit `y` or `yes`, with separate confirmation for
-each fix. Scripts and noninteractive terminals receive instructions without
-running fixes.
+each fix. Ctrl+C cancels startup. Scripts and noninteractive terminals receive
+instructions without running fixes.
 
 Automatic installation uses an existing fnm (for Node), Homebrew, or WinGet;
 otherwise, installation links are provided. After a Node upgrade, activate the

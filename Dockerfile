@@ -113,6 +113,7 @@ RUN pnpm add -g @openai/codex
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/package.json ./
+COPY --from=builder /app/.node-version ./
 COPY --from=builder /app/pnpm-workspace.yaml ./
 COPY --from=builder /app/patches ./patches
 
@@ -122,8 +123,8 @@ COPY --from=builder /app/prisma/schema.prisma ./prisma/
 COPY --from=builder /app/prisma/generated ./prisma/generated
 
 # Expose managed provider login commands in setup and workspace terminals.
-RUN chmod +x /app/dist/src/cli/index.js \
-  && ln -s /app/dist/src/cli/index.js /usr/local/bin/ff
+RUN chmod +x /app/dist/src/cli/bootstrap.mjs \
+  && ln -s /app/dist/src/cli/bootstrap.mjs /usr/local/bin/ff
 
 # Create data directory
 RUN mkdir -p /data

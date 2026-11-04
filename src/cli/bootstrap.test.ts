@@ -118,5 +118,90 @@ it.skipIf(process.platform === 'win32').each([false, true])(
         }
       }
     }
+  },
+  10_000
+);
+
+it('cancels startup on Ctrl+C at the confirmation prompt', () => {
+  const root = fixture('1.0.0');
+  writeFileSync(
+    join(root, 'index.js'),
+    `
+    import { PassThrough } from 'node:stream';
+    import { createSetupIO, confirmFix } from './serve-prerequisites.mjs';
+    const input = new PassThrough();
+    const output = new PassThrough();
+    output.isTTY = true;
+    const io = createSetupIO({ input, output });
+    io.interactive = true;
+    io.run = async () => { console.log('FIX_RAN'); return true; };
+    const pending = confirmFix(['example', 'install'], io);
+    input.write(String.fromCharCode(3));
+    await pending;
+    console.log('SERVER_STARTED');
+  `
+  );
+  const result = spawnSync(process.execPath, [join(root, 'bootstrap.mjs'), 'serve'], {
+    encoding: 'utf8',
+    timeout: 10_000,
+  });
+  expect(result.status).toBe(130);
+  expect(result.stdout).not.toContain('FIX_RAN');
+  expect(result.stdout).not.toContain('SERVER_STARTED');
+});
+
+it.skipIf(process.platform === 'win32')(
+  'delivers a foreground-group Ctrl+C only once to an active installer',
+  async () => {
+    const root = fixture('1.0.0');
+    const pidFile = join(root, 'worker.pid');
+    const gracefulFile = join(root, 'graceful');
+    writeFileSync(
+      join(root, 'worker.mjs'),
+      `
+    import { writeFileSync } from 'node:fs';
+    process.on('SIGINT', () => setTimeout(() => {
+      writeFileSync(new URL('./graceful', import.meta.url), 'done');
+      process.exit(0);
+    }, 200));
+    writeFileSync(new URL('./worker.pid', import.meta.url), String(process.pid));
+    setInterval(() => {}, 1000);
+  `
+    );
+    writeFileSync(
+      join(root, 'index.js'),
+      `
+    import { fileURLToPath } from 'node:url';
+    import { createSetupIO, confirmFix } from './serve-prerequisites.mjs';
+    const io = createSetupIO(); io.interactive = true; io.ask = async () => 'y';
+    await confirmFix([process.execPath, fileURLToPath(new URL('./worker.mjs', import.meta.url))], io);
+  `
+    );
+    const child = spawn(process.execPath, [join(root, 'bootstrap.mjs'), 'serve'], {
+      stdio: 'ignore',
+      detached: true,
+    });
+    const closed = new Promise((resolve) => child.once('exit', resolve));
+    let workerPid: number | undefined;
+    try {
+      await vi.waitFor(
+        () => {
+          workerPid = Number(readFileSync(pidFile, 'utf8'));
+        },
+        { timeout: 5000 }
+      );
+      process.kill(-child.pid!, 'SIGINT');
+      await closed;
+      expect(readFileSync(gracefulFile, 'utf8')).toBe('done');
+    } finally {
+      child.kill('SIGKILL');
+      if (workerPid) {
+        try {
+          process.kill(workerPid, 'SIGKILL');
+        } catch {
+          /* Already stopped. */
+        }
+      }
+    }
   }
 );

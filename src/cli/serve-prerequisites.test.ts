@@ -1,7 +1,12 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { confirmFix, ensureNode, ensureServeTools, supportsNode } from './serve-prerequisites.mjs';
 
-function setup({ answers = ['no'], available = ['git', 'gh'], platform = 'darwin' } = {}) {
+function setup({
+  answers = ['no'],
+  available = ['git', 'gh'],
+  platform = 'darwin',
+  authenticated = false,
+} = {}) {
   const commands: string[][] = [];
   const messages: string[] = [];
   const tools = new Set(available);
@@ -12,12 +17,15 @@ function setup({ answers = ['no'], available = ['git', 'gh'], platform = 'darwin
     ask: vi.fn(async () => answers.shift() ?? ''),
     probe: vi.fn(
       async (command: string, args: string[]) =>
-        tools.has(command) && !(command === 'gh' && args[0] === 'auth')
+        tools.has(command) && (command !== 'gh' || args[0] !== 'auth' || authenticated)
     ),
     run: vi.fn((command: string, args: string[]) => {
       commands.push([command, ...args]);
       if (command === 'brew') {
         tools.add(args[1]!);
+      }
+      if (command === 'gh' && args[0] === 'auth' && args[1] === 'login') {
+        authenticated = true;
       }
       return Promise.resolve(true);
     }),
@@ -80,6 +88,76 @@ describe('consent', () => {
 });
 
 describe('serve tools', () => {
+  it('does not prompt when GitHub authentication is already active', async () => {
+    const { io, commands } = setup({ authenticated: true });
+    expect(await ensureServeTools(io)).toBe(true);
+    expect(io.probe).toHaveBeenCalledWith('gh', ['auth', 'status', '--active']);
+    expect(io.ask).not.toHaveBeenCalled();
+    expect(commands).toEqual([]);
+  });
+  it('rechecks active GitHub authentication after an accepted login', async () => {
+    const { io, commands, messages } = setup({ answers: ['yes'] });
+    expect(await ensureServeTools(io)).toBe(true);
+    expect(commands).toEqual([['gh', 'auth', 'login']]);
+    expect(io.ask).toHaveBeenCalledTimes(1);
+    expect(io.probe.mock.calls).toEqual([
+      ['git', ['--version']],
+      ['gh', ['--version']],
+      ['gh', ['auth', 'status', '--active']],
+      ['gh', ['auth', 'status', '--active']],
+    ]);
+    await expect(io.probe.mock.results[2]!.value).resolves.toBe(false);
+    await expect(io.probe.mock.results[3]!.value).resolves.toBe(true);
+    expect(messages.join('\n')).not.toContain('still unavailable');
+  });
+  it('installs missing GitHub CLI and separately confirms login', async () => {
+    const { io, commands } = setup({ available: ['git', 'brew'], answers: ['y', 'yes'] });
+    expect(await ensureServeTools(io)).toBe(true);
+    expect(commands).toEqual([
+      ['brew', 'install', 'gh'],
+      ['gh', 'auth', 'login'],
+    ]);
+    expect(io.ask).toHaveBeenCalledTimes(2);
+    expect(io.ask.mock.invocationCallOrder[0]).toBeLessThan(io.run.mock.invocationCallOrder[0]!);
+    expect(io.run.mock.invocationCallOrder[0]).toBeLessThan(io.ask.mock.invocationCallOrder[1]!);
+    expect(io.ask.mock.invocationCallOrder[1]).toBeLessThan(io.run.mock.invocationCallOrder[1]!);
+    expect(io.probe.mock.calls).toEqual([
+      ['git', ['--version']],
+      ['gh', ['--version']],
+      ['brew', ['--version']],
+      ['gh', ['--version']],
+      ['gh', ['auth', 'status', '--active']],
+      ['gh', ['auth', 'status', '--active']],
+    ]);
+    await expect(io.probe.mock.results[3]!.value).resolves.toBe(true);
+    await expect(io.probe.mock.results[5]!.value).resolves.toBe(true);
+  });
+  it('does not log in when only GitHub CLI installation is accepted', async () => {
+    const { io, commands } = setup({ available: ['git', 'brew'], answers: ['y', 'no'] });
+    expect(await ensureServeTools(io)).toBe(true);
+    expect(commands).toEqual([['brew', 'install', 'gh']]);
+    expect(io.ask).toHaveBeenCalledTimes(2);
+  });
+  it.each([
+    { available: ['git', 'brew'], command: ['brew', ['install', 'gh']] },
+    { available: ['git', 'gh'], command: ['gh', ['auth', 'login']] },
+  ])('allows local work when the optional fix fails: $command', async ({ available, command }) => {
+    const { io, messages } = setup({ available, answers: ['y'] });
+    io.run.mockResolvedValue(false);
+    expect(await ensureServeTools(io)).toBe(true);
+    expect(io.run).toHaveBeenCalledExactlyOnceWith(...command);
+    expect(messages.join('\n')).toContain('The command failed');
+  });
+  it('allows local work when login succeeds but authentication remains unavailable', async () => {
+    const { io, messages } = setup({ answers: ['y'] });
+    io.run.mockResolvedValue(true);
+    expect(await ensureServeTools(io)).toBe(true);
+    expect(io.run).toHaveBeenCalledExactlyOnceWith('gh', ['auth', 'login']);
+    expect(
+      io.probe.mock.calls.filter(([command, args]) => command === 'gh' && args[0] === 'auth')
+    ).toHaveLength(2);
+    expect(messages.join('\n')).toContain('GitHub authentication is still unavailable');
+  });
   it('blocks missing Git when installation is declined', async () => {
     const { io, commands } = setup({ available: ['brew'] });
     expect(await ensureServeTools(io)).toBe(false);
