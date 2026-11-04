@@ -318,13 +318,17 @@ function ProjectFooterLinks({
   const descriptionId = useId();
   const boardDescriptionId = useId();
   const summary = projectSlug ? navData.agentsSummary : undefined;
+  const showBoardCounts =
+    Boolean(projectSlug) &&
+    projectSlug === navData.selectedProjectSlug &&
+    navData.serverWorkspaces !== undefined;
 
   // Board is active only on the board itself; on workspace detail routes the
   // workspace row carries the active state instead.
   const isActive = (section: ProjectSection) =>
     section === 'workspaces' ? isProjectBoardPath(pathname) : activeSection === section;
   const badges: Partial<Record<ProjectSection, ReactNode>> = {
-    workspaces: projectSlug ? (
+    workspaces: showBoardCounts ? (
       <span id={boardDescriptionId} className="ml-auto flex shrink-0 gap-1">
         <Badge variant="secondary" className="h-5 px-1.5 text-[10px] tabular-nums">
           Working {workingCount}
@@ -344,7 +348,7 @@ function ProjectFooterLinks({
   };
 
   const descriptions: Partial<Record<ProjectSection, string>> = {
-    workspaces: boardDescriptionId,
+    workspaces: showBoardCounts ? boardDescriptionId : undefined,
     agents: summary ? descriptionId : undefined,
   };
 

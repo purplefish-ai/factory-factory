@@ -52,6 +52,25 @@ function IssueQueryStatus({ projectId }: { projectId: string }) {
   );
 }
 
+function getStoryWorkspaces(state: State) {
+  if (state === 'loading') {
+    return undefined;
+  }
+  if (state !== 'board-counts') {
+    return [];
+  }
+  return (['WORKING', 'WORKING', 'WAITING', 'DONE'] as const).map((kanbanColumn, index) => ({
+    ...createOptimisticWorkspaceSummary({
+      id: `workspace-${index}`,
+      projectId: 'factory',
+      name: `Workspace ${index + 1}`,
+      ratchetEnabled: true,
+      createdAt: new Date('2026-01-01T00:00:00Z'),
+    }),
+    kanbanColumn,
+  }));
+}
+
 function SidebarStory({
   state,
   path = '/',
@@ -77,19 +96,7 @@ function SidebarStory({
     selectedProjectId: switched ? 'other' : 'factory',
     selectProjectSlug: () => undefined,
     issueProvider: 'GITHUB',
-    serverWorkspaces:
-      state === 'board-counts'
-        ? (['WORKING', 'WORKING', 'WAITING', 'DONE'] as const).map((kanbanColumn, index) => ({
-            ...createOptimisticWorkspaceSummary({
-              id: `workspace-${index}`,
-              projectId: 'factory',
-              name: `Workspace ${index + 1}`,
-              ratchetEnabled: true,
-              createdAt: new Date('2026-01-01T00:00:00Z'),
-            }),
-            kanbanColumn,
-          }))
-        : [],
+    serverWorkspaces: getStoryWorkspaces(state),
     reviewCount: 0,
     agentsSummary: summary,
     needsAttention: () => false,
@@ -156,6 +163,7 @@ const meta = {
     state: {
       control: 'select',
       options: [
+        'board-counts',
         'healthy',
         'failed',
         'loading',
@@ -209,6 +217,25 @@ export const BoardCounts: Story = {
   play: async ({ canvasElement }) => {
     const board = await within(canvasElement).findByRole('link', { name: 'Board' });
     await expect(board).toHaveAccessibleDescription('Working 2 Waiting 1');
+  },
+};
+
+export const BoardCountsLoading: Story = {
+  args: { path: boardHref, state: 'loading' },
+  play: async ({ canvasElement }) => {
+    const board = await within(canvasElement).findByRole('link', { name: 'Board' });
+    await expect(board).toHaveTextContent(/^Board$/);
+    await expect(board).not.toHaveAttribute('aria-describedby');
+  },
+};
+
+export const BoardCountsDifferentProject: Story = {
+  args: { path: '/projects/other/settings', state: 'board-counts' },
+  play: async ({ canvasElement }) => {
+    const board = await within(canvasElement).findByRole('link', { name: 'Board' });
+    await expect(board).toHaveAttribute('href', '/projects/other/workspaces');
+    await expect(board).toHaveTextContent(/^Board$/);
+    await expect(board).not.toHaveAttribute('aria-describedby');
   },
 };
 

@@ -89,7 +89,7 @@ it.each([
         [...view.container.querySelectorAll('[data-sidebar="footer"] a')].map(
           (link) => link.textContent
         )
-      ).toEqual(['BoardWorking 0Waiting 0', 'Agents', 'Reviews3', 'Settings']);
+      ).toEqual(['Board', 'Agents', 'Reviews3', 'Settings']);
       expect(view.container.querySelector('a[href="/projects/stale/agents"]')).toBeNull();
     } finally {
       await view.dispose();
@@ -114,6 +114,19 @@ it('shows working and waiting board counts by column, excluding completed worksp
     const board = view.container.querySelector('a[href="/projects/stale/workspaces"]');
     expect(board?.textContent).toContain('Working 1');
     expect(board?.textContent).toContain('Waiting 2');
+  } finally {
+    await view.dispose();
+  }
+});
+it.each([
+  ['/admin', { ...navData, serverWorkspaces: undefined }],
+  ['/projects/other/settings', navData],
+])('hides unknown or differently scoped board counts on %s', async (path, data) => {
+  const view = await render(path, data);
+  try {
+    const board = view.container.querySelector('a[aria-label="Board"]');
+    expect(board?.textContent).toBe('Board');
+    expect(board?.hasAttribute('aria-describedby')).toBe(false);
   } finally {
     await view.dispose();
   }
@@ -195,7 +208,7 @@ it('offers Board in the mobile sheet and closes the sheet after navigating to it
         <SidebarProvider>
           <OpenMobileSidebar />
           <CurrentPath />
-          <AppSidebar navData={navData} />
+          <AppSidebar navData={{ ...navData, selectedProjectSlug: 'alpha' }} />
         </SidebarProvider>
       </MemoryRouter>
     )
