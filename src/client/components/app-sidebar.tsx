@@ -301,9 +301,13 @@ function AgentNavigationBadge({
 
 function ProjectFooterLinks({
   navData,
+  workingCount,
+  waitingCount,
   onNavigate,
 }: {
   navData: NavigationData;
+  workingCount: number;
+  waitingCount: number;
   onNavigate?: () => void;
 }) {
   const { pathname } = useLocation();
@@ -312,13 +316,28 @@ function ProjectFooterLinks({
     (navData.selectedProjectId ? navData.selectedProjectSlug : '');
   const activeSection = getProjectSection(pathname);
   const descriptionId = useId();
+  const boardDescriptionId = useId();
   const summary = projectSlug ? navData.agentsSummary : undefined;
+  const showBoardCounts =
+    Boolean(projectSlug) &&
+    projectSlug === navData.selectedProjectSlug &&
+    navData.serverWorkspaces !== undefined;
 
   // Board is active only on the board itself; on workspace detail routes the
   // workspace row carries the active state instead.
   const isActive = (section: ProjectSection) =>
     section === 'workspaces' ? isProjectBoardPath(pathname) : activeSection === section;
   const badges: Partial<Record<ProjectSection, ReactNode>> = {
+    workspaces: showBoardCounts ? (
+      <span id={boardDescriptionId} className="ml-auto flex shrink-0 gap-1">
+        <Badge variant="secondary" className="h-5 px-1.5 text-[10px] tabular-nums">
+          Working {workingCount}
+        </Badge>
+        <Badge variant="warning" className="h-5 px-1.5 text-[10px] tabular-nums">
+          Waiting {waitingCount}
+        </Badge>
+      </span>
+    ) : null,
     agents: <AgentNavigationBadge summary={summary} descriptionId={descriptionId} />,
     reviews:
       projectSlug && navData.reviewCount > 0 ? (
@@ -326,6 +345,11 @@ function ProjectFooterLinks({
           {navData.reviewCount}
         </Badge>
       ) : null,
+  };
+
+  const descriptions: Partial<Record<ProjectSection, string>> = {
+    workspaces: showBoardCounts ? boardDescriptionId : undefined,
+    agents: summary ? descriptionId : undefined,
   };
 
   return (
@@ -351,8 +375,8 @@ function ProjectFooterLinks({
               to={getProjectSectionPath(projectSlug, section)}
               onClick={onNavigate}
               aria-current={active ? 'page' : undefined}
-              aria-label={section === 'agents' ? 'Agents' : undefined}
-              aria-describedby={section === 'agents' && summary ? descriptionId : undefined}
+              aria-label={section === 'agents' || section === 'workspaces' ? label : undefined}
+              aria-describedby={descriptions[section]}
             >
               {content}
             </Link>
@@ -524,7 +548,12 @@ function SidebarInner({
 
       <SidebarFooter>
         <SidebarMenu>
-          <ProjectFooterLinks navData={navData} onNavigate={onNavigate} />
+          <ProjectFooterLinks
+            navData={navData}
+            workingCount={working.length}
+            waitingCount={waiting.length}
+            onNavigate={onNavigate}
+          />
           <SidebarMenuItem>
             <div className="flex items-center gap-1">
               <SidebarMenuButton

@@ -5,6 +5,7 @@ import { expect, userEvent, waitFor, within } from 'storybook/test';
 import type { AppNavigationData } from '@/client/hooks/use-app-navigation-data';
 import { StoryTrpcProvider } from '@/client/lib/storybook-trpc';
 import { trpc } from '@/client/lib/trpc';
+import { createOptimisticWorkspaceSummary } from '@/client/lib/workspace-summary';
 import { SidebarProvider, useSidebar } from '@/components/ui/sidebar';
 import { AppSidebar } from './app-sidebar';
 import {
@@ -13,6 +14,7 @@ import {
 } from './project-issues-recovery.story-fixtures';
 
 type State =
+  | 'board-counts'
   | 'healthy'
   | 'failed'
   | 'loading'
@@ -50,6 +52,25 @@ function IssueQueryStatus({ projectId }: { projectId: string }) {
   );
 }
 
+function getStoryWorkspaces(state: State) {
+  if (state === 'loading') {
+    return undefined;
+  }
+  if (state !== 'board-counts') {
+    return [];
+  }
+  return (['WORKING', 'WORKING', 'WAITING', 'DONE'] as const).map((kanbanColumn, index) => ({
+    ...createOptimisticWorkspaceSummary({
+      id: `workspace-${index}`,
+      projectId: 'factory',
+      name: `Workspace ${index + 1}`,
+      ratchetEnabled: true,
+      createdAt: new Date('2026-01-01T00:00:00Z'),
+    }),
+    kanbanColumn,
+  }));
+}
+
 function SidebarStory({
   state,
   path = '/',
@@ -75,7 +96,7 @@ function SidebarStory({
     selectedProjectId: switched ? 'other' : 'factory',
     selectProjectSlug: () => undefined,
     issueProvider: 'GITHUB',
-    serverWorkspaces: [],
+    serverWorkspaces: getStoryWorkspaces(state),
     reviewCount: 0,
     agentsSummary: summary,
     needsAttention: () => false,
@@ -142,6 +163,7 @@ const meta = {
     state: {
       control: 'select',
       options: [
+        'board-counts',
         'healthy',
         'failed',
         'loading',
@@ -186,6 +208,34 @@ export const BoardActive: Story = {
     await expect(board).toHaveAttribute('href', boardHref);
     await expect(board).toHaveAttribute('aria-current', 'page');
     await expect(board).toHaveAttribute('data-active', 'true');
+    await expect(board).toHaveAccessibleDescription('Working 0 Waiting 0');
+  },
+};
+
+export const BoardCounts: Story = {
+  args: { path: boardHref, state: 'board-counts' },
+  play: async ({ canvasElement }) => {
+    const board = await within(canvasElement).findByRole('link', { name: 'Board' });
+    await expect(board).toHaveAccessibleDescription('Working 2 Waiting 1');
+  },
+};
+
+export const BoardCountsLoading: Story = {
+  args: { path: boardHref, state: 'loading' },
+  play: async ({ canvasElement }) => {
+    const board = await within(canvasElement).findByRole('link', { name: 'Board' });
+    await expect(board).toHaveTextContent(/^Board$/);
+    await expect(board).not.toHaveAttribute('aria-describedby');
+  },
+};
+
+export const BoardCountsDifferentProject: Story = {
+  args: { path: '/projects/other/settings', state: 'board-counts' },
+  play: async ({ canvasElement }) => {
+    const board = await within(canvasElement).findByRole('link', { name: 'Board' });
+    await expect(board).toHaveAttribute('href', '/projects/other/workspaces');
+    await expect(board).toHaveTextContent(/^Board$/);
+    await expect(board).not.toHaveAttribute('aria-describedby');
   },
 };
 
@@ -201,11 +251,14 @@ export const BoardInactiveOnWorkspace: Story = {
 
 /** Phones show the same footer, including Board, in the full-screen navigation sheet. */
 export const MobileSheet: Story = {
-  args: { path: `${boardHref}/workspace-1`, mobileOpen: true },
+  args: { path: `${boardHref}/workspace-1`, mobileOpen: true, state: 'board-counts' },
   globals: { viewport: { value: 'mobile1', isRotated: false } },
   parameters: { layout: 'fullscreen' },
   play: async ({ canvasElement }) => {
     const sheet = await within(canvasElement.ownerDocument.body).findByRole('dialog');
+    await expect(within(sheet).getByRole('link', { name: 'Board' })).toHaveAccessibleDescription(
+      'Working 2 Waiting 1'
+    );
     await expect(within(sheet).getByRole('link', { name: 'Board' })).toHaveAttribute(
       'href',
       boardHref
