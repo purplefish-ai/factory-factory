@@ -165,13 +165,26 @@ function run() {
   const baseline = parseUnusedCodeBaseline(JSON.parse(readFileSync(path, 'utf8')));
   const production = analyze('production');
   const exports = analyze('exports');
+  const result = evaluateInventory(args[0], baseline, production, exports);
+  if (result.baseline !== undefined) {
+    writeFileSync(path, result.baseline);
+  }
+  process.stdout.write(result.output);
+}
+
+export function evaluateInventory(
+  mode: string | undefined,
+  baseline: z.infer<typeof baselineSchema>,
+  production: string[],
+  exports: string[]
+): { output: string; baseline?: string } {
   const drift = {
     production: compareInventory(production, baseline.production),
     exports: compareInventory(exports, baseline.exports),
   };
-  if (args[0] === '--report') {
-    process.stdout.write(
-      `${JSON.stringify(
+  if (mode === '--report') {
+    return {
+      output: `${JSON.stringify(
         {
           version: 1,
           production: production.map((file) => ({
@@ -183,19 +196,19 @@ function run() {
         },
         null,
         2
-      )}\n`
-    );
-    return;
+      )}\n`,
+    };
   }
-  if (args[0] === '--update') {
+  if (mode === '--update') {
     const next = {
       version: 1,
       production: pruneInventory(production, baseline.production),
       exports: pruneInventory(exports, baseline.exports),
     };
-    writeFileSync(path, `${JSON.stringify(next, null, 2)}\n`);
-    process.stdout.write('Pruned resolved unused-code inventory entries.\n');
-    return;
+    return {
+      baseline: `${JSON.stringify(next, null, 2)}\n`,
+      output: 'Pruned resolved unused-code inventory entries.\n',
+    };
   }
   const violations = (['production', 'exports'] as const).flatMap((mode) => [
     ...drift[mode].added.map((key) => `New ${mode} candidate: ${key}`),
@@ -206,9 +219,9 @@ function run() {
       `${violations.join('\n')}\nReview new candidates; run pnpm check:unused-code:update to prune resolved entries. See docs/knip.md.`
     );
   }
-  process.stdout.write(
-    `Unused-code inventory matches: ${production.length} production files, ${exports.length} export visibility candidates.\n`
-  );
+  return {
+    output: `Unused-code inventory matches: ${production.length} production files, ${exports.length} export visibility candidates.\n`,
+  };
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
