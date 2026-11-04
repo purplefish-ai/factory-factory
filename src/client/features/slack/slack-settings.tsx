@@ -161,9 +161,9 @@ export function SlackConnectionsView(props: SlackConnectionsViewProps) {
 
 export function SlackSettings() {
   const connections = trpc.slack.list.useQuery(undefined, { retry: false });
-  const connect = trpc.slack.connect.useMutation({ gcTime: 0 });
-  const test = trpc.slack.test.useMutation();
-  const disconnect = trpc.slack.disconnect.useMutation();
+  const connect = trpc.slack.connect.useMutation({ gcTime: 0, meta: { errorToast: false } });
+  const test = trpc.slack.test.useMutation({ meta: { errorToast: false } });
+  const disconnect = trpc.slack.disconnect.useMutation({ meta: { errorToast: false } });
   const [token, setToken] = useState('');
   const [error, setError] = useState<string>();
   const [notice, setNotice] = useState<string>();

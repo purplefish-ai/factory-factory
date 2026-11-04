@@ -172,6 +172,16 @@ export function WorkspaceDetailContainer() {
       connected,
     ]
   );
+  // The reducer keeps the previous session's queue during a switch until the new
+  // session hydrates, so charge the queue to the session the chat state is
+  // hydrated for; before hydration it belongs to no tab.
+  const queuedMessageCount = useMemo(
+    () =>
+      runtimeSessionId === null
+        ? null
+        : { sessionId: runtimeSessionId, count: queuedMessages.length },
+    [runtimeSessionId, queuedMessages.length]
+  );
   const workspaceRunning = useMemo(
     () =>
       Array.from(sessionSummariesById.values()).some((summary) => isSessionSummaryWorking(summary)),
@@ -388,6 +398,7 @@ export function WorkspaceDetailContainer() {
       selectedSessionControlId,
       selectedSessionControlRuntimeId,
       sessionSummariesById,
+      queuedMessageCount,
       isDeletingSession: deleteSession.isPending,
       handleSelectSession,
       handleNewChat,
@@ -405,6 +416,7 @@ export function WorkspaceDetailContainer() {
       selectedSessionControlId,
       selectedSessionControlRuntimeId,
       sessionSummariesById,
+      queuedMessageCount,
       deleteSession.isPending,
       handleSelectSession,
       handleNewChat,

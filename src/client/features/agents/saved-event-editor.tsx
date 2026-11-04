@@ -15,8 +15,8 @@ export function SavedEventEditor({
   onSaved: () => void;
 }) {
   const utils = trpc.useUtils();
-  const update = trpc.agent.updateSaved.useMutation();
-  const validation = trpc.agent.validateDraft.useMutation();
+  const update = trpc.agent.updateSaved.useMutation({ meta: { errorToast: false } });
+  const validation = trpc.agent.validateDraft.useMutation({ meta: { errorToast: false } });
   const active = useRef(true);
   useEffect(() => {
     active.current = true;

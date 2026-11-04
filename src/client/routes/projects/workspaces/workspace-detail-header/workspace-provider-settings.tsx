@@ -52,6 +52,7 @@ export const WorkspaceProviderSettings = memo(function WorkspaceProviderSettings
   const utils = trpc.useUtils();
 
   const updateProviderDefaults = trpc.workspace.updateProviderDefaults.useMutation({
+    meta: { errorToast: "Couldn't save provider settings" },
     onSuccess: () => {
       runInBackground(
         utils.workspace.get.invalidate({ id: workspaceId }),

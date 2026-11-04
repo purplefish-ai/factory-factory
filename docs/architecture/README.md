@@ -15,7 +15,7 @@ the one that matches your change before you touch it.
 | [agent-runtime.md](./agent-runtime.md)       | ACP runtime, provider sub-agents, child workspaces, quick actions, desktop backend process |
 | [integrations.md](./integrations.md)         | GitHub, Linear, periodic tasks                                                             |
 | [file-previews.md](./file-previews.md)       | Bounded file reads, UTF-8 truncation, untracked diff limits                                |
-| [client-loading.md](./client-loading.md)     | Route chunks, diagram loading, startup bundle measurement                                  |
+| [client-loading.md](./client-loading.md)     | Route chunks, diagram loading, startup bundle, query/mutation failure handling             |
 | [search.md](./search.md)                     | Metadata query bounds, Unicode matching, search navigation                                 |
 | [diff-rendering.md](./diff-rendering.md)     | Workers, virtual rows, scroll anchors, visual verification                                 |
 | [Chat message flow](../chat-message-flow.md) | ACP streaming, session loading, replay, client reduction                                   |
