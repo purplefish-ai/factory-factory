@@ -493,13 +493,8 @@ describe('createTerminalUpgradeHandler', () => {
     );
   });
 
-  it('creates terminals, persists sessions, and routes message types', async () => {
+  it('sends an empty terminal list before creating terminals and routing message types', async () => {
     const workspaceId = 'workspace-1';
-    vi.mocked(workspaceDataService.findById).mockResolvedValue({
-      id: workspaceId,
-      worktreePath: '/tmp/worktree',
-    } as never);
-
     const { terminalService, outputListeners, exitListeners } = createTerminalService();
     const logger = createLogger();
     const appContext = {
@@ -534,6 +529,9 @@ describe('createTerminalUpgradeHandler', () => {
       expect(wss.handleUpgrade).toHaveBeenCalledTimes(1);
     });
 
+    expect(ws.send).toHaveBeenCalledExactlyOnceWith(
+      JSON.stringify({ type: 'terminal_list', terminals: [] })
+    );
     ws.emit('message', JSON.stringify({ type: 'create', cols: 120, rows: 40 }));
     await Promise.resolve();
     await Promise.resolve();
