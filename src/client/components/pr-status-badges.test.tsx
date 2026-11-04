@@ -17,47 +17,45 @@ function createCheck(
 }
 
 describe('CIChecksSection', () => {
-  it('renders skipped, cancelled, and neutral checks with their derived states', () => {
-    const markup = renderToStaticMarkup(
-      <CIChecksSection
-        checks={[
-          createCheck('lint', 'SKIPPED'),
-          createCheck('build', 'CANCELLED'),
-          createCheck('coverage', 'NEUTRAL'),
-        ]}
-      />
-    );
-
-    // Each check maps to a status tone (skipped → neutral, cancelled → danger,
-    // neutral → success) rendered with theme tokens and a humanized label.
-    expect(markup).toContain('data-status-tone="neutral"');
-    expect(markup).toContain('data-status-tone="danger"');
-    expect(markup).toContain('data-status-tone="success"');
-    expect(markup).toContain('text-muted-foreground');
-    expect(markup).toContain('text-destructive');
-    expect(markup).toContain('text-success');
-    expect(markup).toContain('>Skipped<');
-    expect(markup).toContain('>Cancelled<');
-    expect(markup).toContain('>Neutral<');
+  // Render each check on its own so a tone or label cannot be credited to the
+  // wrong check (e.g. swapped skipped and cancelled presentations).
+  it.each([
+    ['skipped', createCheck('lint', 'SKIPPED'), 'neutral', 'text-muted-foreground', 'Skipped'],
+    ['cancelled', createCheck('build', 'CANCELLED'), 'danger', 'text-destructive', 'Cancelled'],
+    ['neutral', createCheck('coverage', 'NEUTRAL'), 'success', 'text-success', 'Neutral'],
+    ['failed', createCheck('deploy', 'FAILURE'), 'danger', 'text-destructive', 'Failure'],
+    [
+      'timed out',
+      {
+        __typename: 'CheckRun' as const,
+        name: 'slow',
+        status: 'COMPLETED' as const,
+        conclusion: 'TIMED_OUT' as const,
+      },
+      'danger',
+      'text-destructive',
+      'Timed out',
+    ],
+    [
+      'in progress',
+      {
+        __typename: 'CheckRun' as const,
+        name: 'e2e',
+        status: 'IN_PROGRESS' as const,
+        conclusion: null,
+      },
+      'waiting',
+      'text-info',
+      'Running',
+    ],
+  ])('renders a %s check with its tone and humanized label', (_, check, tone, textClass, label) => {
+    const markup = renderToStaticMarkup(<CIChecksSection checks={[check]} />);
+    // A single check renders exactly one status icon.
+    expect(markup.match(/data-status-tone=/g)).toHaveLength(1);
+    expect(markup.match(/data-status-tone="(\w+)"/)?.[1]).toBe(tone);
+    expect(markup).toContain(`class="text-xs ${textClass}">${label}<`);
+    expect(markup).not.toContain(check.conclusion ?? check.status);
     expect(markup).not.toMatch(/\b(?:text|bg)-(?:gray|red|green|yellow)-\d/);
-  });
-
-  it('humanizes check progress and conclusions', () => {
-    const markup = renderToStaticMarkup(
-      <CIChecksSection
-        checks={[
-          { __typename: 'CheckRun', name: 'e2e', status: 'IN_PROGRESS', conclusion: null },
-          createCheck('deploy', 'FAILURE'),
-          { __typename: 'CheckRun', name: 'slow', status: 'COMPLETED', conclusion: 'TIMED_OUT' },
-        ]}
-      />
-    );
-
-    expect(markup).toContain('>Running<');
-    expect(markup).toContain('>Failure<');
-    expect(markup).toContain('>Timed out<');
-    expect(markup).not.toContain('TIMED_OUT');
-    expect(markup).toContain('data-status-tone="waiting"');
   });
 
   it('counts cancelled as failed and neutral as passed in section summary', () => {

@@ -15,8 +15,8 @@ export function getDiffLineBackground(type: DiffLineType): string {
   const bgColors: Record<DiffLineType, string> = {
     header: 'bg-muted/50',
     hunk: 'bg-info/10',
-    addition: 'bg-success/15',
-    deletion: 'bg-destructive/15',
+    addition: 'bg-success/10',
+    deletion: 'bg-destructive/10',
     context: '',
   };
   return bgColors[type];
