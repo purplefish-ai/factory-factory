@@ -9,10 +9,32 @@ import {
   type AgentKind,
 } from '@/client/lib/project-navigation';
 import { trpc } from '@/client/lib/trpc';
-import type { AgentFormValues, AgentProject } from './types';
+import type { AgentFormValues, AgentProject, AgentListItem, EventAgentSummary } from './types';
 
 function mutationErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : "Couldn't update agent. Please try again.";
+}
+
+function initialAgentSelection(
+  kind: AgentKind,
+  scheduled: { isSuccess: boolean; error: unknown; data?: AgentListItem[] },
+  events: { isSuccess: boolean; error: unknown; data?: { pages: { items: EventAgentSummary[] }[] } }
+): { id: string; kind: AgentKind } | undefined {
+  if (!events.isSuccess || events.error) {
+    return;
+  }
+  const event = events.data?.pages[0]?.items[0];
+  if (kind === 'event') {
+    return event ? { id: event.id, kind: 'event' } : undefined;
+  }
+  if (!scheduled.isSuccess || scheduled.error) {
+    return;
+  }
+  const task = scheduled.data?.[0];
+  if (task) {
+    return { id: task.id, kind: 'scheduled' };
+  }
+  return event ? { id: event.id, kind: 'event' } : undefined;
 }
 
 export function useAgentsController(project: AgentProject, kind: AgentKind = 'scheduled') {
@@ -26,7 +48,7 @@ export function useAgentsController(project: AgentProject, kind: AgentKind = 'sc
   }, []);
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const [mode, setMode] = useState<'detail' | 'create' | 'edit'>(
+  const [mode, setMode] = useState<'detail' | 'create' | 'create-event' | 'edit'>(
     location.state?.createAgent === true ? 'create' : 'detail'
   );
   const currentMode = useRef(mode);
@@ -93,26 +115,20 @@ export function useAgentsController(project: AgentProject, kind: AgentKind = 'sc
     setActionError(null);
   }, [id]);
   useEffect(() => {
-    if (
-      id ||
-      mode !== 'detail' ||
-      !list.isSuccess ||
-      !events.isSuccess ||
-      list.error ||
-      events.error
-    ) {
+    if (id || mode !== 'detail') {
       return;
     }
-    const scheduled = list.data?.[0];
-    const first = scheduled ?? events.data?.pages[0]?.items[0];
+    const first = initialAgentSelection(
+      kind,
+      { data: list.data, isSuccess: list.isSuccess, error: list.error },
+      { data: events.data, isSuccess: events.isSuccess, error: events.error }
+    );
     if (first) {
-      void navigate(
-        getProjectAgentPath(project.slug, first.id, scheduled ? 'scheduled' : 'event'),
-        { replace: true }
-      );
+      void navigate(getProjectAgentPath(project.slug, first.id, first.kind), { replace: true });
     }
   }, [
     id,
+    kind,
     list.data,
     list.isSuccess,
     list.error,
@@ -258,8 +274,14 @@ export function useAgentsController(project: AgentProject, kind: AgentKind = 'sc
       setDeleteOpen(false);
       setActionError(null);
     },
-    startCreate: () => {
+    startCreate: (createKind: AgentKind) => {
       if (createDisabled) {
+        return;
+      }
+      if (createKind === 'event') {
+        setMode('create-event');
+        setDeleteOpen(false);
+        setActionError(null);
         return;
       }
       if (kind === 'event') {

@@ -6,6 +6,12 @@ import { EmptyState } from '@/client/components/empty-state';
 import { Loading } from '@/client/components/loading';
 import { getProjectAgentPath } from '@/client/lib/project-navigation';
 import { Button } from '@/components/ui/button';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
 import { describeAgentSchedule } from './agent-schedule';
 import type { Agent, EventAgentSummary } from './types';
@@ -32,10 +38,35 @@ export interface AgentsDashboardShellProps {
   isLoading?: boolean;
   error?: string | null;
   onRetry?: () => void;
-  onCreate: () => void;
+  onCreate: (kind: 'scheduled' | 'event') => void;
   onAgentSelect?: (id: string) => void;
   createDisabled?: boolean;
   children: ReactNode;
+}
+
+function CreateAgentMenu({
+  onCreate,
+  disabled,
+  outline = false,
+}: {
+  onCreate: AgentsDashboardShellProps['onCreate'];
+  disabled?: boolean;
+  outline?: boolean;
+}) {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button size="sm" variant={outline ? 'outline' : 'default'} disabled={disabled}>
+          <PlusIcon className="size-4" aria-hidden="true" />
+          Create agent
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end">
+        <DropdownMenuItem onSelect={() => onCreate('scheduled')}>Scheduled agent</DropdownMenuItem>
+        <DropdownMenuItem onSelect={() => onCreate('event')}>Event agent</DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
 }
 
 function selectFromLink(
@@ -127,10 +158,7 @@ export function AgentsDashboardShell({
             Scheduled and event agents in this project.
           </p>
         </div>
-        <Button size="sm" onClick={onCreate} disabled={createDisabled}>
-          <PlusIcon className="size-4" />
-          Create agent
-        </Button>
+        <CreateAgentMenu onCreate={onCreate} disabled={createDisabled} />
       </header>
       <div className="flex min-h-0 min-w-0 flex-1 flex-col @[48rem]/agents:flex-row">
         <aside className="flex max-h-64 shrink-0 flex-col border-b bg-muted/15 @[48rem]/agents:max-h-none @[48rem]/agents:w-72 @[48rem]/agents:border-r @[48rem]/agents:border-b-0 @[64rem]/agents:w-80">
@@ -145,33 +173,40 @@ export function AgentsDashboardShell({
                 )}
               </div>
             )}
-            {isLoading && !agents && <Loading size="compact" message="Loading agents…" />}
+            {isLoading && <Loading size="compact" message="Loading agents…" />}
             {!(error || isLoading) && agents?.length === 0 && (
               <EmptyState
                 size="compact"
                 icon={RobotIcon}
                 title="No agents yet"
-                description="Agents run on a schedule or when an event arrives."
-                action={
-                  <Button variant="outline" size="sm" onClick={onCreate} disabled={createDisabled}>
-                    <PlusIcon aria-hidden="true" />
-                    Create agent
-                  </Button>
-                }
+                description="Schedule recurring work or prepare an event agent."
+                action={<CreateAgentMenu onCreate={onCreate} disabled={createDisabled} outline />}
               />
             )}
-            {agents?.map((agent) => (
-              <AgentRailItem
-                key={`${projectSlug}:${agent.kind ?? 'scheduled'}:${agent.id}`}
-                agent={agent}
-                projectSlug={projectSlug}
-                onAgentSelect={onAgentSelect}
-                selected={
-                  agent.id === selectedAgentId && (agent.kind ?? 'scheduled') === selectedKind
-                }
-              />
-            ))}
-            {continuation}
+            {(!!agents?.length || continuation) &&
+              (['scheduled', 'event'] as const).map((kind) => (
+                <section
+                  key={kind}
+                  aria-label={kind === 'scheduled' ? 'Scheduled' : 'Event'}
+                  className="mb-3"
+                >
+                  <h2 className="px-3 py-2 text-xs font-semibold text-muted-foreground">
+                    {kind === 'scheduled' ? 'Scheduled' : 'Event'}
+                  </h2>
+                  {agents
+                    ?.filter((agent) => (agent.kind ?? 'scheduled') === kind)
+                    .map((agent) => (
+                      <AgentRailItem
+                        key={`${projectSlug}:${kind}:${agent.id}`}
+                        agent={agent}
+                        projectSlug={projectSlug}
+                        onAgentSelect={onAgentSelect}
+                        selected={agent.id === selectedAgentId && kind === selectedKind}
+                      />
+                    ))}
+                  {kind === 'event' && continuation}
+                </section>
+              ))}
           </nav>
         </aside>
         <main className="min-h-0 min-w-0 flex-1 overflow-y-auto">

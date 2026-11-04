@@ -1,5 +1,3 @@
-import { CaretDownIcon } from '@phosphor-icons/react/dist/csr/CaretDown';
-import { RobotIcon } from '@phosphor-icons/react/dist/csr/Robot';
 import { useQueryClient } from '@tanstack/react-query';
 import type { inferRouterOutputs } from '@trpc/server';
 import { useId, useLayoutEffect, useRef } from 'react';
@@ -29,14 +27,7 @@ import {
 import { createOptimisticWorkspaceSummary } from '@/client/lib/workspace-summary';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
 import { Label } from '@/components/ui/label';
-import { Spinner } from '@/components/ui/spinner';
 import { Textarea } from '@/components/ui/textarea';
 import { SUPPORTED_IMAGE_TYPES, SUPPORTED_TEXT_EXTENSIONS } from '@/lib/image-utils';
 import { cn } from '@/lib/utils';
@@ -50,6 +41,7 @@ import {
   type WorkspaceCreationSubmission,
 } from './use-workspace-creation-submission';
 import { WorkspaceCreationOptions } from './workspace-creation-options';
+import { WorkspaceLaunchButton } from './workspace-launch-button';
 
 function handleFormKeyDown(
   e: React.KeyboardEvent,
@@ -86,6 +78,8 @@ function reportUnavailableLaunch(reason?: string) {
 
 interface InlineWorkspaceFormProps {
   projectId: string;
+  /** Separate event-authoring draft; always launches an ordinary workspace. */
+  purpose?: 'event-agent';
   /** Names already taken in this project, used to generate a unique one. */
   existingNames: string[];
   onCancel: () => void;
@@ -112,11 +106,6 @@ async function processFileInput(event: React.ChangeEvent<HTMLInputElement>) {
   event.target.value = '';
   return { newAttachments };
 }
-
-const launchButtonLabels: Record<string, string> = {
-  STANDARD: 'Launch',
-  PERIODIC_TASK: 'Create agent',
-};
 
 type RouterOutputs = inferRouterOutputs<AppRouter>;
 type ProjectWorkspaceCache = RouterOutputs['workspace']['listForProject'];
@@ -172,8 +161,18 @@ function PeriodicTaskConfigPanel({
   );
 }
 
+function workspaceDraftContext(projectId: string, purpose?: 'event-agent') {
+  return {
+    draftId: purpose ? `event-agent:${projectId}` : projectId,
+    seedPrompt: purpose
+      ? 'Help me create an event agent for this project. Ask which event should trigger it and what it should do. Use list_agent_sources to discover available sources, then propose_agent to prepare a configuration for my review. Keep the definition and triggers paused; do not enable listening or automatic runs.'
+      : '',
+  };
+}
+
 export function InlineWorkspaceForm({
   projectId,
+  purpose,
   existingNames,
   onCancel,
   onCreated,
@@ -185,7 +184,13 @@ export function InlineWorkspaceForm({
   const instructionsId = useId();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const recovery = useInlineWorkspaceDraft(projectId, userSettings?.ratchetEnabled);
+  const { draftId, seedPrompt } = workspaceDraftContext(projectId, purpose);
+  const recovery = useInlineWorkspaceDraft(
+    projectId,
+    userSettings?.ratchetEnabled,
+    draftId,
+    seedPrompt
+  );
   const {
     draft,
     launchSelection,
@@ -197,7 +202,8 @@ export function InlineWorkspaceForm({
     setCadence,
     setScheduledTime,
   } = recovery;
-  const { prompt: initialPrompt, attachments, mode, cadence, scheduledTime } = draft;
+  const { prompt: initialPrompt, attachments, cadence, scheduledTime } = draft;
+  const mode = purpose === 'event-agent' ? 'STANDARD' : draft.mode;
   useLayoutEffect(() => {
     const textarea = textareaRef.current;
     if (
@@ -216,7 +222,7 @@ export function InlineWorkspaceForm({
     textarea.style.height = `${Math.min(textarea.scrollHeight + borderHeight, 240)}px`;
     textarea.scrollTop = top;
   }, [initialPrompt]);
-  const submission = useWorkspaceCreationSubmission(projectId);
+  const submission = useWorkspaceCreationSubmission(draftId);
   const submitted = useRef<WorkspaceCreationSubmission | null>(null);
   const completeCreation = (
     token: WorkspaceCreationSubmission | null | undefined,
@@ -547,43 +553,16 @@ export function InlineWorkspaceForm({
           >
             Cancel
           </Button>
-          <div className="flex min-w-0">
-            <Button
-              size="sm"
-              className={cn(
-                'h-7 min-w-0 shrink text-xs whitespace-nowrap rounded-r-none',
-                mode !== 'STANDARD' && 'bg-primary/90'
-              )}
-              onClick={() => handleLaunch(mode)}
-              disabled={isLaunchDisabled}
-              title={launchDisabledReason}
-              aria-description={launchDisabledReason}
-            >
-              {isCreating ? <Spinner className="size-3" aria-hidden="true" /> : null}
-              <span className="truncate">{launchButtonLabels[mode]}</span>
-            </Button>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  size="sm"
-                  className="h-7 rounded-l-none border-l border-primary-foreground/20 px-1.5"
-                  disabled={isBusy}
-                  aria-label="Choose launch mode"
-                >
-                  <CaretDownIcon className="size-3" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="text-xs">
-                <DropdownMenuItem className="text-xs" onClick={() => setMode('STANDARD')}>
-                  Launch as Standard Workspace
-                </DropdownMenuItem>
-                <DropdownMenuItem className="text-xs" onClick={() => setMode('PERIODIC_TASK')}>
-                  <RobotIcon className="mr-1.5 h-3 w-3" />
-                  Create agent
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
+          <WorkspaceLaunchButton
+            mode={mode}
+            purpose={purpose}
+            isCreating={isCreating}
+            isBusy={isBusy}
+            disabled={isLaunchDisabled}
+            reason={launchDisabledReason}
+            onLaunch={() => handleLaunch(mode)}
+            onModeChange={setMode}
+          />
         </WorkspaceCreationOptions>
       </CardContent>
     </Card>

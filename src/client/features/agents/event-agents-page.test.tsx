@@ -20,6 +20,7 @@ import { trpc } from '@/client/lib/trpc';
 import { managedAgentSchema, agentSavedUpdateSchema } from '@/shared/agent-management';
 import { agentDraftValidationSchema } from '@/shared/agent-validation';
 import { waitForReact } from '@/test-utils/react-act';
+import { chooseAgentCreation, renderEventCreationCancel } from './agent-menu.test-support';
 import { AgentsPage } from './agents-page';
 import { eventAgentFixture, eventSummaryFixture } from './event-agent.test-support';
 
@@ -86,7 +87,7 @@ function Harness() {
       <button type="button" onClick={() => void navigate(-1)}>
         Back
       </button>
-      <AgentsPage project={project} />
+      <AgentsPage project={project} renderEventCreation={renderEventCreationCancel} />
       <output>
         {location.pathname}
         {location.search}
@@ -338,7 +339,9 @@ afterEach(async () => {
 it('opens an event outside page one, keeps equal IDs distinct and separates list and retained continuation', async () => {
   saved.retainedNextCursor = 'retained-next';
   await render();
-  await waitForReact(() => expect(container.querySelector('h2')?.textContent).toBe(saved.name));
+  await waitForReact(() =>
+    expect(container.querySelector('main h2')?.textContent).toBe(saved.name)
+  );
   expect(
     requests.some(
       (item) => item.path === 'periodicTask.get' || item.path === 'periodicTask.listExecutions'
@@ -364,7 +367,7 @@ it('opens an event outside page one, keeps equal IDs distinct and separates list
   );
   await navigate('Scheduled same ID');
   await waitForReact(() =>
-    expect(container.querySelector('h2')?.textContent).toBe('Scheduled control')
+    expect(container.querySelector('main h2')?.textContent).toBe('Scheduled control')
   );
   expect(requests.some((item) => item.path === 'periodicTask.listExecutions')).toBe(true);
 });
@@ -378,7 +381,9 @@ it.each(['?kind=', '?kind=other', '?kind=event&kind=scheduled', '?kind=event&kin
 );
 it('preserves a conflicted draft and original CAS through refresh, then reloads deliberately', async () => {
   await render();
-  await waitForReact(() => expect(container.querySelector('h2')?.textContent).toBe(saved.name));
+  await waitForReact(() =>
+    expect(container.querySelector('main h2')?.textContent).toBe(saved.name)
+  );
   await click('Edit agent');
   await edit('textarea[aria-label="Instructions"]', 'Unsaved draft');
   saved = {
@@ -408,7 +413,9 @@ it('preserves a conflicted draft and original CAS through refresh, then reloads 
 });
 it('keeps the draft across a read failure and later success without advancing its baseline', async () => {
   await render();
-  await waitForReact(() => expect(container.querySelector('h2')?.textContent).toBe(saved.name));
+  await waitForReact(() =>
+    expect(container.querySelector('main h2')?.textContent).toBe(saved.name)
+  );
   await click('Edit agent');
   await edit('input[name="name"]', 'Typed name');
   const form = container.querySelector('form');
@@ -428,7 +435,9 @@ it('keeps the draft across a read failure and later success without advancing it
 });
 it('serializes save and invalidates the captured owner after switching kind, project and editing session', async () => {
   await render();
-  await waitForReact(() => expect(container.querySelector('h2')?.textContent).toBe(saved.name));
+  await waitForReact(() =>
+    expect(container.querySelector('main h2')?.textContent).toBe(saved.name)
+  );
   await click('Edit agent');
   const gate = deferred();
   saveWait = gate.promise;
@@ -445,7 +454,9 @@ it('serializes save and invalidates the captured owner after switching kind, pro
     saved
   );
   await navigate('Other project');
-  await waitForReact(() => expect(container.querySelector('h2')?.textContent).toBe(saved.name));
+  await waitForReact(() =>
+    expect(container.querySelector('main h2')?.textContent).toBe(saved.name)
+  );
   await click('Edit agent');
   await edit('input[name="name"]', 'New project draft');
   await act(() => gate.resolve());
@@ -468,7 +479,9 @@ it('serializes save and invalidates the captured owner after switching kind, pro
 });
 it('validates only by explicit mutation and keeps inherited settings through preview and save', async () => {
   await render();
-  await waitForReact(() => expect(container.querySelector('h2')?.textContent).toBe(saved.name));
+  await waitForReact(() =>
+    expect(container.querySelector('main h2')?.textContent).toBe(saved.name)
+  );
   expect(
     requests.some(
       (item) => item.path === 'agent.projectSources' || item.path === 'agent.validateDraft'
@@ -497,7 +510,9 @@ it.each(['preview', 'sources'])(
   'drops late %s feedback after a draft edit and kind switch',
   async (kind) => {
     await render();
-    await waitForReact(() => expect(container.querySelector('h2')?.textContent).toBe(saved.name));
+    await waitForReact(() =>
+      expect(container.querySelector('main h2')?.textContent).toBe(saved.name)
+    );
     await click('Edit agent');
     const gate = deferred();
     if (kind === 'preview') {
@@ -512,7 +527,7 @@ it.each(['preview', 'sources'])(
     expect(container.querySelector('[aria-label="Project sources"]')).toBeNull();
     await navigate('Scheduled same ID');
     await waitForReact(() =>
-      expect(container.querySelector('h2')?.textContent).toBe('Scheduled control')
+      expect(container.querySelector('main h2')?.textContent).toBe('Scheduled control')
     );
     expect(container.textContent).not.toContain('confirmed-model');
   }
@@ -529,7 +544,9 @@ it('inspects recovered zero-event bodies and validates only an explicitly author
     retainedNextCursor: null,
   };
   await render();
-  await waitForReact(() => expect(container.querySelector('h2')?.textContent).toBe(saved.name));
+  await waitForReact(() =>
+    expect(container.querySelector('main h2')?.textContent).toBe(saved.name)
+  );
   await click('Edit agent');
   expect(container.textContent).toContain('Recovered literal body');
   expect(container.textContent).toContain('custom-model');
@@ -571,7 +588,9 @@ it('requires an explicit blank complete replacement for unknown or invalid store
     ],
   };
   await render();
-  await waitForReact(() => expect(container.querySelector('h2')?.textContent).toBe(saved.name));
+  await waitForReact(() =>
+    expect(container.querySelector('main h2')?.textContent).toBe(saved.name)
+  );
   await click('Edit agent');
   expect(container.querySelector('form')).toBeNull();
   expect(container.textContent).toContain('Exact membership is unknown');
@@ -594,7 +613,9 @@ it('requires an explicit blank complete replacement for unknown or invalid store
 it('keeps archived details readable with writes disabled and missing IDs explicit', async () => {
   archived = true;
   await render();
-  await waitForReact(() => expect(container.querySelector('h2')?.textContent).toBe(saved.name));
+  await waitForReact(() =>
+    expect(container.querySelector('main h2')?.textContent).toBe(saved.name)
+  );
   expect(button('Edit agent').disabled).toBe(true);
   expect(button('Create agent').disabled).toBe(true);
 });
@@ -609,7 +630,9 @@ it('does not auto-select or claim empty when either initial list fails', async (
 it('keeps same-ID rail highlights and drafts distinct between kinds', async () => {
   sameRailId = true;
   await render();
-  await waitForReact(() => expect(container.querySelector('h2')?.textContent).toBe(saved.name));
+  await waitForReact(() =>
+    expect(container.querySelector('main h2')?.textContent).toBe(saved.name)
+  );
   expect(container.querySelector('nav a[aria-current="page"]')?.getAttribute('href')).toBe(
     '/projects/owner/agents/same?kind=event'
   );
@@ -617,7 +640,7 @@ it('keeps same-ID rail highlights and drafts distinct between kinds', async () =
   await edit('input[name="name"]', 'Event only draft');
   await navigate('Scheduled same ID');
   await waitForReact(() =>
-    expect(container.querySelector('h2')?.textContent).toBe('Scheduled control')
+    expect(container.querySelector('main h2')?.textContent).toBe('Scheduled control')
   );
   expect(container.querySelector('nav a[aria-current="page"]')?.getAttribute('href')).toBe(
     '/projects/owner/agents/same'
@@ -654,7 +677,9 @@ it.each(['UNSUPPORTED', 'UNAVAILABLE'] as const)(
             },
     };
     await render();
-    await waitForReact(() => expect(container.querySelector('h2')?.textContent).toBe(saved.name));
+    await waitForReact(() =>
+      expect(container.querySelector('main h2')?.textContent).toBe(saved.name)
+    );
     await click('Edit agent');
     await edit(
       'textarea[aria-label="Execution settings"]',
@@ -673,7 +698,9 @@ it.each(['preview', 'sources'])(
   'drops a pending %s response after switching kind and starting a new editing session',
   async (kind) => {
     await render();
-    await waitForReact(() => expect(container.querySelector('h2')?.textContent).toBe(saved.name));
+    await waitForReact(() =>
+      expect(container.querySelector('main h2')?.textContent).toBe(saved.name)
+    );
     await click('Edit agent');
     const gate = deferred();
     if (kind === 'preview') {
@@ -684,7 +711,7 @@ it.each(['preview', 'sources'])(
     await click(kind === 'preview' ? 'Validate draft' : 'Refresh project sources');
     await navigate('Scheduled same ID');
     await waitForReact(() =>
-      expect(container.querySelector('h2')?.textContent).toBe('Scheduled control')
+      expect(container.querySelector('main h2')?.textContent).toBe('Scheduled control')
     );
     await click('Edit agent');
     await edit('input[name="name"]', 'New scheduled session');
@@ -698,7 +725,9 @@ it.each(['preview', 'sources'])(
 );
 it('does not unlock a pending save when an earlier preview finishes', async () => {
   await render();
-  await waitForReact(() => expect(container.querySelector('h2')?.textContent).toBe(saved.name));
+  await waitForReact(() =>
+    expect(container.querySelector('main h2')?.textContent).toBe(saved.name)
+  );
   await click('Edit agent');
   const previewGate = deferred();
   previewWait = previewGate.promise;
@@ -720,7 +749,9 @@ it.each(['preview', 'sources'])(
   'preserves newer same-draft %s feedback when an older request fails late',
   async (kind) => {
     await render();
-    await waitForReact(() => expect(container.querySelector('h2')?.textContent).toBe(saved.name));
+    await waitForReact(() =>
+      expect(container.querySelector('main h2')?.textContent).toBe(saved.name)
+    );
     await click('Edit agent');
     const older = deferred();
     if (kind === 'preview') {
@@ -758,7 +789,9 @@ it('shows authoritative paused state and reopens with returned CAS when successf
     })),
   };
   await render();
-  await waitForReact(() => expect(container.querySelector('h2')?.textContent).toBe(saved.name));
+  await waitForReact(() =>
+    expect(container.querySelector('main h2')?.textContent).toBe(saved.name)
+  );
   expect(container.querySelector('main')?.textContent).toContain('ACTIVE');
   await click('Edit agent');
   await edit('textarea[aria-label="Instructions"]', 'Authoritative returned instructions');
@@ -791,7 +824,9 @@ it('shows authoritative paused state and reopens with returned CAS when successf
 });
 it('preserves a higher same-owner cached revision over an older successful mutation response', async () => {
   await render();
-  await waitForReact(() => expect(container.querySelector('h2')?.textContent).toBe(saved.name));
+  await waitForReact(() =>
+    expect(container.querySelector('main h2')?.textContent).toBe(saved.name)
+  );
   await click('Edit agent');
   await edit('textarea[aria-label="Instructions"]', 'Pending revision three');
   const gate = deferred();
@@ -823,7 +858,9 @@ it('preserves a higher same-owner cached revision over an older successful mutat
 });
 it('seeds the captured event owner after delayed save without replacing the same-ID scheduled draft', async () => {
   await render();
-  await waitForReact(() => expect(container.querySelector('h2')?.textContent).toBe(saved.name));
+  await waitForReact(() =>
+    expect(container.querySelector('main h2')?.textContent).toBe(saved.name)
+  );
   await click('Edit agent');
   await edit('textarea[aria-label="Instructions"]', 'Saved after event editor unmount');
   const gate = deferred();
@@ -838,7 +875,7 @@ it('seeds the captured event owner after delayed save without replacing the same
   queryClient.setQueryData(retainedKey, saved);
   await navigate('Scheduled same ID');
   await waitForReact(() =>
-    expect(container.querySelector('h2')?.textContent).toBe('Scheduled control')
+    expect(container.querySelector('main h2')?.textContent).toBe('Scheduled control')
   );
   await click('Edit agent');
   await edit('input[name="name"]', 'Keep scheduled draft');
@@ -861,9 +898,13 @@ it('seeds the captured event owner after delayed save without replacing the same
 
 it('consumes event-to-scheduled create intent after success so Back does not reopen a blank form', async () => {
   await render();
-  await waitForReact(() => expect(container.querySelector('h2')?.textContent).toBe(saved.name));
-  await click('Create agent');
-  await waitForReact(() => expect(container.querySelector('h2')?.textContent).toBe('Create agent'));
+  await waitForReact(() =>
+    expect(container.querySelector('main h2')?.textContent).toBe(saved.name)
+  );
+  chooseAgentCreation(container);
+  await waitForReact(() =>
+    expect(container.querySelector('main h2')?.textContent).toBe('Create agent')
+  );
   expect(container.querySelector('output')?.textContent).toBe('/projects/owner/agents');
   await edit('input[name="name"]', 'Created from event detail');
   await edit('textarea', 'Scheduled instructions from explicit create');
@@ -876,5 +917,26 @@ it('consumes event-to-scheduled create intent after success so Back does not reo
   expect(container.querySelector('output')?.textContent).toBe(
     '/projects/owner/agents/same?kind=event'
   );
-  expect(container.querySelector('h2')?.textContent).toBe(saved.name);
+  expect(container.querySelector('main h2')?.textContent).toBe(saved.name);
+});
+
+it('opens conversational event creation explicitly and cancels back to the selected definition', async () => {
+  sameRailId = true;
+  await render();
+  await waitForReact(() =>
+    expect(container.querySelector('main')?.textContent).toContain(saved.name)
+  );
+  chooseAgentCreation(container, 'event');
+  expect(container.querySelector('main')?.textContent).toContain('Create event agent');
+  expect(container.querySelector('main')?.textContent).toContain('paused');
+  expect(container.querySelector('main')?.textContent).toContain('not yet available');
+  expect(container.querySelector('nav [aria-current]')).toBeNull();
+  expect(requests.filter((request) => request.type === 'mutation')).toHaveLength(0);
+  await click('Cancel');
+  expect(container.querySelector('main')?.textContent).toContain(saved.name);
+  await waitForReact(() =>
+    expect(container.querySelector('nav [aria-current]')?.getAttribute('href')).toContain(
+      '?kind=event'
+    )
+  );
 });

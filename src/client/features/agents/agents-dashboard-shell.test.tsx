@@ -4,6 +4,7 @@ import { MemoryRouter } from 'react-router';
 import { expect, it, vi } from 'vitest';
 import { actFlushSync } from '@/test-utils/react-act';
 import { AgentsDashboardShell } from './agents-dashboard-shell';
+import { eventAgentFixture, eventSummaryFixture } from './event-agent.test-support';
 
 it('keeps the project rail visible beside task errors and links explicit selections', () => {
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
@@ -43,4 +44,92 @@ it('keeps the project rail visible beside task errors and links explicit selecti
   expect(container.textContent).toContain('Agent not found');
   expect(container.querySelector('[role=combobox]')).toBeNull();
   actFlushSync(() => root.unmount());
+});
+
+it('groups both kinds and keeps event continuation inside the event section', () => {
+  const container = document.createElement('div');
+  const root = createRoot(container);
+  const scheduled = {
+    id: 'same',
+    name: 'Scheduled review',
+    prompt: 'Review changes',
+    cadence: 'DAILY' as const,
+    isEnabled: true,
+    scheduledTime: null,
+    timezone: null,
+    nextRunAt: new Date(),
+    lastRunAt: null,
+  };
+  actFlushSync(() =>
+    root.render(
+      <MemoryRouter>
+        <AgentsDashboardShell
+          projectSlug="project"
+          agents={[
+            scheduled,
+            {
+              ...eventSummaryFixture(eventAgentFixture()),
+              id: 'same',
+              kind: 'event',
+              name: 'Event review',
+            },
+          ]}
+          selectedAgentId="same"
+          selectedKind="event"
+          onCreate={vi.fn()}
+          continuation={<button type="button">Load more event agents</button>}
+        >
+          <p>Detail</p>
+        </AgentsDashboardShell>
+      </MemoryRouter>
+    )
+  );
+  try {
+    const scheduledSection = container.querySelector('section[aria-label="Scheduled"]');
+    const eventSection = container.querySelector('section[aria-label="Event"]');
+    expect(scheduledSection?.textContent).toContain('Scheduled review');
+    expect(scheduledSection?.querySelector('[aria-current]')).toBeNull();
+    expect(scheduledSection?.textContent).not.toContain('Load more event agents');
+    expect(eventSection?.querySelector('[aria-current="page"]')?.textContent).toContain(
+      'Event review'
+    );
+    expect(eventSection?.textContent).toContain('Load more event agents');
+  } finally {
+    actFlushSync(() => root.unmount());
+  }
+});
+
+it('offers the same explicit creation choices from header and empty state', () => {
+  const container = document.createElement('div');
+  document.body.append(container);
+  const root = createRoot(container);
+  const onCreate = vi.fn();
+  actFlushSync(() =>
+    root.render(
+      <MemoryRouter>
+        <AgentsDashboardShell projectSlug="project" agents={[]} onCreate={onCreate}>
+          <p>Detail</p>
+        </AgentsDashboardShell>
+      </MemoryRouter>
+    )
+  );
+  try {
+    const triggers = [...container.querySelectorAll('button')].filter(
+      (button) => button.textContent === 'Create agent'
+    );
+    expect(triggers).toHaveLength(2);
+    for (const [index, trigger] of triggers.entries()) {
+      actFlushSync(() =>
+        trigger.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, button: 0 }))
+      );
+      const items = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')];
+      expect(items.map((item) => item.textContent)).toEqual(['Scheduled agent', 'Event agent']);
+      expect(onCreate).toHaveBeenCalledTimes(index);
+      actFlushSync(() => items[index]?.click());
+      expect(onCreate).toHaveBeenLastCalledWith(index === 0 ? 'scheduled' : 'event');
+    }
+  } finally {
+    actFlushSync(() => root.unmount());
+    container.remove();
+  }
 });

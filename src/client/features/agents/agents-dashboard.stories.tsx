@@ -1,10 +1,12 @@
 import type { Meta, StoryObj } from '@storybook/react';
 import { useState } from 'react';
-import { expect, within } from 'storybook/test';
+import { expect, userEvent, within } from 'storybook/test';
+import { Button } from '@/components/ui/button';
 import { AgentDetail } from './agent-detail';
 import { AgentForm } from './agent-form';
 import { AgentRunHistory } from './agent-run-history';
 import { AgentsDashboardShell } from './agents-dashboard-shell';
+import { EventAgentCreate } from './event-agent-create';
 import {
   EventDashboardStory,
   eventStoryAgent,
@@ -50,7 +52,15 @@ const agents = [
   },
 ];
 
-type StoryMode = 'populated' | 'empty' | 'error' | 'loading' | 'create' | 'edit' | EventStoryState;
+type StoryMode =
+  | 'populated'
+  | 'empty'
+  | 'error'
+  | 'loading'
+  | 'create'
+  | 'edit'
+  | 'create-event'
+  | EventStoryState;
 function StoryContent({
   mode,
   setMode,
@@ -172,13 +182,25 @@ function DashboardSession({ state = 'populated' }: { state?: StoryMode }) {
               : [...agents, { ...eventStoryAgent(eventState ?? 'event'), kind: 'event' as const }]
         }
         selectedKind={eventState ? 'event' : 'scheduled'}
-        selectedAgentId={mode === 'create' ? undefined : eventState ? 'event-agent' : agent.id}
+        selectedAgentId={
+          mode === 'create' || mode === 'create-event'
+            ? undefined
+            : eventState
+              ? 'event-agent'
+              : agent.id
+        }
         isLoading={mode === 'loading'}
         error={mode === 'error' ? 'Could not load agents: Connection unavailable.' : undefined}
         onRetry={() => setMode('populated')}
-        onCreate={() => setMode('create')}
+        onCreate={(kind) => setMode(kind === 'event' ? 'create-event' : 'create')}
       >
-        {eventState ? (
+        {mode === 'create-event' ? (
+          <EventAgentCreate>
+            <Button variant="outline" onClick={() => setMode(state)}>
+              Cancel
+            </Button>
+          </EventAgentCreate>
+        ) : eventState ? (
           <EventDashboardStory key={eventState} state={eventState} />
         ) : (
           <StoryContent
@@ -252,3 +274,30 @@ export const ConstrainedEventEdit: Story = { args: { state: 'event-edit', conten
 export const ConstrainedEventDetail: Story = { args: { state: 'event', contentWidth: 640 } };
 
 export const PopulatedDark: Story = { ...Populated, globals: { theme: 'dark' } };
+
+export const CreateMenu: Story = {
+  play: async ({ canvasElement }) => {
+    await userEvent.click(within(canvasElement).getByRole('button', { name: 'Create agent' }));
+    const page = within(canvasElement.ownerDocument.body);
+    await expect(page.getByRole('menuitem', { name: 'Scheduled agent' })).toBeVisible();
+    await expect(page.getByRole('menuitem', { name: 'Event agent' })).toBeVisible();
+  },
+};
+export const EmptyCreateMenu: Story = {
+  args: { state: 'empty' },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(canvas.getAllByRole('button', { name: 'Create agent' })[1]!);
+    await userEvent.click(
+      within(canvasElement.ownerDocument.body).getByRole('menuitem', { name: 'Event agent' })
+    );
+    await expect(canvas.getByRole('heading', { name: 'Create event agent' })).toBeVisible();
+    await expect(
+      canvas.getByText(/Listening and automatic event runs are not yet available/)
+    ).toBeVisible();
+  },
+};
+export const PhoneCreateMenu: Story = {
+  ...CreateMenu,
+  globals: { viewport: { value: 'phone', isRotated: false } },
+};

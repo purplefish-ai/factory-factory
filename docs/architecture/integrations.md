@@ -250,9 +250,9 @@ does not re-emit reserved runs. The launch/link crash gap remains; there is no
 replay or exactly-once guarantee. Timer events use no second run store, PR
 ledger entry, session queue delivery or receipt protocol.
 
-The mixed Agents page at `/projects/:slug/agents` lists scheduled definitions,
-then saved event definitions with paginated continuation. Scheduled details use
-`/projects/:slug/agents/:id`; saved events use
+The mixed Agents page at `/projects/:slug/agents` groups definitions under
+**Scheduled** and **Event** headings. Event pagination stays in its group.
+Scheduled details use `/projects/:slug/agents/:id`; saved events use
 `/projects/:slug/agents/:id?kind=event`. Both path segments are encoded. Missing
 kind selects scheduled; invalid or duplicate explicit kinds show a bounded link
 error. Owner-less legacy links remain scheduled-only; event links require a
@@ -260,10 +260,12 @@ project. The navbar project selector is the shared project context; Agents has
 no separate project filter. Agents and project-wide Reviews remain in the
 sidebar footer above global Settings. Settings links to Agents without a
 duplicate editor. Project switches preserve the current section and clear the
-selected definition. Legacy `/agents` and `/agents/:id` links resolve the
-definition's owner before trusting a stored project selection, including
-archived owners. A definition belonging to another project or an invalid ID
-shows project-local not found instead of selecting another agent.
+selected definition. An explicit event kind selects only event definitions,
+including when the destination has no event agents. Legacy `/agents` and
+`/agents/:id` links resolve the definition's owner before trusting a stored
+project selection, including archived owners. A definition belonging to another
+project or an invalid ID shows project-local not found instead of selecting
+another agent.
 
 The Agents footer badge combines authoritative scheduled and event summaries for
 the URL owner's project, including paused definitions and archived project
@@ -289,6 +291,17 @@ project.
 Agents stacks its rail and editor below 48rem of available content width,
 including when the workspace sidebar is expanded. Schedule fields share a row
 only above 26rem of their own available width. Resizing preserves form drafts.
+
+**Create agent** opens the same explicit **Scheduled agent** / **Event agent**
+menu in the header and empty state. Scheduled opens the existing schedule form.
+Event opens a normal workspace composer with instructions to discover sources
+and propose an event configuration for review. Its draft is separate from the
+project's normal/scheduled workspace draft, and its launch mode stays standard.
+The proposal card still requires explicit creation of a paused definition;
+listening and automatic event runs remain unavailable. While the workspace is
+being created, the route shows progress; a failed creation restores the draft
+for retry. Archived and unresolved selected definitions retain their existing
+creation restrictions.
 
 Scheduled create/edit use Name, Instructions and Schedule. Creation makes the
 first run due immediately; the existing periodic-task poll admits it, then

@@ -194,6 +194,7 @@ for (const viewport of mobileViewports) {
     await expect(page).toHaveURL(/\/projects\/factory-factory\/workspaces\/archived-run$/);
     await page.goto('/__mobile-baseline?surface=agents');
     await page.getByRole('button', { name: 'Create agent', exact: true }).click();
+    await page.getByRole('menuitem', { name: 'Scheduled agent', exact: true }).click();
     await expect(rail).toBeVisible();
     const form = page.locator('form');
     await form.getByRole('textbox', { name: 'Name', exact: true }).fill('Review mobile layouts');

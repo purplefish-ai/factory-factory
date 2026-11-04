@@ -9,6 +9,7 @@ import { AgentDetail } from '@/client/features/agents/agent-detail';
 import { AgentForm } from '@/client/features/agents/agent-form';
 import { AgentRunHistory } from '@/client/features/agents/agent-run-history';
 import { AgentsDashboardShell } from '@/client/features/agents/agents-dashboard-shell';
+import { EventAgentCreate } from '@/client/features/agents/event-agent-create';
 import type { Agent, AgentRun } from '@/client/features/agents/types';
 import {
   AppNavigationDataProvider,
@@ -18,6 +19,8 @@ import { getProjectAgentPath } from '@/client/lib/project-navigation';
 import { trpc } from '@/client/lib/trpc';
 import { SidebarProvider } from '@/components/ui/sidebar';
 import { TooltipProvider } from '@/components/ui/tooltip';
+import { EventAgentWorkspaceForm } from './agents/event-agent-workspace-form';
+import { eventWorkspaceHandlers } from './agents/event-agent-workspace-form.story-fixtures';
 import { mobileEventFixtures, MobileEventAgentContent } from './mobile-event-agents-fixture';
 
 const project = { id: 'factory', slug: 'factory-factory', name: 'Factory Factory' };
@@ -97,6 +100,28 @@ const dependencies: Agent = {
   executions: previousRuns('dependencies'),
 };
 
+function startFixtureCreation(
+  kind: 'scheduled' | 'event',
+  selectedKind: 'scheduled' | 'event',
+  setSelectedKind: (kind: 'scheduled' | 'event') => void,
+  setFormMode: (mode: 'create' | 'create-event') => void
+) {
+  setSelectedKind(kind === 'scheduled' ? 'scheduled' : selectedKind);
+  setFormMode(kind === 'event' ? 'create-event' : 'create');
+}
+
+function fixtureEventCreation(mode: string | null, onCancel: () => void) {
+  return mode === 'create-event' ? (
+    <EventAgentCreate>
+      <EventAgentWorkspaceForm
+        projectId={project.id}
+        projectSlug={project.slug}
+        onCancel={onCancel}
+      />
+    </EventAgentCreate>
+  ) : null;
+}
+
 /** Frontend-only phone fixture; shared components retain their production links. */
 function MobileAgentsSession() {
   const nextAgentId = useRef(1);
@@ -105,7 +130,7 @@ function MobileAgentsSession() {
   const [selectedKind, setSelectedKind] = useState<'scheduled' | 'event'>('scheduled');
   const [events, setEvents] = useState(() => mobileEventFixtures(project.id));
   const selectedEvent = events.find((event) => event.id === selectedId);
-  const [formMode, setFormMode] = useState<'create' | 'edit' | null>(null);
+  const [formMode, setFormMode] = useState<'create' | 'create-event' | 'edit' | null>(null);
   const navData = {
     ...navigation,
     agentsSummary: {
@@ -177,87 +202,87 @@ function MobileAgentsSession() {
                       ...events.map((event) => ({ ...event, kind: 'event' as const })),
                     ]}
                     selectedKind={selectedKind}
-                    selectedAgentId={formMode === 'create' ? undefined : selectedId}
-                    onCreate={() => {
-                      setSelectedKind('scheduled');
-                      setFormMode('create');
-                    }}
+                    selectedAgentId={formMode?.startsWith('create') ? undefined : selectedId}
+                    onCreate={(kind) =>
+                      startFixtureCreation(kind, selectedKind, setSelectedKind, setFormMode)
+                    }
                   >
-                    {selectedKind === 'event' && selectedEvent ? (
-                      <MobileEventAgentContent
-                        agent={selectedEvent}
-                        editing={formMode === 'edit'}
-                        onEdit={() => setFormMode('edit')}
-                        onCancel={() => setFormMode(null)}
-                        onSaved={(updated) => {
-                          setEvents((current) =>
-                            current.map((event) => (event.id === updated.id ? updated : event))
-                          );
-                          setFormMode(null);
-                        }}
-                      />
-                    ) : formMode ? (
-                      <>
-                        <h2 className="text-xl font-semibold">
-                          {formMode === 'edit' ? 'Edit agent' : 'Create agent'}
-                        </h2>
-                        <AgentForm
-                          key={`${formMode}-${selectedId}`}
-                          initialValues={formMode === 'edit' ? selected : undefined}
+                    {fixtureEventCreation(formMode, () => setFormMode(null)) ??
+                      (selectedKind === 'event' && selectedEvent ? (
+                        <MobileEventAgentContent
+                          agent={selectedEvent}
+                          editing={formMode === 'edit'}
+                          onEdit={() => setFormMode('edit')}
                           onCancel={() => setFormMode(null)}
-                          onSave={(values) => {
-                            const now = new Date();
-                            const base: Agent =
-                              formMode === 'create'
-                                ? {
-                                    id: `fixture-agent-${nextAgentId.current++}`,
-                                    projectId: project.id,
-                                    name: '',
-                                    prompt: '',
-                                    cadence: 'DAILY',
-                                    scheduledTime: null,
-                                    timezone: null,
-                                    scheduledDayOfMonth: null,
-                                    isEnabled: true,
-                                    nextRunAt: now,
-                                    lastRunAt: null,
-                                    createdAt: now,
-                                    updatedAt: now,
-                                    executions: [],
-                                  }
-                                : selected;
-                            const updated = { ...base, ...values, updatedAt: now };
-                            setAgents((current) =>
-                              formMode === 'create'
-                                ? [...current, updated]
-                                : current.map((agent) =>
-                                    agent.id === selected.id ? updated : agent
-                                  )
+                          onSaved={(updated) => {
+                            setEvents((current) =>
+                              current.map((event) => (event.id === updated.id ? updated : event))
                             );
-                            setSelectedId(updated.id);
                             setFormMode(null);
-                            return Promise.resolve();
                           }}
                         />
-                      </>
-                    ) : (
-                      <AgentDetail
-                        agent={selected}
-                        onEdit={() => setFormMode('edit')}
-                        onToggle={() =>
-                          setAgents((current) =>
-                            current.map((agent) =>
-                              agent.id === selected.id
-                                ? { ...agent, isEnabled: !agent.isEnabled }
-                                : agent
+                      ) : formMode ? (
+                        <>
+                          <h2 className="text-xl font-semibold">
+                            {formMode === 'edit' ? 'Edit agent' : 'Create agent'}
+                          </h2>
+                          <AgentForm
+                            key={`${formMode}-${selectedId}`}
+                            initialValues={formMode === 'edit' ? selected : undefined}
+                            onCancel={() => setFormMode(null)}
+                            onSave={(values) => {
+                              const now = new Date();
+                              const base: Agent =
+                                formMode === 'create'
+                                  ? {
+                                      id: `fixture-agent-${nextAgentId.current++}`,
+                                      projectId: project.id,
+                                      name: '',
+                                      prompt: '',
+                                      cadence: 'DAILY',
+                                      scheduledTime: null,
+                                      timezone: null,
+                                      scheduledDayOfMonth: null,
+                                      isEnabled: true,
+                                      nextRunAt: now,
+                                      lastRunAt: null,
+                                      createdAt: now,
+                                      updatedAt: now,
+                                      executions: [],
+                                    }
+                                  : selected;
+                              const updated = { ...base, ...values, updatedAt: now };
+                              setAgents((current) =>
+                                formMode === 'create'
+                                  ? [...current, updated]
+                                  : current.map((agent) =>
+                                      agent.id === selected.id ? updated : agent
+                                    )
+                              );
+                              setSelectedId(updated.id);
+                              setFormMode(null);
+                              return Promise.resolve();
+                            }}
+                          />
+                        </>
+                      ) : (
+                        <AgentDetail
+                          agent={selected}
+                          onEdit={() => setFormMode('edit')}
+                          onToggle={() =>
+                            setAgents((current) =>
+                              current.map((agent) =>
+                                agent.id === selected.id
+                                  ? { ...agent, isEnabled: !agent.isEnabled }
+                                  : agent
+                              )
                             )
-                          )
-                        }
-                        onDelete={() => undefined}
-                      >
-                        <AgentRunHistory projectSlug={project.slug} runs={selected.executions} />
-                      </AgentDetail>
-                    )}
+                          }
+                          onDelete={() => undefined}
+                        >
+                          <AgentRunHistory projectSlug={project.slug} runs={selected.executions} />
+                        </AgentDetail>
+                      ))}
                   </AgentsDashboardShell>
                 </div>
               </div>
@@ -280,8 +305,17 @@ export function MobileAgentsFixture() {
         () =>
           ({ op }) =>
             observable((observer) => {
+              const handler = Object.entries(eventWorkspaceHandlers).find(
+                ([path]) => path === op.path
+              )?.[1];
               observer.next({
-                result: { data: op.path === 'github.listIssuesForProject' ? { issues: [] } : [] },
+                result: {
+                  data: handler
+                    ? handler(op.input)
+                    : op.path === 'github.listIssuesForProject'
+                      ? { issues: [] }
+                      : [],
+                },
               });
               observer.complete();
             }),

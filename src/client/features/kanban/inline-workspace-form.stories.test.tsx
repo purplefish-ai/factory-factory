@@ -139,3 +139,30 @@ it('allows opening the real launch menu and switching to periodic mode before ch
     container.remove();
   }
 });
+
+it('remounts draft seeds when Controls switch between ordinary and event purpose', async () => {
+  const container = document.createElement('div');
+  document.body.append(container);
+  const root = createRoot(container);
+  const render = (purpose?: 'event-agent') =>
+    act(() =>
+      root.render(
+        <TooltipProvider>
+          <SavedCodexDefaults projectId="purpose-control-regression" purpose={purpose} />
+        </TooltipProvider>
+      )
+    );
+  try {
+    await render();
+    await waitFor(() => expect(container.querySelector('textarea')?.value).toBe(''));
+    await render('event-agent');
+    await waitFor(() =>
+      expect(container.querySelector('textarea')?.value).toContain('propose_agent')
+    );
+    await render();
+    await waitFor(() => expect(container.querySelector('textarea')?.value).toBe(''));
+  } finally {
+    await act(() => root.unmount());
+    container.remove();
+  }
+});

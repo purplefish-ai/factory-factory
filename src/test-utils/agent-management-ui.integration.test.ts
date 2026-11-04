@@ -249,7 +249,7 @@ it('edits the exact saved set through the mixed page after real proposal removal
   root = createRoot(container);
   const route = createElement(Route, {
     path: '/projects/:slug/agents/:id?',
-    element: createElement(AgentsPage, { project }),
+    element: createElement(AgentsPage, { project, renderEventCreation: () => null }),
   });
   const routes = createElement(
     MemoryRouter,
@@ -260,7 +260,7 @@ it('edits the exact saved set through the mixed page after real proposal removal
   await act(() => root?.render(createElement(trpc.Provider, { client, queryClient, children })));
 
   await waitForReact(() =>
-    expect(container.querySelector('h2')?.textContent).toBe('Saved after deletion')
+    expect(container.querySelector('main h2')?.textContent).toBe('Saved after deletion')
   );
   expect(container.textContent).toContain('Scheduled control');
   expect(calls).not.toContain('periodicTask.get');
