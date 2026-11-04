@@ -23,7 +23,7 @@
   },
   "ignoreDependencies": ["@prisma/client"],
   "vitest": {
-    "entry": ["src/**/*.test.{ts,tsx}", "vitest.config.ts"]
+    "entry": ["src/**/*.test.{ts,tsx}", "vitest.config.ts", "vitest.storybook.config.ts"]
   },
   "storybook": {
     "entry": ["src/**/*.stories.tsx", ".storybook/**/*.{ts,tsx}"]

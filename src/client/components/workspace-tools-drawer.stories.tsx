@@ -23,8 +23,9 @@ export const Changes: Story = {
     const canvas = within(canvasElement.ownerDocument.body);
     await userEvent.click(canvas.getByRole('button', { name: 'Open tools' }));
     await expect(await canvas.findByRole('dialog', { name: 'Workspace tools' })).toBeVisible();
-    await expect(canvas.getByRole('button', { name: 'Changes' })).toBeVisible();
-    await expect(canvas.getByRole('button', { name: 'Terminal' })).toBeVisible();
+    // Tools are a tab strip (see e2e/workspace-tools.spec.ts).
+    await expect(canvas.getByRole('tab', { name: 'Changes' })).toBeVisible();
+    await expect(canvas.getByRole('tab', { name: 'Terminal' })).toBeVisible();
   },
 };
 export const Terminal: Story = {
@@ -33,9 +34,9 @@ export const Terminal: Story = {
     await userEvent.click(canvas.getByRole('button', { name: 'Open tools' }));
     const drawer = await canvas.findByRole('dialog', { name: 'Workspace tools' });
     const tools = within(drawer).getByRole('navigation', { name: 'Workspace tools' });
-    const terminal = within(tools).getByRole('button', { name: 'Terminal' });
+    const terminal = within(tools).getByRole('tab', { name: 'Terminal' });
     await userEvent.click(terminal);
-    await expect(terminal).toHaveAttribute('aria-pressed', 'true');
+    await expect(terminal).toHaveAttribute('aria-selected', 'true');
   },
 };
 
