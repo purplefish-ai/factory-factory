@@ -101,3 +101,16 @@ it('fences a removed captured tail before publishing any source order', async ()
   expect((await state()).health).toMatchObject({ state: 'RECOVERY_REQUIRED' });
   expect(await db.prisma.agentEvent.count({ where: { sourceOrder: { not: null } } })).toBe(0);
 });
+
+it('reanchors a partial overlap after a large prepend puts unknown head identities on the next page', async () => {
+  await service(1).pollCycle(signal);
+  feed.unshift({ providerEventId: 'new-1', payload: null });
+  await service(1).pollCycle(signal);
+  feed.unshift(
+    ...Array.from({ length: 202 }, (_, i) => ({ providerEventId: `large-${i}`, payload: null }))
+  );
+  await service(1).pollCycle(signal);
+  expect((await state()).health).toMatchObject({ state: 'CATCHING_UP' });
+  expect((await state()).cursor).toMatchObject({ scan: { overlapOffset: 0, nextPage: 3 } });
+  await finish();
+});

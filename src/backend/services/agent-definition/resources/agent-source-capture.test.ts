@@ -38,13 +38,35 @@ describe('resumed capture', () => {
   );
 
   it.each([
-    ['unknown', 'B', 'C'],
     ['B', 'A', 'C'],
     ['A', 'H', 'B'],
     ['A', 'C', 'B'],
   ])('rejects a broken overlap %j', (...ids) => {
     const { scan, captured } = partialOverlap();
     expect(() => capturePage(scan, captured, page(ids, 3))).toThrow('continuity');
+  });
+
+  it('reanchors from the window start after a prepend spans an entire page', () => {
+    const { scan, captured } = partialOverlap();
+    expect(capturePage(scan, captured, page(['new-1', 'new-2'], 3))).toEqual([]);
+    expect(scan.overlapOffset).toBe(0);
+    expect(capturePage(scan, captured, page(['new-3', 'H'], 4))).toEqual([]);
+    expect(capturePage(scan, captured, page(['A', 'B', 'C'], 5))).toEqual(page(['C'], null).events);
+  });
+
+  it('fails closed if a shifted-prefix search never reobserves the window', () => {
+    const { scan, captured } = partialOverlap();
+    capturePage(scan, captured, page(['unknown', 'B', 'C'], 3));
+    expect(() => capturePage(scan, captured, page(['boundary'], null))).toThrow('continuity');
+  });
+
+  it('retains its window when an unarmed page only repeats captured identities', () => {
+    const scan = newScan('H', 'boundary');
+    const captured = entries(['H', 'A', 'B']);
+    capturePage(scan, [], page(['H', 'A', 'B'], 2));
+    capturePage(scan, captured, page(['A', 'B'], 3));
+    expect(resumeScan(scan).resumeIds).toEqual(['H', 'A', 'B']);
+    expect(resumeScan(scan).nextPage).toBe(1);
   });
 
   it('advances after an overlap-only page even when each cycle has only one read', () => {

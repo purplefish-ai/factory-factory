@@ -63,8 +63,14 @@ function consumeOverlap(scan: AgentSourceScan, ids: string[]): number {
       const earlier = scan.resumeIds.slice(0, scan.overlapOffset).lastIndexOf(actual);
       // A prepend can replay a consumed prefix at the next page boundary.
       // Within a page the overlap must still be one contiguous ordered run.
-      if (offset !== 0 || earlier < 0) {
+      if (offset !== 0) {
         discontinuity();
+      }
+      if (earlier < 0) {
+        // A larger shift can put new head identities before the whole window.
+        // Seek its first identity again, then re-prove every member in order.
+        scan.overlapOffset = 0;
+        continue;
       }
       scan.overlapOffset = earlier;
     }
@@ -117,6 +123,7 @@ export function capturePage(
   page: AgentIssueEventPage
 ) {
   const ids = page.events.map((event) => event.providerEventId);
+  const hadOverlap = scan.overlapOffset !== null;
   const start = consumeOverlap(scan, ids);
   const result = captureEntries(scan, captured, page.events.slice(start));
   const fresh = result.fresh;
@@ -130,7 +137,7 @@ export function capturePage(
   if (fresh.length) {
     scan.resumePage = scan.nextPage;
     scan.resumeIds = fresh.map((item) => item.providerEventId);
-  } else if (scan.overlapOffset === null) {
+  } else if (hadOverlap && scan.overlapOffset === null) {
     // The overlap was proved without extending capture. Re-arming the same
     // window next cycle would spend the entire budget replaying it forever.
     // Continue from nextPage; fresh capture will establish the next window.

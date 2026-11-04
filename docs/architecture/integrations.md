@@ -424,16 +424,17 @@ commit in one transaction. Capture and a second ordered verification traversal
 share the ten-page cycle budget, resume with persisted overlap, and keep the
 original head fixed. Resumed capture accepts a previously consumed overlap
 prefix replayed at a page boundary after head insertion, while requiring an
-ordered run within each page. An overlap-only page clears its completed window
-so the next cycle advances rather than replaying the same page indefinitely; new
-capture establishes the next overlap window. The verification pass still checks
-every captured identity before publishing source order. When new head events
-move a resumed verification overlap, verification rechecks from the fixed head
-rather than ignoring unknown middle items. These reads share the same cycle
-budget. New head events wait for the next interval. Missing anchors or observed
-sequence changes stop intake with `RECOVERY_REQUIRED`; no cursor is silently
-reset. Recovery health and its original reason remain a durable fence: normal
-failures, baseline preparation and late page/chunk writes cannot clear or
+ordered run within each page. Unknown leading identities after a larger shift
+restart the search for the complete window. An overlap-only page clears its
+completed window so the next cycle advances rather than replaying the same page
+indefinitely; new capture establishes the next overlap window. The verification
+pass still checks every captured identity before publishing source order. When
+new head events move a resumed verification overlap, verification rechecks from
+the fixed head rather than ignoring unknown middle items. These reads share the
+same cycle budget. New head events wait for the next interval. Missing anchors
+or observed sequence changes stop intake with `RECOVERY_REQUIRED`; no cursor is
+silently reset. Recovery health and its original reason remain a durable fence:
+normal failures, baseline preparation and late page/chunk writes cannot clear or
 advance it. GitHub's offset pages are not a snapshot, so these checks detect
 observed discontinuity rather than guarantee lossless capture under arbitrary
 provider deletion or reordering. Finalization requires verified durable scan
