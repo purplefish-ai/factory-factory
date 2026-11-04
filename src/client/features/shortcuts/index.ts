@@ -6,3 +6,4 @@ export {
   useShortcut,
   useShortcutCommands,
 } from './use-shortcut';
+export { useDesktopCommands } from './use-desktop-commands';
