@@ -1,6 +1,7 @@
 import { vi } from 'vitest';
 import { createLogger } from '@/backend/services/logger.service';
 import type { IntegrationDatabase } from '@/backend/testing/integration-db';
+import { agentEvaluationSnapshotSchema, agentEventPayloadSchema } from '@/shared/agent-runtime';
 import type { EventAgentExecution } from '@/shared/event-agent-launch';
 
 export function deferred<T>() {
@@ -46,10 +47,11 @@ export function boundary() {
   };
 }
 
-/** Real source capture, evaluation and admission only; no workspace/session creation or linkage. */
-export async function createEventAdmissionSeed(
+/** Shared source identity and execution settings for both admission fixture boundaries. */
+async function createEventSeed(
   db: IntegrationDatabase,
-  provider: 'CLAUDE' | 'CODEX' = 'CLAUDE'
+  provider: 'CLAUDE' | 'CODEX',
+  admission: 'source' | 'persisted'
 ) {
   const owner = await vi.importActual<typeof import('@/backend/services/agent-definition')>(
     '@/backend/services/agent-definition'
@@ -107,7 +109,9 @@ export async function createEventAdmissionSeed(
       provider: 'GITHUB',
       externalId: `gh:${project.id}`,
       name: 'Repo',
-      sourceState: { create: { isReady: true } },
+      sourceState: {
+        create: { isReady: true, lastSourceOrder: admission === 'persisted' ? 1 : 0 },
+      },
     },
   });
   const trigger = await db.prisma.agentTrigger.create({
@@ -123,6 +127,88 @@ export async function createEventAdmissionSeed(
       activationBoundary: { provider: 'GITHUB', headEventId: null, sourceOrder: 0 },
     },
   });
+  // Downstream delivery/recovery tests start at the durable queued-run boundary.
+  // Bootstrap capture tests keep the full source -> evaluation -> admission path below.
+  if (admission === 'persisted') {
+    const now = new Date();
+    const event = await db.prisma.agentEvent.create({
+      data: {
+        connectionId: connection.id,
+        providerEventId: 'event-1',
+        sourceOrder: 1,
+        occurredAt: now,
+        observedAt: now,
+        payloadExpiresAt: new Date(now.getTime() + 30 * 86_400_000),
+        identityExpiresAt: new Date(now.getTime() + 90 * 86_400_000),
+        payload: agentEventPayloadSchema.parse({
+          version: 1,
+          provider: 'GITHUB',
+          repositoryId: project.id,
+          repositoryFullName: 'org/repo',
+          action: 'labeled',
+          actorId: 'human',
+          creatorId: 'human',
+          occurredAt: now.toISOString(),
+          observedAt: now.toISOString(),
+          sourceUrl: 'https://github.com/org/repo/issues/1',
+          issue: { number: 1, title: 'Task', body: 'Frozen issue', addedLabel: 'agent' },
+        }),
+      },
+    });
+    const snapshot = agentEvaluationSnapshotSchema.parse({
+      executionConfig: { version: 1, provider, model: execution.model, reasoningEffort: 'high' },
+      definition: {
+        name: definition.name,
+        instructions: definition.instructions,
+        isEnabled: true,
+        executionConfig: { version: 1, provider, model: execution.model, reasoningEffort: 'high' },
+      },
+      trigger: {
+        type: trigger.type,
+        description: trigger.description,
+        isEnabled: true,
+        connectionId: connection.id,
+        config: trigger.config,
+      },
+      input: { version: 1, eventId: event.id, context: [{ id: 'issue', text: 'Frozen issue' }] },
+    });
+    const messageId = crypto.randomUUID();
+    const run = await db.prisma.agentRun.create({
+      data: {
+        agentDefinitionId: definition.id,
+        triggerId: trigger.id,
+        eventId: event.id,
+        idempotencyKey: `event:${event.id}`,
+        activationGeneration: 1,
+        definitionSnapshot: snapshot.definition,
+        triggerSnapshot: snapshot.trigger,
+        input: snapshot.input,
+        reservedWorkspaceId: crypto.randomUUID(),
+        reservedSessionId: crypto.randomUUID(),
+        initialMessageId: messageId,
+        expiresAt: new Date(now.getTime() + 86_400_000),
+        initialDelivery: { create: { sendAttemptId: crypto.randomUUID(), messageId } },
+      },
+    });
+    await db.prisma.agentEvaluation.create({
+      data: {
+        eventId: event.id,
+        connectionId: connection.id,
+        agentDefinitionId: definition.id,
+        triggerId: trigger.id,
+        definitionRevision: 1,
+        triggerRevision: 1,
+        activationGeneration: 1,
+        status: 'MATCHED',
+        reasonCode: 'DETERMINISTIC_MATCH',
+        explanation: 'Matched',
+        configurationSnapshot: snapshot,
+        runId: run.id,
+        expiresAt: event.payloadExpiresAt,
+      },
+    });
+    return { owner, workspace, session, execution, project, input: snapshot.input };
+  }
   let capture = false;
   const poller = new owner.AgentSourcePollService(
     {
@@ -190,12 +276,25 @@ export async function createEventAdmissionSeed(
   return { owner, workspace, session, execution, project, input };
 }
 
+/** Capture and admit through the real source ledger for bootstrap integration coverage. */
+export function createEventAdmissionSeed(
+  db: IntegrationDatabase,
+  provider: 'CLAUDE' | 'CODEX' = 'CLAUDE'
+) {
+  return createEventSeed(db, provider, 'source');
+}
+
+/** Schema-valid admitted state; claiming, launch, delivery and recovery remain real. */
+function createQueuedEventSeed(db: IntegrationDatabase, provider: 'CLAUDE' | 'CODEX' = 'CLAUDE') {
+  return createEventSeed(db, provider, 'persisted');
+}
+
 /** Compatibility composition for delivery tests; production bootstrap tests use the pure seed. */
 export async function createEventAdmissionFixture(
   db: IntegrationDatabase,
   provider: 'CLAUDE' | 'CODEX' = 'CLAUDE'
 ) {
-  const seed = await createEventAdmissionSeed(db, provider);
+  const seed = await createQueuedEventSeed(db, provider);
   const { captureWorkspaceRunResults } = await vi.importActual<
     typeof import('@/backend/orchestration/workspace-deletion.orchestrator')
   >('@/backend/orchestration/workspace-deletion.orchestrator');

@@ -32,6 +32,7 @@ beforeEach(async () => {
   const { AcpNativeSessionTracker } = await vi.importActual<
     typeof import('@/backend/services/session/service/acp/acp-native-session-tracker')
   >('@/backend/services/session/service/acp/acp-native-session-tracker');
+  const providerCreated = deferred<void>();
   vi.spyOn(factory.AcpClientFactory.prototype, 'createClient').mockImplementation(({ options }) => {
     provider = fakeEventProvider(
       h.session.AcpProcessHandle,
@@ -39,6 +40,7 @@ beforeEach(async () => {
       undefined,
       new AcpNativeSessionTracker()
     );
+    providerCreated.resolve();
     return Promise.resolve(provider.handle);
   });
   vi.spyOn(h.workspace.gitOpsService, 'prepareWorktreeCreation').mockImplementation(
@@ -66,7 +68,7 @@ beforeEach(async () => {
     typeof import('@/backend/orchestration/event-run-monitor.orchestrator')
   >('@/backend/orchestration/event-run-monitor.orchestrator'));
   launch = launcher.launchEventRun(h.claim, new AbortController().signal);
-  await vi.waitFor(() => expect(provider).toBeDefined());
+  await providerCreated.promise;
   await provider.called;
 }, 30_000);
 afterEach(async () => {
