@@ -281,6 +281,9 @@ for (const width of [375, 768, 810, 1024, 1280]) {
     }
     await page.getByRole('button', { name: 'Search', exact: true }).click();
     await expect(page.getByRole('dialog')).toBeVisible();
+    await expect(
+      page.getByRole('combobox', { name: 'Search metadata', exact: true })
+    ).toBeFocused();
     await page.keyboard.press('Escape');
     await expect(page.getByRole('dialog')).toBeHidden();
     await page.keyboard.press('Control+k');

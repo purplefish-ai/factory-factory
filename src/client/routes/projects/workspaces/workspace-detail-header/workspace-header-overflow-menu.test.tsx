@@ -142,7 +142,10 @@ it('closes an active rename dialog when the workspace becomes archived', async (
       (item) => item.textContent === 'Rename workspace'
     );
     await act(() => rename!.click());
-    expect(document.querySelector('input[placeholder="Workspace name"]')).not.toBeNull();
+    await vi.waitFor(() =>
+      expect(document.querySelector('input[placeholder="Workspace name"]')).not.toBeNull()
+    );
+    expect(document.querySelector('[role="menu"]')).toBeNull();
     await act(() => root.render(render(true)));
     expect(document.querySelector('input[placeholder="Workspace name"]')).toBeNull();
   } finally {
@@ -265,9 +268,14 @@ it.each([false, true])(
           .find((item) => item.textContent === 'Rename workspace')!
           .click();
       });
-      const input = document.querySelector<HTMLInputElement>(
-        'input[placeholder="Workspace name"]'
-      )!;
+      const input = await vi.waitFor(() => {
+        const field = document.querySelector<HTMLInputElement>(
+          'input[placeholder="Workspace name"]'
+        );
+        expect(field).not.toBeNull();
+        return field!;
+      });
+      expect(document.querySelector('[role="menu"]')).toBeNull();
       await act(async () => {
         await userEvent.clear(input);
         await userEvent.type(input, '  New name  ');

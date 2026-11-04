@@ -73,6 +73,7 @@ export function WorkspaceHeaderOverflowMenu({
   isArchived: boolean;
 }) {
   const triggerRef = useRef<HTMLButtonElement>(null);
+  const pendingDialog = useRef<(() => void) | null>(null);
   const [inlineControls, setInlineControls] = useState<ReadonlySet<string>>(new Set());
   const isInline = (control: HeaderInlineControl) => inlineControls.has(control);
   const [providerSettingsOpen, setProviderSettingsOpen] = useState(false);
@@ -188,15 +189,23 @@ export function WorkspaceHeaderOverflowMenu({
           </TooltipTrigger>
           <TooltipContent>More actions</TooltipContent>
         </Tooltip>
-        <DropdownMenuContent align="end" className="w-60">
+        <DropdownMenuContent
+          align="end"
+          className="w-60"
+          onCloseAutoFocus={(event) => {
+            const action = pendingDialog.current;
+            pendingDialog.current = null;
+            if (action) {
+              event.preventDefault();
+              action();
+            }
+          }}
+        >
           <DropdownMenuLabel>Workspace actions</DropdownMenuLabel>
           {statusContent?.(isInline)}
           <DropdownMenuItem
-            onSelect={(event) => {
-              event.preventDefault();
-              requestAnimationFrame(() => {
-                setDetailsOpen(true);
-              });
+            onSelect={() => {
+              pendingDialog.current = () => setDetailsOpen(true);
             }}
           >
             <InfoIcon className="h-4 w-4" />
@@ -204,11 +213,8 @@ export function WorkspaceHeaderOverflowMenu({
           </DropdownMenuItem>
           {!isArchived && (
             <DropdownMenuItem
-              onSelect={(event) => {
-                event.preventDefault();
-                requestAnimationFrame(() => {
-                  handleRenameOpen();
-                });
+              onSelect={() => {
+                pendingDialog.current = handleRenameOpen;
               }}
             >
               <PencilIcon className="h-4 w-4" />
@@ -216,11 +222,8 @@ export function WorkspaceHeaderOverflowMenu({
             </DropdownMenuItem>
           )}
           <DropdownMenuItem
-            onSelect={(event) => {
-              event.preventDefault();
-              requestAnimationFrame(() => {
-                setProviderSettingsOpen(true);
-              });
+            onSelect={() => {
+              pendingDialog.current = () => setProviderSettingsOpen(true);
             }}
           >
             <GearSixIcon className="h-4 w-4" />
@@ -242,7 +245,9 @@ export function WorkspaceHeaderOverflowMenu({
           <ArchiveActionButton
             workspace={workspace}
             archivePending={archivePending}
-            onArchiveRequest={onArchiveRequest}
+            onArchiveRequest={() => {
+              pendingDialog.current = onArchiveRequest;
+            }}
             renderAsMenuItem
           />
         </DropdownMenuContent>

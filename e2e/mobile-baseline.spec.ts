@@ -87,6 +87,7 @@ for (const viewport of mobileViewports) {
     await page.keyboard.press('Escape');
     await messageInput.fill('');
 
+    await composer.scrollIntoViewIfNeeded();
     const composerBefore = await composer.boundingBox();
     expect(composerBefore).not.toBeNull();
 
@@ -185,9 +186,9 @@ for (const viewport of mobileViewports) {
     expect(
       await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)
     ).toBeLessThanOrEqual(1);
-    await page.locator('main').evaluate((element) => {
-      element.scrollTop = 0;
-    });
+    await page
+      .getByRole('heading', { name: 'Review recent changes', exact: true })
+      .scrollIntoViewIfNeeded();
     await review.blur();
     await expect(page).toHaveScreenshot(`agents-detail-${viewport.name}.png`);
     await workspaceLink.focus();
