@@ -55,6 +55,7 @@ const ALWAYS_IN_MORE_ACTIONS = [
   'Provider settings',
   'Open branch on GitHub',
   'Open dev app',
+  'Open in VS Code',
   'Archive workspace',
 ];
 
@@ -72,7 +73,7 @@ export const DesktopMoreActions: Story = {
     for (const name of ALWAYS_IN_MORE_ACTIONS) {
       await expect(items).toContain(name);
     }
-    for (const inline of ['Create PR', 'Open in VS Code', '#3456']) {
+    for (const inline of ['Create PR', '#3456']) {
       await expect(items).not.toContain(inline);
     }
   },
@@ -89,10 +90,9 @@ export const PhoneMoreActions: Story = {
     const items = await openMoreActions(canvasElement, [
       ...ALWAYS_IN_MORE_ACTIONS,
       'Create PR',
-      'Open in VS Code',
       '#3456',
     ]);
-    for (const name of [...ALWAYS_IN_MORE_ACTIONS, 'Create PR', 'Open in VS Code', '#3456']) {
+    for (const name of [...ALWAYS_IN_MORE_ACTIONS, 'Create PR', '#3456']) {
       await expect(items).toContain(name);
     }
   },

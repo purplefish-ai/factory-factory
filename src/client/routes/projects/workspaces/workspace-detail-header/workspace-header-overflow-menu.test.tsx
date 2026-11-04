@@ -33,16 +33,23 @@ vi.mock('@/client/lib/trpc', () => ({
 vi.mock('./workspace-provider-settings', () => ({ WorkspaceProviderSettings: () => null }));
 vi.mock('./workspace-branch-link', () => ({ WorkspaceBranchLink: () => null }));
 vi.mock('./open-dev-app-action', () => ({ OpenDevAppAction: () => null }));
-vi.mock('./open-in-ide-action', () => ({
-  OpenInIdeAction: () => (
-    <div role="menuitem" tabIndex={-1}>
-      Open in IDE
-    </div>
-  ),
-}));
 vi.mock('./archive-action-button', () => ({ ArchiveActionButton: () => null }));
 beforeEach(() => {
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
+  vi.stubGlobal(
+    'ResizeObserver',
+    class {
+      observe() {
+        // jsdom does no layout.
+      }
+      unobserve() {
+        // jsdom does no layout.
+      }
+      disconnect() {
+        // jsdom does no layout.
+      }
+    }
+  );
   mocks.rename.mockReset().mockResolvedValue({});
   mocks.get.mockReset().mockResolvedValue(undefined);
   mocks.list.mockReset().mockResolvedValue(undefined);
@@ -154,11 +161,18 @@ it('closes an active rename dialog when the workspace becomes archived', async (
   }
 });
 
-it('leaves out controls the header shows inline, and keeps the rest', async () => {
+it('keeps the IDE action when inline controls are visible', async () => {
   const container = document.createElement('div');
   document.body.append(container);
   const root = createRoot(container);
-  const workspace = { id: 'w', projectId: 'p', name: 'Workspace', status: 'READY' };
+  const workspace = {
+    id: 'w',
+    projectId: 'p',
+    name: 'Workspace',
+    status: 'READY',
+    worktreePath: '/workspaces/w',
+  };
+  const openInIde = vi.fn();
   try {
     await act(() =>
       root.render(
@@ -169,9 +183,9 @@ it('leaves out controls the header shows inline, and keeps the rest', async () =
             <WorkspaceHeaderOverflowMenu
               workspace={workspace as WorkspaceHeaderWorkspace}
               workspaceId="w"
-              availableIdes={[]}
-              preferredIde="vscode"
-              openInIde={{ mutate: vi.fn(), isPending: false }}
+              availableIdes={[{ id: 'cursor', name: 'Cursor' }]}
+              preferredIde="cursor"
+              openInIde={{ mutate: openInIde, isPending: false }}
               archivePending={false}
               onArchiveRequest={vi.fn()}
               isArchived={false}
@@ -207,10 +221,14 @@ it('leaves out controls the header shows inline, and keeps the rest', async () =
     const items = [...document.querySelectorAll('[role="menuitem"]')].map(
       (item) => item.textContent
     );
-    expect(items).not.toContain('Open in IDE');
+    expect(items).toContain('Open in Cursor');
     expect(items).not.toContain('Create PR');
     expect(items).toContain('#12');
     expect(items).toContain('Provider settings');
+    await act(async () =>
+      userEvent.click(within(document.body).getByRole('menuitem', { name: 'Open in Cursor' }))
+    );
+    expect(openInIde).toHaveBeenCalledWith({ id: 'w' });
   } finally {
     await act(() => root.unmount());
     container.remove();
