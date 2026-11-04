@@ -70,6 +70,7 @@ export const workspaceProjectionPolicy = {
     drift: { excluded: 'session history input' },
   },
   prs: { group: 'pr', required: true, drift: 'pr' },
+  prCollectionRevision: { group: 'pr', required: false, drift: 'pr' },
   prSummary: { group: 'pr', required: true, drift: 'pr' },
   prUrl: {
     group: 'pr',

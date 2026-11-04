@@ -103,6 +103,7 @@ export class RatchetProjectionWorker {
       }
       const fields: SnapshotUpdateInput = {
         prs: workspace.prs,
+        prCollectionRevision: workspace.prCollectionRevision,
         prSummary: workspace.prSummary,
         prUrl: workspace.prUrl,
         prNumber: workspace.prNumber,

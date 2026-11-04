@@ -80,6 +80,23 @@ function makeCompleteSnapshot() {
 }
 
 describe('workspace snapshot transport contract', () => {
+  it('preserves collection revisions while accepting legacy snapshots without them', () => {
+    const entry = makeCompleteSnapshot();
+    expect(WorkspaceSnapshotEntrySchema.parse({ ...entry, prCollectionRevision: 7 })).toMatchObject(
+      { prCollectionRevision: 7 }
+    );
+    expect(WorkspaceSnapshotEntrySchema.parse(entry)).not.toHaveProperty('prCollectionRevision');
+  });
+
+  it.each([-1, 1.5])('rejects an invalid PR collection revision %s', (prCollectionRevision) => {
+    expect(
+      WorkspaceSnapshotEntrySchema.safeParse({
+        ...makeCompleteSnapshot(),
+        prCollectionRevision,
+      }).success
+    ).toBe(false);
+  });
+
   it('parses full, changed, and removed server messages', () => {
     const entry = makeCompleteSnapshot();
 

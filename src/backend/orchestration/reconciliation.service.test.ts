@@ -569,7 +569,8 @@ describe('workspaceMaintenanceService.findNeedingWorktree', () => {
       },
       include: {
         project: true,
-        prs: { where: { detachedAt: null }, orderBy: { id: 'asc' } },
+        // Canonical collection freshness includes retained detached associations.
+        prs: { orderBy: { id: 'asc' } },
         prMonitoring: { select: { enabled: true } },
         prDiscovery: true,
       },

@@ -33,7 +33,7 @@ function createStore() {
 }
 
 describe('snapshot PR changes', () => {
-  it.each([200, 300])(
+  it.each([200, 300, 400])(
     'preserves newer monitoring settings while accepting PR revision at clock %s',
     (timestamp) => {
       const store = createStore();
@@ -81,8 +81,119 @@ describe('snapshot PR changes', () => {
         prMonitoring: currentMonitoring,
         fieldTimestamps: { ratchet: 300 },
       });
+      const nextMonitoring = { ...monitoring, enabled: true, bindingRevision: 3 };
+      store.upsert(
+        'ws-1',
+        { ratchetEnabled: true, prMonitoring: nextMonitoring },
+        'new settings read',
+        350
+      );
+      expect(store.getByWorkspaceId('ws-1')).toMatchObject({
+        ratchetEnabled: true,
+        prMonitoring: nextMonitoring,
+      });
     }
   );
+  it('rejects monitoring configuration carried by a stale full collection projection', () => {
+    const store = createStore();
+    store.upsert(
+      'ws-1',
+      {
+        projectId: 'project-1',
+        prs: [{ ...first, revision: 1 }],
+        prCollectionRevision: 2,
+        ratchetEnabled: false,
+      },
+      'current',
+      100
+    );
+    store.upsert(
+      'ws-1',
+      { prs: [{ ...first, revision: 0 }], prCollectionRevision: 1, ratchetEnabled: true },
+      'stale full projection',
+      400
+    );
+    expect(store.getByWorkspaceId('ws-1')?.ratchetEnabled).toBe(false);
+  });
+  it('fences pre-detach membership and accepts a genuine reattachment', () => {
+    const store = createStore();
+    store.upsert(
+      'ws-1',
+      { projectId: 'project-1', prs: [{ ...first, revision: 1 }], prCollectionRevision: 2 },
+      'seed',
+      100
+    );
+    store.upsert('ws-1', { prs: [], prCollectionRevision: 3 }, 'detached', 200);
+    expect(store.getByWorkspaceId('ws-1')?.prs).toEqual([]);
+    for (const prCollectionRevision of [2, undefined]) {
+      store.upsert(
+        'ws-1',
+        { prs: [{ ...first, revision: 1 }], prCollectionRevision },
+        'late pre-detach read',
+        400
+      );
+      expect(store.getByWorkspaceId('ws-1')?.prs).toEqual([]);
+    }
+    store.upsert(
+      'ws-1',
+      { prs: [{ ...first, revision: 3 }], prCollectionRevision: 4 },
+      'reattached',
+      200
+    );
+    expect(store.getByWorkspaceId('ws-1')?.prs).toEqual([{ ...first, revision: 3 }]);
+  });
+
+  it('fences pre-attachment collections, including empty reads', () => {
+    const store = createStore();
+    store.upsert(
+      'ws-1',
+      { projectId: 'project-1', prs: [], prCollectionRevision: 0 },
+      'empty seed',
+      100
+    );
+    store.upsert(
+      'ws-1',
+      { prs: [{ ...first, revision: 0 }], prCollectionRevision: 1 },
+      'attached',
+      100
+    );
+    store.upsert('ws-1', { prs: [], prCollectionRevision: 0 }, 'late empty read', 400);
+    expect(store.getByWorkspaceId('ws-1')?.prs).toEqual([{ ...first, revision: 0 }]);
+    store.upsert(
+      'ws-1',
+      {
+        prs: [
+          { ...first, revision: 0 },
+          { ...second, revision: 0 },
+        ],
+        prCollectionRevision: 2,
+      },
+      'sibling attached',
+      100
+    );
+    store.upsert(
+      'ws-1',
+      { prs: [{ ...first, revision: 0 }], prCollectionRevision: 1 },
+      'late pre-sibling read',
+      400
+    );
+    expect(store.getByWorkspaceId('ws-1')?.prs).toEqual([
+      { ...first, revision: 0 },
+      { ...second, revision: 0 },
+    ]);
+  });
+
+  it('keeps an authoritative empty collection fenced against legacy row facts', () => {
+    const store = createStore();
+    store.upsert(
+      'ws-1',
+      { projectId: 'project-1', prs: [], prCollectionRevision: 0 },
+      'empty seed',
+      100
+    );
+    store.upsert('ws-1', { prs: [first] }, 'unversioned projection', 400);
+    expect(store.getByWorkspaceId('ws-1')?.prs).toEqual([]);
+  });
   it('orders persisted PR revisions independently of asynchronous publication clocks', () => {
     const store = createStore();
     const dismissed = {

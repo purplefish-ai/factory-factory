@@ -842,6 +842,13 @@ consume that inventory. Input types derive from the shared summary contract;
 adding a raw field requires an explicit policy. Independent contract fixtures
 check policy semantics rather than importing the production inventory.
 
+Canonical PR collections carry `prCollectionRevision`, the sum of each retained
+association's revision plus one. Detached associations remain in this sum so
+attachment, detachment, and reattachment advance collection freshness even when
+the visible collection becomes empty. Public PR lists exclude detached rows;
+attached-only reads omit the collection revision because they cannot establish
+the full membership history.
+
 The summary schema also supplies common snapshot validators and the HTTP
 projector's public field inventory. Legacy snapshots retain optional metadata,
 PR collections and selection facts, and cannot claim completeness from defaults.

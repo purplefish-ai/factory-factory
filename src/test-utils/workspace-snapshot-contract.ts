@@ -36,6 +36,7 @@ export const snapshotFieldPolicy = {
     drift: { excluded: 'session history input' },
   },
   prs: { group: 'pr', required: true, drift: 'pr' },
+  prCollectionRevision: { group: 'pr', required: false, drift: 'pr' },
   prSummary: { group: 'pr', required: true, drift: 'pr' },
   prUrl: {
     group: 'pr',
@@ -105,6 +106,7 @@ export function authoritativeSnapshotInput(): Required<SnapshotUpdateInput> {
     branchName: 'feature',
     hasHadSessions: false,
     prs: [],
+    prCollectionRevision: 0,
     prSummary: {
       totalCount: 0,
       openCount: 0,
@@ -184,6 +186,7 @@ export function changedSnapshotInput(): Required<SnapshotUpdateInput> {
         syncedAt: null,
       },
     ],
+    prCollectionRevision: 1,
     prSummary: {
       totalCount: 1,
       openCount: 1,

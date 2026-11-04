@@ -26,7 +26,7 @@ export type SessionCommandError =
   | {
       kind: 'user_input_failed';
       sessionId: string;
-      content: string | AgentContentItem[];
+      content: string | unknown[];
       cause: unknown;
     }
   | {

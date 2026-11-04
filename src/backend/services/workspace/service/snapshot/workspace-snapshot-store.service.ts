@@ -426,53 +426,40 @@ export class WorkspaceSnapshotStore extends EventEmitter {
     return true;
   }
 
-  private revisionGroupUpdate(
+  private advanceGroupTimestamp(
     entry: WorkspaceSnapshotEntry,
-    update: SnapshotUpdateInput,
     group: SnapshotFieldGroup,
     timestamp: number,
-    newerPrRevision: boolean
-  ): SnapshotUpdateInput {
-    // PR revisions fence derived Ratchet state, not the user's monitoring settings.
-    return newerPrRevision &&
-      group === 'ratchet' &&
-      timestamp <= (entry.fieldTimestamps.ratchet ?? 0)
-      ? { ratchetState: update.ratchetState }
-      : update;
+    preserveRatchetTimestamp: boolean
+  ): void {
+    if (!(preserveRatchetTimestamp && group === 'ratchet')) {
+      entry.fieldTimestamps[group] = Math.max(timestamp, entry.fieldTimestamps[group] ?? 0);
+    }
   }
 
   private mergeFieldGroups(
     entry: WorkspaceSnapshotEntry,
     update: SnapshotUpdateInput,
     ts: number,
-    newerPrRevision: boolean
+    newerPrRevision: boolean,
+    preserveRatchetTimestamp: boolean
   ): { accepted: boolean; rawChanged: boolean } {
     let accepted = false;
     let rawChanged = false;
     const hydrated = this.hydratedFields.get(entry.workspaceId) ?? new Set<SnapshotField>();
     this.hydratedFields.set(entry.workspaceId, hydrated);
     for (const mapping of FIELD_GROUP_MAPPINGS) {
-      const groupUpdate = this.revisionGroupUpdate(
-        entry,
-        update,
-        mapping.group,
-        ts,
-        newerPrRevision
-      );
-      if (!this.canMergeGroup(entry, groupUpdate, mapping, ts, newerPrRevision)) {
+      if (!this.canMergeGroup(entry, update, mapping, ts, newerPrRevision)) {
         continue;
       }
       accepted = true;
-      entry.fieldTimestamps[mapping.group] = Math.max(
-        ts,
-        entry.fieldTimestamps[mapping.group] ?? 0
-      );
-      this.prFreshness.accept(entry.workspaceId, groupUpdate, mapping.group);
+      this.advanceGroupTimestamp(entry, mapping.group, ts, preserveRatchetTimestamp);
+      this.prFreshness.accept(entry.workspaceId, update, mapping.group);
       for (const field of mapping.fields) {
-        if (this.assignRawField(entry, groupUpdate, field)) {
+        if (this.assignRawField(entry, update, field)) {
           rawChanged = true;
         }
-        if (groupUpdate[field] !== undefined) {
+        if (update[field] !== undefined) {
           hydrated.add(field);
         }
       }
@@ -639,7 +626,13 @@ export class WorkspaceSnapshotStore extends EventEmitter {
 
     // Field-level timestamp merge
     const prProjection = this.prFreshness.prepare(workspaceId, update);
-    const grouped = this.mergeFieldGroups(entry, prProjection.update, ts, prProjection.newer);
+    const grouped = this.mergeFieldGroups(
+      entry,
+      prProjection.update,
+      ts,
+      prProjection.newer,
+      prProjection.preserveRatchetTimestamp
+    );
     const name = this.mergeName(entry, update, ts);
     const branch = this.mergeBranch(entry, update, ts);
     const mergeResult = {

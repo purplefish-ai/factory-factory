@@ -96,7 +96,7 @@ describe('HTTP workspace summary projector', () => {
       projectSlug: 'api',
     };
     const row = projectWorkspaceSummary(
-      { ...source(), parentWorkspace, childWorkspaceCount: 2 },
+      { ...source(), parentWorkspace, childWorkspaceCount: 2, prCollectionRevision: 7 },
       {
         sessionSummaries: [],
         pendingRequestType: null,
@@ -108,6 +108,7 @@ describe('HTTP workspace summary projector', () => {
     expect(WorkspaceSummarySchema.parse(serializeWorkspaceSummary(row))).toMatchObject({
       parentWorkspace,
       childWorkspaceCount: 2,
+      prCollectionRevision: 7,
     });
   });
 

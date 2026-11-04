@@ -54,6 +54,8 @@ describe('raw snapshot input contract', () => {
   it.each(snapshotInputFields)('%s advances only its declared ordinary group', (field) => {
     const store = createStore();
     const baseline = authoritativeSnapshotInput();
+    // This inventory checks isolated group mechanics; revision fences have dedicated collection tests.
+    Reflect.deleteProperty(baseline, 'prCollectionRevision');
     store.upsert('ws', baseline, 'authoritative', 100);
     const before = { ...store.getByWorkspaceId('ws')!.fieldTimestamps };
     const result = store.upsert('ws', fieldUpdate(field), 'one raw input', 200);
@@ -94,6 +96,7 @@ describe('raw snapshot input contract', () => {
     const store = createStore();
     const input: SnapshotUpdateInput = authoritativeSnapshotInput();
     Reflect.deleteProperty(input, field);
+    Reflect.deleteProperty(input, 'prCollectionRevision');
     store.upsert('ws', input, 'one omitted input', 100);
     expect(store.getByWorkspaceId('ws')?.summaryVersion).toBeUndefined();
     const group = snapshotFieldPolicy[field].group;

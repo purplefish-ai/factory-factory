@@ -95,13 +95,22 @@ export function flattenWorkspacePR(pr: WorkspacePR | null | undefined): Workspac
 }
 
 /** Collection facts are authoritative; the scalar link selects an active association. */
-export function projectWorkspacePRCollection(rows: WorkspacePRRow[], enabled: boolean) {
+export function projectWorkspacePRCollection(
+  rows: WorkspacePRRow[],
+  enabled: boolean,
+  allAssociationsIncluded = false
+) {
   const attached = rows.filter((pr) => !pr.detachedAt);
   const prs = attached.map(serializeWorkspacePR);
   const prSummary = deriveWorkspacePRSummary(prs, enabled);
   return {
     ...flattenWorkspacePR(selectWorkspacePR(attached)),
     prs,
+    // Detached rows retain their revision so removal also advances collection freshness.
+    // Attached-only reads cannot prove membership freshness and must omit this fence.
+    ...(allAssociationsIncluded
+      ? { prCollectionRevision: rows.reduce((total, pr) => total + pr.revision + 1, 0) }
+      : {}),
     ...deriveWorkspacePRSelection(prs),
     prSummary,
     prState: prSummary.state,

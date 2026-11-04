@@ -41,6 +41,7 @@ export function createWorkspaceFollowUp(ports: Ports) {
         {
           projectId: workspace.projectId,
           prs: workspace.prs,
+          prCollectionRevision: workspace.prCollectionRevision,
           prSummary: workspace.prSummary,
           prState: workspace.prState,
           prCiStatus: workspace.prCiStatus,

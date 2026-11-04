@@ -165,6 +165,9 @@ function projectSnapshotToLiveFields(
     branchName: entry.branchName,
     prs,
     ...deriveWorkspacePRSelection(prs),
+    ...(entry.prCollectionRevision !== undefined
+      ? { prCollectionRevision: entry.prCollectionRevision }
+      : {}),
     prSummary: entry.prSummary ?? deriveWorkspacePRSummary(prs, entry.ratchetEnabled),
     prUrl: entry.prUrl,
     prNumber: entry.prNumber,

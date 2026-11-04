@@ -57,7 +57,12 @@ describe('raw snapshot drift contract', () => {
           100
         );
         const entry = store.getByWorkspaceId('ws')!;
-        const reordered = { [field]: [structuredClone(second), structuredClone(first)] };
+        const reordered = {
+          [field]: [structuredClone(second), structuredClone(first)],
+          ...(field === 'prs'
+            ? { prCollectionRevision: authoritativeSnapshotInput().prCollectionRevision }
+            : {}),
+        };
         expect(detectDrift(entry, reordered)).toEqual([]);
         expect(store.upsert('ws', reordered, 'reordered', 200)).toEqual({
           accepted: true,
@@ -68,7 +73,12 @@ describe('raw snapshot drift contract', () => {
           field === 'prs'
             ? { ...first, title: 'Changed title' }
             : { ...first, name: 'Changed session' };
-        const nestedChange = { [field]: [second, edited] };
+        const nestedChange = {
+          [field]: [second, edited],
+          ...(field === 'prs'
+            ? { prCollectionRevision: authoritativeSnapshotInput().prCollectionRevision }
+            : {}),
+        };
         expect(detectDrift(entry, nestedChange).map((drift) => drift.field)).toEqual([field]);
         expect(store.upsert('ws', nestedChange, 'nested change', 300)).toEqual({
           accepted: true,

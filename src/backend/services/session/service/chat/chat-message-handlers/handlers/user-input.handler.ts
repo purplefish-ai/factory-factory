@@ -8,8 +8,8 @@ import type {
   SessionCommandOutcome,
   SessionExecutionCommandServices,
 } from '@/backend/services/session/service/chat/session-command.types';
-import type { AgentContentItem } from '@/shared/acp-protocol';
 import type { UserInputMessage } from '@/shared/websocket';
+import { DirectInputContentSchema } from '@/shared/websocket/direct-input-content.schema';
 
 const logger = createLogger('chat-message-handlers');
 
@@ -32,9 +32,23 @@ export function createUserInputHandler(deps: {
       return { replies: [] };
     }
 
-    // Cast content array to AgentContentItem[] - validation is done at WebSocket handler level
-    const messageContent =
-      typeof rawContent === 'string' ? rawContent : (rawContent as AgentContentItem[]);
+    const parsed = DirectInputContentSchema.safeParse(rawContent);
+    if (!parsed.success) {
+      return {
+        replies: [
+          {
+            type: 'error',
+            error: {
+              kind: 'user_input_failed',
+              sessionId,
+              content: rawContent,
+              cause: parsed.error,
+            },
+          },
+        ],
+      };
+    }
+    const messageContent = parsed.data;
 
     if (acpRuntimeManager.isSessionRunning(sessionId)) {
       const isCurrent = deps.backgroundDelivery.captureResumeGuard(sessionId);

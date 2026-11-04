@@ -29,7 +29,8 @@ function projection(
 ): NonNullable<Projection> {
   const prs = [
     {
-      id: 'pr',
+      id: `pr-${prUrl}`,
+      revision: 1,
       url: prUrl,
       number: prNumber,
       title: null,
@@ -56,6 +57,7 @@ function projection(
       pendingEventCount: 0,
     },
     prs,
+    prCollectionRevision: prs.reduce((total, pr) => total + pr.revision + 1, 0),
     ...deriveWorkspacePRSelection(prs),
     prSummary,
     prUrl,

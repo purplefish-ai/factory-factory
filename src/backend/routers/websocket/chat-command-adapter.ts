@@ -1,14 +1,20 @@
 import { randomUUID } from 'node:crypto';
 import type { SessionCommandError, SessionCommandOutcome } from '@/backend/services/session';
-import { type AgentContentItem, type MessageAttachment, MessageState } from '@/shared/acp-protocol';
+import { type MessageAttachment, MessageState } from '@/shared/acp-protocol';
+import { DirectInputContentItemSchema } from '@/shared/websocket/direct-input-content.schema';
 
-function recoverDirectInput(content: string | AgentContentItem[]) {
+function recoverDirectInput(content: string | unknown[]) {
   const attachments: MessageAttachment[] = [];
   if (typeof content === 'string') {
     return { text: content };
   }
   const text: string[] = [];
-  for (const item of content) {
+  for (const rawItem of content) {
+    const parsed = DirectInputContentItemSchema.safeParse(rawItem);
+    if (!parsed.success) {
+      continue;
+    }
+    const item = parsed.data;
     if (item.type === 'text') {
       text.push(item.text);
     } else if (item.type === 'image') {
