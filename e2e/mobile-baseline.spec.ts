@@ -124,9 +124,11 @@ for (const viewport of mobileViewports) {
     await expect(
       page.getByRole('navigation', { name: 'Project sections', exact: true })
     ).toHaveCount(0);
-    await page.getByRole('combobox', { name: 'Open project menu', exact: true }).click();
-    await expect(page.getByRole('option', { name: 'Factory Factory', exact: true })).toBeVisible();
-    await expect(page.getByRole('option', { name: 'Other project', exact: true })).toBeVisible();
+    await page.getByRole('button', { name: 'Open project menu', exact: true }).click();
+    await expect(
+      page.getByRole('menuitem', { name: 'Factory Factory', exact: true })
+    ).toBeVisible();
+    await expect(page.getByRole('menuitem', { name: 'Other project', exact: true })).toBeVisible();
     await page.keyboard.press('Escape');
     await page.getByRole('button', { name: 'Toggle sidebar', exact: true }).click();
     const sidebar = page.getByRole('dialog', { name: 'Navigation', exact: true });

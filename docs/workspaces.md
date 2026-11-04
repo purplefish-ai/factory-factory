@@ -40,6 +40,22 @@ existing names, shown in parentheses where they differ.
   **New Task** button is **New workspace**; `PeriodicTask` in code is a
   scheduled agent.
 
+## Navigation and first run
+
+The project menu in the header lists projects and includes **Create project**
+and **Manage projects**. Switching projects keeps the current Board, Agents or
+Reviews section, including the event-agent view. Menu links support opening a
+project in another tab. The project name opens its board; the following
+breadcrumb identifies the section.
+
+The home page restores the saved project only while it appears in the active
+project list; otherwise it opens the first active project. A missing project
+provides **Go to projects** to choose another repository.
+
+With no projects, onboarding uses the full page without an empty sidebar.
+Desktop onboarding starts with **Local Path**; the browser starts with **GitHub
+URL**. Both sources remain available.
+
 ## Historical progression model
 
 > **Historical workspace progression model.** The Ratchet fixer workflow and

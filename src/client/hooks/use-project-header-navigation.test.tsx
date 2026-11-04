@@ -3,6 +3,7 @@ import { act, createElement } from 'react';
 import { createRoot } from 'react-dom/client';
 import { MemoryRouter, useLocation } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { ProjectSelectorDropdown } from '@/client/components/project-selector';
 import { useProjectHeaderNavigation } from './use-project-header-navigation';
 
 const selectProjectSlug = vi.hoisted(() => vi.fn());
@@ -38,6 +39,14 @@ afterEach(() => {
 });
 describe('explicit header project navigation', () => {
   it.each([
+    [
+      '/projects/alpha/agents/task-1?kind=event&agent=old',
+      'Beta',
+      '/projects/beta/agents?kind=event',
+      'beta',
+    ],
+    ['/projects/alpha/agents?kind=event', 'Beta', '/projects/beta/agents?kind=event', 'beta'],
+    ['/projects/alpha/reviews?kind=event', 'Beta', '/projects/beta/reviews', 'beta'],
     ['/projects/alpha/agents/task-1?agent=old', 'Beta', '/projects/beta/agents', 'beta'],
     ['/projects/alpha/agents', 'Beta', '/projects/beta/agents', 'beta'],
     ['/projects/alpha/agents/task-1', 'Current', '/projects/alpha/workspaces', 'alpha'],
@@ -70,3 +79,84 @@ describe('explicit header project navigation', () => {
     await act(() => root.unmount());
   });
 });
+
+vi.mock('@/hooks/use-mobile', () => ({ useIsMobile: () => false }));
+function HeaderMenuSwitch() {
+  const navigation = useProjectHeaderNavigation();
+  const location = useLocation();
+  return (
+    <>
+      <ProjectSelectorDropdown
+        selectedProjectSlug="alpha"
+        onProjectChange={navigation.handleProjectChange}
+        onCurrentProjectSelect={navigation.handleCurrentProjectSelect}
+        projects={[
+          { id: 'a', slug: 'alpha', name: 'Alpha' },
+          { id: 'b', slug: 'beta', name: 'Beta' },
+        ]}
+      />
+      <output>
+        {location.pathname}
+        {location.search}
+      </output>
+    </>
+  );
+}
+it.each(['primary', 'modified'])(
+  'preserves the event-agent section through %s menu activation',
+  async (activation) => {
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    const from = '/projects/alpha/agents/event-1?kind=event&agent=old';
+    try {
+      await act(() =>
+        root.render(
+          <MemoryRouter initialEntries={[from]}>
+            <HeaderMenuSwitch />
+          </MemoryRouter>
+        )
+      );
+      await act(() =>
+        container
+          .querySelector('[aria-label="Open project menu"]')
+          ?.dispatchEvent(
+            new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true, cancelable: true })
+          )
+      );
+      const link = document.querySelector<HTMLAnchorElement>(
+        '[role="menuitem"][href^="/projects/beta/"]'
+      );
+      expect(link).not.toBeNull();
+      expect(link?.getAttribute('href')).toBe('/projects/beta/agents?kind=event');
+      if (activation === 'modified') {
+        let nativeNavigationAvailable = false;
+        document.addEventListener(
+          'click',
+          (event) => {
+            nativeNavigationAvailable = !event.defaultPrevented;
+            event.preventDefault();
+          },
+          { once: true }
+        );
+        await act(() =>
+          link?.dispatchEvent(
+            new MouseEvent('click', { bubbles: true, cancelable: true, ctrlKey: true })
+          )
+        );
+        expect(nativeNavigationAvailable).toBe(true);
+        expect(selectProjectSlug).not.toHaveBeenCalled();
+        expect(container.querySelector('output')?.textContent).toBe(from);
+      } else {
+        await act(() => link?.click());
+        expect(selectProjectSlug).toHaveBeenCalledWith('beta');
+        expect(container.querySelector('output')?.textContent).toBe(
+          '/projects/beta/agents?kind=event'
+        );
+      }
+    } finally {
+      await act(() => root.unmount());
+      container.remove();
+    }
+  }
+);

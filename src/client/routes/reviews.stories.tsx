@@ -143,8 +143,8 @@ export const SwitchProject: Story = {
     await expect(
       await canvas.findByRole('button', { name: 'Open Alpha workspaces' })
     ).toBeVisible();
-    await userEvent.click(canvas.getByRole('combobox', { name: 'Open project menu' }));
-    await userEvent.click(await within(document.body).findByRole('option', { name: 'Beta' }));
+    await userEvent.click(canvas.getByRole('button', { name: 'Open project menu' }));
+    await userEvent.click(await within(document.body).findByRole('menuitem', { name: 'Beta' }));
     await expect(await canvas.findByRole('button', { name: 'Open Beta workspaces' })).toBeVisible();
     await expect(
       await canvas.findByText('This project has no linked GitHub repository')

@@ -83,8 +83,8 @@ for (const { platform, left, right } of [
       await expect(control).toHaveCSS('-webkit-app-region', 'no-drag');
     }
     await expect(header).toHaveScreenshot(`installed-pwa-header-${platform}.png`);
-    await page.getByRole('combobox', { name: 'Open project menu' }).click();
-    await expect(page.getByRole('listbox')).toBeVisible();
+    await page.getByRole('button', { name: 'Open project menu' }).click();
+    await expect(page.getByRole('menu')).toBeVisible();
     await page.keyboard.press('Escape');
     await page.getByRole('button', { name: 'Search', exact: true }).click();
     await expect(page.getByRole('dialog')).toBeVisible();
@@ -214,9 +214,9 @@ for (const width of [375, 768, 810, 1024, 1280]) {
     await expect(page.getByRole('button', { name: /Pull requests and updates/ })).toBeVisible();
     await expectOneRow(page);
     await expect(page.locator('header')).toHaveScreenshot(`workspace-header-${width}.png`);
-    await page.getByRole('combobox', { name: 'Open project menu' }).click();
+    await page.getByRole('button', { name: 'Open project menu' }).click();
     await expect(
-      page.getByRole('option', {
+      page.getByRole('menuitem', {
         name: 'Factory Factory with an exceptionally long project name',
         exact: true,
       })
@@ -309,14 +309,14 @@ for (const width of [375, 810]) {
       await expect(page.locator('header')).toHaveScreenshot(
         `${variant}-header-project-error-${width}.png`
       );
-      await page.getByRole('combobox', { name: 'Open project menu' }).click();
+      await page.getByRole('button', { name: 'Open project menu' }).click();
       await expect(
-        page.getByRole('option', {
+        page.getByRole('menuitem', {
           name: 'Factory Factory with an exceptionally long project name',
           exact: true,
         })
       ).toBeVisible();
-      const retry = page.getByRole('option', { name: 'Retry projects', exact: true });
+      const retry = page.getByRole('menuitem', { name: 'Retry projects', exact: true });
       await expect(retry).toBeVisible();
       await retry.focus();
       await page.keyboard.press('Enter');
@@ -329,15 +329,15 @@ for (const width of [375, 810]) {
         await expect(page.getByText('Waiting · 0')).toBeVisible();
         await page.keyboard.press('Escape');
       }
-      await page.getByRole('combobox', { name: 'Open project menu' }).click();
-      await expect(page.getByRole('option', { name: 'Retry projects', exact: true })).toHaveCount(
+      await page.getByRole('button', { name: 'Open project menu' }).click();
+      await expect(page.getByRole('menuitem', { name: 'Retry projects', exact: true })).toHaveCount(
         0
       );
       await expect(
-        page.getByRole('option', { name: '+ Create project', exact: true })
+        page.getByRole('menuitem', { name: '+ Create project', exact: true })
       ).toBeVisible();
       await expect(
-        page.getByRole('option', { name: 'Manage projects...', exact: true })
+        page.getByRole('menuitem', { name: 'Manage projects…', exact: true })
       ).toBeVisible();
     });
   }
