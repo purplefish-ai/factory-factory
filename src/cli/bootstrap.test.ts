@@ -1,0 +1,109 @@
+import { spawn, spawnSync } from 'node:child_process';
+import { copyFileSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { afterEach, expect, it, vi } from 'vitest';
+import { z } from 'zod';
+
+const directories: string[] = [];
+function fixture(minimum: string) {
+  const root = mkdtempSync(join(tmpdir(), 'ff-bootstrap-'));
+  directories.push(root);
+  writeFileSync(join(root, 'package.json'), '{"type":"module"}');
+  writeFileSync(join(root, '.node-version'), minimum);
+  for (const file of ['bootstrap.mjs', 'serve-prerequisites.mjs']) {
+    copyFileSync(new URL(file, import.meta.url), join(root, file));
+  }
+  writeFileSync(
+    join(root, 'index.js'),
+    'console.log(JSON.stringify(process.argv.slice(2))); process.exitCode = 7;'
+  );
+  return root;
+}
+afterEach(() =>
+  directories.splice(0).forEach((root) => rmSync(root, { recursive: true, force: true }))
+);
+it('reports unsupported Node without importing the application or prompting on piped input', () => {
+  const root = fixture('999.0.0');
+  writeFileSync(join(root, 'index.js'), 'throw new Error("APP WAS LOADED");');
+  const result = spawnSync(process.execPath, [join(root, 'bootstrap.mjs'), 'serve'], {
+    encoding: 'utf8',
+    timeout: 15_000,
+  });
+  expect(result.status).toBe(1);
+  expect(result.stderr).toContain('requires Node.js 999.0.0');
+  expect(result.stderr).not.toContain('APP WAS LOADED');
+  expect(result.stdout).not.toContain('[y/N]');
+});
+it('forwards arguments verbatim and preserves the application exit code', () => {
+  const root = fixture('1.0.0');
+  const result = spawnSync(
+    process.execPath,
+    [join(root, 'bootstrap.mjs'), 'serve', '--database-path', 'path with spaces'],
+    { encoding: 'utf8', timeout: 15_000 }
+  );
+  expect(result.status).toBe(7);
+  expect(result.stdout.trim()).toBe('["serve","--database-path","path with spaces"]');
+});
+it('keeps the shipped version floor consistent with package engines', () => {
+  const pkg = z
+    .object({
+      engines: z.object({ node: z.string() }),
+      files: z.array(z.string()),
+      bin: z.record(z.string(), z.string()),
+    })
+    .parse(JSON.parse(readFileSync(new URL('../../package.json', import.meta.url), 'utf8')));
+  const minimum = readFileSync(new URL('../../.node-version', import.meta.url), 'utf8').trim();
+  expect(pkg.engines.node).toBe(`>=${minimum}`);
+  expect(pkg.files).toContain('.node-version');
+  expect(pkg.bin.ff).toBe('./dist/src/cli/bootstrap.mjs');
+  expect(pkg.bin['factory-factory']).toBe(pkg.bin.ff);
+});
+
+it.skipIf(process.platform === 'win32').each([false, true])(
+  'stops setup on SIGTERM, including repeated cancellation (ignores first: %s)',
+  async (stubborn) => {
+    const root = fixture('1.0.0');
+    const worker = join(root, 'worker.mjs');
+    const pidFile = join(root, 'worker.pid');
+    writeFileSync(
+      worker,
+      `import { writeFileSync } from 'node:fs'; ${stubborn ? "process.on('SIGTERM', () => {});" : ''} writeFileSync(${JSON.stringify(pidFile)}, String(process.pid)); setInterval(() => {}, 1000);`
+    );
+    writeFileSync(
+      join(root, 'index.js'),
+      `import { createSetupIO, confirmFix } from './serve-prerequisites.mjs'; const io = createSetupIO(); io.interactive = true; io.ask = async () => 'y'; await confirmFix([process.execPath, ${JSON.stringify(worker)}], io);`
+    );
+    const child = spawn(process.execPath, [join(root, 'bootstrap.mjs'), 'serve'], {
+      stdio: 'ignore',
+    });
+    const closed = new Promise((resolve) => child.once('exit', resolve));
+    let workerPid: number | undefined;
+    try {
+      await vi.waitFor(
+        () => {
+          workerPid = Number(readFileSync(pidFile, 'utf8'));
+        },
+        { timeout: 5000 }
+      );
+      child.kill('SIGTERM');
+      if (stubborn) {
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        child.kill('SIGTERM');
+      }
+      await closed;
+      await vi.waitFor(() => expect(() => process.kill(workerPid!, 0)).toThrow(), {
+        timeout: 5000,
+      });
+    } finally {
+      child.kill('SIGKILL');
+      if (workerPid) {
+        try {
+          process.kill(workerPid, 'SIGKILL');
+        } catch {
+          /* Already stopped. */
+        }
+      }
+    }
+  }
+);

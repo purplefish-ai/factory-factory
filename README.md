@@ -55,6 +55,20 @@ npx factory-factory@latest serve
 Factory Factory opens in your browser and stores its database in
 `~/factory-factory/` by default.
 
+`serve` checks Node.js and Git before starting. When a prerequisite needs
+fixing, it shows the command and offers to run it with
+`Run this command? [y/N]`. **The default is No**: press Enter to decline.
+Commands run only after an explicit `y` or `yes`, with separate confirmation for
+each fix. Scripts and noninteractive terminals receive instructions without
+running fixes.
+
+Automatic installation uses an existing fnm (for Node), Homebrew, or WinGet;
+otherwise, installation links are provided. After a Node upgrade, activate the
+new version and rerun `serve`. Tool installations may also require a new
+terminal so your PATH updates. Missing GitHub CLI or authentication prompts for
+optional setup; declining still lets you use local projects. Agent
+authentication remains available through onboarding and Settings.
+
 See [Settings](docs/admin-settings.md) for IDE commands, default chat models,
 and project configuration.
 

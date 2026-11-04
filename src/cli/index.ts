@@ -16,6 +16,7 @@ import { resolveDatabasePath } from './database-path';
 import { runProxyCommand } from './proxy';
 import { ensureDataDir, findAvailablePort } from './runtime-utils';
 import { buildHttpOrigin, buildServeEnv } from './serve-env';
+import { ensureNode, ensureServeTools } from './serve-prerequisites.mjs';
 import { runServeSession } from './serve-session';
 import { registerServeShutdownHandlers, removeServePortFile } from './serve-shutdown';
 import { registerStudioCommand } from './studio';
@@ -190,6 +191,12 @@ program
 
     // Show startup banner
     console.log(chalk.cyan(`\n  🏭🏭 FACTORY ${chalk.bold('FACTORY')}\n`));
+
+    const minimumNode = readFileSync(join(PROJECT_ROOT, '.node-version'), 'utf8').trim();
+    if (!((await ensureNode(process.versions.node, minimumNode)) && (await ensureServeTools()))) {
+      process.exitCode = 1;
+      return;
+    }
 
     // Ensure data directory exists
     if (verbose) {
