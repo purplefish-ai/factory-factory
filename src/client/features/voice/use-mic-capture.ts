@@ -129,7 +129,7 @@ function waitForSocketOpen(socket: WebSocket): Promise<void> {
       (event) => {
         reject(
           new Error(
-            `Failed to connect to Deepgram (WebSocket closed, code ${event.code}${event.reason ? `: ${event.reason}` : ''}). Check the browser Network tab for the actual handshake response.`
+            `Couldn't connect to Deepgram (WebSocket closed, code ${event.code}${event.reason ? `: ${event.reason}` : ''}). Check the browser Network tab for the actual handshake response.`
           )
         );
       },
@@ -591,7 +591,7 @@ export function useMicCapture({
       setIsCapturing(true);
     } catch (err) {
       if (!isStale()) {
-        setError(err instanceof Error ? err.message : 'Failed to start voice capture');
+        setError(err instanceof Error ? err.message : "Couldn't start voice capture");
       }
     } finally {
       if (!isStale()) {

@@ -178,7 +178,7 @@ describe('SubagentList', () => {
     });
 
     const text = container.textContent ?? '';
-    expect(text.indexOf('Security review')).toBeLessThan(text.indexOf('Sub-agent active-n'));
+    expect(text.indexOf('Security review')).toBeLessThan(text.indexOf('Subagent active-n'));
     expect(text).toContain('Running');
     expect(text).toContain('Starting');
     expect(text).toContain('10m elapsed');
@@ -273,7 +273,7 @@ describe('SubagentList', () => {
 
   it.each<[string, SubagentListState, string]>([
     ['loading', { kind: 'loading' }, 'Loading subagents…'],
-    ['empty', { kind: 'ready', subagents: [] }, 'No sub-agents for this session.'],
+    ['empty', { kind: 'ready', subagents: [] }, 'No subagents for this session.'],
   ])('renders the %s state', (_name, state, expectedText) => {
     render({ state, onSelect: vi.fn() });
     expect(container.textContent).toContain(expectedText);

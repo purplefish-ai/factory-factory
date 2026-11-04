@@ -112,27 +112,27 @@ function getInputPlaceholder({
   messageCount: number;
 }): string {
   if (loadingSession) {
-    return 'Loading session...';
+    return 'Loading session…';
   }
   if (stopping) {
-    return 'Stopping...';
+    return 'Stopping…';
   }
   if (displayStartingState && !running) {
-    return 'Agent is starting...';
+    return 'Agent is starting…';
   }
   if (sessionRuntime.phase === 'error') {
-    return 'Agent encountered an error. Type a message to retry...';
+    return "Couldn't continue this chat. Type a message to retry…";
   }
   if (pendingRequestType && sessionRuntime.phase === 'running') {
     return getPendingRequestPresentation(pendingRequestType).composerPlaceholder;
   }
   if (promptInFlight) {
-    return 'Message will be queued...';
+    return 'Message will be queued…';
   }
   if (sessionPhase === 'ready' && messageCount === 0) {
-    return 'Type a message to start the agent...';
+    return 'Type a message to start the agent…';
   }
-  return 'Type a message...';
+  return 'Type a message…';
 }
 
 function getVisibleInitBanner(

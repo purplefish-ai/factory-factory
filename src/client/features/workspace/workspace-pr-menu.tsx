@@ -312,7 +312,7 @@ export function ConnectedWorkspacePrMenu({
           }
         }}
         title="Remove PR from workspace?"
-        description="The pull request stays on GitHub. This workspace will stop watching it."
+        description="The pull request stays on GitHub. This workspace will stop watching it. You can add it again."
         confirmText="Remove"
         isPending={actions.pending}
         onConfirm={() => {
@@ -322,7 +322,7 @@ export function ConnectedWorkspacePrMenu({
                 setRemoveId(null);
               }
             })(),
-            'Could not update pull request'
+            "Couldn't update pull request."
           );
         }}
       />
@@ -348,7 +348,7 @@ export function ConnectedWorkspacePrMenu({
                     setError(result.error);
                   }
                 })(),
-                'Could not update pull request'
+                "Couldn't update pull request."
               );
             }}
             className="space-y-3"

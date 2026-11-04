@@ -31,21 +31,21 @@ const PENDING_REQUEST_PRESENTATIONS: Record<PendingRequestType, PendingRequestPr
     label: 'Needs approval',
     description: 'Waiting for your permission to continue',
     waitingText: 'Waiting for your approval',
-    composerPlaceholder: 'Respond to the request above, or queue a message...',
+    composerPlaceholder: 'Respond to the request above, or queue a message…',
   },
   user_question: {
     icon: ChatCircleDotsIcon,
     label: 'Needs answer',
     description: 'Waiting for your answer to a question',
     waitingText: 'Waiting for your answer',
-    composerPlaceholder: 'Answer the question above, or queue a message...',
+    composerPlaceholder: 'Answer the question above, or queue a message…',
   },
   plan_approval: {
     icon: ClipboardTextIcon,
     label: 'Needs plan review',
     description: 'Waiting for you to approve the plan',
     waitingText: 'Waiting for your plan approval',
-    composerPlaceholder: 'Approve the plan or keep planning...',
+    composerPlaceholder: 'Approve the plan or keep planning…',
   },
 };
 
@@ -54,7 +54,7 @@ const GENERIC_PENDING_REQUEST: PendingRequestPresentation = {
   label: 'Needs input',
   description: 'Waiting for your input to continue',
   waitingText: 'Waiting for your input',
-  composerPlaceholder: 'Respond to the request above, or queue a message...',
+  composerPlaceholder: 'Respond to the request above, or queue a message…',
 };
 
 function hasPresentation(type: string): type is PendingRequestType {

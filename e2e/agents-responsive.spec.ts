@@ -73,7 +73,7 @@ for (const width of [768, 810, 1024, 1280]) {
     await page.screenshot({
       path: test.info().outputPath(`detail-${width}.png`),
     });
-    await page.getByRole('button', { name: 'Edit Agent', exact: true }).click();
+    await page.getByRole('button', { name: 'Edit agent', exact: true }).click();
     await assertEditorBounds(page);
     await page.getByRole('textbox', { name: 'Name', exact: true }).fill('Keep edit draft');
     await page.setViewportSize({ width: 1700, height: 1000 });
@@ -88,7 +88,7 @@ for (const width of [768, 810, 1024, 1280]) {
     await page.setViewportSize({ width, height: 1000 });
     await assertEditorBounds(page);
     await page.getByRole('button', { name: 'Cancel', exact: true }).click();
-    await page.getByRole('button', { name: 'Create Agent', exact: true }).click();
+    await page.getByRole('button', { name: 'Create agent', exact: true }).click();
     await assertEditorBounds(page);
     const name = page.getByRole('textbox', { name: 'Name', exact: true });
     const instructions = page.getByRole('textbox', { name: 'Instructions', exact: true });
@@ -132,7 +132,7 @@ for (const width of [768, 810, 1024, 1280]) {
       page.getByRole('heading', { name: 'Investigate labeled issues', exact: true, level: 2 })
     ).toBeVisible();
     await expect(page.locator('main')).not.toContainText('Run history');
-    await page.getByRole('button', { name: 'Edit Agent', exact: true }).click();
+    await page.getByRole('button', { name: 'Edit agent', exact: true }).click();
     await page.getByRole('textbox', { name: 'Name', exact: true }).fill('Retain event edit');
     await page.getByText('Event settings', { exact: true }).click();
     await assertEditorBounds(page);
@@ -146,7 +146,7 @@ for (const width of [768, 810, 1024, 1280]) {
     await assertEditorBounds(page);
     await page.screenshot({ path: test.info().outputPath(`event-edit-${width}.png`) });
     await rail.locator('a[href$="replacement-agent?kind=event"]').click();
-    await page.getByRole('button', { name: 'Edit Agent', exact: true }).click();
+    await page.getByRole('button', { name: 'Edit agent', exact: true }).click();
     await page.getByRole('button', { name: 'Replace complete specification', exact: true }).click();
     const replacement = page.getByRole('textbox', {
       name: 'Full saved specification JSON',

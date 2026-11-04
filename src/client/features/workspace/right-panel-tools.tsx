@@ -97,7 +97,7 @@ export function TopPanelArea({
           />
         )}
         <TabButton
-          label="Sub-agents"
+          label="Subagents"
           icon={<TreeStructureIcon className="h-3.5 w-3.5" />}
           isActive={showAgents}
           onSelect={() => onTopTabChange('agents')}

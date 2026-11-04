@@ -135,12 +135,12 @@ describe('ProjectFactoryConfigCard', () => {
     renderCard();
     flushSync(() => container.querySelector('button')?.click());
     const save = Array.from(document.querySelectorAll('button')).find((button) =>
-      button.textContent?.includes('Create Configuration')
+      button.textContent?.includes('Create configuration')
     );
     expect(save).toBeDefined();
     flushSync(() => save?.click());
     expect(toast.error).toHaveBeenCalledWith(
-      'Failed to save configuration: Write permission denied'
+      "Couldn't save configuration. Write permission denied"
     );
     renderCard();
     expect(document.querySelector('[role="dialog"]')?.textContent).toContain(

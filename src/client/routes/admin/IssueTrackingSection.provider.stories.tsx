@@ -105,7 +105,7 @@ export const FailedSwitchToLinear: Story = {
     await waitFor(() => expect(onFailure).toHaveBeenCalledOnce(), { timeout: 3000 });
     await waitFor(() => expect(provider).toHaveTextContent('GitHub Issues'));
     await waitFor(() => expect(onList.mock.calls.length).toBeGreaterThanOrEqual(2));
-    await expect(canvas.queryByLabelText('API Key')).not.toBeInTheDocument();
+    await expect(canvas.queryByLabelText('API key')).not.toBeInTheDocument();
     await expect(canvas.getByText('GitHub', { exact: true })).toBeInTheDocument();
   },
 };
@@ -127,7 +127,7 @@ export const FailedSwitchToGitHub: Story = {
     await waitFor(() => expect(onFailure).toHaveBeenCalledOnce(), { timeout: 3000 });
     await waitFor(() => expect(provider).toHaveTextContent('Linear Issues'));
     await waitFor(() => expect(onList.mock.calls.length).toBeGreaterThanOrEqual(2));
-    await expect(canvas.getByLabelText('API Key')).toBeInTheDocument();
+    await expect(canvas.getByLabelText('API key')).toBeInTheDocument();
     await expect(canvas.getByText('Linear', { exact: true })).toBeInTheDocument();
   },
 };

@@ -40,10 +40,10 @@ export function ProjectSettingsDialog({
 
   const updateProject = trpc.project.update.useMutation({
     onSuccess: () => {
-      runInBackground(utils.project.list.invalidate(), 'Could not refresh data');
+      runInBackground(utils.project.list.invalidate(), "Couldn't refresh data.");
       runInBackground(
         utils.project.getById.invalidate({ id: projectId }),
-        'Could not refresh data'
+        "Couldn't refresh data."
       );
       setOpen(false);
     },
@@ -88,7 +88,7 @@ export function ProjectSettingsDialog({
       </Tooltip>
       <DialogContent className="px-3 py-4 sm:max-w-[500px] sm:p-4">
         <DialogHeader>
-          <DialogTitle>Project Settings</DialogTitle>
+          <DialogTitle>Project settings</DialogTitle>
           <DialogDescription>{projectName}</DialogDescription>
         </DialogHeader>
 

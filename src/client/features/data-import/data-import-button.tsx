@@ -53,7 +53,7 @@ export function DataImportButton({
       onImportSuccess?.();
     },
     onError: (error) => {
-      toast.error(`Import failed: ${error.message}`);
+      toast.error(`Couldn't import backup. ${error.message}`);
       setConfirmState({ open: false, data: null, summary: '' });
     },
   });
@@ -107,7 +107,7 @@ export function DataImportButton({
         summary: buildImportSummary(data),
       });
     } catch (error) {
-      toast.error(`Failed to read file: ${getErrorMessage(error)}`);
+      toast.error(`Couldn't read file. ${getErrorMessage(error)}`);
     }
 
     // Reset file input
@@ -131,14 +131,14 @@ export function DataImportButton({
         className={className}
       >
         <UploadIcon className="w-4 h-4 mr-2" />
-        {importData.isPending ? 'Importing...' : children || 'Import Data'}
+        {importData.isPending ? 'Importing…' : children || 'Import data'}
       </Button>
       <input
         ref={fileInputRef}
         type="file"
         accept=".json"
         onChange={(event) => {
-          runInBackground(handleFileSelect(event), 'Could not import backup');
+          runInBackground(handleFileSelect(event), "Couldn't import backup.");
         }}
         className="hidden"
       />
@@ -150,7 +150,7 @@ export function DataImportButton({
             setConfirmState({ open: false, data: null, summary: '' });
           }
         }}
-        title="Confirm Import"
+        title="Confirm import"
         description={`Review the data to be imported. Existing records will be skipped.\n\n${confirmState.summary}`}
         confirmText="Import"
         onConfirm={handleConfirmImport}

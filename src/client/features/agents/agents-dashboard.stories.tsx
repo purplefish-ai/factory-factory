@@ -65,7 +65,7 @@ function StoryContent({
   return mode === 'create' || mode === 'edit' ? (
     <>
       <div>
-        <h2 className="text-xl font-semibold">{mode === 'edit' ? 'Edit Agent' : 'Create Agent'}</h2>
+        <h2 className="text-xl font-semibold">{mode === 'edit' ? 'Edit agent' : 'Create agent'}</h2>
       </div>
       <AgentForm
         initialValues={mode === 'edit' ? agent : undefined}

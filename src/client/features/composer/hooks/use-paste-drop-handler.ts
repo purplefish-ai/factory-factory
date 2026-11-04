@@ -57,7 +57,7 @@ async function handleClipboardImagePaste(
     // nothing usable wasn't necessarily an image paste attempt — fail
     // silently rather than showing a misleading image-specific error.
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'Failed to paste image';
+    const message = error instanceof Error ? error.message : "Couldn't paste image";
     toast.error(message);
   }
 }
@@ -81,7 +81,7 @@ async function handleFileDrop(
     const supportedExts = SUPPORTED_TEXT_EXTENSIONS.join(', ');
     const formattedErrors = errors.map(({ fileName, message }) => `${fileName}: ${message}`);
     toast.error(
-      `Could not add ${errors.length} file(s): ${formattedErrors.join(
+      `Couldn't add ${errors.length} ${errors.length === 1 ? 'file' : 'files'}. ${formattedErrors.join(
         '; '
       )}\n\nSupported text files: ${supportedExts}`
     );

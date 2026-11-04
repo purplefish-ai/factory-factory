@@ -220,7 +220,7 @@ function useScrollToSelectedReview(
 function ReviewsHeader({ count, className }: { count: number; className: string }) {
   return (
     <div className={className}>
-      <h1 className="text-sm font-semibold">Review Requests</h1>
+      <h1 className="text-sm font-semibold">Review requests</h1>
       <p className="text-xs text-muted-foreground">
         {count} PR{count !== 1 ? 's' : ''} awaiting your review
       </p>
@@ -294,7 +294,7 @@ function ReviewsMobileLayout({
       <Sheet open={mobileDetailsOpen && !!selectedPR} onOpenChange={setMobileDetailsOpen}>
         <SheetContent side="bottom" className="h-[92dvh] w-full max-w-none p-0">
           <SheetHeader className="sr-only">
-            <SheetTitle>Pull Request Details</SheetTitle>
+            <SheetTitle>Pull request details</SheetTitle>
             <SheetDescription>Review request details and actions</SheetDescription>
           </SheetHeader>
           <PRDetailPanel
@@ -303,7 +303,7 @@ function ReviewsMobileLayout({
             diffLoading={diffLoading}
             diffError={diffError}
             onFetchDiff={() => {
-              runInBackground(onFetchDiff(), 'Could not load pull request diff');
+              runInBackground(onFetchDiff(), "Couldn't load pull request diff.");
             }}
             onOpenGitHub={onOpenGitHub}
             onApprove={onApprove}
@@ -364,7 +364,7 @@ function ReviewsDesktopLayout({
           diffLoading={diffLoading}
           diffError={diffError}
           onFetchDiff={() => {
-            runInBackground(onFetchDiff(), 'Could not load pull request diff');
+            runInBackground(onFetchDiff(), "Couldn't load pull request diff.");
           }}
           onOpenGitHub={onOpenGitHub}
           onApprove={onApprove}
@@ -479,7 +479,7 @@ export function ReviewDashboard({ project }: { project: ReviewProject }) {
   if (error || data?.error) {
     return (
       <ReviewRouteState
-        error={error?.message ?? data?.error ?? 'Could not load reviews'}
+        error={error?.message ?? data?.error ?? "Couldn't load reviews"}
         onRetry={() => {
           void refetch();
         }}

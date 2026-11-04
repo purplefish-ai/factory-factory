@@ -84,7 +84,7 @@ export const Wide: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await expect(
-      await canvas.findByRole('tab', { name: 'Sub-agents', selected: true })
+      await canvas.findByRole('tab', { name: 'Subagents', selected: true })
     ).toBeVisible();
   },
 };

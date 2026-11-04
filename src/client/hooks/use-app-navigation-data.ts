@@ -51,7 +51,7 @@ function getInitialProjectSlug(): string {
  */
 function usePRStatusSync(selectedProjectId: string | undefined) {
   const syncAllPRStatuses = trpc.workspace.syncAllPRStatuses.useMutation({
-    onError: (error) => toast.error(`Failed to sync PR statuses: ${error.message}`),
+    onError: (error) => toast.error(`Couldn't sync PR statuses. ${error.message}`),
   });
   const lastSyncedProjectRef = useRef<string | null>(null);
 

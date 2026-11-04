@@ -15,7 +15,7 @@ existing names, shown in parentheses where they differ.
   it starts collapsed on the board to leave room for the columns.
 - **Workspace**: one isolated Git worktree and branch, with its chats, terminals
   and pull requests. A workspace is what moves across the board. **New
-  Workspace** in the sidebar opens the new workspace; **New Workspace** in the
+  workspace** in the sidebar opens the new workspace; **New workspace** in the
   board header stays on the board so several can be launched in a row. The
   retired `/projects/:slug/workspaces/new` URL opens the board's form.
 - **Chat** (`session`): one conversation with a coding agent inside a workspace,
@@ -26,18 +26,18 @@ existing names, shown in parentheses where they differ.
   the project's **Agents** section that launches workspaces: a **scheduled
   agent** (`PeriodicTask`) or an **event agent**. Labels for saved agents name
   the kind, as in a workspace's **Scheduled agent** tool tab.
-- **Sub-agent** (`subagent`): a helper that the provider starts inside a chat.
-  It works in the chat's workspace and appears in the workspace's **Sub-agents**
-  tool tab and as a transcript tab. UI text spells it "sub-agent".
+- **Subagent** (`subagent`): a helper that the provider starts inside a chat. It
+  works in the chat's workspace and appears in the workspace's **Subagents**
+  tool tab and as a transcript tab. UI text spells it "subagent".
 - **Child workspace**: a separate workspace, with its own branch and chats, that
   a workspace's agent creates for delegated work. The parent lists its children
-  under **Child Workspaces** in the **Sub-agents** tab, next to the other
+  under **Child workspaces** in the **Subagents** tab, next to the other
   delegated work; board cards link parents and children.
 - **Issue**: a GitHub or Linear issue assigned to you, shown in the board's Todo
   column and the sidebar's Todo group. Starting an issue creates a linked
   workspace.
 - **Task**: not a separate object, so avoid it as a label. The board's former
-  **New Task** button is **New Workspace**; `PeriodicTask` in code is a
+  **New Task** button is **New workspace**; `PeriodicTask` in code is a
   scheduled agent.
 
 ## Historical progression model

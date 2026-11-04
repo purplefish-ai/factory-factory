@@ -97,6 +97,15 @@ function savedConnection() {
   ];
   mount();
 }
+function confirmButton(): HTMLButtonElement {
+  const found = [
+    ...document.querySelectorAll<HTMLButtonElement>('[role="alertdialog"] button'),
+  ].find((button) => button.textContent === 'Disconnect');
+  if (!found) {
+    throw new Error('Missing Disconnect confirmation');
+  }
+  return found;
+}
 function button(text: string) {
   const found = [...document.querySelectorAll('button')].find(
     (button) => button.textContent === text
@@ -122,7 +131,7 @@ it('shows saved status without prefilling a token and waits for confirmed discon
   expect(document.querySelector('[role="alertdialog"]')?.textContent).toContain(
     'Remove the saved bot token'
   );
-  act(() => button('Disconnect Slack').click());
+  act(() => confirmButton().click());
   expect(api.disconnect).toHaveBeenCalledWith({ id: 'slack-1' });
   expect(document.querySelector('[role="alertdialog"]')).not.toBeNull();
   expect(
@@ -174,13 +183,13 @@ it('keeps a failed disconnect open with its error', async () => {
   savedConnection();
   act(() => button('Disconnect').click());
   await act(async () => {
-    button('Disconnect Slack').click();
+    confirmButton().click();
     await Promise.resolve();
   });
   expect(document.querySelector('[role="alertdialog"]')?.textContent).toContain(
     'Could not disconnect'
   );
-  expect(button('Disconnect Slack').disabled).toBe(false);
+  expect(confirmButton().disabled).toBe(false);
 });
 
 it('does not show an unrelated test error in a new disconnect dialog', async () => {

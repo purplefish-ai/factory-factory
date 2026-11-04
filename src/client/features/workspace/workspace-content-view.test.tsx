@@ -95,7 +95,7 @@ describe('WorkspaceContentView sessionless recovery', () => {
       expect(container.textContent).toContain('Conversation content');
       expect(container.textContent).not.toContain('Retry setup');
       act(() => root.render(<WorkspaceContentView {...props} emptyState={undefined} />));
-      expect(container.textContent).toContain('Start a Session');
+      expect(container.textContent).toContain('Start a session');
       expect(container.textContent).toContain('Workspace is initializing');
     } finally {
       act(() => root.unmount());

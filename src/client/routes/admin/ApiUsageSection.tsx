@@ -29,7 +29,7 @@ export function ApiUsageSection({ apiUsage, onReset, isResetting }: ApiUsageSect
   return (
     <Card>
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
-        <CardTitle>API Usage</CardTitle>
+        <CardTitle>API usage</CardTitle>
         <Button
           variant="link"
           onClick={() => setConfirmOpen(true)}

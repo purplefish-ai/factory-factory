@@ -192,7 +192,9 @@ describe('issue provider selection', () => {
       await tick();
       expectProvider(initial);
       expect(listReads).toBe(2);
-      expect(toast.error).toHaveBeenCalledWith('Failed to save: Mock save failed');
+      expect(toast.error).toHaveBeenCalledWith(
+        "Couldn't save issue tracking settings. Mock save failed"
+      );
     }
   );
 

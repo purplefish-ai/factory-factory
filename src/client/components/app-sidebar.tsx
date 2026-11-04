@@ -400,7 +400,7 @@ function SidebarInner({
                     className="h-9"
                   >
                     <PlusIcon className="h-4 w-4" />
-                    <span>New Workspace</span>
+                    <span>New workspace</span>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
               </SidebarMenu>

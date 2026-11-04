@@ -116,14 +116,14 @@ export function ProviderSubagentsSection({
   }
 
   return (
-    <section aria-label="Sub-agents">
+    <section aria-label="Subagents">
       <div className="flex items-center gap-1.5 border-b bg-muted/30 px-3 py-2">
         <RobotIcon className="h-3.5 w-3.5 text-muted-foreground" />
-        <h2 className="text-xs font-medium">Sub-agents</h2>
+        <h2 className="text-xs font-medium">Subagents</h2>
         {state.kind === 'ready' && !state.hasMore && !state.error && state.subagents.length > 0 && (
           <span
             role="status"
-            aria-label="Active sub-agents"
+            aria-label="Active subagents"
             className="rounded-full bg-secondary px-1.5 text-[10px] text-secondary-foreground"
           >
             {state.subagents.filter(isActiveSubagent).length}

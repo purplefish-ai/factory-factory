@@ -25,10 +25,10 @@ export function KanbanControlsView({
       size={isMobile ? 'icon' : 'sm'}
       className={isMobile ? 'h-8 w-8' : 'h-8'}
       onClick={onNewWorkspace}
-      aria-label={isMobile ? 'New Workspace' : undefined}
+      aria-label={isMobile ? 'New workspace' : undefined}
     >
       <PlusIcon className="h-4 w-4" />
-      {isMobile ? null : 'New Workspace'}
+      {isMobile ? null : 'New workspace'}
     </Button>
   );
 
@@ -37,7 +37,7 @@ export function KanbanControlsView({
       {isMobile ? (
         <Tooltip>
           <TooltipTrigger asChild>{newWorkspaceButton}</TooltipTrigger>
-          <TooltipContent>New Workspace</TooltipContent>
+          <TooltipContent>New workspace</TooltipContent>
         </Tooltip>
       ) : (
         newWorkspaceButton

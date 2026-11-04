@@ -28,20 +28,20 @@ export function WorktreeCleanupSection() {
     onSuccess: ({ removed, failed }) => {
       if (failed.length > 0) {
         toast.error(
-          `Removed ${removed.length}; failed to remove ${failed.length}: ${failed[0]?.error}`
+          `Couldn't remove all worktrees. Removed ${removed.length}; failed to remove ${failed.length}. ${failed[0]?.error}`
         );
       } else {
         toast.success(`Removed ${pluralizeWorktrees(removed.length)}`);
       }
     },
     onError: (error) => {
-      toast.error(`Cleanup failed: ${error.message}`);
+      toast.error(`Couldn't remove orphaned worktrees. ${error.message}`);
     },
     onSettled: () => {
       setConfirmOpen(false);
       runInBackground(
         utils.admin.listOrphanedWorktrees.invalidate(),
-        'Could not refresh orphaned worktrees'
+        "Couldn't refresh orphaned worktrees."
       );
     },
   });
@@ -53,7 +53,7 @@ export function WorktreeCleanupSection() {
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <BroomIcon className="w-5 h-5" />
-          Worktree Cleanup
+          Worktree cleanup
         </CardTitle>
         <CardDescription>
           Remove worktree folders left behind by archived, deleted, or failed workspaces
@@ -65,13 +65,13 @@ export function WorktreeCleanupSection() {
         ) : isError ? (
           <div className="space-y-2">
             <p role="alert" className="text-sm text-destructive">
-              Could not scan for orphaned worktrees: {error.message}
+              Couldn't scan for orphaned worktrees. {error.message}
             </p>
             <Button
               variant="outline"
               className="w-full sm:w-auto"
               disabled={isRefetching}
-              onClick={() => runInBackground(refetch(), 'Could not scan for orphaned worktrees')}
+              onClick={() => runInBackground(refetch(), "Couldn't scan for orphaned worktrees.")}
             >
               Retry
             </Button>
@@ -100,7 +100,7 @@ export function WorktreeCleanupSection() {
               onClick={() => setConfirmOpen(true)}
             >
               <BroomIcon className="w-4 h-4 mr-2" />
-              Remove Orphaned Worktrees
+              Remove orphaned worktrees
             </Button>
           </>
         )}
@@ -108,8 +108,8 @@ export function WorktreeCleanupSection() {
       <ConfirmDialog
         open={confirmOpen}
         onOpenChange={setConfirmOpen}
-        title="Remove Orphaned Worktrees"
-        description={`Permanently delete ${pluralizeWorktrees(count)}, including any uncommitted files in them. Committed work stays on its branch.`}
+        title="Remove orphaned worktrees?"
+        description={`Permanently delete ${pluralizeWorktrees(count)}, including any uncommitted files in them. Committed work stays on its branch. Worktree removal cannot be undone.`}
         confirmText="Remove"
         variant="destructive"
         isPending={removeOrphans.isPending}

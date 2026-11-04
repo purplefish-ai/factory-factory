@@ -48,7 +48,7 @@ export const RewindConfirmationDialog = memo(function RewindConfirmationDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <ArrowCounterClockwiseIcon className="h-5 w-5 text-warning" />
-            Rewind Files
+            Rewind files?
           </DialogTitle>
           <DialogDescription>
             This will revert file changes to the state before the selected message was processed.
@@ -112,7 +112,7 @@ export const RewindConfirmationDialog = memo(function RewindConfirmationDialog({
             className="bg-warning text-warning-foreground hover:bg-warning/90 focus-visible:ring-warning/40"
           >
             <ArrowCounterClockwiseIcon className="mr-2 h-4 w-4" />
-            Rewind Files
+            Rewind files
           </Button>
         </DialogFooter>
       </DialogContent>

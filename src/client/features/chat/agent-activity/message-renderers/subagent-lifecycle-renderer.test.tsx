@@ -15,7 +15,7 @@ it.each([
   ['subagent_finished', 'cancelled', 'cancelled'],
   ['subagent_finished', 'interrupted', 'interrupted'],
   ['subagent_finished', 'failed', 'failed'],
-] as const)('opens the sub-agent tab for %s / %s rows', (subtype, status, label) => {
+] as const)('opens the subagent tab for %s / %s rows', (subtype, status, label) => {
   const container = document.createElement('div');
   const root = createRoot(container);
   const onOpenSubagent = vi.fn();
@@ -67,7 +67,7 @@ it.each([
   root.unmount();
 });
 
-it('keeps lifecycle rows without a sub-agent identity non-interactive', () => {
+it('keeps lifecycle rows without a subagent identity non-interactive', () => {
   const container = document.createElement('div');
   const root = createRoot(container);
   try {

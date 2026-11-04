@@ -52,15 +52,15 @@ export const WorkspaceProviderSettings = memo(function WorkspaceProviderSettings
   const utils = trpc.useUtils();
 
   const updateProviderDefaults = trpc.workspace.updateProviderDefaults.useMutation({
-    meta: { errorToast: "Couldn't save provider settings" },
+    meta: { errorToast: "Couldn't save provider settings." },
     onSuccess: () => {
       runInBackground(
         utils.workspace.get.invalidate({ id: workspaceId }),
-        'Could not refresh data'
+        "Couldn't refresh data."
       );
       runInBackground(
         utils.workspace.listForProject.invalidate({ projectId: workspace.projectId }),
-        'Could not refresh data'
+        "Couldn't refresh data."
       );
       setDialogOpen(false);
     },
@@ -111,12 +111,12 @@ export const WorkspaceProviderSettings = memo(function WorkspaceProviderSettings
       )}
       <DialogContent className="sm:max-w-[440px]">
         <DialogHeader>
-          <DialogTitle>Session Provider Defaults</DialogTitle>
+          <DialogTitle>Session provider defaults</DialogTitle>
           <DialogDescription>Configure the default provider for new sessions.</DialogDescription>
         </DialogHeader>
         <div className="space-y-4 py-2">
           <div className="space-y-2">
-            <Label htmlFor="workspace-default-provider">Default Session Provider</Label>
+            <Label htmlFor="workspace-default-provider">Default session provider</Label>
             <Select
               value={defaultProvider}
               onValueChange={(value) => {
@@ -153,7 +153,7 @@ export const WorkspaceProviderSettings = memo(function WorkspaceProviderSettings
             }}
             disabled={!isDirty || updateProviderDefaults.isPending}
           >
-            {updateProviderDefaults.isPending ? 'Saving...' : 'Save'}
+            {updateProviderDefaults.isPending ? 'Saving…' : 'Save'}
           </Button>
         </DialogFooter>
       </DialogContent>

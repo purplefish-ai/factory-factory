@@ -432,7 +432,7 @@ export const CustomIde: Story = {
   ),
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    await canvas.findByLabelText('Custom Command');
+    await canvas.findByLabelText(/^custom command$/i);
     await userEvent.click(canvas.getByRole('button', { name: 'Test' }));
     await waitFor(() =>
       expect(onRequest).toHaveBeenCalledWith('userSettings.testCustomCommand', {
@@ -628,7 +628,7 @@ export const RejectedChatModel: Story = {
     );
     await waitFor(() => expect(model).toHaveTextContent('Sonnet 5'));
     await within(document.body).findByText(
-      'Failed to update chat defaults: Request rejected: userSettings.update'
+      "Couldn't update chat defaults. Request rejected: userSettings.update"
     );
   },
 };
@@ -680,7 +680,7 @@ export const FailedFactorySave: Story = {
     await userEvent.click(within(dialog).getByRole('button', { name: /^save configuration$/i }));
     await within(dialog).findByText('Error: Request rejected: project.saveFactoryConfig');
     await within(document.body).findByText(
-      'Failed to save configuration: Request rejected: project.saveFactoryConfig'
+      "Couldn't save configuration. Request rejected: project.saveFactoryConfig"
     );
     await expect(dialog).toBeVisible();
   },
@@ -798,7 +798,7 @@ export const RejectedChildWorkspaces: Story = {
       })
     );
     await within(canvasElement.ownerDocument.body).findByText(
-      'Failed to update settings: Request rejected: userSettings.update'
+      "Couldn't update settings. Request rejected: userSettings.update"
     );
     await expect(toggle).toBeChecked();
   },
@@ -812,7 +812,7 @@ export const FailedChildWorkspaceSettings: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await expect(await canvas.findByRole('alert')).toHaveTextContent(
-      'Could not load child workspace settings.'
+      "Couldn't load child workspace settings."
     );
     await expect(canvas.queryByRole('switch')).not.toBeInTheDocument();
   },

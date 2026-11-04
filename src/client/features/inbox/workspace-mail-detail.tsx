@@ -145,7 +145,7 @@ export function WorkspaceMailDetail({
         </p>
         {ackError && (
           <p role="alert" className="mb-3 text-sm text-destructive">
-            Could not acknowledge message. {ackError}
+            Couldn't acknowledge message. {ackError}
           </p>
         )}
         {body && (
@@ -158,7 +158,7 @@ export function WorkspaceMailDetail({
         )}
         {readError && (
           <div role="alert" className="mt-3 space-y-2 text-sm">
-            <p>Could not read message. {readError}</p>
+            <p>Couldn't read message. {readError}</p>
             <Button
               variant="outline"
               size="sm"

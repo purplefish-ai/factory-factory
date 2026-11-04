@@ -102,7 +102,7 @@ export function OnboardingCliHealth({ onOpenTerminal }: OnboardingCliHealthProps
     return (
       <div className="flex items-center gap-2 text-sm text-muted-foreground py-2">
         <Spinner className="h-4 w-4" />
-        <span>Checking CLI prerequisites...</span>
+        <span>Checking CLI prerequisites…</span>
       </div>
     );
   }
@@ -148,7 +148,7 @@ export function OnboardingCliHealth({ onOpenTerminal }: OnboardingCliHealthProps
       {hasIssues && (
         <Button type="button" variant="outline" size="sm" onClick={onOpenTerminal}>
           <TerminalIcon className="mr-2 h-4 w-4" />
-          Open Terminal to Log In
+          Open terminal to log in
         </Button>
       )}
     </div>

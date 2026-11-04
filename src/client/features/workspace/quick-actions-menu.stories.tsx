@@ -78,14 +78,14 @@ function MockQuickActionsMenu({
               disabled={disabled || isLoading || !hasActions}
             >
               <LightningIcon className="h-4 w-4" />
-              <span className="sr-only">Quick Actions</span>
+              <span className="sr-only">Quick actions</span>
             </Button>
           </DropdownMenuTrigger>
         </TooltipTrigger>
-        <TooltipContent>Quick Actions</TooltipContent>
+        <TooltipContent>Quick actions</TooltipContent>
       </Tooltip>
       <DropdownMenuContent align="end" className="w-56">
-        <DropdownMenuLabel>Quick Actions</DropdownMenuLabel>
+        <DropdownMenuLabel>Quick actions</DropdownMenuLabel>
         {actions.map((action) => {
           const Icon = iconMap[action.icon || 'zap'] || LightningIcon;
           return (

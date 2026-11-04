@@ -106,7 +106,7 @@ describe('attachment conversion', () => {
     expect(result.errors).toEqual([
       { fileName: 'bad.png', message: 'failed read' },
       { fileName: 'unknown.png', message: 'Unknown error' },
-      { fileName: 'notes.md', message: 'Failed to read notes.md: disk error' },
+      { fileName: 'notes.md', message: "Couldn't read notes.md. disk error" },
     ]);
   });
 
@@ -173,8 +173,8 @@ describe('attachment conversion', () => {
       ],
     });
     expect(result.errors.map(({ message }) => message)).toEqual([
-      'Could not extract image from clipboard (image/jpeg)',
-      'Failed to read image: unreadable',
+      "Couldn't extract image from clipboard (image/jpeg)",
+      "Couldn't read image. unreadable",
     ]);
     expect(result.attachments[0]).toMatchObject({
       name: 'pasted-image-123.png',

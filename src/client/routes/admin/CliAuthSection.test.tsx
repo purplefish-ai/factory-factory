@@ -76,7 +76,7 @@ describe('CLI authentication refresh', () => {
       await click('Recheck');
       authenticated = true;
       if (trigger === 'terminal close') {
-        await click('Open Terminal to Log In');
+        await click('Open terminal to log in');
         await click('Close');
       } else {
         await click('Recheck');

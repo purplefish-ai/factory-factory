@@ -83,7 +83,7 @@ describe('getClipboardImages', () => {
     const result = await getClipboardImages(createClipboardEvent([item]));
 
     expect(result.attachments).toEqual([]);
-    expect(result.errors).toEqual(['Could not extract image from clipboard (image/png)']);
+    expect(result.errors).toEqual(["Couldn't extract image from clipboard (image/png)"]);
   });
 
   it('collects an error when an image exceeds the size limit', async () => {

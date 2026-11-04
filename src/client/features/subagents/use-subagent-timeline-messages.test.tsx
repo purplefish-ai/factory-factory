@@ -152,7 +152,7 @@ it('keeps known lifecycle rows and offers recovery when the provider repeats a p
   mocks.pageParams = [null, 'repeat'];
   const harness = createHarness({ sessionId: 'parent', enabled: true });
   expect(harness.container.textContent).toBe('Review started working');
-  expect(timelineError?.message).toBe('Some sub-agent activity could not be loaded.');
+  expect(timelineError?.message).toBe('Some subagent activity could not be loaded.');
   expect(runningIconIndices).toEqual([]);
   timelineError?.onRetry();
   expect(mocks.refetch).toHaveBeenCalledOnce();
@@ -166,7 +166,7 @@ it('offers the same recovery after a page request fails without discarding loade
   mocks.error = new Error('Request failed');
   const harness = createHarness({ sessionId: 'parent', enabled: true });
   expect(harness.container.textContent).toBe('Review started working');
-  expect(timelineError?.message).toBe('Some sub-agent activity could not be loaded.');
+  expect(timelineError?.message).toBe('Some subagent activity could not be loaded.');
   expect(runningIconIndices).toEqual([]);
   timelineError?.onRetry();
   expect(mocks.refetch).toHaveBeenCalledOnce();
@@ -257,7 +257,7 @@ it('shows pagination and recovery when loaded pages contain only completed agent
   expect(harness.container.querySelectorAll('li')).toHaveLength(0);
   mocks.error = new Error('Request failed');
   harness.render({ sessionId: 'parent', enabled: true, list: true });
-  expect(harness.container.textContent).toContain('Some sub-agent activity could not be loaded.');
+  expect(harness.container.textContent).toContain('Some subagent activity could not be loaded.');
   const retry = [...harness.container.querySelectorAll('button')].find(
     (button) => button.textContent === 'Retry'
   );

@@ -535,7 +535,7 @@ it('selects only images, preserves successful files and presents per-file errors
     await vi.waitFor(() => expect(uploadErrors).toHaveBeenCalled());
   });
   expect(uploadErrors).toHaveBeenCalledWith(
-    'Failed to upload notes.md: Unsupported file type: text/plain'
+    "Couldn't upload notes.md. Unsupported file type: text/plain"
   );
   expect(container.querySelector('output')?.textContent).toBe('selected.png');
   expect(input.value).toBe('');

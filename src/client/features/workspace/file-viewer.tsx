@@ -170,7 +170,7 @@ class MarkdownPreviewErrorBoundary extends Component<
       return (
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
           <WarningCircleIcon className="h-4 w-4 shrink-0" />
-          <span>Failed to render preview.</span>
+          <span>Couldn't render preview.</span>
         </div>
       );
     }

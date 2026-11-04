@@ -54,9 +54,9 @@ export function QuickChatContent({
     chatState.pendingRequest,
     chatState.sessionRuntime
   );
-  let placeholder = promptInFlight ? 'Message will be queued...' : 'Type a message...';
+  let placeholder = promptInFlight ? 'Message will be queued…' : 'Type a message…';
   if (stopping) {
-    placeholder = 'Stopping...';
+    placeholder = 'Stopping…';
   } else if (pendingRequestType && running) {
     placeholder = getPendingRequestPresentation(pendingRequestType).composerPlaceholder;
   }

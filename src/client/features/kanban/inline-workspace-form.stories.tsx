@@ -232,7 +232,7 @@ function WorkspaceCreationPreviewSession({
             />
           ) : (
             <Button variant="outline" onClick={() => setOpen(true)}>
-              New Workspace
+              New workspace
             </Button>
           )}
           {creationPending && <WorkspaceLaunchProgress projectId={projectId} />}
@@ -385,7 +385,7 @@ async function selectSidebarLaunchMode(canvasElement: HTMLElement, mode: string)
 
 export const SidebarPeriodicTask: Story = {
   ...Sidebar,
-  play: ({ canvasElement }) => selectSidebarLaunchMode(canvasElement, 'Create Agent'),
+  play: ({ canvasElement }) => selectSidebarLaunchMode(canvasElement, 'Create agent'),
 };
 
 export const RestoredDraft: Story = {
@@ -515,16 +515,16 @@ export const PeriodicSubmissionSuccess: Story = {
   ],
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    await userEvent.click(canvas.getByRole('button', { name: 'New Workspace' }));
+    await userEvent.click(canvas.getByRole('button', { name: 'New workspace' }));
     await expect(await canvas.findByRole('textbox')).toHaveValue('Retained periodic review');
-    const launch = canvas.getByRole('button', { name: 'Create Agent' });
+    const launch = canvas.getByRole('button', { name: 'Create agent' });
     await waitFor(() => expect(launch).toBeEnabled());
     await userEvent.click(launch);
     // This close uses onCancel, which only runs after periodic success cleanup.
-    await expect(await canvas.findByRole('button', { name: 'New Workspace' })).toBeVisible();
+    await expect(await canvas.findByRole('button', { name: 'New workspace' })).toBeVisible();
     await expect(getWorkspaceCreationDraftSnapshot('preview-periodic-success').draft).toBeNull();
     await expect(readPersistedDraft('preview-periodic-success')).resolves.toBeUndefined();
-    await userEvent.click(canvas.getByRole('button', { name: 'New Workspace' }));
+    await userEvent.click(canvas.getByRole('button', { name: 'New workspace' }));
     await expect(await canvas.findByRole('textbox')).toHaveValue('');
     // Pending ownership must also be released so another task can launch.
     await waitFor(() => expect(canvas.getByRole('button', { name: /^Launch$/ })).toBeEnabled());
@@ -536,7 +536,7 @@ export const CancelRestoredDraft: Story = {
   args: { ...RestoredDraft.args, startCollapsed: true },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    await userEvent.click(canvas.getByRole('button', { name: 'New Workspace' }));
+    await userEvent.click(canvas.getByRole('button', { name: 'New workspace' }));
     await waitFor(() => expect(canvas.getByRole('button', { name: 'Cancel' })).toBeEnabled());
     await expect(canvas.getByRole('textbox')).not.toHaveValue('');
     await expect(canvas.getByText('setup-notes.txt')).toBeInTheDocument();
@@ -550,7 +550,7 @@ export const CancelRestoredDraft: Story = {
     await waitFor(async () => {
       await expect(readPersistedDraft('preview-restored-draft')).resolves.toBeUndefined();
     });
-    await userEvent.click(await canvas.findByRole('button', { name: 'New Workspace' }));
+    await userEvent.click(await canvas.findByRole('button', { name: 'New workspace' }));
     await expect(await canvas.findByRole('textbox')).toHaveValue('');
     await expect(canvas.queryByText('setup-notes.txt')).not.toBeInTheDocument();
     await userEvent.click(canvas.getByRole('button', { name: 'Workspace settings' }));

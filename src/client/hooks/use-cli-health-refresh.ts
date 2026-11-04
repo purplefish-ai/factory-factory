@@ -15,7 +15,7 @@ export function useCLIHealthRefresh() {
       );
       utils.admin.checkCLIHealth.setData({ forceRefresh: false }, health);
     } catch {
-      toast.error('Failed to refresh CLI authentication status. Try Recheck again.');
+      toast.error("Couldn't refresh CLI authentication status. Try Recheck again.");
     } finally {
       setIsRefreshing(false);
     }

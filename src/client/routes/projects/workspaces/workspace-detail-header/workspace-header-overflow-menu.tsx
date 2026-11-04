@@ -59,7 +59,7 @@ export function WorkspaceHeaderOverflowMenu({
 
   const utils = trpc.useUtils();
   const renameMutation = trpc.workspace.rename.useMutation({
-    onError: (error) => toast.error(`Failed to rename workspace: ${error.message}`),
+    onError: (error) => toast.error(`Couldn't rename workspace. ${error.message}`),
   });
 
   const handleRenameOpen = () => {

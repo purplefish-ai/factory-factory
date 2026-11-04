@@ -423,11 +423,7 @@ export const TerminalPanel = forwardRef<TerminalPanelRef, TerminalPanelProps>(
           <TerminalIcon className="h-10 w-10 text-zinc-500 mb-3" />
           <p className="text-sm font-medium text-zinc-400">No terminal open</p>
           <p className="text-xs text-zinc-500 mt-1">
-            {connected
-              ? 'Click + to open a new terminal'
-              : gaveUp
-                ? 'Disconnected'
-                : 'Connecting...'}
+            {connected ? 'Click + to open a new terminal' : gaveUp ? 'Disconnected' : 'Connecting…'}
           </p>
           {gaveUp && (
             <button

@@ -92,7 +92,7 @@ it('renders only queued prompts during hydration without persisting in StrictMod
   expect(host.textContent).toContain('Queued prompt');
   expect(host.textContent).not.toContain('Unhydrated history');
   expect(host.querySelector('.max-w-4xl')?.textContent).toContain('Queued prompt');
-  expect(host.textContent).toContain('Loading session...');
+  expect(host.textContent).toContain('Loading session…');
   expect(save).not.toHaveBeenCalled();
   unmount(root);
   expect(save).not.toHaveBeenCalled();

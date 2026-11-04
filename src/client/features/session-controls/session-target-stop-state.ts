@@ -84,6 +84,6 @@ export async function requestSessionTargetStop(
       return;
     }
     remove(key);
-    toast.error(error instanceof Error ? error.message : 'Unable to stop this item. Try again.');
+    toast.error(error instanceof Error ? error.message : "Couldn't stop this item. Try again.");
   }
 }

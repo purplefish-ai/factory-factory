@@ -44,7 +44,7 @@ type Tab = 'info' | 'diff';
 
 function getApproveButtonText(approving: boolean, reviewDecision: string | null): string {
   if (approving) {
-    return 'Approving...';
+    return 'Approving…';
   }
   if (reviewDecision === 'APPROVED') {
     return 'Approved';

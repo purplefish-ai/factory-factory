@@ -191,7 +191,7 @@ for (const viewport of mobileViewports) {
     await page.keyboard.press('Enter');
     await expect(page).toHaveURL(/\/projects\/factory-factory\/workspaces\/archived-run$/);
     await page.goto('/__mobile-baseline?surface=agents');
-    await page.getByRole('button', { name: 'Create Agent', exact: true }).click();
+    await page.getByRole('button', { name: 'Create agent', exact: true }).click();
     await expect(rail).toBeVisible();
     const form = page.locator('form');
     await form.getByRole('textbox', { name: 'Name', exact: true }).fill('Review mobile layouts');
@@ -206,8 +206,8 @@ for (const viewport of mobileViewports) {
         exact: false,
       })
     ).toBeVisible();
-    await expect(form.getByRole('button', { name: 'Create Agent', exact: true })).toBeEnabled();
-    await form.getByRole('button', { name: 'Create Agent', exact: true }).scrollIntoViewIfNeeded();
+    await expect(form.getByRole('button', { name: 'Create agent', exact: true })).toBeEnabled();
+    await form.getByRole('button', { name: 'Create agent', exact: true }).scrollIntoViewIfNeeded();
     expect(
       await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)
     ).toBeLessThanOrEqual(1);
@@ -259,7 +259,7 @@ for (const viewport of mobileViewports) {
     await expect(
       page.getByRole('heading', { name: 'Investigate labeled issues', exact: true, level: 2 })
     ).toBeVisible();
-    await page.getByRole('button', { name: 'Edit Agent', exact: true }).click();
+    await page.getByRole('button', { name: 'Edit agent', exact: true }).click();
     const instructions = page.getByRole('textbox', { name: 'Instructions', exact: true });
     await instructions.fill('Phone draft stays during resize');
     await instructions.focus();
@@ -295,7 +295,7 @@ for (const viewport of mobileViewports) {
       await page.evaluate(() => document.documentElement.scrollWidth - innerWidth)
     ).toBeLessThanOrEqual(1);
     await page.locator('a[href$="replacement-agent?kind=event"]').click();
-    await page.getByRole('button', { name: 'Edit Agent', exact: true }).click();
+    await page.getByRole('button', { name: 'Edit agent', exact: true }).click();
     await page.getByRole('button', { name: 'Replace complete specification', exact: true }).click();
     const replacement = page.getByRole('textbox', {
       name: 'Full saved specification JSON',

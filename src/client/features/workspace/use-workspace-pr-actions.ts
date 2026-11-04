@@ -40,7 +40,7 @@ export function useWorkspacePrActions(
       } catch (error) {
         return {
           success: false as const,
-          error: error instanceof Error ? error.message : 'Could not add PR',
+          error: error instanceof Error ? error.message : "Couldn't add PR",
         };
       }
     },

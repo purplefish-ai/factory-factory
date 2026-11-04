@@ -253,7 +253,7 @@ export function DevServerSetupPanel({
               ) : (
                 <>
                   <FileCodeIcon className="mr-2 h-4 w-4" />
-                  {isEditing ? 'Save Configuration' : 'Create Configuration'}
+                  {isEditing ? 'Save configuration' : 'Create configuration'}
                 </>
               )}
             </Button>

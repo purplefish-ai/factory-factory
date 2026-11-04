@@ -13,7 +13,7 @@ import { useWorkspacePanel } from './workspace-panel-context';
 
 const overflowTools = [
   { value: 'inbox', label: 'Inbox' },
-  { value: 'agents', label: 'Sub-agents' },
+  { value: 'agents', label: 'Subagents' },
   { value: 'screenshots', label: 'Screenshots' },
   { value: 'periodic-task', label: 'Scheduled agent' },
   { value: 'logs', label: 'Logs' },

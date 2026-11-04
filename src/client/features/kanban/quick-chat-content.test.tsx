@@ -26,9 +26,9 @@ vi.mock('@/client/features/chat', async (importOriginal) => {
 
 describe('QuickChatContent composer and queue controls', () => {
   it.each([
-    { promptInFlight: false, placeholder: 'Type a message...' },
-    { promptInFlight: true, placeholder: 'Message will be queued...' },
-    { promptInFlight: undefined, placeholder: 'Message will be queued...' },
+    { promptInFlight: false, placeholder: 'Type a message…' },
+    { promptInFlight: true, placeholder: 'Message will be queued…' },
+    { promptInFlight: undefined, placeholder: 'Message will be queued…' },
   ])(
     'uses prompt ownership when promptInFlight=$promptInFlight',
     ({ promptInFlight, placeholder }) => {
@@ -91,7 +91,7 @@ describe('QuickChatContent composer and queue controls', () => {
         request: { requestId: 'r-1', toolName: 'Bash', toolInput: { command: 'ls' } },
       },
       pendingRequestType: 'permission_request',
-      placeholder: 'Respond to the request above, or queue a message...',
+      placeholder: 'Respond to the request above, or queue a message…',
     },
     {
       pendingRequest: {
@@ -99,7 +99,7 @@ describe('QuickChatContent composer and queue controls', () => {
         request: { requestId: 'r-2', toolName: 'AskUserQuestion', questions: [] },
       },
       pendingRequestType: 'user_question',
-      placeholder: 'Answer the question above, or queue a message...',
+      placeholder: 'Answer the question above, or queue a message…',
     },
     {
       pendingRequest: {
@@ -107,7 +107,7 @@ describe('QuickChatContent composer and queue controls', () => {
         request: { requestId: 'r-3', toolName: 'ExitPlanMode', questions: [] },
       },
       pendingRequestType: 'plan_approval',
-      placeholder: 'Approve the plan or keep planning...',
+      placeholder: 'Approve the plan or keep planning…',
     },
   ])(
     'tells the footer and composer the agent waits on a $pendingRequestType',
@@ -184,7 +184,7 @@ describe('QuickChatContent composer and queue controls', () => {
             />
           )
         );
-        expect(input.mock.lastCall?.[0].placeholder).toBe('Stopping...');
+        expect(input.mock.lastCall?.[0].placeholder).toBe('Stopping…');
         expect(list.mock.lastCall?.[0].pendingRequestType).toBeNull();
       } finally {
         flushSync(() => root.unmount());

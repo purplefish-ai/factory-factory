@@ -44,7 +44,7 @@ describe('SessionActivityIndicator', () => {
     }
   });
 
-  it('opens a single running sub-agent directly without an expandable list', () => {
+  it('opens a single running subagent directly without an expandable list', () => {
     const onOpenSingleSubagent = vi.fn();
     const container = document.createElement('div');
     const root = createRoot(container);
@@ -64,7 +64,7 @@ describe('SessionActivityIndicator', () => {
         )
       );
       const button = container.querySelector('button');
-      expect(button?.textContent).toBe('1 sub-agent running');
+      expect(button?.textContent).toBe('1 subagent running');
       expect(button?.hasAttribute('aria-expanded')).toBe(false);
       flushSync(() => button?.click());
       expect(onOpenSingleSubagent).toHaveBeenCalledOnce();
@@ -74,7 +74,7 @@ describe('SessionActivityIndicator', () => {
     }
   });
 
-  it('does not expand a single sub-agent while its summary is unavailable', () => {
+  it('does not expand a single subagent while its summary is unavailable', () => {
     const container = document.createElement('div');
     container.innerHTML = renderToStaticMarkup(
       <SessionActivityIndicator
@@ -86,9 +86,9 @@ describe('SessionActivityIndicator', () => {
   });
 
   it.each([
-    [2, '2 sub-agents running'],
-    [3, '3 sub-agents running'],
-  ] as const)('expands running sub-agents from the %s label', (runningSubagents, label) => {
+    [2, '2 subagents running'],
+    [3, '3 subagents running'],
+  ] as const)('expands running subagents from the %s label', (runningSubagents, label) => {
     const onOpenAgents = vi.fn();
     const container = document.createElement('div');
     const root = createRoot(container);
@@ -163,7 +163,7 @@ it('removes the inline thinking slot while retaining background controls', () =>
   const markup = renderToStaticMarkup(
     <SessionActivityIndicator work={{ ...work, runningSubagents: 2 }} showThinking={false} />
   );
-  expect(markup).toContain('2 sub-agents running');
+  expect(markup).toContain('2 subagents running');
   expect(markup).not.toContain('Agent is working');
 });
 
@@ -196,5 +196,5 @@ it('does not invent agent icons while summaries are unavailable', () => {
   expect(container.querySelector('button > span[aria-hidden="true"]')?.children.length ?? 0).toBe(
     0
   );
-  expect(container.textContent).toContain('2 sub-agents running');
+  expect(container.textContent).toContain('2 subagents running');
 });

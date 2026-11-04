@@ -251,7 +251,7 @@ export function CLIHealthBanner() {
       issues={issues}
       isRefetching={isRefetching}
       onRecheck={() => {
-        runInBackground(refetch({ throwOnError: true }), 'Could not check provider status');
+        runInBackground(refetch({ throwOnError: true }), "Couldn't check provider status.");
       }}
       onDismiss={() => {
         rememberDismissedCLIHealthWarning(warningFingerprint);

@@ -41,7 +41,7 @@ it.each([null, 'Running init script...'])(
     try {
       render(true);
       expect(container.textContent).toContain('Please fix the failing tests');
-      expect(container.textContent).toContain(initMessage ?? 'Loading session...');
+      expect(container.textContent).toContain(initMessage ?? 'Loading session…');
       expect(container.textContent).not.toContain('Earlier conversation');
       expect(container.querySelectorAll('.animate-spin')).toHaveLength(1);
       const cancel = container.querySelector<HTMLButtonElement>(

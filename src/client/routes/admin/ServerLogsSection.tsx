@@ -14,24 +14,24 @@ export function ServerLogsSection() {
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <FileTextIcon className="w-5 h-5" />
-          Server Logs
+          Server logs
         </CardTitle>
         <CardDescription>View and search structured server log entries</CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-2 sm:flex-row sm:gap-3">
         <Button variant="outline" className="w-full sm:w-auto" asChild>
-          <RouterLink to="/logs">View Logs</RouterLink>
+          <RouterLink to="/logs">View logs</RouterLink>
         </Button>
         <Button
           variant="outline"
           onClick={() => {
-            runInBackground(download(), 'Could not download logs');
+            runInBackground(download(), "Couldn't download logs.");
           }}
           disabled={isDownloading}
           className="w-full sm:w-auto"
         >
           <DownloadIcon className="w-4 h-4 mr-2" />
-          {isDownloading ? 'Downloading...' : 'Download Log File'}
+          {isDownloading ? 'Downloading…' : 'Download log file'}
         </Button>
       </CardContent>
     </Card>

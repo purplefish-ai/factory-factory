@@ -22,11 +22,10 @@ export function RatchetSettingsSection() {
   const utils = trpc.useUtils();
   const updateSettings = trpc.userSettings.update.useMutation({
     onSuccess: () => {
-      toast.success('Settings updated');
-      runInBackground(utils.userSettings.get.invalidate(), 'Could not refresh data');
+      runInBackground(utils.userSettings.get.invalidate(), "Couldn't refresh data.");
     },
     onError: (error) => {
-      toast.error(`Failed to update settings: ${error.message}`);
+      toast.error(`Couldn't update settings. ${error.message}`);
     },
   });
 
@@ -37,7 +36,7 @@ export function RatchetSettingsSection() {
       );
     },
     onError: (error) => {
-      toast.error(`Failed to check PR updates: ${error.message}`);
+      toast.error(`Couldn't check PR updates. ${error.message}`);
     },
   });
 
@@ -150,7 +149,7 @@ export function RatchetSettingsSection() {
         <div className="border-t pt-4">
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <div className="space-y-0.5">
-              <Label>Manual Check</Label>
+              <Label>Manual check</Label>
               <p className="text-sm text-muted-foreground">
                 Check monitored PRs and queue actionable updates
               </p>
@@ -169,7 +168,7 @@ export function RatchetSettingsSection() {
               ) : (
                 <>
                   <ArrowsClockwiseIcon className="w-4 h-4 mr-2" />
-                  Check All PRs Now
+                  Check all PRs now
                 </>
               )}
             </Button>

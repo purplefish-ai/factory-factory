@@ -43,7 +43,7 @@ export function AppInfoSection() {
     return (
       <Card>
         <CardHeader>
-          <CardTitle>App Info</CardTitle>
+          <CardTitle>App info</CardTitle>
           <CardDescription>Repository and runtime details</CardDescription>
         </CardHeader>
         <CardContent>
@@ -56,7 +56,7 @@ export function AppInfoSection() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>App Info</CardTitle>
+        <CardTitle>App info</CardTitle>
         <CardDescription>Repository and runtime details</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">

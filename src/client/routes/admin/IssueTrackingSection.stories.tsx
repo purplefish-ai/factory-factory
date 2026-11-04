@@ -114,7 +114,7 @@ export const RevalidateEditedKey: Story = {
   render: () => <LinearSettingsStory />,
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    const key = canvas.getByLabelText('API Key');
+    const key = canvas.getByLabelText('API key');
     await userEvent.type(key, 'mock-key-a');
     await userEvent.click(canvas.getByRole('button', { name: 'Validate' }));
     await canvas.findByText('Connected as Mock Viewer A');
@@ -151,7 +151,7 @@ export const EditDuringValidation: Story = {
   render: () => <LinearSettingsStory validationDelay={1000} />,
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    const key = canvas.getByLabelText('API Key');
+    const key = canvas.getByLabelText('API key');
     await userEvent.type(key, 'mock-key-a');
     await userEvent.click(canvas.getByRole('button', { name: 'Validate' }));
     await userEvent.clear(key);
@@ -169,7 +169,7 @@ export const RetryFailedSave: Story = {
   render: () => <LinearSettingsStory failFirstSave />,
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    const key = canvas.getByLabelText('API Key');
+    const key = canvas.getByLabelText('API key');
     await userEvent.type(key, 'mock-key-a');
     await userEvent.click(canvas.getByRole('button', { name: 'Validate' }));
     await canvas.findByText('Connected as Mock Viewer A');

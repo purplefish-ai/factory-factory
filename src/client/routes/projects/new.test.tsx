@@ -230,14 +230,14 @@ describe('NewProjectPage project loading', () => {
   it('waits for the project list before showing onboarding', () => {
     // An explicitly undefined list represents the pending query.
     const { container, root, renderProjects } = renderPage({ projects: undefined });
-    expect(container.textContent).not.toContain('Get Started');
+    expect(container.textContent).not.toContain('Get started');
     expect(container.textContent).not.toContain('Add your first repository');
     expect(container.textContent).toContain('Loading projects');
 
     renderProjects(projects);
     expect(container.textContent).not.toContain('Loading projects');
-    expect(container.textContent).not.toContain('Get Started');
-    expect(container.querySelector('h1')?.textContent).toBe('Add Project');
+    expect(container.textContent).not.toContain('Get started');
+    expect(container.querySelector('h1')?.textContent).toBe('Add project');
     root.unmount();
   });
 
@@ -247,13 +247,13 @@ describe('NewProjectPage project loading', () => {
       (element) => !element.closest('[aria-hidden="true"]')
     );
     expect(statuses).toHaveLength(1);
-    expect(statuses[0]?.textContent).toBe('Loading projects...');
+    expect(statuses[0]?.textContent).toBe('Loading projects…');
     root.unmount();
   });
 
   it('shows onboarding only for a loaded empty project list', () => {
     const { container, root } = renderPage({ projects: [] });
-    expect(container.textContent).toContain('Get Started');
+    expect(container.textContent).toContain('Get started');
     expect(container.textContent).toContain('Add your first repository');
     root.unmount();
   });

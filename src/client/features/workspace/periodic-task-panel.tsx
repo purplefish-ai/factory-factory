@@ -19,7 +19,7 @@ function agentReadError(
   if (error.data?.code === 'NOT_FOUND') {
     return 'Agent not found. Its existing workspaces remain available.';
   }
-  return `Could not ${refresh ? 'refresh' : 'load'} agent: ${error.message}`;
+  return `Couldn't ${refresh ? 'refresh' : 'load'} agent. ${error.message}`;
 }
 
 function managementPath(slug: string | undefined, id?: string): string {
@@ -41,7 +41,7 @@ function ProjectLookupState({
   }
   return (
     <div role="alert" className="space-y-2 text-xs">
-      <p className="text-destructive">Could not load agent project: {error.message}</p>
+      <p className="text-destructive">Couldn't load agent project. {error.message}</p>
       <Button size="sm" variant="outline" onClick={retry}>
         Retry project
       </Button>

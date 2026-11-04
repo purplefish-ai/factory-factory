@@ -85,7 +85,7 @@ export function useEventAgentEditor(props: EventAgentEditorProps) {
   const showFailure = (failure: unknown, captured: number) => {
     if (isCurrent(captured)) {
       setError(
-        failure instanceof Error ? failure.message : 'Could not complete this request. Try again.'
+        failure instanceof Error ? failure.message : "Couldn't complete this request. Try again."
       );
     }
   };

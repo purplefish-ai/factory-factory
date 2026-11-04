@@ -97,7 +97,7 @@ export const DefaultsFailed: Story = {
     provider: null,
     model: undefined,
     models: [],
-    error: 'Could not load chat defaults',
+    error: "Couldn't load chat defaults",
     onRetry: fn(),
   },
 };

@@ -68,7 +68,10 @@ export function describeSessionCloseRisk(
   label: string,
   risk: SessionCloseRisk
 ): { title: string; description: string; confirmText: string } {
-  const outcome = 'its transcript moves to Closed sessions.';
+  const outcome =
+    risk.queuedMessageCount > 0
+      ? 'its transcript moves to Closed sessions. You can read it there; discarded queued messages cannot be recovered.'
+      : 'its transcript moves to Closed sessions. You can read it there.';
   const queued = formatQueuedMessages(risk.queuedMessageCount);
   const activity = risk.awaitingInput ? 'is waiting for your input' : 'is still working';
   if (risk.running && risk.queuedMessageCount > 0) {
@@ -86,7 +89,7 @@ export function describeSessionCloseRisk(
     };
   }
   return {
-    title: `Discard queued messages in ${label}?`,
+    title: `Discard and close ${label}?`,
     description: `${label} has ${queued} that ${risk.queuedMessageCount === 1 ? 'has' : 'have'} not been sent. Closing the tab discards ${risk.queuedMessageCount === 1 ? 'it' : 'them'} and ${outcome}`,
     confirmText: 'Discard and close',
   };

@@ -1,13 +1,16 @@
 // @vitest-environment jsdom
 
-import { createElement } from 'react';
+import { act, createElement } from 'react';
 import { flushSync } from 'react-dom';
 import { createRoot } from 'react-dom/client';
+import { toast } from 'sonner';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { IdeSettingsSection } from './IdeSettingsSection';
 
 const mocks = vi.hoisted(() => ({
   updateSettingsMutate: vi.fn(),
+  onSaved: (() => Promise.resolve()) as () => Promise<void>,
+  onTested: (() => undefined) as () => void,
   testCustomCommandMutate: vi.fn(),
   userSettings: {
     preferredIde: 'cursor' as 'cursor' | 'vscode' | 'custom',
@@ -24,9 +27,20 @@ vi.mock('@/client/lib/trpc', () => ({
     }),
     userSettings: {
       get: { useQuery: () => ({ data: mocks.userSettings, isLoading: false }) },
-      update: { useMutation: () => ({ mutate: mocks.updateSettingsMutate, isPending: false }) },
+      update: {
+        useMutation: (options: { onSuccess: (...args: unknown[]) => unknown }) => {
+          mocks.onSaved = () =>
+            Promise.resolve(options.onSuccess({}, { customIdeCommand: 'code {workspace}' })).then(
+              () => undefined
+            );
+          return { mutate: mocks.updateSettingsMutate, isPending: false };
+        },
+      },
       testCustomCommand: {
-        useMutation: () => ({ mutate: mocks.testCustomCommandMutate, isPending: false }),
+        useMutation: (options: { onSuccess: () => void }) => {
+          mocks.onTested = options.onSuccess;
+          return { mutate: mocks.testCustomCommandMutate, isPending: false };
+        },
       },
     },
   },
@@ -42,6 +56,18 @@ afterEach(() => {
 });
 
 describe('IdeSettingsSection', () => {
+  it('keeps custom-command autosaves quiet and confirms only an explicit command test', async () => {
+    const root = createRoot(document.createElement('div'));
+    try {
+      flushSync(() => root.render(createElement(IdeSettingsSection)));
+      await act(async () => mocks.onSaved());
+      expect(toast.success).not.toHaveBeenCalled();
+      mocks.onTested();
+      expect(toast.success).toHaveBeenCalledExactlyOnceWith('Command executed');
+    } finally {
+      flushSync(() => root.unmount());
+    }
+  });
   it('preserves the saved custom command when switching to a built-in IDE', () => {
     mocks.userSettings.preferredIde = 'custom';
     mocks.userSettings.customIdeCommand = 'code-insiders {workspace}';

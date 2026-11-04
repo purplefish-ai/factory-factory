@@ -139,7 +139,7 @@ export function ProviderCliWarning({
         onClick={() => {
           runInBackground(
             utils.admin.checkCLIHealth.invalidate(),
-            'Could not check provider status'
+            "Couldn't check provider status."
           );
         }}
         disabled={isRefetching}

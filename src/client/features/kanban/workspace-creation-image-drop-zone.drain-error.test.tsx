@@ -54,7 +54,7 @@ it('reports a failed drain chunk and retries it on the next drop', async () => {
     await drop(target, 'lost.png');
     await waitForReact(() =>
       expect(toastError).toHaveBeenCalledExactlyOnceWith(
-        'Dropped images could not be attached. Try dropping them again.'
+        "Couldn't attach dropped images. Try dropping them again."
       )
     );
     expect(getPendingWorkspaceCreationDropProjectIds()).not.toContain(projectId);

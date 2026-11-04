@@ -56,7 +56,7 @@ describe('LoadingIndicator', () => {
       root.render(createElement(LoadingIndicator, { latestReasoning: null }));
     });
 
-    expect(container.textContent).toContain('Agent is working...');
+    expect(container.textContent).toContain('Agent is working…');
 
     root.unmount();
   });
@@ -114,7 +114,7 @@ describe('LoadingIndicator', () => {
       );
     });
 
-    expect(container.textContent).toContain('Agent is working...');
+    expect(container.textContent).toContain('Agent is working…');
 
     root.unmount();
   });

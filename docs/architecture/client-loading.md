@@ -129,7 +129,7 @@ rejection goes to its caller. The rule is therefore:
 - A mutation that reports errors per call, through a `mutateAsync` try/catch, or
   with inline error UI sets `meta: { errorToast: false }`.
 - Otherwise a failure shows an error toast. For a specific title, set a literal
-  string such as `meta: { errorToast: "Couldn't start dev server" }`; it is
+  string such as `meta: { errorToast: "Couldn't start dev server." }`; it is
   shown verbatim, and the server message becomes the description.
 
 Error toasts stay for 10 seconds and have a close button. `toast.error` gets

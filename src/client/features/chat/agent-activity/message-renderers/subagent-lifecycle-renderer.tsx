@@ -9,7 +9,7 @@ export function SubagentLifecycleRenderer({
   message: ChatMessage;
   onOpenSubagent?: (subagentId: string) => void;
 }) {
-  const text = message.message?.text ?? message.text ?? 'Sub-agent';
+  const text = message.message?.text ?? message.text ?? 'Subagent';
   const failed = message.message?.status === 'failed';
   const content = (
     <>
@@ -23,7 +23,7 @@ export function SubagentLifecycleRenderer({
   return onOpenSubagent && subagentId ? (
     <button
       type="button"
-      title="Open sub-agent tab"
+      title="Open subagent tab"
       onClick={() => onOpenSubagent(subagentId)}
       className={cn(
         className,

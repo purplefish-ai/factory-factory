@@ -161,11 +161,13 @@ describe('Linear settings save completion', () => {
   it('keeps validated settings during a pending save and after failure for retry', async () => {
     await prepareSave();
     expectValidated();
-    expect(button('Saving...')?.disabled).toBe(true);
+    expect(button('Saving…')?.disabled).toBe(true);
     await settle(() => requests[0]?.fail());
     expectValidated();
     expect(button('Save')?.disabled).toBe(false);
-    expect(toast.error).toHaveBeenCalledExactlyOnceWith('Failed to save: Mock save failure');
+    expect(toast.error).toHaveBeenCalledExactlyOnceWith(
+      "Couldn't save issue tracking settings. Mock save failure"
+    );
     await settle(() => button('Save')?.click(), 1);
     expect(requests[1]?.input).toEqual(savedInput);
     expect(validationCount).toBe(1);

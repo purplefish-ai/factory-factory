@@ -50,7 +50,7 @@ async function imageAttachment(
       throw error;
     }
     const message = error instanceof Error ? error.message : 'Unknown error';
-    throw new Error(`Failed to read image: ${message}`);
+    throw new Error(`Couldn't read image. ${message}`);
   }
 
   return {
@@ -70,7 +70,7 @@ async function textAttachment(file: File): Promise<MessageAttachment> {
     data = await readTextFile(file);
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
-    throw new Error(`Failed to read ${file.name}: ${message}`);
+    throw new Error(`Couldn't read ${file.name}. ${message}`);
   }
   return {
     id: generateAttachmentId(),
@@ -107,7 +107,7 @@ export async function collectAttachments(
   const convert = async ({ file, type }: (typeof inputs)[number]) => {
     try {
       if (!file) {
-        throw new Error(`Could not extract image from clipboard (${type})`);
+        throw new Error(`Couldn't extract image from clipboard (${type})`);
       }
       const attachment =
         batch.mode === 'clipboard-images'

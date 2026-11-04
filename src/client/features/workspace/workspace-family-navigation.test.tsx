@@ -153,7 +153,7 @@ it('offers retry after a failed family read instead of claiming there are no chi
   await open();
   await waitForReact(() =>
     expect(document.querySelector('[role="menu"]')?.textContent).toContain(
-      'Could not load children. Retry'
+      "Couldn't load children. Retry"
     )
   );
   expect(document.querySelector('[role="menu"]')?.textContent).not.toContain('No active children');

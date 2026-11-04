@@ -324,8 +324,8 @@ function UntrackedDirContents({
         style={{ height: FILE_TREE_ROW_HEIGHT, paddingLeft: depth * 12 + 8 }}
       >
         <WarningCircleIcon className="h-4 w-4 shrink-0" />
-        <span className="truncate" title="Failed to load directory contents">
-          Failed to load directory contents
+        <span className="truncate" title="Couldn't load directory contents">
+          Couldn't load directory contents
         </span>
       </div>
     );

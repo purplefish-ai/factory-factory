@@ -268,7 +268,7 @@ it('offers a retry after saved defaults fail instead of leaving selection loadin
   render();
   expect(result?.loading).toBe(false);
   expect(result?.ready).toBe(false);
-  expect(result?.pickerProps.error).toBe('Could not load chat defaults');
+  expect(result?.pickerProps.error).toBe("Couldn't load chat defaults");
   result?.pickerProps.onRetry?.();
   expect(mocks.refetchSettings).toHaveBeenCalledOnce();
   mocks.settingsError = null;
@@ -390,7 +390,7 @@ it('distinguishes pending discovery and failure from known unsupported capabilit
   mocks.launchErrors.set('CODEX:saved-sol:auto', new Error('Probe failed'));
   mounted.render();
   expect(mounted.current.controlsProps.reasoning?.loading).toBe(false);
-  expect(mounted.current.controlsProps.reasoning?.error).toContain('Could not load');
+  expect(mounted.current.controlsProps.reasoning?.error).toContain("Couldn't load");
   mounted.current.controlsProps.reasoning?.onRetry();
   expect(mocks.refetchLaunch).toHaveBeenCalled();
   mocks.launchErrors.delete('CODEX:saved-sol:auto');
@@ -540,7 +540,7 @@ it('uses the manual account for creation, launch options and model discovery, an
   mocks.launchErrors.set('CODEX:saved-sol:work', new Error('Work probe failed'));
   mounted.render();
   expect(mounted.current.ready).toBe(false);
-  expect(mounted.current.controlsProps.reasoning?.error).toContain('Could not load');
+  expect(mounted.current.controlsProps.reasoning?.error).toContain("Couldn't load");
   flushSync(() => mounted.current.pickerProps.onProviderChange?.('CLAUDE'));
   expect(mounted.current.creationDefaults).not.toHaveProperty('codexAccountId');
   expect(mounted.current.controlsProps.account).toBeUndefined();

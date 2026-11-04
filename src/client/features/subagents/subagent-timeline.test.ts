@@ -146,8 +146,8 @@ describe('mergeSubagentTimeline', () => {
         [{ ...agent, name: null, status, completedAt: null }]
       );
       expect(merged.map((item) => item.text)).toEqual([
-        'Sub-agent started working',
-        `Sub-agent ${status}`,
+        'Subagent started working',
+        `Subagent ${status}`,
       ]);
       expect(merged[1]?.timestamp).toBe(agent.updatedAt);
     }

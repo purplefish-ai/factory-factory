@@ -81,7 +81,7 @@ function handleFormKeyDown(
 }
 
 function reportUnavailableLaunch(reason?: string) {
-  toast.error(reason ?? 'Workspace creation is not ready');
+  toast.error(reason ?? "Couldn't create workspace. Creation is not ready.");
 }
 
 interface InlineWorkspaceFormProps {
@@ -105,7 +105,9 @@ async function processFileInput(event: React.ChangeEvent<HTMLInputElement>) {
   });
   if (errors.length > 0) {
     const formattedErrors = errors.map(({ fileName, message }) => `${fileName}: ${message}`);
-    toast.error(`Could not add ${errors.length} file(s): ${formattedErrors.join('; ')}`);
+    toast.error(
+      `Couldn't add ${errors.length} ${errors.length === 1 ? 'file' : 'files'}. ${formattedErrors.join('; ')}`
+    );
   }
   event.target.value = '';
   return { newAttachments };
@@ -113,7 +115,7 @@ async function processFileInput(event: React.ChangeEvent<HTMLInputElement>) {
 
 const launchButtonLabels: Record<string, string> = {
   STANDARD: 'Launch',
-  PERIODIC_TASK: 'Create Agent',
+  PERIODIC_TASK: 'Create agent',
 };
 
 type RouterOutputs = inferRouterOutputs<AppRouter>;
@@ -230,7 +232,7 @@ export function InlineWorkspaceForm({
           onComplete();
         }
       }),
-      'Could not finalize task creation'
+      "Couldn't finalize task creation."
     );
   };
 
@@ -259,7 +261,7 @@ export function InlineWorkspaceForm({
       const optimisticWorkspace = createOptimisticWorkspaceSummary({
         id: optimisticWorkspaceId,
         projectId: input.projectId,
-        name: input.type === 'MANUAL' ? input.name : 'New Workspace',
+        name: input.type === 'MANUAL' ? input.name : 'New workspace',
         ratchetEnabled: input.type === 'MANUAL' ? (input.ratchetEnabled ?? true) : true,
       });
 
@@ -291,14 +293,14 @@ export function InlineWorkspaceForm({
       seedCreatedWorkspaceDetail(queryClient, workspace);
       runInBackground(
         utils.workspace.listForProject.invalidate({ projectId: workspace.projectId }),
-        'Could not refresh data'
+        "Couldn't refresh data."
       );
       completeCreation(context?.submission ?? submitted.current, () => onCreated(workspace.id));
     },
     onError: (error, input, context) => {
       const token = context?.submission ?? submitted.current;
       if (token) {
-        submission.fail(token, `Failed to create workspace: ${error.message}`);
+        submission.fail(token, `Couldn't create workspace. ${error.message}`);
       }
       if (context) {
         // Drop only the optimistic row. Restoring the pre-mutation cache would
@@ -310,7 +312,7 @@ export function InlineWorkspaceForm({
           (old) => removeWorkspaceFromProjectWorkspaceCache(old, context.optimisticWorkspaceId)
         );
       }
-      toast.error(`Failed to create workspace: ${error.message}`);
+      toast.error(`Couldn't create workspace. ${error.message}`);
     },
   });
 
@@ -320,16 +322,16 @@ export function InlineWorkspaceForm({
       toast.success(`Agent "${task.name}" created`);
       runInBackground(
         invalidateAgentProjectQueries(utils, task.projectId),
-        'Could not refresh data'
+        "Couldn't refresh data."
       );
       completeCreation(context?.submission ?? submitted.current, onCancel);
     },
     onError: (error, _input, context) => {
       const token = context?.submission ?? submitted.current;
       if (token) {
-        submission.fail(token, `Failed to create agent: ${error.message}`);
+        submission.fail(token, `Couldn't create agent. ${error.message}`);
       }
-      toast.error(`Failed to create agent: ${error.message}`);
+      toast.error(`Couldn't create agent. ${error.message}`);
     },
   });
 
@@ -518,7 +520,7 @@ export function InlineWorkspaceForm({
             multiple
             accept={ATTACHMENT_ACCEPT_TYPES}
             onChange={(event) => {
-              runInBackground(handleFileSelect(event), 'Could not attach file');
+              runInBackground(handleFileSelect(event), "Couldn't attach file.");
             }}
             className="hidden"
             aria-label="Attach files"
@@ -538,7 +540,7 @@ export function InlineWorkspaceForm({
             size="sm"
             className="h-7 text-xs whitespace-nowrap"
             onClick={() => {
-              runInBackground(recovery.discardDraft(), 'Could not clear canceled task');
+              runInBackground(recovery.discardDraft(), "Couldn't clear canceled task.");
               onCancel();
             }}
             disabled={isBusy}
@@ -577,7 +579,7 @@ export function InlineWorkspaceForm({
                 </DropdownMenuItem>
                 <DropdownMenuItem className="text-xs" onClick={() => setMode('PERIODIC_TASK')}>
                   <RobotIcon className="mr-1.5 h-3 w-3" />
-                  Create Agent
+                  Create agent
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>

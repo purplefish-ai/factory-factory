@@ -26,8 +26,7 @@ export function AdversarialReviewSection() {
   const [localCodexModel, setLocalCodexModel] = useState('default');
   const updateSettings = trpc.userSettings.update.useMutation({
     onSuccess: () => {
-      toast.success('Adversarial review settings updated');
-      runInBackground(utils.userSettings.get.invalidate(), 'Could not refresh data');
+      runInBackground(utils.userSettings.get.invalidate(), "Couldn't refresh data.");
     },
     onError: (error, variables) => {
       // Roll back only the selector this failed mutation touched, and only if
@@ -49,7 +48,7 @@ export function AdversarialReviewSection() {
             : model
         );
       }
-      toast.error(`Failed to update adversarial review settings: ${error.message}`);
+      toast.error(`Couldn't update adversarial review settings. ${error.message}`);
     },
   });
 
@@ -62,7 +61,7 @@ export function AdversarialReviewSection() {
     return (
       <Card>
         <CardHeader>
-          <CardTitle>Adversarial Review</CardTitle>
+          <CardTitle>Adversarial review</CardTitle>
           <CardDescription>Reviewer provider for the open PR</CardDescription>
         </CardHeader>
         <CardContent>
@@ -100,7 +99,7 @@ export function AdversarialReviewSection() {
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <ShieldWarningIcon className="w-5 h-5" />
-          Adversarial Review
+          Adversarial review
         </CardTitle>
         <CardDescription>
           Review an open PR with a different provider/model than the one that built it — e.g. build

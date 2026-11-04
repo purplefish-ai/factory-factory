@@ -97,14 +97,14 @@ export interface UseChatStateReturn extends Omit<ChatState, 'queuedMessages'> {
 
 function showAttachmentPersistenceError(operation: 'save' | 'clear') {
   if (operation === 'save') {
-    toast.error('Attachments were not autosaved', {
+    toast.error("Couldn't autosave attachments.", {
       description:
         'They are still in this composer, but may be lost if you reload or switch sessions.',
     });
     return;
   }
 
-  toast.error('Saved attachments could not be cleared', {
+  toast.error("Couldn't clear saved attachments.", {
     description: 'Previously saved attachments may reappear after a reload or session switch.',
   });
 }

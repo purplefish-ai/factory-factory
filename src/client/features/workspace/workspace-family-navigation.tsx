@@ -139,7 +139,7 @@ function FamilyChildren({
           void children.refetch();
         }}
       >
-        Could not load children. Retry
+        Couldn't load children. Retry
       </DropdownMenuItem>
     );
   }
@@ -208,7 +208,7 @@ function FamilyMenuContent({
             void root.refetch();
           }}
         >
-          Could not load parent. Retry
+          Couldn't load parent. Retry
         </DropdownMenuItem>
       )}
       <DropdownMenuSeparator />

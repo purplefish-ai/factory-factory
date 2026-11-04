@@ -258,7 +258,7 @@ describe('ScreenshotsPanel', () => {
     mocks.deletePending = false;
     flushSync(() => mocks.deleteOptions?.onError?.(new Error('EACCES: permission denied')));
     rerender();
-    expect(mocks.toastError).toHaveBeenCalledWith("Couldn't delete screenshot", {
+    expect(mocks.toastError).toHaveBeenCalledWith("Couldn't delete screenshot.", {
       description: 'EACCES: permission denied',
     });
     expect(container.querySelector('[role="alertdialog"]')).not.toBeNull();

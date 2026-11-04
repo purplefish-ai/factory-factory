@@ -114,7 +114,7 @@ export default function NewProjectPage() {
   // Local path creation
   const createProject = trpc.project.create.useMutation({
     onSuccess: (project) => {
-      runInBackground(utils.project.list.invalidate(), 'Could not refresh data');
+      runInBackground(utils.project.list.invalidate(), "Couldn't refresh data.");
       void navigate(`/projects/${project.slug}`);
     },
     onError: (err) => setError(err.message),
@@ -123,7 +123,7 @@ export default function NewProjectPage() {
   // GitHub URL creation
   const createFromGithub = trpc.project.createFromGithub.useMutation({
     onSuccess: (project) => {
-      runInBackground(utils.project.list.invalidate(), 'Could not refresh data');
+      runInBackground(utils.project.list.invalidate(), "Couldn't refresh data.");
       void navigate(`/projects/${project.slug}`);
     },
     onError: (err) => setGithubError(err.message),
@@ -175,7 +175,7 @@ export default function NewProjectPage() {
   const handleTerminalClose = useCallback(() => {
     setTerminalOpen(false);
     // Re-check auth after terminal closes
-    runInBackground(refetchAuth(), 'Could not refresh data');
+    runInBackground(refetchAuth(), "Couldn't refresh data.");
     void refreshCLIHealth();
   }, [refetchAuth, refreshCLIHealth]);
 
@@ -192,8 +192,8 @@ export default function NewProjectPage() {
     setStartupScript,
     onSubmit: handleLocalSubmit,
     isSubmitting: createProject.isPending,
-    submitLabel: 'Add Project',
-    submittingLabel: 'Adding...',
+    submitLabel: 'Add project',
+    submittingLabel: 'Adding…',
   } satisfies Omit<
     ProjectRepoFormProps,
     'helperText' | 'idPrefix' | 'footerActions' | 'submitFullWidth'
@@ -213,8 +213,8 @@ export default function NewProjectPage() {
     setStartupScript: setGithubStartupScript,
     onSubmit: handleGithubSubmit,
     isSubmitting: createFromGithub.isPending,
-    submitLabel: 'Clone & Add Project',
-    submittingLabel: 'Cloning...',
+    submitLabel: 'Clone & add project',
+    submittingLabel: 'Cloning…',
   };
 
   const sourceSelector = (
@@ -248,14 +248,14 @@ export default function NewProjectPage() {
           <Card>
             <CardHeader>
               <div role="alert">
-                <CardTitle>Unable to load projects</CardTitle>
+                <CardTitle>Couldn't load projects</CardTitle>
                 <CardDescription>{projectsError.message}</CardDescription>
               </div>
             </CardHeader>
             <CardContent className="flex gap-2">
               <Button onClick={() => void refetchProjects()}>Retry</Button>
               <Button variant="outline" asChild>
-                <Link to="/projects">Back to Projects</Link>
+                <Link to="/projects">Back to projects</Link>
               </Button>
             </CardContent>
           </Card>
@@ -265,7 +265,7 @@ export default function NewProjectPage() {
     return (
       <output className="flex h-full items-center justify-center gap-2 p-6">
         <Spinner className="size-5" aria-hidden="true" />
-        <span className="text-muted-foreground">Loading projects...</span>
+        <span className="text-muted-foreground">Loading projects…</span>
       </output>
     );
   }
@@ -284,7 +284,7 @@ export default function NewProjectPage() {
 
           <Card>
             <CardHeader>
-              <CardTitle>Get Started</CardTitle>
+              <CardTitle>Get started</CardTitle>
               <CardDescription>
                 Add your first repository to begin using FactoryFactory.
               </CardDescription>
@@ -307,7 +307,7 @@ export default function NewProjectPage() {
 
               <DataImportButton
                 onImportSuccess={() => {
-                  runInBackground(handleImportSuccess(), 'Could not open projects after import');
+                  runInBackground(handleImportSuccess(), "Couldn't open projects after import.");
                 }}
                 variant="outline"
                 className="w-full"
@@ -339,7 +339,7 @@ export default function NewProjectPage() {
 
       <div>
         <div>
-          <h1 className="text-2xl font-bold">Add Project</h1>
+          <h1 className="text-2xl font-bold">Add project</h1>
           <p className="text-muted-foreground mt-1">
             Add a repository to manage with FactoryFactory
           </p>
@@ -348,7 +348,7 @@ export default function NewProjectPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Repository Details</CardTitle>
+          <CardTitle>Repository details</CardTitle>
           <CardDescription>Provide a local path or clone from GitHub.</CardDescription>
         </CardHeader>
         <CardContent>

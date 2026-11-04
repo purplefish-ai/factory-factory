@@ -263,7 +263,7 @@ export const SubagentTimelineRecovery: Story = {
   args: {
     loadingSession: false,
     subagentTimelineError: {
-      message: 'Some sub-agent activity could not be loaded.',
+      message: 'Some subagent activity could not be loaded.',
       onRetry: () => undefined,
     },
   },

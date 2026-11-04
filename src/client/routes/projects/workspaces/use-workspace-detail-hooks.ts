@@ -105,7 +105,7 @@ export function useWorkspaceInitStatus(
     if (hasWorktreePath && !prevHasWorktreePathRef.current) {
       runInBackground(
         utils.workspace.get.invalidate({ id: workspaceId }),
-        'Could not refresh data'
+        "Couldn't refresh data."
       );
     }
     prevHasWorktreePathRef.current = hasWorktreePath;
@@ -117,7 +117,7 @@ export function useWorkspaceInitStatus(
       if (isTransitionToReady || isStaleOnFirstLoad) {
         runInBackground(
           utils.workspace.get.invalidate({ id: workspaceId }),
-          'Could not refresh data'
+          "Couldn't refresh data."
         );
       }
     }

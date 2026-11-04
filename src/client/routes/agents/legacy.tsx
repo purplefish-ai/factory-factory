@@ -24,7 +24,7 @@ function LegacyAgentDetail({ id }: { id: string }) {
         <p>
           {task.error.data?.code === 'NOT_FOUND'
             ? 'Agent not found. This agent is no longer available.'
-            : `Could not load agent: ${task.error.message}`}
+            : `Couldn't load agent. ${task.error.message}`}
         </p>
         <Button
           onClick={() => {
@@ -39,7 +39,7 @@ function LegacyAgentDetail({ id }: { id: string }) {
   if (owner.error && !listedOwner) {
     return (
       <div role="alert" className="space-y-3 p-6">
-        <p>Could not load agent project: {owner.error.message}</p>
+        <p>Couldn't load agent project. {owner.error.message}</p>
         <Button
           onClick={() => {
             void owner.refetch();
@@ -62,7 +62,7 @@ function LegacyAgentsIndex() {
   if (navigation.projectsError) {
     return (
       <div role="alert" className="space-y-3 p-6">
-        <p>Could not load projects: {navigation.projectsError.message}</p>
+        <p>Couldn't load projects. {navigation.projectsError.message}</p>
         <Button
           onClick={() => {
             void navigation.refetchProjects();

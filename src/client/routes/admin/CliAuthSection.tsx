@@ -19,7 +19,7 @@ export function CliAuthSection() {
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <TerminalIcon className="w-5 h-5" />
-          CLI Authentication
+          CLI authentication
         </CardTitle>
         <CardDescription>
           Check and manage authentication for Claude, Codex, and GitHub CLI

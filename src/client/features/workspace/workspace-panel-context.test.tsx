@@ -337,6 +337,39 @@ describe('WorkspacePanelProvider persistence', () => {
     actFlushSync(() => root.unmount());
   });
 
+  it.each([
+    ['', 'Sub-agent child-1', 'Subagent child-1'],
+    ['Sub-agent child-1', 'Sub-agent child-1', 'Sub-agent child-1'],
+    ['', 'Sub-agent custom label', 'Sub-agent custom label'],
+  ])(
+    'normalizes only generated unnamed legacy tab labels (name=%s label=%s)',
+    async (name, label, expected) => {
+      const tab: MainViewTab = {
+        id: 'subagent-session-1-child-1',
+        type: 'subagent',
+        label,
+        subagentSelection: {
+          ...runningSelection,
+          subagent: { ...runningSelection.subagent, name },
+        },
+      };
+      localStorage.setItem(
+        TABS_STORAGE_KEY,
+        JSON.stringify([{ id: 'chat', type: 'chat', label: 'Chat' }, tab])
+      );
+      localStorage.setItem(ACTIVE_TAB_STORAGE_KEY, tab.id);
+      const view = renderPanel(<WorkspacePanelProbe />);
+      try {
+        await vi.waitFor(() => expect(readProbe(view.container).activeTabId).toBe(tab.id));
+        expect(
+          readProbe(view.container).tabs.find((candidate) => candidate.id === tab.id)?.label
+        ).toBe(expected);
+      } finally {
+        actFlushSync(() => view.root.unmount());
+      }
+    }
+  );
+
   it('restores a valid persisted sub-agent tab and rejects an incomplete one', async () => {
     const validTab: MainViewTab = {
       id: 'subagent-session-1-child-1',

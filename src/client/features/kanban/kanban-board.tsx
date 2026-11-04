@@ -114,10 +114,10 @@ function KanbanBoardContent() {
   // Context commands are recreated on every render. Stable wrappers let the
   // memoized cards skip re-rendering when another workspace changes.
   const handleToggleRatcheting = useStableCallback((workspaceId: string, enabled: boolean) => {
-    runInBackground(toggleWorkspaceRatcheting(workspaceId, enabled), 'Could not update workspace');
+    runInBackground(toggleWorkspaceRatcheting(workspaceId, enabled), "Couldn't update workspace.");
   });
   const handleArchiveWorkspace = useStableCallback((workspaceId: string) => {
-    runInBackground(archiveWorkspace(workspaceId), 'Could not archive workspace');
+    runInBackground(archiveWorkspace(workspaceId), "Couldn't archive workspace.");
   });
   const handleRenameWorkspace = useStableCallback(renameWorkspace);
   const handleGitLockOpenChange = useStableCallback((open: boolean) => {
@@ -225,7 +225,7 @@ function KanbanBoardContent() {
     return (
       <div className="flex flex-col items-center justify-center py-12 text-center">
         <p className="text-destructive mb-4">
-          Failed to load workspaces: {error?.message ?? 'Unknown error'}
+          Couldn't load workspaces. {error?.message ?? 'Unknown error'}
         </p>
         <Button variant="outline" onClick={() => refetch()}>
           <ArrowsClockwiseIcon className="h-4 w-4 mr-2" />
@@ -352,9 +352,9 @@ function KanbanBoardContent() {
         open={bulkArchiveDialogOpen}
         onOpenChange={setBulkArchiveDialogOpen}
         onConfirm={() => {
-          runInBackground(handleBulkArchiveConfirm(), 'Could not archive workspaces');
+          runInBackground(handleBulkArchiveConfirm(), "Couldn't archive workspaces.");
         }}
-        description={`This will archive all ${workspacesInBulkArchiveColumn.length} workspace(s) in this column. Any uncommitted changes will be committed before the worktrees are removed.`}
+        description={`This will archive ${workspacesInBulkArchiveColumn.length} ${workspacesInBulkArchiveColumn.length === 1 ? 'workspace' : 'workspaces'} in this column. Uncommitted changes will be committed before the worktrees are removed. Chat history and branches are kept. Worktree removal cannot be undone in the app.`}
       />
 
       {archiveGitLockDialog}

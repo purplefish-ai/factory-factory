@@ -131,7 +131,7 @@ describe('ChatContent runtime error placeholder', () => {
       );
       expect(transcript.mock.lastCall?.[0].header).toBeUndefined();
       expect(input.mock.lastCall?.[0].placeholder).toBe(
-        'Agent encountered an error. Type a message to retry...'
+        "Couldn't continue this chat. Type a message to retry…"
       );
     } finally {
       flushSync(() => root.unmount());
@@ -274,9 +274,9 @@ describe('ChatContent agent error strip', () => {
 
 describe('ChatContent message queue wording', () => {
   it.each([
-    { promptInFlight: false, placeholder: 'Type a message...' },
-    { promptInFlight: true, placeholder: 'Message will be queued...' },
-    { promptInFlight: undefined, placeholder: 'Message will be queued...' },
+    { promptInFlight: false, placeholder: 'Type a message…' },
+    { promptInFlight: true, placeholder: 'Message will be queued…' },
+    { promptInFlight: undefined, placeholder: 'Message will be queued…' },
   ])(
     'uses prompt ownership when promptInFlight=$promptInFlight',
     ({ promptInFlight, placeholder }) => {
@@ -330,7 +330,7 @@ describe('ChatContent pending request wording', () => {
         request: { requestId: 'r-1', toolName: 'Bash', toolInput: { command: 'ls' } },
       },
       pendingRequestType: 'permission_request',
-      placeholder: 'Respond to the request above, or queue a message...',
+      placeholder: 'Respond to the request above, or queue a message…',
     },
     {
       pendingRequest: {
@@ -338,7 +338,7 @@ describe('ChatContent pending request wording', () => {
         request: { requestId: 'r-2', toolName: 'ExitPlanMode', toolInput: {} },
       },
       pendingRequestType: 'plan_approval',
-      placeholder: 'Approve the plan or keep planning...',
+      placeholder: 'Approve the plan or keep planning…',
     },
     {
       pendingRequest: {
@@ -346,7 +346,7 @@ describe('ChatContent pending request wording', () => {
         request: { requestId: 'r-3', toolName: 'AskUserQuestion', questions: [] },
       },
       pendingRequestType: 'user_question',
-      placeholder: 'Answer the question above, or queue a message...',
+      placeholder: 'Answer the question above, or queue a message…',
     },
   ])('says the agent waits on a $pendingRequestType', (testCase) => {
     const props = {
@@ -404,7 +404,7 @@ describe('ChatContent pending request wording', () => {
           />
         )
       );
-      expect(input.mock.lastCall?.[0].placeholder).toBe('Type a message to start the agent...');
+      expect(input.mock.lastCall?.[0].placeholder).toBe('Type a message to start the agent…');
       expect(transcript.mock.lastCall?.[0].pendingRequestType).toBeNull();
     } finally {
       flushSync(() => root.unmount());

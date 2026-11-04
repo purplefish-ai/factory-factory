@@ -88,11 +88,11 @@ export function KanbanProvider({
   );
 
   const syncMutation = trpc.workspace.syncAllPRStatuses.useMutation({
-    onError: (error) => toast.error(`Failed to sync PR statuses: ${error.message}`),
+    onError: (error) => toast.error(`Couldn't sync PR statuses. ${error.message}`),
   });
   const toggleRatchetingMutation = useToggleRatcheting(projectId);
   const renameMutation = trpc.workspace.rename.useMutation({
-    onError: (error) => toast.error(`Failed to rename workspace: ${error.message}`),
+    onError: (error) => toast.error(`Couldn't rename workspace. ${error.message}`),
   });
   const archiveCommand = useWorkspaceArchiveCommand();
   const [togglingWorkspaceId, setTogglingWorkspaceId] = useState<string | null>(null);
@@ -150,7 +150,7 @@ export function KanbanProvider({
       'message' in error &&
       typeof error.message === 'string'
         ? error.message
-        : 'Failed to archive workspace';
+        : "Couldn't archive workspace";
     toast.error(message);
   };
 
@@ -169,8 +169,8 @@ export function KanbanProvider({
   const syncAndRefetch = () => {
     // An explicit Sync click bypasses the automatic refresh throttles.
     syncMutation.mutate({ projectId, force: true });
-    runInBackground(refetchWorkspaces(), 'Could not refresh data');
-    runInBackground(refetchIssues(), 'Could not refresh data');
+    runInBackground(refetchWorkspaces(), "Couldn't refresh data.");
+    runInBackground(refetchIssues(), "Couldn't refresh data.");
   };
 
   const toggleWorkspaceRatcheting = async (workspaceId: string, enabled: boolean) => {
@@ -265,8 +265,8 @@ export function KanbanProvider({
   };
 
   const refetch = () => {
-    runInBackground(refetchWorkspaces(), 'Could not refresh data');
-    runInBackground(refetchIssues(), 'Could not refresh data');
+    runInBackground(refetchWorkspaces(), "Couldn't refresh data.");
+    runInBackground(refetchIssues(), "Couldn't refresh data.");
   };
 
   const visibleWorkspaces = useMemo(

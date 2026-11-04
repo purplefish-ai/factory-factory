@@ -84,7 +84,7 @@ function SectionStory({
                 });
               }}
             >
-              Start another sub-agent
+              Start another subagent
             </Button>
           )}
           <ProviderSubagentsSection
@@ -115,7 +115,7 @@ type Story = StoryObj<typeof meta>;
 export const TwoActiveOfEight: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    await expect(await canvas.findByLabelText('Active sub-agents')).toHaveTextContent('2');
+    await expect(await canvas.findByLabelText('Active subagents')).toHaveTextContent('2');
     await expect(canvas.getByRole('button', { name: 'Completed · 6' })).toBeVisible();
   },
 };
@@ -124,7 +124,7 @@ export const CompletedExpanded: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await userEvent.click(await canvas.findByRole('button', { name: 'Completed · 6' }));
-    await expect(canvas.getByLabelText('Active sub-agents')).toHaveTextContent('2');
+    await expect(canvas.getByLabelText('Active subagents')).toHaveTextContent('2');
     await expect(canvas.getByText('Completed task 1')).toBeVisible();
   },
 };
@@ -133,7 +133,7 @@ export const AllCompleted: Story = {
   args: { activeCount: 0 },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    await expect(await canvas.findByLabelText('Active sub-agents')).toHaveTextContent('0');
+    await expect(await canvas.findByLabelText('Active subagents')).toHaveTextContent('0');
     await expect(canvas.getByRole('button', { name: 'Completed · 8' })).toBeVisible();
   },
 };
@@ -142,7 +142,7 @@ export const ActiveAgentsOnLaterPages: Story = {
   args: { activeCount: 2, pageSize: 2 },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    await expect(await canvas.findByLabelText('Active sub-agents')).toHaveTextContent('2');
+    await expect(await canvas.findByLabelText('Active subagents')).toHaveTextContent('2');
     await expect(canvas.getByText('Bug 12846')).toBeVisible();
     await expect(canvas.getByText('Audit and scope review')).toBeVisible();
     await expect(canvas.getByRole('button', { name: 'Completed · 6' })).toBeVisible();
@@ -155,10 +155,10 @@ export const RepeatedProviderCursor: Story = {
     const canvas = within(canvasElement);
     await expect(
       await canvas.findByText(
-        'The provider repeated a sub-agent page cursor. Retry to reload the list.'
+        'The provider repeated a subagent page cursor. Retry to reload the list.'
       )
     ).toBeVisible();
-    await expect(canvas.queryByLabelText('Active sub-agents')).not.toBeInTheDocument();
+    await expect(canvas.queryByLabelText('Active subagents')).not.toBeInTheDocument();
     await expect(canvas.getByRole('button', { name: 'Retry' })).toBeVisible();
   },
 };
@@ -167,9 +167,9 @@ export const LiveSubagentUpdates: Story = {
   args: { activeCount: 1, pageSize: 2, liveUpdates: true },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    await expect(await canvas.findByLabelText('Active sub-agents')).toHaveTextContent('1');
-    await userEvent.click(canvas.getByRole('button', { name: 'Start another sub-agent' }));
+    await expect(await canvas.findByLabelText('Active subagents')).toHaveTextContent('1');
+    await userEvent.click(canvas.getByRole('button', { name: 'Start another subagent' }));
     await expect(await canvas.findByText('Audit and scope review')).toBeVisible();
-    await expect(canvas.getByLabelText('Active sub-agents')).toHaveTextContent('2');
+    await expect(canvas.getByLabelText('Active subagents')).toHaveTextContent('2');
   },
 };

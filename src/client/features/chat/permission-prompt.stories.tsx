@@ -170,7 +170,7 @@ function ComposerFocusHarness({ permission, onApprove }: PermissionPromptArgs) {
       <div className="border-t p-3">
         <Textarea
           aria-label="Message composer"
-          placeholder="Type a message..."
+          placeholder="Type a message…"
           onChange={() => setRequestVisible(true)}
         />
       </div>

@@ -134,7 +134,7 @@ export const Running: Story = {
     onSend: onSendAction,
     running: true,
     promptInFlight: true,
-    placeholder: 'Message will be queued...',
+    placeholder: 'Message will be queued…',
   },
 };
 
@@ -269,7 +269,7 @@ export const InteractivePasteDrop: Story = {
 export const RuntimeError: Story = {
   args: {
     onSend: onSendAction,
-    placeholder: 'Agent encountered an error. Type a message to retry...',
+    placeholder: "Couldn't continue this chat. Type a message to retry…",
   },
 };
 

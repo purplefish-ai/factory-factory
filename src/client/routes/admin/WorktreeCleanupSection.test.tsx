@@ -72,7 +72,7 @@ function findButton(name: string) {
 
 function openConfirmDialog() {
   flushSync(() => {
-    findButton('Remove Orphaned Worktrees')?.click();
+    findButton('Remove orphaned worktrees')?.click();
   });
 }
 
@@ -110,7 +110,7 @@ describe('WorktreeCleanupSection', () => {
     const container = render();
 
     expect(container.textContent).toContain('No orphaned worktrees found.');
-    expect(findButton('Remove Orphaned Worktrees')?.disabled).toBe(true);
+    expect(findButton('Remove orphaned worktrees')?.disabled).toBe(true);
   });
 
   it('shows a scan failure with a retry instead of an empty result', () => {
@@ -118,10 +118,10 @@ describe('WorktreeCleanupSection', () => {
     const container = render();
 
     expect(container.querySelector('[role="alert"]')?.textContent).toBe(
-      'Could not scan for orphaned worktrees: EACCES'
+      "Couldn't scan for orphaned worktrees. EACCES"
     );
     expect(container.textContent).not.toContain('No orphaned worktrees found.');
-    expect(findButton('Remove Orphaned Worktrees')).toBeUndefined();
+    expect(findButton('Remove orphaned worktrees')).toBeUndefined();
 
     flushSync(() => {
       findButton('Retry')?.click();
@@ -161,7 +161,9 @@ describe('WorktreeCleanupSection', () => {
       })
     );
 
-    expect(mocks.toastError).toHaveBeenCalledWith('Removed 1; failed to remove 1: locked');
+    expect(mocks.toastError).toHaveBeenCalledWith(
+      "Couldn't remove all worktrees. Removed 1; failed to remove 1. locked"
+    );
     expect(mocks.toastSuccess).not.toHaveBeenCalled();
     expect(mocks.invalidate).toHaveBeenCalledTimes(1);
   });
@@ -172,7 +174,7 @@ describe('WorktreeCleanupSection', () => {
 
     settle((options) => options.onError(new Error('FORBIDDEN')));
 
-    expect(mocks.toastError).toHaveBeenCalledWith('Cleanup failed: FORBIDDEN');
+    expect(mocks.toastError).toHaveBeenCalledWith("Couldn't remove orphaned worktrees. FORBIDDEN");
     expect(mocks.invalidate).toHaveBeenCalledTimes(1);
     expect(findButton('Remove')).toBeUndefined();
   });

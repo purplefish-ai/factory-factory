@@ -106,7 +106,7 @@ export const WorkspaceContentView = memo(function WorkspaceContentView({
             <div className="flex flex-col items-center justify-center h-full p-8">
               <div className="max-w-md w-full space-y-6 text-center">
                 <div className="space-y-2">
-                  <h2 className="text-2xl font-semibold">Start a Session</h2>
+                  <h2 className="text-2xl font-semibold">Start a session</h2>
                   <p className="text-muted-foreground">
                     Click the + button above to start a new chat session in this workspace.
                   </p>
@@ -119,7 +119,7 @@ export const WorkspaceContentView = memo(function WorkspaceContentView({
                       getStatusBannerClassName('warning'),
                     ].join(' ')}
                   >
-                    Workspace is initializing... Please wait for the worktree to be created.
+                    Workspace is initializing… Please wait for the worktree to be created.
                   </div>
                 )}
               </div>

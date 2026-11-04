@@ -328,7 +328,7 @@ describe('RightPanel Agents tab', () => {
     render();
 
     const agentsTab = [...container.querySelectorAll('button')].find(
-      (button) => button.textContent === 'Sub-agents'
+      (button) => button.textContent === 'Subagents'
     );
     expect(agentsTab).not.toBeUndefined();
     expect(container.textContent).not.toContain('Children');

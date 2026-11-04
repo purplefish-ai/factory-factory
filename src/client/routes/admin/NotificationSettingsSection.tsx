@@ -61,7 +61,7 @@ export function NotificationSettingsSection() {
       );
     },
     onError: (error) => {
-      toast.error(`Couldn't update notification settings: ${error.message}`);
+      toast.error(`Couldn't update notification settings. ${error.message}`);
     },
   });
 

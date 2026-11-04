@@ -39,7 +39,7 @@ export const CompactingIndicator = memo(function CompactingIndicator({
     >
       <div className="flex items-center gap-2">
         <SpinnerGapIcon className="h-3 w-3 animate-spin text-muted-foreground" />
-        <span className="text-xs font-medium text-muted-foreground">Compacting context...</span>
+        <span className="text-xs font-medium text-muted-foreground">Compacting context…</span>
       </div>
     </div>
   );

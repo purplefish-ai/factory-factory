@@ -200,7 +200,7 @@ export function CodexAccountsSettings() {
       setLogin({
         accountId: id,
         status: 'failed',
-        message: error instanceof Error ? error.message : 'Could not start login',
+        message: error instanceof Error ? error.message : "Couldn't start login",
       });
     }
   };
@@ -247,7 +247,7 @@ export function CodexAccountsSettings() {
                 await begin(account.id);
               }
             } catch (error) {
-              setError(error instanceof Error ? error.message : 'Could not add account');
+              setError(error instanceof Error ? error.message : "Couldn't add account");
             }
           })();
         }}
@@ -262,7 +262,7 @@ export function CodexAccountsSettings() {
                 void utils.codexAccounts.list.invalidate();
               })
               .catch((error) =>
-                setError(error instanceof Error ? error.message : 'Could not cancel login')
+                setError(error instanceof Error ? error.message : "Couldn't cancel login")
               );
           }
         }}

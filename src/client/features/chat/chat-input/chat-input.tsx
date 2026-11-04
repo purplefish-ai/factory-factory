@@ -87,7 +87,7 @@ export const ChatInput = memo(function ChatInput({
   stopping = false,
   isCompacting = false,
   inputRef,
-  placeholder = 'Type a message...',
+  placeholder = 'Type a message…',
   className,
   settings,
   capabilities,
@@ -176,7 +176,7 @@ export const ChatInput = memo(function ChatInput({
   const { handleFileSelect } = actions;
   const onFileSelect = useCallback(
     (event: React.ChangeEvent<HTMLInputElement>) => {
-      runInBackground(handleFileSelect(event), 'Could not attach file');
+      runInBackground(handleFileSelect(event), "Couldn't attach file.");
     },
     [handleFileSelect]
   );
@@ -278,7 +278,7 @@ export const ChatInput = memo(function ChatInput({
           onDragOver={pasteDropHandler.handleDragOver}
           onDragLeave={pasteDropHandler.handleDragLeave}
           disabled={isDisabled}
-          placeholder={isDisabled ? 'Connecting...' : placeholder}
+          placeholder={isDisabled ? 'Connecting…' : placeholder}
           // Reserve a full line plus py-3 even while an empty field's intrinsic
           // size is recalculated; a transient shrink clamps the transcript above.
           className={cn(

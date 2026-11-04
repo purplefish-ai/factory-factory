@@ -48,7 +48,7 @@ export function ScreenshotsPanel({
     },
     onError: (error) => {
       // Keep the dialog open so the delete can be retried.
-      toast.error("Couldn't delete screenshot", { description: error.message });
+      toast.error("Couldn't delete screenshot.", { description: error.message });
     },
   });
 

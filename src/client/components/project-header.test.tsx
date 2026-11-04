@@ -53,7 +53,7 @@ it('shows the explicit archived project alongside active project choices without
     expect(options).toContain('Archived owner');
     expect(options).toContain('Active project');
     expect(options).toContain('+ Create project');
-    expect(options).toContain('Manage projects...');
+    expect(options).toContain('Manage projects…');
   } finally {
     await act(() => root.unmount());
   }

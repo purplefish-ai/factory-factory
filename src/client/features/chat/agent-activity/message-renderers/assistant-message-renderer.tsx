@@ -198,7 +198,7 @@ function getLoadingText(latestReasoning: string | null | undefined, plainText: b
   const text = plainText ? (latestReasoning ?? '') : formatThinkingText(latestReasoning);
   const normalized = text.replace(/\s+/g, ' ').trim();
   if (!normalized) {
-    return 'Agent is working...';
+    return 'Agent is working…';
   }
 
   return truncateLoadingText(normalized);

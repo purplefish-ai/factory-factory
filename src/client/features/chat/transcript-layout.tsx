@@ -70,7 +70,7 @@ function getStartupLabel(props: TranscriptDisplayProps) {
   if (props.initBanner?.kind === 'info') {
     return props.initBanner.message;
   }
-  return props.loadingSession ? 'Loading session...' : (props.startingLabel ?? 'Starting agent...');
+  return props.loadingSession ? 'Loading session…' : (props.startingLabel ?? 'Starting agent…');
 }
 
 export function TranscriptTail({

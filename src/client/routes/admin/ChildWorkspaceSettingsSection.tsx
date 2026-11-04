@@ -12,10 +12,10 @@ export function ChildWorkspaceSettingsSection() {
   const updateSettings = trpc.userSettings.update.useMutation({
     onSuccess: (result) => {
       utils.userSettings.get.setData(undefined, result);
-      runInBackground(utils.userSettings.get.invalidate(), 'Could not refresh data');
+      runInBackground(utils.userSettings.get.invalidate(), "Couldn't refresh data.");
     },
     onError: (error) => {
-      toast.error(`Failed to update settings: ${error.message}`);
+      toast.error(`Couldn't update settings. ${error.message}`);
     },
   });
 
@@ -27,7 +27,7 @@ export function ChildWorkspaceSettingsSection() {
     return (
       <Card>
         <CardHeader>
-          <CardTitle>Child Workspaces</CardTitle>
+          <CardTitle>Child workspaces</CardTitle>
           <CardDescription>Delegate work to separate child workspaces</CardDescription>
         </CardHeader>
         <CardContent>
@@ -35,7 +35,7 @@ export function ChildWorkspaceSettingsSection() {
             <Skeleton className="h-10 w-full" />
           ) : (
             <p role="alert" className="text-sm text-destructive">
-              Could not load child workspace settings. Try refreshing the page.
+              Couldn't load child workspace settings. Try refreshing the page.
             </p>
           )}
         </CardContent>
@@ -46,7 +46,7 @@ export function ChildWorkspaceSettingsSection() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Child Workspaces</CardTitle>
+        <CardTitle>Child workspaces</CardTitle>
         <CardDescription>Delegate work to separate child workspaces</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">

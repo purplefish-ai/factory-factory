@@ -82,7 +82,7 @@ function ReadyState({
   return (
     <ChatTranscript
       workspaceId={workspaceId}
-      label="Sub-agent transcript"
+      label="Subagent transcript"
       messages={groupedMessages}
       running={false}
       startingSession={false}

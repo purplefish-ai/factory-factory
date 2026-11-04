@@ -164,7 +164,7 @@ export function GlobalSearch() {
           fallback={
             <Dialog open onOpenChange={() => setSelectedIssue(null)}>
               <DialogContent>
-                <DialogTitle>Start Issue</DialogTitle>
+                <DialogTitle>Start issue</DialogTitle>
                 <DialogDescription role="alert">
                   Couldn't load issue launch options. Reload the app to try again.
                 </DialogDescription>
@@ -180,7 +180,7 @@ export function GlobalSearch() {
             fallback={
               <Dialog open onOpenChange={() => setSelectedIssue(null)}>
                 <DialogContent>
-                  <DialogTitle>Start Issue</DialogTitle>
+                  <DialogTitle>Start issue</DialogTitle>
                   <DialogDescription className="flex items-center gap-2">
                     <Spinner className="size-4" aria-hidden="true" />
                     Loading issue launch options…

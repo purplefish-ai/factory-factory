@@ -151,7 +151,7 @@ function IssueDetailsContent({
           </Button>
           <Button onClick={() => setLaunchSheetOpen(true)} className="flex-1">
             <PlayIcon className="h-4 w-4 mr-2" />
-            Start Issue
+            Start issue
           </Button>
         </div>
       </div>

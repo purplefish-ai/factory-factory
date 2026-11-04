@@ -22,7 +22,7 @@ function AuthStatusSection({
       <div className="space-y-2">
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
           <Spinner className="h-4 w-4" />
-          <span>Checking GitHub authentication...</span>
+          <span>Checking GitHub authentication…</span>
         </div>
       </div>
     );

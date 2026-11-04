@@ -72,7 +72,7 @@ export function useSubagentTimelineMessages(
   }, [refetch]);
   const error = useMemo(
     () =>
-      errorMessage ? { message: 'Some sub-agent activity could not be loaded.', onRetry } : null,
+      errorMessage ? { message: 'Some subagent activity could not be loaded.', onRetry } : null,
     [errorMessage, onRetry]
   );
 

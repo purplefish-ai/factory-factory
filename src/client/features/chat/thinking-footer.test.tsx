@@ -84,7 +84,7 @@ describe('ThinkingFooter', () => {
         root.render(<ThinkingFooter active latestThinking={`**Checking CI**\n\n${marker}`} />)
       );
       expect(host.textContent).toContain('Checking CI');
-      expect(host.textContent).not.toContain('Agent is working...');
+      expect(host.textContent).not.toContain('Agent is working…');
     } finally {
       root.unmount();
     }
@@ -146,7 +146,7 @@ describe('ThinkingFooter', () => {
     const root = createRoot(host);
     try {
       flushSync(() => root.render(<ThinkingFooter active latestThinking={null} />));
-      expect(host.textContent).toContain('Agent is working...');
+      expect(host.textContent).toContain('Agent is working…');
       const text = 'A long thinking preview. '.repeat(40);
       flushSync(() => root.render(<ThinkingFooter active latestThinking={text} />));
       const trigger = host.querySelector('button');

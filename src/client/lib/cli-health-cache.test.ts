@@ -118,7 +118,7 @@ describe('shouldSyncGitHubCLIHealthFromIssuesResponse', () => {
 
     expect(shouldSyncGitHubCLIHealthFromIssuesResponse(authenticatedHealth, null)).toBe(true);
     expect(
-      shouldSyncGitHubCLIHealthFromIssuesResponse(authenticatedHealth, 'Failed to fetch issues')
+      shouldSyncGitHubCLIHealthFromIssuesResponse(authenticatedHealth, "Couldn't fetch issues")
     ).toBe(false);
   });
 });

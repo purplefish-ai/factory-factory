@@ -67,12 +67,14 @@ function LinearConfigFields({
         setViewerName(result.viewerName ?? null);
         setTeams(result.teams ?? []);
       } else {
-        toast.error(`Validation failed: ${result.error ?? 'Unknown error'}`);
+        toast.error(
+          `Couldn't validate issue tracking credentials. ${result.error ?? 'Unknown error'}`
+        );
       }
     } catch (error) {
       if (generation === formGeneration.current) {
         toast.error(
-          `Validation failed: ${error instanceof Error ? error.message : 'Unknown error'}`
+          `Couldn't validate issue tracking credentials. ${error instanceof Error ? error.message : 'Unknown error'}`
         );
       }
     }
@@ -112,7 +114,7 @@ function LinearConfigFields({
       <div className="flex items-end gap-2">
         <div className="space-y-1.5">
           <div className="flex items-center gap-2">
-            <Label htmlFor={`api-key-${projectId}`}>API Key</Label>
+            <Label htmlFor={`api-key-${projectId}`}>API key</Label>
             {isValidated && (
               <span className="flex items-center gap-1 text-xs text-success">
                 <CheckCircleIcon className="w-3 h-3" />
@@ -132,11 +134,11 @@ function LinearConfigFields({
         <Button
           variant="outline"
           onClick={() => {
-            runInBackground(handleValidate(), 'Could not update issue tracking');
+            runInBackground(handleValidate(), "Couldn't update issue tracking.");
           }}
           disabled={validateAndList.isPending || !apiKey}
         >
-          {validateAndList.isPending ? 'Validating...' : 'Validate'}
+          {validateAndList.isPending ? 'Validating…' : 'Validate'}
         </Button>
       </div>
 
@@ -165,12 +167,12 @@ function LinearConfigFields({
           </div>
           <Button
             onClick={() => {
-              runInBackground(handleSave(), 'Could not update issue tracking');
+              runInBackground(handleSave(), "Couldn't update issue tracking.");
             }}
             disabled={!selectedTeamId || isSaving}
             className="self-end"
           >
-            {isSaving ? 'Saving...' : 'Save'}
+            {isSaving ? 'Saving…' : 'Save'}
           </Button>
         </>
       )}
@@ -217,9 +219,9 @@ export function ProjectIssueTrackingCard({
   const updateProject = trpc.project.update.useMutation({
     onSuccess: () => {
       toast.success('Issue tracking settings saved');
-      runInBackground(utils.project.list.invalidate(), 'Could not refresh data');
+      runInBackground(utils.project.list.invalidate(), "Couldn't refresh data.");
     },
-    onError: (error) => toast.error(`Failed to save: ${error.message}`),
+    onError: (error) => toast.error(`Couldn't save issue tracking settings. ${error.message}`),
   });
 
   const resyncProvider = async () => {
@@ -250,13 +252,12 @@ export function ProjectIssueTrackingCard({
           project.id === saved.id ? { ...project, issueProvider: saved.issueProvider } : project
         )
       );
-      if (generation === providerGeneration.current) {
-        toast.success('Issue tracking settings saved');
-      }
     } catch (error) {
       if (generation === providerGeneration.current) {
         setOptimisticProvider(null);
-        toast.error(`Failed to save: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        toast.error(
+          `Couldn't save issue tracking settings. ${error instanceof Error ? error.message : 'Unknown error'}`
+        );
       }
     } finally {
       pendingProviderSaves.current -= 1;
@@ -296,7 +297,7 @@ export function ProjectIssueTrackingCard({
             <Select
               value={provider}
               onValueChange={(value) => {
-                runInBackground(handleProviderChange(value), 'Could not update issue tracking');
+                runInBackground(handleProviderChange(value), "Couldn't update issue tracking.");
               }}
               disabled={updateProvider.isPending || updateProject.isPending}
             >

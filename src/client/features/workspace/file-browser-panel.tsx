@@ -34,7 +34,7 @@ export function FileBrowserPanel({ workspaceId }: FileBrowserPanelProps) {
   const handleRefresh = useCallback(() => {
     runInBackground(
       utils.workspace.listFiles.invalidate({ workspaceId }),
-      'Could not refresh file tree'
+      "Couldn't refresh file tree."
     );
   }, [utils, workspaceId]);
 

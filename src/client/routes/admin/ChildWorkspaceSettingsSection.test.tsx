@@ -101,7 +101,7 @@ it('shows a read error without offering an unknown toggle state', async () => {
     );
     await act(async () => {
       await vi.waitFor(() =>
-        expect(container.querySelector('[role="alert"]')?.textContent).toContain('Could not load')
+        expect(container.querySelector('[role="alert"]')?.textContent).toContain("Couldn't load")
       );
     });
     expect(container.querySelector('[role="switch"]')).toBeNull();

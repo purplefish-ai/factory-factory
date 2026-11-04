@@ -67,7 +67,7 @@ function RetainedPageSession({ agent }: { agent: EventAgent }) {
       )}
       {cursor && page.error && (
         <p role="alert" className="text-sm">
-          Could not load retained triggers: {page.error.message}
+          Couldn't load retained triggers. {page.error.message}
         </p>
       )}
       {stale && !page.isFetching && (
@@ -114,7 +114,7 @@ export function EventAgentSelection({
       <>
         {event.error && (
           <p role="alert" className="text-sm">
-            Could not refresh saved definition: {event.error.message}. Your draft is preserved.
+            Couldn't refresh saved definition. {event.error.message}. Your draft is preserved.
           </p>
         )}
         <SavedEventEditor
@@ -131,7 +131,7 @@ export function EventAgentSelection({
         <p>
           {event.error.data?.code === 'NOT_FOUND'
             ? 'Agent not found in this project.'
-            : `Could not load event agent: ${event.error.message}`}
+            : `Couldn't load event agent. ${event.error.message}`}
         </p>
         <Button variant="outline" onClick={() => void event.refetch()}>
           Retry agent
@@ -149,7 +149,7 @@ export function EventAgentSelection({
     <>
       {event.error && (
         <p role="alert" className="text-sm">
-          Could not refresh event agent: {event.error.message}
+          Couldn't refresh event agent. {event.error.message}
           <Button variant="outline" onClick={() => void event.refetch()}>
             Retry agent
           </Button>

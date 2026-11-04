@@ -25,7 +25,7 @@ export function getSubagentListError(query: {
     lastPage.nextCursor &&
     query.data.pageParams.includes(lastPage.nextCursor)
   ) {
-    return { message: 'The provider repeated a sub-agent page cursor. Retry to reload the list.' };
+    return { message: 'The provider repeated a subagent page cursor. Retry to reload the list.' };
   }
   return null;
 }
