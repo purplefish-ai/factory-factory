@@ -153,7 +153,7 @@ export function FileTree({ workspaceId, path = '', depth = 0, onFileSelect }: Fi
     }
   );
 
-  if (isLoading) {
+  if (isLoading || !(data || error)) {
     return (
       <div
         className="flex items-center gap-2 px-2 py-1 text-sm text-muted-foreground"

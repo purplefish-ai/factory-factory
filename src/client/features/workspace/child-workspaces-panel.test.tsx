@@ -104,3 +104,13 @@ it('keeps loaded children data visible when a background refresh fails', () => {
   expect(container.querySelector('[role="alert"]')).toBeNull();
   expect(container.textContent).toContain('No child workspaces yet');
 });
+
+it('keeps an unresolved offline child query in Loading instead of a blank panel', () => {
+  query.data = undefined;
+  const container = document.createElement('div');
+  const root = createRoot(container);
+  roots.push(root);
+  flushSync(() => root.render(<ChildWorkspacesPanel workspaceId="parent" />));
+  expect(container.textContent).toContain('Loading child workspaces…');
+  expect(container.textContent).not.toContain('No child workspaces yet');
+});

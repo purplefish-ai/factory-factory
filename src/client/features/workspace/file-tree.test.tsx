@@ -5,17 +5,29 @@ import { afterEach, expect, it, vi } from 'vitest';
 import { FileTree } from './file-tree';
 const query = vi.hoisted(() => ({
   data: undefined as undefined | { entries: []; hasWorktree: boolean },
-  error: new Error('Offline'),
+  error: new Error('Offline') as Error | null,
   isLoading: false,
   isFetching: false,
   refetch: vi.fn(),
 }));
+const queryInput = vi.hoisted(() => vi.fn());
 vi.mock('@/client/lib/trpc', () => ({
-  trpc: { workspace: { listFiles: { useQuery: () => query } } },
+  trpc: {
+    workspace: {
+      listFiles: {
+        useQuery: (input: unknown) => {
+          queryInput(input);
+          return query;
+        },
+      },
+    },
+  },
 }));
 afterEach(() => {
   query.data = undefined;
   query.refetch.mockClear();
+  queryInput.mockClear();
+  query.error = new Error('Offline');
   vi.unstubAllGlobals();
 });
 it('retries a failed nested folder query in place', async () => {
@@ -26,6 +38,7 @@ it('retries a failed nested folder query in place', async () => {
     await act(() =>
       root.render(<FileTree workspaceId="w1" path="src" depth={1} onFileSelect={vi.fn()} />)
     );
+    expect(queryInput).toHaveBeenCalledWith({ workspaceId: 'w1', path: 'src' });
     expect(container.querySelector('[role="alert"]')?.textContent).toContain('Offline');
     const retry = [...container.querySelectorAll('button')].find(
       (button) => button.textContent === 'Retry'
@@ -48,6 +61,20 @@ it('retains cached folder data when a refetch fails', async () => {
     );
     expect(container.querySelector('[role="alert"]')).toBeNull();
     expect(container.textContent).toContain('Empty directory');
+  } finally {
+    await act(() => root.unmount());
+  }
+});
+
+it('keeps an unresolved offline first load in Loading rather than No files', async () => {
+  vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
+  query.error = null;
+  const container = document.createElement('div');
+  const root = createRoot(container);
+  try {
+    await act(() => root.render(<FileTree workspaceId="w1" onFileSelect={vi.fn()} />));
+    expect(container.textContent).toContain('Loading…');
+    expect(container.textContent).not.toContain('No files');
   } finally {
     await act(() => root.unmount());
   }

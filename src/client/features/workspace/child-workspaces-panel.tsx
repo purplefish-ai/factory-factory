@@ -235,7 +235,7 @@ export function ChildWorkspacesPanel({ workspaceId, embedded = false }: ChildWor
             isRetrying={isFetching}
           />
         )}
-        {isLoading && !children && (
+        {!(children || error) && (
           <Loading
             size="compact"
             message="Loading child workspaces…"

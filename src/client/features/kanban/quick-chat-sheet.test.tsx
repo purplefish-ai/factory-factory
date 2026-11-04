@@ -11,6 +11,9 @@ const mocks = vi.hoisted(() => ({
   empty: false,
   loaded: true,
   selectionPending: false,
+  error: null as Error | null,
+  fetching: false,
+  refetch: vi.fn(),
   workspaceProvider: 'CLAUDE' as 'CLAUDE' | 'CODEX' | 'WORKSPACE_DEFAULT',
   content: vi.fn(),
 }));
@@ -66,6 +69,9 @@ vi.mock('./use-quick-chat', () => ({
     handleQuickAction: vi.fn(),
     isCreatingSession: false,
     sessionsLoaded: mocks.loaded,
+    sessionsError: mocks.error,
+    refetchSessions: mocks.refetch,
+    isFetchingSessions: mocks.fetching,
     chatState: {},
   }),
 }));
@@ -74,6 +80,8 @@ beforeEach(() => {
   mocks.empty = false;
   mocks.loaded = true;
   mocks.selectionPending = false;
+  mocks.error = null;
+  mocks.fetching = false;
   mocks.workspaceProvider = 'CLAUDE';
   vi.clearAllMocks();
   Object.defineProperty(globalThis, 'IS_REACT_ACT_ENVIRONMENT', {
@@ -197,6 +205,35 @@ it('keeps a loaded nonempty list pending until its first session is selected', a
     await act(() => root.render(<QuickChatSheet workspaceId="workspace" onClose={vi.fn()} />));
     expect(document.body.textContent).toContain('Loading sessions…');
     expect(document.body.textContent).not.toContain('No chats yet');
+  } finally {
+    await act(() => root.unmount());
+    container.remove();
+  }
+});
+
+it('offers session-list Retry after failure and disables only Retry while refetching', async () => {
+  mocks.empty = true;
+  mocks.loaded = false;
+  mocks.error = new Error('Offline');
+  const container = document.createElement('div');
+  document.body.append(container);
+  const root = createRoot(container);
+  try {
+    await act(() => root.render(<QuickChatSheet workspaceId="workspace" onClose={vi.fn()} />));
+    expect(document.body.querySelector('[role="alert"]')?.textContent).toContain('Offline');
+    const retry = [...document.body.querySelectorAll('button')].find(
+      (button) => button.textContent === 'Retry'
+    );
+    expect(retry?.disabled).toBe(false);
+    await act(() => retry?.click());
+    expect(mocks.refetch).toHaveBeenCalledOnce();
+    mocks.fetching = true;
+    await act(() => root.render(<QuickChatSheet workspaceId="workspace" onClose={vi.fn()} />));
+    expect(
+      [...document.body.querySelectorAll('button')].find(
+        (button) => button.textContent === 'Retrying…'
+      )?.disabled
+    ).toBe(true);
   } finally {
     await act(() => root.unmount());
     container.remove();

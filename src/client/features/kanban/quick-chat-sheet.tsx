@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import { EmptyState } from '@/client/components/empty-state';
 import { Loading } from '@/client/components/loading';
+import { QueryErrorState } from '@/client/components/query-error-state';
 import { type SessionData, SessionTabBar } from '@/client/features/chat';
 import { QuickActionsMenu } from '@/client/features/workspace';
 import { trpc } from '@/client/lib/trpc';
@@ -27,13 +28,29 @@ function QuickChatSessionState({
   creating,
   disabled,
   onCreate,
+  error,
+  retrying,
+  onRetry,
 }: {
   sessionsLoaded: boolean;
   hasSessions: boolean;
   creating: boolean;
   disabled: boolean;
   onCreate: () => void;
+  error?: { message: string } | null;
+  retrying?: boolean;
+  onRetry: () => void;
 }) {
+  if (!sessionsLoaded && error) {
+    return (
+      <QueryErrorState
+        title="Couldn't load chats"
+        error={error}
+        onRetry={onRetry}
+        isRetrying={retrying}
+      />
+    );
+  }
   if (!sessionsLoaded || creating || hasSessions) {
     return <Loading size="compact" message={creating ? 'Creating chat…' : 'Loading sessions…'} />;
   }
@@ -79,6 +96,9 @@ export function QuickChatSheet({ workspaceId, onClose }: QuickChatSheetProps) {
     handleQuickAction,
     isCreatingSession,
     sessionsLoaded,
+    sessionsError,
+    refetchSessions,
+    isFetchingSessions,
   } = useQuickChat(workspaceId, workspaceProvider);
 
   const sessionTabData: SessionData[] = useMemo(
@@ -152,6 +172,11 @@ export function QuickChatSheet({ workspaceId, onClose }: QuickChatSheetProps) {
               creating={isCreatingSession}
               disabled={tabBarDisabled}
               onCreate={() => handleNewChat()}
+              error={sessionsError}
+              retrying={isFetchingSessions}
+              onRetry={() => {
+                void refetchSessions();
+              }}
             />
           ) : null}
         </div>
