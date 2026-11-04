@@ -408,6 +408,7 @@ export const RightControls = memo(function RightControls({
         onClick={() => onSendClick(inputRef)}
         disabled={disabled}
         size="icon-sm"
+        className="size-7"
         variant="default"
         aria-label={promptInFlight ? 'Queue message' : 'Send message'}
       >
