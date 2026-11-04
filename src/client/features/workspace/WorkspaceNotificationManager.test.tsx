@@ -14,15 +14,18 @@ const mocks = vi.hoisted(() => ({
 }));
 vi.mock('@/client/lib/sound', () => ({ playSound: mocks.sound }));
 vi.mock('react-router', () => ({ useNavigate: () => mocks.navigate }));
-vi.mock('@/client/lib/trpc', () => ({
-  trpc: {
-    userSettings: { get: { useQuery: () => mocks.settings } },
-    useUtils: () => ({
-      workspace: { get: { fetch: mocks.fetch } },
-      project: { getById: { fetch: mocks.project } },
-    }),
-  },
-}));
+vi.mock('@/client/lib/trpc', () => {
+  const utils = {
+    workspace: { get: { fetch: mocks.fetch } },
+    project: { getById: { fetch: mocks.project } },
+  };
+  return {
+    trpc: {
+      userSettings: { get: { useQuery: () => mocks.settings } },
+      useUtils: () => utils,
+    },
+  };
+});
 vi.mock('sonner', () => ({ toast: { error: vi.fn() } }));
 
 const notices: FakeNotification[] = [];
@@ -60,7 +63,7 @@ afterEach(() => {
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
-function emit(
+async function emit(
   detail: unknown = {
     workspaceId: 'ws-1',
     workspaceName: 'Same name',
@@ -68,31 +71,32 @@ function emit(
     finishedAt: '2026-11-04T00:00:00Z',
   }
 ) {
-  act(() => {
+  await act(async () => {
     window.dispatchEvent(new CustomEvent('workspace-notification-request', { detail }));
+    await Promise.resolve();
   });
 }
-it('defaults browser notifications off even when browser permission is granted', () => {
-  emit();
+it('defaults browser notifications off even when browser permission is granted', async () => {
+  await emit();
   expect(mocks.sound).toHaveBeenCalledOnce();
   expect(notices).toHaveLength(0);
 });
-it('never asks for permission in response to a background completion', () => {
+it('never asks for permission in response to a background completion', async () => {
   FakeNotification.permission = 'default';
-  emit();
+  await emit();
   expect(FakeNotification.requestPermission).not.toHaveBeenCalled();
 });
-it('ignores malformed events and deduplicates workspace completion sounds', () => {
-  emit(null);
-  emit({ workspaceId: 'ws-1' });
+it('ignores malformed events and deduplicates workspace completion sounds', async () => {
+  await emit(null);
+  await emit({ workspaceId: 'ws-1' });
   expect(mocks.sound).not.toHaveBeenCalled();
-  emit();
-  emit();
+  await emit();
+  await emit();
   expect(mocks.sound).toHaveBeenCalledOnce();
 });
 it('uses workspace identity for tags and resolves its real owner on click', async () => {
   localStorage.setItem('factoryfactory_browser_notifications_enabled', 'true');
-  emit();
+  await emit();
   const notice = notices[0]!;
   expect(notice.options.tag).toBe('workspace-complete-ws-1');
   await act(async () => {
@@ -104,27 +108,27 @@ it('uses workspace identity for tags and resolves its real owner on click', asyn
   expect(mocks.fetch).toHaveBeenCalledWith({ id: 'ws-1' });
   expect(mocks.navigate).toHaveBeenCalledWith('/projects/real%20project/workspaces/ws-1');
 });
-it('keeps voice suppression and server sound preferences independent of desktop notifications', () => {
+it('keeps voice suppression and server sound preferences independent of desktop notifications', async () => {
   window.dispatchEvent(new CustomEvent('voice-mode-changed', { detail: { active: true } }));
-  emit();
+  await emit();
   expect(mocks.sound).not.toHaveBeenCalled();
 });
 
-it('remembers completion identities even when an older completion is replayed later', () => {
-  emit();
-  emit({
+it('remembers completion identities even when an older completion is replayed later', async () => {
+  await emit();
+  await emit({
     workspaceId: 'ws-1',
     workspaceName: 'Same name',
     sessionCount: 1,
     finishedAt: '2026-11-05T00:00:00Z',
   });
-  emit();
+  await emit();
   expect(mocks.sound).toHaveBeenCalledTimes(2);
 });
 it('distinguishes workspaces that share a name and closes/focuses before awaiting network work', async () => {
   localStorage.setItem('factoryfactory_browser_notifications_enabled', 'true');
-  emit();
-  emit({
+  await emit();
+  await emit({
     workspaceId: 'ws-2',
     workspaceName: 'Same name',
     sessionCount: 1,
@@ -146,10 +150,10 @@ it('distinguishes workspaces that share a name and closes/focuses before awaitin
 });
 it.each([false, true])(
   'does not chime when sound is disabled or settings are still loading: %s',
-  (loaded) => {
+  async (loaded) => {
     mocks.settings = { data: { playSoundOnComplete: false }, isSuccess: loaded };
     act(() => root.render(<WorkspaceNotificationManager />));
-    emit();
+    await emit();
     expect(mocks.sound).not.toHaveBeenCalled();
   }
 );
@@ -158,11 +162,114 @@ it('invokes the desktop focus bridge before resolving notification navigation', 
   const focusWindow = vi.fn().mockResolvedValue(undefined);
   vi.stubGlobal('electronAPI', { isElectron: true, focusWindow });
   localStorage.setItem('factoryfactory_browser_notifications_enabled', 'true');
-  emit();
+  await emit();
   await act(async () => {
     notices[0]?.onclick?.();
     expect(focusWindow).toHaveBeenCalledOnce();
     await Promise.resolve();
   });
   expect(mocks.navigate).toHaveBeenCalledOnce();
+});
+
+it('claims one completion across manager instances before sound and desktop delivery', async () => {
+  let tail = Promise.resolve();
+  const request = vi.fn((_name: string, callback: () => boolean) => {
+    const result = tail.then(callback);
+    tail = result.then(
+      () => undefined,
+      () => undefined
+    );
+    return result;
+  });
+  vi.stubGlobal('navigator', { locks: { request } });
+  localStorage.setItem('factoryfactory_browser_notifications_enabled', 'true');
+  act(() =>
+    root.render(
+      <>
+        <WorkspaceNotificationManager />
+        <WorkspaceNotificationManager />
+      </>
+    )
+  );
+  const attention = vi.fn();
+  window.addEventListener('workspace-attention-required', attention);
+  try {
+    await act(async () => {
+      await emit();
+      await Promise.resolve();
+    });
+    expect(mocks.sound).toHaveBeenCalledOnce();
+    expect(notices).toHaveLength(1);
+    expect(attention).toHaveBeenCalledTimes(2);
+  } finally {
+    window.removeEventListener('workspace-attention-required', attention);
+  }
+});
+
+it('honors a sound toggle changed while a cross-tab claim is waiting', async () => {
+  let release!: () => void;
+  const request = vi.fn(
+    (_name: string, callback: () => boolean) =>
+      new Promise<boolean>((resolve) => {
+        release = () => resolve(callback());
+      })
+  );
+  vi.stubGlobal('navigator', { locks: { request } });
+  await emit();
+  mocks.settings = { data: { playSoundOnComplete: false }, isSuccess: true };
+  act(() => root.render(<WorkspaceNotificationManager />));
+  await act(async () => {
+    release();
+    await Promise.resolve();
+  });
+  expect(mocks.sound).not.toHaveBeenCalled();
+});
+
+it.each(['opt-out', 'permission revoked'])(
+  'honors desktop %s while a claim waits',
+  async (change) => {
+    let release!: () => void;
+    const request = vi.fn(
+      (_name: string, callback: () => boolean) =>
+        new Promise<boolean>((resolve) => {
+          release = () => resolve(callback());
+        })
+    );
+    vi.stubGlobal('navigator', { locks: { request } });
+    mocks.settings = { data: { playSoundOnComplete: false }, isSuccess: true };
+    act(() => root.render(<WorkspaceNotificationManager />));
+    localStorage.setItem('factoryfactory_browser_notifications_enabled', 'true');
+    await emit();
+    if (change === 'opt-out') {
+      localStorage.setItem('factoryfactory_browser_notifications_enabled', 'false');
+    } else {
+      FakeNotification.permission = 'denied';
+    }
+    await act(async () => {
+      release();
+      await Promise.resolve();
+    });
+    expect(notices).toHaveLength(0);
+  }
+);
+it('does not claim or deliver a completion after unmount while waiting for a lock', async () => {
+  let release!: () => void;
+  const request = vi.fn(
+    (_name: string, callback: () => boolean) =>
+      new Promise<boolean>((resolve) => {
+        release = () => resolve(callback());
+      })
+  );
+  vi.stubGlobal('navigator', { locks: { request } });
+  localStorage.setItem('factoryfactory_browser_notifications_enabled', 'true');
+  await emit();
+  act(() => root.unmount());
+  await act(async () => {
+    release();
+    await Promise.resolve();
+  });
+  root = createRoot(container);
+  expect(mocks.sound).not.toHaveBeenCalled();
+  expect(notices).toHaveLength(0);
+  expect(localStorage.getItem('factoryfactory_recent_workspace_completions')).toBeNull();
 });

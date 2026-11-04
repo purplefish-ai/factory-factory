@@ -949,10 +949,12 @@ describe('window:focus IPC handler', () => {
     const call = handleMock.mock.calls.find(([channel]) => channel === 'window:focus');
     expect(call).toBeDefined();
     const handler = call![1];
-    handler({ senderFrame: {} });
-    expect(window?.focus).not.toHaveBeenCalled();
-    handler({ senderFrame: null });
-    expect(window?.focus).not.toHaveBeenCalled();
+    for (const senderFrame of [{}, null]) {
+      handler({ senderFrame });
+      expect(window?.restore).not.toHaveBeenCalled();
+      expect(window?.show).not.toHaveBeenCalled();
+      expect(window?.focus).not.toHaveBeenCalled();
+    }
     handler({ senderFrame: window!.webContents.mainFrame });
     expect(window?.restore).toHaveBeenCalledOnce();
     expect(window?.show).toHaveBeenCalledOnce();
@@ -964,6 +966,8 @@ describe('window:focus IPC handler', () => {
     expect(window?.focus).toHaveBeenCalledTimes(2);
     window?.destroy();
     handler({ senderFrame: window!.webContents.mainFrame });
+    expect(window?.restore).toHaveBeenCalledOnce();
+    expect(window?.show).toHaveBeenCalledTimes(2);
     expect(window?.focus).toHaveBeenCalledTimes(2);
   });
 });

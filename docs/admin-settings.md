@@ -49,7 +49,7 @@ open into the page below it, including the side-panel toggles.
 
 ## Notifications
 
-**Desktop notifications** starts off on each browser or desktop-app profile.
+**Desktop notifications** start off on each browser or desktop-app profile.
 Turning it on requests browser permission directly from the switch. Completion
 events never request permission in the background. Permission and the opt-in are
 local to this browser; they do not change another device's notifications.
@@ -61,13 +61,19 @@ Selecting a completion notification closes it, focuses the app, and opens the
 workspace using its current project. The desktop app also restores a minimized
 window. Deleted workspaces show an error instead of navigating to a stale link.
 Notification tags use workspace IDs, so workspaces sharing a name remain
-separate. Replayed completion events do not repeat sounds or alerts.
+separate. With Web Locks and browser storage available, one tab claims each
+completion before playing its sound or showing its alert. The browser remembers
+the latest 1,000 completion identities; an older completion can alert again
+after it is evicted. Each tab still receives its attention indicator. If Web
+Locks or storage is unavailable, alerts fall back to per-tab delivery and recent
+in-memory deduplication, so separate tabs may each alert.
 
 **Play completion sound** saves to the server and applies across devices. Voice
-mode suppresses the completion chime while its spoken response is active.
-Desktop alerts and sounds can be enabled independently. App badges are deferred
-because completion attention currently has no reliable unread/acknowledgement
-lifecycle; a badge count could stay stale after a workspace is viewed.
+mode suppresses the completion chime while microphone capture is active,
+including listening and thinking phases. Desktop alerts and sounds can be
+enabled independently. App badges are deferred because completion attention
+currently has no reliable unread/acknowledgement lifecycle; a badge count could
+stay stale after a workspace is viewed.
 
 ## Backup imports
 
