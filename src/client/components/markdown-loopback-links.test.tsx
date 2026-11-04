@@ -39,10 +39,10 @@ async function renderLink(content: string): Promise<HTMLAnchorElement> {
 }
 
 it('opens host loopback links through a shared Tailscale port, keeping their text', async () => {
-  const url = 'http://127.0.0.1:6173/?path=/story/chat-streaming-markdown-comparison--prose';
+  const url = 'http://127.0.0.1:6173/?path=/story/chat-transcript-streamdownmarkdown--prose';
   const anchor = await renderLink(url);
   expect(anchor.getAttribute('href')).toBe(
-    '/proxy/6173/?path=/story/chat-streaming-markdown-comparison--prose'
+    '/proxy/6173/?path=/story/chat-transcript-streamdownmarkdown--prose'
   );
   expect(anchor.textContent).toContain(url);
   expect(anchor.title).toContain('port 6173');

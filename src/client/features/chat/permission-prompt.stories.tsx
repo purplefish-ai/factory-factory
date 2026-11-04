@@ -227,7 +227,7 @@ export const FocusesAllowWhenNothingFocused: Story = {
 
 // Expanded variant stories
 const expandedMeta = {
-  title: 'Chat/PermissionPromptExpanded',
+  title: 'Chat/Prompts/PermissionPromptExpanded',
   component: PermissionPromptExpanded,
   parameters: {
     layout: 'padded',
