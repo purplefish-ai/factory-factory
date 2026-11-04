@@ -15,13 +15,13 @@ const badgeVariants = cva(
         outline:
           'border-border text-foreground [a&]:hover:bg-accent [a&]:hover:text-accent-foreground',
         ghost: '[a&]:hover:bg-accent [a&]:hover:text-accent-foreground',
-        // Tinted status variants: the token is the text color on a 10% tint
-        // (docs/status-colors.md). *-foreground is only for solid fills.
-        // Stronger tints drop light-mode text below AA, so link badges
-        // underline on hover instead of darkening.
-        success: 'border-transparent bg-success/10 text-success [a&]:hover:underline',
-        warning: 'border-transparent bg-warning/10 text-warning [a&]:hover:underline',
-        info: 'border-transparent bg-info/10 text-info [a&]:hover:underline',
+        // Vivid accent tints use a separate contrast-safe text color.
+        // *-foreground is only for solid fills (docs/status-colors.md).
+        success:
+          'border-transparent bg-success-accent/15 text-success dark:bg-success/10 [a&]:hover:underline',
+        warning:
+          'border-transparent bg-warning-accent/15 text-warning dark:bg-warning/10 [a&]:hover:underline',
+        info: 'border-transparent bg-info-accent/15 text-info dark:bg-info/10 [a&]:hover:underline',
         link: 'text-primary underline-offset-4 [a&]:hover:underline',
       },
     },

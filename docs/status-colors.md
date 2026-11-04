@@ -11,13 +11,13 @@ every token and tone with live contrast for the selected theme and scheme.
 
 | Token         | Meaning                                    | Factory light | Factory dark       |
 | ------------- | ------------------------------------------ | ------------- | ------------------ |
-| `running`     | An agent or process is actively working    | brand gold    | brand yellow       |
+| `running`     | An agent or process is actively working    | deep amber    | brand yellow       |
 | `success`     | Passed, approved, ready, open PR           | green         | green              |
 | `warning`     | Caution and "needs you"                    | burnt orange  | amber              |
 | `destructive` | Failed, error, changes requested, closed   | red           | red                |
 | `info`        | Waiting on something else, informational   | blue          | blue               |
 | `merged`      | Merged pull requests                       | purple        | purple             |
-| `brand`       | Factory Yellow accent (not a status)       | gold, hue 95  | `#FFE500`, hue 102 |
+| `brand`       | Factory Yellow accent (not a status)       | amber, hue 75 | `#FFE500`, hue 102 |
 | `ring`        | Focus rings; neutral so it is never status | gray          | gray               |
 
 Each status token is a text and icon color. It reaches WCAG AA (4.5:1) on the
@@ -31,9 +31,13 @@ dark-mode fills. Destructive is the one exception in dark mode, where the shadcn
 Button and Badge render it at 60% opacity with light text. Do not use
 `*-foreground` for text on a tint; use the base token.
 
-Light mode cannot use bright yellow as text, so its brand is a darker gold near
-Factory Yellow's hue (OKLCH hue 95 instead of 102). `running` follows `brand` in
-the Factory scheme.
+Light mode uses deep amber for readable running text. Separate `*-accent` tokens
+provide vivid colors for borders and 15% chip/banner tints; Factory's running
+accent is bright yellow. Dark mode keeps the existing 10% tints and uses the
+base status colors as accents. Each preset supplies its own accents, and the
+palette test checks text contrast on these tints too. Standalone status dots
+keep the contrast-safe base colors. Active board cards retain a clean light-mode
+surface and accent border; dark mode retains its running tint.
 
 ### Presets
 
@@ -80,8 +84,9 @@ statistics use `DIFF_STAT_CLASS_NAMES` (success and destructive text).
 Render statuses with `StatusDot`, `StatusIcon` and `StatusChip` from
 [`status-indicators.tsx`](../src/client/components/status-indicators.tsx), or
 with `getStatusToneStyle(tone)` classes. Tinted chips and banners use
-`bg-<token>/10` with `text-<token>`; the Badge `success`, `warning` and `info`
-variants follow the same rule.
+`bg-<token>-accent/15` with `text-<token>` in light mode and `bg-<token>/10` in
+dark mode; the Badge `success`, `warning` and `info` variants follow the same
+rule.
 
 ## Lint guard
 
@@ -116,3 +121,16 @@ its reason in the option.
 Mermaid diagrams use Mermaid's default theme, chat prose uses the typography
 plugin's colors, and the terminal uses a fixed zinc palette. These are tracked
 in #2935.
+
+## Board controls and PR states
+
+Desktop workspace creation lives at the top of Todo, alongside the inline
+composer. Phones retain a header shortcut that reveals Todo from any tab. The
+board overflow menu offers **Sync now** for an explicit forced PR sync and
+workspace/issue refresh; normal updates remain automatic.
+
+Board cards keep one workspace status label. Attached PR states appear as icons
+with tooltips available on hover and keyboard focus. Each distinct state has an
+icon, repeated states show a count, and tooltips list their PR numbers. The PR
+menu continues to expose individual PR actions and details. The desktop sidebar
+preserves its open/closed preference across navigation.

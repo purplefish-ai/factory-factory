@@ -2,11 +2,7 @@ import type { Meta, StoryObj } from '@storybook/react';
 import { expect, fn, userEvent, within } from 'storybook/test';
 import { KanbanControlsView } from './kanban-controls';
 
-/**
- * Board header actions, shown in the app header's right slot. "New Workspace"
- * opens the board's inline form in the Todo column and stays on the board; the
- * sidebar action of the same name opens the created workspace instead.
- */
+/** Board overflow menu, with a mobile shortcut to the Todo composer. */
 function HeaderPreview(props: Parameters<typeof KanbanControlsView>[0]) {
   return (
     <div className="flex min-h-12 items-center gap-1 border-b bg-background px-2 text-foreground">
@@ -33,16 +29,26 @@ type Story = StoryObj<typeof meta>;
 export const Desktop: Story = {
   play: async ({ canvasElement, args }) => {
     const canvas = within(canvasElement);
-    await userEvent.click(canvas.getByRole('button', { name: 'New workspace' }));
-    await expect(args.onNewWorkspace).toHaveBeenCalledOnce();
-    await expect(canvas.queryByRole('button', { name: 'New Task' })).not.toBeInTheDocument();
+    await expect(canvas.queryByRole('button', { name: 'New workspace' })).not.toBeInTheDocument();
+    await expect(
+      canvas.queryByRole('button', { name: 'Refresh workspaces' })
+    ).not.toBeInTheDocument();
+    const actions = canvas.getByRole('button', { name: 'Board actions' });
+    await userEvent.hover(actions);
+    await expect(await within(document.body).findByRole('tooltip')).toHaveTextContent(
+      'Board actions'
+    );
+    await userEvent.unhover(actions);
+    await userEvent.click(actions);
+    await userEvent.click(await within(document.body).findByRole('menuitem', { name: 'Sync now' }));
+    await expect(args.onRefresh).toHaveBeenCalledOnce();
   },
 };
 
-/** Phones keep the header compact with an icon-only button and the same accessible name. */
+/** Phones retain a shortcut that opens Todo even when another tab is selected. */
 export const Mobile: Story = {
   args: { isMobile: true },
-  globals: { viewport: { value: 'mobile1', isRotated: false } },
+  globals: { viewport: { value: 'phone', isRotated: false } },
   play: async ({ canvasElement, args }) => {
     const button = within(canvasElement).getByRole('button', { name: 'New workspace' });
     await expect(button).toHaveTextContent(/^\s*$/);
@@ -54,8 +60,9 @@ export const Mobile: Story = {
 export const Syncing: Story = {
   args: { isSyncing: true },
   play: async ({ canvasElement }) => {
+    await userEvent.click(within(canvasElement).getByRole('button', { name: 'Board actions' }));
     await expect(
-      within(canvasElement).getByRole('button', { name: 'Refresh workspaces' })
-    ).toBeDisabled();
+      await within(document.body).findByRole('menuitem', { name: 'Syncing…' })
+    ).toHaveAttribute('aria-disabled', 'true');
   },
 };

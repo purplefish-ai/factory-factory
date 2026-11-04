@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { COLOR_SCHEME_IDS, type ColorSchemeId } from '@/shared/appearance';
 import { contrastRatio, mixOver, parseThemeColor, type Rgb, rgbToHex } from './lib/color-contrast';
+import { getStatusToneStyle, STATUS_TONES } from './lib/status-tones';
 import { readThemeDeclarations, resolveThemeVariables, type ThemeMode } from './lib/theme-palette';
 
 /*
@@ -61,6 +62,35 @@ describe('status palette', () => {
         expect
           .soft(contrastRatio(value, mixOver(value, surface, TINT_ALPHA)), `${token} on its tint`)
           .toBeGreaterThanOrEqual(AA);
+      }
+    }
+  });
+
+  it.each(CASES)('%s %s keeps text legible on bright accent tints', (scheme, mode) => {
+    const { color } = palette(scheme, mode);
+    for (const token of STATUS_TOKENS) {
+      const accent = color(`${token}-accent`);
+      for (const surface of ['background', 'card']) {
+        expect(
+          contrastRatio(
+            color(token),
+            mixOver(accent, color(surface), mode === 'dark' ? 0.1 : 0.15)
+          ),
+          `${token} on ${surface} accent tint`
+        ).toBeGreaterThanOrEqual(AA);
+      }
+    }
+  });
+
+  it.each(CASES)('%s %s standalone status dots have non-text contrast', (scheme, mode) => {
+    const { color } = palette(scheme, mode);
+    for (const tone of STATUS_TONES.filter((tone) => tone !== 'neutral')) {
+      const token = getStatusToneStyle(tone).dot.replace('bg-', '');
+      for (const surface of ['background', 'card']) {
+        expect(
+          contrastRatio(color(token), color(surface)),
+          `${tone} dot on ${surface}`
+        ).toBeGreaterThanOrEqual(3);
       }
     }
   });

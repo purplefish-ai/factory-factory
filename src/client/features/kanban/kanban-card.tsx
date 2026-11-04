@@ -9,7 +9,6 @@ import { RobotIcon } from '@phosphor-icons/react/dist/csr/Robot';
 import { WarningIcon } from '@phosphor-icons/react/dist/csr/Warning';
 import { memo, useState } from 'react';
 import { Link } from 'react-router';
-import { PrStateBadge } from '@/client/components/pr-state-badge';
 import {
   ArchiveWorkspaceDialog,
   ConnectedWorkspacePrMenu,
@@ -31,6 +30,7 @@ import { findWorkspaceSessionRuntimeError } from '@/shared/session-runtime';
 import type { WorkspaceSummary } from '@/shared/workspace-summary';
 import { KanbanStatusChip } from './kanban-card-status-chip';
 import { useKanbanFamilyHighlight } from './kanban-family-highlight';
+import { KanbanPrStates } from './kanban-pr-states';
 
 /**
  * A card renders one row of the shared project workspace list, so its props
@@ -129,10 +129,7 @@ function IssueAndPullRequestRow({
             readOnly={workspace.status === 'ARCHIVED' || workspace.status === 'ARCHIVING'}
             compact
           />
-          {/* With several PRs, each row in the menu shows its own state. */}
-          {workspace.prs.length === 1 && (
-            <PrStateBadge prState={workspace.prs[0]?.state} size="sm" showAllStates />
-          )}
+          <KanbanPrStates prs={workspace.prs} />
         </div>
       ) : (
         showPR &&
@@ -150,7 +147,7 @@ function IssueAndPullRequestRow({
               <GitPullRequestIcon className="h-3 w-3 shrink-0" />
               <span>#{selectedPr.number}</span>
             </button>
-            <PrStateBadge prState={selectedPr.state} size="sm" showAllStates />
+            <KanbanPrStates prs={[selectedPr]} />
           </div>
         )
       )}
@@ -446,7 +443,7 @@ export const KanbanCard = memo(function KanbanCard({
       className={cn(
         'group cursor-pointer hover:border-primary/50 transition-colors overflow-hidden relative',
         sessionRuntimeError && 'border-destructive/40 bg-destructive/5 hover:border-destructive/60',
-        workspace.isWorking && 'border-running/50 bg-running/5',
+        workspace.isWorking && 'border-running-accent/80 dark:border-running/50 dark:bg-running/5',
         workspace.pendingRequestType && 'border-warning/40 bg-warning/5 hover:border-warning/60',
         isArchived && 'opacity-60 border-dashed',
         highlighted && 'ring-2 ring-info/70 ring-inset'

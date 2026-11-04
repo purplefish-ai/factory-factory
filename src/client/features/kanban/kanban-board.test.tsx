@@ -324,11 +324,12 @@ describe('KanbanBoard', () => {
     expect(container.querySelector('input')).toBeNull();
   });
 
-  it('creates from the header only, labelled like the sidebar action', () => {
+  it('creates in Todo on desktop and keeps a mobile shortcut', () => {
     mocks.isMobile = false;
     act(() => root.render(createElement(BoardWithHeader)));
     const buttons = [...container.querySelectorAll('button')];
     expect(buttons.filter((button) => button.textContent === 'New workspace')).toHaveLength(1);
+    expect(findButton(container, 'New workspace')?.closest('[data-todo-column]')).not.toBeNull();
     expect(buttons.some((button) => button.textContent === 'New Task')).toBe(false);
 
     mocks.isMobile = true;

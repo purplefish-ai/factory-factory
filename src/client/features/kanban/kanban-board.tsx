@@ -1,4 +1,5 @@
 import { ArrowsClockwiseIcon } from '@phosphor-icons/react/dist/csr/ArrowsClockwise';
+import { PlusIcon } from '@phosphor-icons/react/dist/csr/Plus';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ArchiveGitLockDialog, ArchiveWorkspaceDialog } from '@/client/features/workspace';
 import { useStableCallback } from '@/client/hooks/use-stable-callback';
@@ -373,9 +374,10 @@ interface IssuesColumnProps {
 }
 
 function IssuesColumn({ column, issues, projectId, onWorkspaceCreated }: IssuesColumnProps) {
-  const { workspaces, showInlineForm, setShowInlineForm } = useKanban();
+  const { workspaces, showInlineForm, setShowInlineForm, requestInlineForm } = useKanban();
   const existingNames = useMemo(() => workspaces?.map((w) => w.name) ?? [], [workspaces]);
   const isEmpty = issues.length === 0;
+  const isMobile = useIsMobile();
   const [selectedIssue, setSelectedIssue] = useState<NormalizedIssue | null>(null);
   const [isSheetOpen, setIsSheetOpen] = useState(false);
 
@@ -394,7 +396,10 @@ function IssuesColumn({ column, issues, projectId, onWorkspaceCreated }: IssuesC
 
   return (
     <>
-      <div className="flex flex-col w-full md:flex-1 md:min-w-[280px] md:max-w-[440px] md:h-full">
+      <div
+        data-todo-column
+        className="flex flex-col w-full md:flex-1 md:min-w-[280px] md:max-w-[440px] md:h-full"
+      >
         {/* Column Header — hidden on mobile where pills handle this */}
         <div className="hidden md:flex items-center justify-between px-2 py-3 bg-muted/50 rounded-t-lg">
           <div className="flex items-center gap-2">
@@ -407,6 +412,17 @@ function IssuesColumn({ column, issues, projectId, onWorkspaceCreated }: IssuesC
 
         {/* Column Content */}
         <div className="flex flex-col gap-3 flex-1 overflow-y-auto p-3 min-h-0 rounded-lg md:rounded-t-none bg-muted/50">
+          {!isMobile && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="shrink-0 w-full justify-start"
+              onClick={requestInlineForm}
+            >
+              <PlusIcon className="h-4 w-4" />
+              New workspace
+            </Button>
+          )}
           {showInlineForm ? (
             <InlineWorkspaceForm
               key={projectId}

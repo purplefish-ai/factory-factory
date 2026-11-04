@@ -39,7 +39,7 @@ const TOKEN_GROUPS: TokenGroup[] = [
   {
     title: 'Brand',
     description:
-      'Factory Yellow. Dark mode uses #FFE500; light mode darkens the same hue so it reads as text.',
+      'Factory Yellow. Dark mode uses #FFE500; light mode uses deep amber (hue 75) for readable text and a separate bright yellow running accent.',
     tokens: [
       { name: 'brand', on: 'background' },
       { name: 'brand-foreground', on: 'brand' },

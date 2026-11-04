@@ -345,8 +345,10 @@ describe('KanbanCard', () => {
 
     expect(row?.textContent).toContain('#1905');
     expect(row?.textContent).toContain('#57');
-    expect(row?.textContent).toContain('PR');
-    expect(buttons).toHaveLength(2);
+    expect(row?.querySelector('[aria-label="#57: Draft"]')?.getAttribute('aria-label')).toBe(
+      '#57: Draft'
+    );
+    expect(buttons).toHaveLength(3);
     expect(row?.nextElementSibling?.textContent).toContain('feature/card-style');
 
     buttons?.[0]?.click();
