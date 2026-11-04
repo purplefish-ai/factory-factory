@@ -1,63 +1,83 @@
 import type { Meta, StoryObj } from '@storybook/react';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { observable } from '@trpc/server/observable';
-import { useState } from 'react';
+import { Navigate, Route, Routes } from 'react-router';
 import { expect, fn, userEvent, waitFor, within } from 'storybook/test';
 import { AppHeaderProvider } from '@/client/components/app-header-context';
-import { trpc } from '@/client/lib/trpc';
+import {
+  STORY_TRPC_PENDING,
+  StoryTrpcProvider,
+  storyTrpcHandlersFrom,
+} from '@/client/lib/storybook-trpc';
 import LogsPage from './logs';
 
 const onRequest = fn();
-function LogsStory() {
-  const [queryClient] = useState(() => new QueryClient());
-  const [client] = useState(() => {
-    const data = {
-      entries: [
-        {
-          timestamp: '2026-11-04T10:23:45.678Z',
-          level: 'info',
-          component: 'story',
-          message: 'Story log entry',
-          context: {},
-        },
-      ],
-      total: 1,
-      totalIsExact: true,
-      hasMore: false,
-      filePath: 'server.log',
-    };
-    return trpc.createClient({
-      links: [
-        () =>
-          ({ op }) =>
-            observable((observer) => {
-              onRequest(op.path, op.input);
-              observer.next({ result: { data } });
-              observer.complete();
-            }),
-      ],
-    });
-  });
-  return (
-    <trpc.Provider client={client} queryClient={queryClient}>
-      <QueryClientProvider client={queryClient}>
-        <AppHeaderProvider>
-          <LogsPage />
-        </AppHeaderProvider>
-      </QueryClientProvider>
-    </trpc.Provider>
-  );
-}
+const logs = {
+  entries: [
+    {
+      timestamp: '2026-11-04T10:23:45.678Z',
+      level: 'info',
+      component: 'server',
+      message: 'Story log entry',
+      context: {},
+    },
+    {
+      timestamp: '2026-11-04T10:23:44.678Z',
+      level: 'warn',
+      component: 'workspace',
+      message: 'Workspace setup is taking longer than expected',
+      context: { workspaceId: 'workspace-123' },
+    },
+    {
+      timestamp: '2026-11-04T10:23:43.678Z',
+      level: 'error',
+      component: 'github',
+      message: 'Unable to fetch pull request status',
+      context: { status: 503 },
+    },
+    {
+      timestamp: '2026-11-04T10:23:42.678Z',
+      level: 'debug',
+      component: 'session',
+      message: 'Session heartbeat received',
+      context: {},
+    },
+  ],
+  total: 4,
+  totalIsExact: true,
+  hasMore: false,
+  filePath: '/Users/developer/factory-factory/logs/server.log',
+};
 const meta = {
   title: 'Settings/LogsPage',
-  component: LogsStory,
-  parameters: { layout: 'fullscreen' },
+  component: LogsPage,
+  parameters: { layout: 'fullscreen', trpc: { handlers: { 'admin.getLogs': () => logs } } },
+  render: (_, { parameters }) => (
+    <StoryTrpcProvider handlers={storyTrpcHandlersFrom(parameters)} onRequest={onRequest}>
+      <AppHeaderProvider>
+        <div className="h-screen">
+          <Routes>
+            <Route path="/" element={<Navigate to="/admin/logs" replace />} />
+            <Route path="/admin/logs" element={<LogsPage />} />
+          </Routes>
+        </div>
+      </AppHeaderProvider>
+    </StoryTrpcProvider>
+  ),
   beforeEach: () => {
     onRequest.mockClear();
   },
-} satisfies Meta<typeof LogsStory>;
+} satisfies Meta<typeof LogsPage>;
 export default meta;
 type Story = StoryObj<typeof meta>;
+export const Default: Story = {
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(await canvas.findByText('Story log entry')).toBeVisible();
+    await expect(canvas.getByRole('link', { name: 'Server logs' })).toHaveAttribute(
+      'aria-current',
+      'page'
+    );
+  },
+};
 export const RelativeRange: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
@@ -66,7 +86,7 @@ export const RelativeRange: Story = {
     await expect(time).toHaveAttribute('datetime', '2026-11-04T10:23:45.678Z');
     await expect(time).toHaveAttribute('title', '2026-11-04T10:23:45.678Z');
     await expect(time).toHaveTextContent(':45');
-    const timeRange = canvas.getByText('All time').closest('button');
+    const timeRange = canvas.getByRole('combobox', { name: 'Time range' });
     if (!timeRange) {
       throw new Error('Time range trigger is missing');
     }
@@ -83,3 +103,52 @@ export const RelativeRange: Story = {
 };
 
 export const DatesDark: Story = { ...RelativeRange, globals: { theme: 'dark' } };
+
+export const Loading: Story = {
+  parameters: { trpc: { handlers: { 'admin.getLogs': () => STORY_TRPC_PENDING } } },
+};
+export const Empty: Story = {
+  parameters: {
+    trpc: { handlers: { 'admin.getLogs': () => ({ ...logs, entries: [], total: 0 }) } },
+  },
+  play: async ({ canvasElement }) => {
+    await expect(await within(canvasElement).findByText('No log entries found')).toBeVisible();
+  },
+};
+export const LoadError: Story = {
+  parameters: {
+    trpc: {
+      handlers: {
+        'admin.getLogs': () => {
+          throw new Error('Log file is unavailable');
+        },
+      },
+    },
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(await canvas.findByRole('alert')).toHaveTextContent("Couldn't load logs");
+    await expect(canvas.getByRole('button', { name: 'Retry' })).toBeVisible();
+  },
+};
+export const CustomRange: Story = {
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await canvas.findByText('Story log entry');
+    await userEvent.click(canvas.getByRole('combobox', { name: 'Time range' }));
+    await userEvent.click(
+      await within(document.body).findByRole('option', { name: 'Custom range' })
+    );
+    await expect(canvas.getByRole('button', { name: 'Start date' })).toBeVisible();
+    await expect(canvas.getByRole('button', { name: 'End date' })).toBeVisible();
+  },
+};
+export const Phone: Story = {
+  ...Default,
+  globals: { viewport: { value: 'phone', isRotated: false } },
+  play: async (context) => {
+    await Default.play?.(context);
+    const root = context.canvasElement;
+    await expect(root.scrollWidth).toBeLessThanOrEqual(root.clientWidth);
+  },
+};

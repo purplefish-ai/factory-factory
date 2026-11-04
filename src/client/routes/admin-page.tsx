@@ -17,7 +17,7 @@ import {
   RatchetSettingsSection,
   VoiceModeSection,
 } from './admin/index';
-import { SettingsTabsList } from './admin/settings-tabs-list';
+import { SettingsPageLayout } from './admin/settings-page-layout';
 import { SystemSettingsSection } from './admin/SystemSettingsSection';
 
 function ProjectSettingsLinks() {
@@ -106,22 +106,8 @@ export default function AdminDashboardPage() {
   const { section = 'general' } = useParams<{ section: string }>();
   useAppHeader({ title: 'Settings' });
   return (
-    <div className="h-full overflow-y-auto">
-      <div className="space-y-6 p-3 md:p-6">
-        <nav aria-label="Breadcrumb" className="text-sm text-muted-foreground">
-          <Link className="underline" to="/">
-            Board
-          </Link>{' '}
-          /{' '}
-          <Link className="underline" to="/admin">
-            Settings
-          </Link>
-        </nav>
-        <SettingsTabsList />
-        <div className="space-y-6">
-          <SettingsContent section={section} />
-        </div>
-      </div>
-    </div>
+    <SettingsPageLayout>
+      <SettingsContent section={section} />
+    </SettingsPageLayout>
   );
 }
