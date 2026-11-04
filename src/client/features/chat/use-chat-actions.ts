@@ -62,6 +62,8 @@ export interface SendMessageOptions {
   voiceMode?: boolean;
   /** Send a context command without consuming the next message draft or attachments. */
   preserveInput?: boolean;
+  /** Send these attachments instead of the composer's, e.g. when resending a message. */
+  attachments?: MessageAttachment[];
 }
 
 export interface UseChatActionsReturn {
@@ -242,7 +244,8 @@ export function useChatActions(options: UseChatActionsOptions): UseChatActionsRe
   const sendMessage = useCallback(
     (text: string, options?: SendMessageOptions) => {
       const trimmedText = text.trim();
-      const attachments = options?.preserveInput ? [] : inputAttachmentsRef.current;
+      const attachments =
+        options?.attachments ?? (options?.preserveInput ? [] : inputAttachmentsRef.current);
       if (!trimmedText && attachments.length === 0) {
         return;
       }

@@ -13,7 +13,12 @@ const subagentState = vi.hoisted(() => ({
   siblingStatus: 'completed' as 'completed' | 'starting' | 'waiting' | 'running',
 }));
 
-vi.mock('@/client/features/chat', () => ({
+vi.mock('@/client/features/chat', async () => ({
+  AgentErrorStrip: (
+    await vi.importActual<typeof import('@/client/features/chat/agent-error-strip')>(
+      '@/client/features/chat/agent-error-strip'
+    )
+  ).AgentErrorStrip,
   useGroupedChatMessages: () => [],
   ChatTranscript: (props: { header?: React.ReactNode }) => {
     transcript(props);
@@ -98,12 +103,144 @@ describe('ChatContent runtime error placeholder', () => {
     const root = createRoot(container);
     try {
       flushSync(() => root.render(<ChatContent {...props} />));
-      expect(container.textContent).toContain(
+      const strip = container.querySelector('[data-testid="agent-error-strip"]');
+      expect(strip?.querySelector('[role="alert"]')?.textContent).toContain(
         runtime.errorMessage ?? 'Exited unexpectedly (code 137)'
       );
+      expect(transcript.mock.lastCall?.[0].header).toBeUndefined();
       expect(input.mock.lastCall?.[0].placeholder).toBe(
         'Agent encountered an error. Type a message to retry...'
       );
+    } finally {
+      flushSync(() => root.unmount());
+    }
+  });
+});
+
+describe('ChatContent agent error strip', () => {
+  const lastUserMessage = {
+    id: 'user-2',
+    source: 'user',
+    text: 'Run the migration again',
+    attachments: [
+      {
+        id: 'notes',
+        name: 'notes.txt',
+        type: 'text/plain',
+        contentType: 'text',
+        size: 5,
+        data: 'notes',
+      },
+    ],
+    timestamp: '2026-09-17T00:00:00Z',
+    order: 2,
+  };
+
+  function errorProps(overrides: Partial<ChatContentProps> = {}) {
+    return {
+      workspaceId: 'workspace-1',
+      sessionId: 'session-1',
+      messages: [
+        {
+          id: 'user-1',
+          source: 'user',
+          text: 'First',
+          timestamp: '2026-09-17T00:00:00Z',
+          order: 1,
+        },
+        lastUserMessage,
+      ],
+      queuedMessages: [],
+      sessionStatus: { phase: 'ready' },
+      sessionRuntime: {
+        ...createInitialSessionRuntimeState(),
+        phase: 'error',
+        processState: 'alive',
+        errorMessage: 'Provider returned HTTP 529 (Overloaded)',
+      },
+      chatCapabilities: EMPTY_CHAT_BAR_CAPABILITIES,
+      pendingRequest: { type: 'none' },
+      pendingMessages: new Map(),
+      inputRef: createRef(),
+      connected: true,
+      sendMessage: vi.fn(),
+      restartSession: vi.fn(),
+      ...overrides,
+    } as unknown as ChatContentProps;
+  }
+
+  function button(container: HTMLElement, name: string) {
+    return [...container.querySelectorAll('button')].find(
+      (element) => element.textContent === name || element.getAttribute('aria-label') === name
+    );
+  }
+
+  it('retries by resending the last user message without touching the draft', () => {
+    const props = errorProps();
+    const container = document.createElement('div');
+    const root = createRoot(container);
+    try {
+      flushSync(() => root.render(<ChatContent {...props} />));
+      flushSync(() => button(container, 'Retry')?.click());
+      expect(props.sendMessage).toHaveBeenCalledWith('Run the migration again', {
+        preserveInput: true,
+        attachments: lastUserMessage.attachments,
+      });
+      flushSync(() => button(container, 'Restart agent')?.click());
+      expect(props.restartSession).toHaveBeenCalledTimes(1);
+    } finally {
+      flushSync(() => root.unmount());
+    }
+  });
+
+  it('hides Retry when there is no sent message and disables it while offline', () => {
+    const container = document.createElement('div');
+    const root = createRoot(container);
+    try {
+      flushSync(() => root.render(<ChatContent {...errorProps({ messages: [] })} />));
+      expect(button(container, 'Retry')).toBeUndefined();
+      expect(button(container, 'Restart agent')).toBeDefined();
+      flushSync(() => root.render(<ChatContent {...errorProps({ connected: false })} />));
+      expect(button(container, 'Retry')?.disabled).toBe(true);
+    } finally {
+      flushSync(() => root.unmount());
+    }
+  });
+
+  it('stays dismissed for the same error and returns after the error clears', () => {
+    const props = errorProps();
+    const container = document.createElement('div');
+    const root = createRoot(container);
+    const strip = () => container.querySelector('[data-testid="agent-error-strip"]');
+    try {
+      flushSync(() => root.render(<ChatContent {...props} />));
+      flushSync(() => button(container, 'Dismiss error')?.click());
+      expect(strip()).toBeNull();
+      flushSync(() => root.render(<ChatContent {...props} inputDraft="typing" />));
+      expect(strip()).toBeNull();
+      flushSync(() =>
+        root.render(
+          <ChatContent
+            {...props}
+            sessionRuntime={{ ...props.sessionRuntime, errorMessage: 'Request timed out' }}
+          />
+        )
+      );
+      expect(strip()?.textContent).toContain('Request timed out');
+      flushSync(() => button(container, 'Dismiss error')?.click());
+      flushSync(() =>
+        root.render(<ChatContent {...props} sessionRuntime={createInitialSessionRuntimeState()} />)
+      );
+      expect(strip()).toBeNull();
+      flushSync(() =>
+        root.render(
+          <ChatContent
+            {...props}
+            sessionRuntime={{ ...props.sessionRuntime, errorMessage: 'Request timed out' }}
+          />
+        )
+      );
+      expect(strip()?.textContent).toContain('Request timed out');
     } finally {
       flushSync(() => root.unmount());
     }

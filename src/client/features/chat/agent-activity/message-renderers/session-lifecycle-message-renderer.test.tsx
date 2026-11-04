@@ -3,7 +3,7 @@
 import { createElement } from 'react';
 import { flushSync } from 'react-dom';
 import { createRoot } from 'react-dom/client';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { AgentMessage } from '@/lib/chat-protocol';
 import { SessionLifecycleMessageRenderer } from './session-lifecycle-message-renderer';
 
@@ -56,7 +56,7 @@ describe('SessionLifecycleMessageRenderer', () => {
     root.unmount();
   });
 
-  it('keeps the timestamp visible and exposes the full copy while the message truncates', () => {
+  it('wraps warning copy instead of hiding it in a tooltip, keeping the timestamp visible', () => {
     const container = document.createElement('div');
     document.body.appendChild(container);
     const root = createRoot(container);
@@ -76,17 +76,63 @@ describe('SessionLifecycleMessageRenderer', () => {
     const message = row?.querySelector('p');
     const time = row?.querySelector('time');
 
-    expect(row?.classList.contains('items-center')).toBe(true);
     expect(message?.classList.contains('min-w-0')).toBe(true);
     expect(message?.classList.contains('flex-1')).toBe(true);
-    expect(message?.classList.contains('truncate')).toBe(true);
-    expect(message?.getAttribute('title')).toBe(
-      'Session stopped because the available horizontal space is intentionally very narrow.'
-    );
+    expect(message?.classList.contains('break-words')).toBe(true);
+    expect(message?.classList.contains('truncate')).toBe(false);
     expect(time?.classList.contains('shrink-0')).toBe(true);
     expect(time?.classList.contains('whitespace-nowrap')).toBe(true);
     expect(message?.nextElementSibling).toBe(time);
+    expect(row?.querySelector('button')).toBeNull();
     root.unmount();
+  });
+
+  it('expands error rows inline to the full text and copies it', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } });
+    const longError = `Turn stopped: provider returned 400 ${'{"error":"invalid_request"} '.repeat(20)}`;
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+
+    flushSync(() => {
+      root.render(
+        createElement(SessionLifecycleMessageRenderer, {
+          message: lifecycleMessage('PROVIDER_ERROR', longError),
+        })
+      );
+    });
+
+    const row = container.querySelector('[data-testid="session-lifecycle-message"]');
+    const message = row?.querySelector('p');
+    const toggle = row?.querySelector<HTMLButtonElement>('button[aria-expanded]');
+    expect(message?.classList.contains('truncate')).toBe(true);
+    expect(toggle?.getAttribute('aria-expanded')).toBe('false');
+    expect(toggle?.getAttribute('aria-label')).toBe('Show full error');
+    expect(toggle?.getAttribute('aria-controls')).toBe(message?.id);
+    expect(row?.querySelector('button[aria-label="Copy error"]')).toBeNull();
+
+    flushSync(() => toggle?.click());
+
+    expect(toggle?.getAttribute('aria-expanded')).toBe('true');
+    expect(toggle?.getAttribute('aria-label')).toBe('Collapse error');
+    const details = row?.querySelector(`[id="${toggle?.getAttribute('aria-controls')}"]`);
+    expect(details?.classList.contains('truncate')).toBe(false);
+    expect(details?.classList.contains('whitespace-pre-wrap')).toBe(true);
+    expect(details?.textContent).toBe(longError);
+
+    const copyButton = row?.querySelector<HTMLButtonElement>('button[aria-label="Copy error"]');
+    flushSync(() => copyButton?.click());
+    await vi.waitFor(() => expect(writeText).toHaveBeenCalledWith(longError));
+    await vi.waitFor(() =>
+      expect(row?.querySelector('button[aria-label="Error copied"]')).not.toBeNull()
+    );
+
+    flushSync(() => toggle?.click());
+    expect(row?.querySelector('p')?.classList.contains('truncate')).toBe(true);
+    expect(row?.querySelectorAll('p')).toHaveLength(1);
+    root.unmount();
+    Reflect.deleteProperty(navigator, 'clipboard');
   });
 
   it('marks the severity icon as decorative', () => {

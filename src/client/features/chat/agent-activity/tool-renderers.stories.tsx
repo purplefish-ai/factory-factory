@@ -1,4 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react';
+import { expect, userEvent, within } from 'storybook/test';
 import type { AgentMessage, ToolSequence } from '@/lib/chat-protocol';
 import {
   SAMPLE_BASH_COMMANDS,
@@ -755,5 +756,64 @@ export const CompactActivitySummaries: StoryObj<typeof ToolSequenceGroup> = {
         <ToolSequenceGroup key={JSON.stringify(tools)} sequence={createToolSequence(tools)} />
       ))}
     </div>
+  ),
+};
+
+const FAILED_COMMANDS = [
+  { name: 'Bash', input: { command: 'pnpm typecheck' }, result: 'No errors' },
+  {
+    name: 'Bash',
+    input: { command: 'pnpm test' },
+    result: 'FAIL src/button.test.tsx\n  expected 2 to be 3',
+    isError: true,
+  },
+  { name: 'Bash', input: { command: 'pnpm lint' }, result: 'No warnings' },
+];
+
+/** A collapsed group reports how many calls failed, with a danger icon and tone. */
+export const ToolSequenceGroupCommandsWithFailure: StoryObj<typeof ToolSequenceGroup> = {
+  render: () => <ToolSequenceGroup sequence={createToolSequence(FAILED_COMMANDS)} />,
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const trigger = canvas.getByRole('button', { name: /Ran commands · 1 of 3 failed/ });
+    await expect(trigger.querySelector('svg')).toHaveAttribute('data-status-tone', 'danger');
+    await userEvent.click(trigger);
+    await expect(canvas.getByText('Failed pnpm test')).toBeVisible();
+  },
+};
+
+export const ToolSequenceGroupCommandsWithFailureDark: StoryObj<typeof ToolSequenceGroup> = {
+  ...ToolSequenceGroupCommandsWithFailure,
+  globals: { theme: 'dark' },
+};
+
+/** Failures stay visible while the rest of the group is still running. */
+export const ToolSequenceGroupPendingWithFailure: StoryObj<typeof ToolSequenceGroup> = {
+  render: () => (
+    <ToolSequenceGroup
+      sequence={createToolSequence([
+        ...FAILED_COMMANDS.slice(0, 2),
+        { name: 'Bash', input: { command: 'pnpm build' } },
+      ])}
+    />
+  ),
+};
+
+/** On a phone the label truncates but the failure count stays visible. */
+export const ToolSequenceGroupMixedFailurePhone: StoryObj<typeof ToolSequenceGroup> = {
+  globals: { viewport: { value: 'phone', isRotated: false } },
+  render: () => (
+    <ToolSequenceGroup
+      sequence={createToolSequence([
+        { name: 'Read', input: { file_path: '/project/src/Button.tsx' }, result: 'content' },
+        {
+          name: 'Edit',
+          input: { file_path: '/project/src/Button.tsx', old_string: 'a', new_string: 'b' },
+          result: 'String not found in file',
+          isError: true,
+        },
+        ...FAILED_COMMANDS,
+      ])}
+    />
   ),
 };
