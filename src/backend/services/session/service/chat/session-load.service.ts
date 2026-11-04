@@ -3,6 +3,7 @@ import type { ResolvedSessionConfigProjection } from '@/backend/services/session
 import type { ProviderHistorySession } from '@/backend/services/session/service/lifecycle/session-provider-history-hydrator';
 import type { SessionDomainService } from '@/backend/services/session/service/session-domain.service';
 import { finalizeInterruptedTranscriptToolCalls } from '@/backend/services/session/service/store/session-tool-call-recovery';
+import { selectTranscriptPage } from '@/backend/services/session/service/store/session-transcript-page';
 import {
   commandNameKey,
   isWorkspaceScopedCommandName,
@@ -11,7 +12,6 @@ import {
 } from '@/backend/services/session/service/store/slash-command-disk-scanner';
 import type { CommandInfo, SessionDeltaEvent } from '@/shared/acp-protocol';
 import type { SessionRuntimeState } from '@/shared/session-runtime';
-import { selectTranscriptPage } from '../store/session-transcript-page';
 import { buildAcceptedMessageStateChange, buildQueuedMessage } from './chat-message-handlers/utils';
 import type { SessionCommandOutcome } from './session-command.types';
 

@@ -1,5 +1,5 @@
-import { applyRendererMessages } from '../helpers';
-import type { ChatAction, ChatState } from '../types';
+import { applyRendererMessages } from '@/client/features/chat/reducer/helpers';
+import type { ChatAction, ChatState } from '@/client/features/chat/reducer/types';
 
 export function reduceTranscriptHistory(state: ChatState, action: ChatAction): ChatState {
   if (action.type === 'TRANSCRIPT_HISTORY_START') {
