@@ -1,9 +1,10 @@
 import type { Meta, StoryObj } from '@storybook/react';
 import { type ReactNode, useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router';
-import { expect, userEvent, within } from 'storybook/test';
+import { expect, userEvent, waitFor, within } from 'storybook/test';
 import type { AppNavigationData } from '@/client/hooks/use-app-navigation-data';
 import { StoryTrpcProvider } from '@/client/lib/storybook-trpc';
+import { trpc } from '@/client/lib/trpc';
 import { SidebarProvider, useSidebar } from '@/components/ui/sidebar';
 import { AppSidebar } from './app-sidebar';
 import {
@@ -17,6 +18,7 @@ type State =
   | 'loading'
   | 'empty'
   | 'project-switch'
+  | 'issues-empty'
   | 'issues-ready'
   | 'issues-error'
   | 'issues-disconnected'
@@ -36,6 +38,16 @@ function OpenMobileSheet() {
   const { setOpenMobile } = useSidebar();
   useEffect(() => setOpenMobile(true), [setOpenMobile]);
   return null;
+}
+
+// Observe the sidebar's query without starting another request.
+function IssueQueryStatus({ projectId }: { projectId: string }) {
+  const query = trpc.github.listIssuesForProject.useQuery({ projectId }, { enabled: false });
+  return (
+    <output aria-label="Issue query status" className="sr-only">
+      {query.status}
+    </output>
+  );
 }
 
 function SidebarStory({
@@ -72,6 +84,9 @@ function SidebarStory({
   };
   const content = (
     <>
+      {['issues-empty', 'issues-disconnected', 'issues-error'].includes(state) ? (
+        <IssueQueryStatus projectId={switched ? 'other' : 'factory'} />
+      ) : null}
       {state === 'project-switch' ? (
         <button type="button" onClick={() => setSwitched((value) => !value)}>
           Switch project
@@ -132,6 +147,7 @@ const meta = {
         'loading',
         'empty',
         'project-switch',
+        'issues-empty',
         'issues-ready',
         'issues-error',
         'issues-disconnected',
@@ -211,19 +227,26 @@ export const TodoLaunch: Story = {
     await expect(within(sheet).getByRole('heading', { name: 'Start issue' })).toBeVisible();
   },
 };
+async function expectTodoHidden(canvasElement: HTMLElement) {
+  const canvas = within(canvasElement);
+  await waitFor(async () => {
+    await expect(canvas.getByLabelText('Issue query status')).toHaveTextContent('success');
+  });
+  await expect(canvas.queryByText('Todo')).not.toBeInTheDocument();
+  await expect(canvas.queryByText('No assigned issues')).not.toBeInTheDocument();
+}
+
+export const TodoEmpty: Story = {
+  args: { state: 'issues-empty' },
+  play: async ({ canvasElement }) => expectTodoHidden(canvasElement),
+};
 export const TodoDisconnected: Story = {
   args: { state: 'issues-disconnected' },
-  play: async ({ canvasElement }) => {
-    await expect(
-      await within(canvasElement).findByRole('link', { name: 'Project settings' })
-    ).toHaveAttribute('href', '/projects/factory/settings');
-  },
+  play: async ({ canvasElement }) => expectTodoHidden(canvasElement),
 };
 export const TodoError: Story = {
   args: { state: 'issues-error' },
-  play: async ({ canvasElement }) => {
-    await expect(await within(canvasElement).findByRole('button', { name: 'Retry' })).toBeVisible();
-  },
+  play: async ({ canvasElement }) => expectTodoHidden(canvasElement),
 };
 
 export const TodoRefreshRecovery: Story = {

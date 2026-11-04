@@ -236,11 +236,15 @@ function IssueGroup({
   isRetrying?: boolean;
   onLaunch: (issue: NormalizedIssue) => void;
 }) {
+  if (!issues?.length) {
+    return null;
+  }
+
   return (
     <SidebarGroup>
       <SidebarGroupLabel>Todo</SidebarGroupLabel>
       <SidebarGroupContent>
-        {(!issues || issues.length === 0 || status === 'error') && (
+        {status === 'error' && (
           <ProjectIssuesState
             status={status}
             error={error}
@@ -249,13 +253,11 @@ function IssueGroup({
             isRetrying={isRetrying}
           />
         )}
-        {issues && issues.length > 0 && (
-          <SidebarMenu>
-            {issues.map((issue) => (
-              <SidebarIssueItem key={issue.id} issue={issue} onLaunch={() => onLaunch(issue)} />
-            ))}
-          </SidebarMenu>
-        )}
+        <SidebarMenu>
+          {issues.map((issue) => (
+            <SidebarIssueItem key={issue.id} issue={issue} onLaunch={() => onLaunch(issue)} />
+          ))}
+        </SidebarMenu>
       </SidebarGroupContent>
     </SidebarGroup>
   );

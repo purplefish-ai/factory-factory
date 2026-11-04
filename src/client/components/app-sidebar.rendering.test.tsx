@@ -4,13 +4,18 @@ import { createRoot } from 'react-dom/client';
 import { MemoryRouter } from 'react-router';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import type { AppNavigationData } from '@/client/hooks/use-app-navigation-data';
+import type { ProjectIssuesStatus } from '@/client/hooks/use-project-issues';
 import { projectSnapshotToWorkspace } from '@/client/lib/snapshot-to-workspace';
 import { SidebarProvider } from '@/components/ui/sidebar';
 import { makeWorkspaceSnapshotEntry } from '@/test-utils/workspace-snapshot';
 import { AppSidebar } from './app-sidebar';
 
 const rowRenders = vi.hoisted(() => vi.fn());
-vi.mock('@/client/hooks/use-project-issues', () => ({ useProjectIssues: () => ({ issues: [] }) }));
+const issueState = vi.hoisted(() => ({
+  issues: [] as undefined | [],
+  status: 'ready' as ProjectIssuesStatus,
+}));
+vi.mock('@/client/hooks/use-project-issues', () => ({ useProjectIssues: () => issueState }));
 vi.mock('@/hooks/use-mobile', () => ({ MOBILE_BREAKPOINT: 768, useIsMobile: () => false }));
 vi.mock('./theme-toggle', () => ({ ThemeToggle: () => null }));
 vi.mock('./workspace-item-content', () => ({
@@ -41,6 +46,9 @@ const navData: AppNavigationData = {
 
 beforeEach(() => {
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
+  issueState.issues = [];
+  issueState.status = 'ready';
+  rowRenders.mockClear();
 });
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -68,7 +76,7 @@ it('re-renders only the workspace row whose snapshot changed', async () => {
     [...container.querySelectorAll('[data-sidebar="group-label"]')].map(
       (label) => label.textContent
     )
-  ).toEqual(['Todo', 'Working', 'Waiting', 'Done']);
+  ).toEqual(['Working', 'Waiting', 'Done']);
   rowRenders.mockClear();
 
   // A workspace snapshot replaces one row object and keeps the others.
@@ -79,3 +87,27 @@ it('re-renders only the workspace row whose snapshot changed', async () => {
   expect(container.textContent).toContain('renamed');
   await act(() => root.unmount());
 });
+
+it.each<ProjectIssuesStatus>(['ready', 'loading', 'not-connected', 'error', 'no-project'])(
+  'hides the Todo section without assigned issues when %s',
+  async (status) => {
+    issueState.status = status;
+    issueState.issues = status === 'loading' || status === 'no-project' ? undefined : [];
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    await act(() =>
+      root.render(
+        <MemoryRouter>
+          <SidebarProvider>
+            <AppSidebar navData={navData} />
+          </SidebarProvider>
+        </MemoryRouter>
+      )
+    );
+    expect(container.textContent).not.toContain('Todo');
+    expect(container.textContent).not.toContain('No assigned issues');
+    expect(container.textContent).toContain('Working');
+    await act(() => root.unmount());
+  }
+);
