@@ -70,7 +70,7 @@ const meta = {
   decorators: [
     (Story, context) => (
       <StoryProvider failChildren={context.parameters.failChildren === true}>
-        <div className="h-80 w-[420px]">
+        <div className="h-80 w-[420px] max-w-[calc(100vw-2rem)]">
           <Story />
         </div>
       </StoryProvider>
@@ -126,4 +126,8 @@ export const RecoverableErrorDark: Story = { ...RecoverableError, globals: { the
 export const RecoverableErrorPhone: Story = {
   ...RecoverableError,
   globals: { viewport: { value: 'phone', isRotated: false } },
+  play: async (context) => {
+    await RecoverableError.play?.(context);
+    await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
+  },
 };
