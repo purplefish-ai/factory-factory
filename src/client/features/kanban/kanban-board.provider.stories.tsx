@@ -1,5 +1,11 @@
 import type { Meta, StoryObj } from '@storybook/react';
 import { expect, userEvent, within } from 'storybook/test';
+import { AppHeader } from '@/client/components/app-header';
+import {
+  AppHeaderProvider,
+  HeaderLeftStartSlot,
+  HeaderRightSlot,
+} from '@/client/components/app-header-context';
 import {
   IssueRefreshRecoveryFixture,
   exerciseIssueRefreshRecovery,
@@ -10,6 +16,7 @@ import { KanbanBoard } from './kanban-board';
 import type { WorkspaceWithKanban } from './kanban-card';
 import { baseWorkspace } from './kanban-card.story-fixtures';
 import { KanbanProvider } from './kanban-context';
+import { KanbanControls } from './kanban-controls';
 
 /**
  * The real KanbanBoard and KanbanProvider, fed by story tRPC handlers rather
@@ -64,11 +71,20 @@ const meta = {
   parameters: { layout: 'fullscreen', trpc: { handlers } },
   decorators: [
     (Story) => (
-      <KanbanProvider projectId="proj-1" projectSlug="demo" issueProvider={IssueProvider.GITHUB}>
-        <div className="h-[640px] p-4">
-          <Story />
-        </div>
-      </KanbanProvider>
+      <AppHeaderProvider>
+        <KanbanProvider projectId="proj-1" projectSlug="demo" issueProvider={IssueProvider.GITHUB}>
+          <AppHeader showSidebarToggle={false} />
+          <HeaderLeftStartSlot>
+            <span className="shrink-0 text-sm font-semibold">Board</span>
+          </HeaderLeftStartSlot>
+          <HeaderRightSlot>
+            <KanbanControls />
+          </HeaderRightSlot>
+          <div className="h-[640px] p-4">
+            <Story />
+          </div>
+        </KanbanProvider>
+      </AppHeaderProvider>
     ),
   ],
 } satisfies Meta<typeof KanbanBoard>;
@@ -213,7 +229,9 @@ export const FilterOnly: Story = {
       canvas.queryByRole('combobox', { name: 'Sort workspaces' })
     ).not.toBeInTheDocument();
     await expect(canvas.queryByRole('checkbox', { name: /^Select / })).not.toBeInTheDocument();
-    const filter = canvas.getByRole('textbox', { name: 'Filter board' });
+    const filter = within(canvas.getByRole('banner')).getByRole('textbox', {
+      name: 'Filter board',
+    });
     await userEvent.type(filter, 'authentication');
     await expect(canvas.getByText('Add authentication')).toBeVisible();
     await expect(canvas.queryByText('Fix login bug')).not.toBeInTheDocument();
@@ -231,7 +249,11 @@ export const PhoneFilter: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await canvas.findByText('Update dependencies');
-    await userEvent.type(canvas.getByRole('textbox', { name: 'Filter board' }), 'no matching task');
+    const filter = within(canvas.getByRole('banner')).getByRole('textbox', {
+      name: 'Filter board',
+    });
+    await expect(filter).toBeVisible();
+    await userEvent.type(filter, 'no matching task');
     await expect(canvas.getByText('No matching issues or workspaces')).toBeVisible();
     await userEvent.clear(canvas.getByRole('textbox', { name: 'Filter board' }));
     await expect(canvas.getByText('Update dependencies')).toBeVisible();
