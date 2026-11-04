@@ -3,6 +3,11 @@
 import { act, createElement } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+  AppHeaderProvider,
+  HeaderLeftStartSlot,
+  useAppHeaderContext,
+} from '@/client/components/app-header-context';
 import { createOptimisticWorkspaceSummary } from '@/client/lib/workspace-summary';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { KanbanBoard } from './kanban-board';
@@ -141,11 +146,26 @@ vi.mock('./kanban-context', () => ({
 
 // The board's "New Workspace" action lives in the header controls rendered
 // beside the board by WorkspacesBoardView.
+function TestHeader() {
+  const { setLeftStartSlot } = useAppHeaderContext();
+  return (
+    <header>
+      <div ref={setLeftStartSlot} />
+    </header>
+  );
+}
+
 function BoardWithHeader() {
   return (
     <TooltipProvider>
-      <KanbanControls />
-      <KanbanBoard />
+      <AppHeaderProvider>
+        <TestHeader />
+        <HeaderLeftStartSlot>
+          <span>Board</span>
+        </HeaderLeftStartSlot>
+        <KanbanControls />
+        <KanbanBoard />
+      </AppHeaderProvider>
     </TooltipProvider>
   );
 }
@@ -245,7 +265,8 @@ describe('KanbanBoard', () => {
       mocks.isMobile = mobile;
       mocks.columnProps.length = 0;
       act(() => root.render(createElement(BoardWithHeader)));
-      expect(container.querySelector('input[aria-label="Filter board"]')).not.toBeNull();
+      expect(container.querySelectorAll('input[aria-label="Filter board"]')).toHaveLength(1);
+      expect(container.querySelector('header input[aria-label="Filter board"]')).not.toBeNull();
       expect(container.querySelector('[aria-label="Sort workspaces"]')).toBeNull();
       expect(container.textContent).not.toContain('Archive selected');
       expect(mocks.columnProps.length).toBeGreaterThan(0);
