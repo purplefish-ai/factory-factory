@@ -81,17 +81,48 @@ Cover each state a user can reach, not just the happy path:
 ## Mocking data
 
 Stories never talk to a live backend. The global decorator in
-`.storybook/preview.ts` wraps stories in a router, tooltip provider and tRPC
-provider. A component that queries tRPC must get deterministic data from its
-story; otherwise it stays in a loading state. Today stories either render a
-presentational component with props, seed a local `QueryClient` with
-`setQueryData`, or install a local `trpc.Provider` with a custom link that
-answers by procedure path. Prefer the first; mocks should return fixed data and
-must not depend on the current time unless the story pins it.
+`.storybook/preview.ts` wraps every story in a router, tooltip provider, the
+app's `Toaster` (following the toolbar theme), and `StoryTrpcProvider` from
+`src/client/lib/storybook-trpc.tsx`. That provider answers each tRPC procedure
+path from `parameters.trpc.handlers`; a request without a handler stays pending,
+so the component shows its loading state rather than a network error. Each story
+starts with an empty query cache.
 
-Use the app's providers rather than raw library equivalents (for example the app
+```tsx
+export const LoadError: Story = {
+  parameters: {
+    trpc: {
+      handlers: {
+        'workspace.listForProject': () => {
+          throw new Error('Database is locked');
+        },
+      },
+    },
+  },
+};
+```
+
+A handler receives the procedure input and returns its output (or a promise of
+it), throws to fail the request (throw a `TRPCError` to set `error.data.code`),
+or returns `STORY_TRPC_PENDING` to stay loading. Story parameters merge with the
+meta's, so spread shared handlers when a story overrides one.
+`kanban-board.provider.stories.tsx` is a worked example. Render a component that
+needs its own client (for example to count requests with `fn()`) inside a local
+`StoryTrpcProvider` with `onRequest`. Older stories seed a local `QueryClient`
+or build their own `trpc.Provider`; move them to this helper when you touch
+them.
+
+Prefer presentational components with props where they exist. Mocks return fixed
+data and must not depend on the current time unless the story pins it. Use the
+app's providers rather than raw library equivalents (for example the app
 `Toaster`, not `sonner` directly) so stories match production styling in both
 themes.
+
+A story that renders its own `Toaster` sets `parameters: { toaster: false }` so
+toasts don't appear twice. Docs pages have no global Toaster, because they
+render every story at once; open the story itself to see its toasts. The story
+query client is the app's (`createAppQueryClient`) without retries, so a failing
+mutation without its own error handling shows the app's fallback error toast.
 
 ## Play functions
 
@@ -99,3 +130,27 @@ Use `storybook/test` (`expect`, `within`, `userEvent`, `fn`, `waitFor`). Await
 every assertion and interaction; the lint guardrails flag floating promises.
 Query by role and accessible name, reset `fn()` mocks in `beforeEach`, and keep
 play functions deterministic: no real timers longer than needed, no network.
+
+## Story tests
+
+`pnpm test:storybook` renders every story in headless Chromium through
+[`@storybook/addon-vitest`](https://storybook.js.org/docs/writing-tests/integrations/vitest-addon)
+and runs its play function; a story passes when it renders without throwing and
+its play function succeeds. It uses `vitest.storybook.config.ts`, separate from
+`pnpm test`, so the regular suite still needs no browser. Install the browser
+once with `pnpm exec playwright install chromium`. CI runs the same command in
+the **Storybook Tests** job.
+
+- Run one file with `pnpm test:storybook path/to/name.stories.tsx`, or open the
+  testing widget in `pnpm storybook` to run stories from the sidebar.
+- The test run disables CSS animations and transitions
+  (`.storybook/vitest.setup.ts`) and gives `findBy*`/`waitFor` a 5s timeout, so
+  play functions see settled UI. Still wait for asynchronous UI with `findBy*`
+  or `waitFor` instead of asserting immediately.
+- Story viewport globals apply in tests, so phone stories run at phone width.
+- Accessibility checks run on every story with `parameters.a11y.test: 'todo'`:
+  violations show in Storybook's accessibility panel and test widget but do not
+  fail the run yet.
+- If a story genuinely cannot pass yet, tag it `test-skip` with a comment that
+  links the tracking issue. The run reports it as skipped. Do not skip a story
+  to hide a failing assertion.

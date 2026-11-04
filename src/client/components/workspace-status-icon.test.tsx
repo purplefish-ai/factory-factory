@@ -15,6 +15,15 @@ describe('WorkspaceStatusIcon', () => {
     expect(markup).not.toContain('data-icon="runtime-error"');
   });
 
+  it('falls back to a generic needs-you icon for an unknown request type', () => {
+    // Server data can carry a type this client doesn't know yet.
+    const unknownType = 'REVIEW' as unknown as 'permission_request';
+    const markup = renderToStaticMarkup(<WorkspaceStatusIcon pendingRequestType={unknownType} />);
+
+    expect(markup).toContain('data-icon="pending-request"');
+    expect(markup).toContain('data-status-tone="attention"');
+  });
+
   it('shows runtime error icon when there is no pending request', () => {
     const markup = renderToStaticMarkup(
       <WorkspaceStatusIcon sessionRuntimeErrorMessage="runtime failed" />

@@ -85,9 +85,9 @@ export const KanbanGroups: Story = {
                         {
                           ...baseWorkspace,
                           id: 'waiting-review',
-                          name: 'Review requested',
+                          name: 'Plan approval requested',
                           kanbanColumn: 'WAITING',
-                          pendingRequestType: 'REVIEW',
+                          pendingRequestType: 'plan_approval',
                         },
                         {
                           ...baseWorkspace,

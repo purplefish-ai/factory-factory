@@ -6,7 +6,6 @@ import { useState } from 'react';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
 import { z } from 'zod';
 import { trpc } from '@/client/lib/trpc';
-import { Toaster } from '@/components/ui/sonner';
 import { ScreenshotsPanel } from './screenshots-panel';
 import { WorkspacePanelProvider } from './workspace-panel-context';
 
@@ -116,7 +115,7 @@ function ScreenshotsStoryContent(props: ScreenshotsStoryProps) {
             />
           </div>
         </WorkspacePanelProvider>
-        <Toaster />
+        {/* Toasts render in the app Toaster that .storybook/preview.ts mounts. */}
       </QueryClientProvider>
     </trpc.Provider>
   );
