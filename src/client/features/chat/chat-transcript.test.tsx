@@ -297,6 +297,7 @@ it('automatically loads earlier messages in a short conversation while following
     )
   );
   await vi.waitFor(() => expect(loadOlder).toHaveBeenCalled());
+  expect(host.querySelector('[data-transcript-key="transcript:header"]')).not.toBeNull();
   expect(host.textContent).not.toContain('Load earlier messages');
 });
 

@@ -1,9 +1,17 @@
-import { expect, type Locator, test } from '@playwright/test';
+import { expect, type Locator, type Page, test } from '@playwright/test';
 
 function gap(viewport: Locator) {
   return viewport.evaluate((element) =>
     Math.max(0, element.scrollHeight - element.clientHeight - element.scrollTop)
   );
+}
+
+async function expectCompletedHistory(page: Page, firstRowKey = 'm--100') {
+  const viewport = page.getByTestId('transcript-viewport');
+  await expect(viewport.locator(`[data-transcript-key="${firstRowKey}"]`)).toBeVisible();
+  await expect(page.getByText('Loading earlier messages…')).toHaveCount(0);
+  await expect(page.getByText('Beginning of conversation')).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Load earlier messages' })).toHaveCount(0);
 }
 
 test('typing and clearing a composer keeps the transcript at latest', async ({ page }) => {
@@ -577,7 +585,7 @@ test('older history loads near the top, preserves content at the top, and keeps 
   await viewport.evaluate((element) => {
     element.scrollTop = 0;
   });
-  await expect(page.getByText('Beginning of conversation')).toBeVisible();
+  await expectCompletedHistory(page);
   await expect(page.getByText('History requests: 1')).toBeVisible();
 });
 
@@ -601,7 +609,7 @@ test('failed older history stays visible until an explicit retry', async ({ page
   await viewport.evaluate((element) => {
     element.scrollTop = 0;
   });
-  await expect(page.getByText('Beginning of conversation')).toBeVisible();
+  await expectCompletedHistory(page);
 });
 
 test('paging adjacent tools preserves the expanded existing group and its anchor', async ({
@@ -652,8 +660,7 @@ test('paging adjacent tools preserves the expanded existing group and its anchor
   await viewport.evaluate((element) => {
     element.scrollTop = 0;
   });
-  await expect(page.getByText('Beginning of conversation')).toBeVisible();
-  await expect(viewport.locator('[data-transcript-key="tool-seq-tool-0"]')).toBeVisible();
+  await expectCompletedHistory(page, 'tool-seq-tool-0');
 });
 
 test('history fixture keeps paging state separate across sessions', async ({ page }) => {
@@ -675,5 +682,5 @@ test('history fixture keeps paging state separate across sessions', async ({ pag
   await viewport.evaluate((element) => {
     element.scrollTop = 0;
   });
-  await expect(page.getByText('Beginning of conversation')).toBeVisible();
+  await expectCompletedHistory(page);
 });

@@ -44,15 +44,15 @@ function TranscriptInstance({
     !display.loadingSession &&
     (props.running || autonomousTurn) &&
     (props.work?.promptInFlight !== false || autonomousTurn);
-  const header =
-    history && (history.status === 'loading' || history.status === 'error') ? (
-      <>
-        {banner}
-        <TranscriptHistoryHeader history={history} />
-      </>
-    ) : (
-      banner
-    );
+  // Keep the row identity stable while paging; only its contents change.
+  const header = history ? (
+    <>
+      {banner}
+      <TranscriptHistoryHeader history={history} />
+    </>
+  ) : (
+    banner
+  );
   const layout = useTranscriptLayout(display, Boolean(header));
   const { engine, totalSize, state, hasContentBelow, jumpToLatest } = useTranscriptScroll(
     viewport,
