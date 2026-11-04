@@ -1,0 +1,116 @@
+import type { Meta, StoryObj } from '@storybook/react';
+import { useEffect, useState } from 'react';
+import { expect, userEvent, waitFor, within } from 'storybook/test';
+import { contrastRatio, type Rgb } from '@/client/lib/color-contrast';
+import { mermaidThemeConfig } from '@/client/lib/mermaid-renderer';
+import { Button } from '@/components/ui/button';
+import MermaidDiagram from './mermaid-diagram';
+
+const charts = [
+  'graph LR\nWorkspace --> Session\nSession --> Result',
+  'classDiagram\nWorkspace "1" --> "*" Session',
+  'stateDiagram-v2\n[*] --> Ready\nReady --> Running\nRunning --> Complete',
+  'pie title Workspaces\n"Active" : 3\n"Ready" : 2',
+  'gantt\ntitle Delivery\ndateFormat YYYY-MM-DD\nsection Build\nImplement :active, a1, 2026-11-01, 3d\nVerify :after a1, 2d',
+  'mindmap\n  root((Workspace))\n    Session\n    Changes',
+  'sequenceDiagram\nUser->>Agent: Build feature\nNote over Agent: Working\nAgent-->>User: Ready',
+];
+
+function Gallery() {
+  return (
+    <div className="max-w-3xl bg-background text-foreground p-6">
+      {charts.map((chart) => (
+        <MermaidDiagram key={chart} chart={chart} />
+      ))}
+    </div>
+  );
+}
+
+const meta = {
+  title: 'Chat/Transcript/MermaidDiagram',
+  component: Gallery,
+  parameters: { layout: 'padded' },
+  play: async ({ canvasElement }) => {
+    await waitFor(() => expect(canvasElement.querySelectorAll('svg')).toHaveLength(charts.length));
+    const config = mermaidThemeConfig(canvasElement);
+    await expect(canvasElement.querySelector('svg')?.textContent).toContain(
+      config.themeVariables.primaryColor
+    );
+    await expect(canvasElement.textContent).not.toContain('Error rendering diagram');
+    const node = canvasElement.querySelector('.node rect');
+    const label = canvasElement.querySelector('.node .nodeLabel');
+    if (!(node && label)) {
+      throw new Error('Missing flowchart nodes');
+    }
+    const context = document.createElement('canvas').getContext('2d');
+    if (!context) {
+      throw new Error('Canvas unavailable');
+    }
+    const rgb = (color: string): Rgb => {
+      context.clearRect(0, 0, 1, 1);
+      context.fillStyle = color;
+      context.fillRect(0, 0, 1, 1);
+      const [r = 0, g = 0, b = 0] = context.getImageData(0, 0, 1, 1).data;
+      return [r / 255, g / 255, b / 255];
+    };
+    const ratio = contrastRatio(
+      rgb(getComputedStyle(node).fill),
+      rgb(getComputedStyle(label).color)
+    );
+    await expect(ratio).toBeGreaterThanOrEqual(
+      document.documentElement.dataset.colorScheme === 'high-contrast' ? 7 : 4.5
+    );
+  },
+} satisfies Meta<typeof Gallery>;
+export default meta;
+type Story = StoryObj<typeof meta>;
+
+export const FactoryLight: Story = { globals: { theme: 'light', colorScheme: 'factory' } };
+export const FactoryDark: Story = { globals: { theme: 'dark', colorScheme: 'factory' } };
+export const GitHubLight: Story = { globals: { theme: 'light', colorScheme: 'github' } };
+export const GitHubDark: Story = { globals: { theme: 'dark', colorScheme: 'github' } };
+export const OneLight: Story = { globals: { theme: 'light', colorScheme: 'one' } };
+export const OneDark: Story = { globals: { theme: 'dark', colorScheme: 'one' } };
+export const SolarizedLight: Story = { globals: { theme: 'light', colorScheme: 'solarized' } };
+export const SolarizedDark: Story = { globals: { theme: 'dark', colorScheme: 'solarized' } };
+export const HighContrastLight: Story = {
+  globals: { theme: 'light', colorScheme: 'high-contrast' },
+};
+export const HighContrastDark: Story = { globals: { theme: 'dark', colorScheme: 'high-contrast' } };
+
+function LiveTheme() {
+  const [custom, setCustom] = useState(false);
+  useEffect(() => {
+    const root = document.documentElement;
+    const original = root.style.getPropertyValue('--card');
+    if (custom) {
+      root.style.setProperty('--card', '#123456');
+    }
+    return () => {
+      if (original) {
+        root.style.setProperty('--card', original);
+      } else {
+        root.style.removeProperty('--card');
+      }
+    };
+  }, [custom]);
+  return (
+    <>
+      <Button onClick={() => setCustom(true)}>Apply custom surface</Button>
+      <MermaidDiagram chart={charts[0] ?? ''} />
+    </>
+  );
+}
+
+export const LiveCustomColors: Story = {
+  render: () => <LiveTheme />,
+  play: async ({ canvasElement }) => {
+    await waitFor(() => expect(canvasElement.querySelector('svg')).not.toBeNull());
+    await userEvent.click(
+      within(canvasElement).getByRole('button', { name: 'Apply custom surface' })
+    );
+    await waitFor(() =>
+      expect(canvasElement.querySelector('svg')?.textContent).toContain('#123456')
+    );
+  },
+};
