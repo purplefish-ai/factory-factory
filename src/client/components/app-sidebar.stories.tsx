@@ -224,6 +224,9 @@ export const BoardCounts: Story = {
     const page = within(document.body);
     await expect(await page.findByRole('tooltip')).toHaveTextContent('Working 2 · Waiting 1');
     await userEvent.unhover(board);
+    await waitFor(async () => {
+      await expect(page.queryByRole('tooltip')).not.toBeInTheDocument();
+    });
     board.focus();
     await expect(board).toHaveFocus();
     await expect(await page.findByRole('tooltip')).toHaveTextContent('Working 2 · Waiting 1');
