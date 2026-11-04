@@ -267,7 +267,7 @@ function WorkspaceCreationPreview(props: {
   imageDrop?: boolean;
   purpose?: 'event-agent';
 }) {
-  const key = `${props.projectId ?? 'preview-project'}:${props.provider ?? 'CODEX'}:${Boolean(props.loading)}:${Boolean(props.catalogLoading)}:${Boolean(props.startCollapsed)}:${props.creationError ?? ''}:${Boolean(props.creationPending)}:${Boolean(props.imageDrop)}`;
+  const key = `${props.projectId ?? 'preview-project'}:${props.provider ?? 'CODEX'}:${Boolean(props.loading)}:${Boolean(props.catalogLoading)}:${Boolean(props.startCollapsed)}:${props.creationError ?? ''}:${Boolean(props.creationPending)}:${Boolean(props.imageDrop)}:${props.purpose ?? 'workspace'}`;
   return <WorkspaceCreationPreviewSession key={key} {...props} />;
 }
 

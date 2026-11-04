@@ -162,7 +162,7 @@ function AgentsPageSession({
   renderEventCreation: EventCreationRenderer;
 }) {
   const controller = useAgentsController(routeProject, kind);
-  const { id, task, list, project, mode, pending, actionError } = controller;
+  const { id, list, project, mode, pending, actionError } = controller;
   return (
     <>
       <AgentsDashboardShell
@@ -191,11 +191,7 @@ function AgentsPageSession({
           ) : undefined
         }
         selectedAgentId={mode === 'create' || mode === 'create-event' ? undefined : id}
-        isLoading={
-          list.isLoading ||
-          controller.events.isLoading ||
-          (!!id && (kind === 'event' ? controller.event.isLoading : task.isLoading))
-        }
+        isLoading={list.isLoading || controller.events.isLoading}
         error={
           [
             list.error ? `Couldn't load scheduled agents. ${list.error.message}` : '',

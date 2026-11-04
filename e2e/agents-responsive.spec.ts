@@ -193,3 +193,16 @@ for (const width of [320, 390, 1280]) {
     ).toBeVisible();
   });
 }
+
+test('event authoring fixture launches a real-shaped workspace and navigates to its ID', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 900 });
+  await page.goto('/__mobile-baseline?surface=agents');
+  await page.getByRole('button', { name: 'Create agent', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Event agent', exact: true }).click();
+  const launch = page.getByRole('button', { name: 'Launch', exact: true });
+  await expect(launch).toBeEnabled();
+  await launch.click();
+  await expect(page).toHaveURL(/\/projects\/factory-factory\/workspaces\/fixture-event-workspace$/);
+});

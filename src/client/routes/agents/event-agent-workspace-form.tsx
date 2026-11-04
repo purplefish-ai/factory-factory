@@ -1,6 +1,10 @@
 import { useNavigate } from 'react-router';
+import { Loading } from '@/client/components/loading';
+import { QueryState } from '@/client/components/query-state';
 import { InlineWorkspaceForm } from '@/client/features/kanban/inline-workspace-form';
+import { useWorkspaceCreationSubmission } from '@/client/features/kanban/use-workspace-creation-submission';
 import { trpc } from '@/client/lib/trpc';
+import { Button } from '@/components/ui/button';
 
 /** Route composition keeps workspace creation out of the agents/kanban feature cycle. */
 export function EventAgentWorkspaceForm({
@@ -13,19 +17,37 @@ export function EventAgentWorkspaceForm({
   onCancel: () => void;
 }) {
   const navigate = useNavigate();
+  const submission = useWorkspaceCreationSubmission(`event-agent:${projectId}`);
   const workspaces = trpc.workspace.listForProject.useQuery({ projectId });
   return (
-    <InlineWorkspaceForm
-      key={projectId}
-      projectId={projectId}
-      purpose="event-agent"
-      existingNames={workspaces.data?.workspaces.map((workspace) => workspace.name) ?? []}
-      onCancel={onCancel}
-      onCreated={(workspaceId) => {
-        void navigate(
-          `/projects/${encodeURIComponent(projectSlug)}/workspaces/${encodeURIComponent(workspaceId)}`
-        );
-      }}
-    />
+    <>
+      {submission.isPending && <Loading size="compact" message="Creating event agent workspace…" />}
+      <QueryState
+        query={workspaces}
+        errorTitle="Couldn't load workspace names"
+        loadingMessage="Loading workspace names…"
+        size="compact"
+      >
+        {(data) => (
+          <InlineWorkspaceForm
+            key={projectId}
+            projectId={projectId}
+            purpose="event-agent"
+            existingNames={data.workspaces.map((workspace) => workspace.name)}
+            onCancel={onCancel}
+            onCreated={(workspaceId) => {
+              void navigate(
+                `/projects/${encodeURIComponent(projectSlug)}/workspaces/${encodeURIComponent(workspaceId)}`
+              );
+            }}
+          />
+        )}
+      </QueryState>
+      {!(workspaces.data || submission.isPending) && (
+        <Button variant="outline" onClick={onCancel}>
+          Cancel
+        </Button>
+      )}
+    </>
   );
 }

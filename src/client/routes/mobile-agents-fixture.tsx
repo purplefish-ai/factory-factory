@@ -311,7 +311,7 @@ export function MobileAgentsFixture() {
               observer.next({
                 result: {
                   data: handler
-                    ? handler()
+                    ? handler(op.input)
                     : op.path === 'github.listIssuesForProject'
                       ? { issues: [] }
                       : [],

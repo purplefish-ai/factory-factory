@@ -89,6 +89,7 @@ it('groups both kinds and keeps event continuation inside the event section', ()
     const eventSection = container.querySelector('section[aria-label="Event"]');
     expect(scheduledSection?.textContent).toContain('Scheduled review');
     expect(scheduledSection?.querySelector('[aria-current]')).toBeNull();
+    expect(scheduledSection?.textContent).not.toContain('Load more event agents');
     expect(eventSection?.querySelector('[aria-current="page"]')?.textContent).toContain(
       'Event review'
     );
