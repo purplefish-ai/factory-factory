@@ -56,8 +56,8 @@ and **Manage projects**. Switching projects keeps the current Board, Agents or
 Reviews section, including the event-agent view. Menu links support opening a
 project in another tab. Clicking the project name or chevron opens the menu;
 selecting the current project opens its board. The opened menu shows Working and
-Waiting counts beside every project, including zeros, matching the sidebar.
-Counts appear once project data loads and refresh when the menu opens;
+Waiting counts beside every active project, including zeros, matching the
+sidebar. Counts appear once project data loads and refresh when the menu opens;
 breadcrumbs show only the project name. On phones, names stay expanded when they
 fit and use initials when space is limited. The following breadcrumb identifies
 the section.

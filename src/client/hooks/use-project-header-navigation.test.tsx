@@ -183,32 +183,34 @@ function Counts() {
 it.each([
   ['/projects/alpha/workspaces', true, 'Working 1 Waiting 1'],
   ['/projects/alpha/workspaces', false, 'Loading'],
-  ['/projects/archived/agents', true, 'Working 1 Waiting 1'],
-])('scopes board counts to loaded workspaces at %s (%s)', async (path, loaded, expected) => {
-  navState.workspaces = loaded
-    ? (['WORKING', 'WAITING', 'DONE'] as const).map((kanbanColumn, index) => ({
-        ...createOptimisticWorkspaceSummary({
-          id: String(index),
-          projectId: 'alpha',
-          name: 'Workspace',
-          ratchetEnabled: true,
-        }),
-        kanbanColumn,
-      }))
-    : undefined;
-  const container = document.createElement('div');
-  const root = createRoot(container);
-  try {
-    await act(() =>
-      root.render(
-        <MemoryRouter initialEntries={[path]}>
-          <Counts />
-        </MemoryRouter>
-      )
-    );
-    expect(container.textContent).toBe(expected);
-  } finally {
-    await act(() => root.unmount());
-    navState.workspaces = undefined;
+])(
+  'fills the selected project row from loaded workspaces at %s (%s)',
+  async (path, loaded, expected) => {
+    navState.workspaces = loaded
+      ? (['WORKING', 'WAITING', 'DONE'] as const).map((kanbanColumn, index) => ({
+          ...createOptimisticWorkspaceSummary({
+            id: String(index),
+            projectId: 'alpha',
+            name: 'Workspace',
+            ratchetEnabled: true,
+          }),
+          kanbanColumn,
+        }))
+      : undefined;
+    const container = document.createElement('div');
+    const root = createRoot(container);
+    try {
+      await act(() =>
+        root.render(
+          <MemoryRouter initialEntries={[path]}>
+            <Counts />
+          </MemoryRouter>
+        )
+      );
+      expect(container.textContent).toBe(expected);
+    } finally {
+      await act(() => root.unmount());
+      navState.workspaces = undefined;
+    }
   }
-});
+);

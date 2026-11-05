@@ -1,3 +1,4 @@
+import type { RefetchOptions } from '@tanstack/react-query';
 import {
   createContext,
   createElement,
@@ -129,8 +130,12 @@ export function useAppNavigationData() {
   const {
     data: projects,
     error: projectsError,
-    refetch: refetchProjects,
-  } = trpc.project.list.useQuery({ isArchived: false, includeBoardCounts: true });
+    refetch: refetchProjectList,
+  } = trpc.project.list.useQuery({ isArchived: false });
+  const { data: projectsWithBoardCounts, refetch: refetchBoardCounts } = trpc.project.list.useQuery(
+    { isArchived: false, includeBoardCounts: true },
+    { enabled: false }
+  );
   const selectProjectSlug = useCallback((slug: string) => {
     setSelectedProjectSlug(slug);
     persistSelectedProjectSlug(slug);
@@ -198,9 +203,20 @@ export function useAppNavigationData() {
 
   return {
     ...(unreadMailCounts.data ? { unreadMailCounts: unreadMailCounts.data } : {}),
-    projects,
+    projects: projects?.map((project) => {
+      const boardCounts = projectsWithBoardCounts?.find(
+        (candidate) => candidate.id === project.id
+      )?.boardCounts;
+      return { ...project, ...(boardCounts ? { boardCounts } : {}) };
+    }),
     projectsError,
-    refetchProjects,
+    refetchProjects: async (options?: RefetchOptions & { includeBoardCounts?: boolean }) => {
+      const result = await refetchProjectList(options);
+      if (options?.includeBoardCounts) {
+        await refetchBoardCounts();
+      }
+      return result;
+    },
     selectedProjectSlug,
     selectProjectSlug,
     selectedProjectId,

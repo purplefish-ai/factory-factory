@@ -973,3 +973,25 @@ it('optionally includes live board counts for every listed project', async () =>
     { id: 'p2', boardCounts: { working: 0, waiting: 0 } },
   ]);
 });
+
+it('keeps every project selectable when one board count fails', async () => {
+  mockProjectManagementService.list.mockResolvedValue([
+    { id: 'bad', name: 'Unavailable counts', issueTrackerConfig: null },
+    { id: 'ok', name: 'Healthy', issueTrackerConfig: null },
+  ]);
+  mockBoardCounts.mockImplementation((id: string) =>
+    id === 'bad'
+      ? Promise.reject(new Error('Workspace read failed'))
+      : Promise.resolve({ working: 1, waiting: 2 })
+  );
+  const result = await createCaller().list({ includeBoardCounts: true });
+  expect(result).toEqual([
+    { id: 'bad', name: 'Unavailable counts', issueTrackerConfig: null },
+    {
+      id: 'ok',
+      name: 'Healthy',
+      issueTrackerConfig: null,
+      boardCounts: { working: 1, waiting: 2 },
+    },
+  ]);
+});

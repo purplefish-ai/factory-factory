@@ -13,11 +13,11 @@ export function useProjectHeaderNavigation() {
     projects,
     projectsError,
     refetchProjects,
-    selectedProjectSlug,
+    selectedProjectSlug: workspaceProjectSlug,
     selectProjectSlug,
     serverWorkspaces,
   } = useAppNavigationDataContext();
-  const currentProjectSlug = getProjectSlugFromPath(pathname) ?? selectedProjectSlug;
+  const currentProjectSlug = getProjectSlugFromPath(pathname) ?? workspaceProjectSlug;
 
   const navigateToProject = useCallback(
     (slug: string) => {
@@ -53,7 +53,7 @@ export function useProjectHeaderNavigation() {
   return {
     selectedProjectSlug: currentProjectSlug,
     projects: projects?.map((project) =>
-      project.slug === selectedProjectSlug && serverWorkspaces !== undefined
+      project.slug === workspaceProjectSlug && serverWorkspaces !== undefined
         ? {
             ...project,
             boardCounts: {
@@ -68,7 +68,9 @@ export function useProjectHeaderNavigation() {
     handleProjectMenuOpen: () => {
       if (!projectsError) {
         // Query errors appear through the existing retry item, including failed refreshes.
-        void Promise.resolve(refetchProjects?.()).catch(() => undefined);
+        void Promise.resolve(refetchProjects?.({ includeBoardCounts: true })).catch(
+          () => undefined
+        );
       }
     },
     projectsError,

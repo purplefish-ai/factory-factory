@@ -23,6 +23,9 @@ const mocks = vi.hoisted(() => ({
   getBySlug: vi.fn(),
   reviewQuery: vi.fn(),
   resetReviews: vi.fn(),
+  projectListQuery: vi.fn(),
+  refetchProjectList: vi.fn(async () => ({ data: [] })),
+  refetchBoardCounts: vi.fn(async () => ({ data: [] })),
 }));
 const mutation = { mutate: mocks.mutate };
 vi.mock('@/client/hooks/use-project-workspace-query', () => {
@@ -52,26 +55,33 @@ vi.mock('@/client/lib/trpc', () => ({
     project: {
       getBySlug: { useQuery: mocks.getBySlug },
       list: {
-        useQuery: () => ({
-          data: [
-            {
-              id: 'alpha-id',
-              slug: 'alpha',
-              name: 'Alpha',
-              issueProvider: 'GITHUB',
-              githubOwner: 'o',
-              githubRepo: 'alpha',
-            },
-            {
-              id: 'new-id',
-              slug: 'new',
-              name: 'New',
-              issueProvider: 'GITHUB',
-              githubOwner: 'o',
-              githubRepo: 'new',
-            },
-          ],
-        }),
+        useQuery: (
+          input: { includeBoardCounts?: boolean } = {},
+          options?: { enabled?: boolean }
+        ) => {
+          mocks.projectListQuery(input, options);
+          return {
+            refetch: input.includeBoardCounts ? mocks.refetchBoardCounts : mocks.refetchProjectList,
+            data: [
+              {
+                id: 'alpha-id',
+                slug: 'alpha',
+                name: 'Alpha',
+                issueProvider: 'GITHUB',
+                githubOwner: 'o',
+                githubRepo: 'alpha',
+              },
+              {
+                id: 'new-id',
+                slug: 'new',
+                name: 'New',
+                issueProvider: 'GITHUB',
+                githubOwner: 'o',
+                githubRepo: 'new',
+              },
+            ],
+          };
+        },
       },
     },
     workspace: {
@@ -97,7 +107,15 @@ function NavigationHarness({
   selected.selectedProjectSlug = navigation.selectedProjectSlug;
   selected.selectedProjectId = navigation.selectedProjectId;
   selected.reviewCount = navigation.reviewCount;
-  return null;
+  return (
+    <button
+      onClick={() => {
+        void navigation.refetchProjects({ includeBoardCounts: true });
+      }}
+    >
+      Open projects
+    </button>
+  );
 }
 
 beforeEach(() => {
@@ -381,6 +399,34 @@ it('does not treat initial project metadata without an ID as a previous scope', 
     );
   } finally {
     flushSync(() => root.unmount());
+    localStorage.clear();
+  }
+});
+
+it('keeps count queries disabled until the project menu requests a refresh', async () => {
+  mocks.projectListQuery.mockClear();
+  mocks.refetchBoardCounts.mockClear();
+  const container = document.createElement('div');
+  const root = createRoot(container);
+  try {
+    await act(() =>
+      root.render(
+        <MemoryRouter>
+          <NavigationHarness selected={{}} />
+        </MemoryRouter>
+      )
+    );
+    expect(mocks.projectListQuery).toHaveBeenCalledWith(
+      { isArchived: false, includeBoardCounts: true },
+      { enabled: false }
+    );
+    expect(mocks.refetchBoardCounts).not.toHaveBeenCalled();
+    await act(() => {
+      container.querySelector('button')?.click();
+    });
+    expect(mocks.refetchBoardCounts).toHaveBeenCalledOnce();
+  } finally {
+    await act(() => root.unmount());
     localStorage.clear();
   }
 });

@@ -332,6 +332,13 @@ export default function NewProjectPage() {
       <HeaderLeftStartSlot>
         <ProjectSelectorDropdown
           selectedProjectSlug={selectedProjectSlug}
+          onRetryProjects={
+            projectsError
+              ? () => {
+                  void refetchProjects();
+                }
+              : undefined
+          }
           onMenuOpen={handleProjectMenuOpen}
           onProjectChange={handleProjectChange}
           onCurrentProjectSelect={handleCurrentProjectSelect}

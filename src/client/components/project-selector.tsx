@@ -74,12 +74,13 @@ export function ProjectSelectorDropdown({
   const isMobile = useIsMobile();
   const [open, setOpen] = useState(false);
   const selectedProject = projects?.find((project) => project.slug === selectedProjectSlug);
+  const selectedProjectId = selectedProject?.id;
   const selectedProjectName = selectedProject?.name ?? 'Select a project';
   const nameRef = useRef<HTMLSpanElement>(null);
   const [compact, setCompact] = useState(false);
   useLayoutEffect(() => {
     const name = nameRef.current;
-    if (!(name && isMobile && selectedProject && selectedProjectName)) {
+    if (!(name && isMobile && selectedProjectId && selectedProjectName)) {
       setCompact(false);
       return;
     }
@@ -91,7 +92,7 @@ export function ProjectSelectorDropdown({
     const observer = new ResizeObserver(measure);
     observer.observe(name);
     return () => observer.disconnect();
-  }, [isMobile, selectedProject, selectedProjectName]);
+  }, [isMobile, selectedProjectId, selectedProjectName]);
   const { pathname, search } = useLocation();
 
   // Keep browser link behavior for new tabs/windows and middle clicks. Only
