@@ -22,14 +22,14 @@ VERSION=$(tar -xOf "$TARBALL" package/package.json | jq -er '
   select(type == "string" and test("^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$"))')
 EXPECTED_INTEGRITY="sha512-$(openssl dgst -sha512 -binary "$TARBALL" | openssl base64 -A)"
 EXPECTED_DIGEST=$(openssl dgst -sha512 -binary "$TARBALL" | od -An -v -tx1 | tr -d ' \n')
-METADATA=$(curl --fail --silent --show-error --proto '=https' --tlsv1.2 "https://registry.npmjs.org/factory-factory/$VERSION")
+METADATA=$(curl --fail --silent --show-error --proto '=https' --tlsv1.2 --connect-timeout 15 --max-time 60 "https://registry.npmjs.org/factory-factory/$VERSION")
 jq -e --arg version "$VERSION" --arg integrity "$EXPECTED_INTEGRITY" '
   .name == "factory-factory" and .version == $version and .dist.integrity == $integrity
 ' <<< "$METADATA" >/dev/null || {
   echo 'Published npm package differs from the staged tarball' >&2
   exit 1
 }
-ATTESTATIONS=$(curl --fail --silent --show-error --proto '=https' --tlsv1.2 "https://registry.npmjs.org/-/npm/v1/attestations/factory-factory@$VERSION")
+ATTESTATIONS=$(curl --fail --silent --show-error --proto '=https' --tlsv1.2 --connect-timeout 15 --max-time 60 "https://registry.npmjs.org/-/npm/v1/attestations/factory-factory@$VERSION")
 jq -e --arg version "$VERSION" --arg digest "$EXPECTED_DIGEST" \
   --arg commit "$EXPECTED_COMMIT" --arg repository "$REPOSITORY" --arg run "$STAGING_RUN_ID" '
   [.attestations[] | select(.predicateType == "https://slsa.dev/provenance/v1") |

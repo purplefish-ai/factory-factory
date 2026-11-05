@@ -73,6 +73,7 @@ function fixture() {
   );
   chmodSync(join(root, 'bin/curl'), 0o755);
   return {
+    root,
     metadata,
     statement,
     artifact,
@@ -147,6 +148,11 @@ describe('published npm release identity', () => {
   it('rejects a provenance subject for different bytes', () => {
     const item = fixture();
     item.statement.subject[0]!.digest.sha512 = '0'.repeat(128);
+    expect(item.run().status).not.toBe(0);
+  });
+  it('fails closed when the registry request times out', () => {
+    const item = fixture();
+    writeFileSync(join(item.root, 'bin/curl'), '#!/bin/sh\nexit 28\n');
     expect(item.run().status).not.toBe(0);
   });
   it('rejects ambiguous artifacts', () => {
