@@ -101,6 +101,8 @@ it('deduplicates pending sends against server history and isolates other session
     expect(container.textContent).not.toContain('Stale local content');
     expect(container.textContent).not.toContain('Private other draft');
     expect(container.textContent?.match(/Sending…/g)).toHaveLength(2);
+    expect(container.textContent).toContain('First pending');
+    expect(container.textContent).toContain('Second pending');
     expect(container.textContent?.indexOf('First pending')).toBeLessThan(
       container.textContent?.indexOf('Second pending') ?? 0
     );

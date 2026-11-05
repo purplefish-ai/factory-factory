@@ -45,13 +45,6 @@ accepted update. The legacy `checkFactoryUpdate` query supports older clients.
 
 ACP admission is injected by composition to preserve dependency isolation.
 
-Locally sent messages appear immediately in the transcript with their text,
-attachments and a Sending status while awaiting server confirmation. The pending
-entries survive history refreshes and reconnect loading; matching server message
-IDs replace them without duplication. Pending sends have no queue controls until
-the server confirms acceptance. Both workspace chat and Kanban quick chat use
-this presentation.
-
 Rejected or failed messages restore their text and attachments only when the
 current session composer is empty. A newer draft or attachment selection is
 preserved, and clearing it later does not replay the earlier recovery.
