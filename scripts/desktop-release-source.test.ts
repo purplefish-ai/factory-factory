@@ -1,4 +1,4 @@
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -10,6 +10,9 @@ const workflow = z
   .object({
     jobs: z.object({
       'build-mac': z.object({
+        steps: z.array(z.object({ name: z.string().optional(), run: z.string().optional() })),
+      }),
+      'create-release': z.object({
         steps: z.array(z.object({ name: z.string().optional(), run: z.string().optional() })),
       }),
     }),
@@ -123,4 +126,65 @@ sourceTest('rejects an existing version tag that points to an older main commit'
   expect(() => repo.run('workflow_dispatch', 'refs/heads/main', current)).toThrow(
     'Existing release tag'
   );
+});
+
+function attachmentCheck(tagSha: string, queryFails = false) {
+  const script = workflow.jobs['create-release'].steps.find(
+    (step) => step.name === 'Verify release tag before attaching artifacts'
+  )?.run;
+  if (!script) {
+    throw new Error('Attachment identity guard is missing');
+  }
+  return spawnSync(
+    'bash',
+    [
+      '-c',
+      `
+    gh() {
+      if [[ "$*" == *"matching-refs"* ]]; then return 0; fi
+      if [[ "$*" == *" -X POST "* ]]; then return 1; fi
+      if [ "$QUERY_FAILS" = true ]; then return 7; fi
+      if [[ "$*" == *"/commits/refs/tags/"* ]]; then
+        printf '%s\n' "$TAG_SHA"
+      else
+        # An unqualified ref may resolve to a same-named branch instead.
+        printf '%s\n' "$GITHUB_SHA"
+      fi
+    }
+    ${script}
+  `,
+    ],
+    {
+      encoding: 'utf8',
+      env: {
+        ...process.env,
+        GITHUB_REPOSITORY: 'fixture/repository',
+        GITHUB_SHA: 'a'.repeat(40),
+        RELEASE_TAG: 'v1.2.3',
+        TAG_SHA: tagSha,
+        QUERY_FAILS: String(queryFails),
+      },
+    }
+  );
+}
+
+sourceTest('permits attachment only when the remote tag resolves to the built source', () => {
+  expect(attachmentCheck('a'.repeat(40)).status).toBe(0);
+});
+
+sourceTest('rejects a remote tag changed between build and attachment', () => {
+  const result = attachmentCheck('b'.repeat(40));
+  expect(result.status).toBe(1);
+  expect(result.stdout + result.stderr).toContain('Release tag no longer matches');
+});
+
+sourceTest('rejects attachment when remote tag verification fails', () => {
+  expect(attachmentCheck('a'.repeat(40), true).status).not.toBe(0);
+});
+
+it('disables native dependency rebuilds while signing credentials are present', () => {
+  const signed = workflow.jobs['build-mac'].steps.find(
+    (step) => step.name === 'Build signed and notarized release'
+  );
+  expect(signed?.run).toContain('--config.npmRebuild=false');
 });

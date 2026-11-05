@@ -124,7 +124,7 @@ jobs:
               exit 1
             fi
           done
-          pnpm exec electron-builder --publish never --config.forceCodeSigning=true --config.mac.hardenedRuntime=true --config.mac.notarize=true
+          pnpm exec electron-builder --publish never --config.npmRebuild=false --config.forceCodeSigning=true --config.mac.hardenedRuntime=true --config.mac.notarize=true
 
       - name: Verify release signature and notarization
         if: github.event_name == 'release' || inputs.create_release == true
@@ -236,6 +236,9 @@ jobs:
 
   create-release:
     name: Create Release
+    concurrency:
+      group: desktop-release-${{ github.event_name == 'release' && github.ref_name || inputs.release_tag }}
+      cancel-in-progress: false
     needs: [build-mac, build-windows, build-linux]
     if: |
       always() &&
@@ -254,6 +257,24 @@ jobs:
 
       - name: List artifacts
         run: find artifacts -type f
+
+      - name: Verify release tag before attaching artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.event_name == 'release' && github.ref_name || inputs.release_tag }}
+        run: |
+          set -euo pipefail
+          EXISTING_REF=$(gh api "repos/$GITHUB_REPOSITORY/git/matching-refs/tags/$RELEASE_TAG" --jq '.[] | select(.ref == ("refs/tags/" + env.RELEASE_TAG)) | .ref')
+          if [ -z "$EXISTING_REF" ]; then
+            if ! gh api -X POST "repos/$GITHUB_REPOSITORY/git/refs" -f ref="refs/tags/$RELEASE_TAG" -f sha="$GITHUB_SHA" > /dev/null; then
+              echo "Tag creation did not succeed; remote identity verification is still required."
+            fi
+          fi
+          REMOTE_SHA=$(gh api "repos/$GITHUB_REPOSITORY/commits/refs/tags/$RELEASE_TAG" --jq '.sha')
+          if [ "$REMOTE_SHA" != "$GITHUB_SHA" ]; then
+            echo "::error::Release tag no longer matches the built source commit."
+            exit 1
+          fi
 
       - name: Upload to Release (from release event)
         if: github.event_name == 'release'

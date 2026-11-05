@@ -102,5 +102,6 @@ try {
   );
   process.stdout.write(stdout);
 } finally {
-  rmSync(configDirectory, { recursive: true, force: true });
+  // SDK shutdown can leave transient filesystem activity in its temporary config.
+  rmSync(configDirectory, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
 }

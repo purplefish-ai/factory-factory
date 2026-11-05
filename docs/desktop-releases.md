@@ -48,6 +48,11 @@ built artifacts from being attached to an older same-version tag. Full checkout
 history supplies the ancestry check. Unsigned validation can run on development
 branches without these release restrictions.
 
+The attachment job serializes releases for each tag and revalidates its remote
+commit immediately before attaching artifacts. Missing tags are created at the
+built SHA; a creation race still requires a successful remote identity check.
+Remote verification failures or a mismatched commit stop attachment.
+
 Environment protection remains necessary to restrict who can approve use of the
 credentials. The source guard adds a repository-level check; it does not create
 or replace GitHub's environment review policy.
@@ -56,6 +61,9 @@ or replace GitHub's environment review policy.
 
 Application compilation, Prisma generation and native-module preparation run
 without signing credentials. Only the packaging step receives the credentials.
+That step disables native dependency rebuilding (`npmRebuild: false`),
+preserving the prepared binaries. There are no custom Electron builder lifecycle
+hooks configured; review any new hook for credential exposure before adding it.
 All packaging commands explicitly disable Electron builder publishing; artifact
 attachment is handled only by the workflow's release job. This also prevents CI
 detection from attempting a publish during unsigned validation. The release
