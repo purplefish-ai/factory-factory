@@ -325,9 +325,9 @@ subcommand, such as “Ran python3” or “Ran git cherry-pick”. Shell wrappe
 as `sh -ec 'git status'` show the underlying command, “Ran git status”.
 Summaries omit command arguments and directory paths. Multiple reads or commands
 use the generic plural labels. Expanding the summary reveals chronological
-actions; each action expands to its full input and output. An expanded group with
-failed actions ends with a danger-toned count, such as "Ran commands · 1 of 3
-failed" (or "· failed" for a single action), and shows an error icon once
+actions; each action expands to its full input and output. An expanded group
+with failed actions ends with a danger-toned count, such as "Ran commands · 1 of
+3 failed" (or "· failed" for a single action), and shows an error icon once
 nothing is pending. Collapsed summaries retain their activity icon, or a running
 indicator while pending.
 
