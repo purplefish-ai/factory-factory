@@ -1,6 +1,6 @@
 import { globSync } from 'node:fs';
 import path from 'node:path';
-import { defineConfig } from 'vitest/config';
+import { configDefaults, defineConfig } from 'vitest/config';
 
 // Keep whole-window replacements, native HTTP, cache reference identity and
 // cross-realm strict equality tests in their original process realms.
@@ -72,6 +72,8 @@ const reusableSharedTests = [
 export default defineConfig({
   test: {
     globals: true,
+    globalSetup: ['./src/backend/testing/integration-db.global-setup.ts'],
+    forceRerunTriggers: [...configDefaults.forceRerunTriggers, '**/prisma/migrations/**'],
     environment: 'node',
     // Let jsdom own browser storage instead of Node's experimental global.
     execArgv: ['--no-experimental-webstorage'],
