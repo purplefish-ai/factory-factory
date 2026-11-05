@@ -75,6 +75,7 @@ export function QuickChatContent({
         pendingRequestType={running ? pendingRequestType : null}
         workspaceId={workspaceId}
         messages={groupedMessages}
+        pendingMessages={chatState.pendingMessages}
         history={chatState.transcriptHistory}
         subagentTimelineError={timeline.error}
         runningSubagentIconIndices={timeline.runningSubagentIconIndices}

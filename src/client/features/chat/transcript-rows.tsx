@@ -73,10 +73,14 @@ function TranscriptMessage({
 }
 
 /** Queued prompts render after the active response, which may still be streaming. */
-function latestUnqueuedId(messages: GroupedMessageItem[], display: TranscriptDisplayProps) {
+function latestUnqueuedId(
+  messages: GroupedMessageItem[],
+  display: TranscriptDisplayProps,
+  pendingIds: ReadonlySet<string>
+) {
   for (let index = messages.length - 1; index >= 0; index--) {
     const id = messages[index]?.id;
-    if (id !== undefined && !display.queuedMessageIds?.has(id)) {
+    if (id !== undefined && !display.queuedMessageIds?.has(id) && !pendingIds.has(id)) {
       return id;
     }
   }
@@ -119,11 +123,18 @@ export function TranscriptRows({
           getExpansionState={getExpansionState}
           setExpansionState={setExpansionState}
         />
+        {layout.pendingMessageIds.has(item.id) && (
+          <div role="status" className="mb-4 text-xs text-muted-foreground">
+            Sending…
+          </div>
+        )}
         {messageIndex === layout.messages.length - 1 && tail}
       </>
     );
   };
-  const streamingMessageId = display.running ? latestUnqueuedId(layout.messages, display) : null;
+  const streamingMessageId = display.running
+    ? latestUnqueuedId(layout.messages, display, layout.pendingMessageIds)
+    : null;
   return (
     <ChatImageWorkspaceContext value={display.workspaceId}>
       <ThinkingCompletionProvider
