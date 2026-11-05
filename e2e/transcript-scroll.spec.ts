@@ -195,6 +195,8 @@ test('reading inside a row gap survives prepend and a session round trip', async
     if (!row?.dataset.transcriptKey) {
       throw new Error('Missing row after the reading position');
     }
+    // Model a user adjustment into the gap, rather than an automatic layout write.
+    element.dispatchEvent(new WheelEvent('wheel', { deltaY: 1 }));
     element.scrollTop += row.getBoundingClientRect().top - viewportTop - 4;
     element.dispatchEvent(new Event('scroll'));
     return { key: row.dataset.transcriptKey, top: viewportTop + 4 };
@@ -369,7 +371,7 @@ test('hydration suspends positioning and keeps the committed reading anchor', as
   await expect(page.getByRole('button', { name: 'Scroll to bottom', exact: true })).toBeVisible();
   const anchor = await readingAnchor(viewport);
   await page.getByRole('button', { name: 'Toggle hydration', exact: true }).click();
-  await expect(viewport).toContainText('Loading session...');
+  await expect(viewport).toContainText('Loading session…');
   await page.getByRole('button', { name: 'Append burst', exact: true }).click();
   await page.getByRole('button', { name: 'Toggle hydration', exact: true }).click();
   await expectAnchor(viewport, anchor);
@@ -567,6 +569,8 @@ test('older history loads near the top, preserves content at the top, and keeps 
   await page.mouse.wheel(0, -100_000);
   await expect(page.getByRole('button', { name: 'Scroll to bottom', exact: true })).toBeVisible();
   await viewport.evaluate((element) => {
+    // Pair the synthetic movement with user input, as a wheel/scrollbar would.
+    element.dispatchEvent(new WheelEvent('wheel', { deltaY: -1 }));
     element.scrollTop = 0;
   });
   await expect(page.getByText('Loading earlier messages…')).toBeVisible();
@@ -584,6 +588,8 @@ test('older history loads near the top, preserves content at the top, and keeps 
   await expect.poll(relativeTop).toBe(before);
   expect(await viewport.locator('[data-transcript-key]').count()).toBeLessThan(25);
   await viewport.evaluate((element) => {
+    // Pair the synthetic movement with user input, as a wheel/scrollbar would.
+    element.dispatchEvent(new WheelEvent('wheel', { deltaY: -1 }));
     element.scrollTop = 0;
   });
   await expectCompletedHistory(page);
@@ -597,6 +603,8 @@ test('failed older history stays visible until an explicit retry', async ({ page
   await viewport.hover();
   await page.mouse.wheel(0, -100_000);
   await viewport.evaluate((element) => {
+    // Pair the synthetic movement with user input, as a wheel/scrollbar would.
+    element.dispatchEvent(new WheelEvent('wheel', { deltaY: -1 }));
     element.scrollTop = 0;
   });
   await expect(page.getByText('Loading earlier messages…')).toBeVisible();
@@ -608,6 +616,8 @@ test('failed older history stays visible until an explicit retry', async ({ page
   await expect(page.getByText('History requests: 2')).toBeVisible();
   await page.getByRole('button', { name: 'Resolve history page', exact: true }).click();
   await viewport.evaluate((element) => {
+    // Pair the synthetic movement with user input, as a wheel/scrollbar would.
+    element.dispatchEvent(new WheelEvent('wheel', { deltaY: -1 }));
     element.scrollTop = 0;
   });
   await expectCompletedHistory(page);
@@ -659,6 +669,8 @@ test('paging adjacent tools preserves the expanded existing group and its anchor
     group.getByRole('button', { name: 'Reading file-100.ts Running', exact: true })
   ).toBeVisible();
   await viewport.evaluate((element) => {
+    // Pair the synthetic movement with user input, as a wheel/scrollbar would.
+    element.dispatchEvent(new WheelEvent('wheel', { deltaY: -1 }));
     element.scrollTop = 0;
   });
   await expectCompletedHistory(page, 'tool-seq-tool-0');
@@ -693,6 +705,8 @@ test('history fixture keeps paging state separate across sessions', async ({ pag
   await expect(page.getByText('History requests: 1')).toBeVisible();
   await page.getByRole('button', { name: 'Switch session', exact: true }).click();
   await viewport.evaluate((element) => {
+    // Pair the synthetic movement with user input, as a wheel/scrollbar would.
+    element.dispatchEvent(new WheelEvent('wheel', { deltaY: -1 }));
     element.scrollTop = 0;
   });
   await expectCompletedHistory(page);
@@ -703,6 +717,8 @@ test('history loading feedback stays fully visible at the top', async ({ page })
   const viewport = page.getByTestId('transcript-viewport');
   await expect.poll(() => gap(viewport)).toBeLessThanOrEqual(1);
   await viewport.evaluate((element) => {
+    // Pair the synthetic movement with user input, as a wheel/scrollbar would.
+    element.dispatchEvent(new WheelEvent('wheel', { deltaY: -1 }));
     element.scrollTop = 0;
   });
   const loading = page.getByText('Loading earlier messages…');
@@ -713,4 +729,68 @@ test('history loading feedback stays fully visible at the top', async ({ page })
     }
   });
   await expect(loading).toBeInViewport({ ratio: 1 });
+});
+
+test('overlapping message and tool bursts keep following without user input', async ({ page }) => {
+  await page.goto('/__transcript-scroll');
+  const viewport = page.getByTestId('transcript-viewport');
+  await expect.poll(() => gap(viewport)).toBeLessThanOrEqual(1);
+  await page.evaluate(async () => {
+    const click = (name: string) => {
+      const button = [...document.querySelectorAll('button')].find(
+        (item) => item.textContent === name
+      );
+      if (!button) {
+        throw new Error(`Missing ${name}`);
+      }
+      button.click();
+    };
+    for (let i = 0; i < 30; i++) {
+      click('Tool burst');
+      click('Toggle activity');
+      await new Promise(requestAnimationFrame);
+      click('Append burst');
+      await new Promise(requestAnimationFrame);
+      click('Trim window');
+      await new Promise(requestAnimationFrame);
+      const saved = localStorage.getItem('workspace-panel-scroll-fixture-W1');
+      if (saved?.includes('"intent":"reading"')) {
+        throw new Error(`Lost following during burst ${i}`);
+      }
+    }
+  });
+  await expect.poll(() => gap(viewport)).toBeLessThanOrEqual(1);
+  await expect(page.getByRole('button', { name: 'Scroll to bottom', exact: true })).toBeHidden();
+});
+
+test('desktop to mobile resizing during output preserves following and reading intent', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1100, height: 800 });
+  await page.goto('/__transcript-scroll');
+  const viewport = page.getByTestId('transcript-viewport');
+  const jump = page.getByRole('button', { name: 'Scroll to bottom', exact: true });
+  await expect.poll(() => gap(viewport)).toBeLessThanOrEqual(1);
+  for (const size of [
+    { width: 375, height: 667 },
+    { width: 667, height: 375 },
+    { width: 375, height: 420 },
+    { width: 1100, height: 800 },
+  ]) {
+    await page.getByRole('button', { name: 'Append burst', exact: true }).click();
+    await page.setViewportSize(size);
+    await page.getByRole('button', { name: 'Tool burst', exact: true }).click();
+    await expect.poll(() => gap(viewport)).toBeLessThanOrEqual(1);
+    await expect(jump).toBeHidden();
+  }
+  await viewport.hover();
+  await page.mouse.wheel(0, -700);
+  await expect(jump).toBeVisible();
+  await page.setViewportSize({ width: 375, height: 667 });
+  await page.getByRole('button', { name: 'Append burst', exact: true }).click();
+  await expect(jump).toBeVisible();
+  await expect.poll(() => gap(viewport)).toBeGreaterThan(100);
+  await jump.click();
+  await expect.poll(() => gap(viewport)).toBeLessThanOrEqual(1);
+  await expect(jump).toBeHidden();
 });

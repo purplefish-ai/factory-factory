@@ -26,10 +26,13 @@ export function observeTranscriptScroll(viewport: HTMLDivElement, controller: Co
   let lastWrite: { top: number; left: number; epoch: number } | null = null;
   let timer: ReturnType<typeof setTimeout> | undefined;
   let timedInteraction = false;
+  let touchMomentum = false;
   const held = new Set<'touch' | 'pointer'>();
+  const touchContacts = new Set<number>();
   const finish = () => {
     clearTimeout(timer);
     timedInteraction = false;
+    touchMomentum = false;
     if (held.size === 0) {
       controller.endInteraction();
     }
@@ -58,13 +61,17 @@ export function observeTranscriptScroll(viewport: HTMLDivElement, controller: Co
     const clamped =
       next.max !== observed.max && Math.abs(next.top - Math.min(observed.top, next.max)) <= 1;
     observed = next;
-    if (Math.abs(delta) <= 1 || ownWrite || clamped) {
+    // Tiny momentum steps still prove that the user's timed episode is active.
+    // Keep the jitter threshold below for intent changes, not for ownership.
+    if (delta !== 0 && !ownWrite && !clamped && timedInteraction) {
+      refresh();
+    }
+    // Scroll events also report resize clamps, browser anchoring and virtual
+    // row corrections. Only movement during user input can change intent.
+    if (Math.abs(delta) <= 1 || ownWrite || clamped || (!timedInteraction && held.size === 0)) {
       return false;
     }
     controller.userScrolled(delta < 0 ? 'up' : 'down', Math.max(0, next.max - next.top));
-    if (timedInteraction) {
-      refresh();
-    }
     return true;
   };
   const wheel = (event: WheelEvent) => {
@@ -89,14 +96,27 @@ export function observeTranscriptScroll(viewport: HTMLDivElement, controller: Co
       begin(up ? 'up' : 'down', true);
     }
   };
-  const touch = () => {
+  const touch = (event: TouchEvent) => {
+    for (const contact of Array.from(event.changedTouches ?? [])) {
+      touchContacts.add(contact.identifier);
+    }
     held.add('touch');
     begin('unknown', false);
   };
-  const releaseTouch = () => {
+  const releaseTouch = (event: TouchEvent) => {
+    for (const contact of Array.from(event.changedTouches ?? [])) {
+      touchContacts.delete(contact.identifier);
+    }
+    if (touchContacts.size > 0) {
+      return;
+    }
     held.delete('touch');
-    if (!timedInteraction && held.size === 0) {
-      controller.endInteraction();
+    if (held.size === 0) {
+      // Touch scrolling can continue after release. Keep ownership through
+      // momentum, refreshing the idle timeout on each actual movement.
+      timedInteraction = true;
+      touchMomentum = true;
+      refresh();
     }
   };
   const releasePointer = () => {
@@ -106,7 +126,9 @@ export function observeTranscriptScroll(viewport: HTMLDivElement, controller: Co
     }
   };
   const scrollEnd = () => {
-    if (timedInteraction) {
+    // scrollend carries no gesture identity: an older command's event can
+    // arrive after touch release. Only idle time can end touch momentum.
+    if (timedInteraction && !touchMomentum) {
       finish();
     }
   };

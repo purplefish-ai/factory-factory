@@ -36,6 +36,7 @@ it('ignores delayed and coalesced scroll events after native writes', () => {
   h.viewport.dispatchEvent(new Event('scroll'));
   h.viewport.dispatchEvent(new Event('scroll'));
   expect(h.controller.userScrolled).not.toHaveBeenCalled();
+  h.viewport.dispatchEvent(new Event('touchstart'));
   h.viewport.scrollTop = 250;
   h.viewport.dispatchEvent(new Event('scroll'));
   expect(h.controller.userScrolled).toHaveBeenCalledExactlyOnceWith('up', 250);
@@ -43,6 +44,7 @@ it('ignores delayed and coalesced scroll events after native writes', () => {
 it('takes over for movement before a queued absolute write, but allows native compensation', () => {
   const h = harness();
   const write = vi.fn();
+  h.viewport.dispatchEvent(new Event('touchstart'));
   h.viewport.scrollTop = 100;
   h.observer.write(write);
   expect(h.controller.userScrolled).toHaveBeenCalledWith('up', 400);
@@ -66,6 +68,7 @@ it('stationary touch only interrupts and resumes, while actual upward movement r
   h.viewport.dispatchEvent(new Event('scroll'));
   expect(h.controller.userScrolled).toHaveBeenCalledWith('up', 100);
   h.viewport.dispatchEvent(new Event('touchend'));
+  vi.advanceTimersByTime(150);
   expect(h.controller.endInteraction).toHaveBeenCalledOnce();
 });
 
@@ -76,11 +79,13 @@ it('a queued scrollend cannot release a held touch interaction', () => {
   vi.advanceTimersByTime(500);
   expect(h.controller.endInteraction).not.toHaveBeenCalled();
   h.viewport.dispatchEvent(new Event('touchend'));
+  vi.advanceTimersByTime(150);
   expect(h.controller.endInteraction).toHaveBeenCalledOnce();
 });
 
 it('preserves native deferred/clamped compensation without adjustments after delayed user movement', () => {
   const h = harness();
+  h.viewport.dispatchEvent(new Event('touchstart'));
   h.viewport.scrollTop = 100;
   h.observer.write(() => {
     h.viewport.scrollTop += 200;
@@ -197,4 +202,167 @@ it('does not begin interaction for ordinary viewport or child content clicks', (
   window.dispatchEvent(new Event('pointerup'));
   expect(h.controller.beginInteraction).not.toHaveBeenCalled();
   expect(h.controller.userScrolled).not.toHaveBeenCalled();
+});
+
+it.each(['scroll event', 'queued write'])(
+  'ignores a shrink clamp followed by growth before a %s',
+  (delivery) => {
+    const h = harness();
+    // The DOM shrinks to max=400 and clamps top there, then grows to max=600
+    // in the same render burst. The final event cannot see the temporary max.
+    h.viewport.scrollTop = 400;
+    Object.defineProperty(h.viewport, 'scrollHeight', { value: 1100 });
+    if (delivery === 'scroll event') {
+      h.viewport.dispatchEvent(new Event('scroll'));
+    }
+    const write = vi.fn();
+    h.observer.write(write);
+    expect(h.controller.userScrolled).not.toHaveBeenCalled();
+    expect(write).toHaveBeenCalledOnce();
+  }
+);
+
+it('ignores layout movement from a reading position while the extent changes', () => {
+  const h = harness();
+  h.observer.write(() => {
+    h.viewport.scrollTop = 400;
+  });
+  h.viewport.scrollTop = 300;
+  Object.defineProperty(h.viewport, 'scrollHeight', { value: 1100 });
+  h.viewport.dispatchEvent(new Event('scroll'));
+  expect(h.controller.userScrolled).not.toHaveBeenCalled();
+});
+
+it.each(['wheel', 'touchstart', 'keydown', 'pointerdown'])(
+  'preserves real upward movement during extent changes after %s input',
+  (input) => {
+    const h = harness();
+    vi.spyOn(h.viewport, 'getBoundingClientRect').mockReturnValue(new DOMRect(0, 0, 500, 500));
+    h.viewport.dispatchEvent(
+      input === 'pointerdown'
+        ? new MouseEvent(input, { clientX: 495 })
+        : input === 'wheel'
+          ? new WheelEvent(input, { deltaY: -100 })
+          : input === 'keydown'
+            ? new KeyboardEvent(input, { key: 'ArrowUp' })
+            : new Event(input)
+    );
+    h.viewport.scrollTop = 400;
+    Object.defineProperty(h.viewport, 'scrollHeight', { value: 1100 });
+    h.viewport.dispatchEvent(new Event('scroll'));
+    expect(h.controller.userScrolled).toHaveBeenCalledExactlyOnceWith('up', 200);
+  }
+);
+
+it('ignores non-user movement even when the final extent is unchanged', () => {
+  const h = harness();
+  h.viewport.scrollTop = 350;
+  h.viewport.dispatchEvent(new Event('scroll'));
+  expect(h.controller.userScrolled).not.toHaveBeenCalled();
+});
+
+it('keeps touch momentum owned until an idle timeout despite a queued scrollend', () => {
+  const h = harness();
+  h.viewport.dispatchEvent(new Event('touchstart'));
+  h.viewport.dispatchEvent(new Event('touchend'));
+  vi.advanceTimersByTime(100);
+  h.viewport.scrollTop = 400;
+  h.viewport.dispatchEvent(new Event('scroll'));
+  expect(h.controller.userScrolled).toHaveBeenCalledExactlyOnceWith('up', 100);
+  vi.advanceTimersByTime(100);
+  expect(h.controller.endInteraction).not.toHaveBeenCalled();
+  h.viewport.dispatchEvent(new Event('scrollend'));
+  expect(h.controller.endInteraction).not.toHaveBeenCalled();
+  vi.advanceTimersByTime(50);
+  expect(h.controller.endInteraction).toHaveBeenCalledOnce();
+  h.viewport.scrollTop = 300;
+  h.viewport.dispatchEvent(new Event('scroll'));
+  expect(h.controller.userScrolled).toHaveBeenCalledOnce();
+});
+
+it.each([0.5, 1])('keeps slow touch momentum alive for %s pixel steps', (step) => {
+  const h = harness();
+  h.viewport.dispatchEvent(new Event('touchstart'));
+  h.viewport.dispatchEvent(new Event('touchend'));
+  for (let index = 0; index < 4; index++) {
+    vi.advanceTimersByTime(100);
+    h.viewport.scrollTop -= step;
+    h.viewport.dispatchEvent(new Event('scroll'));
+  }
+  expect(h.controller.endInteraction).not.toHaveBeenCalled();
+  expect(h.controller.userScrolled).not.toHaveBeenCalled();
+  h.viewport.scrollTop -= 10;
+  h.viewport.dispatchEvent(new Event('scroll'));
+  expect(h.controller.userScrolled).toHaveBeenCalledExactlyOnceWith('up', 10 + 4 * step);
+  vi.advanceTimersByTime(150);
+  expect(h.controller.endInteraction).toHaveBeenCalledOnce();
+});
+
+it('ignores an older scrollend immediately after touch release', () => {
+  const h = harness();
+  h.viewport.dispatchEvent(new Event('touchstart'));
+  h.viewport.dispatchEvent(new Event('touchend'));
+  h.viewport.dispatchEvent(new Event('scrollend'));
+  vi.advanceTimersByTime(100);
+  expect(h.controller.endInteraction).not.toHaveBeenCalled();
+  h.viewport.scrollTop = 400;
+  h.viewport.dispatchEvent(new Event('scroll'));
+  expect(h.controller.userScrolled).toHaveBeenCalledExactlyOnceWith('up', 100);
+  vi.advanceTimersByTime(150);
+  expect(h.controller.endInteraction).toHaveBeenCalledOnce();
+});
+
+function contact(target: EventTarget, identifier: number): Touch {
+  return {
+    identifier,
+    target,
+    clientX: 0,
+    clientY: 0,
+    pageX: 0,
+    pageY: 0,
+    screenX: 0,
+    screenY: 0,
+    radiusX: 1,
+    radiusY: 1,
+    rotationAngle: 0,
+    force: 1,
+  };
+}
+
+it.each(['touchend', 'touchcancel'])(
+  'keeps ownership when %s leaves another contact down',
+  (type) => {
+    const h = harness();
+    const first = contact(h.viewport, 1);
+    const second = contact(h.viewport, 2);
+    h.viewport.dispatchEvent(
+      new TouchEvent('touchstart', { changedTouches: [first], touches: [first] })
+    );
+    h.viewport.dispatchEvent(
+      new TouchEvent('touchstart', { changedTouches: [second], touches: [first, second] })
+    );
+    h.viewport.dispatchEvent(new TouchEvent(type, { changedTouches: [first], touches: [second] }));
+    vi.advanceTimersByTime(500);
+    expect(h.controller.endInteraction).not.toHaveBeenCalled();
+    h.viewport.scrollTop = 400;
+    h.viewport.dispatchEvent(new Event('scroll'));
+    expect(h.controller.userScrolled).toHaveBeenCalledExactlyOnceWith('up', 100);
+    h.viewport.dispatchEvent(new TouchEvent('touchend', { changedTouches: [second], touches: [] }));
+    vi.advanceTimersByTime(150);
+    expect(h.controller.endInteraction).toHaveBeenCalledOnce();
+  }
+);
+
+it('does not wait for unrelated touches outside the viewport to lift', () => {
+  const h = harness();
+  const inside = contact(h.viewport, 1);
+  const outside = contact(document.body, 2);
+  h.viewport.dispatchEvent(
+    new TouchEvent('touchstart', { changedTouches: [inside], touches: [inside] })
+  );
+  h.viewport.dispatchEvent(
+    new TouchEvent('touchend', { changedTouches: [inside], touches: [outside] })
+  );
+  vi.advanceTimersByTime(150);
+  expect(h.controller.endInteraction).toHaveBeenCalledOnce();
 });

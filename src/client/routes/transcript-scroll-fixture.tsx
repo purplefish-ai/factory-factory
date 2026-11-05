@@ -32,6 +32,7 @@ function tools(count: number, id: string): GroupedMessageItem {
 
 function TranscriptFixtureContent({ workspaceId }: { workspaceId: string }) {
   const nextToolGroup = useRef(0);
+  const nextMessage = useRef(40);
   const [session, setSession] = useState<'A' | 'B'>('A');
   const [data, setData] = useState<Record<'A' | 'B', GroupedMessageItem[]>>(() => ({
     A: Array.from({ length: 40 }, (_, i) => message(i)),
@@ -75,12 +76,14 @@ function TranscriptFixtureContent({ workspaceId }: { workspaceId: string }) {
       <div className="flex flex-wrap gap-2 pb-2">
         <button
           type="button"
-          onClick={() =>
+          onClick={() => {
+            const start = nextMessage.current;
+            nextMessage.current += 100;
             update((items) => [
               ...items,
-              ...Array.from({ length: 100 }, (_, i) => message(items.length + i)),
-            ])
-          }
+              ...Array.from({ length: 100 }, (_, i) => message(start + i)),
+            ]);
+          }}
         >
           Append burst
         </button>
@@ -108,6 +111,9 @@ function TranscriptFixtureContent({ workspaceId }: { workspaceId: string }) {
           }
         >
           Prepend history
+        </button>
+        <button type="button" onClick={() => update((items) => items.slice(-40))}>
+          Trim window
         </button>
         <button type="button" onClick={() => update((items) => items.slice(0, 2))}>
           Rewind
