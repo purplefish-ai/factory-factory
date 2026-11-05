@@ -132,7 +132,11 @@ export function useAppNavigationData() {
     error: projectsError,
     refetch: refetchProjectList,
   } = trpc.project.list.useQuery({ isArchived: false });
-  const { data: projectsWithBoardCounts, refetch: refetchBoardCounts } = trpc.project.list.useQuery(
+  const {
+    data: projectsWithBoardCounts,
+    error: boardCountsError,
+    refetch: refetchBoardCounts,
+  } = trpc.project.list.useQuery(
     { isArchived: false, includeBoardCounts: true },
     { enabled: false }
   );
@@ -204,17 +208,17 @@ export function useAppNavigationData() {
   return {
     ...(unreadMailCounts.data ? { unreadMailCounts: unreadMailCounts.data } : {}),
     projects: projects?.map((project) => {
-      const boardCounts = projectsWithBoardCounts?.find(
-        (candidate) => candidate.id === project.id
-      )?.boardCounts;
+      const boardCounts = boardCountsError
+        ? undefined
+        : projectsWithBoardCounts?.find((candidate) => candidate.id === project.id)?.boardCounts;
       return { ...project, ...(boardCounts ? { boardCounts } : {}) };
     }),
     projectsError,
     refetchProjects: async (options?: RefetchOptions & { includeBoardCounts?: boolean }) => {
-      const result = await refetchProjectList(options);
-      if (options?.includeBoardCounts) {
-        await refetchBoardCounts();
-      }
+      const [result] = await Promise.all([
+        refetchProjectList(options),
+        options?.includeBoardCounts ? refetchBoardCounts() : Promise.resolve(),
+      ]);
       return result;
     },
     selectedProjectSlug,
