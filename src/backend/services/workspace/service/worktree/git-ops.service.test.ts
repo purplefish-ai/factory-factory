@@ -54,6 +54,14 @@ vi.mock('@/backend/services/workspace-git-state.service', () => ({
     getSnapshot: (...args: unknown[]) => mockGetSnapshot(...args),
     invalidate: mockGitStateInvalidate,
     remove: mockGitStateRemove,
+    withWatchersSuspended: async (worktreePath: string, operation: () => Promise<void>) => {
+      mockGitStateRemove(worktreePath);
+      try {
+        await operation();
+      } finally {
+        mockGitStateRemove(worktreePath);
+      }
+    },
   },
 }));
 
@@ -288,35 +296,68 @@ describe('gitOpsService', () => {
     expect(mockRm).toHaveBeenCalledTimes(1);
   });
 
-  it('evicts Git state after successful registered worktree removal', async () => {
+  it('closes Git state watchers before registered worktree removal', async () => {
     mockGitClient.listWorktreesWithBranches.mockResolvedValueOnce([{ path: '/repo/worktrees/w1' }]);
 
     await gitOpsService.removeWorktree('/repo/worktrees/w1', project);
 
     expect(mockGitClient.deleteWorktree).toHaveBeenCalledWith('w1');
-    expect(mockGitStateRemove).toHaveBeenCalledOnce();
+    expect(mockGitStateRemove).toHaveBeenCalledTimes(2);
     expect(mockGitStateRemove).toHaveBeenCalledWith('/repo/worktrees/w1');
+    expect(mockGitStateRemove.mock.invocationCallOrder[0]).toBeLessThan(
+      mockGitClient.deleteWorktree.mock.invocationCallOrder[0]!
+    );
+    expect(mockGitStateRemove.mock.invocationCallOrder[1]).toBeGreaterThan(
+      mockGitClient.deleteWorktree.mock.invocationCallOrder[0]!
+    );
   });
 
-  it('evicts Git state after successful filesystem-fallback removal', async () => {
+  it('closes Git state watchers before filesystem-fallback removal', async () => {
     mockGitClient.listWorktreesWithBranches.mockResolvedValueOnce([]);
     mockPathExists.mockResolvedValueOnce(true);
 
     await gitOpsService.removeWorktree('/repo/worktrees/w1', project);
 
     expect(mockRm).toHaveBeenCalledWith('/repo/worktrees/w1', { recursive: true, force: true });
-    expect(mockGitStateRemove).toHaveBeenCalledOnce();
+    expect(mockGitStateRemove).toHaveBeenCalledTimes(2);
     expect(mockGitStateRemove).toHaveBeenCalledWith('/repo/worktrees/w1');
+    expect(mockGitStateRemove.mock.invocationCallOrder[0]).toBeLessThan(
+      mockRm.mock.invocationCallOrder[0]!
+    );
+    expect(mockGitStateRemove.mock.invocationCallOrder[1]).toBeGreaterThan(
+      mockRm.mock.invocationCallOrder[0]!
+    );
   });
 
-  it('does not evict Git state when registered worktree removal fails', async () => {
+  it('allows lazy watcher recovery when registered worktree removal fails', async () => {
     mockGitClient.listWorktreesWithBranches.mockResolvedValueOnce([{ path: '/repo/worktrees/w1' }]);
     mockGitClient.deleteWorktree.mockRejectedValueOnce(new Error('remove failed'));
 
     await expect(gitOpsService.removeWorktree('/repo/worktrees/w1', project)).rejects.toThrow(
       'remove failed'
     );
-    expect(mockGitStateRemove).not.toHaveBeenCalled();
+    expect(mockGitStateRemove).toHaveBeenCalledWith('/repo/worktrees/w1');
+    expect(mockGitStateRemove.mock.invocationCallOrder[0]).toBeLessThan(
+      mockGitClient.deleteWorktree.mock.invocationCallOrder[0]!
+    );
+    expect(mockGitStateInvalidate).toHaveBeenCalledWith('/repo/worktrees/w1');
+  });
+
+  it('allows lazy watcher recovery when filesystem removal fails', async () => {
+    mockGitClient.listWorktreesWithBranches.mockResolvedValueOnce([]);
+    mockPathExists.mockResolvedValueOnce(true);
+    mockRm.mockRejectedValueOnce(new Error('filesystem removal failed'));
+
+    await expect(gitOpsService.removeWorktree('/repo/worktrees/w1', project)).rejects.toThrow(
+      'filesystem removal failed'
+    );
+    expect(mockGitStateRemove).toHaveBeenCalledWith('/repo/worktrees/w1');
+    expect(mockGitStateRemove.mock.invocationCallOrder[0]).toBeLessThan(
+      mockRm.mock.invocationCallOrder[0]!
+    );
+    expect(mockGitStateRemove.mock.invocationCallOrder[1]).toBeGreaterThan(
+      mockRm.mock.invocationCallOrder[0]!
+    );
     expect(mockGitStateInvalidate).toHaveBeenCalledWith('/repo/worktrees/w1');
   });
 

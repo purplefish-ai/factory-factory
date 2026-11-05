@@ -1,5 +1,6 @@
 import { watch } from 'node:fs';
 import { readFile } from 'node:fs/promises';
+import { platform } from 'node:os';
 import path from 'node:path';
 import pLimit from 'p-limit';
 import {
@@ -68,6 +69,7 @@ interface WorkspaceGitStateServiceOptions {
   now?: () => number;
   readFile?: ReadFile;
   watchPath?: WatchPath;
+  platform?: NodeJS.Platform;
 }
 
 interface CacheEntry {
@@ -108,6 +110,7 @@ const SERVICE_GIT_CONCURRENCY = 6;
 const WATCH_DEBOUNCE_MS = 100;
 const DEGRADED_TTL_MS = 5000;
 const FALLBACK_TTL_MS = 300_000;
+const LINUX_TTL_MS = 5000;
 const IGNORED_WORKTREE_WATCH_DIRECTORIES = new Set([
   'node_modules',
   '.next',
@@ -229,11 +232,13 @@ export class WorkspaceGitStateService {
   private readonly now: () => number;
   private readonly readFile: ReadFile;
   private readonly watchPath: WatchPath;
+  private readonly recursiveWatch: boolean;
   private readonly cache = new Map<string, CacheEntry>();
   private readonly inFlight = new Map<string, SnapshotCalculation>();
   private readonly generations = new Map<string, number>();
   private readonly watchers = new Map<string, WatcherRecord>();
   private readonly sharedWatchers = new Map<string, SharedWatcherRecord>();
+  private readonly watcherSuspensions = new Map<string, number>();
 
   constructor(options: WorkspaceGitStateServiceOptions = {}) {
     const executeGit = options.runGit ?? gitCommand;
@@ -242,6 +247,9 @@ export class WorkspaceGitStateService {
     this.now = options.now ?? Date.now;
     this.readFile = options.readFile ?? ((filePath) => readFile(filePath, 'utf8'));
     this.watchPath = options.watchPath ?? defaultWatchPath;
+    // Linux implements recursive fs.watch in JS, traversing even ignored
+    // dependency trees. Keep watch installation independent of worktree size.
+    this.recursiveWatch = (options.platform ?? platform()) !== 'linux';
   }
 
   getSnapshot(input: WorkspaceGitStateInput): Promise<WorkspaceGitStateSnapshot> {
@@ -318,6 +326,9 @@ export class WorkspaceGitStateService {
    * blocking on the recompute.
    */
   getCachedSnapshot(input: WorkspaceGitStateInput): WorkspaceGitStateSnapshot | null {
+    if (this.watcherSuspensions.has(path.resolve(input.worktreePath))) {
+      return null;
+    }
     const key = this.cacheKey({ ...input, worktreePath: path.resolve(input.worktreePath) });
     const cached = this.cache.get(key);
     if (!cached) {
@@ -334,7 +345,10 @@ export class WorkspaceGitStateService {
         ? Number.POSITIVE_INFINITY
         : FALLBACK_TTL_MS;
 
-    return this.now() - cached.snapshot.computedAt < ttl ? cached.snapshot : null;
+    // Shallow Linux watches miss nested edits and refs. Readers already poll;
+    // bound cache freshness even when every installed watch is healthy.
+    const effectiveTtl = this.recursiveWatch ? ttl : Math.min(ttl, LINUX_TTL_MS);
+    return this.now() - cached.snapshot.computedAt < effectiveTtl ? cached.snapshot : null;
   }
 
   getMergeBase(input: WorkspaceGitStateInput): Promise<string | null> {
@@ -353,6 +367,28 @@ export class WorkspaceGitStateService {
     const normalizedPath = path.resolve(worktreePath);
     this.closeWatcher(normalizedPath);
     this.invalidatePath(normalizedPath);
+  }
+
+  async withWatchersSuspended(worktreePath: string, operation: () => Promise<void>): Promise<void> {
+    const normalizedPath = path.resolve(worktreePath);
+    this.watcherSuspensions.set(
+      normalizedPath,
+      (this.watcherSuspensions.get(normalizedPath) ?? 0) + 1
+    );
+    this.remove(normalizedPath);
+    try {
+      await operation();
+    } finally {
+      const remaining = (this.watcherSuspensions.get(normalizedPath) ?? 1) - 1;
+      if (remaining === 0) {
+        this.watcherSuspensions.delete(normalizedPath);
+      } else {
+        this.watcherSuspensions.set(normalizedPath, remaining);
+      }
+      // Retire snapshots and fallback records created during deletion, including
+      // failures. Only a later reader may install replacement watchers.
+      this.remove(normalizedPath);
+    }
   }
 
   stop(): void {
@@ -410,9 +446,13 @@ export class WorkspaceGitStateService {
       handles: [],
       setup: Promise.resolve(),
     };
-    record.setup = this.installWatchers(worktreePath, record).catch(() => {
-      this.activateFallback(record);
-    });
+    if (this.watcherSuspensions.has(worktreePath)) {
+      record.mode = 'fallback';
+    } else {
+      record.setup = this.installWatchers(worktreePath, record).catch(() => {
+        this.activateFallback(record);
+      });
+    }
     this.watchers.set(worktreePath, record);
     return record;
   }
@@ -423,12 +463,16 @@ export class WorkspaceGitStateService {
       if (record.mode !== 'healthy' || this.watchers.get(worktreePath) !== record) {
         return;
       }
-      const handle = this.watchPath(root, { recursive: true }, (_eventType, filename) => {
-        if (root === worktreePath && shouldIgnoreWorktreeWatchEvent(filename)) {
-          return;
+      const handle = this.watchPath(
+        root,
+        { recursive: this.recursiveWatch },
+        (_eventType, filename) => {
+          if (root === worktreePath && shouldIgnoreWorktreeWatchEvent(filename)) {
+            return;
+          }
+          this.scheduleInvalidation(worktreePath, record);
         }
-        this.scheduleInvalidation(worktreePath, record);
-      });
+      );
       record.handles.push(handle);
       handle.on('error', () => {
         this.activateFallback(record);
@@ -480,7 +524,7 @@ export class WorkspaceGitStateService {
       let created!: SharedWatcherRecord;
       const handle = this.watchPath(
         commonDirectory,
-        { recursive: true },
+        { recursive: this.recursiveWatch },
         (_eventType, filename) => {
           if (shouldInvalidateForSharedGitEvent(filename)) {
             this.scheduleSharedInvalidation(commonDirectory, created);

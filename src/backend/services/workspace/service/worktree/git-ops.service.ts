@@ -201,12 +201,14 @@ class GitOpsService {
       try {
         await guard?.check();
         guard?.assertCurrent();
-        await gitClient.deleteWorktree(worktreeName);
+        await workspaceGitStateService.withWatchersSuspended(worktreePath, () =>
+          gitClient.deleteWorktree(worktreeName)
+        );
       } catch (error) {
+        // A later snapshot read reinstalls watchers if the worktree survives.
         workspaceGitStateService.invalidate(worktreePath);
         throw error;
       }
-      workspaceGitStateService.remove(worktreePath);
       return;
     }
 
@@ -214,8 +216,12 @@ class GitOpsService {
       try {
         await guard?.check();
         guard?.assertCurrent();
-        await fs.rm(worktreePath, { recursive: true, force: true });
+        await workspaceGitStateService.withWatchersSuspended(worktreePath, () =>
+          fs.rm(worktreePath, { recursive: true, force: true })
+        );
+        return;
       } catch (error) {
+        // A later snapshot read reinstalls watchers if the worktree survives.
         workspaceGitStateService.invalidate(worktreePath);
         throw error;
       }

@@ -107,7 +107,13 @@ describe('WorkspaceGitStateService', () => {
         }
       }
     };
-    service = new WorkspaceGitStateService({ runGit, now: () => now, readFile, watchPath });
+    service = new WorkspaceGitStateService({
+      runGit,
+      now: () => now,
+      readFile,
+      watchPath,
+      platform: 'darwin',
+    });
   });
 
   it('decodes base and upstream filenames without losing surrounding spaces', async () => {
@@ -327,6 +333,55 @@ describe('WorkspaceGitStateService', () => {
     expect(await service.getSnapshot(siblingInput)).not.toBe(sibling);
   });
 
+  it('uses only shallow Linux watches and expires unobserved nested edits', async () => {
+    service = new WorkspaceGitStateService({
+      runGit,
+      now: () => now,
+      readFile,
+      watchPath,
+      platform: 'linux',
+    });
+    const first = await service.getSnapshot(input);
+    const siblingInput = { worktreePath: '/repo/w2', defaultBranch: 'main' };
+    const sibling = await service.getSnapshot(siblingInput);
+
+    expect([...watchers.keys()]).toEqual([
+      '/repo/w1',
+      '/repo/.git/worktrees/w1',
+      '/repo/.git',
+      '/repo/w2',
+      '/repo/.git/worktrees/w2',
+    ]);
+    expect(watchPath.mock.calls.every(([, options]) => !options.recursive)).toBe(true);
+    now += 4999;
+    expect(service.getCachedSnapshot(input)).toBe(first);
+    now += 1;
+    expect(service.getCachedSnapshot(input)).toBeNull();
+    expect(await service.getSnapshot(input)).not.toBe(first);
+    expect(await service.getSnapshot(siblingInput)).not.toBe(sibling);
+    service.stop();
+    expect(watcherHistory.every(({ watcher }) => watcher.closeMock.mock.calls.length === 1)).toBe(
+      true
+    );
+  });
+
+  it('keeps Linux freshness bounded when watcher setup fails', async () => {
+    service = new WorkspaceGitStateService({
+      runGit,
+      now: () => now,
+      readFile,
+      watchPath,
+      platform: 'linux',
+    });
+    watchPath.mockImplementation(() => {
+      throw new Error('watch limit');
+    });
+    const first = await service.getSnapshot(input);
+    now += 5000;
+    expect(service.getCachedSnapshot(input)).toBeNull();
+    expect(await service.getSnapshot(input)).not.toBe(first);
+  });
+
   it('watches the worktree, linked gitdir, and common Git metadata directory', async () => {
     await service.getSnapshot(input);
 
@@ -534,7 +589,13 @@ describe('WorkspaceGitStateService', () => {
       }
       return Promise.reject(Object.assign(new Error('missing'), { code: 'ENOENT' }));
     });
-    service = new WorkspaceGitStateService({ runGit, now: () => now, readFile, watchPath });
+    service = new WorkspaceGitStateService({
+      runGit,
+      now: () => now,
+      readFile,
+      watchPath,
+      platform: 'darwin',
+    });
 
     const calculation = service.getSnapshot(input);
     service.remove(input.worktreePath);
@@ -542,6 +603,57 @@ describe('WorkspaceGitStateService', () => {
     await calculation;
 
     expect(watchPath).not.toHaveBeenCalled();
+  });
+
+  it.each(['success', 'failure'])(
+    'suspends watches through deletion %s and recovers lazily',
+    async (outcome) => {
+      await service.getSnapshot(input);
+      const installed = watchPath.mock.calls.length;
+      const deletion = service.withWatchersSuspended(input.worktreePath, async () => {
+        expect(
+          watcherHistory.every(({ watcher }) => watcher.closeMock.mock.calls.length === 1)
+        ).toBe(true);
+        await service.getSnapshot(input);
+        expect(watchPath).toHaveBeenCalledTimes(installed);
+        expect(service.getCachedSnapshot(input)).toBeNull();
+        if (outcome === 'failure') {
+          throw new Error('deletion failed');
+        }
+      });
+      if (outcome === 'failure') {
+        await expect(deletion).rejects.toThrow('deletion failed');
+      } else {
+        await deletion;
+      }
+      expect(service.getCachedSnapshot(input)).toBeNull();
+      expect(watchPath).toHaveBeenCalledTimes(installed);
+      await service.getSnapshot(input);
+      expect(watchPath).toHaveBeenCalledTimes(installed * 2);
+    }
+  );
+
+  it('keeps watches suspended until overlapping deletion scopes both settle', async () => {
+    let releaseFirst!: () => void;
+    let releaseSecond!: () => void;
+    const first = new Promise<void>((resolve) => {
+      releaseFirst = resolve;
+    });
+    const second = new Promise<void>((resolve) => {
+      releaseSecond = resolve;
+    });
+    const firstDeletion = service.withWatchersSuspended(input.worktreePath, () => first);
+    const secondDeletion = service.withWatchersSuspended('/repo/./w1', () => second);
+    await service.getSnapshot(input);
+    expect(watchPath).not.toHaveBeenCalled();
+    releaseFirst();
+    await firstDeletion;
+    await service.getSnapshot(input);
+    expect(watchPath).not.toHaveBeenCalled();
+    releaseSecond();
+    await secondDeletion;
+    await service.getSnapshot(input);
+    expect(watchPath).toHaveBeenCalledTimes(3);
   });
 
   it('closes every watcher and clears cached snapshots on stop', async () => {

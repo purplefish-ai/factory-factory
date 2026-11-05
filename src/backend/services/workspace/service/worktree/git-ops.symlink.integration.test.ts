@@ -3,12 +3,7 @@ import { mkdir, mkdtemp, realpath, rm, symlink } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
-import { afterEach, describe, expect, it, vi } from 'vitest';
-
-vi.mock('@/backend/services/workspace-git-state.service', () => ({
-  workspaceGitStateService: { invalidate: vi.fn(), remove: vi.fn() },
-}));
-
+import { afterEach, describe, expect, it } from 'vitest';
 import { gitOpsService } from './git-ops.service';
 
 const execFileAsync = promisify(execFile);
