@@ -104,7 +104,15 @@ export const ManualInstallation: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await expect(canvas.queryByRole('button', { name: /^Update$/ })).not.toBeInTheDocument();
-    await expect(canvas.getByText('npm install -g factory-factory@0.5.4')).toBeInTheDocument();
+    await expect(
+      canvas.queryByText('npm install -g factory-factory@0.5.4')
+    ).not.toBeInTheDocument();
+    await userEvent.click(canvas.getByRole('button', { name: 'How to update' }));
+    await expect(canvas.getByText('npm install -g factory-factory@0.5.4')).toBeVisible();
+    await userEvent.click(canvas.getByRole('button', { name: 'How to update' }));
+    await expect(
+      canvas.queryByText('npm install -g factory-factory@0.5.4')
+    ).not.toBeInTheDocument();
   },
 };
 export const RequestPending: Story = { args: { isPending: true } };
@@ -169,4 +177,30 @@ export const RecoveryFailureWithoutNotices: Story = {
       canvas.queryByRole('region', { name: 'Application updates' })
     ).not.toBeInTheDocument();
   },
+};
+
+const checkoutUpdates: ApplicationUpdates = {
+  ...updates,
+  automaticUpdate: false,
+  manualCommand:
+    'Update this checkout with git pull and pnpm install, then restart Factory Factory.',
+  notices: updates.notices.slice(0, 1),
+};
+
+export const CheckoutInstallation: Story = {
+  args: { updates: checkoutUpdates },
+  globals: { theme: 'dark' },
+};
+export const CheckoutInstructions: Story = {
+  ...CheckoutInstallation,
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(canvas.getByRole('button', { name: 'How to update' }));
+    await expect(canvas.getByText(checkoutUpdates.manualCommand)).toBeVisible();
+    await expect(canvas.getByText('Restarting stops terminals and run scripts.')).toBeVisible();
+  },
+};
+export const CheckoutPhone: Story = {
+  ...CheckoutInstructions,
+  globals: { theme: 'dark', viewport: { value: 'phone', isRotated: false } },
 };
