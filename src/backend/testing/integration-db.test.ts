@@ -101,6 +101,9 @@ it('removes the closed migration template at project teardown', () => {
   let templatePath = '';
   const cleanup = setupIntegrationDatabase({
     config: { root: process.cwd() },
+    onTestsRerun: () => {
+      // This test exercises project setup and teardown only.
+    },
     provide: (_key, value) => {
       templatePath = value;
     },
@@ -123,6 +126,9 @@ it('removes the migration template when project setup fails', () => {
   expect(() =>
     setupIntegrationDatabase({
       config: { root: process.cwd() },
+      onTestsRerun: () => {
+        // This test exercises project setup and teardown only.
+      },
       provide: (_key, value) => {
         templatePath = value;
         throw new Error('Project setup failed');

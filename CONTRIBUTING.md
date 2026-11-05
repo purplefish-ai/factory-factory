@@ -90,7 +90,11 @@ once per Vitest project by `integration-db.global-setup.ts`. Each helper call
 still gets its own writable database, Prisma client, environment binding, and
 module reset. Project teardown removes the template; migration-specific tests
 continue to run migrations directly. Standalone Vitest configs without this
-global setup fall back to migrating each private database.
+global setup fall back to migrating each private database. Watch mode reruns
+when migration files change and rebuilds the template from current SQL before
+dispatching tests, including edits to already applied migrations. Unchanged
+migrations keep the existing template; failed rebuilds abort the rerun without
+publishing a partial replacement.
 
 `pnpm check` covers linting, formatting, file lengths, environment access,
 ownership, foreign-key indexes, and dependencies. Upstream ACP adapters own

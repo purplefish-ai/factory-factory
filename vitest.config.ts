@@ -1,5 +1,5 @@
 import path from 'node:path';
-import { defineConfig } from 'vitest/config';
+import { configDefaults, defineConfig } from 'vitest/config';
 
 // Audited tests that clean up resources without module mocks or shared global
 // mutations. New files stay isolated; remove an entry if it needs isolation.
@@ -49,6 +49,7 @@ export default defineConfig({
   test: {
     globals: true,
     globalSetup: ['./src/backend/testing/integration-db.global-setup.ts'],
+    forceRerunTriggers: [...configDefaults.forceRerunTriggers, '**/prisma/migrations/**'],
     environment: 'node',
     // Let jsdom own browser storage instead of Node's experimental global.
     execArgv: ['--no-experimental-webstorage'],
