@@ -21,5 +21,33 @@ jobs:
         with:
           context: .
           push: false
+          load: true
+          tags: factory-factory:validation
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      - name: Verify runtime and production dependencies
+        run: |
+          docker run --rm --entrypoint ff factory-factory:validation serve --help
+          docker run --rm --entrypoint ff factory-factory:validation db:migrate --database-path /tmp/smoke.db
+          docker run --rm --entrypoint codex factory-factory:validation --version
+          docker run --rm --entrypoint uv factory-factory:validation --version
+          docker run --rm --entrypoint cloudflared factory-factory:validation --version
+          docker run --rm --entrypoint node factory-factory:validation --input-type=module -e '
+            import Database from "better-sqlite3";
+            import pty from "node-pty";
+            import { createRequire } from "node:module";
+            const db = new Database(":memory:");
+            if (db.prepare("SELECT 1 AS value").get().value !== 1 || typeof pty.spawn !== "function") {
+              throw new Error("Native runtime modules unavailable");
+            }
+            db.close();
+            const require = createRequire(import.meta.url);
+            for (const name of ["vite", "vitest", "electron-builder", "storybook"]) {
+              try { require.resolve(name); } catch (error) {
+                if (error.code === "MODULE_NOT_FOUND") continue;
+                throw error;
+              }
+              throw new Error(`Development dependency shipped: ${name}`);
+            }
+          '
