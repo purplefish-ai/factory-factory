@@ -95,7 +95,6 @@ describe('conservative CI selection', () => {
       git('init', '-q');
       git('config', 'user.name', 'CI test');
       git('config', 'user.email', 'ci@example.invalid');
-      // Same content would be detected as a rename without --no-renames.
       git('config', 'commit.gpgsign', 'false');
       mkdirSync(join(directory, 'src/client'), { recursive: true });
       mkdirSync(join(directory, 'src/backend'), { recursive: true });
@@ -104,6 +103,7 @@ describe('conservative CI selection', () => {
       git('add', '.');
       git('commit', '-qm', 'base');
       const base = git('rev-parse', 'HEAD');
+      // Same content would be detected as a rename without --no-renames.
       git('mv', 'src/client/moved.ts', 'src/backend/moved.ts');
       git('commit', '-qm', 'move');
       const script = resolve('.github/scripts/select-ci.mjs');
@@ -196,5 +196,19 @@ it('scopes supersession to each workflow and PR, keeping queues and schedules in
     );
     expect(workflow.concurrency.group).toContain("github.ref == 'refs/heads/main'");
     expect(workflow.concurrency.group).toContain('|| github.run_id');
+  }
+});
+
+it('installs only browser prerequisites in the compiler-free Storybook image', () => {
+  const steps = ci.jobs['storybook-tests']?.steps ?? [];
+  const install = steps.find((step) => step.name === 'Install browser-test dependencies');
+  expect(install?.run).toContain('pnpm install --frozen-lockfile --ignore-scripts');
+  expect(install?.run).toContain('pnpm rebuild @prisma/engines esbuild');
+  expect(steps.find((step) => step.name === 'Generate Prisma client')?.run).toBe(
+    'pnpm db:generate'
+  );
+  for (const worker of ['build', 'storybook', 'test-shards', 'test']) {
+    const install = ci.jobs[worker]?.steps?.find((step) => step.name === 'Install dependencies');
+    expect(install?.run).toBe('pnpm install --frozen-lockfile');
   }
 });
