@@ -1,5 +1,29 @@
+import { globSync } from 'node:fs';
 import path from 'node:path';
 import { defineConfig } from 'vitest/config';
+
+// Keep whole-window replacements, native HTTP, cache reference identity and
+// cross-realm strict equality tests in their original process realms.
+const frontendForkTests = new Set([
+  'src/client/components/factory-update-banner.test.tsx',
+  'src/client/features/chat/agent-activity/tool-renderers/tool-expansion-state.test.ts',
+  'src/client/features/workspace/closed-session-transcript-items.test.ts',
+  'src/client/hooks/workspace-cache-reconciler.integration.test.tsx',
+  'src/client/hooks/workspace-detail-removal.integration.test.ts',
+  'src/client/lib/trpc.integration.test.ts',
+  'src/client/lib/workspace-cache-reconciler.test.ts',
+  'src/client/lib/workspace-summary-reconciliation.test.ts',
+  'src/components/ui/mermaid-diagram.integration.test.tsx',
+]);
+
+// Frontend suites preserve fresh per-file module/global contexts, including
+// Node-environment utility tests. Backend native and process suites keep forks.
+const frontendVmTests = globSync(
+  ['src/client/**/*.test.{ts,tsx}', 'src/components/**/*.test.{ts,tsx}'],
+  { cwd: import.meta.dirname }
+)
+  .map((file) => file.replaceAll('\\', '/'))
+  .filter((file) => !frontendForkTests.has(file));
 
 // Audited tests that clean up resources without module mocks or shared global
 // mutations. New files stay isolated; remove an entry if it needs isolation.
@@ -66,7 +90,18 @@ export default defineConfig({
             'electron/**/*.test.ts',
             'scripts/**/*.test.ts',
           ],
-          exclude: ['node_modules', 'dist', '.next', ...reusableSharedTests],
+          exclude: ['node_modules', 'dist', '.next', ...frontendVmTests, ...reusableSharedTests],
+        },
+      },
+      {
+        extends: true,
+        test: {
+          name: 'frontend',
+          include: frontendVmTests,
+          // Keep fresh VM contexts/windows while reusing expensive jsdom imports.
+          // Backend native modules and process APIs retain the forks pool above.
+          pool: 'vmForks',
+          vmMemoryLimit: '512MB',
         },
       },
       {

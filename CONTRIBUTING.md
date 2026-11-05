@@ -78,12 +78,22 @@ may name additional focused checks for their contracts. Inspect the final diff,
 report failed or unavailable checks, and never weaken assertions or guardrails
 to pass. Repeat successful checks only after edits or new evidence.
 
-Vitest keeps application, UI, native and integration tests isolated. The
-`shared` project reuses thread workers for the audited `reusableSharedTests`
-allowlist in `vitest.config.ts` to avoid repeated imports. Those tests must
-clean up their resources and avoid module mocks or shared global mutations. New
-files stay isolated by default; remove a file from the allowlist if it needs
-isolation. `pnpm test:integration` still selects only backend integration tests.
+Vitest keeps application, UI, native and integration tests isolated. Tests under
+`src/client` and `src/components` use `vmForks`: each file gets a fresh VM
+context, module graph, and (jsdom suites) window while workers reuse dependency
+imports. This includes frontend utility tests running in the Node environment.
+Workers recycle after reaching 512 MB. Backend, native and process suites retain
+fork isolation. The explicit `frontendForkTests` exceptions in
+`vitest.config.ts` preserve whole-window replacements, native HTTP/cache
+reference identity, strict cross-realm equality behavior, and Mermaid's ESM
+dependency loading. New frontend tests with incompatible globals, identity
+behavior, or ESM loading should join that exception list, preserving their
+existing assertions. The `shared` project reuses thread workers for the audited
+`reusableSharedTests` allowlist in `vitest.config.ts` to avoid repeated imports.
+Those tests must clean up their resources and avoid module mocks or shared
+global mutations. New files stay isolated by default; remove a file from the
+allowlist if it needs isolation. `pnpm test:integration` still selects only
+backend integration tests.
 
 `pnpm check` covers linting, formatting, file lengths, environment access,
 ownership, foreign-key indexes, and dependencies. Upstream ACP adapters own
