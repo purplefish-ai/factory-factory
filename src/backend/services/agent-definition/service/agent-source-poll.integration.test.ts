@@ -13,6 +13,7 @@ let runtime: typeof import('../index');
 let fixture: Awaited<ReturnType<typeof createLedgerFixture>>;
 let feed: AgentIssueEventPage['events'];
 let calls: number[];
+let requestedPageSizes: number[];
 let port: AgentGitHubSourcePort;
 let fixturePageSize: number;
 beforeAll(async () => {
@@ -28,12 +29,13 @@ beforeEach(async () => {
   await db.prisma.agentSourceState.deleteMany();
   feed = [];
   calls = [];
+  requestedPageSizes = [];
   fixturePageSize = 100;
   port = {
     getRepositoryIdentity: async () => ({ id: 'repo-1', name: 'renamed/repo' }),
     listIssueEvents: (input, signal) => {
       signal?.throwIfAborted();
-      expect(input.perPage).toBe(100);
+      requestedPageSizes.push(input.perPage);
       calls.push(input.page);
       return Promise.resolve({
         events: feed.slice((input.page - 1) * fixturePageSize, input.page * fixturePageSize),
@@ -43,7 +45,11 @@ beforeEach(async () => {
     classifyError: () => 'auth_required',
   };
 });
-afterEach(() => vi.useRealTimers());
+afterEach(() => {
+  vi.useRealTimers();
+  // Assert outside the port: pollCycle intentionally catches provider failures.
+  expect(requestedPageSizes).toEqual(requestedPageSizes.map(() => 100));
+});
 const label = (id: string) => ({ providerEventId: id, payload: fixture.github(id).payload });
 function service() {
   return new runtime.AgentSourcePollService(port, () => 10);
@@ -274,7 +280,11 @@ it('recovers a committed finalization chunk without interleaving a newer interva
     for (let i = 0; i < 6 && !controller.signal.aborted; i++) {
       calls = [];
       await service().pollCycle(controller.signal);
-      expect(calls.length).toBeLessThanOrEqual(10);
+      if (i === 0) {
+        expect(calls).toHaveLength(10);
+      } else {
+        expect(calls.length).toBeLessThanOrEqual(10);
+      }
     }
   } finally {
     spy.mockRestore();
