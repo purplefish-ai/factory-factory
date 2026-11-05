@@ -634,17 +634,23 @@ describe('WorkspaceGitStateService', () => {
   );
 
   it('keeps watches suspended until overlapping deletion scopes both settle', async () => {
-    const first = Promise.withResolvers<void>();
-    const second = Promise.withResolvers<void>();
-    const firstDeletion = service.withWatchersSuspended(input.worktreePath, () => first.promise);
-    const secondDeletion = service.withWatchersSuspended('/repo/./w1', () => second.promise);
+    let releaseFirst!: () => void;
+    let releaseSecond!: () => void;
+    const first = new Promise<void>((resolve) => {
+      releaseFirst = resolve;
+    });
+    const second = new Promise<void>((resolve) => {
+      releaseSecond = resolve;
+    });
+    const firstDeletion = service.withWatchersSuspended(input.worktreePath, () => first);
+    const secondDeletion = service.withWatchersSuspended('/repo/./w1', () => second);
     await service.getSnapshot(input);
     expect(watchPath).not.toHaveBeenCalled();
-    first.resolve();
+    releaseFirst();
     await firstDeletion;
     await service.getSnapshot(input);
     expect(watchPath).not.toHaveBeenCalled();
-    second.resolve();
+    releaseSecond();
     await secondDeletion;
     await service.getSnapshot(input);
     expect(watchPath).toHaveBeenCalledTimes(3);
