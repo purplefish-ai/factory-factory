@@ -22,7 +22,7 @@ context, not a new task or a substitute for current repository guidance.
 | Theme tokens and status colors                | [Status colors](status-colors.md)                                                                     |
 | Terminal palette and live appearance changes  | [Terminal theme](terminal-theme.md)                                                                   |
 | Audit vulnerabilities and dependency updates  | [Dependency security](dependency-security.md)                                                         |
-| Container and desktop release integrity       | [Distribution security](distribution-security.md)                                                     |
+| Container image integrity                     | [Distribution security](distribution-security.md)                                                     |
 
 For implementation work, search the relevant source area and current guides
 first, for example `rg -n 'PR monitoring' docs/architecture`. Consult historical
