@@ -22,7 +22,7 @@ afterEach(async () => {
   await cleanup?.();
   vi.unstubAllGlobals();
 });
-async function render(path = '/projects/alpha/reviews') {
+async function render(path = '/projects/alpha/reviews', open = true) {
   const container = document.createElement('div');
   document.body.append(container);
   const root = createRoot(container);
@@ -46,13 +46,17 @@ async function render(path = '/projects/alpha/reviews') {
     await act(() => root.unmount());
     container.remove();
   };
-  const trigger = container.querySelector('button[aria-label="Open project menu"]');
+  const trigger = container.querySelector('button[aria-label^="Open project menu"]');
   expect(trigger).not.toBeNull();
+  if (!open) {
+    return container;
+  }
   await act(() =>
     trigger?.dispatchEvent(
       new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true, cancelable: true })
     )
   );
+  return container;
 }
 function item(label: string) {
   const entry = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find(
@@ -100,4 +104,18 @@ it('retries project loading without switching projects', async () => {
   await act(() => item('Retry projects').click());
   expect(retry).toHaveBeenCalledOnce();
   expect(change).not.toHaveBeenCalled();
+});
+
+it('opens the menu from the project name without navigating to the board', async () => {
+  const container = await render('/projects/alpha/reviews', false);
+  const name = [...container!.querySelectorAll('button')].find((button) =>
+    button.textContent?.includes('Alpha')
+  );
+  expect(name?.getAttribute('aria-label')).toContain('Alpha');
+  await act(() => {
+    name?.dispatchEvent(new MouseEvent('pointerdown', { button: 0, bubbles: true }));
+    name?.click();
+  });
+  expect(item('Beta')).toBeDefined();
+  expect(current).not.toHaveBeenCalled();
 });

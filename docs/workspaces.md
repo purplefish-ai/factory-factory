@@ -11,8 +11,8 @@ existing names, shown in parentheses where they differ.
 - **Project**: a repository Factory Factory manages. Each project has one board.
 - **Board**: the project's landing page (`/projects/:slug/workspaces`), with
   Todo, Working, Waiting and Done columns. Open it from **Board** in the sidebar
-  or the project name in the header. The sidebar lists the same workspaces and
-  preserves its open/closed preference across navigation.
+  or the current project in the header menu. The sidebar lists the same
+  workspaces and preserves its open/closed preference across navigation.
 - **Workspace**: one isolated Git worktree and branch, with its chats, terminals
   and pull requests. A workspace is what moves across the board. **New
   workspace** in the sidebar opens the new workspace; **New workspace** at the
@@ -54,8 +54,11 @@ ignored artifacts inside new directories stay out of Changes.
 The project menu in the header lists projects and includes **Create project**
 and **Manage projects**. Switching projects keeps the current Board, Agents or
 Reviews section, including the event-agent view. Menu links support opening a
-project in another tab. The project name opens its board; the following
-breadcrumb identifies the section.
+project in another tab. Clicking the project name or chevron opens the menu;
+selecting the current project opens its board. The header shows Working and
+Waiting counts beside the project name once workspace data is loaded, matching
+the sidebar. On phones, names stay expanded when they fit and use initials when
+space is limited. The following breadcrumb identifies the section.
 
 The home page restores the saved project only while it appears in the active
 project list; otherwise it opens the first active project. A missing project

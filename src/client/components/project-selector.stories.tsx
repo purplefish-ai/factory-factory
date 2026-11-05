@@ -49,7 +49,7 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 async function openMenu(canvasElement: HTMLElement) {
-  await userEvent.click(within(canvasElement).getByRole('button', { name: 'Open project menu' }));
+  await userEvent.click(within(canvasElement).getByRole('button', { name: /Open project menu/ }));
   return within(document.body);
 }
 export const ProjectActions: Story = {
@@ -79,7 +79,9 @@ export const RetryProjects: Story = {
 };
 export const KeyboardNavigation: Story = {
   play: async ({ canvasElement, args }) => {
-    within(canvasElement).getByRole('button', { name: 'Open project menu' }).focus();
+    within(canvasElement)
+      .getByRole('button', { name: /Open project menu/ })
+      .focus();
     await userEvent.keyboard('{ArrowDown}b{Enter}');
     await expect(args.onProjectChange).toHaveBeenCalledWith('beta');
   },
@@ -122,4 +124,53 @@ export const PhoneLongProjectName: Story = {
 export const EventAgentModifiedClick: Story = {
   ...ModifiedClick,
   parameters: { projectPath: '/projects/alpha/agents/event-1?kind=event' },
+};
+
+export const BoardCounts: Story = {
+  args: { boardCounts: { working: 4, waiting: 2 } },
+  play: async ({ canvasElement, args }) => {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByLabelText('Working 4 Waiting 2')).toBeVisible();
+    await userEvent.click(canvas.getByText('Alpha', { exact: true }));
+    await expect(within(document.body).getByRole('menuitem', { name: 'Beta' })).toBeVisible();
+    await expect(args.onCurrentProjectSelect).not.toHaveBeenCalled();
+  },
+};
+export const PhoneNameFits: Story = {
+  args: { projects: [{ id: 'a', slug: 'alpha', name: 'Iron Fillet' }] },
+  globals: { viewport: { value: 'phone', isRotated: false } },
+  render: (args) => (
+    <div style={{ width: 240 }}>
+      <ProjectSelectorDropdown {...args} />
+    </div>
+  ),
+  play: async ({ canvasElement }) => {
+    await expect(within(canvasElement).getByText('Iron Fillet', { exact: true })).toBeVisible();
+    await expect(within(canvasElement).queryByText('IF', { exact: true })).not.toBeInTheDocument();
+  },
+};
+export const PhoneNameCramped: Story = {
+  ...PhoneNameFits,
+  render: (args) => (
+    <div style={{ width: 60 }}>
+      <ProjectSelectorDropdown {...args} />
+    </div>
+  ),
+  play: async ({ canvasElement }) => {
+    await expect(await within(canvasElement).findByText('IF', { exact: true })).toBeVisible();
+    await expect(within(canvasElement).getByText('Iron Fillet', { exact: true })).not.toBeVisible();
+  },
+};
+export const EmptyBoard: Story = { args: { boardCounts: { working: 0, waiting: 0 } } };
+
+export const PhoneNoSelection: Story = {
+  ...PhoneNameCramped,
+  args: { selectedProjectSlug: '', projects: [] },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(
+      canvas.getByRole('button', { name: 'Open project menu: Select a project' })
+    ).toBeEnabled();
+    await expect(canvas.queryByText('SAP', { exact: true })).not.toBeInTheDocument();
+  },
 };

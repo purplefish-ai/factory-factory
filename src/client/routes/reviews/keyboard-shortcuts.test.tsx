@@ -119,7 +119,7 @@ function selected(container: HTMLElement) {
 it('lets actual project-selector typeahead consume review shortcuts without approving, opening, or changing selection', async () => {
   const view = await render();
   try {
-    await key(view.container.querySelector('[aria-label="Open project menu"]')!, 'ArrowDown');
+    await key(view.container.querySelector('[aria-label^="Open project menu"]')!, 'ArrowDown');
     const option = document.querySelector('[role="menu"] [role="menuitem"]');
     expect(option).not.toBeNull();
     for (const [value, options] of reviewShortcutPresses) {
@@ -279,7 +279,7 @@ it('keeps unrelated shared-header buttons outside the review-row exception', asy
   const view = await render();
   try {
     const projectButton = view.container.querySelector<HTMLButtonElement>(
-      'button[aria-label="Open Beta workspaces"]'
+      'button[aria-label^="Open project menu"]'
     );
     expect(projectButton).not.toBeNull();
     await act(() => projectButton!.focus());

@@ -565,7 +565,7 @@ describe('AgentsPage coordination', () => {
       expect(container.textContent).toContain('Project refresh unavailable');
       await act(() =>
         container
-          .querySelector('[aria-label="Open project menu"]')
+          .querySelector('[aria-label^="Open project menu"]')
           ?.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }))
       );
       const retry = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find(
@@ -585,9 +585,7 @@ describe('AgentsPage coordination', () => {
       expect(container.querySelector('form')).toBe(originalForm);
       expect(container.querySelector<HTMLInputElement>('input[name="name"]')).toBe(name);
       expect(name?.value).toBe('Unsaved review draft');
-      expect(
-        container.querySelector('[aria-label="Open Owner project workspaces"]')
-      ).not.toBeNull();
+      expect(container.querySelector('[aria-label^="Open project menu"]')).not.toBeNull();
     }
   });
   it('does not override a project switch when a pending creation succeeds', async () => {

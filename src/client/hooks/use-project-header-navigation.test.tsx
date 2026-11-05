@@ -4,12 +4,21 @@ import { createRoot } from 'react-dom/client';
 import { MemoryRouter, useLocation } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ProjectSelectorDropdown } from '@/client/components/project-selector';
+import { createOptimisticWorkspaceSummary } from '@/client/lib/workspace-summary';
+import type { WorkspaceSummary } from '@/shared/workspace-summary';
 import { useProjectHeaderNavigation } from './use-project-header-navigation';
 
 const selectProjectSlug = vi.hoisted(() => vi.fn());
+const navState = vi.hoisted(() => ({
+  workspaces: undefined as WorkspaceSummary<Date>[] | undefined,
+}));
 vi.mock('@/client/hooks/use-app-navigation-data', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/client/hooks/use-app-navigation-data')>()),
-  useAppNavigationDataContext: () => ({ selectedProjectSlug: 'alpha', selectProjectSlug }),
+  useAppNavigationDataContext: () => ({
+    selectedProjectSlug: 'alpha',
+    selectProjectSlug,
+    serverWorkspaces: navState.workspaces,
+  }),
 }));
 
 function HeaderSwitch() {
@@ -119,7 +128,7 @@ it.each(['primary', 'modified'])(
       );
       await act(() =>
         container
-          .querySelector('[aria-label="Open project menu"]')
+          .querySelector('[aria-label^="Open project menu"]')
           ?.dispatchEvent(
             new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true, cancelable: true })
           )
@@ -160,3 +169,44 @@ it.each(['primary', 'modified'])(
     }
   }
 );
+
+function Counts() {
+  const { boardCounts } = useProjectHeaderNavigation();
+  return (
+    <output>
+      {boardCounts ? `Working ${boardCounts.working} Waiting ${boardCounts.waiting}` : 'Loading'}
+    </output>
+  );
+}
+it.each([
+  ['/projects/alpha/workspaces', true, 'Working 1 Waiting 1'],
+  ['/projects/alpha/workspaces', false, 'Loading'],
+  ['/projects/archived/agents', true, 'Loading'],
+])('scopes board counts to loaded workspaces at %s (%s)', async (path, loaded, expected) => {
+  navState.workspaces = loaded
+    ? (['WORKING', 'WAITING', 'DONE'] as const).map((kanbanColumn, index) => ({
+        ...createOptimisticWorkspaceSummary({
+          id: String(index),
+          projectId: 'alpha',
+          name: 'Workspace',
+          ratchetEnabled: true,
+        }),
+        kanbanColumn,
+      }))
+    : undefined;
+  const container = document.createElement('div');
+  const root = createRoot(container);
+  try {
+    await act(() =>
+      root.render(
+        <MemoryRouter initialEntries={[path]}>
+          <Counts />
+        </MemoryRouter>
+      )
+    );
+    expect(container.textContent).toBe(expected);
+  } finally {
+    await act(() => root.unmount());
+    navState.workspaces = undefined;
+  }
+});
