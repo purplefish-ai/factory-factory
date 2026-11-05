@@ -89,7 +89,7 @@ export function FileChangeStatus({
         kind !== 'untracked' && 'uppercase',
         getStatusColorClass(kind)
       )}
-      title={kind === 'untracked' ? 'Untracked: new file, not staged' : getStatusLabel(kind)}
+      title={kind === 'untracked' ? 'Untracked: not staged' : getStatusLabel(kind)}
     >
       {kind === 'untracked' ? 'New' : statusCode}
     </span>

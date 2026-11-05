@@ -122,7 +122,7 @@ export const CompactRows: Story = {
     const changes = within(canvas.getByTestId('changes'));
     await files.findByText('notes.md');
     const newFile = await changes.findByRole('button', { name: 'notes.md New' });
-    await expect(within(newFile).getByTitle('Untracked: new file, not staged')).toBeVisible();
+    await expect(within(newFile).getByTitle('Untracked: not staged')).toBeVisible();
     await expect(changes.queryByText('?')).not.toBeInTheDocument();
     const fileRows = files.getAllByRole('button');
     const changeRows = changes.getAllByRole('button');

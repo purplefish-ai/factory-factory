@@ -81,7 +81,7 @@ describe('ChangeTreeView', () => {
           })
         )
       );
-      const badge = container.querySelector('[title="Untracked: new file, not staged"]');
+      const badge = container.querySelector('[title="Untracked: not staged"]');
       expect(badge?.textContent).toBe('New');
       expect(container.textContent).not.toContain('?');
       container.querySelector('button')?.click();
