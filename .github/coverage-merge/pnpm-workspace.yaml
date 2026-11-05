@@ -1,6 +1,9 @@
 # A separate, minimal installation for the serial coverage gate.
 pmOnFail: ignore
-# Match the root policy permitting same-day security updates.
-minimumReleaseAge: 0
-allowBuilds:
-  esbuild: true
+# Keep this independent install under the root dependency intake policy.
+minimumReleaseAge: 4320
+minimumReleaseAgeStrict: true
+minimumReleaseAgeIgnoreMissingTime: false
+trustPolicy: no-downgrade
+# This toolchain has no dependency that needs an approved lifecycle build.
+allowBuilds: {}
