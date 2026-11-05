@@ -36,8 +36,16 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Setup Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '26.12.1'
+          package-manager-cache: false
+
       - name: Verify signed release source
         if: github.event_name == 'release' || inputs.create_release == true
+        env:
+          REQUESTED_RELEASE_TAG: ${{ inputs.release_tag }}
         run: |
           set -euo pipefail
           if [ "$(git rev-parse HEAD)" != "$GITHUB_SHA" ]; then
@@ -48,13 +56,21 @@ jobs:
             echo "::error::Signed release source must be in main ancestry."
             exit 1
           fi
+          VERSION=$(node -p "require('./package.json').version")
+          if [[ ! "$VERSION" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
+            echo "::error::A stable package version is required for signed releases."
+            exit 1
+          fi
           if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
             if [ "$GITHUB_REF" != "refs/heads/main" ]; then
               echo "::error::Signed manual builds must use the main branch."
               exit 1
             fi
+            if [ "${REQUESTED_RELEASE_TAG:-}" != "v$VERSION" ]; then
+              echo "::error::Manual release tag must match the package version."
+              exit 1
+            fi
           elif [ "$GITHUB_EVENT_NAME" = "release" ]; then
-            VERSION=$(jq -er '.version | select(type == "string" and test("^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$"))' package.json)
             if [ "$GITHUB_REF" != "refs/tags/v$VERSION" ]; then
               echo "::error::Release tag must match the package version."
               exit 1
@@ -66,12 +82,6 @@ jobs:
 
       - name: Install pnpm
         uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0: native pnpm 12 support
-
-      - name: Setup Node.js
-        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        with:
-          node-version: '26.12.1'
-          cache: 'pnpm'
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -87,7 +97,7 @@ jobs:
 
       - name: Build unsigned validation app
         if: github.event_name != 'release' && inputs.create_release != true
-        run: pnpm exec electron-builder --config.mac.notarize=false
+        run: pnpm exec electron-builder --publish never --config.mac.notarize=false
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: false
 
@@ -107,7 +117,7 @@ jobs:
               exit 1
             fi
           done
-          pnpm exec electron-builder --config.forceCodeSigning=true --config.mac.hardenedRuntime=true --config.mac.notarize=true
+          pnpm exec electron-builder --publish never --config.forceCodeSigning=true --config.mac.hardenedRuntime=true --config.mac.notarize=true
 
       - name: Verify release signature and notarization
         if: github.event_name == 'release' || inputs.create_release == true
@@ -164,7 +174,7 @@ jobs:
         run: pnpm db:generate
 
       - name: Build Electron app
-        run: pnpm build:electron
+        run: pnpm build:electron --publish never
 
       - name: Verify bundled Claude without global CLIs
         run: node scripts/check-packaged-claude.mjs --allow-unauthenticated
@@ -203,7 +213,7 @@ jobs:
         run: pnpm db:generate
 
       - name: Build Electron app
-        run: pnpm build:electron
+        run: pnpm build:electron --publish never
 
       - name: Verify bundled Claude without global CLIs
         run: node scripts/check-packaged-claude.mjs --allow-unauthenticated

@@ -39,10 +39,11 @@ protections. An owner must finish setup before the next desktop release.
 
 Before installing dependencies or running repository code, signed builds verify
 that the checkout matches the GitHub event commit and is an ancestor of
-`origin/main`. Signed manual builds must select the main branch. Release events
-must use a tag exactly matching `v` followed by the manifest's stable version.
-Full checkout history supplies the ancestry check. Unsigned validation can run
-on development branches without these release restrictions.
+`origin/main`. Signed manual builds must select the main branch and supply a
+`release_tag` matching `v` followed by the manifest version. Release events must
+use a tag exactly matching `v` followed by the manifest's stable version. Full
+checkout history supplies the ancestry check. Unsigned validation can run on
+development branches without these release restrictions.
 
 Environment protection remains necessary to restrict who can approve use of the
 credentials. The source guard adds a repository-level check; it does not create
@@ -52,10 +53,13 @@ or replace GitHub's environment review policy.
 
 Application compilation, Prisma generation and native-module preparation run
 without signing credentials. Only the packaging step receives the credentials.
-The release command forces code signing and hardened runtime, then requests
-notarization through the pinned Electron builder. After packaging, the workflow
-verifies each macOS app with `codesign --verify --deep --strict`, validates its
-stapled notarization ticket with `xcrun stapler validate`, and checks Gatekeeper
+All packaging commands explicitly disable Electron builder publishing; artifact
+attachment is handled only by the workflow's release job. This also prevents CI
+detection from attempting a publish during unsigned validation. The release
+command forces code signing and hardened runtime, then requests notarization
+through the pinned Electron builder. After packaging, the workflow verifies each
+macOS app with `codesign --verify --deep --strict`, validates its stapled
+notarization ticket with `xcrun stapler validate`, and checks Gatekeeper
 acceptance using `spctl --assess`. Failure prevents artifact upload and release
 attachment.
 
