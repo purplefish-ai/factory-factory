@@ -8,6 +8,27 @@ and this project adheres to
 
 ## [Unreleased]
 
+## [0.5.7] - 2026-11-05
+
+### Changed
+
+- Show Working and Waiting counts for all active projects inside the project
+  menu, open the menu by clicking the project name, and expand mobile project
+  names when space permits (#3064, #3066)
+- Reduce published runtime dependencies and constrain native-helper permission
+  repair to the installed dependency and current platform (#3063)
+
+### Security
+
+- Verify published npm artifact integrity, provenance, version and source commit
+  against the staged package before finalizing a release (#3059)
+- Pin the container base image and executable downloads, ship a pruned
+  production dependency graph, and publish image provenance and an SBOM (#3060)
+- Enforce dependency release-age and trust policies with reviewed
+  lifecycle-script approvals (#3062)
+- Require code signing and Apple notarization for public macOS releases, and
+  verify desktop release source and tag identity (#3061)
+
 ## [0.5.6] - 2026-11-05
 
 ### Changed
