@@ -54,6 +54,14 @@ vi.mock('@/backend/services/workspace-git-state.service', () => ({
     getSnapshot: (...args: unknown[]) => mockGetSnapshot(...args),
     invalidate: mockGitStateInvalidate,
     remove: mockGitStateRemove,
+    withWatchersSuspended: async (worktreePath: string, operation: () => Promise<void>) => {
+      mockGitStateRemove(worktreePath);
+      try {
+        await operation();
+      } finally {
+        mockGitStateRemove(worktreePath);
+      }
+    },
   },
 }));
 
@@ -299,6 +307,9 @@ describe('gitOpsService', () => {
     expect(mockGitStateRemove.mock.invocationCallOrder[0]).toBeLessThan(
       mockGitClient.deleteWorktree.mock.invocationCallOrder[0]!
     );
+    expect(mockGitStateRemove.mock.invocationCallOrder[1]).toBeGreaterThan(
+      mockGitClient.deleteWorktree.mock.invocationCallOrder[0]!
+    );
   });
 
   it('closes Git state watchers before filesystem-fallback removal', async () => {
@@ -313,6 +324,9 @@ describe('gitOpsService', () => {
     expect(mockGitStateRemove.mock.invocationCallOrder[0]).toBeLessThan(
       mockRm.mock.invocationCallOrder[0]!
     );
+    expect(mockGitStateRemove.mock.invocationCallOrder[1]).toBeGreaterThan(
+      mockRm.mock.invocationCallOrder[0]!
+    );
   });
 
   it('allows lazy watcher recovery when registered worktree removal fails', async () => {
@@ -323,6 +337,9 @@ describe('gitOpsService', () => {
       'remove failed'
     );
     expect(mockGitStateRemove).toHaveBeenCalledWith('/repo/worktrees/w1');
+    expect(mockGitStateRemove.mock.invocationCallOrder[0]).toBeLessThan(
+      mockGitClient.deleteWorktree.mock.invocationCallOrder[0]!
+    );
     expect(mockGitStateInvalidate).toHaveBeenCalledWith('/repo/worktrees/w1');
   });
 
@@ -336,6 +353,9 @@ describe('gitOpsService', () => {
     );
     expect(mockGitStateRemove).toHaveBeenCalledWith('/repo/worktrees/w1');
     expect(mockGitStateRemove.mock.invocationCallOrder[0]).toBeLessThan(
+      mockRm.mock.invocationCallOrder[0]!
+    );
+    expect(mockGitStateRemove.mock.invocationCallOrder[1]).toBeGreaterThan(
       mockRm.mock.invocationCallOrder[0]!
     );
     expect(mockGitStateInvalidate).toHaveBeenCalledWith('/repo/worktrees/w1');

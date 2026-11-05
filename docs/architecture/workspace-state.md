@@ -688,8 +688,11 @@ worktrees. Linux snapshots expire after five seconds even with healthy watches;
 existing snapshot readers refresh nested working-tree edits and ref changes that
 shallow watches cannot see. Watch failures retain that five-second limit on
 Linux. Other platforms retain recursive watching and the five-minute failure
-fallback. Worktree removal closes its watchers before Git or filesystem
-deletion; if deletion fails, the next snapshot read recreates them lazily.
+fallback. Worktree removal closes its watchers before Git or filesystem deletion
+and suspends watcher installation until that operation settles. Concurrent
+snapshot reads cannot reinstall watches during deletion. On success or failure,
+it retires any snapshots calculated during deletion; the next read may recreate
+watchers lazily if the worktree survives.
 
 Git snapshots keep one running calculation per worktree/default-branch pair.
 Invalidation clears the cached result and fences the running generation without

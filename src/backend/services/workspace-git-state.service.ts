@@ -238,6 +238,7 @@ export class WorkspaceGitStateService {
   private readonly generations = new Map<string, number>();
   private readonly watchers = new Map<string, WatcherRecord>();
   private readonly sharedWatchers = new Map<string, SharedWatcherRecord>();
+  private readonly watcherSuspensions = new Map<string, number>();
 
   constructor(options: WorkspaceGitStateServiceOptions = {}) {
     const executeGit = options.runGit ?? gitCommand;
@@ -325,6 +326,9 @@ export class WorkspaceGitStateService {
    * blocking on the recompute.
    */
   getCachedSnapshot(input: WorkspaceGitStateInput): WorkspaceGitStateSnapshot | null {
+    if (this.watcherSuspensions.has(path.resolve(input.worktreePath))) {
+      return null;
+    }
     const key = this.cacheKey({ ...input, worktreePath: path.resolve(input.worktreePath) });
     const cached = this.cache.get(key);
     if (!cached) {
@@ -363,6 +367,28 @@ export class WorkspaceGitStateService {
     const normalizedPath = path.resolve(worktreePath);
     this.closeWatcher(normalizedPath);
     this.invalidatePath(normalizedPath);
+  }
+
+  async withWatchersSuspended(worktreePath: string, operation: () => Promise<void>): Promise<void> {
+    const normalizedPath = path.resolve(worktreePath);
+    this.watcherSuspensions.set(
+      normalizedPath,
+      (this.watcherSuspensions.get(normalizedPath) ?? 0) + 1
+    );
+    this.remove(normalizedPath);
+    try {
+      await operation();
+    } finally {
+      const remaining = (this.watcherSuspensions.get(normalizedPath) ?? 1) - 1;
+      if (remaining === 0) {
+        this.watcherSuspensions.delete(normalizedPath);
+      } else {
+        this.watcherSuspensions.set(normalizedPath, remaining);
+      }
+      // Retire snapshots and fallback records created during deletion, including
+      // failures. Only a later reader may install replacement watchers.
+      this.remove(normalizedPath);
+    }
   }
 
   stop(): void {
@@ -420,9 +446,13 @@ export class WorkspaceGitStateService {
       handles: [],
       setup: Promise.resolve(),
     };
-    record.setup = this.installWatchers(worktreePath, record).catch(() => {
-      this.activateFallback(record);
-    });
+    if (this.watcherSuspensions.has(worktreePath)) {
+      record.mode = 'fallback';
+    } else {
+      record.setup = this.installWatchers(worktreePath, record).catch(() => {
+        this.activateFallback(record);
+      });
+    }
     this.watchers.set(worktreePath, record);
     return record;
   }

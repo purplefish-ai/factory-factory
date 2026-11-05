@@ -605,6 +605,51 @@ describe('WorkspaceGitStateService', () => {
     expect(watchPath).not.toHaveBeenCalled();
   });
 
+  it.each(['success', 'failure'])(
+    'suspends watches through deletion %s and recovers lazily',
+    async (outcome) => {
+      await service.getSnapshot(input);
+      const installed = watchPath.mock.calls.length;
+      const deletion = service.withWatchersSuspended(input.worktreePath, async () => {
+        expect(
+          watcherHistory.every(({ watcher }) => watcher.closeMock.mock.calls.length === 1)
+        ).toBe(true);
+        await service.getSnapshot(input);
+        expect(watchPath).toHaveBeenCalledTimes(installed);
+        expect(service.getCachedSnapshot(input)).toBeNull();
+        if (outcome === 'failure') {
+          throw new Error('deletion failed');
+        }
+      });
+      if (outcome === 'failure') {
+        await expect(deletion).rejects.toThrow('deletion failed');
+      } else {
+        await deletion;
+      }
+      expect(service.getCachedSnapshot(input)).toBeNull();
+      expect(watchPath).toHaveBeenCalledTimes(installed);
+      await service.getSnapshot(input);
+      expect(watchPath).toHaveBeenCalledTimes(installed * 2);
+    }
+  );
+
+  it('keeps watches suspended until overlapping deletion scopes both settle', async () => {
+    const first = Promise.withResolvers<void>();
+    const second = Promise.withResolvers<void>();
+    const firstDeletion = service.withWatchersSuspended(input.worktreePath, () => first.promise);
+    const secondDeletion = service.withWatchersSuspended('/repo/./w1', () => second.promise);
+    await service.getSnapshot(input);
+    expect(watchPath).not.toHaveBeenCalled();
+    first.resolve();
+    await firstDeletion;
+    await service.getSnapshot(input);
+    expect(watchPath).not.toHaveBeenCalled();
+    second.resolve();
+    await secondDeletion;
+    await service.getSnapshot(input);
+    expect(watchPath).toHaveBeenCalledTimes(3);
+  });
+
   it('closes every watcher and clears cached snapshots on stop', async () => {
     await service.getSnapshot(input);
     const installedWatchers = [...watchers.values()];
