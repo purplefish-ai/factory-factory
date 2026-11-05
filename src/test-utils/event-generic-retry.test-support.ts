@@ -3,12 +3,15 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, expect, vi } from 'vitest';
 import {
   createEventDeliveryFixture,
-  deferred,
   waitForEventFixture,
   releaseEventBoundaries,
   drainEventFixtureTasks,
+  trackEventFixtureTask,
 } from '@/backend/orchestration/testing/event-delivery.test-support';
-import { fakeEventProvider } from '@/backend/orchestration/testing/event-provider.test-support';
+import {
+  eventProviderCollection,
+  fakeEventProvider,
+} from '@/backend/orchestration/testing/event-provider.test-support';
 import {
   createIntegrationDatabase,
   destroyIntegrationDatabase,
@@ -22,7 +25,7 @@ export let consumer: ReturnType<
 >;
 export let providers: ReturnType<typeof fakeEventProvider>[];
 const exitTasks = new Set<Promise<void>>();
-let providerCreated: ReturnType<typeof deferred<void>>;
+export let waitForProviders: ReturnType<typeof eventProviderCollection>['waitForProviders'];
 beforeEach(async () => {
   db = await createIntegrationDatabase();
   const accounts = await vi.importActual<typeof import('@/backend/services/codex-accounts')>(
@@ -56,8 +59,8 @@ beforeEach(async () => {
     void task.finally(() => exitTasks.delete(task)).catch(() => undefined);
     return task;
   });
-  providers = [];
-  providerCreated = deferred<void>();
+  const collection = eventProviderCollection();
+  ({ providers, waitForProviders } = collection);
   vi.spyOn(process, 'kill').mockImplementation(() => {
     throw new Error('No host signals');
   });
@@ -74,10 +77,18 @@ beforeEach(async () => {
       undefined,
       new AcpNativeSessionTracker()
     );
-    providers.push(provider);
-    providerCreated.resolve();
+    collection.add(provider);
     return Promise.resolve(provider.handle);
   });
+  // Production bridges fire PR wakes without awaiting them on session idle.
+  // Preserve those real operations, but own their lifetime through DB teardown.
+  const delivery = await vi.importActual<
+    typeof import('@/backend/orchestration/pr-event-delivery.orchestrator')
+  >('@/backend/orchestration/pr-event-delivery.orchestrator');
+  const wake = delivery.wakePRDelivery;
+  vi.spyOn(delivery, 'wakePRDelivery').mockImplementation((...args) =>
+    trackEventFixtureTask(wake(...args))
+  );
   const { createEventRunConsumer } = await vi.importActual<
     typeof import('@/backend/orchestration/event-run-consumer.orchestrator')
   >('@/backend/orchestration/event-run-consumer.orchestrator');
@@ -98,9 +109,10 @@ afterEach(async () => {
       async () => {
         await h.session.acpRuntimeManager.stopAllClients(10);
         await new Promise<void>((resolve) => setImmediate(resolve));
-        while (exitTasks.size > 0) {
+        do {
           await Promise.allSettled([...exitTasks]);
-        }
+          await drainEventFixtureTasks();
+        } while (exitTasks.size > 0);
       }
     );
     h.session.sessionPromptTurnCompletionService.clearAll();
@@ -129,8 +141,7 @@ export async function context() {
 }
 export async function launch() {
   await consumer.consumeClaim(h.claim, new AbortController().signal);
-  await waitForEventFixture(providerCreated.promise, 'retry provider creation');
-  expect(providers).toHaveLength(1);
+  await waitForProviders(1);
   const provider = providers[0];
   if (!provider) {
     throw new Error('Initial provider missing');

@@ -107,6 +107,13 @@ migrations keep the existing template; failed rebuilds abort the rerun without
 publishing a partial replacement. A failed private database creation restores
 the previously active client and environment binding.
 
+Event runtime fixtures await bounded provider-creation notifications instead of
+polling. Create a fresh `eventProviderCollection()` in each test fixture, add
+providers through its `add` method, and await `waitForProviders(count)` to
+retain exact-count assertions and a bounded failure when startup stalls. Fixture
+teardown tracks real background PR wakes through completion and drains newly
+spawned work before disconnecting the private database.
+
 `pnpm check` covers linting, formatting, file lengths, environment access,
 ownership, foreign-key indexes, and dependencies. Upstream ACP adapters own
 their provider protocol schemas; test ACP client contracts when upgrading either

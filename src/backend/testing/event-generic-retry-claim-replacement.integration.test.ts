@@ -7,6 +7,7 @@ import {
   db,
   h,
   providers,
+  waitForProviders,
   readyRetryPRFixture,
   readPRDeliveryEvents,
   strictStop,
@@ -104,7 +105,7 @@ it.each([
       expect(
         await consumer.resolveAmbiguousRun({ ...(await context()), action: 'RETRY' })
       ).toMatchObject({ status: 'RETRIED' });
-      await vi.waitFor(() => expect(providers).toHaveLength(3));
+      await waitForProviders(3);
       await providers[2]!.called;
       providers[2]!.response.resolve({ stopReason: 'end_turn' });
       await consumer.drain();

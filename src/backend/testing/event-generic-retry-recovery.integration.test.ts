@@ -7,6 +7,7 @@ import {
   h,
   consumer,
   providers,
+  waitForProviders,
   beginIndependentPrompt,
   context,
   launch,
@@ -85,7 +86,7 @@ it('rejects manual event RETRY while a generic startup script holds PROVISIONING
   expect(
     await consumer.resolveAmbiguousRun({ ...(await context()), action: 'RETRY' })
   ).toMatchObject({ status: 'RETRIED' });
-  await vi.waitFor(() => expect(providers).toHaveLength(2));
+  await waitForProviders(2);
   await providers[1]!.called;
 });
 
@@ -151,7 +152,7 @@ it('allows READY recovery during another session startup and fences the old gene
     expect(
       await consumer.resolveAmbiguousRun({ ...(await context()), action: 'RETRY' })
     ).toMatchObject({ status: 'RETRIED' });
-    await vi.waitFor(() => expect(providers).toHaveLength(2));
+    await waitForProviders(2);
     await providers[1]!.called;
   } finally {
     gate.release();
@@ -385,7 +386,8 @@ it.each([
         expect(
           await consumer.resolveAmbiguousRun({ ...(await context()), action: 'RETRY' })
         ).toMatchObject({ status: 'RETRIED' });
-        await vi.waitFor(() => expect(providers).toHaveLength(3));
+        await waitForProviders(3);
+        await providers[2]!.called;
         expect((await h.read()).attempt.attemptGeneration).toBe(h.attempt.attemptGeneration + 1);
       }
     } finally {
@@ -509,14 +511,14 @@ it.each([true, false])(
         expect(
           await consumer.resolveAmbiguousRun({ ...(await context()), action: 'RETRY' })
         ).toMatchObject({ status: 'RETRIED' });
-        await vi.waitFor(() => expect(providers).toHaveLength(2));
+        await waitForProviders(2);
         await providers[1]!.called;
       }
     } finally {
       held.release();
     }
     if (!revoked) {
-      await vi.waitFor(() => expect(providers).toHaveLength(2));
+      await waitForProviders(2);
       providers[1]!.response.resolve({ stopReason: 'end_turn' });
     }
     await dispatch;
@@ -618,7 +620,7 @@ it.each([
         expect(
           await consumer.resolveAmbiguousRun({ ...(await context()), action: 'RETRY' })
         ).toMatchObject({ status: 'RETRIED' });
-        await vi.waitFor(() => expect(providers).toHaveLength(3));
+        await waitForProviders(3);
         await providers[2]!.called;
         if (replacement) {
           independent = await beginIndependentPrompt(other.id, replacement);
@@ -733,7 +735,7 @@ it.each([
         expect(
           await consumer.resolveAmbiguousRun({ ...(await context()), action: 'RETRY' })
         ).toMatchObject({ status: 'RETRIED' });
-        await vi.waitFor(() => expect(providers).toHaveLength(3));
+        await waitForProviders(3);
         await providers[2]!.called;
       }
     } finally {
@@ -804,7 +806,7 @@ it.each([true, false])(
         expect(
           await consumer.resolveAmbiguousRun({ ...(await context()), action: 'RETRY' })
         ).toMatchObject({ status: 'RETRIED' });
-        await vi.waitFor(() => expect(providers).toHaveLength(3));
+        await waitForProviders(3);
         await providers[2]!.called;
       }
     } finally {
@@ -921,7 +923,7 @@ it.each([
         expect(
           await consumer.resolveAmbiguousRun({ ...(await context()), action: 'RETRY' })
         ).toMatchObject({ status: 'RETRIED' });
-        await vi.waitFor(() => expect(providers).toHaveLength(3));
+        await waitForProviders(3);
         await providers[2]!.called;
       }
     } finally {

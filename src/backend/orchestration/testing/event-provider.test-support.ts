@@ -6,10 +6,10 @@ import type {
   PromptResponse,
   SessionConfigOption,
 } from '@agentclientprotocol/sdk/unstable';
-import { vi } from 'vitest';
+import { expect, vi } from 'vitest';
 import type { AcpClientOptions, AcpProcessHandle } from '@/backend/services/session';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
-import { deferred } from './event-delivery.test-support';
+import { deferred, waitForEventFixture } from './event-delivery.test-support';
 
 /** Replaces only process creation/transport. Never owns or signals a host PID/group. */
 export function fakeEventProvider(
@@ -94,5 +94,29 @@ export function fakeEventProvider(
         method: 'session/update',
         params: { sessionId: handle.acpSessionId, update },
       }),
+  };
+}
+
+/** A fresh collection per test signals creation without a polling interval. */
+export function eventProviderCollection() {
+  const providers: ReturnType<typeof fakeEventProvider>[] = [];
+  const created = new Map<number, ReturnType<typeof deferred<void>>>();
+  return {
+    providers,
+    add(provider: ReturnType<typeof fakeEventProvider>) {
+      providers.push(provider);
+      created.get(providers.length)?.resolve();
+    },
+    async waitForProviders(count: number) {
+      if (providers.length < count) {
+        let signal = created.get(count);
+        if (!signal) {
+          signal = deferred<void>();
+          created.set(count, signal);
+        }
+        await waitForEventFixture(signal.promise, `provider count ${count}`, { timeoutMs: 1000 });
+      }
+      expect(providers).toHaveLength(count);
+    },
   };
 }

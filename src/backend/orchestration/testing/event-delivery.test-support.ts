@@ -46,9 +46,11 @@ export function releaseEventBoundaries() {
   releases.clear();
 }
 export async function drainEventFixtureTasks() {
-  await Promise.allSettled([...tasks]);
+  while (tasks.size > 0) {
+    await Promise.allSettled([...tasks]);
+  }
 }
-function track(task: Promise<void>) {
+export function trackEventFixtureTask(task: Promise<void>) {
   tasks.add(task);
   void task.then(
     () => tasks.delete(task),
@@ -434,7 +436,7 @@ export async function createEventDeliveryFixture(
     workspaceSource,
     read: () => owner.agentInitialDelivery.readFence(claim.runId, claim.reservedSessionId),
     dispatch: () =>
-      track(
+      trackEventFixtureTask(
         session.dispatchAgentInitialPrompt({
           attempt,
           text: 'Frozen task',
