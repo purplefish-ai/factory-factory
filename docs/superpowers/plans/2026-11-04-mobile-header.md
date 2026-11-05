@@ -16,7 +16,14 @@ CSS ordering alone would leave keyboard order inconsistent with the screen.
       project and generic screens at 320px and 390px; verify failure first.
 - [x] Adjust shared header markup and responsive CSS; preserve PWA flex layout.
 - [x] Cover phone states in Storybook and document the shared layout contract.
-- [ ] Run formatting, typecheck, unit, Storybook and mobile checks; inspect
+- [x] Run formatting, typecheck, unit, Storybook and mobile checks; inspect
       diff.
 - [ ] Open a PR, address valid review feedback, and merge only after checks pass
       and no review comments remain outstanding.
+
+## Verification results
+
+All 90 mobile browser tests passed, as did the final 27 header stories, shared
+header unit regression, formatting, typecheck and repository checks. The full
+Storybook suite passed 1,233 tests. Local full application runs exited with code
+23 without a Vitest summary; both application shards subsequently passed in CI.

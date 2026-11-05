@@ -59,10 +59,11 @@ URL**. Both sources remain available.
 
 ## Phone navigation
 
-Every page uses two header rows on phones: navigation and actions above page
-context. Workspace headers put project and family navigation beside the
-workspace name in the context row, keeping the content height stable between
-pages.
+Every page uses two header rows on phones: the sidebar menu and path or page
+title first, then status and action controls. Workspace headers put project and
+family navigation beside the workspace name in the first row, keeping the
+content height stable between pages. See the
+[shared header layout](architecture/workspace-state.md) for the layout contract.
 
 On the Kanban board, Search and **New workspace** live in a toolbar in the main
 pane, with visible labels and room for touch targets. In narrow message
