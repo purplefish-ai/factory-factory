@@ -24,6 +24,7 @@ context, not a new task or a substitute for current repository guidance.
 | Package npm runtime dependencies              | [npm package security](npm-package-security.md)                                                       |
 | Audit vulnerabilities and dependency updates  | [Dependency security](dependency-security.md)                                                         |
 | Container image integrity                     | [Distribution security](distribution-security.md)                                                     |
+| Verify npm release artifact identity          | [npm release security](npm-release-security.md)                                                       |
 
 For implementation work, search the relevant source area and current guides
 first, for example `rg -n 'PR monitoring' docs/architecture`. Consult historical

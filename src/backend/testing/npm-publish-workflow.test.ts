@@ -114,6 +114,9 @@ describe('npm publish workflow', () => {
     );
     expect(verifyJob.environment).toBeUndefined();
     expect(verifyJob.permissions).toEqual({ contents: 'read' });
+    expect(getStep(verifyJob, 'Verify release source').if).toBe(
+      githubExpression("github.event_name == 'release' || github.event.inputs.dry_run != 'true'")
+    );
     expectSecureNodeSetup(verifyJob);
     expect(getStep(verifyJob, 'Install npm CLI').run).toBe('npm install --global npm@11.19.0');
     const dryRunStep = getStep(verifyJob, 'Publish to npm (dry run)');
@@ -193,15 +196,14 @@ describe('npm publish workflow', () => {
     expect(finalizeJob.permissions).toEqual({ actions: 'read', contents: 'write' });
     const verifyPublishedStep = getStep(finalizeJob, 'Verify package is published on npm');
     expect(verifyPublishedStep.id).toBe('release_version');
-    expect(verifyPublishedStep.run).toBe(`set -euo pipefail
-VERSION=$(node -p "require('./package.json').version")
-PUBLISHED_VERSION=$(npm view "factory-factory@$VERSION" version)
-if [ "$PUBLISHED_VERSION" != "$VERSION" ]; then
-  echo "factory-factory@$VERSION is not published on npm" >&2
-  exit 1
-fi
-echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-`);
+    expect(verifyPublishedStep.run).toContain(
+      'bash scripts/verify-npm-release.sh npm-package "$STAGED_COMMIT" "$STAGING_RUN_ID" "$RELEASE_REPOSITORY"'
+    );
+    expect(verifyPublishedStep.env).toEqual({
+      STAGED_COMMIT: githubExpression('steps.staging_run.outputs.commit'),
+      STAGING_RUN_ID: githubExpression('github.event.inputs.staging_run_id'),
+      RELEASE_REPOSITORY: githubExpression('github.repository'),
+    });
     getStep(finalizeJob, 'Create and push tag');
     expect(
       finalizeJob.steps.findIndex((step) => step.name === 'Verify package is published on npm')
@@ -258,6 +260,7 @@ echo "commit=$COMMIT" >> "$GITHUB_OUTPUT"
     });
     expect(getStep(finalizeJob, 'Checkout staged commit').with).toEqual({
       ref: githubExpression('steps.staging_run.outputs.commit'),
+      'fetch-depth': 0,
     });
 
     const orderedSteps = [
