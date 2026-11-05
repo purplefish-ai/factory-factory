@@ -1,5 +1,30 @@
+import { globSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { defineConfig } from 'vitest/config';
+
+// Preserve process realms for these global replacements, HTTP/cache identity
+// checks, and the native ESM dependency loader used by Mermaid.
+const browserForkTests = new Set([
+  'src/components/ui/mermaid-diagram.integration.test.tsx',
+  'src/client/components/factory-update-banner.test.tsx',
+  'src/client/features/chat/agent-activity/tool-renderers/tool-expansion-state.test.ts',
+  'src/client/hooks/workspace-cache-reconciler.integration.test.tsx',
+]);
+
+// Only DOM suites use VM contexts. Node, native and process tests retain forks.
+// Resolve the environment annotation so .ts/.tsx extensions don't change pools.
+const browserTests = globSync(
+  ['src/client/**/*.test.{ts,tsx}', 'src/components/**/*.test.{ts,tsx}'],
+  { cwd: import.meta.dirname }
+)
+  .map((file) => file.replaceAll('\\', '/'))
+  .filter(
+    (file) =>
+      !browserForkTests.has(file) &&
+      /@vitest-environment\s+jsdom\b/.test(
+        readFileSync(path.join(import.meta.dirname, file), 'utf8')
+      )
+  );
 
 // Audited tests that clean up resources without module mocks or shared global
 // mutations. New files stay isolated; remove an entry if it needs isolation.
@@ -66,7 +91,18 @@ export default defineConfig({
             'electron/**/*.test.ts',
             'scripts/**/*.test.ts',
           ],
-          exclude: ['node_modules', 'dist', '.next', ...reusableSharedTests],
+          exclude: ['node_modules', 'dist', '.next', ...browserTests, ...reusableSharedTests],
+        },
+      },
+      {
+        extends: true,
+        test: {
+          name: 'browser',
+          include: browserTests,
+          // Keep fresh VM contexts/windows while reusing expensive jsdom imports.
+          // Backend native modules and process APIs retain the forks pool above.
+          pool: 'vmForks',
+          vmMemoryLimit: '512MB',
         },
       },
       {

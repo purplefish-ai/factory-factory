@@ -78,7 +78,14 @@ may name additional focused checks for their contracts. Inspect the final diff,
 report failed or unavailable checks, and never weaken assertions or guardrails
 to pass. Repeat successful checks only after edits or new evidence.
 
-Vitest keeps application, UI, native and integration tests isolated. The
+Vitest keeps application, UI, native and integration tests isolated. Frontend
+suites annotated `@vitest-environment jsdom` use `vmForks`: each file gets a
+fresh VM context and window while workers reuse jsdom dependency imports.
+Workers recycle after reaching 512 MB. Node, native and process suites retain
+fork isolation. The explicit `browserForkTests` exceptions in `vitest.config.ts`
+preserve whole-window replacements, native HTTP/cache identity behavior, and
+Mermaid's ESM dependency loading. New browser tests that need process realms
+should join that exception list, preserving their existing assertions. The
 `shared` project reuses thread workers for the audited `reusableSharedTests`
 allowlist in `vitest.config.ts` to avoid repeated imports. Those tests must
 clean up their resources and avoid module mocks or shared global mutations. New
