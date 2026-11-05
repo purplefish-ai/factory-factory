@@ -26,6 +26,7 @@ jobs:
   build-mac:
     name: Build macOS
     runs-on: macos-latest
+    environment: ${{ (github.event_name == 'release' || inputs.create_release == true) && 'desktop-release' || 'desktop-validation' }}
     permissions:
       contents: read
     env:
@@ -48,10 +49,45 @@ jobs:
       - name: Generate Prisma client
         run: pnpm db:generate
 
-      - name: Build Electron app
-        run: pnpm build:electron
+      - name: Build unsigned validation app
+        if: github.event_name != 'release' && inputs.create_release != true
+        run: pnpm build:electron --config.mac.notarize=false
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: false
+
+      - name: Build signed and notarized release
+        if: github.event_name == 'release' || inputs.create_release == true
+        env:
+          CSC_LINK: ${{ secrets.MACOS_CERTIFICATE }}
+          CSC_KEY_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          set -euo pipefail
+          for name in CSC_LINK CSC_KEY_PASSWORD APPLE_ID APPLE_APP_SPECIFIC_PASSWORD APPLE_TEAM_ID; do
+            if [ -z "${!name:-}" ]; then
+              echo "::error::Missing signing credential: $name. See docs/desktop-releases.md."
+              exit 1
+            fi
+          done
+          pnpm build:electron --config.forceCodeSigning=true --config.mac.hardenedRuntime=true --config.mac.notarize=true
+
+      - name: Verify release signature and notarization
+        if: github.event_name == 'release' || inputs.create_release == true
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          apps=(release/mac*/"Factory Factory.app")
+          if [ "${#apps[@]}" -eq 0 ]; then
+            echo "::error::No packaged macOS app found for signature verification."
+            exit 1
+          fi
+          for app in "${apps[@]}"; do
+            codesign --verify --deep --strict --verbose=2 "$app"
+            xcrun stapler validate "$app"
+            spctl --assess --type execute --verbose=2 "$app"
+          done
 
       - name: Verify bundled Claude without global CLIs
         run: node scripts/check-packaged-claude.mjs --allow-unauthenticated
