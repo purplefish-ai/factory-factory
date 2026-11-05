@@ -8,19 +8,117 @@ and this project adheres to
 
 ## [Unreleased]
 
+## [0.5.4] - 2026-11-04
+
 ### Added
 
 - Open agent localhost links and the Run button from other devices under
-  `ff tailscale` by sharing the port through Tailscale Serve
+  `ff tailscale` by sharing the port through Tailscale Serve (#2924)
+- Show dismissible release notices with supervised CLI updates, restart, and
+  recovery controls (#2972, #2976)
+- Guide `ff serve` users through missing prerequisites and offer fixes that
+  require explicit acceptance (#2973, #2975)
+- Add native desktop menus and restore window preferences (#2987)
+- Add searchable commands, centralized keyboard shortcuts, accessible tab
+  navigation, and a keyboard toggle for native planning modes (#2964, #2989)
+- Add opt-in workspace completion notifications, per-session needs-input
+  indicators, and workspace unread inbox counts across navigation (#2965, #2967,
+  #2990)
+- Rename chats inline, improve composer and setup access, and load older chat
+  history when scrolling up (#2988, #2992)
+- Recover periodic task configuration, workspace links, execution history, and
+  automation definition bodies while keeping recovered scheduling and
+  definitions disabled and historical runs inert (#2929, #2931, #2932, #2933)
+- Make the ticket dispatch prompt configurable in Settings (#2974)
+- Add persisted sort options for the Waiting Kanban column, synchronized across
+  browser tabs (#3006)
+- Open Claude sign-in directly from the CLI health banner (#3022)
 
 ### Changed
 
 - `ff tailscale` no longer starts public cloudflared tunnels for run scripts
+  (#2924)
+- Smooth streamed Markdown with Streamdown and animate workspace tools and side
+  panels (#2909, #2921)
+- Unify sidebar and Board navigation, simplify workspace headers and quick
+  actions, keep the IDE action in the overflow menu, and remove board-wide sort
+  and workspace selection controls (#2948, #2977, #2982, #2985, #2995, #2998)
+- Show compact working and waiting counts in Board navigation with hover and
+  keyboard-focus labels, move the board filter into the top navigation, and hide
+  the launch button while its creation form is open (#3005, #3014, #3016, #3019)
+- Place sidebar Todo below workspace groups, move the right sidebar toggle after
+  search, and keep workspace editor actions in the overflow menu (#3008, #3010,
+  #3015)
+- Group Settings into URL-addressable sections, scope project configuration,
+  improve first-run setup and project navigation recovery, and group scheduled
+  and event agent navigation (#2981, #2983, #2984)
+- Expand project settings inline in the shared Settings layout, preserve project
+  breadcrumbs in global settings, and remove the separate project settings
+  screen (#3003, #3007, #3017)
+- Unify navigation surfaces and header separators, match installed-window
+  corners, keep terminal tabs compact, improve shared color contrast, and reduce
+  the chat send button height (#3004, #3011, #3012, #3020, #3024)
+- Load earlier chat messages automatically without history labels while
+  preserving the reading position (#3001)
+- Apply shared appearance and status tokens across PR, CI, review, Markdown,
+  Mermaid, terminal, and setup-log surfaces; improve touch targets, accessible
+  status indicators, and offline fonts (#2947, #2949, #2951, #2977, #2978,
+  #2979, #2980, #2986)
+- Standardize loading, empty, error, pending-action, and date displays, surface
+  failed queries and mutations, and clarify autosave and destructive-action
+  feedback (#2946, #2966, #2968, #2969, #2970)
+- Align server logs with Settings and hide the sidebar Todo section when no
+  assigned issues are available (#2996, #2999)
+- Unify PR polling policy and CLI child supervision with bounded shutdown; make
+  `ff build` use the canonical production pipeline and separate checkout Prisma
+  generation from packaged installation (#2902, #2911, #2912, #2917)
+- Add staged unused-code and production reachability checks, organize Storybook
+  titles, and render every Storybook story in CI (#2922, #2925, #2944, #2950)
+- Keep workspace archiving in the overflow menu at every screen width (#3037)
+- Hide failure indicators in collapsed command groups (#3041)
+- Reduce repeated test setup and process launches with migrated SQLite
+  templates, narrower fixtures, reusable MCP processes, and isolated browser VM
+  workers; tighten pagination, contention, and terminal-event test handling
+  (#3027, #3028, #3029, #3030, #3031, #3032, #3033, #3034)
 
 ### Fixed
 
 - Withhold remote localhost links when port-sharing status fails, including
-  failed refreshes with cached status (#2955)
+  failed refreshes with cached status (#2955, #2961)
+- Fix image attachments while agents are working, composer scroll jumps, and
+  scrolling to the latest message after sending (#2903, #2956, #2971)
+- Pin agent errors above the composer with recovery actions and guard
+  one-keystroke approvals and running-session closes (#2945, #2957)
+- Fix phone workspace context and scrolling on Agents pages (#2991)
+- Open external Electron links in the system browser, keep PWA overlays below
+  native window controls, and restore themes correctly after refresh (#2915,
+  #2930, #2942)
+- Fix primary button hover contrast in chat and calendars (#2997)
+- Preserve SQL and JSON nulls in workspace, PR, and session metadata, and accept
+  compatible Claude workspace metadata schemas (#2900, #2923, #2926)
+- Fix Prisma Studio database selection and launch failures (#2904)
+- Recover disconnected Slack connection metadata and wrap long workspace
+  identities (#2943, #2960)
+- Honor workspace permissions for event agents and fix GitHub event intake after
+  resumed capture overlap shifts (#2962, #2963)
+- Preserve dispatched initial prompts when stopping a workspace and restore
+  prompts proven not to have been sent (#3002)
+- Keep follow-up workspaces waiting after PR completion and recover failed
+  direct input for the requesting user (#3009)
+- Prevent history-loading flicker when opening a workspace and keep the
+  scroll-to-bottom button from reserving transcript space (#3018, #3023)
+- Start terminals when a workspace has no running terminals (#3021)
+- Correct desktop PWA notices and clarify temporary Codex provider availability
+  errors while preserving actionable account and recovery errors (#3022, #3025)
+- Align Kanban column headers and card starting positions (#3026)
+- Fix compact touch controls and mobile chat clipping, keep composer actions
+  from overlapping, and prevent terminals from stealing keyboard focus (#3035,
+  #3036)
+- Suppress stale queued-message removal errors caused by repeated clicks or
+  queue dispatch races (#3038)
+- Stabilize mobile headers, Board navigation, and compact chat controls (#3039)
+- Preserve previously granted merge authorization in PR-event prompts, including
+  after CI recovers (#3040)
 
 ## [0.5.3] - 2026-11-03
 
