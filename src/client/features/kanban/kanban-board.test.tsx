@@ -317,8 +317,20 @@ describe('KanbanBoard', () => {
     void act(() => root.render(createElement(BoardWithHeader)));
     click('New workspace');
     const oldScrollContainer = container.querySelector<HTMLElement>('[data-mobile-board]')!;
+    const workingSection = container.querySelector<HTMLElement>('section[aria-label="Working"]')!;
+    const navigation = container.querySelector('nav[aria-label="Board sections"]')!;
+    const scrollTo = vi.fn();
+    Object.defineProperty(oldScrollContainer, 'scrollTo', { value: scrollTo });
+    Object.defineProperty(navigation, 'offsetHeight', { value: 40 });
+    vi.spyOn(oldScrollContainer, 'getBoundingClientRect').mockReturnValue(
+      new DOMRect(0, 100, 390, 600)
+    );
+    vi.spyOn(workingSection, 'getBoundingClientRect').mockReturnValue(
+      new DOMRect(0, 500, 390, 200)
+    );
     oldScrollContainer.scrollTop = 200;
     click('Complete creation');
+    expect(scrollTo).toHaveBeenCalledExactlyOnceWith({ top: 548, behavior: 'instant' });
     expect(
       [...container.querySelectorAll('[data-column="WORKING"] span')].map(
         (card) => card.textContent
@@ -408,7 +420,9 @@ describe('KanbanBoard', () => {
     const waiting = [...container.querySelectorAll('a')].find(
       (link) => link.textContent === 'Waiting 1'
     );
-    act(() => waiting?.click());
+    expect(formInput).not.toBeNull();
+    expect(waiting).toBeDefined();
+    act(() => waiting!.click());
     expect(container.querySelector('input[aria-label="Task name"]')).toBe(formInput);
     click('New workspace');
     expect(container.querySelector('input[aria-label="Task name"]')).toBe(formInput);

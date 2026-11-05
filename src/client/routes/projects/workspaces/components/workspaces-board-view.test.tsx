@@ -354,10 +354,20 @@ describe('WorkspacesBoardView project lifetime', () => {
     }
   });
 
-  it('shows every mobile section and replaces the previous project contents', async () => {
+  it('renders the mocked mobile sections and resets them between projects', async () => {
     mocks.isMobile = true;
+    let previousScroll: HTMLElement | null = null;
     for (const projectId of ['a', 'b', 'c', 'a']) {
       await render(projectId);
+      const scroll = container.querySelector<HTMLElement>('[data-mobile-board]')!;
+      expect(scroll).not.toBe(previousScroll);
+      expect(scroll.scrollTop).toBe(0);
+      expect(
+        [...scroll.querySelectorAll('section')].map((section) => section.getAttribute('aria-label'))
+      ).toEqual(['Waiting', 'Working', 'Issues']);
+      expect(scroll.querySelector('[data-todo-column]')).not.toBeNull();
+      scroll.scrollTop = 200;
+      previousScroll = scroll;
       expect(container.querySelectorAll('[data-column]')).toHaveLength(2);
       expect(container.querySelector('[data-column="WAITING"]')?.textContent).toContain(
         `${projectId}-1`

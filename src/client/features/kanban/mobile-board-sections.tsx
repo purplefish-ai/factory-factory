@@ -25,6 +25,7 @@ export function MobileBoardSections({
   const scrollRef = useRef<HTMLDivElement>(null);
   const navigationRef = useRef<HTMLElement>(null);
   const sectionRefs = useRef(new Map<string, HTMLElement>());
+  const lastCreationRequest = useRef(workspaceCreationRequest);
   const lastRevealedFormRequest = useRef<number | null>(null);
   const [activeId, setActiveId] = useState('ISSUES');
   const visibleSections = sections.filter((section) => section.visible);
@@ -60,7 +61,9 @@ export function MobileBoardSections({
       (navigationRef.current?.offsetHeight ?? 0) -
       12;
     scroll.scrollTo?.({ top: Math.max(0, top), behavior: 'instant' });
-    section.focus({ preventScroll: true });
+    if (!section.contains(section.ownerDocument.activeElement)) {
+      section.focus({ preventScroll: true });
+    }
     setActiveId(columnId);
   });
 
@@ -78,9 +81,10 @@ export function MobileBoardSections({
   }, [showInlineForm, inlineFormRequest, revealSection]);
 
   useEffect(() => {
-    if (workspaceCreationRequest > 0) {
+    if (workspaceCreationRequest > lastCreationRequest.current) {
       revealSection('WORKING');
     }
+    lastCreationRequest.current = workspaceCreationRequest;
   }, [workspaceCreationRequest, revealSection]);
 
   return (

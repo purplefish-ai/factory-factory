@@ -26,21 +26,17 @@ function requestedIssueQuery(query: string, submittedQuery: string): string {
   return /^#?\d+$/.test(query) || submittedQuery === query ? query : '';
 }
 
-function searchTrigger(expanded: boolean) {
+function searchTrigger() {
   return (
     <Button
-      variant={expanded ? 'outline' : 'ghost'}
+      variant="ghost"
       size="sm"
       aria-label="Search"
       aria-keyshortcuts={getAriaKeyShortcuts('app.search')}
-      className={
-        expanded
-          ? 'h-9 w-full justify-start gap-2 text-muted-foreground'
-          : 'h-8 shrink-0 gap-2 px-2 text-muted-foreground'
-      }
+      className="h-8 shrink-0 gap-2 px-2 text-muted-foreground"
     >
       <MagnifyingGlassIcon className="size-4" />
-      <span className={expanded ? undefined : 'hidden @[72rem]/header:inline'}>Search</span>
+      <span className="hidden @[72rem]/header:inline">Search</span>
       <kbd className="hidden rounded border px-1 text-[10px] font-normal @[72rem]/header:inline">
         {formatShortcut('app.search')}
       </kbd>
@@ -48,7 +44,7 @@ function searchTrigger(expanded: boolean) {
   );
 }
 
-export function GlobalSearch({ expanded = false }: { expanded?: boolean }) {
+export function GlobalSearch() {
   const navigate = useNavigate();
   const [selectedIssue, setSelectedIssue] = useState<Extract<
     SearchResult,
@@ -170,7 +166,7 @@ export function GlobalSearch({ expanded = false }: { expanded?: boolean }) {
             runShortcutCommand(command);
           }
         }}
-        trigger={searchTrigger(expanded)}
+        trigger={searchTrigger()}
       />
       {selectedIssue && (
         <ErrorBoundary
