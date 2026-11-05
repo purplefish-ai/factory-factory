@@ -1,5 +1,9 @@
-import { readFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { parse } from 'yaml';
 import { z } from 'zod';
 import { balanceTests, parseHistory, validateReports } from '../.github/coverage-merge/timings';
 
@@ -111,5 +115,64 @@ describe('minimal coverage toolchain', () => {
       expect(merge.dependencies[name]).toMatch(/^\d+\.\d+\.\d+$/);
     }
     expect(merge.packageManager).toBe(root.packageManager);
+  });
+});
+
+describe('coverage workflow safeguards', () => {
+  const step = z.object({
+    name: z.string().optional(),
+    id: z.string().optional(),
+    if: z.string().optional(),
+    run: z.string().optional(),
+    with: z.record(z.string(), z.unknown()).optional(),
+  });
+  const workflow = z
+    .object({
+      jobs: z.record(
+        z.string(),
+        z.object({
+          outputs: z.record(z.string(), z.string()).optional(),
+          steps: z.array(step).optional(),
+        })
+      ),
+    })
+    .parse(parse(readFileSync('.github/workflows/ci.yml', 'utf8')));
+
+  it('uses one immutable history lookup for both shards and rejects a different restore', () => {
+    const selection = workflow.jobs.changes;
+    expect(selection?.outputs?.timings).toBe('${{ steps.timings.outputs.cache-matched-key }}');
+    const lookup = selection?.steps?.find((entry) => entry.id === 'timings');
+    expect(lookup?.with?.['lookup-only']).toBe(true);
+    const shards = workflow.jobs['test-shards'];
+    const restore = shards?.steps?.find((entry) => entry.id === 'shard-timings');
+    expect(restore?.with?.key).toBe('${{ needs.changes.outputs.timings }}');
+    expect(restore?.with?.['restore-keys']).toBeUndefined();
+    expect(restore?.with?.['fail-on-cache-miss']).toBe(true);
+    const exact = shards?.steps?.find(
+      (entry) => entry.name === 'Require exact test duration snapshot'
+    );
+    expect(exact?.if).toBe(
+      "needs.changes.outputs.timings != '' && steps.shard-timings.outputs.cache-matched-key != needs.changes.outputs.timings"
+    );
+    expect(exact?.run).toBe('exit 1');
+  });
+
+  it('fails the actual blob gate until both shard reports exist', () => {
+    const gate = workflow.jobs.test?.steps?.find(
+      (entry) => entry.name === 'Require both shard reports'
+    );
+    const command = z.string().parse(gate?.run);
+    const directory = mkdtempSync(join(tmpdir(), 'ff-coverage-gate-'));
+    const run = () => spawnSync('bash', ['-e', '-c', command], { cwd: directory }).status;
+    try {
+      mkdirSync(join(directory, '.vitest/blob'), { recursive: true });
+      expect(run()).not.toBe(0);
+      writeFileSync(join(directory, '.vitest/blob/blob-1-2.json'), '{}');
+      expect(run()).not.toBe(0);
+      writeFileSync(join(directory, '.vitest/blob/blob-2-2.json'), '{}');
+      expect(run()).toBe(0);
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
   });
 });
