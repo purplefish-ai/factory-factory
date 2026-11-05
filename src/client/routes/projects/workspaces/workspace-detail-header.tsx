@@ -15,11 +15,9 @@ import {
 } from '@/client/features/workspace';
 import { runInBackground } from '@/client/lib/background-task';
 import { trpc } from '@/client/lib/trpc';
-import { isWorkspaceDoneOrMerged } from '@/client/lib/workspace-archive';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useWorkspaceProjectNavigation } from './use-workspace-project-navigation';
 import {
-  ArchiveActionButton,
   getWorkspaceHeaderLabel,
   ToggleRightPanelButton,
   WorkspaceHeaderOverflowMenu,
@@ -145,17 +143,6 @@ export const WorkspaceDetailHeaderSlot = memo(function WorkspaceDetailHeaderSlot
             {prAction(false)}
           </div>
           <WorkspacePrChip workspace={workspace} workspaceId={workspaceId} />
-          {/* Archiving is the next step for a finished workspace, so it stays in
-              view where there is room; More actions always has it. */}
-          {isWorkspaceDoneOrMerged(workspace) && !isArchived && (
-            <div className="hidden @[48rem]/header:flex">
-              <ArchiveActionButton
-                workspace={workspace}
-                archivePending={archivePending}
-                onArchiveRequest={onArchiveRequest}
-              />
-            </div>
-          )}
           <WorkspaceHeaderOverflowMenu
             isArchived={isArchived}
             workspace={workspace}
