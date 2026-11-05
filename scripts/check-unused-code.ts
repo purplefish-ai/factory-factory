@@ -5,6 +5,8 @@ import { pathToFileURL } from 'node:url';
 import { z } from 'zod';
 
 type Mode = 'production' | 'exports';
+const inventoryModeSchema = z.enum(['--report', '--update']).optional();
+type InventoryMode = z.infer<typeof inventoryModeSchema>;
 
 const repositoryPath = z
   .string()
@@ -165,7 +167,12 @@ function run() {
   const baseline = parseUnusedCodeBaseline(JSON.parse(readFileSync(path, 'utf8')));
   const production = analyze('production');
   const exports = analyze('exports');
-  const result = evaluateInventory(args[0], baseline, production, exports);
+  const result = evaluateInventory(
+    inventoryModeSchema.parse(args[0]),
+    baseline,
+    production,
+    exports
+  );
   if (result.baseline !== undefined) {
     writeFileSync(path, result.baseline);
   }
@@ -173,11 +180,12 @@ function run() {
 }
 
 export function evaluateInventory(
-  mode: string | undefined,
+  mode: InventoryMode,
   baseline: z.infer<typeof baselineSchema>,
   production: string[],
   exports: string[]
 ): { output: string; baseline?: string } {
+  inventoryModeSchema.parse(mode);
   const drift = {
     production: compareInventory(production, baseline.production),
     exports: compareInventory(exports, baseline.exports),

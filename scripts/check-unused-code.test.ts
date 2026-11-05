@@ -279,6 +279,12 @@ it('reports new candidates without accepting them, and update cannot add debt', 
     'New production candidate: src/abandoned.ts'
   );
   expect(() => evaluateInventory('--update', baseline, production, [])).toThrow('unreviewed');
+  const normal = run([]);
+  expect(normal.status).toBe(1);
+  expect(normal.stderr).toContain('New production candidate: src/abandoned.ts');
+  const update = run(['--update']);
+  expect(update.status).toBe(1);
+  expect(update.stderr).toContain('unreviewed');
   expect(JSON.parse(readFileSync(join(root, 'scripts/unused-code-baseline.json'), 'utf8'))).toEqual(
     inventory
   );
@@ -313,4 +319,9 @@ it('renders matching inventories and prunes resolved entries in both modes', () 
       []
     ).output
   ).toContain('inventory matches');
+});
+
+it('rejects unsupported evaluator modes at the runtime boundary', () => {
+  const baseline = parseUnusedCodeBaseline({ version: 1, production: {}, exports: {} });
+  expect(() => Reflect.apply(evaluateInventory, undefined, ['--typo', baseline, [], []])).toThrow();
 });

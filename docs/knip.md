@@ -62,9 +62,9 @@ from file reachability. A repository positive control also checks that the live
 GitHub previews, Markdown renderer, lazy file/diff viewers and critical runtime
 modules are absent from the production candidate report. Test-only module and
 fixture-support cases share one fixture and one scan per analysis mode. The CLI
-report smoke test still invokes the real analyzer; inventory enforcement and
-update decisions reuse those findings through the same evaluator as the CLI,
-avoiding repeated scans for output modes.
+report and failure smoke tests still invoke the real analyzer, including the
+normal enforcement and update-refusal paths. Additional inventory decisions
+exercise the same evaluator directly without repeating analyzer scans.
 
 ## Staged review policy
 
