@@ -382,7 +382,9 @@ export const NarrowPhone: Story = {
     const canvas = within(context.canvasElement);
     const options = canvas.getByRole('button', { name: 'Open chat options' });
     const usage = canvas.getByRole('button', { name: 'Usage: 38% context' });
-    await expect(options.querySelector('span')).toHaveClass('@max-[22rem]/composer:sr-only');
+    await expect(options.querySelector('span')?.getBoundingClientRect().width).toBeLessThanOrEqual(
+      1
+    );
     await expect(usage.querySelector('span')).not.toBeVisible();
     await userEvent.click(options);
     await expect(

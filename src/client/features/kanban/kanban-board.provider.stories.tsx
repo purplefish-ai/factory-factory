@@ -5,7 +5,6 @@ import {
   AppHeaderProvider,
   HeaderLeftStartSlot,
   HeaderRightSlot,
-  PageSearchSlot,
 } from '@/client/components/app-header-context';
 import {
   IssueRefreshRecoveryFixture,
@@ -19,6 +18,7 @@ import type { WorkspaceWithKanban } from './kanban-card';
 import { baseWorkspace } from './kanban-card.story-fixtures';
 import { KanbanProvider } from './kanban-context';
 import { KanbanControls } from './kanban-controls';
+import { KanbanToolbar } from './kanban-toolbar';
 
 /**
  * The real KanbanBoard and KanbanProvider, fed by story tRPC handlers rather
@@ -70,10 +70,7 @@ const handlers: StoryTrpcHandlers = {
 function BoardActions() {
   const isMobile = useIsMobile();
   return isMobile ? (
-    <div role="toolbar" aria-label="Board toolbar" className="flex items-center gap-2 p-3">
-      <PageSearchSlot />
-      <KanbanControls />
-    </div>
+    <KanbanToolbar />
   ) : (
     <HeaderRightSlot>
       <KanbanControls />

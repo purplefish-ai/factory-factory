@@ -1,9 +1,10 @@
 import { useEffect } from 'react';
-import { HeaderRightSlot, PageSearchSlot } from '@/client/components/app-header-context';
+import { HeaderRightSlot } from '@/client/components/app-header-context';
 import { ProjectHeader } from '@/client/components/project-header';
 import {
   KanbanBoard,
   KanbanControls,
+  KanbanToolbar,
   KanbanImageDropZone,
   KanbanProvider,
   useKanban,
@@ -74,16 +75,7 @@ export function WorkspacesBoardView({
       ) : null}
       <KanbanImageDropZone>
         <div className="flex flex-col h-full p-3 md:p-6 gap-3 md:gap-4">
-          {isMobile ? (
-            <div
-              aria-label="Board toolbar"
-              role="toolbar"
-              className="flex shrink-0 items-center gap-2"
-            >
-              <PageSearchSlot />
-              <KanbanControls />
-            </div>
-          ) : null}
+          {isMobile ? <KanbanToolbar /> : null}
           <div className="flex-1 min-h-0">
             <KanbanBoard />
           </div>

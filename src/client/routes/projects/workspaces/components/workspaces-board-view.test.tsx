@@ -7,6 +7,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { useKanban } from '@/client/features/kanban/kanban-context';
 import { trpc } from '@/client/lib/trpc';
+import { TooltipProvider } from '@/components/ui/tooltip';
 import { WorkspacesBoardView } from './workspaces-board-view';
 
 type Workspace = { id: string; kanbanColumn: 'WAITING' | 'WORKING'; createdAt: string };
@@ -190,12 +191,14 @@ async function render(projectId: string) {
   await act(async () =>
     root.render(
       <QueryClientProvider client={queryClient}>
-        <WorkspacesBoardView
-          projectId={projectId}
-          slug={projectId}
-          projects={[]}
-          issueProvider="GITHUB"
-        />
+        <TooltipProvider>
+          <WorkspacesBoardView
+            projectId={projectId}
+            slug={projectId}
+            projects={[]}
+            issueProvider="GITHUB"
+          />
+        </TooltipProvider>
       </QueryClientProvider>
     )
   );
