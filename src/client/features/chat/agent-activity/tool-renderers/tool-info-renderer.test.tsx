@@ -197,7 +197,7 @@ describe('quiet activity summaries', () => {
     root.unmount();
   });
 
-  it('surfaces failures on the collapsed summary and keeps details inside', () => {
+  it('hides failures while collapsed and shows them when expanded', () => {
     const container = document.createElement('div');
     const root = createRoot(container);
     const command = {
@@ -218,13 +218,26 @@ describe('quiet activity summaries', () => {
       )
     );
     const trigger = container.querySelector('button');
+    expect(trigger?.textContent).toBe('Edited a file, ran pnpm test');
+    expect(trigger?.querySelector('[title]')?.getAttribute('title')).toBe(
+      'Edited a file, ran pnpm test'
+    );
+    expect(container.querySelector('[data-testid="tool-group-failures"]')).toBeNull();
+    expect(trigger?.querySelector('svg')?.getAttribute('data-status-tone')).not.toBe('danger');
+    expect(container.textContent).not.toContain('Test failed');
+    flushSync(() => trigger?.click());
     expect(trigger?.textContent).toBe('Edited a file, ran pnpm test · 1 of 2 failed');
     const failures = container.querySelector('[data-testid="tool-group-failures"]');
     expect(failures?.className).toContain('text-destructive');
     expect(trigger?.querySelector('svg')?.getAttribute('data-status-tone')).toBe('danger');
-    expect(container.textContent).not.toContain('Test failed');
-    flushSync(() => trigger?.click());
     expect(container.textContent).toContain('Failed pnpm test');
+    const failedCall = container.querySelectorAll('button')[2];
+    expect(failedCall?.querySelector('svg')?.classList.contains('text-destructive')).toBe(true);
+    flushSync(() => failedCall?.click());
+    expect(container.textContent).toContain('Test failed');
+    flushSync(() => trigger?.click());
+    expect(trigger?.textContent).toBe('Edited a file, ran pnpm test');
+    expect(container.querySelector('[data-testid="tool-group-failures"]')).toBeNull();
     expect(container.textContent).not.toContain('Success');
     root.unmount();
   });
@@ -252,6 +265,9 @@ describe('quiet activity summaries', () => {
       )
     );
     const trigger = container.querySelector('button');
+    expect(trigger?.textContent).toBe('Running commandsRunning');
+    expect(container.querySelector('[data-testid="tool-group-failures"]')).toBeNull();
+    flushSync(() => trigger?.click());
     expect(trigger?.textContent).toContain('Running commands · 1 of 2 failed');
     expect(trigger?.querySelector('svg')?.getAttribute('class')).toContain('animate-spin');
     root.unmount();
@@ -302,7 +318,7 @@ describe('single activity summaries', () => {
     {
       name: 'Bash',
       status: 'error' as const,
-      label: 'Ran command · failed',
+      label: 'Ran command',
       detailLabel: 'Failed command',
     },
     {
