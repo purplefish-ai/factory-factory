@@ -776,6 +776,7 @@ export const ToolSequenceGroupCommandsWithFailure: StoryObj<typeof ToolSequenceG
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     const trigger = canvas.getByRole('button', { name: /^Ran commands$/ });
+    await expect(trigger.querySelector('span[title]')).toHaveAttribute('title', 'Ran commands');
     await expect(canvas.queryByTestId('tool-group-failures')).not.toBeInTheDocument();
     await expect(trigger.querySelector('svg')).not.toHaveAttribute('data-status-tone', 'danger');
     await userEvent.click(trigger);

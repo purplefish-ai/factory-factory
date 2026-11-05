@@ -344,6 +344,13 @@ describe('single activity summaries', () => {
       expect(trigger?.className).not.toContain('text-destructive');
       expect(container.textContent).not.toContain('ok');
       flushSync(() => trigger?.click());
+      if (status === 'error') {
+        expect(trigger?.textContent).toBe('Ran command · failed');
+        expect(container.querySelector('[data-testid="tool-group-failures"]')?.textContent).toBe(
+          ' · failed'
+        );
+        expect(trigger?.querySelector('svg')?.getAttribute('data-status-tone')).toBe('danger');
+      }
       const actionTrigger = container.querySelectorAll('button')[1];
       expect(actionTrigger).toBeDefined();
       expect(actionTrigger?.querySelector('span[title]')?.textContent).toBe(detailLabel);
