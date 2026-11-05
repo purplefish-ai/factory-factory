@@ -198,4 +198,29 @@ writeFileSync(join(process.cwd(), 'prisma', 'generated.txt'), 'unexpected genera
       expect(statSync(outside).mode & 0o777).toBe(0o600);
     }
   );
+
+  it.skipIf(process.platform === 'win32')(
+    'does not chmod through a platform directory symlink outside the dependency',
+    () => {
+      const packageRoot = createInstalledPackage('', false);
+      const nativeRoot = join(packageRoot, 'node_modules/node-pty');
+      mkdirSync(join(nativeRoot, 'prebuilds'), { recursive: true });
+      writeFileSync(
+        join(nativeRoot, 'package.json'),
+        JSON.stringify({ name: 'node-pty', version: '1.1.0' })
+      );
+      const outside = join(packageRoot, 'unrelated-directory');
+      mkdirSync(outside);
+      const helper = join(outside, 'spawn-helper');
+      writeFileSync(helper, 'unrelated helper');
+      chmodSync(helper, 0o600);
+      symlinkSync(
+        outside,
+        join(nativeRoot, 'prebuilds', `${process.platform}-${process.arch}`),
+        'dir'
+      );
+      expect(runPostinstall(packageRoot).status).toBe(0);
+      expect(statSync(helper).mode & 0o777).toBe(0o600);
+    }
+  );
 });

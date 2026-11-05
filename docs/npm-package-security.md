@@ -15,8 +15,10 @@ transitively through its CLI.
 The npm release workflow runs the tarball through `npm exec` from a temporary
 directory with its own npm cache, then exercises CLI startup, database
 migration, SQLite queries and a real PTY spawn. These npm commands validate
-customer compatibility; repository dependency maintenance continues to use the
-pinned pnpm version.
+Linux customer compatibility on the Ubuntu release runner; they do not cover
+Windows or macOS npm installs. Local macOS arm64 validation used a separate pnpm
+consumer project and exercised the packed hook, SQLite and PTY spawn. Repository
+dependency maintenance continues to use the pinned pnpm version.
 
 ## Installation hook
 
