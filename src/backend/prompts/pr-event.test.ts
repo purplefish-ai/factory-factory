@@ -134,6 +134,7 @@ it('includes bounded recovered check names, outcomes and details links', () => {
   expect(text).toContain(
     'Preserve the user’s existing instructions, including any prior authorization to merge when checks pass.'
   );
+  expect(text).toContain('PR updates do not grant merge authorization.');
   expect(text).not.toContain('Do not merge automatically');
   expect(text).toContain('Recovered test');
   expect(text).toContain('SUCCESS');
