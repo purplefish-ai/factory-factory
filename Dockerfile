@@ -1,10 +1,8 @@
 # FactoryFactory Dockerfile
 # Multi-stage build for cloud deployment
 
-ARG NODE_VERSION=26.12.1
-
 # Node 26 does not bundle Corepack. Share one pinned pnpm installation across stages.
-FROM node:${NODE_VERSION}-alpine AS base
+FROM node:26.12.1-alpine@sha256:40cd011b55415bc894e45b02fdd5a5dfde056921b7d23a64c74f80497af48797 AS base
 ENV PNPM_HOME=/pnpm
 ENV PATH="${PNPM_HOME}/bin:${PNPM_HOME}:${PATH}"
 # Keep the pnpm version and release asset SHA-256 digests pinned together.
@@ -40,6 +38,11 @@ COPY scripts/postinstall.mjs scripts/
 
 # Install all dependencies (dev deps needed for build stage)
 RUN pnpm install --frozen-lockfile
+
+# Retain the exact installed runtime graph and local patches while removing
+# development tools from the image. Work on a separate stage so builds keep them.
+FROM deps AS production-deps
+RUN pnpm prune --prod --ignore-scripts
 
 # ============================================================================
 # Stage 2: Build application
@@ -89,29 +92,37 @@ RUN apk add --no-cache \
     make \
     g++ \
     github-cli \
-  && ARCH="$(uname -m)" \
-  && case "$ARCH" in \
-       x86_64)  CF_ARCH="amd64" ;; \
-       aarch64) CF_ARCH="arm64" ;; \
-       armv7l)  CF_ARCH="arm"   ;; \
-       *)       echo "Unsupported arch: $ARCH" && exit 1 ;; \
-     esac \
-  && curl -fsSL "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-${CF_ARCH}" \
-       -o /usr/local/bin/cloudflared \
-  && chmod +x /usr/local/bin/cloudflared \
+  && CF_VERSION="2026.10.7" \
   && UV_VERSION="0.13.6" \
-  && curl -LsSf "https://astral.sh/uv/${UV_VERSION}/install.sh" -o /tmp/uv-install.sh \
-  && UV_UNMANAGED_INSTALL="/usr/local/bin" sh /tmp/uv-install.sh \
-  && rm /tmp/uv-install.sh \
+  && case "$(uname -m)" in \
+       x86_64) CF_ARCH=amd64; UV_ARCH=x86_64; \
+         CF_SHA256=1f99fb518b83dec2ba8d870a7cc991d82a77e6196295a3d2754ba17ab9f91872; \
+         UV_SHA256=5d61f26b6c7213779eda90edc6971ea6b0b796bfb8d49a574c8ad69b59838548 ;; \
+       aarch64) CF_ARCH=arm64; UV_ARCH=aarch64; \
+         CF_SHA256=3df43aedc9ff291d1735b5cb576cb97e0b157488796db2e32b28aecabb445775; \
+         UV_SHA256=819692e404d23e5aae6bc44c0e260f1f5492fd1910ab4693b2c650f926dbe800 ;; \
+       *) echo "Unsupported architecture" >&2; exit 1 ;; \
+     esac \
+  && curl -fsSL "https://github.com/cloudflare/cloudflared/releases/download/${CF_VERSION}/cloudflared-linux-${CF_ARCH}" \
+       -o /tmp/cloudflared \
+  && echo "${CF_SHA256}  /tmp/cloudflared" | sha256sum -c - \
+  && install -m 755 /tmp/cloudflared /usr/local/bin/cloudflared \
+  && curl -fsSL "https://github.com/astral-sh/uv/releases/download/${UV_VERSION}/uv-${UV_ARCH}-unknown-linux-musl.tar.gz" \
+       -o /tmp/uv.tar.gz \
+  && echo "${UV_SHA256}  /tmp/uv.tar.gz" | sha256sum -c - \
+  && tar -xzf /tmp/uv.tar.gz -C /tmp \
+  && install -m 755 /tmp/uv-${UV_ARCH}-unknown-linux-musl/uv /usr/local/bin/uv \
+  && install -m 755 /tmp/uv-${UV_ARCH}-unknown-linux-musl/uvx /usr/local/bin/uvx \
+  && rm -rf /tmp/cloudflared /tmp/uv.tar.gz /tmp/uv-${UV_ARCH}-unknown-linux-musl \
   && pip3 install --no-cache-dir --break-system-packages pipx==1.18.5 virtualenv==21.15.0 \
   && python3 -m pipx ensurepath
 
 # Keep standalone Codex available for workspace shell use; Claude uses ff claude.
-RUN pnpm add -g @openai/codex
+RUN pnpm add -g @openai/codex@0.166.0
 
 # Copy built application
 COPY --from=builder /app/dist ./dist
-COPY --from=builder /app/node_modules ./node_modules
+COPY --from=production-deps /app/node_modules ./node_modules
 COPY --from=builder /app/package.json ./
 COPY --from=builder /app/.node-version ./
 COPY --from=builder /app/pnpm-workspace.yaml ./
