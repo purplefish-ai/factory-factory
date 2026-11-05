@@ -20,7 +20,7 @@ interface TerminalInstanceProps {
   onResize: (cols: number, rows: number) => void;
   output: string;
   className?: string;
-  /** When true, the terminal will receive focus */
+  /** Explicit focus request, e.g. for the setup dialog. Workspace terminals omit this. */
   isActive?: boolean;
 }
 
@@ -81,9 +81,6 @@ export function TerminalInstance({
 
     terminal.open(containerRef.current);
     fitAddon.fit();
-    if (!window.matchMedia(MANUAL_FOCUS_MEDIA_QUERY).matches) {
-      terminal.focus();
-    }
 
     // Store refs
     terminalRef.current = terminal;

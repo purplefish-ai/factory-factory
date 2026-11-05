@@ -17,6 +17,7 @@ const mocks = vi.hoisted(() => ({
   connected: true,
   gaveUp: false,
   renderedOutput: '',
+  requestedFocus: false,
   options: null as {
     onCreated?: (terminalId: string, requestId?: string, outputBuffer?: string) => void;
     onOutput?: (terminalId: string, data: string) => void;
@@ -30,7 +31,8 @@ const mocks = vi.hoisted(() => ({
 vi.mock('@phosphor-icons/react/dist/csr/Terminal', () => ({ TerminalIcon: () => null }));
 
 vi.mock('@/client/components/terminal-instance', () => ({
-  TerminalInstance: ({ output }: { output: string }) => {
+  TerminalInstance: ({ output, isActive }: { output: string; isActive?: boolean }) => {
+    mocks.requestedFocus = Boolean(isActive);
     mocks.renderedOutput = output;
     return null;
   },
@@ -67,11 +69,38 @@ describe('TerminalPanel', () => {
     mocks.connected = true;
     mocks.gaveUp = false;
     mocks.renderedOutput = '';
+    mocks.requestedFocus = false;
     mocks.options = null;
   });
 
   afterEach(() => {
     document.body.innerHTML = '';
+  });
+
+  it('auto-creates a workspace terminal without requesting keyboard focus', async () => {
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    try {
+      flushSync(() =>
+        root.render(
+          createElement(TerminalPanel, {
+            workspaceId: 'new-workspace',
+            autoCreateWhenEmpty: true,
+          })
+        )
+      );
+      flushSync(() => mocks.options?.onTerminalList?.([]));
+      await vi.dynamicImportSettled();
+      await vi.waitFor(() => expect(mocks.create).toHaveBeenCalledOnce());
+      flushSync(() =>
+        mocks.options?.onCreated?.('terminal-new', mocks.create.mock.calls[0]?.[0], '$ ready')
+      );
+      await vi.waitFor(() => expect(mocks.renderedOutput).toBe('$ ready'));
+      expect(mocks.requestedFocus).toBe(false);
+    } finally {
+      root.unmount();
+    }
   });
 
   it('ignores disconnected create requests without blocking terminal restoration', () => {

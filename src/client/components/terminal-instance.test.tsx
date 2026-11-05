@@ -183,6 +183,24 @@ describe('TerminalInstance', () => {
     root.unmount();
   });
 
+  it('does not focus on desktop mount or output updates, but focuses on click', () => {
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    const props = { onData: vi.fn(), onResize: vi.fn(), output: '' };
+    try {
+      flushSync(() => root.render(createElement(TerminalInstance, props)));
+      flushSync(() =>
+        root.render(createElement(TerminalInstance, { ...props, output: '$ ready' }))
+      );
+      expect(mocks.focus).not.toHaveBeenCalled();
+      container.querySelector<HTMLElement>('[role="application"]')?.click();
+      expect(mocks.focus).toHaveBeenCalledOnce();
+    } finally {
+      root.unmount();
+    }
+  });
+
   it('uses the default terminal font when appearance is default', () => {
     const container = document.createElement('div');
     document.body.appendChild(container);

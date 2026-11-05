@@ -514,7 +514,6 @@ export const TerminalPanel = forwardRef<TerminalPanelRef, TerminalPanelProps>(
                 onData={handleData}
                 onResize={handleResize}
                 className="h-full"
-                isActive
               />
             </Suspense>
           )}

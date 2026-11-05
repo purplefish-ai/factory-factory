@@ -181,6 +181,12 @@ Terminal 1. Closing it from Logs leaves the empty Terminal tab until selected.
 The server always sends the initial terminal list, including an empty list for
 workspaces with no running terminals, so first-terminal creation can proceed.
 
+Workspace terminals never automatically take keyboard focus when created,
+restored, or selected. Click inside the terminal to type, so asynchronous
+workspace initialization leaves focus in the composer or other active control.
+The dedicated project setup terminal dialog explicitly requests focus on
+desktop.
+
 Workspace terminal reconnects replace each existing tab's output with its server
 rolling buffer by terminal ID. Tab identity and selection are preserved; output
 outside the server's bounded buffer cannot be recovered.

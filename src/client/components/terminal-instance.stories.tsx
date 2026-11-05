@@ -148,3 +148,37 @@ export const LiveThemeSwitch: Story = {
     }
   },
 };
+
+function FocusPreview() {
+  const [visible, setVisible] = useState(false);
+  return (
+    <div className="w-[700px] space-y-3">
+      <label className="block">
+        Workspace prompt
+        <input aria-label="Workspace prompt" className="block border p-2" />
+      </label>
+      <Button onClick={() => setVisible(!visible)}>Toggle workspace terminal</Button>
+      <div className="h-[280px] border">
+        {visible && (
+          <TerminalInstance output="$ ready" onData={() => undefined} onResize={() => undefined} />
+        )}
+      </div>
+    </div>
+  );
+}
+
+export const ManualFocus: Story = {
+  args: { output: '' },
+  render: () => <FocusPreview />,
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const toggle = canvas.getByRole('button', { name: 'Toggle workspace terminal' });
+    await userEvent.click(toggle);
+    await waitFor(async () => {
+      await expect(canvasElement.querySelector('.xterm-helper-textarea')).not.toBeNull();
+    });
+    await expect(toggle).toHaveFocus();
+    await userEvent.click(canvas.getByRole('application', { name: 'Terminal' }));
+    await expect(canvasElement.querySelector('.xterm-helper-textarea')).toHaveFocus();
+  },
+};
