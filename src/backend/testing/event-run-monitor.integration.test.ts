@@ -6,6 +6,7 @@ import {
   boundary,
   deferred,
   releaseEventBoundaries,
+  waitForEventFixture,
 } from '@/backend/orchestration/testing/event-delivery.test-support';
 import { fakeEventProvider } from '@/backend/orchestration/testing/event-provider.test-support';
 import { exportDataSchema } from '@/shared/schemas/export-data.schema';
@@ -68,21 +69,30 @@ beforeEach(async () => {
     typeof import('@/backend/orchestration/event-run-monitor.orchestrator')
   >('@/backend/orchestration/event-run-monitor.orchestrator'));
   launch = launcher.launchEventRun(h.claim, new AbortController().signal);
-  await providerCreated.promise;
-  await provider.called;
+  await waitForEventFixture(
+    providerCreated.promise.then(() => provider.called),
+    'monitor provider startup',
+    { settled: launch }
+  );
 }, 30_000);
 afterEach(async () => {
+  vi.useRealTimers();
   releaseEventBoundaries();
   provider?.response.resolve({ stopReason: 'end_turn' });
-  await launch;
-  await h.session.acpRuntimeManager.stopAllClients(10).catch(() => undefined);
-  h.session.sessionPromptTurnCompletionService.clearAll();
-  h.session.sessionDomainService.clearAllSessions();
-  expect(process.kill).not.toHaveBeenCalled();
-  vi.useRealTimers();
-  vi.restoreAllMocks();
-  await destroyIntegrationDatabase(db);
-  provider = undefined!;
+  try {
+    await waitForEventFixture(launch, 'monitor launch cleanup');
+  } finally {
+    try {
+      await h.session.acpRuntimeManager.stopAllClients(10).catch(() => undefined);
+      h.session.sessionPromptTurnCompletionService.clearAll();
+      h.session.sessionDomainService.clearAllSessions();
+      expect(process.kill).not.toHaveBeenCalled();
+    } finally {
+      vi.restoreAllMocks();
+      await destroyIntegrationDatabase(db);
+      provider = undefined!;
+    }
+  }
 });
 const row = () => db.prisma.agentRun.findUniqueOrThrow({ where: { id: h.claim.runId } });
 async function finish() {

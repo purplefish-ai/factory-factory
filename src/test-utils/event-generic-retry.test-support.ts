@@ -4,6 +4,7 @@ import { afterEach, beforeEach, expect, vi } from 'vitest';
 import {
   createEventDeliveryFixture,
   deferred,
+  waitForEventFixture,
   releaseEventBoundaries,
   drainEventFixtureTasks,
 } from '@/backend/orchestration/testing/event-delivery.test-support';
@@ -128,13 +129,13 @@ export async function context() {
 }
 export async function launch() {
   await consumer.consumeClaim(h.claim, new AbortController().signal);
-  await providerCreated.promise;
+  await waitForEventFixture(providerCreated.promise, 'retry provider creation');
   expect(providers).toHaveLength(1);
   const provider = providers[0];
   if (!provider) {
     throw new Error('Initial provider missing');
   }
-  await provider.called;
+  await waitForEventFixture(provider.called, 'retry provider initial prompt');
 }
 export async function strictStop() {
   const groups = await vi.importActual<

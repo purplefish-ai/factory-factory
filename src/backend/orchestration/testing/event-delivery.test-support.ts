@@ -13,6 +13,30 @@ export function deferred<T>() {
   });
   return { promise, resolve, reject };
 }
+/** Await an event without polling, but surface failed or silent fixture startup. */
+export async function waitForEventFixture<T>(
+  ready: Promise<T>,
+  label: string,
+  options: { settled?: Promise<unknown>; timeoutMs?: number } = {}
+): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const deadline = new Promise<never>((_resolve, reject) => {
+    timer = setTimeout(
+      () => reject(new Error(`Timed out waiting for ${label}`)),
+      options.timeoutMs ?? 2000
+    );
+  });
+  const settled = options.settled?.then(() => {
+    throw new Error(`Launch settled before ${label}`);
+  });
+  try {
+    return await Promise.race(
+      settled !== undefined ? [ready, settled, deadline] : [ready, deadline]
+    );
+  } finally {
+    clearTimeout(timer);
+  }
+}
 const releases = new Set<() => void>();
 const tasks = new Set<Promise<void>>();
 export function releaseEventBoundaries() {
