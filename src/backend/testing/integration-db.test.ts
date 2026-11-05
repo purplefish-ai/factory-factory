@@ -80,7 +80,8 @@ it('keeps each database private, writable with WAL, and independent of the templ
   expect(await second.prisma.project.count()).toBe(0);
   expect(await first.prisma.project.count()).toBe(1);
   expect(readFileSync(templatePath)).toEqual(templateBefore);
-});
+  // Cold Prisma engine setup can exceed the default timeout under V8 coverage.
+}, 30_000);
 
 it('rebinds runtime modules and environment to the new private database', async () => {
   vi.stubEnv('BASE_DIR', '/tmp/unused-integration-base');
@@ -141,9 +142,9 @@ it('removes the migration template when project setup fails', () => {
 
 it('removes its private directory and runtime client when connecting fails', async () => {
   let databasePath: string | undefined;
-  vi.spyOn(TunedPrismaBetterSqlite3.prototype, 'connect').mockImplementationOnce(async () => {
+  vi.spyOn(TunedPrismaBetterSqlite3.prototype, 'connect').mockImplementationOnce(() => {
     databasePath = process.env.DATABASE_PATH;
-    throw new Error('Connection failed');
+    return Promise.reject(new Error('Connection failed'));
   });
   await expect(createIntegrationDatabase()).rejects.toThrow('Connection failed');
   expect(databasePath).toBeTypeOf('string');
@@ -170,4 +171,4 @@ it('restores the active client and environment when a second creation fails', as
   expect(runtime.prisma).toBe(first.prisma);
   expect(runtime.getCurrentDatabasePath()).toBe(first.databasePath);
   expect(await runtime.prisma.project.count()).toBe(0);
-});
+}, 30_000);
