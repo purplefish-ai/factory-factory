@@ -65,4 +65,5 @@ it('builds the Docker client after source copy without requiring generation in d
   } finally {
     rmSync(directory, { recursive: true, force: true });
   }
-});
+  // The Prisma subprocess has a 20-second deadline; include setup and cleanup.
+}, 30_000);
