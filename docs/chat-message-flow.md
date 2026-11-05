@@ -391,9 +391,9 @@ control resumes following. Sending a message in main chat or quick chat also
 returns to the bottom and follows subsequent output. `useTranscriptSend` passes
 a session-scoped request token to the controller, including for queued messages,
 voice submissions and retries; ordinary incoming messages preserve reading
-intent. A held touch/scrollbar gesture inhibits automatic positioning until
-release, even if an older scroll operation emits `scrollend`. Explicit sends and
-the jump control override that inhibition.
+intent. A held touch/scrollbar gesture inhibits automatic positioning through
+release and following momentum, even if an older scroll operation emits
+`scrollend`. Explicit sends and the jump control override that inhibition.
 
 The virtualizer uses start anchoring with native append-follow disabled. One
 controller frame coalesces committed content/viewport changes; TanStack performs
