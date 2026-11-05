@@ -11,6 +11,8 @@ import {
 import { createPortal } from 'react-dom';
 
 interface AppHeaderContextValue {
+  searchSlot: HTMLElement | null;
+  setSearchSlot: (el: HTMLElement | null) => void;
   title: ReactNode;
   setTitle: (title: ReactNode) => void;
   /** Portal target element for right-side header content */
@@ -30,6 +32,7 @@ interface AppHeaderContextValue {
 const AppHeaderContext = createContext<AppHeaderContextValue | null>(null);
 
 export function AppHeaderProvider({ children }: { children: ReactNode }) {
+  const [searchSlot, setSearchSlot] = useState<HTMLElement | null>(null);
   const [title, setTitle] = useState<ReactNode>('');
   const [rightSlot, setRightSlot] = useState<HTMLElement | null>(null);
   const [rightEndSlot, setRightEndSlot] = useState<HTMLElement | null>(null);
@@ -38,6 +41,8 @@ export function AppHeaderProvider({ children }: { children: ReactNode }) {
 
   const value = useMemo(
     () => ({
+      searchSlot,
+      setSearchSlot,
       title,
       setTitle,
       rightSlot,
@@ -49,7 +54,7 @@ export function AppHeaderProvider({ children }: { children: ReactNode }) {
       leftExtraSlot,
       setLeftExtraSlot,
     }),
-    [title, rightSlot, rightEndSlot, leftStartSlot, leftExtraSlot]
+    [title, rightSlot, rightEndSlot, leftStartSlot, leftExtraSlot, searchSlot]
   );
 
   return <AppHeaderContext.Provider value={value}>{children}</AppHeaderContext.Provider>;
@@ -138,4 +143,10 @@ export function HeaderLeftExtraSlot({ children }: { children: ReactNode }) {
  */
 export function useAppHeader({ title }: { title: ReactNode }) {
   useAppHeaderTitle(title);
+}
+
+/** Destination for the single global search control in a page toolbar. */
+export function PageSearchSlot() {
+  const { setSearchSlot } = useAppHeaderContext();
+  return <div ref={setSearchSlot} className="flex min-w-0 flex-1" />;
 }

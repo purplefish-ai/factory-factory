@@ -28,25 +28,15 @@ export function KanbanControlsView({
   onRefresh,
 }: KanbanControlsViewProps) {
   const newWorkspaceButton = (
-    <Button
-      size={isMobile ? 'icon' : 'sm'}
-      className={isMobile ? 'h-8 w-8' : 'h-8'}
-      onClick={onNewWorkspace}
-      aria-label={isMobile ? 'New workspace' : undefined}
-    >
+    <Button size="sm" className="h-9 shrink-0" onClick={onNewWorkspace}>
       <PlusIcon className="h-4 w-4" />
-      {isMobile ? null : 'New workspace'}
+      New workspace
     </Button>
   );
 
   return (
     <>
-      {isMobile && (
-        <Tooltip>
-          <TooltipTrigger asChild>{newWorkspaceButton}</TooltipTrigger>
-          <TooltipContent>New workspace</TooltipContent>
-        </Tooltip>
-      )}
+      {isMobile && newWorkspaceButton}
       <DropdownMenu>
         <Tooltip>
           <TooltipTrigger asChild>

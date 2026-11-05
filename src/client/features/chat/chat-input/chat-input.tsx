@@ -259,7 +259,7 @@ export const ChatInput = memo(function ChatInput({
         paletteRef={fileMentions.paletteRef}
       />
 
-      <InputGroup className="min-h-0 flex-1 flex-col">
+      <InputGroup className="@container/composer min-h-0 flex-1 flex-col">
         {/* Attachment preview (above text input) */}
         <AttachmentSection attachments={attachments} onRemove={actions.handleRemoveAttachment} />
 

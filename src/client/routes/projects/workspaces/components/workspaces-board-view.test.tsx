@@ -40,6 +40,7 @@ vi.mock('@/client/components/app-header-context', () => ({
   useAppHeader: () => undefined,
   HeaderLeftStartSlot: ({ children }: { children: ReactNode }) => children,
   HeaderRightSlot: () => null,
+  PageSearchSlot: () => <button>Search</button>,
 }));
 vi.mock('@/client/components/project-header', () => ({
   ProjectHeader: () => null,

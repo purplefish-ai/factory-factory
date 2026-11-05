@@ -79,7 +79,7 @@ function QueuedMessageSteerAction({ onSteer }: { onSteer: () => void }) {
     <button
       onClick={onSteer}
       className={cn(
-        'inline-flex items-center gap-1 rounded-md px-2 py-1.5 text-xs font-medium',
+        'inline-flex h-6 items-center justify-center gap-1 rounded-md px-1.5 text-xs font-medium',
         'bg-background/90 text-primary hover:bg-primary/10',
         'border border-primary/30 hover:border-primary/60 shadow-sm',
         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring'
@@ -126,7 +126,7 @@ function QueuedMessageActions({
             <button
               onClick={onRemove}
               className={cn(
-                'p-1.5 rounded-md',
+                'inline-flex size-6 items-center justify-center rounded-md',
                 'bg-background/90 hover:bg-destructive/10',
                 'border border-border hover:border-destructive/50',
                 'shadow-sm',

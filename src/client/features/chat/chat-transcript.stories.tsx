@@ -290,6 +290,23 @@ export const QueuedMessageSteering: Story = {
       },
     },
   },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const steer = canvas.getByRole('button', { name: 'Steer queued message' });
+    const cancel = canvas.getByRole('button', { name: 'Cancel queued message' });
+    const steerBox = steer.getBoundingClientRect();
+    const cancelBox = cancel.getBoundingClientRect();
+    await expect(steerBox.height).toBe(24);
+    await expect(cancelBox.height).toBe(steerBox.height);
+    await expect(cancelBox.y).toBe(steerBox.y);
+    const icon = cancel.querySelector('svg')!.getBoundingClientRect();
+    await expect(
+      Math.abs(icon.x + icon.width / 2 - cancelBox.x - cancelBox.width / 2)
+    ).toBeLessThan(1);
+    await expect(
+      Math.abs(icon.y + icon.height / 2 - cancelBox.y - cancelBox.height / 2)
+    ).toBeLessThan(1);
+  },
   render: (args) => <StartupPreview {...args} />,
   args: {
     messages: [startupMessage],

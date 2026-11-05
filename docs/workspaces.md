@@ -16,8 +16,8 @@ existing names, shown in parentheses where they differ.
 - **Workspace**: one isolated Git worktree and branch, with its chats, terminals
   and pull requests. A workspace is what moves across the board. **New
   workspace** in the sidebar opens the new workspace; **New workspace** at the
-  top of the board's Todo column (a header shortcut on phones) stays on the
-  board so several can be launched in a row. The retired
+  top of the board's Todo column (a main-pane toolbar shortcut on phones) stays
+  on the board so several can be launched in a row. The retired
   `/projects/:slug/workspaces/new` URL opens the board's form.
 - **Chat** (`session`): one conversation with a coding agent inside a workspace,
   shown as a tab such as "Chat 1". A workspace can have several. Search lists
@@ -59,8 +59,15 @@ URL**. Both sources remain available.
 
 ## Phone navigation
 
-Workspace headers put project and family navigation beside the workspace name on
-a separate context row on phones. Actions keep their full touch targets.
+Every page uses two header rows on phones: navigation and actions above page
+context. Workspace headers put project and family navigation beside the
+workspace name in the context row, keeping the content height stable between
+pages.
+
+On the Kanban board, Search and **New workspace** live in a toolbar in the main
+pane, with visible labels and room for touch targets. In narrow message
+composers, Options and Usage keep their icons while hiding their labels and
+percentage; usage details remain available in the popover.
 
 On narrow Agents panels, the agent list and editor share one vertical scroll
 surface. Selecting an agent brings its editor into view; wide panels retain

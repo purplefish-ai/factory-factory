@@ -169,7 +169,7 @@ async function expectHeaderFits(page: Page, maxHeight?: number) {
     const rect = header.getBoundingClientRect();
     return {
       height: rect.height,
-      phoneWorkspace: innerWidth < 768 && header.querySelector('[data-workspace-header]') !== null,
+      phone: innerWidth < 768,
       overflow: document.documentElement.scrollWidth - window.innerWidth,
       controls: controls.map(({ label, rect: box }) => ({
         label,
@@ -182,7 +182,7 @@ async function expectHeaderFits(page: Page, maxHeight?: number) {
       right: rect.right,
     };
   });
-  expect(geometry.height).toBeLessThanOrEqual(maxHeight ?? (geometry.phoneWorkspace ? 97 : 49));
+  expect(geometry.height).toBeLessThanOrEqual(maxHeight ?? (geometry.phone ? 97 : 49));
   expect(geometry.overflow).toBeLessThanOrEqual(1);
   for (const [index, control] of geometry.controls.entries()) {
     expect(control.x, control.label ?? '').toBeGreaterThanOrEqual(0);
@@ -361,4 +361,23 @@ for (const width of [375, 810]) {
       ).toBeVisible();
     });
   }
+}
+
+for (const width of [320, 390]) {
+  test(`mobile header keeps the same height across pages at ${width}`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 720 });
+    const heights: number[] = [];
+    for (const variant of ['workspace', 'project', 'generic']) {
+      await page.goto(`/__mobile-baseline?surface=header&header=${variant}`);
+      await expect(page.getByRole('button', { name: 'Search', exact: true })).toBeVisible();
+      heights.push(
+        await page.locator('header').evaluate((el) => el.getBoundingClientRect().height)
+      );
+      const divider = await page.locator('[data-slot="header-context"]').boundingBox();
+      expect(divider?.x).toBe(0);
+      expect(divider?.width).toBe(width);
+    }
+    expect(heights[1]).toBe(heights[0]);
+    expect(heights[2]).toBe(heights[0]);
+  });
 }
