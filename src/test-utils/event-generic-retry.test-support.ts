@@ -3,12 +3,14 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, expect, vi } from 'vitest';
 import {
   createEventDeliveryFixture,
-  deferred,
   waitForEventFixture,
   releaseEventBoundaries,
   drainEventFixtureTasks,
 } from '@/backend/orchestration/testing/event-delivery.test-support';
-import { fakeEventProvider } from '@/backend/orchestration/testing/event-provider.test-support';
+import {
+  eventProviderCollection,
+  fakeEventProvider,
+} from '@/backend/orchestration/testing/event-provider.test-support';
 import {
   createIntegrationDatabase,
   destroyIntegrationDatabase,
@@ -22,7 +24,7 @@ export let consumer: ReturnType<
 >;
 export let providers: ReturnType<typeof fakeEventProvider>[];
 const exitTasks = new Set<Promise<void>>();
-let providerCreated: ReturnType<typeof deferred<void>>;
+export let waitForProviders: ReturnType<typeof eventProviderCollection>['waitForProviders'];
 beforeEach(async () => {
   db = await createIntegrationDatabase();
   const accounts = await vi.importActual<typeof import('@/backend/services/codex-accounts')>(
@@ -56,8 +58,8 @@ beforeEach(async () => {
     void task.finally(() => exitTasks.delete(task)).catch(() => undefined);
     return task;
   });
-  providers = [];
-  providerCreated = deferred<void>();
+  const collection = eventProviderCollection();
+  ({ providers, waitForProviders } = collection);
   vi.spyOn(process, 'kill').mockImplementation(() => {
     throw new Error('No host signals');
   });
@@ -74,8 +76,7 @@ beforeEach(async () => {
       undefined,
       new AcpNativeSessionTracker()
     );
-    providers.push(provider);
-    providerCreated.resolve();
+    collection.add(provider);
     return Promise.resolve(provider.handle);
   });
   const { createEventRunConsumer } = await vi.importActual<
@@ -129,8 +130,7 @@ export async function context() {
 }
 export async function launch() {
   await consumer.consumeClaim(h.claim, new AbortController().signal);
-  await waitForEventFixture(providerCreated.promise, 'retry provider creation');
-  expect(providers).toHaveLength(1);
+  await waitForProviders(1);
   const provider = providers[0];
   if (!provider) {
     throw new Error('Initial provider missing');

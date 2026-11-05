@@ -8,7 +8,10 @@ import {
   deferred,
   drainEventFixtureTasks,
 } from '@/backend/orchestration/testing/event-delivery.test-support';
-import { fakeEventProvider } from '@/backend/orchestration/testing/event-provider.test-support';
+import {
+  eventProviderCollection,
+  fakeEventProvider,
+} from '@/backend/orchestration/testing/event-provider.test-support';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 import {
   createIntegrationDatabase,
@@ -22,6 +25,8 @@ let consumer: ReturnType<
   typeof import('@/backend/orchestration/event-run-consumer.orchestrator').createEventRunConsumer
 >;
 let providers: ReturnType<typeof fakeEventProvider>[];
+let waitForProviders: ReturnType<typeof eventProviderCollection>['waitForProviders'];
+let addProvider: ReturnType<typeof eventProviderCollection>['add'];
 beforeEach(async () => {
   db = await createIntegrationDatabase();
   const accounts = await vi.importActual<typeof import('@/backend/services/codex-accounts')>(
@@ -39,7 +44,8 @@ beforeEach(async () => {
     })
   );
   h = await createEventDeliveryFixture(db, 'CODEX');
-  providers = [];
+  const collection = eventProviderCollection();
+  ({ providers, waitForProviders, add: addProvider } = collection);
   vi.spyOn(process, 'kill').mockImplementation(() => {
     throw new Error('No host signals');
   });
@@ -56,7 +62,7 @@ beforeEach(async () => {
       undefined,
       new AcpNativeSessionTracker()
     );
-    providers.push(provider);
+    collection.add(provider);
     return Promise.resolve(provider.handle);
   });
   const { createEventRunConsumer } = await vi.importActual<
@@ -378,7 +384,7 @@ it('retains an explicit resolution without inventing a provider result and permi
   expect(await consumer.resolveAmbiguousRun({ ...input, action: 'RETRY' })).toMatchObject({
     status: 'RETRIED',
   });
-  await vi.waitFor(() => expect(providers).toHaveLength(2));
+  await waitForProviders(2);
 });
 
 it('keeps old replayed zeroes unproven but establishes new coverage after independently proved old work', async () => {
@@ -398,14 +404,14 @@ it('keeps old replayed zeroes unproven but establishes new coverage after indepe
       tracker.beginHistoryReplay();
       tracker.completeHistoryReplay();
       const next = fakeEventProvider(h.session.AcpProcessHandle, options, undefined, tracker);
-      providers.push(next);
+      addProvider(next);
       return Promise.resolve(next.handle);
     }
   );
   expect(
     await consumer.resolveAmbiguousRun({ ...(await context()), action: 'RETRY' })
   ).toMatchObject({ status: 'RETRIED' });
-  await vi.waitFor(() => expect(providers).toHaveLength(2));
+  await waitForProviders(2);
   await providers[1]!.called;
   providers[1]!.response.resolve({ stopReason: 'end_turn' });
   await consumer.drain();
@@ -579,7 +585,7 @@ it('retries an active initial operation and fences its late callback and release
   expect(await consumer.resolveAmbiguousRun({ ...input, action: 'RETRY' })).toMatchObject({
     status: 'RETRIED',
   });
-  await vi.waitFor(() => expect(providers).toHaveLength(2));
+  await waitForProviders(2);
   await providers[1]!.called;
   providers[0]!.response.resolve({ stopReason: 'end_turn' });
   await vi.waitFor(() => expect(providers[0]!.handle.isPromptInFlight).toBe(false));
@@ -613,7 +619,7 @@ it('fences in-flight maintenance without aborting into a second untargeted stop'
   gate.release();
   expect(await recovery).toMatchObject({ status: 'RETRIED' });
   await maintenance;
-  await vi.waitFor(() => expect(providers).toHaveLength(2));
+  await waitForProviders(2);
   await providers[1]!.called;
   expect(stops.mock.calls.every(([, evidence]) => evidence.cause === 'SYSTEM_STOP')).toBe(true);
   providers[0]!.response.resolve({ stopReason: 'end_turn' });
@@ -648,7 +654,7 @@ it('fences failure cleanup after its captured handoff read while recovery starts
   expect(
     await consumer.resolveAmbiguousRun({ ...(await context()), action: 'RETRY' })
   ).toMatchObject({ status: 'RETRIED' });
-  await vi.waitFor(() => expect(providers).toHaveLength(2));
+  await waitForProviders(2);
   await providers[1]!.called;
   const invalidate = vi.spyOn(h.session.eventSessionAuthority, 'invalidate');
   gate.release();
@@ -722,7 +728,7 @@ it.each(['ownership', 'fence'] as const)(
 it('fences dispatcher abort cleanup already awaiting ownership when recovery revokes the launch', async () => {
   const controller = new AbortController();
   await consumer.consumeClaim(h.claim, controller.signal);
-  await vi.waitFor(() => expect(providers).toHaveLength(1));
+  await waitForProviders(1);
   await providers[0]!.called;
   const lookup = boundary();
   const isOwned = h.session.eventSessionAuthority.isOwned.bind(h.session.eventSessionAuthority);
@@ -750,7 +756,7 @@ it.each([false, true])(
   async (revoked) => {
     const controller = new AbortController();
     await consumer.consumeClaim(h.claim, controller.signal);
-    await vi.waitFor(() => expect(providers).toHaveLength(1));
+    await waitForProviders(1);
     await providers[0]!.called;
     const groups = await vi.importActual<
       typeof import('@/backend/services/session/service/acp/acp-owned-group')
@@ -856,7 +862,7 @@ async function context() {
 }
 async function launch() {
   await consumer.consumeClaim(h.claim, new AbortController().signal);
-  await vi.waitFor(() => expect(providers).toHaveLength(1));
+  await waitForProviders(1);
   await providers[0]!.called;
 }
 async function strictStop() {
@@ -886,7 +892,7 @@ it.each([1, 4])(
     await strictStop();
     const result = await consumer.resolveAmbiguousRun({ ...input, action: 'RETRY' });
     expect(result.status).toBe('RETRIED');
-    await vi.waitFor(() => expect(providers).toHaveLength(2));
+    await waitForProviders(2);
     await providers[1]!.called;
     const after = await row();
     expect(after).toMatchObject({
