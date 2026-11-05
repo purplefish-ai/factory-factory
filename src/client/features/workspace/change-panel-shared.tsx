@@ -6,7 +6,7 @@ import { trpc } from '@/client/lib/trpc';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Spinner } from '@/components/ui/spinner';
 import { cn } from '@/lib/utils';
-import { FileChangeItem, type FileChangeKind } from './file-change-item';
+import { FileChangeItem, type FileChangeKind, FileChangeStatus } from './file-change-item';
 import { FILE_TREE_ROW_HEIGHT, FileTreeRow } from './file-tree-row';
 import { useWorkspacePanel } from './workspace-panel-context';
 
@@ -422,9 +422,7 @@ const GitReportedDirRow = memo(function GitReportedDirRow({
         label={node.name}
       >
         {node.entry && (
-          <span className="text-xs font-mono uppercase text-muted-foreground">
-            {node.entry.statusCode ?? '?'}
-          </span>
+          <FileChangeStatus kind={node.entry.kind} statusCode={node.entry.statusCode ?? '?'} />
         )}
       </FileTreeRow>
       {isExpanded && (
@@ -502,9 +500,7 @@ const ChangeTreeItemRow = memo(function ChangeTreeItemRow({
       label={node.name}
     >
       {node.entry && (
-        <span className="text-xs font-mono uppercase text-muted-foreground">
-          {node.entry.statusCode ?? '?'}
-        </span>
+        <FileChangeStatus kind={node.entry.kind} statusCode={node.entry.statusCode ?? '?'} />
       )}
     </FileTreeRow>
   );

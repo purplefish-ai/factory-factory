@@ -614,7 +614,10 @@ export class WorkspaceGitStateService {
       return command;
     };
     const sections = [
-      runGit(['--no-optional-locks', 'status', '--porcelain'], input.worktreePath),
+      runGit(
+        ['--no-optional-locks', 'status', '--porcelain', '--untracked-files=all'],
+        input.worktreePath
+      ),
       this.calculateBase(input, runGit),
       this.calculateUpstream(input.worktreePath, runGit),
     ] as const;

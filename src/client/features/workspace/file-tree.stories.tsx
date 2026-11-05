@@ -121,7 +121,9 @@ export const CompactRows: Story = {
     const files = within(canvas.getByTestId('files'));
     const changes = within(canvas.getByTestId('changes'));
     await files.findByText('notes.md');
-    await changes.findByText('notes.md');
+    const newFile = await changes.findByRole('button', { name: 'notes.md New' });
+    await expect(within(newFile).getByTitle('Untracked: not staged')).toBeVisible();
+    await expect(changes.queryByText('?')).not.toBeInTheDocument();
     const fileRows = files.getAllByRole('button');
     const changeRows = changes.getAllByRole('button');
     await expect(changeRows).toHaveLength(fileRows.length);
@@ -151,7 +153,7 @@ export const VirtualizedRows: Story = {
 async function checkPlaceholder(canvasElement: HTMLElement, text: string) {
   const changes = within(within(canvasElement).getByTestId('changes'));
   const placeholder = await changes.findByText(text);
-  const folder = changes.getByRole('button', { name: 'drafts ?' });
+  const folder = changes.getByRole('button', { name: 'drafts New' });
   await expect(placeholder.parentElement?.getBoundingClientRect().height).toBe(
     folder.getBoundingClientRect().height
   );

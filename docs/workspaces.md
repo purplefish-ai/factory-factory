@@ -41,6 +41,14 @@ existing names, shown in parentheses where they differ.
   **New Task** button is **New workspace**; `PeriodicTask` in code is a
   scheduled agent.
 
+### File change markers
+
+The **Changes** tab shows **M** for modified files, **A** for added files, **D**
+for deleted files, and **New** for untracked files (Git's `??` status). New
+files exist on disk but have not been staged with `git add`; the marker is not
+an error. Git enumerates these files using the repository's ignore rules, so
+ignored artifacts inside new directories stay out of Changes.
+
 ## Navigation and first run
 
 The project menu in the header lists projects and includes **Create project**

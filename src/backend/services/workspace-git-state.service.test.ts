@@ -166,7 +166,7 @@ describe('WorkspaceGitStateService', () => {
       },
     });
     expect(runGit).toHaveBeenCalledWith(
-      ['--no-optional-locks', 'status', '--porcelain'],
+      ['--no-optional-locks', 'status', '--porcelain', '--untracked-files=all'],
       '/repo/w1'
     );
     expect(runGit).toHaveBeenCalledWith(['diff', '--numstat', 'abc123'], '/repo/w1');

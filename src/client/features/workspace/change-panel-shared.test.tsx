@@ -68,6 +68,29 @@ describe('ChangeTreeView', () => {
     }
   });
 
+  it('explains new files instead of showing an ambiguous question mark', () => {
+    const onFileClick = vi.fn();
+    const container = document.createElement('div');
+    const root = createRoot(container);
+    try {
+      flushSync(() =>
+        root.render(
+          createElement(ChangeTreeView, {
+            entries: [{ path: 'new.ts', kind: 'untracked', statusCode: '?' }],
+            onFileClick,
+          })
+        )
+      );
+      const badge = container.querySelector('[title="Untracked: not staged"]');
+      expect(badge?.textContent).toBe('New');
+      expect(container.textContent).not.toContain('?');
+      container.querySelector('button')?.click();
+      expect(onFileClick).toHaveBeenCalledWith('new.ts');
+    } finally {
+      root.unmount();
+    }
+  });
+
   it('uses inferred children instead of fetching contents for a git-reported directory', () => {
     const entries: ChangeListEntry[] = [
       { path: 'myfolder/', kind: 'untracked', statusCode: '?' },
