@@ -8,6 +8,26 @@ and this project adheres to
 
 ## [Unreleased]
 
+## [0.5.5] - 2026-11-05
+
+### Changed
+
+- Stack mobile Board columns as vertical sections with sticky section navigation
+  and counts, and reveal the relevant section when creating a workspace (#3046)
+- Place mobile navigation above page controls, simplify shared headers, and
+  reserve touch target space in workspace family breadcrumbs (#3045, #3046)
+- Balance two CI test shards using measured durations and reduce coverage
+  aggregation setup while verifying complete, unique test reporting (#3044)
+- Replace event fixture polling with provider notifications and drain background
+  PR wakes before database teardown (#3043)
+
+### Fixed
+
+- Keep chat following new output through message bursts and mobile viewport
+  resizing while preserving user scroll control through slow touch momentum
+  (#3047)
+- Preserve mobile composer focus and avoid stale Board section reveals (#3046)
+
 ## [0.5.4] - 2026-11-04
 
 ### Added
