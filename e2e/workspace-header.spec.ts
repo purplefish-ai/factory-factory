@@ -367,17 +367,27 @@ for (const width of [320, 390]) {
   test(`mobile header keeps the same height across pages at ${width}`, async ({ page }) => {
     await page.setViewportSize({ width, height: 720 });
     const heights: number[] = [];
-    for (const variant of ['workspace', 'project', 'generic']) {
+    for (const variant of ['workspace', 'family', 'project', 'generic']) {
       await page.goto(`/__mobile-baseline?surface=header&header=${variant}`);
       await expect(page.getByRole('button', { name: 'Search', exact: true })).toBeVisible();
       heights.push(
         await page.locator('header').evaluate((el) => el.getBoundingClientRect().height)
       );
-      const divider = await page.locator('[data-slot="header-context"]').boundingBox();
-      expect(divider?.x).toBe(0);
-      expect(divider?.width).toBe(width);
+      const toggle = await page.getByRole('button', { name: 'Toggle sidebar' }).boundingBox();
+      const context = await page.locator('[data-slot="header-context"]').boundingBox();
+      const search = await page.getByRole('button', { name: 'Search', exact: true }).boundingBox();
+      if (!(toggle && context && search)) {
+        throw new Error('Header navigation or search is missing');
+      }
+      expect(context.x).toBeGreaterThanOrEqual(toggle.x + toggle.width);
+      expect(
+        Math.abs(context.y + context.height / 2 - toggle.y - toggle.height / 2)
+      ).toBeLessThanOrEqual(1);
+      expect(search.y).toBeGreaterThanOrEqual(context.y + context.height);
+      await expectHeaderFits(page);
     }
     expect(heights[1]).toBe(heights[0]);
     expect(heights[2]).toBe(heights[0]);
+    expect(heights[3]).toBe(heights[0]);
   });
 }

@@ -43,7 +43,20 @@ export const TabletWorkspace: Story = {
   globals: { viewport: { value: 'tablet', isRotated: false } },
 };
 export const PhoneWorkspace: Story = {
-  globals: { viewport: { value: 'mobile1', isRotated: false } },
+  globals: { viewport: { value: 'phone', isRotated: false } },
+  play: async ({ canvas }) => {
+    const toggle = canvas.getByRole('button', { name: 'Toggle sidebar' }).getBoundingClientRect();
+    const context = canvas
+      .getByRole('combobox', { name: /Open workspace menu/ })
+      .getBoundingClientRect();
+    const search = canvas.getByRole('button', { name: /^Search$/ }).getBoundingClientRect();
+    await expect(context.left).toBeGreaterThanOrEqual(toggle.right);
+    await expect(context.bottom).toBeLessThanOrEqual(search.top);
+  },
+};
+export const PhoneFamily: Story = {
+  args: { variant: 'family' },
+  globals: { viewport: { value: 'phone', isRotated: false } },
 };
 export const WorkspaceDark: Story = { globals: { theme: 'dark' } };
 export const PhoneWorkspaceDark: Story = {
@@ -172,7 +185,7 @@ export const InstalledPwaLargeText: Story = {
 
 export const ProjectListError: Story = {
   args: { projectsError: true },
-  globals: { viewport: { value: 'mobile1', isRotated: false } },
+  globals: { viewport: { value: 'phone', isRotated: false } },
 };
 
 // Exercise the real header triggers, including the sideways sidebar tooltip.

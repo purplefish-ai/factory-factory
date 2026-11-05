@@ -46,20 +46,42 @@ export function AppHeader({ showSidebarToggle = true }: { showSidebarToggle?: bo
     <header className="app-header flex shrink-0 items-stretch border-b bg-shell px-2 min-h-12 pt-[env(safe-area-inset-top)]">
       <div className="app-header-controls @container/header flex min-w-0 flex-1 items-center gap-1 md:gap-x-2">
         {showSidebarToggle ? <SidebarToggleButton /> : null}
-        <div data-slot="header-context" className="flex min-w-0 flex-1 items-center gap-1 md:gap-2">
-          <div ref={setLeftStartSlot} className="flex min-w-0 flex-1 items-center empty:hidden" />
-          <span className="min-w-0 flex-1 truncate text-sm font-semibold empty:hidden">
-            {title}
-          </span>
-          <div ref={setLeftExtraSlot} className="flex shrink-0 items-center gap-1 empty:hidden" />
+        <div
+          data-slot="header-navigation"
+          className="flex min-w-0 flex-1 items-center gap-1 md:gap-2"
+        >
+          <div
+            data-slot="header-context"
+            className="flex min-w-0 flex-1 items-center gap-1 md:gap-2"
+          >
+            <div ref={setLeftStartSlot} className="flex min-w-0 flex-1 items-center empty:hidden" />
+            <span className="min-w-0 flex-1 truncate text-sm font-semibold empty:hidden">
+              {title}
+            </span>
+          </div>
+          <div
+            ref={setLeftExtraSlot}
+            data-slot="header-status"
+            className="flex shrink-0 items-center gap-1 empty:hidden"
+          />
         </div>
-        <div ref={setRightSlot} className="ml-auto flex shrink-0 items-center gap-1 empty:hidden" />
-        {isMobile && searchSlot ? (
-          createPortal(<GlobalSearch expanded />, searchSlot)
-        ) : (
-          <GlobalSearch />
-        )}
-        <div ref={setRightEndSlot} className="flex shrink-0 items-center empty:hidden" />
+        <div
+          data-slot="header-actions"
+          ref={setRightSlot}
+          className="ml-auto flex shrink-0 items-center gap-1 empty:hidden"
+        />
+        <div data-slot="header-search" className="flex shrink-0 items-center empty:hidden">
+          {isMobile && searchSlot ? (
+            createPortal(<GlobalSearch expanded />, searchSlot)
+          ) : (
+            <GlobalSearch />
+          )}
+        </div>
+        <div
+          data-slot="header-end"
+          ref={setRightEndSlot}
+          className="flex shrink-0 items-center empty:hidden"
+        />
       </div>
     </header>
   );
