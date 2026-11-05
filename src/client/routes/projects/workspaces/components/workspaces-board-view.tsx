@@ -4,24 +4,19 @@ import { ProjectHeader } from '@/client/components/project-header';
 import {
   KanbanBoard,
   KanbanControls,
-  KanbanToolbar,
   KanbanImageDropZone,
   KanbanProvider,
   useKanban,
 } from '@/client/features/kanban';
-import { useIsMobile } from '@/hooks/use-mobile';
 import type { IssueProvider } from '@/shared/core';
 
 function BoardHeaderSlot({ project }: { project: { id: string; slug: string; name: string } }) {
-  const isMobile = useIsMobile();
   return (
     <>
       <ProjectHeader project={project} />
-      {isMobile ? null : (
-        <HeaderRightSlot>
-          <KanbanControls />
-        </HeaderRightSlot>
-      )}
+      <HeaderRightSlot>
+        <KanbanControls />
+      </HeaderRightSlot>
     </>
   );
 }
@@ -53,7 +48,6 @@ export function WorkspacesBoardView({
   openNewWorkspaceForm?: boolean;
   onNewWorkspaceFormOpened?: () => void;
 }) {
-  const isMobile = useIsMobile();
   return (
     <KanbanProvider
       key={projectId}
@@ -75,7 +69,6 @@ export function WorkspacesBoardView({
       ) : null}
       <KanbanImageDropZone>
         <div className="flex flex-col h-full p-3 md:p-6 gap-3 md:gap-4">
-          {isMobile ? <KanbanToolbar /> : null}
           <div className="flex-1 min-h-0">
             <KanbanBoard />
           </div>

@@ -1,12 +1,11 @@
 import { ArrowsClockwiseIcon } from '@phosphor-icons/react/dist/csr/ArrowsClockwise';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { ArchiveGitLockDialog, ArchiveWorkspaceDialog } from '@/client/features/workspace';
 import { useStableCallback } from '@/client/hooks/use-stable-callback';
 import { runInBackground } from '@/client/lib/background-task';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useIsMobile } from '@/hooks/use-mobile';
-import { cn } from '@/lib/utils';
 import type { KanbanColumn as KanbanColumnType } from '@/shared/core';
 import { filterBoardWorkspaces, sortBoardWorkspaces } from './board-view';
 import { BoardViewControls } from './board-view-controls';
@@ -15,9 +14,9 @@ import type { WorkspaceWithKanban } from './kanban-card';
 import { getKanbanColumns, KanbanColumn } from './kanban-column';
 import { useKanban } from './kanban-context';
 import { KanbanFamilyProvider } from './kanban-family-highlight';
+import { MobileBoardSections } from './mobile-board-sections';
 import { QuickChatSheet } from './quick-chat-sheet';
 import { useWaitingSortOrder } from './use-waiting-sort-order';
-import { WaitingSortMenu } from './waiting-sort-menu';
 
 interface WorkspacesByColumn {
   WORKING: WorkspaceWithKanban[];
@@ -34,54 +33,6 @@ export function KanbanBoard() {
       <KanbanBoardContent />
     </KanbanFamilyProvider>
   );
-}
-
-/**
- * The first mobile tab once data loads. A New Workspace request made while the
- * board was still loading keeps the form's Todo tab instead of being replaced.
- */
-function pickInitialMobileColumn(
-  workspacesByColumn: WorkspacesByColumn,
-  showInlineForm: boolean
-): string {
-  if (showInlineForm) {
-    return 'ISSUES';
-  }
-  if (workspacesByColumn.WAITING.length > 0) {
-    return 'WAITING';
-  }
-  return workspacesByColumn.WORKING.length > 0 ? 'WORKING' : 'ISSUES';
-}
-
-/**
- * On mobile the inline form lives in the Todo tab. Switch to it when the form
- * opens, and again on every header "New Workspace" request: the button can be
- * pressed while the form is already open behind another tab.
- */
-function useRevealMobileInlineForm({
-  isMobile,
-  showInlineForm,
-  inlineFormRequest,
-  setActiveColumnId,
-}: {
-  isMobile: boolean;
-  showInlineForm: boolean;
-  inlineFormRequest: number;
-  setActiveColumnId: (columnId: string) => void;
-}) {
-  useEffect(() => {
-    if (showInlineForm && isMobile) {
-      setActiveColumnId('ISSUES');
-    }
-  }, [showInlineForm, isMobile, setActiveColumnId]);
-
-  const [seenInlineFormRequest, setSeenInlineFormRequest] = useState(inlineFormRequest);
-  if (seenInlineFormRequest !== inlineFormRequest) {
-    setSeenInlineFormRequest(inlineFormRequest);
-    if (isMobile) {
-      setActiveColumnId('ISSUES');
-    }
-  }
 }
 
 function KanbanBoardContent() {
@@ -137,8 +88,7 @@ function KanbanBoardContent() {
 
   const isMobile = useIsMobile();
   const columns = useMemo(() => getKanbanColumns(issueProvider), [issueProvider]);
-  const [activeColumnId, setActiveColumnId] = useState<string>('WAITING');
-  const hasPickedInitialTab = useRef(false);
+  const [workspaceCreationRequest, setWorkspaceCreationRequest] = useState(0);
   const [search, setSearch] = useState('');
   const [waitingSortOrder, setWaitingSortOrder] = useWaitingSortOrder();
   const [bulkArchiveDialogOpen, setBulkArchiveDialogOpen] = useState(false);
@@ -178,17 +128,6 @@ function KanbanBoardContent() {
 
     return grouped;
   }, [workspaces, search, waitingSortOrder]);
-
-  useRevealMobileInlineForm({ isMobile, showInlineForm, inlineFormRequest, setActiveColumnId });
-
-  // Pick the initial mobile tab once data loads
-  useEffect(() => {
-    if (hasPickedInitialTab.current || !workspaces) {
-      return;
-    }
-    hasPickedInitialTab.current = true;
-    setActiveColumnId(pickInitialMobileColumn(workspacesByColumn, showInlineForm));
-  }, [workspaces, workspacesByColumn, showInlineForm]);
 
   const visibleIssues = (issues ?? []).filter((issue) =>
     `${issue.title} ${issue.displayId}`
@@ -250,7 +189,10 @@ function KanbanBoardContent() {
         issues={visibleIssues}
         filtered={search.trim().length > 0}
         projectId={projectId}
-        onWorkspaceCreated={() => setActiveColumnId('WORKING')}
+        onWorkspaceCreated={() => {
+          setSearch('');
+          setWorkspaceCreationRequest((request) => request + 1);
+        }}
       />
     ) : (
       <KanbanColumn
@@ -296,33 +238,20 @@ function KanbanBoardContent() {
           <p className="text-sm text-muted-foreground">No matching issues or workspaces</p>
         )}
       {isMobile ? (
-        <>
-          <div className="flex flex-wrap items-center gap-1.5 shrink-0">
-            {columns.map((column) => (
-              <button
-                key={column.id}
-                type="button"
-                onClick={() => setActiveColumnId(column.id)}
-                aria-pressed={column.id === activeColumnId}
-                className={cn(
-                  'flex flex-1 items-center justify-center gap-1 rounded-full px-2 py-1.5 text-xs font-medium',
-                  column.id === activeColumnId
-                    ? 'bg-primary text-primary-foreground'
-                    : 'bg-muted text-muted-foreground'
-                )}
-              >
-                {column.shortLabel ?? column.label}
-                <span>{getColumnCount(column.id)}</span>
-              </button>
-            ))}
-            {activeColumnId === 'WAITING' && (
-              <WaitingSortMenu value={waitingSortOrder} onChange={setWaitingSortOrder} />
-            )}
-          </div>
-          <div key={activeColumnId} className="flex-1 min-h-0 overflow-y-auto">
-            {columns.filter((column) => column.id === activeColumnId).map(renderColumn)}
-          </div>
-        </>
+        <MobileBoardSections
+          sections={columns.map((column) => ({
+            column,
+            count: getColumnCount(column.id),
+            visible:
+              !search.trim() ||
+              getColumnCount(column.id) > 0 ||
+              (column.id === 'ISSUES' && showInlineForm),
+            content: renderColumn(column),
+          }))}
+          showInlineForm={showInlineForm}
+          inlineFormRequest={inlineFormRequest}
+          workspaceCreationRequest={workspaceCreationRequest}
+        />
       ) : (
         <div className="flex flex-row gap-4 pb-4 flex-1 min-h-0 overflow-y-hidden overflow-x-auto mx-auto w-full max-w-[1800px]">
           {columns.map(renderColumn)}

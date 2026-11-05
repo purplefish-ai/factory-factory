@@ -1,4 +1,4 @@
-import { DotsThreeVerticalIcon } from '@phosphor-icons/react/dist/csr/DotsThreeVertical';
+import { SortDescendingIcon } from '@phosphor-icons/react/dist/csr/SortDescending';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -21,7 +21,7 @@ export function WaitingSortMenu({
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <Button variant="ghost" size="icon" className="h-7 w-7" aria-label="Waiting sort order">
-          <DotsThreeVerticalIcon className="h-4 w-4" />
+          <SortDescendingIcon className="h-4 w-4" />
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">

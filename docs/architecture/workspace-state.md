@@ -901,13 +901,24 @@ without a selected project, its Todo column offers project selection/creation
 rather than loading a disabled query. An empty project offers its first
 workspace while keeping assigned issues available.
 
-The board filter lives in the top navigation beside Board. It searches workspace
-names, branches and conversation summaries plus issue titles/identifiers.
-Waiting has a kebab menu for Latest message (default) or Created, both newest
-first. The choice persists in browser storage across project boards and reloads,
-and updates other open tabs. On phones the menu sits beside the column pills
-while Waiting is active; controls wrap on narrow screens. Latest message uses
-the workspace's latest session activity timestamp, falling back to creation when
+On phones, the shared top row contains the sidebar menu, breadcrumbs and global
+search icon. The board filter, New workspace and board actions share the second
+row. Desktop keeps the filter beside Board in the top navigation. It searches
+workspace names, branches and conversation summaries plus issue
+titles/identifiers across the entire board.
+
+Mobile sections stack in Todo, Working, Waiting, Done order in one scroll
+surface. Sticky, equal-width section links show counts, jump to a section and
+track manual scrolling. Filtering shows matching sections and updates every
+count; clearing it restores all sections. Empty Todo provider/loading/error
+states remain visible when unfiltered. New workspace scrolls to Todo, including
+when its form is already open. Successful creation clears the filter and reveals
+Working. Project switching resets the scroll, filter and form.
+
+Waiting has a sort icon beside its section heading for Latest message (default)
+or Created, both newest first. The choice persists in browser storage across
+project boards and reloads, and updates other open tabs. Latest message uses the
+workspace's latest session activity timestamp, falling back to creation when
 unavailable. Other columns keep newest-created order. Waiting cards omit
 waiting-duration labels. Ordering affects only the view, preserving snapshot
 order. The board has no card selection controls. The snapshot store records
