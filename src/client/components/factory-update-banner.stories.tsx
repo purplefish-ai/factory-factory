@@ -109,6 +109,16 @@ export const ManualInstallation: Story = {
     ).not.toBeInTheDocument();
     await userEvent.click(canvas.getByRole('button', { name: 'How to update' }));
     await expect(canvas.getByText('npm install -g factory-factory@0.5.4')).toBeVisible();
+    await expect(
+      canvas.getByText(
+        'A restart is required after updating. This stops terminals and run scripts.'
+      )
+    ).toBeVisible();
+    const panelId = canvas
+      .getByRole('button', { name: 'How to update' })
+      .getAttribute('aria-controls');
+    await expect(panelId).toBeTruthy();
+    await expect(canvasElement.querySelector(`[id="${panelId}"]`)).toBeVisible();
     await userEvent.click(canvas.getByRole('button', { name: 'How to update' }));
     await expect(
       canvas.queryByText('npm install -g factory-factory@0.5.4')
@@ -197,7 +207,11 @@ export const CheckoutInstructions: Story = {
     const canvas = within(canvasElement);
     await userEvent.click(canvas.getByRole('button', { name: 'How to update' }));
     await expect(canvas.getByText(checkoutUpdates.manualCommand)).toBeVisible();
-    await expect(canvas.getByText('Restarting stops terminals and run scripts.')).toBeVisible();
+    await expect(
+      canvas.getByText(
+        'A restart is required after updating. This stops terminals and run scripts.'
+      )
+    ).toBeVisible();
   },
 };
 export const CheckoutPhone: Story = {

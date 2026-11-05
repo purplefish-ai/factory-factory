@@ -164,7 +164,7 @@ export function FactoryUpdateBannerContent({
                     size="sm"
                     className="h-7 gap-1 px-2 text-xs text-muted-foreground"
                     aria-expanded={showInstructions}
-                    aria-controls={instructionsId}
+                    aria-controls={showInstructions ? instructionsId : undefined}
                     onClick={() => setShowInstructions((previous) => !previous)}
                   >
                     How to update
@@ -198,7 +198,9 @@ export function FactoryUpdateBannerContent({
           <p className="whitespace-pre-wrap leading-relaxed [overflow-wrap:anywhere]">
             {manualCommand}
           </p>
-          <p className="text-muted-foreground">Restarting stops terminals and run scripts.</p>
+          <p className="text-muted-foreground">
+            A restart is required after updating. This stops terminals and run scripts.
+          </p>
         </div>
       )}
       {(progress || active || automaticUpdate) && (
