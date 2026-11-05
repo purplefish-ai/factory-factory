@@ -60,7 +60,11 @@ production-only reachability catches a test-only module, tests dependencies from
 every runtime root and a lazy import, and distinguishes barrel export visibility
 from file reachability. A repository positive control also checks that the live
 GitHub previews, Markdown renderer, lazy file/diff viewers and critical runtime
-modules are absent from the production candidate report.
+modules are absent from the production candidate report. Test-only module and
+fixture-support cases share one fixture and one scan per analysis mode. The CLI
+report and failure smoke tests still invoke the real analyzer, including the
+normal enforcement and update-refusal paths. Additional inventory decisions
+exercise the same evaluator directly without repeating analyzer scans.
 
 ## Staged review policy
 

@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import {
   compareInventory,
+  evaluateInventory,
   parseKnipOutput,
   parseUnusedCodeBaseline,
   pruneInventory,
@@ -73,23 +74,29 @@ function analyze(root: string, mode: 'production' | 'exports' | 'full-files') {
   return parseKnipOutput(result, mode === 'exports' ? 'exports' : 'production');
 }
 
-it.each([
-  'src/test-only.ts',
-  'src/shared/testing/recovery-json-storage.fixture.ts',
-  'src/client/components/streamdown-markdown.fixtures.ts',
-])('detects test-only production candidates, including fixture support: %s', (file) => {
+it('detects all test-only production candidates, including fixture support', () => {
   const { root, write } = fixture();
-  write(file, 'export const abandoned = 1;');
-  write(
-    'src/test-only.test.ts',
-    `import { abandoned } from './${file.slice(4, -3)}'; console.log(abandoned);`
-  );
+  const files = [
+    'src/test-only.ts',
+    'src/shared/testing/recovery-json-storage.fixture.ts',
+    'src/client/components/streamdown-markdown.fixtures.ts',
+  ];
+  for (const [index, file] of files.entries()) {
+    write(file, 'export const abandoned = 1;');
+    write(
+      `src/test-only-${index}.test.ts`,
+      `import { abandoned } from './${file.slice(4, -3)}'; console.log(abandoned);`
+    );
+  }
   expect(analyze(root, 'full-files')).toEqual([]);
   const production = analyze(root, 'production');
-  expect(production).toContain(file);
-  expect(production).not.toContain('src/test-only.test.ts');
-  expect(analyze(root, 'exports')).not.toContain(`${file}::exports::abandoned`);
-});
+  const exports = analyze(root, 'exports');
+  for (const [index, file] of files.entries()) {
+    expect(production).toContain(file);
+    expect(production).not.toContain(`src/test-only-${index}.test.ts`);
+    expect(exports).not.toContain(`${file}::exports::abandoned`);
+  }
+}, 30_000);
 
 it('keeps each configured runtime and a lazy frontend dependency reachable', () => {
   const { root, write } = fixture();
@@ -266,6 +273,12 @@ it('reports new candidates without accepting them, and update cannot add debt', 
     .object({ drift: z.object({ production: z.object({ added: z.array(z.string()) }) }) })
     .parse(JSON.parse(report.stdout));
   expect(data.drift.production.added).toEqual(['src/abandoned.ts']);
+  const baseline = parseUnusedCodeBaseline(inventory);
+  const production = data.drift.production.added;
+  expect(() => evaluateInventory(undefined, baseline, production, [])).toThrow(
+    'New production candidate: src/abandoned.ts'
+  );
+  expect(() => evaluateInventory('--update', baseline, production, [])).toThrow('unreviewed');
   const normal = run([]);
   expect(normal.status).toBe(1);
   expect(normal.stderr).toContain('New production candidate: src/abandoned.ts');
@@ -277,3 +290,38 @@ it('reports new candidates without accepting them, and update cannot add debt', 
   );
   expect(run(['--unknown']).status).toBe(1);
 }, 30_000);
+
+it('renders matching inventories and prunes resolved entries in both modes', () => {
+  const review = {
+    disposition: 'review-required',
+    reason: 'Review runtime ownership before deleting.',
+  };
+  const baseline = parseUnusedCodeBaseline({
+    version: 1,
+    production: { 'src/resolved.ts': review },
+    exports: { 'src/resolved.ts::exports::old': review },
+  });
+  expect(() => evaluateInventory(undefined, baseline, [], [])).toThrow(
+    'Stale production candidate: src/resolved.ts'
+  );
+  const updated = evaluateInventory('--update', baseline, [], []);
+  expect(parseUnusedCodeBaseline(JSON.parse(updated.baseline ?? 'null'))).toEqual({
+    version: 1,
+    production: {},
+    exports: {},
+  });
+  expect(updated.output).toContain('Pruned resolved');
+  expect(
+    evaluateInventory(
+      undefined,
+      parseUnusedCodeBaseline({ version: 1, production: {}, exports: {} }),
+      [],
+      []
+    ).output
+  ).toContain('inventory matches');
+});
+
+it('rejects unsupported evaluator modes at the runtime boundary', () => {
+  const baseline = parseUnusedCodeBaseline({ version: 1, production: {}, exports: {} });
+  expect(() => Reflect.apply(evaluateInventory, undefined, ['--typo', baseline, [], []])).toThrow();
+});

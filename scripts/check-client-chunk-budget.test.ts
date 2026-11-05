@@ -3,6 +3,7 @@ import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { afterEach, expect, it } from 'vitest';
+import { checkClientChunkBudget } from './check-client-chunk-budget.mjs';
 
 const directories: string[] = [];
 afterEach(() => {
@@ -34,10 +35,13 @@ function check(chunks: Record<string, string>, sourceModules?: Record<string, st
       })
     );
   }
-  return spawnSync(process.execPath, [resolve('scripts/check-client-chunk-budget.mjs')], {
-    cwd: root,
-    encoding: 'utf8',
-  });
+  const lines: string[] = [];
+  try {
+    checkClientChunkBudget(assets, (line: string) => lines.push(line));
+    return { status: 0, stdout: lines.join('\n'), stderr: '', root };
+  } catch (error) {
+    return { status: 1, stdout: lines.join('\n'), stderr: String(error), root };
+  }
 }
 
 it('rejects a large static closure even when every individual chunk passes', () => {
@@ -133,4 +137,18 @@ it('fails closed when a static chunk has no source module metadata', () => {
   );
   expect(result.status).not.toBe(0);
   expect(result.stderr).toContain('Missing source module metadata for shared.js');
+});
+
+it('runs the CLI with its default asset directory and rejects invalid builds', () => {
+  const { root } = check({});
+  const run = () =>
+    spawnSync(process.execPath, [resolve('scripts/check-client-chunk-budget.mjs')], {
+      cwd: root,
+      encoding: 'utf8',
+    });
+  expect(run().status).toBe(0);
+  writeFileSync(join(root, 'dist/client/assets/index-entry.js'), 'import "./file-viewer-lazy.js";');
+  const failed = run();
+  expect(failed.status).not.toBe(0);
+  expect(failed.stderr).toContain('must remain deferred');
 });
