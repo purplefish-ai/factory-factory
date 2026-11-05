@@ -193,15 +193,12 @@ describe('npm publish workflow', () => {
     expect(finalizeJob.permissions).toEqual({ actions: 'read', contents: 'write' });
     const verifyPublishedStep = getStep(finalizeJob, 'Verify package is published on npm');
     expect(verifyPublishedStep.id).toBe('release_version');
-    expect(verifyPublishedStep.run).toBe(`set -euo pipefail
-VERSION=$(node -p "require('./package.json').version")
-PUBLISHED_VERSION=$(npm view "factory-factory@$VERSION" version)
-if [ "$PUBLISHED_VERSION" != "$VERSION" ]; then
-  echo "factory-factory@$VERSION is not published on npm" >&2
-  exit 1
-fi
-echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-`);
+    expect(verifyPublishedStep.run).toContain('bash scripts/verify-npm-release.sh npm-package');
+    expect(verifyPublishedStep.env).toEqual({
+      STAGED_COMMIT: githubExpression('steps.staging_run.outputs.commit'),
+      STAGING_RUN_ID: githubExpression('github.event.inputs.staging_run_id'),
+      RELEASE_REPOSITORY: githubExpression('github.repository'),
+    });
     getStep(finalizeJob, 'Create and push tag');
     expect(
       finalizeJob.steps.findIndex((step) => step.name === 'Verify package is published on npm')
