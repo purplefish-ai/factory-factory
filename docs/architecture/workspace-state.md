@@ -382,9 +382,9 @@ application migration.
 
 On mobile, successful task creation closes the inline form, clears the filter
 and reveals Working. The newly created workspace is already cached and sorted
-first; the board scrolls so its setup card is visible immediately. Cancelling
-or failing creation does not reveal Working. Desktop keeps all columns visible
-and closes the form on success.
+first; the board scrolls so its setup card is visible immediately. Cancelling or
+failing creation does not reveal Working. Desktop keeps all columns visible and
+closes the form on success.
 
 The UI has a provider-driven intake column (`GitHub Issues` or `Linear Issues`)
 plus the columns `WORKING`, `WAITING`, `DONE`.
@@ -695,11 +695,10 @@ existing three-command per-snapshot and six-command service budgets still apply
 across independent workspace keys.
 
 The board provider and its children are keyed by project ID. Switching projects
-resets archive recovery and confirmation dialogs, Quick Chat, inline forms,
-and the mobile board scroll and filter. Archive results arriving after a
-switch still reconcile
-the originating project cache, but cannot open recovery in the new board, even
-when the user has already switched back to the original project.
+resets archive recovery and confirmation dialogs, Quick Chat, inline forms, and
+the mobile board scroll and filter. Archive results arriving after a switch
+still reconcile the originating project cache, but cannot open recovery in the
+new board, even when the user has already switched back to the original project.
 
 Inline workspace renames make the editor read-only and busy through the request
 and cache refresh. Repeated Enter, clicks, and blur events share one save.
