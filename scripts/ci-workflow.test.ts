@@ -84,45 +84,67 @@ describe('conservative CI selection', () => {
     expect(selectJobs('pull_request', [])).toEqual({ app: true, storybook: true });
   });
 
-  it('includes deleted paths when a frontend file moves into backend', () => {
-    const directory = mkdtempSync(join(tmpdir(), 'ff-ci-selection-'));
-    const git = (...args: string[]) => {
-      const result = spawnSync('git', args, { cwd: directory, encoding: 'utf8' });
-      expect(result.status, result.stderr).toBe(0);
-      return result.stdout.trim();
-    };
-    try {
-      git('init', '-q');
-      git('config', 'user.name', 'CI test');
-      git('config', 'user.email', 'ci@example.invalid');
-      git('config', 'commit.gpgsign', 'false');
-      mkdirSync(join(directory, 'src/client'), { recursive: true });
-      mkdirSync(join(directory, 'src/backend'), { recursive: true });
-      writeFileSync(join(directory, 'README.md'), 'documentation');
-      writeFileSync(join(directory, 'src/client/moved.ts'), 'export const moved = true;');
-      git('add', '.');
-      git('commit', '-qm', 'base');
-      const base = git('rev-parse', 'HEAD');
-      // Same content would be detected as a rename without --no-renames.
-      git('mv', 'src/client/moved.ts', 'src/backend/moved.ts');
-      git('commit', '-qm', 'move');
-      const script = resolve('.github/scripts/select-ci.mjs');
-      const result = spawnSync(process.execPath, [script, 'pull_request', base], {
-        cwd: directory,
-        encoding: 'utf8',
-      });
-      expect(result.status, result.stderr).toBe(0);
-      expect(result.stdout).toBe('app=true\nstorybook=true\n');
-      const failure = spawnSync(process.execPath, [script, 'pull_request', 'missing-base'], {
-        cwd: directory,
-        encoding: 'utf8',
-      });
-      expect(failure.status).not.toBe(0);
-      expect(failure.stdout).toBe('');
-    } finally {
-      rmSync(directory, { recursive: true, force: true });
+  it.each(['rename', 'documentation'])(
+    'selects the actual shallow merge diff when main advances (%s)',
+    (change) => {
+      const directory = mkdtempSync(join(tmpdir(), 'ff-ci-selection-'));
+      const git = (...args: string[]) => {
+        const result = spawnSync('git', args, { cwd: directory, encoding: 'utf8' });
+        expect(result.status, result.stderr).toBe(0);
+        return result.stdout.trim();
+      };
+      try {
+        git('init', '-q');
+        git('config', 'user.name', 'CI test');
+        git('config', 'user.email', 'ci@example.invalid');
+        git('config', 'commit.gpgsign', 'false');
+        mkdirSync(join(directory, 'src/client'), { recursive: true });
+        mkdirSync(join(directory, 'src/backend'), { recursive: true });
+        writeFileSync(join(directory, 'README.md'), 'documentation');
+        writeFileSync(join(directory, 'src/client/moved.ts'), 'export const moved = true;');
+        git('add', '.');
+        git('commit', '-qm', 'base');
+        const base = git('rev-parse', 'HEAD');
+        git('switch', '-qc', 'pr-change');
+        if (change === 'rename') {
+          // Same content would be detected as a rename without --no-renames.
+          git('mv', 'src/client/moved.ts', 'src/backend/moved.ts');
+        } else {
+          writeFileSync(join(directory, 'README.md'), 'updated documentation');
+          git('add', '.');
+        }
+        git('commit', '-qm', 'PR change');
+        git('switch', '-qc', 'advanced-main', base);
+        writeFileSync(join(directory, 'main-only-config.ts'), 'export const mainChange = true;');
+        git('add', '.');
+        git('commit', '-qm', 'base advances after event');
+        git('merge', '--no-ff', 'pr-change', '-m', 'integrated PR');
+        const shallow = join(directory, 'shallow');
+        git('clone', '--quiet', '--depth=2', `file://${directory}`, shallow);
+        // The stale event base is not among the regenerated merge's shallow parents.
+        expect(spawnSync('git', ['cat-file', '-e', base], { cwd: shallow }).status).not.toBe(0);
+        const script = resolve('.github/scripts/select-ci.mjs');
+        const result = spawnSync(process.execPath, [script, 'pull_request'], {
+          cwd: shallow,
+          encoding: 'utf8',
+        });
+        expect(result.status, result.stderr).toBe(0);
+        expect(result.stdout).toBe(
+          change === 'rename' ? 'app=true\nstorybook=true\n' : 'app=false\nstorybook=false\n'
+        );
+        // A non-merge checkout cannot safely represent the whole integrated PR.
+        git('switch', 'pr-change');
+        const failure = spawnSync(process.execPath, [script, 'pull_request'], {
+          cwd: directory,
+          encoding: 'utf8',
+        });
+        expect(failure.status).not.toBe(0);
+        expect(failure.stdout).toBe('');
+      } finally {
+        rmSync(directory, { recursive: true, force: true });
+      }
     }
-  });
+  );
 });
 
 describe('required CI gates', () => {

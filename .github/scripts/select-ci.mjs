@@ -17,18 +17,20 @@ export function selectJobs(event, files) {
 }
 
 if (import.meta.main) {
-  const [event, base] = process.argv.slice(2);
-  // Checkout uses the PR merge commit, so diffing its first parent/base includes
-  // the integrated PR changes without fetching repository history or an API.
-  // --no-renames includes both sides of moves; NUL delimiters handle any name.
-  const files =
-    event === 'pull_request'
-      ? execFileSync('git', ['diff', '--no-renames', '--name-only', '-z', base, 'HEAD'], {
-          encoding: 'utf8',
-        })
-          .split('\0')
-          .filter(Boolean)
-      : [];
+  const [event] = process.argv.slice(2);
+  let files = [];
+  if (event === 'pull_request') {
+    // GitHub may regenerate the merge against newer main than the event base SHA.
+    // Verify a merge checkout before diffing its actual first parent; a PR head
+    // checkout must never be mistaken for the integrated PR change set.
+    execFileSync('git', ['rev-parse', '--verify', 'HEAD^2'], { stdio: 'pipe' });
+    // --no-renames includes both sides of moves; NUL delimiters handle any name.
+    files = execFileSync('git', ['diff', '--no-renames', '--name-only', '-z', 'HEAD^1', 'HEAD'], {
+      encoding: 'utf8',
+    })
+      .split('\0')
+      .filter(Boolean);
+  }
   const selected = selectJobs(event, files);
   for (const [job, enabled] of Object.entries(selected)) {
     process.stdout.write(`${job}=${enabled}\n`);

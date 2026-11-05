@@ -33,8 +33,7 @@ jobs:
         id: select
         env:
           EVENT: ${{ github.event_name }}
-          BASE: ${{ github.event.pull_request.base.sha }}
-        run: node .github/scripts/select-ci.mjs "$EVENT" "$BASE" >> "$GITHUB_OUTPUT"
+        run: node .github/scripts/select-ci.mjs "$EVENT" >> "$GITHUB_OUTPUT"
 
   checks:
     name: Lint, Type Check, Dependencies & Dead Code
