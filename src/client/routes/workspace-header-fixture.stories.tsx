@@ -81,6 +81,9 @@ export const DesktopMoreActions: Story = {
     ).toBeVisible();
     await expect(canvas.getByRole('button', { name: 'Create PR' })).toBeVisible();
     await expect(
+      canvas.queryByRole('button', { name: 'Archive workspace', hidden: true })
+    ).not.toBeInTheDocument();
+    await expect(
       canvas.queryByRole('button', { name: 'Open in VS Code', hidden: true })
     ).not.toBeInTheDocument();
     const items = await openMoreActions(canvasElement);

@@ -1,9 +1,7 @@
 import { ArchiveIcon } from '@phosphor-icons/react/dist/csr/Archive';
 import { isWorkspaceDoneOrMerged } from '@/client/lib/workspace-archive';
-import { Button } from '@/components/ui/button';
 import { DropdownMenuItem } from '@/components/ui/dropdown-menu';
 import { Spinner } from '@/components/ui/spinner';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 import type { WorkspaceHeaderWorkspace } from './types';
 
@@ -11,59 +9,27 @@ export function ArchiveActionButton({
   workspace,
   archivePending,
   onArchiveRequest,
-  renderAsMenuItem = false,
 }: {
   workspace: WorkspaceHeaderWorkspace;
   archivePending: boolean;
   onArchiveRequest: () => void;
-  renderAsMenuItem?: boolean;
 }) {
   const completed = isWorkspaceDoneOrMerged(workspace);
 
-  if (renderAsMenuItem) {
-    return (
-      <DropdownMenuItem
-        onSelect={onArchiveRequest}
-        disabled={archivePending}
-        className={cn(
-          completed ? '' : 'text-destructive focus:text-destructive dark:text-destructive'
-        )}
-      >
-        {archivePending ? (
-          <Spinner aria-hidden="true" className="h-4 w-4" />
-        ) : (
-          <ArchiveIcon className="h-4 w-4" />
-        )}
-        {archivePending ? 'Archiving…' : 'Archive workspace'}
-      </DropdownMenuItem>
-    );
-  }
-
-  // Inline, the header only shows this for a finished workspace, as its next step.
-  const label = archivePending ? 'Archiving workspace…' : 'Archive workspace';
   return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <Button
-          variant={completed ? 'default' : 'ghost'}
-          size="sm"
-          className={cn(
-            'h-7 gap-1.5 px-2 text-xs',
-            completed ? '' : 'hover:bg-destructive/10 hover:text-destructive'
-          )}
-          onClick={onArchiveRequest}
-          disabled={archivePending}
-          aria-label={label}
-        >
-          {archivePending ? (
-            <Spinner aria-hidden="true" className="h-4 w-4" />
-          ) : (
-            <ArchiveIcon className="h-4 w-4" />
-          )}
-          <span>Archive</span>
-        </Button>
-      </TooltipTrigger>
-      <TooltipContent>{label}</TooltipContent>
-    </Tooltip>
+    <DropdownMenuItem
+      onSelect={onArchiveRequest}
+      disabled={archivePending}
+      className={cn(
+        completed ? '' : 'text-destructive focus:text-destructive dark:text-destructive'
+      )}
+    >
+      {archivePending ? (
+        <Spinner aria-hidden="true" className="h-4 w-4" />
+      ) : (
+        <ArchiveIcon className="h-4 w-4" />
+      )}
+      {archivePending ? 'Archiving…' : 'Archive workspace'}
+    </DropdownMenuItem>
   );
 }

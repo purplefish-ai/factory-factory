@@ -246,7 +246,6 @@ export function WorkspaceHeaderOverflowMenu({
             onArchiveRequest={() => {
               pendingDialog.current = onArchiveRequest;
             }}
-            renderAsMenuItem
           />
         </DropdownMenuContent>
       </DropdownMenu>
