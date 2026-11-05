@@ -8,6 +8,24 @@ and this project adheres to
 
 ## [Unreleased]
 
+## [0.5.6] - 2026-11-05
+
+### Changed
+
+- Simplify the update banner and collapse manual restart instructions into an
+  accessible disclosure (#3049)
+- Refresh the README with the current application screenshot (#3050)
+
+### Fixed
+
+- Show sent messages immediately in the chat transcript while awaiting server
+  confirmation (#3051)
+- Clarify new-file markers in Changes and enumerate untracked files using Git
+  ignore rules, including nested dependency directories (#3052)
+- Prevent Linux backend stalls during startup and workspace archiving by keeping
+  filesystem watches shallow, refreshing nested changes through bounded cache
+  expiry, and suspending watchers throughout worktree deletion (#3054)
+
 ## [0.5.5] - 2026-11-05
 
 ### Changed
