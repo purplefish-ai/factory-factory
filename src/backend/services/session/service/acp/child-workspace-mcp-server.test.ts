@@ -1,8 +1,9 @@
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
-import { createServer } from 'node:http';
+import { createServer, type IncomingMessage } from 'node:http';
 import { tmpdir } from 'node:os';
-import { describe, expect, it } from 'vitest';
+import { createInterface } from 'node:readline';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import { getChildWorkspaceMcpServerConfig } from './child-workspace-mcp-server';
 
@@ -15,9 +16,10 @@ const toolResponseSchema = z.object({
 
 type ToolResponse = z.infer<typeof toolResponseSchema>;
 
-async function callToolWithHttpResponse(options: {
+type ToolOptions = {
   childWorkspacesEnabled?: boolean;
   body: unknown;
+  stallResponse?: boolean;
   linkedWorkspace?: unknown;
   status: number;
   toolName:
@@ -35,84 +37,48 @@ async function callToolWithHttpResponse(options: {
     | 'send_message_to_parent';
   parentWorkspaceId?: string | null;
   toolArguments?: Record<string, unknown>;
-}): Promise<{
+};
+
+async function callToolWithHttpResponse(
+  options: ToolOptions,
+  timeoutMs = 2000
+): Promise<{
   requestBody: unknown;
   requestMethod: string | undefined;
   requestUrl: string | undefined;
   response: ToolResponse;
 }> {
-  let requestMethod: string | undefined;
-  let requestUrl: string | undefined;
-  let requestBody: unknown;
-  const server = createServer((req, res) => {
-    if (req.url?.startsWith('/api/trpc/userSettings.get')) {
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(
-        JSON.stringify({
-          result: {
-            data: {
-              json: {
-                childWorkspacesEnabled: options.childWorkspacesEnabled ?? true,
-              },
-            },
-          },
-        })
-      );
-      return;
-    }
-    if (options.linkedWorkspace && req.url?.startsWith('/api/trpc/workspace.get')) {
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ result: { data: { json: options.linkedWorkspace } } }));
-      return;
-    }
-    requestMethod = req.method;
-    requestUrl = req.url;
-    let rawBody = '';
-    req.setEncoding('utf8');
-    req.on('data', (chunk) => {
-      rawBody += chunk;
-    });
-    req.on('end', () => {
-      requestBody = rawBody ? JSON.parse(rawBody) : undefined;
-      res.writeHead(options.status, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify(options.body));
-    });
-  });
-  server.listen(0, '127.0.0.1');
-  await once(server, 'listening');
-
+  if (activeCall) {
+    throw new Error('MCP fixture calls must remain sequential');
+  }
+  const capture: {
+    requestBody: unknown;
+    requestMethod: string | undefined;
+    requestUrl: string | undefined;
+  } = {
+    requestBody: undefined,
+    requestMethod: undefined,
+    requestUrl: undefined,
+  };
+  activeCall = { options, capture };
+  const responseAbort = new AbortController();
+  let client: ReturnType<typeof createClient> | undefined;
   try {
-    const address = server.address();
-    if (address === null || typeof address === 'string') {
-      throw new Error('Expected the test HTTP server to listen on a TCP port');
-    }
-    const config = getChildWorkspaceMcpServerConfig({
-      nodeExecPath: process.execPath,
-      workspaceId: 'parent-workspace',
-      parentWorkspaceId: options.parentWorkspaceId ?? null,
-      apiBaseUrl: `http://127.0.0.1:${address.port}`,
-    });
-    const child = spawn(config.command, config.args, {
-      cwd: tmpdir(),
-      env: {
-        ...process.env,
-        ...config.env,
-      },
-    });
-    let stdout = '';
-    let stderr = '';
-    child.stdout.setEncoding('utf8');
-    child.stderr.setEncoding('utf8');
-    child.stdout.on('data', (chunk: string) => {
-      stdout += chunk;
-    });
-    child.stderr.on('data', (chunk: string) => {
-      stderr += chunk;
-    });
-    child.stdin.end(
+    const current = getClient(options.parentWorkspaceId ?? null);
+    client = current;
+    const id = nextRequestId++;
+    const reply = Promise.race([
+      once(client.lines, 'line', { signal: responseAbort.signal }),
+      client.closed.then(([code]) => {
+        throw new Error(
+          `MCP process exited before replying to request ${id}: ${code}; ${current.stderr()}`
+        );
+      }),
+    ]);
+    client.child.stdin.write(
       `${JSON.stringify({
         jsonrpc: '2.0',
-        id: 1,
+        id,
         method: 'tools/call',
         params: {
           name: options.toolName,
@@ -124,21 +90,180 @@ async function callToolWithHttpResponse(options: {
         },
       })}\n`
     );
-
-    const [exitCode] = await once(child, 'exit');
-    expect(exitCode).toBe(0);
-    expect(stderr).toBe('');
-    return {
-      requestBody,
-      requestMethod,
-      requestUrl,
-      response: toolResponseSchema.parse(JSON.parse(stdout.trim())),
-    };
+    const [line] = await withFixtureDeadline(
+      reply,
+      timeoutMs,
+      `MCP response timed out: ${options.toolName}, request ${id}`
+    );
+    const response = toolResponseSchema.extend({ id: z.literal(id) }).parse(JSON.parse(line));
+    expect(client.stderr()).toBe('');
+    return { ...capture, response };
+  } catch (error) {
+    if (client) {
+      await discardClient(client);
+    }
+    throw error;
   } finally {
-    server.close();
-    await once(server, 'close');
+    responseAbort.abort();
+    activeCall = undefined;
   }
 }
+
+// Reuse the actual transport and executable within each immutable launch context.
+// HTTP responses and captures are reset per request; tests must stay sequential.
+let activeCall:
+  | {
+      options: ToolOptions;
+      capture: {
+        requestBody: unknown;
+        requestMethod: string | undefined;
+        requestUrl: string | undefined;
+      };
+    }
+  | undefined;
+let nextRequestId = 1;
+const clients = new Map<string | null, ReturnType<typeof createClient>>();
+const toolServer = createServer((req, res) => {
+  if (!activeCall) {
+    res.writeHead(500);
+    res.end('No active MCP fixture call');
+    return;
+  }
+  const { options, capture } = activeCall;
+  if (req.url?.startsWith('/api/trpc/userSettings.get')) {
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(
+      JSON.stringify({
+        result: {
+          data: { json: { childWorkspacesEnabled: options.childWorkspacesEnabled ?? true } },
+        },
+      })
+    );
+    return;
+  }
+  if (options.linkedWorkspace && req.url?.startsWith('/api/trpc/workspace.get')) {
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ result: { data: { json: options.linkedWorkspace } } }));
+    return;
+  }
+  capture.requestMethod = req.method;
+  capture.requestUrl = req.url;
+  let rawBody = '';
+  req.setEncoding('utf8');
+  req.on('data', (chunk) => {
+    rawBody += chunk;
+  });
+  req.on('end', () => {
+    capture.requestBody = rawBody ? JSON.parse(rawBody) : undefined;
+    if (options.stallResponse) {
+      return;
+    }
+    res.writeHead(options.status, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify(options.body));
+  });
+});
+
+function createClient(parentWorkspaceId: string | null) {
+  const address = toolServer.address();
+  if (!address || typeof address === 'string') {
+    throw new Error('Expected the test HTTP server to listen on a TCP port');
+  }
+  const config = getChildWorkspaceMcpServerConfig({
+    nodeExecPath: process.execPath,
+    workspaceId: 'parent-workspace',
+    parentWorkspaceId,
+    apiBaseUrl: `http://127.0.0.1:${address.port}`,
+  });
+  const child = spawn(config.command, config.args, {
+    cwd: tmpdir(),
+    env: { ...process.env, ...config.env },
+  });
+  let stderr = '';
+  child.stderr.setEncoding('utf8');
+  child.stderr.on('data', (chunk: string) => {
+    stderr += chunk;
+  });
+  const lines = createInterface({ input: child.stdout });
+  const closed = once(child, 'close');
+  return { child, lines, closed, stderr: () => stderr };
+}
+
+function getClient(parentWorkspaceId: string | null) {
+  const existing = clients.get(parentWorkspaceId);
+  if (existing) {
+    return existing;
+  }
+  const client = createClient(parentWorkspaceId);
+  clients.set(parentWorkspaceId, client);
+  return client;
+}
+
+beforeAll(async () => {
+  toolServer.listen(0, '127.0.0.1');
+  await once(toolServer, 'listening');
+});
+
+async function withFixtureDeadline<T>(
+  task: Promise<T>,
+  timeoutMs: number,
+  message: string
+): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      task,
+      new Promise<never>((_resolve, reject) => {
+        timer = setTimeout(() => reject(new Error(message)), timeoutMs);
+      }),
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function discardClient(client: ReturnType<typeof createClient>) {
+  for (const [context, candidate] of clients) {
+    if (candidate === client) {
+      clients.delete(context);
+    }
+  }
+  client.lines.close();
+  if (client.child.exitCode === null && client.child.signalCode === null) {
+    client.child.kill('SIGKILL');
+  }
+  await withFixtureDeadline(client.closed, 1000, 'MCP process did not close after SIGKILL');
+}
+
+async function closeClient(client: ReturnType<typeof createClient>) {
+  try {
+    client.child.stdin.end();
+    const [exitCode] = await withFixtureDeadline(
+      client.closed,
+      500,
+      'MCP graceful shutdown timed out'
+    );
+    expect(exitCode).toBe(0);
+    expect(client.stderr()).toBe('');
+  } finally {
+    await discardClient(client);
+  }
+}
+
+afterAll(async () => {
+  try {
+    const outcomes = await Promise.allSettled([...clients.values()].map(closeClient));
+    for (const outcome of outcomes) {
+      if (outcome.status === 'rejected') {
+        throw outcome.reason;
+      }
+    }
+  } finally {
+    const closed = once(toolServer, 'close');
+    toolServer.closeAllConnections();
+    toolServer.close();
+    await withFixtureDeadline(closed, 500, 'MCP fixture HTTP server did not close');
+  }
+});
 
 describe('child workspace MCP tRPC errors', () => {
   it('rejects child tools when disabled without calling the workspace API', async () => {
@@ -693,3 +818,58 @@ it.each(['send_message_to_child', 'send_message_to_parent'] as const)(
     expect(response.result.isError).not.toBe(true);
   }
 );
+
+it('bounds an unanswered real HTTP call, closes its process, and replaces the client', async () => {
+  const client = getClient(null);
+  await expect(
+    callToolWithHttpResponse(
+      { status: 200, toolName: 'list_projects', body: {}, stallResponse: true },
+      250
+    )
+  ).rejects.toThrow('MCP response timed out: list_projects');
+  expect(client.child.signalCode).toBe('SIGKILL');
+  expect(client.lines.listenerCount('line')).toBe(0);
+  expect(activeCall).toBeUndefined();
+  expect(clients.has(null)).toBe(false);
+  const { response } = await callToolWithHttpResponse({
+    status: 200,
+    toolName: 'list_projects',
+    body: { result: { data: { json: [] } } },
+  });
+  expect(response.result.isError).not.toBe(true);
+  expect(getClient(null)).not.toBe(client);
+});
+
+it('bounds graceful shutdown when a real backend call remains pending', async () => {
+  const client = getClient(null);
+  let notifyRequest: () => void = () => undefined;
+  const requested = new Promise<void>((resolve) => {
+    notifyRequest = resolve;
+  });
+  const observeRequest = (request: IncomingMessage) => {
+    if (request.url?.startsWith('/api/trpc/project.list')) {
+      notifyRequest();
+    }
+  };
+  toolServer.on('request', observeRequest);
+  const pending = callToolWithHttpResponse({
+    status: 200,
+    toolName: 'list_projects',
+    body: {},
+    stallResponse: true,
+  });
+  void pending.catch(() => undefined);
+  try {
+    await withFixtureDeadline(requested, 1000, 'Stalled HTTP request was not observed');
+    await expect(closeClient(client)).rejects.toThrow('MCP graceful shutdown timed out');
+    await expect(pending).rejects.toThrow('MCP process exited before replying');
+    expect(client.child.signalCode).toBe('SIGKILL');
+    expect(client.lines.listenerCount('line')).toBe(0);
+    expect(activeCall).toBeUndefined();
+    expect(clients.has(null)).toBe(false);
+  } finally {
+    toolServer.off('request', observeRequest);
+    await discardClient(client);
+    await pending.catch(() => undefined);
+  }
+});
