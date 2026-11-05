@@ -3,7 +3,6 @@ import { createServer, type Server as HttpServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import type { Duplex } from 'node:stream';
 import { WebSocket, WebSocketServer } from 'ws';
-import { z } from 'zod';
 
 export type UpgradeHandler = (
   request: IncomingMessage,
@@ -104,7 +103,7 @@ export async function waitForWebSocketMessage(
 
     const onMessage = (data: WebSocket.RawData) => {
       try {
-        const message = z.json().parse(JSON.parse(toMessageString(data)));
+        const message: unknown = JSON.parse(toMessageString(data));
         if (!predicate(message)) {
           return;
         }
@@ -135,6 +134,9 @@ export async function waitForWebSocketMessage(
     ws.on('message', onMessage);
     ws.on('error', onError);
     ws.on('close', onClose);
+    if (ws.readyState === WebSocket.CLOSED) {
+      onClose();
+    }
   });
 }
 

@@ -91,3 +91,23 @@ it('cleans up and preserves an error thrown by the predicate', async () => {
   expect(client.listenerCount('error')).toBe(0);
   expect(client.listenerCount('close')).toBe(0);
 });
+
+it('preserves JSON.parse behavior for an overflowing numeric value', async () => {
+  const client = await connectResponder((socket) => {
+    socket.send('{"overflow":1e400}');
+  });
+  const response = waitForWebSocketMessage(client);
+  client.send(JSON.stringify({ type: 'read' }));
+  await expect(response).resolves.toEqual({ overflow: Number.POSITIVE_INFINITY });
+});
+
+it('reports closure when the socket was closed before waiting', async () => {
+  const client = await connectResponder(() => undefined);
+  await closeWebSocket(client);
+  await expect(waitForWebSocketMessage(client)).rejects.toThrow(
+    'WebSocket closed before the expected message'
+  );
+  expect(client.listenerCount('message')).toBe(0);
+  expect(client.listenerCount('error')).toBe(0);
+  expect(client.listenerCount('close')).toBe(0);
+});
