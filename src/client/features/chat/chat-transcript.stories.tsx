@@ -430,6 +430,7 @@ export const SendWhileReading: Story = {
     const viewport = canvas.getByTestId('transcript-viewport');
     const gap = () => viewport.scrollHeight - viewport.clientHeight - viewport.scrollTop;
     await waitFor(() => expect(gap()).toBeLessThanOrEqual(1));
+    viewport.dispatchEvent(new WheelEvent('wheel', { deltaY: -500 }));
     viewport.scrollTop = 0;
     viewport.dispatchEvent(new Event('scroll'));
     await canvas.findByRole('button', { name: 'Scroll to bottom' });
@@ -457,6 +458,7 @@ export const ScrollButtonOverlay: Story = {
     await waitFor(() => expect(gap()).toBeLessThanOrEqual(1));
     const height = viewport.clientHeight;
     const footerTop = footer.getBoundingClientRect().top;
+    viewport.dispatchEvent(new WheelEvent('wheel', { deltaY: -500 }));
     viewport.scrollTop = 0;
     viewport.dispatchEvent(new Event('scroll'));
     const button = await canvas.findByRole('button', { name: 'Scroll to bottom' });

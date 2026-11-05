@@ -58,7 +58,9 @@ export function observeTranscriptScroll(viewport: HTMLDivElement, controller: Co
     const clamped =
       next.max !== observed.max && Math.abs(next.top - Math.min(observed.top, next.max)) <= 1;
     observed = next;
-    if (Math.abs(delta) <= 1 || ownWrite || clamped) {
+    // Scroll events also report resize clamps, browser anchoring and virtual
+    // row corrections. Only movement during user input can change intent.
+    if (Math.abs(delta) <= 1 || ownWrite || clamped || (!timedInteraction && held.size === 0)) {
       return false;
     }
     controller.userScrolled(delta < 0 ? 'up' : 'down', Math.max(0, next.max - next.top));
@@ -95,8 +97,11 @@ export function observeTranscriptScroll(viewport: HTMLDivElement, controller: Co
   };
   const releaseTouch = () => {
     held.delete('touch');
-    if (!timedInteraction && held.size === 0) {
-      controller.endInteraction();
+    if (held.size === 0) {
+      // Touch scrolling can continue after release. Keep ownership through
+      // momentum, refreshing the idle timeout on each actual movement.
+      timedInteraction = true;
+      refresh();
     }
   };
   const releasePointer = () => {
