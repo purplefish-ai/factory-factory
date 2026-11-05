@@ -682,7 +682,14 @@ invalidate every dependent entry, including shared config, refs, info attributes
 and excludes, and reftable state. Object and reflog writes are ignored because
 the associated ref event performs the invalidation. If the shared watcher fails,
 all of its dependents switch to the five-minute fallback expiry; removing the
-last dependent closes it.
+last dependent closes it. On Linux all of these watches are nonrecursive, so
+installation never traverses dependency trees, Git objects, logs or other
+worktrees. Linux snapshots expire after five seconds even with healthy watches;
+existing snapshot readers refresh nested working-tree edits and ref changes that
+shallow watches cannot see. Watch failures retain that five-second limit on
+Linux. Other platforms retain recursive watching and the five-minute failure
+fallback. Worktree removal closes its watchers before Git or filesystem
+deletion; if deletion fails, the next snapshot read recreates them lazily.
 
 Git snapshots keep one running calculation per worktree/default-branch pair.
 Invalidation clears the cached result and fences the running generation without

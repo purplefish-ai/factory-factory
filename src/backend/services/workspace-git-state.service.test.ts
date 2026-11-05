@@ -107,7 +107,13 @@ describe('WorkspaceGitStateService', () => {
         }
       }
     };
-    service = new WorkspaceGitStateService({ runGit, now: () => now, readFile, watchPath });
+    service = new WorkspaceGitStateService({
+      runGit,
+      now: () => now,
+      readFile,
+      watchPath,
+      platform: 'darwin',
+    });
   });
 
   it('decodes base and upstream filenames without losing surrounding spaces', async () => {
@@ -327,6 +333,55 @@ describe('WorkspaceGitStateService', () => {
     expect(await service.getSnapshot(siblingInput)).not.toBe(sibling);
   });
 
+  it('uses only shallow Linux watches and expires unobserved nested edits', async () => {
+    service = new WorkspaceGitStateService({
+      runGit,
+      now: () => now,
+      readFile,
+      watchPath,
+      platform: 'linux',
+    });
+    const first = await service.getSnapshot(input);
+    const siblingInput = { worktreePath: '/repo/w2', defaultBranch: 'main' };
+    const sibling = await service.getSnapshot(siblingInput);
+
+    expect([...watchers.keys()]).toEqual([
+      '/repo/w1',
+      '/repo/.git/worktrees/w1',
+      '/repo/.git',
+      '/repo/w2',
+      '/repo/.git/worktrees/w2',
+    ]);
+    expect(watchPath.mock.calls.every(([, options]) => !options.recursive)).toBe(true);
+    now += 4999;
+    expect(service.getCachedSnapshot(input)).toBe(first);
+    now += 1;
+    expect(service.getCachedSnapshot(input)).toBeNull();
+    expect(await service.getSnapshot(input)).not.toBe(first);
+    expect(await service.getSnapshot(siblingInput)).not.toBe(sibling);
+    service.stop();
+    expect(watcherHistory.every(({ watcher }) => watcher.closeMock.mock.calls.length === 1)).toBe(
+      true
+    );
+  });
+
+  it('keeps Linux freshness bounded when watcher setup fails', async () => {
+    service = new WorkspaceGitStateService({
+      runGit,
+      now: () => now,
+      readFile,
+      watchPath,
+      platform: 'linux',
+    });
+    watchPath.mockImplementation(() => {
+      throw new Error('watch limit');
+    });
+    const first = await service.getSnapshot(input);
+    now += 5000;
+    expect(service.getCachedSnapshot(input)).toBeNull();
+    expect(await service.getSnapshot(input)).not.toBe(first);
+  });
+
   it('watches the worktree, linked gitdir, and common Git metadata directory', async () => {
     await service.getSnapshot(input);
 
@@ -534,7 +589,13 @@ describe('WorkspaceGitStateService', () => {
       }
       return Promise.reject(Object.assign(new Error('missing'), { code: 'ENOENT' }));
     });
-    service = new WorkspaceGitStateService({ runGit, now: () => now, readFile, watchPath });
+    service = new WorkspaceGitStateService({
+      runGit,
+      now: () => now,
+      readFile,
+      watchPath,
+      platform: 'darwin',
+    });
 
     const calculation = service.getSnapshot(input);
     service.remove(input.worktreePath);

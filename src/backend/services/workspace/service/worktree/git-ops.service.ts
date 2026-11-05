@@ -201,8 +201,10 @@ class GitOpsService {
       try {
         await guard?.check();
         guard?.assertCurrent();
+        workspaceGitStateService.remove(worktreePath);
         await gitClient.deleteWorktree(worktreeName);
       } catch (error) {
+        // A later snapshot read reinstalls watchers if the worktree survives.
         workspaceGitStateService.invalidate(worktreePath);
         throw error;
       }
@@ -214,8 +216,10 @@ class GitOpsService {
       try {
         await guard?.check();
         guard?.assertCurrent();
+        workspaceGitStateService.remove(worktreePath);
         await fs.rm(worktreePath, { recursive: true, force: true });
       } catch (error) {
+        // A later snapshot read reinstalls watchers if the worktree survives.
         workspaceGitStateService.invalidate(worktreePath);
         throw error;
       }
