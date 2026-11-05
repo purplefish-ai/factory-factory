@@ -1,6 +1,6 @@
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
-import { createServer } from 'node:http';
+import { createServer, type IncomingMessage } from 'node:http';
 import { tmpdir } from 'node:os';
 import { createInterface } from 'node:readline';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -19,6 +19,7 @@ type ToolResponse = z.infer<typeof toolResponseSchema>;
 type ToolOptions = {
   childWorkspacesEnabled?: boolean;
   body: unknown;
+  stallResponse?: boolean;
   linkedWorkspace?: unknown;
   status: number;
   toolName:
@@ -38,7 +39,10 @@ type ToolOptions = {
   toolArguments?: Record<string, unknown>;
 };
 
-async function callToolWithHttpResponse(options: ToolOptions): Promise<{
+async function callToolWithHttpResponse(
+  options: ToolOptions,
+  timeoutMs = 2000
+): Promise<{
   requestBody: unknown;
   requestMethod: string | undefined;
   requestUrl: string | undefined;
@@ -57,14 +61,17 @@ async function callToolWithHttpResponse(options: ToolOptions): Promise<{
     requestUrl: undefined,
   };
   activeCall = { options, capture };
+  const responseAbort = new AbortController();
+  let client: ReturnType<typeof createClient> | undefined;
   try {
-    const client = getClient(options.parentWorkspaceId ?? null);
+    const current = getClient(options.parentWorkspaceId ?? null);
+    client = current;
     const id = nextRequestId++;
     const reply = Promise.race([
-      once(client.lines, 'line'),
+      once(client.lines, 'line', { signal: responseAbort.signal }),
       client.closed.then(([code]) => {
         throw new Error(
-          `MCP process exited before replying to request ${id}: ${code}; ${client.stderr()}`
+          `MCP process exited before replying to request ${id}: ${code}; ${current.stderr()}`
         );
       }),
     ]);
@@ -83,11 +90,21 @@ async function callToolWithHttpResponse(options: ToolOptions): Promise<{
         },
       })}\n`
     );
-    const [line] = await reply;
+    const [line] = await withFixtureDeadline(
+      reply,
+      timeoutMs,
+      `MCP response timed out: ${options.toolName}, request ${id}`
+    );
     const response = toolResponseSchema.extend({ id: z.literal(id) }).parse(JSON.parse(line));
     expect(client.stderr()).toBe('');
     return { ...capture, response };
+  } catch (error) {
+    if (client) {
+      await discardClient(client);
+    }
+    throw error;
   } finally {
+    responseAbort.abort();
     activeCall = undefined;
   }
 }
@@ -138,6 +155,9 @@ const toolServer = createServer((req, res) => {
   });
   req.on('end', () => {
     capture.requestBody = rawBody ? JSON.parse(rawBody) : undefined;
+    if (options.stallResponse) {
+      return;
+    }
     res.writeHead(options.status, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify(options.body));
   });
@@ -183,25 +203,65 @@ beforeAll(async () => {
   await once(toolServer, 'listening');
 });
 
+async function withFixtureDeadline<T>(
+  task: Promise<T>,
+  timeoutMs: number,
+  message: string
+): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      task,
+      new Promise<never>((_resolve, reject) => {
+        timer = setTimeout(() => reject(new Error(message)), timeoutMs);
+      }),
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function discardClient(client: ReturnType<typeof createClient>) {
+  for (const [context, candidate] of clients) {
+    if (candidate === client) {
+      clients.delete(context);
+    }
+  }
+  client.lines.close();
+  if (client.child.exitCode === null && client.child.signalCode === null) {
+    client.child.kill('SIGKILL');
+  }
+  await withFixtureDeadline(client.closed, 1000, 'MCP process did not close after SIGKILL');
+}
+
+async function closeClient(client: ReturnType<typeof createClient>) {
+  try {
+    client.child.stdin.end();
+    const [exitCode] = await withFixtureDeadline(
+      client.closed,
+      500,
+      'MCP graceful shutdown timed out'
+    );
+    expect(exitCode).toBe(0);
+    expect(client.stderr()).toBe('');
+  } finally {
+    await discardClient(client);
+  }
+}
+
 afterAll(async () => {
   try {
-    await Promise.all(
-      [...clients.values()].map(async (client) => {
-        client.child.stdin.end();
-        const [exitCode] = await client.closed;
-        expect(exitCode).toBe(0);
-        expect(client.stderr()).toBe('');
-      })
-    );
-  } finally {
-    for (const client of clients.values()) {
-      client.lines.close();
-      if (client.child.exitCode === null) {
-        client.child.kill();
+    const outcomes = await Promise.allSettled([...clients.values()].map(closeClient));
+    for (const outcome of outcomes) {
+      if (outcome.status === 'rejected') {
+        throw outcome.reason;
       }
     }
+  } finally {
+    const closed = once(toolServer, 'close');
+    toolServer.closeAllConnections();
     toolServer.close();
-    await once(toolServer, 'close');
+    await withFixtureDeadline(closed, 500, 'MCP fixture HTTP server did not close');
   }
 });
 
@@ -758,3 +818,56 @@ it.each(['send_message_to_child', 'send_message_to_parent'] as const)(
     expect(response.result.isError).not.toBe(true);
   }
 );
+
+it('bounds an unanswered real HTTP call, closes its process, and replaces the client', async () => {
+  const client = getClient(null);
+  await expect(
+    callToolWithHttpResponse(
+      { status: 200, toolName: 'list_projects', body: {}, stallResponse: true },
+      250
+    )
+  ).rejects.toThrow('MCP response timed out: list_projects');
+  expect(client.child.signalCode).toBe('SIGKILL');
+  expect(client.lines.listenerCount('line')).toBe(0);
+  expect(activeCall).toBeUndefined();
+  expect(clients.has(null)).toBe(false);
+  const { response } = await callToolWithHttpResponse({
+    status: 200,
+    toolName: 'list_projects',
+    body: { result: { data: { json: [] } } },
+  });
+  expect(response.result.isError).not.toBe(true);
+  expect(getClient(null)).not.toBe(client);
+});
+
+it('bounds graceful shutdown when a real backend call remains pending', async () => {
+  const client = getClient(null);
+  let notifyRequest: () => void = () => undefined;
+  const requested = new Promise<void>((resolve) => {
+    notifyRequest = resolve;
+  });
+  const observeRequest = (request: IncomingMessage) => {
+    if (request.url?.startsWith('/api/trpc/project.list')) notifyRequest();
+  };
+  toolServer.on('request', observeRequest);
+  const pending = callToolWithHttpResponse({
+    status: 200,
+    toolName: 'list_projects',
+    body: {},
+    stallResponse: true,
+  });
+  void pending.catch(() => undefined);
+  try {
+    await withFixtureDeadline(requested, 1_000, 'Stalled HTTP request was not observed');
+    await expect(closeClient(client)).rejects.toThrow('MCP graceful shutdown timed out');
+    await expect(pending).rejects.toThrow('MCP process exited before replying');
+    expect(client.child.signalCode).toBe('SIGKILL');
+    expect(client.lines.listenerCount('line')).toBe(0);
+    expect(activeCall).toBeUndefined();
+    expect(clients.has(null)).toBe(false);
+  } finally {
+    toolServer.off('request', observeRequest);
+    await discardClient(client);
+    await pending.catch(() => undefined);
+  }
+});
