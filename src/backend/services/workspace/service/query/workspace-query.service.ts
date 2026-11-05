@@ -276,6 +276,15 @@ class WorkspaceQueryService {
       });
   }
 
+  /** Count the same live columns as the board without warming Git or GitHub data. */
+  async boardCountsForProject(projectId: string) {
+    const derived = await this.deriveProjectWorkspaces(projectId);
+    return {
+      working: derived.filter(({ derivedState }) => derivedState.kanbanColumn === 'WORKING').length,
+      waiting: derived.filter(({ derivedState }) => derivedState.kanbanColumn === 'WAITING').length,
+    };
+  }
+
   /**
    * The single project-scoped workspace list, shared by the sidebar and the
    * Kanban board.

@@ -11,6 +11,7 @@ function GlobalSettingsHeader() {
     projects,
     projectsError,
     refetchProjects,
+    handleProjectMenuOpen,
     handleProjectChange,
     handleCurrentProjectSelect,
   } = useProjectHeaderNavigation();
@@ -19,6 +20,7 @@ function GlobalSettingsHeader() {
       <nav aria-label="Breadcrumb" className="flex min-w-0 items-center gap-1">
         <ProjectSelectorDropdown
           selectedProjectSlug={selectedProjectSlug}
+          onMenuOpen={handleProjectMenuOpen}
           onProjectChange={handleProjectChange}
           onCurrentProjectSelect={selectedProjectSlug ? handleCurrentProjectSelect : undefined}
           projects={projects}

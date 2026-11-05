@@ -34,6 +34,7 @@ export default function NewProjectPage() {
     projects,
     projectsError,
     refetchProjects,
+    handleProjectMenuOpen,
     handleProjectChange,
     handleCurrentProjectSelect,
   } = useProjectHeaderNavigation();
@@ -331,6 +332,7 @@ export default function NewProjectPage() {
       <HeaderLeftStartSlot>
         <ProjectSelectorDropdown
           selectedProjectSlug={selectedProjectSlug}
+          onMenuOpen={handleProjectMenuOpen}
           onProjectChange={handleProjectChange}
           onCurrentProjectSelect={handleCurrentProjectSelect}
           projects={projects}

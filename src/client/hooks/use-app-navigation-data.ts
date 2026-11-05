@@ -130,7 +130,7 @@ export function useAppNavigationData() {
     data: projects,
     error: projectsError,
     refetch: refetchProjects,
-  } = trpc.project.list.useQuery({ isArchived: false });
+  } = trpc.project.list.useQuery({ isArchived: false, includeBoardCounts: true });
   const selectProjectSlug = useCallback((slug: string) => {
     setSelectedProjectSlug(slug);
     persistSelectedProjectSlug(slug);

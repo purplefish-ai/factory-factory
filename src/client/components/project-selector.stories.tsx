@@ -127,12 +127,19 @@ export const EventAgentModifiedClick: Story = {
 };
 
 export const BoardCounts: Story = {
-  args: { boardCounts: { working: 4, waiting: 2 } },
+  args: {
+    projects: [
+      { id: 'a', slug: 'alpha', name: 'Alpha', boardCounts: { working: 4, waiting: 2 } },
+      { id: 'b', slug: 'beta', name: 'Beta', boardCounts: { working: 0, waiting: 0 } },
+    ],
+  },
   play: async ({ canvasElement, args }) => {
     const canvas = within(canvasElement);
-    await expect(canvas.getByLabelText('Working 4 Waiting 2')).toBeVisible();
+    await expect(canvas.queryByLabelText('Working 4 Waiting 2')).not.toBeInTheDocument();
     await userEvent.click(canvas.getByText('Alpha', { exact: true }));
-    await expect(within(document.body).getByRole('menuitem', { name: 'Beta' })).toBeVisible();
+    await expect(within(document.body).getByRole('menuitem', { name: /Beta/ })).toBeVisible();
+    await expect(within(document.body).getByLabelText('Working 4 Waiting 2')).toBeVisible();
+    await expect(within(document.body).getByLabelText('Working 0 Waiting 0')).toBeVisible();
     await expect(args.onCurrentProjectSelect).not.toHaveBeenCalled();
   },
 };
@@ -161,7 +168,10 @@ export const PhoneNameCramped: Story = {
     await expect(within(canvasElement).getByText('Iron Fillet', { exact: true })).not.toBeVisible();
   },
 };
-export const EmptyBoard: Story = { args: { boardCounts: { working: 0, waiting: 0 } } };
+export const PhoneBoardCounts: Story = {
+  ...BoardCounts,
+  globals: { viewport: { value: 'phone', isRotated: false } },
+};
 
 export const PhoneNoSelection: Story = {
   ...PhoneNameCramped,

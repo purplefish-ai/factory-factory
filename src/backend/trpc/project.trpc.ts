@@ -2,6 +2,7 @@ import { readdirSync, readFileSync, realpathSync, statSync } from 'node:fs';
 import { writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { basename, isAbsolute, join, relative } from 'node:path';
+import pLimit from 'p-limit';
 import { z } from 'zod';
 import { ApplicationError } from '@/backend/lib/application-error';
 import { searchFilesRecursive } from '@/backend/lib/file-helpers';
@@ -133,6 +134,7 @@ export const projectRouter = router({
       z
         .object({
           isArchived: z.boolean().optional(),
+          includeBoardCounts: z.boolean().optional(),
           limit: z.number().min(1).max(100).optional(),
           offset: z.number().min(0).optional(),
         })
@@ -141,7 +143,19 @@ export const projectRouter = router({
     .query(async ({ ctx, input }) => {
       const { projectManagementService } = ctx.appContext.services;
       const projects = await projectManagementService.list(input);
-      return projects.map(toPublicProject);
+      const limit = pLimit(4);
+      return Promise.all(
+        projects.map((project) =>
+          limit(async () => {
+            const boardCounts = input?.includeBoardCounts
+              ? await ctx.appContext.services.workspaceQueryService.boardCountsForProject(
+                  project.id
+                )
+              : undefined;
+            return { ...toPublicProject(project), ...(boardCounts ? { boardCounts } : {}) };
+          })
+        )
+      );
     }),
 
   // Get project by ID

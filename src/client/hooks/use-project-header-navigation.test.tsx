@@ -15,6 +15,7 @@ const navState = vi.hoisted(() => ({
 vi.mock('@/client/hooks/use-app-navigation-data', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/client/hooks/use-app-navigation-data')>()),
   useAppNavigationDataContext: () => ({
+    projects: [{ id: 'alpha', slug: 'alpha', name: 'Alpha' }],
     selectedProjectSlug: 'alpha',
     selectProjectSlug,
     serverWorkspaces: navState.workspaces,
@@ -171,7 +172,8 @@ it.each(['primary', 'modified'])(
 );
 
 function Counts() {
-  const { boardCounts } = useProjectHeaderNavigation();
+  const { projects } = useProjectHeaderNavigation();
+  const boardCounts = projects?.find((project) => project.slug === 'alpha')?.boardCounts;
   return (
     <output>
       {boardCounts ? `Working ${boardCounts.working} Waiting ${boardCounts.waiting}` : 'Loading'}
@@ -181,7 +183,7 @@ function Counts() {
 it.each([
   ['/projects/alpha/workspaces', true, 'Working 1 Waiting 1'],
   ['/projects/alpha/workspaces', false, 'Loading'],
-  ['/projects/archived/agents', true, 'Loading'],
+  ['/projects/archived/agents', true, 'Working 1 Waiting 1'],
 ])('scopes board counts to loaded workspaces at %s (%s)', async (path, loaded, expected) => {
   navState.workspaces = loaded
     ? (['WORKING', 'WAITING', 'DONE'] as const).map((kanbanColumn, index) => ({

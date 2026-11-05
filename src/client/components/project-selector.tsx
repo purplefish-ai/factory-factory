@@ -1,6 +1,6 @@
 import { CaretRightIcon } from '@phosphor-icons/react/dist/csr/CaretRight';
 import { CaretUpDownIcon } from '@phosphor-icons/react/dist/csr/CaretUpDown';
-import { type MouseEvent, useId, useLayoutEffect, useRef, useState } from 'react';
+import { type MouseEvent, useLayoutEffect, useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router';
 import { getProjectSectionPath, getProjectSwitchPath } from '@/client/lib/project-navigation';
 import { Badge } from '@/components/ui/badge';
@@ -46,25 +46,31 @@ export function ProjectSelectorDropdown({
   triggerId = 'project-select',
   onCurrentProjectSelect,
   onRetryProjects,
-  boardCounts,
+  onMenuOpen,
   showLeadingSlash = false,
   showTrailingSlash = false,
   trailingSeparatorType = 'chevron',
 }: {
   selectedProjectSlug: string;
   onProjectChange: (value: string) => void;
-  projects: Array<{ id: string; slug: string; name: string }> | undefined;
+  projects:
+    | Array<{
+        id: string;
+        slug: string;
+        name: string;
+        boardCounts?: { working: number; waiting: number };
+      }>
+    | undefined;
   triggerClassName?: string;
   projectButtonClassName?: string;
   triggerId?: string;
   onCurrentProjectSelect?: () => void;
   onRetryProjects?: () => void;
-  boardCounts?: { working: number; waiting: number };
+  onMenuOpen?: () => void;
   showLeadingSlash?: boolean;
   showTrailingSlash?: boolean;
   trailingSeparatorType?: 'chevron' | 'slash';
 }) {
-  const countsId = useId();
   const isMobile = useIsMobile();
   const [open, setOpen] = useState(false);
   const selectedProject = projects?.find((project) => project.slug === selectedProjectSlug);
@@ -113,18 +119,21 @@ export function ProjectSelectorDropdown({
           <CaretRightIcon className="h-3.5 w-3.5" />
         </span>
       ) : null}
-      <DropdownMenu open={open} onOpenChange={setOpen}>
+      <DropdownMenu
+        open={open}
+        onOpenChange={(value) => {
+          setOpen(value);
+          if (value) {
+            onMenuOpen?.();
+          }
+        }}
+      >
         <DropdownMenuTrigger asChild>
           <button
             type="button"
             id={triggerId}
             aria-label={`Open project menu: ${selectedProjectName}`}
-            aria-describedby={boardCounts ? countsId : undefined}
-            title={
-              boardCounts
-                ? `${selectedProjectName} · Working ${boardCounts.working} · Waiting ${boardCounts.waiting}`
-                : selectedProjectName
-            }
+            title={selectedProjectName}
             className={cn(
               'flex min-w-0 items-center gap-1 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring',
               DEFAULT_PROJECT_BUTTON_CLASS,
@@ -145,32 +154,6 @@ export function ProjectSelectorDropdown({
                 </span>
               ) : null}
             </span>
-            {boardCounts ? (
-              <span
-                id={countsId}
-                role="img"
-                className="flex shrink-0 gap-1"
-                aria-label={`Working ${boardCounts.working} Waiting ${boardCounts.waiting}`}
-              >
-                <span className="sr-only">
-                  Working {boardCounts.working} Waiting {boardCounts.waiting}
-                </span>
-                <Badge
-                  aria-hidden="true"
-                  variant="secondary"
-                  className="h-5 min-w-5 px-1.5 text-xs tabular-nums"
-                >
-                  {boardCounts.working}
-                </Badge>
-                <Badge
-                  aria-hidden="true"
-                  variant="warning"
-                  className="h-5 min-w-5 px-1.5 text-xs tabular-nums"
-                >
-                  {boardCounts.waiting}
-                </Badge>
-              </span>
-            ) : null}
             <CaretUpDownIcon
               aria-hidden
               className="h-3 w-3 shrink-0 opacity-70 md:h-3.5 md:w-3.5"
@@ -199,9 +182,36 @@ export function ProjectSelectorDropdown({
                       }
                     })
                   }
-                  className="break-words"
+                  className="flex items-center gap-4"
                 >
-                  {project.name}
+                  <span data-project-name className="min-w-0 flex-1 break-words">
+                    {project.name}
+                  </span>
+                  {project.boardCounts ? (
+                    <span
+                      role="img"
+                      className="flex shrink-0 gap-1"
+                      aria-label={`Working ${project.boardCounts.working} Waiting ${project.boardCounts.waiting}`}
+                    >
+                      <span className="sr-only">
+                        Working {project.boardCounts.working} Waiting {project.boardCounts.waiting}
+                      </span>
+                      <Badge
+                        aria-hidden="true"
+                        variant="secondary"
+                        className="h-5 min-w-5 px-1.5 text-xs tabular-nums"
+                      >
+                        {project.boardCounts.working}
+                      </Badge>
+                      <Badge
+                        aria-hidden="true"
+                        variant="warning"
+                        className="h-5 min-w-5 px-1.5 text-xs tabular-nums"
+                      >
+                        {project.boardCounts.waiting}
+                      </Badge>
+                    </span>
+                  ) : null}
                 </Link>
               </DropdownMenuItem>
             );

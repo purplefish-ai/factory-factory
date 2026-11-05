@@ -18,6 +18,8 @@ const mockProjectManagementService = vi.hoisted(() => ({
   archive: vi.fn(),
 }));
 
+const mockBoardCounts = vi.hoisted(() => vi.fn());
+
 const mockGitCommandC = vi.hoisted(() => vi.fn());
 const mockEncrypt = vi.hoisted(() => vi.fn((value: string) => `enc:${value}`));
 const mockReadConfig = vi.hoisted(() => vi.fn());
@@ -81,6 +83,7 @@ function createCaller(
           clone: (...args: unknown[]) => mockCloneRepo(...args),
         },
         projectManagementService: mockProjectManagementService,
+        workspaceQueryService: { boardCountsForProject: mockBoardCounts },
         updateProjectSettings: (input: Parameters<typeof updateProjectSettings>[0]) =>
           updateProjectSettings(input, {
             validateRepoPath: mockProjectManagementService.validateRepoPath,
@@ -954,4 +957,19 @@ describe('projectRouter', () => {
       }
     );
   });
+});
+
+it('optionally includes live board counts for every listed project', async () => {
+  mockProjectManagementService.list.mockResolvedValue([
+    { id: 'p1', name: 'Alpha', issueTrackerConfig: null },
+    { id: 'p2', name: 'Beta', issueTrackerConfig: null },
+  ]);
+  mockBoardCounts.mockImplementation(async (id: string) =>
+    id === 'p1' ? { working: 3, waiting: 2 } : { working: 0, waiting: 0 }
+  );
+  const result = await createCaller().list({ includeBoardCounts: true });
+  expect(result).toMatchObject([
+    { id: 'p1', boardCounts: { working: 3, waiting: 2 } },
+    { id: 'p2', boardCounts: { working: 0, waiting: 0 } },
+  ]);
 });
