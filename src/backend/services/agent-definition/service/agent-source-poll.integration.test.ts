@@ -14,6 +14,7 @@ let fixture: Awaited<ReturnType<typeof createLedgerFixture>>;
 let feed: AgentIssueEventPage['events'];
 let calls: number[];
 let port: AgentGitHubSourcePort;
+let fixturePageSize: number;
 beforeAll(async () => {
   db = await createIntegrationDatabase();
   runtime = await vi.importActual<typeof import('../index')>('../index');
@@ -27,14 +28,16 @@ beforeEach(async () => {
   await db.prisma.agentSourceState.deleteMany();
   feed = [];
   calls = [];
+  fixturePageSize = 100;
   port = {
     getRepositoryIdentity: async () => ({ id: 'repo-1', name: 'renamed/repo' }),
     listIssueEvents: (input, signal) => {
       signal?.throwIfAborted();
+      expect(input.perPage).toBe(100);
       calls.push(input.page);
       return Promise.resolve({
-        events: feed.slice((input.page - 1) * 100, input.page * 100),
-        nextPage: input.page * 100 < feed.length ? input.page + 1 : null,
+        events: feed.slice((input.page - 1) * fixturePageSize, input.page * fixturePageSize),
+        nextPage: input.page * fixturePageSize < feed.length ? input.page + 1 : null,
       });
     },
     classifyError: () => 'auth_required',
@@ -108,50 +111,59 @@ it('orders repeated labels oldest-first after capture and verification, excludin
   expect(await db.prisma.agentEvent.count()).toBe(2);
 });
 
-it('persists ten-page budget progress across restarts, verifies before chunk finalization, and resolves a shared baseline', async () => {
+it('persists ten-page budget progress across restarts, verifies before finalization, and resolves a shared baseline', async () => {
+  // Twelve full fake pages plus a tail exceed the unchanged ten-read cycle budget.
+  fixturePageSize = 2;
+  const eventCount = 12 * fixturePageSize + 1;
   feed = [{ providerEventId: 'B', payload: null }];
   await baseline();
-  feed = [...Array.from({ length: 1205 }, (_, i) => label(`opaque-${1205 - i}`)), ...feed];
+  feed = [
+    ...Array.from({ length: eventCount }, (_, i) => label(`opaque-${eventCount - i}`)),
+    ...feed,
+  ];
   const pending = await baseline();
   expect(pending.boundary).toBeNull();
   calls = [];
   await cycle();
-  expect(calls.length).toBeLessThanOrEqual(10);
+  expect(calls).toHaveLength(10);
   expect((await state()).cursor).toMatchObject({
     committedHeadEventId: 'B',
-    scan: { fixedHeadEventId: 'opaque-1205' },
+    scan: { phase: 'CAPTURE', fixedHeadEventId: `opaque-${eventCount}` },
   });
   expect(await db.prisma.agentEvent.count({ where: { sourceOrder: { not: null } } })).toBe(0);
   for (
     let i = 0;
     i < 8 &&
     (await state()).cursor &&
-    (await db.prisma.agentEvent.count({ where: { sourceOrder: { not: null } } })) < 1205;
+    (await db.prisma.agentEvent.count({ where: { sourceOrder: { not: null } } })) < eventCount;
     i++
   ) {
     calls = [];
     await cycle();
     expect(calls.length).toBeLessThanOrEqual(10);
   }
-  expect((await state()).lastSourceOrder).toBe(1205);
+  expect((await state()).lastSourceOrder).toBe(eventCount);
   expect(await db.prisma.agentEvent.findFirst({ orderBy: { sourceOrder: 'asc' } })).toMatchObject({
     providerEventId: 'opaque-1',
     sourceOrder: 1,
   });
   expect((await service().getBaseline(fixture.connectionId, pending.id))?.boundary).toEqual({
     provider: 'GITHUB',
-    headEventId: 'opaque-1205',
-    sourceOrder: 1205,
+    headEventId: `opaque-${eventCount}`,
+    sourceOrder: eventCount,
   });
 }, 30_000);
 
 it('fails closed when an already captured interval changes during verification', async () => {
+  // Seven full pages and a tail reach VERIFY before exhausting ten reads.
+  fixturePageSize = 2;
+  const eventCount = 7 * fixturePageSize + 1;
   feed = [{ providerEventId: 'B', payload: null }];
   await baseline();
-  feed = [...Array.from({ length: 701 }, (_, i) => label(`e-${i}`)), ...feed];
+  feed = [...Array.from({ length: eventCount }, (_, i) => label(`e-${i}`)), ...feed];
   await cycle();
   expect(await state()).toMatchObject({ cursor: { scan: { phase: 'VERIFY' } } });
-  feed.splice(30, 1);
+  feed.splice(fixturePageSize - 1, 1);
   for (let i = 0; i < 4; i++) {
     await cycle();
   }
@@ -214,29 +226,36 @@ it('rejects finalization without durable verified page evidence', async () => {
 });
 
 it('finishes the fixed interval after more than a page of head insertions, then captures the newer interval', async () => {
+  fixturePageSize = 2;
+  const oldCount = 11 * fixturePageSize;
+  // More than two pages of new heads shift the in-flight interval.
+  const newCount = 2 * fixturePageSize + 1;
   feed = [{ providerEventId: 'B', payload: null }];
   await baseline();
-  feed = [...Array.from({ length: 1100 }, (_, i) => label(`old-${1100 - i}`)), ...feed];
+  feed = [...Array.from({ length: oldCount }, (_, i) => label(`old-${oldCount - i}`)), ...feed];
   await cycle();
-  feed = [...Array.from({ length: 250 }, (_, i) => label(`new-${250 - i}`)), ...feed];
-  for (let i = 0; i < 8 && (await state()).lastSourceOrder < 1100; i++) {
+  feed = [...Array.from({ length: newCount }, (_, i) => label(`new-${newCount - i}`)), ...feed];
+  for (let i = 0; i < 8 && (await state()).lastSourceOrder < oldCount; i++) {
     await cycle();
   }
   expect(await state()).toMatchObject({
-    lastSourceOrder: 1100,
-    cursor: { committedHeadEventId: 'old-1100', scan: null },
+    lastSourceOrder: oldCount,
+    cursor: { committedHeadEventId: `old-${oldCount}`, scan: null },
   });
   expect(
     await db.prisma.agentEvent.count({ where: { providerEventId: { startsWith: 'new-' } } })
   ).toBe(0);
   await cycle();
   expect(await state()).toMatchObject({
-    lastSourceOrder: 1350,
-    cursor: { committedHeadEventId: 'new-250' },
+    lastSourceOrder: oldCount + newCount,
+    cursor: { committedHeadEventId: `new-${newCount}` },
   });
 }, 30_000);
 
 it('recovers a committed finalization chunk without interleaving a newer interval', async () => {
+  // Keep the real 100-event provider pages and 1,000-event commit boundary:
+  // 1,001 executable events require both multiple scan cycles and two commits.
+  expect(fixturePageSize).toBe(100);
   feed = [{ providerEventId: 'B', payload: null }];
   await baseline();
   feed = [...Array.from({ length: 1001 }, (_, i) => label(`e-${1001 - i}`)), ...feed];
@@ -253,7 +272,9 @@ it('recovers a committed finalization chunk without interleaving a newer interva
   });
   try {
     for (let i = 0; i < 6 && !controller.signal.aborted; i++) {
+      calls = [];
       await service().pollCycle(controller.signal);
+      expect(calls.length).toBeLessThanOrEqual(10);
     }
   } finally {
     spy.mockRestore();
@@ -407,9 +428,12 @@ it.each([false, true])(
 );
 
 it('resolves a same-head baseline from its active scan while a newer head waits for the next interval', async () => {
+  // Capture seven pages plus a tail so the first cycle stops during VERIFY.
+  fixturePageSize = 2;
+  const eventCount = 7 * fixturePageSize + 1;
   feed = [{ providerEventId: 'B', payload: null }];
   await baseline();
-  feed = [...Array.from({ length: 701 }, (_, i) => label(`h-${i}`)), ...feed];
+  feed = [...Array.from({ length: eventCount }, (_, i) => label(`h-${i}`)), ...feed];
   await cycle();
   expect(await state()).toMatchObject({
     cursor: { scan: { phase: 'VERIFY', fixedHeadEventId: 'h-0', previousBoundaryEventId: 'B' } },
@@ -424,14 +448,14 @@ it('resolves a same-head baseline from its active scan while a newer head waits 
   expect((await service().getBaseline(fixture.connectionId, same.id))?.boundary).toEqual({
     provider: 'GITHUB',
     headEventId: 'h-0',
-    sourceOrder: 701,
+    sourceOrder: eventCount,
   });
   expect((await service().getBaseline(fixture.connectionId, newer.id))?.boundary).toBeNull();
   await cycle();
   expect((await service().getBaseline(fixture.connectionId, newer.id))?.boundary).toEqual({
     provider: 'GITHUB',
     headEventId: 'N',
-    sourceOrder: 702,
+    sourceOrder: eventCount + 1,
   });
 });
 
