@@ -126,7 +126,11 @@ export function applySessionCommandOutcome(
   if (!outcome) {
     return;
   }
-  for (const reply of outcome.replies) {
+  // A repeated removal or a dispatch race can leave the message already gone.
+  const replies = outcome.replies.filter(
+    (reply) => reply.type !== 'error' || reply.error.kind !== 'message_not_queued'
+  );
+  for (const reply of replies) {
     if (reply.type === 'error') {
       if (reply.error.kind === 'user_input_failed') {
         requester.send(JSON.stringify(buildUserInputRejection(reply.error)));

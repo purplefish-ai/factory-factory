@@ -4,6 +4,32 @@ import { EMPTY_CHAT_BAR_CAPABILITIES } from '@/shared/chat-capabilities';
 import { applySessionCommandOutcome } from './chat-command-adapter';
 
 describe('applySessionCommandOutcome', () => {
+  it.each([undefined, 'cancel-request'])(
+    'silently ignores stale queue errors (%s)',
+    (requestId) => {
+      const ws = { send: vi.fn() };
+      applySessionCommandOutcome(ws, {
+        replies: [{ type: 'error', error: { kind: 'message_not_queued' }, requestId }],
+      });
+      expect(ws.send).not.toHaveBeenCalled();
+    }
+  );
+
+  it('continues delivering other replies after a stale queue error', () => {
+    const ws = { send: vi.fn() };
+    applySessionCommandOutcome(ws, {
+      replies: [
+        { type: 'error', error: { kind: 'message_not_queued' } },
+        { type: 'error', error: { kind: 'session_not_found' } },
+        { type: 'chat_capabilities', capabilities: EMPTY_CHAT_BAR_CAPABILITIES },
+      ],
+    });
+    expect(ws.send.mock.calls).toEqual([
+      [JSON.stringify({ type: 'error', message: 'Session not found' })],
+      [JSON.stringify({ type: 'chat_capabilities', capabilities: EMPTY_CHAT_BAR_CAPABILITIES })],
+    ]);
+  });
+
   it.each([
     { malformed: null },
     { malformed: 17 },
@@ -179,7 +205,6 @@ describe('applySessionCommandOutcome', () => {
       { kind: 'background_monitoring_required' },
       'Disable PR updates to cancel background monitoring',
     ],
-    [{ kind: 'message_not_queued' }, 'Message not found in queue'],
     [{ kind: 'queue_input_invalid', reason: 'Missing message id' }, 'Missing message id'],
     [{ kind: 'start_failed', cause: new Error('boom') }, 'Failed to start agent: boom'],
     [{ kind: 'start_failed', cause: 42 }, 'Failed to start agent: 42'],
