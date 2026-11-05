@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react';
 import { useRef, useState } from 'react';
 import { expect, fn, userEvent, within } from 'storybook/test';
-import type { MessageAttachment } from '@/lib/chat-protocol';
+import { createEmptyTokenStats, type MessageAttachment } from '@/lib/chat-protocol';
 import { type ChatBarCapabilities, EMPTY_CHAT_BAR_CAPABILITIES } from '@/shared/chat-capabilities';
 import { ChatInput } from './chat-input/chat-input';
 
@@ -358,5 +358,37 @@ export const NativePlanningShortcut: Story = {
     await userEvent.keyboard('[AltLeft>][ShiftLeft>][KeyP][/ShiftLeft][/AltLeft]');
     await expect(args.onSetConfigOption).toHaveBeenLastCalledWith('mode', 'default');
     await expect(args.onSettingsChange).not.toHaveBeenCalled();
+  },
+};
+
+export const NarrowPhone: Story = {
+  args: {
+    onSend: onSendAction,
+    onSettingsChange: fn(),
+    capabilities: {
+      ...CLAUDE_CAPABILITIES,
+      usageStats: { enabled: true, contextWindow: true },
+    },
+    tokenStats: { ...createEmptyTokenStats(), contextUsedTokens: 76_000, contextWindow: 200_000 },
+  },
+  globals: { viewport: { value: 'phone', isRotated: false } },
+  parameters: {
+    viewport: {
+      options: { phone: { name: 'Narrow phone', styles: { width: '344px', height: '720px' } } },
+    },
+  },
+  play: async (context) => {
+    await checkCompactToolbar(context);
+    const canvas = within(context.canvasElement);
+    const options = canvas.getByRole('button', { name: 'Open chat options' });
+    const usage = canvas.getByRole('button', { name: 'Usage: 38% context' });
+    await expect(options.querySelector('span')?.getBoundingClientRect().width).toBeLessThanOrEqual(
+      1
+    );
+    await expect(usage.querySelector('span')).not.toBeVisible();
+    await userEvent.click(options);
+    await expect(
+      await within(document.body).findByRole('dialog', { name: 'Chat options' })
+    ).toBeVisible();
   },
 };

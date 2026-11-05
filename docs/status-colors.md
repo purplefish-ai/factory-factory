@@ -137,9 +137,9 @@ lint exceptions.
 ## Board controls and PR states
 
 Desktop workspace creation lives at the top of Todo, alongside the inline
-composer. Phones retain a header shortcut that reveals Todo from any tab. The
-board overflow menu offers **Sync now** for an explicit forced PR sync and
-workspace/issue refresh; normal updates remain automatic.
+composer. Phones retain a main-pane toolbar shortcut that reveals Todo from any
+tab. The board overflow menu offers **Sync now** for an explicit forced PR sync
+and workspace/issue refresh; normal updates remain automatic.
 
 Board cards keep one workspace status label. Attached PR states appear as icons
 with tooltips available on hover and keyboard focus. Each distinct state has an

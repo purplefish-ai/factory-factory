@@ -324,3 +324,12 @@ export const NarrowPhoneFamily: Story = {
     },
   },
 };
+
+export const PhoneProject: Story = {
+  args: { variant: 'project' },
+  globals: { viewport: { value: 'phone', isRotated: false } },
+};
+export const PhoneGeneric: Story = {
+  args: { variant: 'generic' },
+  globals: { viewport: { value: 'phone', isRotated: false } },
+};

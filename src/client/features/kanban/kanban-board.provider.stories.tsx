@@ -11,12 +11,14 @@ import {
   exerciseIssueRefreshRecovery,
 } from '@/client/components/project-issues-recovery.story-fixtures';
 import { STORY_TRPC_PENDING, type StoryTrpcHandlers } from '@/client/lib/storybook-trpc';
+import { useIsMobile } from '@/hooks/use-mobile';
 import { IssueProvider } from '@/shared/core/enums';
 import { KanbanBoard } from './kanban-board';
 import type { WorkspaceWithKanban } from './kanban-card';
 import { baseWorkspace } from './kanban-card.story-fixtures';
 import { KanbanProvider } from './kanban-context';
 import { KanbanControls } from './kanban-controls';
+import { KanbanToolbar } from './kanban-toolbar';
 
 /**
  * The real KanbanBoard and KanbanProvider, fed by story tRPC handlers rather
@@ -65,6 +67,17 @@ const handlers: StoryTrpcHandlers = {
   }),
 };
 
+function BoardActions() {
+  const isMobile = useIsMobile();
+  return isMobile ? (
+    <KanbanToolbar />
+  ) : (
+    <HeaderRightSlot>
+      <KanbanControls />
+    </HeaderRightSlot>
+  );
+}
+
 const meta = {
   title: 'Board/KanbanBoardWithData',
   component: KanbanBoard,
@@ -77,9 +90,7 @@ const meta = {
           <HeaderLeftStartSlot>
             <span className="shrink-0 text-sm font-semibold">Board</span>
           </HeaderLeftStartSlot>
-          <HeaderRightSlot>
-            <KanbanControls />
-          </HeaderRightSlot>
+          <BoardActions />
           <div className="h-[640px] p-4">
             <Story />
           </div>
@@ -143,6 +154,14 @@ export const Phone: Story = {
   globals: { viewport: { value: 'phone', isRotated: false } },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
+    const toolbar = canvas.getByRole('toolbar', { name: 'Board toolbar' });
+    await expect(within(toolbar).getByRole('button', { name: /^Search$/ })).toBeVisible();
+    await expect(within(toolbar).getByRole('button', { name: 'New workspace' })).toHaveTextContent(
+      'New workspace'
+    );
+    await expect(
+      canvasElement.querySelector('header')?.querySelector('[aria-label="Search"]')
+    ).toBeNull();
     // The board opens on the Waiting column.
     await expect(await canvas.findByText('Update dependencies')).toBeVisible();
     await expect(canvas.queryByText('Add authentication')).not.toBeInTheDocument();

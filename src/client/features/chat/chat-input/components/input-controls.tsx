@@ -266,7 +266,7 @@ const MobileSettingsSheet = memo(function MobileSettingsSheet({
           data-testid="chat-options-trigger"
         >
           <SlidersHorizontalIcon className="h-3.5 w-3.5" />
-          <span className="max-[359px]:sr-only">Options</span>
+          <span className="@max-[22rem]/composer:sr-only">Options</span>
         </Button>
       </SheetTrigger>
       <SheetContent
@@ -376,7 +376,7 @@ export const RightControls = memo(function RightControls({
       {pendingMessageCount > 0 && (
         <div className="flex items-center gap-1 text-xs text-muted-foreground">
           <Spinner aria-hidden="true" className="h-3 w-3" />
-          <span className="max-[359px]:sr-only">Sending…</span>
+          <span className="@max-[22rem]/composer:sr-only">Sending…</span>
         </div>
       )}
       {running && (

@@ -6,7 +6,9 @@ import { KanbanControlsView } from './kanban-controls';
 function HeaderPreview(props: Parameters<typeof KanbanControlsView>[0]) {
   return (
     <div className="flex min-h-12 items-center gap-1 border-b bg-background px-2 text-foreground">
-      <span className="min-w-0 flex-1 truncate text-sm font-semibold">Factory Factory</span>
+      <span className="min-w-0 flex-1 truncate text-sm font-semibold">
+        {props.isMobile ? 'Search' : 'Factory Factory'}
+      </span>
       <KanbanControlsView {...props} />
     </div>
   );
@@ -51,7 +53,7 @@ export const Mobile: Story = {
   globals: { viewport: { value: 'phone', isRotated: false } },
   play: async ({ canvasElement, args }) => {
     const button = within(canvasElement).getByRole('button', { name: 'New workspace' });
-    await expect(button).toHaveTextContent(/^\s*$/);
+    await expect(button).toHaveTextContent('New workspace');
     await userEvent.click(button);
     await expect(args.onNewWorkspace).toHaveBeenCalledOnce();
   },

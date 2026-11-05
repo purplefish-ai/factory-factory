@@ -124,7 +124,9 @@ export function UsageControl({
               )}
             </svg>
           )}
-          <span>{percent === null ? 'Usage' : `${Math.round(percent)}%`}</span>
+          <span className="@max-[22rem]/composer:hidden">
+            {percent === null ? 'Usage' : `${Math.round(percent)}%`}
+          </span>
           {planWarning && <span aria-hidden="true" className="h-1 w-1 rounded-full bg-warning" />}
         </Button>
       </PopoverTrigger>

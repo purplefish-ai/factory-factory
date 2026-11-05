@@ -400,8 +400,8 @@ describe('KanbanBoard', () => {
     mocks.isMobile = true;
     act(() => root.render(createElement(BoardWithHeader)));
     const mobileButton = findButton(container, 'New workspace');
-    expect(mobileButton?.textContent).toBe('');
-    expect(mobileButton?.getAttribute('aria-label')).toBe('New workspace');
+    expect(mobileButton?.textContent).toBe('New workspace');
+    expect(mobileButton).not.toBeNull();
   });
 
   it('reveals an already open form when New Workspace is pressed from another mobile tab', () => {
