@@ -1,5 +1,58 @@
-import { expect, it, vi } from 'vitest';
-import { db, h, readyRetryPRFixture } from '@/test-utils/event-generic-retry.test-support';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import {
+  createIntegrationDatabase,
+  destroyIntegrationDatabase,
+  type IntegrationDatabase,
+} from './integration-db';
+
+let db: IntegrationDatabase;
+let other: { id: string };
+let domain: typeof import('@/backend/services/session/service/session-domain.service').sessionDomainService;
+let cleanup: { db?: IntegrationDatabase; domain?: typeof domain } = {};
+beforeEach(async () => {
+  cleanup = {};
+  db = await createIntegrationDatabase();
+  cleanup.db = db;
+  const project = await db.prisma.project.create({
+    data: {
+      name: 'Cleanup fixture',
+      slug: crypto.randomUUID(),
+      repoPath: db.tempDir,
+      worktreeBasePath: db.tempDir,
+    },
+  });
+  const workspace = await db.prisma.workspace.create({
+    data: {
+      name: 'Cleanup fixture',
+      projectId: project.id,
+      status: 'READY',
+      worktreePath: db.tempDir,
+    },
+  });
+  other = await db.prisma.agentSession.create({
+    data: {
+      workspaceId: workspace.id,
+      workflow: 'ratchet',
+      provider: 'CLAUDE',
+      model: 'sonnet',
+      status: 'IDLE',
+    },
+  });
+  ({ sessionDomainService: domain } = await vi.importActual<
+    typeof import('@/backend/services/session/service/session-domain.service')
+  >('@/backend/services/session/service/session-domain.service'));
+  cleanup.domain = domain;
+});
+afterEach(async () => {
+  try {
+    cleanup.domain?.clearAllSessions();
+  } finally {
+    vi.restoreAllMocks();
+    if (cleanup.db) {
+      await destroyIntegrationDatabase(cleanup.db);
+    }
+  }
+});
 
 it.each([
   ['deleted', 1],
@@ -9,11 +62,6 @@ it.each([
 ] as const)(
   'stop cleanup keeps transient store lifetime after %s with %s viewers',
   async (outcome, viewers) => {
-    const { other } = await readyRetryPRFixture();
-    await db.prisma.agentSession.update({
-      where: { id: other.id },
-      data: { workflow: 'ratchet', providerSessionId: null },
-    });
     const { SessionRepository } = await vi.importActual<
       typeof import('@/backend/services/session/service/lifecycle/session.repository')
     >('@/backend/services/session/service/lifecycle/session.repository');
@@ -32,7 +80,6 @@ it.each([
     const { sessionEventBus } = await vi.importActual<
       typeof import('@/backend/services/session/service/session-event-bus')
     >('@/backend/services/session/service/session-event-bus');
-    const domain = h.session.sessionDomainService;
     const stores: Array<{
       registry: InstanceType<typeof SessionStoreRegistry>;
       store: ReturnType<InstanceType<typeof SessionStoreRegistry>['getOrCreate']>;
@@ -75,7 +122,9 @@ it.each([
     );
     const finalizer = new SessionWorkflowFinalizer({
       repository,
-      workspaceLookup: h.workspace.workspaceDataService,
+      workspaceLookup: {
+        findById: (id) => db.prisma.workspace.findUnique({ where: { id } }),
+      },
       sessionDomainService: domain,
       closedSessionPersistenceService: { persistClosedSession: persist },
       lifecycleEventService: { hydrate: async () => undefined },

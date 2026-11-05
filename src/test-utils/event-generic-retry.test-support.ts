@@ -3,6 +3,8 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, expect, vi } from 'vitest';
 import {
   createEventDeliveryFixture,
+  deferred,
+  waitForEventFixture,
   releaseEventBoundaries,
   drainEventFixtureTasks,
 } from '@/backend/orchestration/testing/event-delivery.test-support';
@@ -20,6 +22,7 @@ export let consumer: ReturnType<
 >;
 export let providers: ReturnType<typeof fakeEventProvider>[];
 const exitTasks = new Set<Promise<void>>();
+let providerCreated: ReturnType<typeof deferred<void>>;
 beforeEach(async () => {
   db = await createIntegrationDatabase();
   const accounts = await vi.importActual<typeof import('@/backend/services/codex-accounts')>(
@@ -54,6 +57,7 @@ beforeEach(async () => {
     return task;
   });
   providers = [];
+  providerCreated = deferred<void>();
   vi.spyOn(process, 'kill').mockImplementation(() => {
     throw new Error('No host signals');
   });
@@ -71,6 +75,7 @@ beforeEach(async () => {
       new AcpNativeSessionTracker()
     );
     providers.push(provider);
+    providerCreated.resolve();
     return Promise.resolve(provider.handle);
   });
   const { createEventRunConsumer } = await vi.importActual<
@@ -124,12 +129,13 @@ export async function context() {
 }
 export async function launch() {
   await consumer.consumeClaim(h.claim, new AbortController().signal);
-  await vi.waitFor(() => expect(providers).toHaveLength(1));
+  await waitForEventFixture(providerCreated.promise, 'retry provider creation');
+  expect(providers).toHaveLength(1);
   const provider = providers[0];
   if (!provider) {
     throw new Error('Initial provider missing');
   }
-  await provider.called;
+  await waitForEventFixture(provider.called, 'retry provider initial prompt');
 }
 export async function strictStop() {
   const groups = await vi.importActual<

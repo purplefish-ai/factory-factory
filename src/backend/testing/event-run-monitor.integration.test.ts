@@ -6,6 +6,7 @@ import {
   boundary,
   deferred,
   releaseEventBoundaries,
+  waitForEventFixture,
 } from '@/backend/orchestration/testing/event-delivery.test-support';
 import { fakeEventProvider } from '@/backend/orchestration/testing/event-provider.test-support';
 import { exportDataSchema } from '@/shared/schemas/export-data.schema';
@@ -32,6 +33,7 @@ beforeEach(async () => {
   const { AcpNativeSessionTracker } = await vi.importActual<
     typeof import('@/backend/services/session/service/acp/acp-native-session-tracker')
   >('@/backend/services/session/service/acp/acp-native-session-tracker');
+  const providerCreated = deferred<void>();
   vi.spyOn(factory.AcpClientFactory.prototype, 'createClient').mockImplementation(({ options }) => {
     provider = fakeEventProvider(
       h.session.AcpProcessHandle,
@@ -39,6 +41,7 @@ beforeEach(async () => {
       undefined,
       new AcpNativeSessionTracker()
     );
+    providerCreated.resolve();
     return Promise.resolve(provider.handle);
   });
   vi.spyOn(h.workspace.gitOpsService, 'prepareWorktreeCreation').mockImplementation(
@@ -66,21 +69,30 @@ beforeEach(async () => {
     typeof import('@/backend/orchestration/event-run-monitor.orchestrator')
   >('@/backend/orchestration/event-run-monitor.orchestrator'));
   launch = launcher.launchEventRun(h.claim, new AbortController().signal);
-  await vi.waitFor(() => expect(provider).toBeDefined());
-  await provider.called;
+  await waitForEventFixture(
+    providerCreated.promise.then(() => provider.called),
+    'monitor provider startup',
+    { settled: launch }
+  );
 }, 30_000);
 afterEach(async () => {
+  vi.useRealTimers();
   releaseEventBoundaries();
   provider?.response.resolve({ stopReason: 'end_turn' });
-  await launch;
-  await h.session.acpRuntimeManager.stopAllClients(10).catch(() => undefined);
-  h.session.sessionPromptTurnCompletionService.clearAll();
-  h.session.sessionDomainService.clearAllSessions();
-  expect(process.kill).not.toHaveBeenCalled();
-  vi.useRealTimers();
-  vi.restoreAllMocks();
-  await destroyIntegrationDatabase(db);
-  provider = undefined!;
+  try {
+    await launch;
+  } finally {
+    try {
+      await h.session.acpRuntimeManager.stopAllClients(10).catch(() => undefined);
+      h.session.sessionPromptTurnCompletionService.clearAll();
+      h.session.sessionDomainService.clearAllSessions();
+      expect(process.kill).not.toHaveBeenCalled();
+    } finally {
+      vi.restoreAllMocks();
+      await destroyIntegrationDatabase(db);
+      provider = undefined!;
+    }
+  }
 });
 const row = () => db.prisma.agentRun.findUniqueOrThrow({ where: { id: h.claim.runId } });
 async function finish() {
