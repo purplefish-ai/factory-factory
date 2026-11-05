@@ -35,8 +35,23 @@ secrets require separate administrator verification. The repository changes
 provide the release path, not the Apple account, certificate or environment
 protections. An owner must finish setup before the next desktop release.
 
+## Release source
+
+Before installing dependencies or running repository code, signed builds verify
+that the checkout matches the GitHub event commit and is an ancestor of
+`origin/main`. Signed manual builds must select the main branch. Release events
+must use a tag exactly matching `v` followed by the manifest's stable version.
+Full checkout history supplies the ancestry check. Unsigned validation can run
+on development branches without these release restrictions.
+
+Environment protection remains necessary to restrict who can approve use of the
+credentials. The source guard adds a repository-level check; it does not create
+or replace GitHub's environment review policy.
+
 ## Release verification
 
+Application compilation, Prisma generation and native-module preparation run
+without signing credentials. Only the packaging step receives the credentials.
 The release command forces code signing and hardened runtime, then requests
 notarization through the pinned Electron builder. After packaging, the workflow
 verifies each macOS app with `codesign --verify --deep --strict`, validates its
