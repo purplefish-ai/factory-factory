@@ -286,6 +286,9 @@ describe('release source ancestry', () => {
       });
     expect(run(release).status).toBe(0);
     expect(run(release, 'refs/tags/v1.2.4').status).not.toBe(0);
+    writeFileSync(join(root, 'package.json'), JSON.stringify({ version: '01.2.3' }));
+    expect(run(release, 'refs/tags/v01.2.3').status).not.toBe(0);
+    writeFileSync(join(root, 'package.json'), JSON.stringify({ version: '1.2.3' }));
     git('checkout', '-b', 'untrusted', release);
     git('commit', '--allow-empty', '-m', 'off main');
     expect(run(git('rev-parse', 'HEAD')).status).not.toBe(0);

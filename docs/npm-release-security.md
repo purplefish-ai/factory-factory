@@ -34,10 +34,11 @@ dependency review, and npm's staged approval.
 ## Account controls
 
 Workflow YAML alone cannot enforce account controls. Verify on npm that the
-trusted publisher is bound to this repository,
-`.github/workflows/npm-publish.yml`, and the `npm-publish` environment, with
-stage-only permission. Require maintainer 2FA, review all publisher identities,
-and remove unused publishing tokens only after checking their consumers.
+trusted publisher is bound to this repository, workflow filename
+`npm-publish.yml` (stored at `.github/workflows/npm-publish.yml`), and the
+`npm-publish` environment, with stage-only permission. Require maintainer 2FA,
+review all publisher identities, and remove unused publishing tokens only after
+checking their consumers.
 
 On GitHub, restrict `npm-publish` to intended branches or tags and require an
 independent reviewer. Check repository rules protect the release workflow and
