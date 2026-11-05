@@ -6,18 +6,26 @@ pmOnFail: ignore
 publicHoistPattern:
   - '@types/*'
 
-# Preserve pnpm 10's release-age policy, including same-day security updates.
-minimumReleaseAge: 0
+# Review new releases for three days; urgent fixes need an exact-version exception.
+# See docs/dependency-security.md for review and exception requirements.
+minimumReleaseAge: 4320
+minimumReleaseAgeStrict: true
+minimumReleaseAgeIgnoreMissingTime: false
+trustPolicy: no-downgrade
+# Existing releases reviewed against registry metadata, lock integrity and upstream
+# releases; dependency maintainers re-review by 2026-12-05 (see security docs).
+trustPolicyExclude:
+  - prisma@7.10.1
+  - semver@5.7.2
+  - semver@6.3.1
 
 allowBuilds:
-  '@prisma/engines': true
-  better-sqlite3: true
-  electron: true
-  esbuild: true
-  node-pty: true
-  prisma: true
-  protobufjs: true
-  sharp: true
+  '@prisma/engines@7.10.1': true
+  better-sqlite3@13.0.3: true
+  electron@45.2.1: true
+  esbuild@0.28.2: true
+  node-pty@1.1.0: true
+  prisma@7.10.1: true
   electron-winstaller: false
 
 packageExtensions:
