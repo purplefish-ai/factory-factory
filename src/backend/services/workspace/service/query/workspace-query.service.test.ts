@@ -144,6 +144,14 @@ describe('WorkspaceQueryService', () => {
       prSnapshot: mockPrSnapshotBridge,
     });
   });
+  it('counts empty boards as zero', async () => {
+    mockFindByProjectIdWithSessions.mockResolvedValue([]);
+    mockGetAllPendingRequests.mockReturnValue(new Map());
+    await expect(workspaceQueryService.boardCountsForProject('empty')).resolves.toEqual({
+      working: 0,
+      waiting: 0,
+    });
+  });
 
   it('returns the durable PR monitoring projection in collection results', async () => {
     const workspace = {
@@ -161,7 +169,14 @@ describe('WorkspaceQueryService', () => {
     mockGetAllPendingRequests.mockReturnValue(new Map());
     mockGithubCheckHealth.mockResolvedValue({ isInstalled: false, isAuthenticated: false });
     mockDeriveWorkspaceRuntimeState.mockReturnValue(defaultRuntimeState(workspace));
+    const counts = await workspaceQueryService.boardCountsForProject('p1');
+    expect(mockGithubListReviewRequests).not.toHaveBeenCalled();
+    expect(mockGetWorkspaceGitStats).not.toHaveBeenCalled();
     const result = await workspaceQueryService.listForProject('p1');
+    expect(counts).toEqual({
+      working: result.workspaces.filter((workspace) => workspace.kanbanColumn === 'WORKING').length,
+      waiting: result.workspaces.filter((workspace) => workspace.kanbanColumn === 'WAITING').length,
+    });
     expect(result.workspaces[0]).toMatchObject({
       prMonitoring: {
         enabled: true,

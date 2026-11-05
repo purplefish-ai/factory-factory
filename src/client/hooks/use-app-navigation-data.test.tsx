@@ -23,6 +23,13 @@ const mocks = vi.hoisted(() => ({
   getBySlug: vi.fn(),
   reviewQuery: vi.fn(),
   resetReviews: vi.fn(),
+  projectListQuery: vi.fn(),
+  refetchProjectList: vi.fn(async () => ({ data: [] })),
+  refetchBoardCounts: vi.fn<() => Promise<unknown>>().mockResolvedValue({ data: [] }),
+  boardCountsData: undefined as
+    | Array<{ id: string; boardCounts: { working: number; waiting: number } }>
+    | undefined,
+  boardCountsError: null as Error | null,
 }));
 const mutation = { mutate: mocks.mutate };
 vi.mock('@/client/hooks/use-project-workspace-query', () => {
@@ -52,26 +59,36 @@ vi.mock('@/client/lib/trpc', () => ({
     project: {
       getBySlug: { useQuery: mocks.getBySlug },
       list: {
-        useQuery: () => ({
-          data: [
-            {
-              id: 'alpha-id',
-              slug: 'alpha',
-              name: 'Alpha',
-              issueProvider: 'GITHUB',
-              githubOwner: 'o',
-              githubRepo: 'alpha',
-            },
-            {
-              id: 'new-id',
-              slug: 'new',
-              name: 'New',
-              issueProvider: 'GITHUB',
-              githubOwner: 'o',
-              githubRepo: 'new',
-            },
-          ],
-        }),
+        useQuery: (
+          input: { includeBoardCounts?: boolean } = {},
+          options?: { enabled?: boolean }
+        ) => {
+          mocks.projectListQuery(input, options);
+          return {
+            refetch: input.includeBoardCounts ? mocks.refetchBoardCounts : mocks.refetchProjectList,
+            error: input.includeBoardCounts ? mocks.boardCountsError : null,
+            data: input.includeBoardCounts
+              ? mocks.boardCountsData
+              : [
+                  {
+                    id: 'alpha-id',
+                    slug: 'alpha',
+                    name: 'Alpha',
+                    issueProvider: 'GITHUB',
+                    githubOwner: 'o',
+                    githubRepo: 'alpha',
+                  },
+                  {
+                    id: 'new-id',
+                    slug: 'new',
+                    name: 'New',
+                    issueProvider: 'GITHUB',
+                    githubOwner: 'o',
+                    githubRepo: 'new',
+                  },
+                ],
+          };
+        },
       },
     },
     workspace: {
@@ -91,16 +108,34 @@ import { getProjectSlugFromPath, useAppNavigationData } from './use-app-navigati
 function NavigationHarness({
   selected,
 }: {
-  selected: { selectedProjectSlug?: string; selectedProjectId?: string; reviewCount?: number };
+  selected: {
+    selectedProjectSlug?: string;
+    selectedProjectId?: string;
+    reviewCount?: number;
+    projects?: Array<{ id: string; boardCounts?: { working: number; waiting: number } }>;
+  };
 }) {
   const navigation = useAppNavigationData();
   selected.selectedProjectSlug = navigation.selectedProjectSlug;
   selected.selectedProjectId = navigation.selectedProjectId;
   selected.reviewCount = navigation.reviewCount;
-  return null;
+  selected.projects = navigation.projects;
+  return (
+    <button
+      onClick={() => {
+        void navigation.refetchProjects({ includeBoardCounts: true });
+      }}
+    >
+      Open projects
+    </button>
+  );
 }
 
 beforeEach(() => {
+  mocks.boardCountsData = undefined;
+  mocks.boardCountsError = null;
+  mocks.refetchBoardCounts.mockReset().mockResolvedValue({ data: [] });
+  mocks.refetchProjectList.mockClear();
   mocks.reviewQuery.mockReset().mockReturnValue({
     data: {
       prs: [
@@ -381,6 +416,51 @@ it('does not treat initial project metadata without an ID as a previous scope', 
     );
   } finally {
     flushSync(() => root.unmount());
+    localStorage.clear();
+  }
+});
+
+it('loads menu counts on demand and hides cached counts after a failed refresh', async () => {
+  mocks.projectListQuery.mockClear();
+  mocks.refetchBoardCounts.mockImplementation(() => {
+    mocks.boardCountsData = [{ id: 'alpha-id', boardCounts: { working: 3, waiting: 2 } }];
+    return Promise.resolve({ data: mocks.boardCountsData });
+  });
+  const selected: Parameters<typeof NavigationHarness>[0]['selected'] = {};
+  const container = document.createElement('div');
+  const root = createRoot(container);
+  const render = () =>
+    root.render(
+      <MemoryRouter>
+        <NavigationHarness selected={selected} />
+      </MemoryRouter>
+    );
+  try {
+    await act(render);
+    expect(mocks.projectListQuery).toHaveBeenCalledWith(
+      { isArchived: false, includeBoardCounts: true },
+      { enabled: false }
+    );
+    expect(mocks.refetchBoardCounts).not.toHaveBeenCalled();
+    await act(() => container.querySelector('button')?.click());
+    await act(render);
+    expect(mocks.refetchProjectList).toHaveBeenCalledOnce();
+    expect(mocks.refetchBoardCounts).toHaveBeenCalledOnce();
+    expect(selected.projects?.find((project) => project.id === 'alpha-id')?.boardCounts).toEqual({
+      working: 3,
+      waiting: 2,
+    });
+    mocks.refetchBoardCounts.mockImplementationOnce(() => {
+      mocks.boardCountsError = new Error('Counts unavailable');
+      return Promise.resolve({ isError: true });
+    });
+    await act(() => container.querySelector('button')?.click());
+    await act(render);
+    expect(
+      selected.projects?.find((project) => project.id === 'alpha-id')?.boardCounts
+    ).toBeUndefined();
+  } finally {
+    await act(() => root.unmount());
     localStorage.clear();
   }
 });

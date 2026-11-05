@@ -9,6 +9,7 @@ vi.mock('@/hooks/use-overlay-positioning', () => ({ useOverlayPositioning: () =>
 const change = vi.fn();
 const current = vi.fn();
 const retry = vi.fn();
+const menuOpen = vi.fn();
 let cleanup: (() => Promise<void>) | undefined;
 beforeEach(() => {
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
@@ -32,9 +33,10 @@ async function render(path = '/projects/alpha/reviews', open = true) {
         <ProjectSelectorDropdown
           selectedProjectSlug="alpha"
           projects={[
-            { id: 'a', slug: 'alpha', name: 'Alpha' },
-            { id: 'b', slug: 'beta', name: 'Beta' },
+            { id: 'a', slug: 'alpha', name: 'Alpha', boardCounts: { working: 3, waiting: 2 } },
+            { id: 'b', slug: 'beta', name: 'Beta', boardCounts: { working: 0, waiting: 0 } },
           ]}
+          onMenuOpen={menuOpen}
           onProjectChange={change}
           onCurrentProjectSelect={current}
           onRetryProjects={retry}
@@ -60,7 +62,9 @@ async function render(path = '/projects/alpha/reviews', open = true) {
 }
 function item(label: string) {
   const entry = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find(
-    (element) => element.textContent === label
+    (element) =>
+      element.querySelector('[data-project-name]')?.textContent === label ||
+      element.textContent === label
   );
   expect(entry, `Missing menuitem ${label}`).toBeDefined();
   return entry!;
@@ -118,4 +122,17 @@ it('opens the menu from the project name without navigating to the board', async
   });
   expect(item('Beta')).toBeDefined();
   expect(current).not.toHaveBeenCalled();
+});
+
+it('shows each project count only inside the menu, including zero counts', async () => {
+  const container = await render('/projects/alpha/reviews', false);
+  expect(container.querySelector('[data-slot="badge"]')).toBeNull();
+  await act(() =>
+    container
+      .querySelector('button')
+      ?.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }))
+  );
+  expect(menuOpen).toHaveBeenCalledOnce();
+  expect(item('Alpha').textContent).toContain('Working 3 Waiting 2');
+  expect(item('Beta').textContent).toContain('Working 0 Waiting 0');
 });

@@ -22,8 +22,8 @@ export function ProjectHeaderNavigation({
   triggerId?: string;
 }) {
   const {
-    boardCounts,
     projects,
+    handleProjectMenuOpen,
     handleProjectChange,
     handleCurrentProjectSelect,
     projectsError,
@@ -35,8 +35,8 @@ export function ProjectHeaderNavigation({
   return (
     <div className="flex min-w-0 items-center gap-1">
       <ProjectSelectorDropdown
-        boardCounts={boardCounts}
         selectedProjectSlug={project.slug}
+        onMenuOpen={handleProjectMenuOpen}
         onProjectChange={handleProjectChange}
         onCurrentProjectSelect={handleCurrentProjectSelect}
         projects={menuProjects}

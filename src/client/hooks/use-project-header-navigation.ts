@@ -13,11 +13,11 @@ export function useProjectHeaderNavigation() {
     projects,
     projectsError,
     refetchProjects,
-    selectedProjectSlug,
+    selectedProjectSlug: workspaceProjectSlug,
     selectProjectSlug,
     serverWorkspaces,
   } = useAppNavigationDataContext();
-  const currentProjectSlug = getProjectSlugFromPath(pathname) ?? selectedProjectSlug;
+  const currentProjectSlug = getProjectSlugFromPath(pathname) ?? workspaceProjectSlug;
 
   const navigateToProject = useCallback(
     (slug: string) => {
@@ -51,17 +51,28 @@ export function useProjectHeaderNavigation() {
   }, [currentProjectSlug, navigate, selectProjectSlug]);
 
   return {
-    boardCounts:
-      currentProjectSlug === selectedProjectSlug && serverWorkspaces !== undefined
-        ? {
-            working: serverWorkspaces.filter((workspace) => workspace.kanbanColumn === 'WORKING')
-              .length,
-            waiting: serverWorkspaces.filter((workspace) => workspace.kanbanColumn === 'WAITING')
-              .length,
-          }
-        : undefined,
     selectedProjectSlug: currentProjectSlug,
-    projects,
+    projects: projects?.map((project) =>
+      project.slug === workspaceProjectSlug && serverWorkspaces !== undefined
+        ? {
+            ...project,
+            boardCounts: {
+              working: serverWorkspaces.filter((workspace) => workspace.kanbanColumn === 'WORKING')
+                .length,
+              waiting: serverWorkspaces.filter((workspace) => workspace.kanbanColumn === 'WAITING')
+                .length,
+            },
+          }
+        : project
+    ),
+    handleProjectMenuOpen: () => {
+      if (!projectsError) {
+        // Query errors appear through the existing retry item, including failed refreshes.
+        void Promise.resolve(refetchProjects?.({ includeBoardCounts: true })).catch(
+          () => undefined
+        );
+      }
+    },
     projectsError,
     refetchProjects,
     handleProjectChange,
