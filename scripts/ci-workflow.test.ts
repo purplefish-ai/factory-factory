@@ -202,8 +202,12 @@ it('scopes supersession to each workflow and PR, keeping queues and schedules in
 it('installs only browser prerequisites in the compiler-free Storybook image', () => {
   const steps = ci.jobs['storybook-tests']?.steps ?? [];
   const install = steps.find((step) => step.name === 'Install browser-test dependencies');
-  expect(install?.run).toContain('pnpm install --frozen-lockfile --ignore-scripts');
-  expect(install?.run).toContain('pnpm rebuild @prisma/engines esbuild');
+  expect(install?.run?.trim()).toBe(
+    [
+      'pnpm install --frozen-lockfile --ignore-scripts --store-dir /__w/.pnpm-store',
+      'pnpm rebuild @prisma/engines esbuild',
+    ].join('\n')
+  );
   expect(steps.find((step) => step.name === 'Generate Prisma client')?.run).toBe(
     'pnpm db:generate'
   );
