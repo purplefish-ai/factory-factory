@@ -8,6 +8,7 @@ import {
   readFileSync,
   rmSync,
   statSync,
+  symlinkSync,
   writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -137,10 +138,16 @@ writeFileSync(join(process.cwd(), 'prisma', 'generated.txt'), 'unexpected genera
           localDependency ? 'node_modules' : '..',
           'node-pty',
           'prebuilds',
-          'darwin-arm64',
+          `${process.platform}-${process.arch}`,
           'spawn-helper'
         ),
       ];
+      const nativeRoot = join(helpers[0]!, '..', '..', '..');
+      mkdirSync(nativeRoot, { recursive: true });
+      writeFileSync(
+        join(nativeRoot, 'package.json'),
+        JSON.stringify({ name: 'node-pty', version: '1.1.0' })
+      );
       for (const helper of helpers) {
         mkdirSync(join(helper, '..'), { recursive: true });
         writeFileSync(helper, 'fixture helper');
@@ -153,6 +160,42 @@ writeFileSync(join(process.cwd(), 'prisma', 'generated.txt'), 'unexpected genera
       for (const helper of helpers) {
         expect(statSync(helper).mode & 0o777).toBe(0o755);
       }
+    }
+  );
+
+  it.skipIf(process.platform === 'win32')('only repairs the current platform helper', () => {
+    const packageRoot = createInstalledPackage('', false);
+    const nativeRoot = join(packageRoot, 'node_modules/node-pty');
+    mkdirSync(nativeRoot, { recursive: true });
+    writeFileSync(
+      join(nativeRoot, 'package.json'),
+      JSON.stringify({ name: 'node-pty', version: '1.1.0' })
+    );
+    const other = join(nativeRoot, 'prebuilds/unrelated-platform/spawn-helper');
+    mkdirSync(join(other, '..'), { recursive: true });
+    writeFileSync(other, 'other helper');
+    chmodSync(other, 0o644);
+    expect(runPostinstall(packageRoot).status).toBe(0);
+    expect(statSync(other).mode & 0o777).toBe(0o644);
+  });
+
+  it.skipIf(process.platform === 'win32')(
+    'does not chmod a helper symlink outside the dependency',
+    () => {
+      const packageRoot = createInstalledPackage('', false);
+      const nativeRoot = join(packageRoot, 'node_modules/node-pty');
+      const prebuild = join(nativeRoot, 'prebuilds', `${process.platform}-${process.arch}`);
+      mkdirSync(prebuild, { recursive: true });
+      writeFileSync(
+        join(nativeRoot, 'package.json'),
+        JSON.stringify({ name: 'node-pty', version: '1.1.0' })
+      );
+      const outside = join(packageRoot, 'unrelated-file');
+      writeFileSync(outside, 'unrelated');
+      chmodSync(outside, 0o600);
+      symlinkSync(outside, join(prebuild, 'spawn-helper'));
+      expect(runPostinstall(packageRoot).status).toBe(0);
+      expect(statSync(outside).mode & 0o777).toBe(0o600);
     }
   );
 });
