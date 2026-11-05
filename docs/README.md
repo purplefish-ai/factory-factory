@@ -21,6 +21,7 @@ context, not a new task or a substitute for current repository guidance.
 | Write and organize Storybook stories          | [Storybook](storybook.md)                                                                             |
 | Theme tokens and status colors                | [Status colors](status-colors.md)                                                                     |
 | Terminal palette and live appearance changes  | [Terminal theme](terminal-theme.md)                                                                   |
+| Package npm runtime dependencies              | [npm package security](npm-package-security.md)                                                       |
 | Audit vulnerabilities and dependency updates  | [Dependency security](dependency-security.md)                                                         |
 | Sign and notarize desktop releases            | [Desktop releases](desktop-releases.md)                                                               |
 | Container image integrity                     | [Distribution security](distribution-security.md)                                                     |

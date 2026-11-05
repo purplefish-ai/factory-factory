@@ -89,21 +89,85 @@ importers:
       '@anthropic-ai/claude-agent-sdk':
         specifier: 0.3.316
         version: 0.3.316(@anthropic-ai/sdk@1.3.0(zod@4.6.7))(@modelcontextprotocol/sdk@1.32.2(supports-color@10.2.2)(zod@4.6.7))(zod@4.6.7)
-      '@daypicker/react':
-        specifier: ^10.0.2
-        version: 10.0.2(@types/react@19.3.0)(react@19.3.1)
       '@linear/sdk':
         specifier: ^100.0.0
         version: 100.0.0(graphql@17.0.2)
-      '@phosphor-icons/react':
-        specifier: ^2.1.10
-        version: 2.1.10(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
       '@prisma/adapter-better-sqlite3':
         specifier: 7.10.1
         version: 7.10.1
       '@prisma/client':
         specifier: 7.10.1
         version: 7.10.1(@typescript/typescript6@6.0.2)(prisma@7.10.1(@types/node@26.6.6)(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(@typescript/typescript6@6.0.2)(better-sqlite3@13.0.3)(magicast@0.5.5)(react-dom@19.3.1(react@19.3.1))(react@19.3.1))
+      '@trpc/server':
+        specifier: ^11.22.1
+        version: 11.22.1(@typescript/typescript6@6.0.2)
+      better-sqlite3:
+        specifier: ^13.0.3
+        version: 13.0.3
+      chalk:
+        specifier: ^6.0.1
+        version: 6.0.1
+      commander:
+        specifier: ^15.0.0
+        version: 15.0.0
+      dotenv:
+        specifier: ^18.0.9
+        version: 18.0.9
+      express:
+        specifier: ^5.3.0
+        version: 5.3.0(supports-color@10.2.2)
+      node-pty:
+        specifier: ^1.1.0
+        version: 1.1.0
+      open:
+        specifier: ^11.0.4
+        version: 11.0.4
+      p-limit:
+        specifier: ^7.3.3
+        version: 7.3.3
+      pidusage:
+        specifier: ^4.1.0
+        version: 4.1.0
+      prisma:
+        specifier: 7.10.1
+        version: 7.10.1(@types/node@26.6.6)(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(@typescript/typescript6@6.0.2)(better-sqlite3@13.0.3)(magicast@0.5.5)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
+      qrcode:
+        specifier: ^1.5.4
+        version: 1.5.4
+      re2js:
+        specifier: 2.9.1
+        version: 2.9.1
+      smol-toml:
+        specifier: 1.9.1
+        version: 1.9.1
+      superjson:
+        specifier: ^2.2.6
+        version: 2.2.6
+      tree-kill:
+        specifier: ^1.2.2
+        version: 1.2.2
+      ws:
+        specifier: ^8.22.1
+        version: 8.22.1
+      zod:
+        specifier: ^4.6.7
+        version: 4.6.7
+    devDependencies:
+      '@biomejs/biome':
+        specifier: 2.6.4
+        version: 2.6.4
+      '@daypicker/react':
+        specifier: ^10.0.2
+        version: 10.0.2(@types/react@19.3.0)(react@19.3.1)
+      '@electron/rebuild':
+        specifier: ^4.2.1
+        version: 4.2.1(supports-color@10.2.2)
+      '@phosphor-icons/react':
+        specifier: ^2.1.10
+        version: 2.1.10(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
+      '@playwright/test':
+        specifier: ^1.64.1
+        version: 1.64.1
       '@radix-ui/react-alert-dialog':
         specifier: ^1.2.1
         version: 1.2.1(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
@@ -161,142 +225,6 @@ importers:
       '@radix-ui/react-tooltip':
         specifier: ^1.4.1
         version: 1.4.1(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
-      '@tanstack/react-query':
-        specifier: ^5.105.1
-        version: 5.105.1(@types/react@19.3.0)(react@19.3.1)
-      '@tanstack/react-virtual':
-        specifier: ^3.14.25
-        version: 3.14.25(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
-      '@trpc/client':
-        specifier: ^11.22.1
-        version: 11.22.1(@trpc/server@11.22.1(@typescript/typescript6@6.0.2))(@typescript/typescript6@6.0.2)
-      '@trpc/react-query':
-        specifier: ^11.22.1
-        version: 11.22.1(@tanstack/react-query@5.105.1(@types/react@19.3.0)(react@19.3.1))(@trpc/client@11.22.1(@trpc/server@11.22.1(@typescript/typescript6@6.0.2))(@typescript/typescript6@6.0.2))(@trpc/server@11.22.1(@typescript/typescript6@6.0.2))(@typescript/typescript6@6.0.2)(react@19.3.1)
-      '@trpc/server':
-        specifier: ^11.22.1
-        version: 11.22.1(@typescript/typescript6@6.0.2)
-      '@xterm/addon-fit':
-        specifier: ^0.11.0
-        version: 0.11.0
-      '@xterm/xterm':
-        specifier: ^6.0.0
-        version: 6.0.0
-      better-sqlite3:
-        specifier: ^13.0.3
-        version: 13.0.3
-      chalk:
-        specifier: ^6.0.1
-        version: 6.0.1
-      class-variance-authority:
-        specifier: ^0.7.1
-        version: 0.7.1
-      clsx:
-        specifier: ^2.1.1
-        version: 2.1.1
-      cmdk:
-        specifier: ^1.1.1
-        version: 1.1.1(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
-      commander:
-        specifier: ^15.0.0
-        version: 15.0.0
-      date-fns:
-        specifier: ^4.4.0
-        version: 4.4.0
-      dotenv:
-        specifier: ^18.0.9
-        version: 18.0.9
-      express:
-        specifier: ^5.3.0
-        version: 5.3.0(supports-color@10.2.2)
-      mermaid:
-        specifier: ^12.2.0
-        version: 12.2.0
-      node-pty:
-        specifier: ^1.1.0
-        version: 1.1.0
-      open:
-        specifier: ^11.0.4
-        version: 11.0.4
-      p-limit:
-        specifier: ^7.3.3
-        version: 7.3.3
-      pidusage:
-        specifier: ^4.1.0
-        version: 4.1.0
-      prisma:
-        specifier: 7.10.1
-        version: 7.10.1(@types/node@26.6.6)(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(@typescript/typescript6@6.0.2)(better-sqlite3@13.0.3)(magicast@0.5.5)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
-      qrcode:
-        specifier: ^1.5.4
-        version: 1.5.4
-      re2js:
-        specifier: 2.9.1
-        version: 2.9.1
-      react:
-        specifier: ^19.3.1
-        version: 19.3.1
-      react-dom:
-        specifier: ^19.3.1
-        version: 19.3.1(react@19.3.1)
-      react-markdown:
-        specifier: ^10.1.0
-        version: 10.1.0(@types/react@19.3.0)(react@19.3.1)(supports-color@10.2.2)
-      react-resizable-panels:
-        specifier: ^4.16.0
-        version: 4.16.0(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
-      react-router:
-        specifier: ^8.5.1
-        version: 8.5.1(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
-      react-syntax-highlighter:
-        specifier: ^16.1.2
-        version: 16.1.2(react@19.3.1)
-      refractor:
-        specifier: ^5.0.0
-        version: 5.0.0
-      rehype-raw:
-        specifier: ^7.0.0
-        version: 7.0.0
-      rehype-sanitize:
-        specifier: ^6.0.0
-        version: 6.0.0
-      remark-gfm:
-        specifier: ^4.0.1
-        version: 4.0.1(supports-color@10.2.2)
-      smol-toml:
-        specifier: 1.9.1
-        version: 1.9.1
-      sonner:
-        specifier: ^2.0.8
-        version: 2.0.8(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
-      streamdown:
-        specifier: 2.7.1
-        version: 2.7.1(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(supports-color@10.2.2)
-      superjson:
-        specifier: ^2.2.6
-        version: 2.2.6
-      tailwind-merge:
-        specifier: ^3.7.0
-        version: 3.7.0
-      tree-kill:
-        specifier: ^1.2.2
-        version: 1.2.2
-      ws:
-        specifier: ^8.22.1
-        version: 8.22.1
-      zod:
-        specifier: ^4.6.7
-        version: 4.6.7
-    devDependencies:
-      '@biomejs/biome':
-        specifier: 2.6.4
-        version: 2.6.4
-      '@electron/rebuild':
-        specifier: ^4.2.1
-        version: 4.2.1(supports-color@10.2.2)
-      '@playwright/test':
-        specifier: ^1.64.1
-        version: 1.64.1
       '@storybook/addon-a11y':
         specifier: 10.6.5
         version: 10.6.5(storybook@10.6.5(@types/react@19.3.0)(react@19.3.1))
@@ -321,6 +249,18 @@ importers:
       '@tailwindcss/vite':
         specifier: ^4.3.3
         version: 4.3.3(vite@8.3.5(@types/node@26.6.6)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1))
+      '@tanstack/react-query':
+        specifier: ^5.105.1
+        version: 5.105.1(@types/react@19.3.0)(react@19.3.1)
+      '@tanstack/react-virtual':
+        specifier: ^3.14.25
+        version: 3.14.25(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
+      '@trpc/client':
+        specifier: ^11.22.1
+        version: 11.22.1(@trpc/server@11.22.1(@typescript/typescript6@6.0.2))(@typescript/typescript6@6.0.2)
+      '@trpc/react-query':
+        specifier: ^11.22.1
+        version: 11.22.1(@tanstack/react-query@5.105.1(@types/react@19.3.0)(react@19.3.1))(@trpc/client@11.22.1(@trpc/server@11.22.1(@typescript/typescript6@6.0.2))(@typescript/typescript6@6.0.2))(@trpc/server@11.22.1(@typescript/typescript6@6.0.2))(@typescript/typescript6@6.0.2)(react@19.3.1)
       '@types/better-sqlite3':
         specifier: ^9.6.0
         version: 9.6.0
@@ -363,9 +303,27 @@ importers:
       '@vitest/coverage-v8':
         specifier: 5.0.5
         version: 5.0.5(@vitest/browser@5.0.5)(vitest@5.0.5)
+      '@xterm/addon-fit':
+        specifier: ^0.11.0
+        version: 0.11.0
+      '@xterm/xterm':
+        specifier: ^6.0.0
+        version: 6.0.0
+      class-variance-authority:
+        specifier: ^0.7.1
+        version: 0.7.1
+      clsx:
+        specifier: ^2.1.1
+        version: 2.1.1
+      cmdk:
+        specifier: ^1.1.1
+        version: 1.1.1(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
       concurrently:
         specifier: ^10.0.6
         version: 10.0.6
+      date-fns:
+        specifier: ^4.4.0
+        version: 4.4.0
       dependency-cruiser:
         specifier: ^18.7.0
         version: 18.7.0
@@ -387,6 +345,9 @@ importers:
       lint-staged:
         specifier: ^17.6.0
         version: 17.6.0
+      mermaid:
+        specifier: ^12.2.0
+        version: 12.2.0
       next-themes:
         specifier: ^0.4.6
         version: 0.4.6(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
@@ -402,12 +363,51 @@ importers:
       oxlint-tsgolint:
         specifier: 7.0.2005
         version: 7.0.2005
+      react:
+        specifier: ^19.3.1
+        version: 19.3.1
+      react-dom:
+        specifier: ^19.3.1
+        version: 19.3.1(react@19.3.1)
+      react-markdown:
+        specifier: ^10.1.0
+        version: 10.1.0(@types/react@19.3.0)(react@19.3.1)(supports-color@10.2.2)
+      react-resizable-panels:
+        specifier: ^4.16.0
+        version: 4.16.0(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
+      react-router:
+        specifier: ^8.5.1
+        version: 8.5.1(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
+      react-syntax-highlighter:
+        specifier: ^16.1.2
+        version: 16.1.2(react@19.3.1)
+      refractor:
+        specifier: ^5.0.0
+        version: 5.0.0
+      rehype-raw:
+        specifier: ^7.0.0
+        version: 7.0.0
+      rehype-sanitize:
+        specifier: ^6.0.0
+        version: 6.0.0
+      remark-gfm:
+        specifier: ^4.0.1
+        version: 4.0.1(supports-color@10.2.2)
+      sonner:
+        specifier: ^2.0.8
+        version: 2.0.8(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
       storybook:
         specifier: 10.6.5
         version: 10.6.5(@types/react@19.3.0)(react@19.3.1)
+      streamdown:
+        specifier: 2.7.1
+        version: 2.7.1(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(supports-color@10.2.2)
       supertest:
         specifier: ^7.3.1
         version: 7.3.1(supports-color@10.2.2)
+      tailwind-merge:
+        specifier: ^3.7.0
+        version: 3.7.0
       tailwindcss:
         specifier: ^4.3.3
         version: 4.3.3

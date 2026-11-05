@@ -16,6 +16,7 @@ const lucideClassPrefix = ['lucide', ''].join('-');
 const lucideIconType = ['Lucide', 'Icon'].join('');
 const packageJsonSchema = z.object({
   dependencies: z.record(z.string(), z.string()).optional(),
+  devDependencies: z.record(z.string(), z.string()).optional(),
 });
 const phosphorImportPattern =
   /import(?:\s+type)?\s*{([^{}]*)}\s*from\s*['"]@phosphor-icons\/react(?:\/dist\/(?:csr|lib)\/[^'"]+)?['"]/g;
@@ -233,8 +234,11 @@ describe('icon library', () => {
       JSON.parse(readFileSync(join(repositoryRoot, 'package.json'), 'utf8'))
     );
 
-    expect(packageJson.dependencies?.['@phosphor-icons/react']).toBeDefined();
+    // Icons are bundled into the browser assets, not installed by CLI consumers.
+    expect(packageJson.devDependencies?.['@phosphor-icons/react']).toBeDefined();
+    expect(packageJson.dependencies?.['@phosphor-icons/react']).toBeUndefined();
     expect(packageJson.dependencies?.[lucidePackage]).toBeUndefined();
+    expect(packageJson.devDependencies?.[lucidePackage]).toBeUndefined();
 
     const violations = sourceFiles(join(repositoryRoot, 'src'))
       .filter((path) => relative(repositoryRoot, path) !== thisFile)

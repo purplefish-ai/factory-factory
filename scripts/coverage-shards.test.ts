@@ -137,11 +137,21 @@ describe('minimal coverage toolchain', () => {
       expect(merge.dependencies[name]).toMatch(/^\d+\.\d+\.\d+$/);
     }
     expect(merge.packageManager).toBe(root.packageManager);
-    const policy = z.object({ minimumReleaseAge: z.number() });
+    const policy = z.object({
+      minimumReleaseAge: z.literal(4320),
+      minimumReleaseAgeStrict: z.literal(true),
+      minimumReleaseAgeIgnoreMissingTime: z.literal(false),
+      trustPolicy: z.literal('no-downgrade'),
+    });
+    const coveragePolicy = policy.extend({
+      minimumReleaseAgeExclude: z.never().optional(),
+      trustPolicyExclude: z.never().optional(),
+    });
     expect(
-      policy.parse(parse(readFileSync('.github/coverage-merge/pnpm-workspace.yaml', 'utf8')))
-        .minimumReleaseAge
-    ).toBe(policy.parse(parse(readFileSync('pnpm-workspace.yaml', 'utf8'))).minimumReleaseAge);
+      coveragePolicy.parse(
+        parse(readFileSync('.github/coverage-merge/pnpm-workspace.yaml', 'utf8'))
+      )
+    ).toEqual(policy.parse(parse(readFileSync('pnpm-workspace.yaml', 'utf8'))));
   });
 });
 

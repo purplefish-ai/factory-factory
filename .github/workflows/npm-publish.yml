@@ -72,10 +72,12 @@ jobs:
           set -euo pipefail
           ROOT_DIR="$PWD"
           TARBALL=$(ls factory-factory-*.tgz | head -n1)
-          TMPDIR=$(mktemp -d)
-          cd "$TMPDIR"
-          npm exec --yes --package "$ROOT_DIR/$TARBALL" -- factory-factory serve --help
-          npm exec --yes --package "$ROOT_DIR/$TARBALL" -- factory-factory db:migrate --database-path "$TMPDIR/test.db"
+          INSTALL_DIRECTORY=$(mktemp -d)
+          cd "$INSTALL_DIRECTORY"
+          # Consumer compatibility: isolate npm exec from previous installation caches.
+          npm exec --cache "$INSTALL_DIRECTORY/npm-cache" --yes --package "$ROOT_DIR/$TARBALL" -- factory-factory serve --help
+          npm exec --cache "$INSTALL_DIRECTORY/npm-cache" --yes --package "$ROOT_DIR/$TARBALL" -- factory-factory db:migrate --database-path "$INSTALL_DIRECTORY/test.db"
+          npm exec --cache "$INSTALL_DIRECTORY/npm-cache" --yes --package "$ROOT_DIR/$TARBALL" -- sh -c 'node "$1" "$(dirname "$(readlink -f "$(command -v factory-factory)")")/../../.."' -- "$ROOT_DIR/scripts/check-installed-native-runtime.mjs"
 
       - name: Publish to npm (dry run)
         if: ${{ matrix.node-version == '26.12.1' && github.event_name == 'workflow_dispatch' && github.event.inputs.dry_run == 'true' }}

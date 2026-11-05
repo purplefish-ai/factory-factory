@@ -1,0 +1,11 @@
+version: 2
+
+# Keep dependency alerts visible even if organization defaults disable them.
+# Alert severity/blocking policy is managed in Socket's dashboard; see
+# docs/dependency-security.md. Do not suppress capability alerts globally.
+githubApp:
+  enabled: true
+  pullRequestAlertsEnabled: true
+  projectReportsEnabled: true
+  dependencyOverviewEnabled: true
+  disableCommentsAndCheckRuns: false
