@@ -1,0 +1,4 @@
+# A separate, minimal installation for the serial coverage gate.
+pmOnFail: ignore
+allowBuilds:
+  esbuild: true
