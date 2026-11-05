@@ -40,6 +40,8 @@ jobs:
           fetch-depth: 0
 
       - name: Verify release source
+        # Credential-free dry runs may validate a feature branch without staging.
+        if: ${{ github.event_name == 'release' || github.event.inputs.dry_run != 'true' }}
         env:
           RELEASE_EVENT: ${{ github.event_name }}
           RELEASE_REF: ${{ github.ref }}
@@ -188,6 +190,15 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ steps.staging_run.outputs.commit }}
+          fetch-depth: 0
+
+      - name: Verify staged commit remains on main
+        env:
+          STAGED_COMMIT: ${{ steps.staging_run.outputs.commit }}
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin main
+          git merge-base --is-ancestor "$STAGED_COMMIT" FETCH_HEAD
 
       - name: Download staged npm package
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2

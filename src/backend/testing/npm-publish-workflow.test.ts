@@ -114,6 +114,9 @@ describe('npm publish workflow', () => {
     );
     expect(verifyJob.environment).toBeUndefined();
     expect(verifyJob.permissions).toEqual({ contents: 'read' });
+    expect(getStep(verifyJob, 'Verify release source').if).toBe(
+      githubExpression("github.event_name == 'release' || github.event.inputs.dry_run != 'true'")
+    );
     expectSecureNodeSetup(verifyJob);
     expect(getStep(verifyJob, 'Install npm CLI').run).toBe('npm install --global npm@11.19.0');
     const dryRunStep = getStep(verifyJob, 'Publish to npm (dry run)');
@@ -257,6 +260,7 @@ echo "commit=$COMMIT" >> "$GITHUB_OUTPUT"
     });
     expect(getStep(finalizeJob, 'Checkout staged commit').with).toEqual({
       ref: githubExpression('steps.staging_run.outputs.commit'),
+      'fetch-depth': 0,
     });
 
     const orderedSteps = [

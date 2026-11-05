@@ -41,6 +41,8 @@ jq -e --arg version "$VERSION" --arg digest "$EXPECTED_DIGEST" \
     select(.predicate.buildDefinition.externalParameters.workflow.ref == "refs/heads/main") |
     select(any(.predicate.buildDefinition.resolvedDependencies[];
       .uri == ("git+https://github.com/" + $repository + "@refs/heads/main") and .digest.gitCommit == $commit)) |
+    select(all(.predicate.buildDefinition.resolvedDependencies[];
+      .uri != ("git+https://github.com/" + $repository + "@refs/heads/main") or .digest.gitCommit == $commit)) |
     select(.predicate.runDetails.metadata.invocationId | startswith("https://github.com/" + $repository + "/actions/runs/" + $run + "/attempts/"))
   ] | length == 1
 ' <<< "$ATTESTATIONS" >/dev/null || {

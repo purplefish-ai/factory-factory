@@ -1,13 +1,16 @@
 # npm release security
 
 The npm release workflow builds and tests with the pinned pnpm version. Its npm
-CLI commands are registry publishing and customer-install compatibility steps;
-use pnpm for repository dependency maintenance.
+CLI commands cover registry publishing, artifact packing, installing the pinned
+npm CLI, and customer-install compatibility checks. Use pnpm for repository
+dependency maintenance.
 
 Before dependencies execute, the verification job checks that the release commit
-belongs to `main`. Manual runs must use `main`; release events must use the tag
-matching the manifest version. The separate staging job has OIDC permission and
-stages the tested tarball without checking out or installing application code.
+belongs to `main`. Manual staging runs must use `main`; release events must use
+the tag matching the manifest version. Credential-free dry runs may use feature
+branches, because they cannot stage or publish artifacts. The separate staging
+job has OIDC permission and stages the tested tarball without checking out or
+installing application code.
 
 After a maintainer approves the staged package on npm, finalization downloads
 the original staging artifact and checks:
@@ -18,8 +21,9 @@ the original staging artifact and checks:
   bytes.
 - npm-hosted SLSA provenance identifies the same package digest, repository,
   `main` workflow, commit, and staging run.
-- The version matches the checked-out staging commit. Existing release tags must
-  resolve to that same commit.
+- The version matches the checked-out staging commit, which must still belong to
+  current `main` history. Existing release tags must resolve to that same
+  commit.
 
 Missing or mismatched metadata fails finalization before tags or releases are
 created. These checks authenticate registry responses through HTTPS and compare

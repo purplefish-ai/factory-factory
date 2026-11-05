@@ -197,6 +197,15 @@ describe('published npm release identity', () => {
     );
     expect(item.run().status).not.toBe(0);
   });
+  it('rejects contradictory commits recorded for the same source URI', () => {
+    const item = fixture();
+    const original = item.statement.predicate.buildDefinition.resolvedDependencies[0]!;
+    item.statement.predicate.buildDefinition.resolvedDependencies.push({
+      uri: original.uri,
+      digest: { gitCommit: 'b'.repeat(40) },
+    });
+    expect(item.run().status).not.toBe(0);
+  });
   it('rejects provenance from another workflow', () => {
     const item = fixture();
     item.statement.predicate.buildDefinition.externalParameters.workflow.path =
@@ -280,5 +289,36 @@ describe('release source ancestry', () => {
     git('checkout', '-b', 'untrusted', release);
     git('commit', '--allow-empty', '-m', 'off main');
     expect(run(git('rev-parse', 'HEAD')).status).not.toBe(0);
+    const finalizerSchema = z.object({
+      jobs: z.object({
+        'finalize-release': z.object({
+          steps: z.array(
+            z.object({
+              name: z.string().optional(),
+              run: z.string().optional(),
+              with: z.object({ 'fetch-depth': z.number().optional() }).passthrough().optional(),
+            })
+          ),
+        }),
+      }),
+    });
+    const finalizer = finalizerSchema.parse(
+      parse(readFileSync(resolve('.github/workflows/npm-publish.yml'), 'utf8'))
+    ).jobs['finalize-release'];
+    const finalizerCommand = finalizer.steps.find(
+      (step) => step.name === 'Verify staged commit remains on main'
+    )?.run;
+    expect(finalizerCommand).toBeDefined();
+    expect(
+      finalizer.steps.find((step) => step.name === 'Checkout staged commit')?.with?.['fetch-depth']
+    ).toBe(0);
+    const finalize = (sha: string) =>
+      spawnSync('bash', ['-c', finalizerCommand!], {
+        cwd: root,
+        encoding: 'utf8',
+        env: { ...process.env, STAGED_COMMIT: sha },
+      });
+    expect(finalize(release).status).toBe(0);
+    expect(finalize(git('rev-parse', 'HEAD')).status).not.toBe(0);
   });
 });
