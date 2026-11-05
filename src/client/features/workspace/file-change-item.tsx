@@ -1,5 +1,4 @@
 import { FileCodeIcon } from '@phosphor-icons/react/dist/csr/FileCode';
-import { FileDashedIcon } from '@phosphor-icons/react/dist/csr/FileDashed';
 import { FileMinusIcon } from '@phosphor-icons/react/dist/csr/FileMinus';
 import { FilePlusIcon } from '@phosphor-icons/react/dist/csr/FilePlus';
 import { memo } from 'react';
@@ -43,7 +42,7 @@ function getStatusIcon(kind: FileChangeKind) {
     case 'deleted':
       return <FileMinusIcon className="h-4 w-4" />;
     case 'untracked':
-      return <FileDashedIcon className="h-4 w-4" />;
+      return <FilePlusIcon className="h-4 w-4" />;
   }
 }
 
@@ -56,7 +55,7 @@ function getStatusColorClass(kind: FileChangeKind): string {
     case 'deleted':
       return 'text-destructive';
     case 'untracked':
-      return 'text-muted-foreground';
+      return 'text-success';
   }
 }
 
@@ -71,6 +70,30 @@ function getStatusLabel(kind: FileChangeKind): string {
     case 'untracked':
       return 'Untracked';
   }
+}
+
+export function FileChangeStatus({
+  kind,
+  statusCode,
+}: {
+  kind: FileChangeKind;
+  statusCode?: string;
+}) {
+  if (!statusCode) {
+    return null;
+  }
+  return (
+    <span
+      className={cn(
+        'text-xs font-mono',
+        kind !== 'untracked' && 'uppercase',
+        getStatusColorClass(kind)
+      )}
+      title={kind === 'untracked' ? 'Untracked: new file, not staged' : getStatusLabel(kind)}
+    >
+      {kind === 'untracked' ? 'New' : statusCode}
+    </span>
+  );
 }
 
 interface FileChangeItemProps {
@@ -117,9 +140,7 @@ export const FileChangeItem = memo(function FileChangeItem({
       {showIndicatorDot && (
         <span className="h-1.5 w-1.5 rounded-full bg-info shrink-0" title={indicatorLabel} />
       )}
-      {statusCode && (
-        <span className={cn('text-xs font-mono uppercase', statusColor)}>{statusCode}</span>
-      )}
+      <FileChangeStatus kind={kind} statusCode={statusCode} />
     </FileTreeRow>
   );
 });

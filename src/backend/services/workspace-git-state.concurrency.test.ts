@@ -114,7 +114,12 @@ describe('WorkspaceGitStateService command scheduling', () => {
     }
     expectSnapshot(await snapshot);
     expect(peak).toBeLessThanOrEqual(3);
-    expect(started).toContainEqual(['--no-optional-locks', 'status', '--porcelain']);
+    expect(started).toContainEqual([
+      '--no-optional-locks',
+      'status',
+      '--porcelain',
+      '--untracked-files=all',
+    ]);
     service.stop();
   });
 

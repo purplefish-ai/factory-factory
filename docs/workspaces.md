@@ -498,3 +498,11 @@ Key tests are located at:
   and `src/backend/orchestration/snapshot-reconciliation.orchestrator.test.ts`;
 - live event propagation:
   `src/backend/orchestration/event-collector.orchestrator.test.ts`.
+
+## File change markers
+
+The **Changes** tab shows **M** for modified files, **A** for added files, **D**
+for deleted files, and **New** for untracked files (Git's `??` status). New
+files exist on disk but have not been staged with `git add`; the marker is not
+an error. Git enumerates these files using the repository's ignore rules, so
+ignored artifacts inside new directories stay out of Changes.
