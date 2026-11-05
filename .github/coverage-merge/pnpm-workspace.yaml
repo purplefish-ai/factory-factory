@@ -1,0 +1,6 @@
+# A separate, minimal installation for the serial coverage gate.
+pmOnFail: ignore
+# Match the root policy permitting same-day security updates.
+minimumReleaseAge: 0
+allowBuilds:
+  esbuild: true

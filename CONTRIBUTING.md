@@ -133,12 +133,25 @@ production and Storybook builds, story tests, and generated Prisma drift checks.
 Hooks and CI supplement the verification above; report any local skips rather
 than assuming CI ran.
 
-CI runs the full Vitest suite across two parallel shards. Each shard collects
-coverage and uploads a blob report without checking partial coverage against
-whole-suite thresholds. The required `Test` job requires both shards to pass,
-merges their reports, and enforces the normal coverage thresholds and critical
-surface checks. Local `pnpm test:coverage` still runs and checks the complete
-suite in one process.
+CI runs the full Vitest suite across exactly two parallel shards. The sequencer
+balances files using measured test, import, setup and environment durations from
+the last successful run. Both shards restore the same immutable history
+snapshot; a cold or malformed cache uses deterministic equal estimates, and new
+files use their project's median duration. History only affects assignment,
+never test selection or isolation. Each shard uploads its discovered/assigned
+file lists, measurements and coverage blob without checking partial coverage
+against whole-suite thresholds.
+
+The coverage gate requires both shards to pass, verifies every discovered test
+was assigned and reported exactly once, then merges their reports and enforces
+the normal thresholds and critical surface checks. Missing reports fail the
+gate. It installs only the pinned Vitest coverage toolchain in
+`.github/coverage-merge/`, avoiding restoration of the application's dependency
+cache. Global thresholds live in the shared `vitest.coverage.ts`; a regression
+test keeps both toolchains' Vitest and coverage versions in sync. Update both
+manifests and lockfiles when upgrading those packages. Successful coverage runs
+publish the next duration cache. Local `pnpm test:coverage` still runs and
+checks the complete suite in one process.
 
 CI selects work from the integrated PR diff. Documentation-only changes in the
 explicit prose allowlist omit application builds/tests and Storybook; backend

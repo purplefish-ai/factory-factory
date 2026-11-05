@@ -3,6 +3,7 @@ import {
   copyFileSync,
   existsSync,
   mkdtempSync,
+  mkdirSync,
   readFileSync,
   rmSync,
   writeFileSync,
@@ -42,8 +43,8 @@ function fixture(manager = packageManager) {
   return directory;
 }
 
-function run(directory: string, args: string[]) {
-  return spawnSync(binary, args, { cwd: directory, encoding: 'utf8', timeout: 15_000 });
+function run(directory: string, args: string[], env = process.env) {
+  return spawnSync(binary, args, { cwd: directory, env, encoding: 'utf8', timeout: 15_000 });
 }
 
 describe('pinned package-manager guard', () => {
@@ -94,6 +95,29 @@ describe('pinned package-manager guard', () => {
     const result = run(directory, args);
     expect(result.error).toBeUndefined();
     expect(result.status).not.toBe(0);
-    expect(result.stdout + result.stderr).toContain('Use pnpm@0.0.0');
+    expect((result.stdout + result.stderr).replace(/\s+/g, ' ')).toContain(
+      'Use pnpm@0.0.0 with its default user-agent'
+    );
   });
+});
+
+it.each([30, 80])('enforces the standalone coverage pnpm guard at CLI width %s', (width) => {
+  const directory = fixture('pnpm@0.0.0');
+  const nested = join(directory, '.github/coverage-merge');
+  mkdirSync(nested, { recursive: true });
+  writeFileSync(
+    join(nested, 'package.json'),
+    JSON.stringify({ name: 'merge-fixture', packageManager })
+  );
+  copyFileSync('.github/coverage-merge/pnpm-workspace.yaml', join(nested, 'pnpm-workspace.yaml'));
+  copyFileSync('.github/coverage-merge/.pnpmfile.mjs', join(nested, '.pnpmfile.mjs'));
+  const result = run(nested, ['install', '--lockfile-only', '--offline', '--ignore-scripts'], {
+    ...process.env,
+    COLUMNS: String(width),
+  });
+  expect(result.error).toBeUndefined();
+  expect(result.status).not.toBe(0);
+  expect((result.stdout + result.stderr).replace(/\s+/g, ' ')).toContain(
+    'Use pnpm@0.0.0 with its default user-agent'
+  );
 });

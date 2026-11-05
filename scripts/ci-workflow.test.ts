@@ -233,8 +233,17 @@ it('installs only browser prerequisites in the compiler-free Storybook image', (
   expect(steps.find((step) => step.name === 'Generate Prisma client')?.run).toBe(
     'pnpm db:generate'
   );
-  for (const worker of ['build', 'storybook', 'test-shards', 'test']) {
+  for (const worker of ['build', 'storybook', 'test-shards']) {
     const install = ci.jobs[worker]?.steps?.find((step) => step.name === 'Install dependencies');
     expect(install?.run).toBe('pnpm install --frozen-lockfile');
   }
+});
+
+it('installs only the minimal frozen coverage toolchain in the merge gate', () => {
+  const steps = ci.jobs.test?.steps ?? [];
+  expect(steps.find((step) => step.name === 'Install coverage toolchain')?.run).toBe(
+    'pnpm --dir .github/coverage-merge install --frozen-lockfile'
+  );
+  expect(steps.some((step) => step.run?.includes('pnpm install'))).toBe(false);
+  expect(steps.some((step) => step.name === 'Install dependencies')).toBe(false);
 });
