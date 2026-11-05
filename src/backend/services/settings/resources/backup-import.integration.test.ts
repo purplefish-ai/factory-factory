@@ -78,16 +78,20 @@ it('rejects missing files without creating them and uses the configured physical
   expect(await db.prisma.$queryRaw`PRAGMA journal_mode`).toEqual([{ journal_mode: 'wal' }]);
 });
 
-// A first-statement write exercises the synchronous configured 5s busy wait.
-// Public imports may instead fail immediately on a read-to-write lock upgrade.
+// Set a short busy wait only on this private test connection before its first
+// database read/write. This still exercises native contention rather than the
+// immediate failure of a read-to-write lock upgrade; the configured 5s default
+// is verified independently above and again on the fresh retry connection.
 it('bounds the actual private writer busy wait and disconnects before a fresh whole transaction', async () => {
   const holder = new Database(db.databasePath);
   holder.exec('BEGIN IMMEDIATE');
-  const started = Date.now();
+  let busyWaitStarted = 0;
   try {
     await expect(
-      dataBackupAccessor.runInTransaction((tx) =>
-        tx.project.create({
+      dataBackupAccessor.runInTransaction(async (tx) => {
+        await expect(tx.$queryRaw`PRAGMA busy_timeout = 50`).resolves.toEqual([{ timeout: 50n }]);
+        busyWaitStarted = performance.now();
+        return tx.project.create({
           data: {
             id: 'contended',
             name: 'Contended',
@@ -95,20 +99,23 @@ it('bounds the actual private writer busy wait and disconnects before a fresh wh
             repoPath: '/p',
             worktreeBasePath: '/w',
           },
-        })
-      )
+        });
+      })
     ).rejects.toMatchObject({ code: 'CONFLICT' });
-    expect(Date.now() - started).toBeGreaterThanOrEqual(4500);
-    expect(Date.now() - started).toBeLessThan(20_000);
+    expect(busyWaitStarted).toBeGreaterThan(0);
+    const busyWaitMs = performance.now() - busyWaitStarted;
+    expect(busyWaitMs).toBeGreaterThanOrEqual(25);
+    expect(busyWaitMs).toBeLessThan(5000);
   } finally {
     holder.exec('ROLLBACK');
     holder.close();
   }
   expect(await db.prisma.project.count()).toBe(0);
-  await dataBackupAccessor.runInTransaction((tx) =>
-    tx.project.create({
+  await dataBackupAccessor.runInTransaction(async (tx) => {
+    await expect(tx.$queryRaw`PRAGMA busy_timeout`).resolves.toEqual([{ timeout: 5000n }]);
+    return tx.project.create({
       data: { id: 'retry', name: 'Retry', slug: 'retry', repoPath: '/p', worktreeBasePath: '/w' },
-    })
-  );
+    });
+  });
   expect(await db.prisma.project.count()).toBe(1);
 }, 25_000);
