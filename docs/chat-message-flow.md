@@ -398,12 +398,13 @@ tail, inline tasks and subagent recovery status share the measured extent. When
 a burst or a mobile resize changes the scroll position, it preserves following.
 Only wheel, key, touch or scrollbar input can release the lock; scroll events
 without user input never change intent. Touch ownership includes momentum after
-release, ending on scrollend or 150 ms without movement. Native CSS anchoring is
-disabled on the controlled viewport. The jump button overlays the bottom of the
-viewport above the reserved thinking footer, so showing it cannot change the
-viewport's height or add a blank row above the composer. Only the button
-intercepts pointer input; the surrounding overlay allows interaction with the
-transcript beneath it.
+the last contact lifts, ending after 150 ms without movement (including tiny
+momentum steps). Touch momentum ignores scrollend because a queued event may
+belong to an older scroll operation. Native CSS anchoring is disabled on the
+controlled viewport. The jump button overlays the bottom of the viewport above
+the reserved thinking footer, so showing it cannot change the viewport's height
+or add a blank row above the composer. Only the button intercepts pointer input;
+the surrounding overlay allows interaction with the transcript beneath it.
 
 Canceled PR records remain available for recovery but do not create virtual
 rows. The empty state uses the filtered message model.

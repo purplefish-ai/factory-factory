@@ -261,7 +261,7 @@ it('ignores non-user movement even when the final extent is unchanged', () => {
   expect(h.controller.userScrolled).not.toHaveBeenCalled();
 });
 
-it('keeps touch momentum owned until scrollend or an idle timeout', () => {
+it('keeps touch momentum owned until an idle timeout despite a queued scrollend', () => {
   const h = harness();
   h.viewport.dispatchEvent(new Event('touchstart'));
   h.viewport.dispatchEvent(new Event('touchend'));
@@ -272,8 +272,97 @@ it('keeps touch momentum owned until scrollend or an idle timeout', () => {
   vi.advanceTimersByTime(100);
   expect(h.controller.endInteraction).not.toHaveBeenCalled();
   h.viewport.dispatchEvent(new Event('scrollend'));
+  expect(h.controller.endInteraction).not.toHaveBeenCalled();
+  vi.advanceTimersByTime(50);
   expect(h.controller.endInteraction).toHaveBeenCalledOnce();
   h.viewport.scrollTop = 300;
   h.viewport.dispatchEvent(new Event('scroll'));
   expect(h.controller.userScrolled).toHaveBeenCalledOnce();
+});
+
+it.each([0.5, 1])('keeps slow touch momentum alive for %s pixel steps', (step) => {
+  const h = harness();
+  h.viewport.dispatchEvent(new Event('touchstart'));
+  h.viewport.dispatchEvent(new Event('touchend'));
+  for (let index = 0; index < 4; index++) {
+    vi.advanceTimersByTime(100);
+    h.viewport.scrollTop -= step;
+    h.viewport.dispatchEvent(new Event('scroll'));
+  }
+  expect(h.controller.endInteraction).not.toHaveBeenCalled();
+  expect(h.controller.userScrolled).not.toHaveBeenCalled();
+  h.viewport.scrollTop -= 10;
+  h.viewport.dispatchEvent(new Event('scroll'));
+  expect(h.controller.userScrolled).toHaveBeenCalledExactlyOnceWith('up', 10 + 4 * step);
+  vi.advanceTimersByTime(150);
+  expect(h.controller.endInteraction).toHaveBeenCalledOnce();
+});
+
+it('ignores an older scrollend immediately after touch release', () => {
+  const h = harness();
+  h.viewport.dispatchEvent(new Event('touchstart'));
+  h.viewport.dispatchEvent(new Event('touchend'));
+  h.viewport.dispatchEvent(new Event('scrollend'));
+  vi.advanceTimersByTime(100);
+  expect(h.controller.endInteraction).not.toHaveBeenCalled();
+  h.viewport.scrollTop = 400;
+  h.viewport.dispatchEvent(new Event('scroll'));
+  expect(h.controller.userScrolled).toHaveBeenCalledExactlyOnceWith('up', 100);
+  vi.advanceTimersByTime(150);
+  expect(h.controller.endInteraction).toHaveBeenCalledOnce();
+});
+
+function contact(target: EventTarget, identifier: number): Touch {
+  return {
+    identifier,
+    target,
+    clientX: 0,
+    clientY: 0,
+    pageX: 0,
+    pageY: 0,
+    screenX: 0,
+    screenY: 0,
+    radiusX: 1,
+    radiusY: 1,
+    rotationAngle: 0,
+    force: 1,
+  };
+}
+
+it.each(['touchend', 'touchcancel'])(
+  'keeps ownership when %s leaves another contact down',
+  (type) => {
+    const h = harness();
+    const first = contact(h.viewport, 1);
+    const second = contact(h.viewport, 2);
+    h.viewport.dispatchEvent(
+      new TouchEvent('touchstart', { changedTouches: [first], touches: [first] })
+    );
+    h.viewport.dispatchEvent(
+      new TouchEvent('touchstart', { changedTouches: [second], touches: [first, second] })
+    );
+    h.viewport.dispatchEvent(new TouchEvent(type, { changedTouches: [first], touches: [second] }));
+    vi.advanceTimersByTime(500);
+    expect(h.controller.endInteraction).not.toHaveBeenCalled();
+    h.viewport.scrollTop = 400;
+    h.viewport.dispatchEvent(new Event('scroll'));
+    expect(h.controller.userScrolled).toHaveBeenCalledExactlyOnceWith('up', 100);
+    h.viewport.dispatchEvent(new TouchEvent('touchend', { changedTouches: [second], touches: [] }));
+    vi.advanceTimersByTime(150);
+    expect(h.controller.endInteraction).toHaveBeenCalledOnce();
+  }
+);
+
+it('does not wait for unrelated touches outside the viewport to lift', () => {
+  const h = harness();
+  const inside = contact(h.viewport, 1);
+  const outside = contact(document.body, 2);
+  h.viewport.dispatchEvent(
+    new TouchEvent('touchstart', { changedTouches: [inside], touches: [inside] })
+  );
+  h.viewport.dispatchEvent(
+    new TouchEvent('touchend', { changedTouches: [inside], touches: [outside] })
+  );
+  vi.advanceTimersByTime(150);
+  expect(h.controller.endInteraction).toHaveBeenCalledOnce();
 });
