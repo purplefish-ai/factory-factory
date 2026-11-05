@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { WebSocket } from 'ws';
+import { z } from 'zod';
 import type { AppContext } from '@/backend/app-context';
 import { toError } from '@/backend/lib/error-utils';
 import {
@@ -51,6 +52,13 @@ let sessionDataService: typeof import('@/backend/services/session').sessionDataS
 let terminalSessionService: typeof import('@/backend/services/terminal').terminalSessionService;
 let sessionEventBus: typeof import('@/backend/services/session').sessionEventBus;
 let snapshotReconciliationService: typeof import('@/backend/orchestration/snapshot-reconciliation.orchestrator').snapshotReconciliationService;
+
+const terminalCreatedSchema = z.object({ type: z.literal('created'), terminalId: z.string() });
+const terminalOutputSchema = z.object({
+  type: z.literal('output'),
+  terminalId: z.string(),
+  data: z.string(),
+});
 
 let counter = 0;
 const allowedOrigin = 'http://localhost:3000';
@@ -417,9 +425,14 @@ describe('websocket integration', () => {
     );
     openSockets.add(ws);
 
+    const createdMessage = waitForWebSocketMessage(
+      ws,
+      2000,
+      (message) => terminalCreatedSchema.safeParse(message).success
+    );
     ws.send(JSON.stringify({ type: 'create', cols: 100, rows: 30 }));
 
-    const created = (await waitForWebSocketMessage(ws)) as { type: string; terminalId: string };
+    const created = await createdMessage;
     expect(created).toEqual({ type: 'created', terminalId: `${workspace.id}-term-1` });
 
     expect(fakeTerminalService.createTerminal).toHaveBeenCalledWith({
@@ -434,12 +447,13 @@ describe('websocket integration', () => {
     });
     expect(terminalSession?.pid).toBe(4321);
 
+    const outputMessage = waitForWebSocketMessage(
+      ws,
+      2000,
+      (message) => terminalOutputSchema.safeParse(message).success
+    );
     fakeTerminalService.emitOutput(`${workspace.id}-term-1`, 'hello from pty');
-    const output = (await waitForWebSocketMessage(ws)) as {
-      data: string;
-      terminalId: string;
-      type: string;
-    };
+    const output = await outputMessage;
 
     expect(output).toEqual({
       type: 'output',
@@ -712,8 +726,16 @@ describe('websocket integration', () => {
     );
     openSockets.add(ws);
 
+    const createdMessage = waitForWebSocketMessage(
+      ws,
+      2000,
+      (message) => terminalCreatedSchema.safeParse(message).success
+    );
     ws.send(JSON.stringify({ type: 'create' }));
-    await waitForWebSocketMessage(ws);
+    await expect(createdMessage).resolves.toEqual({
+      type: 'created',
+      terminalId: `${workspace.id}-term-1`,
+    });
 
     const sessions = await prisma.terminalSession.findMany({
       where: { workspaceId: workspace.id },

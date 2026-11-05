@@ -3,6 +3,7 @@ import { createServer, type Server as HttpServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import type { Duplex } from 'node:stream';
 import { WebSocket, WebSocketServer } from 'ws';
+import { z } from 'zod';
 
 export type UpgradeHandler = (
   request: IncomingMessage,
@@ -90,7 +91,11 @@ export async function connectWebSocket(
   return ws;
 }
 
-export async function waitForWebSocketMessage(ws: WebSocket, timeoutMs = 2000): Promise<unknown> {
+export async function waitForWebSocketMessage(
+  ws: WebSocket,
+  timeoutMs = 2000,
+  predicate: (message: unknown) => boolean = () => true
+): Promise<unknown> {
   return await new Promise((resolve, reject) => {
     const timer = setTimeout(() => {
       cleanup();
@@ -98,10 +103,15 @@ export async function waitForWebSocketMessage(ws: WebSocket, timeoutMs = 2000): 
     }, timeoutMs);
 
     const onMessage = (data: WebSocket.RawData) => {
-      cleanup();
       try {
-        resolve(JSON.parse(toMessageString(data)));
+        const message = z.json().parse(JSON.parse(toMessageString(data)));
+        if (!predicate(message)) {
+          return;
+        }
+        cleanup();
+        resolve(message);
       } catch (error) {
+        cleanup();
         reject(error);
       }
     };
@@ -110,15 +120,21 @@ export async function waitForWebSocketMessage(ws: WebSocket, timeoutMs = 2000): 
       cleanup();
       reject(error);
     };
+    const onClose = () => {
+      cleanup();
+      reject(new Error('WebSocket closed before the expected message'));
+    };
 
     const cleanup = () => {
       clearTimeout(timer);
       ws.off('message', onMessage);
       ws.off('error', onError);
+      ws.off('close', onClose);
     };
 
     ws.on('message', onMessage);
     ws.on('error', onError);
+    ws.on('close', onClose);
   });
 }
 
