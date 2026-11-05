@@ -1,18 +1,24 @@
 import { z } from 'zod';
 
-const duration = z.number().finite().positive().max(3_600_000);
+export const TIMING_FORMAT_VERSION = 1;
+export const MAX_RECORDED_DURATION_MS = 3_600_000;
+const duration = z.number().finite().positive().max(MAX_RECORDED_DURATION_MS);
 const historySchema = z.object({
-  version: z.literal(1),
+  version: z.literal(TIMING_FORMAT_VERSION),
   durations: z.record(z.string(), duration),
 });
 const reportSchema = z.object({
-  version: z.literal(1),
+  version: z.literal(TIMING_FORMAT_VERSION),
   shard: z.union([z.literal(1), z.literal(2)]),
   all: z.array(z.string()),
   assigned: z.array(z.string()),
   passed: z.literal(true),
   tests: z.array(z.object({ id: z.string(), duration })),
 });
+
+export function createHistorySnapshot(durations: Record<string, number>) {
+  return historySchema.parse({ version: TIMING_FORMAT_VERSION, durations });
+}
 
 export function parseHistory(raw: string): Record<string, number> {
   try {
@@ -53,7 +59,15 @@ export function balanceTests(ids: string[], history: Record<string, number>): [s
       .map((other) => history[other])
       .filter((value): value is number => value !== undefined)
       .sort((a, b) => a - b);
-    estimates.set(project, values[Math.floor(values.length / 2)] ?? 1000);
+    const middle = Math.floor(values.length / 2);
+    const upper = values[middle];
+    const median =
+      upper === undefined
+        ? 1000
+        : values.length % 2 === 0
+          ? ((values[middle - 1] ?? upper) + upper) / 2
+          : upper;
+    estimates.set(project, median);
   }
   const weight = (id: string) => history[id] ?? estimates.get(id.split(':')[0] ?? '') ?? 1000;
   const sorted = [...ids].sort((a, b) => weight(b) - weight(a) || (a < b ? -1 : a > b ? 1 : 0));

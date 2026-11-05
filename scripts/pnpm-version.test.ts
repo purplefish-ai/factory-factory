@@ -3,6 +3,7 @@ import {
   copyFileSync,
   existsSync,
   mkdtempSync,
+  mkdirSync,
   readFileSync,
   rmSync,
   writeFileSync,
@@ -96,4 +97,20 @@ describe('pinned package-manager guard', () => {
     expect(result.status).not.toBe(0);
     expect(result.stdout + result.stderr).toContain('Use pnpm@0.0.0');
   });
+});
+
+it('enforces the root pnpm guard for standalone coverage toolchain installs', () => {
+  const directory = fixture('pnpm@0.0.0');
+  const nested = join(directory, '.github/coverage-merge');
+  mkdirSync(nested, { recursive: true });
+  writeFileSync(
+    join(nested, 'package.json'),
+    JSON.stringify({ name: 'merge-fixture', packageManager })
+  );
+  copyFileSync('.github/coverage-merge/pnpm-workspace.yaml', join(nested, 'pnpm-workspace.yaml'));
+  copyFileSync('.github/coverage-merge/.pnpmfile.mjs', join(nested, '.pnpmfile.mjs'));
+  const result = run(nested, ['install', '--lockfile-only', '--offline', '--ignore-scripts']);
+  expect(result.error).toBeUndefined();
+  expect(result.status).not.toBe(0);
+  expect(result.stdout + result.stderr).toContain('Use pnpm@0.0.0');
 });

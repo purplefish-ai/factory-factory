@@ -7,20 +7,34 @@ export function testId(root: string, project: string, moduleId: string): string 
   return `${project}:${path.relative(root, moduleId).replaceAll('\\', '/')}`;
 }
 
+export async function readDurationHistory(
+  filePath: string,
+  warn: (message: string) => void
+): Promise<Record<string, number>> {
+  try {
+    return parseHistory(await readFile(filePath, 'utf8'));
+  } catch (error) {
+    // History is an optional optimization. An unexpected read failure stays
+    // observable without aborting a complete deterministic test assignment.
+    if (!(error instanceof Error && 'code' in error && error.code === 'ENOENT')) {
+      warn(
+        `[coverage] Cannot read duration history; using deterministic estimates: ${error instanceof Error ? error.message : String(error)}`
+      );
+    }
+    return {};
+  }
+}
+
 export default class CoverageSequencer extends BaseSequencer {
   override async shard(files: TestSpecification[]): Promise<TestSpecification[]> {
     const { root, shard } = this.ctx.config;
     if (shard?.count !== 2) {
       throw new Error('Coverage CI requires exactly two shards');
     }
-    let history: Record<string, number> = {};
-    try {
-      history = parseHistory(
-        await readFile(path.join(root, '.vitest/timings-history.json'), 'utf8')
-      );
-    } catch {
-      // Cold caches are expected; discovery still assigns every test exactly once.
-    }
+    const history = await readDurationHistory(
+      path.join(root, '.vitest/timings-history.json'),
+      (message) => this.ctx.logger.warn(message)
+    );
     const id = (file: TestSpecification) => testId(root, file.project.name, file.moduleId);
     const all = files.map(id);
     const assignments = balanceTests(all, history);

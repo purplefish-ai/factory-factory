@@ -5,7 +5,12 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { parse } from 'yaml';
 import { z } from 'zod';
-import { balanceTests, parseHistory, validateReports } from '../.github/coverage-merge/timings';
+import {
+  balanceTests,
+  createHistorySnapshot,
+  parseHistory,
+  validateReports,
+} from '../.github/coverage-merge/timings';
 
 const ids = ['isolated:a', 'isolated:b', 'frontend:c', 'shared:d', 'isolated:new'];
 const history = { 'isolated:a': 100, 'isolated:b': 90, 'frontend:c': 30, 'shared:d': 20 };
@@ -37,6 +42,23 @@ describe('coverage shard assignment', () => {
     expect(balanceTests(ids, history)).toEqual(balanceTests([...ids].reverse(), history));
     expect(balanceTests(ids, {})).toEqual(balanceTests([...ids].reverse(), {}));
     expect(balanceTests(ids, history).flat().sort()).toEqual([...ids].sort());
+  });
+
+  it('estimates new files using the ordinary even and odd project medians', () => {
+    const even = { 'p:a': 10, 'p:b': 10, 'p:c': 20, 'p:d': 40 };
+    const selected = [...Object.keys(even), 'p:new'];
+    expect(balanceTests(selected, even)).toEqual([
+      ['p:d', 'p:b'],
+      ['p:c', 'p:new', 'p:a'],
+    ]);
+    const odd = { 'p:a': 10, 'p:b': 30, 'p:c': 70 };
+    const oddIds = [...Object.keys(odd), 'p:new'];
+    expect(balanceTests(oddIds, odd)).toEqual(balanceTests(oddIds, { ...odd, 'p:new': 30 }));
+  });
+
+  it('round trips snapshots through the shared history schema', () => {
+    const durations = { 'p:test.ts': 12.5 };
+    expect(parseHistory(JSON.stringify(createHistorySnapshot(durations)))).toEqual(durations);
   });
 
   it('rejects duplicate discovered tests', () => {
@@ -115,6 +137,11 @@ describe('minimal coverage toolchain', () => {
       expect(merge.dependencies[name]).toMatch(/^\d+\.\d+\.\d+$/);
     }
     expect(merge.packageManager).toBe(root.packageManager);
+    const policy = z.object({ minimumReleaseAge: z.number() });
+    expect(
+      policy.parse(parse(readFileSync('.github/coverage-merge/pnpm-workspace.yaml', 'utf8')))
+        .minimumReleaseAge
+    ).toBe(policy.parse(parse(readFileSync('pnpm-workspace.yaml', 'utf8'))).minimumReleaseAge);
   });
 });
 
