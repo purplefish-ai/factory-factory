@@ -75,6 +75,7 @@ and this project adheres to
 - Add staged unused-code and production reachability checks, organize Storybook
   titles, and render every Storybook story in CI (#2922, #2925, #2944, #2950)
 - Keep workspace archiving in the overflow menu at every screen width (#3037)
+- Hide failure indicators in collapsed command groups (#3041)
 - Reduce repeated test setup and process launches with migrated SQLite
   templates, narrower fixtures, reusable MCP processes, and isolated browser VM
   workers; tighten pagination, contention, and terminal-event test handling
@@ -115,6 +116,9 @@ and this project adheres to
   #3036)
 - Suppress stale queued-message removal errors caused by repeated clicks or
   queue dispatch races (#3038)
+- Stabilize mobile headers, Board navigation, and compact chat controls (#3039)
+- Preserve previously granted merge authorization in PR-event prompts, including
+  after CI recovers (#3040)
 
 ## [0.5.3] - 2026-11-03
 
