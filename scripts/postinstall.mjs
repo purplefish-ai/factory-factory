@@ -9,9 +9,9 @@
  */
 
 import { execFileSync } from 'node:child_process';
-import { existsSync, chmodSync, readdirSync } from 'node:fs';
+import { existsSync, chmodSync, lstatSync, realpathSync } from 'node:fs';
 import { createRequire } from 'node:module';
-import { join, dirname } from 'node:path';
+import { join, dirname, relative, isAbsolute, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -38,58 +38,24 @@ if (isSourceCheckout && existsSync(schemaPath)) {
   }
 }
 
-// Fix node-pty spawn-helper permissions (Unix only)
-// This handles both local node_modules and npx cache installations
+// node-pty 1.1.0 publishes Darwin helpers without executable permission.
+// Resolve the actual dependency rather than searching unrelated ancestor trees.
 if (process.platform !== 'win32') {
-  /**
-   * Fix spawn-helper permissions in a given prebuilds directory
-   */
-  function fixSpawnHelperPermissions(prebuildsDir) {
-    if (!existsSync(prebuildsDir)) {
-      return false;
-    }
-
-    let fixed = false;
-    for (const platform of readdirSync(prebuildsDir)) {
-      const spawnHelper = join(prebuildsDir, platform, 'spawn-helper');
-      if (existsSync(spawnHelper)) {
-        try {
-          chmodSync(spawnHelper, 0o755);
-          fixed = true;
-        } catch {
-          // Ignore permission errors
-        }
-      }
-    }
-    return fixed;
-  }
-
-  // 1. Fix in local node_modules (standard install)
   try {
-    const localPrebuilds = join(projectRoot, 'node_modules', 'node-pty', 'prebuilds');
-    fixSpawnHelperPermissions(localPrebuilds);
-  } catch {
-    // Ignore if node-pty doesn't exist locally
-  }
-
-  // 2. Fix in the directory where this script is running from (npx case)
-  // When run via npx, the module is in a different location
-  try {
-    // Walk up from __dirname to find node_modules/node-pty
-    let searchDir = __dirname;
-    for (let i = 0; i < 10; i++) {
-      const candidate = join(searchDir, 'node_modules', 'node-pty', 'prebuilds');
-      if (existsSync(candidate)) {
-        fixSpawnHelperPermissions(candidate);
-        break;
+    const nativeRoot = realpathSync(dirname(require.resolve('node-pty/package.json')));
+    const helper = join(
+      nativeRoot,
+      'prebuilds',
+      `${process.platform}-${process.arch}`,
+      'spawn-helper'
+    );
+    if (lstatSync(helper).isFile()) {
+      const location = relative(nativeRoot, realpathSync(helper));
+      if (location !== '..' && !location.startsWith(`..${sep}`) && !isAbsolute(location)) {
+        chmodSync(helper, 0o755);
       }
-      const parent = dirname(searchDir);
-      if (parent === searchDir) {
-        break;
-      }
-      searchDir = parent;
     }
   } catch {
-    // Ignore errors
+    // No prebuilt helper on this platform, or the installation is read-only.
   }
 }
