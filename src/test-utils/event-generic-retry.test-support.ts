@@ -6,6 +6,7 @@ import {
   waitForEventFixture,
   releaseEventBoundaries,
   drainEventFixtureTasks,
+  trackEventFixtureTask,
 } from '@/backend/orchestration/testing/event-delivery.test-support';
 import {
   eventProviderCollection,
@@ -79,6 +80,15 @@ beforeEach(async () => {
     collection.add(provider);
     return Promise.resolve(provider.handle);
   });
+  // Production bridges fire PR wakes without awaiting them on session idle.
+  // Preserve those real operations, but own their lifetime through DB teardown.
+  const delivery = await vi.importActual<
+    typeof import('@/backend/orchestration/pr-event-delivery.orchestrator')
+  >('@/backend/orchestration/pr-event-delivery.orchestrator');
+  const wake = delivery.wakePRDelivery;
+  vi.spyOn(delivery, 'wakePRDelivery').mockImplementation((...args) =>
+    trackEventFixtureTask(wake(...args))
+  );
   const { createEventRunConsumer } = await vi.importActual<
     typeof import('@/backend/orchestration/event-run-consumer.orchestrator')
   >('@/backend/orchestration/event-run-consumer.orchestrator');
@@ -99,9 +109,10 @@ afterEach(async () => {
       async () => {
         await h.session.acpRuntimeManager.stopAllClients(10);
         await new Promise<void>((resolve) => setImmediate(resolve));
-        while (exitTasks.size > 0) {
+        do {
           await Promise.allSettled([...exitTasks]);
-        }
+          await drainEventFixtureTasks();
+        } while (exitTasks.size > 0);
       }
     );
     h.session.sessionPromptTurnCompletionService.clearAll();
