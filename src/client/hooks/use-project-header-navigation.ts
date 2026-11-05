@@ -9,8 +9,14 @@ import { getProjectSectionPath, getProjectSwitchPath } from '@/client/lib/projec
 export function useProjectHeaderNavigation() {
   const { pathname, search } = useLocation();
   const navigate = useNavigate();
-  const { projects, projectsError, refetchProjects, selectedProjectSlug, selectProjectSlug } =
-    useAppNavigationDataContext();
+  const {
+    projects,
+    projectsError,
+    refetchProjects,
+    selectedProjectSlug,
+    selectProjectSlug,
+    serverWorkspaces,
+  } = useAppNavigationDataContext();
   const currentProjectSlug = getProjectSlugFromPath(pathname) ?? selectedProjectSlug;
 
   const navigateToProject = useCallback(
@@ -45,6 +51,15 @@ export function useProjectHeaderNavigation() {
   }, [currentProjectSlug, navigate, selectProjectSlug]);
 
   return {
+    boardCounts:
+      currentProjectSlug === selectedProjectSlug && serverWorkspaces !== undefined
+        ? {
+            working: serverWorkspaces.filter((workspace) => workspace.kanbanColumn === 'WORKING')
+              .length,
+            waiting: serverWorkspaces.filter((workspace) => workspace.kanbanColumn === 'WAITING')
+              .length,
+          }
+        : undefined,
     selectedProjectSlug: currentProjectSlug,
     projects,
     projectsError,

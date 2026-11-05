@@ -37,9 +37,7 @@ it('shows the explicit archived project alongside active project choices without
         </MemoryRouter>
       )
     );
-    expect(
-      container.querySelector('button[aria-label="Open Archived owner workspaces"]')
-    ).not.toBeNull();
+    expect(container.querySelector('button[aria-label="Open project menu"]')).not.toBeNull();
     expect(container.querySelector('nav')).toBeNull();
     expect(container.querySelector('a')).toBeNull();
     await act(() =>

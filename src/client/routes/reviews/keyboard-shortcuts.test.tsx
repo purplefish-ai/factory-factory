@@ -279,7 +279,7 @@ it('keeps unrelated shared-header buttons outside the review-row exception', asy
   const view = await render();
   try {
     const projectButton = view.container.querySelector<HTMLButtonElement>(
-      'button[aria-label="Open Beta workspaces"]'
+      'button[aria-label="Open project menu"]'
     );
     expect(projectButton).not.toBeNull();
     await act(() => projectButton!.focus());

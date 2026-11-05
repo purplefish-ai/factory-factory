@@ -120,7 +120,7 @@ for (const viewport of mobileViewports) {
     await page.goto('/__mobile-baseline?surface=agents');
     await expect(page.getByRole('heading', { name: 'Agents', exact: true })).toBeVisible();
     await expect(
-      page.getByRole('button', { name: 'Open Factory Factory workspaces', exact: true })
+      page.getByRole('button', { name: 'Open project menu', exact: true })
     ).toBeVisible();
     await expect(page.getByRole('button', { name: 'Toggle sidebar', exact: true })).toBeVisible();
     await expect(

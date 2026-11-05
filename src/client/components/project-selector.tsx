@@ -1,8 +1,9 @@
 import { CaretRightIcon } from '@phosphor-icons/react/dist/csr/CaretRight';
 import { CaretUpDownIcon } from '@phosphor-icons/react/dist/csr/CaretUpDown';
-import { type MouseEvent, useState } from 'react';
+import { type MouseEvent, useId, useLayoutEffect, useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router';
 import { getProjectSectionPath, getProjectSwitchPath } from '@/client/lib/project-navigation';
+import { Badge } from '@/components/ui/badge';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -14,7 +15,7 @@ import { useIsMobile } from '@/hooks/use-mobile';
 import { cn } from '@/lib/utils';
 
 const DEFAULT_PROJECT_BUTTON_CLASS =
-  'h-7 w-auto max-w-[6rem] border-0 bg-transparent px-0.5 text-sm font-semibold text-foreground shadow-none focus:ring-0 sm:max-w-[18rem] sm:px-1';
+  'h-7 w-auto max-w-[18rem] border-0 bg-transparent px-0.5 text-sm font-semibold text-foreground shadow-none focus:ring-0 sm:px-1';
 
 function getProjectInitials(name: string): string {
   const tokens = name
@@ -45,6 +46,7 @@ export function ProjectSelectorDropdown({
   triggerId = 'project-select',
   onCurrentProjectSelect,
   onRetryProjects,
+  boardCounts,
   showLeadingSlash = false,
   showTrailingSlash = false,
   trailingSeparatorType = 'chevron',
@@ -57,16 +59,33 @@ export function ProjectSelectorDropdown({
   triggerId?: string;
   onCurrentProjectSelect?: () => void;
   onRetryProjects?: () => void;
+  boardCounts?: { working: number; waiting: number };
   showLeadingSlash?: boolean;
   showTrailingSlash?: boolean;
   trailingSeparatorType?: 'chevron' | 'slash';
 }) {
+  const countsId = useId();
   const isMobile = useIsMobile();
   const [open, setOpen] = useState(false);
   const selectedProject = projects?.find((project) => project.slug === selectedProjectSlug);
   const selectedProjectName = selectedProject?.name ?? 'Select a project';
-  const projectButtonLabel =
-    isMobile && selectedProject ? getProjectInitials(selectedProject.name) : selectedProjectName;
+  const nameRef = useRef<HTMLSpanElement>(null);
+  const [compact, setCompact] = useState(false);
+  useLayoutEffect(() => {
+    const name = nameRef.current;
+    if (!(name && isMobile && selectedProjectName)) {
+      setCompact(false);
+      return;
+    }
+    const measure = () => setCompact(name.scrollWidth > name.clientWidth + 1);
+    measure();
+    if (typeof ResizeObserver === 'undefined') {
+      return;
+    }
+    const observer = new ResizeObserver(measure);
+    observer.observe(name);
+    return () => observer.disconnect();
+  }, [isMobile, selectedProjectName]);
   const { pathname, search } = useLocation();
 
   // Keep browser link behavior for new tabs/windows and middle clicks. Only
@@ -87,10 +106,6 @@ export function ProjectSelectorDropdown({
     action();
   };
 
-  const handleCurrentProjectClick = () => {
-    onCurrentProjectSelect?.();
-  };
-
   return (
     <div className="flex min-w-0 items-center gap-0.5">
       {showLeadingSlash ? (
@@ -98,36 +113,69 @@ export function ProjectSelectorDropdown({
           <CaretRightIcon className="h-3.5 w-3.5" />
         </span>
       ) : null}
-      <button
-        type="button"
-        onClick={handleCurrentProjectClick}
-        disabled={!onCurrentProjectSelect}
-        className={cn(
-          'min-w-0 truncate text-left',
-          onCurrentProjectSelect
-            ? 'cursor-pointer hover:text-foreground hover:underline focus-visible:text-foreground focus-visible:underline'
-            : 'cursor-default',
-          DEFAULT_PROJECT_BUTTON_CLASS,
-          projectButtonClassName
-        )}
-        title={selectedProjectName}
-        aria-label={`Open ${selectedProjectName} workspaces`}
-      >
-        {projectButtonLabel}
-      </button>
       <DropdownMenu open={open} onOpenChange={setOpen}>
-        <DropdownMenuTrigger
-          id={triggerId}
-          aria-label="Open project menu"
-          className={cn(
-            'h-7 w-6 shrink-0 border-0 bg-transparent px-0.5 text-muted-foreground shadow-none focus:ring-0 md:w-7 md:px-1 [&>svg:last-of-type]:hidden',
-            triggerClassName
-          )}
-        >
-          <span className="sr-only">Open project menu</span>
-          <span className="inline-flex items-center text-current" aria-hidden>
-            <CaretUpDownIcon className="h-3 w-3 opacity-70 md:h-3.5 md:w-3.5" />
-          </span>
+        <DropdownMenuTrigger asChild>
+          <button
+            type="button"
+            id={triggerId}
+            aria-label="Open project menu"
+            aria-describedby={boardCounts ? countsId : undefined}
+            title={
+              boardCounts
+                ? `${selectedProjectName} · Working ${boardCounts.working} · Waiting ${boardCounts.waiting}`
+                : selectedProjectName
+            }
+            className={cn(
+              'flex min-w-0 items-center gap-1 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring',
+              DEFAULT_PROJECT_BUTTON_CLASS,
+              projectButtonClassName,
+              triggerClassName
+            )}
+          >
+            <span className="relative grid min-w-[3em] text-left">
+              <span
+                ref={nameRef}
+                className={cn('col-start-1 row-start-1 truncate', compact && 'invisible')}
+              >
+                {selectedProjectName}
+              </span>
+              {compact ? (
+                <span className="absolute inset-0 truncate">
+                  {getProjectInitials(selectedProjectName)}
+                </span>
+              ) : null}
+            </span>
+            {boardCounts ? (
+              <span
+                id={countsId}
+                role="img"
+                className="flex shrink-0 gap-1"
+                aria-label={`Working ${boardCounts.working} Waiting ${boardCounts.waiting}`}
+              >
+                <span className="sr-only">
+                  Working {boardCounts.working} Waiting {boardCounts.waiting}
+                </span>
+                <Badge
+                  aria-hidden="true"
+                  variant="secondary"
+                  className="h-5 min-w-5 px-1.5 text-xs tabular-nums"
+                >
+                  {boardCounts.working}
+                </Badge>
+                <Badge
+                  aria-hidden="true"
+                  variant="warning"
+                  className="h-5 min-w-5 px-1.5 text-xs tabular-nums"
+                >
+                  {boardCounts.waiting}
+                </Badge>
+              </span>
+            ) : null}
+            <CaretUpDownIcon
+              aria-hidden
+              className="h-3 w-3 shrink-0 opacity-70 md:h-3.5 md:w-3.5"
+            />
+          </button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start" className="max-w-[calc(100vw-2rem)]">
           {projects?.map((project) => {

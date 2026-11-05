@@ -322,7 +322,7 @@ for (const width of [375, 810]) {
       await expect(page.getByRole('alert')).toContainText('Project refresh unavailable');
       await expectHeaderFits(page);
       const currentProject = page.getByRole('button', {
-        name: 'Open Factory Factory with an exceptionally long project name workspaces',
+        name: 'Open project menu',
         exact: true,
       });
       await expect(currentProject).toBeVisible();
