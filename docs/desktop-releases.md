@@ -41,9 +41,12 @@ Before installing dependencies or running repository code, signed builds verify
 that the checkout matches the GitHub event commit and is an ancestor of
 `origin/main`. Signed manual builds must select the main branch and supply a
 `release_tag` matching `v` followed by the manifest version. Release events must
-use a tag exactly matching `v` followed by the manifest's stable version. Full
-checkout history supplies the ancestry check. Unsigned validation can run on
-development branches without these release restrictions.
+use a tag exactly matching `v` followed by the manifest's stable version. An
+existing version tag must resolve to the event commit. New manual release tags
+are created at that exact commit using `target_commitish`, preventing newly
+built artifacts from being attached to an older same-version tag. Full checkout
+history supplies the ancestry check. Unsigned validation can run on development
+branches without these release restrictions.
 
 Environment protection remains necessary to restrict who can approve use of the
 credentials. The source guard adds a repository-level check; it does not create

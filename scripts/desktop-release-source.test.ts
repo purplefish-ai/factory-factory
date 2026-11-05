@@ -40,6 +40,7 @@ function fixture() {
   git('commit', '-m', 'Release');
   const main = git('rev-parse', 'HEAD');
   git('update-ref', 'refs/remotes/origin/main', main);
+  git('tag', 'v1.2.3');
   return {
     git,
     main,
@@ -111,5 +112,15 @@ sourceTest('rejects an empty manual release tag', () => {
   const repo = fixture();
   expect(() => repo.run('workflow_dispatch', 'refs/heads/main', repo.main, '')).toThrow(
     'package version'
+  );
+});
+
+sourceTest('rejects an existing version tag that points to an older main commit', () => {
+  const repo = fixture();
+  repo.git('commit', '--allow-empty', '-m', 'Main advanced without a version change');
+  const current = repo.git('rev-parse', 'HEAD');
+  repo.git('update-ref', 'refs/remotes/origin/main', current);
+  expect(() => repo.run('workflow_dispatch', 'refs/heads/main', current)).toThrow(
+    'Existing release tag'
   );
 });

@@ -61,6 +61,13 @@ jobs:
             echo "::error::A stable package version is required for signed releases."
             exit 1
           fi
+          if git show-ref --verify --quiet "refs/tags/v$VERSION"; then
+            TAG_COMMIT=$(git rev-parse "refs/tags/v$VERSION^{commit}")
+            if [ "$TAG_COMMIT" != "$GITHUB_SHA" ]; then
+              echo "::error::Existing release tag points to a different source commit."
+              exit 1
+            fi
+          fi
           if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
             if [ "$GITHUB_REF" != "refs/heads/main" ]; then
               echo "::error::Signed manual builds must use the main branch."
@@ -259,6 +266,7 @@ jobs:
         uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
         with:
           tag_name: ${{ github.event.inputs.release_tag }}
+          target_commitish: ${{ github.sha }}
           name: ${{ github.event.inputs.release_tag }}
           draft: true
           files: artifacts/**/*
