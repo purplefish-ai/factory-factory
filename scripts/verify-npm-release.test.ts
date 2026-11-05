@@ -1,6 +1,14 @@
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { chmodSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  chmodSync,
+  mkdtempSync,
+  mkdirSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -126,6 +134,61 @@ describe('published npm release identity', () => {
     const item = fixture();
     item.metadata.version = '1.2.4';
     expect(item.run().status).not.toBe(0);
+  });
+  it.each([
+    ['repository', 'https://github.com/other/repository'],
+    ['ref', 'refs/heads/untrusted'],
+  ] as const)('rejects provenance with a different workflow %s', (field, value) => {
+    const item = fixture();
+    item.statement.predicate.buildDefinition.externalParameters.workflow[field] = value;
+    expect(item.run().status).not.toBe(0);
+  });
+  it('rejects a dependency URI outside the expected repository and main ref', () => {
+    const item = fixture();
+    item.statement.predicate.buildDefinition.resolvedDependencies[0]!.uri =
+      'git+https://github.com/other/repository@refs/heads/main';
+    expect(item.run().status).not.toBe(0);
+  });
+  it('passes the staged identity through the actual finalization workflow step', () => {
+    const item = fixture();
+    expect(item.run().status).toBe(0);
+    const schema = z.object({
+      jobs: z.object({
+        'finalize-release': z.object({
+          steps: z.array(z.object({ name: z.string().optional(), run: z.string().optional() })),
+        }),
+      }),
+    });
+    const workflow = schema.parse(
+      parse(readFileSync(resolve('.github/workflows/npm-publish.yml'), 'utf8'))
+    );
+    const command = workflow.jobs['finalize-release'].steps.find(
+      (step) => step.name === 'Verify package is published on npm'
+    )?.run;
+    expect(command).toBeDefined();
+    mkdirSync(join(item.root, 'scripts'));
+    symlinkSync(
+      resolve('scripts/verify-npm-release.sh'),
+      join(item.root, 'scripts/verify-npm-release.sh')
+    );
+    symlinkSync(item.artifact, join(item.root, 'npm-package'));
+    writeFileSync(join(item.root, 'package.json'), JSON.stringify({ version: '1.2.3' }));
+    const output = join(item.root, 'output');
+    const result = spawnSync('bash', ['-c', command!], {
+      cwd: item.root,
+      encoding: 'utf8',
+      env: {
+        ...process.env,
+        STAGED_COMMIT: commit,
+        STAGING_RUN_ID: '123',
+        RELEASE_REPOSITORY: repository,
+        GITHUB_OUTPUT: output,
+        FIXTURE_ROOT: item.root,
+        PATH: `${join(item.root, 'bin')}:${process.env.PATH}`,
+      },
+    });
+    expect(result.status, result.stderr).toBe(0);
+    expect(readFileSync(output, 'utf8')).toBe('version=1.2.3\n');
   });
   it('rejects provenance for another commit', () => {
     const item = fixture();

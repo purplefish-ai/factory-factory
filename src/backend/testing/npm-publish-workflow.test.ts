@@ -193,7 +193,9 @@ describe('npm publish workflow', () => {
     expect(finalizeJob.permissions).toEqual({ actions: 'read', contents: 'write' });
     const verifyPublishedStep = getStep(finalizeJob, 'Verify package is published on npm');
     expect(verifyPublishedStep.id).toBe('release_version');
-    expect(verifyPublishedStep.run).toContain('bash scripts/verify-npm-release.sh npm-package');
+    expect(verifyPublishedStep.run).toContain(
+      'bash scripts/verify-npm-release.sh npm-package "$STAGED_COMMIT" "$STAGING_RUN_ID" "$RELEASE_REPOSITORY"'
+    );
     expect(verifyPublishedStep.env).toEqual({
       STAGED_COMMIT: githubExpression('steps.staging_run.outputs.commit'),
       STAGING_RUN_ID: githubExpression('github.event.inputs.staging_run_id'),
