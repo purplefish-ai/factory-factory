@@ -23,7 +23,7 @@ it('rejects a launch that finishes without producing the expected event', async 
   ).rejects.toThrow('Launch settled before provider');
 });
 
-it('bounds a missing event even when a consumer absorbs startup failure', async () => {
+it('bounds a missing event when no launch settlement is provided', async () => {
   const ready = deferred<void>();
   await expect(waitForEventFixture(ready.promise, 'provider', { timeoutMs: 10 })).rejects.toThrow(
     'Timed out waiting for provider'

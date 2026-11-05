@@ -80,7 +80,7 @@ afterEach(async () => {
   releaseEventBoundaries();
   provider?.response.resolve({ stopReason: 'end_turn' });
   try {
-    await waitForEventFixture(launch, 'monitor launch cleanup');
+    await launch;
   } finally {
     try {
       await h.session.acpRuntimeManager.stopAllClients(10).catch(() => undefined);
