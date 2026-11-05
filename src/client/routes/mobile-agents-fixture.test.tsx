@@ -116,7 +116,7 @@ it.each([
 });
 
 it('keeps the project selector in the navbar and section links in the real mobile sidebar', () => {
-  expect(container.querySelector('button[aria-label="Open project menu"]')).not.toBeNull();
+  expect(container.querySelector('button[aria-label^="Open project menu"]')).not.toBeNull();
   expect(container.querySelector('nav[aria-label="Project sections"]')).toBeNull();
   expect(container.querySelector('#agents-project-filter')).toBeNull();
   actFlushSync(() =>

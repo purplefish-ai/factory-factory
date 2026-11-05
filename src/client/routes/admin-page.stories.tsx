@@ -91,8 +91,8 @@ export const ProjectMenu: Story = {
     const canvas = within(canvasElement);
     const header = within(canvas.getByRole('banner'));
     await expect(await header.findByRole('navigation', { name: 'Breadcrumb' })).toBeVisible();
-    await expect(header.getByRole('button', { name: 'Open project menu' })).toBeVisible();
-    await userEvent.click(header.getByRole('button', { name: 'Open project menu' }));
+    await expect(header.getByRole('button', { name: /Open project menu/ })).toBeVisible();
+    await userEvent.click(header.getByRole('button', { name: /Open project menu/ }));
     const body = within(canvasElement.ownerDocument.body);
     await expect(await body.findByRole('menuitem', { name: '+ Create project' })).toHaveAttribute(
       'href',
@@ -172,7 +172,7 @@ export const NoSelectedProject: Story = {
   ),
   play: async ({ canvasElement }) => {
     const header = within(within(canvasElement).getByRole('banner'));
-    await expect(await header.findByRole('button', { name: 'Open project menu' })).toBeEnabled();
-    await expect(header.getByRole('button', { name: 'Open project menu' })).toBeEnabled();
+    await expect(await header.findByRole('button', { name: /Open project menu/ })).toBeEnabled();
+    await expect(header.getByRole('button', { name: /Open project menu/ })).toBeEnabled();
   },
 };

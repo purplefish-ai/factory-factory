@@ -46,7 +46,7 @@ async function render(path = '/projects/alpha/reviews', open = true) {
     await act(() => root.unmount());
     container.remove();
   };
-  const trigger = container.querySelector('button[aria-label="Open project menu"]');
+  const trigger = container.querySelector('button[aria-label^="Open project menu"]');
   expect(trigger).not.toBeNull();
   if (!open) {
     return container;
@@ -111,12 +111,11 @@ it('opens the menu from the project name without navigating to the board', async
   const name = [...container!.querySelectorAll('button')].find((button) =>
     button.textContent?.includes('Alpha')
   );
-  expect(name).toBeDefined();
-  await act(() =>
-    name?.dispatchEvent(
-      new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true, cancelable: true })
-    )
-  );
+  expect(name?.getAttribute('aria-label')).toContain('Alpha');
+  await act(() => {
+    name?.dispatchEvent(new MouseEvent('pointerdown', { button: 0, bubbles: true }));
+    name?.click();
+  });
   expect(item('Beta')).toBeDefined();
   expect(current).not.toHaveBeenCalled();
 });

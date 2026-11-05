@@ -73,7 +73,7 @@ export function ProjectSelectorDropdown({
   const [compact, setCompact] = useState(false);
   useLayoutEffect(() => {
     const name = nameRef.current;
-    if (!(name && isMobile && selectedProjectName)) {
+    if (!(name && isMobile && selectedProject && selectedProjectName)) {
       setCompact(false);
       return;
     }
@@ -85,7 +85,7 @@ export function ProjectSelectorDropdown({
     const observer = new ResizeObserver(measure);
     observer.observe(name);
     return () => observer.disconnect();
-  }, [isMobile, selectedProjectName]);
+  }, [isMobile, selectedProject, selectedProjectName]);
   const { pathname, search } = useLocation();
 
   // Keep browser link behavior for new tabs/windows and middle clicks. Only
@@ -118,7 +118,7 @@ export function ProjectSelectorDropdown({
           <button
             type="button"
             id={triggerId}
-            aria-label="Open project menu"
+            aria-label={`Open project menu: ${selectedProjectName}`}
             aria-describedby={boardCounts ? countsId : undefined}
             title={
               boardCounts

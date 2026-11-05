@@ -49,7 +49,7 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 async function openMenu(canvasElement: HTMLElement) {
-  await userEvent.click(within(canvasElement).getByRole('button', { name: 'Open project menu' }));
+  await userEvent.click(within(canvasElement).getByRole('button', { name: /Open project menu/ }));
   return within(document.body);
 }
 export const ProjectActions: Story = {
@@ -79,7 +79,9 @@ export const RetryProjects: Story = {
 };
 export const KeyboardNavigation: Story = {
   play: async ({ canvasElement, args }) => {
-    within(canvasElement).getByRole('button', { name: 'Open project menu' }).focus();
+    within(canvasElement)
+      .getByRole('button', { name: /Open project menu/ })
+      .focus();
     await userEvent.keyboard('{ArrowDown}b{Enter}');
     await expect(args.onProjectChange).toHaveBeenCalledWith('beta');
   },
@@ -160,3 +162,15 @@ export const PhoneNameCramped: Story = {
   },
 };
 export const EmptyBoard: Story = { args: { boardCounts: { working: 0, waiting: 0 } } };
+
+export const PhoneNoSelection: Story = {
+  ...PhoneNameCramped,
+  args: { selectedProjectSlug: '', projects: [] },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(
+      canvas.getByRole('button', { name: 'Open project menu: Select a project' })
+    ).toBeEnabled();
+    await expect(canvas.queryByText('SAP', { exact: true })).not.toBeInTheDocument();
+  },
+};

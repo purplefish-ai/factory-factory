@@ -408,7 +408,7 @@ describe('settings URL sections', () => {
     });
     await act(() =>
       container
-        .querySelector('[aria-label="Open project menu"]')
+        .querySelector('[aria-label^="Open project menu"]')
         ?.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }))
     );
     const retryItem = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find(

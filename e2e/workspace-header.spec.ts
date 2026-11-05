@@ -86,7 +86,7 @@ for (const { platform, left, right } of [
     }
     await expectHeaderFits(page, 33);
     await expect(header).toHaveScreenshot(`installed-pwa-header-${platform}.png`);
-    await page.getByRole('button', { name: 'Open project menu' }).click();
+    await page.getByRole('button', { name: /Open project menu/ }).click();
     await expect(page.getByRole('menu')).toBeVisible();
     await page.keyboard.press('Escape');
     await page.getByRole('button', { name: 'Search', exact: true }).click();
@@ -222,7 +222,7 @@ for (const width of [375, 768, 810, 1024, 1280]) {
     await expect(page.getByRole('button', { name: /Pull requests and updates/ })).toBeVisible();
     await expectHeaderFits(page);
     await expect(page.locator('header')).toHaveScreenshot(`workspace-header-${width}.png`);
-    await page.getByRole('button', { name: 'Open project menu' }).click();
+    await page.getByRole('button', { name: /Open project menu/ }).click();
     await expect(
       page.getByRole('menuitem', {
         name: 'Factory Factory with an exceptionally long project name',
@@ -322,14 +322,14 @@ for (const width of [375, 810]) {
       await expect(page.getByRole('alert')).toContainText('Project refresh unavailable');
       await expectHeaderFits(page);
       const currentProject = page.getByRole('button', {
-        name: 'Open project menu',
+        name: /Open project menu/,
         exact: true,
       });
       await expect(currentProject).toBeVisible();
       await expect(page.locator('header')).toHaveScreenshot(
         `${variant}-header-project-error-${width}.png`
       );
-      await page.getByRole('button', { name: 'Open project menu' }).click();
+      await page.getByRole('button', { name: /Open project menu/ }).click();
       await expect(
         page.getByRole('menuitem', {
           name: 'Factory Factory with an exceptionally long project name',
@@ -349,7 +349,7 @@ for (const width of [375, 810]) {
         await expect(page.getByText('Waiting · 0')).toBeVisible();
         await page.keyboard.press('Escape');
       }
-      await page.getByRole('button', { name: 'Open project menu' }).click();
+      await page.getByRole('button', { name: /Open project menu/ }).click();
       await expect(page.getByRole('menuitem', { name: 'Retry projects', exact: true })).toHaveCount(
         0
       );

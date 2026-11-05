@@ -62,13 +62,22 @@ it.each(['/admin', '/admin/appearance', '/admin/system', '/admin/logs'])(
       expect(container.querySelector('header nav [aria-current="page"]')?.textContent).toBe(
         'Settings'
       );
-      expect(container.querySelector('header [aria-label="Open project menu"]')).not.toBeNull();
+      expect(container.querySelector('header [aria-label^="Open project menu"]')).not.toBeNull();
       const projectButton = container.querySelector<HTMLButtonElement>(
-        'header [aria-label="Open project menu"]'
+        'header [aria-label^="Open project menu"]'
       );
       expect(projectButton).not.toBeNull();
       await act(() => projectButton?.click());
       expect(container.querySelector('output')?.textContent).toBe(path);
+      await act(() =>
+        projectButton?.dispatchEvent(
+          new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true })
+        )
+      );
+      const current = document.querySelector<HTMLElement>('[role="menuitem"][aria-current="true"]');
+      expect(current).not.toBeNull();
+      await act(() => current?.click());
+      expect(container.querySelector('output')?.textContent).toBe('/projects/alpha/workspaces');
     } finally {
       await act(() => root.unmount());
     }
@@ -90,7 +99,7 @@ it('keeps the project menu enabled when there is no selection', async () => {
     expect(
       container.querySelector<HTMLButtonElement>('button[title="Select a project"]')?.disabled
     ).toBe(false);
-    expect(container.querySelector('[aria-label="Open project menu"]')).not.toBeNull();
+    expect(container.querySelector('[aria-label^="Open project menu"]')).not.toBeNull();
   } finally {
     await act(() => root.unmount());
   }
@@ -107,7 +116,7 @@ it('keeps the project action and Settings breadcrumb on mobile', async () => {
         </MemoryRouter>
       )
     );
-    const project = container.querySelector<HTMLButtonElement>('[aria-label="Open project menu"]');
+    const project = container.querySelector<HTMLButtonElement>('[aria-label^="Open project menu"]');
     expect(project?.textContent).toBe('Alpha');
     expect(container.querySelector('[aria-current="page"]')?.textContent).toBe('Settings');
     await act(() => project?.click());
@@ -134,7 +143,7 @@ it('announces project-list failures and retries from the header menu', async () 
     );
     await act(() =>
       container
-        .querySelector('[aria-label="Open project menu"]')
+        .querySelector('[aria-label^="Open project menu"]')
         ?.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }))
     );
     const retry = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find(

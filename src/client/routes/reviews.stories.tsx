@@ -124,7 +124,7 @@ type Story = StoryObj<typeof meta>;
 export const SelectedProject: Story = {
   play: async ({ canvasElement }) => {
     await expect(
-      await within(canvasElement).findByRole('button', { name: 'Open project menu' })
+      await within(canvasElement).findByRole('button', { name: /Open project menu/ })
     ).toBeVisible();
     await expect(await within(canvasElement).findByText('No review requests')).toBeVisible();
   },
@@ -140,10 +140,10 @@ export const LocalProject: Story = {
 export const SwitchProject: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    await expect(await canvas.findByRole('button', { name: 'Open project menu' })).toBeVisible();
-    await userEvent.click(canvas.getByRole('button', { name: 'Open project menu' }));
+    await expect(await canvas.findByRole('button', { name: /Open project menu/ })).toBeVisible();
+    await userEvent.click(canvas.getByRole('button', { name: /Open project menu/ }));
     await userEvent.click(await within(document.body).findByRole('menuitem', { name: 'Beta' }));
-    await expect(await canvas.findByRole('button', { name: 'Open project menu' })).toBeVisible();
+    await expect(await canvas.findByRole('button', { name: /Open project menu/ })).toBeVisible();
     await expect(
       await canvas.findByText('This project has no linked GitHub repository')
     ).toBeVisible();

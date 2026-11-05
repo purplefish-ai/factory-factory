@@ -119,14 +119,12 @@ for (const viewport of mobileViewports) {
     await page.setViewportSize({ width: viewport.width, height: viewport.height });
     await page.goto('/__mobile-baseline?surface=agents');
     await expect(page.getByRole('heading', { name: 'Agents', exact: true })).toBeVisible();
-    await expect(
-      page.getByRole('button', { name: 'Open project menu', exact: true })
-    ).toBeVisible();
+    await expect(page.getByRole('button', { name: /Open project menu/ })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Toggle sidebar', exact: true })).toBeVisible();
     await expect(
       page.getByRole('navigation', { name: 'Project sections', exact: true })
     ).toHaveCount(0);
-    await page.getByRole('button', { name: 'Open project menu', exact: true }).click();
+    await page.getByRole('button', { name: /Open project menu/ }).click();
     await expect(
       page.getByRole('menuitem', { name: 'Factory Factory', exact: true })
     ).toBeVisible();

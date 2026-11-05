@@ -42,7 +42,7 @@ export const EventThenDefault: Story = {
       )
     );
     await expect(canvas.getByLabelText('Story navigation type')).toHaveTextContent('REPLACE');
-    await userEvent.click(canvas.getByRole('button', { name: 'Open project menu' }));
+    await userEvent.click(canvas.getByRole('button', { name: /Open project menu/ }));
     await expect(within(document.body).getByRole('menuitem', { name: 'Beta' })).toHaveAttribute(
       'href',
       '/projects/beta/agents?kind=event'
@@ -51,7 +51,7 @@ export const EventThenDefault: Story = {
     await userEvent.click(canvas.getByRole('button', { name: 'Render default story' }));
     await waitFor(() => expect(canvas.getByLabelText('Story route')).toHaveTextContent(/^\/$/));
     await expect(canvas.getByLabelText('Story navigation type')).toHaveTextContent('REPLACE');
-    await userEvent.click(canvas.getByRole('button', { name: 'Open project menu' }));
+    await userEvent.click(canvas.getByRole('button', { name: /Open project menu/ }));
     await expect(within(document.body).getByRole('menuitem', { name: 'Beta' })).toHaveAttribute(
       'href',
       '/projects/beta/workspaces'

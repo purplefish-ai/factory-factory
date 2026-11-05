@@ -128,7 +128,7 @@ it.each(['primary', 'modified'])(
       );
       await act(() =>
         container
-          .querySelector('[aria-label="Open project menu"]')
+          .querySelector('[aria-label^="Open project menu"]')
           ?.dispatchEvent(
             new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true, cancelable: true })
           )

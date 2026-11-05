@@ -56,9 +56,9 @@ and **Manage projects**. Switching projects keeps the current Board, Agents or
 Reviews section, including the event-agent view. Menu links support opening a
 project in another tab. Clicking the project name or chevron opens the menu;
 selecting the current project opens its board. The header shows Working and
-Waiting counts beside the project name, matching the sidebar. On phones, names
-stay expanded when they fit and use initials when space is limited. The
-following breadcrumb identifies the section.
+Waiting counts beside the project name once workspace data is loaded, matching
+the sidebar. On phones, names stay expanded when they fit and use initials when
+space is limited. The following breadcrumb identifies the section.
 
 The home page restores the saved project only while it appears in the active
 project list; otherwise it opens the first active project. A missing project
