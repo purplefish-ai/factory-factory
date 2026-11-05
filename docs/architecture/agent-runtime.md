@@ -1209,8 +1209,9 @@ append historical starts and finishes as new activity. Live native events still
 use their observation time. If a request fails or the provider repeats a
 pagination cursor, chat keeps known rows visible and offers Retry. Adjacent tool
 activity stays collapsed by default as muted summary rows; expanding a summary
-shows chronological calls with input and output available on demand. Failed
-calls remain visible in the collapsed summary.
+shows chronological calls with input and output available on demand. Failure
+counts and warning icons appear only while the group is expanded; collapsed
+summaries retain their activity icon (or running indicator).
 
 Sub-agent transcript projection applies the same refinements without duplicating
 tool cards and joins consecutive assistant text chunks before rendering

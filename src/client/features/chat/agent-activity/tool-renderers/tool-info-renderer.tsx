@@ -179,7 +179,7 @@ export const ToolSequenceGroup = memo(function ToolSequenceGroup({
   }
   const pending = calls.some((call) => call.status === 'pending');
   const label = getToolGroupLabel(calls);
-  const failureSummary = getToolGroupFailureSummary(calls);
+  const failureSummary = isOpen ? getToolGroupFailureSummary(calls) : null;
   const GroupIcon = groupIcon(calls);
   const proposals = new Map(
     calls.flatMap((call) => {

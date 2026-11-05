@@ -770,15 +770,25 @@ const FAILED_COMMANDS = [
   { name: 'Bash', input: { command: 'pnpm lint' }, result: 'No warnings' },
 ];
 
-/** A collapsed group reports how many calls failed, with a danger icon and tone. */
+/** Failure counts and icons appear only after expanding the group. */
 export const ToolSequenceGroupCommandsWithFailure: StoryObj<typeof ToolSequenceGroup> = {
   render: () => <ToolSequenceGroup sequence={createToolSequence(FAILED_COMMANDS)} />,
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    const trigger = canvas.getByRole('button', { name: /Ran commands · 1 of 3 failed/ });
-    await expect(trigger.querySelector('svg')).toHaveAttribute('data-status-tone', 'danger');
+    const trigger = canvas.getByRole('button', { name: /^Ran commands$/ });
+    await expect(trigger.querySelector('span[title]')).toHaveAttribute('title', 'Ran commands');
+    await expect(canvas.queryByTestId('tool-group-failures')).not.toBeInTheDocument();
+    await expect(trigger.querySelector('svg')).not.toHaveAttribute('data-status-tone', 'danger');
     await userEvent.click(trigger);
-    await expect(canvas.getByText('Failed pnpm test')).toBeVisible();
+    await expect(trigger).toHaveTextContent('Ran commands · 1 of 3 failed');
+    await expect(trigger.querySelector('svg')).toHaveAttribute('data-status-tone', 'danger');
+    const failedCall = canvas.getByRole('button', { name: /Failed pnpm test/ });
+    await expect(failedCall).toBeVisible();
+    await userEvent.click(failedCall);
+    await expect(canvas.getByText(/expected 2 to be 3/)).toBeVisible();
+    await userEvent.click(trigger);
+    await expect(trigger).toHaveTextContent('Ran commands');
+    await expect(canvas.queryByTestId('tool-group-failures')).not.toBeInTheDocument();
   },
 };
 
@@ -787,7 +797,7 @@ export const ToolSequenceGroupCommandsWithFailureDark: StoryObj<typeof ToolSeque
   globals: { theme: 'dark' },
 };
 
-/** Failures stay visible while the rest of the group is still running. */
+/** A collapsed group keeps its running indicator when another call has failed. */
 export const ToolSequenceGroupPendingWithFailure: StoryObj<typeof ToolSequenceGroup> = {
   render: () => (
     <ToolSequenceGroup
@@ -799,7 +809,7 @@ export const ToolSequenceGroupPendingWithFailure: StoryObj<typeof ToolSequenceGr
   ),
 };
 
-/** On a phone the label truncates but the failure count stays visible. */
+/** On a phone a collapsed group keeps a quiet summary even with failures. */
 export const ToolSequenceGroupMixedFailurePhone: StoryObj<typeof ToolSequenceGroup> = {
   globals: { viewport: { value: 'phone', isRotated: false } },
   render: () => (
