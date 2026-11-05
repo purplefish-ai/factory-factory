@@ -91,9 +91,10 @@ Then:
 ## Updating
 
 When a newer stable release is available, the app shows a release notice.
-Supported installations include an **Update** button; other installations show
-manual guidance. Each notice can be dismissed independently; a later version
-appears again. Registry outages do not block startup or normal use.
+Supported installations include an **Update** button; other installations show a
+**How to update** button that expands installation instructions and the restart
+warning. Each notice can be dismissed independently; a later version appears
+again. Registry outages do not block startup or normal use.
 
 Automatic updates support writable global npm installations on macOS and Linux
 started with `ff serve`. The update waits for active agent work and queued

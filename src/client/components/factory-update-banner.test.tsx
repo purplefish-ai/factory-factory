@@ -84,9 +84,10 @@ describe('application update notices', () => {
     const html = renderToStaticMarkup(
       <FactoryUpdateBannerContent {...callbacks} updates={{ ...updates, automaticUpdate: false }} />
     );
-    expect(html).toContain('npm install -g factory-factory@0.5.4');
+    expect(html).not.toContain('npm install -g factory-factory@0.5.4');
+    expect(html).toContain('How to update');
+    expect(html).toContain('aria-expanded="false"');
     expect(html).not.toContain('>Update</button>');
-    expect(html).toContain('Restart Factory Factory');
   });
 
   it.each([

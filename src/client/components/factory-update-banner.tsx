@@ -1,6 +1,7 @@
 import { ArrowCircleUpIcon } from '@phosphor-icons/react/dist/csr/ArrowCircleUp';
+import { CaretDownIcon } from '@phosphor-icons/react/dist/csr/CaretDown';
 import { XIcon } from '@phosphor-icons/react/dist/csr/X';
-import { useEffect, useState } from 'react';
+import { useEffect, useId, useState } from 'react';
 import { trpc } from '@/client/lib/trpc';
 import { Button } from '@/components/ui/button';
 import { Spinner } from '@/components/ui/spinner';
@@ -122,6 +123,8 @@ export function FactoryUpdateBannerContent({
   onDismiss,
 }: Props) {
   const { notices, status, automaticUpdate, manualCommand } = updates;
+  const [showInstructions, setShowInstructions] = useState(false);
+  const instructionsId = useId();
   const active = isActive(status);
   if (notices.length === 0 && !active && status.phase !== 'failed') {
     return null;
@@ -137,16 +140,40 @@ export function FactoryUpdateBannerContent({
   return (
     <section
       aria-label="Application updates"
-      className="shrink-0 border-b border-border bg-muted/30 px-3 py-2 sm:px-4"
+      className="shrink-0 border-b border-primary/15 bg-primary/5 px-3 py-2 sm:px-4"
     >
       <ul className="space-y-2">
-        {notices.map((notice) => (
-          <li key={notice.id} className="flex items-start gap-2 text-xs">
-            <ArrowCircleUpIcon className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
+        {notices.map((notice, index) => (
+          <li key={notice.id} className="flex items-start gap-2.5 text-xs">
+            <ArrowCircleUpIcon className="mt-1.5 size-4 shrink-0 text-primary" aria-hidden="true" />
             <div className="min-w-0 flex-1 space-y-0.5 [overflow-wrap:anywhere]">
-              <p className="font-medium">
-                {notice.label} update available: {notice.currentVersion} → {notice.latestVersion}
-              </p>
+              <div className="flex min-h-7 flex-wrap items-center gap-x-3 gap-y-1">
+                <p className="font-medium">{notice.label} update available</p>
+                <span className="inline-flex items-center gap-1.5 font-mono text-[11px] tabular-nums">
+                  <span className="text-muted-foreground">{notice.currentVersion}</span>
+                  <span className="text-muted-foreground" aria-hidden="true">
+                    →
+                  </span>
+                  <span className="rounded bg-primary/10 px-1.5 py-0.5 font-semibold text-primary">
+                    {notice.latestVersion}
+                  </span>
+                </span>
+                {index === 0 && !(active || automaticUpdate) && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 gap-1 px-2 text-xs text-muted-foreground"
+                    aria-expanded={showInstructions}
+                    aria-controls={showInstructions ? instructionsId : undefined}
+                    onClick={() => setShowInstructions((previous) => !previous)}
+                  >
+                    How to update
+                    <CaretDownIcon
+                      className={`size-3 transition-transform ${showInstructions ? 'rotate-180' : ''}`}
+                    />
+                  </Button>
+                )}
+              </div>
               {notice.id !== 'factory-factory' && (
                 <p className="text-muted-foreground">Updates with Factory Factory.</p>
               )}
@@ -163,36 +190,45 @@ export function FactoryUpdateBannerContent({
           </li>
         ))}
       </ul>
-      <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs">
-        <div className="min-w-0 flex-1 basis-full space-y-1 sm:basis-0">
-          {progress && (
-            <p
-              role={status.phase === 'failed' ? 'alert' : 'status'}
-              className={status.phase === 'failed' ? 'text-destructive' : 'text-muted-foreground'}
-            >
-              {progress}
-            </p>
-          )}
-          {!active && automaticUpdate && (
-            <p className="text-muted-foreground">
-              Waits for active agent work to finish. Restart stops terminals and run scripts.
-            </p>
-          )}
-          {!(active || automaticUpdate) && (
-            <p className="text-muted-foreground [overflow-wrap:anywhere]">
-              Update this installation manually: <code>{manualCommand}</code>. Restart Factory
-              Factory after updating. This stops terminals and run scripts.
-            </p>
-          )}
+      {showInstructions && !(active || automaticUpdate) && (
+        <div
+          id={instructionsId}
+          className="ml-6.5 mt-2 space-y-2 rounded-md border border-border/60 bg-background/60 px-3 py-2.5 text-xs"
+        >
+          <p className="whitespace-pre-wrap leading-relaxed [overflow-wrap:anywhere]">
+            {manualCommand}
+          </p>
+          <p className="text-muted-foreground">
+            A restart is required after updating. This stops terminals and run scripts.
+          </p>
         </div>
-        <UpdateActions
-          updates={updates}
-          isPending={isPending}
-          onUpdate={onUpdate}
-          onCancel={onCancel}
-          onDismiss={onDismiss}
-        />
-      </div>
+      )}
+      {(progress || active || automaticUpdate) && (
+        <div className="ml-6.5 mt-1 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs">
+          <div className="min-w-0 flex-1 basis-full space-y-1 sm:basis-0">
+            {progress && (
+              <p
+                role={status.phase === 'failed' ? 'alert' : 'status'}
+                className={status.phase === 'failed' ? 'text-destructive' : 'text-muted-foreground'}
+              >
+                {progress}
+              </p>
+            )}
+            {!active && automaticUpdate && (
+              <p className="text-muted-foreground">
+                Waits for active agent work to finish. Restart stops terminals and run scripts.
+              </p>
+            )}
+          </div>
+          <UpdateActions
+            updates={updates}
+            isPending={isPending}
+            onUpdate={onUpdate}
+            onCancel={onCancel}
+            onDismiss={onDismiss}
+          />
+        </div>
+      )}
     </section>
   );
 }
