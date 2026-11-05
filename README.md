@@ -23,7 +23,7 @@
 </p>
 
 <p align="center">
-  <img src="public/working.png" alt="Factory Factory workspace with parallel agents, code changes, and an integrated terminal" width="1000">
+  <img src="docs/screenshots/factory-factory.png" alt="Factory Factory workspace with agent chat, completed subagents, pull request status, and an integrated terminal" width="1000">
 </p>
 
 Factory Factory is a local workspace manager for AI coding agents. Every
