@@ -8,14 +8,11 @@ import { ApplicationError } from '@/backend/lib/application-error';
 import { searchFilesRecursive } from '@/backend/lib/file-helpers';
 import { gitCommandC } from '@/backend/lib/shell';
 import { toPublicProject } from '@/backend/orchestration/project-query-projection';
-import { createLogger } from '@/backend/services/logger.service';
 import { IssueProvider } from '@/shared/core/enums';
 import { parseGithubUrl } from '@/shared/github-url';
 import { FactoryConfigSchema } from '@/shared/schemas/factory-config.schema';
 import { IssueTrackerConfigSchema } from '@/shared/schemas/issue-tracker-config.schema';
 import { publicProcedure, router, trustedLocalProcedure } from './trpc';
-
-const logger = createLogger('project-router');
 
 function parseCommandFileDescription(filePath: string): string {
   try {
@@ -154,10 +151,12 @@ export const projectRouter = router({
               ? await ctx.appContext.services.workspaceQueryService
                   .boardCountsForProject(project.id)
                   .catch((error: unknown) => {
-                    logger.warn('Failed to load project board counts', {
-                      projectId: project.id,
-                      error,
-                    });
+                    ctx.appContext.services
+                      .createLogger('project-router')
+                      .warn('Failed to load project board counts', {
+                        projectId: project.id,
+                        error,
+                      });
                     return undefined;
                   })
               : undefined;

@@ -84,6 +84,7 @@ function createCaller(
         },
         projectManagementService: mockProjectManagementService,
         workspaceQueryService: { boardCountsForProject: mockBoardCounts },
+        createLogger: () => ({ warn: vi.fn() }),
         updateProjectSettings: (input: Parameters<typeof updateProjectSettings>[0]) =>
           updateProjectSettings(input, {
             validateRepoPath: mockProjectManagementService.validateRepoPath,
