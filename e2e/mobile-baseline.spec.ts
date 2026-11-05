@@ -125,9 +125,7 @@ for (const viewport of mobileViewports) {
       page.getByRole('navigation', { name: 'Project sections', exact: true })
     ).toHaveCount(0);
     await page.getByRole('button', { name: /Open project menu/ }).click();
-    await expect(
-      page.getByRole('menuitem', { name: 'Factory Factory', exact: true })
-    ).toBeVisible();
+    await expect(page.getByRole('menuitem', { name: /^Factory Factory/ })).toBeVisible();
     await expect(page.getByRole('menuitem', { name: 'Other project', exact: true })).toBeVisible();
     await page.keyboard.press('Escape');
     await page.getByRole('button', { name: 'Toggle sidebar', exact: true }).click();
