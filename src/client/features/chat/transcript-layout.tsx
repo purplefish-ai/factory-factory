@@ -2,7 +2,11 @@ import { useMemo } from 'react';
 import { useReconcileSessionTargetStops } from '@/client/features/session-controls';
 import { Spinner } from '@/components/ui/spinner';
 import type { GroupedMessageItem } from '@/lib/chat-protocol';
-import { isStreamEventMessage, isToolSequence } from '@/lib/chat-protocol';
+import {
+  isStreamEventMessage,
+  isToolSequence,
+  QUEUED_MESSAGE_ORDER_BASE,
+} from '@/lib/chat-protocol';
 import { PR_EVENT_MESSAGE_ID_PREFIX } from '@/shared/pr-monitoring';
 import { GroupedMessageItemRenderer } from './agent-activity';
 import { CompactingIndicator } from './compacting-indicator';
@@ -51,6 +55,24 @@ export function useTranscriptLayout(props: TranscriptDisplayProps, hasHeader: bo
       }
       return prState === null;
     });
+    // Keep unconfirmed sends separate from authoritative transcript state. Snapshots
+    // and replay can replace history without hiding a send still in flight.
+    const confirmedIds = new Set(props.messages.map((item) => item.id));
+    const pendingMessageIds = new Set<string>();
+    for (const [id, content] of props.pendingMessages ?? []) {
+      if (confirmedIds.has(id) || (content.sessionId && content.sessionId !== props.sessionId)) {
+        continue;
+      }
+      pendingMessageIds.add(id);
+      messages.push({
+        id,
+        source: 'user',
+        text: content.text,
+        attachments: content.attachments,
+        timestamp: new Date().toISOString(),
+        order: QUEUED_MESSAGE_ORDER_BASE + messages.length,
+      });
+    }
     const lastThinkingMessageId = lastThinkingId(messages);
     const keys = messages.length ? messages.map((item) => item.id) : ['transcript:status'];
     if (hasHeader) {
@@ -59,11 +81,19 @@ export function useTranscriptLayout(props: TranscriptDisplayProps, hasHeader: bo
     return {
       messages,
       queuedPRUpdate,
+      pendingMessageIds,
       lastThinkingMessageId,
       keys,
       headerOffset: hasHeader ? 1 : 0,
     };
-  }, [props.messages, props.loadingSession, props.queuedMessageIds, hasHeader]);
+  }, [
+    props.messages,
+    props.pendingMessages,
+    props.sessionId,
+    props.loadingSession,
+    props.queuedMessageIds,
+    hasHeader,
+  ]);
 }
 
 function getStartupLabel(props: TranscriptDisplayProps) {

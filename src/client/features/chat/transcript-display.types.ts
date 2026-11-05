@@ -2,7 +2,7 @@ import type { ReactNode } from 'react';
 import type { GroupedMessageItem } from '@/lib/chat-protocol';
 import type { SessionWorkState } from '@/shared/session-runtime';
 import type { WorkspaceInitBanner } from '@/shared/workspace-init';
-import type { AcpPlanState } from './reducer';
+import type { AcpPlanState, PendingMessageContent } from './reducer';
 
 export interface TranscriptDisplayProps {
   /** Stable session identity for remembered activity disclosures, including while disconnected. */
@@ -10,6 +10,8 @@ export interface TranscriptDisplayProps {
   /** Workspace ID (enables persisted tool expansion state per workspace) */
   workspaceId?: string;
   messages: GroupedMessageItem[];
+  /** Local sends awaiting server confirmation, shown immediately in the transcript. */
+  pendingMessages?: ReadonlyMap<string, PendingMessageContent>;
   acpPlan?: AcpPlanState | null;
   running: boolean;
   work?: SessionWorkState;

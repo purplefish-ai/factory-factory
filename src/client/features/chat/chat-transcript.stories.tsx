@@ -619,3 +619,40 @@ export const PhoneQueuedMessageHandoff: Story = {
   ...QueuedMessageHandoff,
   globals: { viewport: { value: 'phone', isRotated: false } },
 };
+
+/** Attachment bytes are already local; no server acknowledgement is needed to render. */
+export const SendingImage: Story = {
+  args: {
+    sessionId: 'sending-story',
+    loadingSession: false,
+    pendingMessages: new Map([
+      [
+        'pending-image',
+        {
+          text: 'Can you explain this image?',
+          sessionId: 'sending-story',
+          attachments: [
+            {
+              id: 'image',
+              name: 'example.png',
+              type: 'image/png',
+              size: 68,
+              contentType: 'image',
+              data: 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=',
+            },
+          ],
+        },
+      ],
+    ]),
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByText('Can you explain this image?')).toBeVisible();
+    await expect(canvas.getByText('Sending…')).toBeVisible();
+  },
+};
+
+export const SendingWhileReconnecting: Story = {
+  ...SendingImage,
+  args: { ...SendingImage.args, loadingSession: true },
+};

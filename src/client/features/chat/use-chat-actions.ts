@@ -271,7 +271,7 @@ export function useChatActions(options: UseChatActionsOptions): UseChatActionsRe
       }
 
       // Send to backend for queueing/dispatch
-      // Message will be added to state when MESSAGE_ACCEPTED is received
+      // The transcript shows pending content until the backend confirms the message.
       const msg: QueueMessageRequest = {
         type: 'queue_message',
         id,

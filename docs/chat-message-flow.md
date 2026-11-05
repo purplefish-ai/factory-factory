@@ -18,6 +18,13 @@ presentation.
 
 ## Live messages
 
+Locally sent messages appear immediately in the transcript with their text,
+attachments and a Sending status while awaiting server confirmation. The pending
+entries survive history refreshes and reconnect loading; matching server message
+IDs replace them without duplication. Pending sends have no queue controls until
+the server confirms acceptance. Both workspace chat and Kanban quick chat use
+this presentation.
+
 ```mermaid
 flowchart TD
     UI[Chat composer] -->|queue_message over WebSocket| Handler[WebSocket chat message router]

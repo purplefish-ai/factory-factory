@@ -298,6 +298,7 @@ export const ChatContent = memo(function ChatContent(props: ChatContentProps) {
         header={header}
         workspaceId={props.workspaceId}
         messages={groupedMessages}
+        pendingMessages={props.pendingMessages}
         history={props.history}
         subagentTimelineError={timeline.error}
         runningSubagentIconIndices={timeline.runningSubagentIconIndices}
