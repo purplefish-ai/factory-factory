@@ -81,7 +81,9 @@ export const WorkspaceDetailHeaderSlot = memo(function WorkspaceDetailHeaderSlot
         <div data-workspace-header className="flex min-w-0 flex-1 items-center gap-0.5">
           <div
             className={
-              hasFamily ? 'min-w-0 max-w-[25%] shrink' : 'min-w-0 max-w-[50%] shrink md:max-w-[40%]'
+              hasFamily
+                ? 'min-w-[74px] max-w-[25%] shrink md:min-w-0'
+                : 'min-w-0 max-w-[50%] shrink md:max-w-[40%]'
             }
           >
             <ProjectHeaderNavigation
