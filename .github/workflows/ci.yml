@@ -7,12 +7,34 @@ on:
   merge_group:
     types: [checks_requested]
 
-# Supersede older main-push checks; keep PR and merge-queue runs independent.
+# Supersede older revisions of each PR and main; merge-queue runs stay independent.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && github.ref || github.run_id }}
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || github.event_name == 'push' && github.ref == 'refs/heads/main' && github.ref || github.run_id }}
   cancel-in-progress: true
 
 jobs:
+  changes:
+    name: Select CI jobs
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      app: ${{ steps.select.outputs.app }}
+      storybook: ${{ steps.select.outputs.storybook }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 2
+      - name: Setup Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: '.node-version'
+      - name: Select jobs from integrated changes
+        id: select
+        env:
+          EVENT: ${{ github.event_name }}
+        run: node .github/scripts/select-ci.mjs "$EVENT" >> "$GITHUB_OUTPUT"
+
   checks:
     name: Lint, Type Check, Dependencies & Dead Code
     runs-on: ubuntu-latest
@@ -29,7 +51,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: '26.12.1'
+          node-version-file: '.node-version'
           cache: 'pnpm'
 
       - name: Install dependencies
@@ -64,7 +86,9 @@ jobs:
         run: pnpm typecheck
 
   build:
-    name: Build
+    name: Build work
+    needs: changes
+    if: needs.changes.outputs.app == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -79,7 +103,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: '26.12.1'
+          node-version-file: '.node-version'
           cache: 'pnpm'
 
       - name: Install dependencies
@@ -92,7 +116,9 @@ jobs:
         run: pnpm build
 
   storybook:
-    name: Storybook Build
+    name: Storybook Build work
+    needs: changes
+    if: needs.changes.outputs.storybook == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -107,7 +133,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: '26.12.1'
+          node-version-file: '.node-version'
           cache: 'pnpm'
 
       - name: Install dependencies
@@ -120,12 +146,23 @@ jobs:
         run: pnpm build:storybook
 
   storybook-tests:
-    name: Storybook Tests
+    name: Storybook Tests work
+    needs: changes
+    if: needs.changes.outputs.storybook == 'true'
     runs-on: ubuntu-latest
+    # Official image includes matching browsers, OS libraries and browser fonts.
+    container:
+      image: mcr.microsoft.com/playwright:v1.64.1-noble@sha256:2f05f8a734509a7b3f26a912639488ee08f58a7b292d14d62271bcff9038768f
+      options: --ipc=host
+    defaults:
+      run:
+        shell: bash
     permissions:
       contents: read
     env:
       DATABASE_URL: 'file:./test.db'
+      PLAYWRIGHT_BROWSERS_PATH: /ms-playwright
+      PLAYWRIGHT_IMAGE_VERSION: '1.64.1'
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -135,23 +172,57 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: '26.12.1'
-          cache: 'pnpm'
+          node-version-file: '.node-version'
+          package-manager-cache: false
 
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+      # Keep the store on the workspace mount. The container HOME is a separate
+      # filesystem, so pnpm otherwise ignores its restored store for hardlinks.
+      - name: Cache Storybook dependencies
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: /__w/.pnpm-store/v11
+          key: ff-storybook-pnpm-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pnpm-lock.yaml') }}
+
+      - name: Install browser-test dependencies
+        # Browser stories do not use node-pty, SQLite or Electron. The official
+        # browser image has no native compiler; rebuild only browser prerequisites.
+        run: |
+          pnpm install --frozen-lockfile --ignore-scripts --store-dir /__w/.pnpm-store
+          pnpm rebuild @prisma/engines esbuild
 
       - name: Generate Prisma client
         run: pnpm db:generate
 
-      - name: Install Playwright Chromium
-        run: pnpm exec playwright install --with-deps --only-shell chromium
+      - name: Verify Playwright environment matches installed packages
+        run: |
+          node --input-type=module -e '
+            import { createRequire } from "node:module";
+            const root = createRequire(import.meta.url);
+            const provider = createRequire(root.resolve("@vitest/browser-playwright"));
+            const browser = createRequire(provider.resolve("playwright/package.json"));
+            const versions = {
+              "@playwright/test": root("@playwright/test/package.json").version,
+              playwright: provider("playwright/package.json").version,
+              "playwright-core": browser("playwright-core/package.json").version,
+            };
+            for (const [name, version] of Object.entries(versions)) {
+              if (version !== process.env.PLAYWRIGHT_IMAGE_VERSION) {
+                throw new Error(`${name} ${version} does not match the pinned Playwright image; update image tag, digest and version together`);
+              }
+            }
+            // Use the actual Vitest provider dependency, including its image binary.
+            const chromium = await provider("playwright").chromium.launch();
+            console.log(`Image Chromium: ${chromium.version()}`);
+            await chromium.close();
+          '
 
       # Renders every story in headless Chromium and runs its play function.
       - name: Test stories
         run: pnpm test:storybook
 
   test-shards:
+    needs: changes
+    if: needs.changes.outputs.app == 'true'
     name: Test shard (${{ matrix.shard }}/2)
     runs-on: ubuntu-latest
     strategy:
@@ -171,7 +242,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: '26.12.1'
+          node-version-file: '.node-version'
           cache: 'pnpm'
 
       - name: Install dependencies
@@ -209,9 +280,9 @@ jobs:
           retention-days: 1
 
   test:
-    name: Test
-    needs: test-shards
-    if: ${{ !cancelled() }}
+    name: Test coverage
+    needs: [changes, test-shards]
+    if: ${{ !cancelled() && needs.changes.outputs.app == 'true' }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -231,7 +302,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: '26.12.1'
+          node-version-file: '.node-version'
           cache: 'pnpm'
 
       - name: Install dependencies
@@ -253,3 +324,79 @@ jobs:
       - name: Report Coverage
         if: always() && github.event_name == 'pull_request'
         uses: davelosert/vitest-coverage-report-action@8f86cfb56ed6d5613ea8cdc5259f207fbfd51ece # v2.13.1
+
+  require-build:
+    name: Build
+    if: always()
+    needs: [changes, build]
+    runs-on: ubuntu-latest
+    permissions: {}
+    steps:
+      - name: Require successful work or an explicit irrelevant-change decision
+        env:
+          SELECTION_RESULT: ${{ needs.changes.result }}
+          SELECTED: ${{ needs.changes.outputs.app }}
+          WORK_RESULT: ${{ needs.build.result }}
+        run: |
+          test "$SELECTION_RESULT" = success
+          case "$SELECTED:$WORK_RESULT" in
+            true:success|false:skipped) ;;
+            *) echo "Unexpected CI result: selected=$SELECTED result=$WORK_RESULT"; exit 1 ;;
+          esac
+
+  require-storybook:
+    name: Storybook Build
+    if: always()
+    needs: [changes, storybook]
+    runs-on: ubuntu-latest
+    permissions: {}
+    steps:
+      - name: Require successful work or an explicit irrelevant-change decision
+        env:
+          SELECTION_RESULT: ${{ needs.changes.result }}
+          SELECTED: ${{ needs.changes.outputs.storybook }}
+          WORK_RESULT: ${{ needs.storybook.result }}
+        run: |
+          test "$SELECTION_RESULT" = success
+          case "$SELECTED:$WORK_RESULT" in
+            true:success|false:skipped) ;;
+            *) echo "Unexpected CI result: selected=$SELECTED result=$WORK_RESULT"; exit 1 ;;
+          esac
+
+  require-storybook-tests:
+    name: Storybook Tests
+    if: always()
+    needs: [changes, storybook-tests]
+    runs-on: ubuntu-latest
+    permissions: {}
+    steps:
+      - name: Require successful work or an explicit irrelevant-change decision
+        env:
+          SELECTION_RESULT: ${{ needs.changes.result }}
+          SELECTED: ${{ needs.changes.outputs.storybook }}
+          WORK_RESULT: ${{ needs.storybook-tests.result }}
+        run: |
+          test "$SELECTION_RESULT" = success
+          case "$SELECTED:$WORK_RESULT" in
+            true:success|false:skipped) ;;
+            *) echo "Unexpected CI result: selected=$SELECTED result=$WORK_RESULT"; exit 1 ;;
+          esac
+
+  require-test:
+    name: Test
+    if: always()
+    needs: [changes, test]
+    runs-on: ubuntu-latest
+    permissions: {}
+    steps:
+      - name: Require successful work or an explicit irrelevant-change decision
+        env:
+          SELECTION_RESULT: ${{ needs.changes.result }}
+          SELECTED: ${{ needs.changes.outputs.app }}
+          WORK_RESULT: ${{ needs.test.result }}
+        run: |
+          test "$SELECTION_RESULT" = success
+          case "$SELECTED:$WORK_RESULT" in
+            true:success|false:skipped) ;;
+            *) echo "Unexpected CI result: selected=$SELECTED result=$WORK_RESULT"; exit 1 ;;
+          esac

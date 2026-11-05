@@ -133,9 +133,21 @@ merges their reports, and enforces the normal coverage thresholds and critical
 surface checks. Local `pnpm test:coverage` still runs and checks the complete
 suite in one process.
 
-New pushes to `main` cancel older main-push runs of CI and CodeQL. Pull request,
-merge-queue, and scheduled checks run independently. npm publishing and Electron
-release workflows are excluded from this cancellation policy.
+CI selects work from the integrated PR diff. Documentation-only changes in the
+explicit prose allowlist omit application builds/tests and Storybook; backend
+TypeScript-only changes also omit Storybook. Lint/type/dependency checks always
+run. Shared code, dependencies, styles, configuration and unknown paths trigger
+all work. Main and merge-queue runs always run everything. The existing required
+`Build`, `Storybook Build`, `Storybook Tests` and `Test` checks remain present:
+their gates require either successful selected work or an explicit irrelevant
+change decision. Failed selection, missing outputs, unexpected skips and failed
+workers fail the gates.
+
+New pushes to each PR cancel older revisions of that PR in CI and CodeQL; new
+pushes to `main` cancel older main-push runs. Cancellation groups include the
+workflow and PR number, while merge-queue and scheduled runs stay independent.
+npm publishing and Electron release workflows are excluded from this
+cancellation policy.
 
 Docker images support the optional [Compose deployment](docker-compose.yml). The
 Docker Build and Docker Build & Push workflows run only through GitHub Actions'
