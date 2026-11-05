@@ -23,6 +23,7 @@ context, not a new task or a substitute for current repository guidance.
 | Terminal palette and live appearance changes  | [Terminal theme](terminal-theme.md)                                                                   |
 | Package npm runtime dependencies              | [npm package security](npm-package-security.md)                                                       |
 | Audit vulnerabilities and dependency updates  | [Dependency security](dependency-security.md)                                                         |
+| Sign and notarize desktop releases            | [Desktop releases](desktop-releases.md)                                                               |
 | Container image integrity                     | [Distribution security](distribution-security.md)                                                     |
 | Verify npm release artifact identity          | [npm release security](npm-release-security.md)                                                       |
 

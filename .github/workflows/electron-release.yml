@@ -26,21 +26,69 @@ jobs:
   build-mac:
     name: Build macOS
     runs-on: macos-latest
+    environment: ${{ (github.event_name == 'release' || inputs.create_release == true) && 'desktop-release' || 'desktop-validation' }}
     permissions:
       contents: read
     env:
       DATABASE_URL: 'file:./test.db'
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
-      - name: Install pnpm
-        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0: native pnpm 12 support
+        with:
+          fetch-depth: 0
 
       - name: Setup Node.js
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: '26.12.1'
-          cache: 'pnpm'
+          package-manager-cache: false
+
+      - name: Verify signed release source
+        if: github.event_name == 'release' || inputs.create_release == true
+        env:
+          REQUESTED_RELEASE_TAG: ${{ inputs.release_tag }}
+        run: |
+          set -euo pipefail
+          if [ "$(git rev-parse HEAD)" != "$GITHUB_SHA" ]; then
+            echo "::error::Checkout does not match the event commit."
+            exit 1
+          fi
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" refs/remotes/origin/main; then
+            echo "::error::Signed release source must be in main ancestry."
+            exit 1
+          fi
+          VERSION=$(node -p "require('./package.json').version")
+          if [[ ! "$VERSION" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
+            echo "::error::A stable package version is required for signed releases."
+            exit 1
+          fi
+          if git show-ref --verify --quiet "refs/tags/v$VERSION"; then
+            TAG_COMMIT=$(git rev-parse "refs/tags/v$VERSION^{commit}")
+            if [ "$TAG_COMMIT" != "$GITHUB_SHA" ]; then
+              echo "::error::Existing release tag points to a different source commit."
+              exit 1
+            fi
+          fi
+          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
+            if [ "$GITHUB_REF" != "refs/heads/main" ]; then
+              echo "::error::Signed manual builds must use the main branch."
+              exit 1
+            fi
+            if [ "${REQUESTED_RELEASE_TAG:-}" != "v$VERSION" ]; then
+              echo "::error::Manual release tag must match the package version."
+              exit 1
+            fi
+          elif [ "$GITHUB_EVENT_NAME" = "release" ]; then
+            if [ "$GITHUB_REF" != "refs/tags/v$VERSION" ]; then
+              echo "::error::Release tag must match the package version."
+              exit 1
+            fi
+          else
+            echo "::error::Unsupported signed release event."
+            exit 1
+          fi
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0: native pnpm 12 support
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -48,10 +96,51 @@ jobs:
       - name: Generate Prisma client
         run: pnpm db:generate
 
-      - name: Build Electron app
-        run: pnpm build:electron
+      - name: Prepare Electron application without signing credentials
+        run: |
+          pnpm build
+          pnpm exec tsc -p tsconfig.electron.json
+          node scripts/ensure-native-modules.mjs electron
+
+      - name: Build unsigned validation app
+        if: github.event_name != 'release' && inputs.create_release != true
+        run: pnpm exec electron-builder --publish never --config.mac.notarize=false
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: false
+
+      - name: Build signed and notarized release
+        if: github.event_name == 'release' || inputs.create_release == true
+        env:
+          CSC_LINK: ${{ secrets.MACOS_CERTIFICATE }}
+          CSC_KEY_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          set -euo pipefail
+          for name in CSC_LINK CSC_KEY_PASSWORD APPLE_ID APPLE_APP_SPECIFIC_PASSWORD APPLE_TEAM_ID; do
+            if [ -z "${!name:-}" ]; then
+              echo "::error::Missing signing credential: $name. See docs/desktop-releases.md."
+              exit 1
+            fi
+          done
+          pnpm exec electron-builder --publish never --config.npmRebuild=false --config.forceCodeSigning=true --config.mac.hardenedRuntime=true --config.mac.notarize=true
+
+      - name: Verify release signature and notarization
+        if: github.event_name == 'release' || inputs.create_release == true
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          apps=(release/mac*/"Factory Factory.app")
+          if [ "${#apps[@]}" -eq 0 ]; then
+            echo "::error::No packaged macOS app found for signature verification."
+            exit 1
+          fi
+          for app in "${apps[@]}"; do
+            codesign --verify --deep --strict --verbose=2 "$app"
+            xcrun stapler validate "$app"
+            spctl --assess --type execute --verbose=2 "$app"
+          done
 
       - name: Verify bundled Claude without global CLIs
         run: node scripts/check-packaged-claude.mjs --allow-unauthenticated
@@ -92,7 +181,7 @@ jobs:
         run: pnpm db:generate
 
       - name: Build Electron app
-        run: pnpm build:electron
+        run: pnpm build:electron --publish never
 
       - name: Verify bundled Claude without global CLIs
         run: node scripts/check-packaged-claude.mjs --allow-unauthenticated
@@ -131,7 +220,7 @@ jobs:
         run: pnpm db:generate
 
       - name: Build Electron app
-        run: pnpm build:electron
+        run: pnpm build:electron --publish never
 
       - name: Verify bundled Claude without global CLIs
         run: node scripts/check-packaged-claude.mjs --allow-unauthenticated
@@ -147,6 +236,9 @@ jobs:
 
   create-release:
     name: Create Release
+    concurrency:
+      group: desktop-release-${{ github.event_name == 'release' && github.ref_name || inputs.release_tag }}
+      cancel-in-progress: false
     needs: [build-mac, build-windows, build-linux]
     if: |
       always() &&
@@ -166,6 +258,24 @@ jobs:
       - name: List artifacts
         run: find artifacts -type f
 
+      - name: Verify release tag before attaching artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.event_name == 'release' && github.ref_name || inputs.release_tag }}
+        run: |
+          set -euo pipefail
+          EXISTING_REF=$(gh api "repos/$GITHUB_REPOSITORY/git/matching-refs/tags/$RELEASE_TAG" --jq '.[] | select(.ref == ("refs/tags/" + env.RELEASE_TAG)) | .ref')
+          if [ -z "$EXISTING_REF" ]; then
+            if ! gh api -X POST "repos/$GITHUB_REPOSITORY/git/refs" -f ref="refs/tags/$RELEASE_TAG" -f sha="$GITHUB_SHA" > /dev/null; then
+              echo "Tag creation did not succeed; remote identity verification is still required."
+            fi
+          fi
+          REMOTE_SHA=$(gh api "repos/$GITHUB_REPOSITORY/commits/refs/tags/$RELEASE_TAG" --jq '.sha')
+          if [ "$REMOTE_SHA" != "$GITHUB_SHA" ]; then
+            echo "::error::Release tag no longer matches the built source commit."
+            exit 1
+          fi
+
       - name: Upload to Release (from release event)
         if: github.event_name == 'release'
         uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
@@ -177,6 +287,7 @@ jobs:
         uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
         with:
           tag_name: ${{ github.event.inputs.release_tag }}
+          target_commitish: ${{ github.sha }}
           name: ${{ github.event.inputs.release_tag }}
           draft: true
           files: artifacts/**/*
