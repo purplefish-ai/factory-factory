@@ -847,7 +847,9 @@ it('bounds graceful shutdown when a real backend call remains pending', async ()
     notifyRequest = resolve;
   });
   const observeRequest = (request: IncomingMessage) => {
-    if (request.url?.startsWith('/api/trpc/project.list')) notifyRequest();
+    if (request.url?.startsWith('/api/trpc/project.list')) {
+      notifyRequest();
+    }
   };
   toolServer.on('request', observeRequest);
   const pending = callToolWithHttpResponse({
@@ -858,7 +860,7 @@ it('bounds graceful shutdown when a real backend call remains pending', async ()
   });
   void pending.catch(() => undefined);
   try {
-    await withFixtureDeadline(requested, 1_000, 'Stalled HTTP request was not observed');
+    await withFixtureDeadline(requested, 1000, 'Stalled HTTP request was not observed');
     await expect(closeClient(client)).rejects.toThrow('MCP graceful shutdown timed out');
     await expect(pending).rejects.toThrow('MCP process exited before replying');
     expect(client.child.signalCode).toBe('SIGKILL');
