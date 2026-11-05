@@ -119,7 +119,7 @@ function QueuedMessageActions({
       inert={!hasQueuedActions}
     >
       <div className="min-h-0 overflow-hidden">
-        <div className="flex h-9 items-center justify-end gap-1 mb-1 px-0.5">
+        <div className="flex h-[max(2.25rem,calc(var(--touch-target-size,0px)+4px))] items-center justify-end gap-1 mb-1 px-0.5">
           {steer && <QueuedMessageSteerAction onSteer={steer} />}
           {/* Cancel button for queued messages */}
           {isQueued && onRemove && (

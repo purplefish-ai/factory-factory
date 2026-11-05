@@ -21,7 +21,7 @@ const overflowTools = [
 ] as const;
 
 const tabClassName =
-  'h-11 flex-none rounded-none px-2.5 text-xs group-data-[orientation=horizontal]/tabs:after:bottom-0';
+  'h-9 flex-none rounded-none px-2.5 text-xs group-data-[orientation=horizontal]/tabs:after:bottom-0';
 
 export function MobileToolSwitcher({
   periodicTaskId,
@@ -70,10 +70,10 @@ export function MobileToolSwitcher({
     <Tabs value={activeTool} onValueChange={selectTool} className="h-full min-h-0 gap-0">
       <nav
         aria-label="Workspace tools"
-        className="flex h-11 shrink-0 items-center border-b bg-shell"
+        className="flex h-9 shrink-0 items-center border-b bg-shell"
       >
         <div className="min-w-0 flex-1 overflow-x-auto">
-          <TabsList variant="line" aria-label="Workspace tools" className="h-11 gap-0 p-0">
+          <TabsList variant="line" aria-label="Workspace tools" className="h-9 gap-0 p-0">
             <TabsTrigger value="changes" className={tabClassName}>
               Changes
             </TabsTrigger>
@@ -102,7 +102,7 @@ export function MobileToolSwitcher({
             <Button
               variant="ghost"
               size="icon"
-              className="relative size-11 rounded-none"
+              className="relative size-9 rounded-none"
               aria-label={
                 unreadCount && activeTool !== 'inbox'
                   ? `More tools, ${unreadCount} unread inbox ${unreadCount === 1 ? 'message' : 'messages'}`
@@ -124,7 +124,7 @@ export function MobileToolSwitcher({
               {overflowTools
                 .filter((tool) => tool.value !== 'periodic-task' || periodicTaskId)
                 .map((tool) => (
-                  <DropdownMenuRadioItem key={tool.value} value={tool.value} className="min-h-11">
+                  <DropdownMenuRadioItem key={tool.value} value={tool.value} className="min-h-9">
                     {tool.label}
                     {tool.value === 'inbox' && <UnreadMailBadge count={unreadCount} icon={false} />}
                   </DropdownMenuRadioItem>

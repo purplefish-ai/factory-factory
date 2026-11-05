@@ -1,16 +1,19 @@
-/* Give workspace context its own line on phones. Actions retain full touch
- * targets while the project, ancestry and workspace switcher share the width.
+/* Two compact rows on phones: grouped actions above a full-width breadcrumb.
+ * A divider gives workspace context a deliberate place in the header.
  */
 @media (width < 48rem) {
   .app-header-controls:has([data-workspace-header]) {
     flex-wrap: wrap;
     row-gap: 0;
+    padding-top: 4px;
   }
 
   .app-header-controls:has([data-workspace-header]) > [data-slot='header-context'] {
     order: 1;
     flex-basis: 100%;
-    min-height: 44px;
+    min-height: 40px;
+    margin-top: 4px;
+    border-top: 1px solid var(--border);
   }
 }
 
@@ -55,6 +58,8 @@
     order: 0;
     flex-basis: auto;
     min-height: 0;
+    margin-top: 0;
+    border-top: 0;
   }
 
   .app-header :is(button, a, input, select, [role='button'], [role='combobox']) {

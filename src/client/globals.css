@@ -412,15 +412,19 @@
   user-select: text !important;
 }
 
-/* Coarse pointers need usable targets even when a secondary mouse is present.
- * Minimum sizes preserve layout flow instead of overlapping adjacent actions.
+/* Compact touch targets apply across the app, including hybrid devices.
+ * Keep the minimum in layout flow so adjacent actions cannot overlap.
  */
 @media (any-pointer: coarse) {
+  html {
+    --touch-target-size: 36px;
+  }
+
   button,
   a[data-slot='button'],
   [role='tab'],
   [role='button'] {
-    min-width: 44px;
-    min-height: 44px;
+    min-width: var(--touch-target-size);
+    min-height: var(--touch-target-size);
   }
 }

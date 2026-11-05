@@ -784,7 +784,7 @@ merges. See [PR update delivery and recovery](pull-requests.md).
 ## Workspace tools on phones and foldables
 
 Below 1024 CSS pixels, workspace tools open in a right-side drawer with a strip
-of the session still visible. A compact 44px strip uses the shared underline
+of the session still visible. A compact 36px strip uses the shared underline
 tabs for Changes, Files, and Terminal. The overflow menu keeps sub-agents,
 screenshots, Inbox, and logs available, plus the scheduled agent when one
 launched the workspace. It marks the current selection and shows the selected

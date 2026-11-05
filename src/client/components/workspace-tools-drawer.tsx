@@ -42,7 +42,7 @@ export function WorkspaceToolsDrawer({
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent
         side="right"
-        className="flex w-[calc(100%-1.5rem)] max-w-[44rem] flex-col gap-0 overflow-hidden p-0 pb-[env(safe-area-inset-bottom)] sm:max-w-[44rem] [&>button]:right-2 [&>button]:top-2 [&>button]:flex [&>button]:size-11 [&>button]:items-center [&>button]:justify-center"
+        className="flex w-[calc(100%-1.5rem)] max-w-[44rem] flex-col gap-0 overflow-hidden p-0 pb-[env(safe-area-inset-bottom)] sm:max-w-[44rem] [&>button]:right-2 [&>button]:top-2 [&>button]:flex [&>button]:size-9 [&>button]:items-center [&>button]:justify-center"
         style={
           viewport
             ? { top, height: Math.max(0, viewport.height - (top - viewport.top)), bottom: 'auto' }

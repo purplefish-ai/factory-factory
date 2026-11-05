@@ -237,7 +237,7 @@ export const RightPanel = memo(function RightPanel({
       <div
         className={cn(
           'flex items-center gap-0.5 p-1 bg-shell min-w-0 overflow-x-auto',
-          isMobile && 'min-h-11 [&_button]:min-h-11 [&_button]:min-w-11',
+          isMobile && 'min-h-9 [&_button]:min-h-9 [&_button]:min-w-9',
           !isLogsActive && 'border-b'
         )}
       >
@@ -260,7 +260,7 @@ export const RightPanel = memo(function RightPanel({
         <div
           className={cn(
             'flex items-center gap-2 px-2 py-1 bg-shell border-b min-w-0',
-            isMobile && '[&_button]:min-h-11 [&_button]:min-w-11'
+            isMobile && '[&_button]:min-h-9 [&_button]:min-w-9'
           )}
         >
           <span className="text-[10px] uppercase tracking-wide text-muted-foreground/80 font-medium whitespace-nowrap">
