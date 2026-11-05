@@ -1,22 +1,66 @@
-/* Two compact rows on every phone page: actions above full-width page context.
- * A divider gives workspace context a deliberate place in the header.
+.app-header-controls > [data-slot='header-search'] {
+  display: contents;
+}
+
+/* Phone headers always put navigation first and controls second. The same
+ * portal targets and DOM order serve desktop and mobile without remounting.
  */
 @media (width < 48rem) {
-  .app-header-controls {
-    flex-wrap: wrap;
-    row-gap: 0;
-    padding-top: 4px;
+  .app-header {
+    padding-inline: 4px;
   }
 
-  .app-header-controls > [data-slot='header-context'] {
-    order: 1;
-    flex-basis: calc(100% + 16px);
-    flex-shrink: 0;
-    margin-inline: -8px;
-    padding-inline: 8px;
-    min-height: 40px;
-    margin-top: 4px;
+  .app-header-controls {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto auto;
+    grid-template-rows: minmax(40px, auto) minmax(40px, auto);
+    row-gap: 0;
+    column-gap: 1px;
+  }
+
+  .app-header-controls > [data-slot='header-navigation'] {
+    display: contents;
+  }
+
+  .app-header-controls > button {
+    grid-row: 1;
+    grid-column: 1;
+  }
+
+  .app-header-controls [data-slot='header-context'] {
+    display: flex;
+    grid-row: 1;
+    grid-column: 2 / -1;
+  }
+
+  .app-header-controls::before {
+    content: '';
+    grid-row: 2;
+    grid-column: 1 / -1;
+    align-self: start;
+    margin-inline: -4px;
     border-top: 1px solid var(--border);
+  }
+
+  .app-header-controls [data-slot='header-status'] {
+    grid-row: 2;
+    grid-column: 1;
+  }
+
+  .app-header-controls > [data-slot='header-actions'] {
+    grid-row: 2;
+    grid-column: 2;
+  }
+
+  .app-header-controls > [data-slot='header-search'] {
+    display: flex;
+    grid-row: 2;
+    grid-column: 3;
+  }
+
+  .app-header-controls > [data-slot='header-end'] {
+    grid-row: 2;
+    grid-column: 4;
   }
 }
 
@@ -54,18 +98,21 @@
   }
 
   .app-header-controls {
+    display: flex;
     flex-wrap: nowrap;
   }
 
-  .app-header-controls > [data-slot='header-context'] {
-    order: 0;
+  .app-header-controls > [data-slot='header-navigation'] {
+    display: flex;
     flex-basis: auto;
-    flex-shrink: 1;
-    margin-inline: 0;
-    padding-inline: 0;
-    min-height: 0;
-    margin-top: 0;
-    border-top: 0;
+  }
+
+  .app-header-controls::before {
+    display: none;
+  }
+
+  .app-header-controls > [data-slot='header-search'] {
+    display: contents;
   }
 
   .app-header :is(button, a, input, select, [role='button'], [role='combobox']) {

@@ -716,6 +716,12 @@ snapshot synchronization aligned with the URL.
 Global Reviews and Settings headers return to the persisted selected project
 when it still exists, falling back to the first available project otherwise.
 
+On phones, the shared app header puts the sidebar menu and breadcrumb or page
+title in its first row. Status and action controls, search, and the panel toggle
+occupy the second row. Both rows keep the same height across pages; long paths
+truncate within the navigation row. Desktop and installed desktop PWA headers
+retain a single row.
+
 ## Session needs-input status
 
 Each `SessionSummary` carries `pendingRequestType` (`permission_request`,

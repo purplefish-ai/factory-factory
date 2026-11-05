@@ -72,6 +72,23 @@ it('preserves context and interaction across all portal slots and restores a gen
     const header = container.querySelector('header');
     expect(header?.textContent).toContain('Project / Workspace');
     expect(header?.textContent).toContain('Merged');
+    const context = header?.querySelector('[data-slot="header-context"]');
+    const status = header?.querySelector('[data-slot="header-status"]');
+    expect(context?.textContent).toBe('Project / Workspace');
+    expect(status?.textContent).toBe('Merged');
+    expect(context?.contains(status ?? null)).toBe(false);
+    expect(
+      [...header!.querySelectorAll('[data-slot^="header-"]')].map((slot) =>
+        slot.getAttribute('data-slot')
+      )
+    ).toEqual([
+      'header-navigation',
+      'header-context',
+      'header-status',
+      'header-actions',
+      'header-search',
+      'header-end',
+    ]);
     expect(
       [...header!.querySelectorAll('button')].map(
         (button) => button.getAttribute('aria-label') ?? button.textContent
