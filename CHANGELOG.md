@@ -74,6 +74,11 @@ and this project adheres to
   generation from packaged installation (#2902, #2911, #2912, #2917)
 - Add staged unused-code and production reachability checks, organize Storybook
   titles, and render every Storybook story in CI (#2922, #2925, #2944, #2950)
+- Keep workspace archiving in the overflow menu at every screen width (#3037)
+- Reduce repeated test setup and process launches with migrated SQLite
+  templates, narrower fixtures, reusable MCP processes, and isolated browser VM
+  workers; tighten pagination, contention, and terminal-event test handling
+  (#3027, #3028, #3029, #3030, #3031, #3032, #3033, #3034)
 
 ### Fixed
 
@@ -104,6 +109,12 @@ and this project adheres to
 - Start terminals when a workspace has no running terminals (#3021)
 - Correct desktop PWA notices and clarify temporary Codex provider availability
   errors while preserving actionable account and recovery errors (#3022, #3025)
+- Align Kanban column headers and card starting positions (#3026)
+- Fix compact touch controls and mobile chat clipping, keep composer actions
+  from overlapping, and prevent terminals from stealing keyboard focus (#3035,
+  #3036)
+- Suppress stale queued-message removal errors caused by repeated clicks or
+  queue dispatch races (#3038)
 
 ## [0.5.3] - 2026-11-03
 
