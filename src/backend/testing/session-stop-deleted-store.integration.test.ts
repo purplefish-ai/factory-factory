@@ -8,8 +8,11 @@ import {
 let db: IntegrationDatabase;
 let other: { id: string };
 let domain: typeof import('@/backend/services/session/service/session-domain.service').sessionDomainService;
+let cleanup: { db?: IntegrationDatabase; domain?: typeof domain } = {};
 beforeEach(async () => {
+  cleanup = {};
   db = await createIntegrationDatabase();
+  cleanup.db = db;
   const project = await db.prisma.project.create({
     data: {
       name: 'Cleanup fixture',
@@ -38,11 +41,17 @@ beforeEach(async () => {
   ({ sessionDomainService: domain } = await vi.importActual<
     typeof import('@/backend/services/session/service/session-domain.service')
   >('@/backend/services/session/service/session-domain.service'));
+  cleanup.domain = domain;
 });
 afterEach(async () => {
-  domain.clearAllSessions();
-  vi.restoreAllMocks();
-  await destroyIntegrationDatabase(db);
+  try {
+    cleanup.domain?.clearAllSessions();
+  } finally {
+    vi.restoreAllMocks();
+    if (cleanup.db) {
+      await destroyIntegrationDatabase(cleanup.db);
+    }
+  }
 });
 
 it.each([
