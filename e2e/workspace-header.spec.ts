@@ -383,7 +383,10 @@ for (const width of [320, 390]) {
       expect(
         Math.abs(context.y + context.height / 2 - toggle.y - toggle.height / 2)
       ).toBeLessThanOrEqual(1);
-      expect(search.y).toBeGreaterThanOrEqual(context.y + context.height);
+      expect(search.x).toBeGreaterThanOrEqual(context.x + context.width);
+      expect(
+        Math.abs(search.y + search.height / 2 - toggle.y - toggle.height / 2)
+      ).toBeLessThanOrEqual(1);
       await expectHeaderFits(page);
     }
     expect(heights[1]).toBe(heights[0]);

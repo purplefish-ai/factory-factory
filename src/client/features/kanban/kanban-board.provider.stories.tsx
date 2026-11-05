@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react';
-import { expect, userEvent, within } from 'storybook/test';
+import { expect, userEvent, waitFor, within } from 'storybook/test';
 import { AppHeader } from '@/client/components/app-header';
 import {
   AppHeaderProvider,
@@ -11,19 +11,18 @@ import {
   exerciseIssueRefreshRecovery,
 } from '@/client/components/project-issues-recovery.story-fixtures';
 import { STORY_TRPC_PENDING, type StoryTrpcHandlers } from '@/client/lib/storybook-trpc';
-import { useIsMobile } from '@/hooks/use-mobile';
+import { SidebarProvider } from '@/components/ui/sidebar';
 import { IssueProvider } from '@/shared/core/enums';
 import { KanbanBoard } from './kanban-board';
 import type { WorkspaceWithKanban } from './kanban-card';
 import { baseWorkspace } from './kanban-card.story-fixtures';
 import { KanbanProvider } from './kanban-context';
 import { KanbanControls } from './kanban-controls';
-import { KanbanToolbar } from './kanban-toolbar';
 
 /**
  * The real KanbanBoard and KanbanProvider, fed by story tRPC handlers rather
  * than a backend. `Board/KanbanBoard` lays out columns directly; these stories
- * cover the responsive board, including the phone column pills.
+ * cover the responsive board, including the phone column tabs.
  */
 
 const workspaces: WorkspaceWithKanban[] = [
@@ -68,10 +67,7 @@ const handlers: StoryTrpcHandlers = {
 };
 
 function BoardActions() {
-  const isMobile = useIsMobile();
-  return isMobile ? (
-    <KanbanToolbar />
-  ) : (
+  return (
     <HeaderRightSlot>
       <KanbanControls />
     </HeaderRightSlot>
@@ -84,18 +80,35 @@ const meta = {
   parameters: { layout: 'fullscreen', trpc: { handlers } },
   decorators: [
     (Story) => (
-      <AppHeaderProvider>
-        <KanbanProvider projectId="proj-1" projectSlug="demo" issueProvider={IssueProvider.GITHUB}>
-          <AppHeader showSidebarToggle={false} />
-          <HeaderLeftStartSlot>
-            <span className="shrink-0 text-sm font-semibold">Board</span>
-          </HeaderLeftStartSlot>
-          <BoardActions />
-          <div className="h-[640px] p-4">
-            <Story />
-          </div>
-        </KanbanProvider>
-      </AppHeaderProvider>
+      <SidebarProvider>
+        <div className="flex h-dvh w-full min-w-0 flex-col overflow-hidden md:h-auto md:overflow-visible">
+          <AppHeaderProvider>
+            <KanbanProvider
+              projectId="proj-1"
+              projectSlug="demo"
+              issueProvider={IssueProvider.GITHUB}
+            >
+              <AppHeader />
+              <HeaderLeftStartSlot>
+                <nav
+                  aria-label="Breadcrumb"
+                  className="flex min-w-0 items-center gap-1 text-sm font-semibold"
+                >
+                  <span className="truncate">Factory Factory</span>
+                  <span aria-hidden className="text-muted-foreground">
+                    /
+                  </span>
+                  <span>Board</span>
+                </nav>
+              </HeaderLeftStartSlot>
+              <BoardActions />
+              <div className="h-[calc(100dvh-81px)] min-h-0 p-3 md:h-[640px] md:p-4">
+                <Story />
+              </div>
+            </KanbanProvider>
+          </AppHeaderProvider>
+        </div>
+      </SidebarProvider>
     ),
   ],
 } satisfies Meta<typeof KanbanBoard>;
@@ -149,22 +162,26 @@ export const Desktop: Story = {
   },
 };
 
-/** Phones show one column at a time behind column pills. */
+/** Phones show one column at a time behind column tabs. */
 export const Phone: Story = {
   globals: { viewport: { value: 'phone', isRotated: false } },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    const toolbar = canvas.getByRole('toolbar', { name: 'Board toolbar' });
-    await expect(within(toolbar).getByRole('button', { name: /^Search$/ })).toBeVisible();
-    await expect(within(toolbar).getByRole('button', { name: 'New workspace' })).toHaveTextContent(
-      'New workspace'
+    const header = canvas.getByRole('banner');
+    const search = within(header).getByRole('button', { name: /^Search$/ });
+    await expect(search).toBeVisible();
+    await expect(within(header).getByRole('button', { name: 'New workspace' })).toBeVisible();
+    const filter = await canvas.findByRole('textbox', { name: 'Filter board' });
+    await expect(header.contains(filter)).toBe(true);
+    await expect(header.querySelector('[data-slot="header-context"]')?.contains(filter)).toBe(
+      false
     );
-    await expect(
-      canvasElement.querySelector('header')?.querySelector('[aria-label="Search"]')
-    ).toBeNull();
-    // The board opens on the Waiting column.
+    await expect(search.getBoundingClientRect().bottom).toBeLessThanOrEqual(
+      filter.getBoundingClientRect().top
+    );
+    // Every section stays mounted on mobile.
     await expect(await canvas.findByText('Update dependencies')).toBeVisible();
-    await expect(canvas.queryByText('Add authentication')).not.toBeInTheDocument();
+    await expect(canvas.getByText('Add authentication')).toBeVisible();
   },
 };
 
@@ -298,7 +315,7 @@ export const PhoneFilter: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await canvas.findByText('Update dependencies');
-    const filter = within(canvas.getByRole('banner')).getByRole('textbox', {
+    const filter = canvas.getByRole('textbox', {
       name: 'Filter board',
     });
     await expect(filter).toBeVisible();
@@ -403,11 +420,9 @@ export const PhoneWaitingSort: Story = {
     await WaitingSort.play?.(context);
     const canvas = within(context.canvasElement);
     await expect(canvas.getByRole('button', { name: 'Waiting sort order' })).toBeVisible();
-    await expect(canvas.queryByRole('heading', { name: 'Waiting' })).not.toBeInTheDocument();
-    await userEvent.click(canvas.getByRole('button', { name: /Working/ }));
-    await expect(
-      canvas.queryByRole('button', { name: 'Waiting sort order' })
-    ).not.toBeInTheDocument();
+    await expect(canvas.getByRole('heading', { name: 'Waiting' })).toBeVisible();
+    await userEvent.click(canvas.getByRole('link', { name: /Working/ }));
+    await expect(canvas.getByRole('button', { name: 'Waiting sort order' })).toBeInTheDocument();
   },
 };
 
@@ -441,4 +456,89 @@ export const NarrowPhoneWaitingSort: Story = {
     ).toBeVisible();
     await userEvent.keyboard('{Escape}');
   },
+};
+
+export const PhoneSectionNavigation: Story = {
+  globals: { viewport: { value: 'phone', isRotated: false } },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await canvas.findByText('Update dependencies');
+    const navigation = canvas.getByRole('navigation', { name: 'Board sections' });
+    const links = within(navigation).getAllByRole('link');
+    await expect(links).toHaveLength(4);
+    const widths = links.map((link) => link.getBoundingClientRect().width);
+    for (const width of widths) {
+      await expect(Math.abs(width - widths[0]!)).toBeLessThan(1);
+    }
+    for (const link of links) {
+      await userEvent.click(link);
+      await waitFor(() => expect(link).toHaveAttribute('aria-current', 'location'));
+      const section = canvasElement.ownerDocument.getElementById(
+        link.getAttribute('href')!.slice(1)
+      )!;
+      await expect(
+        Math.abs(
+          section.getBoundingClientRect().top - navigation.getBoundingClientRect().bottom - 12
+        )
+      ).toBeLessThanOrEqual(1);
+    }
+    await expect(canvas.getByRole('heading', { name: 'Done' })).toBeVisible();
+    await expect(canvas.getByText('Add authentication')).toBeInTheDocument();
+    const scroll = canvasElement.querySelector<HTMLElement>('[data-mobile-board]')!;
+    scroll.scrollTop = 0;
+    scroll.dispatchEvent(new Event('scroll'));
+    await waitFor(() =>
+      expect(within(navigation).getByRole('link', { name: 'Todo 1' })).toHaveAttribute(
+        'aria-current',
+        'location'
+      )
+    );
+  },
+};
+
+export const PhoneFilterAcrossColumns: Story = {
+  globals: { viewport: { value: 'phone', isRotated: false } },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await canvas.findByText('Update dependencies');
+    const filter = canvas.getByRole('textbox', { name: 'Filter board' });
+    await userEvent.type(filter, 'fix');
+    await expect(await canvas.findByText('Fix login bug')).toBeVisible();
+    await expect(canvas.getByText('Fix typo')).toBeVisible();
+    await expect(canvas.queryByText('Update dependencies')).not.toBeInTheDocument();
+    await expect(canvas.getByRole('heading', { name: 'Working' })).toBeVisible();
+    await expect(canvas.getByRole('heading', { name: 'Done' })).toBeVisible();
+    await userEvent.clear(filter);
+    await expect(await canvas.findByText('Update dependencies')).toBeVisible();
+    await expect(canvas.getByText('Fix login bug')).toBeInTheDocument();
+  },
+};
+
+export const PhoneNewWorkspaceFromDone: Story = {
+  globals: { viewport: { value: 'phone', isRotated: false } },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await canvas.findByText('Update dependencies');
+    const navigation = canvas.getByRole('navigation', { name: 'Board sections' });
+    await userEvent.click(within(navigation).getByRole('link', { name: 'Done 1' }));
+    await userEvent.click(canvas.getByRole('button', { name: 'New workspace' }));
+    const input = await canvas.findByPlaceholderText('What should the agent work on?');
+    await userEvent.type(input, 'Keep my task');
+    await userEvent.click(within(navigation).getByRole('link', { name: 'Done 1' }));
+    await expect(input).toHaveValue('Keep my task');
+    await userEvent.click(canvas.getByRole('button', { name: 'New workspace' }));
+    await expect(input).toHaveValue('Keep my task');
+    await expect(input.getBoundingClientRect().top).toBeGreaterThanOrEqual(
+      navigation.getBoundingClientRect().bottom
+    );
+    const scroll = canvasElement.querySelector<HTMLElement>('[data-mobile-board]')!;
+    await expect(input.getBoundingClientRect().bottom).toBeLessThanOrEqual(
+      scroll.getBoundingClientRect().bottom
+    );
+  },
+};
+
+export const PhoneDark: Story = {
+  ...Phone,
+  globals: { theme: 'dark', viewport: { value: 'phone', isRotated: false } },
 };

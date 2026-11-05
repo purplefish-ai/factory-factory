@@ -41,7 +41,7 @@ vi.mock('@/client/components/app-header-context', () => ({
   useAppHeader: () => undefined,
   HeaderLeftStartSlot: ({ children }: { children: ReactNode }) => children,
   HeaderRightSlot: () => null,
-  PageSearchSlot: () => <button>Search</button>,
+  HeaderLeftExtraSlot: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
 }));
 vi.mock('@/client/components/project-header', () => ({
   ProjectHeader: () => null,
@@ -354,31 +354,20 @@ describe('WorkspacesBoardView project lifetime', () => {
     }
   });
 
-  it('reselects the mobile tab from each project instead of carrying a selected tab over', async () => {
+  it('shows every mobile section and replaces the previous project contents', async () => {
     mocks.isMobile = true;
-    await render('a');
-    expect(container.querySelector('[data-column]')?.getAttribute('data-column')).toBe('WAITING');
-    await click('Working0');
-    expect(container.querySelector('[data-column]')?.getAttribute('data-column')).toBe('WORKING');
-
+    for (const projectId of ['a', 'b', 'c', 'a']) {
+      await render(projectId);
+      expect(container.querySelectorAll('[data-column]')).toHaveLength(2);
+      expect(container.querySelector('[data-column="WAITING"]')?.textContent).toContain(
+        `${projectId}-1`
+      );
+      expect(container.querySelectorAll('[data-mobile-board]')).toHaveLength(1);
+    }
+    setList('b', { workspaces: [], reviewCount: 0 });
     await render('b');
-    expect(container.querySelector('[data-column]')?.getAttribute('data-column')).toBe('WAITING');
-    setList('c', {
-      ...list('c'),
-      workspaces: list('c').workspaces.map((workspace) => ({
-        ...workspace,
-        kanbanColumn: 'WORKING',
-      })),
-    });
-    await render('c');
-    expect(container.querySelector('[data-column]')?.getAttribute('data-column')).toBe('WORKING');
-    setList('a', { workspaces: [], reviewCount: 0 });
-    await render('a');
-    expect(container.querySelector('[data-column]')).toBeNull();
-    expect(
-      [...container.querySelectorAll('button')].find((button) => button.textContent === 'Issues0')
-        ?.className
-    ).toContain('bg-primary');
+    expect(container.querySelectorAll('[data-column]')).toHaveLength(2);
+    expect(container.querySelector('[data-column="WAITING"]')?.textContent).not.toContain('a-1');
   });
 
   it('keeps old Quick Chat closed while the next project bootstrap is delayed', async () => {

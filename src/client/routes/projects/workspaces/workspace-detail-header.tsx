@@ -82,12 +82,12 @@ export const WorkspaceDetailHeaderSlot = memo(function WorkspaceDetailHeaderSlot
           <div
             className={
               hasFamily
-                ? 'min-w-[74px] max-w-[25%] shrink md:min-w-0'
-                : 'min-w-0 max-w-[50%] shrink md:max-w-[40%]'
+                ? 'min-w-[calc(3rem+26px)] max-w-[25%] shrink md:min-w-0'
+                : 'min-w-[calc(3rem+26px)] max-w-[30%] shrink md:min-w-0 md:max-w-[40%]'
             }
           >
             <ProjectHeaderNavigation
-              showTrailingSlash
+              showTrailingSlash={!(hasFamily && isMobile)}
               triggerId="workspace-detail-project-select"
               project={
                 routeProject.data ??
@@ -120,7 +120,7 @@ export const WorkspaceDetailHeaderSlot = memo(function WorkspaceDetailHeaderSlot
               currentWorkspaceName={workspace.name}
             />
           </div>
-          {hasFamily && (
+          {hasFamily && !isMobile && (
             <WorkspaceFamilyMenu
               key={workspaceId}
               workspace={workspace}
@@ -131,6 +131,14 @@ export const WorkspaceDetailHeaderSlot = memo(function WorkspaceDetailHeaderSlot
         </div>
       </HeaderLeftStartSlot>
       <HeaderLeftExtraSlot>
+        {hasFamily && isMobile && (
+          <WorkspaceFamilyMenu
+            key={workspaceId}
+            workspace={workspace}
+            projectSlug={slug}
+            iconOnly
+          />
+        )}
         <div className="hidden @[72rem]/header:flex shrink-0 items-center gap-2">
           <div data-header-inline="issue" className="flex">
             <WorkspaceIssueLink workspace={workspace} />

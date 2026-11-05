@@ -1,6 +1,5 @@
 import { ListIcon } from '@phosphor-icons/react/dist/csr/List';
 import { SidebarSimpleIcon } from '@phosphor-icons/react/dist/csr/SidebarSimple';
-import { createPortal } from 'react-dom';
 import { GlobalSearch } from '@/client/features/search';
 import { ShortcutKeys } from '@/client/features/shortcuts';
 import { getAriaKeyShortcuts } from '@/client/lib/keyboard-shortcuts';
@@ -38,8 +37,7 @@ function SidebarToggleButton() {
 }
 
 export function AppHeader({ showSidebarToggle = true }: { showSidebarToggle?: boolean }) {
-  const isMobile = useIsMobile();
-  const { title, searchSlot, setRightSlot, setRightEndSlot, setLeftStartSlot, setLeftExtraSlot } =
+  const { title, setRightSlot, setRightEndSlot, setLeftStartSlot, setLeftExtraSlot } =
     useAppHeaderContext();
 
   return (
@@ -71,11 +69,7 @@ export function AppHeader({ showSidebarToggle = true }: { showSidebarToggle?: bo
           className="ml-auto flex shrink-0 items-center gap-1 empty:hidden"
         />
         <div data-slot="header-search" className="flex shrink-0 items-center empty:hidden">
-          {isMobile && searchSlot ? (
-            createPortal(<GlobalSearch expanded />, searchSlot)
-          ) : (
-            <GlobalSearch />
-          )}
+          <GlobalSearch />
         </div>
         <div
           data-slot="header-end"

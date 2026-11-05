@@ -51,7 +51,10 @@ export const PhoneWorkspace: Story = {
       .getBoundingClientRect();
     const search = canvas.getByRole('button', { name: /^Search$/ }).getBoundingClientRect();
     await expect(context.left).toBeGreaterThanOrEqual(toggle.right);
-    await expect(context.bottom).toBeLessThanOrEqual(search.top);
+    await expect(context.right).toBeLessThanOrEqual(search.left);
+    await expect(
+      Math.abs(context.top + context.height / 2 - search.top - search.height / 2)
+    ).toBeLessThanOrEqual(1);
   },
 };
 export const PhoneFamily: Story = {

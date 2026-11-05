@@ -46,8 +46,8 @@ export function IssuesColumn({
       data-todo-column
       className="flex flex-col w-full md:flex-1 md:min-w-[280px] md:max-w-[440px] md:h-full"
     >
-      {/* Column Header — hidden on mobile where pills handle this */}
-      <div className="hidden md:flex h-13 shrink-0 items-center justify-between px-3 py-3 bg-muted/50 rounded-t-lg">
+      {/* Column header and mobile section heading */}
+      <div className="flex h-13 shrink-0 items-center justify-between px-3 py-3 bg-muted/50 rounded-t-lg">
         <div className="flex items-center gap-2">
           <h3 className="font-semibold text-sm">{column.label}</h3>
           <Badge variant="secondary" className="h-5 min-w-5 justify-center text-xs">
@@ -57,7 +57,7 @@ export function IssuesColumn({
       </div>
 
       {/* Column Content */}
-      <div className="flex flex-col gap-3 flex-1 overflow-y-auto p-3 min-h-0 rounded-lg md:rounded-t-none bg-muted/50">
+      <div className="flex flex-col gap-3 flex-1 md:overflow-y-auto p-3 min-h-0 rounded-lg md:rounded-t-none bg-muted/50">
         {!(isMobile || showInlineForm) && (
           <Button
             variant="outline"

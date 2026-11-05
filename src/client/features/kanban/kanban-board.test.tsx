@@ -147,10 +147,11 @@ vi.mock('./kanban-context', () => ({
 // The board's "New Workspace" action lives in the header controls rendered
 // beside the board by WorkspacesBoardView.
 function TestHeader() {
-  const { setLeftStartSlot } = useAppHeaderContext();
+  const { setLeftStartSlot, setLeftExtraSlot } = useAppHeaderContext();
   return (
     <header>
       <div ref={setLeftStartSlot} />
+      <div ref={setLeftExtraSlot} />
     </header>
   );
 }
@@ -280,7 +281,9 @@ describe('KanbanBoard', () => {
       mocks.columnProps.length = 0;
       act(() => root.render(createElement(BoardWithHeader)));
       expect(container.querySelectorAll('input[aria-label="Filter board"]')).toHaveLength(1);
-      expect(container.querySelector('header input[aria-label="Filter board"]')).not.toBeNull();
+      expect(Boolean(container.querySelector('header input[aria-label="Filter board"]'))).toBe(
+        true
+      );
       expect(container.querySelector('[aria-label="Sort workspaces"]')).toBeNull();
       expect(container.textContent).not.toContain('Archive selected');
       expect(mocks.columnProps.length).toBeGreaterThan(0);
@@ -313,9 +316,7 @@ describe('KanbanBoard', () => {
     );
     void act(() => root.render(createElement(BoardWithHeader)));
     click('New workspace');
-    const oldScrollContainer = container
-      .querySelector('input[aria-label="Task name"]')!
-      .closest('.overflow-y-auto')!.parentElement!.parentElement!;
+    const oldScrollContainer = container.querySelector<HTMLElement>('[data-mobile-board]')!;
     oldScrollContainer.scrollTop = 200;
     click('Complete creation');
     expect(
@@ -324,8 +325,7 @@ describe('KanbanBoard', () => {
       )
     ).toEqual(['New task', 'Older working task']);
     expect(container.querySelector('input[aria-label="Task name"]')).toBeNull();
-    expect(oldScrollContainer.isConnected).toBe(false);
-    expect(container.querySelector('[data-column="WORKING"]')!.parentElement!.scrollTop).toBe(0);
+    expect(oldScrollContainer.isConnected).toBe(true);
   });
 
   it.each([true, false])('keeps failed setup discoverable in Waiting (mobile=%s)', (mobile) => {
@@ -354,9 +354,6 @@ describe('KanbanBoard', () => {
     expect(container.querySelector('[data-column="WORKING"]')?.textContent).not.toContain(
       'New task'
     );
-    if (mobile) {
-      click('Waiting2');
-    }
     expect(container.querySelector('[data-column="WAITING"]')?.textContent).toContain('New task');
     // Remounting the board keeps the failed task supplied by its query visible.
     act(() => root.unmount());
@@ -365,15 +362,15 @@ describe('KanbanBoard', () => {
     expect(container.querySelector('[data-column="WAITING"]')?.textContent).toContain('New task');
   });
 
-  it('stays on To Do when task creation is cancelled', () => {
-    void act(() => root.render(createElement(BoardWithHeader)));
+  it('keeps every section mounted when task creation is cancelled', () => {
+    act(() => root.render(createElement(BoardWithHeader)));
     click('New workspace');
     click('Cancel creation');
-    expect(container.querySelector('[data-column="WORKING"]')).toBeNull();
-    expect(
-      [...container.querySelectorAll('button')].find((button) => button.textContent === 'To Do0')
-        ?.className
-    ).toContain('bg-primary');
+    expect(container.querySelector('input[aria-label="Task name"]')).toBeNull();
+    expect(container.querySelector('[data-column="WORKING"]')).not.toBeNull();
+    expect(container.querySelector('[data-column="WAITING"]')?.textContent).toContain(
+      'Existing task'
+    );
   });
 
   it('keeps the desktop board visible after creation', () => {
@@ -404,15 +401,17 @@ describe('KanbanBoard', () => {
     expect(mobileButton).not.toBeNull();
   });
 
-  it('reveals an already open form when New Workspace is pressed from another mobile tab', () => {
+  it('keeps the open form mounted when navigating mobile sections', () => {
     act(() => root.render(createElement(BoardWithHeader)));
     click('New workspace');
-    expect(container.querySelector('input[aria-label="Task name"]')).not.toBeNull();
-    click('Waiting1');
-    expect(container.querySelector('input[aria-label="Task name"]')).toBeNull();
-    expect(mocks.showInlineForm).toBe(true);
+    const formInput = container.querySelector('input[aria-label="Task name"]');
+    const waiting = [...container.querySelectorAll('a')].find(
+      (link) => link.textContent === 'Waiting 1'
+    );
+    act(() => waiting?.click());
+    expect(container.querySelector('input[aria-label="Task name"]')).toBe(formInput);
     click('New workspace');
-    expect(container.querySelector('input[aria-label="Task name"]')).not.toBeNull();
+    expect(container.querySelector('input[aria-label="Task name"]')).toBe(formInput);
   });
 
   it('keeps a mobile New Workspace request made before workspaces load', () => {
@@ -421,11 +420,11 @@ describe('KanbanBoard', () => {
     act(() => root.render(createElement(BoardWithHeader)));
     click('New workspace');
     expect(container.querySelector('input[aria-label="Task name"]')).not.toBeNull();
-    // Loaded data includes a Waiting workspace, which would normally be the first tab.
+    // Loading data must not unmount an open composer.
     mocks.workspaces = loaded;
     act(() => root.render(createElement(BoardWithHeader)));
     expect(container.querySelector('input[aria-label="Task name"]')).not.toBeNull();
-    expect(container.querySelector('[data-column="WAITING"]')).toBeNull();
+    expect(container.querySelector('[data-column="WAITING"]')).not.toBeNull();
   });
 
   it('renders Git index-lock recovery on mobile', () => {
