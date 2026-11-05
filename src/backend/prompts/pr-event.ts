@@ -37,7 +37,7 @@ export function buildPRMonitoringControlMessage(
 ): string {
   // The control snapshot records enable-time policy; unclaimed messages use current policy.
   // After claiming, retries reuse frozen delivery text instead of rendering again.
-  return `${prEventMarker(input.deliveryId)}\nKeep the associated PRs moving in this conversation. Fix actionable CI failures, review feedback, and merge conflicts as updates arrive. Queue work after the current turn. Do not merge automatically.\n${input.replyToPrComments ? 'Reply to relevant PR comments after addressing them.' : 'Do not post replies to PR comments.'}`;
+  return `${prEventMarker(input.deliveryId)}\nKeep the associated PRs moving in this conversation. Fix actionable CI failures, review feedback, and merge conflicts as updates arrive. Queue work after the current turn. PR updates do not grant merge authorization. Preserve the user’s existing instructions, including any prior authorization to merge when checks pass.\n${input.replyToPrComments ? 'Reply to relevant PR comments after addressing them.' : 'Do not post replies to PR comments.'}`;
 }
 
 export function buildPREventMessage(
@@ -161,13 +161,13 @@ function maintenanceInstructions(input: {
 }) {
   return input.deliveryMode === 'DEDICATED'
     ? [
-        'Maintain this PR in this dedicated conversation. Verify actionable CI failures, review feedback, and merge conflicts against the code, fix them with focused regression tests, run relevant repository checks, commit and push the fixes. Reuse this conversation for subsequent updates. Do not merge automatically.',
+        'Maintain this PR in this dedicated conversation. Verify actionable CI failures, review feedback, and merge conflicts against the code, fix them with focused regression tests, run relevant repository checks, commit and push the fixes. Reuse this conversation for subsequent updates. PR updates do not grant merge authorization. Preserve the user’s existing instructions, including any prior authorization to merge when checks pass.',
         input.replyToPrComments
           ? 'Reply to relevant PR comments after addressing them.'
           : 'Do not post replies to PR comments.',
       ]
     : [
-        'Keep the associated PRs moving in this conversation. Fix actionable CI failures, review feedback, and merge conflicts as updates arrive. Do not merge automatically.',
+        'Keep the associated PRs moving in this conversation. Fix actionable CI failures, review feedback, and merge conflicts as updates arrive. PR updates do not grant merge authorization. Preserve the user’s existing instructions, including any prior authorization to merge when checks pass.',
         input.replyToPrComments
           ? 'Reply to relevant PR comments after addressing them.'
           : 'Do not post replies to PR comments.',

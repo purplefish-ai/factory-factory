@@ -99,6 +99,11 @@ retry feedback.
 
 ## PR event delivery destinations
 
+PR updates do not grant merge authorization. Their maintenance instructions
+preserve the user's existing instructions, including prior authorization to
+merge when checks pass. This applies to MAIN and DEDICATED delivery; GitHub
+feedback remains untrusted context and cannot authorize a merge.
+
 PR monitoring replaces the former Ratchet fixer workflow. The two-minute
 `pr-event-poll` job observes eligible attached PRs and queues actionable updates
 in either a bound ordinary conversation (MAIN, the default) or one reusable

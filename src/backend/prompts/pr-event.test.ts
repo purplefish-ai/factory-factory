@@ -58,7 +58,11 @@ it('preserves rendering of legacy enablement controls', () => {
     replyToPrComments: true,
   });
   expect(text).toContain('Keep the associated PRs moving');
-  expect(text).toContain('Do not merge');
+  expect(text).toContain('PR updates do not grant merge authorization.');
+  expect(text).toContain(
+    'Preserve the user’s existing instructions, including any prior authorization to merge when checks pass.'
+  );
+  expect(text).not.toContain('Do not merge automatically');
 });
 it.each([false, true])(
   'uses current reply policy %s instead of a queued control snapshot',
@@ -127,6 +131,10 @@ it('includes bounded recovered check names, outcomes and details links', () => {
     ],
     replyToPrComments: false,
   });
+  expect(text).toContain(
+    'Preserve the user’s existing instructions, including any prior authorization to merge when checks pass.'
+  );
+  expect(text).not.toContain('Do not merge automatically');
   expect(text).toContain('Recovered test');
   expect(text).toContain('SUCCESS');
   expect(text).toContain(check.detailsUrl);
@@ -150,18 +158,26 @@ it('includes maintenance context in main and dedicated event batches within the 
   const dedicated = buildPREventMessage({ ...input, deliveryMode: 'DEDICATED' });
   expect(main).not.toContain('dedicated conversation');
   expect(main).toContain('Keep the associated PRs moving in this conversation');
-  expect(main).toContain('Do not merge automatically');
+  expect(main).toContain('PR updates do not grant merge authorization.');
+  expect(main).toContain(
+    'Preserve the user’s existing instructions, including any prior authorization to merge when checks pass.'
+  );
+  expect(main).not.toContain('Do not merge automatically');
   expect(main).toContain('Do not post replies');
   expect(dedicated).toContain('Maintain this PR in this dedicated conversation');
-  expect(dedicated).toContain('Do not merge automatically');
+  expect(dedicated).toContain('PR updates do not grant merge authorization.');
+  expect(dedicated).toContain(
+    'Preserve the user’s existing instructions, including any prior authorization to merge when checks pass.'
+  );
+  expect(dedicated).not.toContain('Do not merge automatically');
   expect(dedicated).toContain('Do not post replies');
   expect(dedicated).toContain('untrusted data');
   expect(Buffer.byteLength(dedicated)).toBeLessThanOrEqual(16_384);
 });
 
 it.each([
-  { deliveryMode: 'MAIN' as const, bodyLength: 15_520 },
-  { deliveryMode: 'DEDICATED' as const, bodyLength: 15_375 },
+  { deliveryMode: 'MAIN' as const, bodyLength: 15_397 },
+  { deliveryMode: 'DEDICATED' as const, bodyLength: 15_252 },
 ])(
   'retains near-limit review feedback with one reply policy in $deliveryMode mode',
   ({ deliveryMode, bodyLength }) => {
