@@ -18,6 +18,11 @@ export interface IntegrationDatabase {
 export async function createIntegrationDatabase(): Promise<IntegrationDatabase> {
   const tempDir = mkdtempSync(join(tmpdir(), 'ff-integration-'));
   const databasePath = join(tempDir, 'integration.db');
+  const previousPrisma = globalThis.prismaGlobal;
+  const previousEnvironment = {
+    DATABASE_PATH: process.env.DATABASE_PATH,
+    BASE_DIR: process.env.BASE_DIR,
+  };
 
   let prisma: PrismaClient | undefined;
   try {
@@ -51,8 +56,16 @@ export async function createIntegrationDatabase(): Promise<IntegrationDatabase> 
     try {
       await prisma?.$disconnect();
     } finally {
-      if (prisma && globalThis.prismaGlobal === prisma) {
-        globalThis.prismaGlobal = undefined;
+      if (globalThis.prismaGlobal === (prisma ?? previousPrisma)) {
+        globalThis.prismaGlobal = previousPrisma;
+        for (const [key, value] of Object.entries(previousEnvironment)) {
+          if (value === undefined) {
+            Reflect.deleteProperty(process.env, key);
+          } else {
+            process.env[key] = value;
+          }
+        }
+        vi.resetModules();
       }
       rmSync(tempDir, { recursive: true, force: true });
     }

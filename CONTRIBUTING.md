@@ -94,7 +94,8 @@ global setup fall back to migrating each private database. Watch mode reruns
 when migration files change and rebuilds the template from current SQL before
 dispatching tests, including edits to already applied migrations. Unchanged
 migrations keep the existing template; failed rebuilds abort the rerun without
-publishing a partial replacement.
+publishing a partial replacement. A failed private database creation restores
+the previously active client and environment binding.
 
 `pnpm check` covers linting, formatting, file lengths, environment access,
 ownership, foreign-key indexes, and dependencies. Upstream ACP adapters own

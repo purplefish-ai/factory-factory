@@ -140,15 +140,34 @@ it('removes the migration template when project setup fails', () => {
 });
 
 it('removes its private directory and runtime client when connecting fails', async () => {
-  vi.spyOn(TunedPrismaBetterSqlite3.prototype, 'connect').mockRejectedValueOnce(
-    new Error('Connection failed')
-  );
+  let databasePath: string | undefined;
+  vi.spyOn(TunedPrismaBetterSqlite3.prototype, 'connect').mockImplementationOnce(async () => {
+    databasePath = process.env.DATABASE_PATH;
+    throw new Error('Connection failed');
+  });
   await expect(createIntegrationDatabase()).rejects.toThrow('Connection failed');
-  const databasePath = process.env.DATABASE_PATH;
   expect(databasePath).toBeTypeOf('string');
   if (!databasePath) {
     throw new Error('Database path was not configured');
   }
   expect(existsSync(dirname(databasePath))).toBe(false);
   expect(globalThis.prismaGlobal).toBeUndefined();
+});
+
+it('restores the active client and environment when a second creation fails', async () => {
+  const first = await createIntegrationDatabase();
+  databases.push(first);
+  vi.stubEnv('BASE_DIR', first.tempDir);
+  vi.spyOn(TunedPrismaBetterSqlite3.prototype, 'connect').mockRejectedValueOnce(
+    new Error('Second connection failed')
+  );
+
+  await expect(createIntegrationDatabase()).rejects.toThrow('Second connection failed');
+  expect(globalThis.prismaGlobal === first.prisma).toBe(true);
+  expect(process.env.DATABASE_PATH).toBe(first.databasePath);
+  expect(process.env.BASE_DIR).toBe(first.tempDir);
+  const runtime = await vi.importActual<typeof import('@/backend/db')>('@/backend/db');
+  expect(runtime.prisma).toBe(first.prisma);
+  expect(runtime.getCurrentDatabasePath()).toBe(first.databasePath);
+  expect(await runtime.prisma.project.count()).toBe(0);
 });
