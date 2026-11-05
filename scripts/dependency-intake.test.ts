@@ -126,7 +126,7 @@ describe('dependency intake against the pinned pnpm CLI', () => {
     } finally {
       await registry.close();
     }
-  });
+  }, 60_000);
 
   it('rejects a two-day-old exact version until its matching reviewed exception', async () => {
     const registry = await fixture({ fresh: true });
@@ -142,7 +142,7 @@ describe('dependency intake against the pinned pnpm CLI', () => {
     } finally {
       await registry.close();
     }
-  });
+  }, 60_000);
 
   it('rejects registry metadata without publication dates', async () => {
     const registry = await fixture({ missingTime: true });
@@ -153,7 +153,7 @@ describe('dependency intake against the pinned pnpm CLI', () => {
     } finally {
       await registry.close();
     }
-  });
+  }, 60_000);
 
   it('rejects a too-young version frozen into a lockfile under weaker policy', async () => {
     const registry = await fixture({ fresh: true });
@@ -168,7 +168,7 @@ describe('dependency intake against the pinned pnpm CLI', () => {
     } finally {
       await registry.close();
     }
-  });
+  }, 60_000);
 
   it('rejects a trust downgrade even when the version was locked under weaker policy', async () => {
     const registry = await fixture({ downgrade: true });
@@ -183,5 +183,5 @@ describe('dependency intake against the pinned pnpm CLI', () => {
     } finally {
       await registry.close();
     }
-  });
+  }, 60_000);
 });

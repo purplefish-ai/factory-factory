@@ -93,12 +93,14 @@ checks did not include Socket, but
 subsequently produced `Socket Security: Project Report` and
 `Socket Security: Pull Request Alerts` checks from the Socket app. The report
 was generated; PR alerts were skipped because that PR changed no dependencies.
-This confirms installation, not a clean baseline or configured blocking policy.
-Main's required checks were Build, Test, and Lint/Type Check/Dependencies/Dead
-Code; neither Socket check was required. Verify alert-blocking policy in the
-Socket dashboard and require the observed PR alert check in branch protection.
-Without those settings, this file keeps reports visible but does not establish
-an enforced Socket merge gate.
+This confirms installation, not a clean baseline or configured severity policy.
+On November 5, 2026, main branch protection was updated and verified to require
+`Socket Security: Pull Request Alerts`, bound to the Socket app (ID 156372),
+alongside the existing Build, Test, and Lint/Type Check/Dependencies/Dead Code
+checks. The project report check only confirms report generation and is not a
+required verdict. This merge gate enforces the app's PR alert result; Socket's
+dashboard severity/blocking policy has not been independently verified. Review
+that policy separately before claiming specific alert types block merging.
 
 To establish the baseline, export the version-specific alerts and record each
 finding's package/version, alert type and severity, direct or transitive path,
