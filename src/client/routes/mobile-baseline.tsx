@@ -300,7 +300,7 @@ function GeneralMobileBaselinePage() {
                 onSend={recordCommand}
                 onCompact={() => recordCommand('/compact')}
                 disabled={false}
-                running={false}
+                running={new URLSearchParams(location.search).get('running') === '1'}
                 value={draft}
                 onChange={setDraft}
                 settings={chatSettings}

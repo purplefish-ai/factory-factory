@@ -92,7 +92,7 @@ export function WorkspaceSwitcherDropdown({
         title={currentWorkspaceName}
         aria-label={`Open workspace menu (${queueSummaryLabel})`}
         className={cn(
-          'h-7 min-w-0 w-auto max-w-[10rem] border-0 bg-transparent px-0.5 text-[11px] font-normal text-muted-foreground shadow-none focus:ring-0 hover:[&>.workspace-switcher-label]:underline focus-visible:[&>.workspace-switcher-label]:underline md:max-w-[24rem] md:px-1 md:text-sm [&>svg:last-of-type]:hidden',
+          'h-7 min-w-0 w-auto max-w-full border-0 bg-transparent dark:bg-transparent px-0.5 text-xs font-normal text-muted-foreground shadow-none focus:ring-0 hover:[&>.workspace-switcher-label]:underline focus-visible:[&>.workspace-switcher-label]:underline md:max-w-[24rem] md:px-1 md:text-sm [&>svg:last-of-type]:hidden',
           compact && 'gap-1'
         )}
       >

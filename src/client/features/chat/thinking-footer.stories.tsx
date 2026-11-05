@@ -134,3 +134,20 @@ export const InactiveWithRetainedRequestDark: Story = {
   ...InactiveWithRetainedRequest,
   globals: { theme: 'dark' },
 };
+
+export const PhoneLongPreview: Story = {
+  ...LongPreview,
+  globals: { viewport: { value: 'phone', isRotated: false } },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const row = canvas.getByTestId('thinking-footer').getBoundingClientRect();
+    const preview = canvas.getByRole('button', { name: 'Show thinking preview' });
+    const bounds = preview.getBoundingClientRect();
+    await expect(bounds.top).toBeGreaterThanOrEqual(row.top);
+    await expect(bounds.bottom).toBeLessThanOrEqual(row.bottom);
+    await userEvent.click(preview);
+    await expect(
+      within(canvasElement.ownerDocument.body).getByLabelText('Thinking preview')
+    ).toBeVisible();
+  },
+};

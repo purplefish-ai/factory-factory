@@ -289,7 +289,7 @@ export const ChatInput = memo(function ChatInput({
         {/* Controls row */}
         <InputGroupAddon
           align="block-end"
-          className="flex shrink-0 items-center gap-1 border-t !pt-1 !pb-1"
+          className="flex shrink-0 flex-wrap items-center gap-1 border-t !pt-1 !pb-1"
           data-testid="chat-input-controls"
         >
           {leadingControls}

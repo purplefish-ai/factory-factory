@@ -163,7 +163,10 @@ are in `public/fonts/geist`, sourced from `vercel/geist-font` commit
 `a2357c1398c81d88ff84823a2f50af3152ee8733`. Optional alternate font families
 continue to use the existing Google Fonts stylesheet.
 
-Icon buttons and close controls have 44px minimum targets on devices with any
-coarse pointer. Bottom sheets include the device safe-area inset in addition to
-their normal padding; chat composers already use the shared safe-area helper.
-Looping spinners and pulses remain static when reduced motion is requested.
+Icon buttons and close controls have 36px minimum targets on devices with any
+coarse pointer. Targets participate in layout rather than extending over nearby
+actions. The thinking footer reserves the same minimum height; composer actions
+wrap when they cannot fit in one row. Bottom sheets include the device safe-area
+inset in addition to their normal padding; chat composers already use the shared
+safe-area helper. Looping spinners and pulses remain static when reduced motion
+is requested.

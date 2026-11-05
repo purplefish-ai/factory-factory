@@ -595,3 +595,8 @@ export const FastHistoryCheck: Story = {
     }
   },
 };
+
+export const PhoneQueuedMessageHandoff: Story = {
+  ...QueuedMessageHandoff,
+  globals: { viewport: { value: 'phone', isRotated: false } },
+};

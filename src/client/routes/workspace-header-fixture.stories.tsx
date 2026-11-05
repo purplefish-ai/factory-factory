@@ -309,3 +309,15 @@ export const PendingActionsAfterUpdate: Story = {
     await expect(await canvas.findByRole('button', { name: 'Processing…' })).toBeDisabled();
   },
 };
+
+export const NarrowPhoneFamily: Story = {
+  args: { variant: 'family' },
+  globals: { viewport: { value: 'phone', isRotated: false } },
+  parameters: {
+    viewport: {
+      options: {
+        phone: { name: 'Narrow phone', styles: { width: '320px', height: '640px' } },
+      },
+    },
+  },
+};

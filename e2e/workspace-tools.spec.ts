@@ -111,7 +111,7 @@ test('More tools render their fixtures and Logs reopens the last source', async 
   const dev = drawer.getByRole('button', { name: 'Dev', exact: true });
   await dev.click();
   await expect(drawer.locator('pre')).toContainText('Development server listening');
-  expect((await dev.boundingBox())?.height).toBeGreaterThanOrEqual(44);
+  expect((await dev.boundingBox())?.height).toBeGreaterThanOrEqual(36);
   await drawer.getByRole('tab', { name: 'Changes', exact: true }).click();
   await drawer.getByRole('button', { name: /more tools/i }).click();
   await page.getByRole('menuitemradio', { name: 'Logs', exact: true }).click();
@@ -125,7 +125,7 @@ test('mobile tools use a compact accessible tab strip', async ({ page }) => {
   await page.getByRole('button', { name: 'Open tools' }).click();
   const drawer = page.getByRole('dialog', { name: 'Workspace tools' });
   const navigation = drawer.getByRole('navigation', { name: 'Workspace tools' });
-  expect((await navigation.boundingBox())?.height).toBe(44);
+  expect((await navigation.boundingBox())?.height).toBe(36);
   const changes = navigation.getByRole('tab', { name: 'Changes', exact: true });
   await expect(changes).toHaveAttribute('aria-selected', 'true');
   await changes.focus();

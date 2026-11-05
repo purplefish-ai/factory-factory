@@ -15,12 +15,12 @@ function WaitingForUser({ type }: { type: PendingRequestType }) {
     <div
       data-testid="thinking-footer"
       data-waiting-for={type}
-      className="h-8 shrink-0 min-w-0 px-4 py-1.5"
+      className="h-8 min-h-[var(--touch-target-size,2rem)] shrink-0 min-w-0 px-4"
     >
       <div
         role="status"
         className={cn(
-          'flex min-w-0 items-center gap-2 text-sm leading-normal',
+          'flex h-full min-w-0 items-center gap-2 text-sm leading-normal',
           getStatusToneStyle('attention').text
         )}
       >
@@ -51,11 +51,14 @@ export function ThinkingFooter({
     return <WaitingForUser type={waitingFor} />;
   }
   return (
-    <div data-testid="thinking-footer" className="h-8 shrink-0 min-w-0 px-4 py-1.5">
+    <div
+      data-testid="thinking-footer"
+      className="h-8 min-h-[var(--touch-target-size,2rem)] shrink-0 min-w-0 px-4"
+    >
       <div
         inert={!active}
         className={cn(
-          'transition-opacity duration-150 motion-reduce:transition-none',
+          'h-full transition-opacity duration-150 motion-reduce:transition-none',
           active ? 'opacity-100' : 'pointer-events-none opacity-0'
         )}
       >
@@ -69,7 +72,7 @@ export function ThinkingFooter({
               disabled={!active}
               tabIndex={active ? 0 : -1}
               aria-label="Show thinking preview"
-              className="block w-full min-w-0 rounded-sm text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              className="block h-full w-full min-w-0 rounded-sm text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
               <LoadingIndicator latestReasoning={latestParagraph} singleLine plainText />
             </button>

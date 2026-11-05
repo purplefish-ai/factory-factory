@@ -50,7 +50,7 @@ for (const width of [375, 820]) {
         .toBe('block');
     });
 
-    test('icon controls and close actions have 44px touch targets', async ({ page }) => {
+    test('icon controls and close actions have 36px touch targets', async ({ page }) => {
       await page.goto('/__mobile-baseline?surface=hover-actions');
       for (const name of [
         'Rename workspace',
@@ -62,8 +62,8 @@ for (const width of [375, 820]) {
         const control = page.getByRole('button', { name, exact: true }).first();
         await expect(control).toBeVisible();
         const bounds = await control.boundingBox();
-        expect(bounds?.width, name).toBeGreaterThanOrEqual(44);
-        expect(bounds?.height, name).toBeGreaterThanOrEqual(44);
+        expect(bounds?.width, name).toBeGreaterThanOrEqual(36);
+        expect(bounds?.height, name).toBeGreaterThanOrEqual(36);
       }
       expect(
         await page.evaluate(() => document.documentElement.scrollWidth - innerWidth)
