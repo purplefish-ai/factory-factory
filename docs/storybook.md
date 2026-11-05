@@ -138,8 +138,15 @@ play functions deterministic: no real timers longer than needed, no network.
 and runs its play function; a story passes when it renders without throwing and
 its play function succeeds. It uses `vitest.storybook.config.ts`, separate from
 `pnpm test`, so the regular suite still needs no browser. Install the browser
-once with `pnpm exec playwright install chromium`. CI runs the same command in
-the **Storybook Tests** job.
+once with `pnpm exec playwright install chromium`. The **Storybook Tests** CI
+worker uses the official Ubuntu Noble Playwright image pinned by version and
+immutable digest, including browsers, OS dependencies and fonts. It uses the
+repository's `.node-version` and `package.json#packageManager`, rather than the
+image's bundled Node/pnpm. A runtime version guard and contract test require the
+image version to match the locked Playwright packages. When upgrading
+Playwright, update the image tag, digest and `PLAYWRIGHT_IMAGE_VERSION` together
+in `.github/workflows/ci.yml`. The browser cache path stays `/ms-playwright`; CI
+never installs OS dependencies or silently downloads another browser at runtime.
 
 - Run one file with `pnpm test:storybook path/to/name.stories.tsx`, or open the
   testing widget in `pnpm storybook` to run stories from the sidebar.

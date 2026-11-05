@@ -9,9 +9,9 @@ on:
   schedule:
     - cron: '30 1 * * 1'
 
-# Supersede older main-push scans; keep other events independent.
+# Supersede older revisions of each PR and main; queues/schedules stay independent.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && github.ref || github.run_id }}
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || github.event_name == 'push' && github.ref == 'refs/heads/main' && github.ref || github.run_id }}
   cancel-in-progress: true
 
 jobs:
