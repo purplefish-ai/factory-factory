@@ -17,7 +17,7 @@
 
 <p align="center">
   <a href="https://www.npmjs.com/package/factory-factory"><img src="https://img.shields.io/npm/v/factory-factory" alt="npm"></a>
-  <a href="https://badge.socket.dev/npm/package/factory-factory"><img src="https://badge.socket.dev/npm/package/factory-factory" alt="Socket Badge"></a>
+  <a href="https://socket.dev/npm/package/factory-factory"><img src="https://badge.socket.dev/npm/package/factory-factory" alt="Socket Badge"></a>
   <a href="https://github.com/purplefish-ai/factory-factory/actions/workflows/ci.yml"><img src="https://github.com/purplefish-ai/factory-factory/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <a href="https://github.com/purplefish-ai/factory-factory/blob/main/LICENSE"><img src="https://img.shields.io/github/license/purplefish-ai/factory-factory" alt="License"></a>
   <a href="https://factoryfactory.ai"><img src="https://img.shields.io/badge/website-factoryfactory.ai-blue" alt="Website"></a>
