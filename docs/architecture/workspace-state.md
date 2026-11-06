@@ -159,6 +159,15 @@ optimistic setup card shows progress in Working. If the standard workspace
 creation request fails, its optimistic card is removed and the composer returns
 with its retained draft and error.
 
+Launching from the sidebar immediately selects a local pending workspace and
+closes the form, while server validation and provisioning continue. The pending
+detail view does not query the backend with its temporary ID. Success replaces
+that route with the persisted workspace after seeding its detail cache, without
+waiting for draft cleanup. Navigating away during creation prevents a late
+response from changing the current selection. Failure shows the error and a link
+back to the retained draft; a reload of a temporary route offers the board and
+form instead of querying an invalid workspace ID.
+
 The tab bar's **New** selection configures a new conversation. The composer's
 picker shows the current conversation's provider and changes only its model;
 switching providers requires a new conversation. Model controls remain visible

@@ -489,6 +489,15 @@ function SidebarInner({
                       projectId={selectedProjectId}
                       existingNames={existingWorkspaceNames}
                       onCancel={() => onShowNewWorkspaceFormChange(false)}
+                      onLaunching={(workspaceId) => {
+                        onShowNewWorkspaceFormChange(false);
+                        if (navData.selectedProjectSlug) {
+                          void navigate(
+                            `/projects/${navData.selectedProjectSlug}/workspaces/${workspaceId}`
+                          );
+                        }
+                        onNavigate?.();
+                      }}
                       onCreated={(workspaceId) => {
                         onShowNewWorkspaceFormChange(false);
                         if (navData.selectedProjectSlug) {
