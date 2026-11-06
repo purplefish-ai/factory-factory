@@ -119,17 +119,24 @@ until the remaining concrete findings have dispositions.
 
 The November 6, 2026 source review established these bounded dispositions:
 
-- **Port command construction needs remediation.** The exported
-  `isPortAvailable` service boundary does not validate a caller-supplied port
-  before shell interpolation. Current application callers reach it through
-  `findAvailablePort`, which validates its starting port; this review did not
-  demonstrate a remotely reachable exploit. Fix and test the exported boundary
-  rather than treating TypeScript's `number` annotation as runtime validation.
-- **Published development files need remediation.** The export includes compiled
-  tests, testing helpers and development scripts under `dist`. Remove these from
-  the production artifact and verify the packed file list and actual CLI,
-  migrations and native runtimes. A source exclusion alone does not prove a
-  previously built artifact is clean.
+- **Port command construction is remediated in source.**
+  [PR #3069](https://github.com/purplefish-ai/factory-factory/pull/3069)
+  validates the exported `isPortAvailable` boundary before any process or socket
+  calls and invokes `lsof` through `execFile` with separate arguments.
+  Regression tests reject injection strings, nonnumeric/nonfinite values and
+  invalid TCP ports on Unix and Windows. Existing application callers already
+  used the validated `findAvailablePort` path; this review did not demonstrate a
+  remotely reachable exploit. The historical 0.5.5 artifact still contains the
+  reported code.
+- **Published development files are excluded from the production build.**
+  [PR #3071](https://github.com/purplefish-ai/factory-factory/pull/3071)
+  excludes backend tests, test helpers and fixtures from compilation. Build and
+  prepack checks reject development output, including stale files and runtime
+  imports that pull an excluded module back in; release verification
+  independently inspects the tarball. The packed consumer smoke passed CLI help,
+  fresh SQLite migrations and native SQLite/PTY checks. Source tests remain in
+  the normal typecheck and test suite. A new release and re-scan are still
+  needed to replace the published 0.5.5 artifact.
 - **The install hook has already been narrowed.** It retains source-checkout
   Prisma generation and repairs the executable bit of node-pty's current macOS
   helper within its resolved package directory, with symlink escape checks.
