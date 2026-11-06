@@ -23,14 +23,19 @@ const NewWorkspaceRedirectPage = lazy(() => import('./routes/projects/workspaces
 const ReviewsPage = lazy(() => import('./routes/reviews'));
 const LegacyReviewsPage = lazy(() => import('./routes/reviews/legacy'));
 
-const MobileBaselinePage = lazy(() => import('./routes/mobile-baseline'));
-const TranscriptScrollFixture = lazy(() => import('./routes/transcript-scroll-fixture'));
 const isDevelopmentMode = import.meta.env.MODE === 'development';
 const enableMobileBaselineRoute =
   isDevelopmentMode || import.meta.env.VITE_ENABLE_MOBILE_BASELINE === '1';
+// Guard the lazy imports themselves so disabled fixtures never become build chunks.
+const MobileBaselinePage = enableMobileBaselineRoute
+  ? lazy(() => import('./routes/mobile-baseline'))
+  : null;
+const TranscriptScrollFixture = isDevelopmentMode
+  ? lazy(() => import('./routes/transcript-scroll-fixture'))
+  : null;
 
 export const router = createBrowserRouter([
-  ...(isDevelopmentMode
+  ...(TranscriptScrollFixture
     ? [
         {
           path: '/__transcript-scroll',
@@ -42,7 +47,7 @@ export const router = createBrowserRouter([
         },
       ]
     : []),
-  ...(enableMobileBaselineRoute
+  ...(MobileBaselinePage
     ? [
         {
           path: '/__mobile-baseline',

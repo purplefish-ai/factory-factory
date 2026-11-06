@@ -5,6 +5,11 @@ belong in `devDependencies`; npm users consume the built assets. Keep packages
 needed by backend, CLI, shared runtime modules, or Electron in `dependencies`.
 Do not move a package solely because a source scan misses a dynamic import.
 
+The production browser build omits the mobile baseline and transcript scroll
+fixture modules. Their lazy imports are created only when their routes are
+enabled. Development keeps both fixtures; `VITE_ENABLE_MOBILE_BASELINE=1` also
+allows a production build to include the mobile baseline for explicit testing.
+
 The November 5, 2026 cleanup moves 45 client-only direct dependencies out of the
 consumer runtime set. The installed macOS arm64 production graph drops from 70
 to 25 direct packages and from 634 to 328 distinct package/version pairs. These
