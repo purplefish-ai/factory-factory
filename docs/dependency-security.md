@@ -124,8 +124,9 @@ The November 6, 2026 source review established these bounded dispositions:
   validates the exported `isPortAvailable` boundary before any process or socket
   calls and invokes `lsof` through `execFile` with separate arguments.
   Regression tests reject injection strings, nonnumeric/nonfinite values and
-  invalid TCP ports on Unix and Windows. Existing application callers already
-  used the validated `findAvailablePort` path; this review did not demonstrate a
+  invalid TCP ports on Unix and Windows. No current application call site was
+  found for this backend helper: it is exposed through the application context,
+  while the CLI uses a separate port helper. This review did not demonstrate a
   remotely reachable exploit. The historical 0.5.5 artifact still contains the
   reported code.
 - **Published development files are excluded from the production build.**
