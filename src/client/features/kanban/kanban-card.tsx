@@ -253,7 +253,7 @@ function CardTitleIcons({
     workspace.status !== 'PROVISIONING' &&
     onOpenQuickChat;
   return (
-    <div className="relative z-10 flex items-center gap-1.5 shrink-0">
+    <div className="relative z-10 flex items-center gap-1.5 [@media(any-pointer:coarse)]:gap-0 shrink-0">
       {onStartEdit && !isArchived && (
         <Tooltip>
           <TooltipTrigger asChild>

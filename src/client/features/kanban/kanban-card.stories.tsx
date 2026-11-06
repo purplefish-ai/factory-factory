@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react';
 import { useState } from 'react';
-import { expect, within } from 'storybook/test';
+import { expect, fn, within } from 'storybook/test';
 import type { WorkspacePullRequest } from '@/shared/workspace-pr';
 import { deriveWorkspacePRSummary } from '@/shared/workspace-pr-summary';
 import { baseWorkspace } from './kanban-card.story-fixtures';
@@ -458,4 +458,23 @@ export const UnreadInboxDark: Story = { ...UnreadInbox, globals: { theme: 'dark'
 export const UnreadInboxPhone: Story = {
   ...UnreadInbox,
   globals: { viewport: { value: 'phone', isRotated: false } },
+};
+
+/** Touch controls sit together while retaining the app's 36px tap targets. */
+export const CompactControlsPhone: Story = {
+  args: {
+    workspace: { ...baseWorkspace, name: 'Mobile card controls with a longer workspace title' },
+    projectSlug: 'my-project',
+    onRename: fn(),
+    onOpenQuickChat: fn(),
+    onToggleRatcheting: fn(),
+    onArchive: fn(),
+  },
+  globals: { viewport: { value: 'phone', isRotated: false } },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    for (const name of ['Rename workspace', 'Quick Chat', 'Archive workspace']) {
+      await expect(canvas.getByRole('button', { name })).toBeVisible();
+    }
+  },
 };
