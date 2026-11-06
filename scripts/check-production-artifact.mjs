@@ -23,7 +23,8 @@ if (files.length === 0) {
 const forbidden = files.filter(
   (file) =>
     file.startsWith('scripts/') ||
-    /(?:^|\/)(?:testing|test-utils|fixtures|__tests__)(?:\/|$)/.test(file) ||
+    file.startsWith('src/backend/services/service-registry-check.helpers.') ||
+    /(?:^|\/)(?:test|tests|testing|test-utils|fixtures|__tests__)(?:\/|$)/.test(file) ||
     /\.(?:test|spec)(?:\.|-)/.test(file)
 );
 if (forbidden.length > 0) {

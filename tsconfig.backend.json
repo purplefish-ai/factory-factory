@@ -21,6 +21,9 @@
     "**/testing/**",
     "**/test-utils/**",
     "**/fixtures/**",
-    "**/__tests__/**"
+    "**/__tests__/**",
+    "**/test/**",
+    "**/tests/**",
+    "src/backend/services/service-registry-check.helpers.ts"
   ]
 }
