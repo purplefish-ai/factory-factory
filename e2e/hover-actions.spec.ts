@@ -70,6 +70,30 @@ for (const width of [375, 820]) {
       ).toBeLessThanOrEqual(1);
     });
 
+    test('kanban controls stay compact without shrinking touch targets', async ({ page }) => {
+      await page.goto('/__mobile-baseline?surface=hover-actions');
+      const rename = page.getByRole('button', { name: 'Rename workspace', exact: true });
+      await expect(rename).toBeVisible();
+      const actions = rename.locator('..');
+      const bounds = await actions.locator('button').evaluateAll((buttons) =>
+        buttons.map((button) => {
+          const { x, right, width, height } = button.getBoundingClientRect();
+          return { x, right, width, height };
+        })
+      );
+      expect(bounds).toHaveLength(4);
+      for (const [index, box] of bounds.entries()) {
+        expect(box.width).toBeGreaterThanOrEqual(36);
+        expect(box.height).toBeGreaterThanOrEqual(36);
+        const previous = bounds[index - 1];
+        if (previous) {
+          // Keep distinct tap areas, with no extra space between them.
+          expect(box.x - previous.right).toBeGreaterThanOrEqual(0);
+          expect(box.x - previous.right).toBeLessThanOrEqual(1);
+        }
+      }
+    });
+
     test('screenshot deletion removes the thumbnail', async ({ page }) => {
       await page.goto('/__mobile-baseline?surface=hover-actions');
       await page.getByRole('button', { name: 'Delete screenshot Home' }).tap();
