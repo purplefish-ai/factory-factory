@@ -8,14 +8,14 @@ const mockServer = {
 };
 
 const mockCreateNetServer = vi.fn(() => mockServer);
-const mockExec = vi.fn();
+const mockExecFile = vi.fn();
 
 vi.mock('node:net', () => ({
   createServer: () => mockCreateNetServer(),
 }));
 
 vi.mock('node:child_process', () => ({
-  exec: (...args: unknown[]) => mockExec(...args),
+  execFile: (...args: unknown[]) => mockExecFile(...args),
 }));
 
 vi.mock('node:util', () => ({
@@ -43,7 +43,7 @@ describe('port.service', () => {
     mockServer.once.mockReset();
     mockServer.listen.mockReset();
     mockServer.close.mockReset();
-    mockExec.mockReset();
+    mockExecFile.mockReset();
   });
 
   afterEach(() => {
@@ -54,16 +54,54 @@ describe('port.service', () => {
   });
 
   describe('isPortAvailable', () => {
+    describe.each(['darwin', 'win32'])('invalid input on %s', (platform) => {
+      it.each([
+        0,
+        -1,
+        65_536,
+        1.5,
+        Number.NaN,
+        Number.POSITIVE_INFINITY,
+        '3000',
+        '3000; echo injected',
+        null,
+        undefined,
+      ])('rejects %s before running a process or binding a socket', async (port) => {
+        Object.defineProperty(process, 'platform', { value: platform });
+        mockExecFile.mockResolvedValue({ stdout: '', stderr: '' });
+        mockServer.once.mockImplementation((event: string, callback: () => void) => {
+          if (event === 'listening') {
+            queueMicrotask(callback);
+          }
+          return mockServer;
+        });
+        mockServer.close.mockImplementation((callback: () => void) => callback());
+
+        await expect(Reflect.apply(isPortAvailable, undefined, [port])).rejects.toThrow(
+          /Invalid port/
+        );
+        expect(mockExecFile).not.toHaveBeenCalled();
+        expect(mockCreateNetServer).not.toHaveBeenCalled();
+      });
+    });
+
+    it.each([1, 65_535])('accepts valid boundary port %s', async (port) => {
+      Object.defineProperty(process, 'platform', { value: 'darwin' });
+      mockExecFile.mockResolvedValue({ stdout: '', stderr: '' });
+
+      await expect(isPortAvailable(port)).resolves.toBe(true);
+    });
+
     it('should return true when port is available (lsof on Unix)', async () => {
       Object.defineProperty(process, 'platform', { value: 'darwin' });
 
       // Mock lsof returning no output (port free)
-      mockExec.mockResolvedValue({ stdout: '', stderr: '' });
+      mockExecFile.mockResolvedValue({ stdout: '', stderr: '' });
 
       const result = await isPortAvailable(3000);
 
       expect(result).toBe(true);
-      expect(mockExec).toHaveBeenCalledWith('lsof -i :3000 -sTCP:LISTEN -t', {
+      expect(mockExecFile).toHaveBeenCalledWith('lsof', ['-i', ':3000', '-sTCP:LISTEN', '-t'], {
         timeout: 2000,
       });
     });
@@ -72,7 +110,7 @@ describe('port.service', () => {
       Object.defineProperty(process, 'platform', { value: 'darwin' });
 
       // Mock lsof returning PID (port in use)
-      mockExec.mockResolvedValue({ stdout: '12345\n', stderr: '' });
+      mockExecFile.mockResolvedValue({ stdout: '12345\n', stderr: '' });
 
       const result = await isPortAvailable(3000);
 
@@ -83,7 +121,7 @@ describe('port.service', () => {
       Object.defineProperty(process, 'platform', { value: 'darwin' });
 
       // Mock lsof throwing error (not installed)
-      mockExec.mockRejectedValue(new Error('lsof: command not found'));
+      mockExecFile.mockRejectedValue(new Error('lsof: command not found'));
 
       // Simulate successful server listening (port available)
       mockServer.once.mockImplementation((event: string, callback: () => void) => {
@@ -106,7 +144,9 @@ describe('port.service', () => {
       'uses the bind result (%s) when lsof exits 1 without seeing another user’s listener',
       async (bindEvent) => {
         Object.defineProperty(process, 'platform', { value: 'darwin' });
-        mockExec.mockRejectedValue(Object.assign(new Error('No visible listeners'), { code: 1 }));
+        mockExecFile.mockRejectedValue(
+          Object.assign(new Error('No visible listeners'), { code: 1 })
+        );
         mockServer.once.mockImplementation((event: string, callback: () => void) => {
           if (event === bindEvent) {
             queueMicrotask(callback);
@@ -138,7 +178,7 @@ describe('port.service', () => {
       const result = await isPortAvailable(3000);
 
       expect(result).toBe(true);
-      expect(mockExec).not.toHaveBeenCalled(); // Should not try lsof on Windows
+      expect(mockExecFile).not.toHaveBeenCalled(); // Should not try lsof on Windows
       expect(mockServer.listen).toHaveBeenCalledWith(3000);
     });
 
@@ -165,13 +205,13 @@ describe('port.service', () => {
       'should reject invalid start port %s before probing',
       async (startPort) => {
         Object.defineProperty(process, 'platform', { value: 'darwin' });
-        mockExec.mockResolvedValue({ stdout: '', stderr: '' });
+        mockExecFile.mockResolvedValue({ stdout: '', stderr: '' });
 
         await expect(findAvailablePort(startPort)).rejects.toThrow(
           `Invalid start port ${startPort}: expected an integer between 1 and 65535`
         );
 
-        expect(mockExec).not.toHaveBeenCalled();
+        expect(mockExecFile).not.toHaveBeenCalled();
       }
     );
 
@@ -179,7 +219,7 @@ describe('port.service', () => {
       Object.defineProperty(process, 'platform', { value: 'darwin' });
 
       // Mock lsof returning no output (port free)
-      mockExec.mockResolvedValue({ stdout: '', stderr: '' });
+      mockExecFile.mockResolvedValue({ stdout: '', stderr: '' });
 
       const result = await findAvailablePort(3000);
 
@@ -192,7 +232,7 @@ describe('port.service', () => {
       let callCount = 0;
 
       // Simulate: ports 3000, 3001, 3002 are in use; 3003 is available
-      mockExec.mockImplementation(() => {
+      mockExecFile.mockImplementation(() => {
         const currentPort = 3000 + callCount;
         callCount++;
 
@@ -213,7 +253,7 @@ describe('port.service', () => {
       Object.defineProperty(process, 'platform', { value: 'darwin' });
 
       // Simulate all ports in use
-      mockExec.mockResolvedValue({ stdout: '12345\n', stderr: '' });
+      mockExecFile.mockResolvedValue({ stdout: '12345\n', stderr: '' });
 
       await expect(findAvailablePort(3000, 5)).rejects.toThrow(
         'Could not find an available port starting from 3000'
@@ -226,7 +266,7 @@ describe('port.service', () => {
       let attemptCount = 0;
 
       // Simulate all ports in use
-      mockExec.mockImplementation(() => {
+      mockExecFile.mockImplementation(() => {
         attemptCount++;
         return Promise.resolve({ stdout: '12345\n', stderr: '' });
       });
@@ -238,14 +278,14 @@ describe('port.service', () => {
 
     it('should not probe ports above the valid TCP range', async () => {
       Object.defineProperty(process, 'platform', { value: 'darwin' });
-      mockExec.mockResolvedValue({ stdout: '12345\n', stderr: '' });
+      mockExecFile.mockResolvedValue({ stdout: '12345\n', stderr: '' });
 
       await expect(findAvailablePort(65_535)).rejects.toThrow(
         'Could not find an available port starting from 65535'
       );
 
-      expect(mockExec).toHaveBeenCalledOnce();
-      expect(mockExec).toHaveBeenCalledWith('lsof -i :65535 -sTCP:LISTEN -t', {
+      expect(mockExecFile).toHaveBeenCalledOnce();
+      expect(mockExecFile).toHaveBeenCalledWith('lsof', ['-i', ':65535', '-sTCP:LISTEN', '-t'], {
         timeout: 2000,
       });
     });

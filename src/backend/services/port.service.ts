@@ -4,14 +4,14 @@
  * Provides utilities for checking port availability and finding available ports.
  */
 
-import { exec } from 'node:child_process';
+import { execFile } from 'node:child_process';
 import { createServer as createNetServer } from 'node:net';
 import { promisify } from 'node:util';
 import { SERVICE_TIMEOUT_MS } from './constants';
 import { createLogger } from './logger.service';
 
 const logger = createLogger('port-service');
-const execAsync = promisify(exec);
+const execFileAsync = promisify(execFile);
 const MIN_PORT = 1;
 const MAX_PORT = 65_535;
 
@@ -26,7 +26,7 @@ async function isPortInUse(port: number): Promise<boolean> {
     try {
       // lsof -i :PORT -sTCP:LISTEN checks for processes listening on the port
       // -t returns just PIDs (suppresses errors if no process found)
-      const { stdout } = await execAsync(`lsof -i :${port} -sTCP:LISTEN -t`, {
+      const { stdout } = await execFileAsync('lsof', ['-i', `:${port}`, '-sTCP:LISTEN', '-t'], {
         timeout: SERVICE_TIMEOUT_MS.portLsof,
       });
       // If we get output, port is in use
@@ -55,6 +55,12 @@ async function isPortInUse(port: number): Promise<boolean> {
  * Check if a port is available (inverse of isPortInUse for API compatibility).
  */
 export async function isPortAvailable(port: number): Promise<boolean> {
+  if (!Number.isInteger(port) || port < MIN_PORT || port > MAX_PORT) {
+    throw new Error(
+      `Invalid port ${port}: expected an integer between ${MIN_PORT} and ${MAX_PORT}`
+    );
+  }
+
   return !(await isPortInUse(port));
 }
 
