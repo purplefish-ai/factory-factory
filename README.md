@@ -184,10 +184,10 @@ disable inherited `TRUST_PROXY_HEADERS` and dotenv override settings before
 launching the backend; private mode authenticates clients before stripping
 forwarded-address headers.
 
-Port selection rejects values outside the integer range 1–65535 before
-starting a process or binding a socket, then checks listening processes with
-`lsof` on Unix. If that check fails, including when another user's listener is
-hidden, it verifies the port with a bind attempt before selecting it.
+Port selection rejects values outside the integer range 1–65535 before starting
+a process or binding a socket, then checks listening processes with `lsof` on
+Unix. If that check fails, including when another user's listener is hidden, it
+verifies the port with a bind attempt before selecting it.
 
 ### Inspect the database
 
