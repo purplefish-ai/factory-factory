@@ -84,17 +84,21 @@ changes against the dependency's purpose. Keep dependency bots covered by the
 same review. See
 [Socket configuration](https://docs.socket.dev/docs/socket-yml).
 
-On November 5, 2026, the public
-[0.5.5 report](https://socket.dev/npm/package/factory-factory/overview/0.5.5)
-returned a Cloudflare challenge to the available reader, so its score and alerts
-could not be verified. The checkout was already at 0.5.6. Observed main branch
-checks did not include Socket, but
-[PR #3059](https://github.com/purplefish-ai/factory-factory/pull/3059)
-subsequently produced `Socket Security: Project Report` and
-`Socket Security: Pull Request Alerts` checks from the Socket app. The report
-was generated; PR alerts were skipped because that PR changed no dependencies.
-This confirms installation, not a clean baseline or configured severity policy.
-On November 5, 2026, main branch protection was updated and verified to require
+The user supplied the complete HTML export of the
+[0.5.5 alerts report](https://socket.dev/npm/package/factory-factory/alerts/0.5.5),
+exported November 5, 2026: 22 package alert instances and 437 dependency alert
+instances across 405 package/alert entries. Earlier attempts to read the public
+report encountered a Cloudflare challenge; the supplied export now provides the
+baseline evidence. It describes the published 0.5.5 artifact, not current main
+or a fresh consumer installation. The targeted review below does not establish
+that all 437 dependency instances have been individually investigated.
+
+[PR #3059](https://github.com/purplefish-ai/factory-factory/pull/3059) produced
+`Socket Security: Project Report` and `Socket Security: Pull Request Alerts`
+checks from the Socket app. The report was generated; PR alerts were skipped
+because that PR changed no dependencies. This confirms installation, not a clean
+baseline or configured severity policy. On November 5, 2026, main branch
+protection was updated and verified to require
 `Socket Security: Pull Request Alerts`, bound to the Socket app (ID 156372),
 alongside the existing Build, Test, and Lint/Type Check/Dependencies/Dead Code
 checks. The project report check only confirms report generation and is not a
@@ -102,16 +106,86 @@ required verdict. This merge gate enforces the app's PR alert result; Socket's
 dashboard severity/blocking policy has not been independently verified. Review
 that policy separately before claiming specific alert types block merging.
 
-To establish the baseline, export the version-specific alerts and record each
-finding's package/version, alert type and severity, direct or transitive path,
-and whether it ships in npm, Docker, or desktop artifacts. Assign an owner and
-classify it as remediation, investigated expected behavior, or unresolved. For
-an exception, preserve the reviewed evidence, bounded scope, expiry, and recheck
-condition. Filesystem, network, and process capabilities are expected in parts
-of this application, but require a purpose-specific explanation. Do not
-interpret a capability flag alone as confirmed malware, or suppress it for every
-dependency. Do not report the baseline complete until the actual alerts have
-been captured and dispositions reviewed.
+For each reviewed finding, record its package/version, alert type and severity,
+direct or transitive path, and whether it ships in npm, Docker, or desktop
+artifacts. Assign an owner and classify it as remediation, investigated expected
+behavior, or unresolved. For an exception, preserve the reviewed evidence,
+bounded scope, expiry, and recheck condition. Do not interpret a capability flag
+alone as confirmed malware, or suppress it for every dependency. The dependency
+maintainers own the unresolved items below; the baseline remains incomplete
+until the remaining concrete findings have dispositions.
+
+### Targeted review of the 0.5.5 export
+
+The November 6, 2026 source review established these bounded dispositions:
+
+- **Port command construction is remediated in source.**
+  [PR #3069](https://github.com/purplefish-ai/factory-factory/pull/3069)
+  validates the exported `isPortAvailable` boundary before any process or socket
+  calls and invokes `lsof` through `execFile` with separate arguments.
+  Regression tests reject injection strings, nonnumeric/nonfinite values and
+  invalid TCP ports on Unix and Windows. No current application call site was
+  found for this backend helper: it is exposed through the application context,
+  while the CLI uses a separate port helper. This review did not demonstrate a
+  remotely reachable exploit. The historical 0.5.5 artifact still contains the
+  reported code.
+- **Published development files are excluded from the production build.**
+  [PR #3071](https://github.com/purplefish-ai/factory-factory/pull/3071)
+  excludes backend tests, test helpers and fixtures from compilation. Build and
+  prepack checks reject development output, including stale files and runtime
+  imports that pull an excluded module back in; release verification
+  independently inspects the tarball. The packed consumer smoke passed CLI help,
+  fresh SQLite migrations and native SQLite/PTY checks. Source tests remain in
+  the normal typecheck and test suite. A new release and re-scan are still
+  needed to replace the published 0.5.5 artifact.
+- **The install hook has already been narrowed.** It retains source-checkout
+  Prisma generation and repairs the executable bit of node-pty's current macOS
+  helper within its resolved package directory, with symlink escape checks.
+  Published installations use the generated client in `dist`. See
+  [npm package security](npm-package-security.md). Its remaining install-script,
+  filesystem and process alerts describe capabilities still present; they have
+  not been eliminated by this change.
+- **The Prisma CLI graph remains installed for a supported command.** Startup,
+  updates and `ff db:migrate` use the application's direct SQLite migration
+  runner in `src/backend/migrate.ts`. However, `ff db:studio` resolves and runs
+  `prisma/build/index.js`. The installed `prisma@7.10.1` manifest directly
+  includes `@prisma/dev`, `@prisma/studio-core`, MySQL and PostgreSQL clients;
+  moving Prisma to development dependencies would break Studio for consumers.
+  Optional-tool packaging is a follow-up design decision. This reachability
+  check does not clear every transitive package's behavior or license alerts.
+- **Reviewed Markdown paths already have controls.** Chat uses ReactMarkdown's
+  URL policy and literal HTML handling; its Streamdown adapter disables the
+  default raw-HTML plugins. PR comments run `rehypeRaw` followed by
+  `rehypeSanitize`. Mermaid initializes with `securityLevel: strict`, and an
+  existing integration test with the real engine verifies that diagram
+  frontmatter cannot relax that setting. These checks do not establish that
+  every dependency-level eval or DOM alert is unreachable. Browser CSP coverage
+  and remaining dynamic-code paths need separate review before claiming defense
+  in depth against script injection.
+- **Capability and metadata alerts remain contextual.** Network, filesystem and
+  process access are necessary for provider runtimes, Git operations and local
+  terminals. Minified browser assets are expected build output. New publisher,
+  ownership, deprecated-package and license alerts still need package-specific
+  evidence. Moving frontend dependencies out of the npm runtime graph does not
+  remove that code from browser or desktop bundles or resolve its license
+  alerts. For example, the installed `dompurify@3.4.17` manifest declares
+  `(MPL-2.0 OR Apache-2.0)` and ships both license files; `vscode-jsonrpc@9.0.3`
+  declares MIT and ships an MIT `License.txt`, while its generic
+  `thirdpartynotices.txt` mentions LGPL rights without naming a component. The
+  Claude Agent SDK 0.3.316's `SEE LICENSE IN README.md` metadata also remains.
+  Compare the complete distributed notices and terms before adopting a
+  compliance disposition; these observations do not establish one.
+
+Both full and production registry audits on November 6, 2026 returned zero known
+advisories. The production audit covered 328 resolved production and optional
+package instances. GitHub's dependency SBOM also included application packages
+such as React 19.3.1, Express 5.3.0 and Prisma 7.10.1, rather than only pnpm. An
+advisory audit answers a different question from Socket's behavior, maintenance
+and publishing alerts. It does not validate the published npm graph: consumer
+installs do not inherit this repository's pnpm overrides or patches. Keep the
+clean-install graph comparison in the delivery plan below open, and re-scan the
+next approved release; the historical 0.5.5 report will retain its original
+findings.
 
 ## Approved supply-chain delivery plan
 
@@ -119,8 +193,8 @@ The November 5, 2026 hardening work is split into independently reviewed PRs:
 
 1. Establish the Socket alert baseline and dependency intake controls above.
    Acceptance requires reviewed dispositions for high-severity findings and
-   demonstrated PR checks; inaccessible report/dashboard evidence remains
-   unverified.
+   demonstrated PR checks. The supplied report is available; dashboard blocking
+   policy and the remaining finding dispositions are still unverified.
 2. Make the published npm graph match the reviewed runtime graph. Compare a
    clean tarball install with the production lockfile, preserve applicable
    mitigations outside the pnpm checkout, and verify native/provider runtimes.
