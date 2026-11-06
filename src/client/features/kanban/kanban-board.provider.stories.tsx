@@ -543,3 +543,37 @@ export const PhoneDark: Story = {
   ...Phone,
   globals: { theme: 'dark', viewport: { value: 'phone', isRotated: false } },
 };
+
+/** Card controls must scroll behind the sticky section navigation. */
+export const PhoneScrolledControls: Story = {
+  globals: { viewport: { value: 'phone', isRotated: false } },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await canvas.findByText('Update dependencies');
+    const navigation = canvas.getByRole('navigation', { name: 'Board sections' });
+    const scroll = canvasElement.querySelector<HTMLElement>('[data-mobile-board]')!;
+    const card = canvasElement.querySelector<HTMLElement>('[data-workspace-id="ws-1"]')!;
+    const control = within(card).getByRole('button', { name: 'Rename workspace' });
+    // Put the control's center at the navigation's center, as during a scroll.
+    scroll.scrollTop +=
+      control.getBoundingClientRect().top +
+      control.getBoundingClientRect().height / 2 -
+      (navigation.getBoundingClientRect().top + navigation.getBoundingClientRect().height / 2);
+    await waitFor(async () => {
+      const box = control.getBoundingClientRect();
+      const hit = canvasElement.ownerDocument.elementFromPoint(
+        box.left + box.width / 2,
+        box.top + box.height / 2
+      );
+      await expect(navigation.contains(hit)).toBe(true);
+    });
+    for (const link of within(navigation).getAllByRole('link')) {
+      const badge = link.querySelector('[data-slot="badge"]')!;
+      await expect(badge).not.toBeNull();
+      await expect(getComputedStyle(badge).borderTopWidth).toBe('1px');
+      await expect(getComputedStyle(badge).borderTopColor).not.toBe('rgba(0, 0, 0, 0)');
+    }
+    await userEvent.click(within(navigation).getByRole('link', { name: 'Done 1' }));
+    await expect(canvas.getByRole('region', { name: 'Done' })).toHaveFocus();
+  },
+};

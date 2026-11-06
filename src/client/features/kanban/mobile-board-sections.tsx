@@ -1,5 +1,6 @@
 import { type ReactNode, useEffect, useId, useRef, useState } from 'react';
 import { useStableCallback } from '@/client/hooks/use-stable-callback';
+import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import type { ColumnConfig } from './kanban-column';
 
@@ -121,11 +122,18 @@ export function MobileBoardSections({
               !visible && 'opacity-50'
             )}
           >
-            {column.shortLabel ?? column.label} <span className="tabular-nums">{count}</span>
+            {column.shortLabel ?? column.label}{' '}
+            <Badge
+              variant="outline"
+              className="h-5 min-w-5 px-1.5 text-xs tabular-nums text-inherit"
+            >
+              {count}
+            </Badge>
           </a>
         ))}
       </nav>
-      <div className="flex flex-col gap-4 pt-3 pb-4">
+      {/* Keep card controls in a stacking context below the sticky navigation. */}
+      <div className="isolate flex flex-col gap-4 pt-3 pb-4">
         {visibleSections.map(({ column, content }) => (
           <section
             key={column.id}
