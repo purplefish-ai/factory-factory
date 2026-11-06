@@ -8,6 +8,27 @@ and this project adheres to
 
 ## [Unreleased]
 
+## [0.5.8] - 2026-11-06
+
+### Changed
+
+- Sort the Done column by latest message activity, newest first (#3073)
+- Tighten mobile Kanban card control spacing (#3074)
+- Record the supplied Socket security baseline and reviewed dependency
+  dispositions, and add the latest Socket badge to the README (#3070, #3075)
+
+### Fixed
+
+- Select newly launched workspaces immediately while creation completes (#3076)
+- Fix mobile Board tab stacking and use outlined count badges (#3068)
+
+### Security
+
+- Validate backend port probes and invoke port helpers without a shell (#3069)
+- Exclude development files from production artifacts and verify the packaged
+  output during publishing (#3071)
+- Omit disabled fixture routes from production browser chunks (#3072)
+
 ## [0.5.7] - 2026-11-05
 
 ### Changed
