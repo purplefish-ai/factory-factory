@@ -29,6 +29,40 @@ async function fixture(id: string) {
 }
 
 describe('selected pending workspace', () => {
+  it('bounds completed launch history without evicting a pending request', async () => {
+    setPendingWorkspace('optimistic-retained-pending', {
+      status: 'creating',
+      name: 'Still pending',
+    });
+    setPendingWorkspace('optimistic-old-completed', {
+      status: 'failed',
+      message: 'Old launch failed',
+    });
+    for (let index = 0; index < 100; index++) {
+      setPendingWorkspace(`optimistic-completed-${index}`, {
+        status: 'failed',
+        message: `Failure ${index}`,
+      });
+    }
+    const old = await fixture('optimistic-old-completed');
+    const pending = await fixture('optimistic-retained-pending');
+    const recent = await fixture('optimistic-completed-99');
+    try {
+      expect(old.container.textContent).toContain('This launch is no longer available');
+      expect(pending.container.textContent).toContain('Creating Still pending');
+      expect(recent.container.textContent).toContain('Failure 99');
+    } finally {
+      await act(() => {
+        old.root.unmount();
+        pending.root.unmount();
+        recent.root.unmount();
+      });
+      old.router.dispose();
+      pending.router.dispose();
+      recent.router.dispose();
+    }
+  });
+
   it('shows progress without mounting workspace queries and replaces the temporary route on success', async () => {
     const id = 'optimistic-success';
     setPendingWorkspace(id, { status: 'creating', name: 'My task' });

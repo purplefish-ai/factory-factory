@@ -493,7 +493,7 @@ function SidebarInner({
                         onShowNewWorkspaceFormChange(false);
                         if (navData.selectedProjectSlug) {
                           void navigate(
-                            `/projects/${navData.selectedProjectSlug}/workspaces/${workspaceId}`
+                            `${getProjectSectionPath(navData.selectedProjectSlug, 'workspaces')}/${encodeURIComponent(workspaceId)}`
                           );
                         }
                         onNavigate?.();
@@ -502,7 +502,7 @@ function SidebarInner({
                         onShowNewWorkspaceFormChange(false);
                         if (navData.selectedProjectSlug) {
                           void navigate(
-                            `/projects/${navData.selectedProjectSlug}/workspaces/${workspaceId}`
+                            `${getProjectSectionPath(navData.selectedProjectSlug, 'workspaces')}/${encodeURIComponent(workspaceId)}`
                           );
                         }
                         onNavigate?.();

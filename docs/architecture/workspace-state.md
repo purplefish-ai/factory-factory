@@ -166,7 +166,9 @@ that route with the persisted workspace after seeding its detail cache, without
 waiting for draft cleanup. Navigating away during creation prevents a late
 response from changing the current selection. Failure shows the error and a link
 back to the retained draft; a reload of a temporary route offers the board and
-form instead of querying an invalid workspace ID.
+form instead of querying an invalid workspace ID. The local store retains the
+latest 100 completed launch outcomes for temporary route recovery and never
+evicts requests that are still creating a workspace.
 
 The tab bar's **New** selection configures a new conversation. The composer's
 picker shows the current conversation's provider and changes only its model;
