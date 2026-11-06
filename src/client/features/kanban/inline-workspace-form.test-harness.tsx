@@ -416,7 +416,11 @@ const formRoots = new Set<Root>();
 
 export function renderForm(
   projectId = getTestProjectId(),
-  callbacks: { onCreated?: (id: string) => void; onCancel?: () => void } = {}
+  callbacks: {
+    onCreated?: (id: string) => void;
+    onCancel?: () => void;
+    onLaunching?: (id: string) => void;
+  } = {}
 ): {
   container: HTMLDivElement;
   root: Root;
@@ -450,6 +454,7 @@ export function renderForm(
         existingNames: [],
         onCancel,
         onCreated,
+        onLaunching: callbacks.onLaunching,
       })
     );
   });

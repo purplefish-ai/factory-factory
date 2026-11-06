@@ -1,5 +1,5 @@
 import { act } from 'react';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { createOptimisticWorkspaceSummary } from '@/client/lib/workspace-summary';
 import { actFlushSync } from '@/test-utils/react-act';
 // @vitest-environment jsdom
@@ -34,6 +34,46 @@ function launch(container: HTMLElement, label = 'Launch') {
 }
 
 describe('workspace creation submission recovery', () => {
+  it('selects the launch before waiting for query cancellation or the create response', async () => {
+    const onLaunching = vi.fn();
+    const form = renderForm(getTestProjectId(), { onLaunching });
+    let finishCancellation!: () => void;
+    mocks.listForProjectCancelMock.mockReturnValueOnce(
+      new Promise<void>((resolve) => {
+        finishCancellation = resolve;
+      })
+    );
+    try {
+      launch(form.container);
+      const input = mocks.createWorkspaceMutateMock.mock.calls[0]?.[0] as Input;
+      const mutation = options();
+      const pending = mutation.onMutate(input);
+      expect(onLaunching).toHaveBeenCalledWith(expect.stringMatching(/^optimistic-/));
+      expect(form.onCreated).not.toHaveBeenCalled();
+      // Navigation unmounts the composer, but the request still updates its route.
+      actFlushSync(() => form.root.unmount());
+      finishCancellation();
+      const context = await pending;
+      await act(async () => {
+        await mutation.onSuccess(
+          createOptimisticWorkspaceSummary({
+            id: 'created-immediately',
+            projectId: input.projectId,
+            name: input.name,
+            ratchetEnabled: false,
+          }),
+          input,
+          context
+        );
+      });
+      expect(form.onCreated).not.toHaveBeenCalled();
+      expect(mocks.workspaceListCache?.workspaces[0]?.id).toBe('created-immediately');
+    } finally {
+      finishCancellation();
+      actFlushSync(() => form.root.unmount());
+    }
+  });
+
   it('explains an explicit disk failure after production storage clears the draft in memory', async () => {
     // The harness deliberately stubs IndexedDB unavailable; retain the real logical clear.
     await expect(

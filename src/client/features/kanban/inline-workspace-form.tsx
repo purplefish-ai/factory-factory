@@ -18,6 +18,7 @@ import {
 } from '@/client/features/composer';
 import { invalidateAgentProjectQueries } from '@/client/lib/agent-query-cache';
 import { runInBackground } from '@/client/lib/background-task';
+import { setPendingWorkspace } from '@/client/lib/pending-workspace';
 import type { AppRouter } from '@/client/lib/trpc';
 import { trpc } from '@/client/lib/trpc';
 import {
@@ -84,6 +85,8 @@ interface InlineWorkspaceFormProps {
   existingNames: string[];
   onCancel: () => void;
   onCreated: (workspaceId: string) => void;
+  /** Select the local launch immediately, before server preflight completes. */
+  onLaunching?: (workspaceId: string) => void;
 }
 
 const ATTACHMENT_ACCEPT_TYPES = [...SUPPORTED_IMAGE_TYPES, ...SUPPORTED_TEXT_EXTENSIONS].join(',');
@@ -176,6 +179,7 @@ export function InlineWorkspaceForm({
   existingNames,
   onCancel,
   onCreated,
+  onLaunching,
 }: InlineWorkspaceFormProps) {
   const utils = trpc.useUtils();
   const queryClient = useQueryClient();
@@ -271,6 +275,12 @@ export function InlineWorkspaceForm({
         ratchetEnabled: input.type === 'MANUAL' ? (input.ratchetEnabled ?? true) : true,
       });
 
+      setPendingWorkspace(optimisticWorkspaceId, {
+        status: 'creating',
+        name: optimisticWorkspace.name,
+      });
+      onLaunching?.(optimisticWorkspaceId);
+
       await utils.workspace.listForProject.cancel({ projectId: input.projectId });
 
       utils.workspace.listForProject.setData({ projectId: input.projectId }, (old) =>
@@ -297,11 +307,23 @@ export function InlineWorkspaceForm({
       );
 
       seedCreatedWorkspaceDetail(queryClient, workspace);
+      if (context?.optimisticWorkspaceId) {
+        setPendingWorkspace(context.optimisticWorkspaceId, {
+          status: 'created',
+          workspaceId: workspace.id,
+        });
+      }
       runInBackground(
         utils.workspace.listForProject.invalidate({ projectId: workspace.projectId }),
         "Couldn't refresh data."
       );
-      completeCreation(context?.submission ?? submitted.current, () => onCreated(workspace.id));
+      completeCreation(context?.submission ?? submitted.current, () => {
+        // The selected pending route owns navigation after an immediate launch.
+        // Never pull the user back if they navigated elsewhere during creation.
+        if (!onLaunching) {
+          onCreated(workspace.id);
+        }
+      });
     },
     onError: (error, input, context) => {
       const token = context?.submission ?? submitted.current;
@@ -309,6 +331,10 @@ export function InlineWorkspaceForm({
         submission.fail(token, `Couldn't create workspace. ${error.message}`);
       }
       if (context) {
+        setPendingWorkspace(context.optimisticWorkspaceId, {
+          status: 'failed',
+          message: `Couldn't create workspace. ${error.message}`,
+        });
         // Drop only the optimistic row. Restoring the pre-mutation cache would
         // also revert snapshot deltas and concurrent mutations that landed
         // while the create was in flight, and this cache backs the sidebar as

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { act } from 'react';
 import { createRoot } from 'react-dom/client';
-import { MemoryRouter } from 'react-router';
+import { MemoryRouter, useLocation } from 'react-router';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import type { AppNavigationData } from '@/client/hooks/use-app-navigation-data';
 import type { ProjectIssuesStatus } from '@/client/hooks/use-project-issues';
@@ -12,6 +12,17 @@ import { makeWorkspaceSnapshotEntry } from '@/test-utils/workspace-snapshot';
 import { AppSidebar } from './app-sidebar';
 
 const rowRenders = vi.hoisted(() => vi.fn());
+vi.mock('@/client/features/kanban/inline-workspace-form', () => ({
+  InlineWorkspaceForm: ({ onLaunching }: { onLaunching: (id: string) => void }) => (
+    <button type="button" onClick={() => onLaunching('optimistic-launch')}>
+      Launch
+    </button>
+  ),
+}));
+
+function CurrentLocation() {
+  return <output>{useLocation().pathname}</output>;
+}
 const issueState = vi.hoisted(() => ({
   issues: [] as NormalizedIssue[] | undefined,
   status: 'ready' as ProjectIssuesStatus,
@@ -54,6 +65,38 @@ beforeEach(() => {
 afterEach(() => {
   vi.unstubAllGlobals();
   document.body.innerHTML = '';
+});
+
+it('encodes project slugs when selecting a launch immediately', async () => {
+  const container = document.createElement('div');
+  document.body.appendChild(container);
+  const root = createRoot(container);
+  try {
+    await act(() =>
+      root.render(
+        <MemoryRouter>
+          <SidebarProvider>
+            <AppSidebar navData={{ ...navData, selectedProjectSlug: 'team/repo' }} />
+            <CurrentLocation />
+          </SidebarProvider>
+        </MemoryRouter>
+      )
+    );
+    const newWorkspace = [...container.querySelectorAll('button')].find(
+      (button) => button.textContent === 'New workspace'
+    );
+    await act(async () => newWorkspace?.click());
+    const launch = [...container.querySelectorAll('button')].find(
+      (button) => button.textContent === 'Launch'
+    );
+    expect(launch).toBeDefined();
+    await act(async () => launch?.click());
+    expect(container.querySelector('output')?.textContent).toBe(
+      '/projects/team%2Frepo/workspaces/optimistic-launch'
+    );
+  } finally {
+    await act(() => root.unmount());
+  }
 });
 
 it('re-renders only the workspace row whose snapshot changed', async () => {
