@@ -11,5 +11,19 @@
     "noEmit": false
   },
   "include": ["src/backend/**/*", "src/cli/**/*", "prisma/generated/**/*"],
-  "exclude": ["node_modules", ".next", "dist"]
+  "exclude": [
+    "node_modules",
+    ".next",
+    "dist",
+    "**/*.test.*",
+    "**/*.spec.*",
+    "**/*.test-*",
+    "**/testing/**",
+    "**/test-utils/**",
+    "**/fixtures/**",
+    "**/__tests__/**",
+    "**/test/**",
+    "**/tests/**",
+    "src/backend/services/service-registry-check.helpers.ts"
+  ]
 }

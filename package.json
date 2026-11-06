@@ -45,7 +45,7 @@
   ],
   "scripts": {
     "dev": "node src/cli/bootstrap.mjs serve --dev",
-    "build": "pnpm db:generate && node scripts/check-ambiguous-relative-imports.mjs && node scripts/clean-dist.mjs && tsc -p tsconfig.backend.json && tsc-alias -p tsconfig.backend.json --resolve-full-paths && node scripts/fix-prisma-imports.mjs && node scripts/copy-prompts.mjs && vite build && pnpm check:client-chunks",
+    "build": "pnpm db:generate && node scripts/check-ambiguous-relative-imports.mjs && node scripts/clean-dist.mjs && tsc -p tsconfig.backend.json && tsc-alias -p tsconfig.backend.json --resolve-full-paths && node scripts/fix-prisma-imports.mjs && node scripts/copy-prompts.mjs && vite build && pnpm check:client-chunks && pnpm check:production-artifact",
     "build:storybook": "storybook build",
     "brand:generate": "node scripts/generate-brand-assets.mjs",
     "brand:generate:social-preview": "node scripts/generate-social-preview.mjs",
@@ -86,7 +86,7 @@
     "rebuild:electron": "node scripts/ensure-native-modules.mjs electron --force",
     "start:electron": "electron .",
     "postinstall": "node scripts/postinstall.mjs",
-    "prepack": "node scripts/prepare-runtime-metadata.mjs",
+    "prepack": "node scripts/check-production-artifact.mjs && node scripts/prepare-runtime-metadata.mjs",
     "postpack": "node scripts/restore-runtime-metadata.mjs",
     "prepare": "husky",
     "deps:check": "depcruise src electron --config .dependency-cruiser.cjs",
@@ -103,7 +103,8 @@
     "test:acp:manual:prompt": "RUN_REAL_CODEX_APP_SERVER_PROMPT_TESTS=1 pnpm test:acp:manual",
     "check:unused-code": "node --import tsx scripts/check-unused-code.ts",
     "check:unused-code:report": "node --import tsx scripts/check-unused-code.ts --report",
-    "check:unused-code:update": "node --import tsx scripts/check-unused-code.ts --update"
+    "check:unused-code:update": "node --import tsx scripts/check-unused-code.ts --update",
+    "check:production-artifact": "node scripts/check-production-artifact.mjs"
   },
   "dependencies": {
     "@agentclientprotocol/claude-agent-acp": "^0.99.1",

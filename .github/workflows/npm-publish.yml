@@ -90,6 +90,9 @@ jobs:
       - name: Pack npm tarball
         run: npm pack --silent
 
+      - name: Verify packed artifact contains no development files
+        run: node scripts/check-production-artifact.mjs --tarball factory-factory-*.tgz
+
       - name: Smoke test packed artifact with npm exec
         run: |
           set -euo pipefail
