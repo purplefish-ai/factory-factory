@@ -1,16 +1,16 @@
 import { mkdtempSync, readdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { build } from 'vite';
+import { build, normalizePath } from 'vite';
 import { expect, it } from 'vitest';
 
-const entry = resolve('src/client/router.tsx');
+const entry = normalizePath(resolve('src/client/router.tsx'));
 const fixtureRoutes = [
   './routes/mobile-baseline',
   './routes/transcript-scroll-fixture',
   resolve('src/client/routes/mobile-baseline.tsx'),
   resolve('src/client/routes/transcript-scroll-fixture.tsx'),
-];
+].map(normalizePath);
 
 it.each([
   { mode: 'production', mobileBaseline: '', expected: [] },
@@ -36,7 +36,10 @@ it.each([
             input: entry,
             // Exercise the real router and fixture modules; unrelated app dependencies
             // stay external so this regression does not rebuild the entire application.
-            external: (id) => id !== entry && !fixtureRoutes.includes(id),
+            external: (id) => {
+              const normalizedId = normalizePath(id);
+              return normalizedId !== entry && !fixtureRoutes.includes(normalizedId);
+            },
             output: { chunkFileNames: '[name].js' },
           },
         },
