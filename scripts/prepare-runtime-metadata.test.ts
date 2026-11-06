@@ -161,7 +161,11 @@ it('packs runtime metadata while restoring the checkout and excluding recovery f
   mkdirSync(join(root, 'dist'));
   writeFileSync(join(root, 'dist/artifact.txt'), 'artifact');
   mkdirSync(join(root, 'scripts'));
-  for (const script of ['prepare-runtime-metadata.mjs', 'restore-runtime-metadata.mjs']) {
+  for (const script of [
+    'check-production-artifact.mjs',
+    'prepare-runtime-metadata.mjs',
+    'restore-runtime-metadata.mjs',
+  ]) {
     if (existsSync(resolve('scripts', script))) {
       copyFileSync(resolve('scripts', script), join(root, 'scripts', script));
     }

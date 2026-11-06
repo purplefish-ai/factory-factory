@@ -20,6 +20,16 @@ Windows or macOS npm installs. Local macOS arm64 validation used a separate pnpm
 consumer project and exercised the packed hook, SQLite and PTY spawn. Repository
 dependency maintenance continues to use the pinned pnpm version.
 
+## Production artifacts
+
+The backend build excludes tests, test helpers, fixtures and testing utilities.
+The build and prepack checks reject these files and development scripts in
+`dist`, including files pulled back in through a runtime import or left by a
+stale build. Tests remain part of the source checkout and its normal typecheck
+and test suite. Release verification also inspects the packed tarball before
+running the consumer smoke checks, so archive contents are checked independently
+of the build directory.
+
 ## Installation hook
 
 Published installs use the compiled Prisma client and never execute Prisma
