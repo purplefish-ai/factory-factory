@@ -31,7 +31,47 @@ describe('board view', () => {
     ]);
   });
 
-  it('keeps other columns newest-created and breaks activity ties by creation', () => {
+  it.each(['latest-message', 'created'] as const)(
+    'sorts Done by latest message regardless of Waiting sort order (%s)',
+    (waitingSortOrder) => {
+      const rows = [
+        { ...workspace('newest-created', null, '2026-11-03'), lastActivityAt: null },
+        {
+          ...workspace('latest-message', null, '2026-11-01'),
+          lastActivityAt: '2026-11-05T00:00:00Z',
+        },
+        {
+          ...workspace('older-message', null, '2026-11-02'),
+          lastActivityAt: '2026-11-04T00:00:00Z',
+        },
+      ].map((row) => ({ ...row, kanbanColumn: 'DONE' as const }));
+
+      expect(sortBoardWorkspaces(rows, waitingSortOrder).map((row) => row.id)).toEqual([
+        'latest-message',
+        'older-message',
+        'newest-created',
+      ]);
+      expect(rows.map((row) => row.id)).toEqual([
+        'newest-created',
+        'latest-message',
+        'older-message',
+      ]);
+    }
+  );
+
+  it.each([null, 'invalid', '2026-11-04T00:00:00Z'])(
+    'sorts Done by creation for missing/invalid activity or activity ties (%s)',
+    (lastActivityAt) => {
+      const rows = ['2026-11-01', '2026-11-02'].map((createdAt, index) => ({
+        ...workspace(String(index), null, createdAt),
+        kanbanColumn: 'DONE' as const,
+        lastActivityAt,
+      }));
+      expect(sortBoardWorkspaces(rows).map((row) => row.id)).toEqual(['1', '0']);
+    }
+  );
+
+  it('keeps Working newest-created and breaks Waiting activity ties by creation', () => {
     const rows = [
       { ...workspace('old', null, '2026-11-01'), lastActivityAt: '2026-11-04T00:00:00Z' },
       { ...workspace('new', null, '2026-11-02'), lastActivityAt: '2026-11-04T00:00:00Z' },

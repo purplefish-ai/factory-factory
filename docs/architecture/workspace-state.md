@@ -929,14 +929,15 @@ Waiting has a sort icon beside its section heading for Latest message (default)
 or Created, both newest first. The choice persists in browser storage across
 project boards and reloads, and updates other open tabs. Latest message uses the
 workspace's latest session activity timestamp, falling back to creation when
-unavailable. Other columns keep newest-created order. Waiting cards omit
-waiting-duration labels. Ordering affects only the view, preserving snapshot
-order. The board has no card selection controls. The snapshot store records
-`waitingSince` when an accepted update changes an existing workspace into
-Waiting, retains it across same-status updates and clears it on exit. Initial
-Waiting hydration (including after server restart) has an unknown start;
-creation and last-activity times never substitute for it. No past interval is
-inferred.
+unavailable. Done always uses Latest message order with the same fallback,
+independent of the Waiting sort choice. Working keeps newest-created order.
+Waiting cards omit waiting-duration labels. Ordering affects only the view,
+preserving snapshot order. The board has no card selection controls. The
+snapshot store records `waitingSince` when an accepted update changes an
+existing workspace into Waiting, retains it across same-status updates and
+clears it on exit. Initial Waiting hydration (including after server restart)
+has an unknown start; creation and last-activity times never substitute for it.
+No past interval is inferred.
 
 Archive all in Done targets the entire column, including workspaces hidden by
 the current filter.

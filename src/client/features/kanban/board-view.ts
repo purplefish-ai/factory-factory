@@ -21,9 +21,10 @@ export function sortBoardWorkspaces(
   return [...rows].sort((a, b) => {
     const createdDifference = new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
     if (
-      waitingSortOrder === 'latest-message' &&
-      a.kanbanColumn === 'WAITING' &&
-      b.kanbanColumn === 'WAITING'
+      (a.kanbanColumn === 'DONE' && b.kanbanColumn === 'DONE') ||
+      (waitingSortOrder === 'latest-message' &&
+        a.kanbanColumn === 'WAITING' &&
+        b.kanbanColumn === 'WAITING')
     ) {
       const timestamp = (row: WorkspaceWithKanban) => {
         const activity = row.lastActivityAt ? Date.parse(row.lastActivityAt) : Number.NaN;

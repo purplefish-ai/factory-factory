@@ -379,6 +379,22 @@ export const WaitingSort: Story = {
               createdAt: new Date('2026-11-03'),
               lastActivityAt: '2026-11-03T12:00:00Z',
             },
+            {
+              ...baseWorkspace,
+              kanbanColumn: 'DONE',
+              id: 'done-newer-created',
+              name: 'Done with older message',
+              createdAt: new Date('2026-11-03'),
+              lastActivityAt: '2026-11-03T12:00:00Z',
+            },
+            {
+              ...baseWorkspace,
+              kanbanColumn: 'DONE',
+              id: 'done-latest-message',
+              name: 'Done with latest message',
+              createdAt: new Date('2026-11-01'),
+              lastActivityAt: '2026-11-04T12:00:00Z',
+            },
           ],
           reviewCount: 0,
         }),
@@ -389,9 +405,14 @@ export const WaitingSort: Story = {
     const canvas = within(canvasElement);
     await canvas.findByText('Recent message');
     const ids = () =>
-      [...canvasElement.querySelectorAll('[data-workspace-id]')].map((el) =>
-        el.getAttribute('data-workspace-id')
-      );
+      [...canvasElement.querySelectorAll('[data-workspace-id]')]
+        .map((el) => el.getAttribute('data-workspace-id'))
+        .filter((id) => !id?.startsWith('done-'));
+    const doneIds = () =>
+      [...canvasElement.querySelectorAll('[data-workspace-id]')]
+        .map((el) => el.getAttribute('data-workspace-id'))
+        .filter((id) => id?.startsWith('done-'));
+    await expect(doneIds()).toEqual(['done-latest-message', 'done-newer-created']);
     await expect(ids()).toEqual(['older-created', 'newer-created']);
     await expect(canvas.queryByText(/Waiting since/)).not.toBeInTheDocument();
     await userEvent.click(canvas.getByRole('button', { name: 'Waiting sort order' }));
@@ -402,6 +423,7 @@ export const WaitingSort: Story = {
     );
     await userEvent.click(body.getByRole('menuitemradio', { name: 'Created' }));
     await expect(ids()).toEqual(['newer-created', 'older-created']);
+    await expect(doneIds()).toEqual(['done-latest-message', 'done-newer-created']);
     await expect(localStorage.getItem('kanban-waiting-sort-order')).toBe('created');
     await userEvent.click(canvas.getByRole('button', { name: 'Waiting sort order' }));
     await expect(body.getByRole('menuitemradio', { name: 'Created' })).toHaveAttribute(
