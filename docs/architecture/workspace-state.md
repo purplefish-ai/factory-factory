@@ -930,7 +930,8 @@ or Created, both newest first. The choice persists in browser storage across
 project boards and reloads, and updates other open tabs. Latest message uses the
 workspace's latest session activity timestamp, falling back to creation when
 unavailable. Done always uses Latest message order with the same fallback,
-independent of the Waiting sort choice. Working keeps newest-created order.
+independent of the Waiting sort choice. Equal activity timestamps in Done are
+ordered by creation time, newest first. Working keeps newest-created order.
 Waiting cards omit waiting-duration labels. Ordering affects only the view,
 preserving snapshot order. The board has no card selection controls. The
 snapshot store records `waitingSince` when an accepted update changes an
