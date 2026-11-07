@@ -470,8 +470,11 @@ same helper `fireLifecycleNotification` uses:
   2,000 characters. Full findings live on the PR and in the child's review
   transcript, and the mail says where. Mail is already treated as untrusted data
   and is fetched explicitly through `read_mail`, so it needs no extra fencing.
-- `taskKey` is set to `adversarial-review:<prId>`, so repeat batches on the same
-  PR group together in the inbox.
+- `taskKey` is set to `adversarial-review:<prId>` as correlation metadata. List
+  summaries carry it, so the parent agent can tell which PR a mail is about and
+  match a later mail to an earlier one. It does not group or replace mail: inbox
+  supersession by `taskKey` applies only to `PROGRESS`, and these mails are
+  actionable `COMPLETION`/`BLOCKER` mail that must each stay visible.
 
 **Who gets notified.** Only reviews the parent requested. A user clicking a
 review action inside a child should not send mail to the parent. The
@@ -487,16 +490,20 @@ merges mail that arrives while a signal is still pending. No digest is needed.
 
 At dequeue time the orchestrator decides what code context the reviewer gets and
 picks the matching prompt variant. Inputs are the PR's repo (from its URL), the
-child project's `githubOwner`/`githubRepo`, the PR's `headRefName` and head SHA
-(`getPRHeadCommitSha`, already fetched), and the worktree's current branch
-(`git rev-parse --abbrev-ref HEAD` in `worktreePath`, read when the review runs,
-not from `Workspace.branchName`):
+worktree's `origin` remote, the PR's `headRefName` and head SHA
+(`getPRHeadCommitSha`, already fetched), and the worktree's current branch and
+HEAD (read with `git rev-parse` in `worktreePath` when the review runs, not from
+`Workspace.branchName`). Comparing against `origin` rather than the project's
+stored `githubOwner`/`githubRepo` checks the remote that will actually be
+fetched from. The project fields are derived from `origin` anyway. No base
+commit is needed: the PR diff fetched from GitHub is the authoritative change,
+and the reviewer only needs the head commit to read surrounding code.
 
-| Context        | When                                                           | What the reviewer gets                                                                                                                                                                                                                                                                                                                                                                                                                       |
-| -------------- | -------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `checked_out`  | Same repo, and the worktree branch equals the PR's head branch | Today's prompt: the checkout is the PR. If the worktree HEAD differs from the PR head SHA (unpushed or unpulled commits), the prompt says so and tells the reviewer to treat the diff as authoritative.                                                                                                                                                                                                                                      |
-| `fetched_head` | Same repo, different branch                                    | Before the turn, the orchestrator runs `git fetch --no-write-fetch-head origin +refs/pull/<n>/head:refs/factory-factory/review/<prId>` in the worktree. `refs/pull/<n>/head` also works for PRs from forks. The prompt says the working tree is a **different branch**, and tells the reviewer to read the PR's files with `git show <headSha>:<path>` and compare with `git diff <baseSha>...<headSha>` instead of opening files from disk. |
-| `diff_only`    | The PR's repo is not the child project's repo                  | No usable checkout. The prompt says the local repository is unrelated, and the review is based on the diff, the PR description, and whatever the reviewer can read with `gh` read-only commands. The summary must say that context was limited.                                                                                                                                                                                              |
+| Context        | When                                                                                                                                              | What the reviewer gets                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `checked_out`  | Same repo, the worktree branch equals the PR's head branch, and the PR head commit is in the worktree HEAD                                        | The checkout is the PR. If the worktree HEAD is ahead of the PR head (unpushed commits), the prompt says so, tells the reviewer to review as of the PR head with `git show`, and notes that local checks include the extra commits. Requiring the PR head commit rules out fork PRs that share the branch name and stale local branches.                                                                                                                                                                                                                                 |
+| `fetched_head` | Same repo, otherwise                                                                                                                              | Before the turn, the orchestrator runs `git fetch --no-tags --no-write-fetch-head origin +refs/pull/<n>/head:refs/factory-factory/review/<prId>` in the worktree and checks that the PR head commit is now present. `refs/pull/<n>/head` also works for PRs from forks. The prompt says the working tree is **not this PR**, tells the reviewer to read the PR's files with `git show`, `git ls-tree` and `git grep` at the head SHA instead of from disk, treats the diff below as authoritative for what changed, and says not to run checks against the working tree. |
+| `diff_only`    | The worktree's `origin` is not the PR's repository, Git can't inspect the worktree, the fetch fails, or the PR head moved after the diff was read | No usable checkout. The prompt says why, and the review is based on the diff, the PR description, and read-only `gh` commands. The summary must say that context was limited.                                                                                                                                                                                                                                                                                                                                                                                            |
 
 Notes:
 
@@ -508,7 +515,8 @@ Notes:
   `finally`. Because each child runs one review at a time (section 3), two
   reviewers never fetch into the same worktree at once.
 - **Fetch failures fall back to `diff_only`.** If the fetch fails (auth,
-  network, a force-pushed head), the review drops to `diff_only` and the
+  network) or the fetched ref no longer contains the head SHA the diff was read
+  at (a push landed in between), the review drops to `diff_only` and the
   completion mail says so. It does not fail the review.
 - **Both providers can read the PR head.** Claude (plan mode) and Codex
   (read-only sandbox) reviewers can both run read-only `git show` and
