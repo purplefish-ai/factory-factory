@@ -98,16 +98,25 @@ beside the chip; below that it is in More actions. It starts a new chat with the
 retry feedback.
 
 An adversarial review of an attached PR reads that PR's own code, even when the
-worktree has a different branch checked out. When `origin` is the PR's
-repository and the worktree branch matches the PR head branch and contains the
-PR head commit, the reviewer reads the working tree. Otherwise, for a PR in the
-`origin` repository, the review first fetches `refs/pull/<n>/head` into a
+worktree has a different branch checked out. One
+`git status --porcelain=v2 --branch` snapshot supplies the worktree's branch,
+HEAD and local changes. When `origin` is the PR's repository and the worktree
+branch matches the PR head branch and contains the PR head commit, the checkout
+is the PR. The reviewer reads the working tree only if it is exactly at the PR
+head with no staged, unstaged or untracked changes. It is told to switch to
+`git show` if HEAD moves or changes appear during the review. With local commits
+or changes, it reads the PR head with `git show` instead. Otherwise, for a PR in
+the `origin` repository, the review first fetches `refs/pull/<n>/head` into a
 private `refs/factory-factory/review/<prId>` ref, without touching the working
 tree, index, branches or `FETCH_HEAD`. The reviewer reads the PR head with
 `git show` and is told not to run checks against the working tree. The ref is
-deleted when the turn ends. PRs from another repository, failed fetches, and
-heads that moved after the diff was read fall back to a diff-only review that
-says its file context was limited
+deleted when the turn ends. A worktree without a GitHub `origin`, a PR from
+another repository, a failed fetch, or a head commit that is not available after
+the fetch falls back to a diff-only review that says its file context was
+limited. A head commit that is still available is reviewed even if the PR has
+since moved, because the diff and comment anchors describe that commit.
+Repository files, including `AGENTS.md`, are presented to the reviewer as data
+that cannot override its instructions
 (`src/backend/orchestration/adversarial-review-checkout-context.ts`).
 
 ## PR event delivery destinations

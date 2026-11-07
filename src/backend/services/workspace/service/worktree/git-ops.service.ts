@@ -26,11 +26,16 @@ interface CommitIfNeededOptions {
   removeGitIndexLock?: boolean;
 }
 
-/** What a worktree has checked out; each field is null when Git can't answer. */
+/**
+ * What a worktree has checked out. Fields are null when Git exits non-zero or
+ * can't answer; the call rejects if Git cannot be spawned at all.
+ */
 export interface WorktreeCheckoutIdentity {
   /** Current branch, or null when HEAD is detached. */
   branch: string | null;
   headSha: string | null;
+  /** Staged, unstaged or untracked changes in the working tree. */
+  hasLocalChanges: boolean | null;
   /** GitHub repository of the `origin` remote. */
   origin: { owner: string; repo: string } | null;
 }
@@ -43,6 +48,27 @@ function assertAppPrivateRef(ref: string): void {
   if (!(ref.startsWith(APP_PRIVATE_REF_PREFIX) && /^[A-Za-z0-9/_-]+$/.test(ref))) {
     throw new ApplicationError('INTERNAL_ERROR', `Refusing to write non-private ref: ${ref}`);
   }
+}
+
+/** Parse `git status --porcelain=v2 --branch` output. */
+function parsePorcelainV2Status(
+  stdout: string
+): Pick<WorktreeCheckoutIdentity, 'branch' | 'headSha' | 'hasLocalChanges'> {
+  let branch: string | null = null;
+  let headSha: string | null = null;
+  let hasLocalChanges = false;
+  for (const line of stdout.split('\n')) {
+    if (line.startsWith('# branch.oid ')) {
+      const oid = line.slice('# branch.oid '.length).trim();
+      headSha = COMMIT_SHA_PATTERN.test(oid) ? oid : null;
+    } else if (line.startsWith('# branch.head ')) {
+      const head = line.slice('# branch.head '.length).trim();
+      branch = head && head !== '(detached)' ? head : null;
+    } else if (line.length > 0 && !line.startsWith('#')) {
+      hasLocalChanges = true;
+    }
+  }
+  return { branch, headSha, hasLocalChanges };
 }
 
 function assertCommitSha(sha: string): void {
@@ -404,16 +430,19 @@ class GitOpsService {
   }
 
   async getCheckoutIdentity(worktreePath: string): Promise<WorktreeCheckoutIdentity> {
-    const [branch, head, origin] = await Promise.all([
-      gitCommand(['rev-parse', '--abbrev-ref', 'HEAD'], worktreePath),
-      gitCommand(['rev-parse', 'HEAD'], worktreePath),
+    // One `git status` reads branch, HEAD and changes from a single snapshot, so
+    // a concurrent branch switch can't mix values from two different states.
+    const [status, origin] = await Promise.all([
+      gitCommand(
+        ['status', '--porcelain=v2', '--branch', '--untracked-files=normal'],
+        worktreePath
+      ),
       gitCommand(['remote', 'get-url', 'origin'], worktreePath),
     ]);
-    const branchName = branch.code === 0 ? branch.stdout.trim() : '';
-    const headSha = head.code === 0 ? head.stdout.trim() : '';
     return {
-      branch: branchName && branchName !== 'HEAD' ? branchName : null,
-      headSha: COMMIT_SHA_PATTERN.test(headSha) ? headSha : null,
+      ...(status.code === 0
+        ? parsePorcelainV2Status(status.stdout)
+        : { branch: null, headSha: null, hasLocalChanges: null }),
       origin: origin.code === 0 ? parseGitHubRemoteUrl(origin.stdout.trim()) : null,
     };
   }

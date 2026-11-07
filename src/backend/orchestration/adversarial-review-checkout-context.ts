@@ -71,7 +71,13 @@ export async function prepareReviewCheckout(
   }
 
   const origin = identity.origin;
-  if (!(origin && `${origin.owner}/${origin.repo}`.toLowerCase() === repo.toLowerCase())) {
+  if (!origin) {
+    return {
+      context: { kind: 'diff_only', headSha, reason: 'unknown_origin' },
+      cleanup: noCleanup,
+    };
+  }
+  if (`${origin.owner}/${origin.repo}`.toLowerCase() !== repo.toLowerCase()) {
     return {
       context: { kind: 'diff_only', headSha, reason: 'other_repository' },
       cleanup: noCleanup,
@@ -86,7 +92,13 @@ export async function prepareReviewCheckout(
     (await git.isAncestorCommit(worktreePath, headSha, identity.headSha).catch(() => false))
   ) {
     return {
-      context: { kind: 'checked_out', headSha, localHeadSha: identity.headSha },
+      context: {
+        kind: 'checked_out',
+        headSha,
+        localHeadSha: identity.headSha,
+        // Unknown counts as changed: then the reviewer reads the PR head via git.
+        hasLocalChanges: identity.hasLocalChanges ?? true,
+      },
       cleanup: noCleanup,
     };
   }

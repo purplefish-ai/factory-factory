@@ -600,34 +600,60 @@ describe('event creation candidate ownership', () => {
     const ok = (stdout = '') => ({ code: 0, stdout, stderr: '' });
     const fail = (stderr = 'fatal') => ({ code: 128, stdout: '', stderr });
 
-    it('reads branch, HEAD and GitHub origin of a worktree', async () => {
+    it('reads branch, HEAD, changes and GitHub origin from one status snapshot', async () => {
       mockGitCommand
-        .mockResolvedValueOnce(ok('feature/x\n'))
-        .mockResolvedValueOnce(ok(`${SHA}\n`))
+        .mockResolvedValueOnce(
+          ok(`# branch.oid ${SHA}\n# branch.head feature/x\n# branch.upstream origin/feature/x\n`)
+        )
         .mockResolvedValueOnce(ok('git@github.com:example/repo.git\n'));
 
       await expect(gitOpsService.getCheckoutIdentity('/repo/w1')).resolves.toEqual({
         branch: 'feature/x',
         headSha: SHA,
+        hasLocalChanges: false,
         origin: { owner: 'example', repo: 'repo' },
       });
+      expect(mockGitCommand).toHaveBeenCalledTimes(2);
       expect(mockGitCommand).toHaveBeenCalledWith(
-        ['rev-parse', '--abbrev-ref', 'HEAD'],
+        ['status', '--porcelain=v2', '--branch', '--untracked-files=normal'],
         '/repo/w1'
       );
-      expect(mockGitCommand).toHaveBeenCalledWith(['rev-parse', 'HEAD'], '/repo/w1');
       expect(mockGitCommand).toHaveBeenCalledWith(['remote', 'get-url', 'origin'], '/repo/w1');
     });
 
-    it('reports a detached HEAD, a missing origin and unreadable HEAD as null', async () => {
+    it.each([
+      ['modified', '1 .M N... 100644 100644 100644 aaa bbb src/a.ts'],
+      ['untracked', '? notes.txt'],
+    ])('reports %s files as local changes', async (_name, entry) => {
       mockGitCommand
-        .mockResolvedValueOnce(ok('HEAD\n'))
-        .mockResolvedValueOnce(fail())
+        .mockResolvedValueOnce(ok(`# branch.oid ${SHA}\n# branch.head feature/x\n${entry}\n`))
+        .mockResolvedValueOnce(ok('https://github.com/example/repo\n'));
+
+      await expect(gitOpsService.getCheckoutIdentity('/repo/w1')).resolves.toMatchObject({
+        hasLocalChanges: true,
+      });
+    });
+
+    it('reports a detached HEAD and an unborn branch as null', async () => {
+      mockGitCommand
+        .mockResolvedValueOnce(ok('# branch.oid (initial)\n# branch.head (detached)\n'))
         .mockResolvedValueOnce(fail('No such remote'));
 
       await expect(gitOpsService.getCheckoutIdentity('/repo/w1')).resolves.toEqual({
         branch: null,
         headSha: null,
+        hasLocalChanges: false,
+        origin: null,
+      });
+    });
+
+    it('reports every field as unknown when git status fails', async () => {
+      mockGitCommand.mockResolvedValueOnce(fail()).mockResolvedValueOnce(fail());
+
+      await expect(gitOpsService.getCheckoutIdentity('/repo/w1')).resolves.toEqual({
+        branch: null,
+        headSha: null,
+        hasLocalChanges: null,
         origin: null,
       });
     });

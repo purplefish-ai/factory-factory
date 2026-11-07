@@ -31,6 +31,7 @@ function createGit(overrides: Partial<ReviewCheckoutGit> = {}) {
     getCheckoutIdentity: vi.fn<ReviewCheckoutGit['getCheckoutIdentity']>().mockResolvedValue({
       branch: 'feature/x',
       headSha: HEAD_SHA,
+      hasLocalChanges: false,
       origin: { owner: 'example', repo: 'repo' },
     }),
     isAncestorCommit: vi.fn<ReviewCheckoutGit['isAncestorCommit']>().mockResolvedValue(true),
@@ -54,8 +55,12 @@ describe('prepareReviewCheckout', () => {
     const { context, cleanup } = await prepareReviewCheckout(INPUT, git);
     await cleanup();
 
-    expect(context).toEqual({ kind: 'checked_out', headSha: HEAD_SHA, localHeadSha: HEAD_SHA });
-    expect(git.isAncestorCommit).toHaveBeenCalledWith('/tmp/worktree', HEAD_SHA, HEAD_SHA);
+    expect(context).toEqual({
+      kind: 'checked_out',
+      headSha: HEAD_SHA,
+      localHeadSha: HEAD_SHA,
+      hasLocalChanges: false,
+    });
     expect(git.fetchPullRequestHead).not.toHaveBeenCalled();
     expect(git.deletePrivateRef).not.toHaveBeenCalled();
   });
@@ -65,13 +70,44 @@ describe('prepareReviewCheckout', () => {
       getCheckoutIdentity: vi.fn().mockResolvedValue({
         branch: 'feature/x',
         headSha: LOCAL_SHA,
+        hasLocalChanges: false,
         origin: { owner: 'example', repo: 'repo' },
       }),
     });
 
     const { context } = await prepareReviewCheckout(INPUT, git);
 
-    expect(context).toEqual({ kind: 'checked_out', headSha: HEAD_SHA, localHeadSha: LOCAL_SHA });
+    expect(context).toEqual({
+      kind: 'checked_out',
+      headSha: HEAD_SHA,
+      localHeadSha: LOCAL_SHA,
+      hasLocalChanges: false,
+    });
+    // The PR head must be reachable from the local HEAD, not the other way round.
+    expect(git.isAncestorCommit).toHaveBeenCalledWith('/tmp/worktree', HEAD_SHA, LOCAL_SHA);
+  });
+
+  it.each([
+    ['has uncommitted changes', true, true],
+    ['status is unknown', null, true],
+  ])('reports local changes when the checked-out PR branch %s', async (_name, dirty, expected) => {
+    const git = createGit({
+      getCheckoutIdentity: vi.fn().mockResolvedValue({
+        branch: 'feature/x',
+        headSha: HEAD_SHA,
+        hasLocalChanges: dirty,
+        origin: { owner: 'example', repo: 'repo' },
+      }),
+    });
+
+    const { context } = await prepareReviewCheckout(INPUT, git);
+
+    expect(context).toEqual({
+      kind: 'checked_out',
+      headSha: HEAD_SHA,
+      localHeadSha: HEAD_SHA,
+      hasLocalChanges: expected,
+    });
   });
 
   it.each([
@@ -118,18 +154,21 @@ describe('prepareReviewCheckout', () => {
   });
 
   it.each([
-    ['origin is a different repository', { owner: 'someone', repo: 'fork' }],
-    ['origin is not a GitHub remote', null],
-  ])('limits the review to the diff when %s', async (_name, origin) => {
+    ['origin is a different repository', { owner: 'someone', repo: 'fork' }, 'other_repository'],
+    ['origin is missing or not a GitHub remote', null, 'unknown_origin'],
+  ] as const)('limits the review to the diff when %s', async (_name, origin, reason) => {
     const git = createGit({
-      getCheckoutIdentity: vi
-        .fn()
-        .mockResolvedValue({ branch: 'feature/x', headSha: HEAD_SHA, origin }),
+      getCheckoutIdentity: vi.fn().mockResolvedValue({
+        branch: 'feature/x',
+        headSha: HEAD_SHA,
+        hasLocalChanges: false,
+        origin,
+      }),
     });
 
     const { context } = await prepareReviewCheckout(INPUT, git);
 
-    expect(context).toEqual({ kind: 'diff_only', headSha: HEAD_SHA, reason: 'other_repository' });
+    expect(context).toEqual({ kind: 'diff_only', headSha: HEAD_SHA, reason });
     expect(git.fetchPullRequestHead).not.toHaveBeenCalled();
   });
 

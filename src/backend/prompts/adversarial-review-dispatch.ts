@@ -79,6 +79,8 @@ export type ReviewCheckoutContext =
       headSha: string;
       /** Worktree HEAD; differs from `headSha` when it has unpushed commits. */
       localHeadSha: string;
+      /** Staged, unstaged or untracked changes on top of `localHeadSha`. */
+      hasLocalChanges: boolean;
     }
   | {
       kind: 'fetched_head';
@@ -89,7 +91,7 @@ export type ReviewCheckoutContext =
   | {
       kind: 'diff_only';
       headSha: string;
-      reason: 'other_repository' | 'fetch_failed' | 'git_unavailable';
+      reason: 'other_repository' | 'unknown_origin' | 'fetch_failed' | 'git_unavailable';
     };
 
 export interface AdversarialReviewDispatchInput {
@@ -111,32 +113,46 @@ const DIFF_ONLY_REASONS: Record<
   string
 > = {
   other_repository: 'belongs to a different repository than this PR',
+  unknown_origin: "has no GitHub `origin` remote, so it can't be matched to this PR's repository",
   fetch_failed: "doesn't contain this PR, and its head commit could not be fetched",
   git_unavailable: 'could not be inspected with Git',
 };
 
 function renderCheckoutContext(context: ReviewCheckoutContext): string {
   switch (context.kind) {
-    case 'checked_out':
-      if (context.localHeadSha === context.headSha) {
+    case 'checked_out': {
+      const hasLocalCommits = context.localHeadSha !== context.headSha;
+      if (!(hasLocalCommits || context.hasLocalChanges)) {
         return [
-          `The working tree in this session is this PR's branch at its current head (\`${context.headSha}\`).`,
+          `The working tree in this session is this PR's branch at its current head (\`${context.headSha}\`), with no uncommitted changes.`,
           'Read surrounding code directly from the working tree.',
+          // The workspace's own agent keeps working while the review runs.
+          `If \`git rev-parse HEAD\` stops printing \`${context.headSha}\` or \`git status --porcelain\` shows changes, the workspace has moved on: read the PR's files with \`git show ${context.headSha}:<path>\` instead.`,
         ].join(' ');
       }
+      const differences = [
+        hasLocalCommits
+          ? `local commits that are not in the PR yet (local HEAD \`${context.localHeadSha}\`)`
+          : null,
+        context.hasLocalChanges ? 'uncommitted changes' : null,
+      ].filter((difference) => difference !== null);
       return [
-        `The working tree in this session is this PR's branch, but it also has local commits that are not in the PR yet (local HEAD \`${context.localHeadSha}\`, PR head \`${context.headSha}\`).`,
-        `Review the PR as of \`${context.headSha}\`: the diff below is authoritative for what changed.`,
-        `Where the working tree may differ, read the PR's version with \`git show ${context.headSha}:<path>\`,`,
-        `and check \`git diff ${context.headSha} HEAD\` to see what the local commits change.`,
-        'Results from running checks include those local commits; say so if you rely on them.',
+        `The working tree in this session is this PR's branch, but it also has ${differences.join(' and ')}, so files on disk may not match the PR.`,
+        `Review the PR as of its head \`${context.headSha}\`: the diff below is authoritative for what changed.`,
+        `Read the PR's version of files with \`git show ${context.headSha}:<path>\` rather than from disk${
+          hasLocalCommits
+            ? `, and check \`git diff ${context.headSha} HEAD\` to see what the local commits change`
+            : ''
+        }.`,
+        'Results from running checks include these local differences; say so if you rely on them.',
       ].join(' ');
+    }
     case 'fetched_head':
       return [
         `**The working tree in this session is not this PR.** It has ${
           context.worktreeBranch === null
             ? 'a detached HEAD'
-            : `a different branch (${quoteUntrustedName(context.worktreeBranch)})`
+            : `a branch (${quoteUntrustedName(context.worktreeBranch)}) that is not at this PR's head`
         } checked out, so files on disk show the wrong version of this PR's code. Do not read this PR's files from disk.`,
         `The PR's head commit \`${context.headSha}\` is available locally. Read its files with \`git show ${context.headSha}:<path>\`,`,
         `list them with \`git ls-tree -r --name-only ${context.headSha}\`, and search them with \`git grep <pattern> ${context.headSha}\`.`,

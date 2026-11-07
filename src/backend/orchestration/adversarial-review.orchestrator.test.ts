@@ -238,6 +238,7 @@ describe('triggerAdversarialReview', () => {
     vi.mocked(gitOpsService.getCheckoutIdentity).mockResolvedValue({
       branch: 'feature/checked-out',
       headSha: 'b'.repeat(40),
+      hasLocalChanges: false,
       origin: { owner: 'example', repo: 'repo' },
     });
     vi.mocked(gitOpsService.fetchPullRequestHead).mockResolvedValue(undefined);
@@ -254,7 +255,7 @@ describe('triggerAdversarialReview', () => {
     );
     const prompt = vi.mocked(sessionService.sendSessionMessage).mock.calls[0]?.[1];
     expect(prompt).toContain('**The working tree in this session is not this PR.**');
-    expect(prompt).toContain('a different branch ("feature/checked-out")');
+    expect(prompt).toContain('a branch ("feature/checked-out") that is not at this PR\'s head');
     expect(prompt).toContain(`git show ${HEAD_SHA}:<path>`);
     expect(gitOpsService.deletePrivateRef).toHaveBeenCalledWith(
       '/tmp/worktree',

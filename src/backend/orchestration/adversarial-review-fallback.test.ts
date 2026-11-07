@@ -104,6 +104,7 @@ describe('adversarial-review fallback delivery', () => {
     vi.mocked(gitOpsService.getCheckoutIdentity).mockResolvedValue({
       branch: null,
       headSha: null,
+      hasLocalChanges: null,
       origin: null,
     });
   });
