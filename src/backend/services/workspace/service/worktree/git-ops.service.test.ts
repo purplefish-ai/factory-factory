@@ -615,7 +615,7 @@ describe('event creation candidate ownership', () => {
       });
       expect(mockGitCommand).toHaveBeenCalledTimes(2);
       expect(mockGitCommand).toHaveBeenCalledWith(
-        ['status', '--porcelain=v2', '--branch', '--untracked-files=normal'],
+        ['--no-optional-locks', 'status', '--porcelain=v2', '--branch', '--untracked-files=normal'],
         '/repo/w1'
       );
       expect(mockGitCommand).toHaveBeenCalledWith(['remote', 'get-url', 'origin'], '/repo/w1');
@@ -634,13 +634,26 @@ describe('event creation candidate ownership', () => {
       });
     });
 
-    it('reports a detached HEAD and an unborn branch as null', async () => {
+    it('reports a detached HEAD as a null branch with its commit', async () => {
       mockGitCommand
-        .mockResolvedValueOnce(ok('# branch.oid (initial)\n# branch.head (detached)\n'))
-        .mockResolvedValueOnce(fail('No such remote'));
+        .mockResolvedValueOnce(ok(`# branch.oid ${SHA}\n# branch.head (detached)\n`))
+        .mockResolvedValueOnce(ok('git@github.com:example/repo.git\n'));
 
       await expect(gitOpsService.getCheckoutIdentity('/repo/w1')).resolves.toEqual({
         branch: null,
+        headSha: SHA,
+        hasLocalChanges: false,
+        origin: { owner: 'example', repo: 'repo' },
+      });
+    });
+
+    it('reports an unborn branch with no commit and a missing origin', async () => {
+      mockGitCommand
+        .mockResolvedValueOnce(ok('# branch.oid (initial)\n# branch.head main\n'))
+        .mockResolvedValueOnce(fail('No such remote'));
+
+      await expect(gitOpsService.getCheckoutIdentity('/repo/w1')).resolves.toEqual({
+        branch: 'main',
         headSha: null,
         hasLocalChanges: false,
         origin: null,

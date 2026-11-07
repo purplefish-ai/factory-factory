@@ -492,13 +492,16 @@ merges mail that arrives while a signal is still pending. No digest is needed.
 At dequeue time the orchestrator decides what code context the reviewer gets and
 picks the matching prompt variant. Inputs are the PR's repo (from its URL), the
 worktree's `origin` remote, the PR's `headRefName` and head SHA
-(`getPRHeadCommitSha`, already fetched), and the worktree's current branch and
-HEAD (read with `git rev-parse` in `worktreePath` when the review runs, not from
-`Workspace.branchName`). Comparing against `origin` rather than the project's
-stored `githubOwner`/`githubRepo` checks the remote that will actually be
-fetched from. The project fields are derived from `origin` anyway. No base
-commit is needed: the PR diff fetched from GitHub is the authoritative change,
-and the reviewer only needs the head commit to read surrounding code.
+(`getPRHeadCommitSha`, already fetched), and the worktree's current branch, HEAD
+and local changes. Those three come from one
+`git --no-optional-locks status --porcelain=v2 --branch --untracked-files=normal`
+snapshot in `worktreePath` when the review runs, not from
+`Workspace.branchName`. Staged, unstaged and untracked files all count as local
+changes. Comparing against `origin` rather than the project's stored
+`githubOwner`/`githubRepo` checks the remote that will actually be fetched from.
+The project fields are derived from `origin` anyway. No base commit is needed:
+the PR diff fetched from GitHub is the authoritative change, and the reviewer
+only needs the head commit to read surrounding code.
 
 | Context        | When                                                                                                                                                                                  | What the reviewer gets                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
 | -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
@@ -522,7 +525,8 @@ Notes:
   has moved on since (for example after a force-push), because the diff and
   comment anchors describe that exact commit.
 - **One status snapshot.** Branch, HEAD and local changes come from a single
-  `git status --porcelain=v2 --branch` call, so a concurrent branch switch can't
+  `git --no-optional-locks status --porcelain=v2 --branch` call (which also
+  leaves the index and `index.lock` alone), so a concurrent branch switch can't
   mix values from two states. The workspace's agent can still move on during a
   long review, so the clean-checkout prompt tells the reviewer to check
   `git rev-parse HEAD` and `git status` and fall back to `git show`.

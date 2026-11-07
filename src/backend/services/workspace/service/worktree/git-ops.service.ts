@@ -432,9 +432,11 @@ class GitOpsService {
   async getCheckoutIdentity(worktreePath: string): Promise<WorktreeCheckoutIdentity> {
     // One `git status` reads branch, HEAD and changes from a single snapshot, so
     // a concurrent branch switch can't mix values from two different states.
+    // --no-optional-locks keeps it from refreshing the index (and taking
+    // index.lock) under an agent working in the same worktree.
     const [status, origin] = await Promise.all([
       gitCommand(
-        ['status', '--porcelain=v2', '--branch', '--untracked-files=normal'],
+        ['--no-optional-locks', 'status', '--porcelain=v2', '--branch', '--untracked-files=normal'],
         worktreePath
       ),
       gitCommand(['remote', 'get-url', 'origin'], worktreePath),
