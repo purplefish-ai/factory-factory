@@ -41,17 +41,32 @@ vi.mock('@/backend/services/settings', () => ({
 }));
 
 vi.mock('@/backend/services/workspace', () => ({
+  APP_PRIVATE_REF_PREFIX: 'refs/factory-factory/',
   workspaceDataService: {
     findFixerContext: vi.fn(),
     findPRState: vi.fn(),
   },
+  gitOpsService: {
+    getCheckoutIdentity: vi.fn(),
+    isAncestorCommit: vi.fn(),
+    hasCommit: vi.fn(),
+    fetchPullRequestHead: vi.fn(),
+    deletePrivateRef: vi.fn(),
+  },
 }));
+
+const HEAD_SHA = 'a'.repeat(40);
 
 import { configService } from '@/backend/services/config.service';
 import { getPRDescription, getPRHeadCommitSha, githubCLIService } from '@/backend/services/github';
-import { sessionDataService, sessionLifecycleService } from '@/backend/services/session';
+import {
+  sessionDataService,
+  sessionDomainService,
+  sessionLifecycleService,
+  sessionService,
+} from '@/backend/services/session';
 import { userSettingsService } from '@/backend/services/settings';
-import { workspaceDataService } from '@/backend/services/workspace';
+import { gitOpsService, workspaceDataService } from '@/backend/services/workspace';
 import { ADVERSARIAL_REVIEW_MARKER } from '@/shared/adversarial-review';
 import {
   summarizeExistingActivity,
@@ -88,7 +103,7 @@ function mockOpenPrWorkspace() {
   vi.mocked(githubCLIService.getPRDiff).mockResolvedValue('');
   vi.mocked(githubCLIService.getPRFullDetails).mockResolvedValue({ reviews: [] } as never);
   vi.mocked(githubCLIService.getAuthenticatedUsername).mockResolvedValue('factory-factory[bot]');
-  vi.mocked(getPRHeadCommitSha).mockResolvedValue('abc123');
+  vi.mocked(getPRHeadCommitSha).mockResolvedValue(HEAD_SHA);
   vi.mocked(sessionLifecycleService.stopSession).mockResolvedValue(undefined);
 }
 
@@ -206,6 +221,48 @@ describe('triggerAdversarialReview', () => {
     expect(first).toEqual({ status: 'started', sessionId: 'new-session' });
     expect(second).toEqual(first);
     expect(sessionDataService.createAgentSessionWithinWorkspaceLimit).toHaveBeenCalledTimes(1);
+  });
+
+  it('reviews a PR on another branch from its fetched head and removes the ref afterwards', async () => {
+    mockOpenPrWorkspace();
+    vi.mocked(githubCLIService.getPRFullDetails).mockResolvedValue({
+      reviews: [],
+      headRefName: 'feature/other',
+    } as never);
+    vi.mocked(sessionDataService.createAgentSessionWithinWorkspaceLimit).mockResolvedValue({
+      outcome: 'created',
+      session: { id: 'new-session' },
+    } as never);
+    vi.mocked(sessionService.sendSessionMessage).mockResolvedValue(undefined as never);
+    vi.mocked(sessionDomainService.getTranscriptSnapshot).mockReturnValue([]);
+    vi.mocked(gitOpsService.getCheckoutIdentity).mockResolvedValue({
+      branch: 'feature/checked-out',
+      headSha: 'b'.repeat(40),
+      origin: { owner: 'example', repo: 'repo' },
+    });
+    vi.mocked(gitOpsService.fetchPullRequestHead).mockResolvedValue(undefined);
+    vi.mocked(gitOpsService.hasCommit).mockResolvedValue(true);
+    vi.mocked(gitOpsService.deletePrivateRef).mockResolvedValue(undefined);
+
+    await triggerAdversarialReview(WORKSPACE_ID);
+    await vi.waitFor(() => expect(sessionLifecycleService.stopSession).toHaveBeenCalled());
+
+    expect(gitOpsService.fetchPullRequestHead).toHaveBeenCalledWith(
+      '/tmp/worktree',
+      42,
+      'refs/factory-factory/review/pr-1'
+    );
+    const prompt = vi.mocked(sessionService.sendSessionMessage).mock.calls[0]?.[1];
+    expect(prompt).toContain('**The working tree in this session is not this PR.**');
+    expect(prompt).toContain('a different branch ("feature/checked-out")');
+    expect(prompt).toContain(`git show ${HEAD_SHA}:<path>`);
+    expect(gitOpsService.deletePrivateRef).toHaveBeenCalledWith(
+      '/tmp/worktree',
+      'refs/factory-factory/review/pr-1'
+    );
+    expect(vi.mocked(gitOpsService.deletePrivateRef).mock.invocationCallOrder[0]).toBeLessThan(
+      vi.mocked(sessionLifecycleService.stopSession).mock.invocationCallOrder[0] ?? 0
+    );
   });
 });
 

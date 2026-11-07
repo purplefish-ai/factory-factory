@@ -37,6 +37,7 @@ import {
   hasAdversarialReviewMarker,
 } from '@/shared/adversarial-review';
 import { isOpenPrState, SessionStatus } from '@/shared/core';
+import { prepareReviewCheckout } from './adversarial-review-checkout-context';
 import { buildDiffLineIndex } from './adversarial-review-diff-line-index';
 
 const logger = createLogger('adversarial-review');
@@ -79,7 +80,8 @@ async function triggerAdversarialReviewLocked(
   if (!fixerContext) {
     throw new ApplicationError('NOT_FOUND', `Workspace not found: ${workspaceId}`);
   }
-  if (!fixerContext.worktreePath) {
+  const { worktreePath } = fixerContext;
+  if (!worktreePath) {
     throw new ApplicationError('PRECONDITION_FAILED', 'Workspace is not ready yet (no worktree)');
   }
   if (!(prState?.prUrl && prState.prNumber && isOpenPrState(prState.prState))) {
@@ -144,6 +146,8 @@ async function triggerAdversarialReviewLocked(
   // take minutes, far longer than an HTTP request should block for.
   void runAdversarialReviewTurn({
     sessionId: session.id,
+    worktreePath,
+    prId: prState.prId,
     repo,
     prUrl: prState.prUrl,
     prNumber: prState.prNumber,
@@ -175,6 +179,8 @@ async function findActiveAdversarialReviewSession(
 
 interface RunAdversarialReviewTurnParams {
   sessionId: string;
+  worktreePath: string;
+  prId: string;
   repo: string;
   prUrl: string;
   prNumber: number;
@@ -182,7 +188,8 @@ interface RunAdversarialReviewTurnParams {
 }
 
 async function runAdversarialReviewTurn(params: RunAdversarialReviewTurnParams): Promise<void> {
-  const { sessionId, repo, prUrl, prNumber, postReviewToGitHub } = params;
+  const { sessionId, worktreePath, prId, repo, prUrl, prNumber, postReviewToGitHub } = params;
+  let cleanupCheckout: () => Promise<void> = () => Promise.resolve();
 
   try {
     const [diff, headSha, fullDetails, description, authenticatedUsername] = await Promise.all([
@@ -193,12 +200,28 @@ async function runAdversarialReviewTurn(params: RunAdversarialReviewTurnParams):
       githubCLIService.getAuthenticatedUsername(),
     ]);
 
+    const checkout = await prepareReviewCheckout({
+      worktreePath,
+      repo,
+      prNumber,
+      prId,
+      headSha,
+      headRefName: fullDetails.headRefName,
+    });
+    cleanupCheckout = checkout.cleanup;
+    logger.info('Adversarial review code context', {
+      sessionId,
+      prNumber,
+      context: checkout.context.kind,
+    });
+
     const prompt = buildAdversarialReviewDispatchPrompt({
       prUrl,
       prNumber,
       prDescription: description,
       prDiff: diff,
       existingReviewCommentsSummary: summarizeExistingActivity(fullDetails, authenticatedUsername),
+      checkoutContext: checkout.context,
     });
 
     await sessionService.sendSessionMessage(sessionId, prompt);
@@ -226,6 +249,7 @@ async function runAdversarialReviewTurn(params: RunAdversarialReviewTurnParams):
 
     await postFindingsToGitHub(repo, prNumber, diff, headSha, findings);
   } finally {
+    await cleanupCheckout();
     // A one-off review turn: retire the session once it's done so a later
     // trigger starts a fresh review instead of finding this one "already
     // active" forever.

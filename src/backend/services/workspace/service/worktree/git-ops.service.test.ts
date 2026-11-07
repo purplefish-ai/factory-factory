@@ -593,4 +593,127 @@ describe('event creation candidate ownership', () => {
       gitOpsService.confirmWorktreeAbsent('/repo/worktrees/w1', project, '/real/worktrees')
     ).rejects.toThrow('Git unavailable');
   });
+
+  describe('adversarial review checkout helpers', () => {
+    const SHA = 'a'.repeat(40);
+    const OTHER_SHA = 'b'.repeat(40);
+    const ok = (stdout = '') => ({ code: 0, stdout, stderr: '' });
+    const fail = (stderr = 'fatal') => ({ code: 128, stdout: '', stderr });
+
+    it('reads branch, HEAD and GitHub origin of a worktree', async () => {
+      mockGitCommand
+        .mockResolvedValueOnce(ok('feature/x\n'))
+        .mockResolvedValueOnce(ok(`${SHA}\n`))
+        .mockResolvedValueOnce(ok('git@github.com:example/repo.git\n'));
+
+      await expect(gitOpsService.getCheckoutIdentity('/repo/w1')).resolves.toEqual({
+        branch: 'feature/x',
+        headSha: SHA,
+        origin: { owner: 'example', repo: 'repo' },
+      });
+      expect(mockGitCommand).toHaveBeenCalledWith(
+        ['rev-parse', '--abbrev-ref', 'HEAD'],
+        '/repo/w1'
+      );
+      expect(mockGitCommand).toHaveBeenCalledWith(['rev-parse', 'HEAD'], '/repo/w1');
+      expect(mockGitCommand).toHaveBeenCalledWith(['remote', 'get-url', 'origin'], '/repo/w1');
+    });
+
+    it('reports a detached HEAD, a missing origin and unreadable HEAD as null', async () => {
+      mockGitCommand
+        .mockResolvedValueOnce(ok('HEAD\n'))
+        .mockResolvedValueOnce(fail())
+        .mockResolvedValueOnce(fail('No such remote'));
+
+      await expect(gitOpsService.getCheckoutIdentity('/repo/w1')).resolves.toEqual({
+        branch: null,
+        headSha: null,
+        origin: null,
+      });
+    });
+
+    it('checks ancestry and commit presence without throwing on missing objects', async () => {
+      mockGitCommand.mockResolvedValueOnce(ok()).mockResolvedValueOnce(fail());
+      await expect(gitOpsService.isAncestorCommit('/repo/w1', SHA, OTHER_SHA)).resolves.toBe(true);
+      await expect(gitOpsService.isAncestorCommit('/repo/w1', SHA, OTHER_SHA)).resolves.toBe(false);
+      expect(mockGitCommand).toHaveBeenCalledWith(
+        ['merge-base', '--is-ancestor', SHA, OTHER_SHA],
+        '/repo/w1'
+      );
+
+      mockGitCommand.mockResolvedValueOnce(ok()).mockResolvedValueOnce(fail());
+      await expect(gitOpsService.hasCommit('/repo/w1', SHA)).resolves.toBe(true);
+      await expect(gitOpsService.hasCommit('/repo/w1', SHA)).resolves.toBe(false);
+      expect(mockGitCommand).toHaveBeenCalledWith(
+        ['cat-file', '-e', `${SHA}^{commit}`],
+        '/repo/w1'
+      );
+    });
+
+    it('refuses to pass non-SHA revisions to Git', async () => {
+      await expect(gitOpsService.hasCommit('/repo/w1', '--output=/tmp/x')).rejects.toThrow(
+        'Invalid commit SHA'
+      );
+      await expect(gitOpsService.isAncestorCommit('/repo/w1', SHA, 'HEAD')).rejects.toThrow(
+        'Invalid commit SHA'
+      );
+      expect(mockGitCommand).not.toHaveBeenCalled();
+    });
+
+    it('fetches a PR head into a private ref without writing FETCH_HEAD', async () => {
+      mockGitCommand.mockResolvedValueOnce(ok());
+
+      await gitOpsService.fetchPullRequestHead('/repo/w1', 42, 'refs/factory-factory/review/pr-1');
+
+      expect(mockGitCommand).toHaveBeenCalledWith(
+        [
+          'fetch',
+          '--no-tags',
+          '--no-write-fetch-head',
+          'origin',
+          '+refs/pull/42/head:refs/factory-factory/review/pr-1',
+        ],
+        '/repo/w1'
+      );
+    });
+
+    it('reports fetch failures with Git output', async () => {
+      mockGitCommand.mockResolvedValueOnce(fail('fatal: could not read Username'));
+
+      await expect(
+        gitOpsService.fetchPullRequestHead('/repo/w1', 42, 'refs/factory-factory/review/pr-1')
+      ).rejects.toThrow('Failed to fetch pull request head: fatal: could not read Username');
+    });
+
+    it.each(['refs/heads/main', 'refs/factory-factory/../heads/main', 'refs/factory-factory/a b'])(
+      'refuses to write or delete the non-private ref %s',
+      async (ref) => {
+        await expect(gitOpsService.fetchPullRequestHead('/repo/w1', 42, ref)).rejects.toThrow(
+          'non-private ref'
+        );
+        await expect(gitOpsService.deletePrivateRef('/repo/w1', ref)).rejects.toThrow(
+          'non-private ref'
+        );
+        expect(mockGitCommand).not.toHaveBeenCalled();
+      }
+    );
+
+    it('rejects invalid PR numbers before fetching', async () => {
+      await expect(
+        gitOpsService.fetchPullRequestHead('/repo/w1', 0, 'refs/factory-factory/review/pr-1')
+      ).rejects.toThrow('Invalid pull request number');
+      expect(mockGitCommand).not.toHaveBeenCalled();
+    });
+
+    it('deletes a private ref', async () => {
+      mockGitCommand.mockResolvedValueOnce(ok());
+
+      await gitOpsService.deletePrivateRef('/repo/w1', 'refs/factory-factory/review/pr-1');
+
+      expect(mockGitCommand).toHaveBeenCalledWith(
+        ['update-ref', '-d', 'refs/factory-factory/review/pr-1'],
+        '/repo/w1'
+      );
+    });
+  });
 });

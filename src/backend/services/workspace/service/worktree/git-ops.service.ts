@@ -11,6 +11,7 @@ import {
   workspaceGitStateService,
 } from '@/backend/services/workspace-git-state.service';
 import type { WorkspaceInitGuard } from '@/shared/workspace-init-retry';
+import { parseGitHubRemoteUrl } from './project-repository-inspector';
 
 const logger = createLogger('git-ops');
 
@@ -23,6 +24,31 @@ interface ProjectPaths {
 
 interface CommitIfNeededOptions {
   removeGitIndexLock?: boolean;
+}
+
+/** What a worktree has checked out; each field is null when Git can't answer. */
+export interface WorktreeCheckoutIdentity {
+  /** Current branch, or null when HEAD is detached. */
+  branch: string | null;
+  headSha: string | null;
+  /** GitHub repository of the `origin` remote. */
+  origin: { owner: string; repo: string } | null;
+}
+
+/** Private namespace for refs the app fetches without touching branches. */
+export const APP_PRIVATE_REF_PREFIX = 'refs/factory-factory/';
+const COMMIT_SHA_PATTERN = /^[0-9a-f]{40}(?:[0-9a-f]{24})?$/;
+
+function assertAppPrivateRef(ref: string): void {
+  if (!(ref.startsWith(APP_PRIVATE_REF_PREFIX) && /^[A-Za-z0-9/_-]+$/.test(ref))) {
+    throw new ApplicationError('INTERNAL_ERROR', `Refusing to write non-private ref: ${ref}`);
+  }
+}
+
+function assertCommitSha(sha: string): void {
+  if (!COMMIT_SHA_PATTERN.test(sha)) {
+    throw new ApplicationError('INTERNAL_ERROR', `Invalid commit SHA: ${sha}`);
+  }
 }
 
 class GitOpsService {
@@ -375,6 +401,84 @@ class GitOpsService {
         path.resolve(worktree.path).startsWith(basePrefix) &&
         path.resolve(worktree.path) !== repoPath
     );
+  }
+
+  async getCheckoutIdentity(worktreePath: string): Promise<WorktreeCheckoutIdentity> {
+    const [branch, head, origin] = await Promise.all([
+      gitCommand(['rev-parse', '--abbrev-ref', 'HEAD'], worktreePath),
+      gitCommand(['rev-parse', 'HEAD'], worktreePath),
+      gitCommand(['remote', 'get-url', 'origin'], worktreePath),
+    ]);
+    const branchName = branch.code === 0 ? branch.stdout.trim() : '';
+    const headSha = head.code === 0 ? head.stdout.trim() : '';
+    return {
+      branch: branchName && branchName !== 'HEAD' ? branchName : null,
+      headSha: COMMIT_SHA_PATTERN.test(headSha) ? headSha : null,
+      origin: origin.code === 0 ? parseGitHubRemoteUrl(origin.stdout.trim()) : null,
+    };
+  }
+
+  /** True when `ancestor` is `descendant` or reachable from it; false if either is missing. */
+  async isAncestorCommit(
+    worktreePath: string,
+    ancestor: string,
+    descendant: string
+  ): Promise<boolean> {
+    assertCommitSha(ancestor);
+    assertCommitSha(descendant);
+    const result = await gitCommand(
+      ['merge-base', '--is-ancestor', ancestor, descendant],
+      worktreePath
+    );
+    return result.code === 0;
+  }
+
+  async hasCommit(worktreePath: string, sha: string): Promise<boolean> {
+    assertCommitSha(sha);
+    const result = await gitCommand(['cat-file', '-e', `${sha}^{commit}`], worktreePath);
+    return result.code === 0;
+  }
+
+  /**
+   * Fetch a pull request's head from `origin` into an app-private ref. Leaves
+   * the working tree, index, branches and FETCH_HEAD alone, so an agent working
+   * in the same worktree is unaffected. `refs/pull/<n>/head` also covers PRs
+   * opened from forks.
+   */
+  async fetchPullRequestHead(worktreePath: string, prNumber: number, ref: string): Promise<void> {
+    assertAppPrivateRef(ref);
+    if (!(Number.isInteger(prNumber) && prNumber > 0)) {
+      throw new ApplicationError('INTERNAL_ERROR', `Invalid pull request number: ${prNumber}`);
+    }
+    const result = await gitCommand(
+      [
+        'fetch',
+        '--no-tags',
+        '--no-write-fetch-head',
+        'origin',
+        `+refs/pull/${prNumber}/head:${ref}`,
+      ],
+      worktreePath
+    );
+    if (result.code !== 0) {
+      throw new ApplicationError(
+        'INTERNAL_ERROR',
+        `Failed to fetch pull request head: ${(result.stderr || result.stdout).trim()}`,
+        { cause: result }
+      );
+    }
+  }
+
+  async deletePrivateRef(worktreePath: string, ref: string): Promise<void> {
+    assertAppPrivateRef(ref);
+    const result = await gitCommand(['update-ref', '-d', ref], worktreePath);
+    if (result.code !== 0) {
+      throw new ApplicationError(
+        'INTERNAL_ERROR',
+        `Failed to delete ref ${ref}: ${(result.stderr || result.stdout).trim()}`,
+        { cause: result }
+      );
+    }
   }
 }
 

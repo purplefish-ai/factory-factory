@@ -34,8 +34,18 @@ vi.mock('@/backend/services/session', () => ({
 }));
 vi.mock('@/backend/services/settings', () => ({ userSettingsService: { get: vi.fn() } }));
 vi.mock('@/backend/services/workspace', () => ({
+  APP_PRIVATE_REF_PREFIX: 'refs/factory-factory/',
   workspaceDataService: { findFixerContext: vi.fn(), findPRState: vi.fn() },
+  gitOpsService: {
+    getCheckoutIdentity: vi.fn(),
+    isAncestorCommit: vi.fn(),
+    hasCommit: vi.fn(),
+    fetchPullRequestHead: vi.fn(),
+    deletePrivateRef: vi.fn(),
+  },
 }));
+
+const HEAD_SHA = 'a'.repeat(40);
 
 import {
   createReviewComment,
@@ -52,7 +62,7 @@ import {
   sessionService,
 } from '@/backend/services/session';
 import { userSettingsService } from '@/backend/services/settings';
-import { workspaceDataService } from '@/backend/services/workspace';
+import { gitOpsService, workspaceDataService } from '@/backend/services/workspace';
 import { triggerAdversarialReview } from './adversarial-review.orchestrator';
 
 describe('adversarial-review fallback delivery', () => {
@@ -88,9 +98,14 @@ describe('adversarial-review fallback delivery', () => {
     vi.mocked(githubCLIService.getPRFullDetails).mockResolvedValue({ reviews: [] } as never);
     vi.mocked(githubCLIService.getAuthenticatedUsername).mockResolvedValue('factory-factory[bot]');
     vi.mocked(getPRDescription).mockResolvedValue('description');
-    vi.mocked(getPRHeadCommitSha).mockResolvedValue('abc123');
+    vi.mocked(getPRHeadCommitSha).mockResolvedValue(HEAD_SHA);
     vi.mocked(sessionLifecycleService.stopSession).mockResolvedValue(undefined);
     vi.mocked(sessionService.sendSessionMessage).mockResolvedValue(undefined as never);
+    vi.mocked(gitOpsService.getCheckoutIdentity).mockResolvedValue({
+      branch: null,
+      headSha: null,
+      origin: null,
+    });
   });
 
   async function runReview(comments: unknown[] = []) {
@@ -142,7 +157,7 @@ describe('adversarial-review fallback delivery', () => {
     expect(createReviewComment).toHaveBeenCalledWith(
       'example/repo',
       1,
-      expect.objectContaining({ commitId: 'abc123', path: 'file.ts', line: 1 })
+      expect.objectContaining({ commitId: HEAD_SHA, path: 'file.ts', line: 1 })
     );
   });
 
