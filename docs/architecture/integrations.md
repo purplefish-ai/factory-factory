@@ -754,8 +754,8 @@ accepted revision and specification match. Saved configurations remain editable
 through **Edit automation** / **Save changes** on the same card; updates
 preserve stable event IDs and historical run snapshots, including across removal
 and reordering. Removed events are paused, preserving history. The MCP catalog
-does not expose commit operations; creation and saved-agent updates are user
-actions through trusted local API procedures.
+does not expose commit operations; creation and saved automation updates are
+user actions through trusted local API procedures.
 
 Proposals belong to their authoring workspace and are removed with it; created
 definitions belong to the project and survive workspace deletion. Deleting a

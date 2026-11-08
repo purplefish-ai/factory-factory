@@ -226,7 +226,7 @@ requiring manual environment changes.
 
 #### Open the agent's localhost links
 
-Automations run on the host, so they print links such as
+Agents run on the host, so they print links such as
 `http://127.0.0.1:6173/?path=/story/...`. When you use Factory Factory through
 `ff tailscale` from another device, chat links to `localhost`, `127.0.0.1`,
 `[::1]` or `0.0.0.0` with a port, and the Run button, open through

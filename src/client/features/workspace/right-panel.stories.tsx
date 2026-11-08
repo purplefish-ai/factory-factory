@@ -272,7 +272,7 @@ export const DeleteWhileOpen: Story = {
 };
 
 /**
- * Tool tab labels follow the glossary in docs/workspaces.md: the scheduled-agent
+ * Tool tab labels follow the glossary in docs/workspaces.md: the scheduled-automation
  * origin panel is "Scheduled automation" (not the chat's coding agent), and the
  * subagent/child-workspace panel is "Subagents" (not chat sessions). With no
  * chat selected, that panel shows only Child workspaces.

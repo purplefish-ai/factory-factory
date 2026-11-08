@@ -11,7 +11,7 @@ const cases = [
   {
     name: 'feedback and focused follow-up',
     prompt:
-      'Create an agent to investigate possible bugs in the Company Slack workspace, in #customer-feedback, #data-quality, and #bug-reports. People report bugs directly as well as bots. Ignore ordinary conversation, but prefer investigating uncertain reports. Use a development database. Include the thread for context.',
+      'Create an automation to investigate possible bugs in the Company Slack workspace, in #customer-feedback, #data-quality, and #bug-reports. People report bugs directly as well as bots. Ignore ordinary conversation, but prefer investigating uncertain reports. Use a development database. Include the thread for context.',
     type: 'SLACK_MESSAGE',
     ids: ['C-bugs', 'C-data', 'C-feedback'],
     followUp:
@@ -20,21 +20,21 @@ const cases = [
   {
     name: 'packet unlock inside a thread',
     prompt:
-      'Create an agent for the Company Slack workspace. When a message in a thread in #fillet-packet-review announces a packet has been unlocked, QA is complete. Compare QA edits to investigate potential bugs. Include the whole thread. Wording may vary; it is not always literally packet unlocked.',
+      'Create an automation for the Company Slack workspace. When a message in a thread in #fillet-packet-review announces a packet has been unlocked, QA is complete. Compare QA edits to investigate potential bugs. Include the whole thread. Wording may vary; it is not always literally packet unlocked.',
     type: 'SLACK_MESSAGE',
     ids: ['C-review'],
   },
   {
     name: 'agent-labeled GitHub issues',
     prompt:
-      'Create an agent for this Factory Factory project to execute GitHub issues tagged agent. Include issues that already have that label when created and issues that receive it later. Implement the requested change and open a PR.',
+      'Create an automation for this Factory Factory project to execute GitHub issues tagged agent. Include issues that already have that label when created and issues that receive it later. Implement the requested change and open a PR.',
     type: 'GITHUB_ISSUE',
     ids: ['123'],
   },
   {
     name: 'ambiguous workspace asks before proposing',
     prompt:
-      'Create an agent to investigate messages in #bug-reports on Slack. I have not chosen which connected Slack workspace; please ask me if there is more than one match.',
+      'Create an automation to investigate messages in #bug-reports on Slack. I have not chosen which connected Slack workspace; please ask me if there is more than one match.',
     type: 'CLARIFY',
     ids: [],
   },
