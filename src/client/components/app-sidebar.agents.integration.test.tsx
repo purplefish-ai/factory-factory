@@ -107,10 +107,10 @@ async function render(path = '/projects/alpha/agents') {
 }
 function agentsLink() {
   const link = [...container.querySelectorAll('a')].find((node) =>
-    node.textContent?.startsWith('Agents')
+    node.textContent?.startsWith('Automations')
   );
   if (!link) {
-    throw new Error('Missing Agents link');
+    throw new Error('Missing Automations link');
   }
   return link;
 }
@@ -155,9 +155,9 @@ afterEach(async () => {
 it('shows the count and failure description, then clears the error after a successful refresh', async () => {
   await render();
   await waitForReact(() =>
-    expect(description()).toBe('3 agents, 1 with a failed last completed run')
+    expect(description()).toBe('3 automations, 1 with a failed last completed run')
   );
-  expect(agentsLink().getAttribute('aria-label')).toBe('Agents');
+  expect(agentsLink().getAttribute('aria-label')).toBe('Automations');
   expect(agentsLink().querySelector('[data-agent-count]')?.textContent).toBe('3');
   expect(agentsLink().querySelector('[data-agent-count]')?.className).toContain('text-destructive');
   summaries.alpha = { totalCount: 3, failedCount: 0 };
@@ -166,19 +166,19 @@ it('shows the count and failure description, then clears the error after a succe
       queryKey: getQueryKey(trpc.periodicTask.navigationSummary, { projectId: 'alpha' }, 'query'),
     })
   );
-  await waitForReact(() => expect(description()).toBe('3 agents'));
+  await waitForReact(() => expect(description()).toBe('3 automations'));
   expect(agentsLink().querySelector('[data-agent-count]')?.className).not.toContain(
     'text-destructive'
   );
 });
 it('keeps the last successful same-project count on a refresh error, and hides an initial error', async () => {
   await render();
-  await waitForReact(() => expect(description()).toContain('3 agents'));
+  await waitForReact(() => expect(description()).toContain('3 automations'));
   failSummary = true;
   await act(() =>
     queryClient.invalidateQueries({ queryKey: getQueryKey(trpc.periodicTask.navigationSummary) })
   );
-  expect(description()).toContain('3 agents');
+  expect(description()).toContain('3 automations');
   await switchProject();
   await waitForReact(() =>
     expect(agentsLink().getAttribute('href')).toBe('/projects/space%20here/agents')
@@ -207,12 +207,12 @@ it('hides loading counts and scopes the decoded archived URL owner before stored
   });
   expect(description()).toBeNull();
   await act(() => result.resolve({ totalCount: 0, failedCount: 0 }));
-  await waitForReact(() => expect(description()).toBe('0 agents'));
+  await waitForReact(() => expect(description()).toBe('0 automations'));
   expect(agentsLink().querySelector('[data-agent-count]')?.textContent).toBe('0');
 });
 it('does not borrow a loaded count or accept a late refresh after switching projects', async () => {
   await render();
-  await waitForReact(() => expect(description()).toContain('3 agents'));
+  await waitForReact(() => expect(description()).toContain('3 automations'));
   const lateAlpha = deferred<Summary>();
   summaries.alpha = lateAlpha.promise;
   await act(() => {
@@ -225,7 +225,7 @@ it('does not borrow a loaded count or accept a late refresh after switching proj
       requests.filter((request) => request.path === 'periodicTask.navigationSummary')
     ).toHaveLength(2)
   );
-  expect(description()).toContain('3 agents');
+  expect(description()).toContain('3 automations');
   const owner = deferred<void>();
   ownerWait = owner.promise;
   const betaResult = deferred<Summary>();
@@ -243,14 +243,14 @@ it('does not borrow a loaded count or accept a late refresh after switching proj
   await act(() => lateAlpha.resolve({ totalCount: 99, failedCount: 99 }));
   expect(description()).toBeNull();
   await act(() => betaResult.resolve({ totalCount: 2, failedCount: 0 }));
-  await waitForReact(() => expect(description()).toBe('2 agents'));
+  await waitForReact(() => expect(description()).toBe('2 automations'));
 });
 
 it('combines both authoritative kinds and keeps the prior combined value when one refresh fails', async () => {
   eventSummaries.alpha = { totalCount: 4, failedCount: 2 };
   await render();
   await waitForReact(() =>
-    expect(description()).toBe('7 agents, 3 with a failed last completed run')
+    expect(description()).toBe('7 automations, 3 with a failed last completed run')
   );
   failEventSummary = true;
   summaries.alpha = { totalCount: 30, failedCount: 0 };
@@ -260,13 +260,13 @@ it('combines both authoritative kinds and keeps the prior combined value when on
   await act(() =>
     queryClient.invalidateQueries({ queryKey: getQueryKey(trpc.periodicTask.navigationSummary) })
   );
-  expect(description()).toBe('7 agents, 3 with a failed last completed run');
+  expect(description()).toBe('7 automations, 3 with a failed last completed run');
   failEventSummary = false;
   eventSummaries.alpha = { totalCount: 5, failedCount: 0 };
   await act(() =>
     queryClient.invalidateQueries({ queryKey: getQueryKey(trpc.agent.navigationSummary) })
   );
-  await waitForReact(() => expect(description()).toBe('35 agents'));
+  await waitForReact(() => expect(description()).toBe('35 automations'));
 });
 it.each(['scheduled', 'event'])(
   'hides an incomplete initial %s summary and never displays a partial sum',
@@ -293,14 +293,14 @@ it('waits for initial event data despite a successful scheduled count', async ()
   expect(description()).toBeNull();
   await act(() => event.resolve({ totalCount: 2, failedCount: 0 }));
   await waitForReact(() =>
-    expect(description()).toBe('5 agents, 1 with a failed last completed run')
+    expect(description()).toBe('5 automations, 1 with a failed last completed run')
   );
 });
 it('keeps the combined snapshot when scheduled refresh fails and event refresh succeeds', async () => {
   eventSummaries.alpha = { totalCount: 2, failedCount: 0 };
   await render();
   await waitForReact(() =>
-    expect(description()).toBe('5 agents, 1 with a failed last completed run')
+    expect(description()).toBe('5 automations, 1 with a failed last completed run')
   );
   failSummary = true;
   await act(() =>
@@ -310,11 +310,11 @@ it('keeps the combined snapshot when scheduled refresh fails and event refresh s
   await act(() =>
     queryClient.invalidateQueries({ queryKey: getQueryKey(trpc.agent.navigationSummary) })
   );
-  expect(description()).toBe('5 agents, 1 with a failed last completed run');
+  expect(description()).toBe('5 automations, 1 with a failed last completed run');
 });
 it('does not accept a late old-project event summary into a new owner', async () => {
   await render();
-  await waitForReact(() => expect(description()).toContain('3 agents'));
+  await waitForReact(() => expect(description()).toContain('3 automations'));
   const lateEvent = deferred<Summary>();
   eventSummaries.alpha = lateEvent.promise;
   await act(() => {
@@ -323,7 +323,7 @@ it('does not accept a late old-project event summary into a new owner', async ()
     });
   });
   await switchProject();
-  await waitForReact(() => expect(description()).toBe('0 agents'));
+  await waitForReact(() => expect(description()).toBe('0 automations'));
   await act(() => lateEvent.resolve({ totalCount: 90, failedCount: 90 }));
-  expect(description()).toBe('0 agents');
+  expect(description()).toBe('0 automations');
 });

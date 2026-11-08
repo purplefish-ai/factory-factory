@@ -74,7 +74,7 @@ export const Agent: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await expect(
-      await canvas.findByRole('tab', { name: 'Scheduled agent', selected: true })
+      await canvas.findByRole('tab', { name: 'Scheduled automation', selected: true })
     ).toBeVisible();
   },
 };

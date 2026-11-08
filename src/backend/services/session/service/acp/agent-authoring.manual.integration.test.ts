@@ -138,7 +138,7 @@ describe.skipIf(!enabled)('live natural-language agent authoring evaluation', ()
             [
               {
                 type: 'text',
-                text: `You are helping a user configure an agent in Factory Factory. Use the available Factory Factory authoring tools. Do not run shell commands, edit files, or create/enable an agent yourself. Present the proposal for the user's Create agent action; ask for clarification when needed.\n\n${scenario.prompt}`,
+                text: `You are helping a user configure an automation in Factory Factory. Use the available Factory Factory authoring tools. Do not run shell commands, edit files, or create/enable an automation yourself. Present the proposal for the user's Create automation action; ask for clarification when needed.\n\n${scenario.prompt}`,
               },
             ],
             120_000

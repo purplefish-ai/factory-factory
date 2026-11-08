@@ -813,7 +813,7 @@ merges. See [PR update delivery and recovery](pull-requests.md).
 Below 1024 CSS pixels, workspace tools open in a right-side drawer with a strip
 of the session still visible. A compact 36px strip uses the shared underline
 tabs for Changes, Files, and Terminal. The overflow menu keeps sub-agents,
-screenshots, Inbox, and logs available, plus the scheduled agent when one
+screenshots, Inbox, and logs available, plus the scheduled automation when one
 launched the workspace. It marks the current selection and shows the selected
 tool as an additional underlined tab. The tab strip scrolls on narrow screens
 while the overflow button stays visible. The selected tool survives closing and

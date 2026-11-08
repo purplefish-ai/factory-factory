@@ -57,10 +57,14 @@ export const SHORTCUTS = [
   {
     id: 'nav.agents',
     scope: 'navigation',
-    description: 'Go to Agents',
+    description: 'Go to Automations',
     chords: [],
     context: 'anywhere',
-    command: { label: 'Agents', section: 'Go to', keywords: ['scheduled', 'automation'] },
+    command: {
+      label: 'Automations',
+      section: 'Go to',
+      keywords: ['scheduled', 'event', 'automation', 'agents'],
+    },
   },
   {
     id: 'nav.reviews',

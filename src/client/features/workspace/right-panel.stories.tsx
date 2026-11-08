@@ -120,7 +120,7 @@ function RightPanelStory({
                   );
                 }}
               >
-                Delete agent
+                Delete automation
               </Button>
               <div
                 className="flex h-[650px] border"
@@ -254,7 +254,9 @@ export const DeletedTaskPreference: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await expect(await canvas.findByText('No changes')).toBeVisible();
-    await expect(canvas.queryByRole('button', { name: 'Scheduled agent' })).not.toBeInTheDocument();
+    await expect(
+      canvas.queryByRole('button', { name: 'Scheduled automation' })
+    ).not.toBeInTheDocument();
     await expect(localStorage.getItem(`workspace-right-panel-tab-${workspaceId}`)).toBe('changes');
   },
 };
@@ -263,7 +265,7 @@ export const DeleteWhileOpen: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await canvas.findByText('Scheduled cleanup');
-    await userEvent.click(canvas.getByRole('button', { name: 'Delete agent' }));
+    await userEvent.click(canvas.getByRole('button', { name: 'Delete automation' }));
     await expect(await canvas.findByText('No changes')).toBeVisible();
     await expect(localStorage.getItem(`workspace-right-panel-tab-${workspaceId}`)).toBe('changes');
   },
@@ -271,7 +273,7 @@ export const DeleteWhileOpen: Story = {
 
 /**
  * Tool tab labels follow the glossary in docs/workspaces.md: the scheduled-agent
- * origin panel is "Scheduled agent" (not the chat's coding agent), and the
+ * origin panel is "Scheduled automation" (not the chat's coding agent), and the
  * subagent/child-workspace panel is "Subagents" (not chat sessions). With no
  * chat selected, that panel shows only Child workspaces.
  */
@@ -280,7 +282,7 @@ export const ToolTabLabels: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await canvas.findByText('Scheduled cleanup');
-    await expect(canvas.getByRole('button', { name: 'Scheduled agent' })).toBeVisible();
+    await expect(canvas.getByRole('button', { name: 'Scheduled automation' })).toBeVisible();
     await expect(canvas.queryByRole('button', { name: 'Agent' })).not.toBeInTheDocument();
     await expect(canvas.queryByRole('button', { name: 'Sessions' })).not.toBeInTheDocument();
     await userEvent.click(canvas.getByRole('button', { name: 'Subagents' }));

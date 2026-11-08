@@ -55,7 +55,7 @@ test('browser can discover a standalone app and decode its installation icons', 
 
 test('browser theme color follows light, dark, and custom page backgrounds', async ({ page }) => {
   await page.goto('/__mobile-baseline?surface=agents');
-  await expect(page.getByRole('heading', { name: 'Agents', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Automations', exact: true })).toBeVisible();
   const meta = page.locator('meta[name="theme-color"]');
   await page.evaluate(() => {
     const root = document.documentElement;

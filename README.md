@@ -145,7 +145,7 @@ directory.
   repository contents are not searched yet.
 - **Automatic PR progression:** Ratchet watches open pull requests and can
   dispatch follow-up agents for failing CI and actionable review feedback.
-- **Repeatable automation:** Quick actions, scheduled agents, and child
+- **Repeatable automation:** Quick actions, scheduled automations, and child
   workspaces help split up or repeat common workflows.
 
 The core model is intentionally small:
@@ -226,7 +226,7 @@ requiring manual environment changes.
 
 #### Open the agent's localhost links
 
-Agents run on the host, so they print links such as
+Automations run on the host, so they print links such as
 `http://127.0.0.1:6173/?path=/story/...`. When you use Factory Factory through
 `ff tailscale` from another device, chat links to `localhost`, `127.0.0.1`,
 `[::1]` or `0.0.0.0` with a port, and the Run button, open through

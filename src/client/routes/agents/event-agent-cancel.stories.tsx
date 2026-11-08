@@ -64,7 +64,7 @@ function CancelEventCreation() {
   );
 }
 const meta = {
-  title: 'Agents/EventAgentCancel',
+  title: 'Automations/EventAgentCancel',
   component: CancelEventCreation,
   parameters: {
     trpc: {
@@ -113,9 +113,11 @@ function cancellationStory(failure: boolean, failDelete = false, replaceDraft = 
       await expect(
         await canvas.findByRole('heading', { name: event.name, level: 2 })
       ).toBeVisible();
-      await userEvent.click(canvas.getByRole('button', { name: 'Create agent' }));
+      await userEvent.click(canvas.getByRole('button', { name: 'Create automation' }));
       await userEvent.click(
-        within(canvasElement.ownerDocument.body).getByRole('menuitem', { name: 'Event agent' })
+        within(canvasElement.ownerDocument.body).getByRole('menuitem', {
+          name: 'Event-triggered automation',
+        })
       );
       if (failure) {
         await expect(await canvas.findByRole('alert')).toHaveTextContent(

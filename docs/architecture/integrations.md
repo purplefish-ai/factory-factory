@@ -132,7 +132,9 @@ Failed Linear settings saves retain the validated key and selected team for
 retry. Successful saves clear the submitted form only if no key edits, team
 changes, or newer validation have superseded the submission.
 
-## Scheduled agents
+<a id="scheduled-agents"></a>
+
+## Scheduled automations
 
 Schema-8 backups with the `base-json-periodic-config-1` profile include complete
 periodic task scalar configuration and timestamps. Import preserves due slots,
@@ -159,13 +161,13 @@ original contracts.
 
 <a id="periodic-tasks"></a>
 
-Agents are recurring instructions that create a fresh workspace on a configured
-cadence (daily, weekly, monthly, or testing cadences every minute / five
-minutes). Daily/weekly/monthly tasks can optionally run at a specific time of
-day in the user's browser timezone (`scheduledTime` HH:MM + IANA `timezone`
-fields). Daily and weekly periodic tasks with a scheduled time advance calendar
-dates in the task timezone, preserving the scheduled day across daylight saving
-changes.
+Scheduled automations are recurring instructions that create a fresh workspace
+on a configured cadence (daily, weekly, monthly, or testing cadences every
+minute / five minutes). Daily/weekly/monthly tasks can optionally run at a
+specific time of day in the user's browser timezone (`scheduledTime` HH:MM +
+IANA `timezone` fields). Daily and weekly periodic tasks with a scheduled time
+advance calendar dates in the task timezone, preserving the scheduled day across
+daylight saving changes.
 
 Each execution runs the configured prompt, monitors the workspace until the
 agent finishes, and advances the schedule. Concurrent runs are skipped. The
@@ -223,12 +225,12 @@ and due slot. Dispatch uses only this frozen snapshot, so later definition edits
 cannot change an admitted launch. Legacy execution snapshots remain null:
 historical instructions cannot be reconstructed safely from today's definition.
 This additive execution field is historical evidence, owned by the periodic
-capsule; it does not enable replay or move scheduled agents into `AgentRun`.
-Composition wires its narrow timer dispatch port to the `new_workspace` arm of
-`background-action-dispatch.orchestrator.ts`, shared with PR delivery's
-`existing_sessions` arm. Timer dispatch awaits the injected workspace launcher
-and returns the workspace ID; the periodic capsule owns linkage, failures and
-completion monitoring.
+capsule; it does not enable replay or move scheduled automations into
+`AgentRun`. Composition wires its narrow timer dispatch port to the
+`new_workspace` arm of `background-action-dispatch.orchestrator.ts`, shared with
+PR delivery's `existing_sessions` arm. Timer dispatch awaits the injected
+workspace launcher and returns the workspace ID; the periodic capsule owns
+linkage, failures and completion monitoring.
 
 The PERIODIC_TASK launch policy persists a fresh workspace and requires a
 `periodic-task` / `Agent` session, without explicit provider resolution, CLI
@@ -250,34 +252,38 @@ does not re-emit reserved runs. The launch/link crash gap remains; there is no
 replay or exactly-once guarantee. Timer events use no second run store, PR
 ledger entry, session queue delivery or receipt protocol.
 
-The mixed Agents page at `/projects/:slug/agents` groups definitions under
-**Scheduled** and **Event** headings. Event pagination stays in its group.
-Scheduled details use `/projects/:slug/agents/:id`; saved events use
+The UI calls saved instructions and triggers **automations**, each execution a
+**run**, and the AI carrying out the work an **agent**. Existing `/agents` URLs,
+API names, and stored identifiers retain their names for compatibility.
+
+The mixed Automations page at `/projects/:slug/agents` groups definitions under
+**Scheduled** and **Event-triggered** headings. Event pagination stays in its
+group. Scheduled details use `/projects/:slug/agents/:id`; saved events use
 `/projects/:slug/agents/:id?kind=event`. Both path segments are encoded. Missing
 kind selects scheduled; invalid or duplicate explicit kinds show a bounded link
 error. Owner-less legacy links remain scheduled-only; event links require a
-project. The navbar project selector is the shared project context; Agents has
-no separate project filter. Agents and project-wide Reviews remain in the
-sidebar footer above global Settings. Settings links to Agents without a
-duplicate editor. Project switches preserve the current section and clear the
+project. The navbar project selector is the shared project context; Automations
+has no separate project filter. Automations and project-wide Reviews remain in
+the sidebar footer above global Settings. Settings links to Automations without
+a duplicate editor. Project switches preserve the current section and clear the
 selected definition. An explicit event kind selects only event definitions,
-including when the destination has no event agents. Legacy `/agents` and
-`/agents/:id` links resolve the definition's owner before trusting a stored
-project selection, including archived owners. A definition belonging to another
-project or an invalid ID shows project-local not found instead of selecting
-another agent.
+including when the destination has no event-triggered automations. Legacy
+`/agents` and `/agents/:id` links resolve the definition's owner before trusting
+a stored project selection, including archived owners. A definition belonging to
+another project or an invalid ID shows project-local not found instead of
+selecting another automation.
 
-The Agents footer badge combines authoritative scheduled and event summaries for
-the URL owner's project, including paused definitions and archived project
-owners. Both queries must succeed before a count is known; partial sums stay
-hidden. If either refresh fails, the prior successful combined value for that
-same project remains visible. Unresolved owners and different projects never
-borrow another project's value. It warns when any agent's latest completed
-outcome is FAILED. RUNNING and SKIPPED retries retain that warning until the
-same agent completes a run or creates a PR. The scheduled summary query selects
-its latest terminal outcome by start time, then ID; the event owner uses
-terminal timestamp and ID. Each summary is independent of history limits. Both
-lookups walk an index newest-first instead of sorting history: the
+The Automations footer badge combines authoritative scheduled and event
+summaries for the URL owner's project, including paused definitions and archived
+project owners. Both queries must succeed before a count is known; partial sums
+stay hidden. If either refresh fails, the prior successful combined value for
+that same project remains visible. Unresolved owners and different projects
+never borrow another project's value. It warns when any automation's latest
+completed outcome is FAILED. RUNNING and SKIPPED retries retain that warning
+until the same automation completes a run or creates a PR. The scheduled summary
+query selects its latest terminal outcome by start time, then ID; the event
+owner uses terminal timestamp and ID. Each summary is independent of history
+limits. Both lookups walk an index newest-first instead of sorting history: the
 `PeriodicTaskExecution(periodicTaskId, startedAt, id)` index and the raw-SQL
 partial expression index `AgentRun_latest_terminal_idx`. Prisma cannot see the
 latter, so keep the query's predicate and ordering identical to the index and
@@ -288,52 +294,53 @@ definition changes. Unknown/loading projects hide the badge; loaded empty
 projects show zero. A failed refresh retains the last successful count for that
 project.
 
-Agents stacks its rail and editor below 48rem of available content width,
+Automations stacks its rail and editor below 48rem of available content width,
 including when the workspace sidebar is expanded. Schedule fields share a row
 only above 26rem of their own available width. Resizing preserves form drafts.
 
-**Create agent** opens the same explicit **Scheduled agent** / **Event agent**
-menu in the header and empty state. Scheduled opens the existing schedule form.
-Event opens a normal workspace composer with instructions to discover sources
-and propose an event configuration for review. Its draft is separate from the
-project's normal/scheduled workspace draft, and its launch mode stays standard.
-The proposal card still requires explicit creation of a paused definition;
-listening and automatic event runs remain unavailable. While the workspace is
-being created, the route shows progress; a failed creation restores the draft
-for retry. Archived and unresolved selected definitions retain their existing
-creation restrictions.
+**Create automation** opens the same explicit **Scheduled automation** /
+**Event-triggered automation** menu in the header and empty state. Scheduled
+opens the existing schedule form. Event opens a normal workspace composer with
+instructions to discover sources and propose an event configuration for review.
+Its draft is separate from the project's normal/scheduled workspace draft, and
+its launch mode stays standard. The proposal card still requires explicit
+creation of a paused definition; listening and automatic event runs remain
+unavailable. While the workspace is being created, the route shows progress; a
+failed creation restores the draft for retry. Archived and unresolved selected
+definitions retain their existing creation restrictions.
 
 Scheduled create/edit use Name, Instructions and Schedule. Creation makes the
 first run due immediately; the existing periodic-task poll admits it, then
 follows the configured schedule. No new timer or admission policy is introduced.
-An unchanged clock time keeps an edited agent's timezone; changing the time uses
-the browser timezone. Clearing the time or switching to a minute cadence clears
-both schedule fields. Kanban's **Create Agent** launch mode keeps its
-instructions composer and uses the same schedule controls. It remains available
-while chat provider defaults load. No provider or unattended-execution policy
-changes accompany this UI.
+An unchanged clock time keeps an edited automation's timezone; changing the time
+uses the browser timezone. Clearing the time or switching to a minute cadence
+clears both schedule fields. Kanban's **Create automation** launch mode keeps
+its instructions composer and uses the same schedule controls. It remains
+available while chat provider defaults load. No provider or unattended-execution
+policy changes accompany this UI.
 
 Pause affects future runs; an already running workspace continues. Saving an
 edit with an unchanged schedule keeps the pending run. Changing the schedule
 starts at the first slot still ahead, which can be later the same day or month;
-a weekly agent keeps its weekday. Resuming keeps a pending run that is still
-ahead; an overdue one moves to the next slot on the same weekday, day of month,
-and time rather than running at once. Deleting an agent requires confirmation
-and removes its definition and execution history, while existing workspaces and
-conversations remain available. Failed requests show an error and preserve form
-drafts. The management page polls task/history data without replacing unsaved
-edits.
+a weekly automation keeps its weekday. Resuming keeps a pending run that is
+still ahead; an overdue one moves to the next slot on the same weekday, day of
+month, and time rather than running at once. Deleting an automation requires
+confirmation and removes its definition and execution history, while existing
+workspaces and conversations remain available. Failed requests show an error and
+preserve form drafts. The management page polls task/history data without
+replacing unsaved edits.
 
-Both the management page and the workspace's **Scheduled agent** origin panel
-use the shared run history query, showing up to 50 recent runs with status,
-start time, workspace/PR links and errors. Workspace links use the agent owner's
-slug and remain available for non-null IDs, including archived workspaces. A
-running run without a workspace ID says no workspace yet; a terminal run without
-one says workspace unavailable. The origin panel links back to agent management.
+Both the management page and the workspace's **Scheduled automation** origin
+panel use the shared run history query, showing up to 50 recent runs with
+status, start time, workspace/PR links and errors. Workspace links use the
+automation owner's slug and remain available for non-null IDs, including
+archived workspaces. A running run without a workspace ID says no workspace yet;
+a terminal run without one says workspace unavailable. The origin panel links
+back to automation management.
 
 The workspace's provider subagent/child-workspace tab is **Subagents**. Stored
 panel keys remain `agents` for Subagents and `periodic-task` for Scheduled
-agent. Once workspace data loads, an unavailable origin tab falls back to
+automation. Once workspace data loads, an unavailable origin tab falls back to
 Changes, as does a retired auto-iteration preference. Deleting a definition
 therefore cannot leave that panel blank.
 
@@ -352,7 +359,7 @@ unavailable dependencies are skipped atomically with their workspace group.
 The agent-centered persistence foundation lives in `AgentDefinition`,
 `AgentConnection`, `AgentTrigger`, `AgentRun`, and `AgentProposal`, owned by the
 `agent-definition` capsule. It is additive: existing `PeriodicTask` definitions,
-executions, polling, and UI remain authoritative for scheduled agents. No
+executions, polling, and UI remain authoritative for scheduled automations. No
 definitions are copied into the new tables. Migrating the scheduler is a
 separate change.
 
@@ -731,9 +738,10 @@ Actor-specific ID restrictions are rejected until actor discovery is supported.
 revision, and optional created definition. Tool results carry a proposal
 reference; chat loads its current state and renders an editable card outside the
 collapsed activity group. Users can edit instructions, filters, event settings,
-and execution settings. **Create agent** atomically creates a paused definition
-and its paused triggers. The card explicitly says that listening and automatic
-runs are not yet available. Creation does not start legacy periodic tasks.
+and execution settings. **Create automation** atomically creates a paused
+definition and its paused triggers. The card explicitly says that listening and
+automatic runs are not yet available. Creation does not start legacy periodic
+tasks.
 
 Conversational edits use optimistic revision checks and cannot silently replace
 a newer proposal. A widget that receives a newer revision refreshes its data;
@@ -743,11 +751,11 @@ both sides changed events, loading stops and preserves local edits until the
 user explicitly discards them; positional merging could move a filter to a
 different source. Creation retries return the existing definition only when the
 accepted revision and specification match. Saved configurations remain editable
-through **Edit agent** / **Save changes** on the same card; updates preserve
-stable event IDs and historical run snapshots, including across removal and
-reordering. Removed events are paused, preserving history. The MCP catalog does
-not expose commit operations; creation and saved-agent updates are user actions
-through trusted local API procedures.
+through **Edit automation** / **Save changes** on the same card; updates
+preserve stable event IDs and historical run snapshots, including across removal
+and reordering. Removed events are paused, preserving history. The MCP catalog
+does not expose commit operations; creation and saved-agent updates are user
+actions through trusted local API procedures.
 
 Proposals belong to their authoring workspace and are removed with it; created
 definitions belong to the project and survive workspace deletion. Deleting a
@@ -801,7 +809,7 @@ after a successful save. Existing tokens are never prefilled. Test connection
 uses the stored token and verifies its workspace identity. No signing secret or
 Socket Mode app token is needed for credential validation. Saving a connection
 does not enable event subscriptions, change an existing Slack app's webhook, or
-start agents. Slack event intake is still a separate implementation step.
+start automations. Slack event intake is still a separate implementation step.
 
 These credentials depend on the server's `encryption.key`; retain it with any
 database-file backup. Logical export/import includes Slack connection identity,

@@ -63,7 +63,7 @@ it.each([
   // active state there, so Board must not also read as the current page.
   ['/projects/alpha/workspaces/workspace', null],
 ])(
-  'keeps project-scoped Board, Agents and Reviews above global Settings for %s',
+  'keeps project-scoped Board, Automations and Reviews above global Settings for %s',
   async (path, active) => {
     const view = await render(path);
     try {
@@ -89,7 +89,7 @@ it.each([
         [...view.container.querySelectorAll('[data-sidebar="footer"] a')].map(
           (link) => link.textContent
         )
-      ).toEqual(['Board', 'Agents', 'Reviews3', 'Settings']);
+      ).toEqual(['Board', 'Automations', 'Reviews3', 'Settings']);
       expect(view.container.querySelector('a[href="/projects/stale/agents"]')).toBeNull();
     } finally {
       await view.dispose();
@@ -190,7 +190,7 @@ it('disables project section navigation when no project is available', async () 
       ...view.container.querySelectorAll<HTMLButtonElement>('button[disabled]'),
     ].map((button) => button.textContent);
     expect(disabled).toContain('Board');
-    expect(disabled).toContain('Agents');
+    expect(disabled).toContain('Automations');
     expect(disabled).toContain('Reviews');
   } finally {
     await view.dispose();

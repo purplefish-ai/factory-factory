@@ -151,8 +151,8 @@ function button(container: HTMLElement, label: string) {
   return match!;
 }
 async function editDraft(container: HTMLElement) {
-  await waitForReact(() => expect(container.textContent).toContain('Edit agent'));
-  actFlushSync(() => button(container, 'Edit agent').click());
+  await waitForReact(() => expect(container.textContent).toContain('Edit automation'));
+  actFlushSync(() => button(container, 'Edit automation').click());
   const input = container.querySelector<HTMLInputElement>('input[name="name"]');
   expect(input).not.toBeNull();
   actFlushSync(() => {
@@ -205,7 +205,7 @@ it('distinguishes first-load transport failure and retries the real outlet', asy
   expect(container.textContent).not.toContain('Scheduled review');
   projectRead.mockResolvedValue(projects[0]);
   actFlushSync(() => button(container, 'Retry project').click());
-  await waitForReact(() => expect(container.textContent).toContain('Edit agent'));
+  await waitForReact(() => expect(container.textContent).toContain('Edit automation'));
 });
 it('reports actual first-load NOT_FOUND without exposing an Agent editor', async () => {
   projectRead.mockRejectedValue(notFound());
@@ -243,7 +243,7 @@ it('does not retain the prior project draft while a different owner is loading',
   expect(container.querySelector('input[name="name"]')).toBeNull();
   expect(container.textContent).not.toContain('Scheduled review');
   await act(async () => resolveProject?.(projects[1]));
-  await waitForReact(() => expect(container.textContent).toContain('Give recurring work an agent'));
+  await waitForReact(() => expect(container.textContent).toContain('Automate recurring work'));
 });
 
 it('keeps a paused first project query unresolved until connectivity returns', async () => {
@@ -256,7 +256,7 @@ it('keeps a paused first project query unresolved until connectivity returns', a
   expect(container.querySelector('a[href="/projects"]')).toBeNull();
   expect(projectRead).not.toHaveBeenCalled();
   await act(() => onlineManager.setOnline(true));
-  await waitForReact(() => expect(container.textContent).toContain('Edit agent'));
+  await waitForReact(() => expect(container.textContent).toContain('Edit automation'));
 });
 
 it('keeps a disabled idle project query unresolved without inventing a missing owner', () => {

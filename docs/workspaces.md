@@ -22,11 +22,13 @@ existing names, shown in parentheses where they differ.
 - **Chat** (`session`): one conversation with a coding agent inside a workspace,
   shown as a tab such as "Chat 1". A workspace can have several. Search lists
   chats as **Chat** results.
-- **Agent**: two senses. In status text such as "Agent working", the coding
-  agent (Claude or Codex) running in a chat. As a saved object, an automation in
-  the project's **Agents** section that launches workspaces: a **scheduled
-  agent** (`PeriodicTask`) or an **event agent**. Labels for saved agents name
-  the kind, as in a workspace's **Scheduled agent** tool tab.
+- **Agent**: the coding agent (Claude or Codex) running in a chat, as in "Agent
+  working".
+- **Automation**: saved instructions and a trigger in the project's
+  **Automations** section. A **scheduled automation** (`PeriodicTask`) runs on a
+  cadence; an **event-triggered automation** responds to events. Each execution
+  is a **run**, carried out by an agent. Labels name the kind, as in a
+  workspace's **Scheduled automation** tool tab.
 - **Subagent** (`subagent`): a helper that the provider starts inside a chat. It
   works in the chat's workspace and appears in the workspace's **Subagents**
   tool tab and as a transcript tab. UI text spells it "subagent".
@@ -39,7 +41,7 @@ existing names, shown in parentheses where they differ.
   workspace.
 - **Task**: not a separate object, so avoid it as a label. The board's former
   **New Task** button is **New workspace**; `PeriodicTask` in code is a
-  scheduled agent.
+  scheduled automation.
 
 ### File change markers
 
@@ -52,15 +54,15 @@ ignored artifacts inside new directories stay out of Changes.
 ## Navigation and first run
 
 The project menu in the header lists projects and includes **Create project**
-and **Manage projects**. Switching projects keeps the current Board, Agents or
-Reviews section, including the event-agent view. Menu links support opening a
-project in another tab. Clicking the project name or chevron opens the menu;
-selecting the current project opens its board. The opened menu shows Working and
-Waiting counts beside every active project, including zeros, matching the
-sidebar. Counts appear once project data loads and refresh when the menu opens;
-breadcrumbs show only the project name. On phones, names stay expanded when they
-fit and use initials when space is limited. The following breadcrumb identifies
-the section.
+and **Manage projects**. Switching projects keeps the current Board, Automations
+or Reviews section, including the event-triggered automation view. Menu links
+support opening a project in another tab. Clicking the project name or chevron
+opens the menu; selecting the current project opens its board. The opened menu
+shows Working and Waiting counts beside every active project, including zeros,
+matching the sidebar. Counts appear once project data loads and refresh when the
+menu opens; breadcrumbs show only the project name. On phones, names stay
+expanded when they fit and use initials when space is limited. The following
+breadcrumb identifies the section.
 
 The home page restores the saved project only while it appears in the active
 project list; otherwise it opens the first active project. A missing project
@@ -83,9 +85,9 @@ pane, with visible labels and room for touch targets. In narrow message
 composers, Options and Usage keep their icons while hiding their labels and
 percentage; usage details remain available in the popover.
 
-On narrow Agents panels, the agent list and editor share one vertical scroll
-surface. Selecting an agent brings its editor into view; wide panels retain
-independent list and editor scrolling.
+On narrow Automations panels, the automation list and editor share one vertical
+scroll surface. Selecting an automation brings its editor into view; wide panels
+retain independent list and editor scrolling.
 
 ## Historical progression model
 
