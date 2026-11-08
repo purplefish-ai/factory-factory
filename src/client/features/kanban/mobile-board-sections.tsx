@@ -11,6 +11,10 @@ interface MobileBoardSection {
   content: ReactNode;
 }
 
+function isAtScrollEnd(scroll: HTMLElement): boolean {
+  return scroll.scrollTop > 0 && scroll.scrollTop + scroll.clientHeight >= scroll.scrollHeight - 1;
+}
+
 export function MobileBoardSections({
   sections,
   showInlineForm,
@@ -26,6 +30,7 @@ export function MobileBoardSections({
   const scrollRef = useRef<HTMLDivElement>(null);
   const navigationRef = useRef<HTMLElement>(null);
   const sectionRefs = useRef(new Map<string, HTMLElement>());
+  const navigationTarget = useRef<{ columnId: string; scrollTop: number } | null>(null);
   const lastCreationRequest = useRef(workspaceCreationRequest);
   const lastRevealedFormRequest = useRef<number | null>(null);
   const [activeId, setActiveId] = useState('ISSUES');
@@ -36,6 +41,22 @@ export function MobileBoardSections({
     const navigation = navigationRef.current;
     const first = visibleSections[0];
     if (!(scroll && navigation && first)) {
+      return;
+    }
+    // Retain an explicit jump while it stays at its destination, including when
+    // several short sections share the same clamped position at the bottom.
+    const target = navigationTarget.current;
+    if (
+      target &&
+      Math.abs(scroll.scrollTop - target.scrollTop) < 1 &&
+      visibleSections.some(({ column }) => column.id === target.columnId)
+    ) {
+      setActiveId(target.columnId);
+      return;
+    }
+    navigationTarget.current = null;
+    if (isAtScrollEnd(scroll)) {
+      setActiveId((visibleSections.at(-1) ?? first).column.id);
       return;
     }
     const top = scroll.getBoundingClientRect().top + navigation.offsetHeight + 16;
@@ -62,6 +83,7 @@ export function MobileBoardSections({
       (navigationRef.current?.offsetHeight ?? 0) -
       12;
     scroll.scrollTo?.({ top: Math.max(0, top), behavior: 'instant' });
+    navigationTarget.current = { columnId, scrollTop: scroll.scrollTop };
     if (!section.contains(section.ownerDocument.activeElement)) {
       section.focus({ preventScroll: true });
     }
@@ -92,8 +114,6 @@ export function MobileBoardSections({
     <div
       ref={scrollRef}
       data-mobile-board
-      // The final section needs a full scrollport so every jump target can reach the top.
-      style={{ containerType: 'size' }}
       className="min-h-0 flex-1 overflow-y-auto"
       onScroll={() => updateActiveSection(sections)}
     >
@@ -147,7 +167,7 @@ export function MobileBoardSections({
                 sectionRefs.current.delete(column.id);
               }
             }}
-            className="shrink-0 last:min-h-[calc(100cqh-3.25rem)] outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className="shrink-0 outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             {content}
           </section>

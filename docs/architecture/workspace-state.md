@@ -930,11 +930,15 @@ titles/identifiers across the entire board.
 
 Mobile sections stack in Todo, Working, Waiting, Done order in one scroll
 surface. Sticky, equal-width section links show counts, jump to a section and
-track manual scrolling. Filtering shows matching sections and updates every
-count; clearing it restores all sections. Empty Todo provider/loading/error
-states remain visible when unfiltered. New workspace scrolls to Todo, including
-when its form is already open. Successful creation clears the filter and reveals
-Working. Project switching resets the scroll, filter and form.
+track manual scrolling. The final section stays at its content height, without
+extra space to force its heading to the top. Section jumps stop at the scroll
+limit; an explicit jump keeps its selected link until the board scrolls again.
+The app shell follows the visual viewport to keep the board above the software
+keyboard. Filtering shows matching sections and updates every count; clearing it
+restores all sections. Empty Todo provider/loading/error states remain visible
+when unfiltered. New workspace scrolls to Todo, including when its form is
+already open. Successful creation clears the filter and reveals Working. Project
+switching resets the scroll, filter and form.
 
 Waiting has a sort icon beside its section heading for Latest message (default)
 or Created, both newest first. The choice persists in browser storage across
