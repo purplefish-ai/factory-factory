@@ -111,7 +111,7 @@
     "@agentclientprotocol/codex-acp": "2.5.0",
     "@agentclientprotocol/sdk": "2.2.0",
     "@anthropic-ai/claude-agent-sdk": "0.3.316",
-    "@linear/sdk": "^100.0.0",
+    "@linear/sdk": "^101.1.0",
     "@prisma/adapter-better-sqlite3": "7.10.1",
     "@prisma/client": "7.10.1",
     "@trpc/server": "^11.22.1",
