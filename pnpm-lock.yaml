@@ -69,6 +69,7 @@ packageExtensionsChecksum: sha256-VQQQl//W1eMSlfI3/uzjMqnS5K1IhfEwlrSvmHH9bj0=
 pnpmfileChecksum: sha256-gdQkqYmfQ8E5lNLlEYDvvSpRzYluizhfbIyeiccDj9Q=
 
 patchedDependencies:
+  '@tanstack/query-core@5.106.0': 0a0d485c9b9776885e5715356465902451c2f94c9b59d760e90203af0ade9eef
   braces@3.0.3: 495c564c494113073bfc331b541d482a0dc5c25433ac7b30d4fc26fdb66ce9a8
   dir-compare@4.2.0: def92076ac5babd332ca60d7c2e7bd8d3aa0a85b1a2b444c78ad1956b13645bc
   rimraf@2.6.3: b56126d04bbe99bfa34d8536d79ba44b5e3b2b159802edc336c27b45b76295e3
@@ -251,7 +252,7 @@ importers:
         version: 4.3.3(vite@8.3.5(@types/node@26.6.6)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1))
       '@tanstack/react-query':
         specifier: ^5.105.1
-        version: 5.105.1(@types/react@19.3.0)(react@19.3.1)
+        version: 5.106.0(@types/react@19.3.0)(react@19.3.1)
       '@tanstack/react-virtual':
         specifier: ^3.14.25
         version: 3.14.25(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
@@ -260,7 +261,7 @@ importers:
         version: 11.22.1(@trpc/server@11.22.1(@typescript/typescript6@6.0.2))(@typescript/typescript6@6.0.2)
       '@trpc/react-query':
         specifier: ^11.22.1
-        version: 11.22.1(@tanstack/react-query@5.105.1(@types/react@19.3.0)(react@19.3.1))(@trpc/client@11.22.1(@trpc/server@11.22.1(@typescript/typescript6@6.0.2))(@typescript/typescript6@6.0.2))(@trpc/server@11.22.1(@typescript/typescript6@6.0.2))(@typescript/typescript6@6.0.2)(react@19.3.1)
+        version: 11.22.1(@tanstack/react-query@5.106.0(@types/react@19.3.0)(react@19.3.1))(@trpc/client@11.22.1(@trpc/server@11.22.1(@typescript/typescript6@6.0.2))(@typescript/typescript6@6.0.2))(@trpc/server@11.22.1(@typescript/typescript6@6.0.2))(@typescript/typescript6@6.0.2)(react@19.3.1)
       '@types/better-sqlite3':
         specifier: ^9.6.0
         version: 9.6.0
@@ -2964,11 +2965,11 @@ packages:
     peerDependencies:
       vite: ^5.2.0 || ^6 || ^7 || ^8
 
-  '@tanstack/query-core@5.105.1':
-    resolution: {integrity: sha512-B/rNlZoZ54w1dlddiUt9oEe1SLM+37c00SKLJEg9YH+7as3Y54P81o9Fh+2ujZ36tXPnQJ5oVe7AcyEWkyFhPg==}
+  '@tanstack/query-core@5.106.0':
+    resolution: {integrity: sha512-3GuqVrhCG0bBfmLt4AU0SIm8UuZ1rzeRjDiQBnYuzW3lkri1RdawWN73jZYvB4kC8WyDUoDgBx3kyO3TbNH/6Q==}
 
-  '@tanstack/react-query@5.105.1':
-    resolution: {integrity: sha512-qcu+/+PtBOjW8qU4/0l47QVmNG7hPOWsCLzP0bTRhE1X7HYa757C4732wXTUH0QhCjTV1yedX8onsCiEwlNYrA==}
+  '@tanstack/react-query@5.106.0':
+    resolution: {integrity: sha512-OuP/ST9dEMBwHhisE5A/bBSWMhMmB/xKPfeZ2U0Wy8W/txb9QiGd7iXhxJPQ7jGbfcKlV13sJUHip9Nki54yyg==}
     peerDependencies:
       '@types/react': ^18 || ^19
       react: ^18 || ^19
@@ -9086,11 +9087,11 @@ snapshots:
       tailwindcss: 4.3.3
       vite: 8.3.5(@types/node@26.6.6)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1)
 
-  '@tanstack/query-core@5.105.1': {}
+  '@tanstack/query-core@5.106.0(patch_hash=0a0d485c9b9776885e5715356465902451c2f94c9b59d760e90203af0ade9eef)': {}
 
-  '@tanstack/react-query@5.105.1(@types/react@19.3.0)(react@19.3.1)':
+  '@tanstack/react-query@5.106.0(@types/react@19.3.0)(react@19.3.1)':
     dependencies:
-      '@tanstack/query-core': 5.105.1
+      '@tanstack/query-core': 5.106.0(patch_hash=0a0d485c9b9776885e5715356465902451c2f94c9b59d760e90203af0ade9eef)
       react: 19.3.1
     optionalDependencies:
       '@types/react': 19.3.0
@@ -9132,9 +9133,9 @@ snapshots:
       '@trpc/server': 11.22.1(@typescript/typescript6@6.0.2)
       typescript: '@typescript/typescript6@6.0.2'
 
-  '@trpc/react-query@11.22.1(@tanstack/react-query@5.105.1(@types/react@19.3.0)(react@19.3.1))(@trpc/client@11.22.1(@trpc/server@11.22.1(@typescript/typescript6@6.0.2))(@typescript/typescript6@6.0.2))(@trpc/server@11.22.1(@typescript/typescript6@6.0.2))(@typescript/typescript6@6.0.2)(react@19.3.1)':
+  '@trpc/react-query@11.22.1(@tanstack/react-query@5.106.0(@types/react@19.3.0)(react@19.3.1))(@trpc/client@11.22.1(@trpc/server@11.22.1(@typescript/typescript6@6.0.2))(@typescript/typescript6@6.0.2))(@trpc/server@11.22.1(@typescript/typescript6@6.0.2))(@typescript/typescript6@6.0.2)(react@19.3.1)':
     dependencies:
-      '@tanstack/react-query': 5.105.1(@types/react@19.3.0)(react@19.3.1)
+      '@tanstack/react-query': 5.106.0(@types/react@19.3.0)(react@19.3.1)
       '@trpc/client': 11.22.1(@trpc/server@11.22.1(@typescript/typescript6@6.0.2))(@typescript/typescript6@6.0.2)
       '@trpc/server': 11.22.1(@typescript/typescript6@6.0.2)
       react: 19.3.1
