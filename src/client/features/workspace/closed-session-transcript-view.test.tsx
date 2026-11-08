@@ -269,6 +269,14 @@ describe('compatible archive view with real query selection, projection and rich
         const failed = await observer.refetch();
         expect(failed.isError).toBe(true);
         expect(failed.data).toBe(initial.data);
+        // React's external-store snapshot must stay stable when only time changes.
+        const clock = vi.spyOn(Date, 'now').mockReturnValue(failed.errorUpdatedAt + 1);
+        try {
+          observer.updateResult();
+          expect(observer.getCurrentResult()).toBe(failed);
+        } finally {
+          clock.mockRestore();
+        }
         await vi.waitFor(() =>
           expect(fixture.container.querySelector('[role="status"]')?.textContent).toBe(staleNotice)
         );

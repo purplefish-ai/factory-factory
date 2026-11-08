@@ -69,6 +69,7 @@ packageExtensionsChecksum: sha256-VQQQl//W1eMSlfI3/uzjMqnS5K1IhfEwlrSvmHH9bj0=
 pnpmfileChecksum: sha256-gdQkqYmfQ8E5lNLlEYDvvSpRzYluizhfbIyeiccDj9Q=
 
 patchedDependencies:
+  '@tanstack/query-core@5.106.0': 0a0d485c9b9776885e5715356465902451c2f94c9b59d760e90203af0ade9eef
   braces@3.0.3: 495c564c494113073bfc331b541d482a0dc5c25433ac7b30d4fc26fdb66ce9a8
   dir-compare@4.2.0: def92076ac5babd332ca60d7c2e7bd8d3aa0a85b1a2b444c78ad1956b13645bc
   rimraf@2.6.3: b56126d04bbe99bfa34d8536d79ba44b5e3b2b159802edc336c27b45b76295e3
@@ -9086,11 +9087,11 @@ snapshots:
       tailwindcss: 4.3.3
       vite: 8.3.5(@types/node@26.6.6)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1)
 
-  '@tanstack/query-core@5.106.0': {}
+  '@tanstack/query-core@5.106.0(patch_hash=0a0d485c9b9776885e5715356465902451c2f94c9b59d760e90203af0ade9eef)': {}
 
   '@tanstack/react-query@5.106.0(@types/react@19.3.0)(react@19.3.1)':
     dependencies:
-      '@tanstack/query-core': 5.106.0
+      '@tanstack/query-core': 5.106.0(patch_hash=0a0d485c9b9776885e5715356465902451c2f94c9b59d760e90203af0ade9eef)
       react: 19.3.1
     optionalDependencies:
       '@types/react': 19.3.0

@@ -280,6 +280,16 @@ check new findings independently of this known, locally patched advisory.
 
 ## Upgrade compatibility
 
+React Query 5.106.0 changes effect ordering and exposes an unstable `query-core`
+snapshot after a selector throws: the same error receives a new timestamp on
+every observer update, which can trigger a React update loop.
+`patches/@tanstack__query-core@5.106.0.patch` preserves the timestamp for the
+same error across the source and ESM/CommonJS builds. The closed-session
+transcript recovery tests advance the clock between observer reads to verify
+stable snapshots while retaining validated history and recovering on success.
+Remove this exact-version patch when upstream fixes the snapshot instability;
+keep the regression assertions when upgrading.
+
 The October 30, 2026 dependency refresh updates direct dependencies to their
 latest stable registry tags, including Linear SDK 100, ACP SDK 2.1, Claude ACP
 0.99.1, Codex ACP 2.5, and Electron 45.1. The Linear major removes Salesforce
