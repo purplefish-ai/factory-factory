@@ -131,7 +131,7 @@ function setup(provider: ChatProvider) {
   dispatcher.configureLifecycle({
     gate: {
       getGeneration: () => 0,
-      isGenerationCurrent: () => true,
+      hasStopSince: () => false,
       isSessionStopping: () => false,
     },
     startup: { getSessionClient: () => handle, getOrCreateSessionClient: async () => handle },

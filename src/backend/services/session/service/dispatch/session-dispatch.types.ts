@@ -24,7 +24,7 @@ export interface SessionDispatchStartOptions {
 
 export interface SessionDispatchLifecycleGate {
   getGeneration(sessionId: string): number;
-  isGenerationCurrent(sessionId: string, generation: number): boolean;
+  hasStopSince(sessionId: string, generation: number): boolean;
   isSessionStopping(sessionId: string): boolean;
 }
 

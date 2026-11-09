@@ -1188,6 +1188,45 @@ services own their named responsibility and reconciliation evidence where
 applicable; context supplies operational inputs. The lifecycle facade delegates
 public operations and the session composition root wires the owners.
 
+### Fencing primitives
+
+Per-session work captures a token and re-checks it after each await. Pick the
+narrowest fence that matches what the work must yield to. Paths are relative to
+`src/backend/services/session/service/`.
+
+| Fence                                                         | Owner                                                            | Fences                                                                                                  |
+| ------------------------------------------------------------- | ---------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| Lifecycle generation (`getGeneration`, `isGenerationCurrent`) | `SessionLifecycleGate` (`lifecycle/session-lifecycle-gate.ts`)   | Prompts, initial sends and event-owned work vs. stop, shutdown or an unestablished startup lease ending |
+| Stop-only fence (`hasStopSince`)                              | `SessionLifecycleGate`                                           | Queue dispatch, steering and mail retries vs. explicit stop or shutdown only                            |
+| Stop and shutdown reservations (`isSessionStopping`)          | `SessionLifecycleGate`                                           | Concurrent stops; startup and dispatch while a stop or runtime stop is in flight                        |
+| Startup lease (`establishStartup`, `assertStartupAllowed`)    | `SessionLifecycleGate`                                           | Startup continuations after a stop                                                                      |
+| Supervisor stop generation                                    | `AcpRuntimeSupervisor` (`acp/acp-runtime-supervisor.ts`)         | In-flight client creation vs. any runtime stop, including ungated ones                                  |
+| Runtime incarnation and current handle                        | `AcpRuntimeSupervisor`                                           | Events, exits and prompt timeouts from a replaced process                                               |
+| Observed-stop ownership (`canStopTarget`)                     | `AcpObservedStop` (`acp/acp-observed-stop.ts`)                   | Physical stop or cleanup of a replaced handle or provider source                                        |
+| Prompt readiness and configured handle                        | `AcpPromptReadiness`, `acp/acp-configured-handle.ts`             | Prompts and config writes before configuration completes or after replacement                           |
+| `SessionCallerGuard` (`check`, `assertCurrent`)               | Caller (`bridges.ts`; built by orchestration retry authority)    | Dispatch, config and prompts vs. loss of the caller's authority                                         |
+| Event authority, `EventSessionFenceError`                     | `EventSessionAuthority` (`lifecycle/event-session-authority.ts`) | Event-initial delivery and late durable writes vs. cancel, close or ownership change                    |
+| `WorkspaceInitFenceError`                                     | `src/backend/lib/workspace-init-fence-error.ts`                  | Dispatch vs. workspace initialization policy (message stays queued)                                     |
+| Event-owned work windows                                      | `EventOwnedWork` (`lifecycle/event-owned-work.ts`)               | Work proofs vs. a later prompt, pending request, or stop and restart                                    |
+| Dispatch claim token                                          | `SessionDispatchClaim` (`dispatch/session-dispatch-claim.ts`)    | Concurrent dispatch per session; stale releases                                                         |
+| Notification dispatch claim and mail wake claim               | `SessionNotificationDeliveryService`                             | Duplicate or quarantined notification sends; stale wake settles                                         |
+| PR delivery tokens (`validate`)                               | `SessionBackgroundDeliveryService`                               | Queued PR updates from an old binding revision                                                          |
+| Resume fence                                                  | `sessionResumeFences` (`session-resume-fence.ts`)                | User resume and input submission vs. user stop or runtime failure                                       |
+| Config commit token and mutation queue                        | `SessionConfigCommitAuthority`, `SessionConfigMutationQueue`     | Superseded config commits; config edits across runtime replacement                                      |
+| Store guard (`captureStoreGuard`)                             | `SessionDomainService`, `store/session-store-registry.ts`        | Dispatch and steering writes into an evicted or replaced store                                          |
+| Provider history fence                                        | `SessionDomainService`, `lifecycle/session-startup-history.ts`   | History replay after store replacement, suspension or provider change                                   |
+| Application update admission                                  | `src/backend/services/application-update-admission.service.ts`   | New dispatch and starts once an application update closes admission                                     |
+| Workspace activity generation                                 | Workspace activity service (`markSessionRunning`)                | A stale idle mark clearing a newer run                                                                  |
+
+Dispatch uses the stop-only fence because a startup lease that ends without
+establishing a runtime (a failed start, or `ensureSubagentBrowseSession`
+returning `false` for a session without native sub-agent browsing) deletes the
+lifecycle generation. A dispatch that captured it would otherwise return with
+its message still queued and no retry. The supervisor keeps its own stop
+generation: it also advances for runtime stops that never reserve through the
+gate (failed-startup cleanup, browse-only teardown, observed and targeted
+stops), and ACP internals cannot import the lifecycle gate.
+
 ## Task lists
 
 The current task list appears inline beneath the conversation in workspace chat

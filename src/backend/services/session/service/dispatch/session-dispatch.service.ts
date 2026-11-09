@@ -862,10 +862,11 @@ export class SessionDispatchService {
     );
   }
 
+  /** Dispatch yields only to stops; startup-lease churn must not strand the queue. */
   private isDispatchGenerationCurrent(dbSessionId: string, stopGeneration: number): boolean {
-    return (
-      !this.lifecycle.gate.isSessionStopping(dbSessionId) &&
-      this.lifecycle.gate.isGenerationCurrent(dbSessionId, stopGeneration)
+    return !(
+      this.lifecycle.gate.isSessionStopping(dbSessionId) ||
+      this.lifecycle.gate.hasStopSince(dbSessionId, stopGeneration)
     );
   }
 

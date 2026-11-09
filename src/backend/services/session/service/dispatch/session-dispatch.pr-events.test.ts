@@ -40,7 +40,7 @@ const {
     getOrCreateSessionClient: vi.fn(),
     isSessionStopping: vi.fn(),
     getGeneration: vi.fn(),
-    isGenerationCurrent: vi.fn(),
+    hasStopSince: vi.fn(),
     isSessionRunning: vi.fn(),
     isSessionPromptInFlight: vi.fn(),
     resolveQueuedMessageSettings: (_id: string, message: QueuedMessage) => message.settings,
@@ -150,7 +150,7 @@ describe('sessionDispatchService.tryDispatchNextMessage', () => {
     mockSessionService.isSessionRunning.mockReturnValue(true);
     mockSessionService.isSessionStopping.mockReturnValue(false);
     mockSessionService.getGeneration.mockReturnValue(0);
-    mockSessionService.isGenerationCurrent.mockReturnValue(true);
+    mockSessionService.hasStopSince.mockReturnValue(false);
     mockSessionDataService.findAgentSessionById.mockResolvedValue({
       workspace: {
         status: 'READY',
@@ -191,7 +191,7 @@ describe('sessionDispatchService.tryDispatchNextMessage', () => {
         if (stop === 'runtime-stopped') {
           mockSessionService.isSessionRunning.mockReturnValue(false);
         } else {
-          mockSessionService.isGenerationCurrent.mockReturnValue(false);
+          mockSessionService.hasStopSince.mockReturnValue(true);
         }
         return Promise.resolve();
       });

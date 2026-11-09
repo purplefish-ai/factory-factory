@@ -20,6 +20,8 @@ export class SessionLifecycleGate {
   private readonly shutdownSessions = new Set<string>();
   private stopGenerationCounter = 0;
   private readonly stopGenerations = new Map<string, number>();
+  /** Generation assigned by the latest stop or shutdown reservation per session. */
+  private readonly lastStopGenerations = new Map<string, number>();
   private readonly startupGenerationReferences = new Map<number, StartupGenerationReferences>();
   private readonly establishedGenerations = new Set<number>();
 
@@ -61,7 +63,7 @@ export class SessionLifecycleGate {
       return null;
     }
 
-    const generation = this.advanceGeneration(sessionId);
+    const generation = this.advanceStopGeneration(sessionId);
     this.stoppingSessions.add(sessionId);
     let released = false;
     return {
@@ -82,7 +84,7 @@ export class SessionLifecycleGate {
       if (this.shutdownSessions.has(sessionId)) {
         continue;
       }
-      this.advanceGeneration(sessionId);
+      this.advanceStopGeneration(sessionId);
       this.shutdownSessions.add(sessionId);
     }
   }
@@ -116,6 +118,22 @@ export class SessionLifecycleGate {
     return this.stopGenerations.get(sessionId) === generation;
   }
 
+  /**
+   * Stop-only fence: true when a stop or shutdown was reserved at or after
+   * `generation`. Unlike `isGenerationCurrent`, a startup lease that ends without
+   * establishing a runtime does not count, so work that only needs to yield to
+   * stops (queue dispatch) survives an unrelated failed or browse-only startup.
+   */
+  hasStopSince(sessionId: string, generation: number): boolean {
+    const lastStop = this.lastStopGenerations.get(sessionId);
+    return lastStop !== undefined && lastStop >= generation;
+  }
+
+  /** Drops retained generation state for a deleted session. */
+  forgetSession(sessionId: string): void {
+    this.lastStopGenerations.delete(sessionId);
+  }
+
   private releaseStartupLease(lease: SessionStartupLease): void {
     const references = this.startupGenerationReferences.get(lease.generation);
     if (!references) {
@@ -137,6 +155,12 @@ export class SessionLifecycleGate {
     ) {
       this.deleteGeneration(lease.sessionId);
     }
+  }
+
+  private advanceStopGeneration(sessionId: string): number {
+    const generation = this.advanceGeneration(sessionId);
+    this.lastStopGenerations.set(sessionId, generation);
+    return generation;
   }
 
   private advanceGeneration(sessionId: string): number {
