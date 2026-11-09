@@ -1,10 +1,12 @@
 import {
+  chmodSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
   readdirSync,
   rmSync,
   statSync,
+  utimesSync,
   writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -109,11 +111,12 @@ describe('runMigrationsWithBackup', () => {
       writer.close();
     }
 
-    expect(backups()).toEqual(['data-pre-migration-20270115T080000000Z.db']);
+    expect(backups()).toEqual(['data.db-pre-migration-20270115T080000000Z.db']);
     const backupPath = join(backupDirectory, backups()[0] ?? '');
     expect(tablesIn(backupPath)).not.toContain('posts');
     expect(tablesIn(databasePath)).toContain('posts');
     expect(statSync(backupPath).mode & 0o777).toBe(0o600);
+    expect(statSync(backupDirectory).mode & 0o777).toBe(0o700);
     const backup = new Database(backupPath, { readonly: true });
     try {
       expect(backup.prepare('SELECT id FROM users').all()).toEqual([{ id: 7 }]);
@@ -129,19 +132,42 @@ describe('runMigrationsWithBackup', () => {
     mkdirSync(backupDirectory, { recursive: true });
     writeFileSync(join(backupDirectory, 'keep-me.db'), '');
     writeFileSync(join(backupDirectory, 'other-pre-migration-20000101T000000000Z.db'), '');
+    writeFileSync(join(backupDirectory, 'data.sqlite-pre-migration-20000101T000000000Z.db'), '');
 
     for (let index = 1; index <= 5; index += 1) {
       addMigration(`00${index}_table`, `CREATE TABLE t${index} (id INTEGER PRIMARY KEY);`);
       await migrate();
     }
 
-    const own = backups().filter((name) => name.startsWith('data-pre-migration-'));
+    const own = backups().filter((name) => name.startsWith('data.db-pre-migration-'));
     expect(own).toHaveLength(3);
     // The three newest survive: taken before migrations 3, 4 and 5.
     expect(tablesIn(join(backupDirectory, own[0] ?? ''))).toContain('t2');
     expect(tablesIn(join(backupDirectory, own[0] ?? ''))).not.toContain('t3');
     expect(backups()).toContain('keep-me.db');
     expect(backups()).toContain('other-pre-migration-20000101T000000000Z.db');
+    expect(backups()).toContain('data.sqlite-pre-migration-20000101T000000000Z.db');
+  });
+
+  it('removes partial copies left by an interrupted backup once they are stale', async () => {
+    addMigration('001_users', 'CREATE TABLE users (id INTEGER PRIMARY KEY);');
+    await migrate();
+    mkdirSync(backupDirectory, { mode: 0o755 });
+    chmodSync(backupDirectory, 0o755);
+    const stale = 'data.db-pre-migration-20000101T000000000Z.db.partial';
+    const recent = 'data.db-pre-migration-20000102T000000000Z.db.partial';
+    writeFileSync(join(backupDirectory, stale), '');
+    writeFileSync(join(backupDirectory, recent), '');
+    const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000);
+    utimesSync(join(backupDirectory, stale), twoHoursAgo, twoHoursAgo);
+    addMigration('002_posts', 'CREATE TABLE posts (id INTEGER PRIMARY KEY);');
+
+    await migrate();
+
+    expect(backups()).not.toContain(stale);
+    expect(backups()).toContain(recent);
+    // An existing, more permissive directory is tightened too.
+    expect(statSync(backupDirectory).mode & 0o777).toBe(0o700);
   });
 
   it('names the backup when a migration fails', async () => {

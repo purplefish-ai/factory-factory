@@ -1,4 +1,4 @@
-import { chmod } from 'node:fs/promises';
+import { chmod, writeFile } from 'node:fs/promises';
 import Database from 'better-sqlite3';
 
 /**
@@ -12,6 +12,9 @@ export async function snapshotSqliteDatabase(
 ): Promise<void> {
   const database = new Database(databasePath, { readonly: true, fileMustExist: true });
   try {
+    // Restrict the destination before any page is copied into it.
+    await writeFile(destinationPath, '', { mode: 0o600 });
+    await chmod(destinationPath, 0o600);
     await database.backup(destinationPath);
     await chmod(destinationPath, 0o600);
   } finally {
