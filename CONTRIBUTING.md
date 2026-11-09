@@ -119,7 +119,11 @@ ownership, foreign-key indexes, and dependencies. Upstream ACP adapters own
 their provider protocol schemas; test ACP client contracts when upgrading either
 adapter. After reducing oversized legacy files, run
 `pnpm check:file-length:update` to lower their exact ceilings; it never allows
-growth.
+growth. The file-length check also prints a non-failing warning listing files
+that are within the 1,000-line cap but at or above 98% of it, whether or not
+they have a stale baseline entry; files over the cap are reported only as
+violations. Before growing one, split it by responsibility; do not compress it
+by dropping blank lines or comments.
 
 CI caches the Node native-module binaries by operating system, Ubuntu release,
 architecture, Node ABI, dependency lockfile and native-module setup script. It

@@ -17,6 +17,7 @@ const candidateRoots = new Set(['src', 'electron', 'scripts']);
 const candidateExtensions = new Set(['.js', '.jsx', '.ts', '.tsx', '.mjs', '.mts', '.cjs', '.cts']);
 
 const defaultMaxLines = 1000;
+const defaultCapPressureRatio = 0.98;
 
 export type FileLength = {
   path: string;
@@ -159,6 +160,37 @@ export function planBaselineUpdate(evaluation: FileLengthEvaluation): BaselineUp
         .map((file) => [file.path, file.lines])
     ),
   };
+}
+
+/**
+ * Files under the cap whose length is at or above `ratio` of it. They pass the
+ * check, but are reported so pressure on the cap is visible in review before a
+ * file reaches it and gets compressed instead of split.
+ */
+export function findFilesNearCap(
+  files: readonly FileLength[],
+  maxLines = defaultMaxLines,
+  ratio = defaultCapPressureRatio
+): FileLength[] {
+  const threshold = Math.ceil(maxLines * ratio);
+  return files
+    .filter((file) => file.lines >= threshold && file.lines <= maxLines)
+    .toSorted((left, right) => right.lines - left.lines || left.path.localeCompare(right.path));
+}
+
+export function formatCapPressureWarning(
+  nearCap: readonly FileLength[],
+  maxLines = defaultMaxLines,
+  ratio = defaultCapPressureRatio
+): string {
+  const threshold = Math.ceil(maxLines * ratio);
+  const width = String(maxLines).length;
+  const listing = nearCap.map((file) => `  ${String(file.lines).padStart(width)}  ${file.path}`);
+  return [
+    `Warning: ${nearCap.length} file(s) at or above ${Math.round(ratio * 100)}% of the ${maxLines}-line cap (${threshold}+ lines):`,
+    ...listing,
+    'This warning does not fail the check. Before growing one of these files, split it by responsibility into cohesive modules; do not compress it by removing blank lines, comments or readable formatting.',
+  ].join('\n');
 }
 
 export function discoverCandidatePaths(repositoryRoot: string): string[] {
@@ -341,10 +373,16 @@ function parseUpdateMode(args: readonly string[], stderr: FileLengthOutput): boo
 }
 
 function runNormalFileLengthCli(
+  files: readonly FileLength[],
   evaluation: FileLengthEvaluation,
   stdout: FileLengthOutput,
   stderr: FileLengthOutput
 ): number {
+  const nearCap = findFilesNearCap(files);
+  if (nearCap.length > 0) {
+    stdout(`${formatCapPressureWarning(nearCap)}\n`);
+  }
+
   if (evaluation.violations.length > 0) {
     stderr(`${formatFileLengthViolations(evaluation.violations)}\n`);
     return 1;
@@ -402,7 +440,7 @@ export function runFileLengthCli(options: FileLengthCliOptions = {}): number {
   const evaluation = evaluateFileLengths(files, baseline);
   return updateMode
     ? runUpdateFileLengthCli(evaluation, baselinePath, stdout, stderr)
-    : runNormalFileLengthCli(evaluation, stdout, stderr);
+    : runNormalFileLengthCli(files, evaluation, stdout, stderr);
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
