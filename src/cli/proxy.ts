@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import { promisify } from 'node:util';
 import chalk from 'chalk';
 import { runMigrations as runDbMigrations } from '@/backend/migrate';
+import { getCurrentProcessEnv } from '@/backend/services/logger.service';
 import {
   type AuthenticationCheck,
   appendBoundedOutputBuffer,
@@ -24,6 +25,7 @@ import {
   verifySessionValue,
 } from '@/shared/proxy-utils';
 import { resolveDatabasePath } from './database-path';
+import { describeMigrationFailure, resolveUnknownMigrationPolicy } from './migration-policy';
 import { ensureDataDir, findAvailablePort, treeKillAsync } from './runtime-utils';
 import { startFactoryFactoryServer } from './server-startup';
 import { supportsTerminalQrRendering, tryRenderTerminalQrCode } from './terminal-qr';
@@ -180,6 +182,7 @@ function runMigrations(projectRoot: string, databasePath: string): void {
     log: () => {
       // silent for proxy command
     },
+    unknownMigrations: resolveUnknownMigrationPolicy({ env: getCurrentProcessEnv() }),
   });
 }
 
@@ -777,7 +780,7 @@ export async function runProxyCommand({
   try {
     runMigrations(projectRoot, databasePath);
   } catch (error) {
-    console.error(chalk.red(`\n❌ Migration failed: ${(error as Error).message}`));
+    console.error(chalk.red(`\n❌ ${describeMigrationFailure(error)}`));
     detachSignalHandlers();
     process.exit(1);
     return;

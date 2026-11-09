@@ -11,13 +11,53 @@ import { createHash } from 'node:crypto';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import Database from 'better-sqlite3';
+import { z } from 'zod';
 import { configService } from './services/config.service';
+
+/**
+ * How to treat a database that has applied migrations this build does not ship
+ * (an older build started on a database a newer build migrated).
+ * - `refuse` (default): throw {@link UnknownAppliedMigrationsError} before changing anything.
+ * - `warn`: log a loud warning and continue. For development, where worktrees on
+ *   different branches can share one database.
+ */
+export type UnknownMigrationPolicy = 'refuse' | 'warn';
 
 export interface MigrationOptions {
   databasePath: string;
   migrationsPath: string;
   log?: (msg: string) => void;
+  /** Problems that do not stop startup. Defaults to stderr so they stay visible when `log` is silent. */
+  warn?: (msg: string) => void;
+  unknownMigrations?: UnknownMigrationPolicy;
 }
+
+/** The database has applied migrations this build does not include: it was migrated by a newer version. */
+export class UnknownAppliedMigrationsError extends Error {
+  readonly migrationNames: readonly string[];
+
+  constructor(databasePath: string, migrationNames: readonly string[]) {
+    super(
+      `The database at ${databasePath} was updated by a newer version of Factory Factory. ` +
+        `It has ${migrationNames.length} applied migration(s) this version does not include: ` +
+        `${migrationNames.join(', ')}. ` +
+        'Upgrade Factory Factory to the latest version and start it again. ' +
+        'This version refuses to start because its database code does not match that schema.'
+    );
+    this.name = 'UnknownAppliedMigrationsError';
+    this.migrationNames = migrationNames;
+  }
+}
+
+const appliedMigrationRowSchema = z.object({
+  migration_name: z.string(),
+  checksum: z.string(),
+});
+
+const foreignKeyViolationSchema = z.object({
+  table: z.string(),
+  parent: z.string(),
+});
 
 function writeStdout(message: string): void {
   process.stdout.write(`${message}\n`);
@@ -27,12 +67,17 @@ function writeStderr(message: string): void {
   process.stderr.write(`${message}\n`);
 }
 
+/** Upper-case, whitespace-free, without the optional trailing semicolon. */
+function normalizePragma(pragma: string): string {
+  return pragma.toUpperCase().replace(/\s+/g, '').replace(/;$/, '');
+}
+
 function classifyPragmaBucket(trimmedPragma: string, foundNonPragma: boolean): 'pre' | 'post' {
-  const normalized = trimmedPragma.toUpperCase().replace(/\s+/g, '');
-  if (normalized === 'PRAGMADEFER_FOREIGN_KEYS=ON;' || normalized === 'PRAGMAFOREIGN_KEYS=OFF;') {
+  const normalized = normalizePragma(trimmedPragma);
+  if (normalized === 'PRAGMADEFER_FOREIGN_KEYS=ON' || normalized === 'PRAGMAFOREIGN_KEYS=OFF') {
     return 'pre';
   }
-  if (normalized === 'PRAGMAFOREIGN_KEYS=ON;' || normalized === 'PRAGMADEFER_FOREIGN_KEYS=OFF;') {
+  if (normalized === 'PRAGMAFOREIGN_KEYS=ON' || normalized === 'PRAGMADEFER_FOREIGN_KEYS=OFF') {
     return 'post';
   }
   return foundNonPragma ? 'post' : 'pre';
@@ -199,12 +244,67 @@ function parseMigrationSql(migrationSql: string): {
 /**
  * Apply a single migration file to the database.
  */
+function disablesForeignKeys(pragmas: readonly string[]): boolean {
+  return pragmas.some((pragma) => normalizePragma(pragma) === 'PRAGMAFOREIGN_KEYS=OFF');
+}
+
+/** Foreign key violations per `child -> parent` table pair. */
+function countForeignKeyViolations(db: Database.Database): Map<string, number> {
+  const counts = new Map<string, number>();
+  for (const { table, parent } of z
+    .array(foreignKeyViolationSchema)
+    .parse(db.pragma('foreign_key_check'))) {
+    const key = `${table} -> ${parent}`;
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+  }
+  return counts;
+}
+
+function errorText(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+/**
+ * SQLite does not validate existing rows when foreign keys are switched back on,
+ * so a table rebuild with checks off can leave orphans. Report violations the
+ * migration added (compared with `before`); never fail startup over them.
+ */
+function reportNewForeignKeyViolations(
+  db: Database.Database,
+  migrationName: string,
+  before: ReadonlyMap<string, number>,
+  warn: (msg: string) => void
+): void {
+  let after: Map<string, number>;
+  try {
+    after = countForeignKeyViolations(db);
+  } catch (error) {
+    warn(
+      `[migrate] Warning: foreign key check after ${migrationName} could not run: ${errorText(error)}`
+    );
+    return;
+  }
+  const added = [...after]
+    .map(([key, count]) => [key, count - (before.get(key) ?? 0)] as const)
+    .filter(([, count]) => count > 0);
+  if (added.length === 0) {
+    return;
+  }
+  const total = added.reduce((sum, [, count]) => sum + count, 0);
+  const summary = added.map(([key, count]) => `${key} (${count})`).join(', ');
+  warn(
+    `[migrate] Warning: ${migrationName} left ${total} new row(s) referencing missing parents ` +
+      `(PRAGMA foreign_key_check): ${summary}. Startup continues.`
+  );
+}
+
 function applySingleMigration(
   db: Database.Database,
   migrationName: string,
   sql: string,
   checksum: string,
-  log: (msg: string) => void
+  log: (msg: string) => void,
+  warn: (msg: string) => void
 ): void {
   assertNoMultilineStringLiterals(sql, migrationName);
   const { prePragmas, ddlDml, postPragmas } = parseMigrationSql(sql);
@@ -230,6 +330,16 @@ function applySingleMigration(
 
   log(`[migrate] Applying: ${migrationName}`);
 
+  // Baseline for the post-migration check, so earlier orphans are not blamed on this migration.
+  let violationsBefore: Map<string, number> | undefined;
+  if (disablesForeignKeys(prePragmas)) {
+    try {
+      violationsBefore = countForeignKeyViolations(db);
+    } catch {
+      violationsBefore = new Map();
+    }
+  }
+
   // Execute pre-transaction PRAGMAs
   for (const pragma of prePragmas) {
     db.exec(pragma);
@@ -253,7 +363,84 @@ function applySingleMigration(
     }
   }
 
+  if (violationsBefore) {
+    reportNewForeignKeyViolations(db, migrationName, violationsBefore, warn);
+  }
+
   log(`[migrate] Applied: ${migrationName}`);
+}
+
+function sha256(text: string): string {
+  return createHash('sha256').update(text).digest('hex');
+}
+
+function checksumMatches(sql: string, storedChecksum: string): boolean {
+  // Like Prisma, accept a checkout that only changed line endings.
+  return (
+    sha256(sql) === storedChecksum ||
+    sha256(sql.replace(/\r\n/g, '\n')) === storedChecksum ||
+    sha256(sql.replace(/\r?\n/g, '\r\n')) === storedChecksum
+  );
+}
+
+/** Latest stored checksum per applied migration name. */
+function readAppliedMigrations(db: Database.Database): Map<string, string> {
+  const rows = z
+    .array(appliedMigrationRowSchema)
+    .parse(
+      db
+        .prepare(
+          'SELECT migration_name, checksum FROM _prisma_migrations WHERE finished_at IS NOT NULL ORDER BY started_at, rowid'
+        )
+        .all()
+    );
+  return new Map(rows.map((row) => [row.migration_name, row.checksum]));
+}
+
+function guardUnknownMigrations(
+  databasePath: string,
+  applied: ReadonlyMap<string, string>,
+  known: ReadonlySet<string>,
+  policy: UnknownMigrationPolicy,
+  warn: (msg: string) => void
+): void {
+  const unknown = [...applied.keys()].filter((name) => !known.has(name)).sort();
+  if (unknown.length === 0) {
+    return;
+  }
+  const error = new UnknownAppliedMigrationsError(databasePath, unknown);
+  if (policy === 'refuse') {
+    throw error;
+  }
+  warn(
+    `[migrate] WARNING: ${error.message} Continuing because unknown migrations are allowed ` +
+      '(development mode or FF_ALLOW_UNKNOWN_MIGRATIONS=1); the schema may not match this code.'
+  );
+}
+
+/** Edited migrations are a warning, never a failure; legacy rows have an empty checksum. */
+function warnOnChecksumMismatches(
+  migrationsPath: string,
+  applied: ReadonlyMap<string, string>,
+  migrationDirs: readonly string[],
+  warn: (msg: string) => void
+): void {
+  const mismatched = migrationDirs.filter((name) => {
+    const storedChecksum = applied.get(name);
+    const sqlPath = join(migrationsPath, name, 'migration.sql');
+    return (
+      storedChecksum !== undefined &&
+      storedChecksum !== '' &&
+      existsSync(sqlPath) &&
+      !checksumMatches(readFileSync(sqlPath, 'utf-8'), storedChecksum)
+    );
+  });
+  if (mismatched.length > 0) {
+    warn(
+      `[migrate] Warning: ${mismatched.length} applied migration(s) changed on disk after they were applied: ` +
+        `${mismatched.join(', ')}. They are not re-run.`
+    );
+  }
 }
 
 /**
@@ -262,7 +449,13 @@ function applySingleMigration(
  * @throws Error if migrations fail
  */
 export function runMigrations(options: MigrationOptions): void {
-  const { databasePath, migrationsPath, log = writeStdout } = options;
+  const {
+    databasePath,
+    migrationsPath,
+    log = writeStdout,
+    warn = writeStderr,
+    unknownMigrations = 'refuse',
+  } = options;
 
   log(`[migrate] Database: ${databasePath}`);
   log(`[migrate] Migrations: ${migrationsPath}`);
@@ -293,20 +486,22 @@ export function runMigrations(options: MigrationOptions): void {
       db.exec("ALTER TABLE _prisma_migrations ADD COLUMN checksum TEXT NOT NULL DEFAULT ''");
     }
 
-    // Get list of applied migrations
-    const appliedMigrations = new Set(
-      (
-        db
-          .prepare('SELECT migration_name FROM _prisma_migrations WHERE finished_at IS NOT NULL')
-          .all() as Array<{ migration_name: string }>
-      ).map((row) => row.migration_name)
-    );
+    const appliedMigrations = readAppliedMigrations(db);
 
     // Read migration directories (sorted by name = chronological order)
     const migrationDirs = readdirSync(migrationsPath, { withFileTypes: true })
       .filter((d) => d.isDirectory())
       .map((d) => d.name)
       .sort();
+
+    guardUnknownMigrations(
+      databasePath,
+      appliedMigrations,
+      new Set(migrationDirs),
+      unknownMigrations,
+      warn
+    );
+    warnOnChecksumMismatches(migrationsPath, appliedMigrations, migrationDirs, warn);
 
     for (const migrationName of migrationDirs) {
       if (appliedMigrations.has(migrationName)) {
@@ -321,10 +516,10 @@ export function runMigrations(options: MigrationOptions): void {
       }
 
       const sql = readFileSync(sqlPath, 'utf-8');
-      const checksum = createHash('sha256').update(sql).digest('hex');
+      const checksum = sha256(sql);
 
       try {
-        applySingleMigration(db, migrationName, sql, checksum, log);
+        applySingleMigration(db, migrationName, sql, checksum, log, warn);
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         log(`[migrate] Failed to apply migration ${migrationName}: ${message}`);
