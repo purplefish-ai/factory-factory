@@ -10,6 +10,9 @@ import { getProjectWorkspaceCacheReconciler } from '@/client/lib/workspace-cache
 import {
   ensureWorkspaceDetail,
   fetchWorkspaceDetail,
+  getCachedWorkspaceDetails,
+  invalidateWorkspaceDetail,
+  resetWorkspaceDetail,
   mergeWorkspaceDetailSnapshot,
   projectWorkspaceListQuery,
   seedWorkspaceDetail,
@@ -133,5 +136,24 @@ describe('workspace query ownership', () => {
       name: 'Merged',
       description: 'HTTP-only detail',
     });
+  });
+
+  it('operates on owned detail keys without handing them to callers', async () => {
+    const f = fixture();
+    await fetchWorkspaceDetail(f.queryClient, f.client, 'ws-1');
+    seedWorkspaceDetail(f.queryClient, 'ws-2', () => detail('Second'));
+    expect(getCachedWorkspaceDetails(f.queryClient).map((cached) => cached?.name)).toEqual([
+      'HTTP name',
+      'Second',
+    ]);
+    const key = workspaceDetailQuery(f.queryClient, f.client, 'ws-1').queryKey;
+    await invalidateWorkspaceDetail(f.queryClient, 'ws-1');
+    expect(f.queryClient.getQueryState(key)?.isInvalidated).toBe(true);
+    await resetWorkspaceDetail(f.queryClient, 'ws-1');
+    expect(f.queryClient.getQueryData(key)).toBeUndefined();
+    expect(getCachedWorkspaceDetails(f.queryClient).map((cached) => cached?.name)).toEqual([
+      undefined,
+      'Second',
+    ]);
   });
 });

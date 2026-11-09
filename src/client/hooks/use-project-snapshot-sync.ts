@@ -32,7 +32,7 @@ import {
   createWorkspaceDetailTransitionScope,
   type ProjectWorkspaceDetailTransitions,
 } from '@/client/lib/workspace-detail-snapshot-transitions';
-import { projectWorkspaceListQueryFilter } from '@/client/lib/workspace-queries';
+import { cancelProjectWorkspaceList } from '@/client/lib/workspace-queries';
 import { useWebSocketChannel } from '@/hooks/use-websocket-channel';
 import { buildWebSocketUrl } from '@/lib/websocket-config';
 import {
@@ -335,13 +335,12 @@ export function useProjectSnapshotSync(projectId: string | undefined): void {
     if (!projectId) {
       return;
     }
-    const filter = projectWorkspaceListQueryFilter(projectId);
     const detailFilter = projectWorkspaceDetailQueryFilter(queryClient, projectId);
     runInBackground(queryClient.cancelQueries(detailFilter), "Couldn't refresh data.");
     runInBackground(queryClient.invalidateQueries(detailFilter), "Couldn't refresh data.");
     // Cancel synchronously before invalidating, including an uncached bootstrap
     // whose old connection result must not win over the fallback request.
-    runInBackground(queryClient.cancelQueries(filter), "Couldn't refresh data.");
+    runInBackground(cancelProjectWorkspaceList(queryClient, projectId), "Couldn't refresh data.");
     runInBackground(
       utils.workspace.listForProject.invalidate({ projectId }),
       "Couldn't refresh data."

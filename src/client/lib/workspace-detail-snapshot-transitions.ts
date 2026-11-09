@@ -1,9 +1,11 @@
 import type { QueryClient } from '@tanstack/react-query';
 import { runInBackground } from '@/client/lib/background-task';
-import type { WorkspaceDetail } from '@/client/lib/snapshot-to-workspace';
 import {
+  cancelWorkspaceDetail,
+  getCachedWorkspaceDetails,
   mergeWorkspaceDetailSnapshot,
-  workspaceDetailQueryFilter,
+  refetchActiveWorkspaceDetail,
+  resetWorkspaceDetail,
 } from '@/client/lib/workspace-queries';
 import type { WorkspaceSnapshotEntry } from '@/shared/workspace-snapshot';
 
@@ -33,10 +35,7 @@ export function createWorkspaceDetailTransitionScope(): WorkspaceDetailTransitio
         removedWorkspaceIds.add(workspaceId);
         // Reset clears old data and synchronously cancels its request before
         // active observers refetch persisted detail. No initialData is configured.
-        runInBackground(
-          queryClient.resetQueries(workspaceDetailQueryFilter(workspaceId)),
-          "Couldn't refresh data."
-        );
+        runInBackground(resetWorkspaceDetail(queryClient, workspaceId), "Couldn't refresh data.");
       };
       return {
         remove,
@@ -44,9 +43,7 @@ export function createWorkspaceDetailTransitionScope(): WorkspaceDetailTransitio
           const liveWorkspaceIds = new Set(entries.map((entry) => entry.workspaceId));
           const removalCandidates = new Set(previousWorkspaceIds);
           // A detail can outlive an empty/evicted project list across navigation.
-          for (const [, detail] of queryClient.getQueriesData<WorkspaceDetail>(
-            workspaceDetailQueryFilter()
-          )) {
+          for (const detail of getCachedWorkspaceDetails(queryClient)) {
             if (
               detail?.projectId === projectId &&
               detail.status !== 'ARCHIVING' &&
@@ -63,16 +60,18 @@ export function createWorkspaceDetailTransitionScope(): WorkspaceDetailTransitio
         },
         mergeLive(entry) {
           const reintroduced = removedWorkspaceIds.delete(entry.workspaceId);
-          const filter = workspaceDetailQueryFilter(entry.workspaceId);
           if (reintroduced) {
             // Cancellation takes effect synchronously; do not await before merging.
-            runInBackground(queryClient.cancelQueries(filter), "Couldn't refresh data.");
+            runInBackground(
+              cancelWorkspaceDetail(queryClient, entry.workspaceId),
+              "Couldn't refresh data."
+            );
           }
           mergeWorkspaceDetailSnapshot(queryClient, entry);
           if (reintroduced) {
             // Reset may have cleared full detail, which a summary cannot recreate.
             runInBackground(
-              queryClient.refetchQueries({ ...filter, type: 'active' }),
+              refetchActiveWorkspaceDetail(queryClient, entry.workspaceId),
               "Couldn't refresh data."
             );
           }
