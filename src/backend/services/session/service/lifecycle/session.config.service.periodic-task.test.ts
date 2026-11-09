@@ -26,7 +26,8 @@ it.each([
   async ({ provider, preset, auto }) => {
     vi.mocked(userSettingsService.get).mockResolvedValue(
       unsafeCoerce({
-        defaultWorkspacePermissions: preset,
+        defaultWorkspacePermissions: 'YOLO',
+        automationPermissions: preset,
       })
     );
     const handle = unsafeCoerce<AcpProcessHandle>({
@@ -110,7 +111,9 @@ it.each([
       );
     }
     expect(handle.configOptions.find((option) => option.id === 'mode')?.currentValue).toBe(
-      provider === 'CODEX' ? 'agent-full-access' : claudeModes[preset]
+      provider === 'CODEX'
+        ? { STRICT: 'workspace-write', RELAXED: 'agent', YOLO: 'agent-full-access' }[preset]
+        : claudeModes[preset]
     );
     if (provider === 'CODEX') {
       expect(
