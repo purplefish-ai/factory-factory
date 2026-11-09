@@ -14,7 +14,8 @@ export const prEventStateSchema = z.enum([
  * `WorkspacePRDelivery.state`. `BLOCKED` quarantines inconsistent or held receipt
  * evidence and holds every later claim for its workspace. `DISMISSED` is a
  * `BLOCKED` delivery the user explicitly discarded: its evidence stays verbatim,
- * its members read as `CANCELLED`, and it no longer holds claims.
+ * its unsettled members read as `CANCELLED` (settled ones keep their state), and
+ * it no longer holds claims. Unknown persisted states hold claims and fail reads.
  */
 export const prDeliveryStateSchema = z.enum([
   ...prEventStateSchema.options,

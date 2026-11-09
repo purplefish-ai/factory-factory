@@ -63,12 +63,16 @@ export function projectDeliveryEvent(
   }
   const state = parseDeliveryState(delivery);
   // Blocked evidence keeps holding the workspace; dismissed evidence is retained
-  // verbatim but is no longer live, so neither overlays its frozen fields.
+  // verbatim but is no longer live, so neither overlays its frozen fields. A
+  // dismissed member keeps settled raw states (a DELIVERED fact stays delivered
+  // history); only its unsettled PENDING/DISPATCHING state reads as CANCELLED.
   if (state === PR_DELIVERY_STATE.BLOCKED) {
     return { ...event, state: PR_EVENT_STATE.DISPATCHING };
   }
   if (state === PR_DELIVERY_STATE.DISMISSED) {
-    return { ...event, state: PR_EVENT_STATE.CANCELLED };
+    return hasState(event.state, [PR_EVENT_STATE.PENDING, PR_EVENT_STATE.DISPATCHING])
+      ? { ...event, state: PR_EVENT_STATE.CANCELLED }
+      : event;
   }
   return {
     ...event,

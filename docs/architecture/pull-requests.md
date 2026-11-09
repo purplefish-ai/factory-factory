@@ -298,14 +298,16 @@ offers **Discard stuck PR update…** instead of Resume. After confirmation, the
 trusted-local `workspace.discardBlockedPRDeliveries` mutation moves the
 workspace's `BLOCKED` deliveries to `DISMISSED` and wakes delivery. Nothing is
 resent or deleted: delivery rows, membership and member evidence stay verbatim,
-members read as `CANCELLED`, and their facts are not delivered (the next PR
-transition emits fresh facts). Dismissed deliveries are never settled, retried
-or recovered. Export still writes quarantined evidence verbatim and still fails
-for damaged normalized membership; dismissal is local, so a restored backup
-quarantines the same evidence again. Delivery and event states are defined once
-in `src/shared/schemas/pr-event.schema.ts` and parsed on read; an unknown
-persisted state fails the read instead of being treated as live. Frozen legacy
-metadata without a receipt ID (below) still blocks claims without this
+unsettled (pending or dispatching) members read as `CANCELLED` while members
+already recorded as delivered stay delivered history, and the cancelled facts
+are not delivered (the next PR transition emits fresh facts). Dismissed
+deliveries are never settled, retried or recovered. Export still writes
+quarantined evidence verbatim and still fails for damaged normalized membership;
+dismissal is local, so a restored backup quarantines the same evidence again.
+Delivery and event states are defined once in
+`src/shared/schemas/pr-event.schema.ts` and parsed on read; an unknown persisted
+state fails the read and holds claims instead of being treated as live. Frozen
+legacy metadata without a receipt ID (below) still blocks claims without this
 projection or action.
 
 Logical backups retain the existing flattened event format. Export validates

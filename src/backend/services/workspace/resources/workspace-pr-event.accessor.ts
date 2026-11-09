@@ -51,6 +51,15 @@ const unboundLegacyEvidenceWhere = {
   ],
 } satisfies Prisma.WorkspacePREventWhereInput;
 
+/** Delivery states that do not hold a workspace's claim; every other value does. */
+const nonHoldingDeliveryStates = [
+  DELIVERY.PENDING,
+  DELIVERY.DELIVERED,
+  DELIVERY.SUPERSEDED,
+  DELIVERY.CANCELLED,
+  DELIVERY.DISMISSED,
+];
+
 // Positive NULL checks avoid three-valued NOT semantics on optional receipt IDs.
 const unclaimedDeliveryWhere = {
   batchId: null,
@@ -640,11 +649,9 @@ class WorkspacePrEventAccessor {
         return null;
       }
       // A durable claim holds the workspace until prompt completion or receipt recovery.
+      // Any state not known to be idle or settled holds it, so unknown values fail closed.
       const held = await tx.workspacePRDelivery.findFirst({
-        where: {
-          workspaceId: request.workspaceId,
-          state: { in: [DELIVERY.DISPATCHING, DELIVERY.BLOCKED] },
-        },
+        where: { workspaceId: request.workspaceId, state: { notIn: nonHoldingDeliveryStates } },
       });
       const competing =
         held ||
@@ -654,7 +661,7 @@ class WorkspacePrEventAccessor {
             OR: [
               { batchId: null, state: EVENT.DISPATCHING },
               unboundLegacyEvidenceWhere,
-              { batch: { state: { in: [DELIVERY.DISPATCHING, DELIVERY.BLOCKED] } } },
+              { batch: { state: { notIn: nonHoldingDeliveryStates } } },
             ],
           },
         }));

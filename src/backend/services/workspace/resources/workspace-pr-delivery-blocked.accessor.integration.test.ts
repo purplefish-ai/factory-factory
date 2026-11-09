@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, beforeEach, expect, it, vi } from 'vitest';
+import { ZodError } from 'zod';
 import {
   createIntegrationDatabase,
   destroyIntegrationDatabase,
@@ -227,6 +228,21 @@ it('fails closed when a persisted delivery state is unknown', async () => {
     where: { id: 'claimed' },
     data: { state: 'MYSTERY' },
   });
-  await expect(readDeliveryEvents(db.prisma, { workspaceId: 'w' })).rejects.toThrow();
-  await expect(exportWorkspace('w')).rejects.toThrow();
+  await expect(readDeliveryEvents(db.prisma, { workspaceId: 'w' })).rejects.toThrow(ZodError);
+  await expect(exportWorkspace('w')).rejects.toThrow(ZodError);
+  expect(await claim('w', 'next', [await fact('w', 'later')])).toBeNull();
+});
+
+it('keeps delivered members of a dismissed batch as delivered history', async () => {
+  const [delivered = '', pending = ''] = await blockLegacyBatch('w', 'legacy-blocked');
+  await db.prisma.workspacePREvent.update({
+    where: { id: delivered },
+    data: { state: 'DELIVERED' },
+  });
+  await workspacePrEventAccessor.discardBlockedDeliveries('w');
+  const states = new Map(
+    (await readDeliveryEvents(db.prisma, { workspaceId: 'w' })).map((e) => [e.id, e.state])
+  );
+  expect(states.get(delivered)).toBe('DELIVERED');
+  expect(states.get(pending)).toBe('CANCELLED');
 });
