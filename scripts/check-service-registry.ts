@@ -17,7 +17,9 @@ const rootDir = process.cwd();
 const backendRoot = path.join(rootDir, 'src/backend');
 const servicesRoot = path.join(rootDir, 'src/backend/services');
 const declaredServices: Record<ServiceName, ServiceDefinition> = serviceRegistry;
-const bridgeWiringCallPattern = /\.(?:configure[A-Za-z]*|setHandler)\(/u;
+// A cheap prefilter; the AST scanner decides what is actually a wiring call.
+const bridgeWiringCallPattern = /\b(?:configure[A-Za-z]*|setHandler)\s*[<(]/u;
+// `*.test-helpers.ts`, `*.test-support.ts`, `*.test-harness.ts` and test directories.
 const testSupportPathPattern = /(?:^|\/)(?:testing|test-utils)\/|\.test-[a-z-]+\.tsx?$/u;
 const schemaPath = path.join(rootDir, 'prisma/schema.prisma');
 const prismaGeneratedRoot = path.join(rootDir, 'prisma/generated');
@@ -260,6 +262,15 @@ function validateCrossServiceImport(
   }
 }
 
+function importedSetFor(
+  importedDependencies: Map<ServiceName, Set<ServiceName>>,
+  serviceName: ServiceName
+): Set<ServiceName> {
+  const imported = importedDependencies.get(serviceName) ?? new Set<ServiceName>();
+  importedDependencies.set(serviceName, imported);
+  return imported;
+}
+
 /** Validates cross-capsule imports and returns the capsules each capsule imports. */
 function checkCrossServiceImports(errors: string[]): Map<ServiceName, Set<ServiceName>> {
   const serviceFiles = listTypeScriptFiles(servicesRoot);
@@ -292,8 +303,11 @@ function checkCrossServiceImports(errors: string[]): Map<ServiceName, Set<Servic
       continue;
     }
     const allowedDependencies = new Set(serviceRegistry[fromService].dependsOn);
-    const imported = importedDependencies.get(fromService) ?? new Set<ServiceName>();
-    importedDependencies.set(fromService, imported);
+    // Test support still obeys the import allowlist, but cannot keep a
+    // production dependency declaration alive.
+    const imported = testSupportPathPattern.test(relativePath)
+      ? new Set<ServiceName>()
+      : importedSetFor(importedDependencies, fromService);
 
     for (const moduleSpecifier of collectModuleSpecifiers(filePath)) {
       validateCrossServiceImport(
