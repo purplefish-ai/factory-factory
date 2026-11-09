@@ -185,7 +185,7 @@ const RUN_CHILD_REVIEWS_TOOL = {
   review tends to find fresh nits, so an agent that re-reviews fixes unprompted
   has no natural stopping point. This is guidance, not a limit; a per-PR
   cooldown is the follow-up if loops appear in practice. `already_active` is not
-  a limit here, because it only covers reviews still running.
+  a limit here, because it covers only reviews that are queued or still running.
 - `run_child_adversarial_reviews` is offered only in normal chat sessions, never
   in adversarial-review, Ratchet, PR-monitoring, scheduled or event-driven
   sessions. Today every session in a workspace gets the same MCP tools, because
