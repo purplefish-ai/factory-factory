@@ -278,16 +278,17 @@ chunks, with `parseChatServerMessage` from
 `ChatServerMessageSchema` is a Zod discriminated union over every type in the
 `WebSocketMessage` protocol type, and its output satisfies that type. Backend
 senders are typed against `WebSocketMessage`; direct requester replies go
-through `serializeChatFrame`. Live `agent_message` events must carry their
-transcript `order`; live `session_lifecycle` rows need an event id, copy and a
-parseable timestamp.
+through `serializeChatFrame`. `agent_message` events must carry their transcript
+`order`. `session_lifecycle` rows in `agent_message` events and snapshot
+transcripts need an event id, copy and a parseable timestamp.
 
 An invalid frame is dropped before hydration bookkeeping or the reducer sees it.
 The client logs the Zod issues to the console and shows one deduplicated error
 toast. Snapshots, deltas and live events are all-or-nothing. A replay batch is
 the one exception: each invalid replay event is dropped and reported
 individually, so one malformed historical event cannot make a session
-unloadable.
+unloadable. Malformed or oversized replay chunks are reported the same way;
+chunks stranded by a reconnect or a superseding load are dropped silently.
 
 Every snapshot and replay array is parsed in full; there is no cheaper envelope
 check. Parsing a replay of 1,000 agent messages (about 1 MB of JSON) took about

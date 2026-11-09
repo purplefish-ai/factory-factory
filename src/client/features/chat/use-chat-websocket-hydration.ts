@@ -1,24 +1,24 @@
 import { z } from 'zod';
+import type { WebSocketMessage } from '@/lib/chat-protocol';
 
-const HydrationBatchSchema = z.object({
-  type: z.enum(['session_replay_batch', 'session_snapshot']),
-  loadRequestId: z.string().optional(),
-});
-
-export type HydrationBatch = z.infer<typeof HydrationBatchSchema>;
+export type HydrationBatch = Extract<
+  WebSocketMessage,
+  { type: 'session_replay_batch' | 'session_snapshot' }
+>;
 export type HydrationBatchDecision = 'pass' | 'drop' | 'match';
 export type LoadSessionRetryDecision = 'retry' | 'stale' | 'exhausted';
 export const CONNECT_LOADING_DEBOUNCE_MS = 300;
 export const LOAD_SESSION_MAX_RETRY_ATTEMPTS = 3;
 
-/** Reads the load correlation of a snapshot or replay batch; other frames return null. */
-export function parseHydrationBatch(data: unknown): HydrationBatch | null {
-  const batch = HydrationBatchSchema.safeParse(data);
-  return batch.success ? batch.data : null;
+/** Snapshots and replay batches carry hydration; other validated frames return null. */
+export function getHydrationBatch(message: WebSocketMessage): HydrationBatch | null {
+  return message.type === 'session_replay_batch' || message.type === 'session_snapshot'
+    ? message
+    : null;
 }
 
 export function evaluateHydrationBatch(
-  batch: HydrationBatch,
+  batch: Pick<HydrationBatch, 'loadRequestId'>,
   pendingLoadRequestId: string | null,
   acceptedLoadRequestId: string | null = null
 ): HydrationBatchDecision {

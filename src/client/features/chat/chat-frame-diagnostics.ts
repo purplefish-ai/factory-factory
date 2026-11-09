@@ -32,6 +32,14 @@ function reportInvalidChatFrame(data: unknown, error: z.ZodError): void {
   notify();
 }
 
+/** Replay chunks that are malformed, oversized or reassemble into an invalid batch. */
+export function reportInvalidReplayFrame(error: unknown): void {
+  logProtocolError('[chat] Dropped an invalid replay frame', {
+    issues: error instanceof z.ZodError ? z.prettifyError(error) : String(error),
+  });
+  notify();
+}
+
 /** Replay events removed from an otherwise valid replay batch. */
 function reportDroppedChatElements(type: string, dropped: DroppedChatElement[]): void {
   logProtocolError('[chat] Dropped invalid elements from a WebSocket frame', {

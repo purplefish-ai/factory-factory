@@ -65,16 +65,20 @@ it('translates provider updates into frames the chat client accepts', () => {
     translator.translateSessionUpdate(update)
   );
 
-  expect(new Set(deltas.map((delta) => delta.type))).toEqual(
-    new Set([
-      'agent_message',
-      'tool_progress',
-      'task_notification',
-      'slash_commands',
-      'compacting_start',
-      'config_options_update',
-    ])
-  );
+  expect(deltas.map((delta) => delta.type)).toEqual([
+    'agent_message',
+    'agent_message',
+    'agent_message',
+    'tool_progress',
+    'tool_progress',
+    'tool_progress',
+    'agent_message',
+    'task_notification',
+    'slash_commands',
+    'agent_message',
+    'compacting_start',
+    'config_options_update',
+  ]);
   for (const [order, delta] of deltas.entries()) {
     // The event processor assigns a transcript order before publishing agent messages.
     const frame = { type: 'session_delta', data: { ...delta, order } };

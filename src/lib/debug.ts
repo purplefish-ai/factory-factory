@@ -2,7 +2,8 @@
  * Debug utility for frontend logging.
  *
  * Provides a centralized way to log debug information in development.
- * All logging is disabled unless explicitly enabled via the DEBUG flag.
+ * Debug logging is disabled unless explicitly enabled via the DEBUG flag;
+ * `logProtocolError` is the exception and always reports protocol faults.
  */
 
 type LogFn = (...args: unknown[]) => void;

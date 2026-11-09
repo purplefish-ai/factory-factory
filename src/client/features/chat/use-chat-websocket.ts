@@ -15,7 +15,7 @@ import { buildWebSocketUrl } from '@/lib/websocket-config';
 import { SessionReplayAssembler } from '@/shared/acp-protocol/protocol/replay-framing';
 import type { ChatBarCapabilities } from '@/shared/chat-capabilities';
 import type { SessionRuntimeState } from '@/shared/session-runtime';
-import { readChatFrame } from './chat-frame-diagnostics';
+import { readChatFrame, reportInvalidReplayFrame } from './chat-frame-diagnostics';
 import type {
   AcpConfigOption,
   AcpPlanState,
@@ -29,7 +29,7 @@ import { useChatState } from './use-chat-state';
 import {
   evaluateHydrationBatch,
   evaluateLoadSessionRetry,
-  parseHydrationBatch,
+  getHydrationBatch,
   parseHydrationLoadError,
   scheduleConnectLoadingStart,
 } from './use-chat-websocket-hydration';
@@ -159,7 +159,7 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
   // This works because:
   // 1. sendRef.current is updated synchronously after useWebSocketTransport returns
   // 2. The callback wrapper ((msg) => sendRef.current(msg)) always uses the latest ref value
-  const replayAssembler = useRef(new SessionReplayAssembler());
+  const replayAssembler = useRef(new SessionReplayAssembler(reportInvalidReplayFrame));
   const sendRef = useRef<WebSocketSend>(() => false);
   const currentLoadRequestIdRef = useRef<string | null>(null);
   const exhaustedLoadRequestIdRef = useRef<string | null>(null);
@@ -254,7 +254,7 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
   /** Records hydration for snapshots and replay batches; false drops a stale one. */
   const admitHydrationBatch = useCallback(
     (data: WebSocketMessage): boolean => {
-      const batch = parseHydrationBatch(data);
+      const batch = getHydrationBatch(data);
       if (!batch) {
         return true;
       }

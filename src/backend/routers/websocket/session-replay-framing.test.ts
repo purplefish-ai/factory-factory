@@ -55,6 +55,21 @@ it('keeps small legacy batches unchanged', () => {
   expect([...frameSessionReplay({ ...batch, replayEvents: [] })]).toEqual([batch]);
 });
 
+it('reports malformed replay frames but not chunks stranded by a superseded replay', () => {
+  const frames = [...frameSessionReplay(largeBatch())];
+  const onInvalidFrame = vi.fn();
+  const assembler = new SessionReplayAssembler(onInvalidFrame);
+  expect(assembler.accept(frames[1])).toBeNull();
+  assembler.accept(frames[0]);
+  expect(assembler.accept(frames[2])).toBeNull();
+  expect(onInvalidFrame).not.toHaveBeenCalled();
+
+  expect(assembler.accept({ ...frames[0], replayId: '' })).toBeNull();
+  expect(onInvalidFrame).toHaveBeenCalledOnce();
+  expect(assembler.accept({ type: 'session_replay_chunk', index: 0 })).toBeNull();
+  expect(onInvalidFrame).toHaveBeenCalledTimes(2);
+});
+
 it('drops interrupted, reordered, expired and oversized batches and accepts a fresh replay', () => {
   const frames = [...frameSessionReplay(largeBatch())];
   const assembler = new SessionReplayAssembler();

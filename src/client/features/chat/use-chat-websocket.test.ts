@@ -9,10 +9,11 @@
  * clears the guard when a matching response is received.
  */
 import { describe, expect, it } from 'vitest';
+import type { WebSocketMessage } from '@/lib/chat-protocol';
 import {
   evaluateHydrationBatch,
   evaluateLoadSessionRetry,
-  parseHydrationBatch,
+  getHydrationBatch,
   scheduleConnectLoadingStart,
   shouldScheduleConnectLoading,
 } from './use-chat-websocket-hydration';
@@ -25,10 +26,25 @@ interface GuardState {
   messageProcessed: boolean;
 }
 
+function snapshot(loadRequestId?: string): WebSocketMessage {
+  return {
+    type: 'session_snapshot',
+    messages: [],
+    queuedMessages: [],
+    sessionRuntime: {
+      phase: 'idle',
+      processState: 'alive',
+      activity: 'IDLE',
+      updatedAt: '2026-11-09T00:00:00.000Z',
+    },
+    ...(loadRequestId ? { loadRequestId } : {}),
+  };
+}
+
 // Helper function that simulates the handleMessage logic from the hook
 function createHandleMessage(guardState: GuardState) {
-  return (data: unknown) => {
-    const batch = parseHydrationBatch(data);
+  return (data: WebSocketMessage) => {
+    const batch = getHydrationBatch(data);
     if (batch) {
       const decision = evaluateHydrationBatch(
         batch,
@@ -91,7 +107,7 @@ describe('useChatWebSocket hydration guard logic', () => {
       };
       const handleMessage = createHandleMessage(guardState);
 
-      handleMessage({ type: 'session_snapshot', loadRequestId: 'load-123' });
+      handleMessage(snapshot('load-123'));
 
       expect(guardState.currentLoadRequestId).toBe(null);
       expect(guardState.clearLoadTimeoutCalled).toBe(true);
@@ -120,7 +136,7 @@ describe('useChatWebSocket hydration guard logic', () => {
       const handleMessage = createHandleMessage(guardState);
 
       // This simulates an unrelated snapshot (e.g., from enqueuing a message)
-      handleMessage({ type: 'session_snapshot' });
+      handleMessage(snapshot());
 
       // Guard should NOT be cleared
       expect(guardState.currentLoadRequestId).toBe('load-123');
@@ -152,7 +168,7 @@ describe('useChatWebSocket hydration guard logic', () => {
       const handleMessage = createHandleMessage(guardState);
 
       // This simulates a stale message from a previous connection attempt
-      handleMessage({ type: 'session_snapshot', loadRequestId: 'load-000' });
+      handleMessage(snapshot('load-000'));
 
       // Guard should NOT be cleared and message should be rejected
       expect(guardState.currentLoadRequestId).toBe('load-123');
@@ -169,7 +185,7 @@ describe('useChatWebSocket hydration guard logic', () => {
       const handleMessage = createHandleMessage(guardState);
 
       // Late load responses should be ignored once hydration has completed
-      handleMessage({ type: 'session_snapshot', loadRequestId: 'load-999' });
+      handleMessage(snapshot('load-999'));
 
       expect(guardState.currentLoadRequestId).toBe(null);
       expect(guardState.clearLoadTimeoutCalled).toBe(false);
@@ -185,7 +201,7 @@ describe('useChatWebSocket hydration guard logic', () => {
       };
       const handleMessage = createHandleMessage(guardState);
 
-      handleMessage({ type: 'session_snapshot', loadRequestId: 'load-123' });
+      handleMessage(snapshot('load-123'));
 
       expect(guardState.currentLoadRequestId).toBe(null);
       expect(guardState.exhaustedLoadRequestId).toBe(null);
@@ -202,7 +218,7 @@ describe('useChatWebSocket hydration guard logic', () => {
       };
       const handleMessage = createHandleMessage(guardState);
 
-      handleMessage({ type: 'session_snapshot', loadRequestId: 'load-999' });
+      handleMessage(snapshot('load-999'));
 
       expect(guardState.currentLoadRequestId).toBe(null);
       expect(guardState.exhaustedLoadRequestId).toBe('load-123');
@@ -218,7 +234,7 @@ describe('useChatWebSocket hydration guard logic', () => {
       };
       const handleMessage = createHandleMessage(guardState);
 
-      handleMessage({ type: 'session_snapshot' });
+      handleMessage(snapshot());
 
       expect(guardState.currentLoadRequestId).toBe(null);
       expect(guardState.clearLoadTimeoutCalled).toBe(false);
@@ -234,7 +250,7 @@ describe('useChatWebSocket hydration guard logic', () => {
       };
       const handleMessage = createHandleMessage(guardState);
 
-      handleMessage({ type: 'session_snapshot' });
+      handleMessage(snapshot());
 
       expect(guardState.exhaustedLoadRequestId).toBe(null);
       expect(guardState.messageProcessed).toBe(true);
@@ -337,7 +353,7 @@ describe('useChatWebSocket hydration guard logic', () => {
         guardState.currentLoadRequestId = null;
       }
 
-      createHandleMessage(guardState)({ type: 'session_snapshot' });
+      createHandleMessage(guardState)(snapshot());
 
       expect(loadingEnded).toBe(true);
       expect(guardState.currentLoadRequestId).toBe(null);

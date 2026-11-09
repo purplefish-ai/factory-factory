@@ -1,3 +1,5 @@
+import { z } from 'zod';
+import { logProtocolError } from '@/lib/debug';
 import {
   AcpEventTranslator,
   type AcpTranslationLogger,
@@ -65,6 +67,10 @@ function applySessionDelta(
   // Translator output is untyped provider data; validate it like a wire frame.
   const parsed = parseChatServerMessage({ ...delta, order, messageId });
   if (!parsed.success) {
+    logProtocolError('[chat] Dropped an invalid subagent transcript update', {
+      type: delta.type,
+      issues: z.prettifyError(parsed.error),
+    });
     return state;
   }
   const action = createActionFromWebSocketMessage(parsed.message);
