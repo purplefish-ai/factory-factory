@@ -1169,13 +1169,13 @@ finalization each have one coordinator or service.
 in-memory state. Collaborators register disposers in the composition root, and
 the coordinators run the scope's stages instead of listing collaborators:
 
-| Stage           | Run by                                   | Disposers                                       |
-| --------------- | ---------------------------------------- | ----------------------------------------------- |
-| `beginTeardown` | Stop and runtime exit, first             | Prompt-turn completion, queued ACP prompts      |
-| `quiesce`       | Stop, before the runtime stops           | Streaming and replay state, pending permissions |
-| `settle`        | Stop and exit, after orphan finalization | ACP event state; permissions on exit            |
-| `completeStop`  | Every stop, before the reservation ends  | Dispatch claim, steering, retries, mail claims  |
-| `forget`        | `session_permanently_deleted`            | Configuration, observed-empty, manual resume    |
+| Stage           | Run by                                   | Disposers                                                       |
+| --------------- | ---------------------------------------- | --------------------------------------------------------------- |
+| `beginTeardown` | Stop and runtime exit, first             | Prompt-turn completion, queued ACP prompts                      |
+| `quiesce`       | Stop, before the runtime stops           | Streaming and replay state, pending permissions                 |
+| `settle`        | Stop and exit, after orphan finalization | ACP event state; permissions on exit                            |
+| `completeStop`  | Every stop, before the reservation ends  | Dispatch claim, steering, retries, mail claims                  |
+| `forget`        | `session_permanently_deleted`            | Dispatch state and manual resume, configuration, observed-empty |
 
 Stages run disposers in registration order and log, rather than propagate, a
 disposer failure. Every stop caller (WebSocket, tRPC, admin, orchestration)

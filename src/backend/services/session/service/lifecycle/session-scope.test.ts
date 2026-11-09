@@ -1,4 +1,16 @@
 import { describe, expect, it, vi } from 'vitest';
+
+const mockLogger = vi.hoisted(() => ({
+  debug: vi.fn(),
+  info: vi.fn(),
+  warn: vi.fn(),
+  error: vi.fn(),
+}));
+
+vi.mock('@/backend/services/logger.service', () => ({
+  createLogger: () => mockLogger,
+}));
+
 import { registerSessionRuntimeParticipants, SessionScope } from './session-scope';
 
 describe('SessionScope', () => {
@@ -42,6 +54,12 @@ describe('SessionScope', () => {
 
     expect(() => scope.completeStop('s')).not.toThrow();
     expect(later).toHaveBeenCalledWith('s', 'stop');
+    expect(mockLogger.warn).toHaveBeenCalledWith('Session scope disposer failed', {
+      sessionId: 's',
+      stage: 'completeStop',
+      participant: 'failing',
+      error: 'dispose failed',
+    });
   });
 
   it('rejects duplicate participant names', () => {
