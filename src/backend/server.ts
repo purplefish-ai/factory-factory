@@ -24,6 +24,7 @@ import type { Application } from './app-context';
 import { createShutdownPlan, runShutdownPlan } from './application-shutdown';
 import { toError } from './lib/error-utils';
 import { eventLoopMonitor } from './lib/event-loop-monitor';
+import { type CloseListeners, listenHttpServer } from './lib/http-listen';
 import {
   createCorsMiddleware,
   createRequestLoggerMiddleware,
@@ -114,28 +115,16 @@ export function createServer(application: Application, requestedPort?: number): 
   const isAddressInUseError = (error: unknown): error is NodeJS.ErrnoException =>
     error instanceof Error && (error as NodeJS.ErrnoException).code === 'EADDRINUSE';
 
-  const listenOnPort = (port: number): Promise<void> =>
-    new Promise((resolve, reject) => {
-      const onError = (error: Error) => {
-        server.off('listening', onListening);
-        reject(error);
-      };
-      const onListening = () => {
-        server.off('error', onError);
-        resolve();
-      };
+  // Closes the `::1` listener when BACKEND_HOST is unset (see listenHttpServer).
+  let closeExtraListeners: CloseListeners = () => Promise.resolve();
 
-      server.once('error', onError);
-      server.once('listening', onListening);
-
-      try {
-        server.listen(port, REQUESTED_HOST);
-      } catch (error) {
-        server.off('error', onError);
-        server.off('listening', onListening);
-        reject(error);
-      }
+  const listenOnPort = async (port: number): Promise<void> => {
+    closeExtraListeners = await listenHttpServer(server, port, REQUESTED_HOST, {
+      onIpv6Unavailable: (errorCode) => {
+        logger.info('IPv6 loopback unavailable; listening on 127.0.0.1 only', { errorCode });
+      },
     });
+  };
 
   const bindServerWithPortFallback = async (): Promise<void> => {
     let lastAddressInUseError: NodeJS.ErrnoException | undefined;
@@ -175,19 +164,22 @@ export function createServer(application: Application, requestedPort?: number): 
   };
 
   const closeBoundServer = async (): Promise<void> => {
-    if (!server.listening) {
-      return;
-    }
-
-    await new Promise<void>((resolve, reject) => {
-      server.close((error) => {
-        if (error) {
-          reject(error);
-          return;
-        }
-        resolve();
-      });
-    });
+    // Close both listeners together: `server.close()` also ends idle
+    // connections accepted on `::1`, which the companion close waits for.
+    await Promise.all([
+      closeExtraListeners(),
+      server.listening
+        ? new Promise<void>((resolve, reject) => {
+            server.close((error) => {
+              if (error) {
+                reject(error);
+                return;
+              }
+              resolve();
+            });
+          })
+        : undefined,
+    ]);
   };
 
   const closeWebSocketServer = async (): Promise<void> => {
