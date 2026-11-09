@@ -53,8 +53,11 @@ type SessionAccessor = {
   recoverStaleRunning(): Promise<number>;
 };
 
+/** Workspace reads here omit the large `initOutput` and `creationMetadata` blobs. */
+type SessionWorkspace = Omit<Workspace, 'initOutput' | 'creationMetadata'>;
+
 type WorkspaceAccessor = {
-  findById(id: string): Promise<Workspace | null>;
+  findById(id: string): Promise<SessionWorkspace | null>;
   recordSessionPresence(id: string): Promise<void>;
 };
 
@@ -72,7 +75,7 @@ export class SessionRepository {
     return this.sessions.findByWorkspaceId(workspaceId);
   }
 
-  getWorkspaceById(workspaceId: string): Promise<Workspace | null> {
+  getWorkspaceById(workspaceId: string): Promise<SessionWorkspace | null> {
     return this.workspaces.findById(workspaceId);
   }
 

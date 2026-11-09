@@ -63,7 +63,8 @@ afterAll(async () => {
 });
 
 it('reads workspace detail without creation metadata, init output or provider metadata', async () => {
-  const full = await workspaceAccessor.findById('w');
+  const full = await db.prisma.workspace.findUnique({ where: { id: 'w' } });
+  const narrow = await workspaceAccessor.findById('w');
   const detail = await workspaceDetailReadAccessor.findDetailById('w');
 
   expect(detail).toMatchObject({
@@ -77,18 +78,9 @@ it('reads workspace detail without creation metadata, init output or provider me
   expect(detail).not.toHaveProperty('initOutput');
   expect(detail?.agentSessions[0]).not.toHaveProperty('providerMetadata');
 
-  // Detail keeps every other field the full read returns.
-  const {
-    creationMetadata: _creationMetadata,
-    initOutput: _initOutput,
-    agentSessions: fullSessions,
-    ...fullRest
-  } = full!;
-  const { initialPrompt: _initialPrompt, agentSessions: detailSessions, ...detailRest } = detail!;
-  expect(detailRest).toEqual(fullRest);
-  expect(detailSessions).toEqual(
-    fullSessions.map(({ providerMetadata: _providerMetadata, ...session }) => session)
-  );
+  // Detail is the narrow server read plus the initial prompt.
+  const { initialPrompt: _initialPrompt, ...detailRest } = detail!;
+  expect(detailRest).toEqual(narrow);
 
   const fullBytes = JSON.stringify(full).length;
   const detailBytes = JSON.stringify(detail).length;

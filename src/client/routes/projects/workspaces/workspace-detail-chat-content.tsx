@@ -6,7 +6,6 @@ import {
   getChatPendingRequestType,
   PermissionPrompt,
   QuestionPrompt,
-  RewindConfirmationDialog,
   useGroupedChatMessages,
   useTranscriptSend,
   ChatTranscript,
@@ -74,11 +73,6 @@ export interface ChatContentProps {
   slashCommands: CommandInfo[];
   slashCommandsLoaded: ReturnType<typeof useChatWebSocket>['slashCommandsLoaded'];
   tokenStats: TokenStats;
-  rewindPreview: ReturnType<typeof useChatWebSocket>['rewindPreview'];
-  startRewindPreview: ReturnType<typeof useChatWebSocket>['startRewindPreview'];
-  confirmRewind: ReturnType<typeof useChatWebSocket>['confirmRewind'];
-  cancelRewind: ReturnType<typeof useChatWebSocket>['cancelRewind'];
-  getUuidForMessageId: ReturnType<typeof useChatWebSocket>['getUuidForMessageId'];
   acpConfigOptions: ReturnType<typeof useChatWebSocket>['acpConfigOptions'];
   setConfigOption: ReturnType<typeof useChatWebSocket>['setConfigOption'];
   autoStartPending?: boolean;
@@ -234,7 +228,6 @@ export const ChatContent = memo(function ChatContent(props: ChatContentProps) {
   const stopping = props.sessionStatus.phase === 'stopping';
   const displayStartingState = shouldShowStartingState(props.sessionStatus.phase, autoStartPending);
   const loadingSession = props.sessionStatus.phase === 'loading';
-  const rewindEnabled = props.chatCapabilities.rewind.enabled;
 
   const permissionRequestId =
     props.pendingRequest.type === 'permission' ? props.pendingRequest.request.requestId : null;
@@ -323,8 +316,6 @@ export const ChatContent = memo(function ChatContent(props: ChatContentProps) {
             : undefined
         }
         isCompacting={props.isCompacting}
-        getUuidForMessageId={props.getUuidForMessageId}
-        onRewindToMessage={rewindEnabled ? props.startRewindPreview : undefined}
         resolveWorkspaceFileLink={props.resolveWorkspaceFileLink}
         onWorkspaceFileLink={props.onWorkspaceFileLink}
         initBanner={props.initBanner}
@@ -389,12 +380,6 @@ export const ChatContent = memo(function ChatContent(props: ChatContentProps) {
           />
         </div>
       </div>
-
-      <RewindConfirmationDialog
-        rewindPreview={props.rewindPreview}
-        onConfirm={props.confirmRewind}
-        onCancel={props.cancelRewind}
-      />
     </div>
   );
 });

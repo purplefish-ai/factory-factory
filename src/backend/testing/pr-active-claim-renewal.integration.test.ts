@@ -145,9 +145,9 @@ it.each([
       attempt: 1,
       bindingRevision: current.bindingRevision,
     });
-    expect(await port.fail(ready.delivery, new Error('Late old failure'))).toEqual({
-      paused: false,
-    });
+    expect(
+      await port.fail(ready.delivery, { reason: 'failed', error: new Error('Late old failure') })
+    ).toEqual({ paused: false });
     expect(await owner.validate(next)).toBe(true);
     for (const row of await rows()) {
       expect(row).toMatchObject({

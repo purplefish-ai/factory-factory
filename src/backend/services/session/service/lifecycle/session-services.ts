@@ -23,6 +23,7 @@ import {
   sessionPermissionService,
   sessionPromptTurnCompletionService,
   sessionRetryService,
+  sessionScope,
   sessionService,
 } from './session-core-services';
 import {
@@ -67,6 +68,10 @@ const dispatchLifecycle = {
 };
 
 sessionDispatchService.configureLifecycle(dispatchLifecycle);
+sessionScope.register('dispatch', {
+  completeStop: (id) => sessionDispatchService.resetDispatchState(id),
+  forget: (id) => sessionDispatchService.forgetSession(id),
+});
 /** Resource adapters stay in the capsule; application composition supplies runtime capabilities. */
 export function createSessionLoadService(
   ports: Omit<

@@ -237,7 +237,6 @@ export class ChatConnectionRegistry {
         dbSessionId,
         type: payload.type,
         innerType: delta?.type,
-        uuid: delta?.uuid,
       });
     }
 

@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import Database from 'better-sqlite3';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { runMigrations } from './migrate';
+import { runMigrations, UnknownAppliedMigrationsError } from './migrate';
 
 describe('runMigrations', () => {
   let tempDir: string;
@@ -612,5 +612,219 @@ line three');`
     } finally {
       db.close();
     }
+  });
+
+  describe('database integrity checks', () => {
+    const silent = () => {
+      /* no-op */
+    };
+
+    const addMigration = (name: string, sql: string) => {
+      createMigrationDir(name);
+      setupMigration(name, sql);
+    };
+
+    const migrate = (overrides: Partial<Parameters<typeof runMigrations>[0]> = {}) => {
+      const warnings: string[] = [];
+      runMigrations({
+        databasePath,
+        migrationsPath,
+        log: silent,
+        warn: (msg) => warnings.push(msg),
+        ...overrides,
+      });
+      return warnings;
+    };
+
+    const recordForeignMigration = (name: string, finished: boolean) => {
+      const db = new Database(databasePath);
+      try {
+        db.prepare(
+          `INSERT INTO _prisma_migrations (id, checksum, migration_name, started_at, finished_at)
+           VALUES (?, 'abc', ?, CURRENT_TIMESTAMP, ${finished ? 'CURRENT_TIMESTAMP' : 'NULL'})`
+        ).run(`id-${name}`, name);
+      } finally {
+        db.close();
+      }
+    };
+
+    const withDatabase = <T>(read: (db: Database.Database) => T): T => {
+      const db = new Database(databasePath);
+      try {
+        return read(db);
+      } finally {
+        db.close();
+      }
+    };
+
+    it('refuses a database with applied migrations this build does not ship, before applying anything', () => {
+      addMigration('001_users', 'CREATE TABLE users (id INTEGER PRIMARY KEY);');
+      migrate();
+      recordForeignMigration('003_from_newer_version', true);
+      recordForeignMigration('002_also_newer', true);
+      addMigration('004_pending', 'CREATE TABLE pending (id INTEGER PRIMARY KEY);');
+
+      let thrown: unknown;
+      try {
+        migrate();
+      } catch (error) {
+        thrown = error;
+      }
+
+      expect(thrown).toBeInstanceOf(UnknownAppliedMigrationsError);
+      const error = thrown as UnknownAppliedMigrationsError;
+      expect(error.migrationNames).toEqual(['002_also_newer', '003_from_newer_version']);
+      expect(error.message).toContain('002_also_newer, 003_from_newer_version');
+      expect(error.message).toContain('Upgrade Factory Factory');
+      expect(error.message).toContain(databasePath);
+      expect(withDatabase(getAppliedMigrations)).not.toContain('004_pending');
+    });
+
+    it('only warns about unknown applied migrations when allowed, and still applies pending ones', () => {
+      addMigration('001_users', 'CREATE TABLE users (id INTEGER PRIMARY KEY);');
+      migrate();
+      recordForeignMigration('002_other_branch', true);
+      addMigration('003_this_branch', 'CREATE TABLE this_branch (id INTEGER PRIMARY KEY);');
+
+      const warnings = migrate({ unknownMigrations: 'warn' });
+
+      expect(warnings).toHaveLength(1);
+      expect(warnings[0]).toContain('002_other_branch');
+      expect(warnings[0]).toContain('WARNING');
+      expect(withDatabase(getAppliedMigrations)).toContain('003_this_branch');
+    });
+
+    it('ignores unknown migrations that never finished', () => {
+      addMigration('001_users', 'CREATE TABLE users (id INTEGER PRIMARY KEY);');
+      migrate();
+      recordForeignMigration('002_failed_elsewhere', false);
+
+      expect(migrate()).toEqual([]);
+    });
+
+    it('warns, without failing, when an applied migration changed on disk', () => {
+      addMigration('001_users', 'CREATE TABLE users (id INTEGER PRIMARY KEY);');
+      addMigration('002_posts', 'CREATE TABLE posts (id INTEGER PRIMARY KEY);');
+      migrate();
+      setupMigration('001_users', 'CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT);');
+
+      const warnings = migrate();
+
+      expect(warnings).toHaveLength(1);
+      expect(warnings[0]).toContain('001_users');
+      expect(warnings[0]).not.toContain('002_posts');
+    });
+
+    it('does not compare legacy empty checksums or line-ending-only changes', () => {
+      addMigration(
+        '001_users',
+        'CREATE TABLE users (id INTEGER PRIMARY KEY);\nCREATE TABLE a (id INTEGER);\n'
+      );
+      addMigration('002_posts', 'CREATE TABLE posts (id INTEGER PRIMARY KEY);');
+      migrate();
+      withDatabase((db) =>
+        db
+          .prepare("UPDATE _prisma_migrations SET checksum = '' WHERE migration_name = '002_posts'")
+          .run()
+      );
+      setupMigration(
+        '001_users',
+        'CREATE TABLE users (id INTEGER PRIMARY KEY);\r\nCREATE TABLE a (id INTEGER);\r\n'
+      );
+      setupMigration('002_posts', 'CREATE TABLE posts (id INTEGER PRIMARY KEY, title TEXT);');
+
+      expect(migrate()).toEqual([]);
+    });
+
+    it('reports foreign key violations left by a migration that disabled foreign keys', () => {
+      addMigration(
+        '001_tables',
+        `CREATE TABLE users (id INTEGER PRIMARY KEY);
+CREATE TABLE posts (id INTEGER PRIMARY KEY, user_id INTEGER NOT NULL REFERENCES users(id));`
+      );
+      addMigration(
+        '002_orphan_rebuild',
+        `PRAGMA defer_foreign_keys=ON;
+PRAGMA foreign_keys=OFF;
+INSERT INTO posts (id, user_id) VALUES (1, 42);
+INSERT INTO posts (id, user_id) VALUES (2, 43);
+PRAGMA foreign_keys=ON;
+PRAGMA defer_foreign_keys=OFF;`
+      );
+
+      const warnings = migrate();
+
+      expect(warnings).toHaveLength(1);
+      expect(warnings[0]).toContain('002_orphan_rebuild');
+      expect(warnings[0]).toContain('posts -> users (2)');
+      expect(withDatabase(getAppliedMigrations)).toEqual(['001_tables', '002_orphan_rebuild']);
+    });
+
+    it('reports only violations a migration added, and accepts PRAGMAs without semicolons', () => {
+      addMigration(
+        '001_tables',
+        `CREATE TABLE users (id INTEGER PRIMARY KEY);
+CREATE TABLE posts (id INTEGER PRIMARY KEY, user_id INTEGER NOT NULL REFERENCES users(id));`
+      );
+      migrate();
+      withDatabase((db) => {
+        db.pragma('foreign_keys = OFF');
+        db.prepare('INSERT INTO posts (id, user_id) VALUES (1, 42)').run();
+      });
+      addMigration(
+        '002_rebuild_keeps_old_orphan',
+        `PRAGMA foreign_keys=OFF
+CREATE TABLE notes (id INTEGER PRIMARY KEY);
+PRAGMA foreign_keys=ON`
+      );
+      addMigration(
+        '003_adds_orphan',
+        `PRAGMA foreign_keys=OFF
+INSERT INTO posts (id, user_id) VALUES (2, 43);
+PRAGMA foreign_keys=ON`
+      );
+
+      const warnings = migrate();
+
+      expect(warnings).toHaveLength(1);
+      expect(warnings[0]).toContain('003_adds_orphan left 1 new row(s)');
+      expect(warnings[0]).toContain('posts -> users (1)');
+    });
+
+    it('disables foreign keys before the transaction even for an interleaved PRAGMA without a semicolon', () => {
+      addMigration(
+        '001_tables',
+        `CREATE TABLE users (id INTEGER PRIMARY KEY);
+CREATE TABLE posts (id INTEGER PRIMARY KEY, user_id INTEGER NOT NULL REFERENCES users(id));`
+      );
+      addMigration(
+        '002_interleaved',
+        `CREATE TABLE notes (id INTEGER PRIMARY KEY);
+PRAGMA foreign_keys=OFF
+INSERT INTO posts (id, user_id) VALUES (1, 42);
+PRAGMA foreign_keys=ON`
+      );
+
+      const warnings = migrate();
+
+      expect(withDatabase(getAppliedMigrations)).toEqual(['001_tables', '002_interleaved']);
+      expect(warnings[0]).toContain('posts -> users (1)');
+    });
+
+    it('does not run the foreign key check after migrations that keep foreign keys on', () => {
+      addMigration(
+        '001_tables',
+        `CREATE TABLE users (id INTEGER PRIMARY KEY);
+CREATE TABLE posts (id INTEGER PRIMARY KEY, user_id INTEGER NOT NULL REFERENCES users(id));`
+      );
+      migrate();
+      withDatabase((db) => {
+        db.pragma('foreign_keys = OFF');
+        db.prepare('INSERT INTO posts (id, user_id) VALUES (1, 42)').run();
+      });
+      addMigration('002_plain', 'CREATE TABLE plain (id INTEGER PRIMARY KEY);');
+
+      expect(migrate()).toEqual([]);
+    });
   });
 });

@@ -1,3 +1,4 @@
+import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router';
 import { toast } from 'sonner';
@@ -11,6 +12,7 @@ import { getProjectSectionPath } from '@/client/lib/project-navigation';
 import { playSound } from '@/client/lib/sound';
 import { trpc } from '@/client/lib/trpc';
 import { claimWorkspaceCompletion } from '@/client/lib/workspace-notification-claim';
+import { fetchWorkspaceDetail } from '@/client/lib/workspace-queries';
 
 const notificationRequestSchema = z.object({
   workspaceId: z.string().min(1),
@@ -73,6 +75,7 @@ function showDesktopNotification(request: NotificationRequest, onOpen: () => Pro
 export function WorkspaceNotificationManager() {
   const { data: settings, isSuccess } = trpc.userSettings.get.useQuery();
   const utils = trpc.useUtils();
+  const queryClient = useQueryClient();
   const navigate = useNavigate();
   const voiceModeActiveRef = useRef(false);
   const soundEnabledRef = useRef(false);
@@ -98,7 +101,7 @@ export function WorkspaceNotificationManager() {
   useEffect(() => {
     let active = true;
     const openWorkspace = async (workspaceId: string) => {
-      const workspace = await utils.workspace.get.fetch({ id: workspaceId });
+      const workspace = await fetchWorkspaceDetail(queryClient, utils.client, workspaceId);
       const project = await utils.project.getById.fetch({ id: workspace.projectId });
       if (!project) {
         throw new Error('The workspace project is no longer available.');
@@ -146,6 +149,6 @@ export function WorkspaceNotificationManager() {
       active = false;
       window.removeEventListener('workspace-notification-request', onCompletion);
     };
-  }, [utils, navigate]);
+  }, [utils, queryClient, navigate]);
   return null;
 }

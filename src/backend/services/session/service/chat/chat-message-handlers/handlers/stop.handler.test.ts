@@ -4,7 +4,6 @@ const mocks = vi.hoisted(() => ({
   stopSession: vi.fn(),
   clearPendingRequest: vi.fn(),
   tryDispatchNextMessage: vi.fn(),
-  resetDispatchState: vi.fn(),
 }));
 
 vi.mock('@/backend/services/session/service/lifecycle/session-core-services', () => ({
@@ -32,14 +31,12 @@ describe('createStopHandler', () => {
       lifecycle: { stopSession: mocks.stopSession },
       clearPendingRequest: mocks.clearPendingRequest,
       tryDispatchNextMessage: mocks.tryDispatchNextMessage,
-      resetDispatchState: mocks.resetDispatchState,
     });
 
     await handler({ sessionId: 'session-1', workingDir: '/tmp/work' }, { type: 'stop' } as never);
 
     expect(mocks.stopSession).toHaveBeenCalledWith('session-1', { reason: 'USER_STOP' });
     expect(mocks.clearPendingRequest).toHaveBeenCalledWith('session-1');
-    expect(mocks.resetDispatchState).toHaveBeenCalledWith('session-1');
     expect(mocks.tryDispatchNextMessage).toHaveBeenCalledWith('session-1');
   });
 
@@ -54,7 +51,6 @@ describe('createStopHandler', () => {
       lifecycle: { stopSession: mocks.stopSession },
       clearPendingRequest: mocks.clearPendingRequest,
       tryDispatchNextMessage: mocks.tryDispatchNextMessage,
-      resetDispatchState: mocks.resetDispatchState,
     });
 
     const stopPromise = handler({ sessionId: 'session-1', workingDir: '/tmp/work' }, {

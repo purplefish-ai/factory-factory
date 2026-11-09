@@ -14,6 +14,7 @@ import type {
   SessionLoadService,
 } from '@/backend/services/session';
 import { createInitialSessionRuntimeState } from '@/shared/session-runtime';
+import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 
 const hoistedApplicationGraphMocks = vi.hoisted(() => ({
   computePendingRequestType: vi.fn(),
@@ -58,8 +59,12 @@ vi.mock('@/backend/orchestration/event-collector.orchestrator', () => ({
 vi.mock('@/backend/orchestration/linear-config.helper', () => ({
   getWorkspaceLinearContext: vi.fn().mockResolvedValue(null),
 }));
-vi.mock('@/backend/orchestration/reconciliation.service', () => ({ reconciliationService: {} }));
-vi.mock('@/backend/orchestration/scheduler.service', () => ({ schedulerService: {} }));
+vi.mock('@/backend/orchestration/reconciliation.service', () => ({
+  reconciliationService: { stopPeriodicCleanup: vi.fn(async () => undefined) },
+}));
+vi.mock('@/backend/orchestration/scheduler.service', () => ({
+  schedulerService: { stop: vi.fn(async () => undefined) },
+}));
 vi.mock('@/backend/orchestration/snapshot-reconciliation.orchestrator', () => ({
   SnapshotReconciliationService: class {
     start = vi.fn();
@@ -174,13 +179,17 @@ vi.mock('@/backend/services/logger.service', () => ({
   getLogFilePath: vi.fn(),
 }));
 vi.mock('@/backend/services/periodic-task', () => ({
-  periodicTaskService: {},
+  periodicTaskService: { stop: vi.fn(async () => undefined) },
 }));
 vi.mock('@/backend/services/port.service', () => ({ findAvailablePort: vi.fn() }));
-vi.mock('@/backend/services/ratchet', () => ({ ratchetService: {} }));
-vi.mock('@/backend/services/rate-limiter.service', () => ({ rateLimiter: {} }));
+vi.mock('@/backend/services/ratchet', () => ({
+  ratchetService: { stop: vi.fn(async () => undefined) },
+}));
+vi.mock('@/backend/services/rate-limiter.service', () => ({
+  rateLimiter: { stop: vi.fn(async () => undefined) },
+}));
 vi.mock('@/backend/services/run-script', () => ({
-  createRunScriptService: vi.fn(() => ({})),
+  createRunScriptService: vi.fn(() => ({ cleanup: vi.fn(async () => undefined) })),
   FactoryConfigService: { readConfig: vi.fn() },
   runScriptConfigPersistenceService: {},
   runScriptStateMachine: {},
@@ -198,7 +207,7 @@ vi.mock('@/backend/services/session', async () => {
     sessionBackgroundDeliveryService: { configure: vi.fn() },
     findPRDeliveryReceipt: vi.fn(),
     acpRuntimeManager: {},
-    acpTraceLogger: {},
+    acpTraceLogger: { cleanup: vi.fn() },
     chatEventForwarderService: {},
     createSessionLoadService: vi.fn(
       (ports: Pick<SessionLoadDependencies, 'getRuntimeSnapshot'>) =>
@@ -233,7 +242,7 @@ vi.mock('@/backend/services/session', async () => {
     sessionDataService: {},
     sessionDomainService: {},
     sessionEventBus: { publishToSession: vi.fn() },
-    sessionFileLogger: { log: vi.fn() },
+    sessionFileLogger: { log: vi.fn(), cleanup: vi.fn() },
     sessionLifecycleEventService: {},
     sessionLifecycleService: {
       stopAllClients: vi.fn().mockResolvedValue(undefined),
@@ -257,7 +266,7 @@ vi.mock('@/backend/services/settings', () => ({
   userSettingsService: {},
 }));
 vi.mock('@/backend/services/terminal', () => ({
-  terminalService: {},
+  terminalService: { cleanup: vi.fn() },
   terminalSessionService: {},
 }));
 vi.mock('@/backend/services/workspace', async () => ({
@@ -586,7 +595,11 @@ export function createFakeApplicationGraph(label = 'test'): FakeApplicationGraph
     retryQueuedDispatchAfterWorkspaceReady,
     runScriptConfigPersistenceService,
     runScriptService: createRunScriptService({ registerShutdownHandlers: false }),
-    portShareService: new PortShareService({ getTailscaleConfig: () => null }),
+    portShareService: new PortShareService({
+      getTailscaleConfig: () => null,
+      // No record file: graph disposal must not touch the filesystem.
+      records: unsafeCoerce({ write: vi.fn(async () => undefined) }),
+    }),
     runScriptStateMachine,
     schedulerService,
     serverInstanceService: createServerInstanceService(),
@@ -627,6 +640,7 @@ export function createFakeApplicationGraph(label = 'test'): FakeApplicationGraph
 
   const lifecycle = {
     database: prisma,
+    jobs: { stopAll: vi.fn(async () => undefined) },
     interceptors: {
       register: registerInterceptors,
       start: startInterceptors,

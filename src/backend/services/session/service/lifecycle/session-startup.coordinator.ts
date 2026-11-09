@@ -33,6 +33,7 @@ import {
   pinEventSession,
   requestsStartupCleanup,
 } from './event-session-startup';
+import { createResumeFailedError } from './pr-delivery-failure';
 import {
   assertSessionAccountBinding,
   resolveSessionCodexContext,
@@ -851,7 +852,7 @@ export class SessionStartupCoordinator {
       handle.sessionCreationOutcome.kind === 'resume_fallback' ||
       (cold && handle.sessionCreationOutcome.kind !== 'resumed')
     ) {
-      throw new Error('Required existing conversation could not be restored');
+      throw createResumeFailedError();
     }
   }
 

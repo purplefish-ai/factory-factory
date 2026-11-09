@@ -22,8 +22,8 @@ import type {
   SessionLifecycleEventService,
 } from './session-lifecycle-event.service';
 import type { SessionLifecycleGate } from './session-lifecycle-gate';
+import type { SessionScope } from './session-scope';
 import type { SessionWorkflowFinalizer } from './session-workflow-finalizer';
-import type { SessionPermissionService } from './session.permission.service';
 import type { SessionPromptTurnCompletionService } from './session.prompt-turn-completion.service';
 import type { SessionRepository } from './session.repository';
 import type { SessionRetryService } from './session.retry.service';
@@ -74,20 +74,13 @@ export type SessionTerminationCoordinatorDependencies = {
   > &
     Partial<Pick<AcpRuntimeManager, 'stopAndQuiesceObserved' | 'getRuntimeStopSource'>>;
   sessionDomainService: Pick<SessionDomainService, 'clearQueuedWork' | 'setRuntimeSnapshot'>;
-  sessionPermissionService: Pick<SessionPermissionService, 'cancelPendingRequests'>;
   acpEventProcessor: Pick<
     AcpEventProcessor,
-    | 'clearSessionState'
-    | 'clearStreamingState'
-    | 'clearReplaySuppression'
-    | 'finalizeOrphanedToolCalls'
-    | 'clearPendingToolCalls'
-    | 'getWorkspaceId'
+    'finalizeOrphanedToolCalls' | 'clearPendingToolCalls' | 'getWorkspaceId'
   >;
-  promptTurnCompletionService: Pick<
-    SessionPromptTurnCompletionService,
-    'clearSession' | 'clearAll'
-  >;
+  promptTurnCompletionService: Pick<SessionPromptTurnCompletionService, 'clearAll'>;
+  /** Owns per-session disposers; stop runs every stage in order. */
+  scope: Pick<SessionScope, 'beginTeardown' | 'quiesce' | 'settle' | 'completeStop'>;
   lifecycleEventService: Pick<SessionLifecycleEventService, 'record'>;
   lifecycleGate: Pick<SessionLifecycleGate, 'reserveStop' | 'reserveShutdown' | 'releaseShutdown'>;
   workflowFinalizer: Pick<
@@ -95,7 +88,6 @@ export type SessionTerminationCoordinatorDependencies = {
     'finalizeDeliberateStop' | 'clearInactiveSession'
   >;
   getRuntimeSnapshot: (sessionId: string) => SessionRuntimeState;
-  onBeforeStopSession?: (sessionId: string) => void;
 };
 
 export class SessionTerminationCoordinator {
@@ -141,6 +133,9 @@ export class SessionTerminationCoordinator {
     } finally {
       completeEvent({ persisted: false });
       this.stopLifecycleEvents.delete(sessionId);
+      // Every stop path (WebSocket, tRPC, admin, orchestration) ends here, so a
+      // never-settling turn cannot strand dispatch claims or retry timers.
+      this.dependencies.scope.completeStop(sessionId);
       stopReservation.release();
     }
   }
@@ -234,8 +229,7 @@ export class SessionTerminationCoordinator {
     completeEvent: (outcome: StopLifecycleEventOutcome) => void,
     options?: StopSessionOptions
   ): Promise<void> {
-    this.dependencies.promptTurnCompletionService.clearSession(sessionId);
-    this.dependencies.onBeforeStopSession?.(sessionId);
+    this.dependencies.scope.beginTeardown(sessionId, 'stop');
     this.dependencies.sessionDomainService.clearQueuedWork(sessionId, { emitSnapshot: true });
     const session = await this.loadSessionForStop(sessionId);
     const workspaceId =
@@ -266,9 +260,7 @@ export class SessionTerminationCoordinator {
       updatedAt: new Date().toISOString(),
     });
 
-    this.dependencies.acpEventProcessor.clearStreamingState(sessionId);
-    this.dependencies.acpEventProcessor.clearReplaySuppression(sessionId);
-    this.dependencies.sessionPermissionService.cancelPendingRequests(sessionId);
+    this.dependencies.scope.quiesce(sessionId);
 
     let stopClientFailed = false;
     try {
@@ -291,7 +283,7 @@ export class SessionTerminationCoordinator {
         updatedAt: new Date().toISOString(),
       });
       this.markWorkspaceSessionIdleOnStop(workspaceId, sessionId);
-      this.dependencies.acpEventProcessor.clearSessionState(sessionId);
+      this.dependencies.scope.settle(sessionId, 'stop');
 
       if (!stopClientFailed) {
         const shouldCleanupTransientRatchetSession =

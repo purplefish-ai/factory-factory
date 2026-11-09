@@ -3,6 +3,7 @@ import { SessionStatus } from '@/shared/core';
 import { sessionBackgroundDeliveryService } from './session-background-delivery.service';
 import { createLifecycleTestSession } from './session-lifecycle.test-helpers';
 import { SessionRuntimeExitCoordinator } from './session-runtime-exit.coordinator';
+import { registerSessionRuntimeParticipants, SessionScope } from './session-scope';
 
 const { mockTraceLog, mockTraceClose } = vi.hoisted(() => ({
   mockTraceLog: vi.fn(),
@@ -75,17 +76,22 @@ function createExitCoordinatorHarness(options?: {
   };
   const onSessionExit = vi.fn();
   const providerIdentityService = { reconcile: vi.fn(async () => undefined) };
+  const scope = new SessionScope();
+  registerSessionRuntimeParticipants(scope, {
+    promptTurnCompletion: promptCompletion,
+    queuedPrompts: { clearQueuedAcpPrompts: onSessionExit },
+    acpEvents: { ...processor, clearReplaySuppression: vi.fn() },
+    permissions: permission,
+  });
   const coordinator = new SessionRuntimeExitCoordinator({
     repository,
     providerIdentityService,
     sessionDomainService: domain,
-    sessionPermissionService: permission,
     acpEventProcessor: processor,
-    promptTurnCompletionService: promptCompletion,
     lifecycleEventService: lifecycleEvents,
     lifecycleGate,
     workflowFinalizer,
-    onSessionExit,
+    scope,
   });
   const handlers = coordinator.createHandlers({
     sessionId: 'session-1',
@@ -393,19 +399,22 @@ describe('SessionRuntimeExitCoordinator', () => {
     expect(harness.workflowFinalizer.finalizeRuntimeExit).not.toHaveBeenCalled();
   });
 
-  it('closes the trace without finalization when active preparation fails', async () => {
+  it('isolates a failing teardown disposer and still records the exit', async () => {
     const harness = createExitCoordinatorHarness();
     harness.promptCompletion.clearSession.mockImplementationOnce(() => {
       throw new Error('active preparation failed');
     });
 
-    await expect(harness.coordinator.handleExit(runtimeExit())).rejects.toThrow(
-      'active preparation failed'
-    );
+    await harness.coordinator.handleExit(runtimeExit());
 
+    // Session scope disposers are independent: one failure cannot skip the rest
+    // or leave the exit unrecorded.
+    expect(harness.onSessionExit).toHaveBeenCalledWith('session-1');
+    expect(harness.processor.clearSessionState).toHaveBeenCalledWith('session-1');
+    expect(harness.permission.cancelPendingRequests).toHaveBeenCalledWith('session-1');
+    expect(harness.domain.markProcessExit).toHaveBeenCalled();
+    expect(harness.workflowFinalizer.finalizeRuntimeExit).toHaveBeenCalledOnce();
     expect(mockTraceClose).toHaveBeenCalledWith('session-1');
-    expect(harness.domain.markProcessExit).not.toHaveBeenCalled();
-    expect(harness.workflowFinalizer.finalizeRuntimeExit).not.toHaveBeenCalled();
   });
 
   it('closes the trace in finally when inactive cleanup fails', async () => {

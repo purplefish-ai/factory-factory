@@ -25,6 +25,7 @@ import {
   seedCreatedWorkspaceDetail,
   removeWorkspaceFromProjectWorkspaceCache,
 } from '@/client/lib/workspace-cache-helpers';
+import { setProjectWorkspaceList } from '@/client/lib/workspace-queries';
 import { createOptimisticWorkspaceSummary } from '@/client/lib/workspace-summary';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -283,7 +284,7 @@ export function InlineWorkspaceForm({
 
       await utils.workspace.listForProject.cancel({ projectId: input.projectId });
 
-      utils.workspace.listForProject.setData({ projectId: input.projectId }, (old) =>
+      setProjectWorkspaceList(queryClient, input.projectId, (old) =>
         withOptimisticWorkspaceFirst(old, optimisticWorkspace, [optimisticWorkspaceId])
       );
 
@@ -298,7 +299,7 @@ export function InlineWorkspaceForm({
         createdAt: workspace.createdAt,
       });
 
-      utils.workspace.listForProject.setData({ projectId: workspace.projectId }, (old) =>
+      setProjectWorkspaceList(queryClient, workspace.projectId, (old) =>
         withOptimisticWorkspaceFirst(
           old,
           old?.workspaces.find((row) => row.id === workspace.id) ?? optimisticWorkspace,
@@ -339,8 +340,9 @@ export function InlineWorkspaceForm({
         // also revert snapshot deltas and concurrent mutations that landed
         // while the create was in flight, and this cache backs the sidebar as
         // well as the board.
-        utils.workspace.listForProject.setData(
-          { projectId: input?.projectId ?? token?.projectId ?? projectId },
+        setProjectWorkspaceList(
+          queryClient,
+          input?.projectId ?? token?.projectId ?? projectId,
           (old) => removeWorkspaceFromProjectWorkspaceCache(old, context.optimisticWorkspaceId)
         );
       }

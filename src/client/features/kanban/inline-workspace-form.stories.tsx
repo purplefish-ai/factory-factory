@@ -4,6 +4,7 @@ import { TRPCClientError, type TRPCLink } from '@trpc/client';
 import { observable } from '@trpc/server/observable';
 import { useState } from 'react';
 import { expect, fn, userEvent, waitFor, within } from 'storybook/test';
+import { useProjectWorkspaceQuery } from '@/client/hooks/use-project-workspace-query';
 import { trpc, type AppRouter } from '@/client/lib/trpc';
 import { Button } from '@/components/ui/button';
 import type { ChatProvider } from '@/shared/chat-capabilities';
@@ -162,7 +163,7 @@ function previewLink(
 }
 
 function WorkspaceLaunchProgress({ projectId }: { projectId: string }) {
-  const { data } = trpc.workspace.listForProject.useQuery({ projectId });
+  const { data } = useProjectWorkspaceQuery(projectId);
   return (
     <section aria-label="Working" className="space-y-3">
       <h3 className="font-semibold text-sm">Working</h3>

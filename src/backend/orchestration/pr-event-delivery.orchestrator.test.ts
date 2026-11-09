@@ -535,7 +535,7 @@ it.each([1, 0])(
         text: 'frozen',
         attempt: 3,
       },
-      new Error('transport failure')
+      { reason: 'failed', error: new Error('transport failure') }
     );
     expect(outcome).toEqual({ paused: count > 0 });
     expect(mocks.pause).toHaveBeenCalledWith('w', 'DELIVERY_FAILED', 1);

@@ -1,4 +1,8 @@
 import type { SessionCallerGuard } from '@/backend/services/session/service/bridges';
+import {
+  classifyPRDeliveryFailure,
+  type PRDeliveryFailure,
+} from '@/backend/services/session/service/lifecycle/pr-delivery-failure';
 import { sessionDomainService } from '@/backend/services/session/service/session-domain.service';
 import {
   SessionResumeFences,
@@ -23,7 +27,7 @@ export interface PRBackgroundDeliveryPort {
   >;
   validate(delivery: ClaimedPRDelivery): Promise<boolean>;
   complete(delivery: ClaimedPRDelivery): Promise<void>;
-  fail(delivery: ClaimedPRDelivery, error: unknown): Promise<{ paused: boolean }>;
+  fail(delivery: ClaimedPRDelivery, failure: PRDeliveryFailure): Promise<{ paused: boolean }>;
   recover(sessionId: string): Promise<void>;
   pause(sessionId: string, reason: 'USER_STOPPED' | 'SESSION_FAILED'): Promise<void>;
   resume(sessionId: string, isCurrent?: () => boolean): Promise<void>;
@@ -134,7 +138,7 @@ export class SessionBackgroundDeliveryService {
           ...result,
           releaseOnRejection: async (error: unknown) => {
             try {
-              await port.fail(result.delivery, error);
+              await port.fail(result.delivery, classifyPRDeliveryFailure(error));
             } finally {
               this.forgetCapturedDelivery(message, result.delivery);
             }
@@ -149,7 +153,7 @@ export class SessionBackgroundDeliveryService {
         [...this.tokens.values()].includes(token)
       ) {
         this.forgetCapturedDelivery(message, result.delivery);
-        await port.fail(result.delivery, error);
+        await port.fail(result.delivery, classifyPRDeliveryFailure(error));
       }
       throw error;
     }
@@ -265,7 +269,7 @@ export class SessionBackgroundDeliveryService {
     const token = [...this.tokens.values()].find((entry) => entry.messageId === message.id);
     if (entry?.message === message && delivery && this.port) {
       try {
-        const outcome = await this.port.fail(delivery, error);
+        const outcome = await this.port.fail(delivery, classifyPRDeliveryFailure(error));
         const currentToken = [...this.tokens.values()].find(
           (entry) => entry.messageId === message.id
         );

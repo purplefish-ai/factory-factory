@@ -51,7 +51,6 @@ vi.mock('@/client/features/chat', async () => ({
   ChatInput: spies.input,
   PermissionPrompt: () => null,
   QuestionPrompt: () => null,
-  RewindConfirmationDialog: () => null,
 }));
 vi.mock('@/client/features/chat/transcript-rows', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/client/features/chat/transcript-rows')>();

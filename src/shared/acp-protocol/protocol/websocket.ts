@@ -2,14 +2,11 @@ import type { AcpPlanNotification } from '@/shared/acp-protocol/task-plan';
 import type { ChatBarCapabilities } from '@/shared/chat-capabilities';
 import type { PendingInteractiveRequest } from '@/shared/pending-request-types';
 import type { SessionRuntimeState } from '@/shared/session-runtime';
-import type { AgentMetadata } from './agent';
-import type { PluginInfo, ToolDefinition } from './content';
 import type { AskUserQuestion } from './interaction';
 import type { ChatMessage } from './messages';
 import type { ChatSettings, CommandInfo } from './models';
 import type { MessageAttachment, QueuedMessage } from './queued';
 import type { SessionReplayChunk } from './replay-frame-schema';
-import type { SessionInfo } from './session';
 import type { MessageState } from './state-machine';
 
 interface WebSocketMessageCommon {
@@ -18,8 +15,6 @@ interface WebSocketMessageCommon {
   message?: string;
   code?: number;
   data?: unknown;
-  sessions?: SessionInfo[];
-  agentMetadata?: AgentMetadata;
   requestId?: string;
   toolName?: string;
   rawToolName?: string;
@@ -59,11 +54,7 @@ interface WebSocketMessageCommon {
   tool_name?: string;
   parent_tool_use_id?: string;
   elapsed_time_seconds?: number;
-  summary?: string;
-  preceding_tool_use_ids?: string[];
-  permissionMode?: string;
   slashCommands?: CommandInfo[];
-  uuid?: string;
   workspaceId?: string;
   workspaceName?: string;
   sessionCount?: number;
@@ -115,7 +106,7 @@ interface WebSocketMessagePayloadByType {
     data: import('./messages').AgentMessage;
     /** Stable backend transcript identifier when emitted from snapshot/replay. */
     messageId?: string;
-    /** Backend-assigned order for agent_message and message_used_as_response events */
+    /** Backend-assigned transcript order. */
     order?: number;
   };
   assistant_text_delta: {
@@ -131,12 +122,6 @@ interface WebSocketMessagePayloadByType {
   error: {
     message: string;
     code?: number;
-  };
-  sessions: {
-    sessions: SessionInfo[];
-  };
-  agent_metadata: {
-    agentMetadata: AgentMetadata;
   };
   permission_request: {
     requestId?: string;
@@ -167,11 +152,6 @@ interface WebSocketMessagePayloadByType {
   };
   permission_cancelled: {
     requestId?: string;
-  };
-  message_used_as_response: {
-    text?: string;
-    id?: string;
-    order?: number;
   };
   message_state_changed: {
     id?: string;
@@ -206,44 +186,10 @@ interface WebSocketMessagePayloadByType {
     /** ACP tool kind (read, edit, execute, etc.) */
     acpKind?: string;
   };
-  tool_use_summary: {
-    summary?: string;
-    preceding_tool_use_ids?: string[];
-  };
-  status_update: {
-    permissionMode?: string;
-  };
   task_notification: {
     message?: string;
   };
-  system_init: {
-    data?: {
-      tools?: ToolDefinition[];
-      model?: string;
-      cwd?: string;
-      apiKeySource?: string;
-      slashCommands?: CommandInfo[];
-      plugins?: PluginInfo[];
-    };
-  };
   compact_boundary: object;
-  hook_started: {
-    data?: {
-      hookId?: string;
-      hookName?: string;
-      hookEvent?: string;
-    };
-  };
-  hook_response: {
-    data?: {
-      hookId?: string;
-      output?: string;
-      stdout?: string;
-      stderr?: string;
-      exitCode?: number;
-      outcome?: string;
-    };
-  };
   compacting_start: object;
   compacting_end: object;
   workspace_notification_request: {
@@ -254,9 +200,6 @@ interface WebSocketMessagePayloadByType {
   };
   slash_commands: {
     slashCommands?: CommandInfo[];
-  };
-  user_message_uuid: {
-    uuid?: string;
   };
   chat_capabilities: {
     capabilities: ChatBarCapabilities;
@@ -319,28 +262,19 @@ const WEBSOCKET_MESSAGE_TYPE_MAP: Record<WebSocketMessage['type'], true> = {
   agent_message: true,
   assistant_text_delta: true,
   error: true,
-  sessions: true,
-  agent_metadata: true,
   permission_request: true,
   user_question: true,
   permission_cancelled: true,
-  message_used_as_response: true,
   message_state_changed: true,
   session_replay_batch: true,
   session_replay_chunk: true,
   tool_progress: true,
-  tool_use_summary: true,
-  status_update: true,
   task_notification: true,
-  system_init: true,
   compact_boundary: true,
-  hook_started: true,
-  hook_response: true,
   compacting_start: true,
   compacting_end: true,
   workspace_notification_request: true,
   slash_commands: true,
-  user_message_uuid: true,
   chat_capabilities: true,
   config_options_update: true,
   config_option_applied: true,

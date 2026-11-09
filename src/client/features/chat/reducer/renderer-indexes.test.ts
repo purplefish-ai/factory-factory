@@ -7,7 +7,6 @@ import {
 } from '@/lib/chat-protocol';
 import { chatReducer, createInitialChatState } from './index';
 import {
-  getRendererTranscriptIds,
   getRendererTrimSlack,
   resolveRendererTranscript,
   runRendererTranscriptBatch,
@@ -84,9 +83,6 @@ function expectMatchesRescan(resolved: ReturnType<typeof resolveRendererTranscri
   const expected = expectedIndexes(resolved.retained);
   expect(resolved.indexes.toolUseIdToIndex).toEqual(expected.toolUseIdToIndex);
   expect(resolved.indexes.agentMessageOrderToIndex).toEqual(expected.agentMessageOrderToIndex);
-  expect(getRendererTranscriptIds(resolved.retained, resolved.indexes)).toEqual(
-    new Set(resolved.retained.map((message) => message.id))
-  );
 }
 
 describe('resolveRendererTranscript', () => {

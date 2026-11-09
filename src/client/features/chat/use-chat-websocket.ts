@@ -8,7 +8,6 @@ import type {
   CommandInfo,
   MessageAttachment,
   QueuedMessage,
-  SessionInfo,
   TokenStats,
 } from '@/lib/chat-protocol';
 import { buildWebSocketUrl } from '@/lib/websocket-config';
@@ -20,7 +19,6 @@ import type {
   AcpPlanState,
   PendingMessageContent,
   PendingRequest,
-  RewindPreviewState,
   SessionStatus,
   ToolProgressInfo,
 } from './reducer';
@@ -72,7 +70,6 @@ export interface UseChatWebSocketReturn {
   /** Current transport has accepted its own hydration, distinct from retained browsing state. */
   controlsHydrated: boolean;
   gitBranch: string | null;
-  availableSessions: SessionInfo[];
   // Pending interactive request (permission or user question)
   pendingRequest: PendingRequest;
   // Chat settings
@@ -94,16 +91,12 @@ export interface UseChatWebSocketReturn {
   isCompacting: boolean;
   // Task notifications from SDK
   taskNotifications: { id: string; message: string; timestamp: string }[];
-  // Current permission mode from SDK status updates
-  permissionMode: string | null;
   // Slash commands from CLI initialize response
   slashCommands: CommandInfo[];
   // Whether slash commands have finished loading for this session
   slashCommandsLoaded: boolean;
   // Accumulated token usage stats for the session
   tokenStats: TokenStats;
-  // Rewind preview state (for confirmation dialog)
-  rewindPreview: RewindPreviewState | null;
   // ACP agent plan state for structured task list rendering
   acpPlan: AcpPlanState | null;
   // ACP agent-provided config options for config selector UI
@@ -124,12 +117,6 @@ export interface UseChatWebSocketReturn {
   resumeQueuedMessages: () => void;
   // ACP config option action
   setConfigOption: (configId: string, value: string) => void;
-  // Rewind files actions
-  startRewindPreview: (userMessageUuid: string) => void;
-  confirmRewind: () => void;
-  cancelRewind: () => void;
-  /** Get the SDK-assigned UUID for a user message by its stable message ID */
-  getUuidForMessageId: (messageId: string) => string | undefined;
   // Refs
   inputRef: React.RefObject<HTMLTextAreaElement | null>;
 }
@@ -398,7 +385,6 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
     processStatus: chat.processStatus,
     sessionRuntime: chat.sessionRuntime,
     gitBranch: chat.gitBranch,
-    availableSessions: chat.availableSessions,
     pendingRequest: chat.pendingRequest,
     chatSettings: chat.chatSettings,
     chatCapabilities: chat.chatCapabilities,
@@ -411,11 +397,9 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
     pendingMessages: chat.pendingMessages,
     isCompacting: chat.isCompacting,
     taskNotifications: chat.taskNotifications,
-    permissionMode: chat.permissionMode,
     slashCommands: chat.slashCommands,
     slashCommandsLoaded: chat.slashCommandsLoaded,
     tokenStats: chat.tokenStats,
-    rewindPreview: chat.rewindPreview,
     acpPlan: chat.acpPlan,
     acpConfigOptions: chat.acpConfigOptions,
     toolProgress: chat.toolProgress,
@@ -432,11 +416,6 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
     steerQueuedMessage: chat.steerQueuedMessage,
     resumeQueuedMessages: chat.resumeQueuedMessages,
     setConfigOption: chat.setConfigOption,
-    // Rewind files actions
-    startRewindPreview: chat.startRewindPreview,
-    confirmRewind: chat.confirmRewind,
-    cancelRewind: chat.cancelRewind,
-    getUuidForMessageId: chat.getUuidForMessageId,
     // Refs from chat
     inputRef: chat.inputRef,
   };

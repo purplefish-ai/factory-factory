@@ -1,6 +1,6 @@
 import { createLogger } from '@/backend/services/logger.service';
 import { RATCHET_DISPATCH_CHANGED } from '@/backend/services/ratchet';
-import type { PRBackgroundDeliveryPort } from '@/backend/services/session';
+import type { PRBackgroundDeliveryPort, PRDeliveryFailureReason } from '@/backend/services/session';
 import type { ClaimedPRDelivery } from '@/shared/pr-monitoring';
 import { isCurrentPRRecipient } from './pr-delivery-recipient';
 import { recoverPRDeliveries } from './pr-delivery-recovery';
@@ -68,12 +68,8 @@ export function createPRBackgroundDeliveryPort(
         });
       }
     },
-    async fail(delivery, error) {
-      const message = error instanceof Error ? error.message : String(error);
-      if (
-        message.includes('A turn is already in progress') ||
-        message.includes('human message queued during preparation')
-      ) {
+    async fail(delivery, { reason }) {
+      if (reason === 'busy') {
         await workspacePRMonitoringService.deferBusy(delivery.deliveryId);
         return { paused: false };
       }
@@ -84,7 +80,7 @@ export function createPRBackgroundDeliveryPort(
       if (!settled) {
         return { paused: false };
       }
-      return pauseAfterFailedDelivery(delivery, message, services);
+      return pauseAfterFailedDelivery(delivery, reason, services);
     },
     recover: (sessionId) => recoverPRDeliveries(sessionId, undefined, services),
     async pause(sessionId, reason) {
@@ -140,16 +136,16 @@ async function invalidateRecipient(
 
 async function pauseAfterFailedDelivery(
   delivery: ClaimedPRDelivery,
-  message: string,
+  reason: Exclude<PRDeliveryFailureReason, 'busy'>,
   services: PRDeliveryPorts
 ): Promise<{ paused: boolean }> {
   const session = await services.sessionDataService.findAgentSessionById(delivery.sessionId);
-  if (!(session && (delivery.attempt >= 3 || message.includes('existing conversation')))) {
+  if (!(session && (delivery.attempt >= 3 || reason === 'resume_failed'))) {
     return { paused: false };
   }
   const paused = await services.workspacePRMonitoringService.pauseWorkspace(
     session.workspaceId,
-    message.includes('existing conversation') ? 'RESUME_FAILED' : 'DELIVERY_FAILED',
+    reason === 'resume_failed' ? 'RESUME_FAILED' : 'DELIVERY_FAILED',
     delivery.bindingRevision
   );
   if (paused.count) {

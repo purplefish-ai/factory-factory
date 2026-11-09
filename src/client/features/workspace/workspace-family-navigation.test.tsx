@@ -7,7 +7,9 @@ import { createRoot } from 'react-dom/client';
 import { MemoryRouter } from 'react-router';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { trpc } from '@/client/lib/trpc';
+import { getProjectWorkspaceCacheReconciler } from '@/client/lib/workspace-cache-reconciler';
 import { waitForReact } from '@/test-utils/react-act';
+import { makeWorkspaceSnapshotEntry as entry } from '@/test-utils/workspace-snapshot';
 import { WorkspaceFamilyMenu, WorkspaceParentLink } from './workspace-family-navigation';
 
 const parent = {
@@ -62,9 +64,9 @@ async function renderMenu(
   resolve: (path: string) => unknown = (path) =>
     path === 'workspace.listChildren'
       ? children
-      : { ...parent, kanbanColumn: 'WAITING', status: 'READY' }
+      : { ...parent, kanbanColumn: 'WAITING', status: 'READY' },
+  queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
 ) {
-  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   clients.push(queryClient);
   const requests: string[] = [];
   const client = trpc.createClient({
@@ -165,6 +167,28 @@ it('offers retry after a failed family read instead of claiming there are no chi
   await waitForReact(() =>
     expect(document.querySelector('[role="menu"]')?.textContent).toContain('Auth tests')
   );
+});
+
+it('keeps the live stream state of a parent over its polled HTTP detail', async () => {
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const owner = getProjectWorkspaceCacheReconciler(queryClient, 'api');
+  owner.apply(owner.beginConnection(), {
+    type: 'snapshot_full',
+    projectId: 'api',
+    entries: [entry({ workspaceId: 'parent', projectId: 'api', name: 'Live parent name' })],
+  });
+  const { open } = await renderMenu(
+    (path) =>
+      path === 'workspace.listChildren'
+        ? []
+        : { ...parent, name: 'Stale HTTP name', status: 'READY', kanbanColumn: 'WAITING' },
+    queryClient
+  );
+  await open();
+  await waitForReact(() =>
+    expect(document.querySelector('[role="menu"]')?.textContent).toContain('Live parent name')
+  );
+  expect(document.querySelector('[role="menu"]')?.textContent).not.toContain('Stale HTTP name');
 });
 
 it('keeps an archived parent and the current child navigable when live children are empty', async () => {

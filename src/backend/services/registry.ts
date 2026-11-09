@@ -115,8 +115,30 @@ export const serviceNames = [
 
 export type ServiceName = (typeof serviceNames)[number];
 
-type ServiceDefinition = {
+/**
+ * A capsule's declared dependencies, by how it reaches the other capsule. Each
+ * dependency is listed once. `pnpm check:service-registry` verifies the first
+ * two kinds against source; see the backend services guide.
+ *
+ * The import graph (`dependsOn`) must stay acyclic. The runtime graph, which
+ * adds `bridgedDependsOn`, is not: workspace and session, and workspace and
+ * GitHub, depend on each other at runtime, which is why one direction of each
+ * pair is a bridge rather than an import.
+ */
+export type ServiceDefinition = {
+  /** Capsules whose barrels this capsule imports from non-test code. */
   dependsOn: readonly ServiceName[];
+  /**
+   * Capsules whose capabilities orchestration hands this capsule through a
+   * `configure*()` or `setHandler()` call at startup.
+   */
+  bridgedDependsOn?: readonly ServiceName[];
+  /**
+   * Dependencies neither imported nor bridged, such as raw SQL over another
+   * capsule's tables. The checker cannot see these; the value says why the
+   * dependency exists.
+   */
+  dataDependsOn?: Partial<Record<ServiceName, string>>;
   ownsModels: readonly PrismaModelName[];
 };
 
@@ -141,9 +163,18 @@ export const serviceRegistry = {
     ],
   },
   'codex-accounts': { dependsOn: [], ownsModels: ['CodexAccount'] },
-  search: { dependsOn: ['workspace', 'session'], ownsModels: [] },
+  search: {
+    dependsOn: [],
+    dataDependsOn: {
+      workspace:
+        'metadata-search.accessor.ts reads Workspace, Project, WorkspacePR and WorkspaceMetadata with read-only raw SQL.',
+      session: 'metadata-search.accessor.ts reads AgentSession with read-only raw SQL.',
+    },
+    ownsModels: [],
+  },
   session: {
-    dependsOn: ['workspace', 'settings', 'terminal', 'github', 'codex-accounts'],
+    dependsOn: ['workspace', 'settings', 'codex-accounts'],
+    bridgedDependsOn: ['agent-definition'],
     ownsModels: [
       'AgentSession',
       'AgentSessionLaunchOrigin',
@@ -154,6 +185,7 @@ export const serviceRegistry = {
   },
   workspace: {
     dependsOn: ['settings'],
+    bridgedDependsOn: ['session', 'github'],
     ownsModels: [
       'Project',
       'Workspace',
@@ -177,6 +209,7 @@ export const serviceRegistry = {
   },
   github: {
     dependsOn: ['workspace'],
+    bridgedDependsOn: ['settings'],
     ownsModels: [],
   },
   linear: {
@@ -184,7 +217,7 @@ export const serviceRegistry = {
     ownsModels: [],
   },
   ratchet: {
-    dependsOn: ['session', 'workspace', 'settings', 'github'],
+    dependsOn: ['workspace'],
     ownsModels: [],
   },
   'run-script': {
@@ -204,7 +237,8 @@ export const serviceRegistry = {
     ownsModels: ['DecisionLog'],
   },
   'periodic-task': {
-    dependsOn: ['workspace', 'settings'],
+    dependsOn: [],
+    bridgedDependsOn: ['workspace', 'session'],
     ownsModels: ['PeriodicTask', 'PeriodicTaskExecution'],
   },
 } as const satisfies Record<ServiceName, ServiceDefinition>;

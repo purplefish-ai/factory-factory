@@ -290,7 +290,10 @@ describe('createApplication', () => {
     const result = disposeApplication(application).catch((error: unknown) => error);
     await vi.waitFor(() => expect(calls).toEqual(['sessions']));
     rejectSessions(sessionFailure);
-    expect(await result).toMatchObject({ errors: [sessionFailure, accountFailure] });
+    expect(await result).toMatchObject({
+      message: 'Application disposal failed: step sessions, step codex-accounts',
+      errors: [sessionFailure, accountFailure],
+    });
     expect(calls).toEqual(['sessions', 'accounts']);
     expect(application.lifecycle.eventCollector.stop).toHaveBeenCalledOnce();
     expect(application.lifecycle.snapshotReconciliation.stop).toHaveBeenCalledOnce();

@@ -464,6 +464,18 @@ removed rows or overwrite newer live fields or a supplied stream review count.
 The reconciler consumes each HTTP response's identity tag once, so explicit
 optimistic mutation writes retain their existing behavior.
 
+`src/client/lib/workspace-queries.ts` is the only place that builds options,
+fetches or writes for `workspace.get` and `workspace.listForProject`. React
+Query lets the latest fetch or observer of a key replace that key's options,
+including the commit hook, so a plain tRPC `useQuery`, `fetch` or `setData` on
+either key would commit untagged HTTP data over live fields and leave later
+invalidation refetches unreconciled. Readers use `useProjectWorkspaceQuery`
+(observer-only `staleTime`), `useWorkspaceDetailQuery` (observer-only `enabled`,
+`refetchInterval` and `staleTime`), `fetchWorkspaceDetail` or
+`ensureWorkspaceDetail`; optimistic list rows, creation seeds and stream detail
+merges use the module's writers. Invalidation, cancellation and cache reads keep
+using tRPC utilities because they reuse the options already installed.
+
 Reconciliation ownership is scoped to the QueryClient, project, and connection
 lifetime. Disconnecting or leaving a project retires that token, cancels its
 pending list and detail HTTP requests, and invalidates them for HTTP fallback.
@@ -569,13 +581,20 @@ do not erase deliberately reopened archived detail. Initialization retains
 `getInitStatus` polling and readiness/worktree-path invalidations; those repairs
 hydrate omitted metadata through the shared detail options.
 
-`workspace.get` reads `findDetailById`, not the server's full `findById`. It
-leaves out `initOutput` (served by `getInitStatus`), agent-session
-`providerMetadata`, and `creationMetadata`. Base64 `initialAttachments` stay
-stored in `creationMetadata` after init; only the detail response drops them,
-exposing `initialPrompt` for the details dialog instead. Polled git, file and
-init-status reads use the narrow `findWorktreeContext`/`findInitStatus` selects
-instead of full rows.
+SQLite reads run synchronously on the main event loop, so hot workspace reads
+leave out the large columns: `initOutput`, `creationMetadata` (base64
+`initialAttachments` stay stored there after init), agent-session
+`providerMetadata`, and the PR `observation`. `findById`, the project list
+(`findByProjectIdWithSessions`) and the 60-second snapshot reconciliation read
+(`findAllNonArchivedWithSessionsAndProject`) omit them, and their return types
+do too. Callers that need a blob use a named finder: `findInitStatus` for the
+startup log, `findInitialMessageContext` for the first-message prompt and
+attachments, `findMetadataContext` for auto-generated name provenance, and the
+session and PR capsules' own reads for provider metadata and observations.
+
+`workspace.get` reads `findDetailById`, which adds the `initialPrompt` for the
+details dialog to that narrow row. Polled git, file and init-status reads use
+the narrow `findWorktreeContext`/`findInitStatus` selects instead of full rows.
 
 `WorkspaceSummarySchema` defines the required board/sidebar fields independently
 of backend and client code. The HTTP list projector and snapshot summaries share

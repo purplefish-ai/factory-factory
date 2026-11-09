@@ -1,3 +1,4 @@
+import { z } from 'zod';
 import { prisma } from '@/backend/db';
 import { readWorkspaceInitialPrompt } from '@/shared/workspace-initial-prompt';
 import type { Prisma } from '@prisma-gen/client';
@@ -5,23 +6,21 @@ import {
   type FlattenedWorkspaceRow,
   flattenWorkspaceRow,
   type WorkspaceSideTableInclude,
+  workspaceSessionsWithoutBlobs,
   workspaceSideTables,
 } from './workspace.accessor';
 
 /**
- * Narrow workspace reads for client detail and polled endpoints. The full
- * `findById` row carries `creationMetadata` (which retains base64 initial
- * attachments after init), the startup-script log and session provider
- * metadata; these reads leave out what their callers never use.
+ * Narrow workspace reads for client detail and polled endpoints. These reads
+ * leave out what their callers never use: the startup-script log, session
+ * provider metadata, and `creationMetadata` (which retains base64 initial
+ * attachments after init) beyond the initial prompt.
  */
 
 type WorkspaceDetailRow = FlattenedWorkspaceRow<
   Prisma.WorkspaceGetPayload<{
     omit: { initOutput: true };
-    include: {
-      agentSessions: { omit: { providerMetadata: true } };
-      terminalSessions: true;
-    } & WorkspaceSideTableInclude;
+    include: typeof workspaceSessionsWithoutBlobs & WorkspaceSideTableInclude;
   }>
 >;
 
@@ -54,6 +53,14 @@ export type WorkspaceInitStatusRow = Prisma.WorkspaceGetPayload<{
   select: typeof workspaceInitStatusSelect;
 }>;
 
+const creationMetadataSchema = z.record(z.string(), z.unknown());
+
+export type WorkspaceInitialMessageContext = {
+  id: string;
+  parentWorkspaceId: string | null;
+  creationMetadata: Record<string, unknown> | null;
+};
+
 class WorkspaceDetailReadAccessor {
   /**
    * The workspace detail served to clients: the full flattened row minus the
@@ -64,11 +71,7 @@ class WorkspaceDetailReadAccessor {
     const row = await prisma.workspace.findUnique({
       where: { id },
       omit: { initOutput: true },
-      include: {
-        agentSessions: { omit: { providerMetadata: true } },
-        terminalSessions: true,
-        ...workspaceSideTables,
-      },
+      include: { ...workspaceSessionsWithoutBlobs, ...workspaceSideTables },
     });
     if (!row) {
       return null;
@@ -95,6 +98,23 @@ class WorkspaceDetailReadAccessor {
       where: { id },
       select: workspaceInitStatusSelect,
     });
+  }
+
+  /**
+   * The creation metadata carrying the initial prompt and base64 attachments,
+   * for building the first message after initialization. Non-object metadata
+   * reads as null.
+   */
+  async findInitialMessageContext(id: string): Promise<WorkspaceInitialMessageContext | null> {
+    const row = await prisma.workspace.findUnique({
+      where: { id },
+      select: { id: true, parentWorkspaceId: true, creationMetadata: true },
+    });
+    if (!row) {
+      return null;
+    }
+    const metadata = creationMetadataSchema.safeParse(row.creationMetadata);
+    return { ...row, creationMetadata: metadata.success ? metadata.data : null };
   }
 }
 

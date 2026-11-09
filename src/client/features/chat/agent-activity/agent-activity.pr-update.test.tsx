@@ -51,8 +51,6 @@ it.each(['queued', 'committed', 'restored', 'failed'] as const)(
         message,
         isQueued: phase === 'queued',
         onRemove: () => undefined,
-        userMessageUuid: 'provider-user-id',
-        onRewindToMessage: () => undefined,
       })
     );
     expect(html).toContain('PR update');
@@ -63,7 +61,6 @@ it.each(['queued', 'committed', 'restored', 'failed'] as const)(
       expect(html).toContain(`PR update · ${phase}`);
     }
     expect(html).not.toContain('factory-factory-pr-event');
-    expect(html).not.toContain('Rewind');
     expect(html).not.toContain('Remove');
   }
 );

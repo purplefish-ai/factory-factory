@@ -60,6 +60,14 @@ class WorkspaceDataService {
     return workspaceAccessor.findById(id);
   }
 
+  findInitialMessageContext(id: string) {
+    return workspaceDetailReadAccessor.findInitialMessageContext(id);
+  }
+
+  findMetadataContext(id: string) {
+    return workspaceMetadataAccessor.findContext(id);
+  }
+
   findByIdWithProject(id: string) {
     return workspaceAccessor.findByIdWithProject(id);
   }

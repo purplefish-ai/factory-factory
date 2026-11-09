@@ -10,8 +10,16 @@ Enforced by dependency-cruiser and ownership checks:
 
 - External callers use capsule barrels, except
   `orchestration/data-backup.service.ts` may import
-  `settings/resources/data-backup.accessor.ts` directly. Capsules declare
-  dependencies in `registry.ts`.
+  `settings/resources/data-backup.accessor.ts` directly.
+- Capsules declare each dependency once in `registry.ts`, by how they reach it:
+  `dependsOn` for barrel imports (acyclic, each must be imported by non-test
+  code); `bridgedDependsOn` for capabilities that orchestration passes in
+  through `configure*()`/`setHandler()`; `dataDependsOn` with a reason for
+  dependencies the checker cannot see, such as raw SQL. Bridges are checked
+  against the wiring in production files outside `services/`. Bridged
+  dependencies can form cycles, as workspace ⇄ session does, and callbacks into
+  orchestration functions are not counted. Cross-capsule Prisma reads are not
+  modelled yet.
 - Service logic uses its capsule's accessors. Resources may compose sibling
   accessors but cannot import another capsule's resources or application layers
   (`service/`, `orchestration/`, `routers/`, `trpc/`, `agents/`).

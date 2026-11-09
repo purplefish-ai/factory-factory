@@ -78,7 +78,7 @@ describe('workspaceAccessor', () => {
         include: {
           conversationMetadata: true,
           prMonitoring: true,
-          prs: { orderBy: { id: 'asc' } },
+          prs: { orderBy: { id: 'asc' }, omit: { observation: true } },
           prDiscovery: true,
           runScript: true,
           parentWorkspace: {
@@ -127,7 +127,7 @@ describe('workspaceAccessor', () => {
         include: {
           conversationMetadata: true,
           prMonitoring: true,
-          prs: { orderBy: { id: 'asc' } },
+          prs: { orderBy: { id: 'asc' }, omit: { observation: true } },
           prDiscovery: true,
           runScript: true,
           parentWorkspace: {
@@ -188,12 +188,13 @@ describe('workspaceAccessor', () => {
     expect(mockFindMany).toHaveBeenCalledWith({
       where: { projectId: 'project-1', status: { notIn: ['ARCHIVING', 'ARCHIVED'] } },
       orderBy: { updatedAt: 'desc' },
+      omit: { initOutput: true, creationMetadata: true },
       include: {
-        agentSessions: true,
+        agentSessions: { omit: { providerMetadata: true } },
         terminalSessions: true,
         conversationMetadata: true,
         prMonitoring: true,
-        prs: { orderBy: { id: 'asc' } },
+        prs: { orderBy: { id: 'asc' }, omit: { observation: true } },
         prDiscovery: true,
         runScript: true,
         parentWorkspace: {
@@ -223,6 +224,43 @@ describe('workspaceAccessor', () => {
     });
   });
 
+  describe('hot-path reads leave out large blob columns', () => {
+    const blobOmit = { initOutput: true, creationMetadata: true };
+    const sessionsWithoutBlobs = {
+      agentSessions: { omit: { providerMetadata: true } },
+      terminalSessions: true,
+      prs: { orderBy: { id: 'asc' }, omit: { observation: true } },
+    };
+
+    it.each([
+      ['findById', () => workspaceAccessor.findById('ws-1'), mockFindUnique],
+      [
+        'findByProjectIdWithSessions',
+        () => workspaceAccessor.findByProjectIdWithSessions('project-1'),
+        mockFindMany,
+      ],
+      [
+        'findAllNonArchivedWithSessionsAndProject',
+        () => workspaceAccessor.findAllNonArchivedWithSessionsAndProject(),
+        mockFindMany,
+      ],
+    ] as const)(
+      '%s omits init output, creation metadata, provider metadata and PR observations',
+      async (_name, read, query) => {
+        query.mockResolvedValueOnce(query === mockFindUnique ? null : []);
+
+        await read();
+
+        expect(query).toHaveBeenCalledWith(
+          expect.objectContaining({
+            omit: blobOmit,
+            include: expect.objectContaining(sessionsWithoutBlobs),
+          })
+        );
+      }
+    );
+  });
+
   it('short-circuits findByIdsWithProject for empty id arrays', async () => {
     await expect(workspaceAccessor.findByIdsWithProject([])).resolves.toEqual([]);
 
@@ -239,7 +277,7 @@ describe('workspaceAccessor', () => {
       include: {
         project: true,
         prMonitoring: { select: { enabled: true } },
-        prs: { orderBy: { id: 'asc' } },
+        prs: { orderBy: { id: 'asc' }, omit: { observation: true } },
         prDiscovery: true,
       },
     });
@@ -277,7 +315,7 @@ describe('workspaceAccessor', () => {
           include: expect.objectContaining({
             conversationMetadata: true,
             prMonitoring: true,
-            prs: { orderBy: { id: 'asc' } },
+            prs: { orderBy: { id: 'asc' }, omit: { observation: true } },
             prDiscovery: true,
             runScript: true,
           }),
@@ -366,7 +404,7 @@ describe('workspaceAccessor', () => {
         include: {
           project: true,
           prMonitoring: { select: { enabled: true } },
-          prs: { orderBy: { id: 'asc' } },
+          prs: { orderBy: { id: 'asc' }, omit: { observation: true } },
           prDiscovery: true,
         },
         orderBy: { updatedAt: 'asc' },

@@ -1,11 +1,9 @@
 import type { QueryClient } from '@tanstack/react-query';
 import { getQueryKey } from '@trpc/react-query';
 import { runInBackground } from '@/client/lib/background-task';
-import {
-  type WorkspaceDetail,
-  mergeProjectSnapshotIntoWorkspaceDetail,
-} from '@/client/lib/snapshot-to-workspace';
+import type { WorkspaceDetail } from '@/client/lib/snapshot-to-workspace';
 import { trpc } from '@/client/lib/trpc';
+import { mergeWorkspaceDetailSnapshot } from '@/client/lib/workspace-queries';
 import type { WorkspaceSnapshotEntry } from '@/shared/workspace-snapshot';
 
 export interface ProjectWorkspaceDetailTransitions {
@@ -75,9 +73,7 @@ export function createWorkspaceDetailTransitionScope(): WorkspaceDetailTransitio
             // Cancellation takes effect synchronously; do not await before merging.
             runInBackground(queryClient.cancelQueries(filter), "Couldn't refresh data.");
           }
-          queryClient.setQueryData<WorkspaceDetail>(filter.queryKey, (prev) =>
-            mergeProjectSnapshotIntoWorkspaceDetail(entry, prev)
-          );
+          mergeWorkspaceDetailSnapshot(queryClient, entry);
           if (reintroduced) {
             // Reset may have cleared full detail, which a summary cannot recreate.
             runInBackground(

@@ -58,12 +58,6 @@ function TranscriptMessage({
           ? () => display.onRemoveQueuedMessage?.(item.id)
           : undefined
       }
-      userMessageUuid={
-        'source' in item && item.source === 'user'
-          ? display.getUuidForMessageId?.(item.id)
-          : undefined
-      }
-      onRewindToMessage={display.onRewindToMessage}
       resolveWorkspaceFileLink={display.resolveWorkspaceFileLink}
       onWorkspaceFileLink={display.onWorkspaceFileLink}
       getToolExpansionState={display.workspaceId ? getExpansionState : undefined}

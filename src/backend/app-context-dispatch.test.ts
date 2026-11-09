@@ -60,6 +60,9 @@ function setupInitialization(services: ReturnType<typeof createGraph>['services'
   });
   vi.spyOn(services.workspaceDataService, 'findByIdWithProject').mockResolvedValue(workspace);
   vi.spyOn(services.workspaceDataService, 'findById').mockResolvedValue(unsafeCoerce(workspace));
+  vi.spyOn(services.workspaceDataService, 'findInitialMessageContext').mockResolvedValue(
+    unsafeCoerce(workspace)
+  );
   vi.spyOn(services.worktreeLifecycleService, 'getInitMode').mockResolvedValue(false);
   vi.spyOn(services.factoryConfigService, 'readConfig').mockResolvedValue(null);
   vi.spyOn(
