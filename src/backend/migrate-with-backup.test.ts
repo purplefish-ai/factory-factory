@@ -170,6 +170,22 @@ describe('runMigrationsWithBackup', () => {
     expect(statSync(backupDirectory).mode & 0o777).toBe(0o700);
   });
 
+  it('never reuses a backup name another launch has claimed', async () => {
+    addMigration('001_users', 'CREATE TABLE users (id INTEGER PRIMARY KEY);');
+    await migrate();
+    mkdirSync(backupDirectory);
+    const claimed = 'data.db-pre-migration-20270115T080000000Z.db';
+    writeFileSync(join(backupDirectory, `${claimed}.partial`), 'in progress elsewhere');
+    addMigration('002_posts', 'CREATE TABLE posts (id INTEGER PRIMARY KEY);');
+
+    await migrate();
+
+    expect(backups()).toEqual([
+      `${claimed}.partial`,
+      'data.db-pre-migration-20270115T080000001Z.db',
+    ]);
+  });
+
   it('names the backup when a migration fails', async () => {
     addMigration('001_users', 'CREATE TABLE users (id INTEGER PRIMARY KEY);');
     await migrate();

@@ -1,4 +1,5 @@
-import { chmod, mkdir, readdir, rename, rm, stat } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
+import { chmod, mkdir, open, readdir, rename, rm, stat } from 'node:fs/promises';
 import { basename, dirname, join } from 'node:path';
 import { snapshotSqliteDatabase } from './lib/sqlite-snapshot';
 import { inspectMigrations, type MigrationOptions, runMigrations } from './migrate';
@@ -68,18 +69,50 @@ async function pruneBackups(
   );
 }
 
+function isAlreadyExists(error: unknown): boolean {
+  return error instanceof Error && 'code' in error && error.code === 'EEXIST';
+}
+
+/**
+ * Claim an unused backup name. Creating its `.partial` file exclusively makes
+ * the claim atomic, so concurrent launches never share or delete each other's copy.
+ */
+async function reserveBackupPath(directory: string, prefix: string, now: Date): Promise<string> {
+  for (let offsetMs = 0; offsetMs < 1000; offsetMs += 1) {
+    const backupPath = join(
+      directory,
+      `${prefix}${backupTimestamp(new Date(now.getTime() + offsetMs))}.db`
+    );
+    if (existsSync(backupPath)) {
+      continue;
+    }
+    try {
+      await (await open(`${backupPath}.partial`, 'wx', 0o600)).close();
+      return backupPath;
+    } catch (error) {
+      if (!isAlreadyExists(error)) {
+        throw error;
+      }
+    }
+  }
+  throw new Error(`No unused backup name in ${directory}`);
+}
+
 async function backupBeforeMigrating(
   options: MigrateWithBackupOptions & { backupDirectory: string },
   warn: (msg: string) => void
 ): Promise<string> {
   const prefix = backupPrefix(options.databasePath);
-  const now = (options.now ?? (() => new Date()))();
-  const backupPath = join(options.backupDirectory, `${prefix}${backupTimestamp(now)}.db`);
-  // Write under a name retention ignores, so an interrupted copy never displaces a good backup.
-  const partialPath = `${backupPath}.partial`;
   await mkdir(options.backupDirectory, { recursive: true, mode: 0o700 });
   // mkdir leaves an existing directory's mode alone.
   await chmod(options.backupDirectory, 0o700);
+  const backupPath = await reserveBackupPath(
+    options.backupDirectory,
+    prefix,
+    (options.now ?? (() => new Date()))()
+  );
+  // Written under a name retention ignores, so an interrupted copy never displaces a good backup.
+  const partialPath = `${backupPath}.partial`;
   try {
     await snapshotSqliteDatabase(options.databasePath, partialPath);
     await rename(partialPath, backupPath);
