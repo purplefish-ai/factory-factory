@@ -1,7 +1,9 @@
 /**
  * Bridge interfaces for session domain cross-domain dependencies.
- * These are injected by the orchestration layer at startup.
- * The session domain never imports from other domains directly.
+ * These are injected by the orchestration layer at startup. Direct imports of
+ * other capsules go through their barrels and must be declared in the
+ * session entry of `registry.ts`; bridges cover callbacks that would otherwise
+ * create a dependency cycle.
  */
 
 /** Workspace activity callbacks needed by session domain */

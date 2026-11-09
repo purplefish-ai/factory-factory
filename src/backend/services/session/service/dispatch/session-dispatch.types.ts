@@ -1,3 +1,4 @@
+import type { AcpProcessHandle } from '@/backend/services/session/service/acp';
 import type { AcpRuntimeManager } from '@/backend/services/session/service/acp/acp-runtime-manager';
 import type { SessionCallerGuard } from '@/backend/services/session/service/bridges';
 import type { SessionBackgroundDeliveryService } from '@/backend/services/session/service/lifecycle/session-background-delivery.service';
@@ -28,11 +29,11 @@ export interface SessionDispatchLifecycleGate {
 }
 
 export interface SessionDispatchStartupService {
-  getSessionClient(sessionId: string): unknown | undefined;
+  getSessionClient(sessionId: string): AcpProcessHandle | undefined;
   getOrCreateSessionClient(
     sessionId: string,
     options: SessionDispatchStartOptions
-  ): Promise<unknown>;
+  ): Promise<AcpProcessHandle>;
 }
 
 export interface SessionDispatchNotificationDeliveryService {
