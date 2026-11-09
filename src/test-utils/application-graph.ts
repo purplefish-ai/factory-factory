@@ -89,10 +89,12 @@ vi.mock('@/backend/orchestration/linear-config.helper', () =>
   })
 );
 vi.mock('@/backend/orchestration/reconciliation.service', () =>
-  withAutoStubs('reconciliation.service', { reconciliationService: {} })
+  withAutoStubs('reconciliation.service', {
+    reconciliationService: { stopPeriodicCleanup: vi.fn(async () => undefined) },
+  })
 );
 vi.mock('@/backend/orchestration/scheduler.service', () =>
-  withAutoStubs('scheduler.service', { schedulerService: {} })
+  withAutoStubs('scheduler.service', { schedulerService: { stop: vi.fn(async () => undefined) } })
 );
 vi.mock('@/backend/orchestration/snapshot-reconciliation.orchestrator', () =>
   withAutoStubs('snapshot-reconciliation.orchestrator', {
@@ -237,18 +239,20 @@ vi.mock('@/backend/services/logger.service', () =>
   })
 );
 vi.mock('@/backend/services/periodic-task', () =>
-  withAutoStubs('periodic-task', { periodicTaskService: {} })
+  withAutoStubs('periodic-task', { periodicTaskService: { stop: vi.fn(async () => undefined) } })
 );
 vi.mock('@/backend/services/port.service', () =>
   withAutoStubs('port.service', { findAvailablePort: vi.fn() })
 );
-vi.mock('@/backend/services/ratchet', () => withAutoStubs('ratchet', { ratchetService: {} }));
+vi.mock('@/backend/services/ratchet', () =>
+  withAutoStubs('ratchet', { ratchetService: { stop: vi.fn(async () => undefined) } })
+);
 vi.mock('@/backend/services/rate-limiter.service', () =>
-  withAutoStubs('rate-limiter.service', { rateLimiter: {} })
+  withAutoStubs('rate-limiter.service', { rateLimiter: { stop: vi.fn(async () => undefined) } })
 );
 vi.mock('@/backend/services/run-script', () =>
   withAutoStubs('run-script', {
-    createRunScriptService: vi.fn(() => ({})),
+    createRunScriptService: vi.fn(() => ({ cleanup: vi.fn(async () => undefined) })),
     FactoryConfigService: { readConfig: vi.fn() },
     runScriptConfigPersistenceService: {},
     runScriptStateMachine: {},
@@ -269,7 +273,7 @@ vi.mock('@/backend/services/session', async () => {
     sessionBackgroundDeliveryService: { configure: vi.fn() },
     findPRDeliveryReceipt: vi.fn(),
     acpRuntimeManager: {},
-    acpTraceLogger: {},
+    acpTraceLogger: { cleanup: vi.fn() },
     chatEventForwarderService: {},
     createSessionLoadService: vi.fn(
       (ports: Pick<SessionLoadDependencies, 'getRuntimeSnapshot'>) =>
@@ -304,7 +308,7 @@ vi.mock('@/backend/services/session', async () => {
     sessionDataService: {},
     sessionDomainService: {},
     sessionEventBus: unsafeCoerce({ publishToSession: vi.fn() }),
-    sessionFileLogger: { log: vi.fn() },
+    sessionFileLogger: { log: vi.fn(), cleanup: vi.fn() },
     sessionLifecycleEventService: {},
     sessionLifecycleService: {
       stopAllClients: vi.fn().mockResolvedValue(undefined),
@@ -327,7 +331,7 @@ vi.mock('@/backend/services/settings', () =>
   withAutoStubs('settings', { settingsHealthService: {}, userSettingsService: {} })
 );
 vi.mock('@/backend/services/terminal', () =>
-  withAutoStubs('terminal', { terminalService: {}, terminalSessionService: {} })
+  withAutoStubs('terminal', { terminalService: { cleanup: vi.fn() }, terminalSessionService: {} })
 );
 vi.mock('@/backend/services/workspace', async () =>
   withAutoStubs('workspace', {
@@ -357,7 +361,7 @@ vi.mock('@/backend/services/workspace', async () =>
   })
 );
 vi.mock('@/backend/services/workspace-git-state.service', () =>
-  withAutoStubs('workspace-git-state.service', { workspaceGitStateService: {} })
+  withAutoStubs('workspace-git-state.service', { workspaceGitStateService: { stop: vi.fn() } })
 );
 
 import type {

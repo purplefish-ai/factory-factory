@@ -10,6 +10,7 @@ import type { RenamedWorkspace } from '@/backend/orchestration/workspace-rename.
 import { createFakeApplicationGraph } from '@/test-utils/application-graph';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 import {
+  type Application,
   createApplication,
   createDefaultApplicationDependencies,
   disposeApplication,
@@ -123,6 +124,15 @@ describe('createApplication', () => {
       registerShutdownHandlers: true,
     });
     expect(second.services.runScriptService).toBe(first.services.runScriptService);
+  });
+
+  it('disposes a default graph composed under the test module mocks', async () => {
+    const dependencies = createDefaultApplicationDependencies();
+    await expect(
+      disposeApplication(unsafeCoerce<Application>({ ...dependencies, config: {} }))
+    ).resolves.toBeUndefined();
+    expect(dependencies.services.runScriptService.cleanup).toHaveBeenCalled();
+    expect(dependencies.lifecycle.database.$disconnect).toHaveBeenCalled();
   });
 
   it('auto-stubs fake graph members no test configured, separately per graph', () => {
