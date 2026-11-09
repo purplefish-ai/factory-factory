@@ -9,7 +9,6 @@ import {
 } from '@/backend/services/session';
 import { SessionStatus } from '@/shared/core';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
-import { bindIssueMonitoringSession } from './pr-monitoring.orchestrator';
 import {
   clearWorkspaceInitOrchestratorStateForTests,
   initializeWorkspaceWorktree,
@@ -17,10 +16,13 @@ import {
 } from './workspace-init.orchestrator';
 import { WORKSPACE_ID, mockLogger, setupHappyPath } from './workspace-init.test-harness';
 
+const bindMonitoringSession = vi.fn<(workspaceId: string, sessionId: string) => Promise<void>>();
+const dependencies = { sessionDispatch: sessionDispatchService, bindMonitoringSession };
+
 describe('workspace startup PR binding recovery', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(bindIssueMonitoringSession).mockReset();
+    vi.mocked(bindMonitoringSession).mockReset();
     clearWorkspaceInitOrchestratorStateForTests();
   });
   it.each([false, true])(
@@ -31,17 +33,17 @@ describe('workspace startup PR binding recovery', () => {
       vi.mocked(sessionDataService.findAgentSessionsByWorkspaceId).mockResolvedValue([
         unsafeCoerce({ id: 'session-main', status: SessionStatus.IDLE, model: 'claude-sonnet' }),
       ]);
-      vi.mocked(bindIssueMonitoringSession).mockRejectedValueOnce(
+      vi.mocked(bindMonitoringSession).mockRejectedValueOnce(
         new Error('Binding database unavailable')
       );
       if (persistent) {
-        vi.mocked(bindIssueMonitoringSession).mockRejectedValueOnce(
+        vi.mocked(bindMonitoringSession).mockRejectedValueOnce(
           new Error('Binding database still unavailable')
         );
       }
-      await initializeWorkspaceWorktree(WORKSPACE_ID);
-      expect(bindIssueMonitoringSession).toHaveBeenCalledTimes(2);
-      expect(bindIssueMonitoringSession).toHaveBeenLastCalledWith(WORKSPACE_ID, 'session-main');
+      await initializeWorkspaceWorktree(WORKSPACE_ID, undefined, dependencies);
+      expect(bindMonitoringSession).toHaveBeenCalledTimes(2);
+      expect(bindMonitoringSession).toHaveBeenLastCalledWith(WORKSPACE_ID, 'session-main');
       expect(sessionLifecycleService.startSession).toHaveBeenCalledTimes(1);
       expect(sessionDomainService.enqueueInitialMessage).toHaveBeenCalledTimes(1);
       expect(sessionDispatchService.tryDispatchNextMessage).toHaveBeenCalledTimes(2);
@@ -57,7 +59,7 @@ describe('workspace startup PR binding recovery', () => {
 describe('workspace-ready recovery selection', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(bindIssueMonitoringSession).mockReset();
+    vi.mocked(bindMonitoringSession).mockReset();
     vi.mocked(sessionDataService.findAgentSessionsByWorkspaceId).mockReset();
   });
   it.each(['ratchet', 'auto-iteration', 'adversarial_review'])(
@@ -71,8 +73,8 @@ describe('workspace-ready recovery selection', () => {
           workflow: 'implementation',
         }),
       ]);
-      await retryQueuedDispatchAfterWorkspaceReady(WORKSPACE_ID, null);
-      expect(bindIssueMonitoringSession).toHaveBeenCalledExactlyOnceWith(
+      await retryQueuedDispatchAfterWorkspaceReady(WORKSPACE_ID, null, dependencies);
+      expect(bindMonitoringSession).toHaveBeenCalledExactlyOnceWith(
         WORKSPACE_ID,
         'ordinary-session'
       );
@@ -98,8 +100,8 @@ describe('workspace-ready recovery selection', () => {
         unsafeCoerce({ id: 'fixer', status: SessionStatus.IDLE, workflow: 'ratchet' }),
         unsafeCoerce({ id: 'idle-main', status: SessionStatus.IDLE, workflow: 'implementation' }),
       ]);
-    await retryQueuedDispatchAfterWorkspaceReady(WORKSPACE_ID, null);
-    expect(bindIssueMonitoringSession).toHaveBeenCalledExactlyOnceWith(WORKSPACE_ID, 'idle-main');
+    await retryQueuedDispatchAfterWorkspaceReady(WORKSPACE_ID, null, dependencies);
+    expect(bindMonitoringSession).toHaveBeenCalledExactlyOnceWith(WORKSPACE_ID, 'idle-main');
     expect(sessionDispatchService.tryDispatchNextMessage).toHaveBeenCalledExactlyOnceWith(
       'idle-main'
     );
@@ -120,8 +122,8 @@ describe('workspace-ready recovery selection', () => {
       .mockResolvedValueOnce([
         unsafeCoerce({ id: 'fixer', status: SessionStatus.IDLE, workflow: 'ratchet' }),
       ]);
-    await retryQueuedDispatchAfterWorkspaceReady(WORKSPACE_ID, null);
-    expect(bindIssueMonitoringSession).not.toHaveBeenCalled();
+    await retryQueuedDispatchAfterWorkspaceReady(WORKSPACE_ID, null, dependencies);
+    expect(bindMonitoringSession).not.toHaveBeenCalled();
     expect(sessionDispatchService.tryDispatchNextMessage).not.toHaveBeenCalled();
     expect(sessionLifecycleService.startSession).not.toHaveBeenCalled();
   });

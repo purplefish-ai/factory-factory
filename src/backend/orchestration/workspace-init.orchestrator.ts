@@ -29,7 +29,6 @@ import { isPRMonitoringRecipient } from '@/shared/pr-monitoring';
 import { AttachmentSchema } from '@/shared/websocket';
 import type { WorkspaceInitGuard } from '@/shared/workspace-init-retry';
 import { getWorkspaceLinearContext } from './linear-config.helper';
-import { bindIssueMonitoringSession } from './pr-monitoring.orchestrator';
 import type { WorkspaceWithProject } from './types';
 import { handleWorkspaceInitFailure, type CapturedDefaultTerminal } from './workspace-init-cleanup';
 import { GitHubUsernameCache } from './workspace-init-github-username-cache';
@@ -56,6 +55,8 @@ type WorkspaceInitializationOptions = {
 
 interface WorkspaceDispatchDependencies {
   sessionDispatch: Pick<typeof sessionDispatchService, 'tryDispatchNextMessage'>;
+  /** Binds the PR-monitoring recipient in the composing graph; absent when unmonitored. */
+  bindMonitoringSession?(workspaceId: string, sessionId: string): Promise<void>;
 }
 
 const defaultWorkspaceDispatchDependencies: WorkspaceDispatchDependencies = {
@@ -299,9 +300,13 @@ async function resolveInitialAutoMessageContent(
   return null;
 }
 
-async function bindInitialMonitoringSession(workspaceId: string, sessionId: string): Promise<void> {
+async function bindInitialMonitoringSession(
+  workspaceId: string,
+  sessionId: string,
+  dependencies: WorkspaceDispatchDependencies
+): Promise<void> {
   try {
-    await bindIssueMonitoringSession(workspaceId, sessionId);
+    await dependencies.bindMonitoringSession?.(workspaceId, sessionId);
   } catch (error) {
     logger.warn('Failed to bind initial PR monitoring conversation', {
       workspaceId,
@@ -403,7 +408,7 @@ async function startDefaultAgentSession(
     });
     await guard?.check();
     guard?.assertCurrent();
-    await bindInitialMonitoringSession(workspaceId, sessionId);
+    await bindInitialMonitoringSession(workspaceId, sessionId, dependencies);
 
     // Trigger queue dispatch after init/session start so messages queued during
     // workspace provisioning are picked up immediately when dispatch is allowed.
@@ -443,7 +448,7 @@ export async function retryQueuedDispatchAfterWorkspaceReady(
     if (startedSessionId) {
       await guard?.check();
       guard?.assertCurrent();
-      await bindInitialMonitoringSession(workspaceId, startedSessionId);
+      await bindInitialMonitoringSession(workspaceId, startedSessionId, dependencies);
       await guard?.check();
       guard?.assertCurrent();
       await dependencies.sessionDispatch.tryDispatchNextMessage(
@@ -460,7 +465,7 @@ export async function retryQueuedDispatchAfterWorkspaceReady(
     if (runningSession) {
       await guard?.check();
       guard?.assertCurrent();
-      await bindInitialMonitoringSession(workspaceId, runningSession.id);
+      await bindInitialMonitoringSession(workspaceId, runningSession.id, dependencies);
       await guard?.check();
       guard?.assertCurrent();
       await dependencies.sessionDispatch.tryDispatchNextMessage(
@@ -480,7 +485,7 @@ export async function retryQueuedDispatchAfterWorkspaceReady(
 
     await guard?.check();
     guard?.assertCurrent();
-    await bindInitialMonitoringSession(workspaceId, idleSession.id);
+    await bindInitialMonitoringSession(workspaceId, idleSession.id, dependencies);
     await guard?.check();
     guard?.assertCurrent();
     await dependencies.sessionDispatch.tryDispatchNextMessage(

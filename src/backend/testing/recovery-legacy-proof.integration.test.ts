@@ -1,12 +1,13 @@
 import { afterAll, beforeAll, expect, it, vi } from 'vitest';
 import { dataBackupService } from '@/backend/orchestration/data-backup.service';
-import { defaultPRDeliveryPorts } from '@/backend/orchestration/pr-delivery-dependencies';
+import { createPRDeliveryPorts } from '@/backend/orchestration/pr-delivery-dependencies';
 import { recoverPRDeliveries } from '@/backend/orchestration/pr-delivery-recovery';
 import {
   preparePRDelivery,
   wakePRDelivery,
 } from '@/backend/orchestration/pr-event-delivery.orchestrator';
 import type { PRDeliveryPorts } from '@/backend/orchestration/pr-monitoring-ports';
+import { createPRMonitoringTestServices } from '@/backend/orchestration/testing/pr-monitoring-services.test-support';
 import { sessionDataService } from '@/backend/services/session';
 import {
   workspacePRMonitoringService,
@@ -22,6 +23,8 @@ import {
   destroyIntegrationDatabase,
   type IntegrationDatabase,
 } from './integration-db';
+
+const baseDeliveryPorts = createPRDeliveryPorts(createPRMonitoringTestServices());
 
 const database = vi.hoisted(() => ({ prisma: undefined as PrismaClient | undefined }));
 vi.mock('@/backend/db', () => ({
@@ -162,17 +165,17 @@ it('publicly round trips complete contradictory legacy proof as BLOCKED through 
   const sends = vi.fn();
   const queued = new Map<string, PRDeliveryRequest>();
   const drains: Promise<void>[] = [];
-  const receipt = vi.fn<typeof defaultPRDeliveryPorts.findPRDeliveryReceipt>(async () => 'absent');
+  const receipt = vi.fn<typeof baseDeliveryPorts.findPRDeliveryReceipt>(async () => 'absent');
   const ports: PRDeliveryPorts = {
-    ...defaultPRDeliveryPorts,
+    ...baseDeliveryPorts,
     sessionDataService,
     workspacePRMonitoringService,
     acpRuntimeManager: {
-      ...defaultPRDeliveryPorts.acpRuntimeManager,
+      ...baseDeliveryPorts.acpRuntimeManager,
       isSessionPromptInFlight: () => false,
     },
     sessionBackgroundDeliveryService: {
-      ...defaultPRDeliveryPorts.sessionBackgroundDeliveryService,
+      ...baseDeliveryPorts.sessionBackgroundDeliveryService,
       isDeliveryActive: () => false,
     },
     sessionDomainService: { getPendingInteractiveRequest: () => null },
@@ -183,7 +186,7 @@ it('publicly round trips complete contradictory legacy proof as BLOCKED through 
     },
     findPRDeliveryReceipt: receipt,
     backgroundDispatch: {
-      ...defaultPRDeliveryPorts.backgroundDispatch,
+      ...baseDeliveryPorts.backgroundDispatch,
       enqueue: (sessionId, request) => {
         queued.set(sessionId, request);
         return { queued: true };

@@ -22,6 +22,7 @@ import {
 } from './orchestration/event-collector.orchestrator';
 import { searchGitHubIssues } from './orchestration/github-issue-search.orchestrator';
 import { getWorkspaceLinearContext } from './orchestration/linear-config.helper';
+import { bindIssueMonitoringSession } from './orchestration/pr-monitoring.orchestrator';
 import { updateProjectSettings } from './orchestration/project-settings.orchestrator';
 import { reconciliationService } from './orchestration/reconciliation.service';
 import { listVisibleReviewRequests } from './orchestration/review-requests.orchestrator';
@@ -317,6 +318,13 @@ export function createDefaultApplicationDependencies(): ApplicationDependencies 
       ) ||
       services.agentRuntime.hasWork(),
   });
+  // Workspace startup binds the issue conversation inside this graph's PR
+  // monitoring scope, read at call time so tests can replace the dispatcher.
+  const workspaceDispatch = () => ({
+    sessionDispatch: services.sessionDispatchService,
+    bindMonitoringSession: (workspaceId: string, sessionId: string) =>
+      bindIssueMonitoringSession(workspaceId, sessionId, services),
+  });
   const services: ApplicationServices = {
     applicationUpdateAdmission,
     applicationUpdateService,
@@ -400,9 +408,7 @@ export function createDefaultApplicationDependencies(): ApplicationDependencies 
     captureWorkspaceRetryGuard,
     readWorkspaceRetryAvailability,
     initializeWorkspaceWorktree: (workspaceId, options) =>
-      initializeWorkspaceWorktree(workspaceId, options, {
-        sessionDispatch: services.sessionDispatchService,
-      }),
+      initializeWorkspaceWorktree(workspaceId, options, workspaceDispatch()),
     getWorkspaceInitPolicy,
     githubCLIService,
     linearClientService,
@@ -547,9 +553,7 @@ export function createDefaultApplicationDependencies(): ApplicationDependencies 
       retryQueuedDispatchAfterWorkspaceReady(
         workspaceId,
         startedSessionId,
-        {
-          sessionDispatch: services.sessionDispatchService,
-        },
+        workspaceDispatch(),
         ...(guard ? ([guard] as const) : [])
       ),
   };

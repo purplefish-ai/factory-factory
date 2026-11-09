@@ -35,7 +35,7 @@ it.each([
     const { ensureDedicatedPRRecipient } = await vi.importActual<
       typeof import('@/backend/orchestration/pr-dedicated-session.orchestrator')
     >('@/backend/orchestration/pr-dedicated-session.orchestrator');
-    const { defaultPRDeliveryPorts } = await vi.importActual<
+    const { createPRDeliveryPorts } = await vi.importActual<
       typeof import('@/backend/orchestration/pr-delivery-dependencies')
     >('@/backend/orchestration/pr-delivery-dependencies');
     const { SessionConfigService } = await vi.importActual<
@@ -69,7 +69,7 @@ it.each([
     }
     const starting = ensureDedicatedPRRecipient(
       { workspaceId: workspace.id, prId: 'first', bindingRevision: 1 },
-      defaultPRDeliveryPorts,
+      createPRDeliveryPorts(graph.services),
       () => true
     );
     try {

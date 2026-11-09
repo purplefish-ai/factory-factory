@@ -1,7 +1,6 @@
 import { type Mock, vi } from 'vitest';
 import { createAgentAuthoring } from '@/backend/orchestration/agent-authoring.orchestrator';
 import { createAgentManagement } from '@/backend/orchestration/agent-management.orchestrator';
-import { defaultPRMonitoringServices } from '@/backend/orchestration/pr-monitoring-dependencies';
 import {
   captureWorkspaceRetryGuard,
   readWorkspaceRetryAvailability,
@@ -340,6 +339,7 @@ import {
   checkGithubAuth,
   githubCLIService,
   prFetchCoordinator,
+  prObservationService,
   prSnapshotService,
 } from '@/backend/services/github';
 import { JobRunner } from '@/backend/services/job-runner.service';
@@ -364,6 +364,8 @@ import {
   acpTraceLogger,
   chatEventForwarderService,
   createSessionLoadService,
+  findPRDeliveryReceipt,
+  sessionBackgroundDeliveryService,
   sessionCommandFactories,
   sessionConfigService,
   sessionPermissionService,
@@ -395,6 +397,7 @@ import {
   workspaceDataService,
   workspaceMaintenanceService,
   workspaceNotificationService,
+  workspacePRMonitoringService,
   workspacePrSnapshotService,
   workspaceQueryService,
   workspaceRelationshipsService,
@@ -494,7 +497,11 @@ export function createFakeApplicationGraph(label = 'test'): FakeApplicationGraph
       cancelUpdate: vi.fn(async () => ({ phase: 'idle' as const })),
     },
     listVisibleReviewRequests: vi.fn(async () => []),
-    ...defaultPRMonitoringServices,
+    prObservationService,
+    findPRDeliveryReceipt,
+    sessionBackgroundDeliveryService,
+    userSettingsService,
+    workspacePRMonitoringService,
     acpRuntimeManager: graphAcpRuntimeManager,
     acpTraceLogger,
     archiveWorkspace,

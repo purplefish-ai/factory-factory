@@ -1,9 +1,8 @@
-import { defaultPRMonitoringServices } from './pr-monitoring-dependencies';
 import type { PRRecipientReadinessPorts } from './pr-monitoring-ports';
 export async function recipientCanDispatch(
   workspaceId: string,
   sessionId: string,
-  services: PRRecipientReadinessPorts = defaultPRMonitoringServices
+  services: PRRecipientReadinessPorts
 ): Promise<boolean> {
   let timeout: ReturnType<typeof setTimeout> | undefined;
   try {

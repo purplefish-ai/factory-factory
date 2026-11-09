@@ -1,10 +1,6 @@
 import { createLogger } from '@/backend/services/logger.service';
 import type { ExistingSessionDispatchPorts } from './background-action-dispatch.orchestrator';
-import {
-  defaultPRMonitoringServices,
-  createPRObservationPorts,
-  type PRMonitoringServices,
-} from './pr-monitoring-dependencies';
+import { createPRObservationPorts, type PRMonitoringServices } from './pr-monitoring-dependencies';
 import type { PRDeliveryPorts } from './pr-monitoring-ports';
 import { observeMonitoredPR } from './pr-observation.orchestrator';
 
@@ -57,5 +53,3 @@ export function createPRDeliveryPorts(
     },
   };
 }
-
-export const defaultPRDeliveryPorts = createPRDeliveryPorts(defaultPRMonitoringServices);

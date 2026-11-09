@@ -24,17 +24,20 @@ import {
 import { redObservation } from '@/shared/pr-monitoring.test-helpers';
 import type { Prisma } from '@prisma-gen/client';
 import { createEventCollectorOrchestrator } from './event-collector.orchestrator';
-import { createPRDeliveryPorts, defaultPRDeliveryPorts } from './pr-delivery-dependencies';
+import { createPRDeliveryPorts } from './pr-delivery-dependencies';
 import { recoverPRDeliveries } from './pr-delivery-recovery';
-import { prBackgroundDeliveryPort } from './pr-event-delivery-port';
+import { createPRBackgroundDeliveryPort } from './pr-event-delivery-port';
 import { preparePRDelivery, wakePRDelivery } from './pr-event-delivery.orchestrator';
 import { createPRFlowIntegrationDatabase, getPRFlowTestState } from './pr-event-flow.test-helpers';
-import {
-  createPRObservationPorts,
-  defaultPRMonitoringServices,
-} from './pr-monitoring-dependencies';
+import { createPRObservationPorts } from './pr-monitoring-dependencies';
 import { bindIssueMonitoringSession, setPRMonitoring } from './pr-monitoring.orchestrator';
 import { observeMonitoredPR } from './pr-observation.orchestrator';
+import { createPRMonitoringTestServices } from './testing/pr-monitoring-services.test-support';
+
+// The application graph under test; every entry point receives it explicitly.
+const services = createPRMonitoringTestServices();
+const flowPorts = createPRDeliveryPorts(services);
+const prBackgroundDeliveryPort = createPRBackgroundDeliveryPort(flowPorts);
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -54,7 +57,7 @@ async function readEvents(where: Prisma.WorkspacePREventWhereInput) {
 }
 beforeEach(() => {
   // Delivery integration controls its freshness prerequisite at the delivery port.
-  vi.spyOn(defaultPRDeliveryPorts, 'refreshObservation').mockResolvedValue(true);
+  vi.spyOn(flowPorts, 'refreshObservation').mockResolvedValue(true);
 });
 beforeAll(async () => {
   db = await createPRFlowIntegrationDatabase();
@@ -148,7 +151,7 @@ it('commits facts and events together, rejects stale writes, and preserves a sib
 it('defers a busy main session, then freezes one bounded update and reuses it on retry', async () => {
   const request = { workspaceId: 'w', prId: 'sibling', bindingRevision: 1 };
   state.busy = true;
-  expect(await preparePRDelivery({ sessionId: 'main', request })).toMatchObject({
+  expect(await preparePRDelivery({ sessionId: 'main', request }, flowPorts)).toMatchObject({
     status: 'blocked',
   });
   expect((await workspacePRMonitoringService.listPending('w', 'sibling'))[0]).toMatchObject({
@@ -156,7 +159,7 @@ it('defers a busy main session, then freezes one bounded update and reuses it on
     deliveryId: null,
   });
   state.busy = false;
-  const prepared = await preparePRDelivery({ sessionId: 'main', request });
+  const prepared = await preparePRDelivery({ sessionId: 'main', request }, flowPorts);
   expect(prepared.status).toBe('ready');
   if (prepared.status !== 'ready') {
     throw new Error('Expected delivery');
@@ -164,7 +167,7 @@ it('defers a busy main session, then freezes one bounded update and reuses it on
   expect(prepared.delivery.text).toContain('PR update: "org/repo" #2');
   expect(Buffer.byteLength(prepared.delivery.text)).toBeLessThanOrEqual(16_384);
   await prBackgroundDeliveryPort.fail(prepared.delivery, new Error('temporary transport failure'));
-  const retry = await preparePRDelivery({ sessionId: 'main', request });
+  const retry = await preparePRDelivery({ sessionId: 'main', request }, flowPorts);
   expect(retry).toMatchObject({
     status: 'ready',
     delivery: {
@@ -230,8 +233,10 @@ it('delivers a dedicated PR batch through the same ledger and guards sibling rec
     bindingRevision: 100,
     deliveryMode: 'DEDICATED' as const,
   };
-  expect(await preparePRDelivery({ sessionId: 'main', request })).toEqual({ status: 'discard' });
-  const result = await preparePRDelivery({ sessionId: 'dedicated', request });
+  expect(await preparePRDelivery({ sessionId: 'main', request }, flowPorts)).toEqual({
+    status: 'discard',
+  });
+  const result = await preparePRDelivery({ sessionId: 'dedicated', request }, flowPorts);
   expect(result.status).toBe('ready');
   if (result.status !== 'ready') {
     throw new Error('expected dedicated claim');
@@ -303,7 +308,7 @@ it('retains a competing dedicated request and wakes it after the workspace claim
       deliveryMode: 'DEDICATED' as const,
     },
   }));
-  const results = await Promise.all(inputs.map((input) => preparePRDelivery(input)));
+  const results = await Promise.all(inputs.map((input) => preparePRDelivery(input, flowPorts)));
   expect(results.map((result) => result.status).sort()).toEqual(['blocked', 'ready']);
   const winner = results.find((result) => result.status === 'ready');
   const waiting = inputs[results.findIndex((result) => result.status === 'blocked')]!;
@@ -318,7 +323,7 @@ it('retains a competing dedicated request and wakes it after the workspace claim
     waiting.sessionId,
     waiting.request
   );
-  expect(await preparePRDelivery(waiting)).toMatchObject({
+  expect(await preparePRDelivery(waiting, flowPorts)).toMatchObject({
     status: 'ready',
     delivery: { attempt: 1 },
   });
@@ -338,7 +343,7 @@ it('coalesces poll, manual refresh, and delivery through separately composed obs
       prs: { create: { id: prId, url: redObservation.url } },
     },
   });
-  const graph = { ...defaultPRMonitoringServices };
+  const graph = { ...services };
   const fetched = deferred<typeof redObservation>();
   const fetch = vi.spyOn(prObservationService, 'fetch').mockReturnValue(fetched.promise);
   const publish = vi.spyOn(prSnapshotService, 'emit');
@@ -413,10 +418,13 @@ it('accepts a changed head without superseding an in-flight frozen failure', asy
     observation: redObservation,
   });
   expect(accepted.eventIds).toHaveLength(1);
-  const prepared = await preparePRDelivery({
-    sessionId,
-    request: { workspaceId, prId, bindingRevision: 1 },
-  });
+  const prepared = await preparePRDelivery(
+    {
+      sessionId,
+      request: { workspaceId, prId, bindingRevision: 1 },
+    },
+    flowPorts
+  );
   if (prepared.status !== 'ready') {
     throw new Error('Expected a frozen failure delivery');
   }
@@ -496,10 +504,13 @@ async function freezeReviewThenPush(workspaceId: string) {
     expectedEventEpoch: 1,
     observation: green,
   });
-  const prepared = await preparePRDelivery({
-    sessionId,
-    request: { workspaceId, prId, bindingRevision: 1 },
-  });
+  const prepared = await preparePRDelivery(
+    {
+      sessionId,
+      request: { workspaceId, prId, bindingRevision: 1 },
+    },
+    flowPorts
+  );
   if (prepared.status !== 'ready') {
     throw new Error('Expected a frozen review delivery');
   }
@@ -571,7 +582,7 @@ it('queues a committed failure after an empty idle wake without waiting for anot
     where: { workspaceId },
     data: { recipientSessionId: sessionId },
   });
-  const graph = { ...defaultPRMonitoringServices };
+  const graph = { ...services };
   const delivery = createPRDeliveryPorts(graph);
   const wake = vi.fn((id: string, isCurrent?: () => boolean) =>
     wakePRDelivery(id, delivery, isCurrent)
@@ -687,15 +698,18 @@ it.each([false, true])(
     });
     vi.mocked(sessionBackgroundDeliveryService.enqueue).mockClear();
     vi.mocked(sessionDispatchService.tryDispatchNextMessage).mockClear();
-    await bindIssueMonitoringSession(workspaceId, sessionId);
+    await bindIssueMonitoringSession(workspaceId, sessionId, services);
     const config = await workspacePRMonitoringService.get(workspaceId);
     expect(config).toMatchObject({ enabled: true, recipientSessionId: sessionId });
-    await setPRMonitoring({
-      workspaceId,
-      enabled: true,
-      recipientSessionId: sessionId,
-      expectedBindingRevision: config!.bindingRevision,
-    });
+    await setPRMonitoring(
+      {
+        workspaceId,
+        enabled: true,
+        recipientSessionId: sessionId,
+        expectedBindingRevision: config!.bindingRevision,
+      },
+      services
+    );
     expect(await db.prisma.workspacePREvent.count({ where: { workspaceId } })).toBe(0);
     expect(sessionBackgroundDeliveryService.enqueue).not.toHaveBeenCalled();
     expect(sessionDispatchService.tryDispatchNextMessage).not.toHaveBeenCalled();
@@ -711,7 +725,7 @@ it.each([false, true])(
       expectedEventEpoch: config!.eventEpoch,
       observation: redObservation,
     });
-    await wakePRDelivery(workspaceId);
+    await wakePRDelivery(workspaceId, flowPorts);
     expect(sessionBackgroundDeliveryService.enqueue).toHaveBeenCalledExactlyOnceWith(sessionId, {
       workspaceId,
       prId,
@@ -769,10 +783,13 @@ it('recovers an absent frozen batch with a detached target and delivers attached
     });
   };
   const original = [await addFact(0), await addFact(1)];
-  const prepared = await preparePRDelivery({
-    sessionId,
-    request: { workspaceId, prId: targets[0]!.id, bindingRevision: 1 },
-  });
+  const prepared = await preparePRDelivery(
+    {
+      sessionId,
+      request: { workspaceId, prId: targets[0]!.id, bindingRevision: 1 },
+    },
+    flowPorts
+  );
   if (prepared.status !== 'ready') {
     throw new Error('Expected original frozen delivery');
   }
@@ -785,7 +802,7 @@ it('recovers an absent frozen batch with a detached target and delivers attached
   const fresh = await addFact(2);
 
   vi.mocked(findPRDeliveryReceipt).mockResolvedValue('unavailable');
-  await recoverPRDeliveries(sessionId);
+  await recoverPRDeliveries(sessionId, undefined, flowPorts);
   expect(await readEvents({ batchId: frozen.deliveryId })).toEqual(
     expect.arrayContaining(
       original.map((row) =>
@@ -801,8 +818,8 @@ it('recovers an absent frozen batch with a detached target and delivers attached
   expect(await db.prisma.workspacePREvent.count({ where: { workspaceId } })).toBe(3);
   await workspacePRMonitoringService.resume(sessionId);
   vi.mocked(findPRDeliveryReceipt).mockResolvedValue('absent');
-  await recoverPRDeliveries(sessionId);
-  await recoverPRDeliveries(sessionId);
+  await recoverPRDeliveries(sessionId, undefined, flowPorts);
+  await recoverPRDeliveries(sessionId, undefined, flowPorts);
   expect(await readEvents({ batchId: frozen.deliveryId })).toEqual(
     expect.arrayContaining(
       original.map((row) =>
@@ -834,10 +851,13 @@ it('recovers an absent frozen batch with a detached target and delivers attached
     ])
   );
   const binding = await workspacePRMonitoringService.get(workspaceId);
-  const next = await preparePRDelivery({
-    sessionId,
-    request: { workspaceId, prId: targets[2]!.id, bindingRevision: binding!.bindingRevision },
-  });
+  const next = await preparePRDelivery(
+    {
+      sessionId,
+      request: { workspaceId, prId: targets[2]!.id, bindingRevision: binding!.bindingRevision },
+    },
+    flowPorts
+  );
   if (next.status !== 'ready') {
     throw new Error('Expected eligible sibling delivery');
   }
@@ -908,10 +928,13 @@ it('delivers a large MAIN ledger in bounded batches without acknowledging deferr
     if (!representative) {
       throw new Error('Expected pending ledger facts');
     }
-    const prepared = await preparePRDelivery({
-      sessionId,
-      request: { workspaceId, prId: representative, bindingRevision: 1 },
-    });
+    const prepared = await preparePRDelivery(
+      {
+        sessionId,
+        request: { workspaceId, prId: representative, bindingRevision: 1 },
+      },
+      flowPorts
+    );
     if (prepared.status !== 'ready') {
       throw new Error('Expected bounded MAIN delivery');
     }

@@ -11,7 +11,6 @@ import {
   type BackgroundAction,
 } from './background-action-dispatch.orchestrator';
 import { ensureDedicatedPRRecipient } from './pr-dedicated-session.orchestrator';
-import { defaultPRDeliveryPorts } from './pr-delivery-dependencies';
 import { recipientCanDispatch } from './pr-delivery-readiness';
 import { isCurrentPRRecipient } from './pr-delivery-recipient';
 import { recoverPRDeliveries } from './pr-delivery-recovery';
@@ -122,7 +121,7 @@ export async function preparePRDelivery(
     sessionId: string;
     request: PRDeliveryRequest;
   },
-  services: PRDeliveryPorts = defaultPRDeliveryPorts
+  services: PRDeliveryPorts
 ): ReturnType<PRBackgroundDeliveryPort['prepare']> {
   const initialGuard = await guardPRDelivery(sessionId, request, services);
   if (initialGuard !== 'ready') {
@@ -347,7 +346,7 @@ function canWake(config: MonitoringConfig) {
 }
 export async function wakePRDelivery(
   workspaceId: string,
-  services: PRDeliveryPorts = defaultPRDeliveryPorts,
+  services: PRDeliveryPorts,
   isCurrent: () => boolean = () => true
 ): Promise<void> {
   const monitoring = services.workspacePRMonitoringService;

@@ -8,23 +8,22 @@ const mocks = vi.hoisted(() => ({
   control: vi.fn(),
   wake: vi.fn(),
 }));
-vi.mock('@/backend/services/workspace', () => ({
+vi.mock('./pr-event-delivery.orchestrator', () => ({ wakePRDelivery: mocks.wake }));
+
+import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
+import type { PRMonitoringServices } from './pr-monitoring-dependencies';
+import { bindIssueMonitoringSession, setPRMonitoring } from './pr-monitoring.orchestrator';
+
+const services = unsafeCoerce<PRMonitoringServices>({
   workspacePRMonitoringService: {
     get: mocks.get,
     setBinding: mocks.setBinding,
     addEnabledControl: mocks.control,
   },
-}));
-vi.mock('@/backend/services/session', () => ({
   sessionDataService: { findAgentSessionsByWorkspaceId: mocks.sessions },
   sessionBackgroundDeliveryService: { invalidate: mocks.invalidate },
-}));
-vi.mock('@/backend/services/settings', () => ({
   userSettingsService: { get: async () => ({ ratchetReplyToPrComments: false }) },
-}));
-vi.mock('./pr-event-delivery.orchestrator', () => ({ wakePRDelivery: mocks.wake }));
-
-import { bindIssueMonitoringSession, setPRMonitoring } from './pr-monitoring.orchestrator';
+});
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -43,7 +42,7 @@ beforeEach(() => {
 });
 it('requires an explicit recipient when more than one ordinary conversation exists', async () => {
   expect(
-    await setPRMonitoring({ workspaceId: 'w', enabled: true, expectedBindingRevision: 2 })
+    await setPRMonitoring({ workspaceId: 'w', enabled: true, expectedBindingRevision: 2 }, services)
   ).toMatchObject({
     status: 'recipient_required',
     bindingRevision: 2,
@@ -57,7 +56,7 @@ it('binds the unique ordinary conversation without queuing a PR update', async (
     { id: 'a', workflow: 'code' },
     { id: 'aux', workflow: 'auto-iteration' },
   ]);
-  await setPRMonitoring({ workspaceId: 'w', enabled: true, expectedBindingRevision: 2 });
+  await setPRMonitoring({ workspaceId: 'w', enabled: true, expectedBindingRevision: 2 }, services);
   expect(mocks.setBinding).toHaveBeenCalledWith({
     workspaceId: 'w',
     enabled: true,
@@ -70,19 +69,22 @@ it('binds the unique ordinary conversation without queuing a PR update', async (
 it('rejects stale binding changes without queuing control or facts', async () => {
   mocks.setBinding.mockResolvedValue({ applied: false, bindingRevision: 4 });
   await expect(
-    setPRMonitoring({
-      workspaceId: 'w',
-      enabled: true,
-      recipientSessionId: 'a',
-      expectedBindingRevision: 2,
-    })
+    setPRMonitoring(
+      {
+        workspaceId: 'w',
+        enabled: true,
+        recipientSessionId: 'a',
+        expectedBindingRevision: 2,
+      },
+      services
+    )
   ).rejects.toThrow('refresh and retry');
   expect(mocks.control).not.toHaveBeenCalled();
   expect(mocks.wake).not.toHaveBeenCalled();
 });
 it('binds the issue-start conversation explicitly rather than choosing a recent session', async () => {
   mocks.get.mockResolvedValue({ enabled: true, recipientSessionId: null, bindingRevision: 2 });
-  await bindIssueMonitoringSession('w', 'a');
+  await bindIssueMonitoringSession('w', 'a', services);
   expect(mocks.setBinding).toHaveBeenCalledWith({
     workspaceId: 'w',
     enabled: true,
@@ -94,22 +96,28 @@ it('binds the issue-start conversation explicitly rather than choosing a recent 
 it('does not queue a PR update when the same enabled binding is retried', async () => {
   mocks.get.mockResolvedValue({ enabled: true, recipientSessionId: 'a', bindingRevision: 3 });
   mocks.setBinding.mockResolvedValue({ applied: true, bindingRevision: 3 });
-  await setPRMonitoring({
-    workspaceId: 'w',
-    enabled: true,
-    recipientSessionId: 'a',
-    expectedBindingRevision: 3,
-  });
+  await setPRMonitoring(
+    {
+      workspaceId: 'w',
+      enabled: true,
+      recipientSessionId: 'a',
+      expectedBindingRevision: 3,
+    },
+    services
+  );
   expect(mocks.control).not.toHaveBeenCalled();
 });
 
 it('enables dedicated delivery without selecting a main recipient or emitting a control', async () => {
-  await setPRMonitoring({
-    workspaceId: 'w',
-    enabled: true,
-    deliveryMode: 'DEDICATED',
-    expectedBindingRevision: 2,
-  });
+  await setPRMonitoring(
+    {
+      workspaceId: 'w',
+      enabled: true,
+      deliveryMode: 'DEDICATED',
+      expectedBindingRevision: 2,
+    },
+    services
+  );
   expect(mocks.sessions).not.toHaveBeenCalled();
   expect(mocks.setBinding).toHaveBeenCalledWith(
     expect.objectContaining({ deliveryMode: 'DEDICATED', recipientSessionId: null })
@@ -124,18 +132,21 @@ it('does not bind an issue conversation while dedicated delivery is enabled', as
     recipientSessionId: null,
     bindingRevision: 2,
   });
-  await bindIssueMonitoringSession('w', 'a');
+  await bindIssueMonitoringSession('w', 'a', services);
   expect(mocks.setBinding).not.toHaveBeenCalled();
 });
 
 it('forwards an explicit workspace resume with its destination and revision', async () => {
-  await setPRMonitoring({
-    workspaceId: 'w',
-    enabled: true,
-    deliveryMode: 'DEDICATED',
-    resume: true,
-    expectedBindingRevision: 2,
-  });
+  await setPRMonitoring(
+    {
+      workspaceId: 'w',
+      enabled: true,
+      deliveryMode: 'DEDICATED',
+      resume: true,
+      expectedBindingRevision: 2,
+    },
+    services
+  );
   expect(mocks.setBinding).toHaveBeenCalledWith(
     expect.objectContaining({ resume: true, deliveryMode: 'DEDICATED', expectedBindingRevision: 2 })
   );
@@ -151,13 +162,16 @@ it.each(newerSettings)(
     const current = { ...settings, recipientSessionId: 'new-recipient', bindingRevision: 3 };
     mocks.get.mockResolvedValue(current);
     await expect(
-      setPRMonitoring({
-        workspaceId: 'w',
-        enabled: true,
-        deliveryMode: 'MAIN',
-        recipientSessionId: null,
-        expectedBindingRevision: 2,
-      })
+      setPRMonitoring(
+        {
+          workspaceId: 'w',
+          enabled: true,
+          deliveryMode: 'MAIN',
+          recipientSessionId: null,
+          expectedBindingRevision: 2,
+        },
+        services
+      )
     ).rejects.toThrow('refresh and retry');
     expect(mocks.sessions).not.toHaveBeenCalled();
     expect(mocks.setBinding).not.toHaveBeenCalled();
@@ -191,13 +205,16 @@ it.each(newerSettings)(
       entered();
       return discovery;
     });
-    const request = setPRMonitoring({
-      workspaceId: 'w',
-      enabled: true,
-      deliveryMode: 'MAIN',
-      recipientSessionId: null,
-      expectedBindingRevision: 2,
-    });
+    const request = setPRMonitoring(
+      {
+        workspaceId: 'w',
+        enabled: true,
+        deliveryMode: 'MAIN',
+        recipientSessionId: null,
+        expectedBindingRevision: 2,
+      },
+      services
+    );
     await discovering;
     current = { ...settings, recipientSessionId: 'new-recipient', bindingRevision: 3 };
     release([

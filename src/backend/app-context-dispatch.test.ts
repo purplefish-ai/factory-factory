@@ -4,6 +4,7 @@ import { userSettingsService } from '@/backend/services/settings';
 import { SessionStatus } from '@/shared/core';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 import { createDefaultApplicationDependencies } from './app-context';
+import { bindIssueMonitoringSession } from './orchestration/pr-monitoring.orchestrator';
 import { clearWorkspaceInitOrchestratorStateForTests } from './orchestration/workspace-init.orchestrator';
 import {
   SessionConfigService,
@@ -95,6 +96,7 @@ describe('application queue producer composition', () => {
     const first = createGraph('first');
     const second = createGraph('second');
     setupInitialization(first.services);
+    vi.mocked(bindIssueMonitoringSession).mockClear();
 
     await first.services.initializeWorkspaceWorktree('workspace-init', {
       provisioningAlreadyStarted: true,
@@ -119,6 +121,16 @@ describe('application queue producer composition', () => {
       { sessionId: 'session-init', text: 'Queued while provisioning' },
     ]);
     expect(sessionDispatchService.tryDispatchNextMessage).not.toHaveBeenCalled();
+    // Issue binding stays in the owning graph's PR-monitoring cache scope.
+    const bindings = vi.mocked(bindIssueMonitoringSession).mock.calls;
+    expect(bindings.map(([workspaceId, sessionId]) => [workspaceId, sessionId])).toEqual([
+      ['workspace-init', 'session-init'],
+      ['workspace-init', 'session-init'],
+      ['workspace-init', 'session-init'],
+    ]);
+    expect(bindings[0]?.[2]).toBe(first.services);
+    expect(bindings[1]?.[2]).toBe(first.services);
+    expect(bindings[2]?.[2]).toBe(second.services);
   });
 
   it('carries READY retry authority through the selected graph wrapper', async () => {

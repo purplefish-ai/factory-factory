@@ -1,11 +1,11 @@
-import { configService } from '@/backend/services/config.service';
+import type { configService } from '@/backend/services/config.service';
 import {
   PR_SNAPSHOT_UPDATED,
-  prObservationService,
-  prSnapshotService,
+  type prObservationService,
+  type prSnapshotService,
 } from '@/backend/services/github';
-import { ratchetService } from '@/backend/services/ratchet';
-import {
+import type { ratchetService } from '@/backend/services/ratchet';
+import type {
   acpRuntimeManager,
   sessionDispatchService,
   findPRDeliveryReceipt,
@@ -14,8 +14,8 @@ import {
   sessionDomainService,
   sessionLifecycleService,
 } from '@/backend/services/session';
-import { userSettingsService } from '@/backend/services/settings';
-import {
+import type { userSettingsService } from '@/backend/services/settings';
+import type {
   workspacePRMonitoringService,
   workspacePrSnapshotService,
 } from '@/backend/services/workspace';
@@ -37,55 +37,12 @@ export type PRMonitoringServices = {
   workspacePRMonitoringService: typeof workspacePRMonitoringService;
   workspacePrSnapshotService: typeof workspacePrSnapshotService;
 };
-export const defaultPRMonitoringServices: PRMonitoringServices = {
-  get configService() {
-    return configService;
-  },
-  get prObservationService() {
-    return prObservationService;
-  },
-  get prSnapshotService() {
-    return prSnapshotService;
-  },
-  get ratchetService() {
-    return ratchetService;
-  },
-  get acpRuntimeManager() {
-    return acpRuntimeManager;
-  },
-  get sessionDispatchService() {
-    return sessionDispatchService;
-  },
-  get findPRDeliveryReceipt() {
-    return findPRDeliveryReceipt;
-  },
-  get sessionBackgroundDeliveryService() {
-    return sessionBackgroundDeliveryService;
-  },
-  get sessionDataService() {
-    return sessionDataService;
-  },
-  get sessionDomainService() {
-    return sessionDomainService;
-  },
-  get sessionLifecycleService() {
-    return sessionLifecycleService;
-  },
-  get userSettingsService() {
-    return userSettingsService;
-  },
-  get workspacePRMonitoringService() {
-    return workspacePRMonitoringService;
-  },
-  get workspacePrSnapshotService() {
-    return workspacePrSnapshotService;
-  },
-};
-
 const observationCacheScopes = new WeakMap<object, object>();
 
-// A graph may create fresh wrappers for poll, manual refresh, and delivery.
-// Keep their coalescing identity stable without exposing services to the producer.
+// Composition passes one services object per application graph. A graph may
+// create fresh wrappers for poll, manual refresh, and delivery; keying the scope
+// by that object keeps their coalescing identity stable without exposing
+// services to the producer.
 export function createPRObservationPorts(
   services: Pick<
     PRMonitoringServices,

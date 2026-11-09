@@ -249,11 +249,14 @@ export async function readyRetryPRFixture() {
   const { createPRBackgroundDeliveryPort } = await vi.importActual<
     typeof import('@/backend/orchestration/pr-event-delivery-port')
   >('@/backend/orchestration/pr-event-delivery-port');
-  const { defaultPRDeliveryPorts } = await vi.importActual<
+  const { createPRDeliveryPorts } = await vi.importActual<
     typeof import('@/backend/orchestration/pr-delivery-dependencies')
   >('@/backend/orchestration/pr-delivery-dependencies');
+  const { createPRMonitoringTestServices } = await vi.importActual<
+    typeof import('@/backend/orchestration/testing/pr-monitoring-services.test-support')
+  >('@/backend/orchestration/testing/pr-monitoring-services.test-support');
   const port = createPRBackgroundDeliveryPort({
-    ...defaultPRDeliveryPorts,
+    ...createPRDeliveryPorts(createPRMonitoringTestServices()),
     refreshObservation: async () => true,
   });
   if (!guard) {
