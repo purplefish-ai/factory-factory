@@ -241,40 +241,59 @@ function parseMigrationSql(migrationSql: string): {
  */
 function disablesForeignKeys(pragmas: readonly string[]): boolean {
   return pragmas.some(
-    (pragma) => pragma.toUpperCase().replace(/\s+/g, '') === 'PRAGMAFOREIGN_KEYS=OFF;'
+    (pragma) =>
+      pragma.toUpperCase().replace(/\s+/g, '').replace(/;$/, '') === 'PRAGMAFOREIGN_KEYS=OFF'
   );
+}
+
+/** Foreign key violations per `child -> parent` table pair. */
+function countForeignKeyViolations(db: Database.Database): Map<string, number> {
+  const counts = new Map<string, number>();
+  for (const { table, parent } of z
+    .array(foreignKeyViolationSchema)
+    .parse(db.pragma('foreign_key_check'))) {
+    const key = `${table} -> ${parent}`;
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+  }
+  return counts;
+}
+
+function errorText(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }
 
 /**
  * SQLite does not validate existing rows when foreign keys are switched back on,
- * so a table rebuild with checks off can leave orphans. Report them; never fail
- * startup over rows the application has been running with.
+ * so a table rebuild with checks off can leave orphans. Report violations the
+ * migration added (compared with `before`); never fail startup over them.
  */
-function reportForeignKeyViolations(
+function reportNewForeignKeyViolations(
   db: Database.Database,
   migrationName: string,
+  before: ReadonlyMap<string, number>,
   warn: (msg: string) => void
 ): void {
+  let after: Map<string, number>;
   try {
-    const violations = z.array(foreignKeyViolationSchema).parse(db.pragma('foreign_key_check'));
-    if (violations.length === 0) {
-      return;
-    }
-    const counts = new Map<string, number>();
-    for (const { table, parent } of violations) {
-      const key = `${table} -> ${parent}`;
-      counts.set(key, (counts.get(key) ?? 0) + 1);
-    }
-    const summary = [...counts].map(([key, count]) => `${key} (${count})`).join(', ');
-    warn(
-      `[migrate] Warning: foreign key check after ${migrationName} found ${violations.length} ` +
-        `row(s) referencing missing parents: ${summary}. Startup continues.`
-    );
+    after = countForeignKeyViolations(db);
   } catch (error) {
     warn(
-      `[migrate] Warning: foreign key check after ${migrationName} could not run: ${error instanceof Error ? error.message : String(error)}`
+      `[migrate] Warning: foreign key check after ${migrationName} could not run: ${errorText(error)}`
     );
+    return;
   }
+  const added = [...after]
+    .map(([key, count]) => [key, count - (before.get(key) ?? 0)] as const)
+    .filter(([, count]) => count > 0);
+  if (added.length === 0) {
+    return;
+  }
+  const total = added.reduce((sum, [, count]) => sum + count, 0);
+  const summary = added.map(([key, count]) => `${key} (${count})`).join(', ');
+  warn(
+    `[migrate] Warning: ${migrationName} left ${total} new row(s) referencing missing parents ` +
+      `(PRAGMA foreign_key_check): ${summary}. Startup continues.`
+  );
 }
 
 function applySingleMigration(
@@ -309,6 +328,16 @@ function applySingleMigration(
 
   log(`[migrate] Applying: ${migrationName}`);
 
+  // Baseline for the post-migration check, so earlier orphans are not blamed on this migration.
+  let violationsBefore: Map<string, number> | undefined;
+  if (disablesForeignKeys(prePragmas)) {
+    try {
+      violationsBefore = countForeignKeyViolations(db);
+    } catch {
+      violationsBefore = new Map();
+    }
+  }
+
   // Execute pre-transaction PRAGMAs
   for (const pragma of prePragmas) {
     db.exec(pragma);
@@ -332,8 +361,8 @@ function applySingleMigration(
     }
   }
 
-  if (disablesForeignKeys(prePragmas)) {
-    reportForeignKeyViolations(db, migrationName, warn);
+  if (violationsBefore) {
+    reportNewForeignKeyViolations(db, migrationName, violationsBefore, warn);
   }
 
   log(`[migrate] Applied: ${migrationName}`);

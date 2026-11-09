@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import { promisify } from 'node:util';
 import chalk from 'chalk';
 import { runMigrations as runDbMigrations } from '@/backend/migrate';
+import { getCurrentProcessEnv } from '@/backend/services/logger.service';
 import {
   type AuthenticationCheck,
   appendBoundedOutputBuffer,
@@ -181,7 +182,7 @@ function runMigrations(projectRoot: string, databasePath: string): void {
     log: () => {
       // silent for proxy command
     },
-    unknownMigrations: resolveUnknownMigrationPolicy({ env: process.env }),
+    unknownMigrations: resolveUnknownMigrationPolicy({ env: getCurrentProcessEnv() }),
   });
 }
 

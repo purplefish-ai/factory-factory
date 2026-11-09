@@ -30,9 +30,19 @@ describe('describeMigrationFailure', () => {
 
     expect(text).toContain('20990101000000_future');
     expect(text).toContain('Upgrade Factory Factory');
+    expect(text).toContain('FF_ALLOW_UNKNOWN_MIGRATIONS=1');
+    expect(text).not.toContain('--dev');
+    expect(text).not.toMatch(/^Migration failed/);
+  });
+
+  it('suggests development mode only where the command has one', () => {
+    const text = describeMigrationFailure(
+      new UnknownAppliedMigrationsError('/data/data.db', ['20990101000000_future']),
+      { suggestDevMode: true }
+    );
+
     expect(text).toContain('ff serve --dev');
     expect(text).toContain('FF_ALLOW_UNKNOWN_MIGRATIONS=1');
-    expect(text).not.toMatch(/^Migration failed/);
   });
 
   it('labels other errors as migration failures', () => {

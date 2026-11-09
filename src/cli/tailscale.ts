@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import chalk from 'chalk';
 import type { Command } from 'commander';
 import { runMigrations } from '@/backend/migrate';
+import { getCurrentProcessEnv } from '@/backend/services/logger.service';
 import { stopChild, watchChild } from './child-lifecycle';
 import { resolveDatabasePath } from './database-path';
 import { forwardDiagnosticOutput } from './diagnostic-output';
@@ -40,7 +41,7 @@ export async function runTailscaleSession(params: {
       databasePath,
       migrationsPath: join(projectRoot, 'prisma', 'migrations'),
       log: console.log,
-      unknownMigrations: resolveUnknownMigrationPolicy({ env: process.env }),
+      unknownMigrations: resolveUnknownMigrationPolicy({ env: getCurrentProcessEnv() }),
     });
     const requestedPort = await findAvailablePort(options.backendPort, { maxAttempts: 50, signal });
     signal.throwIfAborted();

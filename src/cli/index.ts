@@ -160,7 +160,7 @@ async function runMigrationsOrExit(
     await runMigrations(databasePath, verbose, dev);
     console.log(chalk.green('  ✓ Migrations completed'));
   } catch (error) {
-    console.error(chalk.red(`\n  ✗ ${describeMigrationFailure(error)}`));
+    console.error(chalk.red(`\n  ✗ ${describeMigrationFailure(error, { suggestDevMode: true })}`));
     process.exit(1);
   }
 }

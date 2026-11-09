@@ -760,6 +760,37 @@ PRAGMA defer_foreign_keys=OFF;`
       expect(withDatabase(getAppliedMigrations)).toEqual(['001_tables', '002_orphan_rebuild']);
     });
 
+    it('reports only violations a migration added, and accepts PRAGMAs without semicolons', () => {
+      addMigration(
+        '001_tables',
+        `CREATE TABLE users (id INTEGER PRIMARY KEY);
+CREATE TABLE posts (id INTEGER PRIMARY KEY, user_id INTEGER NOT NULL REFERENCES users(id));`
+      );
+      migrate();
+      withDatabase((db) => {
+        db.pragma('foreign_keys = OFF');
+        db.prepare('INSERT INTO posts (id, user_id) VALUES (1, 42)').run();
+      });
+      addMigration(
+        '002_rebuild_keeps_old_orphan',
+        `PRAGMA foreign_keys=OFF
+CREATE TABLE notes (id INTEGER PRIMARY KEY);
+PRAGMA foreign_keys=ON`
+      );
+      addMigration(
+        '003_adds_orphan',
+        `PRAGMA foreign_keys=OFF
+INSERT INTO posts (id, user_id) VALUES (2, 43);
+PRAGMA foreign_keys=ON`
+      );
+
+      const warnings = migrate();
+
+      expect(warnings).toHaveLength(1);
+      expect(warnings[0]).toContain('003_adds_orphan left 1 new row(s)');
+      expect(warnings[0]).toContain('posts -> users (1)');
+    });
+
     it('does not run the foreign key check after migrations that keep foreign keys on', () => {
       addMigration(
         '001_tables',

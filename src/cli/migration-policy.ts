@@ -14,13 +14,22 @@ export function resolveUnknownMigrationPolicy(options: {
   return options.dev || options.env[ALLOW_UNKNOWN_MIGRATIONS_ENV] === '1' ? 'warn' : 'refuse';
 }
 
-/** Startup failure text for a migration error, with recovery advice for a downgrade. */
-export function describeMigrationFailure(error: unknown): string {
+/**
+ * Startup failure text for a migration error, with recovery advice for a
+ * downgrade. Only `ff serve` has a development mode to suggest.
+ */
+export function describeMigrationFailure(
+  error: unknown,
+  options: { suggestDevMode?: boolean } = {}
+): string {
   if (error instanceof UnknownAppliedMigrationsError) {
+    const choices = options.suggestDevMode
+      ? `use \`ff serve --dev\` or set ${ALLOW_UNKNOWN_MIGRATIONS_ENV}=1`
+      : `set ${ALLOW_UNKNOWN_MIGRATIONS_ENV}=1`;
     return (
       `${error.message}\n` +
       '  If these migrations came from a development branch that shares this database, ' +
-      `use \`ff serve --dev\` or set ${ALLOW_UNKNOWN_MIGRATIONS_ENV}=1 to start anyway.`
+      `${choices} to start anyway.`
     );
   }
   return `Migration failed: ${error instanceof Error ? error.message : String(error)}`;
