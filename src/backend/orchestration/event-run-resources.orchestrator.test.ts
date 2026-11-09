@@ -61,7 +61,10 @@ it.each([
 ] as const)(
   'freezes %s %s access without granting incidental unattended privileges',
   async (provider, preset, accessMode) => {
-    ports.settings.mockResolvedValue({ defaultWorkspacePermissions: preset });
+    ports.settings.mockResolvedValue({
+      defaultWorkspacePermissions: 'YOLO',
+      automationPermissions: preset,
+    });
     await createEventLaunchResources(claim, run(provider), vi.fn());
     const execution = ports.freeze.mock.calls[0]?.[0].execution;
     expect(execution).toMatchObject({
@@ -105,3 +108,14 @@ it('does not create resources if workspace permissions cannot be read', async ()
   expect(ports.workspace).not.toHaveBeenCalled();
   expect(ports.session).not.toHaveBeenCalled();
 });
+
+it.each(['CLAUDE', 'CODEX'] as const)(
+  'defaults new %s executions to auto review',
+  async (provider) => {
+    ports.settings.mockResolvedValue({ defaultWorkspacePermissions: 'YOLO' });
+    await createEventLaunchResources(claim, run(provider), vi.fn());
+    expect(ports.freeze.mock.calls[0]?.[0].execution.accessMode).toBe(
+      provider === 'CODEX' ? 'agent' : 'auto'
+    );
+  }
+);

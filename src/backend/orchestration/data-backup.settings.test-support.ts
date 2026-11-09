@@ -20,6 +20,7 @@ export const mockUserSettings: UserSettings = {
   defaultClaudeReasoningEffort: null,
   defaultCodexReasoningEffort: 'high',
   defaultWorkspacePermissions: 'STRICT',
+  automationPermissions: 'YOLO',
   // Non-default values — an export/import test that only ever exercises
   // defaults can't tell a real persisted preference from a value the
   // schema's default happened to backfill (see the voiceModeEnabled et al.

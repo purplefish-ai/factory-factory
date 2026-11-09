@@ -505,6 +505,7 @@ describe('DataBackupService', () => {
           defaultClaudeModel: 'sonnet',
           defaultCodexModel: 'gpt-5-codex',
           defaultWorkspacePermissions: 'STRICT',
+          automationPermissions: 'YOLO',
           reviewerSessionProvider: SessionProvider.CLAUDE,
           reviewerClaudeModel: 'opus',
           reviewerCodexModel: 'gpt-5-codex-high',
@@ -541,6 +542,7 @@ describe('DataBackupService', () => {
           defaultClaudeModel: 'sonnet',
           defaultCodexModel: 'default',
           defaultWorkspacePermissions: 'STRICT',
+          automationPermissions: 'YOLO',
         },
       });
 
@@ -704,7 +706,7 @@ describe('DataBackupService', () => {
   });
 
   describe('importData', () => {
-    it('round-trips a custom ticket prompt through the current backup format', async () => {
+    it('round-trips ticket prompts and explicit automation permissions through current backups', async () => {
       vi.mocked(prisma.project.findMany).mockResolvedValue([]);
       vi.mocked(prisma.workspace.findMany).mockResolvedValue([]);
       vi.mocked(prisma.agentSession.findMany).mockResolvedValue([]);
@@ -718,6 +720,7 @@ describe('DataBackupService', () => {
       expect(mockTx.userSettings.create).toHaveBeenCalledWith({
         data: expect.objectContaining({
           ticketDispatchPrompt: mockUserSettings.ticketDispatchPrompt,
+          automationPermissions: 'YOLO',
         }),
       });
     });
@@ -796,6 +799,7 @@ describe('DataBackupService', () => {
       expect(mockTx.userSettings.create).toHaveBeenCalledWith({
         data: expect.objectContaining({
           ratchetReviewTriggerMode: 'ALL_REVIEW_FEEDBACK',
+          automationPermissions: 'RELAXED',
           ticketDispatchPrompt: null,
           childWorkspacesEnabled: false,
           reviewerSessionProvider: SessionProvider.CLAUDE,
@@ -846,6 +850,7 @@ describe('DataBackupService', () => {
           defaultClaudeModel: 'sonnet',
           defaultCodexModel: 'gpt-5-codex',
           defaultWorkspacePermissions: 'STRICT',
+          automationPermissions: 'YOLO',
           voiceModeEnabled: true,
           voiceTtsModel: 'aura-2-apollo-en',
           voiceTtsSpeed: 0.72,
