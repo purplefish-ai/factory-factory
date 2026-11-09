@@ -1,9 +1,10 @@
 import type { QueryClient } from '@tanstack/react-query';
-import { getQueryKey } from '@trpc/react-query';
 import { runInBackground } from '@/client/lib/background-task';
 import type { WorkspaceDetail } from '@/client/lib/snapshot-to-workspace';
-import { trpc } from '@/client/lib/trpc';
-import { mergeWorkspaceDetailSnapshot } from '@/client/lib/workspace-queries';
+import {
+  mergeWorkspaceDetailSnapshot,
+  workspaceDetailQueryFilter,
+} from '@/client/lib/workspace-queries';
 import type { WorkspaceSnapshotEntry } from '@/shared/workspace-snapshot';
 
 export interface ProjectWorkspaceDetailTransitions {
@@ -33,10 +34,7 @@ export function createWorkspaceDetailTransitionScope(): WorkspaceDetailTransitio
         // Reset clears old data and synchronously cancels its request before
         // active observers refetch persisted detail. No initialData is configured.
         runInBackground(
-          queryClient.resetQueries({
-            queryKey: getQueryKey(trpc.workspace.get, { id: workspaceId }, 'query'),
-            exact: true,
-          }),
+          queryClient.resetQueries(workspaceDetailQueryFilter(workspaceId)),
           "Couldn't refresh data."
         );
       };
@@ -46,9 +44,9 @@ export function createWorkspaceDetailTransitionScope(): WorkspaceDetailTransitio
           const liveWorkspaceIds = new Set(entries.map((entry) => entry.workspaceId));
           const removalCandidates = new Set(previousWorkspaceIds);
           // A detail can outlive an empty/evicted project list across navigation.
-          for (const [, detail] of queryClient.getQueriesData<WorkspaceDetail>({
-            queryKey: getQueryKey(trpc.workspace.get, undefined, 'query'),
-          })) {
+          for (const [, detail] of queryClient.getQueriesData<WorkspaceDetail>(
+            workspaceDetailQueryFilter()
+          )) {
             if (
               detail?.projectId === projectId &&
               detail.status !== 'ARCHIVING' &&
@@ -65,10 +63,7 @@ export function createWorkspaceDetailTransitionScope(): WorkspaceDetailTransitio
         },
         mergeLive(entry) {
           const reintroduced = removedWorkspaceIds.delete(entry.workspaceId);
-          const filter = {
-            queryKey: getQueryKey(trpc.workspace.get, { id: entry.workspaceId }, 'query'),
-            exact: true,
-          };
+          const filter = workspaceDetailQueryFilter(entry.workspaceId);
           if (reintroduced) {
             // Cancellation takes effect synchronously; do not await before merging.
             runInBackground(queryClient.cancelQueries(filter), "Couldn't refresh data.");

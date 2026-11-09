@@ -23,7 +23,8 @@ import type { WorkspaceSnapshotEntry } from '@/shared/workspace-snapshot';
  * responses with the snapshot stream. A plain tRPC `useQuery`, `fetch` or
  * `setData` on one of these keys would therefore commit HTTP data without the
  * reconciler and leave it uninstalled for later refetches. Every reader here
- * installs the reconciler (see docs/architecture/workspace-state.md).
+ * installs the reconciler; `factory/workspace-query-owner` keeps callers on
+ * this module (see docs/architecture/workspace-state.md).
  */
 
 /** The parts of the vanilla tRPC client (`trpc.useUtils().client`) these reads use. */
@@ -117,7 +118,26 @@ export function mergeWorkspaceDetailSnapshot(
   entry: WorkspaceSnapshotEntry
 ): void {
   queryClient.setQueryData<WorkspaceDetail>(
-    getQueryKey(trpc.workspace.get, { id: entry.workspaceId }, 'query'),
+    workspaceDetailQueryFilter(entry.workspaceId).queryKey,
     (existing) => mergeProjectSnapshotIntoWorkspaceDetail(entry, existing)
   );
+}
+
+/**
+ * Filters for cancelling, invalidating, resetting and reading one detail, or
+ * every detail when no ID is given. These operations reuse the installed
+ * options; never pass the key to a raw fetch or write.
+ */
+export function workspaceDetailQueryFilter(workspaceId?: string) {
+  return workspaceId === undefined
+    ? { queryKey: getQueryKey(trpc.workspace.get, undefined, 'query') }
+    : { queryKey: getQueryKey(trpc.workspace.get, { id: workspaceId }, 'query'), exact: true };
+}
+
+/** The same filter contract for one project's list. */
+export function projectWorkspaceListQueryFilter(projectId: string) {
+  return {
+    queryKey: getQueryKey(trpc.workspace.listForProject, { projectId }, 'query'),
+    exact: true,
+  };
 }

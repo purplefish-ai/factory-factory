@@ -474,7 +474,20 @@ invalidation refetches unreconciled. Readers use `useProjectWorkspaceQuery`
 `refetchInterval` and `staleTime`), `fetchWorkspaceDetail` or
 `ensureWorkspaceDetail`; optimistic list rows, creation seeds and stream detail
 merges use the module's writers. Invalidation, cancellation and cache reads keep
-using tRPC utilities because they reuse the options already installed.
+using tRPC utilities because they reuse the options already installed;
+QueryClient filters for these keys come from `workspaceDetailQueryFilter` and
+`projectWorkspaceListQueryFilter`.
+
+The `factory/workspace-query-owner` lint rule rejects tRPC `useQuery`, `fetch`,
+`ensureData`, `prefetch`, `setData` and related helpers, plus `getQueryKey`, for
+either procedure outside the module and the reconciler (its `owners` option in
+`.oxlintrc.json`); tests are exempt. The reconciler relies on three React Query
+behaviours: it calls a function `structuralSharing` synchronously at the commit,
+a thrown `CancelledError({ revert: true })` keeps the previous data without an
+error state, and the latest fetch or observer of a key installs the options
+later option-less refetches and writes use. `query-core-commit-contract.test.ts`
+pins all three so a React Query upgrade fails loudly instead of disabling
+reconciliation.
 
 Reconciliation ownership is scoped to the QueryClient, project, and connection
 lifetime. Disconnecting or leaving a project retires that token, cancels its

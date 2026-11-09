@@ -1,5 +1,13 @@
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, relative, resolve } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -17,14 +25,19 @@ const rules = [
   'no-unsafe-json-parse-cast',
   'no-unsafe-resolver-cast',
   'no-raw-palette-classes',
+  'workspace-query-owner',
 ];
+const workspaceQueryOwner = 'owned/workspace-queries.ts';
 writeFileSync(
   config,
   JSON.stringify({
     categories: { correctness: 'off' },
     plugins: [],
     jsPlugins: [{ name: 'factory', specifier: resolve('lint-rules/factory.mjs') }],
-    rules: Object.fromEntries(rules.map((rule) => [`factory/${rule}`, 'error'])),
+    rules: {
+      ...Object.fromEntries(rules.map((rule) => [`factory/${rule}`, 'error'])),
+      'factory/workspace-query-owner': ['error', { owners: [workspaceQueryOwner] }],
+    },
   })
 );
 
@@ -85,6 +98,20 @@ describe('Oxlint project guardrails', () => {
     ['no-raw-palette-classes', 'const className = "dark:text-red-500";'],
     ['no-raw-palette-classes', 'const className = "p-2 !bg-red-500";'],
     ['no-raw-palette-classes', 'const glow = "inset-ring-amber-400/50";'],
+    ['workspace-query-owner', 'const query = trpc.workspace.get.useQuery({ id });'],
+    [
+      'workspace-query-owner',
+      'const query = trpc.workspace.listForProject.useSuspenseQuery(input);',
+    ],
+    ['workspace-query-owner', 'await utils.workspace.get.fetch({ id });'],
+    ['workspace-query-owner', 'await utils.workspace.listForProject.ensureData(input);'],
+    ['workspace-query-owner', 'void utils.workspace.get.prefetch({ id });'],
+    ['workspace-query-owner', 'utils.workspace.listForProject.setData(input, (old) => old);'],
+    ['workspace-query-owner', 'utils.workspace["get"].setData({ id }, detail);'],
+    ['workspace-query-owner', 'const options = utils.workspace.get.queryOptions({ id });'],
+    ['workspace-query-owner', 'const fetchDetail = utils.workspace.get.fetch;'],
+    ['workspace-query-owner', "const key = getQueryKey(trpc.workspace.get, { id }, 'query');"],
+    ['workspace-query-owner', 'const key = getQueryKey(trpc.workspace.listForProject);'],
   ];
   const rejectedFixtures = rejectedSources.map(([rule, source], index) => ({
     rule,
@@ -117,12 +144,27 @@ describe('Oxlint project guardrails', () => {
     'const id = "my-text-red-500-id";',
     'const url = "/api/text-red-500";',
     'const selector = "a.text-red-500";',
-  ].map((source, index) => ({ source, file: join(directory, `accepted-${index}.tsx`) }));
+    'await utils.workspace.get.invalidate({ id });',
+    'await utils.workspace.listForProject.cancel(input);',
+    'const cached = utils.workspace.listForProject.getData(input);',
+    'const detail = await utils.client.workspace.get.query({ id }, { signal });',
+    'const children = trpc.workspace.listChildren.useQuery({ id });',
+    'const project = trpc.project.get.useQuery({ id });',
+    "const key = getQueryKey(trpc.workspace.listChildren, { id }, 'query');",
+    'const value = map.get.fetch();',
+  ]
+    .map((source, index) => ({ source, file: join(directory, `accepted-${index}.tsx`) }))
+    .concat({
+      // The configured owner is the one file allowed to build these options.
+      source: 'utils.workspace.get.setData({ id }, detail); getQueryKey(trpc.workspace.get);',
+      file: join(directory, workspaceQueryOwner),
+    });
 
   let report: z.infer<typeof reportSchema>;
   beforeAll(() => {
     // Separate modules preserve every fixture's scope while sharing one real CLI startup.
     const fixtures = [...rejectedFixtures, ...acceptedFixtures];
+    mkdirSync(join(directory, 'owned'));
     for (const { file, source } of fixtures) {
       writeFileSync(file, source);
     }
@@ -190,5 +232,28 @@ describe('raw palette class exceptions', () => {
     expect(readFileSync(resolve(file), 'utf8')).toMatch(
       /(?<=^|[\s'"`:!])(?:bg|text|border(?:-[trblxyse])?|ring(?:-offset)?|inset-ring|outline|fill|stroke|from|via|to|decoration|divide|shadow|inset-shadow|text-shadow|drop-shadow|accent|caret|placeholder)-(?:red|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose|slate|gray|zinc|neutral|stone)-(?:50|[1-9]00|950)(?![\w-])/
     );
+  });
+});
+
+describe('workspace query owners', () => {
+  const projectConfig = overridesSchema.parse(
+    JSON.parse(readFileSync(resolve('.oxlintrc.json'), 'utf8'))
+  );
+  const owners = projectConfig.overrides.flatMap((override) => {
+    const rule = override.rules['factory/workspace-query-owner'];
+    return Array.isArray(rule)
+      ? z.tuple([z.literal('error'), z.object({ owners: z.array(z.string()) })]).parse(rule)[1]
+          .owners
+      : [];
+  });
+
+  it('names the query module and its reconciler as the only owners', () => {
+    expect(owners).toEqual([
+      'src/client/lib/workspace-queries.ts',
+      'src/client/lib/workspace-cache-reconciler.ts',
+    ]);
+    for (const owner of owners) {
+      expect(existsSync(resolve(owner))).toBe(true);
+    }
   });
 });

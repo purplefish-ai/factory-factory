@@ -1,7 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { TRPCClientError } from '@trpc/client';
-import { getQueryKey } from '@trpc/react-query';
 import { observable } from '@trpc/server/observable';
 import { useRef, useState } from 'react';
 import { expect, fn, userEvent, within } from 'storybook/test';
@@ -9,6 +8,7 @@ import { ChatTranscript } from '@/client/features/chat';
 import type { SubagentSelection } from '@/client/features/subagents';
 import { runInBackground } from '@/client/lib/background-task';
 import { trpc } from '@/client/lib/trpc';
+import { workspaceDetailQueryFilter } from '@/client/lib/workspace-queries';
 import { Button } from '@/components/ui/button';
 import { MainViewTabBar } from './main-view-tab-bar';
 import { RightPanel } from './right-panel';
@@ -113,9 +113,7 @@ function RightPanelStory({
                 onClick={() => {
                   taskPresent.current = false;
                   runInBackground(
-                    queryClient.invalidateQueries({
-                      queryKey: getQueryKey(trpc.workspace.get, { id: workspaceId }, 'query'),
-                    }),
+                    queryClient.invalidateQueries(workspaceDetailQueryFilter(workspaceId)),
                     'Could not refresh workspace'
                   );
                 }}

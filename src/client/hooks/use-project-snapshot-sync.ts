@@ -1,5 +1,4 @@
 import { type QueryClient, useQueryClient } from '@tanstack/react-query';
-import { getQueryKey } from '@trpc/react-query';
 /**
  * React hook that syncs /snapshots WebSocket messages into the
  * workspace.listForProject (sidebar + kanban) and workspace.get (detail
@@ -33,6 +32,7 @@ import {
   createWorkspaceDetailTransitionScope,
   type ProjectWorkspaceDetailTransitions,
 } from '@/client/lib/workspace-detail-snapshot-transitions';
+import { projectWorkspaceListQueryFilter } from '@/client/lib/workspace-queries';
 import { useWebSocketChannel } from '@/hooks/use-websocket-channel';
 import { buildWebSocketUrl } from '@/lib/websocket-config';
 import {
@@ -335,10 +335,7 @@ export function useProjectSnapshotSync(projectId: string | undefined): void {
     if (!projectId) {
       return;
     }
-    const filter = {
-      queryKey: getQueryKey(trpc.workspace.listForProject, { projectId }, 'query'),
-      exact: true,
-    };
+    const filter = projectWorkspaceListQueryFilter(projectId);
     const detailFilter = projectWorkspaceDetailQueryFilter(queryClient, projectId);
     runInBackground(queryClient.cancelQueries(detailFilter), "Couldn't refresh data.");
     runInBackground(queryClient.invalidateQueries(detailFilter), "Couldn't refresh data.");
