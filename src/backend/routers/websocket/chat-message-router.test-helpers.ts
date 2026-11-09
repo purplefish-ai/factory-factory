@@ -1,7 +1,12 @@
 import { vi } from 'vitest';
 import type { SessionCommandFactories } from '@/backend/services/session';
 import { EMPTY_CHAT_BAR_CAPABILITIES } from '@/shared/chat-capabilities';
+import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 import type { ChatMessageRouterServices } from './chat-message-router';
+
+type StartupClient = Awaited<
+  ReturnType<ChatMessageRouterServices['startup']['getOrCreateSessionClient']>
+>;
 
 export function createChatRouterServices(
   factories: SessionCommandFactories
@@ -40,7 +45,10 @@ export function createChatRouterServices(
     },
     permission: { respondToPermission: vi.fn(() => true) },
     prompt: { sendSessionMessage: vi.fn(async () => undefined) },
-    startup: { getSessionClient: vi.fn(), getOrCreateSessionClient: vi.fn(async () => undefined) },
+    startup: {
+      getSessionClient: vi.fn(),
+      getOrCreateSessionClient: vi.fn(async () => unsafeCoerce<StartupClient>({})),
+    },
     dispatch: {
       steerQueuedMessage: vi.fn().mockResolvedValue(undefined),
       tryDispatchNextMessage: vi.fn(async () => undefined),

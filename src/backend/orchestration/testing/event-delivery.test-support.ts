@@ -402,7 +402,6 @@ export async function createEventDeliveryFixture(
       workspace.workspaceActivityService.markSessionRunning(w, s),
     markSessionIdle: (w: string, s: string) =>
       workspace.workspaceActivityService.markSessionIdle(w, s),
-    recordRatchetSessionEnd: async () => undefined,
     resetPRDiscoveryBackoff: (id: string) =>
       workspace.workspaceDataService.resetPRDiscoveryBackoff(id),
   };

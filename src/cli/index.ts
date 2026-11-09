@@ -18,6 +18,7 @@ import { registerBuildCommand } from './build-command';
 import { registerClaudeCommand } from './claude';
 import { registerCodexCommand } from './codex';
 import { resolveDatabasePath } from './database-path';
+import { describeMigrationFailure, resolveUnknownMigrationPolicy } from './migration-policy';
 import { runProxyCommand } from './proxy';
 import { ensureDataDir, findAvailablePort } from './runtime-utils';
 import { buildHttpOrigin, buildServeEnv } from './serve-env';
@@ -61,8 +62,12 @@ function getVersion(): string {
   }
 }
 
+function warnMigration(msg: string): void {
+  console.warn(chalk.yellow(`  ⚠ ${msg}`));
+}
+
 // Run database migrations using better-sqlite3 directly (no Prisma CLI needed)
-function runMigrations(databasePath: string, verbose: boolean): Promise<void> {
+function runMigrations(databasePath: string, verbose: boolean, dev: boolean): Promise<void> {
   const migrationsPath = join(PROJECT_ROOT, 'prisma', 'migrations');
   const log = verbose
     ? (msg: string) => console.log(chalk.gray(`  ${msg}`))
@@ -71,7 +76,13 @@ function runMigrations(databasePath: string, verbose: boolean): Promise<void> {
       };
 
   return Promise.resolve().then(() => {
-    runDbMigrations({ databasePath, migrationsPath, log });
+    runDbMigrations({
+      databasePath,
+      migrationsPath,
+      log,
+      warn: warnMigration,
+      unknownMigrations: resolveUnknownMigrationPolicy({ dev, env: getCurrentProcessEnv() }),
+    });
   });
 }
 
@@ -139,13 +150,17 @@ async function resolvePortsOrExit(
   }
 }
 
-async function runMigrationsOrExit(databasePath: string, verbose: boolean): Promise<void> {
+async function runMigrationsOrExit(
+  databasePath: string,
+  verbose: boolean,
+  dev: boolean
+): Promise<void> {
   console.log(chalk.blue('  📦 Running database migrations...'));
   try {
-    await runMigrations(databasePath, verbose);
+    await runMigrations(databasePath, verbose, dev);
     console.log(chalk.green('  ✓ Migrations completed'));
   } catch (error) {
-    console.error(chalk.red(`\n  ✗ Migration failed: ${(error as Error).message}`));
+    console.error(chalk.red(`\n  ✗ ${describeMigrationFailure(error, { suggestDevMode: true })}`));
     process.exit(1);
   }
 }
@@ -244,7 +259,7 @@ program
         const restarted = spawnSync(process.execPath, process.argv.slice(1), { stdio: 'inherit' });
         process.exit(restarted.status ?? 1);
       }
-      await runMigrationsOrExit(databasePath, verbose);
+      await runMigrationsOrExit(databasePath, verbose, !!options.dev);
     } catch (error) {
       releaseRunningMarker?.();
       console.error(chalk.red(`\n  ✗ ${error instanceof Error ? error.message : String(error)}`));
@@ -326,10 +341,12 @@ program
         databasePath: effectivePath,
         migrationsPath,
         log: (msg) => console.log(chalk.gray(msg)),
+        warn: (msg) => console.warn(chalk.yellow(msg)),
+        unknownMigrations: resolveUnknownMigrationPolicy({ env: getCurrentProcessEnv() }),
       });
       console.log(chalk.green('Migrations completed successfully'));
     } catch (error) {
-      console.error(chalk.red('Migration failed:'), error);
+      console.error(chalk.red(describeMigrationFailure(error)));
       process.exit(1);
     }
   });

@@ -76,7 +76,6 @@ it.each([
             planModeEnabled: false,
           },
         },
-        false,
         guard
       )
       .catch((error: unknown) => error);
@@ -112,7 +111,7 @@ it.each([
   }
 );
 
-it.each(['plan', 'thinking', 'reasoning'] as const)(
+it.each(['plan', 'reasoning'] as const)(
   'rejects guarded %s settings with no runtime while retaining ordinary behavior',
   async (kind) => {
     const manager = new AcpRuntimeManager();
@@ -122,18 +121,18 @@ it.each(['plan', 'thinking', 'reasoning'] as const)(
       settings: {
         selectedModel: null,
         reasoningEffort: kind === 'reasoning' ? 'high' : null,
-        thinkingEnabled: kind === 'thinking',
+        thinkingEnabled: false,
         planModeEnabled: kind === 'plan',
       },
     };
     await expect(
-      h.service.configureQueuedMessage('session', message, kind === 'thinking', {
+      h.service.configureQueuedMessage('session', message, {
         check: async () => undefined,
         assertCurrent: () => undefined,
       })
     ).rejects.toThrow('Retry runtime is unavailable');
-    await expect(
-      h.service.configureQueuedMessage('session', message, kind === 'thinking')
-    ).resolves.toEqual(message.settings);
+    await expect(h.service.configureQueuedMessage('session', message)).resolves.toEqual(
+      message.settings
+    );
   }
 );

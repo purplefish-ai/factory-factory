@@ -9,12 +9,15 @@ import { PR_URL_ATTACHED } from '@/backend/services/github';
 import { RATCHET_DISPATCH_CHANGED } from '@/backend/services/ratchet';
 import {
   deriveWorkspaceFlowState,
+  SNAPSHOT_CHANGED,
   WorkspaceSnapshotStore,
   type workspaceDataService,
 } from '@/backend/services/workspace';
 import { prProjectionDefaults } from '@/backend/testing/pr-projection-fixture';
 import { isWorkspaceDoneOrMerged } from '@/client/lib/workspace-archive';
 import { deriveWorkspaceSidebarStatus } from '@/shared/core';
+import { deriveWorkspacePRSelection, type WorkspacePullRequest } from '@/shared/workspace-pr';
+import { deriveWorkspacePRSummary } from '@/shared/workspace-pr-summary';
 
 type Projection = Awaited<ReturnType<typeof workspaceDataService.findRatchetProjection>>;
 
@@ -33,9 +36,52 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-describe('failed PR attachment streaming', () => {
+function attachedCollection(previousState: 'MERGED' | 'CLOSED'): NonNullable<Projection> {
+  const pr = (id: string, number: number, state: WorkspacePullRequest['state']) => ({
+    id,
+    revision: state === 'NONE' ? 0 : 1,
+    url: `https://github.com/org/repo/pull/${number}`,
+    number: state === 'NONE' ? null : number,
+    title: null,
+    headRefName: null,
+    baseRefName: null,
+    state,
+    reviewState: null,
+    ciStatus: state === 'NONE' ? ('UNKNOWN' as const) : ('SUCCESS' as const),
+    hasMergeConflict: false,
+    syncedAt: null,
+  });
+  const prs = [pr('pr-1', 1, previousState), pr('pr-2', 2, 'NONE')];
+  const selection = deriveWorkspacePRSelection(prs);
+  const prSummary = deriveWorkspacePRSummary(prs, true);
+  return {
+    ...prProjectionDefaults,
+    status: 'READY',
+    ratchetEnabled: true,
+    ratchetState: prSummary.ratchetState,
+    prMonitoring: {
+      deliveryMode: 'MAIN',
+      enabled: true,
+      recipientSessionId: 'main',
+      bindingRevision: 1,
+      pauseReason: null,
+      pendingEventCount: 0,
+    },
+    prs,
+    prCollectionRevision: prs.reduce((total, row) => total + row.revision + 1, 0),
+    ...selection,
+    prSummary,
+    prUrl: selection.selectedPr?.url ?? null,
+    prNumber: selection.selectedPr?.number ?? null,
+    prState: prSummary.state,
+    prCiStatus: prSummary.ciStatus,
+    prHasMergeConflict: prSummary.hasMergeConflict,
+  };
+}
+
+describe('PR attachment streaming', () => {
   it.each(['MERGED', 'CLOSED'] as const)(
-    'clears a previous %s PR immediately and discards its in-flight projection',
+    'discards an in-flight %s projection and publishes the attached collection',
     async (previousState) => {
       vi.useFakeTimers();
       vi.setSystemTime(2000);
@@ -72,7 +118,8 @@ describe('failed PR attachment streaming', () => {
       const newRead = deferred<Projection>();
       const read = vi.fn().mockReturnValueOnce(oldRead.promise).mockReturnValue(newRead.promise);
       const prEvents = new EventEmitter();
-      const ratchetEvents = new EventEmitter();
+      const checkWorkspaceById = vi.fn().mockResolvedValue(null);
+      const ratchetEvents = Object.assign(new EventEmitter(), { checkWorkspaceById });
       const logger = { info: vi.fn(), debug: vi.fn(), warn: vi.fn(), error: vi.fn() };
       const findSessions = vi.fn().mockResolvedValue([]);
       // The fixture uses real store/derivation/collector/worker; only event sources
@@ -102,25 +149,13 @@ describe('failed PR attachment streaming', () => {
       ratchetEvents.emit(RATCHET_DISPATCH_CHANGED, { workspaceId: 'ws-1' });
       expect(read).toHaveBeenCalledTimes(1);
 
+      const published: unknown[] = [];
+      store.on(SNAPSHOT_CHANGED, () => published.push(store.getByWorkspaceId('ws-1')));
       prEvents.emit(PR_URL_ATTACHED, {
         workspaceId: 'ws-1',
+        prId: 'pr-2',
         prUrl: 'https://github.com/org/repo/pull/2',
       });
-      const assertNeutral = () => {
-        const snapshot = store.getByWorkspaceId('ws-1');
-        expect(snapshot).toMatchObject({
-          prUrl: 'https://github.com/org/repo/pull/2',
-          prNumber: null,
-          prState: 'NONE',
-          prCiStatus: 'UNKNOWN',
-          ratchetState: 'IDLE',
-          hasMergeConflict: false,
-        });
-        expect(snapshot?.kanbanColumn).not.toBe('DONE');
-        expect(snapshot?.sidebarStatus.ciState).toBe('UNKNOWN');
-        expect(isWorkspaceDoneOrMerged(snapshot)).toBe(false);
-      };
-      assertNeutral();
 
       oldRead.resolve({
         ...prProjectionDefaults,
@@ -139,9 +174,27 @@ describe('failed PR attachment streaming', () => {
       });
       await vi.advanceTimersByTimeAsync(0);
       expect(read).toHaveBeenCalledTimes(2);
-      // The new read is still pending: the old result cannot reopen the
-      // confirmation bypass while waiting for the replacement projection.
-      assertNeutral();
+      // The superseded read cannot publish while the replacement is pending.
+      expect(published).toEqual([]);
+
+      newRead.resolve(attachedCollection(previousState));
+      await vi.advanceTimersByTimeAsync(0);
+      const snapshot = store.getByWorkspaceId('ws-1');
+      expect(snapshot).toMatchObject({
+        prUrl: 'https://github.com/org/repo/pull/2',
+        prNumber: null,
+        prState: 'OPEN',
+        prCiStatus: 'UNKNOWN',
+        ratchetState: 'CI_RUNNING',
+        hasMergeConflict: false,
+      });
+      expect(snapshot?.sidebarStatus.ciState).not.toBe('MERGED');
+      expect(snapshot?.prs?.map((pr) => pr.id)).toEqual(['pr-1', 'pr-2']);
+      expect(snapshot?.kanbanColumn).not.toBe('DONE');
+      expect(isWorkspaceDoneOrMerged(snapshot)).toBe(false);
+      // The selected PR changed, so monitoring is recomputed immediately.
+      expect(checkWorkspaceById).toHaveBeenCalledExactlyOnceWith('ws-1');
+      expect(logger.warn).not.toHaveBeenCalled();
     }
   );
 });

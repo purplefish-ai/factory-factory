@@ -328,10 +328,10 @@ What that replaced:
   graph"; it was documentation, and it is gone along with its 89-line test.
 - **A compare-and-swap on `state`**, which existed to keep the `fromState` on
   `RATCHET_STATE_CHANGED` accurate. No consumer of that event reads `fromState`
-  or `toState` — the handler enqueues `prCiStatus` and asks for an authoritative
-  re-projection. The CAS on `enabled` survives, because "was ratcheting disabled
-  while this check ran" is a real question; the state half is gone, and with it
-  the `superseded` branch in `finishRatchetCheck`.
+  or `toState` — the handler only asks for an authoritative re-projection. The
+  CAS on `enabled` survives, because "was ratcheting disabled while this check
+  ran" is a real question; the state half is gone, and with it the `superseded`
+  branch in `finishRatchetCheck`.
 - **Two settling writes.** Disabling a workspace, and `markPrClosed` with its
   three-attempt CAS retry loop, both existed to force `state` to `IDLE`. A
   disabled workspace and a closed PR both derive to `IDLE`, so the toggle and

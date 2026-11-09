@@ -50,6 +50,14 @@ The app stores its database at `~/factory-factory/data.db` by default;
 inspect it. Follow the Prisma schema row below for migrations and generated
 client changes.
 
+Worktrees on different branches often share that database, so one branch can
+apply migrations another branch does not have. Production launches refuse such a
+database by default (the `ff` commands continue with a warning when
+`FF_ALLOW_UNKNOWN_MIGRATIONS=1` is set); `pnpm dev` (`ff serve --dev`) prints a
+warning naming the unknown migrations and starts anyway. Use a separate
+`DATABASE_PATH` when branch schemas diverge in ways the other branch's code
+cannot tolerate.
+
 ## Verification
 
 This is the shared verification policy for contributors and agents. Command

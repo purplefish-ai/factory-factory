@@ -5,7 +5,6 @@ import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 
 const mockNotifyToolStart = vi.fn();
 const mockNotifyToolComplete = vi.fn();
-const mockRecordRatchetSessionEnd = vi.fn();
 const mockAcpTraceLoggerCloseSession = vi.fn();
 vi.mock('@/backend/services/logger.service', () => ({
   createLogger: () => ({
@@ -117,7 +116,6 @@ describe('retained legacy runtime exit', () => {
     vi.clearAllMocks();
     mockNotifyToolStart.mockReset();
     mockNotifyToolComplete.mockReset();
-    mockRecordRatchetSessionEnd.mockReset();
     mockAcpTraceLoggerCloseSession.mockReset();
     const acpProcessor = getAcpProcessorState();
     acpProcessor.pendingAcpToolCalls.clear();
@@ -127,7 +125,6 @@ describe('retained legacy runtime exit', () => {
     const workspaceBridge = {
       markSessionRunning: vi.fn(),
       markSessionIdle: vi.fn(),
-      recordRatchetSessionEnd: mockRecordRatchetSessionEnd,
       resetPRDiscoveryBackoff: vi.fn(async () => true),
     };
     sessionService.configure({ workspace: workspaceBridge });
@@ -204,11 +201,6 @@ describe('retained legacy runtime exit', () => {
     expect(sessionRepository.updateSession).toHaveBeenCalledWith('session-1', {
       status: SessionStatus.COMPLETED,
     });
-    expect(mockRecordRatchetSessionEnd).toHaveBeenCalledWith(
-      'workspace-1',
-      'session-1',
-      'COMPLETED'
-    );
     expect(sessionRepository.deleteSession).toHaveBeenCalledWith('session-1');
     expect(clearSessionSpy).toHaveBeenCalledWith('session-1', { permanentlyDeleted: true });
     const destructiveClearCallIndex = clearSessionSpy.mock.calls.findIndex(

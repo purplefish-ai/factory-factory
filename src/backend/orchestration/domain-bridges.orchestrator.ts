@@ -1,3 +1,11 @@
+/**
+ * Domain Bridge Wiring
+ *
+ * Configures the cross-domain bridges of one application graph from the
+ * services object supplied by the composition root (`app-context.ts`). Must run
+ * before those domain services are used. Domain services never import each
+ * other; they receive capabilities via these bridges.
+ */
 import type {
   githubCLIService,
   prFetchCoordinator,
@@ -6,15 +14,6 @@ import type {
 import type { createLogger } from '@/backend/services/logger.service';
 import type { periodicTaskService } from '@/backend/services/periodic-task';
 import type { ratchetService } from '@/backend/services/ratchet';
-/**
- * Domain Bridge Wiring
- *
- * Single entry point that configures all cross-domain bridges at application startup.
- * Must be called BEFORE any domain service is used.
- *
- * Import graph: orchestration -> all 6 domain barrels
- * Domain services never import each other; they receive capabilities via bridges.
- */
 import type { startupScriptService } from '@/backend/services/run-script';
 import type {
   acpRuntimeManager,
@@ -214,11 +213,6 @@ export function configureDomainBridges(services: BridgeServices): void {
     markSessionRunning: (wsId: string, sId: string) =>
       workspaceActivityService.markSessionRunning(wsId, sId),
     markSessionIdle,
-    recordRatchetSessionEnd: (
-      _workspaceId: string,
-      _sessionId: string,
-      _outcome: 'COMPLETED' | 'DIED'
-    ) => Promise.resolve(),
     resetPRDiscoveryBackoff: (workspaceId: string) =>
       workspaceDataService.resetPRDiscoveryBackoff(workspaceId),
   };

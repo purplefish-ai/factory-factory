@@ -184,6 +184,9 @@ disable inherited `TRUST_PROXY_HEADERS` and dotenv override settings before
 launching the backend; private mode authenticates clients before stripping
 forwarded-address headers.
 
+The server listens on loopback only unless you pass another address with
+`ff serve --host` (for example `--host 0.0.0.0`, as the Docker image does).
+
 Port selection rejects values outside the integer range 1–65535 before starting
 a process or binding a socket, then checks listening processes with `lsof` on
 Unix. If that check fails, including when another user's listener is hidden, it
@@ -200,6 +203,20 @@ selects an available port. Set `BROWSER=none` to start Studio without opening a
 browser. Launch failures return a nonzero exit status. The command does not
 download Prisma or other packages. Windows UNC and device paths are rejected
 because Prisma Studio cannot preserve their location; use a local drive path.
+
+### Database upgrades
+
+Every launch (`ff serve`, `ff proxy`, `ff tailscale`, the desktop app and the
+Docker image) applies pending database migrations before starting. An older
+version refuses to start on a database a newer version has migrated, naming the
+migrations it does not know; upgrade Factory Factory and start it again. The
+`ff` commands accept `FF_ALLOW_UNKNOWN_MIGRATIONS=1` to start anyway with a
+warning, at the risk of errors from the mismatched schema. Development mode
+(`ff serve --dev`) always warns and continues instead of refusing.
+
+Startup warns, without failing, when an applied migration's file has changed
+since it was applied, or when a migration that disabled foreign keys left rows
+that reference missing records.
 
 ### Access through Tailscale
 
@@ -297,8 +314,9 @@ via nginx, Caddy, or another reverse proxy:
   `CORS_ALLOWED_ORIGINS=https://ff.example.com`. This gates both HTTP CORS and
   WebSocket upgrades; non-loopback origins must match exactly (scheme + host +
   non-default port, no trailing slash).
-- Keep `BACKEND_HOST` bound to `localhost`/`127.0.0.1` so only your proxy can
-  reach the server.
+- Keep the server on loopback so only your proxy can reach it: leave
+  `BACKEND_HOST` unset (the backend then binds `127.0.0.1` and, where IPv6 is
+  available, `::1`), or set it to `localhost` or `127.0.0.1`.
 
 By default the server rejects privileged HTTP requests and WebSocket upgrades
 that carry client-address headers (`x-forwarded-for`, `cf-connecting-ip`, etc.),

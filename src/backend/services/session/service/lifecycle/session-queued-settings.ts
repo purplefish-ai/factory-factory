@@ -1,7 +1,6 @@
 import type { AcpProcessHandle, AcpRuntimeManager } from '@/backend/services/session/service/acp';
 import { isReasoningConfigOption } from '@/backend/services/session/service/acp/acp-config-option-identification';
 import { getConfigOptionValues } from '@/backend/services/session/service/lifecycle/session-config-option-helpers';
-import { DEFAULT_THINKING_BUDGET } from '@/shared/acp-protocol';
 import type { QueuedMessage } from '@/shared/acp-protocol';
 
 type Settings = QueuedMessage['settings'];
@@ -111,10 +110,8 @@ export class SessionQueuedSettings {
   async configure(
     sessionId: string,
     message: Pick<QueuedMessage, 'timestamp' | 'settings'>,
-    supportsThinkingBudget: boolean,
     apply: {
       plan(): Promise<void>;
-      thinking(budget: number | null): Promise<void>;
       model(model: string | undefined): Promise<unknown>;
       reasoning(effort: string): Promise<void>;
     }
@@ -122,9 +119,6 @@ export class SessionQueuedSettings {
     const settings = this.resolve(sessionId, message);
     if (settings.planModeEnabled) {
       await apply.plan();
-    }
-    if (supportsThinkingBudget) {
-      await apply.thinking(settings.thinkingEnabled ? DEFAULT_THINKING_BUDGET : null);
     }
     await apply.model(settings.selectedModel ?? undefined);
     if (typeof settings.reasoningEffort === 'string') {

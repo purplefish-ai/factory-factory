@@ -59,7 +59,6 @@ function createFinalizerHarness(options?: {
   const workspaceBridge = {
     markSessionRunning: vi.fn(() => 0),
     markSessionIdle: vi.fn(),
-    recordRatchetSessionEnd: vi.fn(async () => undefined),
     resetPRDiscoveryBackoff: vi.fn(async () => true),
   };
   const autoIterationExit = {
@@ -145,7 +144,7 @@ describe('SessionWorkflowFinalizer', () => {
     expect(harness.persistence.persistClosedSession).not.toHaveBeenCalled();
   });
 
-  it('settles a deliberate ratchet stop as completed before removing its transient session', async () => {
+  it('removes the transient session after a deliberate ratchet stop', async () => {
     const harness = createFinalizerHarness({
       session: createLifecycleTestSession({ workflow: 'ratchet' }),
     });
@@ -156,11 +155,6 @@ describe('SessionWorkflowFinalizer', () => {
       cleanupTransientRatchetSession: true,
     });
 
-    expect(harness.workspaceBridge.recordRatchetSessionEnd).toHaveBeenCalledWith(
-      'workspace-1',
-      'session-1',
-      'COMPLETED'
-    );
     expect(harness.persistence.persistClosedSession).toHaveBeenCalledOnce();
     expect(harness.repository.deleteSession).toHaveBeenCalledWith('session-1');
     expect(harness.domain.clearSession).toHaveBeenCalledWith('session-1', {
@@ -196,80 +190,10 @@ describe('SessionWorkflowFinalizer', () => {
     expect(harness.domain.clearSession).not.toHaveBeenCalled();
   });
 
-  it.each([
-    [0, false, 'COMPLETED'],
-    [1, false, 'DIED'],
-    [null, false, 'DIED'],
-    [1, true, 'COMPLETED'],
-    [null, true, 'COMPLETED'],
-  ] as const)(
-    'settles ratchet runtime exit code %s with deliberate=%s as %s',
-    async (exitCode, deliberate, outcome) => {
-      const harness = createFinalizerHarness({
-        session: createLifecycleTestSession({ workflow: 'ratchet' }),
-      });
-
-      await harness.finalizer.finalizeRuntimeExit({
-        session: harness.session!,
-        sessionId: 'session-1',
-        exitCode,
-        deliberate,
-      });
-
-      expect(harness.workspaceBridge.recordRatchetSessionEnd).toHaveBeenCalledWith(
-        'workspace-1',
-        'session-1',
-        outcome
-      );
-    }
-  );
-
-  it('uses the captured deliberate-stop state when settling a ratchet exit', async () => {
+  it('cleans up a transient ratchet session on runtime exit', async () => {
     const harness = createFinalizerHarness({
       session: createLifecycleTestSession({ workflow: 'ratchet' }),
     });
-    harness.runtime.isStopInProgress.mockReturnValue(true);
-
-    await harness.finalizer.finalizeRuntimeExit({
-      session: harness.session!,
-      sessionId: 'session-1',
-      exitCode: 1,
-      deliberate: false,
-    });
-
-    expect(harness.workspaceBridge.recordRatchetSessionEnd).toHaveBeenCalledWith(
-      'workspace-1',
-      'session-1',
-      'DIED'
-    );
-  });
-
-  it('settles a lifecycle-deliberate ratchet exit as completed after the runtime stop clears', async () => {
-    const harness = createFinalizerHarness({
-      session: createLifecycleTestSession({ workflow: 'ratchet' }),
-    });
-
-    await harness.finalizer.finalizeRuntimeExit({
-      session: harness.session!,
-      sessionId: 'session-1',
-      exitCode: 1,
-      deliberate: true,
-    });
-
-    expect(harness.workspaceBridge.recordRatchetSessionEnd).toHaveBeenCalledWith(
-      'workspace-1',
-      'session-1',
-      'COMPLETED'
-    );
-  });
-
-  it('cleans up a transient ratchet session when runtime-exit settlement fails', async () => {
-    const harness = createFinalizerHarness({
-      session: createLifecycleTestSession({ workflow: 'ratchet' }),
-    });
-    harness.workspaceBridge.recordRatchetSessionEnd.mockRejectedValueOnce(
-      new Error('settlement unavailable')
-    );
 
     await expect(
       harness.finalizer.finalizeRuntimeExit({
@@ -349,7 +273,6 @@ describe('SessionWorkflowFinalizer', () => {
       cleanupTransientRatchetSession: true,
     });
 
-    expect(harness.workspaceBridge.recordRatchetSessionEnd).toHaveBeenCalledTimes(2);
     expect(harness.persistence.persistClosedSession).toHaveBeenCalledOnce();
     expect(harness.repository.deleteSession).toHaveBeenCalledTimes(2);
     expect(harness.domain.clearSession).toHaveBeenCalledOnce();

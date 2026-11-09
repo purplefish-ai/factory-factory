@@ -82,7 +82,7 @@ describe('SessionLifecycleFacade', () => {
         .mockRejectedValueOnce(startupFailure),
       restartSession: vi.fn<SessionStartupCoordinator['restartSession']>(async () => undefined),
       getOrCreateSessionClient: vi.fn<SessionStartupCoordinator['getOrCreateSessionClient']>(
-        async () => 'client-by-id'
+        async () => unsafeCoerce('client-by-id')
       ),
       ensureSubagentBrowseSession: vi.fn<SessionStartupCoordinator['ensureSubagentBrowseSession']>(
         async () => true
