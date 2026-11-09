@@ -103,8 +103,10 @@ export function isLoopbackBindHost(bindHost: string | undefined): boolean {
   if (isLoopbackHostname(unbracketed) || isLoopbackRemoteAddress(unbracketed)) {
     return true;
   }
-  // Compare the compressed form so spellings such as `0:0::1` count too.
-  return isIP(unbracketed) === 6 && new URL(`http://[${unbracketed}]`).hostname === '[::1]';
+  // Compare the compressed form so spellings such as `0:0::1` count too. Zoned
+  // addresses (`fe80::1%en0`) are not URL hosts and are never loopback.
+  const urlHost = `http://[${unbracketed}]`;
+  return isIP(unbracketed) === 6 && URL.canParse(urlHost) && new URL(urlHost).hostname === '[::1]';
 }
 
 function parseHostHeaderHostname(hostHeader: string): string | undefined {

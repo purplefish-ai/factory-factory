@@ -99,12 +99,18 @@ describe('request trust helpers', () => {
       expect(isLoopbackBindHost(host)).toBe(true);
     });
 
-    it.each(['0.0.0.0', '::', '0:0::0', '192.168.1.20', 'mac.local', '[::]', 'fe80::1'])(
-      'treats %s as reachable beyond loopback',
-      (host) => {
-        expect(isLoopbackBindHost(host)).toBe(false);
-      }
-    );
+    it.each([
+      '0.0.0.0',
+      '::',
+      '0:0::0',
+      '192.168.1.20',
+      'mac.local',
+      '[::]',
+      'fe80::1',
+      'fe80::1%eth0',
+    ])('treats %s as reachable beyond loopback', (host) => {
+      expect(isLoopbackBindHost(host)).toBe(false);
+    });
   });
 
   describe('isHostHeaderAllowed', () => {
