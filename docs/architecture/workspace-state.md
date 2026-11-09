@@ -813,7 +813,7 @@ merges. See [PR update delivery and recovery](pull-requests.md).
 Below 1024 CSS pixels, workspace tools open in a right-side drawer with a strip
 of the session still visible. A compact 36px strip uses the shared underline
 tabs for Changes, Files, and Terminal. The overflow menu keeps sub-agents,
-screenshots, Inbox, and logs available, plus the scheduled agent when one
+screenshots, Inbox, and logs available, plus the scheduled automation when one
 launched the workspace. It marks the current selection and shows the selected
 tool as an additional underlined tab. The tab strip scrolls on narrow screens
 while the overflow button stays visible. The selected tool survives closing and
@@ -930,11 +930,15 @@ titles/identifiers across the entire board.
 
 Mobile sections stack in Todo, Working, Waiting, Done order in one scroll
 surface. Sticky, equal-width section links show counts, jump to a section and
-track manual scrolling. Filtering shows matching sections and updates every
-count; clearing it restores all sections. Empty Todo provider/loading/error
-states remain visible when unfiltered. New workspace scrolls to Todo, including
-when its form is already open. Successful creation clears the filter and reveals
-Working. Project switching resets the scroll, filter and form.
+track manual scrolling. The final section stays at its content height, without
+extra space to force its heading to the top. Section jumps stop at the scroll
+limit; an explicit jump keeps its selected link until the board scrolls again.
+The app shell follows the visual viewport to keep the board above the software
+keyboard. Filtering shows matching sections and updates every count; clearing it
+restores all sections. Empty Todo provider/loading/error states remain visible
+when unfiltered. New workspace scrolls to Todo, including when its form is
+already open. Successful creation clears the filter and reveals Working. Project
+switching resets the scroll, filter and form.
 
 Waiting has a sort icon beside its section heading for Latest message (default)
 or Created, both newest first. The choice persists in browser storage across

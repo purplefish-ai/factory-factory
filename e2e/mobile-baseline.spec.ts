@@ -114,11 +114,11 @@ for (const viewport of mobileViewports) {
 }
 
 for (const viewport of mobileViewports) {
-  test(`Agents mobile shell - ${viewport.name}`, async ({ page }) => {
+  test(`Automations mobile shell - ${viewport.name}`, async ({ page }) => {
     await page.clock.setFixedTime(new Date('2026-01-12T12:00:00.000Z'));
     await page.setViewportSize({ width: viewport.width, height: viewport.height });
     await page.goto('/__mobile-baseline?surface=agents');
-    await expect(page.getByRole('heading', { name: 'Agents', exact: true })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Automations', exact: true })).toBeVisible();
     await expect(page.getByRole('button', { name: /Open project menu/ })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Toggle sidebar', exact: true })).toBeVisible();
     await expect(
@@ -136,7 +136,7 @@ for (const viewport of mobileViewports) {
       'href',
       '/projects/factory-factory/workspaces'
     );
-    await expect(footer.getByRole('link', { name: 'Agents', exact: true })).toHaveAttribute(
+    await expect(footer.getByRole('link', { name: 'Automations', exact: true })).toHaveAttribute(
       'href',
       '/projects/factory-factory/agents'
     );
@@ -154,15 +154,15 @@ for (const viewport of mobileViewports) {
         .evaluateAll((links) =>
           links.map((link) => link.getAttribute('aria-label') ?? link.textContent)
         )
-    ).toEqual(['Board', 'Agents', 'Reviews2', 'Settings']);
+    ).toEqual(['Board', 'Automations', 'Reviews2', 'Settings']);
     await expect(
-      footer.getByRole('link', { name: 'Agents', exact: true })
-    ).toHaveAccessibleDescription('4 agents');
+      footer.getByRole('link', { name: 'Automations', exact: true })
+    ).toHaveAccessibleDescription('4 automations');
     await expect(footer.locator('[data-agent-count]')).toHaveText('4');
     await expect(page).toHaveScreenshot(`agents-sidebar-${viewport.name}.png`);
     await sidebar.getByRole('button', { name: 'Close sidebar', exact: true }).click();
     await expect(sidebar).toBeHidden();
-    const rail = page.getByRole('navigation', { name: 'Agents', exact: true });
+    const rail = page.getByRole('navigation', { name: 'Automations', exact: true });
     await expect(rail).toBeVisible();
     const dependencies = rail.getByRole('link', { name: /Keep dependencies current/ });
     await dependencies.click();
@@ -191,8 +191,8 @@ for (const viewport of mobileViewports) {
     await page.keyboard.press('Enter');
     await expect(page).toHaveURL(/\/projects\/factory-factory\/workspaces\/archived-run$/);
     await page.goto('/__mobile-baseline?surface=agents');
-    await page.getByRole('button', { name: 'Create agent', exact: true }).click();
-    await page.getByRole('menuitem', { name: 'Scheduled agent', exact: true }).click();
+    await page.getByRole('button', { name: 'Create automation', exact: true }).click();
+    await page.getByRole('menuitem', { name: 'Scheduled automation', exact: true }).click();
     await expect(rail).toBeVisible();
     const form = page.locator('form');
     await form.getByRole('textbox', { name: 'Name', exact: true }).fill('Review mobile layouts');
@@ -207,8 +207,12 @@ for (const viewport of mobileViewports) {
         exact: false,
       })
     ).toBeVisible();
-    await expect(form.getByRole('button', { name: 'Create agent', exact: true })).toBeEnabled();
-    await form.getByRole('button', { name: 'Create agent', exact: true }).scrollIntoViewIfNeeded();
+    await expect(
+      form.getByRole('button', { name: 'Create automation', exact: true })
+    ).toBeEnabled();
+    await form
+      .getByRole('button', { name: 'Create automation', exact: true })
+      .scrollIntoViewIfNeeded();
     expect(
       await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)
     ).toBeLessThanOrEqual(1);
@@ -265,7 +269,7 @@ for (const viewport of mobileViewports) {
     await expect(
       page.getByRole('heading', { name: 'Investigate labeled issues', exact: true, level: 2 })
     ).toBeVisible();
-    await page.getByRole('button', { name: 'Edit agent', exact: true }).click();
+    await page.getByRole('button', { name: 'Edit automation', exact: true }).click();
     const instructions = page.getByRole('textbox', { name: 'Instructions', exact: true });
     await instructions.fill('Phone draft stays during resize');
     await instructions.focus();
@@ -301,7 +305,7 @@ for (const viewport of mobileViewports) {
       await page.evaluate(() => document.documentElement.scrollWidth - innerWidth)
     ).toBeLessThanOrEqual(1);
     await page.locator('a[href$="replacement-agent?kind=event"]').click();
-    await page.getByRole('button', { name: 'Edit agent', exact: true }).click();
+    await page.getByRole('button', { name: 'Edit automation', exact: true }).click();
     await page.getByRole('button', { name: 'Replace complete specification', exact: true }).click();
     const replacement = page.getByRole('textbox', {
       name: 'Full saved specification JSON',

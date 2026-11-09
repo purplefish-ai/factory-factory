@@ -107,6 +107,8 @@ overrides:
 
 # Remove these local mitigations once upstream publishes fixed releases.
 patchedDependencies:
+  # Keep selector-error snapshots stable; remove after the upstream timestamp fix.
+  '@tanstack/query-core@5.106.0': patches/@tanstack__query-core@5.106.0.patch
   braces@3.0.3: patches/braces@3.0.3.patch
   # Adapt legacy callers to the patched minimatch/glob export and promise APIs.
   dir-compare@4.2.0: patches/dir-compare@4.2.0.patch

@@ -20,7 +20,7 @@ beforeEach(() => vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true));
 afterEach(() => vi.unstubAllGlobals());
 it.each([
   ['workspaces', 'Board'],
-  ['agents', 'Agents'],
+  ['agents', 'Automations'],
   ['reviews', 'Reviews'],
 ])('identifies %s as the current section', async (section, label) => {
   const container = document.createElement('div');

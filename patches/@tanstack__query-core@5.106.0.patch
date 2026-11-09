@@ -1,0 +1,65 @@
+diff --git a/build/legacy/queryObserver.cjs b/build/legacy/queryObserver.cjs
+index 92b9ed781d8f910f435a9b7515f7232089f778aa..047206c45ac764a358b5a88949cc2802a9157c3c 100644
+--- a/build/legacy/queryObserver.cjs
++++ b/build/legacy/queryObserver.cjs
+@@ -345,7 +345,7 @@ var QueryObserver = class extends require_subscribable.Subscribable {
+ 		if (require_classPrivateFieldSet2._classPrivateFieldGet2(_selectError, this)) {
+ 			error = require_classPrivateFieldSet2._classPrivateFieldGet2(_selectError, this);
+ 			data = require_classPrivateFieldSet2._classPrivateFieldGet2(_selectResult, this);
+-			errorUpdatedAt = Date.now();
++			errorUpdatedAt = error === prevResult?.error ? prevResult.errorUpdatedAt : Date.now();
+ 			status = "error";
+ 			isPlaceholderData = false;
+ 		}
+diff --git a/build/legacy/queryObserver.js b/build/legacy/queryObserver.js
+index 93c19198fa72e4df729854116c355f0330db38aa..e9f5b78d11d151bddb177ddbdc2c237db9bada55 100644
+--- a/build/legacy/queryObserver.js
++++ b/build/legacy/queryObserver.js
+@@ -344,7 +344,7 @@ var QueryObserver = class extends Subscribable {
+ 		if (_classPrivateFieldGet2(_selectError, this)) {
+ 			error = _classPrivateFieldGet2(_selectError, this);
+ 			data = _classPrivateFieldGet2(_selectResult, this);
+-			errorUpdatedAt = Date.now();
++			errorUpdatedAt = error === prevResult?.error ? prevResult.errorUpdatedAt : Date.now();
+ 			status = "error";
+ 			isPlaceholderData = false;
+ 		}
+diff --git a/build/modern/queryObserver.cjs b/build/modern/queryObserver.cjs
+index 71123984a92976305859143de0c53147071aec54..f4d6c805762b67dac4086c7df2685aaab8c7c409 100644
+--- a/build/modern/queryObserver.cjs
++++ b/build/modern/queryObserver.cjs
+@@ -369,7 +369,7 @@ var QueryObserver = class extends require_subscribable.Subscribable {
+ 		if (this.#selectError) {
+ 			error = this.#selectError;
+ 			data = this.#selectResult;
+-			errorUpdatedAt = Date.now();
++			errorUpdatedAt = error === prevResult?.error ? prevResult.errorUpdatedAt : Date.now();
+ 			status = "error";
+ 			isPlaceholderData = false;
+ 		}
+diff --git a/build/modern/queryObserver.js b/build/modern/queryObserver.js
+index 3747df04d0ba00df11ab38293c4713a2d91241e4..6ab1170e7371068172a03fd4fcaed468f82baefc 100644
+--- a/build/modern/queryObserver.js
++++ b/build/modern/queryObserver.js
+@@ -368,7 +368,7 @@ var QueryObserver = class extends Subscribable {
+ 		if (this.#selectError) {
+ 			error = this.#selectError;
+ 			data = this.#selectResult;
+-			errorUpdatedAt = Date.now();
++			errorUpdatedAt = error === prevResult?.error ? prevResult.errorUpdatedAt : Date.now();
+ 			status = "error";
+ 			isPlaceholderData = false;
+ 		}
+diff --git a/src/queryObserver.ts b/src/queryObserver.ts
+index d46c910b15a85f114a76076e6bcd10d41226ed85..4ad807e9df4dfb2b300399ffffa3a069c0c6127d 100644
+--- a/src/queryObserver.ts
++++ b/src/queryObserver.ts
+@@ -710,7 +710,7 @@ export class QueryObserver<
+     if (this.#selectError) {
+       error = this.#selectError
+       data = this.#selectResult
+-      errorUpdatedAt = Date.now()
++      errorUpdatedAt = error === prevResult?.error ? prevResult.errorUpdatedAt : Date.now()
+       status = 'error'
+       isPlaceholderData = false
+     }

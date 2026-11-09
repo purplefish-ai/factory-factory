@@ -35,7 +35,7 @@ export function AgentDetail({
         </div>
         <div className="flex flex-wrap gap-2">
           <Button variant="outline" size="sm" onClick={onEdit} disabled={pending}>
-            Edit agent
+            Edit automation
           </Button>
           <Button variant="outline" size="sm" onClick={onToggle} disabled={pending}>
             {agent.isEnabled ? 'Pause' : 'Resume'}

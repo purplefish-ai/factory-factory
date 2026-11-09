@@ -71,7 +71,7 @@ const preview: Preview = {
           'Board',
           'Workspace',
           'Chat',
-          'Agents',
+          'Automations',
           'Reviews',
           'Projects',
           'Settings',

@@ -73,7 +73,8 @@ function RetainedPageSession({ agent }: { agent: EventAgent }) {
       {stale && !page.isFetching && (
         <div role="status" className="space-y-2 text-sm">
           <p>
-            The saved definition changed. Refresh the agent before inspecting more retained records.
+            The saved definition changed. Refresh the automation before inspecting more retained
+            records.
           </p>
           <Button
             variant="outline"
@@ -81,7 +82,7 @@ function RetainedPageSession({ agent }: { agent: EventAgent }) {
               void utils.agent.get.invalidate({ projectId: agent.projectId, agentId: agent.id })
             }
           >
-            Refresh agent
+            Refresh automation
           </Button>
         </div>
       )}
@@ -130,28 +131,28 @@ export function EventAgentSelection({
       <div role="alert" className="space-y-3 text-sm">
         <p>
           {event.error.data?.code === 'NOT_FOUND'
-            ? 'Agent not found in this project.'
-            : `Couldn't load event agent. ${event.error.message}`}
+            ? 'Automation not found in this project.'
+            : `Couldn't load event-triggered automation. ${event.error.message}`}
         </p>
         <Button variant="outline" onClick={() => void event.refetch()}>
-          Retry agent
+          Retry automation
         </Button>
       </div>
     );
   }
   if (event.isLoading) {
-    return <Loading size="compact" message="Loading event agent…" />;
+    return <Loading size="compact" message="Loading event-triggered automation…" />;
   }
   if (!event.data) {
-    return <p className="text-sm">Select an agent from the project list.</p>;
+    return <p className="text-sm">Select an automation from the project list.</p>;
   }
   return (
     <>
       {event.error && (
         <p role="alert" className="text-sm">
-          Couldn't refresh event agent. {event.error.message}
+          Couldn't refresh event-triggered automation. {event.error.message}
           <Button variant="outline" onClick={() => void event.refetch()}>
-            Retry agent
+            Retry automation
           </Button>
         </p>
       )}

@@ -109,11 +109,11 @@ export function EventAgentDetail({
       <header className="space-y-3">
         <h2 className="break-words text-xl font-semibold">{agent.name}</h2>
         <p className="text-sm">
-          Event agent · Definition {agent.isEnabled ? 'enabled' : 'paused'} · Management revision{' '}
-          {agent.managementRevision}
+          Event-triggered automation · Definition {agent.isEnabled ? 'enabled' : 'paused'} ·
+          Management revision {agent.managementRevision}
         </p>
         <Button onClick={onEdit} disabled={archived}>
-          Edit agent
+          Edit automation
         </Button>
         {archived && (
           <p className="text-sm text-muted-foreground">

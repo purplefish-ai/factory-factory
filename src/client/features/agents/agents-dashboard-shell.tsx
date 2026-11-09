@@ -60,7 +60,7 @@ function CreateAgentMenu({
       <DropdownMenuTrigger asChild>
         <Button size="sm" variant={outline ? 'outline' : 'default'} disabled={disabled}>
           <PlusIcon className="size-4" aria-hidden="true" />
-          Create agent
+          Create automation
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent
@@ -80,14 +80,14 @@ function CreateAgentMenu({
             pendingCreation.current = 'scheduled';
           }}
         >
-          Scheduled agent
+          Scheduled automation
         </DropdownMenuItem>
         <DropdownMenuItem
           onSelect={() => {
             pendingCreation.current = 'event';
           }}
         >
-          Event agent
+          Event-triggered automation
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
@@ -154,7 +154,7 @@ function AgentRailItem({
           {agent.isEnabled ? (agent.kind === 'event' ? 'Definition enabled' : 'Active') : 'Paused'}
         </span>
         <span aria-hidden="true">·</span>
-        <span>{agent.kind === 'event' ? 'Event' : describeAgentSchedule(agent)}</span>
+        <span>{agent.kind === 'event' ? 'Event-triggered' : describeAgentSchedule(agent)}</span>
       </div>
     </Link>
   );
@@ -215,9 +215,9 @@ export function AgentsDashboardShell({
     <div className="@container/agents flex h-full min-h-0 min-w-0 flex-col overflow-hidden">
       <header className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b px-4 py-4 sm:px-6">
         <div>
-          <h1 className="text-lg font-semibold tracking-tight">Agents</h1>
+          <h1 className="text-lg font-semibold tracking-tight">Automations</h1>
           <p className="mt-1 text-xs text-muted-foreground">
-            Scheduled and event agents in this project.
+            Run AI agents on a schedule or when events happen.
           </p>
         </div>
         <CreateAgentMenu onCreate={createAgent} disabled={createDisabled} />
@@ -228,7 +228,7 @@ export function AgentsDashboardShell({
       >
         <aside className="flex shrink-0 flex-col border-b bg-muted/15 @[48rem]/agents:max-h-none @[48rem]/agents:w-72 @[48rem]/agents:border-r @[48rem]/agents:border-b-0 @[64rem]/agents:w-80">
           <nav
-            aria-label="Agents"
+            aria-label="Automations"
             className="min-h-0 overflow-visible p-2 @[48rem]/agents:overflow-y-auto"
           >
             {error && (
@@ -236,18 +236,18 @@ export function AgentsDashboardShell({
                 <p className="break-words text-destructive">{error}</p>
                 {onRetry && (
                   <Button variant="outline" size="sm" onClick={onRetry}>
-                    Retry agents
+                    Retry automations
                   </Button>
                 )}
               </div>
             )}
-            {isLoading && <Loading size="compact" message="Loading agents…" />}
+            {isLoading && <Loading size="compact" message="Loading automations…" />}
             {!(error || isLoading) && agents?.length === 0 && (
               <EmptyState
                 size="compact"
                 icon={RobotIcon}
-                title="No agents yet"
-                description="Schedule recurring work or prepare an event agent."
+                title="No automations yet"
+                description="Schedule recurring work or prepare an event-triggered automation."
                 action={
                   <CreateAgentMenu onCreate={createAgent} disabled={createDisabled} outline />
                 }
@@ -257,11 +257,11 @@ export function AgentsDashboardShell({
               (['scheduled', 'event'] as const).map((kind) => (
                 <section
                   key={kind}
-                  aria-label={kind === 'scheduled' ? 'Scheduled' : 'Event'}
+                  aria-label={kind === 'scheduled' ? 'Scheduled' : 'Event-triggered'}
                   className="mb-3"
                 >
                   <h2 className="px-3 py-2 text-xs font-semibold text-muted-foreground">
-                    {kind === 'scheduled' ? 'Scheduled' : 'Event'}
+                    {kind === 'scheduled' ? 'Scheduled' : 'Event-triggered'}
                   </h2>
                   {agents
                     ?.filter((agent) => (agent.kind ?? 'scheduled') === kind)
@@ -282,7 +282,7 @@ export function AgentsDashboardShell({
         <main
           ref={editorRef}
           tabIndex={-1}
-          aria-label="Agent details"
+          aria-label="Automation details"
           className="min-h-0 min-w-0 flex-none overflow-visible @[48rem]/agents:flex-1 @[48rem]/agents:overflow-y-auto"
         >
           <div className="mx-auto w-full max-w-4xl space-y-7 p-4 sm:p-6 lg:p-8">{children}</div>

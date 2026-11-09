@@ -75,7 +75,9 @@ function StoryContent({
   return mode === 'create' || mode === 'edit' ? (
     <>
       <div>
-        <h2 className="text-xl font-semibold">{mode === 'edit' ? 'Edit agent' : 'Create agent'}</h2>
+        <h2 className="text-xl font-semibold">
+          {mode === 'edit' ? 'Edit automation' : 'Create automation'}
+        </h2>
       </div>
       <AgentForm
         initialValues={mode === 'edit' ? agent : undefined}
@@ -88,17 +90,17 @@ function StoryContent({
     </>
   ) : mode === 'loading' ? (
     <p role="status" className="text-sm text-muted-foreground">
-      Loading agent…
+      Loading automation…
     </p>
   ) : mode === 'error' ? (
     <p role="alert" className="text-sm text-destructive">
-      Could not load agent. Retry to reconnect.
+      Could not load automation. Retry to reconnect.
     </p>
   ) : mode === 'empty' ? (
     <div className="py-16 text-center">
-      <h2 className="text-lg font-semibold">Give recurring work an agent</h2>
+      <h2 className="text-lg font-semibold">Automate recurring work</h2>
       <p className="mt-2 text-sm text-muted-foreground">
-        Create an agent with instructions and a schedule to get started.
+        Create an automation with instructions and a schedule to get started.
       </p>
     </div>
   ) : (
@@ -190,7 +192,7 @@ function DashboardSession({ state = 'populated' }: { state?: StoryMode }) {
               : agent.id
         }
         isLoading={mode === 'loading'}
-        error={mode === 'error' ? 'Could not load agents: Connection unavailable.' : undefined}
+        error={mode === 'error' ? 'Could not load automations: Connection unavailable.' : undefined}
         onRetry={() => setMode('populated')}
         onCreate={(kind) => setMode(kind === 'event' ? 'create-event' : 'create')}
       >
@@ -228,7 +230,7 @@ function DashboardStory({
   );
 }
 const meta = {
-  title: 'Agents/AgentsDashboard',
+  title: 'Automations/AgentsDashboard',
   component: DashboardStory,
   parameters: { layout: 'fullscreen' },
 } satisfies Meta<typeof DashboardStory>;
@@ -277,21 +279,25 @@ export const PopulatedDark: Story = { ...Populated, globals: { theme: 'dark' } }
 
 export const CreateMenu: Story = {
   play: async ({ canvasElement }) => {
-    await userEvent.click(within(canvasElement).getByRole('button', { name: 'Create agent' }));
+    await userEvent.click(within(canvasElement).getByRole('button', { name: 'Create automation' }));
     const page = within(canvasElement.ownerDocument.body);
-    await expect(page.getByRole('menuitem', { name: 'Scheduled agent' })).toBeVisible();
-    await expect(page.getByRole('menuitem', { name: 'Event agent' })).toBeVisible();
+    await expect(page.getByRole('menuitem', { name: 'Scheduled automation' })).toBeVisible();
+    await expect(page.getByRole('menuitem', { name: 'Event-triggered automation' })).toBeVisible();
   },
 };
 export const EmptyCreateMenu: Story = {
   args: { state: 'empty' },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    await userEvent.click(canvas.getAllByRole('button', { name: 'Create agent' })[1]!);
+    await userEvent.click(canvas.getAllByRole('button', { name: 'Create automation' })[1]!);
     await userEvent.click(
-      within(canvasElement.ownerDocument.body).getByRole('menuitem', { name: 'Event agent' })
+      within(canvasElement.ownerDocument.body).getByRole('menuitem', {
+        name: 'Event-triggered automation',
+      })
     );
-    await expect(canvas.getByRole('heading', { name: 'Create event agent' })).toBeVisible();
+    await expect(
+      canvas.getByRole('heading', { name: 'Create event-triggered automation' })
+    ).toBeVisible();
     await expect(
       canvas.getByText(/Listening and automatic event runs are not yet available/)
     ).toBeVisible();
@@ -309,7 +315,7 @@ function LongPhoneRail() {
     ...Array.from({ length: 12 }, (_, index) => ({
       ...agent,
       id: `extra-${index}`,
-      name: `Additional agent ${index + 1}`,
+      name: `Additional automation ${index + 1}`,
     })),
   ];
   return (
@@ -322,7 +328,7 @@ function LongPhoneRail() {
         onCreate={() => undefined}
       >
         <h2 className="text-lg font-semibold">{rail.find((item) => item.id === selected)?.name}</h2>
-        <p>Agent details and controls</p>
+        <p>Automation details and controls</p>
       </AgentsDashboardShell>
     </div>
   );
@@ -333,7 +339,7 @@ export const PhoneLongRail: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await userEvent.click(canvas.getByRole('link', { name: /Keep dependencies current/ }));
-    const editor = canvas.getByRole('main', { name: 'Agent details' });
+    const editor = canvas.getByRole('main', { name: 'Automation details' });
     await expect(editor).toHaveFocus();
     await expect(editor).toHaveTextContent('Keep dependencies current');
     await expect(editor.getBoundingClientRect().top).toBeGreaterThanOrEqual(0);

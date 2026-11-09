@@ -7,7 +7,7 @@ vi.mock('@/client/root', () => ({ Root: () => null }));
 vi.mock('@/client/layouts/project-layout', () => ({ ProjectLayout: () => null }));
 import { router } from '@/client/router';
 
-describe('Agents routes', () => {
+describe('Automations routes', () => {
   const rootRoute = router.routes.find((route) => route.path === '/');
   const legacy = rootRoute?.children?.find((route) => route.path === 'agents/:id?');
   const canonical = rootRoute?.children
@@ -19,7 +19,7 @@ describe('Agents routes', () => {
     ['/agents/agent-id', 'legacy'],
     ['/projects/example/agents', 'canonical'],
     ['/projects/example/agents/agent-id', 'canonical'],
-  ])('matches %s to the %s Agents route', (pathname, kind) => {
+  ])('matches %s to the %s Automations route', (pathname, kind) => {
     const expected = kind === 'legacy' ? legacy : canonical;
     expect(expected).toBeDefined();
     expect(matchRoutes(router.routes, pathname)?.at(-1)?.route).toBe(expected);

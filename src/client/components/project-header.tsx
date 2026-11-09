@@ -69,7 +69,7 @@ export function ProjectHeader({ project }: { project: ProjectNavigationProject }
     section === 'workspaces'
       ? 'Board'
       : section === 'agents'
-        ? 'Agents'
+        ? 'Automations'
         : section === 'reviews'
           ? 'Reviews'
           : null;

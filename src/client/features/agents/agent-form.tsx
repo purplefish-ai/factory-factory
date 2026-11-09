@@ -49,7 +49,9 @@ export function AgentForm({ initialValues, onSave, onCancel }: AgentFormProps) {
         ...resolveAgentSchedule({ cadence, scheduledTime }, baseline),
       });
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Couldn't save agent. Please try again.");
+      setError(
+        cause instanceof Error ? cause.message : "Couldn't save automation. Please try again."
+      );
     } finally {
       pendingRef.current = false;
       setPending(false);
@@ -93,7 +95,7 @@ export function AgentForm({ initialValues, onSave, onCancel }: AgentFormProps) {
           }}
           disabled={pending}
           required
-          placeholder="Describe what this agent should do on each run…"
+          placeholder="Describe what this automation should do on each run…"
         />
         <p className="text-xs text-muted-foreground">
           Each run creates a workspace and works toward a pull request.
@@ -124,7 +126,7 @@ export function AgentForm({ initialValues, onSave, onCancel }: AgentFormProps) {
           Cancel
         </Button>
         <Button type="submit" disabled={pending}>
-          {pending ? 'Saving…' : baseline ? 'Save changes' : 'Create agent'}
+          {pending ? 'Saving…' : baseline ? 'Save changes' : 'Create automation'}
         </Button>
       </div>
     </form>

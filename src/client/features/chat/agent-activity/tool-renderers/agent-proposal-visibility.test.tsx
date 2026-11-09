@@ -85,9 +85,9 @@ it('shows a proposal widget while ordinary tool activity is collapsed', async ()
         </trpc.Provider>
       )
     );
-    await vi.waitFor(() => expect(container.textContent).toContain('Create agent'));
+    await vi.waitFor(() => expect(container.textContent).toContain('Create automation'));
     expect(container.querySelector('button[data-state="closed"]')).not.toBeNull();
-    expect(container.querySelector('[aria-label="Agent configuration"]')).not.toBeNull();
+    expect(container.querySelector('[aria-label="Automation configuration"]')).not.toBeNull();
     current = {
       ...proposal,
       revision: 2,

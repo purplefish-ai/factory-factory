@@ -12,7 +12,7 @@ import { trpc } from '@/client/lib/trpc';
 import type { AgentFormValues, AgentProject, AgentListItem, EventAgentSummary } from './types';
 
 function mutationErrorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : "Couldn't update agent. Please try again.";
+  return error instanceof Error ? error.message : "Couldn't update automation. Please try again.";
 }
 
 function initialAgentSelection(
@@ -84,17 +84,19 @@ export function useAgentsController(project: AgentProject, kind: AgentKind = 'sc
   );
   const [savedEvent, setSavedEvent] = useState(false);
   const create = trpc.periodicTask.create.useMutation({
-    onError: (error) => toast.error(`Couldn't create agent. ${error.message}`),
+    onError: (error) => toast.error(`Couldn't create automation. ${error.message}`),
   });
   const update = trpc.periodicTask.update.useMutation({
-    onError: (error) => toast.error(`Couldn't update agent. ${error.message}`),
+    onError: (error) => toast.error(`Couldn't update automation. ${error.message}`),
   });
   const toggle = trpc.periodicTask.toggleEnabled.useMutation({
     onError: (error, variables) =>
-      toast.error(`Couldn't ${variables.enabled ? 'resume' : 'pause'} agent. ${error.message}`),
+      toast.error(
+        `Couldn't ${variables.enabled ? 'resume' : 'pause'} automation. ${error.message}`
+      ),
   });
   const remove = trpc.periodicTask.delete.useMutation({
-    onError: (error) => toast.error(`Couldn't delete agent. ${error.message}`),
+    onError: (error) => toast.error(`Couldn't delete automation. ${error.message}`),
   });
   const createDisabled =
     pending ||
@@ -146,7 +148,7 @@ export function useAgentsController(project: AgentProject, kind: AgentKind = 'sc
         invalidateAgentProjectQueries(utils, projectId),
         utils.periodicTask.get.invalidate({ id: agentId }),
       ]),
-      "Couldn't refresh agents."
+      "Couldn't refresh automations."
     );
   };
   const save = async (values: AgentFormValues) => {

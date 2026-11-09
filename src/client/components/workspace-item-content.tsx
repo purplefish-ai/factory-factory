@@ -30,7 +30,7 @@ function CreationSourceIcon({ creationSource }: { creationSource?: string | null
     return (
       <RobotIcon
         role="img"
-        aria-label="Agent workspace"
+        aria-label="Automation workspace"
         className="h-3 w-3 shrink-0 text-muted-foreground"
       />
     );

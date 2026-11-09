@@ -23,15 +23,15 @@ function LegacyAgentDetail({ id }: { id: string }) {
       <div role="alert" className="space-y-3 p-6">
         <p>
           {task.error.data?.code === 'NOT_FOUND'
-            ? 'Agent not found. This agent is no longer available.'
-            : `Couldn't load agent. ${task.error.message}`}
+            ? 'Automation not found. This automation is no longer available.'
+            : `Couldn't load automation. ${task.error.message}`}
         </p>
         <Button
           onClick={() => {
             void task.refetch();
           }}
         >
-          Retry agent
+          Retry automation
         </Button>
       </div>
     );
@@ -39,7 +39,7 @@ function LegacyAgentDetail({ id }: { id: string }) {
   if (owner.error && !listedOwner) {
     return (
       <div role="alert" className="space-y-3 p-6">
-        <p>Couldn't load agent project. {owner.error.message}</p>
+        <p>Couldn't load automation project. {owner.error.message}</p>
         <Button
           onClick={() => {
             void owner.refetch();
@@ -54,7 +54,7 @@ function LegacyAgentDetail({ id }: { id: string }) {
   return project ? (
     <Navigate replace to={getProjectAgentPath(project.slug, id)} />
   ) : (
-    <Loading message="Loading agent project…" />
+    <Loading message="Loading automation project…" />
   );
 }
 function LegacyAgentsIndex() {
@@ -87,7 +87,7 @@ export default function LegacyAgentsRoute() {
   if (!kind || kind === 'event') {
     return (
       <p role="alert" className="p-6">
-        Event agent links require an explicit project owner and a valid kind.
+        Event-triggered automation links require an explicit project owner and a valid kind.
       </p>
     );
   }

@@ -362,18 +362,18 @@ describe('AgentsPage coordination', () => {
   it('keeps an explicit missing ID and distinguishes not found from request failure', async () => {
     missing = true;
     render('/projects/owner-slug/agents/missing');
-    await waitForReact(() => expect(container.textContent).toContain('Agent not found'));
+    await waitForReact(() => expect(container.textContent).toContain('Automation not found'));
     expect(container.querySelector('output')?.textContent).toBe(
       '/projects/owner-slug/agents/missing'
     );
-    expect(container.querySelector('nav[aria-label="Agents"]')).not.toBeNull();
+    expect(container.querySelector('nav[aria-label="Automations"]')).not.toBeNull();
   });
   it('shows task network failure with retry instead of replacing the selection', async () => {
     failQuery = 'periodicTask.get';
     render();
     await waitForReact(() => expect(container.textContent).toContain('Connection unavailable'));
     failQuery = null;
-    actFlushSync(() => button('Retry agent').click());
+    actFlushSync(() => button('Retry automation').click());
     await waitForReact(() =>
       expect(container.querySelector('main h2')?.textContent).toBe('Review changes')
     );
@@ -400,7 +400,7 @@ describe('AgentsPage coordination', () => {
     ).not.toBeNull();
     const before = requests.filter((request) => request.path === 'periodicTask.get').length;
     failQuery = null;
-    actFlushSync(() => button('Retry agent').click());
+    actFlushSync(() => button('Retry automation').click());
     await waitForReact(() => expect(container.textContent).not.toContain('Connection unavailable'));
     expect(
       requests.filter((request) => request.path === 'periodicTask.get').length
@@ -415,7 +415,7 @@ describe('AgentsPage coordination', () => {
     await act(async () => {
       await queryClient.invalidateQueries();
     });
-    await waitForReact(() => expect(container.textContent).toContain('Agent not found'));
+    await waitForReact(() => expect(container.textContent).toContain('Automation not found'));
     expect(container.querySelector('main h2')).toBeNull();
     expect(container.querySelector('main [aria-label="Run history"]')).toBeNull();
   });
@@ -424,7 +424,7 @@ describe('AgentsPage coordination', () => {
     await waitForReact(() =>
       expect(container.querySelector('main h2')?.textContent).toBe('Review changes')
     );
-    actFlushSync(() => button('Edit agent').click());
+    actFlushSync(() => button('Edit automation').click());
     const form = container.querySelector('form');
     const instructions = container.querySelector<HTMLTextAreaElement>('textarea');
     const draft = 'Unsaved instructions with specific changes.\nKeep this second line too.';
@@ -440,12 +440,14 @@ describe('AgentsPage coordination', () => {
       await queryClient.invalidateQueries();
     });
     await waitForReact(() =>
-      expect(container.textContent).toContain('Agent not found. This agent is no longer available.')
+      expect(container.textContent).toContain(
+        'Automation not found. This automation is no longer available.'
+      )
     );
     expect(container.querySelector('form')).toBe(form);
     expect(container.querySelector<HTMLTextAreaElement>('textarea')?.value).toBe(draft);
     const before = requests.filter((request) => request.path === 'periodicTask.get').length;
-    actFlushSync(() => button('Retry agent').click());
+    actFlushSync(() => button('Retry automation').click());
     await waitForReact(() =>
       expect(
         requests.filter((request) => request.path === 'periodicTask.get').length
@@ -464,7 +466,7 @@ describe('AgentsPage coordination', () => {
     await waitForReact(() =>
       expect(container.querySelector('main h2')?.textContent).toBe('Review changes')
     );
-    actFlushSync(() => button('Edit agent').click());
+    actFlushSync(() => button('Edit automation').click());
     const name = container.querySelector<HTMLInputElement>('input[name="name"]');
     actFlushSync(() => {
       const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
@@ -486,7 +488,7 @@ describe('AgentsPage coordination', () => {
       'Changed name'
     );
     expect(notifications.error).toHaveBeenCalledWith(
-      "Couldn't update agent. Server refused the change"
+      "Couldn't update automation. Server refused the change"
     );
     failQuery = 'periodicTask.get';
     await act(async () => {
@@ -525,7 +527,7 @@ describe('AgentsPage coordination', () => {
     await waitForReact(() => expect(container.textContent).toContain('Server refused the change'));
     expect(notifications.error).toHaveBeenCalled();
     expect(notifications.error).toHaveBeenCalledWith(
-      "Couldn't pause agent. Server refused the change"
+      "Couldn't pause automation. Server refused the change"
     );
     failMutation = 'periodicTask.delete';
     actFlushSync(() => button('Delete').click());
@@ -539,7 +541,7 @@ describe('AgentsPage coordination', () => {
     );
     expect(document.querySelector('[role="alertdialog"]')).not.toBeNull();
     expect(notifications.error).toHaveBeenCalledWith(
-      "Couldn't delete agent. Server refused the change"
+      "Couldn't delete automation. Server refused the change"
     );
     expect(container.querySelector('output')?.textContent).toBe(
       '/projects/owner-slug/agents/agent'
@@ -550,7 +552,7 @@ describe('AgentsPage coordination', () => {
     await waitForReact(() =>
       expect(container.querySelector('main h2')?.textContent).toBe('Review changes')
     );
-    actFlushSync(() => button('Edit agent').click());
+    actFlushSync(() => button('Edit automation').click());
     const originalForm = container.querySelector('form');
     const name = container.querySelector<HTMLInputElement>('input[name="name"]');
     actFlushSync(() => {
@@ -683,7 +685,7 @@ describe('AgentsPage coordination', () => {
     await chooseAgentCreation(container);
     expect(container.querySelector('form')).not.toBeNull();
     const railLink = container.querySelector<HTMLAnchorElement>(
-      'nav[aria-label="Agents"] a[href="/projects/owner-slug/agents/agent"]'
+      'nav[aria-label="Automations"] a[href="/projects/owner-slug/agents/agent"]'
     );
     actFlushSync(() => railLink?.click());
     expect(container.querySelector('form')).toBeNull();
@@ -715,7 +717,7 @@ describe('AgentsPage coordination', () => {
     actFlushSync(() =>
       container
         .querySelector<HTMLAnchorElement>(
-          'nav[aria-label="Agents"] a[href="/projects/owner-slug/agents/agent"]'
+          'nav[aria-label="Automations"] a[href="/projects/owner-slug/agents/agent"]'
         )
         ?.click()
     );
@@ -724,7 +726,7 @@ describe('AgentsPage coordination', () => {
       finishMutation();
       await mutationWait;
     });
-    await waitForReact(() => expect(button('Create agent').disabled).toBe(false));
+    await waitForReact(() => expect(button('Create automation').disabled).toBe(false));
     expect(container.querySelector('output')?.textContent).toBe(
       '/projects/owner-slug/agents/agent'
     );
@@ -744,7 +746,7 @@ describe('AgentsPage coordination', () => {
       );
       await chooseAgentCreation(container);
       const railLink = container.querySelector<HTMLAnchorElement>(
-        'nav[aria-label="Agents"] a[href="/projects/owner-slug/agents/agent"]'
+        'nav[aria-label="Automations"] a[href="/projects/owner-slug/agents/agent"]'
       );
       let browserActionPrevented = true;
       const suppressTestNavigation = (event: MouseEvent) => {
@@ -786,7 +788,7 @@ describe('AgentsPage coordination', () => {
       'Daily agent'
     );
     expect(notifications.error).toHaveBeenCalledWith(
-      "Couldn't create agent. Server refused the change"
+      "Couldn't create automation. Server refused the change"
     );
     failMutation = null;
     await act(async () =>
@@ -813,7 +815,7 @@ describe('AgentsPage coordination', () => {
   });
   it('rejects an agent belonging to another canonical project without switching owner', async () => {
     render('/projects/stale/agents/agent');
-    await waitForReact(() => expect(container.textContent).toContain('Agent not found'));
+    await waitForReact(() => expect(container.textContent).toContain('Automation not found'));
     expect(container.querySelector('form')).toBeNull();
     expect(container.querySelector('main h2')).toBeNull();
     expect(container.querySelector('output')?.textContent).toBe('/projects/stale/agents/agent');
@@ -897,7 +899,7 @@ describe('AgentsPage coordination', () => {
         'New lifetime draft'
       );
       if (kind === 'delete') {
-        expect(container.querySelector('nav[aria-label="Agents"] a')).toBeNull();
+        expect(container.querySelector('nav[aria-label="Automations"] a')).toBeNull();
       }
     }
   );
@@ -928,7 +930,7 @@ describe('AgentsPage coordination', () => {
   });
   it('exits Create when explicitly reopening the same idless project index', async () => {
     render('/projects/stale/agents');
-    await waitForReact(() => expect(button('Create agent').disabled).toBe(false));
+    await waitForReact(() => expect(button('Create automation').disabled).toBe(false));
     await chooseAgentCreation(container);
     expect(container.querySelector('form')).not.toBeNull();
     actFlushSync(() => button('Open current index').click());
@@ -937,7 +939,7 @@ describe('AgentsPage coordination', () => {
   });
   it('preserves Create and its draft when polling discovers the first agent in an empty project', async () => {
     render('/projects/stale/agents');
-    await waitForReact(() => expect(button('Create agent').disabled).toBe(false));
+    await waitForReact(() => expect(button('Create automation').disabled).toBe(false));
     await chooseAgentCreation(container);
     const form = container.querySelector('form');
     const input = container.querySelector<HTMLInputElement>('input[name="name"]');
@@ -953,7 +955,7 @@ describe('AgentsPage coordination', () => {
       await queryClient.invalidateQueries();
     });
     await waitForReact(() =>
-      expect(container.querySelector('nav[aria-label="Agents"] a')).not.toBeNull()
+      expect(container.querySelector('nav[aria-label="Automations"] a')).not.toBeNull()
     );
     expect(container.querySelector('form')).toBe(form);
     expect(container.querySelector<HTMLInputElement>('input[name="name"]')?.value).toBe(
@@ -975,11 +977,11 @@ it('retains phone editor reveal across the production keyed route navigation', a
   try {
     render();
     await waitForReact(() =>
-      expect(container.querySelector('nav[aria-label="Agents"] a')).not.toBeNull()
+      expect(container.querySelector('nav[aria-label="Automations"] a')).not.toBeNull()
     );
     const before = container.querySelector('main');
     actFlushSync(() =>
-      container.querySelector<HTMLAnchorElement>('nav[aria-label="Agents"] a')!.click()
+      container.querySelector<HTMLAnchorElement>('nav[aria-label="Automations"] a')!.click()
     );
     await waitForReact(() => expect(container.querySelector('main')).not.toBe(before));
     await waitForReact(() => expect(document.activeElement).toBe(container.querySelector('main')));

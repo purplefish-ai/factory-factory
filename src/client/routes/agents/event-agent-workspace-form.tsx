@@ -45,15 +45,17 @@ export function EventAgentWorkspaceForm({
           }
         })
         .finally(() => setIsCanceling(false)),
-      "Couldn't clear canceled event agent draft."
+      "Couldn't clear canceled event-triggered automation draft."
     );
   };
   if (isCanceling) {
-    return <Loading size="compact" message="Canceling event agent draft…" />;
+    return <Loading size="compact" message="Canceling event-triggered automation draft…" />;
   }
   return (
     <>
-      {submission.isPending && <Loading size="compact" message="Creating event agent workspace…" />}
+      {submission.isPending && (
+        <Loading size="compact" message="Creating event-triggered automation workspace…" />
+      )}
       <QueryState
         query={workspaces}
         errorTitle="Couldn't load workspace names"

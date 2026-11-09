@@ -23,7 +23,7 @@ describe('InlineWorkspaceForm', () => {
     const { container, root } = renderForm();
     try {
       expect(container.textContent).toContain('Launch');
-      expect(container.textContent).toContain('Create agent');
+      expect(container.textContent).toContain('Create automation');
       expect(container.textContent).not.toMatch(/auto.iterat/i);
       expect(container.querySelector('#test-command')).toBeNull();
       expect(container.querySelector('#target-description')).toBeNull();
@@ -56,7 +56,7 @@ describe('InlineWorkspaceForm', () => {
   it('hides ignored workspace-only toolbar controls in periodic task mode', () => {
     const { container, root } = renderForm();
     const periodicTaskItem = Array.from(container.querySelectorAll('div')).find(
-      (element) => element.textContent === 'Create agent'
+      (element) => element.textContent === 'Create automation'
     );
 
     if (!periodicTaskItem) {
@@ -253,7 +253,7 @@ it.each(['loading', 'failed'])(
           )?.disabled
         ).toBe(true);
         const periodicMode = [...container.querySelectorAll('div')].find(
-          (element) => element.textContent === 'Create agent'
+          (element) => element.textContent === 'Create automation'
         );
         actFlushSync(() => periodicMode?.click());
         const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')?.set;
@@ -262,7 +262,7 @@ it.each(['loading', 'failed'])(
           textarea.dispatchEvent(new Event('input', { bubbles: true }));
         });
         const create = [...container.querySelectorAll<HTMLButtonElement>('button')].find(
-          (button) => button.textContent === 'Create agent'
+          (button) => button.textContent === 'Create automation'
         );
         expect(create?.disabled).toBe(false);
         actFlushSync(() => create?.click());
@@ -303,7 +303,7 @@ it('creates an agent with shared schedule fields and clears time and timezone fo
   try {
     actFlushSync(() =>
       [...container.querySelectorAll('div')]
-        .find((element) => element.textContent === 'Create agent')
+        .find((element) => element.textContent === 'Create automation')
         ?.click()
     );
     const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')?.set;
@@ -318,7 +318,7 @@ it('creates an agent with shared schedule fields and clears time and timezone fo
       time?.dispatchEvent(new Event('input', { bubbles: true }));
     });
     const create = [...container.querySelectorAll('button')].find(
-      (button) => button.textContent === 'Create agent'
+      (button) => button.textContent === 'Create automation'
     );
     actFlushSync(() => create?.click());
     expect(mocks.createPeriodicTaskMutateMock).toHaveBeenLastCalledWith(
@@ -530,7 +530,7 @@ it('restores periodic schedules and explicit ratchet settings without applying l
   );
   actFlushSync(() =>
     [...mounted.container.querySelectorAll('button')]
-      .find((button) => button.textContent === 'Create agent')
+      .find((button) => button.textContent === 'Create automation')
       ?.click()
   );
   expect(mocks.createPeriodicTaskMutateMock).toHaveBeenCalledWith(

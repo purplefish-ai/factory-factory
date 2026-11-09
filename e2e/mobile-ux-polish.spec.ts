@@ -56,10 +56,10 @@ for (const { variant, width } of ['workspace', 'family'].flatMap((variant) =>
   });
 }
 
-test('phone Agents scrolls its rail and editor as one surface', async ({ page }) => {
+test('phone Automations scrolls its rail and editor as one surface', async ({ page }) => {
   await page.goto('/__mobile-baseline?surface=agents');
   const shell = page.locator('[class~="@container/agents"]');
-  await expect(shell.getByRole('heading', { name: 'Agents', exact: true })).toBeVisible();
+  await expect(shell.getByRole('heading', { name: 'Automations', exact: true })).toBeVisible();
   const nestedPanes = await shell.locator('nav, main').evaluateAll(
     (elements) =>
       elements.filter((element) => {
@@ -69,7 +69,7 @@ test('phone Agents scrolls its rail and editor as one surface', async ({ page })
   );
   expect(nestedPanes).toBe(0);
   const body = shell.locator(':scope > div').last();
-  await page.getByRole('navigation', { name: 'Agents', exact: true }).hover();
+  await page.getByRole('navigation', { name: 'Automations', exact: true }).hover();
   await page.mouse.wheel(0, 450);
   await expect.poll(() => body.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
   expect(
@@ -77,24 +77,24 @@ test('phone Agents scrolls its rail and editor as one surface', async ({ page })
   ).toBeLessThanOrEqual(1);
 });
 
-test('selecting from a long phone Agents rail reveals the editor', async ({ page }) => {
+test('selecting from a long phone Automations rail reveals the editor', async ({ page }) => {
   await page.goto('/__mobile-baseline?surface=agents&many-agents');
   await page
-    .getByRole('navigation', { name: 'Agents', exact: true })
+    .getByRole('navigation', { name: 'Automations', exact: true })
     .getByRole('link', { name: /Keep dependencies current/ })
     .click();
-  const editor = page.getByRole('main', { name: 'Agent details' });
+  const editor = page.getByRole('main', { name: 'Automation details' });
   await expect(editor).toBeInViewport();
   await expect(editor).toBeFocused();
   await expect(editor).toContainText('Keep dependencies current');
 });
 
-test('creating from a long phone Agents rail reveals the form and retains its input focus', async ({
+test('creating from a long phone Automations rail reveals the form and retains its input focus', async ({
   page,
 }) => {
   await page.goto('/__mobile-baseline?surface=agents&many-agents');
-  await page.getByRole('button', { name: 'Create agent', exact: true }).click();
-  await page.getByRole('menuitem', { name: 'Scheduled agent', exact: true }).click();
+  await page.getByRole('button', { name: 'Create automation', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Scheduled automation', exact: true }).click();
   const name = page.getByRole('textbox', { name: 'Name', exact: true });
   await expect(name).toBeInViewport();
   await expect(name).toBeFocused();
