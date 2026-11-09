@@ -44,7 +44,6 @@ function createPromptService(eventAuthority?: EventSessionAuthority) {
   const workspaceBridge = {
     markSessionRunning: vi.fn(() => 1),
     markSessionIdle: vi.fn(),
-    recordRatchetSessionEnd: vi.fn(async () => undefined),
     resetPRDiscoveryBackoff: vi.fn(async () => true),
   };
   const service = new SessionService({

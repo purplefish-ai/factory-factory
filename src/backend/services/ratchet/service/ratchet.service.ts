@@ -8,7 +8,7 @@ import {
   workspacePRMonitoringService,
   workspacePrSnapshotService,
 } from '@/backend/services/workspace';
-import { type CIStatus, RatchetState } from '@/shared/core';
+import { RatchetState } from '@/shared/core';
 import type { PRTarget, PRDeliveryMode } from '@/shared/pr-monitoring';
 import { shouldPollPR } from '@/shared/pr-polling';
 import { deriveWorkspacePRSummary } from '@/shared/workspace-pr-summary';
@@ -24,10 +24,8 @@ export interface RatchetDispatchChangedEvent {
 }
 export interface RatchetStateChangedEvent {
   workspaceId: string;
-  prId?: string;
   fromState: RatchetState;
   toState: RatchetState;
-  prCiStatus?: CIStatus;
 }
 export interface RatchetToggledEvent {
   workspaceId: string;

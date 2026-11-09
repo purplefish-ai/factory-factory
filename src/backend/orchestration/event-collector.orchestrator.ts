@@ -70,7 +70,7 @@ import { isOpenPrState, type PRState } from '@/shared/core';
 import { projectWorkspaceSnapshotMetadata } from '@/shared/workspace-snapshot';
 import type { getWorkspaceLinearContext } from './linear-config.helper';
 import { LinearMergeCompletion } from './linear-merge-completion.orchestrator';
-import { projectPrEvent, shouldRefreshRatchetForPrSwitch } from './pr-event-projection';
+import { shouldRefreshRatchetForPrSwitch } from './pr-event-projection';
 import { RatchetProjectionWorker } from './ratchet-projection.worker';
 import { subscribeWorkspaceBranchPublication } from './workspace-branch-publication.orchestrator';
 import type { fireLifecycleNotification } from './workspace-children.orchestrator';
@@ -540,8 +540,6 @@ function startEventCollectorWithState(state: EventCollectorState): void {
   );
   state.activeCoalescer = coalescer;
   const linearMergeCompletion = new LinearMergeCompletion({
-    readLegacyProjection: (workspaceId) =>
-      dependencies.workspaceDataService.findRatchetProjection(workspaceId),
     getLinearContext: (workspaceId) => dependencies.getWorkspaceLinearContext(workspaceId),
     markIssueCompleted: (apiKey, issueId) =>
       dependencies.linearStateSyncService.markIssueCompleted(apiKey, issueId),
@@ -636,6 +634,8 @@ function startEventCollectorWithState(state: EventCollectorState): void {
       ratchetProjection.setArchived(event.workspaceId, true);
       // Immediate removal for UI feedback -- no coalescing delay
       removeWorkspaceWithState(state, event.workspaceId);
+      // Archive cleanup already stopped these before ARCHIVING → ARCHIVED, but
+      // terminal creation is not gated on ARCHIVING; sweep anything opened since.
       void Promise.allSettled([
         dependencies.sessionLifecycleService.stopWorkspaceSessions(event.workspaceId, {
           reason: 'WORKSPACE_ARCHIVED',
@@ -688,7 +688,7 @@ function startEventCollectorWithState(state: EventCollectorState): void {
     // Observed states are enriched, so a PR first seen as a draft or already
     // reviewed is still a newly opened PR. Only NONE → open notifies; later
     // transitions between open states (e.g. DRAFT → OPEN) do not repeat it.
-    if (event.prId && event.previousPrState === 'NONE' && isOpenPrState(event.prState)) {
+    if (event.previousPrState === 'NONE' && isOpenPrState(event.prState)) {
       void dependencies
         .fireLifecycleNotification(event.workspaceId, 'A pull request has been opened.')
         .catch((error) => {
@@ -699,40 +699,7 @@ function startEventCollectorWithState(state: EventCollectorState): void {
           });
         });
     }
-    if (event.prId) {
-      ratchetProjection.request(event.workspaceId, 'pr');
-      return;
-    }
-    const previousSnapshot = dependencies.workspaceSnapshotStore.getByWorkspaceId(
-      event.workspaceId
-    );
-    const shouldRefreshRatchet = shouldRefreshRatchetForPrSwitch(previousSnapshot, event);
-    const prIdentity = {
-      prNumber: event.prNumber,
-      prUrl:
-        event.prUrl ??
-        (previousSnapshot?.prNumber === event.prNumber ? previousSnapshot.prUrl : undefined),
-    };
-    // PR events invalidate the entire collection; publish one authoritative projection.
-    ratchetProjection.request(event.workspaceId);
-    coalescer.enqueue(
-      event.workspaceId,
-      projectPrEvent(previousSnapshot, event),
-      'event:pr_snapshot_updated',
-      { immediate: true }
-    );
-
-    if (shouldRefreshRatchet) {
-      // Recompute monitoring and wake delivery immediately after the switch.
-      // Reuse observations just accepted by the sync; GitHub fetching retains
-      // the shared observation cooldown and terminal-PR policy.
-      requestImmediateRatchetCheck(state, event.workspaceId);
-    }
-
-    // Transition linked Linear issue to completed when PR is merged
-    if (event.prState === 'MERGED' || event.prState === 'CLOSED') {
-      linearMergeCompletion.observeLegacy(event.workspaceId, prIdentity, event.prState);
-    }
+    ratchetProjection.request(event.workspaceId, 'pr');
   };
   dependencies.prSnapshotService.on(PR_SNAPSHOT_UPDATED, prSnapshotUpdatedHandler);
   state.teardownListeners.push(() =>
@@ -740,22 +707,7 @@ function startEventCollectorWithState(state: EventCollectorState): void {
   );
 
   const prUrlAttachedHandler = (event: PRUrlAttachedEvent) => {
-    if (event.prId) {
-      ratchetProjection.request(event.workspaceId, 'pr');
-      return;
-    }
-    // No snapshot was fetched for this URL. Publish its neutral cache and drop
-    // the old PR's projection before any subscriber can archive it as merged.
-    coalescer.enqueue(
-      event.workspaceId,
-      projectPrEvent(
-        dependencies.workspaceSnapshotStore.getByWorkspaceId(event.workspaceId),
-        event
-      ),
-      'event:pr_url_attached',
-      { immediate: true }
-    );
-    ratchetProjection.request(event.workspaceId);
+    ratchetProjection.request(event.workspaceId, 'pr');
   };
   dependencies.prSnapshotService.on(PR_URL_ATTACHED, prUrlAttachedHandler);
   state.teardownListeners.push(() =>
@@ -772,14 +724,6 @@ function startEventCollectorWithState(state: EventCollectorState): void {
 
   // 3. Ratchet state changes
   const ratchetStateChangedHandler = (event: RatchetStateChangedEvent) => {
-    if (event.prCiStatus !== undefined && !event.prId) {
-      coalescer.enqueue(
-        event.workspaceId,
-        { prCiStatus: event.prCiStatus },
-        'event:ratchet_state_changed',
-        { immediate: true }
-      );
-    }
     ratchetProjection.request(event.workspaceId);
   };
   dependencies.ratchetService.on(RATCHET_STATE_CHANGED, ratchetStateChangedHandler);

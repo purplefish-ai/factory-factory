@@ -7,7 +7,6 @@ import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 
 const mockNotifyToolStart = vi.fn();
 const mockNotifyToolComplete = vi.fn();
-const mockRecordRatchetSessionEnd = vi.fn();
 const mockAcpTraceLoggerCloseSession = vi.fn();
 vi.mock('@/backend/services/logger.service', () => ({
   createLogger: () => ({
@@ -123,7 +122,6 @@ describe('SessionService', () => {
     vi.clearAllMocks();
     mockNotifyToolStart.mockReset();
     mockNotifyToolComplete.mockReset();
-    mockRecordRatchetSessionEnd.mockReset();
     mockAcpTraceLoggerCloseSession.mockReset();
     const acpProcessor = getAcpProcessorState();
     acpProcessor.pendingAcpToolCalls.clear();
@@ -134,7 +132,6 @@ describe('SessionService', () => {
     const workspaceBridge = {
       markSessionRunning: vi.fn(),
       markSessionIdle: vi.fn(),
-      recordRatchetSessionEnd: mockRecordRatchetSessionEnd,
       resetPRDiscoveryBackoff: vi.fn(async () => true),
     };
     sessionService.configure({ workspace: workspaceBridge });
@@ -890,7 +887,6 @@ describe('SessionService', () => {
       workspace: {
         markSessionRunning,
         markSessionIdle,
-        recordRatchetSessionEnd: mockRecordRatchetSessionEnd,
         resetPRDiscoveryBackoff: vi.fn(async () => true),
       },
     });
@@ -1178,7 +1174,6 @@ describe('SessionService', () => {
       workspace: {
         markSessionRunning: vi.fn(),
         markSessionIdle,
-        recordRatchetSessionEnd: mockRecordRatchetSessionEnd,
         resetPRDiscoveryBackoff: vi.fn(async () => true),
       },
     });
@@ -1220,7 +1215,6 @@ describe('SessionService', () => {
       [SessionStatus.RUNNING]
     );
     expect(clearQueuedWorkSpy).toHaveBeenCalledWith('session-1', { emitSnapshot: true });
-    expect(mockRecordRatchetSessionEnd).not.toHaveBeenCalled();
     expect(sessionRepository.deleteSession).not.toHaveBeenCalled();
   });
 
@@ -1302,7 +1296,6 @@ describe('SessionService', () => {
       workspace: {
         markSessionRunning: vi.fn(),
         markSessionIdle,
-        recordRatchetSessionEnd: mockRecordRatchetSessionEnd,
         resetPRDiscoveryBackoff: vi.fn(async () => true),
       },
     });
@@ -1395,11 +1388,6 @@ describe('SessionService', () => {
     try {
       await sessionLifecycleService.stopSession('session-1');
 
-      expect(mockRecordRatchetSessionEnd).toHaveBeenCalledWith(
-        'workspace-1',
-        'session-1',
-        'COMPLETED'
-      );
       expect(closedSessionPersistenceService.persistClosedSession).toHaveBeenCalledWith({
         sessionId: 'session-1',
         workspaceId: 'workspace-1',
@@ -1486,11 +1474,6 @@ describe('SessionService', () => {
       cleanupTransientRatchetSession: false,
     });
 
-    expect(mockRecordRatchetSessionEnd).toHaveBeenCalledWith(
-      'workspace-1',
-      'session-3',
-      'COMPLETED'
-    );
     expect(closedSessionPersistenceService.persistClosedSession).not.toHaveBeenCalled();
     expect(sessionRepository.deleteSession).not.toHaveBeenCalled();
   });

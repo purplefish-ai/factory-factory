@@ -244,22 +244,18 @@ The event collector uses one per-lifetime projection worker for PR collection
 and monitoring invalidations. Its narrow database read publishes the complete PR
 and monitoring field set together; it does not fetch the broad workspace record.
 Invalidations during a read supersede that read and retain their reasons until a
-current projection is accepted. For association-aware events, only accepted PR
-invalidations run PR-switch refresh and Linear-completion effects.
-Monitoring-only refreshes publish facts without invoking those effects. The
-worker owns retries and archive/stop fences, and has no GitHub, delivery,
-session, or Linear runtime dependency.
+current projection is accepted. Every PR snapshot and attachment event carries
+its association ID; only accepted PR invalidations run PR-switch refresh and
+Linear-completion effects, and completion uses the accepted projection without
+another database read. Monitoring-only refreshes publish facts without invoking
+those effects. The worker owns retries and archive/stop fences, and has no
+GitHub, delivery, session, or Linear runtime dependency.
 
 PR-switch handling immediately recomputes monitoring and wakes delivery using
 `checkWorkspaceById`. This automatic check retains the shared 90-second
 observation cooldown and terminal-PR policy; a just-accepted attachment or
 discovery observation is reused rather than fetched again. Explicit refreshes
 and delivery preparation retain their separate forced-observation contract.
-
-Legacy events without an association ID retain immediate scalar cache updates
-and PR-switch handling. Their Linear-completion gate retains its narrow read and
-missing-row fallback; association-aware completion uses the accepted projection
-without another database read.
 
 Manual workspace PR refreshes serialize per workspace so concurrent requests
 report a committed lifecycle transition only once. Sibling refresh failures log
