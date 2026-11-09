@@ -203,6 +203,12 @@ vi.mock('@/client/lib/workspace-cache-helpers', async (importOriginal) => ({
   seedCreatedWorkspaceDetail: vi.fn(),
 }));
 
+vi.mock('@/client/lib/workspace-queries', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/client/lib/workspace-queries')>()),
+  setProjectWorkspaceList: (_queryClient: unknown, projectId: string, updater: unknown) =>
+    mocks.listForProjectSetDataMock({ projectId }, updater),
+}));
+
 // One factory for the whole composer, because the form now consumes it through
 // a single barrel. Everything the form imports has to appear here: a partial
 // factory leaves the rest undefined rather than falling through to the real

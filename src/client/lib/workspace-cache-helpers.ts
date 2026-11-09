@@ -1,7 +1,7 @@
 import type { QueryClient } from '@tanstack/react-query';
 import type { inferRouterOutputs } from '@trpc/server';
 import type { AppRouter } from '@/client/lib/trpc';
-import { workspaceDetailCacheOptions } from '@/client/lib/workspace-cache-reconciler';
+import { seedWorkspaceDetail } from '@/client/lib/workspace-queries';
 import { createOptimisticWorkspaceSummary } from '@/client/lib/workspace-summary';
 import { readWorkspaceInitialPrompt } from '@/shared/workspace-initial-prompt';
 
@@ -48,11 +48,8 @@ export function createOptimisticWorkspaceCacheData(workspace: CreatedWorkspace) 
 
 /** Creation returns a full persisted row, so it can seed detail before navigation. */
 export function seedCreatedWorkspaceDetail(queryClient: QueryClient, workspace: CreatedWorkspace) {
-  const options = workspaceDetailCacheOptions(queryClient, workspace.id);
-  queryClient.getQueryCache().build(queryClient, options);
-  queryClient.setQueryData(
-    options.queryKey,
-    (existing) => existing ?? createOptimisticWorkspaceCacheData(workspace)
+  seedWorkspaceDetail(queryClient, workspace.id, () =>
+    createOptimisticWorkspaceCacheData(workspace)
   );
 }
 

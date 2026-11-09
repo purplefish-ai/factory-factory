@@ -1,3 +1,4 @@
+import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, useId, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import type { z } from 'zod';
@@ -5,6 +6,7 @@ import { Loading } from '@/client/components/loading';
 import { invalidateSavedAgentQueries } from '@/client/lib/agent-query-cache';
 import { withOccurrenceKeys } from '@/client/lib/list-keys';
 import { trpc } from '@/client/lib/trpc';
+import { ensureWorkspaceDetail } from '@/client/lib/workspace-queries';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -271,6 +273,7 @@ export function AgentProposalCard({ reference }: { reference: AgentProposalRefer
     onError: (error) => toast.error(error.message),
   });
   const utils = trpc.useUtils();
+  const queryClient = useQueryClient();
   const { refetch } = query;
   useEffect(() => {
     if (reference.revision && query.data && reference.revision > query.data.revision) {
@@ -292,9 +295,11 @@ export function AgentProposalCard({ reference }: { reference: AgentProposalRefer
       onCreate={async (value) => {
         let projectId: string;
         try {
-          const owner =
-            utils.workspace.get.getData({ id: reference.workspaceId }) ??
-            (await utils.workspace.get.fetch({ id: reference.workspaceId }));
+          const owner = await ensureWorkspaceDetail(
+            queryClient,
+            utils.client,
+            reference.workspaceId
+          );
           if (!owner?.projectId) {
             throw new Error('Missing authoring workspace project.');
           }

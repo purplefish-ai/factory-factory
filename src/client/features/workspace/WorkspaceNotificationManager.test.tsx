@@ -10,13 +10,19 @@ const mocks = vi.hoisted(() => ({
   navigate: vi.fn(),
   fetch: vi.fn(),
   project: vi.fn(),
+  queryClient: {},
   settings: { data: { playSoundOnComplete: true }, isSuccess: true },
 }));
 vi.mock('@/client/lib/sound', () => ({ playSound: mocks.sound }));
 vi.mock('react-router', () => ({ useNavigate: () => mocks.navigate }));
+vi.mock('@tanstack/react-query', () => ({ useQueryClient: () => mocks.queryClient }));
+vi.mock('@/client/lib/workspace-queries', () => ({
+  fetchWorkspaceDetail: (_queryClient: unknown, _client: unknown, id: string) =>
+    mocks.fetch({ id }),
+}));
 vi.mock('@/client/lib/trpc', () => {
   const utils = {
-    workspace: { get: { fetch: mocks.fetch } },
+    client: {},
     project: { getById: { fetch: mocks.project } },
   };
   return {

@@ -464,6 +464,18 @@ removed rows or overwrite newer live fields or a supplied stream review count.
 The reconciler consumes each HTTP response's identity tag once, so explicit
 optimistic mutation writes retain their existing behavior.
 
+`src/client/lib/workspace-queries.ts` is the only place that builds options,
+fetches or writes for `workspace.get` and `workspace.listForProject`. React
+Query lets the latest fetch or observer of a key replace that key's options,
+including the commit hook, so a plain tRPC `useQuery`, `fetch` or `setData` on
+either key would commit untagged HTTP data over live fields and leave later
+invalidation refetches unreconciled. Readers use `useProjectWorkspaceQuery`
+(observer-only `staleTime`), `useWorkspaceDetailQuery` (observer-only `enabled`,
+`refetchInterval` and `staleTime`), `fetchWorkspaceDetail` or
+`ensureWorkspaceDetail`; optimistic list rows, creation seeds and stream detail
+merges use the module's writers. Invalidation, cancellation and cache reads keep
+using tRPC utilities because they reuse the options already installed.
+
 Reconciliation ownership is scoped to the QueryClient, project, and connection
 lifetime. Disconnecting or leaving a project retires that token, cancels its
 pending list and detail HTTP requests, and invalidates them for HTTP fallback.
