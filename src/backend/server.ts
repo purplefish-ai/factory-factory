@@ -21,6 +21,7 @@ import { createExpressMiddleware } from '@trpc/server/adapters/express';
 import express from 'express';
 import { WebSocketServer } from 'ws';
 import type { Application } from './app-context';
+import { createShutdownPlan, runShutdownPlan } from './application-shutdown';
 import { toError } from './lib/error-utils';
 import { eventLoopMonitor } from './lib/event-loop-monitor';
 import {
@@ -68,21 +69,12 @@ export function createServer(application: Application, requestedPort?: number): 
     ratchetService,
     rateLimiter,
     reconciliationService,
-    runScriptService,
     runScriptStateMachine,
     schedulerService,
     sessionFileLogger,
     sessionLifecycleService,
-    terminalService,
-    workspaceGitStateService,
   } = services;
-  const {
-    database,
-    eventCollector,
-    interceptors,
-    recoverStaleArchivingWorkspaces,
-    snapshotReconciliation,
-  } = lifecycle;
+  const { interceptors, recoverStaleArchivingWorkspaces, snapshotReconciliation } = lifecycle;
 
   const logger = createLogger('server');
   const REQUESTED_PORT = requestedPort ?? configService.getBackendPort();
@@ -397,8 +389,6 @@ export function createServer(application: Application, requestedPort?: number): 
   // ============================================================================
   // Cleanup Logic
   // ============================================================================
-  const SHUTDOWN_TIMEOUT_MS = 5000;
-
   const runStartupTask = async (errorMessage: string, task: () => Promise<void>): Promise<void> => {
     try {
       await task();
@@ -457,23 +447,6 @@ export function createServer(application: Application, requestedPort?: number): 
     assertStartupNotInterrupted();
   };
 
-  /**
-   * Signal one background job to stop now and return its drain. The drain
-   * never rejects: a failed stop is logged so it cannot keep the other jobs,
-   * or the database disconnect, from proceeding.
-   */
-  const beginJobStop = (job: string, stop: () => Promise<void>): Promise<void> => {
-    let drain: Promise<void>;
-    try {
-      drain = stop();
-    } catch (error) {
-      drain = Promise.reject(error);
-    }
-    return drain.catch((error: unknown) => {
-      logger.error('Failed to stop background job', toError(error), { job });
-    });
-  };
-
   const performCleanup = (): Promise<void> => {
     if (cleanupPromise !== null) {
       return cleanupPromise;
@@ -485,73 +458,48 @@ export function createServer(application: Application, requestedPort?: number): 
       eventLoopMonitorStarted = false;
       eventLoopMonitor.stop();
     }
-    cleanupPromise = (async () => {
-      logger.info('Starting graceful cleanup');
-      // Abort every background job now so none starts new work during
-      // teardown, and let their in-flight runs drain concurrently with it and
-      // with each other: shutdown then waits for the slowest drain rather than
-      // the sum of them. Drains are awaited only after sessions and processes
-      // are torn down: reconciliation's includes startup workspace
-      // initialization, whose in-flight startup script cannot be cancelled and
-      // may outlast the stop budget, and new agent sessions fail fast once
-      // clients are stopped.
-      const jobDrains = {
-        applicationUpdates: beginJobStop(
-          'application-update-idle',
-          () => services.applicationUpdateService?.stop() ?? Promise.resolve()
-        ),
-        reconciliation: beginJobStop('reconciliation-cleanup', () =>
-          reconciliationService.stopPeriodicCleanup()
-        ),
-        prSync: beginJobStop('pr-sync', () => schedulerService.stop()),
-        snapshotReconciliation: beginJobStop('snapshot-reconciliation', () =>
-          snapshotReconciliation.stop()
-        ),
-        ratchet: beginJobStop('ratchet', () => ratchetService.stop()),
-        periodicTasks: beginJobStop('periodic-task-poll', () => periodicTaskService.stop()),
-      };
-      await services.agentRuntime?.stop();
-      // Archive recovery still uses sessions, run scripts, caches and the database.
-      await archiveRecoveryPromise;
-
-      clearInterval(heartbeatInterval);
-      if (indexHtmlReloadInterval !== null) {
-        clearInterval(indexHtmlReloadInterval);
-        indexHtmlReloadInterval = null;
+    logger.info('Starting graceful cleanup');
+    // The shared plan signals every background job now so none starts new
+    // work during teardown, and lets their in-flight runs drain concurrently
+    // with it and with each other: shutdown then waits for the slowest drain
+    // rather than the sum of them. Drains are awaited only after sessions and
+    // processes are torn down: reconciliation's includes startup workspace
+    // initialization, whose in-flight startup script cannot be cancelled and
+    // may outlast the stop budget, and new agent sessions fail fast once
+    // clients are stopped. A failed drain is logged and blocks neither the
+    // other drains nor the disconnect. A failed step is logged, the remaining
+    // steps still run, and cleanup then rejects.
+    const stepFailures: unknown[] = [];
+    const plan = createShutdownPlan(application, {
+      settleServerWork: async () => {
+        // Archive recovery still uses sessions, run scripts, caches and the database.
+        await archiveRecoveryPromise;
+        clearInterval(heartbeatInterval);
+        if (indexHtmlReloadInterval !== null) {
+          clearInterval(indexHtmlReloadInterval);
+          indexHtmlReloadInterval = null;
+        }
+      },
+      closeTransports: async () => {
+        await closeWebSocketServer();
+        disposeChatTransportForApplication(application);
+        disposeSnapshotsHandlerState(application);
+        await closeBoundServer();
+      },
+    });
+    cleanupPromise = runShutdownPlan(plan, ({ kind, name, error }) => {
+      if (kind === 'job') {
+        logger.error('Failed to stop background job', toError(error), { job: name });
+        return;
       }
-      await interceptors.stop();
-      await services.workspaceMetadata?.stop();
-
-      await closeWebSocketServer();
-      disposeChatTransportForApplication(application);
-      disposeSnapshotsHandlerState(application);
-      await closeBoundServer();
-
-      // Stop all ACP clients through the session lifecycle owner.
-      await sessionLifecycleService.stopAllClients(SHUTDOWN_TIMEOUT_MS);
-
-      terminalService.cleanup();
-      await runScriptService.cleanup();
-      await portShareService.cleanup();
-      sessionFileLogger.cleanup();
-      acpTraceLogger.cleanup();
-      await rateLimiter.stop();
-
-      // Every drain is already under way, so awaiting them one at a time costs
-      // only the slowest; the order below just keeps the edges that matter.
-      // The event collector keeps projecting until the PR sync has settled.
-      await jobDrains.applicationUpdates;
-      await jobDrains.prSync;
-      eventCollector.stop();
-      // Snapshot reconciliation's Git-stats pass must settle before the Git
-      // state service drops its watchers and cache.
-      await jobDrains.snapshotReconciliation;
-      workspaceGitStateService.stop();
-      await Promise.all([jobDrains.ratchet, jobDrains.periodicTasks, jobDrains.reconciliation]);
-      await database.$disconnect();
-
+      logger.error('Failed to stop application component', toError(error), { step: name });
+      stepFailures.push(error);
+    }).then(() => {
+      if (stepFailures.length > 0) {
+        throw new AggregateError(stepFailures, 'Graceful cleanup failed');
+      }
       logger.info('Graceful cleanup completed');
-    })();
+    });
 
     return cleanupPromise;
   };

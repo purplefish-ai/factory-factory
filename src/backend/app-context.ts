@@ -2,6 +2,7 @@ import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { createAgentAuthoring } from '@/backend/orchestration/agent-authoring.orchestrator';
 import { createAgentRuntime } from '@/backend/orchestration/agent-runtime.orchestrator';
+import { createShutdownPlan, runShutdownPlan } from './application-shutdown';
 import { prisma } from './db';
 import { registerInterceptors, startInterceptors, stopInterceptors } from './interceptors';
 import { triggerAdversarialReview } from './orchestration/adversarial-review.orchestrator';
@@ -264,6 +265,7 @@ export type AppConfig = ReturnType<typeof configService.getSystemConfig>;
 
 export type ApplicationLifecycle = {
   database: typeof prisma;
+  jobs: Pick<typeof jobRunner, 'stopAll'>;
   interceptors: {
     register: typeof registerInterceptors;
     start: typeof startInterceptors;
@@ -586,6 +588,7 @@ export function createDefaultApplicationDependencies(): ApplicationDependencies 
     services,
     lifecycle: {
       database: prisma,
+      jobs: jobRunner,
       interceptors: {
         register: registerInterceptors,
         start: startInterceptors,
@@ -630,26 +633,16 @@ export function createApplication(
   });
 }
 
+/**
+ * Tear down an application no server took ownership of. Runs the same ordered
+ * plan as server shutdown, without the server's transport hooks, and rejects
+ * with every failure once all steps have been attempted.
+ */
 export async function disposeApplication(application: Application): Promise<void> {
-  // Preserve dependency order while retaining failures from every independent cleanup attempt.
   const failures: unknown[] = [];
-  const cleanup = [
-    () => application.services.applicationUpdateService?.stop(),
-    () => application.services.agentRuntime?.stop(),
-    () => application.services.workspaceMetadata?.stop(),
-    () => application.services.sessionLifecycleService.stopAllClients(),
-    () => application.services.codexAccountService.shutdown(),
-    () => application.lifecycle.eventCollector.stop(),
-    () => application.lifecycle.snapshotReconciliation.stop(),
-    () => application.services.workspaceGitStateService.stop(),
-  ];
-  for (const dispose of cleanup) {
-    try {
-      await dispose();
-    } catch (error) {
-      failures.push(error);
-    }
-  }
+  await runShutdownPlan(createShutdownPlan(application), ({ error }) => {
+    failures.push(error);
+  });
   if (failures.length) {
     throw new AggregateError(failures, 'Application disposal failed');
   }

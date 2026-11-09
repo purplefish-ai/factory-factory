@@ -62,19 +62,28 @@ in rejected timestamp groups and unhydrated defaults do not count. Git stats
 continue streaming while the job remains in flight, so `stop()` still waits for
 every Git task to settle.
 
-Server cleanup calls every `server.ts`-owned job's `stop()` (reconciliation
-cleanup, PR sync, snapshot reconciliation, ratchet and PR event retention,
-periodic tasks) as soon as it begins, so no job starts new work during teardown
-and their in-flight runs drain concurrently with session/process teardown and
-with each other: shutdown waits for the slowest drain, not the sum. The drains
-are awaited only after sessions, run scripts and the rate limiter have stopped,
-and all of them before the database disconnects. Two edges are kept by awaiting
-in order: the event collector stops after the PR sync drains, and the Git state
-service stops after snapshot reconciliation drains. A failed `stop()` is logged
-with its job name and does not block the other drains or the disconnect. Startup
-re-checks for cleanup after each await before starting more jobs, since a start
-issued after its stop would revive the job; a startup interrupted that way
-rejects once cleanup finishes.
+Teardown is one ordered plan, `createShutdownPlan` in
+`src/backend/application-shutdown.ts`. Server shutdown and `disposeApplication`
+(used when no server took ownership of the graph) both run it, so a component
+stopped on one path is stopped on the other; the server adds only its transport
+and timer work through hooks at fixed points.
+
+The plan calls every server-started job's `stop()` (application update idle,
+reconciliation cleanup, PR sync, snapshot reconciliation, ratchet and PR event
+retention, periodic tasks) as soon as it begins, so no job starts new work
+during teardown and their in-flight runs drain concurrently with session/process
+teardown and with each other: shutdown waits for the slowest drain, not the sum.
+The drains are awaited only after sessions, Codex logins, run scripts and the
+rate limiter have stopped, and all of them before the database disconnects. Two
+edges are kept by awaiting in order: the event collector stops after the PR sync
+drains, and the Git state service stops after snapshot reconciliation drains.
+`jobRunner.stopAll()` then runs as a backstop, so a registered job without an
+owner in the plan is still stopped before the disconnect. A failed job `stop()`
+is logged with its job name and does not block the other drains or the
+disconnect. A failed step is logged with its step name; the later steps still
+run, and shutdown then rejects. Startup re-checks for cleanup after each await
+before starting more jobs, since a start issued after its stop would revive the
+job; a startup interrupted that way rejects once cleanup finishes.
 
 There is deliberately no "run this job now" API. The two loops with a
 cancellable sleep only ever cancelled it from their own `stop()`, so
@@ -150,7 +159,8 @@ cadence to renew sixty-second leases and recover bounded pages even while
 evaluation is stalled. Shutdown closes admission, drains committed handoffs,
 aborts and joins owned setup, and interrupts initial provider work before
 session and database teardown. Session teardown retains the final observation
-drain. Application disposal also drains sessions before account dependencies.
+drain, and the shared shutdown plan drains sessions before cancelling Codex
+logins.
 
 That same launch-maintenance owner observes initial outcomes and tracked work,
 retaining leases after the initial response until settlement. Expired
