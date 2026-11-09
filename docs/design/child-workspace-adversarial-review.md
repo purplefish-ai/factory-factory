@@ -184,15 +184,23 @@ const RUN_CHILD_REVIEWS_TOOL = {
   Completion mail wakes the parent, Ratchet can fix every finding, and a fresh
   review tends to find fresh nits, so an agent that re-reviews fixes unprompted
   has no natural stopping point. This is guidance, not a limit; a per-PR
-  cooldown is the follow-up if loops appear in practice.
+  cooldown is the follow-up if loops appear in practice. `already_active` is not
+  a limit here, because it only covers reviews still running.
 - `run_child_adversarial_reviews` is offered only in normal chat sessions, never
   in adversarial-review, Ratchet, PR-monitoring, scheduled or event-driven
   sessions. Today every session in a workspace gets the same MCP tools, because
   `getMcpServers` receives only the workspace IDs. Pass the session's `workflow`
-  into the MCP launch context, and use an allow-list of interactive chat
-  workflows so that any new automated workflow has no access by default. Both
-  `tools/list` and tool dispatch enforce it, like the existing `hasParent`
-  check. `list_child_workspaces` is read-only and has no such restriction.
+  into the MCP launch context and check it against a shared
+  `INTERACTIVE_CHAT_WORKFLOWS` constant in `src/shared/`, containing only
+  `followup` (user-created chats, quick actions and a workspace's first chat).
+  Everything else fails closed: `ratchet`, `ci-fix`, `pr-monitoring`,
+  `periodic-task`, `event-agent`, `adversarial_review`, and any missing or
+  unrecognized value, including workflows added later. Both `tools/list` and
+  tool dispatch enforce it, like the existing `hasParent` check.
+  `list_child_workspaces` is read-only and has no such restriction. This limits
+  which sessions have the tool, not what they read: a `followup` chat can still
+  receive PR-update text, which the tool description and the permission preset
+  have to handle.
 
 A second parent-only tool, `list_child_workspaces`, wraps
 `workspace.listChildren`. For each child it returns the id, name, project, agent
@@ -610,9 +618,10 @@ to the orchestrator and expose it through `AppContext.services`. It merges:
 
 1. **Queued jobs** from the in-memory queue (section 3), with global position.
 2. **Running** reviews: the active `adversarial_review` sessions already loaded
-   in `child.agentSessions` (the same RUNNING check as
-   `findActiveAdversarialReviewSession`), plus the context and reviewer label
-   the orchestrator recorded at dequeue.
+   in `child.agentSessions` (RUNNING only, on purpose: stopping a session
+   persists IDLE, so an IDLE review has already finished. This matches
+   `findActiveAdversarialReviewSession` once #3095 lands), plus the context and
+   reviewer label the orchestrator recorded at dequeue.
 3. **Recent outcomes**: an in-memory map keyed by `prId`, written in the turn's
    `finally` from the `AdversarialReviewOutcome` (section 4). Entries expire
    after 24 hours and are replaced when a newer review of that PR starts. They
