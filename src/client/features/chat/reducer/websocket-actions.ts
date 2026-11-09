@@ -142,16 +142,19 @@ function createSessionEventAction(event: SessionDeltaEvent): ChatAction | null {
         },
       };
     case 'tool_progress':
-      return {
-        type: 'SDK_TOOL_PROGRESS',
-        payload: {
-          toolUseId: event.tool_use_id,
-          toolName: event.tool_name,
-          elapsedSeconds: event.elapsed_time_seconds,
-          acpLocations: event.acpLocations,
-          acpKind: event.acpKind,
-        },
-      };
+      // Only timed updates for a named tool are tracked; in-progress ACP updates omit timing.
+      return event.tool_name && event.elapsed_time_seconds !== undefined
+        ? {
+            type: 'SDK_TOOL_PROGRESS',
+            payload: {
+              toolUseId: event.tool_use_id,
+              toolName: event.tool_name,
+              elapsedSeconds: event.elapsed_time_seconds,
+              acpLocations: event.acpLocations,
+              acpKind: event.acpKind,
+            },
+          }
+        : null;
     case 'task_notification':
       return createTaskNotificationAction(event);
     case 'compact_boundary':

@@ -153,9 +153,11 @@ interface WebSocketMessagePayloadByType {
   };
   tool_progress: {
     tool_use_id: string;
-    tool_name: string;
+    /** Absent when an ACP tool update omits its title. */
+    tool_name?: string;
     parent_tool_use_id?: string;
-    elapsed_time_seconds: number;
+    /** Present on terminal updates; in-progress ACP updates omit it. */
+    elapsed_time_seconds?: number;
     /** ACP tool call status; the backend uses it to retire tracked calls. */
     acpStatus?: string;
     /** ACP tool call file locations for click-to-open rendering */

@@ -232,9 +232,9 @@ export const SessionDeltaEventSchema = z.discriminatedUnion('type', [
   z.object({
     type: z.literal('tool_progress'),
     tool_use_id: z.string().min(1),
-    tool_name: z.string().min(1),
+    tool_name: z.string().optional(),
     parent_tool_use_id: z.string().optional(),
-    elapsed_time_seconds: z.number(),
+    elapsed_time_seconds: z.number().optional(),
     acpStatus: z.string().optional(),
     acpLocations: z.array(z.object({ path: z.string(), line: z.number().nullish() })).optional(),
     acpKind: z.string().optional(),

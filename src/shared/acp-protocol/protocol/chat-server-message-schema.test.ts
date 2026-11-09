@@ -113,10 +113,7 @@ describe('ChatServerMessageSchema', () => {
     ['error without copy', { type: 'error' }],
     ['task notification without copy', { type: 'task_notification' }],
     ['slash commands without a list', { type: 'slash_commands' }],
-    [
-      'tool progress without timing',
-      { type: 'tool_progress', tool_use_id: 't', tool_name: 'Read' },
-    ],
+    ['tool progress without a tool id', { type: 'tool_progress', tool_name: 'Read' }],
     ['agent message without order', { type: 'agent_message', data: { type: 'result' } }],
     ['agent message with an unknown payload', { type: 'agent_message', order: 1, data: {} }],
     ['runtime without a phase', { type: 'session_runtime_updated', sessionRuntime: {} }],
