@@ -247,9 +247,9 @@ Invalidations during a read supersede that read and retain their reasons until a
 current projection is accepted. Every PR snapshot and attachment event carries
 its association ID; only accepted PR invalidations run PR-switch refresh and
 Linear-completion effects, and completion uses the accepted projection without
-another database read. Monitoring-only refreshes publish facts without invoking
-those effects. The worker owns retries and archive/stop fences, and has no
-GitHub, delivery, session, or Linear runtime dependency.
+another PR-projection read. Monitoring-only refreshes publish facts without
+invoking those effects. The worker owns retries and archive/stop fences, and has
+no GitHub, delivery, session, or Linear runtime dependency.
 
 PR-switch handling immediately recomputes monitoring and wakes delivery using
 `checkWorkspaceById`. This automatic check retains the shared 90-second

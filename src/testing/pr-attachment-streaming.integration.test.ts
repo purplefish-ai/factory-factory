@@ -183,8 +183,12 @@ describe('PR attachment streaming', () => {
       expect(snapshot).toMatchObject({
         prUrl: 'https://github.com/org/repo/pull/2',
         prNumber: null,
+        prState: 'OPEN',
+        prCiStatus: 'UNKNOWN',
+        ratchetState: 'CI_RUNNING',
         hasMergeConflict: false,
       });
+      expect(snapshot?.sidebarStatus.ciState).not.toBe('MERGED');
       expect(snapshot?.prs?.map((pr) => pr.id)).toEqual(['pr-1', 'pr-2']);
       expect(snapshot?.kanbanColumn).not.toBe('DONE');
       expect(isWorkspaceDoneOrMerged(snapshot)).toBe(false);
