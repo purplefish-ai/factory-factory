@@ -12,13 +12,15 @@ export interface WorkspaceDetailQuerySettings {
 /** Route, right panel and family menu share the same detail hydration and stream authority. */
 export function useWorkspaceDetailQuery(
   workspaceId: string,
-  { enabled = true, ...settings }: WorkspaceDetailQuerySettings = {}
+  { enabled = true, refetchInterval, staleTime }: WorkspaceDetailQuerySettings = {}
 ) {
   const queryClient = useQueryClient();
   const utils = trpc.useUtils();
+  const options = workspaceDetailQuery(queryClient, utils.client, workspaceId);
   return useQuery({
-    ...workspaceDetailQuery(queryClient, utils.client, workspaceId),
-    ...settings,
+    ...options,
+    refetchInterval,
+    staleTime: staleTime ?? options.staleTime,
     enabled: enabled && Boolean(workspaceId),
   });
 }

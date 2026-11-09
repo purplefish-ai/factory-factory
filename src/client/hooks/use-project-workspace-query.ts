@@ -10,13 +10,14 @@ export interface ProjectWorkspaceQuerySettings {
 /** Board, sidebar, switcher and forms share the existing tRPC query key and writer. */
 export function useProjectWorkspaceQuery(
   projectId: string | undefined,
-  settings: ProjectWorkspaceQuerySettings = {}
+  { staleTime }: ProjectWorkspaceQuerySettings = {}
 ) {
   const queryClient = useQueryClient();
   const utils = trpc.useUtils();
+  const options = projectWorkspaceListQuery(queryClient, utils.client, projectId ?? '');
   return useQuery({
-    ...projectWorkspaceListQuery(queryClient, utils.client, projectId ?? ''),
-    ...settings,
+    ...options,
+    staleTime: staleTime ?? options.staleTime,
     enabled: Boolean(projectId),
   });
 }
