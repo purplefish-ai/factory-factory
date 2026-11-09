@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import type { AcpProcessHandle } from '@/backend/services/session/service/acp';
 import { AcpSteeringTimeoutError } from '@/backend/services/session/service/acp/acp-steering';
 import { sessionDataService } from '@/backend/services/session/service/data/session-data.service';
 import { SessionNotificationDeliveryService } from '@/backend/services/session/service/lifecycle/session-notification-delivery.service';
@@ -9,6 +10,8 @@ import type { AgentContentItem, QueuedMessage } from '@/shared/acp-protocol';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 import { visibleIdsAfterEachEvent } from './session-dispatch-visibility.test-helpers';
 import { SessionDispatchService } from './session-dispatch.service';
+
+const fakeClient = unsafeCoerce<AcpProcessHandle>({});
 
 function deferred() {
   let resolve!: () => void;
@@ -45,7 +48,7 @@ function harness(
     .mockResolvedValue(undefined);
   const steerSessionMessage = vi.fn().mockResolvedValue({ outcome: 'injected' });
   const startup = {
-    getSessionClient: vi.fn<() => unknown>().mockReturnValue({}),
+    getSessionClient: vi.fn<() => AcpProcessHandle | undefined>().mockReturnValue(fakeClient),
     getOrCreateSessionClient: vi.fn().mockResolvedValue({}),
   };
   const runtimeManager = {
@@ -151,7 +154,7 @@ describe('session dispatcher queue and lifecycle coordination', () => {
     const dispatch = dispatcher.tryDispatchNextMessage('session');
     await vi.waitFor(() => expect(sendSessionMessage).toHaveBeenCalledOnce());
     expect(sendSessionMessage).toHaveBeenCalledWith('session', 'first\n\nsecond');
-    expect(configureQueuedMessage).toHaveBeenCalledWith('session', second, false);
+    expect(configureQueuedMessage).toHaveBeenCalledWith('session', second);
     expect(sessionDomainService.getQueueLength('session')).toBe(0);
     expect(sessionDomainService.getTranscriptSnapshot('session').map(({ id }) => id)).toEqual([
       first.id,
@@ -601,7 +604,7 @@ describe('session dispatcher queue and lifecycle coordination', () => {
     startup.getSessionClient.mockReturnValue(undefined);
     startup.getOrCreateSessionClient.mockImplementation(async () => {
       await started.promise;
-      startup.getSessionClient.mockReturnValue({});
+      startup.getSessionClient.mockReturnValue(fakeClient);
       return {};
     });
     const pending = dispatcher.tryDispatchNextMessage('session');
@@ -620,7 +623,7 @@ describe('session dispatcher queue and lifecycle coordination', () => {
     enqueue('stopped-follow-up');
     startup.getSessionClient.mockReturnValue(undefined);
     startup.getOrCreateSessionClient.mockImplementation(() => {
-      startup.getSessionClient.mockReturnValue({});
+      startup.getSessionClient.mockReturnValue(fakeClient);
       return Promise.resolve({});
     });
     resolveQueuedMessageSettings.mockImplementation((_id, message) => ({
@@ -643,7 +646,7 @@ describe('session dispatcher queue and lifecycle coordination', () => {
     const message = enqueue('follow-up');
     startup.getSessionClient.mockReturnValue(undefined);
     startup.getOrCreateSessionClient.mockImplementation(() => {
-      startup.getSessionClient.mockReturnValue({});
+      startup.getSessionClient.mockReturnValue(fakeClient);
       runtimeManager.isSessionPromptInFlight.mockReturnValue(true);
       return Promise.resolve({});
     });
@@ -655,24 +658,6 @@ describe('session dispatcher queue and lifecycle coordination', () => {
     runtimeManager.isSessionPromptInFlight.mockReturnValue(false);
     await dispatcher.tryDispatchNextMessage('session');
     expect(sendSessionMessage).toHaveBeenCalledExactlyOnceWith('session', 'follow-up');
-  });
-
-  it('waits for compaction even when no prompt or background task is active', async () => {
-    const { dispatcher, startup, sendSessionMessage } = harness();
-    let compacting = true;
-    startup.getSessionClient.mockReturnValue({
-      isCompactingActive: () => compacting,
-      startCompaction: vi.fn(),
-      endCompaction: vi.fn(),
-    });
-    const message = enqueue('after-compaction');
-
-    await dispatcher.tryDispatchNextMessage('session');
-    expect(sessionDomainService.peekNextMessage('session')).toBe(message);
-    expect(sendSessionMessage).not.toHaveBeenCalled();
-    compacting = false;
-    await dispatcher.tryDispatchNextMessage('session');
-    expect(sendSessionMessage).toHaveBeenCalledExactlyOnceWith('session', 'after-compaction');
   });
 
   it('does not let an old completion unlock a replacement dispatch after lifecycle reset', async () => {

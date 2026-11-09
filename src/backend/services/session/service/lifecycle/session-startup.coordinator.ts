@@ -265,7 +265,7 @@ export class SessionStartupCoordinator {
   async getOrCreateSessionClient(
     sessionId: string,
     options?: GetOrCreateSessionClientOptions
-  ): Promise<unknown> {
+  ): Promise<AcpProcessHandle> {
     options = await guardEventStartup(this.dependencies.eventAuthority, sessionId, options ?? {});
     const permit = options.eventInitial;
     return await this.dependencies.lifecycleGate.runStartup(sessionId, async (lease) => {

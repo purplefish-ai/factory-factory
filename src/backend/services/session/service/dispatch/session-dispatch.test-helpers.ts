@@ -22,26 +22,16 @@ export function createTestSessionDispatcher(): SessionDispatchService {
 export function configureTestQueuedMessage(
   service: Pick<
     SessionConfigService,
-    | 'setSessionCollaborationMode'
-    | 'setSessionThinkingBudget'
-    | 'setSessionModel'
-    | 'setSessionReasoningEffort'
+    'setSessionCollaborationMode' | 'setSessionModel' | 'setSessionReasoningEffort'
   >,
   sessionId: string,
-  message: QueuedMessage,
-  supportsThinkingBudget: boolean
+  message: QueuedMessage
 ): Promise<QueuedMessage['settings']> {
-  return new SessionQueuedSettings({ getClient: () => undefined }).configure(
-    sessionId,
-    message,
-    supportsThinkingBudget,
-    {
-      plan: () => service.setSessionCollaborationMode(sessionId, 'plan'),
-      thinking: (budget) => service.setSessionThinkingBudget(sessionId, budget),
-      model: (model) => service.setSessionModel(sessionId, model),
-      reasoning: (effort) => service.setSessionReasoningEffort(sessionId, effort),
-    }
-  );
+  return new SessionQueuedSettings({ getClient: () => undefined }).configure(sessionId, message, {
+    plan: () => service.setSessionCollaborationMode(sessionId, 'plan'),
+    model: (model) => service.setSessionModel(sessionId, model),
+    reasoning: (effort) => service.setSessionReasoningEffort(sessionId, effort),
+  });
 }
 
 export function createAttachmentMessage(message: QueuedMessage): QueuedMessage {

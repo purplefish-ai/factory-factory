@@ -64,6 +64,14 @@ describe('PR background delivery failure reasons', () => {
     expect(pauseWorkspace).not.toHaveBeenCalled();
   });
 
+  it('ignores a failure for a claim that is already settled or stale', async () => {
+    settleDelivery.mockResolvedValueOnce(false);
+    const failure = { reason: 'resume_failed' as const, error: new Error('late') };
+    await expect(port.fail(delivery(3), failure)).resolves.toEqual({ paused: false });
+    expect(pauseWorkspace).not.toHaveBeenCalled();
+    expect(emit).not.toHaveBeenCalled();
+  });
+
   it('pauses ordinary failures as DELIVERY_FAILED once the retry allowance is spent', async () => {
     await port.fail(delivery(3), { reason: 'failed', error: new Error('transport failure') });
     expect(pauseWorkspace).toHaveBeenCalledWith('w', 'DELIVERY_FAILED', 4);
