@@ -187,9 +187,27 @@ describe('isWebSocketMessage', () => {
   });
 
   it('accepts valid session_delta payloads', () => {
-    expect(isWebSocketMessage({ type: 'session_delta', data: { type: 'status_update' } })).toBe(
-      true
-    );
+    expect(
+      isWebSocketMessage({
+        type: 'session_delta',
+        data: { type: 'task_notification', message: 'Indexing' },
+      })
+    ).toBe(true);
+  });
+
+  it.each([
+    'system_init',
+    'hook_started',
+    'hook_response',
+    'tool_use_summary',
+    'status_update',
+    'agent_metadata',
+    'user_message_uuid',
+    'message_used_as_response',
+    'sessions',
+  ])('rejects the retired %s message type', (type) => {
+    expect(isWebSocketMessage({ type })).toBe(false);
+    expect(isWebSocketMessage({ type: 'session_delta', data: { type } })).toBe(false);
   });
 
   it('accepts direct and nested assistant text delta payloads', () => {

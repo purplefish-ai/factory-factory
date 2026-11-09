@@ -47,7 +47,6 @@ vi.mock('@/client/features/chat', async () => ({
   ChatInput: input,
   PermissionPrompt: () => null,
   QuestionPrompt: () => null,
-  RewindConfirmationDialog: () => null,
 }));
 vi.mock('@/client/features/voice', () => ({ VoiceModeToggle: () => null }));
 vi.mock('./use-retry-workspace-init', () => ({

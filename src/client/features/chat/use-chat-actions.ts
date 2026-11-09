@@ -8,7 +8,6 @@
  * - Answering questions
  * - Updating settings
  * - Removing queued messages
- * - Rewind files operations
  */
 
 import { useCallback } from 'react';
@@ -52,8 +51,6 @@ export interface UseChatActionsOptions {
   dbSessionIdRef: React.MutableRefObject<string | null>;
   /** Input attachments ref for sendMessage */
   inputAttachmentsRef: React.MutableRefObject<MessageAttachment[]>;
-  /** Rewind timeout ref for cleanup */
-  rewindTimeoutRef: React.MutableRefObject<ReturnType<typeof setTimeout> | null>;
   /** Callback to clear input draft and attachments */
   onClearInput: () => void;
 }
@@ -76,10 +73,6 @@ export interface UseChatActionsReturn {
   steerQueuedMessage: (id: string) => void;
   resumeQueuedMessages: () => void;
   setConfigOption: (configId: string, value: string) => void;
-  startRewindPreview: (userMessageUuid: string) => void;
-  confirmRewind: () => void;
-  cancelRewind: () => void;
-  getUuidForMessageId: (messageId: string) => string | undefined;
 }
 
 // =============================================================================
@@ -200,15 +193,7 @@ function isAllowOptionId(optionId: string, options: AcpPermissionOption[] | unde
  * All callbacks are stable and use refs internally to avoid recreation on state changes.
  */
 export function useChatActions(options: UseChatActionsOptions): UseChatActionsReturn {
-  const {
-    send,
-    dispatch,
-    stateRef,
-    dbSessionIdRef,
-    inputAttachmentsRef,
-    rewindTimeoutRef,
-    onClearInput,
-  } = options;
+  const { send, dispatch, stateRef, dbSessionIdRef, inputAttachmentsRef, onClearInput } = options;
 
   // Keep sequential actions (for example selecting a model then immediately sending)
   // on the same settings even before React commits the reducer render.
@@ -420,81 +405,6 @@ export function useChatActions(options: UseChatActionsOptions): UseChatActionsRe
     [send, applySettings, rejectUnsentModelRequest, stateRef, dispatch]
   );
 
-  // Rewind files actions
-  const startRewindPreview = useCallback(
-    (userMessageUuid: string) => {
-      if (!stateRef.current.chatCapabilities.rewind.enabled) {
-        return;
-      }
-
-      // Clear any existing timeout
-      if (rewindTimeoutRef.current) {
-        clearTimeout(rewindTimeoutRef.current);
-        rewindTimeoutRef.current = null;
-      }
-
-      // Generate unique nonce for this request (handles retry race conditions)
-      const requestNonce = `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
-
-      // Start preview state first - this ensures the reducer can handle error states
-      dispatch({
-        type: 'REWIND_PREVIEW_START',
-        payload: { userMessageId: userMessageUuid, requestNonce },
-      });
-
-      dispatch({
-        type: 'REWIND_PREVIEW_ERROR',
-        payload: { error: 'Rewind is not supported in ACP runtime.', requestNonce },
-      });
-    },
-    [dispatch, stateRef, rewindTimeoutRef]
-  );
-
-  const confirmRewind = useCallback(() => {
-    if (!stateRef.current.chatCapabilities.rewind.enabled) {
-      return;
-    }
-
-    // Clear any existing timeout
-    if (rewindTimeoutRef.current) {
-      clearTimeout(rewindTimeoutRef.current);
-      rewindTimeoutRef.current = null;
-    }
-
-    const rewindPreview = stateRef.current.rewindPreview;
-    if (!rewindPreview) {
-      return;
-    }
-
-    // Mark as executing (keep dialog open with loading state for actual rewind)
-    dispatch({ type: 'REWIND_EXECUTING' });
-
-    dispatch({
-      type: 'REWIND_PREVIEW_ERROR',
-      payload: {
-        error: 'Rewind is not supported in ACP runtime.',
-        requestNonce: rewindPreview.requestNonce,
-      },
-    });
-  }, [dispatch, stateRef, rewindTimeoutRef]);
-
-  const cancelRewind = useCallback(() => {
-    // Clear the timeout when canceling
-    if (rewindTimeoutRef.current) {
-      clearTimeout(rewindTimeoutRef.current);
-      rewindTimeoutRef.current = null;
-    }
-    dispatch({ type: 'REWIND_CANCEL' });
-  }, [dispatch, rewindTimeoutRef]);
-
-  const getUuidForMessageId = useCallback(
-    (messageId: string): string | undefined => {
-      // Look up UUID by message ID (stable identifier)
-      return stateRef.current.messageIdToUuid.get(messageId);
-    },
-    [stateRef]
-  );
-
   return {
     sendMessage,
     stopChat,
@@ -505,9 +415,5 @@ export function useChatActions(options: UseChatActionsOptions): UseChatActionsRe
     steerQueuedMessage,
     resumeQueuedMessages,
     setConfigOption,
-    startRewindPreview,
-    confirmRewind,
-    cancelRewind,
-    getUuidForMessageId,
   };
 }

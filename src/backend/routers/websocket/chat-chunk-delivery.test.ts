@@ -143,8 +143,7 @@ it('excludes foreign and duplicate correlated baselines from an active replay ba
     test.bus.publishToSession('s1', {
       type: 'session_replay_batch',
       loadRequestId: index % 2 ? 'another-viewer' : 'load-1',
-      permissionMode: 'metadata'.repeat(20_000),
-      replayEvents: [],
+      replayEvents: [{ type: 'task_notification', message: 'metadata'.repeat(20_000) }],
     });
   }
   test.bus.publishToSession('s1', delta);

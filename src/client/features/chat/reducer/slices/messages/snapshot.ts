@@ -12,11 +12,7 @@ import { compareTranscriptMessageOrder } from '@/lib/chat-protocol';
 type SnapshotPayload = Extract<ChatAction, { type: 'SESSION_SNAPSHOT' }>['payload'];
 type SnapshotHistory = Pick<
   ChatState,
-  | 'messages'
-  | 'transcriptHistory'
-  | 'rendererTranscriptLimit'
-  | 'transcriptPageBoundaries'
-  | 'messageIdToUuid'
+  'messages' | 'transcriptHistory' | 'rendererTranscriptLimit' | 'transcriptPageBoundaries'
 >;
 
 function selectSnapshotHistory(state: ChatState, payload: SnapshotPayload): SnapshotHistory {
@@ -33,7 +29,6 @@ function selectSnapshotHistory(state: ChatState, payload: SnapshotPayload): Snap
       rendererTranscriptLimit:
         state.transcriptPageBoundaries.size > 0 ? undefined : state.rendererTranscriptLimit,
       transcriptPageBoundaries: new Set(),
-      messageIdToUuid: new Map(),
     };
   }
   const first = payload.messages[0];
@@ -58,7 +53,6 @@ function selectSnapshotHistory(state: ChatState, payload: SnapshotPayload): Snap
     transcriptHistory,
     rendererTranscriptLimit: state.rendererTranscriptLimit,
     transcriptPageBoundaries: state.transcriptPageBoundaries,
-    messageIdToUuid: state.messageIdToUuid,
   };
 }
 
@@ -102,9 +96,6 @@ export function reduceMessageSnapshotSlice(state: ChatState, action: ChatAction)
           agentMessageOrderToIndex: new Map(),
           pendingMessages: newPendingMessages,
           lastRejectedMessage: state.lastRejectedMessage,
-          pendingUserMessageUuids: [],
-          localUserMessageIds: new Set(),
-          rewindPreview: null,
         },
         snapshotMessages
       );
