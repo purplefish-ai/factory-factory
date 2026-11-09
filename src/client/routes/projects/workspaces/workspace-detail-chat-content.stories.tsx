@@ -167,11 +167,6 @@ function MockConversation({
             slashCommands={[]}
             slashCommandsLoaded
             tokenStats={createTokenStats()}
-            rewindPreview={null}
-            startRewindPreview={noop}
-            confirmRewind={noop}
-            cancelRewind={noop}
-            getUuidForMessageId={() => undefined}
             acpConfigOptions={null}
             setConfigOption={noop}
             initBanner={null}

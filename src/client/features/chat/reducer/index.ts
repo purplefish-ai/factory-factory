@@ -25,9 +25,7 @@ import { reduceSessionStateDeltaSlice } from './slices/messages/session-state-de
 import { reduceMessageSnapshotSlice } from './slices/messages/snapshot';
 import { reduceMessageStateMachineSlice } from './slices/messages/state-machine';
 import { reduceMessageTransportSlice } from './slices/messages/transport';
-import { reduceMessageUuidSlice } from './slices/messages/uuid';
 import { reduceRequestSlice } from './slices/requests';
-import { reduceRewindExecutionSlice, reduceRewindPreviewSlice } from './slices/rewind';
 import { reduceSessionSlice } from './slices/session';
 import { reduceSettingsSlice } from './slices/settings';
 import { reduceSystemSlice } from './slices/system';
@@ -49,7 +47,6 @@ export type {
   PendingRequest,
   ProcessStatus,
   RejectedMessageInfo,
-  RewindPreviewState,
   SessionStatus,
   TaskNotification,
   ToolProgressInfo,
@@ -77,12 +74,9 @@ const chatReducerSlices: ReducerSlice[] = [
   reduceMessageSnapshotSlice,
   reduceSessionStateDeltaSlice,
   reduceMessageStateMachineSlice,
-  reduceMessageUuidSlice,
   reduceMessageCompactSlice,
   reduceToolingSlice,
   reduceSystemSlice,
-  reduceRewindPreviewSlice,
-  reduceRewindExecutionSlice,
 ];
 
 function reduceSingleAction(currentState: ChatState, currentAction: ChatAction): ChatState {
@@ -212,13 +206,6 @@ function handleErrorMessageAction(data: WebSocketMessage): ChatAction | null {
         ...(typeof data.requestId === 'string' ? { requestId: data.requestId } : {}),
       },
     };
-  }
-  return null;
-}
-
-function handleSessionsMessage(data: WebSocketMessage): ChatAction | null {
-  if (data.sessions) {
-    return { type: 'WS_SESSIONS', payload: { sessions: data.sessions } };
   }
   return null;
 }
@@ -368,102 +355,11 @@ function handleToolProgressMessage(data: WebSocketMessage): ChatAction | null {
   };
 }
 
-function handleToolUseSummaryMessage(data: WebSocketMessage): ChatAction | null {
-  // Only require preceding_tool_use_ids (used for cleanup). Summary can be empty string.
-  if (!Array.isArray(data.preceding_tool_use_ids)) {
-    return null;
-  }
-  return {
-    type: 'SDK_TOOL_USE_SUMMARY',
-    payload: {
-      summary: data.summary,
-      precedingToolUseIds: data.preceding_tool_use_ids,
-    },
-  };
-}
-
-function handleSystemInitMessage(data: WebSocketMessage): ChatAction | null {
-  const initData = data.data as
-    | {
-        tools?: Array<{
-          name: string;
-          description?: string;
-          input_schema?: Record<string, unknown>;
-        }>;
-        model?: string;
-        cwd?: string;
-        apiKeySource?: string;
-        slashCommands?: string[];
-        plugins?: Array<{ name: string; path: string }>;
-      }
-    | undefined;
-  if (!initData) {
-    return null;
-  }
-  return {
-    type: 'SYSTEM_INIT',
-    payload: {
-      tools: initData.tools ?? [],
-      model: initData.model ?? null,
-      cwd: initData.cwd ?? null,
-      apiKeySource: initData.apiKeySource ?? null,
-      slashCommands: initData.slashCommands ?? [],
-      plugins: initData.plugins ?? [],
-    },
-  };
-}
-
-function handleHookStartedMessage(data: WebSocketMessage): ChatAction | null {
-  const hookData = data.data as
-    | {
-        hookId?: string;
-        hookName?: string;
-        hookEvent?: string;
-      }
-    | undefined;
-  if (!(hookData?.hookId && hookData?.hookName && hookData?.hookEvent)) {
-    return null;
-  }
-  return {
-    type: 'HOOK_STARTED',
-    payload: {
-      hookId: hookData.hookId,
-      hookName: hookData.hookName,
-      hookEvent: hookData.hookEvent,
-    },
-  };
-}
-
-function handleHookResponseMessage(data: WebSocketMessage): ChatAction | null {
-  const hookRespData = data.data as { hookId?: string } | undefined;
-  if (!hookRespData?.hookId) {
-    return null;
-  }
-  return { type: 'HOOK_RESPONSE', payload: { hookId: hookRespData.hookId } };
-}
-
 function handlePermissionCancelledMessage(data: WebSocketMessage): ChatAction | null {
   if (!data.requestId) {
     return null;
   }
   return { type: 'WS_PERMISSION_CANCELLED', payload: { requestId: data.requestId } };
-}
-
-function handleMessageUsedAsResponseMessage(data: WebSocketMessage): ChatAction | null {
-  if (!(data.id && data.text && data.order !== undefined)) {
-    return null;
-  }
-  return {
-    type: 'MESSAGE_USED_AS_RESPONSE',
-    payload: { id: data.id, text: data.text, order: data.order },
-  };
-}
-
-function handleStatusUpdateMessage(data: WebSocketMessage): ChatAction {
-  return {
-    type: 'SDK_STATUS_UPDATE',
-    payload: { permissionMode: data.permissionMode },
-  };
 }
 
 function handleTaskNotificationMessage(data: WebSocketMessage): ChatAction | null {
@@ -484,10 +380,6 @@ function handleSlashCommandsMessage(data: WebSocketMessage): ChatAction | null {
   return data.slashCommands
     ? { type: 'WS_SLASH_COMMANDS', payload: { commands: data.slashCommands } }
     : null;
-}
-
-function handleUserMessageUuidMessage(data: WebSocketMessage): ChatAction | null {
-  return data.uuid ? { type: 'USER_MESSAGE_UUID_RECEIVED', payload: { uuid: data.uuid } } : null;
 }
 
 function handleConfigOptionsUpdateMessage(data: WebSocketMessage): ChatAction | null {
@@ -519,13 +411,10 @@ const messageHandlers: MessageHandlerMap = {
   agent_message: handleClaudeMessageAction,
   assistant_text_delta: handleAssistantTextDeltaAction,
   error: handleErrorMessageAction,
-  sessions: handleSessionsMessage,
   chat_capabilities: handleChatCapabilitiesMessage,
-  agent_metadata: null,
   permission_request: handlePermissionRequestMessage,
   user_question: handleUserQuestionMessage,
   permission_cancelled: handlePermissionCancelledMessage,
-  message_used_as_response: handleMessageUsedAsResponseMessage,
   session_snapshot: handleSessionSnapshot,
   session_delta: null,
   queue_updated: handleQueueUpdated,
@@ -536,18 +425,12 @@ const messageHandlers: MessageHandlerMap = {
   session_replay_chunk: null,
   message_state_changed: handleMessageStateChanged,
   tool_progress: handleToolProgressMessage,
-  tool_use_summary: handleToolUseSummaryMessage,
-  status_update: handleStatusUpdateMessage,
   task_notification: handleTaskNotificationMessage,
-  system_init: handleSystemInitMessage,
   compact_boundary: () => ({ type: 'COMPACT_BOUNDARY' }),
-  hook_started: handleHookStartedMessage,
-  hook_response: handleHookResponseMessage,
   compacting_start: () => ({ type: 'SDK_COMPACTING_START' }),
   compacting_end: () => ({ type: 'SDK_COMPACTING_END' }),
   workspace_notification_request: null,
   slash_commands: handleSlashCommandsMessage,
-  user_message_uuid: handleUserMessageUuidMessage,
   config_options_update: handleConfigOptionsUpdateMessage,
   config_option_applied: (data) =>
     typeof data.requestId === 'string'

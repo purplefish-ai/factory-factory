@@ -259,8 +259,7 @@ export const SystemMessageRenderer = memo(function SystemMessageRenderer({
 
     case 'hook_started':
     case 'hook_response':
-      // Hook events are stored in state but don't need visual rendering here
-      // Future hook UI (#449) can use the activeHooks state from reducer
+      // Provider transcripts can contain hook system messages; they have no visual rendering.
       return null;
 
     default:

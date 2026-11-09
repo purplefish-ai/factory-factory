@@ -77,12 +77,6 @@ export interface UseChatStateReturn extends Omit<ChatState, 'queuedMessages'> {
   resumeQueuedMessages: () => void;
   // ACP config option action
   setConfigOption: (configId: string, value: string) => void;
-  // Rewind files actions
-  startRewindPreview: (userMessageUuid: string) => void;
-  confirmRewind: () => void;
-  cancelRewind: () => void;
-  /** Get the SDK-assigned UUID for a user message by its stable message ID */
-  getUuidForMessageId: (messageId: string) => string | undefined;
   // Message handler for transport
   handleMessage: (data: unknown) => void;
   // Roll back private command replies lost with the transport.
@@ -135,8 +129,6 @@ export function useChatState(options: UseChatStateOptions): UseChatStateReturn {
   // Track input attachments in a ref for stable sendMessage callback
   const inputAttachmentsRef = useRef(inputAttachments);
   inputAttachmentsRef.current = inputAttachments;
-  // Track rewind preview timeout for cleanup
-  const rewindTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Use an identity token so callbacks from an earlier visit to the same session
   // also expire when switching away and back.
@@ -309,18 +301,8 @@ export function useChatState(options: UseChatStateOptions): UseChatStateReturn {
     stateRef,
     dbSessionIdRef,
     inputAttachmentsRef,
-    rewindTimeoutRef,
     onClearInput,
   });
-
-  // Clean up rewind timeout on unmount
-  useEffect(() => {
-    return () => {
-      if (rewindTimeoutRef.current) {
-        clearTimeout(rewindTimeoutRef.current);
-      }
-    };
-  }, []);
 
   // =============================================================================
   // Return Value

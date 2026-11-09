@@ -19,17 +19,10 @@ function createBaseResetState(): Pick<
   | 'lastRejectedMessage'
   | 'isCompacting'
   | 'toolProgress'
-  | 'sessionInitData'
-  | 'permissionMode'
   | 'hasCompactBoundary'
-  | 'activeHooks'
   | 'taskNotifications'
   | 'tokenStats'
   | 'countedResultOrders'
-  | 'pendingUserMessageUuids'
-  | 'messageIdToUuid'
-  | 'localUserMessageIds'
-  | 'rewindPreview'
   | 'acpPlan'
   | 'acpConfigOptions'
 > {
@@ -52,17 +45,10 @@ function createBaseResetState(): Pick<
     lastRejectedMessage: null,
     isCompacting: false,
     toolProgress: new Map(),
-    sessionInitData: null,
-    permissionMode: null,
     hasCompactBoundary: false,
-    activeHooks: new Map(),
     taskNotifications: [],
     tokenStats: createEmptyTokenStats(),
     countedResultOrders: new Set(),
-    pendingUserMessageUuids: [],
-    messageIdToUuid: new Map(),
-    localUserMessageIds: new Set(),
-    rewindPreview: null,
     acpPlan: null,
     acpConfigOptions: null,
   };
@@ -93,19 +79,12 @@ function createSessionSwitchResetState(): Pick<
   | 'sessionStatus'
   | 'isCompacting'
   | 'toolProgress'
-  | 'sessionInitData'
-  | 'permissionMode'
   | 'hasCompactBoundary'
-  | 'activeHooks'
   | 'taskNotifications'
   | 'slashCommands'
   | 'slashCommandsLoaded'
   | 'tokenStats'
   | 'countedResultOrders'
-  | 'pendingUserMessageUuids'
-  | 'messageIdToUuid'
-  | 'localUserMessageIds'
-  | 'rewindPreview'
   | 'processStatus'
   | 'sessionRuntime'
   | 'chatCapabilities'
@@ -147,7 +126,6 @@ export function createInitialChatState(overrides?: Partial<ChatState>): ChatStat
     processStatus: { state: 'unknown' },
     sessionRuntime: createInitialSessionRuntimeState(),
     gitBranch: null,
-    availableSessions: [],
     pendingRequest: { type: 'none' },
     chatSettings: DEFAULT_CHAT_SETTINGS,
     chatCapabilities: EMPTY_CHAT_BAR_CAPABILITIES,
@@ -166,19 +144,12 @@ export function createInitialChatState(overrides?: Partial<ChatState>): ChatStat
     lastRejectedMessage: null,
     isCompacting: false,
     toolProgress: new Map(),
-    sessionInitData: null,
-    permissionMode: null,
     hasCompactBoundary: false,
-    activeHooks: new Map(),
     taskNotifications: [],
     slashCommands: [],
     slashCommandsLoaded: false,
     tokenStats: createEmptyTokenStats(),
     countedResultOrders: new Set(),
-    pendingUserMessageUuids: [],
-    messageIdToUuid: new Map(),
-    localUserMessageIds: new Set(),
-    rewindPreview: null,
     acpPlan: null,
     acpConfigOptions: null,
     ...overrides,

@@ -21,14 +21,6 @@ export function reduceToolingSlice(state: ChatState, action: ChatAction): ChatSt
       });
       return { ...state, toolProgress: newToolProgress };
     }
-    case 'SDK_TOOL_USE_SUMMARY': {
-      const { precedingToolUseIds } = action.payload;
-      const newToolProgress = new Map(state.toolProgress);
-      for (const toolUseId of precedingToolUseIds) {
-        newToolProgress.delete(toolUseId);
-      }
-      return { ...state, toolProgress: newToolProgress };
-    }
     case 'SDK_COMPACTING_START':
       return { ...state, isCompacting: true };
     case 'SDK_COMPACTING_END':

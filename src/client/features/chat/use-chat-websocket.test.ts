@@ -254,7 +254,7 @@ describe('useChatWebSocket hydration guard logic', () => {
       const handleMessage = createHandleMessage(guardState);
 
       // Other message types should pass through without affecting guard
-      handleMessage({ type: 'status_update', status: 'idle' });
+      handleMessage({ type: 'task_notification', message: 'Indexing' });
 
       expect(guardState.currentLoadRequestId).toBe('load-123');
       expect(guardState.clearLoadTimeoutCalled).toBe(false);
