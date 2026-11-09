@@ -718,12 +718,11 @@ available for active agent work without implying that the next message must
 wait.
 
 Startup and required configuration must complete before submission. Workspace
-initialization/manual-resume policy, compaction, per-session dispatch
-serialization and stop/generation fences still apply. The prompt slot is
-rechecked after auto-start; another caller may have acquired it while startup
-was awaited. A stopped runtime can auto-resume through the existing launch
-policy; being stopped is not permission to bypass setup or a failed exact
-resume.
+initialization/manual-resume policy, per-session dispatch serialization and
+stop/generation fences still apply. The prompt slot is rechecked after
+auto-start; another caller may have acquired it while startup was awaited. A
+stopped runtime can auto-resume through the existing launch policy; being
+stopped is not permission to bypass setup or a failed exact resume.
 
 Automatic PR updates additionally wait for pending interactive requests, an
 in-flight prompt in another conversation in the same workspace, valid recipient

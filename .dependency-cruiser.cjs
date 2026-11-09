@@ -289,18 +289,6 @@ module.exports = {
       to: { path: '^src/(backend/lib|shared)/session-model\\.ts$' },
     },
     {
-      name: 'session-runtime-import-boundary',
-      severity: 'error',
-      comment:
-        'Session runtime managers are internal lifecycle infrastructure and may only be imported by session acp/lifecycle entry points.',
-      from: {
-        path: '^src/backend/services/session/service/',
-        pathNot:
-          '^src/backend/services/session/service/(acp/|runtime/|lifecycle/)|^src/backend/services/session/(index\\.ts|service/index\\.ts)$|^src/backend/.*\\.test\\.ts$',
-      },
-      to: { path: '^src/backend/services/session/service/runtime/' },
-    },
-    {
       name: 'acp-no-external-imports',
       severity: 'error',
       comment:
