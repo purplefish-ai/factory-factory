@@ -1,3 +1,4 @@
+import type { PRMonitoringServices } from '@/backend/orchestration/pr-monitoring-dependencies';
 import { configService } from '@/backend/services/config.service';
 import { prObservationService, prSnapshotService } from '@/backend/services/github';
 import { ratchetService } from '@/backend/services/ratchet';
@@ -15,7 +16,6 @@ import {
   workspacePRMonitoringService,
   workspacePrSnapshotService,
 } from '@/backend/services/workspace';
-import type { PRMonitoringServices } from '../pr-monitoring-dependencies';
 
 /**
  * Builds one explicit PR-monitoring graph from the process service barrels
