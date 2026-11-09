@@ -5,7 +5,12 @@ export type ApplicationErrorCode =
   | 'CONFLICT'
   | 'INTERNAL_ERROR';
 
-export type ApplicationErrorKind = 'GIT_INDEX_LOCKED';
+export type ApplicationErrorKind =
+  | 'GIT_INDEX_LOCKED'
+  /** A background prompt could not start because the session's turn slot is taken. */
+  | 'SESSION_TURN_BUSY'
+  /** A background prompt required its exact stored provider conversation, which failed to resume. */
+  | 'SESSION_RESUME_FAILED';
 
 export interface ApplicationErrorOptions extends ErrorOptions {
   kind?: ApplicationErrorKind;

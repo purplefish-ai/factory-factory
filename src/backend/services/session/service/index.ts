@@ -79,6 +79,7 @@ export {
   type PRBackgroundDeliveryPort,
   sessionBackgroundDeliveryService,
 } from './lifecycle/session-background-delivery.service';
+export type { PRDeliveryFailureReason } from './lifecycle/pr-delivery-failure';
 export { findPRDeliveryReceipt } from './lifecycle/session-pr-receipt';
 export type { SessionPromptService } from './lifecycle/session-services';
 export {

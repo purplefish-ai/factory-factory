@@ -10,6 +10,7 @@ import { PermanentAttachmentError } from '@/backend/services/session/service/cha
 import { DEBUG_CHAT_WS } from '@/backend/services/session/service/chat/chat-message-handlers/constants';
 import { sessionDataService } from '@/backend/services/session/service/data/session-data.service';
 import { EventSessionFenceError } from '@/backend/services/session/service/lifecycle/event-session-fence-error';
+import { createPRDeliveryBlockedError } from '@/backend/services/session/service/lifecycle/pr-delivery-failure';
 import {
   isTurnAlreadyInProgressError,
   toErrorMessage,
@@ -321,7 +322,7 @@ export class SessionDispatchService {
     if (peeked.source && sessionDomainService.peekNextMessage(dbSessionId) !== peeked) {
       await this.dependencies.backgroundDelivery.fail(
         peeked,
-        new Error('Turn in progress: human message queued during preparation')
+        createPRDeliveryBlockedError('preempted')
       );
       return;
     }
@@ -414,11 +415,7 @@ export class SessionDispatchService {
       if (peeked.source) {
         await this.dependencies.backgroundDelivery.fail(
           peeked,
-          new Error(
-            clientResult.blocked === 'busy'
-              ? 'A turn is already in progress for this session'
-              : 'Required existing conversation could not be restored'
-          )
+          createPRDeliveryBlockedError(clientResult.blocked)
         );
       }
       return null;
