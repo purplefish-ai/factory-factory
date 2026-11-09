@@ -21,6 +21,7 @@ import { SessionLifecycleGate } from './session-lifecycle-gate';
 import type { SessionAcpEnvironmentPort } from './session-lifecycle.types';
 import { SessionNotificationDeliveryService } from './session-notification-delivery.service';
 import { SessionRuntimeExitCoordinator } from './session-runtime-exit.coordinator';
+import { registerSessionRuntimeParticipants, SessionScope } from './session-scope';
 import { SessionStartupCoordinator } from './session-startup.coordinator';
 import {
   SessionTerminationCoordinator,
@@ -209,6 +210,7 @@ export type TerminationHarness = {
   >;
   workspaceBridge: MockedPick<SessionLifecycleWorkspaceBridge, 'markSessionIdle'>;
   getRuntimeSnapshot: Mock<(sessionId: string) => SessionRuntimeState>;
+  scope: SessionScope;
   session: AgentSessionRecord;
 };
 
@@ -374,19 +376,25 @@ export function createTerminationHarness(
     activity: 'IDLE' as const,
     updatedAt: '2026-07-15T00:00:00.000Z',
   }));
+  const scope = new SessionScope();
+  registerSessionRuntimeParticipants(scope, {
+    promptTurnCompletion: promptTurnCompletionService,
+    queuedPrompts: { clearQueuedAcpPrompts: (id) => overrides.onBeforeStopSession?.(id) },
+    acpEvents: acpEventProcessor,
+    permissions: sessionPermissionService,
+  });
   const coordinator = new SessionTerminationCoordinator({
     repository,
     retryService,
     runtimeManager,
     sessionDomainService,
-    sessionPermissionService,
     acpEventProcessor,
     promptTurnCompletionService,
     lifecycleEventService,
     lifecycleGate,
     workflowFinalizer,
     getRuntimeSnapshot,
-    onBeforeStopSession: overrides.onBeforeStopSession,
+    scope,
   });
   coordinator.configure({ workspace: workspaceBridge });
 
@@ -404,6 +412,7 @@ export function createTerminationHarness(
     workflowFinalizer,
     workspaceBridge,
     getRuntimeSnapshot,
+    scope,
     session,
   };
 }
@@ -780,6 +789,13 @@ export function createLifecycleHarness(
     ]),
   } satisfies SessionAcpEnvironmentPort;
   const promptTurnCompletionService = { clearSession: vi.fn(), clearAll: vi.fn() };
+  const scope = new SessionScope();
+  registerSessionRuntimeParticipants(scope, {
+    promptTurnCompletion: promptTurnCompletionService,
+    queuedPrompts: { clearQueuedAcpPrompts: vi.fn() },
+    acpEvents: acpEventProcessor,
+    permissions: notificationService,
+  });
   const retryService = {
     run: vi.fn(async (operation: () => Promise<unknown>) => await operation()),
   };
@@ -806,13 +822,11 @@ export function createLifecycleHarness(
       eventAuthority: overrides.eventAuthority,
       repository,
       sessionDomainService,
-      sessionPermissionService: notificationService,
       acpEventProcessor,
-      promptTurnCompletionService,
       lifecycleEventService,
       lifecycleGate,
       workflowFinalizer,
-      onSessionExit: vi.fn(),
+      scope,
     })
   );
   let service: SessionLifecycleService;
@@ -823,13 +837,13 @@ export function createLifecycleHarness(
       retryService,
       runtimeManager,
       sessionDomainService,
-      sessionPermissionService: notificationService,
       acpEventProcessor,
       promptTurnCompletionService,
       lifecycleEventService,
       lifecycleGate,
       workflowFinalizer,
       getRuntimeSnapshot: (sessionId: string) => service.getRuntimeSnapshot(sessionId),
+      scope,
     })
   );
   const startupCoordinator = new SessionStartupCoordinator(

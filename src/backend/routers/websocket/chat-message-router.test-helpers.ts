@@ -53,7 +53,6 @@ export function createChatRouterServices(
       steerQueuedMessage: vi.fn().mockResolvedValue(undefined),
       tryDispatchNextMessage: vi.fn(async () => undefined),
       setManualDispatchResume: vi.fn(),
-      resetDispatchState: vi.fn(),
     },
     load: {
       prepareLoad: vi.fn(async () => ({ status: 'error' as const, outcome: { replies: [] } })),
