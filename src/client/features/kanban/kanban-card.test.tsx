@@ -151,7 +151,7 @@ describe('KanbanCard', () => {
     'checks agent icon visibility for %s cards',
     (creationSource) => {
       const { container, root } = renderCard({ ...baseWorkspace, creationSource });
-      const icon = container.querySelector('[role="img"][aria-label="Agent workspace"]');
+      const icon = container.querySelector('[role="img"][aria-label="Automation workspace"]');
 
       if (creationSource === 'PERIODIC_TASK') {
         expect(icon).not.toBeNull();

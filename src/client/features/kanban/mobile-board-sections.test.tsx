@@ -23,7 +23,8 @@ function render({
   form = false,
   creationRequest = 0,
   key = 'board',
-}: { form?: boolean; creationRequest?: number; key?: string } = {}) {
+  done = false,
+}: { form?: boolean; creationRequest?: number; key?: string; done?: boolean } = {}) {
   act(() =>
     root.render(
       <MobileBoardSections
@@ -41,6 +42,16 @@ function render({
             visible: true,
             content: <p>New task</p>,
           },
+          ...(done
+            ? [
+                {
+                  column: { id: 'DONE' as const, label: 'Done', description: '' },
+                  count: 0,
+                  visible: true,
+                  content: <p>Completed tasks</p>,
+                },
+              ]
+            : []),
         ]}
         showInlineForm={form}
         inlineFormRequest={form ? 1 : 0}
@@ -81,4 +92,61 @@ it('reveals Working only for new creation requests, not mount or remount', () =>
 
   render({ creationRequest: 8, key: 'remounted' });
   expect(document.activeElement).not.toBe(container.querySelector('section[aria-label="Working"]'));
+});
+
+it('marks the last section active when scrolling to the end before its heading reaches the top', async () => {
+  render();
+  const scroll = container.querySelector<HTMLElement>('[data-mobile-board]')!;
+  const navigation = container.querySelector('nav')!;
+  const working = container.querySelector<HTMLElement>('section[aria-label="Working"]')!;
+  Object.defineProperties(scroll, {
+    clientHeight: { value: 600 },
+    scrollHeight: { value: 1000 },
+  });
+  Object.defineProperty(navigation, 'offsetHeight', { value: 40 });
+  vi.spyOn(scroll, 'getBoundingClientRect').mockReturnValue(new DOMRect(0, 100, 390, 600));
+  vi.spyOn(working, 'getBoundingClientRect').mockReturnValue(new DOMRect(0, 500, 390, 100));
+  scroll.scrollTop = 400;
+  await act(() => {
+    scroll.dispatchEvent(new Event('scroll'));
+  });
+  expect(container.querySelector('a[aria-current="location"]')?.textContent).toBe('Working 1');
+
+  scroll.scrollTop = 0;
+  await act(() => {
+    scroll.dispatchEvent(new Event('scroll'));
+  });
+  expect(container.querySelector('a[aria-current="location"]')?.textContent).toBe('Todo 0');
+});
+
+it('retains a clamped navigation selection until the scroll position changes', async () => {
+  render({ done: true });
+  const scroll = container.querySelector<HTMLElement>('[data-mobile-board]')!;
+  Object.defineProperties(scroll, {
+    clientHeight: { value: 600 },
+    scrollHeight: { value: 1000 },
+    scrollTo: {
+      value: () => {
+        scroll.scrollTop = 400;
+      },
+    },
+  });
+  const working = container.querySelector<HTMLElement>('section[aria-label="Working"]')!;
+  vi.spyOn(working, 'getBoundingClientRect').mockReturnValue(new DOMRect(0, 500, 390, 100));
+  await act(() => container.querySelectorAll('a')[1]!.click());
+  await act(() => {
+    scroll.dispatchEvent(new Event('scroll'));
+  });
+  expect(document.activeElement).toBe(working);
+  expect(container.querySelector('a[aria-current="location"]')?.textContent).toBe('Working 1');
+
+  scroll.scrollTop = 300;
+  await act(() => {
+    scroll.dispatchEvent(new Event('scroll'));
+  });
+  scroll.scrollTop = 400;
+  await act(() => {
+    scroll.dispatchEvent(new Event('scroll'));
+  });
+  expect(container.querySelector('a[aria-current="location"]')?.textContent).toBe('Done 0');
 });

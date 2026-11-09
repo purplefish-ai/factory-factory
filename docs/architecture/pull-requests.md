@@ -3,8 +3,8 @@
 ## Review requests
 
 Reviews lives at `/projects/:slug/reviews`. The navbar selects its project;
-Agents and Reviews remain in the sidebar above global Settings. The page and
-sidebar badge share a project-keyed query with a 30-second freshness/refresh
+Automations and Reviews remain in the sidebar above global Settings. The page
+and sidebar badge share a project-keyed query with a 30-second freshness/refresh
 policy. The badge excludes approved PRs. The URL project wins over a temporarily
 stale saved selection, including archived projects absent from the active menu.
 Local-only projects show an explicit repository empty state without fetching

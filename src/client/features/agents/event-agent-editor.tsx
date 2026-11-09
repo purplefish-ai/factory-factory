@@ -16,7 +16,7 @@ export function EventAgentEditor(props: EventAgentEditorProps) {
   const inspectOnly = !(draft || editor.replacementMode);
   return (
     <section className="min-w-0 space-y-5" aria-label="Saved event editor">
-      <h2 className="text-xl font-semibold">Edit agent</h2>
+      <h2 className="text-xl font-semibold">Edit automation</h2>
       <p className="text-sm break-words">
         {editor.baseline.name} · Saved management revision {editor.baseline.managementRevision}
       </p>

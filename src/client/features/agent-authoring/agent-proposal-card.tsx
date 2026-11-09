@@ -25,9 +25,9 @@ type EditorProps = {
 };
 function heading(hasAgent: boolean, editing: boolean) {
   if (!hasAgent) {
-    return 'Proposed agent';
+    return 'Proposed automation';
   }
-  return editing ? 'Edit agent' : 'Agent created';
+  return editing ? 'Edit automation' : 'Automation created';
 }
 function useProposalEditor({ proposal, onCreate }: EditorProps) {
   const [draft, setDraft] = useState(() => draftFrom(proposal));
@@ -78,7 +78,7 @@ function useProposalEditor({ proposal, onCreate }: EditorProps) {
       setEditing(false);
     } catch (failure) {
       setError(
-        failure instanceof Error ? failure.message : "Couldn't create this agent. Try again."
+        failure instanceof Error ? failure.message : "Couldn't create this automation. Try again."
       );
     } finally {
       submitting.current = false;
@@ -138,7 +138,7 @@ export function AgentProposalEditor(props: EditorProps) {
   } = useProposalEditor(props);
   return (
     <section
-      aria-label="Agent configuration"
+      aria-label="Automation configuration"
       className="my-3 min-w-0 rounded-xl border bg-card p-4 text-card-foreground shadow-sm"
     >
       <div className="mb-4 space-y-1">
@@ -146,7 +146,7 @@ export function AgentProposalEditor(props: EditorProps) {
         <p className="text-xs text-muted-foreground">
           {accepted
             ? 'Configuration saved. Event listening and automatic runs are not available yet.'
-            : 'Review or edit the configuration, then create your agent. Event listening and automatic runs are not available yet.'}
+            : 'Review or edit the configuration, then create your automation. Event listening and automatic runs are not available yet.'}
         </p>
       </div>
       {accepted && !editing ? (
@@ -170,7 +170,7 @@ export function AgentProposalEditor(props: EditorProps) {
               setError(undefined);
             }}
           >
-            Edit agent
+            Edit automation
           </Button>
         </div>
       ) : (
@@ -192,7 +192,7 @@ export function AgentProposalEditor(props: EditorProps) {
               />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor={`${id}-instructions`}>What the agent should do</Label>
+              <Label htmlFor={`${id}-instructions`}>What the automation should do</Label>
               <Textarea
                 id={`${id}-instructions`}
                 aria-label="Instructions"
@@ -238,7 +238,7 @@ export function AgentProposalEditor(props: EditorProps) {
             </div>
           ) : (
             <Button type="submit" disabled={busy}>
-              {busy ? 'Saving…' : accepted ? 'Save changes' : 'Create agent'}
+              {busy ? 'Saving…' : accepted ? 'Save changes' : 'Create automation'}
             </Button>
           )}
         </form>
@@ -281,7 +281,7 @@ export function AgentProposalCard({ reference }: { reference: AgentProposalRefer
         {query.error.message}
       </p>
     ) : (
-      <Loading size="compact" message="Loading agent proposal…" className="my-3" />
+      <Loading size="compact" message="Loading automation proposal…" className="my-3" />
     );
   }
   return (

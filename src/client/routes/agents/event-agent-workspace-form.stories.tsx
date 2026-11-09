@@ -21,7 +21,7 @@ function EventCreation() {
   );
 }
 const meta = {
-  title: 'Agents/EventAgentCreation',
+  title: 'Automations/EventAgentCreation',
   component: EventCreation,
   beforeEach: async () => {
     finishCreation = undefined;
@@ -88,7 +88,7 @@ async function startPendingCreation(canvasElement: HTMLElement) {
   await waitFor(() => expect(launch).toBeEnabled());
   await userEvent.click(launch);
   await expect(await canvas.findByRole('status', { name: '' })).toHaveTextContent(
-    'Creating event agent workspace…'
+    'Creating event-triggered automation workspace…'
   );
   await expect(canvas.getByRole('status', { name: '' })).toBeVisible();
   await expect(canvas.queryByRole('button', { name: 'Cancel' })).not.toBeInTheDocument();

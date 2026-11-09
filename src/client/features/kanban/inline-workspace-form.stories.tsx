@@ -389,7 +389,7 @@ async function selectSidebarLaunchMode(canvasElement: HTMLElement, mode: string)
 
 export const SidebarPeriodicTask: Story = {
   ...Sidebar,
-  play: ({ canvasElement }) => selectSidebarLaunchMode(canvasElement, 'Create agent'),
+  play: ({ canvasElement }) => selectSidebarLaunchMode(canvasElement, 'Create automation'),
 };
 
 export const RestoredDraft: Story = {
@@ -521,7 +521,7 @@ export const PeriodicSubmissionSuccess: Story = {
     const canvas = within(canvasElement);
     await userEvent.click(canvas.getByRole('button', { name: 'New workspace' }));
     await expect(await canvas.findByRole('textbox')).toHaveValue('Retained periodic review');
-    const launch = canvas.getByRole('button', { name: 'Create agent' });
+    const launch = canvas.getByRole('button', { name: 'Create automation' });
     await waitFor(() => expect(launch).toBeEnabled());
     await userEvent.click(launch);
     // This close uses onCancel, which only runs after periodic success cleanup.
@@ -579,7 +579,12 @@ export const EventAuthoring: Story = {
       canvas.queryByRole('button', { name: 'Choose launch mode' })
     ).not.toBeInTheDocument();
     await userEvent.clear(instructions);
-    await userEvent.type(instructions, 'Propose an event agent to review labeled issues.');
-    await expect(instructions).toHaveValue('Propose an event agent to review labeled issues.');
+    await userEvent.type(
+      instructions,
+      'Propose an event-triggered automation to review labeled issues.'
+    );
+    await expect(instructions).toHaveValue(
+      'Propose an event-triggered automation to review labeled issues.'
+    );
   },
 };

@@ -29,7 +29,7 @@ groups, which the sidebar shows in this order (`parameters.options.storySort` in
 | `Board`       | The Kanban board, columns, cards, and launch forms.                                                                |
 | `Workspace`   | Workspace detail: header controls, panels, files, diffs, terminal, dialogs, overlays, inbox, and child workspaces. |
 | `Chat`        | Transcript, composer, prompts, tool renderers, session tabs, usage, and subagents.                                 |
-| `Agents`      | The Agents dashboard and event agents.                                                                             |
+| `Automations` | The Automations dashboard and event-triggered automations.                                                         |
 | `Reviews`     | PR review dashboard, PR panels, and CI status.                                                                     |
 | `Projects`    | Project creation and project configuration forms.                                                                  |
 | `Settings`    | Admin settings sections and integrations such as Slack, Codex accounts, and voice.                                 |

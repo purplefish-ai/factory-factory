@@ -121,7 +121,7 @@ export function SlackConnectionsView(props: SlackConnectionsViewProps) {
           </Button>
         </form>
         <p className="text-xs text-muted-foreground">
-          Saving credentials does not start event listeners or agents.
+          Saving credentials does not start event listeners or automations.
         </p>
         <ConfirmDialog
           open={!!disconnectId}

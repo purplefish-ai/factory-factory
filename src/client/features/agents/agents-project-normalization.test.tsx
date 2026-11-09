@@ -254,7 +254,7 @@ describe('explicit agent links during real project normalization', () => {
       finishTask();
       await taskWait;
     });
-    await waitForReact(() => expect(container.textContent).toContain('Agent not found'));
+    await waitForReact(() => expect(container.textContent).toContain('Automation not found'));
     expect(container.querySelector('output[aria-label="Current route"]')?.textContent).toBe(
       '/agents/missing-agent'
     );

@@ -31,17 +31,17 @@ it('keeps the project rail visible beside task errors and links explicit selecti
           selectedAgentId="invalid"
           onCreate={vi.fn()}
         >
-          <p role="alert">Agent not found</p>
+          <p role="alert">Automation not found</p>
         </AgentsDashboardShell>
       </MemoryRouter>
     )
   );
-  expect(container.querySelector('nav[aria-label="Agents"]')).not.toBeNull();
+  expect(container.querySelector('nav[aria-label="Automations"]')).not.toBeNull();
   expect(container.querySelector('a[href="/projects/project/agents/one"]')?.textContent).toContain(
     'Review code'
   );
   expect(container.querySelector('a[aria-current="page"]')).toBeNull();
-  expect(container.textContent).toContain('Agent not found');
+  expect(container.textContent).toContain('Automation not found');
   expect(container.querySelector('[role=combobox]')).toBeNull();
   actFlushSync(() => root.unmount());
 });
@@ -77,7 +77,7 @@ it('groups both kinds and keeps event continuation inside the event section', ()
           selectedAgentId="same"
           selectedKind="event"
           onCreate={vi.fn()}
-          continuation={<button type="button">Load more event agents</button>}
+          continuation={<button type="button">Load more event-triggered automations</button>}
         >
           <p>Detail</p>
         </AgentsDashboardShell>
@@ -86,14 +86,14 @@ it('groups both kinds and keeps event continuation inside the event section', ()
   );
   try {
     const scheduledSection = container.querySelector('section[aria-label="Scheduled"]');
-    const eventSection = container.querySelector('section[aria-label="Event"]');
+    const eventSection = container.querySelector('section[aria-label="Event-triggered"]');
     expect(scheduledSection?.textContent).toContain('Scheduled review');
     expect(scheduledSection?.querySelector('[aria-current]')).toBeNull();
-    expect(scheduledSection?.textContent).not.toContain('Load more event agents');
+    expect(scheduledSection?.textContent).not.toContain('Load more event-triggered automations');
     expect(eventSection?.querySelector('[aria-current="page"]')?.textContent).toContain(
       'Event review'
     );
-    expect(eventSection?.textContent).toContain('Load more event agents');
+    expect(eventSection?.textContent).toContain('Load more event-triggered automations');
   } finally {
     actFlushSync(() => root.unmount());
   }
@@ -117,7 +117,7 @@ it('offers the same explicit creation choices after the menu closes', async () =
   );
   try {
     const triggers = [...container.querySelectorAll('button')].filter(
-      (button) => button.textContent === 'Create agent'
+      (button) => button.textContent === 'Create automation'
     );
     expect(triggers).toHaveLength(2);
     for (const [index, trigger] of triggers.entries()) {
@@ -125,7 +125,10 @@ it('offers the same explicit creation choices after the menu closes', async () =
         trigger.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, button: 0 }))
       );
       const items = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')];
-      expect(items.map((item) => item.textContent)).toEqual(['Scheduled agent', 'Event agent']);
+      expect(items.map((item) => item.textContent)).toEqual([
+        'Scheduled automation',
+        'Event-triggered automation',
+      ]);
       expect(onCreate).toHaveBeenCalledTimes(index);
       actFlushSync(() => items[index]?.click());
       await vi.waitFor(() =>

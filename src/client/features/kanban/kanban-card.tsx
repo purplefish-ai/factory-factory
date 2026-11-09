@@ -484,7 +484,7 @@ export const KanbanCard = memo(function KanbanCard({
               {workspace.creationSource === 'PERIODIC_TASK' && (
                 <RobotIcon
                   role="img"
-                  aria-label="Agent workspace"
+                  aria-label="Automation workspace"
                   className="h-3 w-3 mt-0.5 shrink-0 text-muted-foreground"
                 />
               )}
