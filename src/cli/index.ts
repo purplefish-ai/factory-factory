@@ -9,7 +9,7 @@ import chalk from 'chalk';
 import { Command } from 'commander';
 import { config } from 'dotenv';
 import open from 'open';
-import { runMigrations as runDbMigrations } from '@/backend/migrate';
+import { runMigrationsWithBackup } from '@/backend/migrate-with-backup';
 import { getCurrentProcessEnv, getLogFilePath } from '@/backend/services/logger.service';
 import { registerApplicationServerMarker } from './application-server-marker';
 import { ApplicationUpdateInstaller } from './application-update-installer';
@@ -75,14 +75,12 @@ function runMigrations(databasePath: string, verbose: boolean, dev: boolean): Pr
         /* no-op for non-verbose mode */
       };
 
-  return Promise.resolve().then(() => {
-    runDbMigrations({
-      databasePath,
-      migrationsPath,
-      log,
-      warn: warnMigration,
-      unknownMigrations: resolveUnknownMigrationPolicy({ dev, env: getCurrentProcessEnv() }),
-    });
+  return runMigrationsWithBackup({
+    databasePath,
+    migrationsPath,
+    log,
+    warn: warnMigration,
+    unknownMigrations: resolveUnknownMigrationPolicy({ dev, env: getCurrentProcessEnv() }),
   });
 }
 
@@ -330,14 +328,14 @@ program
   .command('db:migrate')
   .description('Run database migrations')
   .option('-d, --database-path <path>', 'SQLite database file path (or set DATABASE_PATH env)')
-  .action((options: MigrateOptions) => {
+  .action(async (options: MigrateOptions) => {
     const effectivePath = resolveDatabasePath({ databasePath: options.databasePath });
 
     console.log(chalk.blue(`Running database migrations on ${effectivePath}...`));
 
     try {
       const migrationsPath = join(PROJECT_ROOT, 'prisma', 'migrations');
-      runDbMigrations({
+      await runMigrationsWithBackup({
         databasePath: effectivePath,
         migrationsPath,
         log: (msg) => console.log(chalk.gray(msg)),

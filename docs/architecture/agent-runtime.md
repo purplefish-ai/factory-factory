@@ -17,6 +17,10 @@ before migrations, and keeps the previous package until the replacement reports
 full startup readiness over IPC. Interrupted recovery runs before migrations and
 relaunches the restored CLI. The supervisor retains durable update status
 outside the replaced package, including errors after the backend has stopped.
+Its restorable snapshot is separate from the bounded `db-backups/` copy every
+launch and `ff db:migrate` take before pending migrations (see the README's
+database upgrades section); both use one SQLite online-backup helper,
+`src/backend/lib/sqlite-snapshot.ts`.
 
 Automatic installation supports writable global npm installations on macOS and
 Linux launched through supervised `ff serve`. Eligibility is fixed at startup;
@@ -1368,9 +1372,10 @@ The desktop app runs the backend in an Electron utility process, not in Electron
 main, so synchronous SQLite work, agent streams and terminals cannot freeze the
 window or menus. `electron/main/server-manager.ts` forks
 `src/backend/electron-utility-entry.ts` and passes the database, migrations,
-frontend and log paths through the child environment. The child runs migrations,
-starts the server, and posts `ready` with its URL or `error` over
-`process.parentPort`; startup that takes longer than two minutes is killed.
+frontend and log paths through the child environment. The child backs up the
+database when migrations are pending, runs them, starts the server, and posts
+`ready` with its URL or `error` over `process.parentPort`; startup that takes
+longer than two minutes is killed.
 
 Electron main opens the window as soon as the app is ready, showing a
 self-contained loading page (`electron/main/loading-page.ts`, a `data:` URL with

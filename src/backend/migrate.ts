@@ -30,6 +30,16 @@ export interface MigrationOptions {
   /** Problems that do not stop startup. Defaults to stderr so they stay visible when `log` is silent. */
   warn?: (msg: string) => void;
   unknownMigrations?: UnknownMigrationPolicy;
+  /** Snapshot taken before this run; a failure names it so the user can restore it. */
+  backupPath?: string;
+}
+
+/** What {@link runMigrations} would do, read without changing the database. */
+export interface MigrationInspection {
+  /** False for a missing or never-migrated database: nothing worth backing up. */
+  hasAppliedMigrations: boolean;
+  pendingMigrations: string[];
+  unknownAppliedMigrations: string[];
 }
 
 /** The database has applied migrations this build does not include: it was migrated by a newer version. */
@@ -443,6 +453,68 @@ function warnOnChecksumMismatches(
   }
 }
 
+/** Migration directory names, sorted by name (chronological order). */
+function listMigrationDirectories(migrationsPath: string): string[] {
+  return readdirSync(migrationsPath, { withFileTypes: true })
+    .filter((d) => d.isDirectory())
+    .map((d) => d.name)
+    .sort();
+}
+
+/** Inspect pending and unknown migrations through a read-only connection. */
+export function inspectMigrations(
+  options: Pick<MigrationOptions, 'databasePath' | 'migrationsPath'>
+): MigrationInspection {
+  const migrationDirs = listMigrationDirectories(options.migrationsPath);
+  const runnable = migrationDirs.filter((name) =>
+    existsSync(join(options.migrationsPath, name, 'migration.sql'))
+  );
+  if (!existsSync(options.databasePath)) {
+    return {
+      hasAppliedMigrations: false,
+      pendingMigrations: runnable,
+      unknownAppliedMigrations: [],
+    };
+  }
+  const db = new Database(options.databasePath, { readonly: true, fileMustExist: true });
+  try {
+    const hasTable =
+      db
+        .prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = '_prisma_migrations'")
+        .get() !== undefined;
+    const applied = new Set(
+      hasTable
+        ? z
+            .array(z.object({ migration_name: z.string() }))
+            .parse(
+              db
+                .prepare(
+                  'SELECT migration_name FROM _prisma_migrations WHERE finished_at IS NOT NULL'
+                )
+                .all()
+            )
+            .map((row) => row.migration_name)
+        : []
+    );
+    const known = new Set(migrationDirs);
+    return {
+      hasAppliedMigrations: applied.size > 0,
+      pendingMigrations: runnable.filter((name) => !applied.has(name)),
+      unknownAppliedMigrations: [...applied].filter((name) => !known.has(name)).sort(),
+    };
+  } finally {
+    db.close();
+  }
+}
+
+function describeBackup(databasePath: string, backupPath: string | undefined): string {
+  return backupPath
+    ? ` The database was backed up before migrating to ${backupPath}. To return to that state, ` +
+        `stop Factory Factory, then replace ${databasePath} with the backup and delete any ` +
+        `${databasePath}-wal and ${databasePath}-shm files.`
+    : '';
+}
+
 /**
  * Run database migrations.
  * @param options - Migration configuration
@@ -455,6 +527,7 @@ export function runMigrations(options: MigrationOptions): void {
     log = writeStdout,
     warn = writeStderr,
     unknownMigrations = 'refuse',
+    backupPath,
   } = options;
 
   log(`[migrate] Database: ${databasePath}`);
@@ -488,11 +561,7 @@ export function runMigrations(options: MigrationOptions): void {
 
     const appliedMigrations = readAppliedMigrations(db);
 
-    // Read migration directories (sorted by name = chronological order)
-    const migrationDirs = readdirSync(migrationsPath, { withFileTypes: true })
-      .filter((d) => d.isDirectory())
-      .map((d) => d.name)
-      .sort();
+    const migrationDirs = listMigrationDirectories(migrationsPath);
 
     guardUnknownMigrations(
       databasePath,
@@ -522,8 +591,14 @@ export function runMigrations(options: MigrationOptions): void {
         applySingleMigration(db, migrationName, sql, checksum, log, warn);
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
-        log(`[migrate] Failed to apply migration ${migrationName}: ${message}`);
-        throw err;
+        const backup = describeBackup(databasePath, backupPath);
+        log(`[migrate] Failed to apply migration ${migrationName}: ${message}${backup}`);
+        if (!backup) {
+          throw err;
+        }
+        throw new Error(`Failed to apply migration ${migrationName}: ${message}${backup}`, {
+          cause: err,
+        });
       }
     }
 
