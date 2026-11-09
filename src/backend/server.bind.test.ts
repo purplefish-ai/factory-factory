@@ -54,13 +54,23 @@ function portOf(server: NetServer): number {
   return address.port;
 }
 
-/** Asks the OS for a currently free loopback port. */
+/** Finds a port currently free on both loopback families. */
 async function findFreePort(): Promise<number> {
-  const probe = await listenBlocker(0, '127.0.0.1');
-  const port = portOf(probe);
-  blockers.splice(blockers.indexOf(probe), 1);
-  await new Promise((resolve) => probe.close(resolve));
-  return port;
+  for (let attempt = 0; attempt < 20; attempt++) {
+    const probe = await listenBlocker(0, '127.0.0.1');
+    const port = portOf(probe);
+    const ipv6Probe = ipv6Available ? await listenBlocker(port, '::1').catch(() => null) : null;
+    for (const server of [probe, ipv6Probe]) {
+      if (server) {
+        blockers.splice(blockers.indexOf(server), 1);
+        await new Promise((resolve) => server.close(resolve));
+      }
+    }
+    if (!ipv6Available || ipv6Probe) {
+      return port;
+    }
+  }
+  throw new Error('Could not find a port free on both loopback families');
 }
 
 function getHealthStatus(host: string, port: number): Promise<number | undefined> {

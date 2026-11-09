@@ -162,7 +162,8 @@ describe('listenHttpServer without a configured host', () => {
 
   it.runIf(ipv6Available)('closes the ::1 listener with keep-alive connections open', async () => {
     const server = createTestHttpServer();
-    const closeExtra = await listenHttpServer(server, 0, undefined);
+    // Tracked so a failure before the inline close still releases both ports.
+    const closeExtra = await listenAndTrack(server, 0, undefined);
     const port = boundPort(server);
     const agent = new Agent({ keepAlive: true });
     cleanups.push(async () => agent.destroy());

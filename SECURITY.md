@@ -41,10 +41,10 @@ Factory Factory runs locally on your machine and interacts with:
    access
 3. **Protect your database**: The SQLite database contains session history
 4. **Network exposure**: By default, the server listens on loopback only. The
-   desktop app and a backend started without `BACKEND_HOST` bind `127.0.0.1` and
-   `::1`; `ff serve` binds its `--host` (default `localhost`). Binding another
-   address, such as `ff serve --host 0.0.0.0` or the Docker image, exposes the
-   server to that network.
+   desktop app and a backend started without `BACKEND_HOST` bind `127.0.0.1`
+   and, where IPv6 is available, `::1`; `ff serve` binds its `--host` (default
+   `localhost`). Binding another address, such as `ff serve --host 0.0.0.0` or
+   the Docker image, exposes the server to that network.
 
 ## Supported Versions
 

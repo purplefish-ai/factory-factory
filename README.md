@@ -301,8 +301,8 @@ via nginx, Caddy, or another reverse proxy:
   WebSocket upgrades; non-loopback origins must match exactly (scheme + host +
   non-default port, no trailing slash).
 - Keep the server on loopback so only your proxy can reach it: leave
-  `BACKEND_HOST` unset (the backend then binds `127.0.0.1` and `::1`), or set it
-  to `localhost` or `127.0.0.1`.
+  `BACKEND_HOST` unset (the backend then binds `127.0.0.1` and, where IPv6 is
+  available, `::1`), or set it to `localhost` or `127.0.0.1`.
 
 By default the server rejects privileged HTTP requests and WebSocket upgrades
 that carry client-address headers (`x-forwarded-for`, `cf-connecting-ip`, etc.),
