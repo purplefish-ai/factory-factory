@@ -108,6 +108,10 @@ Not reliably. Here is what exists now:
   the queue is in memory too. A backend restart drops queued and running
   reviews.
 - Automatic re-review when a child pushes new commits.
+- A forced approval step for `run_child_adversarial_reviews`. The active
+  permission preset decides, as for other MCP tools.
+- Filtering batch review findings by severity for Ratchet. Every finding,
+  including nits, stays actionable, the same as a manual review.
 - Changing workspace-wide status for review sessions. The board card, sidebar
   and `workspace.get` still count a running review as "Agent working". Only the
   Subagents pane's child rows leave review sessions out (section 7). Changing
@@ -131,7 +135,8 @@ const RUN_CHILD_REVIEWS_TOOL = {
   description:
     'Queue an adversarial review (a read-only review by the Admin-configured reviewer ' +
     'model, posted to the PR) of every open pull request on child workspaces. ' +
-    'Omit childWorkspaceIds to cover every child. Only call when the user asks for it. ' +
+    'Omit childWorkspaceIds to cover every child. Only call when the user asks for it ' +
+    'in their current message; never in response to completion mail or to re-check fixes. ' +
     'Results arrive later as one COMPLETION mail per PR.',
   inputSchema: {
     type: 'object',
@@ -173,7 +178,21 @@ const RUN_CHILD_REVIEWS_TOOL = {
   post to GitHub under the user's `gh` identity, and with Ratchet on they can
   trigger fixer sessions. The tool description says this. Provider permission
   prompts apply as they do for any MCP tool, so the active preset decides
-  whether the call needs approval. This matches `spawn_child_workspace`.
+  whether the call needs approval. This matches `spawn_child_workspace`. This
+  tool gets no extra approval step of its own.
+- The tool description rules out re-running on the agent's own initiative.
+  Completion mail wakes the parent, Ratchet can fix every finding, and a fresh
+  review tends to find fresh nits, so an agent that re-reviews fixes unprompted
+  has no natural stopping point. This is guidance, not a limit; a per-PR
+  cooldown is the follow-up if loops appear in practice.
+- `run_child_adversarial_reviews` is offered only in normal chat sessions, never
+  in adversarial-review, Ratchet, PR-monitoring, scheduled or event-driven
+  sessions. Today every session in a workspace gets the same MCP tools, because
+  `getMcpServers` receives only the workspace IDs. Pass the session's `workflow`
+  into the MCP launch context, and use an allow-list of interactive chat
+  workflows so that any new automated workflow has no access by default. Both
+  `tools/list` and tool dispatch enforce it, like the existing `hasParent`
+  check. `list_child_workspaces` is read-only and has no such restriction.
 
 A second parent-only tool, `list_child_workspaces`, wraps
 `workspace.listChildren`. For each child it returns the id, name, project, agent
@@ -591,7 +610,7 @@ to the orchestrator and expose it through `AppContext.services`. It merges:
 
 1. **Queued jobs** from the in-memory queue (section 3), with global position.
 2. **Running** reviews: the active `adversarial_review` sessions already loaded
-   in `child.agentSessions` (the same RUNNING/IDLE check as
+   in `child.agentSessions` (the same RUNNING check as
    `findActiveAdversarialReviewSession`), plus the context and reviewer label
    the orchestrator recorded at dequeue.
 3. **Recent outcomes**: an in-memory map keyed by `prId`, written in the turn's
@@ -722,6 +741,10 @@ the orchestrator.
   the PR starts. PRs no longer attached are dropped. No finding bodies are
   returned.
 - `list_child_workspaces` renders the agent line and review lines.
+- MCP launch context: `run_child_adversarial_reviews` is listed and callable for
+  an interactive chat workflow. It is neither listed nor callable for
+  `adversarial_review`, Ratchet, `pr-monitoring`, `periodic-task`, `event-agent`
+  or an unknown workflow.
 - Client: the button is hidden when no child has an open PR. The confirm dialog
   shows the PR and child counts, the reviewer label and the concurrency. The
   toast summarizes the counts. Each row renders the status-reason label and
@@ -753,6 +776,11 @@ None remaining.
 
 Resolved:
 
+- **Who can start a batch from an agent?** ✅ Normal chat sessions only, through
+  an allow-list of interactive workflows.
+- **Force approval for the batch tool?** ✅ No; the permission preset decides.
+- **Should only blocking batch findings trigger Ratchet?** ✅ No; nits can
+  trigger fixes too.
 - **Can the reviewer run `git show` in plan mode?** ✅ Yes, on both Claude and
   Codex. `fetched_head` reviews read the PR head directly. The prompt does not
   include changed-file contents.
