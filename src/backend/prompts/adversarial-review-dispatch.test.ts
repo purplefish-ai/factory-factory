@@ -62,7 +62,7 @@ describe('adversarial review dispatch prompt', () => {
     expect(prompt).not.toMatch(/\{\{[A-Z_]+\}\}/);
   });
 
-  it('never suggests network commands in a shipped diff-only prompt', async () => {
+  it('does not suggest gh read commands in a shipped diff-only prompt', async () => {
     const { readFileSync } = await vi.importActual<typeof import('node:fs')>('node:fs');
     readFileSyncMock.mockImplementation(readFileSync);
 
