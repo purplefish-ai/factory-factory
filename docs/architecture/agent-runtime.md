@@ -811,7 +811,7 @@ account resolution, options lookup and the overall request. Native probes also
 record initialization, session creation, model selection and cleanup durations,
 including failures, so slow account checks can be distinguished from adapter
 startup. Timing and background-refresh warnings omit raw provider errors and
-subprocess diagnostics; the original failure still propagates to the caller.
+subprocess diagnostics.
 
 Session creation persists `AgentSession.codexAccountId`. All human, child,
 periodic, reviewer and dedicated-PR creation goes through the same session-data
