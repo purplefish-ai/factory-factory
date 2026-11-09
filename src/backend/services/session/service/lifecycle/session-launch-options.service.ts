@@ -1,7 +1,7 @@
 import { resolveSessionModelForProvider } from '@/backend/lib/session-model';
 import { createLogger } from '@/backend/services/logger.service';
+import { timeLaunchDiscovery } from '@/backend/services/session/service/acp/launch-discovery-timing';
 import type { SessionLaunchOptions } from '@/shared/session-launch';
-import { timeLaunchDiscovery } from '../acp/launch-discovery-timing';
 type Input = { provider: 'CLAUDE' | 'CODEX'; model?: string; codexAccountId?: string };
 type Defaults = {
   defaultClaudeModel?: string;
