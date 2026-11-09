@@ -62,7 +62,7 @@ it('creates with the user-edited instructions and filter, preserving event setti
   await act(() => root.render(createElement(AgentProposalEditor, { proposal, onCreate: create })));
   expect(document.body.textContent).toContain('#customer-feedback');
   expect([...document.querySelectorAll('button')].map((button) => button.textContent)).toEqual([
-    'Create agent',
+    'Create automation',
   ]);
   edit('Instructions', 'Investigate using the dev database.');
   edit('Filter 1', 'Investigate uncertain cases too.');
@@ -85,8 +85,8 @@ it('creates with the user-edited instructions and filter, preserving event setti
       }),
     })
   );
-  expect(document.body.textContent).toContain('Agent created');
-  expect(document.querySelector('button')?.textContent).toBe('Edit agent');
+  expect(document.body.textContent).toContain('Automation created');
+  expect(document.querySelector('button')?.textContent).toBe('Edit automation');
 });
 
 it('preserves edits and surfaces a failed acceptance', async () => {
@@ -143,7 +143,7 @@ it('disables creation while a request is pending', async () => {
     finish({ ...proposal, agentDefinitionId: 'agent-1' });
     await Promise.resolve();
   });
-  expect(document.body.textContent).toContain('Agent created');
+  expect(document.body.textContent).toContain('Automation created');
 });
 
 it('allows editing an already-created agent through the same widget', async () => {

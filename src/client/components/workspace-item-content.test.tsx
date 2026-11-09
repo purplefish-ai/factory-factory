@@ -196,7 +196,7 @@ it.each(['PERIODIC_TASK', 'MANUAL'] as const)(
   'identifies only agent workspace origins with a robot: %s',
   (creationSource) => {
     const { container, root } = renderContent({ ...baseWorkspace, creationSource });
-    expect(within(container).queryByRole('img', { name: 'Agent workspace' }) !== null).toBe(
+    expect(within(container).queryByRole('img', { name: 'Automation workspace' }) !== null).toBe(
       creationSource === 'PERIODIC_TASK'
     );
     actFlushSync(() => root.unmount());

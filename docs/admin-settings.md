@@ -34,10 +34,11 @@ the interaction. Color pickers save when focus leaves the picker, so click or
 tab to another control after choosing a color. Linear credentials and their
 validated team are submitted together with Save.
 
-Scheduled agents are managed from **Agents** in the sidebar or the Agents link
-in Settings. The management page replaces the former Periodic Tasks settings
-editor. See [scheduled agents](architecture/integrations.md#scheduled-agents)
-for schedule and run behavior.
+Scheduled automations are managed from **Automations** in the sidebar or the
+Automations link in Settings. The management page replaces the former Periodic
+Tasks settings editor. See
+[scheduled automations](architecture/integrations.md#scheduled-agents) for
+schedule and run behavior.
 
 ## Appearance
 

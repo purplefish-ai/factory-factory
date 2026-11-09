@@ -351,7 +351,7 @@ it('opens an event outside page one, keeps equal IDs distinct and separates list
   expect(
     [...container.querySelectorAll('main button')].map((item) => item.textContent)
   ).not.toContain('Delete');
-  await click('Load more event agents');
+  await click('Load more event-triggered automations');
   await waitForReact(() =>
     expect(
       container.querySelector('a[href="/projects/owner/agents/page-two?kind=event"]')
@@ -375,7 +375,7 @@ it.each(['?kind=', '?kind=other', '?kind=event&kind=scheduled', '?kind=event&kin
   'rejects explicit invalid kinds %s without owner queries',
   async (search) => {
     await render(`/projects/owner/agents/same${search}`);
-    expect(container.textContent).toContain('Invalid agent kind');
+    expect(container.textContent).toContain('Invalid automation kind');
     expect(requests).toHaveLength(0);
   }
 );
@@ -384,7 +384,7 @@ it('preserves a conflicted draft and original CAS through refresh, then reloads 
   await waitForReact(() =>
     expect(container.querySelector('main h2')?.textContent).toBe(saved.name)
   );
-  await click('Edit agent');
+  await click('Edit automation');
   await edit('textarea[aria-label="Instructions"]', 'Unsaved draft');
   saved = {
     ...saved,
@@ -416,7 +416,7 @@ it('keeps the draft across a read failure and later success without advancing it
   await waitForReact(() =>
     expect(container.querySelector('main h2')?.textContent).toBe(saved.name)
   );
-  await click('Edit agent');
+  await click('Edit automation');
   await edit('input[name="name"]', 'Typed name');
   const form = container.querySelector('form');
   fail = 'agent.get';
@@ -438,7 +438,7 @@ it('serializes save and invalidates the captured owner after switching kind, pro
   await waitForReact(() =>
     expect(container.querySelector('main h2')?.textContent).toBe(saved.name)
   );
-  await click('Edit agent');
+  await click('Edit automation');
   const gate = deferred();
   saveWait = gate.promise;
   await edit('input[name="name"]', 'Captured old edit');
@@ -457,7 +457,7 @@ it('serializes save and invalidates the captured owner after switching kind, pro
   await waitForReact(() =>
     expect(container.querySelector('main h2')?.textContent).toBe(saved.name)
   );
-  await click('Edit agent');
+  await click('Edit automation');
   await edit('input[name="name"]', 'New project draft');
   await act(() => gate.resolve());
   await waitForReact(() =>
@@ -487,7 +487,7 @@ it('validates only by explicit mutation and keeps inherited settings through pre
       (item) => item.path === 'agent.projectSources' || item.path === 'agent.validateDraft'
     )
   ).toBe(false);
-  await click('Edit agent');
+  await click('Edit automation');
   await click('Validate draft');
   await waitForReact(() => expect(container.textContent).toContain('confirmed-model'));
   expect(container.textContent).toContain('requested-model');
@@ -513,7 +513,7 @@ it.each(['preview', 'sources'])(
     await waitForReact(() =>
       expect(container.querySelector('main h2')?.textContent).toBe(saved.name)
     );
-    await click('Edit agent');
+    await click('Edit automation');
     const gate = deferred();
     if (kind === 'preview') {
       previewWait = gate.promise;
@@ -547,7 +547,7 @@ it('inspects recovered zero-event bodies and validates only an explicitly author
   await waitForReact(() =>
     expect(container.querySelector('main h2')?.textContent).toBe(saved.name)
   );
-  await click('Edit agent');
+  await click('Edit automation');
   expect(container.textContent).toContain('Recovered literal body');
   expect(container.textContent).toContain('custom-model');
   expect(container.querySelector('form')).toBeNull();
@@ -591,7 +591,7 @@ it('requires an explicit blank complete replacement for unknown or invalid store
   await waitForReact(() =>
     expect(container.querySelector('main h2')?.textContent).toBe(saved.name)
   );
-  await click('Edit agent');
+  await click('Edit automation');
   expect(container.querySelector('form')).toBeNull();
   expect(container.textContent).toContain('Exact membership is unknown');
   await click('Replace complete specification');
@@ -616,15 +616,15 @@ it('keeps archived details readable with writes disabled and missing IDs explici
   await waitForReact(() =>
     expect(container.querySelector('main h2')?.textContent).toBe(saved.name)
   );
-  expect(button('Edit agent').disabled).toBe(true);
-  expect(button('Create agent').disabled).toBe(true);
+  expect(button('Edit automation').disabled).toBe(true);
+  expect(button('Create automation').disabled).toBe(true);
 });
 it('does not auto-select or claim empty when either initial list fails', async () => {
   fail = 'agent.list';
   await render('/projects/owner/agents');
   await waitForReact(() => expect(container.textContent).toContain('Event list unavailable'));
   expect(container.querySelector('output')?.textContent).toBe('/projects/owner/agents');
-  expect(container.textContent).not.toContain('No agents yet');
+  expect(container.textContent).not.toContain('No automations yet');
 });
 
 it('keeps same-ID rail highlights and drafts distinct between kinds', async () => {
@@ -636,7 +636,7 @@ it('keeps same-ID rail highlights and drafts distinct between kinds', async () =
   expect(container.querySelector('nav a[aria-current="page"]')?.getAttribute('href')).toBe(
     '/projects/owner/agents/same?kind=event'
   );
-  await click('Edit agent');
+  await click('Edit automation');
   await edit('input[name="name"]', 'Event only draft');
   await navigate('Scheduled same ID');
   await waitForReact(() =>
@@ -645,7 +645,7 @@ it('keeps same-ID rail highlights and drafts distinct between kinds', async () =
   expect(container.querySelector('nav a[aria-current="page"]')?.getAttribute('href')).toBe(
     '/projects/owner/agents/same'
   );
-  await click('Edit agent');
+  await click('Edit automation');
   expect(container.querySelector<HTMLInputElement>('input[name="name"]')?.value).toBe(
     'Scheduled control'
   );
@@ -653,7 +653,7 @@ it('keeps same-ID rail highlights and drafts distinct between kinds', async () =
 it('keeps an explicit missing event selected without scheduled fallback', async () => {
   await render('/projects/owner/agents/missing?kind=event');
   await waitForReact(() =>
-    expect(container.textContent).toContain('Agent not found in this project')
+    expect(container.textContent).toContain('Automation not found in this project')
   );
   expect(container.querySelector('output')?.textContent).toContain('/missing?kind=event');
   expect(requests.some((request) => request.path === 'periodicTask.get')).toBe(false);
@@ -680,7 +680,7 @@ it.each(['UNSUPPORTED', 'UNAVAILABLE'] as const)(
     await waitForReact(() =>
       expect(container.querySelector('main h2')?.textContent).toBe(saved.name)
     );
-    await click('Edit agent');
+    await click('Edit automation');
     await edit(
       'textarea[aria-label="Execution settings"]',
       '{"version":1,"provider":"CODEX","model":"gpt-test","reasoningEffort":"high"}'
@@ -701,7 +701,7 @@ it.each(['preview', 'sources'])(
     await waitForReact(() =>
       expect(container.querySelector('main h2')?.textContent).toBe(saved.name)
     );
-    await click('Edit agent');
+    await click('Edit automation');
     const gate = deferred();
     if (kind === 'preview') {
       previewWait = gate.promise;
@@ -713,7 +713,7 @@ it.each(['preview', 'sources'])(
     await waitForReact(() =>
       expect(container.querySelector('main h2')?.textContent).toBe('Scheduled control')
     );
-    await click('Edit agent');
+    await click('Edit automation');
     await edit('input[name="name"]', 'New scheduled session');
     await act(() => gate.resolve());
     expect(container.querySelector<HTMLInputElement>('input[name="name"]')?.value).toBe(
@@ -728,7 +728,7 @@ it('does not unlock a pending save when an earlier preview finishes', async () =
   await waitForReact(() =>
     expect(container.querySelector('main h2')?.textContent).toBe(saved.name)
   );
-  await click('Edit agent');
+  await click('Edit automation');
   const previewGate = deferred();
   previewWait = previewGate.promise;
   await click('Validate draft');
@@ -752,7 +752,7 @@ it.each(['preview', 'sources'])(
     await waitForReact(() =>
       expect(container.querySelector('main h2')?.textContent).toBe(saved.name)
     );
-    await click('Edit agent');
+    await click('Edit automation');
     const older = deferred();
     if (kind === 'preview') {
       previewWait = older.promise;
@@ -793,7 +793,7 @@ it('shows authoritative paused state and reopens with returned CAS when successf
     expect(container.querySelector('main h2')?.textContent).toBe(saved.name)
   );
   expect(container.querySelector('main')?.textContent).toContain('ACTIVE');
-  await click('Edit agent');
+  await click('Edit automation');
   await edit('textarea[aria-label="Instructions"]', 'Authoritative returned instructions');
   fail = 'agent.get';
   await submit();
@@ -808,7 +808,7 @@ it('shows authoritative paused state and reopens with returned CAS when successf
   expect(container.querySelector('main')?.textContent).not.toContain('ACTIVE');
   expect(container.querySelector('main')?.textContent).toContain('re-enabling is needed');
   expect(managedAgentSchema.parse(queryClient.getQueryData(key)).managementRevision).toBe(3);
-  await click('Edit agent');
+  await click('Edit automation');
   expect(
     container.querySelector<HTMLTextAreaElement>('textarea[aria-label="Instructions"]')?.value
   ).toBe('Authoritative returned instructions');
@@ -827,7 +827,7 @@ it('preserves a higher same-owner cached revision over an older successful mutat
   await waitForReact(() =>
     expect(container.querySelector('main h2')?.textContent).toBe(saved.name)
   );
-  await click('Edit agent');
+  await click('Edit automation');
   await edit('textarea[aria-label="Instructions"]', 'Pending revision three');
   const gate = deferred();
   saveWait = gate.promise;
@@ -850,7 +850,7 @@ it('preserves a higher same-owner cached revision over an older successful mutat
   expect(container.querySelector('main')?.textContent).toContain(
     'Newer authoritative revision five'
   );
-  await click('Edit agent');
+  await click('Edit automation');
   expect(container.textContent).toContain('Saved management revision 5');
   expect(
     container.querySelector<HTMLTextAreaElement>('textarea[aria-label="Instructions"]')?.value
@@ -861,7 +861,7 @@ it('seeds the captured event owner after delayed save without replacing the same
   await waitForReact(() =>
     expect(container.querySelector('main h2')?.textContent).toBe(saved.name)
   );
-  await click('Edit agent');
+  await click('Edit automation');
   await edit('textarea[aria-label="Instructions"]', 'Saved after event editor unmount');
   const gate = deferred();
   saveWait = gate.promise;
@@ -877,7 +877,7 @@ it('seeds the captured event owner after delayed save without replacing the same
   await waitForReact(() =>
     expect(container.querySelector('main h2')?.textContent).toBe('Scheduled control')
   );
-  await click('Edit agent');
+  await click('Edit automation');
   await edit('input[name="name"]', 'Keep scheduled draft');
   const form = container.querySelector('form');
   fail = 'agent.get';
@@ -903,7 +903,7 @@ it('consumes event-to-scheduled create intent after success so Back does not reo
   );
   await chooseAgentCreation(container);
   await waitForReact(() =>
-    expect(container.querySelector('main h2')?.textContent).toBe('Create agent')
+    expect(container.querySelector('main h2')?.textContent).toBe('Create automation')
   );
   expect(container.querySelector('output')?.textContent).toBe('/projects/owner/agents');
   await edit('input[name="name"]', 'Created from event detail');
@@ -927,7 +927,9 @@ it('opens conversational event creation explicitly and cancels back to the selec
     expect(container.querySelector('main')?.textContent).toContain(saved.name)
   );
   await chooseAgentCreation(container, 'event');
-  expect(container.querySelector('main')?.textContent).toContain('Create event agent');
+  expect(container.querySelector('main')?.textContent).toContain(
+    'Create event-triggered automation'
+  );
   expect(container.querySelector('main')?.textContent).toContain('paused');
   expect(container.querySelector('main')?.textContent).toContain('not yet available');
   expect(container.querySelector('nav [aria-current]')).toBeNull();
@@ -964,7 +966,7 @@ it('reveals the phone creation form after an event-to-scheduled keyed remount', 
     const before = container.querySelector('main');
     await chooseAgentCreation(container);
     await waitForReact(() =>
-      expect(container.querySelector('main h2')?.textContent).toBe('Create agent')
+      expect(container.querySelector('main h2')?.textContent).toBe('Create automation')
     );
     const editor = container.querySelector('main');
     expect(editor).not.toBe(before);

@@ -1,8 +1,8 @@
 # Client copy
 
 Use sentence case for headings, buttons, menus, labels and accessible names:
-“Quick actions”, “New workspace”, “Create agent”. Keep proper names and acronyms
-such as GitHub, Claude, Codex, PR, API and IDE. Use the
+“Quick actions”, “New workspace”, “Create automation”. Keep proper names and
+acronyms such as GitHub, Claude, Codex, PR, API and IDE. Use the
 [workspace glossary](../workspaces.md#glossary) for product terms. Write
 “subagent”, with no hyphen.
 

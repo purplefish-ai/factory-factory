@@ -45,7 +45,9 @@ export function WorkspaceLaunchButton({
         aria-description={reason}
       >
         {isCreating ? <Spinner className="size-3" aria-hidden="true" /> : null}
-        <span className="truncate">{mode === 'PERIODIC_TASK' ? 'Create agent' : 'Launch'}</span>
+        <span className="truncate">
+          {mode === 'PERIODIC_TASK' ? 'Create automation' : 'Launch'}
+        </span>
       </Button>
       {!purpose && (
         <DropdownMenu>
@@ -65,7 +67,7 @@ export function WorkspaceLaunchButton({
             </DropdownMenuItem>
             <DropdownMenuItem className="text-xs" onClick={() => onModeChange('PERIODIC_TASK')}>
               <RobotIcon className="mr-1.5 h-3 w-3" />
-              Create agent
+              Create automation
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>

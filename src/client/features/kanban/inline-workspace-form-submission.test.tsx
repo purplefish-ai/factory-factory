@@ -107,7 +107,7 @@ describe('workspace creation submission recovery', () => {
       expect(form.onCreated).not.toHaveBeenCalled();
       expect(
         [...form.container.querySelectorAll('button')].find((button) =>
-          ['Launch', 'Create agent'].includes(button.textContent ?? '')
+          ['Launch', 'Create automation'].includes(button.textContent ?? '')
         )?.disabled
       ).toBe(false);
     } finally {
@@ -126,7 +126,7 @@ describe('workspace creation submission recovery', () => {
     ).rejects.toThrow('could not be saved');
     const form = renderForm();
     try {
-      launch(form.container, 'Create agent');
+      launch(form.container, 'Create automation');
       expect(mocks.createPeriodicTaskMutateMock).toHaveBeenCalledWith(
         expect.objectContaining({ prompt: 'Retained periodic review' })
       );
@@ -163,7 +163,7 @@ describe('workspace creation submission recovery', () => {
       expect(form.onCancel).not.toHaveBeenCalled();
       expect(
         [...form.container.querySelectorAll('button')].find((button) =>
-          ['Launch', 'Create agent'].includes(button.textContent ?? '')
+          ['Launch', 'Create automation'].includes(button.textContent ?? '')
         )?.disabled
       ).toBe(false);
     } finally {

@@ -6,12 +6,12 @@ async function assertEditorBounds(page: Page) {
   // Read both boxes in one layout snapshot while form autofocus scrolls the shared surface.
   const { editor, rail } = await main.evaluate((element) => ({
     editor: element.getBoundingClientRect().toJSON(),
-    rail: document.querySelector('nav[aria-label="Agents"]')?.getBoundingClientRect().toJSON(),
+    rail: document.querySelector('nav[aria-label="Automations"]')?.getBoundingClientRect().toJSON(),
   }));
   expect(editor).not.toBeNull();
   expect(rail).not.toBeNull();
   if (!(editor && rail)) {
-    throw new Error('Missing Agents panels');
+    throw new Error('Missing Automations panels');
   }
   expect(editor.y).toBeGreaterThanOrEqual(rail.y + rail.height - 1);
   expect(rail.width).toBeGreaterThan(0);
@@ -41,18 +41,18 @@ async function assertEditorBounds(page: Page) {
 
 function assertWidePanels(editor: { x: number } | null, rail: { x: number; width: number } | null) {
   if (!(editor && rail)) {
-    throw new Error('Missing Agents panels');
+    throw new Error('Missing Automations panels');
   }
   expect(editor.x).toBeGreaterThanOrEqual(rail.x + rail.width);
 }
 
-test('wide Agents geometry requires both panels', () => {
-  expect(() => assertWidePanels({ x: 100 }, null)).toThrow('Missing Agents panels');
-  expect(() => assertWidePanels(null, { x: 0, width: 100 })).toThrow('Missing Agents panels');
+test('wide Automations geometry requires both panels', () => {
+  expect(() => assertWidePanels({ x: 100 }, null)).toThrow('Missing Automations panels');
+  expect(() => assertWidePanels(null, { x: 0, width: 100 })).toThrow('Missing Automations panels');
 });
 
 for (const width of [768, 810, 1024, 1280]) {
-  test(`Agents use available content width with expanded sidebar at ${width}px`, async ({
+  test(`Automations use available content width with expanded sidebar at ${width}px`, async ({
     page,
   }) => {
     await page.setViewportSize({ width, height: 1000 });
@@ -74,18 +74,18 @@ for (const width of [768, 810, 1024, 1280]) {
       await page.mouse.up();
     }
 
-    await expect(page.getByRole('heading', { name: 'Agents', exact: true })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Automations', exact: true })).toBeVisible();
     await assertEditorBounds(page);
     await page.screenshot({
       path: test.info().outputPath(`detail-${width}.png`),
     });
-    await page.getByRole('button', { name: 'Edit agent', exact: true }).click();
+    await page.getByRole('button', { name: 'Edit automation', exact: true }).click();
     await assertEditorBounds(page);
     await page.getByRole('textbox', { name: 'Name', exact: true }).fill('Keep edit draft');
     await page.setViewportSize({ width: 1700, height: 1000 });
     const wideEditor = await page.locator('main').boundingBox();
     const wideRail = await page
-      .getByRole('navigation', { name: 'Agents', exact: true })
+      .getByRole('navigation', { name: 'Automations', exact: true })
       .boundingBox();
     assertWidePanels(wideEditor, wideRail);
     await expect(page.getByRole('textbox', { name: 'Name', exact: true })).toHaveValue(
@@ -94,8 +94,8 @@ for (const width of [768, 810, 1024, 1280]) {
     await page.setViewportSize({ width, height: 1000 });
     await assertEditorBounds(page);
     await page.getByRole('button', { name: 'Cancel', exact: true }).click();
-    await page.getByRole('button', { name: 'Create agent', exact: true }).click();
-    await page.getByRole('menuitem', { name: 'Scheduled agent', exact: true }).click();
+    await page.getByRole('button', { name: 'Create automation', exact: true }).click();
+    await page.getByRole('menuitem', { name: 'Scheduled automation', exact: true }).click();
     await assertEditorBounds(page);
     const name = page.getByRole('textbox', { name: 'Name', exact: true });
     const instructions = page.getByRole('textbox', { name: 'Instructions', exact: true });
@@ -133,13 +133,13 @@ for (const width of [768, 810, 1024, 1280]) {
       await page.mouse.move(handle.x + handle.width / 2 + 288, handle.y + handle.height / 2);
       await page.mouse.up();
     }
-    const rail = page.getByRole('navigation', { name: 'Agents', exact: true });
+    const rail = page.getByRole('navigation', { name: 'Automations', exact: true });
     await rail.locator('a[href$="event-agent?kind=event"]').click();
     await expect(
       page.getByRole('heading', { name: 'Investigate labeled issues', exact: true, level: 2 })
     ).toBeVisible();
     await expect(page.locator('main')).not.toContainText('Run history');
-    await page.getByRole('button', { name: 'Edit agent', exact: true }).click();
+    await page.getByRole('button', { name: 'Edit automation', exact: true }).click();
     await page.getByRole('textbox', { name: 'Name', exact: true }).fill('Retain event edit');
     await page.getByText('Event settings', { exact: true }).click();
     await assertEditorBounds(page);
@@ -153,7 +153,7 @@ for (const width of [768, 810, 1024, 1280]) {
     await assertEditorBounds(page);
     await page.screenshot({ path: test.info().outputPath(`event-edit-${width}.png`) });
     await rail.locator('a[href$="replacement-agent?kind=event"]').click();
-    await page.getByRole('button', { name: 'Edit agent', exact: true }).click();
+    await page.getByRole('button', { name: 'Edit automation', exact: true }).click();
     await page.getByRole('button', { name: 'Replace complete specification', exact: true }).click();
     const replacement = page.getByRole('textbox', {
       name: 'Full saved specification JSON',
@@ -170,25 +170,25 @@ for (const width of [768, 810, 1024, 1280]) {
 }
 
 for (const width of [320, 390, 1280]) {
-  test(`Agents creation menu makes kind explicit at ${width}px`, async ({ page }) => {
+  test(`Automations creation menu makes kind explicit at ${width}px`, async ({ page }) => {
     await page.setViewportSize({ width, height: 900 });
     await page.goto('/__mobile-baseline?surface=agents');
-    await page.getByRole('button', { name: 'Create agent', exact: true }).click();
+    await page.getByRole('button', { name: 'Create automation', exact: true }).click();
     await expect(
-      page.getByRole('menuitem', { name: 'Scheduled agent', exact: true })
+      page.getByRole('menuitem', { name: 'Scheduled automation', exact: true })
     ).toBeVisible();
-    await page.getByRole('menuitem', { name: 'Event agent', exact: true }).click();
+    await page.getByRole('menuitem', { name: 'Event-triggered automation', exact: true }).click();
     await expect(
-      page.getByRole('heading', { name: 'Create event agent', exact: true })
+      page.getByRole('heading', { name: 'Create event-triggered automation', exact: true })
     ).toBeVisible();
     await expect(page.locator('main')).toContainText('paused');
     await expect(page.locator('main')).toContainText('not yet available');
     const prompt = page.locator('main textarea');
     await expect(prompt).toHaveValue(/propose_agent/);
-    await prompt.fill('Propose my event agent');
+    await prompt.fill('Propose my event-triggered automation');
     await page.setViewportSize({ width: 1700, height: 900 });
     await page.setViewportSize({ width, height: 900 });
-    await expect(prompt).toHaveValue('Propose my event agent');
+    await expect(prompt).toHaveValue('Propose my event-triggered automation');
     await expect(page.getByRole('button', { name: 'Choose launch mode' })).toHaveCount(0);
     expect(
       await page.evaluate(() => document.documentElement.scrollWidth - innerWidth)
@@ -205,8 +205,8 @@ test('event authoring fixture launches a real-shaped workspace and navigates to 
 }) => {
   await page.setViewportSize({ width: 390, height: 900 });
   await page.goto('/__mobile-baseline?surface=agents');
-  await page.getByRole('button', { name: 'Create agent', exact: true }).click();
-  await page.getByRole('menuitem', { name: 'Event agent', exact: true }).click();
+  await page.getByRole('button', { name: 'Create automation', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Event-triggered automation', exact: true }).click();
   const launch = page.getByRole('button', { name: 'Launch', exact: true });
   await expect(launch).toBeEnabled();
   await launch.click();

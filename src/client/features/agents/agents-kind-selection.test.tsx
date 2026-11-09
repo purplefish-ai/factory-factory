@@ -174,7 +174,9 @@ it('keeps a loaded rail free of list-loading feedback while the selected event l
   await waitForReact(() =>
     expect(container.querySelector('nav')?.textContent).toContain('Scheduled review')
   );
-  expect(container.querySelector('main')?.textContent).toContain('Loading event agent…');
-  expect(container.querySelector('nav')?.textContent).not.toContain('Loading agents…');
+  expect(container.querySelector('main')?.textContent).toContain(
+    'Loading event-triggered automation…'
+  );
+  expect(container.querySelector('nav')?.textContent).not.toContain('Loading automations…');
   await act(() => detail.resolve());
 });

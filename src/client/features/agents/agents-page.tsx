@@ -51,14 +51,14 @@ function AgentRequestError({
   }
   return (
     <RequestError
-      label="Retry agent"
+      label="Retry automation"
       retry={() => {
         void task.refetch();
       }}
     >
       {task.error.data?.code === 'NOT_FOUND'
-        ? 'Agent not found. This agent is no longer available.'
-        : `Couldn't ${refresh ? 'refresh' : 'load'} agent: ${task.error.message}`}
+        ? 'Automation not found. This automation is no longer available.'
+        : `Couldn't ${refresh ? 'refresh' : 'load'} automation: ${task.error.message}`}
     </RequestError>
   );
 }
@@ -73,7 +73,7 @@ function AgentSelectionContent({
   if (controller.wrongOwner) {
     return (
       <p role="alert" className="text-sm text-destructive">
-        Agent not found in this project.
+        Automation not found in this project.
       </p>
     );
   }
@@ -86,7 +86,7 @@ function AgentSelectionContent({
     return (
       <>
         <div>
-          <h2 className="text-xl font-semibold">Create agent</h2>
+          <h2 className="text-xl font-semibold">Create automation</h2>
         </div>
         <AgentForm
           key={`create-${project.id}`}
@@ -98,10 +98,10 @@ function AgentSelectionContent({
   }
   if (!id && mode === 'detail') {
     if (controller.list.error || controller.events.error) {
-      return <p className="text-sm">Select an available agent or retry the failed list.</p>;
+      return <p className="text-sm">Select an available automation or retry the failed list.</p>;
     }
     if (controller.list.isLoading || controller.events.isLoading) {
-      return <Loading size="compact" message="Loading agents…" />;
+      return <Loading size="compact" message="Loading automations…" />;
     }
   }
   if (controller.kind === 'event') {
@@ -115,7 +115,7 @@ function ScheduledAgentSelection({ controller }: { controller: Controller }) {
   if (mode === 'edit' && task.data) {
     return (
       <>
-        <h2 className="text-xl font-semibold">Edit agent</h2>
+        <h2 className="text-xl font-semibold">Edit automation</h2>
         <AgentRequestError task={task} refresh />
         <AgentForm
           key={`edit-${project.id}:scheduled:${task.data.id}`}
@@ -130,7 +130,7 @@ function ScheduledAgentSelection({ controller }: { controller: Controller }) {
     return <AgentRequestError task={task} />;
   }
   if (id && task.isLoading) {
-    return <Loading size="compact" message="Loading agent…" />;
+    return <Loading size="compact" message="Loading automation…" />;
   }
   if (task.data && project) {
     return (
@@ -151,9 +151,9 @@ function ScheduledAgentSelection({ controller }: { controller: Controller }) {
   }
   return (
     <div className="py-12 text-center">
-      <h2 className="text-lg font-semibold">Give recurring work an agent</h2>
+      <h2 className="text-lg font-semibold">Automate recurring work</h2>
       <p className="mt-2 text-sm text-muted-foreground">
-        Create an agent with instructions and a schedule.
+        Create an automation with instructions and a schedule.
       </p>
     </div>
   );
@@ -195,7 +195,7 @@ function AgentsPageSession({
               disabled={controller.events.isFetchingNextPage}
               onClick={() => void controller.events.fetchNextPage()}
             >
-              Load more event agents
+              Load more event-triggered automations
             </Button>
           ) : undefined
         }
@@ -203,9 +203,9 @@ function AgentsPageSession({
         isLoading={list.isLoading || controller.events.isLoading}
         error={
           [
-            list.error ? `Couldn't load scheduled agents. ${list.error.message}` : '',
+            list.error ? `Couldn't load scheduled automations. ${list.error.message}` : '',
             controller.events.error
-              ? `Couldn't load event agents. ${controller.events.error.message}`
+              ? `Couldn't load event-triggered automations. ${controller.events.error.message}`
               : '',
           ]
             .filter(Boolean)
@@ -228,8 +228,8 @@ function AgentsPageSession({
             controller.setDeleteOpen(open);
           }
         }}
-        title="Delete agent?"
-        description={`The agent definition and run history will be permanently deleted. Generated workspaces and chats are kept. This cannot be undone.${actionError ? ` ${actionError}` : ''}`}
+        title="Delete automation?"
+        description={`The automation definition and run history will be permanently deleted. Generated workspaces and chats are kept. This cannot be undone.${actionError ? ` ${actionError}` : ''}`}
         confirmText="Delete"
         variant="destructive"
         onConfirm={controller.deleteAgent}
@@ -256,7 +256,7 @@ export function AgentsPage({
   if (!kind) {
     return (
       <p role="alert" className="p-6 text-sm">
-        Invalid agent kind. Use a single scheduled or event selection.
+        Invalid automation kind. Use a single scheduled or event selection.
       </p>
     );
   }

@@ -117,7 +117,7 @@ afterEach(async () => {
 });
 it('captures the authoring owner before updating and invalidates its saved caches after unmount', async () => {
   await render();
-  await waitForReact(() => expect(container.textContent).toContain('Agent created'));
+  await waitForReact(() => expect(container.textContent).toContain('Automation created'));
   const listKey = getQueryKey(trpc.agent.list, { projectId: 'owner-project' }, 'infinite');
   const detailKey = getQueryKey(
     trpc.agent.get,
@@ -133,7 +133,7 @@ it('captures the authoring owner before updating and invalidates its saved cache
   for (const key of [listKey, detailKey, summaryKey, foreign]) {
     client.setQueryData(key, {});
   }
-  await click('Edit agent');
+  await click('Edit automation');
   wait = new Promise<void>((done) => {
     finish = done;
   });
@@ -157,7 +157,7 @@ it('captures the authoring owner before updating and invalidates its saved cache
 });
 it('refreshes matching validated proposal cards after a saved edit without inventing workspace identities', async () => {
   await render();
-  await waitForReact(() => expect(container.textContent).toContain('Agent created'));
+  await waitForReact(() => expect(container.textContent).toContain('Automation created'));
   const unrelated = getQueryKey(
     trpc.agent.getProposal,
     { workspaceId: 'other', proposalId: 'other' },
@@ -186,8 +186,8 @@ it('refreshes matching validated proposal cards after a saved edit without inven
 it('shows an explicit owner load problem and never updates against sidebar selection', async () => {
   ownerFailure = true;
   await render();
-  await waitForReact(() => expect(container.textContent).toContain('Agent created'));
-  await click('Edit agent');
+  await waitForReact(() => expect(container.textContent).toContain('Automation created'));
+  await click('Edit automation');
   await act(() =>
     container
       .querySelector('form')

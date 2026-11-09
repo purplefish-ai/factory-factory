@@ -168,7 +168,7 @@ function workspaceDraftContext(projectId: string, purpose?: 'event-agent') {
   return {
     draftId: purpose ? `event-agent:${projectId}` : projectId,
     seedPrompt: purpose
-      ? 'Help me create an event agent for this project. Ask which event should trigger it and what it should do. Use list_agent_sources to discover available sources, then propose_agent to prepare a configuration for my review. Keep the definition and triggers paused; do not enable listening or automatic runs.'
+      ? 'Help me create an event-triggered automation for this project. Ask which event should trigger it and what it should do. Use list_agent_sources to discover available sources, then propose_agent to prepare a configuration for my review. Keep the definition and triggers paused; do not enable listening or automatic runs.'
       : '',
   };
 }
@@ -351,7 +351,7 @@ export function InlineWorkspaceForm({
   const createPeriodicTaskMutation = trpc.periodicTask.create.useMutation({
     onMutate: () => ({ submission: submitted.current }),
     onSuccess: (task, _input, context) => {
-      toast.success(`Agent "${task.name}" created`);
+      toast.success(`Automation "${task.name}" created`);
       runInBackground(
         invalidateAgentProjectQueries(utils, task.projectId),
         "Couldn't refresh data."
@@ -361,9 +361,9 @@ export function InlineWorkspaceForm({
     onError: (error, _input, context) => {
       const token = context?.submission ?? submitted.current;
       if (token) {
-        submission.fail(token, `Couldn't create agent. ${error.message}`);
+        submission.fail(token, `Couldn't create automation. ${error.message}`);
       }
-      toast.error(`Couldn't create agent. ${error.message}`);
+      toast.error(`Couldn't create automation. ${error.message}`);
     },
   });
 
@@ -400,7 +400,7 @@ export function InlineWorkspaceForm({
 
   const launchPeriodicTask = (trimmedPrompt: string) => {
     if (!trimmedPrompt) {
-      toast.error('Agent requires instructions.');
+      toast.error('Automation requires instructions.');
       return;
     }
     const token = submission.begin();

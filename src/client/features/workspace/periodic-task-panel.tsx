@@ -17,9 +17,9 @@ function agentReadError(
   refresh = false
 ): string {
   if (error.data?.code === 'NOT_FOUND') {
-    return 'Agent not found. Its existing workspaces remain available.';
+    return 'Automation not found. Its existing workspaces remain available.';
   }
-  return `Couldn't ${refresh ? 'refresh' : 'load'} agent. ${error.message}`;
+  return `Couldn't ${refresh ? 'refresh' : 'load'} automation. ${error.message}`;
 }
 
 function managementPath(slug: string | undefined, id?: string): string {
@@ -37,11 +37,11 @@ function ProjectLookupState({
   retry: () => void;
 }) {
   if (!error) {
-    return <Loading size="compact" message="Loading agent project…" />;
+    return <Loading size="compact" message="Loading automation project…" />;
   }
   return (
     <div role="alert" className="space-y-2 text-xs">
-      <p className="text-destructive">Couldn't load agent project. {error.message}</p>
+      <p className="text-destructive">Couldn't load automation project. {error.message}</p>
       <Button size="sm" variant="outline" onClick={retry}>
         Retry project
       </Button>
@@ -72,18 +72,18 @@ function MissingAgentState({
             {agentReadError(taskError)}
           </p>
           <Button size="sm" variant="outline" onClick={retryTask}>
-            Retry agent
+            Retry automation
           </Button>
           {ownerSlug || !hasKnownOwner ? (
             <Link to={managementPath(ownerSlug)} className="block text-primary underline">
-              Manage Agents
+              Manage automations
             </Link>
           ) : (
             <ProjectLookupState error={ownerError} retry={retryOwner} />
           )}
         </>
       ) : (
-        <Loading size="compact" message="Loading agent…" />
+        <Loading size="compact" message="Loading automation…" />
       )}
     </div>
   );
@@ -135,7 +135,7 @@ export function PeriodicTaskPanel({ periodicTaskId, projectId }: PeriodicTaskPan
           to={managementPath(project.data?.slug, periodicTaskId)}
           className="inline-block text-xs text-primary underline underline-offset-4"
         >
-          Manage Agent
+          Manage automation
         </Link>
         {task.error && (
           <div className="space-y-2">
@@ -143,7 +143,7 @@ export function PeriodicTaskPanel({ periodicTaskId, projectId }: PeriodicTaskPan
               {agentReadError(task.error, true)}
             </p>
             <Button size="sm" variant="outline" onClick={() => void task.refetch()}>
-              Retry agent
+              Retry automation
             </Button>
           </div>
         )}
@@ -160,7 +160,7 @@ export function PeriodicTaskPanel({ periodicTaskId, projectId }: PeriodicTaskPan
         {project.data ? (
           <AgentRunHistoryQuery periodicTaskId={periodicTaskId} projectSlug={project.data.slug} />
         ) : !project.error ? (
-          <Loading size="compact" message="Loading agent project…" />
+          <Loading size="compact" message="Loading automation project…" />
         ) : null}
       </div>
     </div>

@@ -278,7 +278,7 @@ function AgentNavigationBadge({
   if (!summary) {
     return null;
   }
-  const description = `${summary.totalCount} ${summary.totalCount === 1 ? 'agent' : 'agents'}${summary.failedCount > 0 ? `, ${summary.failedCount} with a failed last completed run` : ''}`;
+  const description = `${summary.totalCount} ${summary.totalCount === 1 ? 'automation' : 'automations'}${summary.failedCount > 0 ? `, ${summary.failedCount} with a failed last completed run` : ''}`;
   return (
     <>
       <Badge
@@ -369,7 +369,7 @@ function ProjectFooterLinks({
   return (
     [
       { section: 'workspaces', label: 'Board', Icon: KanbanIcon },
-      { section: 'agents', label: 'Agents', Icon: RobotIcon },
+      { section: 'agents', label: 'Automations', Icon: RobotIcon },
       { section: 'reviews', label: 'Reviews', Icon: GitPullRequestIcon },
     ] as const
   ).map(({ section, label, Icon }) => {

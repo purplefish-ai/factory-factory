@@ -6,16 +6,18 @@ export async function chooseAgentCreation(
   kind: 'scheduled' | 'event' = 'scheduled'
 ) {
   const trigger = [...scope.querySelectorAll('button')].find(
-    (button) => button.textContent === 'Create agent'
+    (button) => button.textContent === 'Create automation'
   );
   if (!trigger) {
-    throw new Error('Missing Create agent menu');
+    throw new Error('Missing Create automation menu');
   }
   actFlushSync(() =>
     trigger.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, button: 0 }))
   );
   const item = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find(
-    (element) => element.textContent === (kind === 'scheduled' ? 'Scheduled agent' : 'Event agent')
+    (element) =>
+      element.textContent ===
+      (kind === 'scheduled' ? 'Scheduled automation' : 'Event-triggered automation')
   );
   if (!item) {
     throw new Error(`Missing ${kind} creation choice`);

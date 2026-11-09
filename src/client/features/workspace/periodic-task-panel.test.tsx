@@ -105,7 +105,7 @@ it('links to Agent management and shared history using the agent owner, includin
   try {
     expect(
       view.container.querySelector('a[href="/projects/archived-owner/agents/agent-1"]')?.textContent
-    ).toContain('Manage Agent');
+    ).toContain('Manage automation');
     expect(mocks.projectInput).toHaveBeenCalledWith({ id: 'owner' });
     expect(mocks.historyInput).toHaveBeenCalledWith({ periodicTaskId: 'agent-1', limit: 50 });
     expect(view.container.textContent).toContain('Up to 50 recent runs');
@@ -128,9 +128,9 @@ it.each(['loading', 'NOT_FOUND', 'network'])('shows explicit %s agent state', as
   try {
     expect(view.container.textContent).toContain(
       state === 'loading'
-        ? 'Loading agent'
+        ? 'Loading automation'
         : state === 'NOT_FOUND'
-          ? 'Agent not found'
+          ? 'Automation not found'
           : 'Read failed'
     );
     if (state !== 'loading') {
@@ -138,7 +138,7 @@ it.each(['loading', 'NOT_FOUND', 'network'])('shows explicit %s agent state', as
         view.container.querySelector('a[href="/projects/archived-owner/agents"]')
       ).not.toBeNull();
       const retry = [...view.container.querySelectorAll('button')].find(
-        (button) => button.textContent === 'Retry agent'
+        (button) => button.textContent === 'Retry automation'
       );
       await act(() => retry?.click());
       expect(mocks.task.refetch).toHaveBeenCalledOnce();
@@ -171,10 +171,10 @@ it('retains cached agent details and allows retrying a failed definition refresh
   try {
     expect(view.container.textContent).toContain('Review changes');
     expect(view.container.textContent).toContain(
-      "Couldn't refresh agent. Definition refresh unavailable"
+      "Couldn't refresh automation. Definition refresh unavailable"
     );
     const retry = [...view.container.querySelectorAll('button')].find(
-      (button) => button.textContent === 'Retry agent'
+      (button) => button.textContent === 'Retry automation'
     );
     expect(retry).toBeDefined();
     await act(() => retry?.click());
@@ -192,12 +192,12 @@ it('uses friendly cached NOT_FOUND copy and preserves the definition retry actio
   const view = await render();
   try {
     expect(view.container.querySelector('[role="alert"]')?.textContent).toContain(
-      'Agent not found. Its existing workspaces remain available.'
+      'Automation not found. Its existing workspaces remain available.'
     );
     expect(view.container.textContent).not.toContain('Periodic task not found');
     await act(() =>
       [...view.container.querySelectorAll('button')]
-        .find((button) => button.textContent === 'Retry agent')
+        .find((button) => button.textContent === 'Retry automation')
         ?.click()
     );
     expect(mocks.task.refetch).toHaveBeenCalledOnce();
@@ -217,7 +217,7 @@ it.each(['loading', 'error'])(
     try {
       expect(view.container.querySelector('a[href="/agents"]')).toBeNull();
       expect(view.container.textContent).toContain(
-        state === 'error' ? 'Owner unavailable' : 'Loading agent project'
+        state === 'error' ? 'Owner unavailable' : 'Loading automation project'
       );
       if (state === 'error') {
         await act(() =>

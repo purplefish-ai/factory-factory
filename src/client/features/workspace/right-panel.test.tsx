@@ -377,7 +377,7 @@ describe('RightPanel Agents tab', () => {
     expect(localStorage.getItem('workspace-right-panel-tab-workspace-1')).toBe('periodic-task');
     // "Agent" alone read as the chat's coding agent; name the Agents-section concept.
     expect([...container.querySelectorAll('button')].map((button) => button.textContent)).toContain(
-      'Scheduled agent'
+      'Scheduled automation'
     );
   });
 
