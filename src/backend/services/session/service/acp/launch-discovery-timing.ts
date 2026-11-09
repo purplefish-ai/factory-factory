@@ -21,7 +21,6 @@ export async function timeLaunchDiscovery<T>(
       ...context,
       stage,
       durationMs: Date.now() - startedAt,
-      error,
     });
     throw error;
   }

@@ -17,11 +17,9 @@ const MAX_PENDING_DISCOVERIES = 8;
 const logger = createLogger('session-launch-options');
 type Discovery = { result: Promise<SessionLaunchOptions>; drained: Promise<void> };
 type PendingDiscovery = Discovery & { succeeded: boolean };
+type CachedOptions = { value: SessionLaunchOptions; capturedAt: number; refreshAfter: number };
 export class SessionLaunchOptionsService {
-  private readonly cache = new Map<
-    string,
-    { value: SessionLaunchOptions; capturedAt: number; refreshAfter: number }
-  >();
+  private readonly cache = new Map<string, CachedOptions>();
   private readonly pending = new Map<string, PendingDiscovery>();
   constructor(
     private readonly deps: {
@@ -80,12 +78,12 @@ export class SessionLaunchOptionsService {
         this.pending.size < MAX_PENDING_DISCOVERIES
       ) {
         cached.refreshAfter = Date.now() + REFRESH_RETRY_MS;
-        void this.discover(key, input).result.catch((error: unknown) => {
+        void this.discover(key, input).result.catch(() => {
           cached.refreshAfter = Date.now() + REFRESH_RETRY_MS;
-          logger.warn('Launch options background refresh failed; keeping cached options', {
-            ...input,
-            error,
-          });
+          if (!this.cache.has(key) && Date.now() - cached.capturedAt < CACHE_MAX_AGE_MS) {
+            this.cacheOptions(key, cached);
+          }
+          logger.warn('Launch options background refresh failed', { ...input });
         });
       }
       logger.debug('Launch options cache hit', { ...input, ageMs, stale: ageMs >= CACHE_FRESH_MS });
@@ -103,6 +101,16 @@ export class SessionLaunchOptionsService {
       pending = this.discover(key, input);
     }
     return structuredClone(await pending.result);
+  }
+  private cacheOptions(key: string, cached: CachedOptions): void {
+    this.cache.delete(key);
+    if (this.cache.size >= MAX_CACHE_ENTRIES) {
+      const oldest = this.cache.keys().next().value;
+      if (oldest !== undefined) {
+        this.cache.delete(oldest);
+      }
+    }
+    this.cache.set(key, cached);
   }
   private discover(key: string, input: Input): PendingDiscovery {
     const started = Promise.resolve().then(() => this.deps.fetchOptions(input));
@@ -123,14 +131,7 @@ export class SessionLaunchOptionsService {
       result: started
         .then((discovery) => discovery.result)
         .then((value) => {
-          this.cache.delete(key);
-          if (this.cache.size >= MAX_CACHE_ENTRIES) {
-            const oldest = this.cache.keys().next().value;
-            if (oldest !== undefined) {
-              this.cache.delete(oldest);
-            }
-          }
-          this.cache.set(key, {
+          this.cacheOptions(key, {
             value: structuredClone(value),
             capturedAt: Date.now(),
             refreshAfter: 0,

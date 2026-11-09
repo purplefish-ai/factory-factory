@@ -443,9 +443,12 @@ session configured with the selected provider/model; the provider-wide model
 catalog is not used as a thinking capability list. Discovery submits no prompt,
 rejects permission/tool callbacks, and closes its processes. Its endpoint
 requires the trusted-local boundary used for local execution. Successful native
-results are cached for 30 seconds per provider/model, with bounded cache and
-concurrent discovery counts. Failed discovery offers Retry; creation waits for
-confirmed options while model selection remains editable.
+results stay fresh for five minutes per provider/model/effective Codex account,
+then remain usable up to a 30-minute maximum age during a request-triggered
+background refresh. Failed refreshes retain a valid last success and retry after
+30 seconds. Cache size and concurrent discovery counts remain bounded. Cold or
+expired discovery failures offer Retry; creation waits for available options
+while model selection remains editable.
 
 Native discovery retains one of its eight admission slots until the disposable
 child emits `close`, including closure of its stdio pipes, and its ACP
@@ -453,9 +456,9 @@ connection is logically closed. Operation/session-close timeouts and TERM/KILL
 requests bound caller results but do not release that native lifetime. SDK
 logical closure alone does not prove child drain. A lifetime that never closes
 remains charged; retries share its bounded failure, or report discovery busy
-when its successful cache entry expires after 30 seconds or is evicted. The
-success timestamp is not refreshed while cleanup remains charged. This tracks
-the owned child and pipes, without claiming containment of every SDK
+when its successful cache entry reaches its 30-minute maximum age or is evicted.
+The success timestamp is not refreshed while cleanup remains charged. This
+tracks the owned child and pipes, without claiming containment of every SDK
 continuation or external descendant.
 
 Each launch draft snapshots its saved provider defaults and retains explicit
@@ -798,15 +801,17 @@ for up to 30 minutes while a request triggers one background refresh. Failed
 refreshes retain the last success and retry after a 30-second cooldown. Cache
 keys include the provider, requested model and effective Codex account; fresh
 saved effort defaults are applied to cloned results. Account validation still
-precedes cache access. Cold and expired entries await discovery, and process
-admission remains charged until both the native child and protocol pipes close.
-Cache refreshes respect the same admission limit and do not run on a timer.
+precedes cache access. Cold and expired entries await discovery when admission
+is available, or return a busy error when saturated. Process admission remains
+charged until both the native child and protocol pipes close. Cache refreshes
+respect the same admission limit and do not run on a timer.
 
 The `session-launch-options` logger records stage durations for settings,
 account resolution, options lookup and the overall request. Native probes also
 record initialization, session creation, model selection and cleanup durations,
 including failures, so slow account checks can be distinguished from adapter
-startup.
+startup. Timing and background-refresh warnings omit raw provider errors and
+subprocess diagnostics; the original failure still propagates to the caller.
 
 Session creation persists `AgentSession.codexAccountId`. All human, child,
 periodic, reviewer and dedicated-PR creation goes through the same session-data

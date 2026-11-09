@@ -3,6 +3,9 @@ import { createDeferred } from '@/backend/services/session/service/acp/acp-runti
 import type { SessionLaunchOptions } from '@/shared/session-launch';
 import { SessionLaunchOptionsService } from './session-launch-options.service';
 
+const logs = vi.hoisted(() => ({ info: vi.fn(), warn: vi.fn(), debug: vi.fn() }));
+vi.mock('@/backend/services/logger.service', () => ({ createLogger: () => logs }));
+
 const input = { provider: 'CLAUDE' as const, model: 'opus' };
 const value: SessionLaunchOptions = {
   provider: 'CLAUDE',
@@ -29,7 +32,7 @@ describe('launch discovery cache refresh', () => {
   it('reuses successful options beyond the old 30-second expiry', async () => {
     const f = fixture();
     await f.service.getOptions(input);
-    await vi.advanceTimersByTimeAsync(30_001);
+    await vi.advanceTimersByTimeAsync(5 * 60_000 - 1);
     expect(await f.service.getOptions(input)).toEqual(value);
     expect(f.fetchOptions).toHaveBeenCalledTimes(1);
   });
@@ -57,11 +60,12 @@ describe('launch discovery cache refresh', () => {
     const f = fixture();
     await f.service.getOptions(input);
     await vi.advanceTimersByTimeAsync(5 * 60_000);
-    f.fetchOptions.mockRejectedValueOnce(new Error('provider timed out'));
+    f.fetchOptions.mockRejectedValueOnce(new Error('provider diagnostic containing a secret'));
     expect(await f.service.getOptions(input)).toEqual(value);
     await vi.advanceTimersByTimeAsync(0);
     expect(await f.service.getOptions(input)).toEqual(value);
     expect(f.fetchOptions).toHaveBeenCalledTimes(2);
+    expect(logs.warn).toHaveBeenCalledWith('Launch options background refresh failed', input);
     await vi.advanceTimersByTimeAsync(30_000);
     expect(await f.service.getOptions(input)).toEqual(value);
     await vi.advanceTimersByTimeAsync(0);
@@ -78,6 +82,44 @@ describe('launch discovery cache refresh', () => {
     f.fetchOptions.mockRejectedValueOnce(new Error('fresh discovery failed'));
     await expect(f.service.getOptions(input)).rejects.toThrow('fresh discovery failed');
   });
+
+  it.each([false, true])(
+    'restores an evicted fallback only within its maximum age (expired=%s)',
+    async (expired) => {
+      const f = fixture();
+      await f.service.getOptions(input);
+      await vi.advanceTimersByTimeAsync(5 * 60_000);
+      const refresh = createDeferred<SessionLaunchOptions>();
+      f.fetchOptions.mockResolvedValueOnce({
+        result: refresh.promise,
+        drained: refresh.promise.then(
+          () => undefined,
+          () => undefined
+        ),
+      });
+      await f.service.getOptions(input);
+      // The 33rd cached key evicts this key while its refresh is still pending.
+      for (let i = 0; i < 32; i++) {
+        await f.service.getOptions({ ...input, model: `other-${i}` });
+      }
+      if (expired) {
+        await vi.advanceTimersByTimeAsync(25 * 60_000);
+      }
+      refresh.reject(new Error('refresh failed after eviction'));
+      await vi.advanceTimersByTimeAsync(0);
+      f.fetchOptions.mockRejectedValueOnce(new Error('new discovery failed'));
+      if (expired) {
+        await expect(f.service.getOptions(input)).rejects.toThrow('new discovery failed');
+      } else {
+        expect(await f.service.getOptions(input)).toEqual(value);
+        expect(f.fetchOptions).toHaveBeenCalledTimes(34);
+        // Restoring a fallback must still respect the 32-entry cache bound.
+        await expect(f.service.getOptions({ ...input, model: 'other-0' })).rejects.toThrow(
+          'new discovery failed'
+        );
+      }
+    }
+  );
 
   it('serves stale options while a successful probe still owns its process slot', async () => {
     const f = fixture();

@@ -26,7 +26,9 @@ it('records successful stage latency without changing its result', async () => {
 it('records failed stage latency and preserves the original failure', async () => {
   vi.useFakeTimers();
   vi.setSystemTime(0);
-  const error = new Error('provider timed out');
+  const error = new Error('provider diagnostic containing a secret', {
+    cause: { credential: 'secret' },
+  });
   await expect(
     timeLaunchDiscovery('session creation', { provider: 'CLAUDE' }, () => {
       vi.setSystemTime(30_000);
@@ -37,6 +39,5 @@ it('records failed stage latency and preserves the original failure', async () =
     provider: 'CLAUDE',
     stage: 'session creation',
     durationMs: 30_000,
-    error,
   });
 });
