@@ -526,7 +526,7 @@ only needs the head commit to read surrounding code.
 | -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `checked_out`  | Same repo, the worktree branch equals the PR's head branch, and the PR head commit is in the worktree HEAD                                                                            | The checkout is the PR. The reviewer reads the working tree only when HEAD is exactly the PR head and there are no staged, unstaged or untracked changes, and is told to switch to `git show` if that stops being true mid-review. With unpushed commits or uncommitted changes, the prompt says so, tells the reviewer to review as of the PR head with `git show`, and notes that local checks include those differences. Requiring the PR head commit rules out fork PRs that share the branch name and stale local branches.                                         |
 | `fetched_head` | Same repo, otherwise                                                                                                                                                                  | Before the turn, the orchestrator runs `git fetch --no-tags --no-write-fetch-head origin +refs/pull/<n>/head:refs/factory-factory/review/<prId>` in the worktree and checks that the PR head commit is now present. `refs/pull/<n>/head` also works for PRs from forks. The prompt says the working tree is **not this PR**, tells the reviewer to read the PR's files with `git show`, `git ls-tree` and `git grep` at the head SHA instead of from disk, treats the diff below as authoritative for what changed, and says not to run checks against the working tree. |
-| `diff_only`    | The worktree has no GitHub `origin`, its `origin` is not the PR's repository, Git can't inspect the worktree, the fetch fails, or the PR head commit is not available after the fetch | No usable checkout. The prompt says why, and the review is based on the diff, the PR description, and read-only `gh` commands. The summary must say that context was limited.                                                                                                                                                                                                                                                                                                                                                                                            |
+| `diff_only`    | The worktree has no GitHub `origin`, its `origin` is not the PR's repository, Git can't inspect the worktree, the fetch fails, or the PR head commit is not available after the fetch | No usable checkout. The prompt says why, and the review is based on the diff and the PR description. It does not suggest `gh`, because Codex's read-only sandbox has no network access and a denied escalation request ends the turn with no findings. The summary must say that context was limited.                                                                                                                                                                                                                                                                    |
 
 Notes:
 
@@ -537,12 +537,13 @@ Notes:
   with the child agent's own fetches. The ref is deleted in the turn's
   `finally`. Because each child runs one review at a time (section 3), two
   reviewers never fetch into the same worktree at once.
-- **Fetch failures fall back to `diff_only`.** If the fetch fails (auth,
-  network) or the head SHA the diff was read at is not available afterwards, the
-  review drops to `diff_only` and the completion mail says so. It does not fail
-  the review. A head commit that is still available is reviewed even if the PR
-  has moved on since (for example after a force-push), because the diff and
-  comment anchors describe that exact commit.
+- **Fetch failures fall back to `diff_only` only if the commit is missing.** A
+  failed fetch (auth, network) doesn't matter when the head SHA is already
+  available locally. If it isn't, the review drops to `diff_only` and the
+  completion mail says so. It does not fail the review.
+- **The diff and head SHA describe the same commit.** The diff is read between
+  two head lookups and retried up to three times if a push lands in between. If
+  the head never settles, the turn fails without running the reviewer.
 - **One status snapshot.** Branch, HEAD and local changes come from a single
   `git --no-optional-locks status --porcelain=v2 --branch` call (which also
   leaves the index and `index.lock` alone), so a concurrent branch switch can't

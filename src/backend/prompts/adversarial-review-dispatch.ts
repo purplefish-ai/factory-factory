@@ -162,7 +162,7 @@ function renderCheckoutContext(context: ReviewCheckoutContext): string {
     case 'diff_only':
       return [
         `**No checkout of this PR is available.** The repository in this session ${DIFF_ONLY_REASONS[context.reason]}, so do not use its files as context for this PR, and do not run its tests, typecheck or lint.`,
-        `Base your review on the diff, the description, and read-only \`gh\` commands (for example \`gh pr view\`, or \`gh api\` contents requests with \`ref=${context.headSha}\`).`,
+        'Base your review on the diff and the description above; network access may be unavailable in this session.',
         'Say in `summary` that file context was limited to the diff.',
       ].join(' ');
   }

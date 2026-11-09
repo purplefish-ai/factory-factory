@@ -112,11 +112,14 @@ private `refs/factory-factory/review/<prId>` ref, without touching the working
 tree, index, branches or `FETCH_HEAD`. The reviewer reads the PR head with
 `git show` and is told not to run checks against the working tree. The ref is
 deleted when the turn ends. A worktree Git can't inspect, a worktree without a
-GitHub `origin`, a PR from another repository, a failed fetch, or a head commit
-that is not available after the fetch falls back to a diff-only review that says
-its file context was limited. A head commit that is still available is reviewed
-even if the PR has since moved, because the diff and comment anchors describe
-that commit. Repository files, including `AGENTS.md`, are presented to the
+GitHub `origin`, a PR from another repository, or a head commit that can't be
+fetched or found locally falls back to a diff-only review, based on the diff and
+description, that says its file context was limited. The diff is read between
+two head lookups and retried if a push lands in between, so the diff, the commit
+the reviewer reads and the comment anchors all describe the same commit. Review
+sessions cannot gain permissions: a denied request can end the turn with no
+findings, so the prompt tells the reviewer never to ask and to report what it
+couldn't check. Repository files, including `AGENTS.md`, are presented to the
 reviewer as data that cannot override its instructions
 (`src/backend/orchestration/adversarial-review-checkout-context.ts`).
 

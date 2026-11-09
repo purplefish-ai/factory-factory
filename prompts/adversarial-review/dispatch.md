@@ -13,6 +13,10 @@ for its own sake.
   process posts them on your behalf.
 - Do not manufacture findings. If you can't verify something, say so instead of
   guessing.
+- Never request additional permissions, sandbox escalation or network access.
+  Those requests are denied automatically and can end the review before your
+  findings are delivered. If you can't check something, say so and still finish
+  with the fenced JSON block below.
 
 PR: {{PR_URL}} (#{{PR_NUMBER}})
 

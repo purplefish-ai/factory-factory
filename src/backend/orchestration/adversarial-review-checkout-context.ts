@@ -70,6 +70,14 @@ export async function prepareReviewCheckout(
     };
   }
 
+  // A failed status leaves branch and HEAD unknown; don't guess what's checked out.
+  if (identity.hasLocalChanges === null) {
+    return {
+      context: { kind: 'diff_only', headSha, reason: 'git_unavailable' },
+      cleanup: noCleanup,
+    };
+  }
+
   const origin = identity.origin;
   if (!origin) {
     return {
@@ -96,8 +104,7 @@ export async function prepareReviewCheckout(
         kind: 'checked_out',
         headSha,
         localHeadSha: identity.headSha,
-        // Unknown counts as changed: then the reviewer reads the PR head via git.
-        hasLocalChanges: identity.hasLocalChanges ?? true,
+        hasLocalChanges: identity.hasLocalChanges,
       },
       cleanup: noCleanup,
     };
@@ -113,18 +120,17 @@ export async function prepareReviewCheckout(
       });
     });
   };
-  try {
-    await git.fetchPullRequestHead(worktreePath, prNumber, ref);
-    // The PR may have moved on since its diff was read; the reviewer must read
-    // the same commit the diff and comment anchors describe.
-    if (!(await git.hasCommit(worktreePath, headSha))) {
-      throw new Error(`PR head ${headSha} is not available after fetching`);
-    }
-  } catch (error) {
+  let failure: string | null = null;
+  await git.fetchPullRequestHead(worktreePath, prNumber, ref).catch((error) => {
+    failure = toError(error).message;
+  });
+  // The reviewer must read the commit the diff and comment anchors describe. If
+  // it's already here, a failed fetch doesn't matter.
+  if (!(await git.hasCommit(worktreePath, headSha).catch(() => false))) {
     logger.warn('Falling back to a diff-only adversarial review', {
       worktreePath,
       prNumber,
-      error: toError(error).message,
+      error: failure ?? `PR head ${headSha} is not available after fetching`,
     });
     return { context: { kind: 'diff_only', headSha, reason: 'fetch_failed' }, cleanup };
   }

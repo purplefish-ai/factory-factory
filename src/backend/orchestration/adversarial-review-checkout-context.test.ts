@@ -87,28 +87,28 @@ describe('prepareReviewCheckout', () => {
     expect(git.isAncestorCommit).toHaveBeenCalledWith('/tmp/worktree', HEAD_SHA, LOCAL_SHA);
   });
 
-  it.each([
-    ['has uncommitted changes', true, true],
-    ['status is unknown', null, true],
-  ])('reports local changes when the checked-out PR branch %s', async (_name, dirty, expected) => {
-    const git = createGit({
-      getCheckoutIdentity: vi.fn().mockResolvedValue({
-        branch: 'feature/x',
+  it.each([['has uncommitted changes', true, true]])(
+    'reports local changes when the checked-out PR branch %s',
+    async (_name, dirty, expected) => {
+      const git = createGit({
+        getCheckoutIdentity: vi.fn().mockResolvedValue({
+          branch: 'feature/x',
+          headSha: HEAD_SHA,
+          hasLocalChanges: dirty,
+          origin: { owner: 'example', repo: 'repo' },
+        }),
+      });
+
+      const { context } = await prepareReviewCheckout(INPUT, git);
+
+      expect(context).toEqual({
+        kind: 'checked_out',
         headSha: HEAD_SHA,
-        hasLocalChanges: dirty,
-        origin: { owner: 'example', repo: 'repo' },
-      }),
-    });
-
-    const { context } = await prepareReviewCheckout(INPUT, git);
-
-    expect(context).toEqual({
-      kind: 'checked_out',
-      headSha: HEAD_SHA,
-      localHeadSha: HEAD_SHA,
-      hasLocalChanges: expected,
-    });
-  });
+        localHeadSha: HEAD_SHA,
+        hasLocalChanges: expected,
+      });
+    }
+  );
 
   it.each([
     ['another branch is checked out', { branch: 'main' }, true],
@@ -190,6 +190,7 @@ describe('prepareReviewCheckout', () => {
         origin: { owner: 'example', repo: 'repo' },
       }),
       fetchPullRequestHead: vi.fn().mockRejectedValue(new Error('authentication failed')),
+      hasCommit: vi.fn().mockResolvedValue(false),
     });
 
     const { context, cleanup } = await prepareReviewCheckout(INPUT, git);
@@ -201,6 +202,40 @@ describe('prepareReviewCheckout', () => {
       'Falling back to a diff-only adversarial review',
       expect.objectContaining({ error: 'authentication failed' })
     );
+  });
+
+  it('still reads the PR head when the fetch fails but the commit is already local', async () => {
+    const git = createGit({
+      getCheckoutIdentity: vi.fn().mockResolvedValue({
+        branch: 'main',
+        headSha: LOCAL_SHA,
+        hasLocalChanges: false,
+        origin: { owner: 'example', repo: 'repo' },
+      }),
+      fetchPullRequestHead: vi.fn().mockRejectedValue(new Error('network unreachable')),
+    });
+
+    const { context, cleanup } = await prepareReviewCheckout(INPUT, git);
+    await cleanup();
+
+    expect(context).toEqual({ kind: 'fetched_head', headSha: HEAD_SHA, worktreeBranch: 'main' });
+    expect(git.deletePrivateRef).toHaveBeenCalled();
+  });
+
+  it('does not guess the checkout when git status fails', async () => {
+    const git = createGit({
+      getCheckoutIdentity: vi.fn().mockResolvedValue({
+        branch: null,
+        headSha: null,
+        hasLocalChanges: null,
+        origin: { owner: 'example', repo: 'repo' },
+      }),
+    });
+
+    const { context } = await prepareReviewCheckout(INPUT, git);
+
+    expect(context).toEqual({ kind: 'diff_only', headSha: HEAD_SHA, reason: 'git_unavailable' });
+    expect(git.fetchPullRequestHead).not.toHaveBeenCalled();
   });
 
   it('falls back to the diff when the PR moved on after its diff was read', async () => {

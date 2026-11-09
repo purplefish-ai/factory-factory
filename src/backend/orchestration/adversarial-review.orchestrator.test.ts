@@ -265,6 +265,64 @@ describe('triggerAdversarialReview', () => {
       vi.mocked(sessionLifecycleService.stopSession).mock.invocationCallOrder[0] ?? 0
     );
   });
+
+  describe('PR snapshot', () => {
+    const NEXT_SHA = 'c'.repeat(40);
+
+    function mockStartedReview() {
+      mockOpenPrWorkspace();
+      vi.mocked(sessionDataService.createAgentSessionWithinWorkspaceLimit).mockResolvedValue({
+        outcome: 'created',
+        session: { id: 'new-session' },
+      } as never);
+      vi.mocked(sessionService.sendSessionMessage).mockResolvedValue(undefined as never);
+      vi.mocked(sessionDomainService.getTranscriptSnapshot).mockReturnValue([]);
+      vi.mocked(gitOpsService.getCheckoutIdentity).mockResolvedValue({
+        branch: null,
+        headSha: null,
+        hasLocalChanges: null,
+        origin: null,
+      });
+    }
+
+    it('re-reads the diff when a push lands while it is being read', async () => {
+      mockStartedReview();
+      vi.mocked(gitOpsService.getCheckoutIdentity).mockResolvedValue({
+        branch: 'main',
+        headSha: 'b'.repeat(40),
+        hasLocalChanges: false,
+        origin: { owner: 'example', repo: 'repo' },
+      });
+      vi.mocked(gitOpsService.fetchPullRequestHead).mockResolvedValue(undefined);
+      vi.mocked(gitOpsService.hasCommit).mockResolvedValue(true);
+      vi.mocked(gitOpsService.deletePrivateRef).mockResolvedValue(undefined);
+      vi.mocked(getPRHeadCommitSha)
+        .mockReset()
+        .mockResolvedValueOnce(HEAD_SHA)
+        .mockResolvedValueOnce(NEXT_SHA)
+        .mockResolvedValue(NEXT_SHA);
+
+      await triggerAdversarialReview(WORKSPACE_ID);
+      await vi.waitFor(() => expect(sessionLifecycleService.stopSession).toHaveBeenCalled());
+
+      expect(githubCLIService.getPRDiff).toHaveBeenCalledTimes(2);
+      expect(vi.mocked(sessionService.sendSessionMessage).mock.calls[0]?.[1]).toContain(NEXT_SHA);
+    });
+
+    it('does not start the review turn when the head never settles', async () => {
+      mockStartedReview();
+      let sha = 0;
+      vi.mocked(getPRHeadCommitSha)
+        .mockReset()
+        .mockImplementation(() => Promise.resolve(String(++sha).padStart(40, '0')));
+
+      await triggerAdversarialReview(WORKSPACE_ID);
+      await vi.waitFor(() => expect(sessionLifecycleService.stopSession).toHaveBeenCalled());
+
+      expect(githubCLIService.getPRDiff).toHaveBeenCalledTimes(3);
+      expect(sessionService.sendSessionMessage).not.toHaveBeenCalled();
+    });
+  });
 });
 
 describe('summarizeExistingActivity', () => {
