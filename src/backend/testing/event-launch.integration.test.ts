@@ -135,10 +135,10 @@ it.each([false, true])(
     await task;
     expect(await h.read()).toMatchObject({
       state: 'FINISHED',
-      execution: { ...h.execution, accessMode: 'default' },
+      execution: { ...h.execution, accessMode: 'auto' },
     });
     expect(provider.handle.configOptions.find((option) => option.id === 'mode')?.currentValue).toBe(
-      'default'
+      'auto'
     );
     expect(await db.prisma.agentRun.findUnique({ where: { id: h.claim.runId } })).toMatchObject({
       status: 'RUNNING',

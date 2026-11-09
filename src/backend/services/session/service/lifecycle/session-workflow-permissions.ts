@@ -6,13 +6,14 @@ export function isUnattendedWorkflow(workflow: string): boolean {
 
 export function getWorkflowPermissionPreset(
   workflow: string,
-  provider: SessionProvider,
+  _provider: SessionProvider,
   settings: {
     defaultWorkspacePermissions: SessionPermissionPreset;
+    automationPermissions?: SessionPermissionPreset;
   } = { defaultWorkspacePermissions: 'STRICT' }
 ): SessionPermissionPreset {
-  if (workflow === 'periodic-task' && provider === 'CODEX') {
-    return 'YOLO';
+  if (isUnattendedWorkflow(workflow)) {
+    return settings.automationPermissions ?? 'RELAXED';
   }
   return settings.defaultWorkspacePermissions;
 }
