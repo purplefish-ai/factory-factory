@@ -276,13 +276,12 @@ describe('SessionLifecycleGate stop fence', () => {
     expect(gate.hasStopSince('other-session', beforeStop)).toBe(false);
   });
 
-  it('forgets the stop fence of a deleted session', () => {
+  it('keeps fencing a pre-stop generation after the stop is released', () => {
     const gate = new SessionLifecycleGate({ isRuntimeStopInProgress: () => false });
     const captured = gate.getGeneration('session-1');
     gate.reserveStop('session-1')?.release();
 
-    gate.forgetSession('session-1');
-
-    expect(gate.hasStopSince('session-1', captured)).toBe(false);
+    expect(gate.isSessionStopping('session-1')).toBe(false);
+    expect(gate.hasStopSince('session-1', captured)).toBe(true);
   });
 });

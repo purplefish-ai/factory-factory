@@ -20,7 +20,12 @@ export class SessionLifecycleGate {
   private readonly shutdownSessions = new Set<string>();
   private stopGenerationCounter = 0;
   private readonly stopGenerations = new Map<string, number>();
-  /** Generation assigned by the latest stop or shutdown reservation per session. */
+  /**
+   * Generation assigned by the latest stop or shutdown reservation per session.
+   * Retained for the process lifetime (one number per stopped session): a stop
+   * can delete its session before releasing the reservation, so dropping this
+   * on deletion would un-fence dispatches still awaiting async work.
+   */
   private readonly lastStopGenerations = new Map<string, number>();
   private readonly startupGenerationReferences = new Map<number, StartupGenerationReferences>();
   private readonly establishedGenerations = new Set<number>();
@@ -127,11 +132,6 @@ export class SessionLifecycleGate {
   hasStopSince(sessionId: string, generation: number): boolean {
     const lastStop = this.lastStopGenerations.get(sessionId);
     return lastStop !== undefined && lastStop >= generation;
-  }
-
-  /** Drops retained generation state for a deleted session. */
-  forgetSession(sessionId: string): void {
-    this.lastStopGenerations.delete(sessionId);
   }
 
   private releaseStartupLease(lease: SessionStartupLease): void {

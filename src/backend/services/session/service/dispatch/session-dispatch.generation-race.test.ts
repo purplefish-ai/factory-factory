@@ -104,11 +104,11 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-// Candidate race from the session-runtime review: dispatch captures the lifecycle
-// generation, and an unrelated startup lease that ends without establishing a
-// runtime (for example ensureSubagentBrowseSession returning false for a
-// non-Codex session) deletes that generation. Dispatch then reads "not current",
-// returns with the message still queued, and schedules no retry.
+// Race: dispatch captures the lifecycle generation, and an unrelated startup
+// lease that ends without establishing a runtime (for example
+// ensureSubagentBrowseSession returning false for a non-Codex session) deletes
+// that generation. Dispatch must not read that as a stop: it would return with
+// the message still queued and schedule no retry.
 it.each([
   ['returns without establishing', () => Promise.resolve(false)],
   ['fails before establishing', () => Promise.reject(new Error('spawn failed'))],

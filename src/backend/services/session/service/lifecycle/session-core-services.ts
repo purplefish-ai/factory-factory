@@ -132,9 +132,6 @@ export type SessionPromptService = Pick<
 export const sessionLifecycleGate = new SessionLifecycleGate({
   isRuntimeStopInProgress: (sessionId) => acpRuntimeManager.isStopInProgress(sessionId),
 });
-sessionScope.register('lifecycle-gate', {
-  forget: (id) => sessionLifecycleGate.forgetSession(id),
-});
 export const eventOwnedWork = new EventOwnedWork(
   acpRuntimeManager,
   sessionLifecycleGate,

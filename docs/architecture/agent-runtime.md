@@ -1192,7 +1192,7 @@ public operations and the session composition root wires the owners.
 
 Per-session work captures a token and re-checks it after each await. Pick the
 narrowest fence that matches what the work must yield to. Paths are relative to
-`src/backend/services/session/service/`.
+`src/backend/services/session/service/` unless they start with `src/`.
 
 | Fence                                                         | Owner                                                            | Fences                                                                                                  |
 | ------------------------------------------------------------- | ---------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
@@ -1224,8 +1224,8 @@ returning `false` for a session without native sub-agent browsing) deletes the
 lifecycle generation. A dispatch that captured it would otherwise return with
 its message still queued and no retry. The supervisor keeps its own stop
 generation: it also advances for runtime stops that never reserve through the
-gate (failed-startup cleanup, browse-only teardown, observed and targeted
-stops), and ACP internals cannot import the lifecycle gate.
+gate (failed-startup cleanup, observed and targeted stops), and ACP internals
+cannot import the lifecycle gate.
 
 ## Task lists
 
