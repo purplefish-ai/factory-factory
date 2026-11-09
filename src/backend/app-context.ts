@@ -289,9 +289,17 @@ export type Application = {
   readonly config: AppConfig;
 };
 
-const defaultRunScriptService = createRunScriptService({
-  registerShutdownHandlers: true,
-});
+let processRunScriptService: RunScriptService | null = null;
+
+/**
+ * The run-script service registers process signal and exit handlers, so a
+ * process has one, shared by every graph it composes. It is created on first
+ * composition rather than when this module is imported.
+ */
+function getProcessRunScriptService(): RunScriptService {
+  processRunScriptService ??= createRunScriptService({ registerShutdownHandlers: true });
+  return processRunScriptService;
+}
 
 export function createDefaultApplicationDependencies(): ApplicationDependencies {
   let eventCollector: EventCollectorOrchestrator | null = null;
@@ -437,7 +445,7 @@ export function createDefaultApplicationDependencies(): ApplicationDependencies 
     recoverStaleProvisioningWorkspace,
     runScriptConfigPersistenceService,
     reconciliationService,
-    runScriptService: defaultRunScriptService,
+    runScriptService: getProcessRunScriptService(),
     runScriptStateMachine,
     schedulerService,
     serverInstanceService,

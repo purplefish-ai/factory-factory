@@ -50,7 +50,7 @@ it.each(['policy', 'unavailable'] as const)(
     dispatcher.configureLifecycle({
       gate: {
         getGeneration: () => 1,
-        isGenerationCurrent: () => true,
+        hasStopSince: () => false,
         isSessionStopping: () => false,
       },
       startup: { getSessionClient: () => undefined, getOrCreateSessionClient: start },
