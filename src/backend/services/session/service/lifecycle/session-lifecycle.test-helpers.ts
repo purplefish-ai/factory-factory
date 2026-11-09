@@ -154,7 +154,7 @@ export type LifecycleHarness = {
   notificationService: MockedPick<SessionPermissionService, 'cancelPendingRequests'>;
   workspaceBridge: MockedPick<
     SessionLifecycleWorkspaceBridge,
-    'markSessionRunning' | 'markSessionIdle' | 'recordRatchetSessionEnd' | 'resetPRDiscoveryBackoff'
+    'markSessionRunning' | 'markSessionIdle' | 'resetPRDiscoveryBackoff'
   >;
   messageQueueBridge: MockedPick<SessionLifecycleMessageQueueBridge, 'tryDispatchNextMessage'>;
   session: AgentSessionRecord;
@@ -748,7 +748,6 @@ export function createLifecycleHarness(
   const workspaceBridge = {
     markSessionRunning: vi.fn(() => 0),
     markSessionIdle: vi.fn(),
-    recordRatchetSessionEnd: vi.fn(async () => undefined),
     resetPRDiscoveryBackoff: vi.fn(async () => true),
   } satisfies SessionLifecycleWorkspaceBridge;
   const messageQueueBridge = {
