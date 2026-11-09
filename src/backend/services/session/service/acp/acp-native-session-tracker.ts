@@ -27,6 +27,12 @@ const spawnedSchema = z.object({
   prompt: z.string().optional(),
   capabilities: z.object({ cancel: z.record(z.string(), z.unknown()).nullish() }).optional(),
 });
+const modelOptionSchema = z.object({
+  id: z.string(),
+  category: z.string().optional(),
+  type: z.literal('select'),
+  currentValue: z.string().trim().min(1),
+});
 const stateSchema = z.object({
   subagentSessionId: z.string().min(1),
   state: z.enum(['completed', 'failed', 'cancelled', 'disconnected']),
@@ -274,6 +280,7 @@ export class AcpNativeSessionTracker {
     }
     const child = this.children.get(this.childId(sessionId));
     if (child?.activeSessionId === sessionId) {
+      this.trackModel(child, update);
       this.trackGoal(child.summary.id, update);
       this.append(child, update);
     }
@@ -318,6 +325,24 @@ export class AcpNativeSessionTracker {
         this.trackTask(sessionId, update);
     }
     return true;
+  }
+
+  private trackModel(child: ChildSession, update: Record<string, unknown>): void {
+    if (update.sessionUpdate !== 'config_option_update' || !Array.isArray(update.configOptions)) {
+      return;
+    }
+    for (const option of update.configOptions) {
+      const parsed = modelOptionSchema.safeParse(option);
+      if (!parsed.success || (parsed.data.category !== 'model' && parsed.data.id !== 'model')) {
+        continue;
+      }
+      if (child.summary.model !== parsed.data.currentValue) {
+        child.summary.model = parsed.data.currentValue;
+        child.summary.updatedAt = this.observationTimestamp();
+        this.changed(child.summary.id, 'updated');
+      }
+      return;
+    }
   }
 
   private trackGoal(sessionId: string, update: Record<string, unknown>): void {
@@ -459,6 +484,7 @@ export class AcpNativeSessionTracker {
     child.startNewTurn = true;
     child.previousUserChunk = undefined;
     child.pendingPrompt = false;
+    child.summary.model = undefined;
     child.summary.status = 'running';
     child.summary.generation = generation;
     child.summary.completedAt = null;

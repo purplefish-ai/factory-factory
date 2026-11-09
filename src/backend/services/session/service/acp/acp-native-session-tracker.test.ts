@@ -37,6 +37,36 @@ function text(
 }
 
 describe('AcpNativeSessionTracker', () => {
+  it('reports only the active child generation model and not parent configuration', () => {
+    const onSubagentsChanged = vi.fn();
+    const tracker = new AcpNativeSessionTracker({
+      groupCodexGenerations: true,
+      onSubagentsChanged,
+    });
+    tracker.setRootSessionId('root');
+    spawn(tracker, 'root', 'child:generation:1');
+    const configuration = (model: unknown) => ({
+      sessionUpdate: 'config_option_update',
+      configOptions: [{ id: 'model', category: 'model', type: 'select', currentValue: model }],
+    });
+    tracker.onRawMessage(update('root', configuration('parent-model')));
+    expect(tracker.list({ limit: 10 }).subagents[0]?.model).toBeUndefined();
+    onSubagentsChanged.mockClear();
+    tracker.onRawMessage(update('child:generation:1', configuration('child-model')));
+    expect(tracker.list({ limit: 10 }).subagents[0]?.model).toBe('child-model');
+    expect(onSubagentsChanged).toHaveBeenCalledWith(
+      expect.objectContaining({ subagentId: 'child', change: 'updated' })
+    );
+    tracker.onRawMessage(update('child:generation:1', configuration({ invalid: true })));
+    expect(tracker.list({ limit: 10 }).subagents[0]?.model).toBe('child-model');
+    spawn(tracker, 'root', 'child:generation:2');
+    expect(tracker.list({ limit: 10 }).subagents[0]?.model).toBeUndefined();
+    tracker.onRawMessage(update('child:generation:2', configuration('resumed-model')));
+    tracker.onRawMessage(update('child:generation:1', configuration('stale-model')));
+    expect(tracker.list({ limit: 10 }).subagents[0]?.model).toBe('resumed-model');
+    expect(tracker.read({ subagentId: 'child', limit: 10 }).updates).toEqual([]);
+  });
+
   it('retains large child replay without per-chunk invalidations and resumes live notifications', () => {
     const onSubagentsChanged = vi.fn();
     const tracker = new AcpNativeSessionTracker({ onSubagentsChanged });

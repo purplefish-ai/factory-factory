@@ -132,6 +132,14 @@ function SubagentRow({
             <p className="truncate text-sm font-medium">{displayName(subagent)}</p>
             <div className="flex min-w-0 items-center gap-1.5 text-[11px] text-muted-foreground">
               <span>{statusLabel(subagent.status)}</span>
+              {subagent.model && (
+                <>
+                  <span aria-hidden="true">·</span>
+                  <span title={`Model: ${subagent.model}`} className="truncate">
+                    {subagent.model}
+                  </span>
+                </>
+              )}
               {elapsed && (
                 <>
                   <span aria-hidden="true">·</span>
