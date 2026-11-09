@@ -6,6 +6,7 @@ import { runMigrations } from '@/backend/migrate';
 import { stopChild, watchChild } from './child-lifecycle';
 import { resolveDatabasePath } from './database-path';
 import { forwardDiagnosticOutput } from './diagnostic-output';
+import { resolveUnknownMigrationPolicy } from './migration-policy';
 import { ensureDataDir, findAvailablePort } from './runtime-utils';
 import { startFactoryFactoryServer } from './server-startup';
 import { discoverTailscale, parsePort } from './tailscale-client';
@@ -39,6 +40,7 @@ export async function runTailscaleSession(params: {
       databasePath,
       migrationsPath: join(projectRoot, 'prisma', 'migrations'),
       log: console.log,
+      unknownMigrations: resolveUnknownMigrationPolicy({ env: process.env }),
     });
     const requestedPort = await findAvailablePort(options.backendPort, { maxAttempts: 50, signal });
     signal.throwIfAborted();

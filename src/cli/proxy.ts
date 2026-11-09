@@ -24,6 +24,7 @@ import {
   verifySessionValue,
 } from '@/shared/proxy-utils';
 import { resolveDatabasePath } from './database-path';
+import { describeMigrationFailure, resolveUnknownMigrationPolicy } from './migration-policy';
 import { ensureDataDir, findAvailablePort, treeKillAsync } from './runtime-utils';
 import { startFactoryFactoryServer } from './server-startup';
 import { supportsTerminalQrRendering, tryRenderTerminalQrCode } from './terminal-qr';
@@ -180,6 +181,7 @@ function runMigrations(projectRoot: string, databasePath: string): void {
     log: () => {
       // silent for proxy command
     },
+    unknownMigrations: resolveUnknownMigrationPolicy({ env: process.env }),
   });
 }
 
@@ -777,7 +779,7 @@ export async function runProxyCommand({
   try {
     runMigrations(projectRoot, databasePath);
   } catch (error) {
-    console.error(chalk.red(`\n❌ Migration failed: ${(error as Error).message}`));
+    console.error(chalk.red(`\n❌ ${describeMigrationFailure(error)}`));
     detachSignalHandlers();
     process.exit(1);
     return;

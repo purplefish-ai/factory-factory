@@ -201,6 +201,19 @@ browser. Launch failures return a nonzero exit status. The command does not
 download Prisma or other packages. Windows UNC and device paths are rejected
 because Prisma Studio cannot preserve their location; use a local drive path.
 
+### Database upgrades
+
+Every launch (`ff serve`, `ff proxy`, `ff tailscale`, the desktop app and the
+Docker image) applies pending database migrations before starting. An older
+version refuses to start on a database a newer version has migrated, naming the
+migrations it does not know; upgrade Factory Factory and start it again. The
+`ff` commands accept `FF_ALLOW_UNKNOWN_MIGRATIONS=1` to start anyway with a
+warning, at the risk of errors from the mismatched schema.
+
+Startup warns, without failing, when an applied migration's file has changed
+since it was applied, or when a migration that disabled foreign keys left rows
+that reference missing records.
+
 ### Access through Tailscale
 
 Connect the host and your other device to Tailscale, then run:
