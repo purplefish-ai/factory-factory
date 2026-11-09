@@ -120,7 +120,7 @@ describe('selected-model launch discovery', () => {
     expect(fetchOptions).toHaveBeenCalledTimes(9);
   });
 
-  it('expires after 30 seconds and isolates returned objects', async () => {
+  it('expires after 30 minutes and isolates returned objects', async () => {
     vi.useFakeTimers();
     try {
       const fetchOptions = vi.fn().mockResolvedValue(native('CODEX', 'model'));
@@ -133,7 +133,7 @@ describe('selected-model launch discovery', () => {
       expect(
         (await service.getOptions({ provider: 'CODEX', model: 'model' })).reasoning.options
       ).toHaveLength(2);
-      vi.advanceTimersByTime(30_001);
+      vi.advanceTimersByTime(30 * 60_000 + 1);
       await service.getOptions({ provider: 'CODEX', model: 'model' });
       expect(fetchOptions).toHaveBeenCalledTimes(2);
     } finally {

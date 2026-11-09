@@ -792,6 +792,22 @@ Auto model discovery combines catalogs from enabled, authenticated accounts so
 models exclusive to one account remain selectable. A failed named-account
 catalog read advertises no fallback models from other accounts.
 
+Launcher thinking, planning and access options come from a disposable ACP
+session. Successful observations stay fresh for five minutes, then remain usable
+for up to 30 minutes while a request triggers one background refresh. Failed
+refreshes retain the last success and retry after a 30-second cooldown. Cache
+keys include the provider, requested model and effective Codex account; fresh
+saved effort defaults are applied to cloned results. Account validation still
+precedes cache access. Cold and expired entries await discovery, and process
+admission remains charged until both the native child and protocol pipes close.
+Cache refreshes respect the same admission limit and do not run on a timer.
+
+The `session-launch-options` logger records stage durations for settings,
+account resolution, options lookup and the overall request. Native probes also
+record initialization, session creation, model selection and cleanup durations,
+including failures, so slow account checks can be distinguished from adapter
+startup.
+
 Session creation persists `AgentSession.codexAccountId`. All human, child,
 periodic, reviewer and dedicated-PR creation goes through the same session-data
 binding policy. Existing sessions retain their original account for runtime,
