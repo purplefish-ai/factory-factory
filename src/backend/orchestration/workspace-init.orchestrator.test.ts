@@ -727,7 +727,7 @@ describe('initializeWorkspaceWorktree', () => {
       vi.mocked(sessionDataService.findAgentSessionsByWorkspaceId).mockResolvedValue([
         unsafeCoerce({ id: 'session-1', status: SessionStatus.IDLE, model: 'claude-sonnet' }),
       ]);
-      vi.mocked(workspaceDataService.findById).mockResolvedValue(
+      vi.mocked(workspaceDataService.findInitialMessageContext).mockResolvedValue(
         unsafeCoerce({
           id: WORKSPACE_ID,
           creationMetadata: {
@@ -1004,7 +1004,7 @@ describe('initializeWorkspaceWorktree', () => {
       vi.mocked(sessionDataService.findAgentSessionsByWorkspaceId).mockResolvedValue([
         unsafeCoerce({ id: 'session-1', status: SessionStatus.IDLE, model: 'claude-sonnet' }),
       ]);
-      vi.mocked(workspaceDataService.findById).mockResolvedValue(
+      vi.mocked(workspaceDataService.findInitialMessageContext).mockResolvedValue(
         unsafeCoerce({
           id: WORKSPACE_ID,
           creationMetadata: {
@@ -1050,13 +1050,13 @@ describe('initializeWorkspaceWorktree', () => {
           }),
         })
       );
-      expect(workspaceDataService.findById).toHaveBeenCalledTimes(1);
+      expect(workspaceDataService.findInitialMessageContext).toHaveBeenCalledTimes(1);
     });
   });
 
   describe('GitHub issue prompt', () => {
     it('enqueues saved initial prompt for GitHub issue workspace without refetching issue', async () => {
-      const workspace = makeWorkspaceWithProject({
+      setupHappyPath({
         githubIssueNumber: 42,
         creationMetadata: {
           issueNumber: 42,
@@ -1064,9 +1064,6 @@ describe('initializeWorkspaceWorktree', () => {
           initialPrompt: 'Custom edited prompt',
         },
       });
-      setupHappyPath();
-      vi.mocked(workspaceDataService.findByIdWithProject).mockResolvedValue(workspace);
-      vi.mocked(workspaceDataService.findById).mockResolvedValue(workspace as never);
       vi.mocked(sessionDataService.findAgentSessionsByWorkspaceId).mockResolvedValue([
         unsafeCoerce({ id: 'session-1', status: SessionStatus.IDLE, model: 'claude-sonnet' }),
       ]);
@@ -1084,7 +1081,7 @@ describe('initializeWorkspaceWorktree', () => {
     });
 
     it('skips enqueue for saved empty initial prompt without rebuilding issue prompt', async () => {
-      const workspace = makeWorkspaceWithProject({
+      setupHappyPath({
         githubIssueNumber: 42,
         creationMetadata: {
           issueNumber: 42,
@@ -1092,9 +1089,6 @@ describe('initializeWorkspaceWorktree', () => {
           initialPrompt: '',
         },
       });
-      setupHappyPath();
-      vi.mocked(workspaceDataService.findByIdWithProject).mockResolvedValue(workspace);
-      vi.mocked(workspaceDataService.findById).mockResolvedValue(workspace as never);
       vi.mocked(sessionDataService.findAgentSessionsByWorkspaceId).mockResolvedValue([
         unsafeCoerce({ id: 'session-1', status: SessionStatus.IDLE, model: 'claude-sonnet' }),
       ]);
@@ -1107,7 +1101,7 @@ describe('initializeWorkspaceWorktree', () => {
     });
 
     it('skips enqueue for saved whitespace-only initial prompt without rebuilding issue prompt', async () => {
-      const workspace = makeWorkspaceWithProject({
+      setupHappyPath({
         githubIssueNumber: 42,
         creationMetadata: {
           issueNumber: 42,
@@ -1115,9 +1109,6 @@ describe('initializeWorkspaceWorktree', () => {
           initialPrompt: '   \n\t',
         },
       });
-      setupHappyPath();
-      vi.mocked(workspaceDataService.findByIdWithProject).mockResolvedValue(workspace);
-      vi.mocked(workspaceDataService.findById).mockResolvedValue(workspace as never);
       vi.mocked(sessionDataService.findAgentSessionsByWorkspaceId).mockResolvedValue([
         unsafeCoerce({ id: 'session-1', status: SessionStatus.IDLE, model: 'claude-sonnet' }),
       ]);
@@ -1130,7 +1121,7 @@ describe('initializeWorkspaceWorktree', () => {
     });
 
     it('enqueues attachments when saved initial prompt is empty but attachments exist', async () => {
-      const workspace = makeWorkspaceWithProject({
+      setupHappyPath({
         githubIssueNumber: 42,
         creationMetadata: {
           issueNumber: 42,
@@ -1148,9 +1139,6 @@ describe('initializeWorkspaceWorktree', () => {
           ],
         },
       });
-      setupHappyPath();
-      vi.mocked(workspaceDataService.findByIdWithProject).mockResolvedValue(workspace);
-      vi.mocked(workspaceDataService.findById).mockResolvedValue(workspace as never);
       vi.mocked(sessionDataService.findAgentSessionsByWorkspaceId).mockResolvedValue([
         unsafeCoerce({ id: 'session-1', status: SessionStatus.IDLE, model: 'claude-sonnet' }),
       ]);

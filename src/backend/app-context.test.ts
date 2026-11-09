@@ -10,6 +10,7 @@ import type { RenamedWorkspace } from '@/backend/orchestration/workspace-rename.
 import { createFakeApplicationGraph } from '@/test-utils/application-graph';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 import {
+  type Application,
   createApplication,
   createDefaultApplicationDependencies,
   disposeApplication,
@@ -107,6 +108,41 @@ describe('createApplication', () => {
       results: [expect.objectContaining({ projectId: 'p1', title: 'Graph issue' })],
       errors: [],
     });
+  });
+
+  it('creates the process run-script service on first composition, not on import, and shares it', async () => {
+    vi.resetModules();
+    const app = await vi.importActual<typeof import('./app-context')>('./app-context');
+    const { createRunScriptService } =
+      await vi.importMock<typeof import('./services/run-script')>('./services/run-script');
+    expect(createRunScriptService).not.toHaveBeenCalled();
+
+    const first = app.createDefaultApplicationDependencies();
+    const second = app.createDefaultApplicationDependencies();
+
+    expect(createRunScriptService).toHaveBeenCalledExactlyOnceWith({
+      registerShutdownHandlers: true,
+    });
+    expect(second.services.runScriptService).toBe(first.services.runScriptService);
+  });
+
+  it('disposes a default graph composed under the test module mocks', async () => {
+    const dependencies = createDefaultApplicationDependencies();
+    await expect(
+      disposeApplication(unsafeCoerce<Application>({ ...dependencies, config: {} }))
+    ).resolves.toBeUndefined();
+    expect(dependencies.services.runScriptService.cleanup).toHaveBeenCalled();
+    expect(dependencies.lifecycle.database.$disconnect).toHaveBeenCalled();
+  });
+
+  it('auto-stubs fake graph members no test configured, separately per graph', () => {
+    const first = createFakeApplicationGraph('first');
+    const second = createFakeApplicationGraph('second');
+
+    expect(first.services.cryptoService.encrypt('key')).toBeUndefined();
+    expect(first.services.cryptoService.encrypt).toHaveBeenCalledExactlyOnceWith('key');
+    expect(second.services.cryptoService.encrypt).not.toHaveBeenCalled();
+    expect(first.services.workspaceMetadata).toBeUndefined();
   });
 
   it('shares the runtime server endpoint with lifecycle composition', () => {

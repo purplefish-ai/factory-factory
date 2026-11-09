@@ -499,5 +499,7 @@ ordering and recovery contracts rather than inferring guarantees from a diagram.
 ## Message text selection
 
 User and assistant messages use native text selection for copying on mobile and
-desktop. Message rows have no copy buttons; rewind and queued-message actions
-remain available.
+desktop. Message rows have no copy buttons; queued-message actions remain
+available. The ACP runtime does not support rewinding files, so message rows
+offer no rewind action; `capabilities.rewind` stays on the wire and is always
+disabled.

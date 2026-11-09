@@ -36,10 +36,6 @@ export interface TranscriptDisplayProps {
   onSteerQueuedMessage?: (id: string) => void;
   /** Whether context compaction is in progress */
   isCompacting?: boolean;
-  /** Get the SDK-assigned UUID for a user message by its stable message ID */
-  getUuidForMessageId?: (messageId: string) => string | undefined;
-  /** Callback when user initiates rewind to a message */
-  onRewindToMessage?: (uuid: string) => void;
   resolveWorkspaceFileLink?: (href: string) => string | null;
   onWorkspaceFileLink?: (path: string) => void;
   /** Init banner for showing workspace initialization status */

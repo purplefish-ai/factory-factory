@@ -1,4 +1,3 @@
-import { ArrowCounterClockwiseIcon } from '@phosphor-icons/react/dist/csr/ArrowCounterClockwise';
 import { SteeringWheelIcon } from '@phosphor-icons/react/dist/csr/SteeringWheel';
 import { XIcon } from '@phosphor-icons/react/dist/csr/X';
 import { memo } from 'react';
@@ -46,10 +45,6 @@ export interface MessageItemProps {
   /** Callback to cancel/remove this queued message */
   onRemove?: () => void;
   onSteer?: () => void;
-  /** SDK-assigned UUID for this user message (enables rewind functionality) */
-  userMessageUuid?: string;
-  /** Callback to initiate rewind to before this message */
-  onRewindToMessage?: (uuid: string) => void;
   resolveWorkspaceFileLink?: (href: string) => string | null;
   onWorkspaceFileLink?: (path: string) => void;
   onOpenSubagent?: (subagentId: string) => void;
@@ -150,8 +145,6 @@ export const MessageItem = memo(function MessageItem({
   isQueued,
   onRemove,
   onSteer,
-  userMessageUuid,
-  onRewindToMessage,
   resolveWorkspaceFileLink,
   onWorkspaceFileLink,
   onOpenSubagent,
@@ -177,27 +170,6 @@ export const MessageItem = memo(function MessageItem({
       <MessageWrapper>
         {/* Keep queued actions readable outside the faded message content. */}
         <div className="group relative w-full max-w-full">
-          <div className="absolute -top-1 -right-1 hover-reveal z-10">
-            {/* Rewind button for messages with tracked UUIDs */}
-            {!isQueued && userMessageUuid && onRewindToMessage && (
-              <button
-                onClick={() => onRewindToMessage(userMessageUuid)}
-                onMouseDown={(e) => e.preventDefault()}
-                className={cn(
-                  'p-1.5 rounded-md',
-                  'bg-background/90 hover:bg-warning/10',
-                  'border border-border hover:border-warning/50',
-                  'shadow-sm',
-                  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring'
-                )}
-                title="Rewind files to before this message"
-                type="button"
-                aria-label="Rewind files to before this message"
-              >
-                <ArrowCounterClockwiseIcon className="h-3.5 w-3.5 text-muted-foreground hover:text-warning" />
-              </button>
-            )}
-          </div>
           <QueuedMessageActions
             message={message}
             isQueued={isQueued}
@@ -257,10 +229,6 @@ export interface GroupedMessageItemRendererProps {
   /** Callback to cancel/remove this queued message */
   onRemove?: () => void;
   onSteer?: () => void;
-  /** SDK-assigned UUID for user messages (enables rewind functionality) */
-  userMessageUuid?: string;
-  /** Callback to initiate rewind to before this message */
-  onRewindToMessage?: (uuid: string) => void;
   resolveWorkspaceFileLink?: (href: string) => string | null;
   onWorkspaceFileLink?: (path: string) => void;
   onOpenSubagent?: (subagentId: string) => void;
@@ -280,8 +248,6 @@ export const GroupedMessageItemRenderer = memo(function GroupedMessageItemRender
   isQueued,
   onRemove,
   onSteer,
-  userMessageUuid,
-  onRewindToMessage,
   resolveWorkspaceFileLink,
   onWorkspaceFileLink,
   onOpenSubagent,
@@ -325,8 +291,6 @@ export const GroupedMessageItemRenderer = memo(function GroupedMessageItemRender
       isQueued={isQueued}
       onRemove={onRemove}
       onSteer={onSteer}
-      userMessageUuid={userMessageUuid}
-      onRewindToMessage={onRewindToMessage}
       resolveWorkspaceFileLink={resolveWorkspaceFileLink}
       onWorkspaceFileLink={onWorkspaceFileLink}
     />

@@ -217,6 +217,10 @@
       "disposition": "test-support",
       "reason": "Test harness or fixture support remains explicit in this inventory; production callers are not expected."
     },
+    "src/test-utils/auto-stub.ts": {
+      "disposition": "test-support",
+      "reason": "Auto-stubbing doubles for the fake application graph and its module mocks; only tests import this helper."
+    },
     "src/test-utils/deferred.ts": {
       "disposition": "test-support",
       "reason": "Test harness or fixture support remains explicit in this inventory; production callers are not expected."
@@ -964,10 +968,6 @@
       "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
     },
     "src/client/features/chat/index.ts::types::ChatMessage": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
-    "src/client/features/chat/index.ts::types::RewindConfirmationDialogProps": {
       "disposition": "maintained-api",
       "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
     },

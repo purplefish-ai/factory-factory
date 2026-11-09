@@ -22,7 +22,6 @@ function SteeringFixture({
     stateRef: useRef(createInitialChatState()),
     dbSessionIdRef: useRef('session'),
     inputAttachmentsRef: useRef([]),
-    rewindTimeoutRef: useRef(null),
     onClearInput,
   });
   return (
@@ -64,7 +63,7 @@ it('steers the selected queued message without removing it before delivery is co
   }
 });
 
-it('keeps the message DOM mounted when dequeued and replaces queue actions with rewind', () => {
+it('keeps the message DOM mounted when dequeued and removes its queue actions', () => {
   const container = document.createElement('div');
   const root = createRoot(container);
   const render = (isQueued: boolean) => (
@@ -73,8 +72,6 @@ it('keeps the message DOM mounted when dequeued and replaces queue actions with 
       queuedMessageIds={new Set(isQueued ? [queued.id] : [])}
       onSteerQueuedMessage={vi.fn()}
       onRemoveQueuedMessage={vi.fn()}
-      getUuidForMessageId={() => 'user-uuid'}
-      onRewindToMessage={vi.fn()}
       running
       startingSession={false}
       loadingSession={false}
@@ -93,9 +90,6 @@ it('keeps the message DOM mounted when dequeued and replaces queue actions with 
     expect(container.contains(message ?? null)).toBe(true);
     expect(container.querySelector('button[aria-label="Steer queued message"]')).toBeNull();
     expect(container.querySelector('button[aria-label="Cancel queued message"]')).toBeNull();
-    expect(
-      container.querySelector('button[aria-label="Rewind files to before this message"]')
-    ).not.toBeNull();
   } finally {
     flushSync(() => root.unmount());
   }

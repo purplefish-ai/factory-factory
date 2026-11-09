@@ -15,7 +15,7 @@ import {
 } from '@/lib/chat-protocol';
 import { createDebugLogger, DEBUG_CHAT_WS } from '@/lib/debug';
 import { getAskUserQuestions, isUserQuestionRequest } from '@/shared/pending-request-types';
-import { getRendererTranscriptIds, resolveRendererTranscript } from './renderer-indexes';
+import { resolveRendererTranscript } from './renderer-indexes';
 import type { ChatAction, ChatState, PendingRequest } from './types';
 
 // Shared chat debug flag, controlled by DEBUG_CHAT_WS env var.
@@ -148,37 +148,6 @@ export function trimMessagesForRenderer(
   return trimTranscriptForRenderer(messages, limit);
 }
 
-function filterMapByIds<Value>(
-  map: Map<string, Value>,
-  getRetainedIds: () => Set<string>
-): Map<string, Value> {
-  if (map.size === 0) {
-    return map;
-  }
-  const retainedIds = getRetainedIds();
-  const filtered = new Map<string, Value>();
-  for (const [id, value] of map) {
-    if (retainedIds.has(id)) {
-      filtered.set(id, value);
-    }
-  }
-  return filtered;
-}
-
-function filterSetByIds(set: Set<string>, getRetainedIds: () => Set<string>): Set<string> {
-  if (set.size === 0) {
-    return set;
-  }
-  const retainedIds = getRetainedIds();
-  const filtered = new Set<string>();
-  for (const id of set) {
-    if (retainedIds.has(id)) {
-      filtered.add(id);
-    }
-  }
-  return filtered;
-}
-
 export function applyRendererMessages(state: ChatState, messages: ChatMessage[]): ChatState {
   const { retained: retainedMessages, indexes } = resolveRendererTranscript(
     state.messages,
@@ -187,27 +156,11 @@ export function applyRendererMessages(state: ChatState, messages: ChatMessage[])
       ? DEFAULT_RENDERER_TRANSCRIPT_LIMIT
       : state.rendererTranscriptLimit
   );
-  const getRetainedIds = () => getRendererTranscriptIds(retainedMessages, indexes);
-  const hasUnmappedLocalUserMessage =
-    state.localUserMessageIds.size > 0 &&
-    retainedMessages.some(
-      (message) =>
-        message.source === 'user' &&
-        state.localUserMessageIds.has(message.id) &&
-        !state.messageIdToUuid.has(message.id)
-    );
-
   return {
     ...state,
     messages: retainedMessages,
     toolUseIdToIndex: indexes.toolUseIdToIndex,
     agentMessageOrderToIndex: indexes.agentMessageOrderToIndex,
-    messageIdToUuid: filterMapByIds(state.messageIdToUuid, getRetainedIds),
-    localUserMessageIds: filterSetByIds(state.localUserMessageIds, getRetainedIds),
-    pendingUserMessageUuids:
-      hasUnmappedLocalUserMessage || state.pendingMessages.size > 0
-        ? state.pendingUserMessageUuids
-        : [],
   };
 }
 

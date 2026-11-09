@@ -3,7 +3,6 @@ import './workspace-init.test-harness';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { githubCLIService } from '@/backend/services/github';
 import { sessionDataService, sessionDomainService } from '@/backend/services/session';
-import { workspaceDataService } from '@/backend/services/workspace';
 import { SessionStatus } from '@/shared/core';
 import { buildIssueStartPrompt } from '@/shared/issue-start-prompt';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
@@ -11,16 +10,12 @@ import {
   clearWorkspaceInitOrchestratorStateForTests,
   initializeWorkspaceWorktree,
 } from './workspace-init.orchestrator';
-import {
-  makeWorkspaceWithProject,
-  setupHappyPath,
-  WORKSPACE_ID,
-} from './workspace-init.test-harness';
+import { setupHappyPath, WORKSPACE_ID } from './workspace-init.test-harness';
 
 const enqueueInitialMessage = vi.mocked(sessionDomainService.enqueueInitialMessage);
 
 async function initializeWithSavedPrompt(initialPrompt: string) {
-  const workspace = makeWorkspaceWithProject({
+  setupHappyPath({
     githubIssueNumber: 42,
     creationMetadata: {
       issueNumber: 42,
@@ -28,9 +23,6 @@ async function initializeWithSavedPrompt(initialPrompt: string) {
       initialPrompt,
     },
   });
-  setupHappyPath();
-  vi.mocked(workspaceDataService.findByIdWithProject).mockResolvedValue(workspace);
-  vi.mocked(workspaceDataService.findById).mockResolvedValue(workspace as never);
   vi.mocked(sessionDataService.findAgentSessionsByWorkspaceId).mockResolvedValue([
     unsafeCoerce({ id: 'session-1', status: SessionStatus.IDLE, model: 'claude-sonnet' }),
   ]);

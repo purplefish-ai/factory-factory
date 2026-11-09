@@ -98,8 +98,6 @@ export function HoverActionsFixture() {
                 timestamp: '2026-01-01',
                 order: 0,
               }}
-              userMessageUuid="user"
-              onRewindToMessage={() => undefined}
             />
             <WorkspacePanelProvider workspaceId="hover-fixture">
               <div className="h-28">

@@ -18,7 +18,6 @@ for (const width of [375, 820]) {
         'Rename workspace',
         'Archive workspace',
         'Quick Chat',
-        'Rewind files to before this message',
         'Delete screenshot Home',
         'Close File',
         'Sidebar action',
@@ -136,9 +135,6 @@ test('desktop actions reveal on hover and keyboard focus', async ({ page }) => {
   await rename.focus();
   await expect(rename).toHaveCSS('opacity', '1');
   await rename.blur();
-  const rewind = page.getByRole('button', { name: 'Rewind files to before this message' });
-  await rewind.focus();
-  await expect(rewind.locator('..')).toHaveCSS('opacity', '1');
   const sidebar = page.getByRole('button', { name: 'Sidebar action' });
   await sidebar.focus();
   await expect(sidebar).toHaveCSS('opacity', '1');
