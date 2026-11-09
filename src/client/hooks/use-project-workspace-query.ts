@@ -1,15 +1,13 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { trpc } from '@/client/lib/trpc';
-import { projectWorkspaceQueryOptions } from '@/client/lib/workspace-cache-reconciler';
+import { projectWorkspaceListQuery } from '@/client/lib/workspace-queries';
 
-/** Board, sidebar and switcher share the existing tRPC query key and writer. */
+/** Board, sidebar, switcher and forms share the existing tRPC query key and writer. */
 export function useProjectWorkspaceQuery(projectId: string | undefined) {
   const queryClient = useQueryClient();
   const utils = trpc.useUtils();
   return useQuery({
-    ...projectWorkspaceQueryOptions(queryClient, projectId ?? '', (signal) =>
-      utils.client.workspace.listForProject.query({ projectId: projectId ?? '' }, { signal })
-    ),
+    ...projectWorkspaceListQuery(queryClient, utils.client, projectId ?? ''),
     enabled: Boolean(projectId),
   });
 }

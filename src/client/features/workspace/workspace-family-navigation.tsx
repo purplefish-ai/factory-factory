@@ -1,6 +1,7 @@
 import { ArrowBendUpLeftIcon } from '@phosphor-icons/react/dist/csr/ArrowBendUpLeft';
 import { TreeStructureIcon } from '@phosphor-icons/react/dist/csr/TreeStructure';
 import { Link } from 'react-router';
+import { useWorkspaceDetailQuery } from '@/client/hooks/use-workspace-detail-query';
 import { trpc } from '@/client/lib/trpc';
 import { Button } from '@/components/ui/button';
 import {
@@ -175,10 +176,12 @@ function FamilyMenuContent({
 }) {
   const parent = workspace.parentWorkspace;
   const rootId = parent?.id ?? workspace.id;
-  const root = trpc.workspace.get.useQuery(
-    { id: rootId },
-    { enabled: Boolean(parent), refetchInterval: 15_000 }
-  );
+  // A parent in another project has no live stream, so the menu keeps polling it.
+  const root = useWorkspaceDetailQuery(rootId, {
+    enabled: Boolean(parent),
+    refetchInterval: 15_000,
+    staleTime: 5000,
+  });
   const rootWorkspace = parent ? root.data : workspace;
   return (
     <>
