@@ -84,7 +84,6 @@ describe('socket-free command registry', () => {
         steerQueuedMessage: vi.fn().mockResolvedValue(undefined),
         tryDispatchNextMessage: vi.fn(),
         setManualDispatchResume: vi.fn(),
-        resetDispatchState: vi.fn(),
       },
     });
     const context = { sessionId: 'injected-session', workingDir: '/injected/worktree' };
@@ -159,7 +158,6 @@ it('routes execution commands using injected application capabilities and typed 
   };
   const clearPendingRequest = vi.fn();
   const humanMessageAccepted = vi.fn().mockResolvedValue(undefined);
-  const resetDispatchState = vi.fn();
   const tryDispatchNextMessage = vi.fn().mockResolvedValue(undefined);
   const setManualDispatchResume = vi.fn();
   const sendSessionMessage = vi.fn().mockResolvedValue(undefined);
@@ -181,7 +179,6 @@ it('routes execution commands using injected application capabilities and typed 
     permission: { respondToPermission: vi.fn() },
     dispatch: {
       steerQueuedMessage: vi.fn(),
-      resetDispatchState,
       tryDispatchNextMessage,
       setManualDispatchResume,
     },
@@ -220,7 +217,6 @@ it('routes execution commands using injected application capabilities and typed 
   expect(setManualDispatchResume).toHaveBeenCalledWith('injected-execution', true);
   expect(lifecycle.stopSession).toHaveBeenCalledWith('injected-execution', { reason: 'USER_STOP' });
   expect(clearPendingRequest).toHaveBeenCalledWith('injected-execution');
-  expect(resetDispatchState).toHaveBeenCalledWith('injected-execution');
   expect(tryDispatchNextMessage).toHaveBeenCalledTimes(3);
   expect(backgroundDelivery.userResume).toHaveBeenCalledTimes(4);
   expect(backgroundDelivery.userResume).toHaveBeenNthCalledWith(4, 'injected-execution', guard);

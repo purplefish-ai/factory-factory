@@ -156,11 +156,18 @@ export class SessionDispatchService {
     this.manualDispatchResumed.delete(sessionId);
   }
 
+  /** Runs at the end of every stop (session scope `completeStop`). */
   resetDispatchState(sessionId: string): void {
     this.steering.reset(sessionId);
     this.dispatchClaim.reset(sessionId);
     this.retry.clear(sessionId);
     this.notificationDeliveryService?.resetSession(sessionId);
+  }
+
+  /** Drops everything retained for a deleted session (session scope `forget`). */
+  forgetSession(sessionId: string): void {
+    this.resetDispatchState(sessionId);
+    this.manualDispatchResumed.delete(sessionId);
   }
 
   /** Keep messages queued during preparation so refresh cannot lose them. */

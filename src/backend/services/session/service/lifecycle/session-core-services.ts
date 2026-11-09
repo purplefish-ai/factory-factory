@@ -28,6 +28,7 @@ import { SessionNotificationDeliveryService } from './session-notification-deliv
 import { hydrateProviderHistoryIfNeeded } from './session-provider-history-hydrator';
 import { SessionProviderIdentityService } from './session-provider-identity.service';
 import { SessionRuntimeExitCoordinator } from './session-runtime-exit.coordinator';
+import { registerSessionRuntimeParticipants, SessionScope } from './session-scope';
 import { SessionStartupCoordinator } from './session-startup.coordinator';
 import { SessionTerminationCoordinator } from './session-termination.coordinator';
 import { SessionWorkflowFinalizer } from './session-workflow-finalizer';
@@ -96,9 +97,16 @@ export const sessionConfigService = new SessionConfigService({
   sessionDomainService,
 });
 
+/** Lifetime owner for per-session state; see session-scope.ts. */
+export const sessionScope = new SessionScope();
+sessionScope.register('session-configuration', {
+  forget: (id) => sessionConfigService.releaseSessionConfiguration(id),
+});
+sessionScope.register('observed-empty-provider-session', {
+  forget: (id) => acpRuntimeManager.forgetObservedEmptyProviderSession(id),
+});
 sessionDomainService.on('session_permanently_deleted', (sessionId: string) => {
-  sessionConfigService.releaseSessionConfiguration(sessionId);
-  acpRuntimeManager.forgetObservedEmptyProviderSession(sessionId);
+  sessionScope.forget(sessionId);
 });
 
 export const sessionPromptTurnCompletionService = new SessionPromptTurnCompletionService();
@@ -161,6 +169,13 @@ const sessionPromptCoordinator = new SessionService({
 
 export const sessionService: SessionPromptService = sessionPromptCoordinator;
 
+registerSessionRuntimeParticipants(sessionScope, {
+  promptTurnCompletion: sessionPromptTurnCompletionService,
+  queuedPrompts: sessionPromptCoordinator,
+  acpEvents: acpEventProcessor,
+  permissions: sessionPermissionService,
+});
+
 const sessionProviderIdentityService = new SessionProviderIdentityService({
   repository: sessionRepository,
   sessionDomainService,
@@ -173,15 +188,11 @@ const sessionRuntimeExitCoordinator = new SessionRuntimeExitCoordinator({
   providerIdentityService: sessionProviderIdentityService,
   repository: sessionRepository,
   sessionDomainService,
-  sessionPermissionService,
   acpEventProcessor,
-  promptTurnCompletionService: sessionPromptTurnCompletionService,
   lifecycleEventService: sessionLifecycleEventService,
   lifecycleGate: sessionLifecycleGate,
   workflowFinalizer: sessionWorkflowFinalizer,
-  onSessionExit: (sessionId) => {
-    sessionPromptCoordinator.clearQueuedAcpPrompts(sessionId);
-  },
+  scope: sessionScope,
 });
 
 let sessionLifecycleServiceInstance: SessionLifecycleService;
@@ -192,16 +203,13 @@ const sessionTerminationCoordinator = new SessionTerminationCoordinator({
   retryService: sessionRetryService,
   runtimeManager: acpRuntimeManager,
   sessionDomainService,
-  sessionPermissionService,
   acpEventProcessor,
   promptTurnCompletionService: sessionPromptTurnCompletionService,
   lifecycleEventService: sessionLifecycleEventService,
   lifecycleGate: sessionLifecycleGate,
   workflowFinalizer: sessionWorkflowFinalizer,
   getRuntimeSnapshot: (sessionId) => sessionLifecycleServiceInstance.getRuntimeSnapshot(sessionId),
-  onBeforeStopSession: (sessionId) => {
-    sessionPromptCoordinator.clearQueuedAcpPrompts(sessionId);
-  },
+  scope: sessionScope,
 });
 
 const sessionStartupCoordinator = new SessionStartupCoordinator({
