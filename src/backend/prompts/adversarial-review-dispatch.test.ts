@@ -62,6 +62,19 @@ describe('adversarial review dispatch prompt', () => {
     expect(prompt).not.toMatch(/\{\{[A-Z_]+\}\}/);
   });
 
+  it('never suggests network commands in a shipped diff-only prompt', async () => {
+    const { readFileSync } = await vi.importActual<typeof import('node:fs')>('node:fs');
+    readFileSyncMock.mockImplementation(readFileSync);
+
+    const prompt = buildAdversarialReviewDispatchPrompt({
+      ...BASE_INPUT,
+      checkoutContext: { kind: 'diff_only', headSha: HEAD_SHA, reason: 'other_repository' },
+    });
+
+    expect(prompt).toContain('**No checkout of this PR is available.**');
+    expect(prompt).not.toMatch(/\bgh (?:api|pr (?:view|diff|checkout))\b/);
+  });
+
   it.each(['', '   \n'])(
     'rejects an empty template rather than dispatching stale instructions',
     (template) => {

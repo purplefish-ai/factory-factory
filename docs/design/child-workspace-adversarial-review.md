@@ -550,8 +550,9 @@ Notes:
   available locally. If it isn't, the review drops to `diff_only` and the
   completion mail says so. It does not fail the review.
 - **The diff and head SHA describe the same commit.** The diff is read between
-  two head lookups and retried up to three times if a push lands in between. If
-  the head never settles, the turn fails without running the reviewer.
+  two head lookups and read again, for up to three attempts in total, if a push
+  lands in between. If the head never settles, the turn fails without running
+  the reviewer.
 - **One status snapshot.** Branch, HEAD and local changes come from a single
   `git --no-optional-locks status --porcelain=v2 --branch` call (which also
   leaves the index and `index.lock` alone), so a concurrent branch switch can't
