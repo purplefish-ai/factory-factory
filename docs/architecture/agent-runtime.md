@@ -593,6 +593,12 @@ requires explicit consent; it never opens a URL automatically. Cancellation
 resolves pending permissions and elicitations as cancelled and dismisses their
 prompts.
 
+Subagent lists and transcript headers display the child model reported through
+native `config_option_update` model options. The model stays hidden until the
+provider reports it (Claude reports after the first response); it is never
+inferred from the parent. Child updates refresh the label, and stale Codex
+generation updates cannot overwrite a resumed child's model.
+
 Native subagent/session updates are captured before SDK validation because the
 subagent contract is still a draft. Children retain separate transcripts and
 permissions remain routed through the owning parent. Child tool calls also reach

@@ -33,6 +33,7 @@ function selection(
     parentSessionId: 'session-1',
     parentSessionName: 'Session 1',
     subagent: {
+      model: 'claude-sonnet-4-6',
       id: `security-${status}`,
       name: 'Security review',
       status,

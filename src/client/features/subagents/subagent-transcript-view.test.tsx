@@ -153,6 +153,13 @@ describe('SubagentTranscriptContent', () => {
     );
   }
 
+  it('shows the reported child model in the transcript header', () => {
+    const selected = selection();
+    selected.subagent.model = 'child-model';
+    render({ kind: 'empty' }, { selected });
+    expect(container.textContent).toContain('Model: child-model');
+  });
+
   it('renders transcript content without breadcrumb, back action, or status pills', () => {
     render({
       kind: 'ready',

@@ -48,6 +48,17 @@ describe('SubagentList', () => {
     void act(() => root.render(createElement(SubagentList, props)));
   }
 
+  it('shows the reported model when available and updates it live', () => {
+    const props = { onSelect: vi.fn() };
+    render({ ...props, state: { kind: 'ready', subagents: [subagent({ id: 'child' })] } });
+    expect(container.querySelector('[title^="Model:"]')).toBeNull();
+    render({
+      ...props,
+      state: { kind: 'ready', subagents: [subagent({ id: 'child', model: 'child-model' })] },
+    });
+    expect(container.querySelector('[title^="Model:"]')?.textContent).toBe('child-model');
+  });
+
   it('remembers completed expansion per session after remounting', () => {
     const props = {
       state: { kind: 'ready' as const, subagents: [subagent({ id: 'done', status: 'completed' })] },
