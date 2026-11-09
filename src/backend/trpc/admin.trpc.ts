@@ -172,7 +172,7 @@ export const adminRouter = router({
   /**
    * Reject legacy global upgrades; provider runtimes are managed with the app.
    */
-  upgradeProviderCLI: publicProcedure
+  upgradeProviderCLI: trustedLocalProcedure
     .input(z.object({ provider: z.enum(['CLAUDE', 'CODEX']) }))
     .mutation(async ({ ctx, input }) => {
       try {

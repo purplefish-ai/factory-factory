@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { isLoopbackRemoteAddress, isOriginAllowed, isTrustedLocalAddress } from './request-trust';
+import {
+  isHostHeaderAllowed,
+  isLoopbackBindHost,
+  isLoopbackRemoteAddress,
+  isOriginAllowed,
+  isTrustedLocalAddress,
+} from './request-trust';
 
 describe('request trust helpers', () => {
   describe('isLoopbackRemoteAddress', () => {
@@ -74,6 +80,49 @@ describe('request trust helpers', () => {
     it('allows any origin when disableCorsChecks is set', () => {
       expect(isOriginAllowed('https://attacker.example', [], true)).toBe(true);
       expect(isOriginAllowed('not a url', ['http://localhost:3000'], true)).toBe(true);
+    });
+  });
+
+  describe('isLoopbackBindHost', () => {
+    it.each([undefined, 'localhost', 'LOCALHOST', '127.0.0.1', '127.1.2.3', '::1', '[::1]'])(
+      'treats %s as a loopback bind',
+      (host) => {
+        expect(isLoopbackBindHost(host)).toBe(true);
+      }
+    );
+
+    it.each(['0.0.0.0', '::', '192.168.1.20', 'mac.local', '[::]'])(
+      'treats %s as reachable beyond loopback',
+      (host) => {
+        expect(isLoopbackBindHost(host)).toBe(false);
+      }
+    );
+  });
+
+  describe('isHostHeaderAllowed', () => {
+    const allowedOrigins = ['http://localhost:3000', 'https://mac.tail123.ts.net'];
+
+    it.each(['localhost:3001', 'LOCALHOST:3001', '127.0.0.1:3001', '[::1]:3001', 'localhost'])(
+      'accepts loopback Host %s',
+      (host) => {
+        expect(isHostHeaderAllowed(host, allowedOrigins)).toBe(true);
+      }
+    );
+
+    it('accepts the hostname of a configured allowed origin on any port', () => {
+      expect(isHostHeaderAllowed('mac.tail123.ts.net', allowedOrigins)).toBe(true);
+      expect(isHostHeaderAllowed('MAC.tail123.ts.net:8443', allowedOrigins)).toBe(true);
+    });
+
+    it.each([
+      'attacker.example:3001',
+      'localhost.attacker.example',
+      'localhost@attacker.example',
+      'localhost/path',
+      '192.168.1.20:3001',
+      '',
+    ])('rejects rebound or malformed Host %j', (host) => {
+      expect(isHostHeaderAllowed(host, allowedOrigins)).toBe(false);
     });
   });
 });

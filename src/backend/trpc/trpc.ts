@@ -4,6 +4,8 @@ import superjson from 'superjson';
 import type { AppContext } from '@/backend/app-context';
 import { ApplicationError } from '@/backend/lib/application-error';
 import {
+  isHostHeaderAllowed,
+  isLoopbackBindHost,
   isLoopbackRemoteAddress,
   isOriginAllowed,
   isTrustedLocalAddress,
@@ -16,6 +18,8 @@ export { isLoopbackRemoteAddress };
 export type RequestTrustInfo = {
   remoteAddress?: string;
   origin?: string;
+  /** `Host` header, checked against DNS rebinding when bound to loopback. */
+  host?: string;
   isLocal: boolean;
   hasForwardedClientAddressHeaders?: boolean;
 };
@@ -37,6 +41,7 @@ function buildRequestTrust(req: Request): RequestTrustInfo {
   return {
     remoteAddress,
     origin: getHeaderValue(req.headers.origin),
+    host: req.headers.host,
     isLocal: isLoopbackRemoteAddress(remoteAddress),
     hasForwardedClientAddressHeaders: FORWARDED_CLIENT_ADDRESS_HEADERS.some(
       (header) => req.headers[header] !== undefined
@@ -69,13 +74,60 @@ const t = initTRPC.context<Context>().create({
 export const router = t.router;
 export const mergeRouters = t.mergeRouters;
 
-export const publicProcedure = t.procedure.use(async ({ next }) => {
+function isAllowedBrowserContext(ctx: Context): boolean {
+  // In-process callers do not cross the HTTP trust boundary.
+  if (!ctx.requestTrust) {
+    return true;
+  }
+
+  const { configService } = ctx.appContext.services;
+  const corsConfig = configService.getCorsConfig();
+  // The flag already admits every Origin, so a rebound Host adds no exposure.
+  if (corsConfig.disableCorsChecks) {
+    return true;
+  }
+
+  const { origin, host } = ctx.requestTrust;
+  if (origin !== undefined && !isOriginAllowed(origin, corsConfig.allowedOrigins)) {
+    return false;
+  }
+
+  return (
+    host === undefined ||
+    isHostHeaderAllowed(host, corsConfig.allowedOrigins) ||
+    !isLoopbackBindHost(configService.getBackendHost())
+  );
+}
+
+/**
+ * Applies the browser boundary WebSocket upgrades use to every HTTP procedure:
+ * a request carrying an `Origin` header must come from an allowed origin, and
+ * a loopback-bound server only answers loopback or allowed-origin `Host`
+ * names, so neither a cross-site page nor a DNS-rebound one can call the API.
+ * Clients that send no `Origin` (CLI tools, agent MCP servers, same-origin
+ * GETs) are unaffected; `DISABLE_CORS_CHECKS` turns both checks off.
+ */
+function assertAllowedBrowserContext(ctx: Context): void {
+  if (!isAllowedBrowserContext(ctx)) {
+    throw new TRPCError({
+      code: 'FORBIDDEN',
+      message: 'Requests from this browser origin are not allowed.',
+    });
+  }
+}
+
+const applicationErrorProcedure = t.procedure.use(async ({ next }) => {
   const result = await next();
   if (!result.ok && result.error.cause instanceof ApplicationError) {
     throw toTRPCError(result.error.cause);
   }
 
   return result;
+});
+
+export const publicProcedure = applicationErrorProcedure.use(({ ctx, next }) => {
+  assertAllowedBrowserContext(ctx);
+  return next();
 });
 
 function isTrustedLocalContext(ctx: Context): boolean {
@@ -126,7 +178,10 @@ export function assertTrustedLocalContext(ctx: Context): void {
   }
 }
 
-export const trustedLocalProcedure = publicProcedure.use(({ ctx, next }) => {
+// The trusted-local check runs first so its error explains an Origin
+// rejection; the browser check then adds the DNS-rebinding Host guard.
+export const trustedLocalProcedure = applicationErrorProcedure.use(({ ctx, next }) => {
   assertTrustedLocalContext(ctx);
+  assertAllowedBrowserContext(ctx);
   return next();
 });

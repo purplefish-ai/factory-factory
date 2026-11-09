@@ -1,6 +1,6 @@
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
-import { publicProcedure, router } from './trpc';
+import { publicProcedure, router, trustedLocalProcedure } from './trpc';
 
 const scheduledTimeSchema = z
   .string()
@@ -44,7 +44,7 @@ export const periodicTaskRouter = router({
     return task;
   }),
 
-  create: publicProcedure
+  create: trustedLocalProcedure
     .input(
       z.object({
         projectId: z.string(),
@@ -59,7 +59,7 @@ export const periodicTaskRouter = router({
       return ctx.appContext.services.periodicTaskService.create(input);
     }),
 
-  update: publicProcedure
+  update: trustedLocalProcedure
     .input(
       z.object({
         id: z.string(),
@@ -82,7 +82,7 @@ export const periodicTaskRouter = router({
     return { success: true };
   }),
 
-  toggleEnabled: publicProcedure
+  toggleEnabled: trustedLocalProcedure
     .input(z.object({ id: z.string(), enabled: z.boolean() }))
     .mutation(({ ctx, input }) => {
       return ctx.appContext.services.periodicTaskService.toggleEnabled(input.id, input.enabled);

@@ -664,3 +664,28 @@ describe('application update trust boundary', () => {
     await expect(remote.checkUpdates()).resolves.toEqual({ notices: [] });
   });
 });
+
+describe('provider CLI upgrade trust boundary', () => {
+  it.each([
+    { remoteAddress: '203.0.113.10', isLocal: false },
+    { remoteAddress: '127.0.0.1', isLocal: true, origin: 'https://untrusted.example' },
+    { remoteAddress: '127.0.0.1', isLocal: true, hasForwardedClientAddressHeaders: true },
+  ])('rejects upgrades from untrusted clients: %j', async (trust) => {
+    const { caller, cliHealthService } = createCaller(trust);
+    await expect(caller.upgradeProviderCLI({ provider: 'CLAUDE' })).rejects.toMatchObject({
+      code: 'FORBIDDEN',
+    });
+    expect(cliHealthService.upgradeProviderCLI).not.toHaveBeenCalled();
+  });
+
+  it('reaches the CLI health service from a trusted local client', async () => {
+    const { caller, cliHealthService } = createCaller({
+      remoteAddress: '127.0.0.1',
+      isLocal: true,
+    });
+    await expect(caller.upgradeProviderCLI({ provider: 'CODEX' })).rejects.toMatchObject({
+      code: 'INTERNAL_SERVER_ERROR',
+    });
+    expect(cliHealthService.upgradeProviderCLI).toHaveBeenCalledWith('CODEX');
+  });
+});

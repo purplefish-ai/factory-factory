@@ -90,6 +90,55 @@ function isLoopbackHostname(hostname: string): boolean {
   return isIP(normalized) === 4 && normalized.startsWith('127.');
 }
 
+/**
+ * Whether a configured bind host keeps the server on loopback. An unset host
+ * binds loopback only (see `listenHttpServer`).
+ */
+export function isLoopbackBindHost(bindHost: string | undefined): boolean {
+  if (bindHost === undefined) {
+    return true;
+  }
+  const unbracketed =
+    bindHost.startsWith('[') && bindHost.endsWith(']') ? bindHost.slice(1, -1) : bindHost;
+  return isLoopbackHostname(unbracketed) || isLoopbackRemoteAddress(unbracketed);
+}
+
+function parseHostHeaderHostname(hostHeader: string): string | undefined {
+  const candidate = `http://${hostHeader}`;
+  if (!URL.canParse(candidate)) {
+    return undefined;
+  }
+  const url = new URL(candidate);
+  const isBareHost =
+    url.username === '' &&
+    url.password === '' &&
+    url.pathname === '/' &&
+    url.search === '' &&
+    url.hash === '' &&
+    !hostHeader.includes('/');
+  return isBareHost ? url.hostname : undefined;
+}
+
+/**
+ * DNS-rebinding guard for a loopback-bound server. A page whose own hostname
+ * was rebound to 127.0.0.1 sends that hostname as `Host`, so only loopback
+ * names and the hostnames of configured allowed origins (for example a
+ * Tailscale or reverse-proxy origin that forwards its `Host`) are accepted.
+ */
+export function isHostHeaderAllowed(
+  hostHeader: string,
+  allowedOrigins: readonly string[]
+): boolean {
+  const hostname = parseHostHeaderHostname(hostHeader);
+  if (hostname === undefined) {
+    return false;
+  }
+  if (isLoopbackHostname(hostname)) {
+    return true;
+  }
+  return allowedOrigins.some((allowedOrigin) => parseOrigin(allowedOrigin)?.hostname === hostname);
+}
+
 function parseOrigin(origin: string): URL | undefined {
   try {
     return new URL(origin);

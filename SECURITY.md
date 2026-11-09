@@ -45,6 +45,12 @@ Factory Factory runs locally on your machine and interacts with:
    and, where IPv6 is available, `::1`; `ff serve` binds its `--host` (default
    `localhost`). Binding another address, such as `ff serve --host 0.0.0.0` or
    the Docker image, exposes the server to that network.
+5. **Browser access**: API requests and WebSocket connections that carry an
+   `Origin` header must come from `CORS_ALLOWED_ORIGINS` (by default the local
+   app origins). While the server listens on loopback, API requests must also
+   use a loopback `Host` or an allowed origin's host, which blocks DNS
+   rebinding. `DISABLE_CORS_CHECKS=true` turns both checks off; use it only for
+   local testing.
 
 ## Supported Versions
 
