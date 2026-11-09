@@ -17,6 +17,8 @@ import {
   discoverCandidatePaths,
   evaluateFileLengths,
   type FileLength,
+  findFilesNearCap,
+  formatCapPressureWarning,
   formatFileLengthViolations,
   isFileLengthCandidate,
   planBaselineUpdate,
@@ -201,6 +203,55 @@ describe('evaluateFileLengths', () => {
   });
 });
 
+describe('cap pressure', () => {
+  test('lists files from 98% of the cap up to the cap, largest first', () => {
+    const files: FileLength[] = [
+      { path: 'src/below.ts', lines: 979 },
+      { path: 'src/threshold.ts', lines: 980 },
+      { path: 'src/at-cap.ts', lines: 1000 },
+      { path: 'src/b-near.ts', lines: 990 },
+      { path: 'src/a-near.ts', lines: 990 },
+      { path: 'src/oversized.ts', lines: 1001 },
+    ];
+
+    expect(findFilesNearCap(files)).toEqual([
+      { path: 'src/at-cap.ts', lines: 1000 },
+      { path: 'src/a-near.ts', lines: 990 },
+      { path: 'src/b-near.ts', lines: 990 },
+      { path: 'src/threshold.ts', lines: 980 },
+    ]);
+  });
+
+  test('rounds the threshold up for caps that are not multiples of 50', () => {
+    const files: FileLength[] = [
+      { path: 'src/below.ts', lines: 97 },
+      { path: 'src/at.ts', lines: 98 },
+    ];
+
+    expect(findFilesNearCap(files, 99)).toEqual([{ path: 'src/at.ts', lines: 98 }]);
+  });
+
+  test('does not change the evaluation of files near the cap', () => {
+    const files: FileLength[] = [{ path: 'src/near.ts', lines: 999 }];
+
+    expect(evaluateFileLengths(files, {})).toEqual({ violations: [], currentOversized: [] });
+  });
+
+  test('formats the warning with counts, paths and the split-by-responsibility remedy', () => {
+    const warning = formatCapPressureWarning([
+      { path: 'src/at-cap.ts', lines: 1000 },
+      { path: 'src/near.ts', lines: 985 },
+    ]);
+
+    expect(warning).toContain('2 file(s) at or above 98% of the 1000-line cap (980+ lines)');
+    expect(warning).toContain('  1000  src/at-cap.ts');
+    expect(warning).toContain('   985  src/near.ts');
+    expect(warning).toContain('does not fail the check');
+    expect(warning).toContain('split it by responsibility');
+    expect(warning).toContain('do not compress it');
+  });
+});
+
 describe('planBaselineUpdate', () => {
   test('lowers a shrinking oversized baseline entry', () => {
     const evaluation = evaluateFileLengths([{ path: 'src/legacy.ts', lines: 1100 }], {
@@ -358,6 +409,52 @@ describe('repository discovery and CLI', () => {
     expect(stderr.join('')).toContain('reduce');
   });
 
+  test('warns about files near the cap without failing the check', () => {
+    const repositoryRoot = createTemporaryRepository();
+    writeLines(join(repositoryRoot, 'src/near.ts'), 990);
+    writeLines(join(repositoryRoot, 'src/small.ts'), 10);
+    execFileSync('git', ['add', 'src'], { cwd: repositoryRoot });
+    const baselinePath = join(repositoryRoot, 'baseline.json');
+    writeFileSync(baselinePath, '{}\n');
+    const stdout: string[] = [];
+    const stderr: string[] = [];
+
+    const exitCode = runFileLengthCli({
+      repositoryRoot,
+      baselinePath,
+      args: [],
+      stdout: (message) => stdout.push(message),
+      stderr: (message) => stderr.push(message),
+    });
+
+    expect(exitCode).toBe(0);
+    expect(stderr).toEqual([]);
+    const output = stdout.join('');
+    expect(output).toContain('990  src/near.ts');
+    expect(output).not.toContain('src/small.ts');
+    expect(output).toContain('split it by responsibility');
+    expect(output).toContain('File length check passed.');
+  });
+
+  test('prints no cap pressure warning when every file is well under the cap', () => {
+    const repositoryRoot = createTemporaryRepository();
+    writeLines(join(repositoryRoot, 'src/small.ts'), 979);
+    execFileSync('git', ['add', 'src'], { cwd: repositoryRoot });
+    const baselinePath = join(repositoryRoot, 'baseline.json');
+    writeFileSync(baselinePath, '{}\n');
+    const stdout: string[] = [];
+
+    const exitCode = runFileLengthCli({
+      repositoryRoot,
+      baselinePath,
+      args: [],
+      stdout: (message) => stdout.push(message),
+    });
+
+    expect(exitCode).toBe(0);
+    expect(stdout).toEqual(['File length check passed.\n']);
+  });
+
   test('reports and removes a baseline entry for a tracked file deleted from the working tree', () => {
     const repositoryRoot = createTemporaryRepository();
     const deletedPath = join(repositoryRoot, 'src/deleted.ts');
@@ -371,6 +468,7 @@ describe('repository discovery and CLI', () => {
     const normalExitCode = runFileLengthCli({
       repositoryRoot,
       baselinePath,
+      stdout: () => undefined,
       stderr: (message) => stderr.push(message),
     });
     const updateExitCode = runFileLengthCli({
@@ -401,6 +499,7 @@ describe('repository discovery and CLI', () => {
     const normalExitCode = runFileLengthCli({
       repositoryRoot,
       baselinePath,
+      stdout: () => undefined,
       stderr: (message) => stderr.push(message),
     });
     const updateExitCode = runFileLengthCli({
@@ -430,6 +529,7 @@ describe('repository discovery and CLI', () => {
     const normalExitCode = runFileLengthCli({
       repositoryRoot,
       baselinePath,
+      stdout: () => undefined,
       stderr: (message) => stderr.push(message),
     });
     const updateExitCode = runFileLengthCli({
@@ -461,6 +561,7 @@ describe('repository discovery and CLI', () => {
     const normalExitCode = runFileLengthCli({
       repositoryRoot,
       baselinePath,
+      stdout: () => undefined,
       stderr: (message) => stderr.push(message),
     });
     const updateExitCode = runFileLengthCli({
