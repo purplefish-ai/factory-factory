@@ -290,9 +290,9 @@ individually, so one malformed historical event cannot make a session
 unloadable.
 
 Every snapshot and replay array is parsed in full; there is no cheaper envelope
-check. Parsing a replay of 1,000 agent messages (about 1 MB of JSON) takes
-roughly 3 ms in Node, comparable to the `JSON.parse` of the same frame, with or
-without Zod's JIT.
+check. Parsing a replay of 1,000 agent messages (about 1 MB of JSON) took about
+3 ms in Node, with or without Zod's JIT; `JSON.parse` of the same frame took
+about 1.6 ms.
 
 `useChatTransport` unwraps `session_delta` before passing its inner event to
 `createActionFromWebSocketMessage`. Action creators map validated fields without
