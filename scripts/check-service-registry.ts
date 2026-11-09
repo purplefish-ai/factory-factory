@@ -4,13 +4,21 @@ import ts from 'typescript';
 import {
   infrastructureServiceRegistry,
   prismaModelNames,
+  type ServiceDefinition,
   type ServiceName,
+  serviceNames,
   serviceRegistry,
 } from '../src/backend/services/registry';
 import { getInfrastructureServiceClassificationErrors } from '../src/backend/services/service-registry-check.helpers';
+import { collectBridgeEdges } from './service-registry-bridges';
+import { getDeclaredDependencyErrors } from './service-registry-dependencies';
 
 const rootDir = process.cwd();
+const backendRoot = path.join(rootDir, 'src/backend');
 const servicesRoot = path.join(rootDir, 'src/backend/services');
+const declaredServices: Record<ServiceName, ServiceDefinition> = serviceRegistry;
+const bridgeWiringCallPattern = /\.(?:configure[A-Za-z]*|setHandler)\(/u;
+const testSupportPathPattern = /(?:^|\/)(?:testing|test-utils)\/|\.test-[a-z-]+\.tsx?$/u;
 const schemaPath = path.join(rootDir, 'prisma/schema.prisma');
 const prismaGeneratedRoot = path.join(rootDir, 'prisma/generated');
 const publicPrismaGeneratedSpecifiers = new Set([
@@ -215,6 +223,7 @@ function validateCrossServiceImport(
   relativePath: string,
   moduleSpecifier: string,
   allowedDependencies: Set<ServiceName>,
+  importedDependencies: Set<ServiceName>,
   errors: string[]
 ): void {
   const serviceImport = parseServiceImport(moduleSpecifier);
@@ -236,6 +245,7 @@ function validateCrossServiceImport(
   if (toService === fromService) {
     return;
   }
+  importedDependencies.add(toService);
 
   if (serviceImport.toSubpath.length > 0 && serviceImport.toSubpath !== 'index') {
     errors.push(
@@ -250,8 +260,10 @@ function validateCrossServiceImport(
   }
 }
 
-function checkCrossServiceImports(errors: string[]): void {
+/** Validates cross-capsule imports and returns the capsules each capsule imports. */
+function checkCrossServiceImports(errors: string[]): Map<ServiceName, Set<ServiceName>> {
   const serviceFiles = listTypeScriptFiles(servicesRoot);
+  const importedDependencies = new Map<ServiceName, Set<ServiceName>>();
 
   for (const filePath of serviceFiles) {
     const relativePath = getRelativeServiceFilePath(filePath);
@@ -280,6 +292,8 @@ function checkCrossServiceImports(errors: string[]): void {
       continue;
     }
     const allowedDependencies = new Set(serviceRegistry[fromService].dependsOn);
+    const imported = importedDependencies.get(fromService) ?? new Set<ServiceName>();
+    importedDependencies.set(fromService, imported);
 
     for (const moduleSpecifier of collectModuleSpecifiers(filePath)) {
       validateCrossServiceImport(
@@ -287,10 +301,42 @@ function checkCrossServiceImports(errors: string[]): void {
         relativePath,
         moduleSpecifier,
         allowedDependencies,
+        imported,
         errors
       );
     }
   }
+
+  return importedDependencies;
+}
+
+/** Production files outside the capsules that may wire bridges between them. */
+function listBridgeWiringFiles(): string[] {
+  return listTypeScriptFiles(backendRoot).filter((filePath) => {
+    const relativePath = getRelativeServiceFilePath(filePath);
+    return (
+      !(isInsideDirectory(filePath, servicesRoot) || testSupportPathPattern.test(relativePath)) &&
+      bridgeWiringCallPattern.test(readFileSync(filePath, 'utf8'))
+    );
+  });
+}
+
+function checkDeclaredDependencies(
+  importedDependencies: Map<ServiceName, Set<ServiceName>>,
+  errors: string[]
+): void {
+  const bridgeEdges = collectBridgeEdges({
+    repositoryRoot: rootDir,
+    wiringFiles: listBridgeWiringFiles(),
+    serviceNames: new Set(serviceNames),
+  });
+  errors.push(
+    ...getDeclaredDependencyErrors({
+      registry: declaredServices,
+      importedDependencies,
+      bridgeEdges,
+    })
+  );
 }
 
 function isInsideDirectory(filePath: string, directoryPath: string): boolean {
@@ -384,7 +430,7 @@ function main(): void {
   checkInfrastructureServiceClassification(errors);
   checkRegistryModelList(errors);
   checkDependencyGraph(errors);
-  checkCrossServiceImports(errors);
+  checkDeclaredDependencies(checkCrossServiceImports(errors), errors);
   checkPrismaGeneratedImports(errors);
 
   if (errors.length > 0) {
