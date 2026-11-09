@@ -640,11 +640,13 @@ export function createApplication(
  */
 export async function disposeApplication(application: Application): Promise<void> {
   const failures: unknown[] = [];
-  await runShutdownPlan(createShutdownPlan(application), ({ error }) => {
+  const failed: string[] = [];
+  await runShutdownPlan(createShutdownPlan(application), ({ kind, name, error }) => {
     failures.push(error);
+    failed.push(`${kind} ${name}`);
   });
   if (failures.length) {
-    throw new AggregateError(failures, 'Application disposal failed');
+    throw new AggregateError(failures, `Application disposal failed: ${failed.join(', ')}`);
   }
 }
 

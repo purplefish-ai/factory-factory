@@ -68,11 +68,13 @@ Teardown is one ordered plan, `createShutdownPlan` in
 stopped on one path is stopped on the other; the server adds only its transport
 and timer work through hooks at fixed points.
 
-The plan calls every server-started job's `stop()` (application update idle,
-reconciliation cleanup, PR sync, snapshot reconciliation, ratchet and PR event
-retention, periodic tasks) as soon as it begins, so no job starts new work
-during teardown and their in-flight runs drain concurrently with session/process
-teardown and with each other: shutdown waits for the slowest drain, not the sum.
+The plan calls six jobs' `stop()` (application update idle, reconciliation
+cleanup, PR sync, snapshot reconciliation, ratchet and PR event retention,
+periodic tasks) as soon as it begins, so none starts new work during teardown
+and their in-flight runs drain concurrently with session/process teardown and
+with each other: shutdown waits for the slowest drain, not the sum. Agent
+runtime and workspace metadata jobs stop at their own ordered steps instead:
+agent runtime first, workspace metadata before transports and sessions close.
 The drains are awaited only after sessions, Codex logins, run scripts and the
 rate limiter have stopped, and all of them before the database disconnects. Two
 edges are kept by awaiting in order: the event collector stops after the PR sync
