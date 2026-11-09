@@ -127,6 +127,7 @@ describe('workspace query ownership', () => {
     expect(f.queryClient.getQueryData(key)).toBeUndefined();
     seedWorkspaceDetail(f.queryClient, 'ws-1', () => detail('Seed'));
     seedWorkspaceDetail(f.queryClient, 'ws-1', () => detail('Second seed'));
+    expect(f.queryClient.getQueryData<WorkspaceDetail>(key)?.name).toBe('Seed');
     mergeWorkspaceDetailSnapshot(f.queryClient, entry({ name: 'Merged' }));
     expect(f.queryClient.getQueryData<WorkspaceDetail>(key)).toMatchObject({
       name: 'Merged',

@@ -26,7 +26,8 @@ export function EventAgentWorkspaceForm({
   const draft = useWorkspaceCreationDraft(draftId);
   const [isCanceling, setIsCanceling] = useState(false);
   const cancelRevision = useRef<string | undefined>(undefined);
-  const workspaces = useProjectWorkspaceQuery(projectId);
+  // Keep the app-default freshness: names are re-read when the form remounts.
+  const workspaces = useProjectWorkspaceQuery(projectId, { staleTime: 5000 });
   const cancelFallback = () => {
     if (submission.isPending || draft.isRestoring || isCanceling) {
       return;
