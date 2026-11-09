@@ -475,8 +475,10 @@ invalidation refetches unreconciled. Readers use `useProjectWorkspaceQuery`
 `ensureWorkspaceDetail`; optimistic list rows, creation seeds and stream detail
 merges use the module's writers. Invalidation, cancellation and cache reads keep
 using tRPC utilities because they reuse the options already installed.
-QueryClient cancel, reset, invalidate, active-refetch and cache-read operations
-for these keys are module functions, so callers do not build keys. Query options
+Operations that would otherwise need a raw QueryClient key are module functions
+instead: `resetWorkspaceDetail`, `invalidateWorkspaceDetail`,
+`cancelWorkspaceDetail`, `refetchActiveWorkspaceDetail`,
+`getCachedWorkspaceDetails` and `cancelProjectWorkspaceList`. Query options
 still carry their key for `useQuery`; never pass it to a raw QueryClient fetch
 or write.
 
