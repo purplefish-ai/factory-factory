@@ -41,8 +41,8 @@ Use the actual operation as the verb:
   what remains: removing a PR from a workspace leaves the PR on GitHub; removing
   an orphaned worktree deletes its uncommitted files but keeps committed
   branches.
-- **Delete** permanently deletes the named records or files. Deleting an agent
-  deletes its definition/history, not workspaces it created.
+- **Delete** permanently deletes the named records or files. Deleting an
+  automation deletes its definition/history, not workspaces it created.
 
 A confirmation title is “{Verb} {object}?” in sentence case. Its body states the
 consequence and whether it can be undone, including any retained history or
