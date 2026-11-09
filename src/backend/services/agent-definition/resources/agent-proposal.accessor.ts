@@ -47,7 +47,7 @@ function ownedTrigger(proposalId: string, trigger: AgentSpecification['triggers'
   if (!id) {
     throw new ApplicationError(
       'INVALID_INPUT',
-      'Preserve event IDs from the saved proposal before creating or editing an agent.'
+      'Preserve event IDs from the saved proposal before creating or editing an automation.'
     );
   }
   return { ...settings, id: `${proposalId}:${id}`, isEnabled: false as const };
@@ -151,7 +151,7 @@ export const agentProposalAccessor = {
       if (!agent) {
         throw new ApplicationError(
           'PRECONDITION_FAILED',
-          'The agent no longer belongs to this workspace project.'
+          'The automation no longer belongs to this workspace project.'
         );
       }
       await agentRevisionAccessor.reviseDefinition(

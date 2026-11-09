@@ -26,9 +26,9 @@ type ToolOptions = {
     | 'spawn_child_workspace'
     | 'list_projects'
     | 'archive_child_workspace'
-    | 'propose_agent'
-    | 'list_agent_sources'
-    | 'get_agent_proposal'
+    | 'propose_automation'
+    | 'list_automation_sources'
+    | 'get_automation_proposal'
     | 'get_linear_issue'
     | 'list_mail'
     | 'read_mail'
@@ -371,9 +371,9 @@ describe('child workspace MCP tRPC errors', () => {
   );
 
   it('binds proposals to the current workspace and returns a renderable reference', async () => {
-    const { requestBody, response } = await callToolWithHttpResponse({
+    const { requestBody, requestMethod, requestUrl, response } = await callToolWithHttpResponse({
       status: 200,
-      toolName: 'propose_agent',
+      toolName: 'propose_automation',
       toolArguments: {
         workspaceId: 'spoofed',
         specification: {
@@ -409,11 +409,13 @@ describe('child workspace MCP tRPC errors', () => {
         },
       },
     });
+    expect(requestMethod).toBe('POST');
+    expect(requestUrl).toBe('/api/trpc/automation.propose');
     expect(requestBody).toMatchObject({
       json: { workspaceId: 'parent-workspace', specification: { name: 'QA reviewer' } },
     });
     expect(JSON.parse(response.result.content[0]?.text ?? '')).toMatchObject({
-      type: 'agent_proposal',
+      type: 'automation_proposal',
       proposalId: 'proposal-1',
       workspaceId: 'parent-workspace',
       revision: 1,
@@ -556,19 +558,19 @@ it.each([
         stderr += chunk;
       });
       const forbidden = [
-        'agent.updateSaved',
+        'automation.updateSaved',
         'update_saved_agent',
         'agent.setEnabled',
         'activate_agent',
         'resolve_agent_run',
         'agent.recover',
-        'agent.recoveryTarget',
+        'automation.recoveryTarget',
         'recoveryTarget',
         'recovery_target',
-        'agent.inspectRun',
+        'automation.inspectRun',
         'inspectRun',
         'inspect_agent_run',
-        'agent.resolveAmbiguousRun',
+        'automation.resolveAmbiguousRun',
         'resolveAmbiguousRun',
         'agent.activate',
         'agent.pause',
@@ -656,9 +658,9 @@ it.each([
         'list_mail',
         'read_mail',
         'ack_mail',
-        'list_agent_sources',
-        'propose_agent',
-        'get_agent_proposal',
+        'list_automation_sources',
+        'propose_automation',
+        'get_automation_proposal',
       ]);
       const recoveryResponses = responses.filter((row) => row.id > 0 && row.id < 1000);
       expect(recoveryResponses).toHaveLength(forbidden.length * 3);

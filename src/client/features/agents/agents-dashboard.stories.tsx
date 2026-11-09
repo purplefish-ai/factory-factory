@@ -230,7 +230,7 @@ function DashboardStory({
   );
 }
 const meta = {
-  title: 'Automations/AgentsDashboard',
+  title: 'Automations/AutomationsDashboard',
   component: DashboardStory,
   parameters: { layout: 'fullscreen' },
 } satisfies Meta<typeof DashboardStory>;

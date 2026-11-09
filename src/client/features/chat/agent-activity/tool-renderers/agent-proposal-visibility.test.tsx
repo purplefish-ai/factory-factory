@@ -38,11 +38,11 @@ it('shows a proposal widget while ordinary tool activity is collapsed', async ()
               observer.complete();
               return;
             }
-            if (op.path === 'agent.create') {
+            if (op.path === 'automation.create') {
               observer.error(new TRPCClientError('Could not save this agent.'));
               return;
             }
-            if (op.path !== 'agent.getProposal') {
+            if (op.path !== 'automation.getProposal') {
               throw new Error(`Unexpected request ${op.path}`);
             }
             observer.next({ result: { data: current } });
@@ -57,12 +57,12 @@ it('shows a proposal widget while ordinary tool activity is collapsed', async ()
     pairedCalls: [
       {
         id: 'call-1',
-        name: 'mcp.factory-factory-child-workspace.propose_agent',
+        name: 'mcp.factory-factory-child-workspace.propose_automation',
         input: {},
         status: 'success',
         result: {
           content: JSON.stringify({
-            type: 'agent_proposal',
+            type: 'automation_proposal',
             proposalId: 'proposal-1',
             workspaceId: 'workspace-1',
           }),
@@ -102,7 +102,7 @@ it('shows a proposal widget while ordinary tool activity is collapsed', async ()
         ...call,
         result: {
           content: JSON.stringify({
-            type: 'agent_proposal',
+            type: 'automation_proposal',
             proposalId: 'proposal-1',
             workspaceId: 'workspace-1',
             revision: 2,

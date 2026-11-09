@@ -573,7 +573,10 @@ export const EventAuthoring: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     const instructions = await canvas.findByRole('textbox');
-    await expect(instructions).toHaveProperty('value', expect.stringContaining('propose_agent'));
+    await expect(instructions).toHaveProperty(
+      'value',
+      expect.stringContaining('propose_automation')
+    );
     await waitFor(() => expect(instructions).toBeEnabled());
     await expect(
       canvas.queryByRole('button', { name: 'Choose launch mode' })

@@ -143,7 +143,7 @@ describe.skipIf(!enabled)('live natural-language agent authoring evaluation', ()
             ],
             120_000
           );
-          expect(fixture.paths.some((path) => path.includes('agent.sources'))).toBe(true);
+          expect(fixture.paths.some((path) => path.includes('automation.sources'))).toBe(true);
           const proposals = await fixture.db.prisma.agentProposal.findMany({
             where: { workspaceId: fixture.workspaceId },
           });

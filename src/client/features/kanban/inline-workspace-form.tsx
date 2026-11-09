@@ -168,7 +168,7 @@ function workspaceDraftContext(projectId: string, purpose?: 'event-agent') {
   return {
     draftId: purpose ? `event-agent:${projectId}` : projectId,
     seedPrompt: purpose
-      ? 'Help me create an event-triggered automation for this project. Ask which event should trigger it and what it should do. Use list_agent_sources to discover available sources, then propose_agent to prepare a configuration for my review. Keep the definition and triggers paused; do not enable listening or automatic runs.'
+      ? 'Help me create an event-triggered automation for this project. Ask which event should trigger it and what it should do. Use list_automation_sources to discover available sources, then propose_automation to prepare a configuration for my review. Keep the definition and triggers paused; do not enable listening or automatic runs.'
       : '',
   };
 }

@@ -174,10 +174,10 @@ async function listResponse(input: unknown) {
   return removed || projectId !== (archived ? 'archived' : task.projectId) ? [] : [task];
 }
 async function queryResponse(path: string, input: unknown) {
-  if (path === 'agent.list') {
+  if (path === 'automation.list') {
     return { items: [], nextCursor: null };
   }
-  if (path === 'agent.navigationSummary') {
+  if (path === 'automation.navigationSummary') {
     return { totalCount: 0, failedCount: 0 };
   }
   if (path === 'periodicTask.navigationSummary') {

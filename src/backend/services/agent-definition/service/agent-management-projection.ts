@@ -49,7 +49,7 @@ const explanations: Record<AgentCapability['reasonCode'], string> = {
   UNKNOWN_MEMBERSHIP: 'Save the complete configuration before activation can be considered.',
   REMOVED_TRIGGER: 'This event is retained for history and is not configured.',
   INVALID_STORED_DATA: 'Stored configuration is unavailable.',
-  UNSUPPORTED_SCHEDULE: 'Use scheduled agents for time-based tasks.',
+  UNSUPPORTED_SCHEDULE: 'Use scheduled automations for time-based tasks.',
   SLACK_INTAKE_UNAVAILABLE: 'Slack event intake is not available yet.',
   UNSUPPORTED_GITHUB_ACTION: 'Only GitHub labeled events are supported.',
   UNSUPPORTED_SEMANTIC_FILTER: 'Semantic event filtering is not available yet.',

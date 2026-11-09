@@ -582,7 +582,7 @@ it.each(['STANDARD', 'PERIODIC_TASK'] as const)(
     };
     actFlushSync(() => root.render(createFormElement(props)));
     const textarea = container.querySelector('textarea')!;
-    expect(textarea.value).toContain('propose_agent');
+    expect(textarea.value).toContain('propose_automation');
     expect(container.querySelector('[aria-label="Choose launch mode"]')).toBeNull();
     expect(getWorkspaceCreationDraftSnapshot(projectId).draft).toEqual(normal);
     actFlushSync(() => {

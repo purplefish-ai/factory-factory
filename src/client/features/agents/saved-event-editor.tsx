@@ -15,8 +15,8 @@ export function SavedEventEditor({
   onSaved: () => void;
 }) {
   const utils = trpc.useUtils();
-  const update = trpc.agent.updateSaved.useMutation({ meta: { errorToast: false } });
-  const validation = trpc.agent.validateDraft.useMutation({ meta: { errorToast: false } });
+  const update = trpc.automation.updateSaved.useMutation({ meta: { errorToast: false } });
+  const validation = trpc.automation.validateDraft.useMutation({ meta: { errorToast: false } });
   const active = useRef(true);
   useEffect(() => {
     active.current = true;
@@ -38,10 +38,10 @@ export function SavedEventEditor({
             specification,
           });
         } catch (error) {
-          await utils.agent.get.invalidate(owner);
+          await utils.automation.get.invalidate(owner);
           throw error;
         }
-        utils.agent.get.setData(owner, (cached) =>
+        utils.automation.get.setData(owner, (cached) =>
           cached && cached.managementRevision > result.managementRevision ? cached : result
         );
         await invalidateSavedAgentQueries(utils, owner.projectId, owner.agentId);
@@ -53,9 +53,9 @@ export function SavedEventEditor({
         validation.mutateAsync({ projectId: owner.projectId, specification })
       }
       onSources={(input) =>
-        utils.client.agent.projectSources.query({ projectId: owner.projectId, ...input })
+        utils.client.automation.projectSources.query({ projectId: owner.projectId, ...input })
       }
-      onReload={() => utils.agent.get.fetch(owner)}
+      onReload={() => utils.automation.get.fetch(owner)}
     />
   );
 }

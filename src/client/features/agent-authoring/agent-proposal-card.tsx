@@ -263,11 +263,13 @@ function LatestProposalButton({
 
 export function AgentProposalCard({ reference }: { reference: AgentProposalReference }) {
   const input = { workspaceId: reference.workspaceId, proposalId: reference.proposalId };
-  const query = trpc.agent.getProposal.useQuery(input, { refetchOnWindowFocus: false });
-  const mutation = trpc.agent.create.useMutation({
+  const query = trpc.automation.getProposal.useQuery(input, { refetchOnWindowFocus: false });
+  const mutation = trpc.automation.create.useMutation({
     onError: (error) => toast.error(error.message),
   });
-  const update = trpc.agent.update.useMutation({ onError: (error) => toast.error(error.message) });
+  const update = trpc.automation.update.useMutation({
+    onError: (error) => toast.error(error.message),
+  });
   const utils = trpc.useUtils();
   const { refetch } = query;
   useEffect(() => {
@@ -309,7 +311,7 @@ export function AgentProposalCard({ reference }: { reference: AgentProposalRefer
           await refetch();
           throw error;
         }
-        utils.agent.getProposal.setData(input, result);
+        utils.automation.getProposal.setData(input, result);
         if (result.agentDefinitionId) {
           await invalidateSavedAgentQueries(utils, projectId, result.agentDefinitionId);
         }

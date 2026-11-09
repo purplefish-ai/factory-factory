@@ -47,7 +47,7 @@ export function pageAfter(cursor?: ManagementCursor) {
 export async function ownedAgent(tx: Prisma.TransactionClient, projectId: string, agentId: string) {
   const agent = await tx.agentDefinition.findFirst({ where: { id: agentId, projectId } });
   if (!agent) {
-    throw new ApplicationError('NOT_FOUND', 'Agent not found in this project.');
+    throw new ApplicationError('NOT_FOUND', 'Automation not found in this project.');
   }
   return agent;
 }
@@ -116,7 +116,7 @@ export const agentManagementAccessor = {
         data: { managementRevision: input.expectedManagementRevision },
       });
       if (!claimed.count) {
-        throw new ApplicationError('CONFLICT', 'This agent changed. Reload it before saving.');
+        throw new ApplicationError('CONFLICT', 'This automation changed. Reload it before saving.');
       }
       await validateManagementSources(tx, input.projectId, input.specification, evidence);
       const proposal = await tx.agentProposal.findUnique({

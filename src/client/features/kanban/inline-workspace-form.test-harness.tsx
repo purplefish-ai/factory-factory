@@ -108,7 +108,7 @@ vi.mock('@/client/lib/trpc', () => ({
           invalidate: mocks.listForProjectInvalidateMock,
         },
       },
-      agent: { list: { invalidate: vi.fn() }, navigationSummary: { invalidate: vi.fn() } },
+      automation: { list: { invalidate: vi.fn() }, navigationSummary: { invalidate: vi.fn() } },
       periodicTask: {
         list: { invalidate: vi.fn() },
         navigationSummary: { invalidate: mocks.navigationSummaryInvalidate },

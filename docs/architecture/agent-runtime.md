@@ -1696,15 +1696,15 @@ immediate-delivery or polling-time guarantee.
 
 ### Exact-context operator recovery transport
 
-The trusted-local `agent.recoveryTarget` query accepts project, agent and run
-IDs. Its owner reads membership and the current run/delivery tuple together,
+The trusted-local `automation.recoveryTarget` query accepts project, agent and
+run IDs. Its owner reads membership and the current run/delivery tuple together,
 returning an exact claim/current-send context or a bounded unavailable reason.
 It performs no provider discovery, stop, adoption or mutation. History and
 workspace origins intentionally omit current send identity and cannot authorize
 recovery.
 
-`agent.inspectRun` accepts that full context plus agent ID;
-`agent.resolveAmbiguousRun` adds RESOLVE, ABANDON or RETRY. Both verify the
+`automation.inspectRun` accepts that full context plus agent ID;
+`automation.resolveAmbiguousRun` adds RESOLVE, ABANDON or RETRY. Both verify the
 project/agent/run membership before reaching the application's existing recovery
 consumer. They preserve the submitted claim and attempt, including the original
 initial message and the current message/send attempt. A later action revalidates

@@ -48,7 +48,7 @@ function RecoveredBody() {
   );
 }
 const meta = {
-  title: 'Automations/EventAgentRecovery',
+  title: 'Automations/EventAutomationRecovery',
   component: RecoveredBody,
   parameters: { layout: 'fullscreen' },
 } satisfies Meta<typeof RecoveredBody>;
