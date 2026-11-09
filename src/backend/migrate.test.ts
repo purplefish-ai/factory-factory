@@ -791,6 +791,26 @@ PRAGMA foreign_keys=ON`
       expect(warnings[0]).toContain('posts -> users (1)');
     });
 
+    it('disables foreign keys before the transaction even for an interleaved PRAGMA without a semicolon', () => {
+      addMigration(
+        '001_tables',
+        `CREATE TABLE users (id INTEGER PRIMARY KEY);
+CREATE TABLE posts (id INTEGER PRIMARY KEY, user_id INTEGER NOT NULL REFERENCES users(id));`
+      );
+      addMigration(
+        '002_interleaved',
+        `CREATE TABLE notes (id INTEGER PRIMARY KEY);
+PRAGMA foreign_keys=OFF
+INSERT INTO posts (id, user_id) VALUES (1, 42);
+PRAGMA foreign_keys=ON`
+      );
+
+      const warnings = migrate();
+
+      expect(withDatabase(getAppliedMigrations)).toEqual(['001_tables', '002_interleaved']);
+      expect(warnings[0]).toContain('posts -> users (1)');
+    });
+
     it('does not run the foreign key check after migrations that keep foreign keys on', () => {
       addMigration(
         '001_tables',

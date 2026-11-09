@@ -67,12 +67,17 @@ function writeStderr(message: string): void {
   process.stderr.write(`${message}\n`);
 }
 
+/** Upper-case, whitespace-free, without the optional trailing semicolon. */
+function normalizePragma(pragma: string): string {
+  return pragma.toUpperCase().replace(/\s+/g, '').replace(/;$/, '');
+}
+
 function classifyPragmaBucket(trimmedPragma: string, foundNonPragma: boolean): 'pre' | 'post' {
-  const normalized = trimmedPragma.toUpperCase().replace(/\s+/g, '');
-  if (normalized === 'PRAGMADEFER_FOREIGN_KEYS=ON;' || normalized === 'PRAGMAFOREIGN_KEYS=OFF;') {
+  const normalized = normalizePragma(trimmedPragma);
+  if (normalized === 'PRAGMADEFER_FOREIGN_KEYS=ON' || normalized === 'PRAGMAFOREIGN_KEYS=OFF') {
     return 'pre';
   }
-  if (normalized === 'PRAGMAFOREIGN_KEYS=ON;' || normalized === 'PRAGMADEFER_FOREIGN_KEYS=OFF;') {
+  if (normalized === 'PRAGMAFOREIGN_KEYS=ON' || normalized === 'PRAGMADEFER_FOREIGN_KEYS=OFF') {
     return 'post';
   }
   return foundNonPragma ? 'post' : 'pre';
@@ -240,10 +245,7 @@ function parseMigrationSql(migrationSql: string): {
  * Apply a single migration file to the database.
  */
 function disablesForeignKeys(pragmas: readonly string[]): boolean {
-  return pragmas.some(
-    (pragma) =>
-      pragma.toUpperCase().replace(/\s+/g, '').replace(/;$/, '') === 'PRAGMAFOREIGN_KEYS=OFF'
-  );
+  return pragmas.some((pragma) => normalizePragma(pragma) === 'PRAGMAFOREIGN_KEYS=OFF');
 }
 
 /** Foreign key violations per `child -> parent` table pair. */
