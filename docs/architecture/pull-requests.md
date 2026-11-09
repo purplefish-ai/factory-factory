@@ -564,6 +564,16 @@ another conversation is selected. If history is unavailable, restore the
 provider history files and archived identity, then explicitly resume the
 selected conversation. Local transcript messages cannot prove receipt.
 
+The session capsule tells the delivery port why a claimed delivery did not reach
+the provider with a typed `PRDeliveryFailureReason`; error message text never
+decides delivery state. Dispatch raises `ApplicationError` kinds that the
+session's background delivery service classifies before calling the port. `busy`
+(`SESSION_TURN_BUSY`: another turn holds the session or a human message arrived
+during preparation, or the provider runtime reports a busy turn) defers the
+claim without spending an attempt. `resume_failed` (`SESSION_RESUME_FAILED`: the
+exact stored conversation could not be restored) pauses delivery as
+`RESUME_FAILED` immediately. Any other failure is a counted retry.
+
 Transport attempts stop after three failures. User stop and runtime failure
 persist a pause and invalidate queued requests; explicit user continuation
 clears recoverable pauses and renews the bounded retry allowance while

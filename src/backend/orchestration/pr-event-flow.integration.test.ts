@@ -163,7 +163,10 @@ it('defers a busy main session, then freezes one bounded update and reuses it on
   }
   expect(prepared.delivery.text).toContain('PR update: "org/repo" #2');
   expect(Buffer.byteLength(prepared.delivery.text)).toBeLessThanOrEqual(16_384);
-  await prBackgroundDeliveryPort.fail(prepared.delivery, new Error('temporary transport failure'));
+  await prBackgroundDeliveryPort.fail(prepared.delivery, {
+    reason: 'failed',
+    error: new Error('temporary transport failure'),
+  });
   const retry = await preparePRDelivery({ sessionId: 'main', request });
   expect(retry).toMatchObject({
     status: 'ready',
@@ -531,7 +534,10 @@ it('does not repeat review feedback received by a delivery in flight during a pu
 it('retains review feedback when a delivery in flight during a push is cancelled', async () => {
   const workspaceId = 'review-push-cancelled';
   const flow = await freezeReviewThenPush(workspaceId);
-  await prBackgroundDeliveryPort.fail(flow.delivery, new Error('Temporary transport failure'));
+  await prBackgroundDeliveryPort.fail(flow.delivery, {
+    reason: 'failed',
+    error: new Error('Temporary transport failure'),
+  });
   await workspacePRMonitoringService.cancelRecoveredDelivery(
     flow.delivery.deliveryId,
     flow.sessionId
@@ -777,7 +783,10 @@ it('recovers an absent frozen batch with a detached target and delivers attached
     throw new Error('Expected original frozen delivery');
   }
   const frozen = prepared.delivery;
-  await prBackgroundDeliveryPort.fail(frozen, new Error('Temporary transport failure'));
+  await prBackgroundDeliveryPort.fail(frozen, {
+    reason: 'failed',
+    error: new Error('Temporary transport failure'),
+  });
   await db.prisma.workspacePR.update({
     where: { id: targets[1]!.id },
     data: { detachedAt: new Date() },

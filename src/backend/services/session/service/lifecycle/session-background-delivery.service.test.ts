@@ -1,4 +1,5 @@
 import { expect, it, vi } from 'vitest';
+import { ApplicationError } from '@/backend/lib/application-error';
 import { prepareBackgroundForDispatch } from '@/backend/services/session/service/dispatch/session-dispatch-batch';
 import { sessionDomainService } from '@/backend/services/session/service/session-domain.service';
 import {
@@ -98,6 +99,43 @@ it('keeps a frozen retry coalesced until its queue item is removed', async () =>
   sessionDomainService.removeQueuedMessage('retry-test', queued.id);
   service.enqueue('retry-test', request);
   expect(sessionDomainService.getQueueLength('retry-test')).toBe(1);
+});
+
+it.each([
+  ['busy', new ApplicationError('CONFLICT', 'Reworded busy', { kind: 'SESSION_TURN_BUSY' })],
+  [
+    'resume_failed',
+    new ApplicationError('PRECONDITION_FAILED', 'Reworded resume', {
+      kind: 'SESSION_RESUME_FAILED',
+    }),
+  ],
+  ['failed', new Error('Required existing conversation could not be restored')],
+] as const)('reports a typed %s failure reason to the delivery port', async (reason, error) => {
+  const service = new SessionBackgroundDeliveryService();
+  const sessionId = `typed-failure-${reason}`;
+  const delivery = {
+    deliveryId: 'typed',
+    sessionId,
+    bindingRevision: 1,
+    eventIds: ['e'],
+    text: 'facts',
+    attempt: 1,
+  };
+  const fail = vi.fn(async () => ({ paused: false }));
+  service.configure({
+    prepare: async () => ({ status: 'ready', delivery }),
+    validate: async () => true,
+    complete: async () => undefined,
+    fail,
+    recover: async () => undefined,
+    pause: async () => undefined,
+    resume: async () => undefined,
+  });
+  service.enqueue(sessionId, request);
+  const queued = sessionDomainService.peekNextMessage(sessionId)!;
+  await service.prepare(sessionId, queued);
+  await service.fail(queued, error);
+  expect(fail).toHaveBeenCalledExactlyOnceWith(delivery, { reason, error });
 });
 
 it('retries queue pressure after capacity returns without allocating another session', () => {
@@ -767,7 +805,10 @@ it.each(['none', 'before-rejection', 'during-release'] as const)(
       }
       releaseSettlement();
       expect(await dispatch).toBe(reason);
-      expect(fail).toHaveBeenCalledExactlyOnceWith(oldResult.delivery, reason);
+      expect(fail).toHaveBeenCalledExactlyOnceWith(oldResult.delivery, {
+        reason: 'failed',
+        error: reason,
+      });
       expect(service.isDeliveryActive('frozen-delivery')).toBe(replacement !== 'none');
       expect(sessionDomainService.peekNextMessage(sessionId)).toBe(message);
       if (replacement !== 'none') {

@@ -88,7 +88,10 @@ it('delivers and retries a saved merge event when all associations stop backgrou
   if (prepared.status !== 'ready') {
     throw new Error('Expected terminal delivery');
   }
-  await prBackgroundDeliveryPort.fail(prepared.delivery, new Error('temporary transport failure'));
+  await prBackgroundDeliveryPort.fail(prepared.delivery, {
+    reason: 'failed',
+    error: new Error('temporary transport failure'),
+  });
   await ratchetService.checkWorkspaceById(workspaceId);
   const retry = await preparePRDelivery({ sessionId, request });
   if (retry.status !== 'ready') {

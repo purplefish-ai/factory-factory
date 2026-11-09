@@ -199,7 +199,10 @@ describe('sessionDispatchService.tryDispatchNextMessage', () => {
         await sessionDispatchService.tryDispatchNextMessage('s1');
         expect(fail).toHaveBeenCalledWith(
           delivery,
-          expect.objectContaining({ message: 'Session stopped before dispatch' })
+          expect.objectContaining({
+            reason: 'failed',
+            error: expect.objectContaining({ message: 'Session stopped before dispatch' }),
+          })
         );
         expect(sessionBackgroundDeliveryService.isDeliveryActive(delivery.deliveryId)).toBe(false);
         expect(mockSessionService.sendSessionMessage).not.toHaveBeenCalled();
@@ -302,6 +305,7 @@ describe('sessionDispatchService.tryDispatchNextMessage', () => {
           background,
           expect.objectContaining({
             message: expect.stringContaining('A turn is already in progress'),
+            kind: 'SESSION_TURN_BUSY',
           })
         );
         expect(mockSessionService.sendSessionMessage).not.toHaveBeenCalled();
@@ -345,7 +349,10 @@ describe('sessionDispatchService.tryDispatchNextMessage', () => {
       expect(mockSessionService.sendSessionMessage).not.toHaveBeenCalled();
       expect(fail).toHaveBeenCalledWith(
         background,
-        expect.objectContaining({ message: expect.stringContaining('existing conversation') })
+        expect.objectContaining({
+          message: expect.stringContaining('existing conversation'),
+          kind: 'SESSION_RESUME_FAILED',
+        })
       );
     } finally {
       prepare.mockRestore();
@@ -386,7 +393,10 @@ describe('sessionDispatchService.tryDispatchNextMessage', () => {
     expect(mockSessionService.sendSessionMessage).toHaveBeenCalledWith('s1', 'hello');
     expect(fail).toHaveBeenCalledWith(
       background,
-      expect.objectContaining({ message: expect.stringContaining('human message queued') })
+      expect.objectContaining({
+        message: expect.stringContaining('human message queued'),
+        kind: 'SESSION_TURN_BUSY',
+      })
     );
     prepare.mockRestore();
     validate.mockRestore();
