@@ -436,6 +436,33 @@ describe('repository discovery and CLI', () => {
     expect(output).toContain('File length check passed.');
   });
 
+  test('warns by current length, not baseline status', () => {
+    const repositoryRoot = createTemporaryRepository();
+    writeLines(join(repositoryRoot, 'src/legacy.ts'), 1200);
+    writeLines(join(repositoryRoot, 'src/shrunk.ts'), 990);
+    execFileSync('git', ['add', 'src'], { cwd: repositoryRoot });
+    const baselinePath = join(repositoryRoot, 'baseline.json');
+    writeFileSync(baselinePath, '{\n  "src/legacy.ts": 1200,\n  "src/shrunk.ts": 1100\n}\n');
+    const stdout: string[] = [];
+    const stderr: string[] = [];
+
+    const exitCode = runFileLengthCli({
+      repositoryRoot,
+      baselinePath,
+      args: [],
+      stdout: (message) => stdout.push(message),
+      stderr: (message) => stderr.push(message),
+    });
+
+    // A baselined file over the cap is a ratchet entry, not near-cap pressure.
+    // One that shrank below the cap is still near it, and remains listed after
+    // `--update` drops its stale entry, so it is warned about now as well.
+    expect(exitCode).toBe(1);
+    expect(stdout.join('')).not.toContain('src/legacy.ts');
+    expect(stdout.join('')).toContain('990  src/shrunk.ts');
+    expect(stderr.join('')).toContain('src/shrunk.ts: 990 lines is below the recorded 1100');
+  });
+
   test('prints no cap pressure warning when every file is well under the cap', () => {
     const repositoryRoot = createTemporaryRepository();
     writeLines(join(repositoryRoot, 'src/small.ts'), 979);
