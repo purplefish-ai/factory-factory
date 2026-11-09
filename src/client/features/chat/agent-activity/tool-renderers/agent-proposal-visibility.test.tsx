@@ -39,7 +39,7 @@ it('shows a proposal widget while ordinary tool activity is collapsed', async ()
               return;
             }
             if (op.path === 'automation.create') {
-              observer.error(new TRPCClientError('Could not save this agent.'));
+              observer.error(new TRPCClientError('Could not save this automation.'));
               return;
             }
             if (op.path !== 'automation.getProposal') {
@@ -139,11 +139,11 @@ it('shows a proposal widget while ordinary tool activity is collapsed', async ()
     });
     await vi.waitFor(() =>
       expect(document.querySelector('[data-sonner-toast]')?.textContent).toContain(
-        'Could not save this agent.'
+        'Could not save this automation.'
       )
     );
     expect(container.querySelector('[role="alert"]')?.textContent).toContain(
-      'Could not save this agent.'
+      'Could not save this automation.'
     );
   } finally {
     await act(() => root.unmount());
