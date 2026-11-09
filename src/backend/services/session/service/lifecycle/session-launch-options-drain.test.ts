@@ -341,7 +341,7 @@ describe('native launch admission through actual child drain', () => {
     expect(await options.getOptions(request('model-0'))).toMatchObject({
       reasoning: { selected: 'high' },
     });
-    await vi.advanceTimersByTimeAsync(30_001);
+    await vi.advanceTimersByTimeAsync(30 * 60_000 + 1);
     const expired = settled(options.getOptions(request('model-0')));
     await vi.advanceTimersByTimeAsync(1);
     expect(peers).toHaveLength(1);
@@ -503,7 +503,7 @@ describe('native launch admission through actual child drain', () => {
     const success = settled(options.getOptions(request('model-0')));
     await vi.advanceTimersByTimeAsync(1);
     expect(await success).toMatchObject({ model: 'model-0' });
-    await vi.advanceTimersByTimeAsync(30_001);
+    await vi.advanceTimersByTimeAsync(5 * 60_000);
     const refreshed = settled(options.getOptions(request('model-0')));
     await vi.advanceTimersByTimeAsync(5001);
     expect(await refreshed).toMatchObject({ model: 'model-0' });
