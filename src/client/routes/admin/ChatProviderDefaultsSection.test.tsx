@@ -197,4 +197,21 @@ describe('ChatProviderDefaultsSection', () => {
     expect(trigger?.textContent).toBe('Default — Opus 4.8 (1M)');
     root.unmount();
   });
+  it('defaults automation permissions to Auto review and saves them separately', () => {
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    flushSync(() => root.render(createElement(ChatProviderDefaultsSection)));
+    const trigger = container.querySelector<HTMLElement>('#automation-permissions');
+    expect(trigger?.textContent).toBe('Auto review');
+    expect(container.querySelector('#workspace-permissions')?.textContent).toBe('Standard');
+    flushSync(() => trigger?.click());
+    const option = Array.from(document.querySelectorAll<HTMLElement>('[role="option"]')).find(
+      (element) => element.textContent === 'Full access'
+    );
+    expect(option).toBeDefined();
+    flushSync(() => option?.click());
+    expect(mocks.updateSettingsMutate).toHaveBeenLastCalledWith({ automationPermissions: 'YOLO' });
+    root.unmount();
+  });
 });

@@ -28,6 +28,7 @@ interface UpdateUserSettingsInput {
   defaultClaudeReasoningEffort?: string | null;
   defaultCodexReasoningEffort?: string | null;
   defaultWorkspacePermissions?: SessionPermissionPreset;
+  automationPermissions?: SessionPermissionPreset;
   reviewerSessionProvider?: SessionProvider;
   reviewerClaudeModel?: string | null;
   reviewerCodexModel?: string | null;
@@ -154,12 +155,14 @@ function buildRatchetDefaults(
   | 'ratchetReplyToPrComments'
   | 'ratchetReviewTriggerMode'
   | 'defaultWorkspacePermissions'
+  | 'automationPermissions'
 > {
   return {
     ratchetEnabled: data.ratchetEnabled ?? false,
     ratchetReplyToPrComments: data.ratchetReplyToPrComments ?? true,
     ratchetReviewTriggerMode: data.ratchetReviewTriggerMode ?? 'CHANGES_REQUESTED',
     defaultWorkspacePermissions: data.defaultWorkspacePermissions ?? 'STRICT',
+    automationPermissions: data.automationPermissions ?? 'RELAXED',
   };
 }
 
@@ -312,6 +315,7 @@ class UserSettingsAccessor {
           defaultClaudeReasoningEffort: null,
           defaultCodexReasoningEffort: null,
           defaultWorkspacePermissions: 'STRICT',
+          automationPermissions: 'RELAXED',
           ratchetReplyToPrComments: true,
           ratchetReviewTriggerMode: 'CHANGES_REQUESTED',
         },

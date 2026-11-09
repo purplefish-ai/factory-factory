@@ -382,6 +382,7 @@ function createImportData(
         defaultClaudeModel: 'sonnet',
         defaultCodexModel: 'gpt-5-codex',
         defaultWorkspacePermissions: 'STRICT',
+        automationPermissions: 'YOLO',
         // Non-default so the import test below actually exercises restoring
         // a persisted preference, not just the schema's own default.
         reviewerSessionProvider: SessionProvider.CLAUDE,
@@ -505,6 +506,7 @@ describe('DataBackupService', () => {
           defaultClaudeModel: 'sonnet',
           defaultCodexModel: 'gpt-5-codex',
           defaultWorkspacePermissions: 'STRICT',
+          automationPermissions: 'YOLO',
           reviewerSessionProvider: SessionProvider.CLAUDE,
           reviewerClaudeModel: 'opus',
           reviewerCodexModel: 'gpt-5-codex-high',
@@ -541,6 +543,7 @@ describe('DataBackupService', () => {
           defaultClaudeModel: 'sonnet',
           defaultCodexModel: 'default',
           defaultWorkspacePermissions: 'STRICT',
+          automationPermissions: 'YOLO',
         },
       });
 
@@ -846,6 +849,7 @@ describe('DataBackupService', () => {
           defaultClaudeModel: 'sonnet',
           defaultCodexModel: 'gpt-5-codex',
           defaultWorkspacePermissions: 'STRICT',
+          automationPermissions: 'YOLO',
           voiceModeEnabled: true,
           voiceTtsModel: 'aura-2-apollo-en',
           voiceTtsSpeed: 0.72,

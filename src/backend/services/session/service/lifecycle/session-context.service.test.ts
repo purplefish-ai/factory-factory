@@ -48,13 +48,13 @@ function createHarness() {
 
 describe('SessionContextService', () => {
   it.each(['CODEX', 'CLAUDE'] as const)(
-    'keeps the scheduled %s fallback provider-specific',
+    'defaults scheduled %s sessions to auto review when settings fail',
     async (provider) => {
       const { service, session, permissionPresetPort } = createHarness();
       permissionPresetPort.getPermissionPreset.mockRejectedValueOnce(new Error('settings failed'));
       await expect(
         service.resolvePermissionPreset({ ...session, workflow: 'periodic-task', provider })
-      ).resolves.toBe(provider === 'CODEX' ? 'YOLO' : 'STRICT');
+      ).resolves.toBe('RELAXED');
     }
   );
 
