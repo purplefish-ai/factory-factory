@@ -9,6 +9,8 @@ export const workspacePRMonitoringService = {
     workspacePrEventAccessor.cancelRecoveredDelivery.bind(workspacePrEventAccessor),
   addEnabledControl: workspacePrEventAccessor.addEnabledControl.bind(workspacePrEventAccessor),
   deferBusy: workspacePrEventAccessor.deferBusy.bind(workspacePrEventAccessor),
+  discardBlockedDeliveries:
+    workspacePrEventAccessor.discardBlockedDeliveries.bind(workspacePrEventAccessor),
   listLegacyRetirementCandidates: workspacePrMonitoringAccessor.listLegacyRetirementCandidates.bind(
     workspacePrMonitoringAccessor
   ),

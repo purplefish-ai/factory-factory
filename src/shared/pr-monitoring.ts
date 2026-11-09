@@ -30,6 +30,14 @@ export interface PRMonitoringProjection {
   pauseReason: string | null;
   pendingEventCount: number;
 }
+/**
+ * Projected (not persisted) pause: a quarantined `BLOCKED` delivery holds every
+ * later claim for the workspace until the user discards it.
+ */
+export const PR_DELIVERY_BLOCKED_PAUSE_REASON = 'DELIVERY_BLOCKED';
+export function isPRDeliveryBlocked(reason: string | null | undefined): boolean {
+  return reason === PR_DELIVERY_BLOCKED_PAUSE_REASON;
+}
 const resumablePauseReasons = new Set([
   'USER_STOPPED',
   'SESSION_FAILED',

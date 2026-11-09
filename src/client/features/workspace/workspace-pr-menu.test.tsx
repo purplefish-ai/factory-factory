@@ -230,3 +230,31 @@ it('disables resume during a mutation and hides it when monitoring is off', asyn
   );
   expect(document.body.textContent).not.toContain('Resume PR updates');
 });
+it('explains a blocked delivery and offers discard instead of resume', async () => {
+  const onDiscardBlocked = vi.fn();
+  const onResume = vi.fn();
+  await render(
+    <WorkspacePrMenu
+      prs={[]}
+      monitoring={{
+        enabled: true,
+        deliveryMode: 'MAIN',
+        pauseReason: 'DELIVERY_BLOCKED',
+        pending: false,
+        onToggle: vi.fn(),
+        onDeliveryMode: vi.fn(),
+        onChangeRecipient: vi.fn(),
+        onResume,
+        onDiscardBlocked,
+      }}
+    />
+  );
+  await open();
+  expect(document.querySelector('[role="status"]')?.textContent).toContain(
+    'PR updates are stopped'
+  );
+  expect(document.body.textContent).not.toContain('Resume PR updates');
+  await key(item('Discard stuck PR update…'), 'Enter');
+  expect(onDiscardBlocked).toHaveBeenCalledOnce();
+  expect(onResume).not.toHaveBeenCalled();
+});

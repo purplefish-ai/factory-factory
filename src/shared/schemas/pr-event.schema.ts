@@ -2,6 +2,26 @@ import { z } from 'zod';
 
 export const prDeliveryModeSchema = z.enum(['MAIN', 'DEDICATED']);
 
+/** `WorkspacePREvent.state`. Delivery members project their delivery's state on read. */
+export const prEventStateSchema = z.enum([
+  'PENDING',
+  'DISPATCHING',
+  'DELIVERED',
+  'SUPERSEDED',
+  'CANCELLED',
+]);
+/**
+ * `WorkspacePRDelivery.state`. `BLOCKED` quarantines inconsistent or held receipt
+ * evidence and holds every later claim for its workspace. `DISMISSED` is a
+ * `BLOCKED` delivery the user explicitly discarded: its evidence stays verbatim,
+ * its members read as `CANCELLED`, and it no longer holds claims.
+ */
+export const prDeliveryStateSchema = z.enum([
+  ...prEventStateSchema.options,
+  'BLOCKED',
+  'DISMISSED',
+]);
+
 export const prTargetSchema = z.strictObject({
   workspaceId: z.string().min(1),
   prId: z.string().min(1),
@@ -82,3 +102,4 @@ export type PRFactPayload = z.infer<typeof prFactPayloadSchema>;
 export type PRMonitoringControlPayload = z.infer<typeof prMonitoringControlPayloadSchema>;
 export type PRMonitoringEventPayload = z.infer<typeof prMonitoringEventPayloadSchema>;
 export type PRDeliveryRequest = z.infer<typeof prDeliveryRequestSchema>;
+export type PRDeliveryState = z.infer<typeof prDeliveryStateSchema>;

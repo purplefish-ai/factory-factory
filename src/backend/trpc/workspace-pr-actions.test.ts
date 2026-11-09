@@ -7,8 +7,10 @@ import { workspaceCoreRouter } from './workspace.trpc';
 const detach = vi.fn(),
   attach = vi.fn(),
   stop = vi.fn(),
-  sessions = vi.fn();
-function caller() {
+  sessions = vi.fn(),
+  discardBlocked = vi.fn(),
+  wake = vi.fn();
+function caller(requestTrust?: { remoteAddress: string; origin: string; isLocal: boolean }) {
   const graph = createFakeApplicationGraph('pr-actions');
   const services = {
     ...graph.services,
@@ -16,8 +18,10 @@ function caller() {
     prSnapshotService: { attachAndRefreshPR: attach, detachPR: detach },
     sessionLifecycleService: { stopSession: stop },
     sessionDataService: { findAgentSessionsByWorkspaceId: sessions },
+    ratchetService: { discardBlockedPRDeliveries: discardBlocked, wakePendingEvents: wake },
   };
   return workspaceCoreRouter.createCaller({
+    requestTrust,
     appContext: unsafeCoerce<AppContext>({ ...graph, services }),
   });
 }
@@ -63,3 +67,27 @@ it.each(['stale_observation', 'no_pr_url'])(
     ).resolves.toMatchObject({ id: 'w', attachedPrId: 'a', prSyncStatus: 'pending' });
   }
 );
+
+it('discards blocked PR deliveries and wakes delivery only when something was discarded', async () => {
+  wake.mockResolvedValue(undefined);
+  discardBlocked.mockResolvedValueOnce({ discarded: 1 }).mockResolvedValue({ discarded: 0 });
+  const api = caller();
+  await expect(api.discardBlockedPRDeliveries({ workspaceId: 'w' })).resolves.toEqual({
+    discarded: 1,
+  });
+  await expect(api.discardBlockedPRDeliveries({ workspaceId: 'w' })).resolves.toEqual({
+    discarded: 0,
+  });
+  expect(discardBlocked.mock.calls).toEqual([['w'], ['w']]);
+  expect(wake).toHaveBeenCalledExactlyOnceWith('w');
+});
+it('rejects discarding blocked PR deliveries from an untrusted request', async () => {
+  await expect(
+    caller({
+      remoteAddress: '203.0.113.10',
+      origin: 'https://attacker.example',
+      isLocal: false,
+    }).discardBlockedPRDeliveries({ workspaceId: 'w' })
+  ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+  expect(discardBlocked).not.toHaveBeenCalled();
+});

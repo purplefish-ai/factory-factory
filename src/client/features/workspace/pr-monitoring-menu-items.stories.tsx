@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react';
-import { expect, fn, within } from 'storybook/test';
+import { expect, fn, userEvent, within } from 'storybook/test';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -44,3 +44,20 @@ export const Saving: Story = {
   },
 };
 export const SavingDark: Story = { ...Saving, globals: { theme: 'dark' } };
+export const DeliveryBlocked: Story = {
+  args: {
+    enabled: true,
+    pending: false,
+    pauseReason: 'DELIVERY_BLOCKED',
+    onResume: fn(),
+    onDiscardBlocked: fn(),
+  },
+  play: async ({ args, canvasElement }) => {
+    const body = within(canvasElement.ownerDocument.body);
+    await expect(body.getByRole('status')).toHaveTextContent('PR updates are stopped');
+    await expect(body.queryByRole('menuitem', { name: 'Resume PR updates' })).toBeNull();
+    await userEvent.click(body.getByRole('menuitem', { name: 'Discard stuck PR update…' }));
+    await expect(args.onDiscardBlocked).toHaveBeenCalledOnce();
+  },
+};
+export const DeliveryBlockedDark: Story = { ...DeliveryBlocked, globals: { theme: 'dark' } };

@@ -288,6 +288,26 @@ workspace deletion still cascades both deliveries and events. A quarantined
 legacy receipt spanning multiple workspaces blocks deletion of its batch owner
 rather than cascading into another workspace's evidence.
 
+Membership that later becomes inconsistent, and old-format imports of unfinished
+receipts, are also quarantined as `BLOCKED`. A `BLOCKED` delivery holds every
+later claim for its workspace, so the workspace projection reports the derived
+pause reason `DELIVERY_BLOCKED` (a persisted pause reason takes precedence) and
+the status reads "PR update delivery needs attention". The PR menu says updates
+are stopped because an earlier update's delivery record is inconsistent, and
+offers **Discard stuck PR update…** instead of Resume. After confirmation, the
+trusted-local `workspace.discardBlockedPRDeliveries` mutation moves the
+workspace's `BLOCKED` deliveries to `DISMISSED` and wakes delivery. Nothing is
+resent or deleted: delivery rows, membership and member evidence stay verbatim,
+members read as `CANCELLED`, and their facts are not delivered (the next PR
+transition emits fresh facts). Dismissed deliveries are never settled, retried
+or recovered. Export still writes quarantined evidence verbatim and still fails
+for damaged normalized membership; dismissal is local, so a restored backup
+quarantines the same evidence again. Delivery and event states are defined once
+in `src/shared/schemas/pr-event.schema.ts` and parsed on read; an unknown
+persisted state fails the read instead of being treated as live. Frozen legacy
+metadata without a receipt ID (below) still blocks claims without this
+projection or action.
+
 Logical backups retain the existing flattened event format. Export validates
 complete normalized membership; old imports reconstruct batches with the same
 receipt IDs and quarantine contradictory evidence. Delivery ID collisions abort

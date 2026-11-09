@@ -51,3 +51,20 @@ it('defaults legacy menu projections to MAIN', () => {
       .deliveryMode
   ).toBe('MAIN');
 });
+
+it('passes the blocked delivery discard action through only when supplied', () => {
+  const discard = vi.fn();
+  const toggle = { mutate: vi.fn(), isPending: false };
+  const menu = createPRMonitoringMenuProps(
+    'w',
+    { enabled: true, pauseReason: 'DELIVERY_BLOCKED' },
+    toggle,
+    discard
+  );
+  menu.onDiscardBlocked?.();
+  expect(discard).toHaveBeenCalledOnce();
+  expect(toggle.mutate).not.toHaveBeenCalled();
+  expect(createPRMonitoringMenuProps('w', { enabled: true }, toggle)).not.toHaveProperty(
+    'onDiscardBlocked'
+  );
+});

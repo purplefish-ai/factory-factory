@@ -298,6 +298,14 @@ export class RatchetService extends EventEmitter {
       });
     }
   }
+  /** Discard quarantined deliveries so PR updates can be claimed again. */
+  async discardBlockedPRDeliveries(workspaceId: string): Promise<{ discarded: number }> {
+    const { count } = await workspacePRMonitoringService.discardBlockedDeliveries(workspaceId);
+    if (count) {
+      this.emit(RATCHET_DISPATCH_CHANGED, { workspaceId });
+    }
+    return { discarded: count };
+  }
   async setWorkspaceRatcheting(
     workspaceId: string,
     enabled: boolean,
