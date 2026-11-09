@@ -45,6 +45,25 @@ describe('userSettingsAccessor.update', () => {
       );
     }
   );
+  it.each([undefined, 'STRICT', 'RELAXED', 'YOLO'] as const)(
+    'persists automation permissions %s with an independent default',
+    async (automationPermissions) => {
+      mockUpsert.mockImplementation(
+        async ({ create }: { create: Record<string, unknown> }) => create
+      );
+      const settings = await userSettingsAccessor.update({
+        defaultWorkspacePermissions: 'YOLO',
+        automationPermissions,
+      });
+      expect(settings.automationPermissions).toBe(automationPermissions ?? 'RELAXED');
+      expect(mockUpsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          update: expect.objectContaining({ automationPermissions }),
+        })
+      );
+    }
+  );
+
   it('preserves ratchetEnabled when update creates the settings', async () => {
     mockUpsert.mockImplementation(async ({ create }: { create: { ratchetEnabled?: boolean } }) => ({
       ...create,

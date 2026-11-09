@@ -205,6 +205,7 @@ export const userSettingsRouter = router({
         defaultCodexReasoningEffort: z.string().trim().min(1).nullable().optional(),
         // Permission preset defaults
         defaultWorkspacePermissions: z.nativeEnum(SessionPermissionPreset).optional(),
+        automationPermissions: z.nativeEnum(SessionPermissionPreset).optional(),
         // Adversarial review settings
         reviewerSessionProvider: z.nativeEnum(SessionProvider).optional(),
         reviewerClaudeModel: z.string().trim().min(1).nullable().optional(),

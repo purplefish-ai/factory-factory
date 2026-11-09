@@ -65,7 +65,7 @@ export async function createEventLaunchResources(
   return binding;
 }
 async function resolveExecution(run: Run, codexAccountId: string | null) {
-  const { defaultWorkspacePermissions } = await userSettingsService.get();
+  const { automationPermissions } = await userSettingsService.get();
   return eventAgentExecutionSchema.parse({
     ...run.execution,
     reasoningEffort: run.execution.reasoningEffort ?? null,
@@ -73,7 +73,7 @@ async function resolveExecution(run: Run, codexAccountId: string | null) {
     startupModePreset: 'non_interactive',
     accessMode: resolvePermissionPresetAccessMode(
       run.execution.provider,
-      defaultWorkspacePermissions
+      automationPermissions ?? 'RELAXED'
     ),
     planModeEnabled: false,
   });

@@ -235,6 +235,15 @@ describe('Enum sync with Prisma schema', () => {
   });
 });
 
+describe('automation permissions on restore', () => {
+  it('defaults older backups to auto review independently of workspace permissions', () => {
+    expect(exportedUserSettingsSchema.shape.automationPermissions.parse(undefined)).toBe('RELAXED');
+  });
+  it.each(['STRICT', 'RELAXED', 'YOLO'] as const)('preserves explicit %s permissions', (preset) => {
+    expect(exportedUserSettingsSchema.shape.automationPermissions.parse(preset)).toBe(preset);
+  });
+});
+
 describe('voice settings normalization on restore', () => {
   // Import writes these values straight to UserSettings and never replays the
   // Flux migration, so a backup taken before the upgrade is the one path that

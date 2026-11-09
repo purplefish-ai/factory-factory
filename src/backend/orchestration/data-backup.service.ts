@@ -536,6 +536,7 @@ async function importUserSettings(
       defaultClaudeReasoningEffort: settings.defaultClaudeReasoningEffort,
       defaultCodexReasoningEffort: settings.defaultCodexReasoningEffort,
       defaultWorkspacePermissions: settings.defaultWorkspacePermissions,
+      automationPermissions: settings.automationPermissions,
       // Adversarial review settings
       reviewerSessionProvider: settings.reviewerSessionProvider,
       reviewerClaudeModel: settings.reviewerClaudeModel,
@@ -733,6 +734,7 @@ class DataBackupService {
               defaultClaudeReasoningEffort: userSettings.defaultClaudeReasoningEffort,
               defaultCodexReasoningEffort: userSettings.defaultCodexReasoningEffort,
               defaultWorkspacePermissions: userSettings.defaultWorkspacePermissions,
+              automationPermissions: userSettings.automationPermissions,
               // Adversarial review settings
               reviewerSessionProvider: userSettings.reviewerSessionProvider,
               reviewerClaudeModel: userSettings.reviewerClaudeModel,
