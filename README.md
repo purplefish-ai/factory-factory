@@ -184,6 +184,9 @@ disable inherited `TRUST_PROXY_HEADERS` and dotenv override settings before
 launching the backend; private mode authenticates clients before stripping
 forwarded-address headers.
 
+The server listens on loopback only unless you pass another address with
+`ff serve --host` (for example `--host 0.0.0.0`, as the Docker image does).
+
 Port selection rejects values outside the integer range 1–65535 before starting
 a process or binding a socket, then checks listening processes with `lsof` on
 Unix. If that check fails, including when another user's listener is hidden, it
@@ -297,8 +300,9 @@ via nginx, Caddy, or another reverse proxy:
   `CORS_ALLOWED_ORIGINS=https://ff.example.com`. This gates both HTTP CORS and
   WebSocket upgrades; non-loopback origins must match exactly (scheme + host +
   non-default port, no trailing slash).
-- Keep `BACKEND_HOST` bound to `localhost`/`127.0.0.1` so only your proxy can
-  reach the server.
+- Keep the server on loopback so only your proxy can reach it: leave
+  `BACKEND_HOST` unset (the backend then binds `127.0.0.1` and `::1`), or set it
+  to `localhost` or `127.0.0.1`.
 
 By default the server rejects privileged HTTP requests and WebSocket upgrades
 that carry client-address headers (`x-forwarded-for`, `cf-connecting-ip`, etc.),

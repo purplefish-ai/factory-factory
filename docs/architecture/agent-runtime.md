@@ -1264,9 +1264,10 @@ exposed to the agent (`spawn_child_workspace`, `send_message_to_child`,
 `archive_child_workspace`, `list_projects`). Children report back via
 `send_message_to_parent`.
 
-Child-workspace MCP requests connect to localhost when the backend binds to an
-IPv4 or IPv6 wildcard, including equivalent compressed IPv6 spellings. Explicit
-bind addresses remain the connection destination.
+Child-workspace MCP requests connect to localhost when `BACKEND_HOST` is unset
+(the backend then binds both `127.0.0.1` and `::1`) or is an IPv4 or IPv6
+wildcard, including equivalent compressed IPv6 spellings. Explicit bind
+addresses remain the connection destination.
 
 Messages are persisted as workspace inbox mail. Their bodies are never injected
 automatically into an agent conversation. Agents receive a coalesced, body-free
