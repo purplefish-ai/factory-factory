@@ -148,6 +148,14 @@ function setOriginHead(repoPath: string, branch: string): void {
   );
 }
 
+async function findInitOutput(workspaceId: string) {
+  const status = await workspaceDataService.findInitStatus(workspaceId);
+  if (!status) {
+    throw new Error(`Workspace not found: ${workspaceId}`);
+  }
+  return status.initOutput;
+}
+
 async function findWorkspaceOrThrow(workspaceId: string) {
   const workspace = await workspaceDataService.findById(workspaceId);
   if (!workspace) {
@@ -307,10 +315,10 @@ describe('resource accessors integration', () => {
 
       await workspaceRunScriptService.appendInitOutput(workspace.id, 'a'.repeat(80), 50);
 
-      const reloaded = await findWorkspaceOrThrow(workspace.id);
-      expect(reloaded.initOutput).toBeTruthy();
-      expect((reloaded.initOutput || '').length).toBeLessThanOrEqual(50);
-      expect(reloaded.initOutput?.startsWith('[...truncated...]\n')).toBe(true);
+      const initOutput = await findInitOutput(workspace.id);
+      expect(initOutput).toBeTruthy();
+      expect((initOutput || '').length).toBeLessThanOrEqual(50);
+      expect(initOutput?.startsWith('[...truncated...]\n')).toBe(true);
     });
 
     it('preserves all chunks across concurrent init output appends', async () => {
@@ -324,8 +332,7 @@ describe('resource accessors integration', () => {
         )
       );
 
-      const reloaded = await findWorkspaceOrThrow(workspace.id);
-      const output = reloaded.initOutput ?? '';
+      const output = (await findInitOutput(workspace.id)) ?? '';
 
       expect(output.length).toBeGreaterThan(0);
       expect(output.startsWith('[...truncated...]\n')).toBe(false);
