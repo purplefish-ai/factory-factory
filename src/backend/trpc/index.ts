@@ -19,7 +19,7 @@ import { voiceRouter } from './voice.trpc';
 import { workspaceRouter } from './workspace.trpc';
 
 export const appRouter = router({
-  agent: agentRouter,
+  automation: agentRouter,
   project: projectRouter,
   decisionLog: decisionLogRouter,
   admin: adminRouter,

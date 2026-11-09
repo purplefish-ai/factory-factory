@@ -9,8 +9,8 @@ export function invalidateAgentProjectQueries(
   return Promise.all([
     utils.periodicTask.list.invalidate({ projectId }),
     utils.periodicTask.navigationSummary.invalidate({ projectId }),
-    utils.agent.list.invalidate({ projectId }),
-    utils.agent.navigationSummary.invalidate({ projectId }),
+    utils.automation.list.invalidate({ projectId }),
+    utils.automation.navigationSummary.invalidate({ projectId }),
   ]);
 }
 /** Partial input deliberately covers all retainedCursor variants for this saved owner. */
@@ -20,10 +20,10 @@ export function invalidateSavedAgentQueries(
   agentId: string
 ) {
   return Promise.all([
-    utils.agent.list.invalidate({ projectId }),
-    utils.agent.navigationSummary.invalidate({ projectId }),
-    utils.agent.get.invalidate({ projectId, agentId }),
-    utils.agent.getProposal.invalidate(undefined, {
+    utils.automation.list.invalidate({ projectId }),
+    utils.automation.navigationSummary.invalidate({ projectId }),
+    utils.automation.get.invalidate({ projectId, agentId }),
+    utils.automation.getProposal.invalidate(undefined, {
       predicate: (query) => {
         const proposal = agentProposalSchema.safeParse(query.state.data);
         return proposal.success && proposal.data.agentDefinitionId === agentId;

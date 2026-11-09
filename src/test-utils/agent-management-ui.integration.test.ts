@@ -189,10 +189,10 @@ it('edits the exact saved set through the mixed page after real proposal removal
   ]);
   const respond = (path: string, input: unknown) => {
     calls.push(path);
-    if (path === 'agent.list') {
+    if (path === 'automation.list') {
       return caller.list({ projectId: project.id });
     }
-    if (path === 'agent.get') {
+    if (path === 'automation.get') {
       return caller.get(
         z
           .object({
@@ -203,10 +203,10 @@ it('edits the exact saved set through the mixed page after real proposal removal
           .parse(input)
       );
     }
-    if (path === 'agent.navigationSummary') {
+    if (path === 'automation.navigationSummary') {
       return caller.navigationSummary({ projectId: project.id });
     }
-    if (path === 'agent.updateSaved') {
+    if (path === 'automation.updateSaved') {
       writes.push(input);
       return caller.updateSaved(
         z
@@ -339,7 +339,7 @@ it('edits the exact saved set through the mixed page after real proposal removal
       new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })
     )
   );
-  await act(() => queryClient.invalidateQueries({ queryKey: [['agent', 'get']] }));
+  await act(() => queryClient.invalidateQueries({ queryKey: [['automation', 'get']] }));
   await waitForReact(() => expect(container.textContent).toContain('Exact membership is unknown'));
   await act(() => button('Edit automation').click());
   expect(container.querySelector('form')).toBeNull();

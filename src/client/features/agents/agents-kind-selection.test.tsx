@@ -68,7 +68,7 @@ async function render(search = '?kind=event') {
               await scheduledWait;
               return [scheduled];
             },
-            'agent.list': async () => {
+            'automation.list': async () => {
               await eventWait;
               if (eventError) {
                 throw new Error('Event list unavailable');
@@ -77,7 +77,7 @@ async function render(search = '?kind=event') {
             },
             'periodicTask.get': () => scheduled,
             'periodicTask.listExecutions': () => [],
-            'agent.get': async (input) => {
+            'automation.get': async (input) => {
               await detailWait;
               return {
                 ...event,

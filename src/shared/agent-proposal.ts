@@ -63,7 +63,8 @@ export const proposeAgentInputSchema = z
   });
 
 export const agentProposalReferenceSchema = z.strictObject({
-  type: z.literal('agent_proposal'),
+  // Accept the old discriminator when rendering persisted chat history.
+  type: z.enum(['automation_proposal', 'agent_proposal']),
   workspaceId: z.string().min(1),
   proposalId: z.string().min(1),
   revision: z.number().int().positive().optional(),

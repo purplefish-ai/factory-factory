@@ -70,7 +70,7 @@ export function useAgentsController(project: AgentProject, kind: AgentKind = 'sc
     { projectId: project.id },
     { refetchInterval: 10_000 }
   );
-  const events = trpc.agent.list.useInfiniteQuery(
+  const events = trpc.automation.list.useInfiniteQuery(
     { projectId: project.id },
     {
       getNextPageParam: (page) => page.nextCursor ?? undefined,
@@ -78,7 +78,7 @@ export function useAgentsController(project: AgentProject, kind: AgentKind = 'sc
       retry: false,
     }
   );
-  const event = trpc.agent.get.useQuery(
+  const event = trpc.automation.get.useQuery(
     { projectId: project.id, agentId: id ?? '' },
     { enabled: !!id && kind === 'event', refetchInterval: 10_000, retry: false }
   );

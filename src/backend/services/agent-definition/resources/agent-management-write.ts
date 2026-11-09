@@ -45,7 +45,7 @@ export async function resolveSavedTriggerIds(
     select: { id: true },
   });
   if (owned.length !== ids.length) {
-    throw new ApplicationError('NOT_FOUND', 'An event does not belong to this agent.');
+    throw new ApplicationError('NOT_FOUND', 'An event does not belong to this automation.');
   }
   return specification.triggers.map((trigger) => ({
     ...trigger,

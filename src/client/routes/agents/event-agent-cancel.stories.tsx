@@ -64,15 +64,15 @@ function CancelEventCreation() {
   );
 }
 const meta = {
-  title: 'Automations/EventAgentCancel',
+  title: 'Automations/EventAutomationCancel',
   component: CancelEventCreation,
   parameters: {
     trpc: {
       handlers: {
         ...eventWorkspaceHandlers,
         'periodicTask.list': () => [],
-        'agent.list': () => ({ items: [eventSummaryFixture(event)], nextCursor: null }),
-        'agent.get': () => event,
+        'automation.list': () => ({ items: [eventSummaryFixture(event)], nextCursor: null }),
+        'automation.get': () => event,
       },
     },
   },

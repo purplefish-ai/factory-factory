@@ -8,7 +8,7 @@ export function useCombinedAgentSummary(projectId: string | undefined) {
     { projectId: projectId ?? '' },
     { enabled: !!projectId, refetchInterval: 10_000 }
   );
-  const event = trpc.agent.navigationSummary.useQuery(
+  const event = trpc.automation.navigationSummary.useQuery(
     { projectId: projectId ?? '' },
     { enabled: !!projectId, refetchInterval: 10_000 }
   );

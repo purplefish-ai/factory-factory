@@ -47,7 +47,7 @@ function Probe() {
   return null;
 }
 async function respond(path: string) {
-  if (path === 'agent.getProposal') {
+  if (path === 'automation.getProposal') {
     return proposal;
   }
   if (path === 'workspace.get') {
@@ -56,7 +56,7 @@ async function respond(path: string) {
     }
     return { projectId: 'owner-project' };
   }
-  if (path === 'agent.update') {
+  if (path === 'automation.update') {
     await wait;
     return { ...proposal, revision: 2 };
   }
@@ -84,7 +84,7 @@ async function render() {
       <trpc.Provider client={transport} queryClient={client}>
         <QueryClientProvider client={client}>
           <Probe />
-          <AgentProposalCard reference={{ type: 'agent_proposal', ...input }} />
+          <AgentProposalCard reference={{ type: 'automation_proposal', ...input }} />
         </QueryClientProvider>
       </trpc.Provider>
     )
@@ -118,18 +118,22 @@ afterEach(async () => {
 it('captures the authoring owner before updating and invalidates its saved caches after unmount', async () => {
   await render();
   await waitForReact(() => expect(container.textContent).toContain('Automation created'));
-  const listKey = getQueryKey(trpc.agent.list, { projectId: 'owner-project' }, 'infinite');
+  const listKey = getQueryKey(trpc.automation.list, { projectId: 'owner-project' }, 'infinite');
   const detailKey = getQueryKey(
-    trpc.agent.get,
+    trpc.automation.get,
     { projectId: 'owner-project', agentId: 'saved-id', retainedCursor: 'tail' },
     'query'
   );
   const summaryKey = getQueryKey(
-    trpc.agent.navigationSummary,
+    trpc.automation.navigationSummary,
     { projectId: 'owner-project' },
     'query'
   );
-  const foreign = getQueryKey(trpc.agent.navigationSummary, { projectId: 'new-project' }, 'query');
+  const foreign = getQueryKey(
+    trpc.automation.navigationSummary,
+    { projectId: 'new-project' },
+    'query'
+  );
   for (const key of [listKey, detailKey, summaryKey, foreign]) {
     client.setQueryData(key, {});
   }
@@ -143,10 +147,10 @@ it('captures the authoring owner before updating and invalidates its saved cache
       ?.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
   );
   await waitForReact(() =>
-    expect(requests.some((request) => request.path === 'agent.update')).toBe(true)
+    expect(requests.some((request) => request.path === 'automation.update')).toBe(true)
   );
   expect(requests.findIndex((request) => request.path === 'workspace.get')).toBeLessThan(
-    requests.findIndex((request) => request.path === 'agent.update')
+    requests.findIndex((request) => request.path === 'automation.update')
   );
   await act(() => root.render(null));
   await act(() => finish?.());
@@ -159,12 +163,12 @@ it('refreshes matching validated proposal cards after a saved edit without inven
   await render();
   await waitForReact(() => expect(container.textContent).toContain('Automation created'));
   const unrelated = getQueryKey(
-    trpc.agent.getProposal,
+    trpc.automation.getProposal,
     { workspaceId: 'other', proposalId: 'other' },
     'query'
   );
   const malformed = getQueryKey(
-    trpc.agent.getProposal,
+    trpc.automation.getProposal,
     { workspaceId: 'bad', proposalId: 'bad' },
     'query'
   );
@@ -178,7 +182,7 @@ it('refreshes matching validated proposal cards after a saved edit without inven
     await invalidate?.();
   });
   await waitForReact(() =>
-    expect(requests.filter((request) => request.path === 'agent.getProposal')).toHaveLength(2)
+    expect(requests.filter((request) => request.path === 'automation.getProposal')).toHaveLength(2)
   );
   expect(client.getQueryState(unrelated)?.isInvalidated).toBe(false);
   expect(client.getQueryState(malformed)?.isInvalidated).toBe(false);
@@ -196,5 +200,5 @@ it('shows an explicit owner load problem and never updates against sidebar selec
   await waitForReact(() =>
     expect(container.textContent).toContain("Couldn't load the authoring workspace project")
   );
-  expect(requests.some((request) => request.path === 'agent.update')).toBe(false);
+  expect(requests.some((request) => request.path === 'automation.update')).toBe(false);
 });

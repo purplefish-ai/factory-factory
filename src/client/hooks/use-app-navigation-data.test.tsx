@@ -51,7 +51,7 @@ vi.mock('@/client/lib/trpc', () => ({
         useQuery: () => ({ data: undefined, isSuccess: false, isFetching: false }),
       },
     },
-    agent: {
+    automation: {
       navigationSummary: {
         useQuery: () => ({ data: undefined, isSuccess: false, isFetching: false }),
       },

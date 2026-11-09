@@ -98,7 +98,7 @@ export async function createAgentAuthoringEvalFixture() {
   app.use(
     '/api/trpc',
     createExpressMiddleware({
-      router: router({ agent: agentRouter }),
+      router: router({ automation: agentRouter }),
       createContext: () =>
         ({
           appContext: {

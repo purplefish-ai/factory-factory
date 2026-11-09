@@ -16,7 +16,10 @@
 import { createInterface } from 'node:readline';
 import { z } from 'zod';
 import { workspaceMailSendMetadataSchema } from '@/shared/workspace-mail';
-import { AGENT_AUTHORING_TOOLS, callAgentAuthoringTool } from './agent-authoring-tools';
+import {
+  AUTOMATION_AUTHORING_TOOLS,
+  callAutomationAuthoringTool,
+} from './automation-authoring-tools';
 import { callLinearIssueTool, LINEAR_ISSUE_TOOL } from './linear-issue-tool';
 import { callWorkspaceMailTool, WORKSPACE_MAIL_TOOLS } from './workspace-mail-tools';
 
@@ -393,8 +396,8 @@ async function dispatchToolCall(
     send({ jsonrpc: '2.0', id: req.id, result });
     return;
   }
-  if (AGENT_AUTHORING_TOOLS.some((tool) => tool.name === params.name)) {
-    const result = await callAgentAuthoringTool({
+  if (AUTOMATION_AUTHORING_TOOLS.some((tool) => tool.name === params.name)) {
+    const result = await callAutomationAuthoringTool({
       name: params.name,
       args,
       workspaceId,
@@ -484,7 +487,7 @@ async function handleRequest(
       ...(childToolsEnabled ? workspaceTools : []),
       LINEAR_ISSUE_TOOL,
       ...WORKSPACE_MAIL_TOOLS,
-      ...AGENT_AUTHORING_TOOLS,
+      ...AUTOMATION_AUTHORING_TOOLS,
     ];
     send({ jsonrpc: '2.0', id: req.id, result: { tools } });
     return;
