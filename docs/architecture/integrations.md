@@ -136,6 +136,12 @@ changes, or newer validation have superseded the submission.
 
 ## Scheduled automations
 
+Settings > General settings > Chat defaults > Automation permissions controls
+scheduled and event automation runs independently of workspace permissions. It
+defaults to Auto review for existing and new installations. Standard and Full
+access remain explicit options. Changes apply to future runs; frozen event
+launches retain their recorded access mode.
+
 Schema-8 backups with the `base-json-periodic-config-1` profile include complete
 periodic task scalar configuration and timestamps. Import preserves due slots,
 clock/timezone values and monthly anchors, but restores every accepted task

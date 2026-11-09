@@ -80,6 +80,7 @@ describe('sessionProviderResolverService', () => {
       defaultClaudeReasoningEffort: null,
       defaultCodexReasoningEffort: null,
       defaultWorkspacePermissions: 'STRICT',
+      automationPermissions: 'RELAXED',
       reviewerSessionProvider: 'CODEX',
       reviewerClaudeModel: null,
       reviewerCodexModel: null,

@@ -207,6 +207,7 @@ const exportedUserSettingsSchema = z.object({
   defaultClaudeReasoningEffort: z.string().nullable().optional().default(null),
   defaultCodexReasoningEffort: z.string().nullable().optional().default(null),
   defaultWorkspacePermissions: SessionPermissionPreset.optional().default('STRICT'),
+  automationPermissions: SessionPermissionPreset.optional().default('RELAXED'),
   ratchetPermissions: SessionPermissionPreset.optional(),
   // Adversarial review settings
   reviewerSessionProvider: SessionProvider.optional().default('CODEX'),

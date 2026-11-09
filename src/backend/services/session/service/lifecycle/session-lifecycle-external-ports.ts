@@ -18,9 +18,7 @@ function isWildcardHost(host: string): boolean {
   return URL.canParse(`http://${urlHost}`) && new URL(`http://${urlHost}`).hostname === '[::]';
 }
 
-// Scheduled Codex tasks use YOLO so approval prompts cannot stall headless runs;
-// other scheduled
-// providers retain workspace permissions (see getWorkflowPermissionPreset).
+// Scheduled and event automations use their explicit automation permission setting.
 // Adversarial review is also non-interactive but
 // is read-only by contract (see docs/design/adversarial-review.md) — it falls
 // through to `defaultWorkspacePermissions`. Lifecycle startup independently

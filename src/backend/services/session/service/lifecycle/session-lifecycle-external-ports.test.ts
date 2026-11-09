@@ -36,7 +36,7 @@ import { sessionAcpEnvironment, sessionContextService } from './session-lifecycl
 
 describe('session lifecycle external ports', () => {
   it.each(['CODEX', 'CLAUDE'] as const)(
-    'uses provider-specific scheduled permissions for %s',
+    'uses auto review for scheduled %s sessions',
     async (provider) => {
       vi.mocked(userSettingsService.get).mockResolvedValueOnce(
         unsafeCoerce({
@@ -50,7 +50,7 @@ describe('session lifecycle external ports', () => {
             provider,
           })
         )
-      ).resolves.toBe(provider === 'CODEX' ? 'YOLO' : 'RELAXED');
+      ).resolves.toBe('RELAXED');
     }
   );
 

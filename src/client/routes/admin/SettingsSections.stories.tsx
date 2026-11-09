@@ -46,6 +46,7 @@ const defaultSettings = {
   defaultClaudeReasoningEffort: null,
   defaultCodexReasoningEffort: null,
   defaultWorkspacePermissions: 'STRICT',
+  automationPermissions: 'RELAXED',
   ratchetEnabled: false,
   ratchetReplyToPrComments: true,
   ratchetReviewTriggerMode: 'CHANGES_REQUESTED',
@@ -470,6 +471,28 @@ export const NativePermissionDefaults: Story = {
       <ChatProviderDefaultsSection />
     </SettingsStoryProvider>
   ),
+};
+
+export const AutomationPermissionDefaults: Story = {
+  render: () => (
+    <SettingsStoryProvider
+      settings={{ defaultWorkspacePermissions: 'YOLO', automationPermissions: 'RELAXED' }}
+    >
+      <ChatProviderDefaultsSection />
+    </SettingsStoryProvider>
+  ),
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const permissions = await canvas.findByLabelText('Automation permissions');
+    await expect(permissions).toHaveTextContent('Auto review');
+    await userEvent.click(permissions);
+    await userEvent.click(await within(document.body).findByRole('option', { name: 'Standard' }));
+    await waitFor(() =>
+      expect(onRequest).toHaveBeenCalledWith('userSettings.update', {
+        automationPermissions: 'STRICT',
+      })
+    );
+  },
 };
 
 export const ChatDefaultsSlowRefresh: Story = {

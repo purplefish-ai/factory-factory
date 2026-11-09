@@ -284,6 +284,33 @@ export function ChatProviderDefaultsSection() {
           </Select>
           <p className="text-xs text-muted-foreground">{NATIVE_PERMISSION_DESCRIPTION}</p>
         </div>
+        <div className="space-y-2 pt-1">
+          <Label htmlFor="automation-permissions">Automation permissions</Label>
+          <Select
+            value={settings?.automationPermissions ?? 'RELAXED'}
+            onValueChange={(value) => {
+              if (isNativePermissionPreset(value)) {
+                updateSettings.mutate({ automationPermissions: value });
+              }
+            }}
+            disabled={updateSettings.isPending}
+          >
+            <SelectTrigger id="automation-permissions">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {NATIVE_PERMISSION_OPTIONS.map((option) => (
+                <SelectItem key={option.value} value={option.value}>
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <p className="text-xs text-muted-foreground">
+            Scheduled and event automations use these permissions for future runs. Auto review is
+            the default.
+          </p>
+        </div>
       </CardContent>
     </Card>
   );

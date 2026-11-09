@@ -3524,6 +3524,7 @@ export const UserSettingsScalarFieldEnum = {
   defaultClaudeReasoningEffort: 'defaultClaudeReasoningEffort',
   defaultCodexReasoningEffort: 'defaultCodexReasoningEffort',
   defaultWorkspacePermissions: 'defaultWorkspacePermissions',
+  automationPermissions: 'automationPermissions',
   reviewerSessionProvider: 'reviewerSessionProvider',
   reviewerClaudeModel: 'reviewerClaudeModel',
   reviewerCodexModel: 'reviewerCodexModel',

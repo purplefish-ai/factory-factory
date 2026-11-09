@@ -4,8 +4,10 @@
  * One place where the backend's recurring background work is declared and its
  * lifecycle is owned. Before this existed, each poll loop hand-rolled the same
  * machinery -- a shutdown flag, an in-flight promise, a guard against
- * overlapping ticks, and (in two cases) a cancellable sleep -- and the five
- * copies had drifted apart in their details.
+ * overlapping ticks, and (in two cases) a cancellable sleep -- and the copies
+ * had drifted apart in their details. The registered jobs and their owners are
+ * listed in docs/architecture/background-jobs.md; do not restate how many
+ * jobs exist here, because that number changes.
  *
  * Jobs are paced *sequentially*: the delay is measured from the end of one run
  * to the start of the next. That is what the ratchet and periodic-task loops
@@ -22,12 +24,12 @@
  *
  * Expected usage, which is what the guarantees below are worth defending:
  * a job is registered once when its service is constructed, and started and
- * stopped from the composition root -- `server.ts` for the five real jobs. In
+ * stopped from the composition root -- `server.ts` for the real jobs. In
  * that pattern `start()` and `stop()` never overlap and a job never touches
  * its own lifecycle.
  *
  * The runner nonetheless survives the overlapping cases, because it is shared
- * by five services and a lifecycle primitive that only works when called
+ * by many services and orchestrators, and a lifecycle primitive that only works when called
  * politely is a trap: concurrent stops share one wait, a start during a stop
  * becomes a restart honoured when the old loop settles, a job that stops
  * itself is stopped and waited for, and a loop that dies frees its slot. What
@@ -205,8 +207,8 @@ export class JobRunner {
   /**
    * Stop a job, cancelling a pending delay and awaiting any run in flight.
    *
-   * The wait for an in-flight run is unbounded, which is exactly what the five
-   * loops did before this runner existed (`await this.syncInProgress` and its
+   * The wait for an in-flight run is unbounded, which is exactly what the
+   * hand-rolled loops did before this runner existed (`await this.syncInProgress` and its
    * equivalents). It is a real hazard -- a wedged `gh` call inside a run would
    * hold up process exit -- but bounding it here would silently change shutdown
    * to abandon work mid-flight, which is a behaviour decision and not part of
