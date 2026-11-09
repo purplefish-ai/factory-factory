@@ -559,15 +559,13 @@ export class SessionConfigService {
   configureQueuedMessage(
     sessionId: string,
     message: Pick<QueuedMessage, 'timestamp' | 'settings'>,
-    supportsThinkingBudget = false,
     guard?: SessionCallerGuard
   ): Promise<QueuedMessage['settings']> {
     return this.configUpdates.run(
       sessionId,
       () =>
-        this.queuedSettings.configure(sessionId, message, supportsThinkingBudget, {
+        this.queuedSettings.configure(sessionId, message, {
           plan: () => this.setSessionCollaborationModeUnserialized(sessionId, 'plan', guard),
-          thinking: (budget) => this.setSessionThinkingBudgetUnserialized(sessionId, budget, guard),
           model: (model) => this.setSessionModelUnserialized(sessionId, model, guard),
           reasoning: (effort) =>
             this.setSessionReasoningEffortUnserialized(sessionId, effort, guard),
@@ -662,8 +660,7 @@ export class SessionConfigService {
 
   private async setSessionThinkingBudgetUnserialized(
     sessionId: string,
-    maxTokens: number | null,
-    guard?: SessionCallerGuard
+    maxTokens: number | null
   ): Promise<void> {
     const acpHandle = this.runtimeManager.getClient(sessionId);
     if (acpHandle) {
@@ -683,12 +680,7 @@ export class SessionConfigService {
           return;
         }
 
-        await this.setSessionConfigOptionUnserialized(
-          sessionId,
-          thoughtOption.id,
-          thinkingBudget,
-          guard
-        );
+        await this.setSessionConfigOptionUnserialized(sessionId, thoughtOption.id, thinkingBudget);
       }
       return;
     }

@@ -135,11 +135,10 @@ describe('queued explicit settings', () => {
       },
     ];
     const plan = vi.fn(async () => undefined);
-    await f.queued.configure('session', f.message, false, {
+    await f.queued.configure('session', f.message, {
       plan,
       model: async () => undefined,
       reasoning: async () => undefined,
-      thinking: async () => undefined,
     });
     expect(plan).not.toHaveBeenCalled();
     expect(f.handle.configOptions[0]?.currentValue).toBe('plan');
@@ -161,12 +160,10 @@ describe('queued explicit settings', () => {
     const settings = await f.queued.configure(
       'session',
       { ...f.message, settings: { ...f.message.settings, planModeEnabled: true } },
-      false,
       {
         plan,
         model: async () => undefined,
         reasoning: async () => undefined,
-        thinking: async () => undefined,
       }
     );
     expect(settings.planModeEnabled).toBe(false);

@@ -40,7 +40,7 @@ export const PR_URL_ATTACHED = 'pr_url_attached' as const;
 export const PR_DETACHED = 'pr_detached' as const;
 
 export interface PRSnapshotUpdatedEvent {
-  prId?: string;
+  prId: string;
   workspaceId: string;
   prUrl?: string | null;
   prNumber: number;
@@ -55,7 +55,7 @@ export interface PRSnapshotUpdatedEvent {
 }
 
 export interface PRUrlAttachedEvent {
-  prId?: string;
+  prId: string;
   workspaceId: string;
   prUrl: string;
 }

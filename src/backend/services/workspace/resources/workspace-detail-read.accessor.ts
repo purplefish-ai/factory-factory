@@ -6,6 +6,7 @@ import {
   type FlattenedWorkspaceRow,
   flattenWorkspaceRow,
   type WorkspaceSideTableInclude,
+  workspaceSessionsWithoutBlobs,
   workspaceSideTables,
 } from './workspace.accessor';
 
@@ -19,10 +20,7 @@ import {
 type WorkspaceDetailRow = FlattenedWorkspaceRow<
   Prisma.WorkspaceGetPayload<{
     omit: { initOutput: true };
-    include: {
-      agentSessions: { omit: { providerMetadata: true } };
-      terminalSessions: true;
-    } & WorkspaceSideTableInclude;
+    include: typeof workspaceSessionsWithoutBlobs & WorkspaceSideTableInclude;
   }>
 >;
 
@@ -73,11 +71,7 @@ class WorkspaceDetailReadAccessor {
     const row = await prisma.workspace.findUnique({
       where: { id },
       omit: { initOutput: true },
-      include: {
-        agentSessions: { omit: { providerMetadata: true } },
-        terminalSessions: true,
-        ...workspaceSideTables,
-      },
+      include: { ...workspaceSessionsWithoutBlobs, ...workspaceSideTables },
     });
     if (!row) {
       return null;

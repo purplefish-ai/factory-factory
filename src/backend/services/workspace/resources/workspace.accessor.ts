@@ -139,6 +139,7 @@ type SideTableInclude = typeof sideTables;
 
 /** Side-table reads and flattening for sibling accessors that project their own workspace shape. */
 export {
+  sessionsWithoutBlobs as workspaceSessionsWithoutBlobs,
   flatten as flattenWorkspaceRow,
   sideTables as workspaceSideTables,
   type Flattened as FlattenedWorkspaceRow,

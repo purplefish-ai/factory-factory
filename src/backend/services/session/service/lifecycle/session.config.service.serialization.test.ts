@@ -190,23 +190,20 @@ describe('configuration transaction ordering', () => {
       f.handle.configOptions.push(thought);
       f.rpc.mockResolvedValue({ configOptions: [...options('first'), thought] });
       await f.service.setSessionThinkingBudget('session', enabled ? DEFAULT_THINKING_BUDGET : null);
-      const resolved = await f.service.configureQueuedMessage(
-        'session',
-        {
-          timestamp: new Date(0).toISOString(),
-          settings: {
-            selectedModel: null,
-            reasoningEffort: null,
-            thinkingEnabled: !enabled,
-            planModeEnabled: false,
-          },
+      const resolved = await f.service.configureQueuedMessage('session', {
+        timestamp: new Date(0).toISOString(),
+        settings: {
+          selectedModel: null,
+          reasoningEffort: null,
+          thinkingEnabled: !enabled,
+          planModeEnabled: false,
         },
-        true
-      );
+      });
       expect(resolved.thinkingEnabled).toBe(enabled);
+      // Only the explicit toggle writes the budget; queued dispatch does not reapply it.
       expect(
         f.rpc.mock.calls.filter(([request]) => request.configId === 'thinking_budget')
-      ).toHaveLength(enabled ? 2 : 0);
+      ).toHaveLength(enabled ? 1 : 0);
     }
   );
 
@@ -221,19 +218,15 @@ describe('configuration transaction ordering', () => {
       options: [{ value: 'low', name: 'Low' }],
     });
     await f.service.setSessionThinkingBudget('session', DEFAULT_THINKING_BUDGET);
-    const resolved = await f.service.configureQueuedMessage(
-      'session',
-      {
-        timestamp: new Date(0).toISOString(),
-        settings: {
-          selectedModel: null,
-          reasoningEffort: null,
-          thinkingEnabled: false,
-          planModeEnabled: false,
-        },
+    const resolved = await f.service.configureQueuedMessage('session', {
+      timestamp: new Date(0).toISOString(),
+      settings: {
+        selectedModel: null,
+        reasoningEffort: null,
+        thinkingEnabled: false,
+        planModeEnabled: false,
       },
-      true
-    );
+    });
     expect(resolved.thinkingEnabled).toBe(false);
     expect(f.rpc).not.toHaveBeenCalled();
   });

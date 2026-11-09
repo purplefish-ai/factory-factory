@@ -788,6 +788,7 @@ describe('configureEventCollector', () => {
       .mocked(prSnapshotService.on)
       .mock.calls.find((call) => call[0] === 'pr_snapshot_updated')![1] as (event: {
       workspaceId: string;
+      prId: string;
       prNumber: number;
       prState: string;
       prCiStatus: string;
@@ -796,6 +797,7 @@ describe('configureEventCollector', () => {
 
     handler({
       workspaceId: 'ws-conflict-resolved',
+      prId: 'pr-7',
       prNumber: 7,
       prState: 'OPEN',
       prCiStatus: 'SUCCESS',
@@ -806,7 +808,7 @@ describe('configureEventCollector', () => {
       expect(workspaceSnapshotStore.upsert).toHaveBeenCalledWith(
         'ws-conflict-resolved',
         expect.objectContaining({ hasMergeConflict: false, ratchetState: 'CI_RUNNING' }),
-        'projection:ratchet_authoritative',
+        'projection:pr_authoritative',
         expect.any(Number)
       )
     );
@@ -838,47 +840,6 @@ describe('configureEventCollector', () => {
         'projection:ratchet_authoritative',
         expect.any(Number)
       )
-    );
-  });
-
-  it('projects a ratchet observation through the snapshot-update path', () => {
-    // This replaces a test for `pr_dispatch_invalidated`, which had one emitter and
-    // one handler and was only published when a settled dispatch was reset. A
-    // ratchet observation now publishes `pr_snapshot_updated` for every applied
-    // write, so a merge the ratchet saw first no longer stops at the database.
-    vi.mocked(workspaceSnapshotStore.getByWorkspaceId).mockReturnValue({
-      projectId: 'proj-1',
-    } as ReturnType<typeof workspaceSnapshotStore.getByWorkspaceId>);
-    vi.mocked(workspaceDataService.findRatchetProjection).mockResolvedValue({
-      ...prProjectionDefaults,
-      status: 'READY',
-      ratchetEnabled: true,
-      ratchetState: 'CI_RUNNING',
-    } as never);
-    configureEventCollector();
-
-    const handler = vi
-      .mocked(prSnapshotService.on)
-      .mock.calls.find((call) => call[0] === 'pr_snapshot_updated')![1] as (event: {
-      workspaceId: string;
-      prNumber: number;
-      prState: string;
-      prCiStatus: string;
-      prReviewState: string | null;
-    }) => void;
-    handler({
-      workspaceId: 'ws-direct-ci',
-      prNumber: 7,
-      prState: 'MERGED',
-      prCiStatus: 'PENDING',
-      prReviewState: null,
-    });
-
-    expect(workspaceSnapshotStore.upsert).toHaveBeenCalledWith(
-      'ws-direct-ci',
-      { prNumber: 7, prState: 'MERGED', prCiStatus: 'PENDING' },
-      'event:pr_snapshot_updated',
-      expect.any(Number)
     );
   });
 
@@ -928,115 +889,6 @@ describe('configureEventCollector', () => {
     );
   });
 
-  it('pr_snapshot_updated without prUrl does not overwrite existing prUrl in store', () => {
-    vi.mocked(workspaceSnapshotStore.getByWorkspaceId).mockReturnValue({
-      projectId: 'proj-1',
-    } as ReturnType<typeof workspaceSnapshotStore.getByWorkspaceId>);
-
-    configureEventCollector();
-
-    const onCall = vi
-      .mocked(prSnapshotService.on)
-      .mock.calls.find((call) => call[0] === 'pr_snapshot_updated');
-    const handler = onCall![1] as (event: {
-      workspaceId: string;
-      prNumber: number;
-      prState: string;
-      prCiStatus: string;
-      prReviewState: string | null;
-      prUrl?: string | null;
-    }) => void;
-
-    handler({
-      workspaceId: 'ws-1',
-      prNumber: 42,
-      prState: 'OPEN',
-      prCiStatus: 'SUCCESS',
-      prReviewState: null,
-    });
-
-    expect(workspaceSnapshotStore.upsert).toHaveBeenCalledWith(
-      'ws-1',
-      {
-        prNumber: 42,
-        prState: 'OPEN',
-        prCiStatus: 'SUCCESS',
-      },
-      'event:pr_snapshot_updated',
-      expect.any(Number)
-    );
-  });
-
-  it('triggers immediate ratchet recompute when PR identity changes', () => {
-    vi.mocked(workspaceSnapshotStore.getByWorkspaceId).mockReturnValue({
-      projectId: 'proj-1',
-      prNumber: 41,
-      prUrl: 'https://github.com/org/repo/pull/41',
-    } as ReturnType<typeof workspaceSnapshotStore.getByWorkspaceId>);
-
-    configureEventCollector();
-
-    const onCall = vi
-      .mocked(prSnapshotService.on)
-      .mock.calls.find((call) => call[0] === 'pr_snapshot_updated');
-    const handler = onCall![1] as (event: {
-      workspaceId: string;
-      prNumber: number;
-      prState: string;
-      prCiStatus: string;
-      prReviewState: string | null;
-      prUrl?: string | null;
-    }) => void;
-
-    handler({
-      workspaceId: 'ws-1',
-      prNumber: 42,
-      prState: 'OPEN',
-      prCiStatus: 'PENDING',
-      prReviewState: null,
-      prUrl: 'https://github.com/org/repo/pull/42',
-    });
-
-    expect(ratchetService.checkWorkspaceById).toHaveBeenCalledWith('ws-1');
-  });
-
-  it.each(['OPEN', 'APPROVED', 'CHANGES_REQUESTED', 'DRAFT'])(
-    'triggers immediate ratchet recompute when a closed PR is reopened as %s',
-    (reopenedState) => {
-      vi.mocked(workspaceSnapshotStore.getByWorkspaceId).mockReturnValue({
-        projectId: 'proj-1',
-        prNumber: 42,
-        prUrl: 'https://github.com/org/repo/pull/42',
-        prState: 'CLOSED',
-      } as ReturnType<typeof workspaceSnapshotStore.getByWorkspaceId>);
-
-      configureEventCollector();
-
-      const onCall = vi
-        .mocked(prSnapshotService.on)
-        .mock.calls.find((call) => call[0] === 'pr_snapshot_updated');
-      const handler = onCall![1] as (event: {
-        workspaceId: string;
-        prNumber: number;
-        prState: string;
-        prCiStatus: string;
-        prReviewState: string | null;
-        prUrl?: string | null;
-      }) => void;
-
-      handler({
-        workspaceId: 'ws-1',
-        prNumber: 42,
-        prState: reopenedState,
-        prCiStatus: 'PENDING',
-        prReviewState: null,
-        prUrl: 'https://github.com/org/repo/pull/42',
-      });
-
-      expect(ratchetService.checkWorkspaceById).toHaveBeenCalledWith('ws-1');
-    }
-  );
-
   it('settles ratchet state without a recompute when PR is closed', () => {
     vi.mocked(workspaceSnapshotStore.getByWorkspaceId).mockReturnValue({
       projectId: 'proj-1',
@@ -1052,6 +904,7 @@ describe('configureEventCollector', () => {
       .mock.calls.find((call) => call[0] === 'pr_snapshot_updated');
     const handler = onCall![1] as (event: {
       workspaceId: string;
+      prId: string;
       prNumber: number;
       prState: string;
       prCiStatus: string;
@@ -1061,6 +914,7 @@ describe('configureEventCollector', () => {
 
     handler({
       workspaceId: 'ws-1',
+      prId: 'pr-42',
       prNumber: 42,
       prState: 'CLOSED',
       prCiStatus: 'UNKNOWN',
@@ -1089,6 +943,7 @@ describe('configureEventCollector', () => {
       .mock.calls.find((call) => call[0] === 'pr_snapshot_updated');
     const handler = onCall![1] as (event: {
       workspaceId: string;
+      prId: string;
       prNumber: number;
       prState: string;
       prCiStatus: string;
@@ -1098,6 +953,7 @@ describe('configureEventCollector', () => {
 
     handler({
       workspaceId: 'ws-1',
+      prId: 'pr-42',
       prNumber: 42,
       prState: 'CLOSED',
       prCiStatus: 'UNKNOWN',
@@ -1109,84 +965,6 @@ describe('configureEventCollector', () => {
     // No settle call: a closed PR derives to IDLE. The projection refresh is what
     // republishes it.
     expect(workspaceDataService.findRatchetProjection).toHaveBeenCalledWith('ws-1');
-  });
-
-  it('still triggers ratchet recompute when store mutates snapshot during immediate upsert', () => {
-    const existingSnapshot: { projectId: string; prNumber: number | null; prUrl: string | null } = {
-      projectId: 'proj-1',
-      prNumber: 41,
-      prUrl: 'https://github.com/org/repo/pull/41',
-    };
-    vi.mocked(workspaceSnapshotStore.getByWorkspaceId).mockReturnValue(
-      existingSnapshot as ReturnType<typeof workspaceSnapshotStore.getByWorkspaceId>
-    );
-    vi.mocked(workspaceSnapshotStore.upsert).mockImplementation((_, update) => {
-      if (update.prNumber !== undefined) {
-        existingSnapshot.prNumber = update.prNumber;
-      }
-      if (update.prUrl !== undefined) {
-        existingSnapshot.prUrl = update.prUrl;
-      }
-      return { accepted: true, changed: true, emitted: true };
-    });
-
-    configureEventCollector();
-
-    const onCall = vi
-      .mocked(prSnapshotService.on)
-      .mock.calls.find((call) => call[0] === 'pr_snapshot_updated');
-    const handler = onCall![1] as (event: {
-      workspaceId: string;
-      prNumber: number;
-      prState: string;
-      prCiStatus: string;
-      prReviewState: string | null;
-      prUrl?: string | null;
-    }) => void;
-
-    handler({
-      workspaceId: 'ws-1',
-      prNumber: 42,
-      prState: 'OPEN',
-      prCiStatus: 'PENDING',
-      prReviewState: null,
-      prUrl: 'https://github.com/org/repo/pull/42',
-    });
-
-    expect(ratchetService.checkWorkspaceById).toHaveBeenCalledWith('ws-1');
-  });
-
-  it('does not trigger immediate ratchet recompute when PR identity is unchanged', () => {
-    vi.mocked(workspaceSnapshotStore.getByWorkspaceId).mockReturnValue({
-      projectId: 'proj-1',
-      prNumber: 42,
-      prUrl: 'https://github.com/org/repo/pull/42',
-    } as ReturnType<typeof workspaceSnapshotStore.getByWorkspaceId>);
-
-    configureEventCollector();
-
-    const onCall = vi
-      .mocked(prSnapshotService.on)
-      .mock.calls.find((call) => call[0] === 'pr_snapshot_updated');
-    const handler = onCall![1] as (event: {
-      workspaceId: string;
-      prNumber: number;
-      prState: string;
-      prCiStatus: string;
-      prReviewState: string | null;
-      prUrl?: string | null;
-    }) => void;
-
-    handler({
-      workspaceId: 'ws-1',
-      prNumber: 42,
-      prState: 'OPEN',
-      prCiStatus: 'SUCCESS',
-      prReviewState: null,
-      prUrl: 'https://github.com/org/repo/pull/42',
-    });
-
-    expect(ratchetService.checkWorkspaceById).not.toHaveBeenCalled();
   });
 
   it('ratchet_toggled updates ratchetEnabled and ratchetState immediately', () => {

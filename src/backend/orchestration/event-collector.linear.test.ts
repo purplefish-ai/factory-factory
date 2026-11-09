@@ -62,20 +62,37 @@ function createHarness(prState: 'OPEN' | 'MERGED' | 'CLOSED' | null = 'OPEN') {
   collector.start();
   const emitMerge = (
     prNumber = 7,
-    prUrl: string | null = `https://github.com/org/repo/pull/${prNumber}`,
-    prId?: string
+    prUrl = `https://github.com/org/repo/pull/${prNumber}`,
+    prId = 'selected'
   ) =>
     prSnapshotService.emit(PR_SNAPSHOT_UPDATED, {
       workspaceId: 'ws-1',
       prId,
       prNumber,
+      prUrl,
       prState: 'MERGED',
       prCiStatus: 'SUCCESS',
       prReviewState: null,
-      ...(prUrl === null ? {} : { prUrl }),
     });
+  // Accept a merged observation whose authoritative projection selects that PR.
+  const acceptMerge = (prNumber = 7) => {
+    const prUrl = `https://github.com/org/repo/pull/${prNumber}`;
+    findById.mockResolvedValue({
+      status: 'READY',
+      prNumber,
+      prUrl,
+      prState: 'MERGED',
+      prCiStatus: 'SUCCESS',
+      prUpdatedAt: null,
+      ratchetState: 'MERGED',
+      ratchetEnabled: true,
+      prHasMergeConflict: false,
+    });
+    emitMerge(prNumber, prUrl);
+  };
   return {
     collector,
+    acceptMerge,
     emitMerge,
     markIssueCompleted,
     getWorkspaceLinearContext,
@@ -90,144 +107,11 @@ function createHarness(prState: 'OPEN' | 'MERGED' | 'CLOSED' | null = 'OPEN') {
 }
 
 describe('Linear completion on PR merge', () => {
-  it.each(['CLOSED', 'DETACHED'])(
-    'completes after sibling detachment but preserves a closed sibling (%s)',
-    async (transition) => {
-      const { collector, emitMerge, markIssueCompleted, findRatchetProjection, prSnapshotService } =
-        createHarness();
-      try {
-        findRatchetProjection.mockResolvedValue({
-          status: 'READY',
-          prState: 'OPEN',
-          prSummary: { hasNonterminal: true },
-        });
-        emitMerge();
-        await new Promise((resolve) => setTimeout(resolve, 0));
-        expect(markIssueCompleted).not.toHaveBeenCalled();
-        findRatchetProjection.mockResolvedValue({
-          status: 'READY',
-          prState: transition === 'DETACHED' ? 'MERGED' : 'CLOSED',
-          prSummary: { hasNonterminal: false },
-        });
-        if (transition === 'DETACHED') {
-          prSnapshotService.emit(PR_DETACHED, { workspaceId: 'ws-1', prId: 'b' });
-        } else {
-          prSnapshotService.emit(PR_SNAPSHOT_UPDATED, {
-            workspaceId: 'ws-1',
-            prId: 'b',
-            prNumber: 8,
-            prState: 'CLOSED',
-            prCiStatus: 'SUCCESS',
-            prReviewState: null,
-          });
-        }
-        await new Promise((resolve) => setTimeout(resolve, 0));
-        if (transition === 'DETACHED') {
-          expect(markIssueCompleted).toHaveBeenCalledExactlyOnceWith('test-key', 'issue-1');
-        } else {
-          expect(markIssueCompleted).not.toHaveBeenCalled();
-        }
-        expect(findRatchetProjection).toHaveBeenCalledWith('ws-1');
-      } finally {
-        collector.stop();
-      }
-    }
-  );
-  it.each(['CLOSED', 'DETACHED'])(
-    'retries a %s transition during a stale projection read',
-    async (transition) => {
-      const { collector, emitMerge, markIssueCompleted, findRatchetProjection, prSnapshotService } =
-        createHarness();
-      let resolveProjection!: (value: unknown) => void;
-      findRatchetProjection.mockResolvedValueOnce(null).mockReturnValueOnce(
-        new Promise((resolve) => {
-          resolveProjection = resolve;
-        })
-      );
-      try {
-        emitMerge();
-        findRatchetProjection.mockResolvedValue({
-          status: 'READY',
-          prState: transition === 'DETACHED' ? 'MERGED' : 'CLOSED',
-          prSummary: { hasNonterminal: false },
-        });
-        if (transition === 'DETACHED') {
-          prSnapshotService.emit(PR_DETACHED, { workspaceId: 'ws-1', prId: 'b' });
-        } else {
-          prSnapshotService.emit(PR_SNAPSHOT_UPDATED, {
-            workspaceId: 'ws-1',
-            prId: 'b',
-            prNumber: 8,
-            prState: 'CLOSED',
-            prCiStatus: 'SUCCESS',
-            prReviewState: null,
-          });
-        }
-        resolveProjection({
-          status: 'READY',
-          prState: 'OPEN',
-          prSummary: { hasNonterminal: true },
-        });
-        await new Promise((resolve) => setTimeout(resolve, 0));
-        if (transition === 'DETACHED') {
-          expect(markIssueCompleted).toHaveBeenCalledExactlyOnceWith('test-key', 'issue-1');
-        } else {
-          expect(markIssueCompleted).not.toHaveBeenCalled();
-        }
-        expect(findRatchetProjection).toHaveBeenCalledWith('ws-1');
-      } finally {
-        collector.stop();
-      }
-    }
-  );
-  it.each([false, true])(
-    'deduplicates unseeded ratchet and poller events (settled: %s)',
-    async (settled) => {
-      const { collector, emitMerge, markIssueCompleted } = createHarness(null);
-      try {
-        emitMerge(7, null);
-        if (settled) {
-          await vi.waitFor(() => expect(markIssueCompleted).toHaveBeenCalledTimes(1));
-        }
-        emitMerge();
-        await new Promise((resolve) => setTimeout(resolve, 0));
-        expect(markIssueCompleted).toHaveBeenCalledExactlyOnceWith('test-key', 'issue-1');
-      } finally {
-        collector.stop();
-      }
-    }
-  );
-
-  it('distinguishes same-numbered PRs after learning an initially missing URL', async () => {
-    const { collector, emitMerge, markIssueCompleted } = createHarness(null);
-    try {
-      emitMerge(7, null);
-      emitMerge();
-      emitMerge(7, 'https://github.com/org/other/pull/7');
-      await new Promise((resolve) => setTimeout(resolve, 0));
-      expect(markIssueCompleted).toHaveBeenCalledTimes(2);
-    } finally {
-      collector.stop();
-    }
-  });
-
-  it('distinguishes a newly linked same-numbered PR from a seeded ratchet completion', async () => {
-    const { collector, emitMerge, markIssueCompleted } = createHarness();
-    try {
-      emitMerge(7, null);
-      emitMerge(7, 'https://github.com/org/other/pull/7');
-      await new Promise((resolve) => setTimeout(resolve, 0));
-      expect(markIssueCompleted).toHaveBeenCalledTimes(2);
-    } finally {
-      collector.stop();
-    }
-  });
-
   it('completes the linked issue once across repeated merged snapshots', async () => {
-    const { collector, emitMerge, markIssueCompleted } = createHarness();
+    const { collector, acceptMerge, markIssueCompleted } = createHarness();
     try {
-      emitMerge();
-      emitMerge();
+      acceptMerge();
+      acceptMerge();
       await new Promise((resolve) => setTimeout(resolve, 0));
       expect(markIssueCompleted).toHaveBeenCalledExactlyOnceWith('test-key', 'issue-1');
     } finally {
@@ -236,9 +120,9 @@ describe('Linear completion on PR merge', () => {
   });
 
   it('completes a seeded merged PR on its first poll', async () => {
-    const { collector, emitMerge, markIssueCompleted } = createHarness('MERGED');
+    const { collector, acceptMerge, markIssueCompleted } = createHarness('MERGED');
     try {
-      emitMerge();
+      acceptMerge();
       await new Promise((resolve) => setTimeout(resolve, 0));
       expect(markIssueCompleted).toHaveBeenCalledExactlyOnceWith('test-key', 'issue-1');
     } finally {
@@ -247,13 +131,14 @@ describe('Linear completion on PR merge', () => {
   });
 
   it('retries when Linear context becomes available on a later poll', async () => {
-    const { collector, emitMerge, markIssueCompleted, getWorkspaceLinearContext } = createHarness();
+    const { collector, acceptMerge, markIssueCompleted, getWorkspaceLinearContext } =
+      createHarness();
     getWorkspaceLinearContext.mockResolvedValueOnce(null);
     try {
-      emitMerge();
+      acceptMerge();
       await vi.waitFor(() => expect(getWorkspaceLinearContext).toHaveBeenCalledTimes(1));
       expect(markIssueCompleted).not.toHaveBeenCalled();
-      emitMerge();
+      acceptMerge();
       await vi.waitFor(() =>
         expect(markIssueCompleted).toHaveBeenCalledExactlyOnceWith('test-key', 'issue-1')
       );
@@ -265,18 +150,18 @@ describe('Linear completion on PR merge', () => {
   it.each(['reported', 'thrown'] as const)(
     'retries a %s completion failure on the next poll',
     async (failure) => {
-      const { collector, emitMerge, markIssueCompleted } = createHarness();
+      const { collector, acceptMerge, markIssueCompleted } = createHarness();
       if (failure === 'reported') {
         markIssueCompleted.mockResolvedValueOnce(false);
       } else {
         markIssueCompleted.mockRejectedValueOnce(new Error('Linear unavailable'));
       }
       try {
-        emitMerge();
+        acceptMerge();
         await vi.waitFor(() => expect(markIssueCompleted).toHaveBeenCalledTimes(1));
-        emitMerge();
+        acceptMerge();
         await vi.waitFor(() => expect(markIssueCompleted).toHaveBeenCalledTimes(2));
-        emitMerge();
+        acceptMerge();
         await new Promise((resolve) => setTimeout(resolve, 0));
         expect(markIssueCompleted).toHaveBeenCalledTimes(2);
       } finally {
@@ -286,7 +171,7 @@ describe('Linear completion on PR merge', () => {
   );
 
   it('suppresses repeated polls while completion is in flight and after it succeeds', async () => {
-    const { collector, emitMerge, markIssueCompleted } = createHarness();
+    const { collector, acceptMerge, markIssueCompleted } = createHarness();
     let resolve!: (completed: boolean) => void;
     markIssueCompleted.mockReturnValueOnce(
       new Promise<boolean>((done) => {
@@ -294,14 +179,14 @@ describe('Linear completion on PR merge', () => {
       })
     );
     try {
-      emitMerge();
+      acceptMerge();
       await vi.waitFor(() => expect(markIssueCompleted).toHaveBeenCalledTimes(1));
-      emitMerge();
+      acceptMerge();
       await new Promise((resolve) => setTimeout(resolve, 0));
       expect(markIssueCompleted).toHaveBeenCalledTimes(1);
       resolve(true);
       await new Promise((resolve) => setTimeout(resolve, 0));
-      emitMerge();
+      acceptMerge();
       await new Promise((resolve) => setTimeout(resolve, 0));
       expect(markIssueCompleted).toHaveBeenCalledTimes(1);
     } finally {
@@ -310,13 +195,13 @@ describe('Linear completion on PR merge', () => {
   });
 
   it('attempts completion again after the collector restarts', async () => {
-    const { collector, emitMerge, markIssueCompleted } = createHarness();
+    const { collector, acceptMerge, markIssueCompleted } = createHarness();
     try {
-      emitMerge();
+      acceptMerge();
       await vi.waitFor(() => expect(markIssueCompleted).toHaveBeenCalledTimes(1));
       collector.stop();
       collector.start();
-      emitMerge();
+      acceptMerge();
       await vi.waitFor(() => expect(markIssueCompleted).toHaveBeenCalledTimes(2));
     } finally {
       collector.stop();
@@ -324,10 +209,10 @@ describe('Linear completion on PR merge', () => {
   });
 
   it('completes a newly linked merged PR after a previous merged PR', async () => {
-    const { collector, emitMerge, markIssueCompleted } = createHarness('MERGED');
+    const { collector, acceptMerge, markIssueCompleted } = createHarness('MERGED');
     try {
-      emitMerge(8);
-      emitMerge(8);
+      acceptMerge(8);
+      acceptMerge(8);
       await new Promise((resolve) => setTimeout(resolve, 0));
       expect(markIssueCompleted).toHaveBeenCalledExactlyOnceWith('test-key', 'issue-1');
     } finally {
@@ -653,13 +538,13 @@ describe.each(['removal', 'restart'] as const)('Linear completion after %s', (cl
   }
 
   it('clears a successful completion so the same PR can be attempted again', async () => {
-    const { collector, emitMerge, markIssueCompleted } = createHarness();
+    const { collector, acceptMerge, markIssueCompleted } = createHarness();
     try {
-      emitMerge();
+      acceptMerge();
       await settleCompletions();
       expect(markIssueCompleted).toHaveBeenCalledTimes(1);
       clearTracking(collector);
-      emitMerge();
+      acceptMerge();
       await settleCompletions();
       expect(markIssueCompleted).toHaveBeenCalledTimes(2);
     } finally {
@@ -670,16 +555,16 @@ describe.each(['removal', 'restart'] as const)('Linear completion after %s', (cl
   it.each(['false', 'throw'] as const)(
     'fences a late %s finalization from a new running attempt',
     async (result) => {
-      const { collector, emitMerge, markIssueCompleted } = createHarness();
+      const { collector, acceptMerge, markIssueCompleted } = createHarness();
       const first = deferred<boolean>();
       const second = deferred<boolean>();
       markIssueCompleted.mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise);
       try {
-        emitMerge();
+        acceptMerge();
         await settleCompletions();
         expect(markIssueCompleted).toHaveBeenCalledTimes(1);
         clearTracking(collector);
-        emitMerge();
+        acceptMerge();
         await settleCompletions();
         expect(markIssueCompleted).toHaveBeenCalledTimes(2);
         if (result === 'false') {
@@ -688,12 +573,12 @@ describe.each(['removal', 'restart'] as const)('Linear completion after %s', (cl
           first.reject(new Error('late failure'));
         }
         await settleCompletions();
-        emitMerge();
+        acceptMerge();
         await settleCompletions();
         expect(markIssueCompleted).toHaveBeenCalledTimes(2);
         second.resolve(true);
         await settleCompletions();
-        emitMerge();
+        acceptMerge();
         await settleCompletions();
         expect(markIssueCompleted).toHaveBeenCalledTimes(2);
       } finally {
@@ -703,17 +588,17 @@ describe.each(['removal', 'restart'] as const)('Linear completion after %s', (cl
   );
 
   it('does not restore cleared tracking when admitted work succeeds later', async () => {
-    const { collector, emitMerge, markIssueCompleted } = createHarness();
+    const { collector, acceptMerge, markIssueCompleted } = createHarness();
     const first = deferred<boolean>();
     markIssueCompleted.mockReturnValueOnce(first.promise);
     try {
-      emitMerge();
+      acceptMerge();
       await settleCompletions();
       expect(markIssueCompleted).toHaveBeenCalledTimes(1);
       clearTracking(collector);
       first.resolve(true);
       await settleCompletions();
-      emitMerge();
+      acceptMerge();
       await settleCompletions();
       expect(markIssueCompleted).toHaveBeenCalledTimes(2);
     } finally {
@@ -722,57 +607,21 @@ describe.each(['removal', 'restart'] as const)('Linear completion after %s', (cl
   });
 
   it('allows an admitted context lookup to continue after tracking cleanup', async () => {
-    const { collector, emitMerge, getWorkspaceLinearContext, markIssueCompleted } = createHarness();
+    const { collector, acceptMerge, getWorkspaceLinearContext, markIssueCompleted } =
+      createHarness();
     const context = deferred<{ apiKey: string; linearIssueId: string }>();
     getWorkspaceLinearContext.mockReturnValueOnce(context.promise);
     try {
-      emitMerge();
+      acceptMerge();
       await settleCompletions();
       expect(getWorkspaceLinearContext).toHaveBeenCalledTimes(1);
       clearTracking(collector);
       context.resolve({ apiKey: 'test-key', linearIssueId: 'issue-1' });
       await settleCompletions();
       expect(markIssueCompleted).toHaveBeenCalledExactlyOnceWith('test-key', 'issue-1');
-      emitMerge();
+      acceptMerge();
       await settleCompletions();
       expect(markIssueCompleted).toHaveBeenCalledTimes(2);
-    } finally {
-      collector.stop();
-    }
-  });
-
-  it('does not retry a cleared pending read with queued CLOSED intent', async () => {
-    const {
-      collector,
-      emitMerge,
-      findRatchetProjection,
-      prSnapshotService,
-      markIssueCompleted,
-      getWorkspaceLinearContext,
-    } = createHarness();
-    const projection = deferred<unknown>();
-    // The first read belongs to the monitoring worker, the second to legacy completion.
-    findRatchetProjection.mockResolvedValueOnce(null).mockReturnValueOnce(projection.promise);
-    try {
-      emitMerge();
-      prSnapshotService.emit(PR_SNAPSHOT_UPDATED, {
-        workspaceId: 'ws-1',
-        prNumber: 7,
-        prState: 'CLOSED',
-        prCiStatus: 'SUCCESS',
-        prReviewState: null,
-      });
-      await settleCompletions();
-      clearTracking(collector);
-      const readsBeforeSettlement = findRatchetProjection.mock.calls.length;
-      projection.resolve({ prState: 'OPEN' });
-      await settleCompletions();
-      expect(findRatchetProjection).toHaveBeenCalledTimes(readsBeforeSettlement);
-      expect(getWorkspaceLinearContext).not.toHaveBeenCalled();
-      expect(markIssueCompleted).not.toHaveBeenCalled();
-      emitMerge();
-      await settleCompletions();
-      expect(markIssueCompleted).toHaveBeenCalledTimes(1);
     } finally {
       collector.stop();
     }

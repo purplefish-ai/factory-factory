@@ -1,10 +1,7 @@
 import { createLogger } from '@/backend/services/logger.service';
 import type { AgentSessionRecord } from '@/backend/services/session/resources/agent-session.accessor';
 import type { AcpRuntimeManager } from '@/backend/services/session/service/acp';
-import type {
-  RatchetSessionEndOutcome,
-  SessionLifecycleWorkspaceBridge,
-} from '@/backend/services/session/service/bridges';
+import type { SessionLifecycleWorkspaceBridge } from '@/backend/services/session/service/bridges';
 import type { SessionDomainService } from '@/backend/services/session/service/session-domain.service';
 import { isLocalTranscriptMessage } from '@/backend/services/session/service/store/session-local-transcript';
 import type { PersistClosedSessionInput } from './closed-session-persistence.service';
@@ -58,21 +55,7 @@ export class SessionWorkflowFinalizer {
     cleanupTransientRatchetSession: boolean;
   }): Promise<void> {
     const { session, sessionId, cleanupTransientRatchetSession } = input;
-    if (session?.workflow !== 'ratchet') {
-      return;
-    }
-
-    try {
-      await this.recordRatchetSessionEnd(session.workspaceId, sessionId, 'COMPLETED');
-    } catch (error) {
-      logger.warn('Failed settling ratchet dispatch record during stop', {
-        sessionId,
-        workspaceId: session.workspaceId,
-        error: toErrorMessage(error),
-      });
-    }
-
-    if (!cleanupTransientRatchetSession) {
+    if (session?.workflow !== 'ratchet' || !cleanupTransientRatchetSession) {
       return;
     }
 
@@ -85,20 +68,7 @@ export class SessionWorkflowFinalizer {
     exitCode: number | null;
     deliberate: boolean;
   }): Promise<void> {
-    const { session, sessionId, exitCode, deliberate } = input;
-    if (session.workflow === 'ratchet') {
-      const outcome: RatchetSessionEndOutcome = exitCode === 0 || deliberate ? 'COMPLETED' : 'DIED';
-      try {
-        await this.recordRatchetSessionEnd(session.workspaceId, sessionId, outcome);
-      } catch (error) {
-        logger.warn('Failed settling ratchet dispatch record during runtime exit', {
-          sessionId,
-          workspaceId: session.workspaceId,
-          error: toErrorMessage(error),
-        });
-      }
-    }
-
+    const { session, sessionId } = input;
     if (this.workspaceBridge) {
       void schedulePRDiscovery(session.workspaceId, logger, this.workspaceBridge);
     }
@@ -180,14 +150,6 @@ export class SessionWorkflowFinalizer {
 
   recoverStaleRunningSessions(): Promise<number> {
     return this.dependencies.repository.recoverStaleRunningSessions();
-  }
-
-  private async recordRatchetSessionEnd(
-    workspaceId: string,
-    sessionId: string,
-    outcome: RatchetSessionEndOutcome
-  ): Promise<void> {
-    await this.workspaceBridge?.recordRatchetSessionEnd(workspaceId, sessionId, outcome);
   }
 
   private async cleanupTransientRatchetSession(

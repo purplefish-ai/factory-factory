@@ -102,9 +102,9 @@ with the same number in different repositories. Failed or incomplete transitions
 retry on later polls, and a seeded merged snapshot is attempted after startup.
 The adjacent `linear-merge-completion.orchestrator.ts` owns this attempt
 protocol, with one owner per running collector lifetime. The collector retains
-subscriptions and admits association-aware effects only for accepted PR
-invalidations. Removing a workspace or stopping the collector clears completion
-tracking; already admitted Linear work may still complete after cleanup.
+subscriptions and admits completion effects only for accepted PR invalidations.
+Removing a workspace or stopping the collector clears completion tracking;
+already admitted Linear work may still complete after cleanup.
 
 Project settings updates enter through trusted-local tRPC input validation, then
 `updateProjectSettings` coordinates repository validation, the final startup
