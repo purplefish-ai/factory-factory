@@ -20,6 +20,30 @@ export function projectConversationSummary(row?: WorkspaceMetadata | null) {
 }
 
 export const workspaceMetadataAccessor = {
+  /**
+   * The fields metadata generation reads before accepting a result. Selects
+   * `creationMetadata` for its auto-generated name provenance; the hot
+   * workspace finders omit that column.
+   */
+  async findContext(workspaceId: string) {
+    const row = await prisma.workspace.findUnique({
+      where: { id: workspaceId },
+      select: {
+        id: true,
+        projectId: true,
+        name: true,
+        status: true,
+        creationSource: true,
+        creationMetadata: true,
+        conversationMetadata: true,
+      },
+    });
+    if (!row) {
+      return null;
+    }
+    const { conversationMetadata, ...rest } = row;
+    return { ...rest, conversationSummary: projectConversationSummary(conversationMetadata) };
+  },
   renameAndPin(workspaceId: string, name: string) {
     return prisma.$transaction(async (tx) => {
       const workspace = await tx.workspace.findUniqueOrThrow({ where: { id: workspaceId } });

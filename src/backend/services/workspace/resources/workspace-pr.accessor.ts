@@ -68,11 +68,15 @@ export const WORKSPACE_PR_DEFAULTS: WorkspacePRFields = {
   prReviewLastCommentId: null,
 };
 
-/** The persisted row, as joined onto a workspace read. */
-export type WorkspacePRRow = WorkspacePR;
+/**
+ * The persisted row as joined onto a workspace read. Workspace reads omit the
+ * normalized `observation` (review bodies included); only PR polling and event
+ * derivation read it, through their own queries.
+ */
+export type WorkspacePRRow = Omit<WorkspacePR, 'observation'>;
 
 /** Flatten a joined PR row onto the caller-facing field names. */
-export function flattenWorkspacePR(pr: WorkspacePR | null | undefined): WorkspacePRFields {
+export function flattenWorkspacePR(pr: WorkspacePRRow | null | undefined): WorkspacePRFields {
   if (!pr) {
     return { ...WORKSPACE_PR_DEFAULTS };
   }

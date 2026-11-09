@@ -88,6 +88,7 @@ vi.mock('@/backend/services/workspace', () => ({
   workspaceDataService: {
     findById: vi.fn(),
     findByIdWithProject: vi.fn(),
+    findInitialMessageContext: vi.fn(),
   },
   workspaceRelationshipsService: {
     findParent: vi.fn(),
@@ -164,6 +165,9 @@ export function setupHappyPath(overrides = {}) {
   vi.mocked(workspaceStateMachine.startProvisioning).mockResolvedValue(unsafeCoerce(workspace));
   vi.mocked(workspaceDataService.findByIdWithProject).mockResolvedValue(workspace);
   vi.mocked(workspaceDataService.findById).mockResolvedValue(workspace as never);
+  vi.mocked(workspaceDataService.findInitialMessageContext).mockResolvedValue(
+    unsafeCoerce(workspace)
+  );
   vi.mocked(mockWorkspaceUpdate).mockResolvedValue(workspace as never);
   vi.mocked(gitOpsService.ensureBaseBranchExists).mockResolvedValue(undefined);
   vi.mocked(gitOpsService.removeWorktree).mockResolvedValue(undefined);

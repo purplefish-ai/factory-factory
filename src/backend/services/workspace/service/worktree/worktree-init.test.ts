@@ -7,6 +7,7 @@ import { SessionStatus } from '@/shared/core';
 const mocks = vi.hoisted(() => ({
   findById: vi.fn(),
   findByIdWithProject: vi.fn(),
+  findInitialMessageContext: vi.fn(),
   registerInitializedWorktree: vi.fn(),
   setRunScriptCommands: vi.fn(),
   findByWorkspaceId: vi.fn(),
@@ -59,6 +60,7 @@ vi.mock('@/backend/services/workspace', () => ({
   workspaceDataService: {
     findById: mocks.findById,
     findByIdWithProject: mocks.findByIdWithProject,
+    findInitialMessageContext: mocks.findInitialMessageContext,
   },
   workspaceRelationshipsService: {
     findParent: vi.fn(),
@@ -155,6 +157,11 @@ describe('initializeWorkspaceWorktree orchestrator', () => {
       },
     });
     mocks.findById.mockResolvedValue({ initErrorMessage: 'failed' });
+    mocks.findInitialMessageContext.mockResolvedValue({
+      id: 'workspace-1',
+      parentWorkspaceId: null,
+      creationMetadata: null,
+    });
 
     mocks.ensureBaseBranchExists.mockResolvedValue(undefined);
     mocks.createWorktree.mockResolvedValue({

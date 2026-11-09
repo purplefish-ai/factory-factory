@@ -561,7 +561,7 @@ export function createDefaultApplicationDependencies(): ApplicationDependencies 
         return session ? { ...session, codexAccountId: session.codexAccountId ?? null } : null;
       },
       history: (id) => sessionInterceptorBridge.getSessionConversationHistory(id, ''),
-      findWorkspace: (id) => services.workspaceDataService.findById(id),
+      findWorkspace: (id) => services.workspaceDataService.findMetadataContext(id),
       reserve: (id, requestId) => services.workspaceDataService.reserveMetadata(id, requestId),
       accept: (input) => services.workspaceDataService.acceptMetadata(input),
       generate: generateWorkspaceMetadata,

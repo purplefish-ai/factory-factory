@@ -326,8 +326,8 @@ async function prepareDefaultAgentSession(
       return null;
     }
 
-    const workspace = await workspaceDataService.findById(workspaceId);
-    const metadata = workspace?.creationMetadata as Record<string, unknown> | null;
+    const workspace = await workspaceDataService.findInitialMessageContext(workspaceId);
+    const metadata = workspace?.creationMetadata ?? null;
     const startupModePreset = readStartupModePresetFromMetadata(metadata, workspaceId);
 
     // Build the initial prompt from linked issue data, or fallback to creation metadata.

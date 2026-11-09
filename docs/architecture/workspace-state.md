@@ -569,13 +569,20 @@ do not erase deliberately reopened archived detail. Initialization retains
 `getInitStatus` polling and readiness/worktree-path invalidations; those repairs
 hydrate omitted metadata through the shared detail options.
 
-`workspace.get` reads `findDetailById`, not the server's full `findById`. It
-leaves out `initOutput` (served by `getInitStatus`), agent-session
-`providerMetadata`, and `creationMetadata`. Base64 `initialAttachments` stay
-stored in `creationMetadata` after init; only the detail response drops them,
-exposing `initialPrompt` for the details dialog instead. Polled git, file and
-init-status reads use the narrow `findWorktreeContext`/`findInitStatus` selects
-instead of full rows.
+SQLite reads run synchronously on the main event loop, so hot workspace reads
+leave out the large columns: `initOutput`, `creationMetadata` (base64
+`initialAttachments` stay stored there after init), agent-session
+`providerMetadata`, and the PR `observation`. `findById`, the project list
+(`findByProjectIdWithSessions`) and the 60-second snapshot reconciliation read
+(`findAllNonArchivedWithSessionsAndProject`) omit them, and their return types
+do too. Callers that need a blob use a named finder: `findInitStatus` for the
+startup log, `findInitialMessageContext` for the first-message prompt and
+attachments, `findMetadataContext` for auto-generated name provenance, and the
+session and PR capsules' own reads for provider metadata and observations.
+
+`workspace.get` reads `findDetailById`, which adds the `initialPrompt` for the
+details dialog to that narrow row. Polled git, file and init-status reads use
+the narrow `findWorktreeContext`/`findInitStatus` selects instead of full rows.
 
 `WorkspaceSummarySchema` defines the required board/sidebar fields independently
 of backend and client code. The HTTP list projector and snapshot summaries share

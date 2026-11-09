@@ -198,7 +198,7 @@ it('keeps ordinary nonzero setup warnings and successful startup work', async ()
   });
   expect(await init(input())).toMatchObject({ status: 'READY' });
   expect(
-    await h.workspace.workspaceDataService.findById(h.claim.reservedWorkspaceId)
+    await h.workspace.workspaceDataService.findInitStatus(h.claim.reservedWorkspaceId)
   ).toMatchObject({
     status: 'READY',
     initOutput: expect.stringContaining('setupstartup'),
@@ -331,10 +331,13 @@ it.skipIf(process.platform === 'win32')(
     const task = init(input(cancel.signal));
     try {
       await vi.waitFor(async () => {
+        const status = await h.workspace.workspaceDataService.findInitStatus(
+          h.claim.reservedWorkspaceId
+        );
         const workspace = await h.workspace.workspaceDataService.findById(
           h.claim.reservedWorkspaceId
         );
-        expect(workspace?.initOutput).toContain('script-started');
+        expect(status?.initOutput).toContain('script-started');
         expect(workspace?.initScriptPid).toBeGreaterThan(1);
       });
       cancel.abort();
@@ -538,7 +541,7 @@ it('retains a marked Unicode-safe bounded output tail inside the event owner tra
   const owner = h.workspace.eventWorkspaceInitService;
   await owner.start(h.claim);
   await owner.appendOutput(h.claim, `${'😀'.repeat(25_600)}x`);
-  const row = await h.workspace.workspaceDataService.findById(h.claim.reservedWorkspaceId);
+  const row = await h.workspace.workspaceDataService.findInitStatus(h.claim.reservedWorkspaceId);
   expect(row?.initOutput?.startsWith('[...truncated...]\n')).toBe(true);
   expect(Buffer.from(row?.initOutput ?? '').toString('utf8')).toBe(row?.initOutput);
   expect(row?.initOutput?.length).toBeLessThanOrEqual(50 * 1024);
