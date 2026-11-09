@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({
   invalidate: vi.fn(),
   status: 'already_active',
   mutate: vi.fn(),
+  discard: vi.fn(),
 }));
 vi.mock('sonner', () => ({ toast: { success: mocks.success, error: vi.fn() } }));
 vi.mock('@/client/lib/trpc', () => ({
@@ -20,6 +21,9 @@ vi.mock('@/client/lib/trpc', () => ({
     workspace: {
       attachPR: { useMutation: () => ({ isPending: false }) },
       detachPR: { useMutation: () => ({ isPending: false }) },
+      discardBlockedPRDeliveries: {
+        useMutation: () => ({ isPending: false, mutateAsync: mocks.discard }),
+      },
     },
     adversarialReview: {
       trigger: {
@@ -60,4 +64,32 @@ it.each([
   expect(mocks.mutate).toHaveBeenCalledWith({ workspaceId: 'workspace-1', prId: 'pr-42' });
   expect(mocks.success).toHaveBeenCalledWith(message);
   expect(mocks.invalidate).toHaveBeenCalledWith({ workspaceId: 'workspace-1' });
+});
+
+function DiscardButton({ results }: { results: boolean[] }) {
+  const actions = useWorkspacePrActions('workspace-1', 'project-1');
+  return (
+    <button
+      onClick={() => {
+        void actions.discardBlocked().then((result) => results.push(result));
+      }}
+    >
+      Discard
+    </button>
+  );
+}
+it('reports whether discarding blocked PR deliveries succeeded', async () => {
+  const results: boolean[] = [];
+  mocks.discard.mockResolvedValueOnce({ discarded: 1 }).mockRejectedValueOnce(new Error('denied'));
+  const host = document.createElement('div');
+  document.body.append(host);
+  root = createRoot(host);
+  await act(() => root.render(<DiscardButton results={results} />));
+  await act(async () => host.querySelector('button')!.click());
+  await act(async () => host.querySelector('button')!.click());
+  await vi.waitFor(() => expect(results).toEqual([true, false]));
+  expect(mocks.discard.mock.calls).toEqual([
+    [{ workspaceId: 'workspace-1' }],
+    [{ workspaceId: 'workspace-1' }],
+  ]);
 });

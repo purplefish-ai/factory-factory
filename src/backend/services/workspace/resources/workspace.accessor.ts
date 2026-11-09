@@ -95,7 +95,7 @@ function flatten<
     prs?: WorkspacePRRow[];
     prDiscovery?: WorkspacePRDiscovery | null;
     runScript?: WorkspaceRunScriptRow | null;
-    _count?: { prEvents: number; childWorkspaces?: number };
+    _count?: { prEvents: number; prDeliveries?: number; childWorkspaces?: number };
     parentWorkspace?: Parameters<typeof projectWorkspaceFamily>[0]['parentWorkspace'];
     conversationMetadata?: Parameters<typeof projectConversationSummary>[0];
   },
@@ -110,7 +110,11 @@ function flatten<
     parentWorkspace,
     ...rest
   } = row;
-  const ratchetFields = flattenWorkspaceRatchet(prMonitoring, _count?.prEvents ?? 0);
+  const ratchetFields = flattenWorkspaceRatchet(
+    prMonitoring,
+    _count?.prEvents ?? 0,
+    _count?.prDeliveries ?? 0
+  );
   return {
     ...rest,
     ...projectWorkspaceFamily({ parentWorkspace, _count }),

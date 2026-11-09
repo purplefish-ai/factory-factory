@@ -1,5 +1,9 @@
 import { expect, it } from 'vitest';
-import { canResumePRMonitoring } from './pr-monitoring';
+import {
+  canResumePRMonitoring,
+  isPRDeliveryBlocked,
+  PR_DELIVERY_BLOCKED_PAUSE_REASON,
+} from './pr-monitoring';
 
 it('allows only recoverable monitoring pauses to be resumed explicitly', () => {
   for (const reason of [
@@ -17,8 +21,16 @@ it('allows only recoverable monitoring pauses to be resumed explicitly', () => {
     '',
     'LEGACY_FIXER',
     'LEGACY_FIXER_USER_STOPPED',
+    PR_DELIVERY_BLOCKED_PAUSE_REASON,
     'UNKNOWN',
   ]) {
     expect(canResumePRMonitoring(reason)).toBe(false);
+  }
+});
+
+it('recognizes only the projected blocked delivery reason as blocked', () => {
+  expect(isPRDeliveryBlocked(PR_DELIVERY_BLOCKED_PAUSE_REASON)).toBe(true);
+  for (const reason of [null, undefined, 'DELIVERY_FAILED', 'USER_STOPPED']) {
+    expect(isPRDeliveryBlocked(reason)).toBe(false);
   }
 });

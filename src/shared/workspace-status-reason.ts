@@ -1,7 +1,7 @@
 import type { CIStatus, PRState, RatchetState, WorkspaceStatus } from '@/shared/core';
 import type { WorkspaceCiObservation, WorkspaceFlowPhase } from '@/shared/workspace-flow-state';
 import { PENDING_REQUEST_TYPES, type PendingRequestType } from './pending-request-constants';
-import type { PRMonitoringProjection } from './pr-monitoring';
+import { PR_DELIVERY_BLOCKED_PAUSE_REASON, type PRMonitoringProjection } from './pr-monitoring';
 
 export const WORKSPACE_PENDING_REQUEST_TYPES = PENDING_REQUEST_TYPES;
 
@@ -178,9 +178,13 @@ function deriveMonitoringReason(input: WorkspaceStatusReasonInput): OptionalWork
     return reason('PR_RECIPIENT_REQUIRED', 'Choose main conversation', 'attention', true);
   }
   if (config.pauseReason) {
-    return ['DELIVERY_FAILED', 'RESUME_FAILED', 'INVALID_EVENT', 'LEGACY_FIXER'].includes(
-      config.pauseReason
-    )
+    return [
+      'DELIVERY_FAILED',
+      'RESUME_FAILED',
+      'INVALID_EVENT',
+      'LEGACY_FIXER',
+      PR_DELIVERY_BLOCKED_PAUSE_REASON,
+    ].includes(config.pauseReason)
       ? reason('PR_DELIVERY_ERROR', 'PR update delivery needs attention', 'danger', true)
       : reason('PR_UPDATES_PAUSED', 'PR updates paused', 'waiting', true);
   }
