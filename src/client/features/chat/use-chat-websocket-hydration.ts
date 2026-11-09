@@ -1,22 +1,20 @@
 import { z } from 'zod';
 
-export type HydrationBatch = { loadRequestId?: string; type?: string };
+const HydrationBatchSchema = z.object({
+  type: z.enum(['session_replay_batch', 'session_snapshot']),
+  loadRequestId: z.string().optional(),
+});
+
+export type HydrationBatch = z.infer<typeof HydrationBatchSchema>;
 export type HydrationBatchDecision = 'pass' | 'drop' | 'match';
 export type LoadSessionRetryDecision = 'retry' | 'stale' | 'exhausted';
 export const CONNECT_LOADING_DEBOUNCE_MS = 300;
 export const LOAD_SESSION_MAX_RETRY_ATTEMPTS = 3;
 
+/** Reads the load correlation of a snapshot or replay batch; other frames return null. */
 export function parseHydrationBatch(data: unknown): HydrationBatch | null {
-  if (typeof data !== 'object' || data === null || !('type' in data)) {
-    return null;
-  }
-
-  const maybeType = (data as { type?: string }).type;
-  if (maybeType !== 'session_replay_batch' && maybeType !== 'session_snapshot') {
-    return null;
-  }
-
-  return data as HydrationBatch;
+  const batch = HydrationBatchSchema.safeParse(data);
+  return batch.success ? batch.data : null;
 }
 
 export function evaluateHydrationBatch(

@@ -249,9 +249,9 @@ describe('session-replay-builder', () => {
     ];
 
     const replayEvents = buildReplayEvents(store);
-    const replayedRejectedIds = replayEvents
-      .filter((event) => event.type === 'message_state_changed' && event.newState === 'REJECTED')
-      .map((event) => event.id);
+    const replayedRejectedIds = replayEvents.flatMap((event) =>
+      event.type === 'message_state_changed' && event.newState === 'REJECTED' ? [event.id] : []
+    );
 
     expect(replayedRejectedIds).not.toContain('expired-1');
     expect(replayedRejectedIds).not.toContain('q1');
@@ -387,9 +387,9 @@ describe('session-replay-builder', () => {
     store.pendingInteractiveRequest = null;
 
     const replayEvents = buildReplayEvents(store);
-    const acceptedMessageIds = replayEvents
-      .filter((event) => event.type === 'message_state_changed' && event.newState === 'ACCEPTED')
-      .map((event) => event.id);
+    const acceptedMessageIds = replayEvents.flatMap((event) =>
+      event.type === 'message_state_changed' && event.newState === 'ACCEPTED' ? [event.id] : []
+    );
 
     expect(acceptedMessageIds).toHaveLength(DEFAULT_RENDERER_TRANSCRIPT_LIMIT);
     expect(acceptedMessageIds[0]).toBe('m-3');

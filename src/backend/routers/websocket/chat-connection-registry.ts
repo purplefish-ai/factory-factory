@@ -28,6 +28,7 @@ import {
 import type { WebSocketMessage } from '@/shared/acp-protocol';
 import type { SessionReplayChunk } from '@/shared/acp-protocol/protocol/replay-frame-schema';
 import { ChatReplayDelivery } from './chat-replay-delivery';
+import { serializeChatFrame } from './message-utils';
 
 type ChatRegistryLogger = Pick<
   ReturnType<ApplicationServices['createLogger']>,
@@ -345,7 +346,7 @@ export class ChatConnectionRegistry {
   ): void {
     sendStateful(
       ws,
-      JSON.stringify({ type: 'error', code, loadRequestId, message }),
+      serializeChatFrame({ type: 'error', code, loadRequestId, message }),
       this.logger,
       'chat load error'
     );
@@ -415,8 +416,8 @@ export class ChatConnectionRegistry {
    * the connection map (not the topic index) because connections without a
    * selected session are not subscribed to any topic.
    */
-  broadcastToAll(payload: Record<string, unknown>): void {
-    const message = JSON.stringify(payload);
+  broadcastToAll(payload: WebSocketMessage): void {
+    const message = serializeChatFrame(payload);
     for (const entry of this.connections.values()) {
       sendStateful(entry.info.ws, message, this.logger, 'workspace notification');
     }

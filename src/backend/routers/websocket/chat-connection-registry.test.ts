@@ -421,7 +421,7 @@ describe('ChatConnectionRegistry', () => {
       registry.register('conn-2', { ws: asWs(ws2), dbSessionId: 's2', workingDir: null });
       registry.register('conn-3', { ws: asWs(noSessionWs), dbSessionId: null, workingDir: null });
 
-      const payload = { type: 'workspace_notification_request' };
+      const payload = { type: 'workspace_notification_request' as const };
       registry.broadcastToAll(payload);
 
       const message = JSON.stringify(payload);

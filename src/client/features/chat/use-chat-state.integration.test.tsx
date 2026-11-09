@@ -674,6 +674,7 @@ describe('pending native settings', () => {
     ) {
       throw new Error('Expected request correlation');
     }
+    const olderRequestId = older.requestId;
     expect(harness.chatRef.current?.acpConfigOptions?.[0]?.currentValue).toBe('review');
     actFlushSync(() => harness.chatRef.current?.setConfigOption('mode', 'default'));
     const latest = harness.send.mock.calls.at(-1)?.[0];
@@ -685,6 +686,7 @@ describe('pending native settings', () => {
     ) {
       throw new Error('Expected request correlation');
     }
+    const latestRequestId = latest.requestId;
     actFlushSync(() =>
       harness.chatRef.current?.dispatch({
         type: 'CONFIG_OPTIONS_UPDATE',
@@ -694,7 +696,7 @@ describe('pending native settings', () => {
     actFlushSync(() =>
       harness.chatRef.current?.handleMessage({
         type: 'error',
-        requestId: older.requestId,
+        requestId: olderRequestId,
         message: 'rejected',
       })
     );
@@ -702,7 +704,7 @@ describe('pending native settings', () => {
     actFlushSync(() =>
       harness.chatRef.current?.handleMessage({
         type: 'error',
-        requestId: latest.requestId,
+        requestId: latestRequestId,
         message: 'rejected',
       })
     );
@@ -717,6 +719,7 @@ describe('pending native settings', () => {
     ) {
       throw new Error('Expected request correlation');
     }
+    const appliedRequestId = applied.requestId;
     actFlushSync(() =>
       harness.chatRef.current?.dispatch({
         type: 'CONFIG_OPTIONS_UPDATE',
@@ -726,7 +729,7 @@ describe('pending native settings', () => {
     actFlushSync(() =>
       harness.chatRef.current?.handleMessage({
         type: 'config_option_applied',
-        requestId: applied.requestId,
+        requestId: appliedRequestId,
       })
     );
     actFlushSync(() =>

@@ -2,7 +2,7 @@
 export interface AcpConfigOptionValue {
   value: string;
   name: string;
-  description?: string;
+  description?: string | null;
 }
 
 /** Grouped config option values (for hierarchical option lists) */

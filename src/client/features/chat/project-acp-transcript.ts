@@ -1,4 +1,3 @@
-import { isWebSocketMessage } from '@/lib/chat-protocol';
 import {
   AcpEventTranslator,
   type AcpTranslationLogger,
@@ -6,6 +5,7 @@ import {
   type SessionDeltaEvent,
   type SubagentTranscriptUpdate,
 } from '@/shared/acp-protocol';
+import { parseChatServerMessage } from '@/shared/acp-protocol/protocol/chat-server-message-schema';
 import {
   type ChatState,
   chatReducer,
@@ -62,11 +62,12 @@ function applySessionDelta(
   order: number,
   messageId: string
 ): ChatState {
-  const message: SessionDeltaEvent = { ...delta, order, messageId };
-  if (!isWebSocketMessage(message)) {
+  // Translator output is untyped provider data; validate it like a wire frame.
+  const parsed = parseChatServerMessage({ ...delta, order, messageId });
+  if (!parsed.success) {
     return state;
   }
-  const action = createActionFromWebSocketMessage(message);
+  const action = createActionFromWebSocketMessage(parsed.message);
   return action ? chatReducer(state, action) : state;
 }
 

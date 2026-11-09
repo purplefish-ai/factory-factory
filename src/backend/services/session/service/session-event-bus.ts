@@ -24,7 +24,7 @@ export interface SessionOutboundEvent {
 }
 
 export interface ChatBroadcastEvent {
-  payload: Record<string, unknown>;
+  payload: WebSocketMessage;
 }
 
 export type SessionViewerCountProvider = (sessionId: string) => number;
@@ -45,7 +45,7 @@ export class SessionEventBus extends EventEmitter {
   }
 
   /** Publish a payload to every connected chat client, regardless of session. */
-  publishToAllClients(payload: Record<string, unknown>): void {
+  publishToAllClients(payload: WebSocketMessage): void {
     const event: ChatBroadcastEvent = { payload };
     this.emit(CHAT_BROADCAST_EVENT, event);
   }

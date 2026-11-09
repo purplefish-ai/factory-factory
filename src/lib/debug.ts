@@ -45,3 +45,11 @@ export function createDebugLogger(enabled: boolean): DebugLogger {
     groupEnd: () => console.groupEnd(),
   };
 }
+
+/**
+ * Report a protocol fault that the UI recovered from. Unlike debug logging,
+ * this always reaches the browser console so dropped data stays diagnosable.
+ */
+export function logProtocolError(message: string, details: Record<string, unknown>): void {
+  console.error(message, details);
+}
