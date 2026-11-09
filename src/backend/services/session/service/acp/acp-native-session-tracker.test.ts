@@ -37,6 +37,19 @@ function text(
 }
 
 describe('AcpNativeSessionTracker', () => {
+  it.each([null, undefined])('recognizes model options by ID when category is %s', (category) => {
+    const tracker = new AcpNativeSessionTracker();
+    tracker.setRootSessionId('root');
+    spawn(tracker);
+    tracker.onRawMessage(
+      update('child', {
+        sessionUpdate: 'config_option_update',
+        configOptions: [{ id: 'model', category, type: 'select', currentValue: 'child-model' }],
+      })
+    );
+    expect(tracker.list({ limit: 10 }).subagents[0]?.model).toBe('child-model');
+  });
+
   it('reports only the active child generation model and not parent configuration', () => {
     const onSubagentsChanged = vi.fn();
     const tracker = new AcpNativeSessionTracker({

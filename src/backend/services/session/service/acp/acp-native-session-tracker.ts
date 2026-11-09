@@ -29,7 +29,7 @@ const spawnedSchema = z.object({
 });
 const modelOptionSchema = z.object({
   id: z.string(),
-  category: z.string().optional(),
+  category: z.string().nullish(),
   type: z.literal('select'),
   currentValue: z.string().trim().min(1),
 });
