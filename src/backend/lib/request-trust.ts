@@ -100,7 +100,11 @@ export function isLoopbackBindHost(bindHost: string | undefined): boolean {
   }
   const unbracketed =
     bindHost.startsWith('[') && bindHost.endsWith(']') ? bindHost.slice(1, -1) : bindHost;
-  return isLoopbackHostname(unbracketed) || isLoopbackRemoteAddress(unbracketed);
+  if (isLoopbackHostname(unbracketed) || isLoopbackRemoteAddress(unbracketed)) {
+    return true;
+  }
+  // Compare the compressed form so spellings such as `0:0::1` count too.
+  return isIP(unbracketed) === 6 && new URL(`http://[${unbracketed}]`).hostname === '[::1]';
 }
 
 function parseHostHeaderHostname(hostHeader: string): string | undefined {

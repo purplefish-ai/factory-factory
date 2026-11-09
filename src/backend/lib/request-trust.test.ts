@@ -84,14 +84,22 @@ describe('request trust helpers', () => {
   });
 
   describe('isLoopbackBindHost', () => {
-    it.each([undefined, 'localhost', 'LOCALHOST', '127.0.0.1', '127.1.2.3', '::1', '[::1]'])(
-      'treats %s as a loopback bind',
-      (host) => {
-        expect(isLoopbackBindHost(host)).toBe(true);
-      }
-    );
+    it.each([
+      undefined,
+      'localhost',
+      'LOCALHOST',
+      '127.0.0.1',
+      '127.1.2.3',
+      '::1',
+      '[::1]',
+      '0:0::1',
+      '0:0:0:0:0:0:0:1',
+      '::ffff:127.0.0.1',
+    ])('treats %s as a loopback bind', (host) => {
+      expect(isLoopbackBindHost(host)).toBe(true);
+    });
 
-    it.each(['0.0.0.0', '::', '192.168.1.20', 'mac.local', '[::]'])(
+    it.each(['0.0.0.0', '::', '0:0::0', '192.168.1.20', 'mac.local', '[::]', 'fe80::1'])(
       'treats %s as reachable beyond loopback',
       (host) => {
         expect(isLoopbackBindHost(host)).toBe(false);
