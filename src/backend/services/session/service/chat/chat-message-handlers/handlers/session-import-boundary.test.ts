@@ -19,7 +19,7 @@ describe('session handler import boundary', () => {
 
     expect(importSpecifiers).not.toContain('@/backend/services/session');
     expect(importSpecifiers).not.toContain(
-      '@/backend/services/session/service/lifecycle/session.service'
+      '@/backend/services/session/service/prompt/session.service'
     );
     expect(importSpecifiers).not.toContain(
       '@/backend/services/session/service/session-domain.service'

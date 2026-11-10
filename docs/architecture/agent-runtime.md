@@ -93,6 +93,28 @@ available to other consumers. Stopping the session invalidates its shared
 hydration generation before publication; a later startup starts fresh hydration
 instead of joining the superseded preparation.
 
+Passive loads, startup and workflow finalization share one provider history read
+and projection per session, provider identity, worktree and Codex account
+(`data/provider-history-transcript-loader.ts`). Each caller applies the result
+through its own domain and fences. The read stops only when every caller is
+stale and is never cached then; a caller that is still current starts afresh. A
+caller never joins a read with a stale caller, since a stop, reset or rollover
+after the read began may have changed the file.
+
+Completed projections stay in `ProviderHistoryTranscriptCache`
+(`data/provider-history-transcript-cache.ts`), so reopening an idle session
+whose store was cleared can skip the read. Entries are keyed by session,
+provider, provider session ID and file path, and serve only the exact file
+identity (path, size, modification time and inode) observed before and after the
+read; a changed file is reread and replaces its entry. The cache holds only file
+projections, never store state, so clearing a store keeps its preservation rules
+and later loads merge retained local entries as before. Each store receives its
+own copies of the transcript entries, since stores may reassign an entry's
+fields in place. It keeps at most 16 entries and 128 MiB estimated from file
+sizes, evicting the least recently used first. An entry used by a live store
+does not expire; `session_cleared` starts a five-minute TTL and permanent
+deletion drops the session's entries through `SessionScope`.
+
 Cold resumes overlap history hydration with adapter spawning and ACP
 initialization. Provider session loading/creation waits for the history barrier,
 which restores timestamps and establishes replay suppression before provider
@@ -1166,29 +1188,57 @@ notification and PR acknowledgements; acknowledgement failures do not roll back
 human messages. Provider history retains the combined human text and restores
 trailing PR content as a compact update row.
 
+The session capsule's `service/` directory is grouped by sub-domain. Imports
+point up this table: code imports from its own row or earlier rows, never later
+ones. The barrel `index.ts` and `interceptor.bridge.ts` sit below every row. Two
+older edges remain: `store/` and `voice/` publish through the root
+`session-event-bus`, and `dispatch/` reuses the chat attachment helpers.
+
+| Directory                                                | Owns                                                                                                                                 |
+| -------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `acp/`, `store/`, `logging/`, `metadata/`, `voice/`      | ACP runtime; in-memory session store; trace logs; workspace metadata generation; voice narration                                     |
+| `providers/`, `archive/`                                 | Account-wide model catalogs and plan usage; closed-session transcripts                                                               |
+| root (`session-domain.service.ts`, `bridges.ts`, others) | Domain state, bridge interfaces, resume fence, provider error messages                                                               |
+| `data/`                                                  | `SessionRepository`, stored launch settings and startup intent, provider history loading and hydration                               |
+| `config/`                                                | `SessionConfigService`, config commit authority and mutation queue, permission presets, launch options, startup configuration        |
+| `event-agent/`                                           | `EventSessionAuthority`, event fences, event startup guards                                                                          |
+| `delivery/`                                              | Notification and PR background delivery, PR receipts and discovery                                                                   |
+| `events/`                                                | `AcpEventProcessor`, permission requests, sub-agent events, work state                                                               |
+| `lifecycle/`                                             | Gate, scope, startup, termination and runtime-exit coordinators, workflow finalizer, context, lifecycle events, the lifecycle facade |
+| `prompt/`                                                | `SessionService` prompt sends, child-workspace prompt context                                                                        |
+| `dispatch/`                                              | Queue dispatch                                                                                                                       |
+| `chat/`                                                  | Chat commands, session load                                                                                                          |
+| `composition/`                                           | Composition root (`session-core-services.ts`, `session-services.ts`)                                                                 |
+
+`SessionConfigService` is a facade over four owners. `SessionConfigWriter`
+accepts, persists and publishes native configuration writes, and every other
+owner writes through it. `SessionConfigReader` projects live or stored
+configuration. `SessionStartupConfiguration` applies launch intent to a new
+runtime. `SessionConfigMutations` applies live and stopped-session edits.
+
 Startup, termination, runtime exit, notifications, context, and workflow
 finalization each have one coordinator or service.
 
-| Responsibility        | Owner                                | Reconciliation point                                      |
-| --------------------- | ------------------------------------ | --------------------------------------------------------- |
-| Startup               | `SessionStartupCoordinator`          | Persisted `RUNNING` state                                 |
-| Termination           | `SessionTerminationCoordinator`      | Persisted idle/stopped state                              |
-| Runtime exit          | `SessionRuntimeExitCoordinator`      | Terminal status and unexpected-exit lifecycle history     |
-| Notifications         | `SessionNotificationDeliveryService` | Transcript plus delivered evidence                        |
-| Context               | `SessionContextService`              | Operational precondition; no durable-state reconciliation |
-| Workflow finalization | `SessionWorkflowFinalizer`           | Idempotent workflow completion                            |
+| Responsibility        | Owner                                              | Reconciliation point                                      |
+| --------------------- | -------------------------------------------------- | --------------------------------------------------------- |
+| Startup               | `SessionStartupCoordinator` (`lifecycle/`)         | Persisted `RUNNING` state                                 |
+| Termination           | `SessionTerminationCoordinator` (`lifecycle/`)     | Persisted idle/stopped state                              |
+| Runtime exit          | `SessionRuntimeExitCoordinator` (`lifecycle/`)     | Terminal status and unexpected-exit lifecycle history     |
+| Notifications         | `SessionNotificationDeliveryService` (`delivery/`) | Transcript plus delivered evidence                        |
+| Context               | `SessionContextService` (`lifecycle/`)             | Operational precondition; no durable-state reconciliation |
+| Workflow finalization | `SessionWorkflowFinalizer` (`lifecycle/`)          | Idempotent workflow completion                            |
 
 `SessionScope` (`lifecycle/session-scope.ts`) owns the lifetime of per-session
 in-memory state. Collaborators register disposers in the composition root, and
 the coordinators run the scope's stages instead of listing collaborators:
 
-| Stage           | Run by                                   | Disposers                                                       |
-| --------------- | ---------------------------------------- | --------------------------------------------------------------- |
-| `beginTeardown` | Stop and runtime exit, first             | Prompt-turn completion, queued ACP prompts                      |
-| `quiesce`       | Stop, before the runtime stops           | Streaming and replay state, pending permissions                 |
-| `settle`        | Stop and exit, after orphan finalization | ACP event state; permissions on exit                            |
-| `completeStop`  | Every stop, before the reservation ends  | Dispatch claim, steering, retries, mail claims                  |
-| `forget`        | `session_permanently_deleted`            | Dispatch state and manual resume, configuration, observed-empty |
+| Stage           | Run by                                   | Disposers                                                                                |
+| --------------- | ---------------------------------------- | ---------------------------------------------------------------------------------------- |
+| `beginTeardown` | Stop and runtime exit, first             | Prompt-turn completion, queued ACP prompts                                               |
+| `quiesce`       | Stop, before the runtime stops           | Streaming and replay state, pending permissions                                          |
+| `settle`        | Stop and exit, after orphan finalization | ACP event state; permissions on exit                                                     |
+| `completeStop`  | Every stop, before the reservation ends  | Dispatch claim, steering, retries, mail claims                                           |
+| `forget`        | `session_permanently_deleted`            | Dispatch state and manual resume, configuration, observed-empty, cached provider history |
 
 Stages run disposers in registration order and log, rather than propagate, a
 disposer failure. Every stop caller (WebSocket, tRPC, admin, orchestration)
@@ -1207,29 +1257,29 @@ Per-session work captures a token and re-checks it after each await. Pick the
 narrowest fence that matches what the work must yield to. Paths are relative to
 `src/backend/services/session/service/` unless they start with `src/`.
 
-| Fence                                                         | Owner                                                            | Fences                                                                                                  |
-| ------------------------------------------------------------- | ---------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
-| Lifecycle generation (`getGeneration`, `isGenerationCurrent`) | `SessionLifecycleGate` (`lifecycle/session-lifecycle-gate.ts`)   | Prompts, initial sends and event-owned work vs. stop, shutdown or an unestablished startup lease ending |
-| Stop-only fence (`hasStopSince`)                              | `SessionLifecycleGate`                                           | Queue dispatch, steering and mail retries vs. explicit stop or shutdown only                            |
-| Stop and shutdown reservations (`isSessionStopping`)          | `SessionLifecycleGate`                                           | Concurrent stops; startup and dispatch while a stop or runtime stop is in flight                        |
-| Startup lease (`establishStartup`, `assertStartupAllowed`)    | `SessionLifecycleGate`                                           | Startup continuations after a stop                                                                      |
-| Supervisor stop generation                                    | `AcpRuntimeSupervisor` (`acp/acp-runtime-supervisor.ts`)         | In-flight client creation vs. any runtime stop, including ungated ones                                  |
-| Runtime incarnation and current handle                        | `AcpRuntimeSupervisor`                                           | Events, exits and prompt timeouts from a replaced process                                               |
-| Observed-stop ownership (`canStopTarget`)                     | `AcpObservedStop` (`acp/acp-observed-stop.ts`)                   | Physical stop or cleanup of a replaced handle or provider source                                        |
-| Prompt readiness and configured handle                        | `AcpPromptReadiness`, `acp/acp-configured-handle.ts`             | Prompts and config writes before configuration completes or after replacement                           |
-| `SessionCallerGuard` (`check`, `assertCurrent`)               | Caller (`bridges.ts`; built by orchestration retry authority)    | Dispatch, config and prompts vs. loss of the caller's authority                                         |
-| Event authority, `EventSessionFenceError`                     | `EventSessionAuthority` (`lifecycle/event-session-authority.ts`) | Event-initial delivery and late durable writes vs. cancel, close or ownership change                    |
-| `WorkspaceInitFenceError`                                     | `src/backend/lib/workspace-init-fence-error.ts`                  | Dispatch vs. workspace initialization policy (message stays queued)                                     |
-| Event-owned work windows                                      | `EventOwnedWork` (`lifecycle/event-owned-work.ts`)               | Work proofs vs. a later prompt, pending request, or stop and restart                                    |
-| Dispatch claim token                                          | `SessionDispatchClaim` (`dispatch/session-dispatch-claim.ts`)    | Concurrent dispatch per session; stale releases                                                         |
-| Notification dispatch claim and mail wake claim               | `SessionNotificationDeliveryService`                             | Duplicate or quarantined notification sends; stale wake settles                                         |
-| PR delivery tokens (`validate`)                               | `SessionBackgroundDeliveryService`                               | Queued PR updates from an old binding revision                                                          |
-| Resume fence                                                  | `sessionResumeFences` (`session-resume-fence.ts`)                | User resume and input submission vs. user stop or runtime failure                                       |
-| Config commit token and mutation queue                        | `SessionConfigCommitAuthority`, `SessionConfigMutationQueue`     | Superseded config commits; config edits across runtime replacement                                      |
-| Store guard (`captureStoreGuard`)                             | `SessionDomainService`, `store/session-store-registry.ts`        | Dispatch and steering writes into an evicted or replaced store                                          |
-| Provider history fence                                        | `SessionDomainService`, `lifecycle/session-startup-history.ts`   | History replay after store replacement, suspension or provider change                                   |
-| Application update admission                                  | `src/backend/services/application-update-admission.service.ts`   | New dispatch and starts once an application update closes admission                                     |
-| Workspace activity generation                                 | Workspace activity service (`markSessionRunning`)                | A stale idle mark clearing a newer run                                                                  |
+| Fence                                                         | Owner                                                              | Fences                                                                                                  |
+| ------------------------------------------------------------- | ------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------- |
+| Lifecycle generation (`getGeneration`, `isGenerationCurrent`) | `SessionLifecycleGate` (`lifecycle/session-lifecycle-gate.ts`)     | Prompts, initial sends and event-owned work vs. stop, shutdown or an unestablished startup lease ending |
+| Stop-only fence (`hasStopSince`)                              | `SessionLifecycleGate`                                             | Queue dispatch, steering and mail retries vs. explicit stop or shutdown only                            |
+| Stop and shutdown reservations (`isSessionStopping`)          | `SessionLifecycleGate`                                             | Concurrent stops; startup and dispatch while a stop or runtime stop is in flight                        |
+| Startup lease (`establishStartup`, `assertStartupAllowed`)    | `SessionLifecycleGate`                                             | Startup continuations after a stop                                                                      |
+| Supervisor stop generation                                    | `AcpRuntimeSupervisor` (`acp/acp-runtime-supervisor.ts`)           | In-flight client creation vs. any runtime stop, including ungated ones                                  |
+| Runtime incarnation and current handle                        | `AcpRuntimeSupervisor`                                             | Events, exits and prompt timeouts from a replaced process                                               |
+| Observed-stop ownership (`canStopTarget`)                     | `AcpObservedStop` (`acp/acp-observed-stop.ts`)                     | Physical stop or cleanup of a replaced handle or provider source                                        |
+| Prompt readiness and configured handle                        | `AcpPromptReadiness`, `acp/acp-configured-handle.ts`               | Prompts and config writes before configuration completes or after replacement                           |
+| `SessionCallerGuard` (`check`, `assertCurrent`)               | Caller (`bridges.ts`; built by orchestration retry authority)      | Dispatch, config and prompts vs. loss of the caller's authority                                         |
+| Event authority, `EventSessionFenceError`                     | `EventSessionAuthority` (`event-agent/event-session-authority.ts`) | Event-initial delivery and late durable writes vs. cancel, close or ownership change                    |
+| `WorkspaceInitFenceError`                                     | `src/backend/lib/workspace-init-fence-error.ts`                    | Dispatch vs. workspace initialization policy (message stays queued)                                     |
+| Event-owned work windows                                      | `EventOwnedWork` (`lifecycle/event-owned-work.ts`)                 | Work proofs vs. a later prompt, pending request, or stop and restart                                    |
+| Dispatch claim token                                          | `SessionDispatchClaim` (`dispatch/session-dispatch-claim.ts`)      | Concurrent dispatch per session; stale releases                                                         |
+| Notification dispatch claim and mail wake claim               | `SessionNotificationDeliveryService`                               | Duplicate or quarantined notification sends; stale wake settles                                         |
+| PR delivery tokens (`validate`)                               | `SessionBackgroundDeliveryService`                                 | Queued PR updates from an old binding revision                                                          |
+| Resume fence                                                  | `sessionResumeFences` (`session-resume-fence.ts`)                  | User resume and input submission vs. user stop or runtime failure                                       |
+| Config commit token and mutation queue                        | `SessionConfigCommitAuthority`, `SessionConfigMutationQueue`       | Superseded config commits; config edits across runtime replacement                                      |
+| Store guard (`captureStoreGuard`)                             | `SessionDomainService`, `store/session-store-registry.ts`          | Dispatch and steering writes into an evicted or replaced store                                          |
+| Provider history fence                                        | `SessionDomainService`, `lifecycle/session-startup-history.ts`     | History replay after store replacement, suspension or provider change                                   |
+| Application update admission                                  | `src/backend/services/application-update-admission.service.ts`     | New dispatch and starts once an application update closes admission                                     |
+| Workspace activity generation                                 | Workspace activity service (`markSessionRunning`)                  | A stale idle mark clearing a newer run                                                                  |
 
 Dispatch uses the stop-only fence because a startup lease that ends without
 establishing a runtime (a failed start, or `ensureSubagentBrowseSession`

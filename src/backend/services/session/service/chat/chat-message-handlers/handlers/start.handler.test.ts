@@ -11,13 +11,13 @@ vi.mock('@/backend/services/session/service/session-domain.service', () => ({
   },
 }));
 
-vi.mock('@/backend/services/session/service/lifecycle/session-core-services', () => ({
+vi.mock('@/backend/services/session/service/composition/session-core-services', () => ({
   sessionLifecycleService: {
     getSessionOptions: mocks.getSessionOptions,
   },
 }));
 
-import { sessionBackgroundDeliveryService } from '@/backend/services/session/service/lifecycle/session-background-delivery.service';
+import { sessionBackgroundDeliveryService } from '@/backend/services/session/service/delivery/session-background-delivery.service';
 import { createStartHandler } from './start.handler';
 
 describe('createStartHandler', () => {

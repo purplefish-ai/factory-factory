@@ -5,6 +5,10 @@ import type {
   AcpRuntimeEventHandlers,
   AcpRuntimeExitEvent,
 } from '@/backend/services/session/service/acp';
+import type { SessionRepository } from '@/backend/services/session/service/data/session.repository';
+import { sessionBackgroundDeliveryService } from '@/backend/services/session/service/delivery/session-background-delivery.service';
+import type { EventSessionAuthority } from '@/backend/services/session/service/event-agent/event-session-authority';
+import type { AcpEventProcessor } from '@/backend/services/session/service/events/acp-event-processor';
 import { acpTraceLogger } from '@/backend/services/session/service/logging/acp-trace-logger.service';
 import type { SessionDomainService } from '@/backend/services/session/service/session-domain.service';
 import {
@@ -12,15 +16,11 @@ import {
   SessionLifecycleEventReason,
   SessionStatus,
 } from '@/shared/core';
-import type { AcpEventProcessor } from './acp-event-processor';
-import type { EventSessionAuthority } from './event-session-authority';
-import { sessionBackgroundDeliveryService } from './session-background-delivery.service';
 import type { SessionLifecycleEventService } from './session-lifecycle-event.service';
 import type { SessionLifecycleGate } from './session-lifecycle-gate';
 import type { SessionProviderIdentityService } from './session-provider-identity.service';
 import type { SessionScope } from './session-scope';
 import type { SessionWorkflowFinalizer } from './session-workflow-finalizer';
-import type { SessionRepository } from './session.repository';
 
 const logger = createLogger('session');
 

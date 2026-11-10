@@ -4,8 +4,8 @@ import {
   sessionConfigService,
   sessionLifecycleEventService,
   sessionLifecycleService,
-} from '@/backend/services/session/service/lifecycle/session-core-services';
-import { hydrateProviderHistoryIfNeeded } from '@/backend/services/session/service/lifecycle/session-provider-history-hydrator';
+} from '@/backend/services/session/service/composition/session-core-services';
+import { hydrateProviderHistoryIfNeeded } from '@/backend/services/session/service/data/session-provider-history-hydrator';
 import { sessionDomainService } from '@/backend/services/session/service/session-domain.service';
 import { slashCommandCacheService } from '@/backend/services/session/service/store/slash-command-cache.service';
 import type { LoadSessionMessage } from '@/shared/websocket';

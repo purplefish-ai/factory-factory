@@ -12,10 +12,10 @@ import { createStartHandler } from './start.handler';
 import { createStopHandler } from './stop.handler';
 import { createUserInputHandler } from './user-input.handler';
 
-vi.mock('@/backend/services/session/service/lifecycle/session-core-services', () => {
+vi.mock('@/backend/services/session/service/composition/session-core-services', () => {
   throw new Error('Execution commands must use injected lifecycle capabilities');
 });
-vi.mock('@/backend/services/session/service/lifecycle/session-background-delivery.service', () => {
+vi.mock('@/backend/services/session/service/delivery/session-background-delivery.service', () => {
   throw new Error('Execution commands must use injected background delivery capabilities');
 });
 

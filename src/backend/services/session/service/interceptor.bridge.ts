@@ -5,7 +5,7 @@ import type {
   HistoryMessage,
 } from '@/shared/acp-protocol';
 import { acpRuntimeManager } from './acp';
-import { sessionService } from './lifecycle/session-services';
+import { sessionService } from './composition/session-services';
 import { sessionDomainService } from './session-domain.service';
 
 /**

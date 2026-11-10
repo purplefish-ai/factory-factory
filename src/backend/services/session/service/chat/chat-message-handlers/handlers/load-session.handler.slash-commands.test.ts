@@ -12,10 +12,10 @@ const mocks = vi.hoisted(() => ({
 vi.mock('@/backend/services/session/resources/agent-session.accessor', () => ({
   agentSessionAccessor: { findById: mocks.findById },
 }));
-vi.mock('@/backend/services/session/service/lifecycle/session-provider-history-hydrator', () => ({
+vi.mock('@/backend/services/session/service/data/session-provider-history-hydrator', () => ({
   hydrateProviderHistoryIfNeeded: vi.fn(),
 }));
-vi.mock('@/backend/services/session/service/lifecycle/session-core-services', () => ({
+vi.mock('@/backend/services/session/service/composition/session-core-services', () => ({
   sessionLifecycleService: { getRuntimeSnapshot: () => ({ processState: 'stopped' }) },
   sessionLifecycleEventService: { hydrate: vi.fn() },
   sessionConfigService: {

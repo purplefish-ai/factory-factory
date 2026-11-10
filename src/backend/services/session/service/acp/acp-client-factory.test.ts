@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { PassThrough } from 'node:stream';
 import type { RequestPermissionRequest } from '@agentclientprotocol/sdk/unstable';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { AcpEventProcessor } from '@/backend/services/session/service/lifecycle/acp-event-processor';
+import { AcpEventProcessor } from '@/backend/services/session/service/events/acp-event-processor';
 import { SessionDomainService } from '@/backend/services/session/service/session-domain.service';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 import { AcpClientFactory } from './acp-client-factory';

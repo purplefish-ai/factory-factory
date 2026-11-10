@@ -4,6 +4,11 @@ import { createLogger } from '@/backend/services/logger.service';
 import type { AgentSessionRecord } from '@/backend/services/session/resources/agent-session.accessor';
 import type { AcpRuntimeManager } from '@/backend/services/session/service/acp';
 import type { SessionLifecycleWorkspaceBridge } from '@/backend/services/session/service/bridges';
+import type { SessionRepository } from '@/backend/services/session/service/data/session.repository';
+import { sessionBackgroundDeliveryService } from '@/backend/services/session/service/delivery/session-background-delivery.service';
+import { withEventEvidenceDeadline } from '@/backend/services/session/service/event-agent/event-evidence-deadline';
+import type { EventSessionAuthority } from '@/backend/services/session/service/event-agent/event-session-authority';
+import type { AcpEventProcessor } from '@/backend/services/session/service/events/acp-event-processor';
 import { acpTraceLogger } from '@/backend/services/session/service/logging/acp-trace-logger.service';
 import type { SessionDomainService } from '@/backend/services/session/service/session-domain.service';
 import {
@@ -13,10 +18,6 @@ import {
 } from '@/shared/core';
 import type { RuntimeStopEvidence, ExpectedEventRuntime } from '@/shared/event-agent-delivery';
 import type { SessionRuntimeState } from '@/shared/session-runtime';
-import type { AcpEventProcessor } from './acp-event-processor';
-import { withEventEvidenceDeadline } from './event-evidence-deadline';
-import type { EventSessionAuthority } from './event-session-authority';
-import { sessionBackgroundDeliveryService } from './session-background-delivery.service';
 import type {
   RecordLifecycleEventInput,
   SessionLifecycleEventService,
@@ -25,7 +26,6 @@ import type { SessionLifecycleGate } from './session-lifecycle-gate';
 import type { SessionScope } from './session-scope';
 import type { SessionWorkflowFinalizer } from './session-workflow-finalizer';
 import type { SessionPromptTurnCompletionService } from './session.prompt-turn-completion.service';
-import type { SessionRepository } from './session.repository';
 import type { SessionRetryService } from './session.retry.service';
 
 const logger = createLogger('session');

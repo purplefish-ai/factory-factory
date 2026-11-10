@@ -39,8 +39,8 @@ it.each([
       typeof import('@/backend/orchestration/pull-requests/pr-delivery-dependencies')
     >('@/backend/orchestration/pull-requests/pr-delivery-dependencies');
     const { SessionConfigService } = await vi.importActual<
-      typeof import('@/backend/services/session/service/lifecycle/session.config.service')
-    >('@/backend/services/session/service/lifecycle/session.config.service');
+      typeof import('@/backend/services/session/service/config/session.config.service')
+    >('@/backend/services/session/service/config/session.config.service');
     const configure = SessionConfigService.prototype.configureQueuedMessage;
     const held = boundary();
     let targetId: string | undefined;

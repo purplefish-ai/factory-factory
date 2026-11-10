@@ -1,0 +1,411 @@
+import { beforeEach, expect, it, vi } from 'vitest';
+
+const mocks = vi.hoisted(() => ({
+  listEnabled: vi.fn(),
+  listPending: vi.fn(),
+  markChecked: vi.fn(),
+  pruneTerminalEvents: vi.fn(),
+  register: vi.fn(),
+  snapshot: vi.fn(),
+  get: vi.fn(),
+}));
+vi.mock('@/backend/services/job-runner.service', () => ({
+  jobRunner: { register: mocks.register, start: vi.fn(), stop: vi.fn() },
+}));
+vi.mock('@/backend/services/workspace', () => ({
+  workspacePRMonitoringService: mocks,
+  workspacePrSnapshotService: { list: mocks.snapshot },
+}));
+
+import {
+  RatchetService,
+  RATCHET_DISPATCH_CHANGED,
+  RATCHET_STATE_CHANGED,
+  RATCHET_TOGGLED,
+} from './ratchet.service';
+
+beforeEach(() => {
+  mocks.listEnabled.mockReset();
+  mocks.listPending.mockReset().mockResolvedValue([]);
+  mocks.markChecked.mockReset().mockResolvedValue(undefined);
+  mocks.snapshot.mockReset().mockResolvedValue([]);
+  mocks.get.mockReset().mockResolvedValue({ enabled: true, bindingRevision: 7 });
+});
+
+it('wakes committed events without fetching GitHub and ignores wakes after stop', async () => {
+  const observe = vi.fn();
+  const wake = vi.fn().mockResolvedValue(undefined);
+  const service = new RatchetService({ observe, wake, setMonitoring: vi.fn() });
+  await service.wakePendingEvents('w');
+  expect(wake).toHaveBeenCalledExactlyOnceWith('w', expect.any(Function));
+  expect(observe).not.toHaveBeenCalled();
+  expect(mocks.listEnabled).not.toHaveBeenCalled();
+  await service.stop();
+  await service.wakePendingEvents('w');
+  expect(wake).toHaveBeenCalledTimes(1);
+});
+
+it('invalidates an in-flight event wake and drains it before shutdown finishes', async () => {
+  const pending = deferred<void>();
+  const wake = vi.fn((_id: string, _isCurrent?: () => boolean) => pending.promise);
+  const service = new RatchetService({ observe: vi.fn(), wake, setMonitoring: vi.fn() });
+  const waking = service.wakePendingEvents('w');
+  const isCurrent = wake.mock.calls[0]?.[1];
+  expect(isCurrent?.()).toBe(true);
+  let stopped = false;
+  const stopping = service.stop().then(() => {
+    stopped = true;
+  });
+  await Promise.resolve();
+  await Promise.resolve();
+  expect(isCurrent?.()).toBe(false);
+  expect(stopped).toBe(false);
+  pending.resolve();
+  await Promise.all([waking, stopping]);
+  expect(stopped).toBe(true);
+});
+
+it('keeps a wake from before stop invalidated when monitoring restarts during the drain', async () => {
+  const pending = deferred<void>();
+  const wake = vi.fn((_id: string, _isCurrent?: () => boolean) => pending.promise);
+  const service = new RatchetService({ observe: vi.fn(), wake, setMonitoring: vi.fn() });
+  const waking = service.wakePendingEvents('w');
+  const isCurrent = wake.mock.calls[0]?.[1];
+  const stopping = service.stop();
+  await service.start();
+  expect(isCurrent?.()).toBe(false);
+  pending.resolve();
+  await Promise.all([waking, stopping]);
+  expect(isCurrent?.()).toBe(false);
+});
+
+it('observes every association and wakes the main queue once without creating fixer sessions', async () => {
+  mocks.listEnabled.mockResolvedValue([
+    {
+      workspaceId: 'w',
+      enabled: true,
+      workspace: {
+        prs: [
+          {
+            id: 'p1',
+            state: 'OPEN',
+            ciStatus: 'FAILURE',
+            hasMergeConflict: false,
+            reviewState: null,
+          },
+          {
+            id: 'p2',
+            state: 'MERGED',
+            ciStatus: 'SUCCESS',
+            hasMergeConflict: false,
+            reviewState: null,
+          },
+        ],
+      },
+    },
+  ]);
+  mocks.listPending.mockResolvedValue([]);
+  const observe = vi.fn().mockResolvedValue(true),
+    wake = vi.fn().mockResolvedValue(undefined);
+  const ratchetService = new RatchetService({ observe, wake, setMonitoring: vi.fn() });
+  await ratchetService.checkAllWorkspaces();
+  expect(observe.mock.calls.map((c) => c[0])).toEqual([
+    { workspaceId: 'w', prId: 'p1' },
+    { workspaceId: 'w', prId: 'p2' },
+  ]);
+  expect(wake).toHaveBeenCalledExactlyOnceWith('w', expect.any(Function));
+  expect(mocks.register).toHaveBeenCalledWith(
+    expect.objectContaining({ name: 'pr-event-poll', intervalMs: 120_000 })
+  );
+  observe.mockClear().mockImplementation((target) => {
+    if (target.prId === 'p1') {
+      return Promise.reject(new Error('Repository is inaccessible'));
+    }
+    return Promise.resolve(true);
+  });
+  wake.mockClear();
+  await ratchetService.checkAllWorkspaces();
+  expect(observe.mock.calls.map((c) => c[0].prId)).toEqual(['p1', 'p2']);
+  expect(wake).toHaveBeenCalledExactlyOnceWith('w', expect.any(Function));
+  observe.mockClear().mockRejectedValue(new Error('HTTP 429 rate limit'));
+  wake.mockClear();
+  await ratchetService.checkAllWorkspaces();
+  expect(observe).toHaveBeenCalledTimes(1);
+  expect(wake).toHaveBeenCalledExactlyOnceWith('w', expect.any(Function));
+});
+
+it('registers bounded PR event retention as its own job', async () => {
+  mocks.register.mockClear();
+  new RatchetService({ observe: vi.fn(), wake: vi.fn(), setMonitoring: vi.fn() });
+  const retention = mocks.register.mock.calls
+    .map(([job]) => job)
+    .find((job) => job.name === 'pr-event-retention');
+  expect(retention).toMatchObject({ intervalMs: 30 * 60_000 });
+  expect(retention.runImmediately).toBeUndefined();
+  const signal = new AbortController().signal;
+  mocks.pruneTerminalEvents.mockResolvedValue({ deleted: 3, batches: 1, complete: true });
+  await retention.run(signal);
+  expect(mocks.pruneTerminalEvents).toHaveBeenCalledExactlyOnceWith({ signal });
+});
+
+const config = {
+  workspaceId: 'w',
+  enabled: true,
+  eventEpoch: 1,
+  workspace: {
+    prs: [
+      {
+        id: 'p1',
+        state: 'OPEN',
+        observationEpoch: 1,
+        ciStatus: 'FAILURE',
+        hasMergeConflict: false,
+        reviewState: null,
+      },
+    ],
+  },
+};
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((done) => {
+    resolve = done;
+  });
+  return { promise, resolve };
+}
+it.each(['all', 'single'] as const)(
+  'does not begin %s workspace checks after stopping during the query',
+  async (scope) => {
+    const loaded = deferred<(typeof config)[]>();
+    mocks.listEnabled.mockReturnValue(loaded.promise);
+    const observe = vi.fn().mockResolvedValue(true);
+    const wake = vi.fn().mockResolvedValue(undefined);
+    const service = new RatchetService({ observe, wake, setMonitoring: vi.fn() });
+    const checking =
+      scope === 'all' ? service.checkAllWorkspaces() : service.checkWorkspaceById('w');
+    await service.stop();
+    loaded.resolve([config]);
+    await checking;
+    expect(observe).not.toHaveBeenCalled();
+    expect(wake).not.toHaveBeenCalled();
+  }
+);
+
+it.each([
+  { deliveryMode: 'DEDICATED' as const },
+  { resume: true },
+  { recipientSessionId: 'replacement' },
+])('refreshes monitoring projection without a false state reset for %j', async (options) => {
+  const setMonitoring = vi.fn().mockResolvedValue({ status: 'updated', bindingRevision: 8 });
+  const service = new RatchetService({ observe: vi.fn(), wake: vi.fn(), setMonitoring });
+  const toggled = vi.fn(),
+    changed = vi.fn();
+  service.on(RATCHET_TOGGLED, toggled);
+  service.on(RATCHET_DISPATCH_CHANGED, changed);
+  await service.setWorkspaceRatcheting('w', true, { ...options, expectedBindingRevision: 7 });
+  expect(toggled).not.toHaveBeenCalled();
+  expect(changed).toHaveBeenCalledExactlyOnceWith({ workspaceId: 'w' });
+});
+
+it.each([false, true])('publishes only an actual enablement transition to %s', async (enabled) => {
+  mocks.get.mockResolvedValue({ enabled: !enabled, bindingRevision: 7 });
+  const setMonitoring = vi.fn().mockResolvedValue({ status: 'updated', bindingRevision: 8 });
+  const service = new RatchetService({ observe: vi.fn(), wake: vi.fn(), setMonitoring });
+  const toggled = vi.fn(),
+    changed = vi.fn();
+  service.on(RATCHET_TOGGLED, toggled);
+  service.on(RATCHET_DISPATCH_CHANGED, changed);
+  await service.setWorkspaceRatcheting('w', enabled);
+  expect(toggled).toHaveBeenCalledExactlyOnceWith({
+    workspaceId: 'w',
+    enabled,
+    ratchetState: 'IDLE',
+  });
+  expect(changed).not.toHaveBeenCalled();
+});
+
+it('preserves the displayed revision rather than substituting the latest one', async () => {
+  const setMonitoring = vi.fn().mockRejectedValue(new Error('revision changed'));
+  const service = new RatchetService({ observe: vi.fn(), wake: vi.fn(), setMonitoring });
+  const toggled = vi.fn(),
+    changed = vi.fn();
+  service.on(RATCHET_TOGGLED, toggled);
+  service.on(RATCHET_DISPATCH_CHANGED, changed);
+  await expect(
+    service.setWorkspaceRatcheting('w', true, { expectedBindingRevision: 6 })
+  ).rejects.toThrow('revision changed');
+  expect(setMonitoring).toHaveBeenCalledWith(
+    expect.objectContaining({ expectedBindingRevision: 6 })
+  );
+  expect(toggled).not.toHaveBeenCalled();
+  expect(changed).not.toHaveBeenCalled();
+});
+
+it('invalidates and drains the delivery wake of an in-flight manual check on stop', async () => {
+  mocks.listEnabled.mockResolvedValue([config]);
+  mocks.listPending.mockResolvedValue([{ id: 'event-1' }]);
+  const entered = deferred<void>();
+  const pending = deferred<void>();
+  const wake = vi.fn((_id: string, _isCurrent?: () => boolean) => {
+    entered.resolve();
+    return pending.promise;
+  });
+  const service = new RatchetService({
+    observe: vi.fn().mockResolvedValue(true),
+    wake,
+    setMonitoring: vi.fn(),
+  });
+  const checking = service.checkWorkspaceById('w');
+  await entered.promise;
+  const isCurrent = wake.mock.calls[0]?.[1];
+  expect(isCurrent?.()).toBe(true);
+  let stopped = false;
+  const stopping = service.stop().then(() => {
+    stopped = true;
+  });
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  expect(isCurrent?.()).toBe(false);
+  expect(stopped).toBe(false);
+  pending.resolve();
+  await Promise.all([checking, stopping]);
+  expect(stopped).toBe(true);
+});
+
+it.each(['markChecked', 'listPending', 'wake', 'snapshot'] as const)(
+  'does not continue delivery or publish state after stopping during %s',
+  async (stage) => {
+    mocks.listEnabled.mockResolvedValue([config]);
+    const entered = deferred<void>();
+    const release = deferred<[]>();
+    const observe = vi.fn().mockResolvedValue(true);
+    const wake = vi.fn().mockResolvedValue(undefined);
+    const paused = stage === 'wake' ? wake : mocks[stage];
+    paused.mockImplementation(() => {
+      entered.resolve();
+      return release.promise;
+    });
+    const service = new RatchetService({ observe, wake, setMonitoring: vi.fn() });
+    const dispatchChanged = vi.fn(),
+      stateChanged = vi.fn();
+    service.on(RATCHET_DISPATCH_CHANGED, dispatchChanged);
+    service.on(RATCHET_STATE_CHANGED, stateChanged);
+    const checking = service.checkAllWorkspaces();
+    await entered.promise;
+    // stop() drains an in-flight wake, so release the paused stage before awaiting it.
+    const stopping = service.stop();
+    release.resolve([]);
+    await Promise.all([checking, stopping]);
+    if (stage === 'markChecked' || stage === 'listPending') {
+      expect(wake).not.toHaveBeenCalled();
+    }
+    if (stage !== 'snapshot') {
+      expect(dispatchChanged).not.toHaveBeenCalled();
+    }
+    expect(stateChanged).not.toHaveBeenCalled();
+  }
+);
+
+it('stops merged polling while waking pending terminal deliveries and polling open siblings', async () => {
+  const prs = [
+    {
+      ...config.workspace.prs[0],
+      id: 'merged',
+      state: 'MERGED',
+      observation: {},
+      syncedAt: new Date(),
+    },
+    { ...config.workspace.prs[0], id: 'open', observation: {}, syncedAt: new Date() },
+  ];
+  mocks.listEnabled.mockResolvedValue([{ ...config, workspace: { prs } }]);
+  mocks.listPending.mockResolvedValue([{ id: 'terminal-event', prId: 'merged', state: 'PENDING' }]);
+  const observe = vi.fn().mockResolvedValue(true);
+  const wake = vi.fn().mockResolvedValue(undefined);
+  const service = new RatchetService({ observe, wake, setMonitoring: vi.fn() });
+  const result = await service.checkAllWorkspaces();
+  expect(observe.mock.calls.map(([target]) => target.prId)).toEqual(['open']);
+  expect(wake).toHaveBeenCalledExactlyOnceWith('w', expect.any(Function));
+  expect(result.actionsTriggered).toBe(1);
+});
+
+it('backs off closed PRs but observes them again to detect reopening', async () => {
+  const now = Date.now();
+  const prs = [
+    {
+      ...config.workspace.prs[0],
+      id: 'recent',
+      state: 'CLOSED',
+      observation: {},
+      syncedAt: new Date(now - 10 * 60_000),
+    },
+    {
+      ...config.workspace.prs[0],
+      id: 'due',
+      state: 'CLOSED',
+      observation: {},
+      syncedAt: new Date(now - 31 * 60_000),
+    },
+    {
+      ...config.workspace.prs[0],
+      id: 'legacy',
+      state: 'MERGED',
+      observation: null,
+      syncedAt: new Date(now - 10 * 60_000),
+    },
+  ];
+  mocks.listEnabled.mockResolvedValue([{ ...config, workspace: { prs } }]);
+  const observe = vi.fn().mockResolvedValue(true);
+  const service = new RatchetService({
+    observe,
+    wake: vi.fn().mockResolvedValue(undefined),
+    setMonitoring: vi.fn(),
+  });
+  await service.checkAllWorkspaces();
+  expect(observe.mock.calls.map(([target]) => target.prId)).toEqual(['due', 'legacy']);
+});
+
+it('eliminates recurring observations for four initialized merged PRs across thirty poll cycles', async () => {
+  const prs = Array.from({ length: 4 }, (_, index) => ({
+    ...config.workspace.prs[0],
+    id: `merged-${index}`,
+    state: 'MERGED',
+    observation: {},
+    syncedAt: new Date(),
+  }));
+  mocks.listEnabled.mockResolvedValue([{ ...config, workspace: { prs } }]);
+  const observe = vi.fn().mockResolvedValue(true);
+  const wake = vi.fn().mockResolvedValue(undefined);
+  const service = new RatchetService({ observe, wake, setMonitoring: vi.fn() });
+  for (let cycle = 0; cycle < 30; cycle++) {
+    await service.checkAllWorkspaces();
+  }
+  expect(observe).toHaveBeenCalledTimes(0);
+  expect(wake).toHaveBeenCalledTimes(30);
+});
+
+it('initializes terminal facts for a new monitoring epoch before applying backoff', async () => {
+  const prs = ['MERGED', 'CLOSED'].map((state) => ({
+    ...config.workspace.prs[0],
+    id: state,
+    state,
+    observation: {},
+    observationEpoch: 0,
+    syncedAt: new Date(),
+  }));
+  mocks.listEnabled.mockResolvedValue([{ ...config, eventEpoch: 1, workspace: { prs } }]);
+  const observe = vi.fn().mockImplementation((target) => {
+    const pr = prs.find((pr) => pr.id === target.prId);
+    if (pr) {
+      pr.observationEpoch = 1;
+    }
+    return Promise.resolve(true);
+  });
+  const service = new RatchetService({
+    observe,
+    wake: vi.fn().mockResolvedValue(undefined),
+    setMonitoring: vi.fn(),
+  });
+  await service.checkAllWorkspaces();
+  expect(observe.mock.calls.map(([target]) => target.prId)).toEqual(['MERGED', 'CLOSED']);
+  observe.mockClear();
+  await service.checkAllWorkspaces();
+  expect(observe).not.toHaveBeenCalled();
+});

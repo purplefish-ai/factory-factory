@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { AcpBrowseSessionUnavailableError } from '@/backend/services/session/service/acp/acp-runtime-manager';
 import { AcpRuntimeQuiescence } from '@/backend/services/session/service/acp/acp-runtime-quiescence';
+import { SessionService } from '@/backend/services/session/service/prompt/session.service';
 import { SessionDomainService } from '@/backend/services/session/service/session-domain.service';
 import { workspaceNotificationService } from '@/backend/services/workspace';
 import { SessionStatus } from '@/shared/core';
@@ -13,7 +14,6 @@ import {
   SessionStartupCoordinator,
   type SessionStartupCoordinatorDependencies,
 } from './session-startup.coordinator';
-import { SessionService } from './session.service';
 
 vi.mock('@/backend/services/logger.service', () => ({
   createLogger: () => ({

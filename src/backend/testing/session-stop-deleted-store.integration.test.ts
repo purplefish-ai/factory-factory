@@ -63,8 +63,8 @@ it.each([
   'stop cleanup keeps transient store lifetime after %s with %s viewers',
   async (outcome, viewers) => {
     const { SessionRepository } = await vi.importActual<
-      typeof import('@/backend/services/session/service/lifecycle/session.repository')
-    >('@/backend/services/session/service/lifecycle/session.repository');
+      typeof import('@/backend/services/session/service/data/session.repository')
+    >('@/backend/services/session/service/data/session.repository');
     const { SessionWorkflowFinalizer } = await vi.importActual<
       typeof import('@/backend/services/session/service/lifecycle/session-workflow-finalizer')
     >('@/backend/services/session/service/lifecycle/session-workflow-finalizer');

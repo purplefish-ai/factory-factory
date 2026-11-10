@@ -93,6 +93,11 @@ vi.mock('@/backend/orchestration/workspace-lifecycle/reconciliation.service', ()
     reconciliationService: { stopPeriodicCleanup: vi.fn(async () => undefined) },
   })
 );
+vi.mock('@/backend/orchestration/pull-requests/ratchet-dependencies', () =>
+  withAutoStubs('ratchet-dependencies', {
+    createRatchetService: vi.fn(() => ({ stop: vi.fn(async () => undefined) })),
+  })
+);
 vi.mock('@/backend/orchestration/pull-requests/scheduler.service', () =>
   withAutoStubs('scheduler.service', { schedulerService: { stop: vi.fn(async () => undefined) } })
 );
@@ -245,9 +250,6 @@ vi.mock('@/backend/services/periodic-task', () =>
 );
 vi.mock('@/backend/services/port.service', () =>
   withAutoStubs('port.service', { findAvailablePort: vi.fn() })
-);
-vi.mock('@/backend/services/ratchet', () =>
-  withAutoStubs('ratchet', { ratchetService: { stop: vi.fn(async () => undefined) } })
 );
 vi.mock('@/backend/services/rate-limiter.service', () =>
   withAutoStubs('rate-limiter.service', { rateLimiter: { stop: vi.fn(async () => undefined) } })

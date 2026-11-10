@@ -1,12 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { createDefaultApplicationDependencies } from '@/backend/app-context';
-import { PR_SNAPSHOT_UPDATED, PR_URL_ATTACHED, prSnapshotService } from '@/backend/services/github';
 import {
   RATCHET_DISPATCH_CHANGED,
   RATCHET_STATE_CHANGED,
   RATCHET_TOGGLED,
-  ratchetService,
-} from '@/backend/services/ratchet';
+} from '@/backend/orchestration/pull-requests/ratchet.service';
+import { PR_SNAPSHOT_UPDATED, PR_URL_ATTACHED, prSnapshotService } from '@/backend/services/github';
 import { RUN_SCRIPT_STATUS_CHANGED, runScriptStateMachine } from '@/backend/services/run-script';
 import { sessionDomainService } from '@/backend/services/session';
 import {
@@ -18,6 +17,8 @@ import {
 
 describe('event collector listener lifecycle', () => {
   it('restores every real EventEmitter listener count after stop', () => {
+    const { lifecycle, services } = createDefaultApplicationDependencies();
+    const { ratchetService } = services;
     const sources = [
       [workspaceStateMachine, WORKSPACE_CREATED],
       [workspaceStateMachine, WORKSPACE_STATE_CHANGED],
@@ -34,7 +35,7 @@ describe('event collector listener lifecycle', () => {
       [sessionDomainService, 'runtime_changed'],
     ] as const;
     const baseline = sources.map(([emitter, event]) => emitter.listenerCount(event));
-    const collector = createDefaultApplicationDependencies().lifecycle.eventCollector;
+    const collector = lifecycle.eventCollector;
 
     collector.start();
     expect(sources.map(([emitter, event]) => emitter.listenerCount(event))).toEqual(

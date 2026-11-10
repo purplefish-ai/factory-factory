@@ -156,12 +156,12 @@ describe('server background job shutdown', () => {
       expect(stop).toHaveBeenCalledOnce();
     }
     expect(harness.logger.error).toHaveBeenCalledWith('Failed to stop background job', failure, {
-      job: 'pr-sync',
+      job: 'pr-poll',
     });
     expect(harness.logger.error).toHaveBeenCalledWith(
       'Failed to stop background job',
       expect.objectContaining({ message: 'ratchet stop threw' }),
-      { job: 'ratchet' }
+      { job: 'pr-event-poll' }
     );
     expect(harness.lifecycle.eventCollector.stop).toHaveBeenCalledOnce();
     expect(harness.services.workspaceGitStateService.stop).toHaveBeenCalledOnce();

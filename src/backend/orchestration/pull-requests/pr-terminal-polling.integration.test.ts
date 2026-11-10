@@ -2,7 +2,6 @@
 import './pr-event-flow.test-helpers';
 import { afterAll, beforeAll, beforeEach, expect, it, vi } from 'vitest';
 import { createPRMonitoringTestServices } from '@/backend/orchestration/testing/pr-monitoring-services.test-support';
-import { ratchetService } from '@/backend/services/ratchet';
 import { sessionBackgroundDeliveryService } from '@/backend/services/session';
 import {
   workspacePRMonitoringService,
@@ -17,6 +16,7 @@ import { createPRDeliveryPorts } from './pr-delivery-dependencies';
 import { createPRBackgroundDeliveryPort } from './pr-event-delivery-port';
 import { preparePRDelivery, wakePRDelivery } from './pr-event-delivery.orchestrator';
 import { createPRFlowIntegrationDatabase } from './pr-event-flow.test-helpers';
+import { RatchetService } from './ratchet.service';
 
 const deliveryPorts = createPRDeliveryPorts(createPRMonitoringTestServices());
 const prBackgroundDeliveryPort = createPRBackgroundDeliveryPort(deliveryPorts);
@@ -74,7 +74,7 @@ it('delivers and retries a saved merge event when all associations stop backgrou
     'PR_MERGED',
   ]);
   const observe = vi.fn().mockResolvedValue(true);
-  ratchetService.configure({
+  const ratchetService = new RatchetService({
     observe,
     wake: (id, isCurrent) => wakePRDelivery(id, deliveryPorts, isCurrent),
     setMonitoring: vi.fn(),

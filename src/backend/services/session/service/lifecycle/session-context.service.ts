@@ -1,10 +1,10 @@
 import { createLogger } from '@/backend/services/logger.service';
 import type { AgentSessionRecord } from '@/backend/services/session/resources/agent-session.accessor';
 import type { PermissionPreset } from '@/backend/services/session/service/acp';
+import { getWorkflowPermissionPreset } from '@/backend/services/session/service/config/session-workflow-permissions';
+import type { SessionRepository } from '@/backend/services/session/service/data/session.repository';
 import type { WorkspaceStatus } from '@/shared/core';
 import type { SessionProvider } from '@prisma-gen/client';
-import { getWorkflowPermissionPreset } from './session-workflow-permissions';
-import type { SessionRepository } from './session.repository';
 
 const logger = createLogger('session');
 

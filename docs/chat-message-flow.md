@@ -70,9 +70,10 @@ orchestrator calls retain an explicit default dispatcher binding.
 stores transcript changes, and emits session deltas. Streaming text accumulates
 under a stable message order so the client updates the existing message. Runtime
 and permission events update session state through their respective handlers.
-The client renders the streaming message's Markdown from a throttled snapshot.
-When the text splits safely into top-level blocks, only the growing tail block
-re-parses; see [streaming Markdown](performance/streaming-markdown.md).
+The client commits streaming deltas once per 100 ms window and renders the
+streaming message's Markdown from each commit. When the text splits safely into
+top-level blocks, only the growing tail block re-parses; see
+[streaming Markdown](performance/streaming-markdown.md).
 
 `SessionEventBus` is the transport-free outbound surface. `SessionPublisher`
 wraps incremental events in `session_delta`; `ChatConnectionRegistry` owns
@@ -233,10 +234,14 @@ not built, since a viewer that arrives later hydrates through `load_session`;
 load replies are always sent.
 
 Provider history comes from the Claude or Codex history loader selected by the
-session's provider and identity. Codex tool-history backfill defers transcript
-renumbering while a session is starting, running, or stopping, including turns
-that begin during the history read. This preserves the message orders used by
-live text deltas. A later idle load can recover the missing tools.
+session's provider and identity. Concurrent loads, retries and an overlapping
+startup share one read, and reopening an idle session can reuse its cached
+projection while the history file is unchanged and the entry is retained; see
+[agent runtime](architecture/agent-runtime.md). Codex tool-history backfill
+defers transcript renumbering while a session is starting, running, or stopping,
+including turns that begin during the history read. This preserves the message
+orders used by live text deltas. A later idle load can recover the missing
+tools.
 
 In-memory pending requests can survive a viewer reconnect while the session
 exists; they are not a durable permission request that can be resumed after a
@@ -302,6 +307,25 @@ about 1.6 ms.
 `createActionFromWebSocketMessage`. Action creators map validated fields without
 re-checking their shape. The reducer handles snapshots and replay batches as
 well as live events; replay uses the same event-to-action mapping.
+
+`useChatState` routes every reducer dispatch through a stream-delta coalescer
+(`stream-delta-coalescer.ts`), so a streaming reply reaches the reducer about
+ten times a second rather than once per 25 ms WebSocket message. Assistant text
+deltas, `content_block_delta` agent messages (text, thinking and tool-input
+JSON) and `TOOL_INPUT_UPDATE` actions count as deltas and share one 100 ms
+window, measured from the last time deltas were dispatched. A delta that arrives
+a full window after that while nothing is buffered, such as a reply's first
+token, is dispatched immediately. Other deltas are buffered and dispatched in
+one action when the window closes, as a `STREAM_DELTA_BATCH` when more than one
+is pending. In a foreground tab no delta waits longer than 100 ms; hidden tabs
+may exceed that, because the window is a timer and browsers throttle timers in
+hidden tabs. They still drain the buffer, at whatever rate the browser allows.
+Any other action, including session switches, disconnects and local sends, first
+dispatches the buffer, and unmounting dispatches it too. The reducer applies a
+batch's actions in order, so it reaches exactly the state that dispatching each
+message would have committed. The streaming Markdown renders each commit
+directly, so the window is the only clock between receipt and render; see
+[streaming Markdown](performance/streaming-markdown.md).
 
 | Wire event                                             | Reducer action or handling                             |
 | ------------------------------------------------------ | ------------------------------------------------------ |
@@ -516,15 +540,15 @@ cannot provide the archive's lossless tool-record or model-name boundary.
 
 ## Sources of truth
 
-| Concern                                               | Source                                                                                                                                                                                                             |
-| ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Queue, transcript, runtime snapshot, pending requests | [SessionDomainService](../src/backend/services/session/service/session-domain.service.ts) and its `store/` collaborators                                                                                           |
-| Provider event translation                            | [AcpEventProcessor](../src/backend/services/session/service/lifecycle/acp-event-processor.ts)                                                                                                                      |
-| History hydration and replay                          | [SessionLoadService](../src/backend/services/session/service/chat/session-load.service.ts) and [provider history hydrator](../src/backend/services/session/service/lifecycle/session-provider-history-hydrator.ts) |
-| Outbound event envelopes                              | [SessionPublisher](../src/backend/services/session/service/store/session-publisher.ts)                                                                                                                             |
-| WebSocket subscriptions and delivery                  | [ChatConnectionRegistry](../src/backend/routers/websocket/chat-connection-registry.ts)                                                                                                                             |
-| Client transport and event reduction                  | [useChatTransport](../src/client/features/chat/use-chat-transport.ts) and [chat reducer](../src/client/features/chat/reducer/index.ts)                                                                             |
-| Persisted provider identity and lifecycle history     | `AgentSession` and `SessionLifecycleEvent` in [Prisma schema](../prisma/schema.prisma)                                                                                                                             |
+| Concern                                               | Source                                                                                                                                                                                                                  |
+| ----------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Queue, transcript, runtime snapshot, pending requests | [SessionDomainService](../src/backend/services/session/service/session-domain.service.ts) and its `store/` collaborators                                                                                                |
+| Provider event translation                            | [AcpEventProcessor](../src/backend/services/session/service/events/acp-event-processor.ts)                                                                                                                              |
+| History hydration and replay                          | [SessionLoadService](../src/backend/services/session/service/chat/session-load.service.ts) and [provider history hydrator](../src/backend/services/session/service/data/session-provider-history-hydrator.ts)           |
+| Outbound event envelopes                              | [SessionPublisher](../src/backend/services/session/service/store/session-publisher.ts)                                                                                                                                  |
+| WebSocket subscriptions and delivery                  | [ChatConnectionRegistry](../src/backend/routers/websocket/chat-connection-registry.ts)                                                                                                                                  |
+| Client transport and event reduction                  | [useChatTransport](../src/client/features/chat/use-chat-transport.ts), [stream-delta coalescer](../src/client/features/chat/stream-delta-coalescer.ts) and [chat reducer](../src/client/features/chat/reducer/index.ts) |
+| Persisted provider identity and lifecycle history     | `AgentSession` and `SessionLifecycleEvent` in [Prisma schema](../prisma/schema.prisma)                                                                                                                                  |
 
 Focused history and recovery coverage remains in `load-session.handler.test.ts`
 and `load-session.handler.recovery.test.ts`.
