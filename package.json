@@ -79,7 +79,7 @@
     "db:generate": "prisma generate",
     "db:studio": "node --import tsx src/cli/index.ts db:studio",
     "storybook": "storybook dev -p 6006",
-    "dev:electron": "node scripts/ensure-native-modules.mjs electron && tsc -p tsconfig.electron.json && concurrently \"pnpm dev:backend\" \"pnpm dev:frontend\" \"wait-on http://localhost:5173 && VITE_DEV_SERVER_URL=http://localhost:5173 electron .\"",
+    "dev:electron": "node scripts/ensure-native-modules.mjs electron && tsc -p tsconfig.electron.json && concurrently \"CORS_ALLOWED_ORIGINS=${CORS_ALLOWED_ORIGINS:-http://localhost:5173} pnpm dev:backend\" \"pnpm dev:frontend\" \"wait-on http://localhost:5173 && VITE_DEV_SERVER_URL=http://localhost:5173 electron .\"",
     "dev:backend": "BACKEND_PORT=3001 tsx watch src/backend/index.ts",
     "dev:frontend": "BACKEND_URL=http://localhost:3001 vite",
     "build:electron": "pnpm build && pnpm exec tsc -p tsconfig.electron.json && node scripts/ensure-native-modules.mjs electron && electron-builder",

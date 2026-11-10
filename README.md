@@ -177,12 +177,14 @@ ff db:studio        # Inspect the local database with Prisma Studio
 
 `ff proxy` requires `cloudflared` on your `PATH`. Factory Factory automatically
 runs database migrations, finds an available port, and opens the browser when
-the server is ready. Use `--private` for remote workspace management and command
-execution. Public tunnels cannot invoke privileged operations; their forwarded
-requests are rejected even when they omit the `Origin` header. Both tunnel modes
-disable inherited `TRUST_PROXY_HEADERS` and dotenv override settings before
-launching the backend; private mode authenticates clients before stripping
-forwarded-address headers.
+the server is ready. Use `--private` to require a password. Public tunnels
+cannot invoke privileged operations; their forwarded requests are rejected even
+when they omit the `Origin` header. The tunnel's `https://*.trycloudflare.com`
+origin is not one of the backend's allowed origins, so browsers using either
+tunnel can load data, but their API mutations and WebSocket connections (chat,
+terminals) are rejected. Both tunnel modes disable inherited
+`TRUST_PROXY_HEADERS` and dotenv override settings before launching the backend;
+private mode authenticates clients before stripping forwarded-address headers.
 
 The server listens on loopback only unless you pass another address with
 `ff serve --host` (for example `--host 0.0.0.0`, as the Docker image does).
@@ -321,9 +323,13 @@ To serve Factory Factory from your own domain (e.g. `https://ff.example.com`)
 via nginx, Caddy, or another reverse proxy:
 
 - Set `CORS_ALLOWED_ORIGINS` to the exact public origin(s), comma-separated:
-  `CORS_ALLOWED_ORIGINS=https://ff.example.com`. This gates both HTTP CORS and
-  WebSocket upgrades; non-loopback origins must match exactly (scheme + host +
-  non-default port, no trailing slash).
+  `CORS_ALLOWED_ORIGINS=https://ff.example.com`. This gates HTTP CORS, every
+  tRPC API request that carries an `Origin` header, and WebSocket upgrades;
+  non-loopback origins must match exactly (scheme + host + non-default port, no
+  trailing slash). While the backend listens on loopback, tRPC requests must
+  also use a loopback `Host` or the host of an allowed origin, which blocks DNS
+  rebinding; a proxy that forwards `Host: ff.example.com` is covered by the
+  setting above.
 - Keep the server on loopback so only your proxy can reach it: leave
   `BACKEND_HOST` unset (the backend then binds `127.0.0.1` and, where IPv6 is
   available, `::1`), or set it to `localhost` or `127.0.0.1`.
@@ -340,11 +346,11 @@ applies.
 
 For local testing from an origin that isn't in `CORS_ALLOWED_ORIGINS` (an
 alternate dev frontend, curl/Postman, or a LAN device that also satisfies
-`TRUSTED_LOCAL_CIDRS`), set `DISABLE_CORS_CHECKS=true` to skip Origin validation
-entirely. **Local dev only** — never set this in a deployed or reverse-proxied
-environment; it removes the app's only defense against a malicious webpage you
-have open calling the local API on your behalf (workspace/project creation,
-local command execution).
+`TRUSTED_LOCAL_CIDRS`), set `DISABLE_CORS_CHECKS=true` to skip Origin and `Host`
+validation entirely. **Local dev only** — never set this in a deployed or
+reverse-proxied environment; it removes the app's only defense against a
+malicious webpage you have open calling the local API on your behalf
+(workspace/project creation, local command execution).
 
 ## Security
 

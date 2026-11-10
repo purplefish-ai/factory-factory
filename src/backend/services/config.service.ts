@@ -54,7 +54,8 @@ export interface CorsConfig {
   trustProxyHeaders?: boolean;
   /**
    * Local dev only: disables Origin validation entirely across the Express
-   * CORS middleware, WebSocket upgrades, and tRPC's trusted-local check.
+   * CORS middleware, WebSocket upgrades, and tRPC procedures, along with
+   * tRPC's DNS-rebinding `Host` check.
    * Never enable in production or when the backend is reachable beyond
    * loopback — this removes the app's only defense against a malicious
    * webpage you have open calling the local API on your behalf.

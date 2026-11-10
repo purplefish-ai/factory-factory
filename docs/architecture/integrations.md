@@ -175,6 +175,11 @@ IANA `timezone` fields). Daily and weekly periodic tasks with a scheduled time
 advance calendar dates in the task timezone, preserving the scheduled day across
 daylight saving changes.
 
+Creating, editing and enabling a task schedules workspace launches, so those
+`periodicTask` mutations require a trusted local client, like
+`workspace.create`. Listing, reading and deleting tasks stay available to remote
+clients.
+
 Each execution runs the configured prompt, monitors the workspace until the
 agent finishes, and advances the schedule. Concurrent runs are skipped. The
 schedule advances from the slot that was due, so a run picked up late (for
