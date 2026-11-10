@@ -124,7 +124,7 @@ RUN pnpm add -g @openai/codex@0.166.0
 COPY --from=builder /app/dist ./dist
 COPY --from=production-deps /app/node_modules ./node_modules
 COPY --from=builder /app/package.json ./
-COPY --from=builder /app/.node-version ./
+COPY --from=builder /app/.node-minimum ./
 COPY --from=builder /app/pnpm-workspace.yaml ./
 COPY --from=builder /app/patches ./patches
 

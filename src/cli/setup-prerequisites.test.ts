@@ -35,23 +35,23 @@ function setup({
 afterEach(() => vi.restoreAllMocks());
 
 describe('Node requirement', () => {
-  it.each(['26.12.1', '26.13.0', '27.0.0'])('accepts %s', (version) => {
-    expect(supportsNode(version, '26.12.1')).toBe(true);
+  it.each(['26.8.1', '26.13.0', '27.0.0'])('accepts %s', (version) => {
+    expect(supportsNode(version, '26.8.1')).toBe(true);
   });
-  it.each(['26.12.0', '26.11.9', '25.99.9', '26.12.1-rc.1', 'garbage'])('rejects %s', (version) => {
-    expect(supportsNode(version, '26.12.1')).toBe(false);
+  it.each(['26.8.0', '26.7.9', '25.99.9', '26.8.1-rc.1', 'garbage'])('rejects %s', (version) => {
+    expect(supportsNode(version, '26.8.1')).toBe(false);
   });
   it('does not ask or probe when Node is supported', async () => {
     const { io } = setup();
-    expect(await ensureNode('26.12.1', '26.12.1', io)).toBe(true);
+    expect(await ensureNode('26.8.1', '26.8.1', io)).toBe(true);
     expect(io.ask).not.toHaveBeenCalled();
     expect(io.probe).not.toHaveBeenCalled();
   });
   it('offers an installed fnm and requires a restart after installation', async () => {
     const { io, commands, messages } = setup({ available: ['fnm'], answers: ['y'] });
-    expect(await ensureNode('22.0.0', '26.12.1', io)).toBe(false);
-    expect(commands).toEqual([['fnm', 'install', '26.12.1']]);
-    expect(messages.join('\n')).toContain('fnm use 26.12.1');
+    expect(await ensureNode('22.0.0', '26.8.1', io)).toBe(false);
+    expect(commands).toEqual([['fnm', 'install', '26.8.1']]);
+    expect(messages.join('\n')).toContain('fnm use 26.8.1');
   });
 });
 

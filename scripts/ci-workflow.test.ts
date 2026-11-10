@@ -8,6 +8,8 @@ import { z } from 'zod';
 import { selectJobs } from '../.github/scripts/select-ci.mjs';
 
 const stepSchema = z.object({
+  uses: z.string().optional(),
+  with: z.record(z.string(), z.unknown()).optional(),
   name: z.string().optional(),
   run: z.string().optional(),
 });
@@ -37,6 +39,23 @@ function runGate(selected: string, work: string, selection = 'success') {
 }
 
 describe('conservative CI selection', () => {
+  it('tests, builds and exercises native modules on the separate user minimum', () => {
+    const job = ci.jobs['minimum-node'];
+    expect(job?.needs).toBe('changes');
+    expect(job?.if).toBe("needs.changes.outputs.app == 'true'");
+    const setup = job?.steps?.find((step) => step.uses?.startsWith('actions/setup-node@'));
+    expect(setup?.with?.['node-version-file']).toBe('.node-minimum');
+    const commands = job?.steps
+      ?.map((step) => step.run)
+      .filter(Boolean)
+      .join('\n');
+    expect(commands).toContain('pnpm test');
+    expect(commands).toContain('pnpm build');
+    expect(commands).toContain('node dist/src/cli/bootstrap.mjs serve --help');
+    expect(commands).toContain('node dist/src/cli/bootstrap.mjs db:migrate');
+    expect(commands).toContain('node scripts/check-installed-native-runtime.mjs');
+  });
+
   it('skips app work only for the explicit documentation allowlist', () => {
     expect(selectJobs('pull_request', ['README.md', 'docs/architecture/jobs.md'])).toEqual({
       app: false,
@@ -148,6 +167,12 @@ describe('conservative CI selection', () => {
 });
 
 describe('required CI gates', () => {
+  it('requires the minimum runtime to pass the Build gate', () => {
+    const step = ci.jobs['require-build']?.steps?.[1];
+    expect(step?.run).toBe(gateCommand);
+    expect(step?.name).toBe('Require minimum runtime compatibility');
+  });
+
   it('accepts successful selected work and explicitly omitted work', () => {
     expect(runGate('true', 'success')).toBe(0);
     expect(runGate('false', 'skipped')).toBe(0);
@@ -178,7 +203,9 @@ describe('required CI gates', () => {
     const gate = ci.jobs[`require-${worker}`];
     expect(gate?.name).toBe(name);
     expect(gate?.if).toBe('always()');
-    expect(gate?.needs).toEqual(['changes', worker]);
+    expect(gate?.needs).toEqual(
+      worker === 'build' ? ['changes', worker, 'minimum-node'] : ['changes', worker]
+    );
     expect(gate?.steps?.[0]?.run).toBe(gateCommand);
   });
 });

@@ -36,8 +36,9 @@ terminals, issues, and pull request status together in one place.
 
 You will need:
 
-- Node.js 26.12.1+ for the CLI and development (pinned in `.node-version`); the
-  desktop app uses Electron 45.0's bundled Node.js 24.22 runtime
+- Node.js 26.8.1+ for the CLI; development uses the version pinned in
+  `.node-version`. The desktop app uses Electron 45.0's bundled Node.js 24.22
+  runtime
 - macOS 13 (Ventura) or newer for the macOS desktop app
 - A local git repository
 - At least one agent provider:

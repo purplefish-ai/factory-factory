@@ -74,13 +74,14 @@ function githubExpression(expression: string): string {
 }
 
 describe('npm publish workflow', () => {
-  it('verifies and publishes on the pinned development runtime', () => {
+  it('verifies both runtimes and publishes on the development pin', () => {
     const nodeVersion = readFileSync(
       new URL('../../../.node-version', import.meta.url),
       'utf8'
     ).trim();
     const verifyJob = getJob('verify');
-    expect(verifyJob.strategy?.matrix['node-version']).toEqual([nodeVersion]);
+    const minimum = readFileSync(new URL('../../../.node-minimum', import.meta.url), 'utf8').trim();
+    expect(verifyJob.strategy?.matrix['node-version']).toEqual([minimum, nodeVersion]);
     for (const name of ['Publish to npm (dry run)', 'Upload npm package']) {
       expect(getStep(verifyJob, name).if).toContain(`matrix.node-version == '${nodeVersion}'`);
     }
