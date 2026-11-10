@@ -1,5 +1,12 @@
 import type { inferRouterOutputs } from '@trpc/server';
-import { createContext, type ReactElement, type ReactNode, useContext, useState } from 'react';
+import {
+  createContext,
+  type ReactElement,
+  type ReactNode,
+  useContext,
+  useMemo,
+  useState,
+} from 'react';
 import { downloadFile } from '@/client/lib/download-file';
 import type { AppRouter } from '@/client/lib/trpc';
 import {
@@ -40,10 +47,14 @@ export function DataImportResultsProvider({
   const history = active?.recovery.periodicHistory;
   const definitions = active?.recovery.automationDefinitions;
   const links = active?.recovery.periodicWorkspaceLinks;
+  const value = useMemo(
+    () => ({
+      publishImportResult: (result: ImportResult) => setPending((queue) => [...queue, result]),
+    }),
+    []
+  );
   return (
-    <ImportResultsContext.Provider
-      value={{ publishImportResult: (result) => setPending((queue) => [...queue, result]) }}
-    >
+    <ImportResultsContext.Provider value={value}>
       {children}
       {active && runtime && (
         <AlertDialog open>

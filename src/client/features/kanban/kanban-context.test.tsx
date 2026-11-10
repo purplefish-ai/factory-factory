@@ -2,7 +2,7 @@
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { getQueryKey } from '@trpc/react-query';
-import { type ReactNode } from 'react';
+import { memo, type ReactNode } from 'react';
 import { flushSync } from 'react-dom';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -10,7 +10,7 @@ import type { GitHubIssueRaw } from '@/client/lib/issue-normalization';
 import { projectSnapshotToWorkspace } from '@/client/lib/snapshot-to-workspace';
 import { trpc } from '@/client/lib/trpc';
 import { makeCompleteWorkspaceSnapshotEntry } from '@/test-utils/workspace-snapshot';
-import { KanbanProvider, useKanban } from './kanban-context';
+import { KanbanProvider, useKanban, useKanbanActions } from './kanban-context';
 
 interface ArchiveError {
   data?: { code?: string | null; applicationErrorKind?: string | null };
@@ -60,7 +60,7 @@ const mocks = vi.hoisted(() => ({
   bulkArchiveInputs: [] as unknown[],
   workspaceListState: undefined as ProjectWorkspaceCache | undefined,
   githubIssues: [] as GitHubIssueRaw[],
-  toggleRatchetingMutateAsync: vi.fn(),
+  toggleRatchetingMutate: vi.fn(),
   pendingToggleWorkspaceIds: [] as string[],
   renameMutateAsync: vi.fn(),
 }));
@@ -73,7 +73,7 @@ vi.mock('sonner', () => ({
 
 vi.mock('@/client/hooks/use-toggle-ratcheting', () => ({
   useToggleRatcheting: () => ({
-    mutateAsync: mocks.toggleRatchetingMutateAsync,
+    mutate: mocks.toggleRatchetingMutate,
     pendingWorkspaceIds: mocks.pendingToggleWorkspaceIds,
   }),
 }));
@@ -301,12 +301,11 @@ describe('KanbanProvider PR sync', () => {
 });
 
 describe('KanbanProvider per-workspace commands', () => {
-  it('exposes every in-flight ratchet toggle so concurrent cards stay pending', async () => {
+  it('exposes every in-flight ratchet toggle so concurrent cards stay pending', () => {
     const kanban = renderProvider();
-    mocks.toggleRatchetingMutateAsync.mockRejectedValueOnce(new Error('offline'));
-    // Failures are reported by the shared hook; the command itself never rejects.
-    await expect(kanban.toggleWorkspaceRatcheting('workspace-1', true)).resolves.toBeUndefined();
-    expect(mocks.toggleRatchetingMutateAsync).toHaveBeenCalledWith({
+    // Failures are reported by the shared hook, so the command only starts the mutation.
+    kanban.toggleWorkspaceRatcheting('workspace-1', true);
+    expect(mocks.toggleRatchetingMutate).toHaveBeenCalledWith({
       workspaceId: 'workspace-1',
       enabled: true,
     });
@@ -593,5 +592,31 @@ describe('KanbanProvider archive failure handling', () => {
     expect(mocks.toastErrorMock).not.toHaveBeenCalled();
     expect(context?.archiveGitLockWorkspaceIds).toEqual(['workspace-1']);
     expect(mocks.bulkArchiveInputs).toEqual([{ projectId: 'project-1', kanbanColumn: 'WAITING' }]);
+  });
+});
+
+let commandRenders = 0;
+const CommandsOnly = memo(function CommandsOnly() {
+  commandRenders += 1;
+  useKanbanActions();
+  return null;
+});
+
+describe('KanbanProvider render stability', () => {
+  it('keeps commands stable so command-only consumers skip board state changes', () => {
+    commandRenders = 0;
+    const children = (
+      <>
+        <Probe />
+        <CommandsOnly />
+      </>
+    );
+    const first = renderProvider(children);
+    flushSync(() => first.requestInlineForm());
+    flushSync(() => first.openQuickChat('workspace-1'));
+    flushSync(() => root?.render(providerElement(children)));
+    expect(context?.showInlineForm).toBe(true);
+    expect(context?.quickChatWorkspaceId).toBe('workspace-1');
+    expect(commandRenders).toBe(1);
   });
 });

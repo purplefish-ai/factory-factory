@@ -1,8 +1,7 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { EmptyState } from '@/client/components/empty-state';
 import { QueryErrorState, QueryRefreshError } from '@/client/components/query-error-state';
 import { ArchiveGitLockDialog, ArchiveWorkspaceDialog } from '@/client/features/workspace';
-import { useStableCallback } from '@/client/hooks/use-stable-callback';
 import { runInBackground } from '@/client/lib/background-task';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -66,26 +65,12 @@ function KanbanBoardContent() {
     closeQuickChat,
   } = useKanban();
 
-  // Context commands are recreated on every render. Stable wrappers let the
-  // memoized cards skip re-rendering when another workspace changes.
-  const handleToggleRatcheting = useStableCallback((workspaceId: string, enabled: boolean) => {
-    runInBackground(toggleWorkspaceRatcheting(workspaceId, enabled), "Couldn't update workspace.");
-  });
-  const handleArchiveWorkspace = useStableCallback((workspaceId: string) => {
-    runInBackground(archiveWorkspace(workspaceId), "Couldn't archive workspace.");
-  });
-  const handleRenameWorkspace = useStableCallback(renameWorkspace);
-  const handleGitLockOpenChange = useStableCallback((open: boolean) => {
-    if (!open) {
-      dismissArchiveGitLock();
-    }
-  });
-  const handleRetryGitLockedArchives = useStableCallback(() => {
-    void retryGitLockedArchives(false);
-  });
-  const handleRemoveGitLocksAndArchive = useStableCallback(() => {
-    void retryGitLockedArchives(true);
-  });
+  // Cards take a fire-and-forget archive; the command itself resolves for the git-lock retry.
+  const handleArchiveWorkspace = useCallback(
+    (workspaceId: string) =>
+      runInBackground(archiveWorkspace(workspaceId), "Couldn't archive workspace."),
+    [archiveWorkspace]
+  );
 
   const isMobile = useIsMobile();
   const columns = useMemo(() => getKanbanColumns(issueProvider), [issueProvider]);
@@ -145,10 +130,14 @@ function KanbanBoardContent() {
   const archiveGitLockDialog = (
     <ArchiveGitLockDialog
       open={archiveGitLockWorkspaceIds.length > 0}
-      onOpenChange={handleGitLockOpenChange}
+      onOpenChange={(open) => {
+        if (!open) {
+          dismissArchiveGitLock();
+        }
+      }}
       workspaceCount={archiveGitLockWorkspaceIds.length}
-      onRetry={handleRetryGitLockedArchives}
-      onRemoveLockAndArchive={handleRemoveGitLocksAndArchive}
+      onRetry={() => void retryGitLockedArchives(false)}
+      onRemoveLockAndArchive={() => void retryGitLockedArchives(true)}
       isPending={isArchiving}
     />
   );
@@ -204,13 +193,13 @@ function KanbanBoardContent() {
         waitingSortOrder={waitingSortOrder}
         onWaitingSortOrderChange={setWaitingSortOrder}
         unreadMailCounts={unreadMailCounts}
-        onToggleRatcheting={handleToggleRatcheting}
+        onToggleRatcheting={toggleWorkspaceRatcheting}
         togglingWorkspaceIds={togglingWorkspaceIds}
         onArchive={handleArchiveWorkspace}
         onBulkArchive={() => handleBulkArchive(column.id)}
         isBulkArchiving={isBulkArchiving}
         onOpenQuickChat={openQuickChat}
-        onRename={handleRenameWorkspace}
+        onRename={renameWorkspace}
       />
     );
   const columnArchiveCount = bulkArchiveColumnId
