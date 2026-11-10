@@ -1,17 +1,15 @@
 import { useEffect, useState, useSyncExternalStore } from 'react';
-import { toast } from 'sonner';
-import { runInBackground } from '@/client/lib/background-task';
+import { QueryState } from '@/client/components/query-state';
 import {
   readBrowserNotificationsEnabled,
   readNotificationPermission,
   subscribeBrowserNotifications,
   writeBrowserNotificationsEnabled,
 } from '@/client/lib/browser-notifications';
-import { trpc } from '@/client/lib/trpc';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Label } from '@/components/ui/label';
+import { useUpdateUserSettings, useUserSettings } from '@/client/lib/user-settings-queries';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Switch } from '@/components/ui/switch';
+import { SettingRow, SettingsSection } from './settings-section';
 
 function notificationDescription(
   permission: ReturnType<typeof readNotificationPermission>,
@@ -34,8 +32,8 @@ function notificationDescription(
 }
 
 export function NotificationSettingsSection() {
-  const { data: settings, isLoading } = trpc.userSettings.get.useQuery();
-  const utils = trpc.useUtils();
+  const settingsQuery = useUserSettings();
+  const updateSettings = useUpdateUserSettings();
   const enabled = useSyncExternalStore(
     subscribeBrowserNotifications,
     readBrowserNotificationsEnabled,
@@ -53,18 +51,6 @@ export function NotificationSettingsSection() {
       document.removeEventListener('visibilitychange', refresh);
     };
   }, []);
-  const updateSettings = trpc.userSettings.update.useMutation({
-    onSuccess: () => {
-      runInBackground(
-        utils.userSettings.get.invalidate(),
-        "Couldn't refresh notification settings."
-      );
-    },
-    onError: (error) => {
-      toast.error(`Couldn't update notification settings. ${error.message}`);
-    },
-  });
-
   const enableDesktop = async () => {
     setError(null);
     if (permission === 'unsupported' || permission === 'denied') {
@@ -101,57 +87,51 @@ export function NotificationSettingsSection() {
   const description = notificationDescription(permission, requesting, enabled);
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Notifications</CardTitle>
-        <CardDescription>Choose how to hear about workspace completions.</CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-          <div className="space-y-0.5">
-            <Label htmlFor="desktop-notifications-toggle">Desktop notifications</Label>
-            <p
-              id="desktop-notifications-description"
-              className="text-sm text-muted-foreground"
-              role="status"
-            >
-              {description}
+    <SettingsSection
+      title="Notifications"
+      description="Choose how to hear about workspace completions."
+    >
+      <SettingRow
+        label="Desktop notifications"
+        htmlFor="desktop-notifications-toggle"
+        description={<span role="status">{description}</span>}
+        descriptionId="desktop-notifications-description"
+        message={
+          error ? (
+            <p className="text-sm text-destructive" role="alert">
+              {error}
             </p>
-            {error ? (
-              <p className="text-sm text-destructive" role="alert">
-                {error}
-              </p>
-            ) : null}
-          </div>
-          <Switch
-            id="desktop-notifications-toggle"
-            aria-describedby="desktop-notifications-description"
-            checked={enabled && permission === 'granted'}
-            onCheckedChange={(checked) => {
-              void toggleDesktop(checked);
-            }}
-            disabled={requesting || permission === 'unsupported' || permission === 'denied'}
-          />
-        </div>
-        {isLoading ? (
-          <Skeleton className="h-10 w-full" />
-        ) : (
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-            <div className="space-y-0.5">
-              <Label htmlFor="sound-toggle">Play completion sound</Label>
-              <p className="text-sm text-muted-foreground">
-                Play a sound when a workspace finishes.
-              </p>
-            </div>
+          ) : null
+        }
+      >
+        <Switch
+          id="desktop-notifications-toggle"
+          aria-describedby="desktop-notifications-description"
+          checked={enabled && permission === 'granted'}
+          onCheckedChange={toggleDesktop}
+          disabled={requesting || permission === 'unsupported' || permission === 'denied'}
+        />
+      </SettingRow>
+      <QueryState
+        query={settingsQuery}
+        errorTitle="Couldn't load notification settings"
+        loading={<Skeleton className="h-10 w-full" />}
+      >
+        {(settings) => (
+          <SettingRow
+            label="Play completion sound"
+            htmlFor="sound-toggle"
+            description="Play a sound when a workspace finishes."
+            saving={updateSettings.isSaving('playSoundOnComplete')}
+          >
             <Switch
               id="sound-toggle"
-              checked={settings?.playSoundOnComplete ?? true}
+              checked={settings.playSoundOnComplete}
               onCheckedChange={(checked) => updateSettings.mutate({ playSoundOnComplete: checked })}
-              disabled={updateSettings.isPending}
             />
-          </div>
+          </SettingRow>
         )}
-      </CardContent>
-    </Card>
+      </QueryState>
+    </SettingsSection>
   );
 }

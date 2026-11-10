@@ -2,6 +2,7 @@ import { WarningIcon } from '@phosphor-icons/react/dist/csr/Warning';
 import { Link } from 'react-router';
 import { POLL_INTERVAL_MS } from '@/client/lib/query-options';
 import { trpc } from '@/client/lib/trpc';
+import { useUserSettings } from '@/client/lib/user-settings-queries';
 import { resolveClaudeModelAlias } from '@/shared/acp-protocol/model-selection';
 import type { ChatModelOption, ChatProvider } from '@/shared/chat-capabilities';
 
@@ -75,7 +76,7 @@ export function ModelCatalogWarningContent({ models }: { models: MissingModel[] 
 
 /** Surface stale defaults across the app without changing the user's saved selection. */
 export function ModelCatalogWarning() {
-  const { data: settings } = trpc.userSettings.get.useQuery();
+  const { data: settings } = useUserSettings();
   const { data: catalog } = trpc.userSettings.getProviderOptions.useQuery(undefined, {
     staleTime: 60_000,
     refetchOnWindowFocus: true,

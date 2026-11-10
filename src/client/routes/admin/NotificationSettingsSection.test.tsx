@@ -8,14 +8,14 @@ import {
 } from '@/client/lib/browser-notifications';
 import { NotificationSettingsSection } from './NotificationSettingsSection';
 
-vi.mock('@/client/lib/trpc', () => ({
-  trpc: {
-    userSettings: {
-      get: { useQuery: () => ({ data: { playSoundOnComplete: true }, isLoading: false }) },
-      update: { useMutation: () => ({ mutate: vi.fn(), isPending: false }) },
-    },
-    useUtils: () => ({ userSettings: { get: { invalidate: vi.fn() } } }),
-  },
+vi.mock('@/client/lib/user-settings-queries', () => ({
+  useUserSettings: () => ({
+    data: { playSoundOnComplete: true },
+    error: null,
+    isFetching: false,
+    refetch: vi.fn(),
+  }),
+  useUpdateUserSettings: () => ({ mutate: vi.fn(), isPending: false, isSaving: () => false }),
 }));
 let root: Root;
 let container: HTMLDivElement;

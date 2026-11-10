@@ -1,31 +1,22 @@
 import { PaletteIcon } from '@phosphor-icons/react/dist/csr/Palette';
 import { useTheme } from 'next-themes';
-import { useEffect, useRef, useState } from 'react';
-import { toast } from 'sonner';
+import { useEffect, useState } from 'react';
 import {
   COLOR_SCHEME_ATTRIBUTE,
   readRenderedThemeColors,
   type RenderedThemeColors,
 } from '@/client/lib/appearance';
-import { runInBackground } from '@/client/lib/background-task';
-import { trpc } from '@/client/lib/trpc';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import { Skeleton } from '@/components/ui/skeleton';
+  type UserSettingsPatch,
+  useUpdateUserSettings,
+  useUserSettings,
+} from '@/client/lib/user-settings-queries';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { Slider } from '@/components/ui/slider';
 import {
   appearanceFromUserSettings,
   COLOR_SCHEME_OPTIONS,
-  type ColorSchemeId,
   CUSTOM_FONT_OPTION_ID,
   DEFAULT_COLOR_SCHEME,
   DEFAULT_FONT_SCALE,
@@ -39,17 +30,13 @@ import {
   MONO_FONT_OPTIONS,
   SANS_FONT_OPTIONS,
 } from '@/shared/appearance';
-
-type AppearanceUpdate = Partial<{
-  appearanceColorScheme: ColorSchemeId;
-  appearanceBackgroundColor: string | null;
-  appearanceForegroundColor: string | null;
-  appearanceFontScale: number;
-  appearanceFontSans: string | null;
-  appearanceFontMono: string | null;
-}>;
-
-const FIELD_WIDTH = 'w-full sm:w-[280px]';
+import {
+  SETTING_FIELD_WIDTH,
+  SettingField,
+  SettingHelp,
+  SettingSelect,
+  SettingsSection,
+} from './settings-section';
 
 /** Used until the page's painted colors can be read, and in environments without canvas. */
 const SCHEME_COLOR_FALLBACK: Record<'light' | 'dark', RenderedThemeColors> = {
@@ -102,61 +89,10 @@ const THEME_MODES = [
   { value: 'dark', label: 'Dark' },
 ];
 
-function ThemeModeField() {
-  const { theme, setTheme } = useTheme();
-  return (
-    <div className="space-y-1.5">
-      <Label htmlFor="appearance-mode">Mode</Label>
-      <Select value={theme ?? 'system'} onValueChange={setTheme}>
-        <SelectTrigger id="appearance-mode" className={FIELD_WIDTH}>
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          {THEME_MODES.map((mode) => (
-            <SelectItem key={mode.value} value={mode.value}>
-              {mode.label}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-      <p className="text-xs text-muted-foreground">
-        Every color scheme has a light and a dark variant.
-      </p>
-    </div>
-  );
-}
-
-interface ColorSchemeFieldProps {
-  value: ColorSchemeId;
-  disabled: boolean;
-  onChange: (value: ColorSchemeId) => void;
-}
-
-function ColorSchemeField({ value, disabled, onChange }: ColorSchemeFieldProps) {
-  const selected = COLOR_SCHEME_OPTIONS.find((option) => option.id === value);
-  return (
-    <div className="space-y-1.5">
-      <Label htmlFor="appearance-color-scheme">Color scheme</Label>
-      <Select
-        value={value}
-        onValueChange={(next) => onChange(next as ColorSchemeId)}
-        disabled={disabled}
-      >
-        <SelectTrigger id="appearance-color-scheme" className={FIELD_WIDTH}>
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          {COLOR_SCHEME_OPTIONS.map((option) => (
-            <SelectItem key={option.id} value={option.id}>
-              {option.label}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-      <p className="text-xs text-muted-foreground">{selected?.description}</p>
-    </div>
-  );
-}
+const COLOR_SCHEMES = COLOR_SCHEME_OPTIONS.map((option) => ({
+  value: option.id,
+  label: option.label,
+}));
 
 interface ColorOverrideFieldProps {
   id: string;
@@ -165,7 +101,7 @@ interface ColorOverrideFieldProps {
   value: string | null;
   /** Shown in the picker while no override is saved. */
   placeholderColor: string;
-  disabled: boolean;
+  saving: boolean;
   onCommit: (value: string | null) => void;
 }
 
@@ -176,28 +112,19 @@ function ColorOverrideField({
   helpText,
   value,
   placeholderColor,
-  disabled,
+  saving,
   onCommit,
 }: ColorOverrideFieldProps) {
-  const shown = value ?? placeholderColor;
-  const [draft, setDraft] = useState(shown);
-  // Set once the picker reports a change, so choosing exactly the placeholder
-  // color still saves it as an override. A ref: it never needs a re-render.
-  const dirtyRef = useRef(false);
-
-  // The placeholder follows the painted scheme and can change while the
-  // native picker is open; only replace the draft when no pick is in progress.
-  useEffect(() => {
-    if (!dirtyRef.current) {
-      setDraft(shown);
-    }
-  }, [shown]);
+  // Set only while a pick is in progress, so choosing exactly the placeholder
+  // color still saves it as an override; otherwise the picker follows the
+  // saved value or the painted scheme.
+  const [draft, setDraft] = useState<string | null>(null);
 
   const commit = () => {
-    if (!dirtyRef.current) {
+    if (draft === null) {
       return;
     }
-    dirtyRef.current = false;
+    setDraft(null);
     const next = draft.toLowerCase();
     if (next !== value?.toLowerCase()) {
       onCommit(next);
@@ -205,62 +132,56 @@ function ColorOverrideField({
   };
 
   return (
-    <div className="space-y-1.5">
-      <Label htmlFor={id}>{label}</Label>
+    <SettingField label={label} htmlFor={id} description={helpText} saving={saving}>
       <div className="flex items-center gap-2">
         <input
           id={id}
           type="color"
-          value={draft}
-          onChange={(event) => {
-            setDraft(event.target.value);
-            dirtyRef.current = true;
-          }}
+          value={draft ?? value ?? placeholderColor}
+          onChange={(event) => setDraft(event.target.value)}
           onBlur={commit}
-          disabled={disabled}
-          className="h-9 w-12 cursor-pointer rounded-md border border-input bg-background p-1 disabled:cursor-not-allowed disabled:opacity-50"
+          className="h-9 w-12 cursor-pointer rounded-md border border-input bg-background p-1"
         />
         <span className="font-mono text-xs text-muted-foreground">
           {value ?? 'From color scheme'}
         </span>
         {value && (
-          <Button variant="ghost" size="sm" onClick={() => onCommit(null)} disabled={disabled}>
+          <Button variant="ghost" size="sm" onClick={() => onCommit(null)}>
             Reset
           </Button>
         )}
       </div>
-      <p className="text-xs text-muted-foreground">{helpText}</p>
-    </div>
+    </SettingField>
   );
 }
 
 interface FontScaleFieldProps {
   value: number;
-  disabled: boolean;
+  saving: boolean;
   onCommit: (value: number) => void;
 }
 
-function FontScaleField({ value, disabled, onCommit }: FontScaleFieldProps) {
-  const [draft, setDraft] = useState(value);
-
-  useEffect(() => {
-    setDraft(value);
-  }, [value]);
+function FontScaleField({ value, saving, onCommit }: FontScaleFieldProps) {
+  // Set while dragging; the parent remounts this field by key when the saved value changes.
+  const [draft, setDraft] = useState<number | null>(null);
+  const shown = draft ?? value;
 
   return (
-    <div className="space-y-1.5">
-      <div className={`flex items-center justify-between ${FIELD_WIDTH}`}>
-        <Label id="appearance-font-scale-label">Font size</Label>
-        <span className="font-mono text-xs text-muted-foreground">{draft}%</span>
-      </div>
+    <SettingField
+      label="Font size"
+      id="appearance-font-scale-label"
+      saving={saving}
+      labelAccessory={<span className="font-mono text-xs text-muted-foreground">{shown}%</span>}
+      description="Scales all interface text and spacing, independent of browser zoom."
+    >
       <div className="flex items-center gap-2">
         <Slider
           id="appearance-font-scale"
           aria-labelledby="appearance-font-scale-label"
-          aria-valuetext={`${draft}%`}
-          className={FIELD_WIDTH}
-          value={[draft]}
-          onValueChange={([next]) => setDraft(next ?? value)}
+          aria-valuetext={`${shown}%`}
+          className={SETTING_FIELD_WIDTH}
+          value={[shown]}
+          onValueChange={([next]) => setDraft(next ?? null)}
           onValueCommit={([next]) => {
             if (next !== undefined && next !== value) {
               onCommit(next);
@@ -269,73 +190,53 @@ function FontScaleField({ value, disabled, onCommit }: FontScaleFieldProps) {
           min={FONT_SCALE_MIN}
           max={FONT_SCALE_MAX}
           step={FONT_SCALE_STEP}
-          disabled={disabled}
         />
         <Button
           variant="ghost"
           size="sm"
           onClick={() => onCommit(DEFAULT_FONT_SCALE)}
-          disabled={disabled || value === DEFAULT_FONT_SCALE}
+          disabled={value === DEFAULT_FONT_SCALE}
         >
           Reset
         </Button>
       </div>
-      <p className="text-xs text-muted-foreground">
-        Scales all interface text and spacing, independent of browser zoom.
-      </p>
-    </div>
+    </SettingField>
   );
 }
 
 interface FontFamilyFieldProps {
-  resetKey: number;
   id: string;
   label: string;
   helpText: string;
   options: readonly FontFamilyOption[];
   value: string | null;
-  disabled: boolean;
+  saving: boolean;
   onCommit: (value: string | null) => void;
 }
 
 /** Preset font stacks plus a Custom entry that reveals a free-form font-family input. */
 function FontFamilyField({
-  resetKey,
   id,
   label,
   helpText,
   options,
   value,
-  disabled,
+  saving,
   onCommit,
 }: FontFamilyFieldProps) {
   const savedOptionId = fontOptionIdForValue(options, value);
-  const [selectedId, setSelectedId] = useState(savedOptionId);
+  // Custom is chosen before its font is saved; presets save as soon as they are picked.
+  const [choosingCustom, setChoosingCustom] = useState(false);
+  const selectedId = choosingCustom ? CUSTOM_FONT_OPTION_ID : savedOptionId;
+  // A failed save keeps the typed font for another try.
   const [customDraft, setCustomDraft] = useState(
     savedOptionId === CUSTOM_FONT_OPTION_ID ? (value ?? '') : ''
   );
   const [customError, setCustomError] = useState<string | null>(null);
 
-  useEffect(() => {
-    setSelectedId(savedOptionId);
-    if (savedOptionId === CUSTOM_FONT_OPTION_ID) {
-      setCustomDraft(value ?? '');
-    }
-  }, [savedOptionId, value]);
-
-  // Autosaved preset failures revert the selection; explicit custom saves retain drafts.
-  useEffect(() => {
-    if (resetKey) {
-      setSelectedId((current) => (current === CUSTOM_FONT_OPTION_ID ? current : savedOptionId));
-    }
-  }, [resetKey, savedOptionId]);
-
   const handleSelect = (nextId: string) => {
-    setSelectedId(nextId);
+    setChoosingCustom(nextId === CUSTOM_FONT_OPTION_ID);
     setCustomError(null);
-    if (nextId === CUSTOM_FONT_OPTION_ID) {
-      return;
-    }
     const option = options.find((candidate) => candidate.id === nextId);
     if (option && option.value !== value) {
       onCommit(option.value);
@@ -357,24 +258,20 @@ function FontFamilyField({
     }
   };
 
-  const customInputId = `${id}-custom`;
-
   return (
-    <div className="space-y-1.5">
-      <Label htmlFor={id}>{label}</Label>
-      <Select value={selectedId} onValueChange={handleSelect} disabled={disabled}>
-        <SelectTrigger id={id} className={FIELD_WIDTH}>
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          {options.map((option) => (
-            <SelectItem key={option.id} value={option.id}>
-              {option.label}
-            </SelectItem>
-          ))}
-          <SelectItem value={CUSTOM_FONT_OPTION_ID}>Custom…</SelectItem>
-        </SelectContent>
-      </Select>
+    <div className="space-y-2">
+      <SettingSelect
+        id={id}
+        label={label}
+        saving={saving}
+        value={selectedId}
+        options={[
+          ...options.map((option) => ({ value: option.id, label: option.label })),
+          { value: CUSTOM_FONT_OPTION_ID, label: 'Custom…' },
+        ]}
+        onValueChange={handleSelect}
+        triggerClassName={SETTING_FIELD_WIDTH}
+      />
       {selectedId === CUSTOM_FONT_OPTION_ID && (
         <form
           className="space-y-1"
@@ -384,7 +281,7 @@ function FontFamilyField({
           }}
         >
           <Input
-            id={customInputId}
+            id={`${id}-custom`}
             aria-label={`${label} family`}
             value={customDraft}
             onChange={(event) => {
@@ -392,15 +289,14 @@ function FontFamilyField({
               setCustomError(null);
             }}
             placeholder='"Fira Code", monospace'
-            className={`${FIELD_WIDTH} font-mono text-sm`}
-            disabled={disabled}
+            className={`${SETTING_FIELD_WIDTH} font-mono text-sm`}
             aria-invalid={customError ? true : undefined}
           />
           <Button
             type="submit"
             size="sm"
             aria-label={`Save ${label.toLowerCase()}`}
-            disabled={disabled || !customDraft.trim()}
+            disabled={saving || !customDraft.trim()}
           >
             Save
           </Button>
@@ -409,152 +305,134 @@ function FontFamilyField({
               {customError}
             </p>
           )}
-          <p className="text-xs text-muted-foreground">
+          <SettingHelp>
             Any font installed on this device, written as a CSS font-family list.
-          </p>
+          </SettingHelp>
         </form>
       )}
-      <p className="text-xs text-muted-foreground">{helpText}</p>
+      <SettingHelp>{helpText}</SettingHelp>
     </div>
   );
 }
 
-const RESET_ALL: AppearanceUpdate = {
+const RESET_ALL = {
   appearanceColorScheme: DEFAULT_COLOR_SCHEME,
   appearanceBackgroundColor: null,
   appearanceForegroundColor: null,
   appearanceFontScale: DEFAULT_FONT_SCALE,
   appearanceFontSans: null,
   appearanceFontMono: null,
-};
+} satisfies UserSettingsPatch;
 
 export function AppearanceSettingsSection() {
-  const { data: settings, isLoading } = trpc.userSettings.get.useQuery();
-  const utils = trpc.useUtils();
-  const { resolvedTheme } = useTheme();
-  const isDark = resolvedTheme === 'dark';
-  const appearance = appearanceFromUserSettings(settings);
-  const schemeColors = useRenderedSchemeColors(isDark);
-  // Fields keep local drafts; bumping this remounts them from the saved values.
-  const [resetKey, setResetKey] = useState(0);
-  const updateSettings = trpc.userSettings.update.useMutation({
-    onSuccess: (result) => {
-      // Seed the cache so the AppearanceProvider applies the change before
-      // the refetch lands, then refetch to stay authoritative.
-      utils.userSettings.get.setData(undefined, result);
-      runInBackground(utils.userSettings.get.invalidate(), "Couldn't refresh data.");
-    },
-    onError: (error) => {
-      toast.error(`Couldn't update appearance. ${error.message}`);
-      setResetKey((key) => key + 1);
-    },
-  });
-
-  if (isLoading) {
-    return (
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <PaletteIcon className="h-5 w-5" />
-            Appearance
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <Skeleton className="h-10 w-full" />
-        </CardContent>
-      </Card>
-    );
-  }
-
-  const disabled = updateSettings.isPending;
-  const update = (patch: AppearanceUpdate) => updateSettings.mutate(patch);
+  const settingsQuery = useUserSettings();
+  const updateSettings = useUpdateUserSettings();
+  const { theme, setTheme, resolvedTheme } = useTheme();
+  const schemeColors = useRenderedSchemeColors(resolvedTheme === 'dark');
+  const update = (patch: UserSettingsPatch) => updateSettings.mutate(patch);
+  const saving = (field: keyof UserSettingsPatch) => updateSettings.isSaving(field);
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <PaletteIcon className="h-5 w-5" />
-          Appearance
-        </CardTitle>
-        <CardDescription>
-          Choose a color scheme, adjust text size, and pick the fonts used across the app.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-6">
-        <div className="grid gap-4 sm:grid-cols-2">
-          <ColorSchemeField
-            value={appearance.colorScheme}
-            disabled={disabled}
-            onChange={(colorScheme) => update({ appearanceColorScheme: colorScheme })}
-          />
-          <ThemeModeField />
-        </div>
+    <SettingsSection
+      title="Appearance"
+      icon={<PaletteIcon className="h-5 w-5" />}
+      description="Choose a color scheme, adjust text size, and pick the fonts used across the app."
+      query={settingsQuery}
+      errorTitle="Couldn't load appearance settings"
+      contentClassName="space-y-6"
+    >
+      {(settings) => {
+        const appearance = appearanceFromUserSettings(settings);
+        return (
+          <>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <SettingSelect
+                id="appearance-color-scheme"
+                label="Color scheme"
+                description={
+                  COLOR_SCHEME_OPTIONS.find((option) => option.id === appearance.colorScheme)
+                    ?.description
+                }
+                saving={saving('appearanceColorScheme')}
+                value={appearance.colorScheme}
+                options={COLOR_SCHEMES}
+                onValueChange={(colorScheme) => update({ appearanceColorScheme: colorScheme })}
+                triggerClassName={SETTING_FIELD_WIDTH}
+              />
+              <SettingSelect
+                id="appearance-mode"
+                label="Mode"
+                description="Every color scheme has a light and a dark variant."
+                value={theme ?? 'system'}
+                options={THEME_MODES}
+                onValueChange={setTheme}
+                triggerClassName={SETTING_FIELD_WIDTH}
+              />
+            </div>
 
-        <div className="grid gap-4 sm:grid-cols-2">
-          <ColorOverrideField
-            key={`background-${resetKey}`}
-            id="appearance-background-color"
-            label="Background color"
-            helpText="Replaces the color scheme’s page background in both light and dark mode."
-            value={appearance.backgroundColor}
-            placeholderColor={schemeColors.background}
-            disabled={disabled}
-            onCommit={(color) => update({ appearanceBackgroundColor: color })}
-          />
-          <ColorOverrideField
-            key={`foreground-${resetKey}`}
-            id="appearance-foreground-color"
-            label="Text color"
-            helpText="Replaces the primary text color; secondary text is blended from it."
-            value={appearance.foregroundColor}
-            placeholderColor={schemeColors.foreground}
-            disabled={disabled}
-            onCommit={(color) => update({ appearanceForegroundColor: color })}
-          />
-        </div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <ColorOverrideField
+                id="appearance-background-color"
+                label="Background color"
+                helpText="Replaces the color scheme’s page background in both light and dark mode."
+                value={appearance.backgroundColor}
+                placeholderColor={schemeColors.background}
+                saving={saving('appearanceBackgroundColor')}
+                onCommit={(color) => update({ appearanceBackgroundColor: color })}
+              />
+              <ColorOverrideField
+                id="appearance-foreground-color"
+                label="Text color"
+                helpText="Replaces the primary text color; secondary text is blended from it."
+                value={appearance.foregroundColor}
+                placeholderColor={schemeColors.foreground}
+                saving={saving('appearanceForegroundColor')}
+                onCommit={(color) => update({ appearanceForegroundColor: color })}
+              />
+            </div>
 
-        <div className="space-y-4 border-t pt-4">
-          <FontScaleField
-            key={`scale-${resetKey}`}
-            value={appearance.fontScale}
-            disabled={disabled}
-            onCommit={(fontScale) => update({ appearanceFontScale: fontScale })}
-          />
-          <div className="grid gap-4 sm:grid-cols-2">
-            <FontFamilyField
-              resetKey={resetKey}
-              id="appearance-font-sans"
-              label="Interface font"
-              helpText="Used for navigation, chat, and settings."
-              options={SANS_FONT_OPTIONS}
-              value={appearance.fontSans}
-              disabled={disabled}
-              onCommit={(fontSans) => update({ appearanceFontSans: fontSans })}
-            />
-            <FontFamilyField
-              resetKey={resetKey}
-              id="appearance-font-mono"
-              label="Monospace font"
-              helpText="Used for code, diffs, and terminals."
-              options={MONO_FONT_OPTIONS}
-              value={appearance.fontMono}
-              disabled={disabled}
-              onCommit={(fontMono) => update({ appearanceFontMono: fontMono })}
-            />
-          </div>
-        </div>
+            <div className="space-y-4 border-t pt-4">
+              <FontScaleField
+                key={appearance.fontScale}
+                value={appearance.fontScale}
+                saving={saving('appearanceFontScale')}
+                onCommit={(fontScale) => update({ appearanceFontScale: fontScale })}
+              />
+              <div className="grid gap-4 sm:grid-cols-2">
+                <FontFamilyField
+                  id="appearance-font-sans"
+                  label="Interface font"
+                  helpText="Used for navigation, chat, and settings."
+                  options={SANS_FONT_OPTIONS}
+                  value={appearance.fontSans}
+                  saving={saving('appearanceFontSans')}
+                  onCommit={(fontSans) => update({ appearanceFontSans: fontSans })}
+                />
+                <FontFamilyField
+                  id="appearance-font-mono"
+                  label="Monospace font"
+                  helpText="Used for code, diffs, and terminals."
+                  options={MONO_FONT_OPTIONS}
+                  value={appearance.fontMono}
+                  saving={saving('appearanceFontMono')}
+                  onCommit={(fontMono) => update({ appearanceFontMono: fontMono })}
+                />
+              </div>
+            </div>
 
-        <div className="flex justify-end border-t pt-4">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => update(RESET_ALL)}
-            disabled={disabled || isDefaultAppearance(appearance)}
-          >
-            Reset appearance
-          </Button>
-        </div>
-      </CardContent>
-    </Card>
+            <div className="flex justify-end border-t pt-4">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => update(RESET_ALL)}
+                disabled={isDefaultAppearance(appearance)}
+              >
+                Reset appearance
+              </Button>
+            </div>
+          </>
+        );
+      }}
+    </SettingsSection>
   );
 }

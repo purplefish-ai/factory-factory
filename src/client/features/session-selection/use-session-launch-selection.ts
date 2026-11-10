@@ -1,6 +1,7 @@
 import { useCallback, useLayoutEffect, useRef, useState } from 'react';
 import { QUERY_RETRY } from '@/client/lib/query-options';
 import { trpc } from '@/client/lib/trpc';
+import { useUserSettings } from '@/client/lib/user-settings-queries';
 import { resolveEffectiveSessionProvider } from '@/lib/session-provider-selection';
 import type { ChatModelOption, ChatProvider } from '@/shared/chat-capabilities';
 import type { CodexAccountSummary } from '@/shared/codex-accounts';
@@ -284,11 +285,7 @@ export function useSessionLaunchSelection(
     onChange?: (snapshot: SessionLaunchSelectionSnapshot) => void;
   } = {}
 ): SessionLaunchSelection {
-  const {
-    data: settings,
-    error: settingsError,
-    refetch: refetchSettings,
-  } = trpc.userSettings.get.useQuery();
+  const { data: settings, error: settingsError, refetch: refetchSettings } = useUserSettings();
   const selection = useSessionLaunchSelectionState(
     scopeKey,
     settings && options.ready !== false

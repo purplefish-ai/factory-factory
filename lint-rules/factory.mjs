@@ -125,7 +125,7 @@ function isButtonIcon(node) {
 
 // tRPC React helpers that install query options or commit data for a key.
 // Invalidation, cancellation, reset and cache reads reuse installed options.
-const WORKSPACE_QUERY_CACHE_METHODS = new Set([
+const QUERY_CACHE_METHODS = new Set([
   'useQuery',
   'useSuspenseQuery',
   'useInfiniteQuery',
@@ -144,13 +144,19 @@ const WORKSPACE_QUERY_CACHE_METHODS = new Set([
   'setQueriesData',
 ]);
 
-/** `<any>.workspace.get` or `<any>.workspace.listForProject`. */
-function reconciledWorkspaceProcedure(node) {
-  const procedure = memberName(node);
-  return (procedure === 'get' || procedure === 'listForProject') &&
-    memberName(node.object) === 'workspace'
-    ? procedure
-    : undefined;
+// tRPC helpers that build a key from a procedure reference.
+const KEY_HELPERS = new Set(['getQueryKey', 'getMutationKey']);
+
+/** Whether `node` is `<any>.<router>.<procedure>` for a dotted `path`, matched from the end. */
+function isProcedure(node, path) {
+  let current = node;
+  for (const segment of path.split('.').toReversed()) {
+    if (memberName(current) !== segment) {
+      return false;
+    }
+    current = current.object;
+  }
+  return true;
 }
 
 function propertyKey(node) {
@@ -269,40 +275,80 @@ function isListedFile(context, paths) {
 }
 
 const rules = {
-  'workspace-query-owner': {
+  'query-owner': {
     meta: {
       schema: [
         {
           type: 'object',
           properties: {
-            owners: { type: 'array', items: { type: 'string', minLength: 1 } },
+            groups: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  procedures: { type: 'array', items: { type: 'string', minLength: 1 } },
+                  owners: {
+                    type: 'array',
+                    items: { type: 'string', minLength: 1 },
+                    minItems: 1,
+                  },
+                  // `cache`: only helpers that install options or write data.
+                  // `all`: every hook and cache helper, including mutations.
+                  helpers: { enum: ['cache', 'all'] },
+                  reason: { type: 'string', minLength: 1 },
+                },
+                required: ['procedures', 'owners', 'helpers', 'reason'],
+                additionalProperties: false,
+              },
+            },
           },
           additionalProperties: false,
         },
       ],
     },
     create(context) {
-      // React Query lets the latest fetch or observer replace a key's options,
-      // including the reconciler's commit hook (docs/architecture/workspace-state.md).
-      if (isListedFile(context, context.options[0]?.owners ?? [])) {
+      // Each group names procedures whose reads and writes must go through
+      // one owner module, e.g. so every workspace read installs the snapshot
+      // reconciler (docs/architecture/workspace-state.md).
+      const groups = (context.options[0]?.groups ?? []).filter(
+        (group) => !isListedFile(context, group.owners)
+      );
+      if (groups.length === 0) {
         return {};
       }
-      const report = (node, procedure) =>
+      const owningGroup = (node) => {
+        for (const group of groups) {
+          const procedure = group.procedures.find((path) => isProcedure(node, path));
+          if (procedure) {
+            return { group, procedure };
+          }
+        }
+        return undefined;
+      };
+      const report = (node, { group, procedure }) =>
         context.report({
           node,
-          message: `Use src/client/lib/workspace-queries.ts for workspace.${procedure}; plain tRPC reads and writes bypass the snapshot reconciler.`,
+          message: `Use ${group.owners[0]} for ${procedure}; ${group.reason}.`,
         });
       return {
         MemberExpression(node) {
-          const procedure = reconciledWorkspaceProcedure(node.object);
-          if (procedure && WORKSPACE_QUERY_CACHE_METHODS.has(memberName(node))) {
-            report(node, procedure);
+          const match = owningGroup(node.object);
+          if (
+            match &&
+            (match.group.helpers === 'all' || QUERY_CACHE_METHODS.has(memberName(node)))
+          ) {
+            report(node, match);
           }
         },
         CallExpression(node) {
-          const procedure = reconciledWorkspaceProcedure(node.arguments[0]);
-          if (procedure && isIdentifier(node.callee, 'getQueryKey')) {
-            report(node, procedure);
+          const match = node.arguments[0] && owningGroup(node.arguments[0]);
+          if (
+            match &&
+            node.callee.type === 'Identifier' &&
+            KEY_HELPERS.has(node.callee.name) &&
+            (match.group.helpers === 'all' || node.callee.name === 'getQueryKey')
+          ) {
+            report(node, match);
           }
         },
       };

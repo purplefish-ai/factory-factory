@@ -1,73 +1,44 @@
 // @vitest-environment jsdom
 
-import { createElement } from 'react';
+import { act, createElement } from 'react';
 import { flushSync } from 'react-dom';
-import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+  chooseOption,
+  createSettingsServer,
+  type RenderedSettings,
+  renderWithSettingsServer,
+  type SettingsServer,
+  type SettingsServerOptions,
+  stubRadixLayout,
+  waitForCheck,
+} from '@/client/lib/user-settings-queries.test-harness';
 import { AppearanceSettingsSection } from './AppearanceSettingsSection';
 
-const mocks = vi.hoisted(() => ({
-  updateSettingsMutate: vi.fn(),
-  pending: false,
-  mutationOptions: null as null | { onError?: (error: Error) => void },
-  setTheme: vi.fn(),
-  userSettings: {
-    appearanceColorScheme: 'factory',
-    appearanceBackgroundColor: null as string | null,
-    appearanceForegroundColor: null as string | null,
-    appearanceFontScale: 100,
-    appearanceFontSans: null as string | null,
-    appearanceFontMono: null as string | null,
-  },
-}));
+const mocks = vi.hoisted(() => ({ setTheme: vi.fn() }));
 
-vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
+vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() }, Toaster: () => null }));
 vi.mock('next-themes', () => ({
   useTheme: () => ({ theme: 'dark', resolvedTheme: 'dark', setTheme: mocks.setTheme }),
 }));
-vi.mock('@/client/lib/trpc', () => ({
-  trpc: {
-    useUtils: () => ({
-      userSettings: { get: { invalidate: vi.fn(), setData: vi.fn() } },
-    }),
-    userSettings: {
-      get: { useQuery: () => ({ data: mocks.userSettings, isLoading: false }) },
-      update: {
-        useMutation: (options: { onError?: (error: Error) => void }) => {
-          mocks.mutationOptions = options;
-          return { mutate: mocks.updateSettingsMutate, isPending: mocks.pending };
-        },
-      },
-    },
-  },
-}));
 
-let root: Root | null = null;
+let server: SettingsServer;
+let view: RenderedSettings | undefined;
 
-function render(): HTMLElement {
-  const container = document.createElement('div');
-  document.body.appendChild(container);
-  root = createRoot(container);
-  flushSync(() => {
-    root?.render(createElement(AppearanceSettingsSection));
-  });
-  return container;
+async function render(options: SettingsServerOptions = {}): Promise<HTMLElement> {
+  server = createSettingsServer(options);
+  view = await renderWithSettingsServer(createElement(AppearanceSettingsSection), server);
+  return view.container;
 }
+
+const updates = () =>
+  server.requests.filter(({ path }) => path === 'userSettings.update').map(({ input }) => input);
 
 function click(element: HTMLElement | null | undefined) {
   flushSync(() => {
     element?.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0 }));
     element?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
   });
-}
-
-function selectOption(container: HTMLElement, triggerId: string, optionText: string) {
-  click(container.querySelector<HTMLElement>(`#${triggerId}`));
-  const option = Array.from(document.body.querySelectorAll<HTMLElement>('[role="option"]')).find(
-    (candidate) => candidate.textContent === optionText
-  );
-  expect(option, `option ${optionText}`).toBeDefined();
-  click(option);
 }
 
 function typeInto(input: HTMLInputElement | null, value: string) {
@@ -99,38 +70,23 @@ function buttonNamed(scope: ParentNode, name: string): HTMLButtonElement | undef
   return Array.from(scope.querySelectorAll('button')).find((button) => button.textContent === name);
 }
 
-class MockResizeObserver {
-  observe = vi.fn();
-  unobserve = vi.fn();
-  disconnect = vi.fn();
-}
-
 beforeEach(() => {
   vi.clearAllMocks();
-  // Radix Slider measures its thumb with ResizeObserver, which jsdom lacks.
-  vi.stubGlobal('ResizeObserver', MockResizeObserver);
+  stubRadixLayout();
   // jsdom has no canvas, which the rendered-color probe needs; it falls back.
   vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null);
-  mocks.mutationOptions = null;
-  mocks.pending = false;
-  mocks.userSettings.appearanceColorScheme = 'factory';
-  mocks.userSettings.appearanceBackgroundColor = null;
-  mocks.userSettings.appearanceForegroundColor = null;
-  mocks.userSettings.appearanceFontScale = 100;
-  mocks.userSettings.appearanceFontSans = null;
-  mocks.userSettings.appearanceFontMono = null;
 });
 
-afterEach(() => {
-  root?.unmount();
-  root = null;
-  document.body.innerHTML = '';
+afterEach(async () => {
+  await view?.unmount();
+  view = undefined;
+  vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
 
 describe('AppearanceSettingsSection', () => {
-  it('labels the font size slider thumb and announces its percentage', () => {
-    const container = render();
+  it('labels the font size slider thumb and announces its percentage', async () => {
+    const container = await render();
     const thumb = container.querySelector('[role="slider"]');
     const label = document.getElementById(thumb?.getAttribute('aria-labelledby') ?? '');
 
@@ -139,57 +95,51 @@ describe('AppearanceSettingsSection', () => {
     expect(thumb?.getAttribute('aria-valuetext')).toBe('100%');
   });
 
-  it('saves a chosen color scheme', () => {
-    const container = render();
+  it('saves a chosen color scheme', async () => {
+    const container = await render();
     expect(container.querySelector('#appearance-color-scheme')?.textContent).toContain('Factory');
 
-    selectOption(container, 'appearance-color-scheme', 'GitHub');
+    await chooseOption(container, 'appearance-color-scheme', 'GitHub');
 
-    expect(mocks.updateSettingsMutate).toHaveBeenCalledWith({ appearanceColorScheme: 'github' });
+    expect(container.querySelector('#appearance-color-scheme')?.textContent).toContain('GitHub');
+    await waitForCheck(() => expect(updates()).toEqual([{ appearanceColorScheme: 'github' }]));
   });
 
-  it('switches light and dark mode through next-themes', () => {
-    const container = render();
-    selectOption(container, 'appearance-mode', 'Light');
+  it('switches light and dark mode through next-themes', async () => {
+    const container = await render();
+    await chooseOption(container, 'appearance-mode', 'Light');
     expect(mocks.setTheme).toHaveBeenCalledWith('light');
-    expect(mocks.updateSettingsMutate).not.toHaveBeenCalled();
+    expect(updates()).toEqual([]);
   });
 
-  it('commits a background color on blur and clears it with Reset', () => {
-    const container = render();
+  it('commits a background color on blur and clears it with Reset', async () => {
+    const container = await render();
     const picker = container.querySelector<HTMLInputElement>('#appearance-background-color');
     expect(picker?.value).toBe('#0a0a0a');
 
     typeInto(picker, '#123456');
-    expect(mocks.updateSettingsMutate).toHaveBeenCalledWith({
-      appearanceBackgroundColor: '#123456',
-    });
+    const field = picker?.closest('.space-y-2') as HTMLElement;
+    await waitForCheck(() => expect(field.textContent).toContain('#123456'));
+    expect(updates()).toEqual([{ appearanceBackgroundColor: '#123456' }]);
 
-    root?.unmount();
-    document.body.innerHTML = '';
-    mocks.updateSettingsMutate.mockClear();
-    mocks.userSettings.appearanceBackgroundColor = '#123456';
-    const rerendered = render();
-    const field = rerendered
-      .querySelector('#appearance-background-color')
-      ?.closest('.space-y-1\\.5') as HTMLElement;
-    expect(field.textContent).toContain('#123456');
     click(buttonNamed(field, 'Reset'));
-    expect(mocks.updateSettingsMutate).toHaveBeenCalledWith({ appearanceBackgroundColor: null });
+    await waitForCheck(() => expect(field.textContent).toContain('From color scheme'));
+    expect(updates()).toEqual([
+      { appearanceBackgroundColor: '#123456' },
+      { appearanceBackgroundColor: null },
+    ]);
   });
 
-  it('saves the placeholder color when it is picked deliberately', () => {
-    const container = render();
+  it('saves the placeholder color when it is picked deliberately', async () => {
+    const container = await render();
     const picker = container.querySelector<HTMLInputElement>('#appearance-background-color');
     expect(picker?.value).toBe('#0a0a0a');
     pickColors(picker, ['#123456', '#0a0a0a']);
-    expect(mocks.updateSettingsMutate).toHaveBeenCalledWith({
-      appearanceBackgroundColor: '#0a0a0a',
-    });
+    await waitForCheck(() => expect(updates()).toEqual([{ appearanceBackgroundColor: '#0a0a0a' }]));
   });
 
-  it('keeps an in-progress pick when the placeholder changes underneath it', () => {
-    const container = render();
+  it('keeps an in-progress pick when the placeholder changes underneath it', async () => {
+    const container = await render();
     const picker = container.querySelector<HTMLInputElement>('#appearance-background-color');
     const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
     flushSync(() => {
@@ -198,81 +148,79 @@ describe('AppearanceSettingsSection', () => {
     });
 
     // The painted scheme color is re-read whenever <html> changes.
-    flushSync(() => {
+    await act(() => {
       document.documentElement.classList.toggle('dark');
     });
 
     flushSync(() => {
       picker?.dispatchEvent(new FocusEvent('focusout', { bubbles: true }));
     });
-    expect(mocks.updateSettingsMutate).toHaveBeenCalledWith({
-      appearanceBackgroundColor: '#123456',
-    });
+    await waitForCheck(() => expect(updates()).toEqual([{ appearanceBackgroundColor: '#123456' }]));
   });
 
-  it('does not save when the picker is left on its placeholder', () => {
-    const container = render();
+  it('does not save when the picker is left on its placeholder', async () => {
+    const container = await render();
     const picker = container.querySelector<HTMLInputElement>('#appearance-foreground-color');
     flushSync(() => {
       picker?.dispatchEvent(new FocusEvent('focusout', { bubbles: true }));
     });
-    expect(mocks.updateSettingsMutate).not.toHaveBeenCalled();
+    expect(updates()).toEqual([]);
   });
 
-  it('resets the font scale to the default', () => {
-    mocks.userSettings.appearanceFontScale = 125;
-    const container = render();
+  it('resets the font scale to the default', async () => {
+    const container = await render({ settings: { appearanceFontScale: 125 } });
     expect(container.textContent).toContain('125%');
 
-    const field = container
-      .querySelector('#appearance-font-scale')
-      ?.closest('.space-y-1\\.5') as HTMLElement;
-    click(buttonNamed(field, 'Reset'));
+    const field = container.querySelector('#appearance-font-scale')?.closest('.space-y-2');
+    click(buttonNamed(field as HTMLElement, 'Reset'));
 
-    expect(mocks.updateSettingsMutate).toHaveBeenCalledWith({ appearanceFontScale: 100 });
+    await waitForCheck(() => expect(updates()).toEqual([{ appearanceFontScale: 100 }]));
+    expect(container.textContent).toContain('100%');
   });
 
-  it('saves a preset monospace font', () => {
-    const container = render();
-    selectOption(container, 'appearance-font-mono', 'IBM Plex Mono');
-    expect(mocks.updateSettingsMutate).toHaveBeenCalledWith({
-      appearanceFontMono: '"IBM Plex Mono", ui-monospace, monospace',
-    });
+  it('saves a preset monospace font', async () => {
+    const container = await render();
+    await chooseOption(container, 'appearance-font-mono', 'IBM Plex Mono');
+    await waitForCheck(() =>
+      expect(updates()).toEqual([
+        { appearanceFontMono: '"IBM Plex Mono", ui-monospace, monospace' },
+      ])
+    );
   });
 
-  it('saves a valid custom font and rejects an invalid one', () => {
-    const container = render();
-    selectOption(container, 'appearance-font-sans', 'Custom…');
-    expect(mocks.updateSettingsMutate).not.toHaveBeenCalled();
+  it('saves a valid custom font and rejects an invalid one', async () => {
+    const container = await render();
+    await chooseOption(container, 'appearance-font-sans', 'Custom…');
+    expect(updates()).toEqual([]);
 
     const input = container.querySelector<HTMLInputElement>('#appearance-font-sans-custom');
     expect(input).not.toBeNull();
 
     typeInto(input, 'OpenDyslexic, sans-serif');
-    expect(mocks.updateSettingsMutate).not.toHaveBeenCalled();
+    expect(updates()).toEqual([]);
     flushSync(() =>
       container
         .querySelector<HTMLButtonElement>('button[aria-label="Save interface font"]')
         ?.click()
     );
-    expect(mocks.updateSettingsMutate).toHaveBeenCalledWith({
-      appearanceFontSans: 'OpenDyslexic, sans-serif',
-    });
+    await waitForCheck(() =>
+      expect(updates()).toEqual([{ appearanceFontSans: 'OpenDyslexic, sans-serif' }])
+    );
 
-    mocks.updateSettingsMutate.mockClear();
     typeInto(input, 'Inter; background: url(x)');
     flushSync(() =>
       container
         .querySelector<HTMLButtonElement>('button[aria-label="Save interface font"]')
         ?.click()
     );
-    expect(mocks.updateSettingsMutate).not.toHaveBeenCalled();
+    expect(updates()).toHaveLength(1);
     expect(container.querySelector('[role="alert"]')?.textContent).toContain('Font family');
   });
 
-  it('retains a custom-font draft after a save failure for retry', () => {
-    const container = render();
-    selectOption(container, 'appearance-font-sans', 'Custom…');
+  it('retains a custom-font draft after a save failure for retry', async () => {
+    const container = await render();
+    server.failUpdates = 'offline';
+    await chooseOption(container, 'appearance-font-sans', 'Custom…');
     const input = container.querySelector<HTMLInputElement>('#appearance-font-sans-custom');
     typeInto(input, 'OpenDyslexic, sans-serif');
     flushSync(() =>
@@ -280,86 +228,98 @@ describe('AppearanceSettingsSection', () => {
         .querySelector<HTMLButtonElement>('button[aria-label="Save interface font"]')
         ?.click()
     );
-    expect(mocks.updateSettingsMutate).toHaveBeenCalledWith({
-      appearanceFontSans: 'OpenDyslexic, sans-serif',
-    });
-    flushSync(() => mocks.mutationOptions?.onError?.(new Error('offline')));
+    await waitForCheck(() =>
+      expect(updates()).toEqual([{ appearanceFontSans: 'OpenDyslexic, sans-serif' }])
+    );
+    await waitForCheck(() => expect(container.querySelector('[aria-label="Saving"]')).toBeNull());
     expect(container.querySelector<HTMLInputElement>('#appearance-font-sans-custom')?.value).toBe(
       'OpenDyslexic, sans-serif'
     );
   });
 
-  it('does not label a custom font as saving when another appearance change is pending', () => {
-    mocks.userSettings.appearanceFontSans = 'OpenDyslexic, sans-serif';
-    mocks.pending = true;
-    const container = render();
+  it('only marks the setting being saved as saving', async () => {
+    const container = await render({
+      settings: { appearanceFontSans: 'OpenDyslexic, sans-serif' },
+      hold: ['userSettings.update'],
+    });
+    await chooseOption(container, 'appearance-color-scheme', 'GitHub');
+    await waitForCheck(() => expect(server.held).toHaveLength(1));
     const save = container.querySelector<HTMLButtonElement>(
       'button[aria-label="Save interface font"]'
     );
-    expect(save?.disabled).toBe(true);
+    expect(save?.disabled).toBe(false);
     expect(save?.textContent).toBe('Save');
+    const saving = container.querySelectorAll('[aria-label="Saving"]');
+    expect(saving).toHaveLength(1);
+    expect(saving[0]?.closest('.space-y-2')?.textContent).toContain('Color scheme');
   });
 
-  it('returns the font selector to the saved font when the save fails', () => {
-    const container = render();
-    selectOption(container, 'appearance-font-mono', 'IBM Plex Mono');
+  it('returns the font selector to the saved font when the save fails', async () => {
+    const container = await render({ hold: ['userSettings.update'] });
+    await chooseOption(container, 'appearance-font-mono', 'IBM Plex Mono');
     expect(container.querySelector('#appearance-font-mono')?.textContent).toContain(
       'IBM Plex Mono'
     );
 
-    flushSync(() => {
-      mocks.mutationOptions?.onError?.(new Error('offline'));
-    });
+    await waitForCheck(() => expect(server.held).toHaveLength(1));
+    await act(async () => server.held[0]?.reject('offline'));
 
-    expect(container.querySelector('#appearance-font-mono')?.textContent).toContain(
-      'Geist Mono (default)'
+    await waitForCheck(() =>
+      expect(container.querySelector('#appearance-font-mono')?.textContent).toContain(
+        'Geist Mono (default)'
+      )
     );
   });
 
-  it('returns the font scale draft to the saved value when the save fails', () => {
-    const container = render();
+  it('returns the font scale to the saved value when the save fails', async () => {
+    const container = await render({ hold: ['userSettings.update'] });
     const slider = container.querySelector<HTMLElement>('#appearance-font-scale [role="slider"]');
-    flushSync(() => {
+    await act(() => {
       slider?.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
     });
     expect(container.textContent).toContain('105%');
 
-    flushSync(() => {
-      mocks.mutationOptions?.onError?.(new Error('offline'));
-    });
+    await waitForCheck(() => expect(server.held).toHaveLength(1));
+    await act(async () => server.held[0]?.reject('offline'));
 
-    expect(container.textContent).toContain('100%');
+    await waitForCheck(() => expect(container.textContent).toContain('100%'));
     expect(container.textContent).not.toContain('105%');
   });
 
-  it('shows a saved custom font as Custom with its value', () => {
-    mocks.userSettings.appearanceFontMono = 'Fira Code';
-    const container = render();
+  it('shows a saved custom font as Custom with its value', async () => {
+    const container = await render({ settings: { appearanceFontMono: 'Fira Code' } });
     expect(container.querySelector('#appearance-font-mono')?.textContent).toContain('Custom');
     expect(container.querySelector<HTMLInputElement>('#appearance-font-mono-custom')?.value).toBe(
       'Fira Code'
     );
   });
 
-  it('resets every appearance preference at once', () => {
-    mocks.userSettings.appearanceColorScheme = 'solarized';
-    mocks.userSettings.appearanceFontScale = 150;
-    const container = render();
+  it('resets every appearance preference at once', async () => {
+    const container = await render({
+      settings: { appearanceColorScheme: 'solarized', appearanceFontScale: 150 },
+    });
 
     click(buttonNamed(container, 'Reset appearance'));
 
-    expect(mocks.updateSettingsMutate).toHaveBeenCalledWith({
-      appearanceColorScheme: 'factory',
-      appearanceBackgroundColor: null,
-      appearanceForegroundColor: null,
-      appearanceFontScale: 100,
-      appearanceFontSans: null,
-      appearanceFontMono: null,
-    });
+    await waitForCheck(() =>
+      expect(updates()).toEqual([
+        {
+          appearanceColorScheme: 'factory',
+          appearanceBackgroundColor: null,
+          appearanceForegroundColor: null,
+          appearanceFontScale: 100,
+          appearanceFontSans: null,
+          appearanceFontMono: null,
+        },
+      ])
+    );
+    await waitForCheck(() =>
+      expect(buttonNamed(container, 'Reset appearance')?.disabled).toBe(true)
+    );
   });
 
-  it('disables Reset appearance while everything is default', () => {
-    const container = render();
+  it('disables Reset appearance while everything is default', async () => {
+    const container = await render();
     expect(buttonNamed(container, 'Reset appearance')?.disabled).toBe(true);
   });
 });

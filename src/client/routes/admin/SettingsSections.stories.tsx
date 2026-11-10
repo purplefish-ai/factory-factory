@@ -1,9 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { TRPCClientError } from '@trpc/client';
-import { observable } from '@trpc/server/observable';
 import { ThemeProvider } from 'next-themes';
 import { type ReactNode, useState } from 'react';
+import { toast } from 'sonner';
 import { expect, fn, userEvent, waitFor, within } from 'storybook/test';
 import { AppearanceProvider } from '@/client/components/appearance-provider';
 import { ProviderCliWarning } from '@/client/components/provider-cli-warning';
@@ -14,7 +12,11 @@ import {
   COLOR_SCHEME_ATTRIBUTE,
 } from '@/client/lib/appearance';
 import { BROWSER_NOTIFICATIONS_KEY } from '@/client/lib/browser-notifications';
-import { trpc } from '@/client/lib/trpc';
+import {
+  STORY_TRPC_PENDING,
+  StoryTrpcProvider,
+  type StoryTrpcHandlers,
+} from '@/client/lib/storybook-trpc';
 import { DEFAULT_APPEARANCE } from '@/shared/appearance';
 import { DEFAULT_TICKET_DISPATCH_PROMPT } from '@/shared/issue-start-prompt';
 import type { FactoryConfig } from '@/shared/schemas/factory-config.schema';
@@ -58,13 +60,14 @@ const defaultSettings = {
   appearanceFontMono: null as string | null,
 };
 
-// A local transport keeps these interactive examples independent of a running backend.
+// Stateful handlers keep these interactive examples independent of a running backend.
 function SettingsStoryProvider({
   children,
   settings: initialSettings = {},
   loading = false,
   refreshDelayMs = 0,
   failRequests = [],
+  pendingRequests = [],
   factoryConfig = null,
 }: {
   children: ReactNode;
@@ -72,12 +75,11 @@ function SettingsStoryProvider({
   loading?: boolean;
   refreshDelayMs?: number;
   failRequests?: string[];
+  /** Paths that never answer, to show saving states. */
+  pendingRequests?: string[];
   factoryConfig?: FactoryConfig | null;
 }) {
-  const [queryClient] = useState(
-    () => new QueryClient({ defaultOptions: { queries: { retry: false } } })
-  );
-  const [client] = useState(() => {
+  const [handlers] = useState(() => {
     let settings = { ...defaultSettings, ...initialSettings };
     let orphanedWorktrees = [
       {
@@ -91,9 +93,12 @@ function SettingsStoryProvider({
         path: '/Users/me/factory-factory/worktrees/factory-factory/workspace-def456',
       },
     ];
-    const responses: Record<string, (input: unknown) => unknown> = {
+    const responses: StoryTrpcHandlers = {
       'codexAccounts.list': () => [],
-      'userSettings.get': () => settings,
+      'userSettings.get': () =>
+        refreshDelayMs > 0
+          ? new Promise((resolve) => setTimeout(() => resolve(settings), refreshDelayMs))
+          : settings,
       'userSettings.update': (input) => {
         settings = { ...settings, ...(typeof input === 'object' ? input : {}) };
         return settings;
@@ -153,48 +158,27 @@ function SettingsStoryProvider({
         },
       }),
     };
-    const dispatchResponse = (path: string, send: () => void) => {
-      if (path === 'userSettings.get' && refreshDelayMs > 0) {
-        const timer = setTimeout(send, refreshDelayMs);
-        return () => clearTimeout(timer);
-      }
-      send();
-      return;
-    };
-    return trpc.createClient({
-      links: [
-        () =>
-          ({ op }) =>
-            observable((observer) => {
-              onRequest(op.path, op.input);
-              if (loading) {
-                return;
-              }
-              if (failRequests.includes(op.path)) {
-                observer.error(new TRPCClientError(`Request rejected: ${op.path}`));
-                return;
-              }
-              const respond = responses[op.path];
-              if (!respond) {
-                observer.error(new TRPCClientError(`No story fixture for ${op.path}`));
-                return;
-              }
-              const send = () => {
-                observer.next({ result: { data: respond(op.input) } });
-                observer.complete();
-              };
-              return dispatchResponse(op.path, send);
-            }),
-      ],
-    });
+    const paths = new Set([...Object.keys(responses), ...failRequests]);
+    return Object.fromEntries(
+      [...paths].map((path) => [
+        path,
+        (input: unknown) => {
+          if (loading || pendingRequests.includes(path)) {
+            return STORY_TRPC_PENDING;
+          }
+          if (failRequests.includes(path)) {
+            throw new Error(`Request rejected: ${path}`);
+          }
+          return responses[path]?.(input);
+        },
+      ])
+    );
   });
   return (
-    <trpc.Provider client={client} queryClient={queryClient}>
-      <QueryClientProvider client={queryClient}>
-        {/* Toasts render in the app Toaster that .storybook/preview.ts mounts. */}
-        <div className="mx-auto w-full max-w-3xl">{children}</div>
-      </QueryClientProvider>
-    </trpc.Provider>
+    <StoryTrpcProvider handlers={handlers} onRequest={onRequest}>
+      {/* Toasts render in the app Toaster that .storybook/preview.ts mounts. */}
+      <div className="mx-auto w-full max-w-3xl">{children}</div>
+    </StoryTrpcProvider>
   );
 }
 
@@ -204,6 +188,9 @@ const meta = {
   tags: ['autodocs'],
   beforeEach: () => {
     onRequest.mockClear();
+    // Settings save failures share one toast id; start each story without an
+    // earlier story's toast so a new failure shows a fresh toast.
+    toast.dismiss();
   },
 } satisfies Meta;
 export default meta;
@@ -642,9 +629,8 @@ export const RejectedChatModel: Story = {
       })
     );
     await waitFor(() => expect(model).toHaveTextContent('Sonnet 5'));
-    await within(document.body).findByText(
-      "Couldn't update chat defaults. Request rejected: userSettings.update"
-    );
+    await within(document.body).findByText("Couldn't save settings.");
+    await within(document.body).findByText('Request rejected: userSettings.update');
   },
 };
 
@@ -812,9 +798,7 @@ export const RejectedChildWorkspaces: Story = {
         childWorkspacesEnabled: false,
       })
     );
-    await within(canvasElement.ownerDocument.body).findByText(
-      "Couldn't update settings. Request rejected: userSettings.update"
-    );
+    await within(canvasElement.ownerDocument.body).findByText("Couldn't save settings.");
     await expect(toggle).toBeChecked();
   },
 };
@@ -827,7 +811,7 @@ export const FailedChildWorkspaceSettings: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await expect(await canvas.findByRole('alert')).toHaveTextContent(
-      "Couldn't load child workspace settings."
+      "Couldn't load child workspace settings"
     );
     await expect(canvas.queryByRole('switch')).not.toBeInTheDocument();
   },
@@ -927,14 +911,47 @@ export const CustomFontSaveFailure: Story = {
         appearanceFontSans: 'OpenDyslexic, sans-serif',
       })
     );
-    await expect(
-      await within(document.body).findByText(/Couldn't update appearance/)
-    ).toBeVisible();
+    const toastTitle = await within(document.body).findByText("Couldn't save settings.");
+    // The toast fades in after it mounts.
+    await waitFor(() => expect(toastTitle).toBeVisible());
     await waitFor(() =>
       expect(canvas.getByRole('button', { name: 'Save interface font' })).toBeEnabled()
     );
     await expect(canvas.getByRole('textbox', { name: 'Interface font family' })).toHaveValue(
       'OpenDyslexic, sans-serif'
     );
+  },
+};
+
+export const FailedRatchetSettings: Story = {
+  render: () => (
+    <SettingsStoryProvider failRequests={['userSettings.get']}>
+      <RatchetSettingsSection />
+    </SettingsStoryProvider>
+  ),
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(await canvas.findByRole('alert')).toHaveTextContent(
+      "Couldn't load PR update settings"
+    );
+    await expect(canvas.getByRole('button', { name: 'Retry' })).toBeEnabled();
+    await expect(canvas.queryByRole('switch')).not.toBeInTheDocument();
+    await expect(canvas.queryByRole('combobox')).not.toBeInTheDocument();
+  },
+};
+
+export const SavingChildWorkspaces: Story = {
+  render: () => (
+    <SettingsStoryProvider pendingRequests={['userSettings.update']}>
+      <ChildWorkspaceSettingsSection />
+    </SettingsStoryProvider>
+  ),
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const toggle = await canvas.findByRole('switch', { name: 'Enable child workspaces' });
+    await userEvent.click(toggle);
+    await expect(toggle).not.toBeChecked();
+    await expect(toggle).toBeEnabled();
+    await expect(await canvas.findByRole('status', { name: 'Saving' })).toBeVisible();
   },
 };

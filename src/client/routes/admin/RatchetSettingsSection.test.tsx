@@ -1,112 +1,108 @@
 // @vitest-environment jsdom
 
-import { createElement } from 'react';
-import { flushSync } from 'react-dom';
-import { createRoot } from 'react-dom/client';
-import { toast } from 'sonner';
+import { act, createElement } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+  chooseOption,
+  createSettingsServer,
+  type RenderedSettings,
+  renderWithSettingsServer,
+  type SettingsServer,
+  stubRadixLayout,
+  waitForCheck,
+} from '@/client/lib/user-settings-queries.test-harness';
 import { RatchetSettingsSection } from './RatchetSettingsSection';
 
-const mocks = vi.hoisted(() => ({
-  updateSettingsMutate: vi.fn(),
-  onSaved: (() => undefined) as () => void,
-  invalidate: vi.fn().mockResolvedValue(undefined),
-  userSettings: {
-    ratchetEnabled: false,
-    ratchetReplyToPrComments: true,
-    ratchetReviewTriggerMode: 'CHANGES_REQUESTED' as 'CHANGES_REQUESTED' | 'ALL_REVIEW_FEEDBACK',
-  },
-}));
+const toast = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn() }));
+vi.mock('sonner', () => ({ toast, Toaster: () => null }));
+vi.mock('@/client/features/workspace', () => ({ RatchetWrenchIcon: () => createElement('span') }));
 
-vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
-vi.mock('@/client/lib/trpc', () => ({
-  trpc: {
-    useUtils: () => ({
-      userSettings: { get: { invalidate: mocks.invalidate } },
-    }),
-    userSettings: {
-      get: { useQuery: () => ({ data: mocks.userSettings, isLoading: false }) },
-      update: {
-        useMutation: (options: { onSuccess: () => void }) => {
-          mocks.onSaved = options.onSuccess;
-          return { mutate: mocks.updateSettingsMutate, isPending: false };
-        },
-      },
+let server: SettingsServer;
+let view: RenderedSettings | undefined;
+
+async function render(options: Parameters<typeof createSettingsServer>[0] = {}) {
+  server = createSettingsServer({
+    ...options,
+    handlers: {
+      'admin.triggerRatchetCheck': () => ({ checked: 1, stateChanges: 0, actionsTriggered: 0 }),
     },
-    admin: { triggerRatchetCheck: { useMutation: () => ({ mutate: vi.fn(), isPending: false }) } },
-  },
-}));
+  });
+  view = await renderWithSettingsServer(createElement(RatchetSettingsSection), server);
+  return view.container;
+}
+
+const updates = () =>
+  server.requests.filter(({ path }) => path === 'userSettings.update').map(({ input }) => input);
 
 beforeEach(() => {
   vi.clearAllMocks();
-  mocks.userSettings.ratchetReviewTriggerMode = 'CHANGES_REQUESTED';
+  stubRadixLayout();
 });
-afterEach(() => {
-  document.body.innerHTML = '';
+afterEach(async () => {
+  await view?.unmount();
+  view = undefined;
+  vi.unstubAllGlobals();
 });
-vi.mock('@/client/features/workspace', () => ({ RatchetWrenchIcon: () => createElement('span') }));
 
 describe('RatchetSettingsSection', () => {
-  it('refreshes autosaved settings without a success toast', () => {
-    const root = createRoot(document.createElement('div'));
-    try {
-      flushSync(() => root.render(createElement(RatchetSettingsSection)));
-      mocks.onSaved();
-      expect(mocks.invalidate).toHaveBeenCalledOnce();
-      expect(toast.success).not.toHaveBeenCalled();
-    } finally {
-      root.unmount();
-    }
+  it('shows the load error with Retry instead of editable defaults', async () => {
+    server = createSettingsServer({ hold: ['userSettings.get'] });
+    view = await renderWithSettingsServer(createElement(RatchetSettingsSection), server);
+    await act(async () => server.held[0]?.reject('Database is locked'));
+    const container = view.container;
+    await waitForCheck(() =>
+      expect(container.querySelector('[role="alert"]')?.textContent).toContain(
+        "Couldn't load PR update settings"
+      )
+    );
+    expect(container.textContent).toContain('Database is locked');
+    expect(container.querySelector('[role="switch"]')).toBeNull();
+    expect(container.querySelector('#ratchet-review-trigger')).toBeNull();
+
+    const retry = Array.from(container.querySelectorAll('button')).find(
+      (button) => button.textContent === 'Retry'
+    );
+    await act(async () => retry?.click());
+    await act(async () => server.held[1]?.resolve({ ...server.settings, ratchetEnabled: true }));
+    await waitForCheck(() =>
+      expect(container.querySelector('#ratchet-enabled')?.getAttribute('aria-checked')).toBe('true')
+    );
   });
 
-  it('keeps Ratchet settings without auto-iteration permission controls', () => {
-    const container = document.createElement('div');
-    document.body.appendChild(container);
-    const root = createRoot(container);
-    try {
-      flushSync(() => root.render(createElement(RatchetSettingsSection)));
-      expect(container.textContent).toContain('Review feedback trigger');
-      expect(container.textContent).not.toMatch(/auto.iteration/i);
-      expect(container.querySelector('#auto-iteration-permissions')).toBeNull();
-    } finally {
-      root.unmount();
-    }
+  it('flips a switch at once and shows it saving until the server answers', async () => {
+    const container = await render({ hold: ['userSettings.update'] });
+    const toggle = container.querySelector<HTMLButtonElement>('#ratchet-enabled');
+    expect(toggle?.getAttribute('aria-checked')).toBe('false');
+
+    await act(async () => toggle?.click());
+    await waitForCheck(() => expect(toggle?.getAttribute('aria-checked')).toBe('true'));
+    expect(toggle?.disabled).toBe(false);
+    expect(container.querySelector('[aria-label="Saving"]')).not.toBeNull();
+    expect(updates()).toEqual([{ ratchetEnabled: true }]);
+
+    await act(async () => server.held[0]?.respond());
+    await waitForCheck(() => expect(container.querySelector('[aria-label="Saving"]')).toBeNull());
+    expect(toggle?.getAttribute('aria-checked')).toBe('true');
+    expect(toast.success).not.toHaveBeenCalled();
   });
 
-  it('updates the Ratchet review feedback trigger mode', () => {
-    const container = document.createElement('div');
-    document.body.appendChild(container);
-    const root = createRoot(container);
-
-    flushSync(() => {
-      root.render(createElement(RatchetSettingsSection));
-    });
-
+  it('keeps Ratchet settings without auto-iteration permission controls', async () => {
+    const container = await render();
     expect(container.textContent).toContain('Review feedback trigger');
-    const trigger = container.querySelector<HTMLElement>('#ratchet-review-trigger');
+    expect(container.textContent).not.toMatch(/auto.iteration/i);
+    expect(container.querySelector('#auto-iteration-permissions')).toBeNull();
+  });
+
+  it('updates the Ratchet review feedback trigger mode', async () => {
+    const container = await render();
+    const trigger = container.querySelector('#ratchet-review-trigger');
     expect(trigger?.textContent).toContain('Changes requested and unresolved threads');
 
-    flushSync(() => {
-      trigger?.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0 }));
-      trigger?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    });
+    await chooseOption(container, 'ratchet-review-trigger', 'All review feedback');
 
-    // Radix portals SelectContent into document.body, outside the render container.
-    const listbox = document.body.querySelector<HTMLElement>('[role="listbox"]');
-    const broadOption = Array.from(
-      listbox?.querySelectorAll<HTMLElement>('[role="option"]') ?? []
-    ).find((option) => option.textContent?.includes('All review feedback'));
-    expect(broadOption).toBeDefined();
-
-    flushSync(() => {
-      broadOption?.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0 }));
-      broadOption?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    });
-
-    expect(mocks.updateSettingsMutate).toHaveBeenCalledWith({
-      ratchetReviewTriggerMode: 'ALL_REVIEW_FEEDBACK',
-    });
-
-    root.unmount();
+    await waitForCheck(() =>
+      expect(updates()).toEqual([{ ratchetReviewTriggerMode: 'ALL_REVIEW_FEEDBACK' }])
+    );
+    expect(trigger?.textContent).toContain('All review feedback');
   });
 });

@@ -21,6 +21,7 @@ import { runInBackground } from '@/client/lib/background-task';
 import { setPendingWorkspace } from '@/client/lib/pending-workspace';
 import type { AppRouter } from '@/client/lib/trpc';
 import { trpc } from '@/client/lib/trpc';
+import { useUserSettings } from '@/client/lib/user-settings-queries';
 import {
   seedCreatedWorkspaceDetail,
   removeWorkspaceFromProjectWorkspaceCache,
@@ -184,7 +185,7 @@ export function InlineWorkspaceForm({
 }: InlineWorkspaceFormProps) {
   const utils = trpc.useUtils();
   const queryClient = useQueryClient();
-  const { data: userSettings, isLoading: isLoadingSettings } = trpc.userSettings.get.useQuery();
+  const { data: userSettings, isLoading: isLoadingSettings } = useUserSettings();
 
   const instructionsId = useId();
   const textareaRef = useRef<HTMLTextAreaElement>(null);

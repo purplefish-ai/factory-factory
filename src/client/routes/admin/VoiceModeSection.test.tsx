@@ -12,8 +12,17 @@ vi.mock('@/client/lib/trpc', () => ({
     voice: {
       getConfig: {
         useQuery: () => ({
-          data: { enabled: true, hasApiKey: true, ttsSpeed: 1, ttsModel: 'flux-haley-en' },
-          isLoading: false,
+          data: {
+            enabled: true,
+            hasApiKey: true,
+            ttsSpeed: 1,
+            ttsModel: 'flux-haley-en',
+            utteranceEndMs: 1000,
+            bargeInSustainedMs: 16,
+          },
+          error: null,
+          isFetching: false,
+          refetch: vi.fn(),
         }),
       },
       updateConfig: { useMutation: () => ({ mutate: mocks.mutate, isPending: false }) },

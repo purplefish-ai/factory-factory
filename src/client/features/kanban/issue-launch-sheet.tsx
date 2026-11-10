@@ -7,6 +7,7 @@ import { RatchetToggleButton } from '@/client/features/workspace';
 import { runInBackground } from '@/client/lib/background-task';
 import type { NormalizedIssue } from '@/client/lib/issue-normalization';
 import { trpc } from '@/client/lib/trpc';
+import { useUserSettings } from '@/client/lib/user-settings-queries';
 import { seedCreatedWorkspaceDetail } from '@/client/lib/workspace-cache-helpers';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
@@ -51,7 +52,7 @@ export function IssueLaunchSheet({
 }: IssueLaunchSheetProps) {
   const utils = trpc.useUtils();
   const queryClient = useQueryClient();
-  const { data: userSettings, isLoading: isLoadingSettings } = trpc.userSettings.get.useQuery();
+  const { data: userSettings, isLoading: isLoadingSettings } = useUserSettings();
   const promptPreview = useMemo(
     () => buildIssueStartPrompt({ url: issue.url, prompt: userSettings?.ticketDispatchPrompt }),
     [issue.url, userSettings?.ticketDispatchPrompt]
