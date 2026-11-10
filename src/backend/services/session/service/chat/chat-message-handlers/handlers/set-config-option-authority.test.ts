@@ -3,7 +3,7 @@ import {
   gate,
   setupAuthority,
   settleConfig,
-} from '@/backend/services/session/service/lifecycle/session-config-authority.test-helpers';
+} from '@/backend/services/session/service/config/session-config-authority.test-helpers';
 import { createSetConfigOptionHandler } from './set-config-option.handler';
 
 vi.mock('@/backend/services/settings', () => ({ userSettingsService: {} }));

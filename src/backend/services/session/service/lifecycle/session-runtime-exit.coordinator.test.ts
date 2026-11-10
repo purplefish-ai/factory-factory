@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { sessionBackgroundDeliveryService } from '@/backend/services/session/service/delivery/session-background-delivery.service';
 import { SessionStatus } from '@/shared/core';
-import { sessionBackgroundDeliveryService } from './session-background-delivery.service';
 import { createLifecycleTestSession } from './session-lifecycle.test-helpers';
 import { SessionRuntimeExitCoordinator } from './session-runtime-exit.coordinator';
 import { registerSessionRuntimeParticipants, SessionScope } from './session-scope';

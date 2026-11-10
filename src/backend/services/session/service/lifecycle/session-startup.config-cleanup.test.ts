@@ -1,6 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createTestProcessHandle } from '@/backend/services/session/service/acp/acp-runtime-manager.test-helpers';
-import { gate, settleConfig } from './session-config-authority.test-helpers';
+import {
+  gate,
+  settleConfig,
+} from '@/backend/services/session/service/config/session-config-authority.test-helpers';
 import { setupStartupConfig } from './session-startup-config.test-helpers';
 
 vi.mock('@/backend/services/workspace', () => ({

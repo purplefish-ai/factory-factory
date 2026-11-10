@@ -30,6 +30,17 @@ const encoder = new TextEncoder();
 function jsonBytes(value: unknown): number {
   return encoder.encode(JSON.stringify(value)).length;
 }
+/** Equals `jsonBytes(frame)` while measuring each event only once. */
+function frameBytes(frame: SessionReplayChunk, eventBytes: readonly number[]): number {
+  if (frame.encoding !== 'events') {
+    return jsonBytes(frame);
+  }
+  let bytes = jsonBytes({ ...frame, replayEvents: [] }) + Math.max(0, eventBytes.length - 1);
+  for (const eventSize of eventBytes) {
+    bytes += eventSize;
+  }
+  return bytes;
+}
 function decodeJson(parts: Uint8Array[], length: number): unknown {
   const bytes = new Uint8Array(length);
   let offset = 0;
@@ -104,14 +115,15 @@ export class SessionReplayAssembler {
 
   private appendEvents(
     pending: PendingReplay,
-    frame: Extract<SessionReplayChunk, { encoding: 'events' }>
+    frame: Extract<SessionReplayChunk, { encoding: 'events' }>,
+    eventBytes: readonly number[]
   ): void {
     const batch = pending.batch;
     if (!batch || pending.eventReceived || (frame.index !== 0 && frame.batch)) {
       throw new Error('Unexpected replay event frame');
     }
-    for (const event of frame.replayEvents) {
-      pending.received += jsonBytes(event) + (batch.replayEvents.length ? 1 : 0);
+    for (const [index, event] of frame.replayEvents.entries()) {
+      pending.received += (eventBytes[index] ?? 0) + (batch.replayEvents.length ? 1 : 0);
       batch.replayEvents.push(event);
     }
   }
@@ -146,9 +158,13 @@ export class SessionReplayAssembler {
     }
   }
 
-  private appendFrame(pending: PendingReplay, frame: SessionReplayChunk): void {
+  private appendFrame(
+    pending: PendingReplay,
+    frame: SessionReplayChunk,
+    eventBytes: readonly number[]
+  ): void {
     if (frame.encoding === 'events') {
-      this.appendEvents(pending, frame);
+      this.appendEvents(pending, frame, eventBytes);
     } else if (frame.encoding === 'event_fragment') {
       this.appendFragment(pending, frame);
     } else {
@@ -163,7 +179,9 @@ export class SessionReplayAssembler {
 
   private acceptChunk(data: unknown, now: number): unknown | null {
     const frame = SessionReplayChunkSchema.parse(data);
-    if (jsonBytes(data) > MAX_REPLAY_FRAME_BYTES) {
+    // Measure each event once, for both the frame bound and the replay total.
+    const eventBytes = frame.encoding === 'events' ? frame.replayEvents.map(jsonBytes) : [];
+    if (frameBytes(frame, eventBytes) > MAX_REPLAY_FRAME_BYTES) {
       throw new Error('Replay frame exceeds its byte limit');
     }
     if (frame.index === 0) {
@@ -184,7 +202,7 @@ export class SessionReplayAssembler {
       this.reset();
       return null;
     }
-    this.appendFrame(pending, frame);
+    this.appendFrame(pending, frame, eventBytes);
     pending.next++;
     if (pending.next < pending.total) {
       return null;

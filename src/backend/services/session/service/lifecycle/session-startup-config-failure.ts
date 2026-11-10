@@ -1,14 +1,24 @@
 import { createLogger } from '@/backend/services/logger.service';
 import type { AcpProcessHandle, AcpRuntimeManager } from '@/backend/services/session/service/acp';
+import {
+  SessionStartupPermissionError,
+  SessionStartupTargetError,
+} from '@/backend/services/session/service/config/session-permission-policy';
+import { SessionStartupPersistenceError } from '@/backend/services/session/service/config/session-startup-configuration-finalizer';
+import { requestsStartupCleanup } from '@/backend/services/session/service/event-agent/event-session-startup';
+import type { AcpEventProcessor } from '@/backend/services/session/service/events/acp-event-processor';
 import type { SessionDomainService } from '@/backend/services/session/service/session-domain.service';
-import type { AcpEventProcessor } from './acp-event-processor';
-import { requestsStartupCleanup } from './event-session-startup';
+import { toErrorMessage } from '@/backend/services/session/service/session.error-message';
 import type { SessionLifecycleGate } from './session-lifecycle-gate';
 import type { StartSessionOptions } from './session-startup-options';
 import type { StopSessionOptions } from './session-termination.coordinator';
-import { toErrorMessage } from './session.error-message';
 
 const logger = createLogger('session');
+
+export const isTerminalConfigFailure = (error: unknown) =>
+  error instanceof SessionStartupPermissionError ||
+  error instanceof SessionStartupPersistenceError ||
+  error instanceof SessionStartupTargetError;
 
 type StartupFailureDependencies = {
   runtimeManager: Pick<AcpRuntimeManager, 'getClient' | 'stopClient'>;

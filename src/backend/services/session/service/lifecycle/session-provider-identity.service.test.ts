@@ -2,14 +2,14 @@ import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import type { AcpProviderIdentityEvent } from '@/backend/services/session/service/acp';
 import { createDeferred } from '@/backend/services/session/service/acp/acp-runtime-manager.test-helpers';
+import type { closedSessionPersistenceService } from '@/backend/services/session/service/archive/closed-session-persistence.service';
+import type { SessionRepository } from '@/backend/services/session/service/data/session.repository';
 import { SessionDomainService } from '@/backend/services/session/service/session-domain.service';
-import type { closedSessionPersistenceService } from './closed-session-persistence.service';
 import {
   createLifecycleTestSession,
   createLifecycleTestWorkspace,
 } from './session-lifecycle.test-helpers';
 import { SessionProviderIdentityService } from './session-provider-identity.service';
-import type { SessionRepository } from './session.repository';
 
 function harness() {
   let session = createLifecycleTestSession({

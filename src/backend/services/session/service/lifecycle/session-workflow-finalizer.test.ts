@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AgentSessionRecord } from '@/backend/services/session/resources/agent-session.accessor';
-import type { PersistClosedSessionInput } from './closed-session-persistence.service';
+import type { PersistClosedSessionInput } from '@/backend/services/session/service/archive/closed-session-persistence.service';
 import {
   createLifecycleTestSession,
   createLifecycleTestWorkspace,

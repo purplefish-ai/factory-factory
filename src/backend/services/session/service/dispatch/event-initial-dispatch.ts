@@ -1,8 +1,8 @@
-import { withEventEvidenceDeadline } from '@/backend/services/session/service/lifecycle/event-evidence-deadline';
+import { withEventEvidenceDeadline } from '@/backend/services/session/service/event-agent/event-evidence-deadline';
 import type {
   EventInitialPermit,
   EventSessionAuthority,
-} from '@/backend/services/session/service/lifecycle/event-session-authority';
+} from '@/backend/services/session/service/event-agent/event-session-authority';
 import type { QueuedMessage } from '@/shared/acp-protocol';
 import type { InitialAttempt } from '@/shared/event-agent-delivery';
 import type { RuntimeStopEvidence } from '@/shared/event-agent-delivery';

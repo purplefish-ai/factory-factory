@@ -89,13 +89,22 @@ const PRUNABLE_FACT_KINDS = [
 ];
 
 /**
- * Terminal facts that were never claimed: the reducer, pending counts and
- * delivery never read them. Delivery members and any legacy receipt evidence
- * are retained, because frozen batches must keep their complete membership.
+ * Facts that were never claimed and can never be delivered: terminal facts,
+ * which the reducer, pending counts and delivery never read, and pending facts
+ * of ARCHIVED workspaces. ARCHIVED is final, polling observes only READY
+ * workspaces and claims require READY, so those facts have no reader either.
+ * Delivery members and any legacy receipt evidence are retained, because
+ * frozen batches must keep their complete membership. The `(state, createdAt)`
+ * index narrows both branches by state and age, so DELIVERED history is never
+ * scanned; the PENDING range still covers old pending rows of every workspace,
+ * and the ARCHIVED check runs per row.
  */
 function prunableTerminalEventWhere(before: Date) {
   return {
-    state: { in: [EVENT.SUPERSEDED, EVENT.CANCELLED] },
+    OR: [
+      { state: { in: [EVENT.SUPERSEDED, EVENT.CANCELLED] } },
+      { state: EVENT.PENDING, workspace: { status: 'ARCHIVED' } },
+    ],
     kind: { in: PRUNABLE_FACT_KINDS },
     prId: { not: null },
     createdAt: { lt: before },
@@ -599,9 +608,10 @@ class WorkspacePrEventAccessor {
     ).filter((event) => hasState(event.state, states) && event.deduplicationKey.startsWith(prefix));
   }
   /**
-   * Delete one bounded batch of unclaimed SUPERSEDED/CANCELLED facts created
-   * before `before`, oldest first. The delete re-applies the predicate, so a
-   * row claimed or changed after selection is kept. Returns the deleted count.
+   * Delete one bounded batch of unclaimed SUPERSEDED/CANCELLED facts, and
+   * unclaimed PENDING facts of ARCHIVED workspaces, created before `before`,
+   * oldest first. The delete re-applies the predicate, so a row claimed or
+   * changed after selection is kept. Returns the deleted count.
    */
   async pruneTerminalEvents(input: { before: Date; limit: number }) {
     const where = prunableTerminalEventWhere(input.before);

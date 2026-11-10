@@ -9,13 +9,13 @@ import type { SessionCallerGuard } from '@/backend/services/session/service/brid
 import { PermanentAttachmentError } from '@/backend/services/session/service/chat/chat-message-handlers/attachment-processing';
 import { DEBUG_CHAT_WS } from '@/backend/services/session/service/chat/chat-message-handlers/constants';
 import { sessionDataService } from '@/backend/services/session/service/data/session-data.service';
-import { EventSessionFenceError } from '@/backend/services/session/service/lifecycle/event-session-fence-error';
-import { createPRDeliveryBlockedError } from '@/backend/services/session/service/lifecycle/pr-delivery-failure';
+import { createPRDeliveryBlockedError } from '@/backend/services/session/service/delivery/pr-delivery-failure';
+import { EventSessionFenceError } from '@/backend/services/session/service/event-agent/event-session-fence-error';
+import { sessionDomainService } from '@/backend/services/session/service/session-domain.service';
 import {
   isTurnAlreadyInProgressError,
   toErrorMessage,
-} from '@/backend/services/session/service/lifecycle/session.error-message';
-import { sessionDomainService } from '@/backend/services/session/service/session-domain.service';
+} from '@/backend/services/session/service/session.error-message';
 import { MessageState, type QueuedMessage, resolveSelectedModel } from '@/shared/acp-protocol';
 import {
   acknowledgeSentBatch,

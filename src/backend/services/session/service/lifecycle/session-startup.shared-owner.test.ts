@@ -5,8 +5,8 @@ import {
   exitChildWithCode,
   type MockChildProcess,
 } from '@/backend/services/session/service/acp/acp-runtime-manager.test-helpers';
+import { gate } from '@/backend/services/session/service/config/session-config-authority.test-helpers';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
-import { gate } from './session-config-authority.test-helpers';
 import { setupStartupConfig } from './session-startup-config.test-helpers';
 
 vi.mock('@/backend/services/workspace', () => ({

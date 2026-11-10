@@ -1,13 +1,13 @@
 import type { AcpProcessHandle } from '@/backend/services/session/service/acp';
 import type { AcpRuntimeManager } from '@/backend/services/session/service/acp/acp-runtime-manager';
 import type { SessionCallerGuard } from '@/backend/services/session/service/bridges';
-import type { SessionBackgroundDeliveryService } from '@/backend/services/session/service/lifecycle/session-background-delivery.service';
+import type { SessionConfigService } from '@/backend/services/session/service/config/session.config.service';
+import type { SessionBackgroundDeliveryService } from '@/backend/services/session/service/delivery/session-background-delivery.service';
 import type {
   MailRecoveryRetry,
   MailSignalReceipt,
   NotificationDispatchClaim,
-} from '@/backend/services/session/service/lifecycle/session-notification-delivery.service';
-import type { SessionConfigService } from '@/backend/services/session/service/lifecycle/session.config.service';
+} from '@/backend/services/session/service/delivery/session-notification-delivery.service';
 import type { AgentContentItem, QueuedMessage } from '@/shared/acp-protocol';
 
 export type DispatchOptions = { bypassTurnInProgressBackoff?: boolean; guard?: SessionCallerGuard };

@@ -1,13 +1,13 @@
 import type { CodexRuntimeContext } from '@/backend/services/codex-accounts';
 import type { AcpRuntimeManager } from '@/backend/services/session/service/acp';
-import type { SessionDomainService } from '@/backend/services/session/service/session-domain.service';
-import { isLocalTranscriptMessage } from '@/backend/services/session/service/store/session-local-transcript';
-import type { AcpEventProcessor } from './acp-event-processor';
-import type { SessionContext } from './session-context.service';
 import {
   getProviderHistorySessionId,
   type ProviderHistorySession,
-} from './session-provider-history-hydrator';
+} from '@/backend/services/session/service/data/session-provider-history-hydrator';
+import type { AcpEventProcessor } from '@/backend/services/session/service/events/acp-event-processor';
+import type { SessionDomainService } from '@/backend/services/session/service/session-domain.service';
+import { isLocalTranscriptMessage } from '@/backend/services/session/service/store/session-local-transcript';
+import type { SessionContext } from './session-context.service';
 
 export type SessionStartupHistoryDependencies = {
   hydrateProviderHistory: (

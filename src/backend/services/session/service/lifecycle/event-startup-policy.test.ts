@@ -1,7 +1,7 @@
 import { expect, it, vi } from 'vitest';
+import { EventSessionAuthority } from '@/backend/services/session/service/event-agent/event-session-authority';
+import { guardEventStartup } from '@/backend/services/session/service/event-agent/event-session-startup';
 import type { InitialDeliveryFence } from '@/shared/event-agent-delivery';
-import { EventSessionAuthority } from './event-session-authority';
-import { guardEventStartup } from './event-session-startup';
 import { createLifecycleHarness } from './session-lifecycle.test-helpers';
 import { prepareSessionStartup } from './session-startup-preparation';
 const attempt = {
