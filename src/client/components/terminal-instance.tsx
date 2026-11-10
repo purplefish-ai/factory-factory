@@ -15,7 +15,7 @@ const DEFAULT_TERMINAL_FONT_FAMILY = 'Menlo, Monaco, "Courier New", monospace';
 // Erase the screen (ED 2) and scrollback (ED 3), then home the cursor. Sent
 // through write() so it is parsed after any chunks still queued in xterm;
 // terminal.clear() would run synchronously, ahead of them.
-export const TERMINAL_CLEAR_SEQUENCE = '\x1b[2J\x1b[3J\x1b[H';
+const TERMINAL_CLEAR_SEQUENCE = '\x1b[2J\x1b[3J\x1b[H';
 
 // =============================================================================
 // Types

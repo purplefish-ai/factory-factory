@@ -8,7 +8,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { TERMINAL_OUTPUT_MAX_CHARS } from '@/client/lib/rolling-output';
 import { TerminalOutputStream } from '@/client/lib/terminal-output-stream';
 import { DEFAULT_APPEARANCE } from '@/shared/appearance';
-import { TERMINAL_CLEAR_SEQUENCE, TerminalInstance } from './terminal-instance';
+import { TerminalInstance } from './terminal-instance';
+
+// Erase screen and scrollback, then home the cursor (written in-band by resets).
+const TERMINAL_CLEAR_SEQUENCE = '\x1b[2J\x1b[3J\x1b[H';
 
 const mocks = vi.hoisted(() => ({
   appearance: {
