@@ -1188,6 +1188,12 @@ older edges remain: `store/` and `voice/` publish through the root
 | `chat/`                                                  | Chat commands, session load                                                                                                          |
 | `composition/`                                           | Composition root (`session-core-services.ts`, `session-services.ts`)                                                                 |
 
+`SessionConfigService` is a facade over four owners. `SessionConfigWriter`
+accepts, persists and publishes native configuration writes, and every other
+owner writes through it. `SessionConfigReader` projects live or stored
+configuration. `SessionStartupConfiguration` applies launch intent to a new
+runtime. `SessionConfigMutations` applies live and stopped-session edits.
+
 Startup, termination, runtime exit, notifications, context, and workflow
 finalization each have one coordinator or service.
 
