@@ -48,6 +48,19 @@ function useLastLogsTab(activeBottomTab: BottomPanelTab): LogsBottomTab {
   return isLogsBottomTab(activeBottomTab) ? activeBottomTab : lastLogsTab;
 }
 
+/**
+ * Whether the bottom panel has been shown. The desktop panel always shows it;
+ * the mobile drawer mounts it, and opens the terminal socket, on first use.
+ */
+function useBottomPanelOpened(isMobile: boolean, mobilePanel: 'top' | 'bottom'): boolean {
+  const shown = !isMobile || mobilePanel === 'bottom';
+  const [opened, setOpened] = useState(shown);
+  if (shown && !opened) {
+    setOpened(true);
+  }
+  return opened || shown;
+}
+
 /** A log source's status dot: running (pulsing), connected or failed. */
 type LogStatus = Extract<StatusTone, 'success' | 'working' | 'danger'>;
 
@@ -101,7 +114,12 @@ export const RightPanel = memo(function RightPanel({
   // same commit. WorkspacePanelProvider remounts this panel for each workspace.
   const isTerminalVisible =
     activeBottomTab === 'terminal' && (!isMobile || mobilePanel === 'bottom');
-  const terminal = useTerminalTabs({ workspaceId, autoCreate: isTerminalVisible });
+  const bottomPanelOpened = useBottomPanelOpened(isMobile, mobilePanel);
+  const terminal = useTerminalTabs({
+    workspaceId,
+    autoCreate: isTerminalVisible,
+    connect: bottomPanelOpened,
+  });
 
   const lastLogsTab = useLastLogsTab(activeBottomTab);
 

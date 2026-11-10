@@ -71,6 +71,23 @@ function KanbanBoardContent() {
       runInBackground(archiveWorkspace(workspaceId), "Couldn't archive workspace."),
     [archiveWorkspace]
   );
+  // The lock dialog is memoized; these follow the provider's stable commands.
+  const handleLockOpenChange = useCallback(
+    (open: boolean) => {
+      if (!open) {
+        dismissArchiveGitLock();
+      }
+    },
+    [dismissArchiveGitLock]
+  );
+  const handleLockRetry = useCallback(
+    () => void retryGitLockedArchives(false),
+    [retryGitLockedArchives]
+  );
+  const handleLockRemoveAndArchive = useCallback(
+    () => void retryGitLockedArchives(true),
+    [retryGitLockedArchives]
+  );
 
   const isMobile = useIsMobile();
   const columns = useMemo(() => getKanbanColumns(issueProvider), [issueProvider]);
@@ -130,14 +147,10 @@ function KanbanBoardContent() {
   const archiveGitLockDialog = (
     <ArchiveGitLockDialog
       open={archiveGitLockWorkspaceIds.length > 0}
-      onOpenChange={(open) => {
-        if (!open) {
-          dismissArchiveGitLock();
-        }
-      }}
+      onOpenChange={handleLockOpenChange}
       workspaceCount={archiveGitLockWorkspaceIds.length}
-      onRetry={() => void retryGitLockedArchives(false)}
-      onRemoveLockAndArchive={() => void retryGitLockedArchives(true)}
+      onRetry={handleLockRetry}
+      onRemoveLockAndArchive={handleLockRemoveAndArchive}
       isPending={isArchiving}
     />
   );

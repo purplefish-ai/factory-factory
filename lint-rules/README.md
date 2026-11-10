@@ -135,9 +135,10 @@ values that contain no call, `.current` read, `await` or `new`. Both apply to
 the spinner rules' ([client state](../docs/architecture/client-state.md)).
 `stable-context-value` rejects a context `value` built in the JSX, on
 `<Foo.Provider>`, a React 19 `<FooContext>` or `createElement(Foo.Provider, …)`:
-an object or array literal, a function, `new`, or a call that is not a hook,
-including inside a conditional or logical operator. Memoize the value or split
-state from commands
+an object, array or JSX literal, a function, `new`, or a call other than
+`useMemo`, `useCallback`, `useRef`, `useStableCallback` and `useLatestRef`
+(`useState` returns a new tuple each render), including inside a conditional or
+logical operator. Memoize the value or split state from commands
 ([context values](../docs/architecture/client-state.md#context-values)). It
 applies to the same directories outside tests and takes an `exceptions` map with
 the same still-needed test.

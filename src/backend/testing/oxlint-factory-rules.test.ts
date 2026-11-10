@@ -376,6 +376,8 @@ describe('Oxlint project guardrails', () => {
     ['stable-context-value', 'const x = <Ctx.Provider value={{ a } as Value}>{c}</Ctx.Provider>;'],
     ['stable-context-value', 'const x = createElement(Ctx.Provider, { value: { a } }, c);'],
     ['stable-context-value', 'const x = React.createElement(NavContext, { value: [a] }, c);'],
+    ['stable-context-value', 'const x = <SlotContext value={<Icon />}>{c}</SlotContext>;'],
+    ['stable-context-value', 'const x = <Ctx.Provider value={useState(0)}>{c}</Ctx.Provider>;'],
   ];
   const rejectedFixtures = rejectedSources.map(([rule, source], index) => ({
     rule,
@@ -510,6 +512,7 @@ describe('Oxlint project guardrails', () => {
     'const x = <PanelContext value={state}>{c}</PanelContext>;',
     'const x = <ThemeContext value="dark">{c}</ThemeContext>;',
     'const x = <Ctx.Provider value={useMemo(() => ({ a }), [a])}>{c}</Ctx.Provider>;',
+    'const x = <Ctx.Provider value={React.useCallback(run, [])}>{c}</Ctx.Provider>;',
     'const x = <Ctx.Provider value={context ?? DEFAULT_CONTEXT}>{c}</Ctx.Provider>;',
     'const x = <Select value={{ id }} />;',
     'const x = <Tooltip.Root value={[a]} />;',

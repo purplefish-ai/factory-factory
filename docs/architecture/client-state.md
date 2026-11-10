@@ -114,7 +114,9 @@ inside `memo`. Keep the value stable and let consumers subscribe narrowly:
   a controlled `TerminalPanel`, so they change in the same commit.
 
 `factory/stable-context-value` rejects a context `value` built in the JSX: an
-object or array literal, a function, `new` or a non-hook call.
+object, array or JSX literal, a function, `new`, or a call other than a hook
+that keeps its result (`useMemo`, `useCallback`, `useRef`, `useStableCallback`,
+`useLatestRef`).
 
 ## Shared behaviours
 

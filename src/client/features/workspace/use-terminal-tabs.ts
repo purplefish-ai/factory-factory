@@ -86,14 +86,18 @@ function replayReconnectBuffers(
 /**
  * Terminal tabs for a workspace: restores the server's terminals, creates and
  * closes them, and routes output to per-tab streams. With `autoCreate`, an
- * empty list opens a first terminal once the server's list has arrived.
+ * empty list opens a first terminal once the server's list has arrived. With
+ * `connect` false the socket stays closed (the mobile panel waits until the
+ * terminal pane is first opened).
  */
 export function useTerminalTabs({
   workspaceId,
   autoCreate,
+  connect = true,
 }: {
   workspaceId: string;
   autoCreate: boolean;
+  connect?: boolean;
 }): TerminalTabs {
   const [store] = useState(createTabsStore);
   const { tabs, activeTabId } = useSyncExternalStore(store.subscribe, store.get);
@@ -123,6 +127,7 @@ export function useTerminalTabs({
 
   const socket = useTerminalWebSocket({
     workspaceId,
+    enabled: connect,
     // Route output to its tab by terminalId, without a React update.
     onOutput: useStableCallback((terminalId: string, data: string) => {
       const tab = findTab(terminalId);
@@ -265,7 +270,9 @@ export function useTerminalTabs({
   });
 
   const selectTab = useStableCallback((tabId: string) => {
-    store.update({ activeTabId: tabId });
+    if (store.get().activeTabId !== tabId) {
+      store.update({ activeTabId: tabId });
+    }
     const tab = store.get().tabs.find((candidate) => candidate.id === tabId);
     if (tab?.terminalId) {
       socket.setActive(tab.terminalId);

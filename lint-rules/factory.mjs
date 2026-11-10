@@ -823,6 +823,16 @@ const FRESH_VALUE_TYPES = new Set([
   'FunctionExpression',
   'ClassExpression',
   'NewExpression',
+  'JSXElement',
+  'JSXFragment',
+]);
+// Hooks whose result keeps its identity until their inputs change.
+const STABLE_RESULT_HOOKS = new Set([
+  'useMemo',
+  'useCallback',
+  'useRef',
+  'useStableCallback',
+  'useLatestRef',
 ]);
 const TYPE_WRAPPERS = new Set([
   'TSAsExpression',
@@ -834,9 +844,10 @@ const TYPE_WRAPPERS = new Set([
 
 /**
  * Whether an expression makes a new object, array or function each time it
- * runs: a literal, a function, `new`, or a call that is not a hook (a hook
- * such as `useMemo` owns the identity it returns). Conditionals and logical
- * operators are checked branch by branch.
+ * runs: a literal (including JSX), a function, `new`, or a call other than a
+ * hook that keeps its result's identity (`useMemo`, `useCallback`, `useRef`,
+ * `useStableCallback`, `useLatestRef`); `useState` returns a new tuple each
+ * render. Conditionals and logical operators are checked branch by branch.
  */
 function isFreshValue(node) {
   if (!node) {
@@ -850,7 +861,7 @@ function isFreshValue(node) {
   }
   if (node.type === 'CallExpression') {
     const callee = node.callee.type === 'Identifier' ? node.callee.name : memberName(node.callee);
-    return !/^use[A-Z0-9]/.test(callee ?? '');
+    return !STABLE_RESULT_HOOKS.has(callee);
   }
   if (node.type === 'ConditionalExpression') {
     return isFreshValue(node.consequent) || isFreshValue(node.alternate);

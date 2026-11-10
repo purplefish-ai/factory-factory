@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
   agentsProps: vi.fn(),
   mobile: false,
   terminalOptions: null as null | {
+    enabled?: boolean;
     onOutput?: (terminalId: string, data: string) => void;
     onCreated?: (id: string, requestId?: string, output?: string) => void;
     onTerminalList?: (
@@ -393,6 +394,27 @@ describe('RightPanel Agents tab', () => {
         .find((b) => b.textContent === 'Terminal')
         ?.getAttribute('aria-selected')
     ).toBe('true');
+  });
+
+  it('opens the mobile terminal socket only once the terminal pane is shown', () => {
+    mocks.mobile = true;
+    render();
+    expect(mocks.terminalOptions?.enabled).toBe(false);
+    const terminalTab = [...container.querySelectorAll('button')].find(
+      (b) => b.textContent === 'Terminal'
+    );
+    void act(() =>
+      terminalTab?.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0 }))
+    );
+    expect(mocks.terminalOptions?.enabled).toBe(true);
+    const changesTab = [...container.querySelectorAll('button')].find(
+      (b) => b.textContent === 'Changes'
+    );
+    void act(() =>
+      changesTab?.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0 }))
+    );
+    // Once opened, the terminal stays connected like the mounted pane did.
+    expect(mocks.terminalOptions?.enabled).toBe(true);
   });
 
   it('selects Agents from outside the panel and preserves it when the panel remounts', () => {
