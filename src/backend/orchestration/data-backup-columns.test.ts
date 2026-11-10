@@ -9,6 +9,11 @@ import { exportDataSchema } from '@/shared/schemas/export-data.schema';
  * with a reason. A new column therefore fails this test until someone decides
  * whether backups should carry it. Reasons starting with "Gap:" record columns
  * the export does not carry today but arguably should.
+ *
+ * "Exported" is checked against the export schema: the current format must
+ * have the declared key. It does not prove that exportData copies the column
+ * into that key; the export and import mappings remain hand-written and are
+ * exercised by the data-backup service and backup integration tests.
  */
 import { Prisma } from '@prisma-gen/client';
 import { createBaseRecoveryManifest } from './data-backup-manifest';
