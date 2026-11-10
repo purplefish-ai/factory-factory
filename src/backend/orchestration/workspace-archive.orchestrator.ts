@@ -1,5 +1,6 @@
 import { ApplicationError } from '@/backend/lib/application-error';
 import { toError } from '@/backend/lib/error-utils';
+import { sweepWorktreeProcesses } from '@/backend/lib/worktree-process-sweep';
 import { createLogger } from '@/backend/services/logger.service';
 import type { SessionStopReason } from '@/backend/services/session';
 import {
@@ -72,10 +73,56 @@ export interface ArchiveRecoveryResult {
   failed: Array<{ id: string; error: string }>;
 }
 
+type LeftoverProcessWorktree = {
+  worktreePath: string | null;
+  project: { worktreeBasePath: string };
+};
+
+/**
+ * Best effort: the owned cleanups above are the contract, and a failed sweep
+ * leaves the same leftovers as no sweep, so it is logged and never blocks.
+ */
+async function terminateLeftoverWorktreeProcesses(
+  workspaceId: string,
+  worktree: LeftoverProcessWorktree,
+  operation: 'archive' | 'delete'
+): Promise<void> {
+  if (!worktree.worktreePath) {
+    return;
+  }
+  try {
+    const result = await sweepWorktreeProcesses({
+      worktreePath: worktree.worktreePath,
+      worktreeBasePath: worktree.project.worktreeBasePath,
+    });
+    if (result.status === 'swept' && result.survivors.length > 0) {
+      logger.warn(`Leftover worktree processes survived the sweep before ${operation}`, {
+        workspaceId,
+        ...result,
+      });
+    } else if (result.status === 'swept' && result.matched.length > 0) {
+      logger.info(`Terminated leftover worktree processes before ${operation}`, {
+        workspaceId,
+        ...result,
+      });
+    }
+  } catch (error) {
+    logger.warn(`Leftover worktree process sweep failed before ${operation}`, {
+      workspaceId,
+      error: toError(error).message,
+    });
+  }
+}
+
+/**
+ * Stops owned runtimes; any failure aborts the operation. With `worktree`, a
+ * best-effort sweep then terminates leftover processes running inside it.
+ */
 export async function cleanupWorkspaceRuntimeResources(
   workspaceId: string,
   services: WorkspaceRuntimeCleanupDependencies,
-  operation: 'archive' | 'delete'
+  operation: 'archive' | 'delete',
+  worktree?: LeftoverProcessWorktree
 ): Promise<void> {
   const { runScriptService, sessionLifecycleService, terminalService } = services;
   const sessionStopReason = operation === 'archive' ? 'WORKSPACE_ARCHIVED' : 'SYSTEM_STOP';
@@ -114,6 +161,10 @@ export async function cleanupWorkspaceRuntimeResources(
       cause:
         cleanupErrors.length === 1 ? cleanupErrors[0] : new AggregateError(cleanupErrors, message),
     });
+  }
+
+  if (worktree) {
+    await terminateLeftoverWorktreeProcesses(workspaceId, worktree, operation);
   }
 }
 
@@ -165,7 +216,7 @@ async function completeArchive(
   options: ArchiveWorkspaceOptions,
   services: ArchiveWorkspaceDependencies
 ) {
-  await cleanupWorkspaceRuntimeResources(workspace.id, services, 'archive');
+  await cleanupWorkspaceRuntimeResources(workspace.id, services, 'archive', workspace);
 
   try {
     await worktreeLifecycleService.cleanupWorkspaceWorktree(workspace, options);
