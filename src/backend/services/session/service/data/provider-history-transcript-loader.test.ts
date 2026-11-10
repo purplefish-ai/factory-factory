@@ -90,7 +90,10 @@ function fixture(provider: Provider, texts: string[]) {
 }
 
 const texts = (domain: SessionDomainService) =>
-  domain.getTranscriptSnapshot('session').map((message) => message.text ?? message.message?.type);
+  domain
+    .getTranscriptSnapshot('session')
+    .map((message) => message.text ?? message.message?.text ?? message.message?.type);
+const prOutcome = { type: 'pr_update', text: 'Review feedback', prDeliveryState: 'failed' };
 
 describe.each(['CLAUDE', 'CODEX'] as const)('%s provider history transcripts', (provider) => {
   it('reopens a cleared idle session without rereading its unchanged history file', async () => {
@@ -119,13 +122,32 @@ describe.each(['CLAUDE', 'CODEX'] as const)('%s provider history transcripts', (
       'Provider unavailable'
     );
     domain.clearSession('session', { preserveRejections: true });
-    expect(texts(domain)).toEqual(['pr_update']);
+    expect(texts(domain)).toEqual(['Review feedback']);
 
     await hydrate('session', session);
     expect(read).toHaveBeenCalledOnce();
-    expect(texts(domain)).toEqual(['one', 'two', 'pr_update']);
-    expect(domain.getTranscriptSnapshot('session').slice(0, 2)).toEqual(first);
+    expect(texts(domain)).toEqual(['one', 'two', 'Review feedback']);
+    const reopened = domain.getTranscriptSnapshot('session');
+    expect(reopened.slice(0, 2)).toEqual(first);
+    expect(reopened[2]?.message).toMatchObject(prOutcome);
+    expect(reopened[2]!.order).toBeGreaterThan(reopened[1]!.order);
     expect(domain.getHistoryHydrationSource('session')).toBe('jsonl');
+  });
+
+  it('keeps the cached projection intact when a store reassigns an entry in place', async () => {
+    const { session, read } = fixture(provider, ['one']);
+    const domain = new SessionDomainService();
+    const hydrate = createProviderHistoryHydrator(domain);
+    await hydrate('session', session);
+    // Tool-use enrichment reassigns a stored entry's message in place.
+    const [entry] = domain.getTranscriptSnapshot('session');
+    Object.assign(entry!, { text: 'changed by the live store' });
+    domain.clearSession('session', { preserveRejections: true });
+
+    const reopened = new SessionDomainService();
+    await createProviderHistoryHydrator(reopened)('session', session);
+    expect(read).toHaveBeenCalledOnce();
+    expect(texts(reopened)).toEqual(['one']);
   });
 
   it('rereads a history file that changed after it was cached', async () => {

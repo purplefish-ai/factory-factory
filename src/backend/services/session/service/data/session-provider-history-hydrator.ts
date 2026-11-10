@@ -198,7 +198,9 @@ function handleLoadedProviderHistory(
     return;
   }
 
-  const loadedTranscript = [...loadResult.transcript];
+  // Stores may reassign an entry's top-level fields in place (tool-use enrichment),
+  // so give this store its own entries; nested message data stays shared.
+  const loadedTranscript = loadResult.transcript.map((message) => ({ ...message }));
   const latestTranscript = domain.getTranscriptSnapshot(sessionId);
   const latestProviderMessages = providerMessages(latestTranscript);
   if (latestProviderMessages.length > 0) {

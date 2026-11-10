@@ -28,12 +28,13 @@ type Entry = {
 };
 
 /**
- * Projected provider transcripts, keyed by provider history file and valid only
- * for the exact file identity (path, size, mtime, inode) they were read from.
- * A changed file can never be served stale: lookups compare identities and drop
- * a mismatched entry. It holds pure file projections, never session store state,
- * so clearing a store keeps its own preservation rules. Messages are shared
- * with stores that apply them; stores replace rather than mutate messages.
+ * Projected provider transcripts, keyed by session and provider history file and
+ * valid only for the exact file identity (path, size, mtime, inode) they were
+ * read from. A changed file can never be served stale: lookups compare
+ * identities and drop a mismatched entry. It holds pure file projections, never
+ * session store state, so clearing a store keeps its own preservation rules.
+ * The hydrator copies each entry before a store receives it, because stores may
+ * reassign an entry's top-level fields in place.
  *
  * Bounded by entry count and by estimated bytes (least recently used first),
  * and by a TTL that starts once the session's store is cleared.

@@ -234,8 +234,8 @@ load replies are always sent.
 
 Provider history comes from the Claude or Codex history loader selected by the
 session's provider and identity. Concurrent loads, retries and an overlapping
-startup share one read, and reopening an idle session reuses its projection
-while the history file is unchanged; see
+startup share one read, and reopening an idle session can reuse its cached
+projection while the history file is unchanged and the entry is retained; see
 [agent runtime](architecture/agent-runtime.md). Codex tool-history backfill
 defers transcript renumbering while a session is starting, running, or stopping,
 including turns that begin during the history read. This preserves the message

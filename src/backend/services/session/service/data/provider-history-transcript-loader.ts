@@ -21,7 +21,7 @@ export type ProviderHistorySession = {
 export type ProviderHistoryTranscriptResult =
   | {
       status: 'loaded';
-      /** Shared by every caller of one load; callers must not mutate it. */
+      /** Shared by every caller of one load and the cache; copy entries before storing them. */
       transcript: readonly ChatMessage[];
       filePath: string;
       source: 'cache' | 'file';
@@ -133,7 +133,7 @@ async function readProviderHistoryTranscript(
   isCurrent: () => boolean
 ): Promise<ProviderHistoryTranscriptResult> {
   const cacheKey = (file: HistoryFileIdentity) =>
-    JSON.stringify([dbSession.provider, providerSessionId, file.filePath]);
+    JSON.stringify([sessionId, dbSession.provider, providerSessionId, file.filePath]);
   const input = {
     providerSessionId,
     workingDir: dbSession.workspace.worktreePath ?? '',

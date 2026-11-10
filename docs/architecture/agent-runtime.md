@@ -103,15 +103,17 @@ after the read began may have changed the file.
 
 Completed projections stay in `ProviderHistoryTranscriptCache`
 (`data/provider-history-transcript-cache.ts`), so reopening an idle session
-whose store was cleared skips the read. Entries are keyed by provider, provider
-session ID and file path, and serve only the exact file identity (path, size,
-modification time and inode) observed before and after the read; a changed file
-is reread and replaces its entry. The cache holds only file projections, never
-store state, so clearing a store keeps its preservation rules and later loads
-merge retained local entries as before. It keeps at most 16 entries and 128 MiB
-estimated from file sizes, evicting the least recently used first. An entry used
-by a live store does not expire; `session_cleared` starts a five-minute TTL and
-permanent deletion drops the session's entries through `SessionScope`.
+whose store was cleared can skip the read. Entries are keyed by session,
+provider, provider session ID and file path, and serve only the exact file
+identity (path, size, modification time and inode) observed before and after the
+read; a changed file is reread and replaces its entry. The cache holds only file
+projections, never store state, so clearing a store keeps its preservation rules
+and later loads merge retained local entries as before. Each store receives its
+own copies of the transcript entries, since stores may reassign an entry's
+fields in place. It keeps at most 16 entries and 128 MiB estimated from file
+sizes, evicting the least recently used first. An entry used by a live store
+does not expire; `session_cleared` starts a five-minute TTL and permanent
+deletion drops the session's entries through `SessionScope`.
 
 Cold resumes overlap history hydration with adapter spawning and ACP
 initialization. Provider session loading/creation waits for the history barrier,
