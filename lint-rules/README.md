@@ -84,6 +84,18 @@ is left to its consumer; reads through a local alias are followed. The rule
 checks that an error field is read, not how it is rendered. It has no
 exceptions.
 
+`no-direct-web-storage` rejects `localStorage` and `sessionStorage` (including
+`window.localStorage` and `globalThis["sessionStorage"]`) in `src/client`,
+`src/components` and `src/lib`. Keep UI state in Web Storage with
+`usePersistedState` (`src/client/hooks/use-persisted-state.ts`): it reads and
+validates the stored value with Zod on the first render, writes in its stable
+setter, keeps every mounted consumer of a key in agreement, keeps working in
+memory when storage is blocked or full, and follows other tabs when asked.
+Module-level stores use the guarded helpers in
+`src/client/lib/browser-storage.ts`, the only file in its `exceptions` map; a
+test fails if that exception is no longer needed. Tests may seed storage
+directly.
+
 ## Remaining Biome checks
 
 Biome remains a linter for CSS and checks without equivalent Oxlint coverage. It

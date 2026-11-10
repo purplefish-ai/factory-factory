@@ -380,7 +380,7 @@ describe('input attachment persistence', () => {
 
       const result = persistInputAttachments('session-123', sampleAttachments);
 
-      expect(result).toEqual({ ok: false, operation: 'save', error: storageError });
+      expect(result).toEqual({ ok: false, operation: 'save' });
     });
 
     it('should report removeItem failures without throwing', () => {
@@ -391,7 +391,7 @@ describe('input attachment persistence', () => {
 
       const result = persistInputAttachments('session-123', []);
 
-      expect(result).toEqual({ ok: false, operation: 'clear', error: storageError });
+      expect(result).toEqual({ ok: false, operation: 'clear' });
     });
   });
 
@@ -417,7 +417,7 @@ describe('input attachment persistence', () => {
 
       const result = clearInputAttachments('session-123');
 
-      expect(result).toEqual({ ok: false, operation: 'clear', error: storageError });
+      expect(result).toEqual({ ok: false, operation: 'clear' });
     });
   });
 });

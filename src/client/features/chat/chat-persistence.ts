@@ -1,5 +1,5 @@
 /**
- * Chat persistence utilities for localStorage/sessionStorage.
+ * Chat persistence utilities for sessionStorage.
  *
  * This module handles persisting and loading:
  * - Chat settings (model, thinking mode, plan mode)
@@ -13,6 +13,13 @@
  * Drafts and input attachments use sessionStorage keyed by session ID.
  */
 
+import {
+  readStorageItem,
+  readStoredJson,
+  removeStorageItem,
+  writeStorageItem,
+  writeStoredJson,
+} from '@/client/lib/browser-storage';
 import type { ChatSettings, MessageAttachment } from '@/lib/chat-protocol';
 import { DEFAULT_CHAT_SETTINGS, resolveSelectedModel } from '@/lib/chat-protocol';
 import { AttachmentSchema, ChatSettingsSchema } from '@/shared/websocket';
@@ -47,32 +54,21 @@ function getAttachmentsKey(sessionId: string): string {
  * Load draft from sessionStorage for a specific session.
  */
 export function loadDraft(sessionId: string | null): string {
-  if (!sessionId || typeof window === 'undefined') {
-    return '';
-  }
-  try {
-    return sessionStorage.getItem(getDraftKey(sessionId)) ?? '';
-  } catch {
-    return '';
-  }
+  return sessionId ? (readStorageItem(getDraftKey(sessionId), 'session') ?? '') : '';
 }
 
 /**
  * Persist draft to sessionStorage for a specific session.
- * Clears the draft if it's empty.
+ * Clears the draft if it's empty. Storage failures are ignored.
  */
 export function persistDraft(sessionId: string | null, draft: string): void {
-  if (!sessionId || typeof window === 'undefined') {
+  if (!sessionId) {
     return;
   }
-  try {
-    if (draft.trim()) {
-      sessionStorage.setItem(getDraftKey(sessionId), draft);
-    } else {
-      sessionStorage.removeItem(getDraftKey(sessionId));
-    }
-  } catch {
-    // Silently ignore storage errors
+  if (draft.trim()) {
+    writeStorageItem(getDraftKey(sessionId), draft, 'session');
+  } else {
+    removeStorageItem(getDraftKey(sessionId), 'session');
   }
 }
 
@@ -80,13 +76,8 @@ export function persistDraft(sessionId: string | null, draft: string): void {
  * Clear draft from sessionStorage for a specific session.
  */
 export function clearDraft(sessionId: string | null): void {
-  if (!sessionId || typeof window === 'undefined') {
-    return;
-  }
-  try {
-    sessionStorage.removeItem(getDraftKey(sessionId));
-  } catch {
-    // Silently ignore storage errors
+  if (sessionId) {
+    removeStorageItem(getDraftKey(sessionId), 'session');
   }
 }
 
@@ -98,29 +89,16 @@ const PersistedAttachmentsSchema = AttachmentSchema.array();
 
 export type InputAttachmentsPersistenceResult =
   | { ok: true; operation: 'save' | 'clear' | 'skip' }
-  | { ok: false; operation: 'save' | 'clear'; error: unknown };
+  | { ok: false; operation: 'save' | 'clear' };
 
 /**
  * Load input attachments from sessionStorage for a specific session.
  */
 export function loadInputAttachments(sessionId: string | null): MessageAttachment[] {
-  if (!sessionId || typeof window === 'undefined') {
+  if (!sessionId) {
     return [];
   }
-  try {
-    const stored = sessionStorage.getItem(getAttachmentsKey(sessionId));
-    if (!stored) {
-      return [];
-    }
-    const parsed: unknown = JSON.parse(stored);
-    const validated = PersistedAttachmentsSchema.safeParse(parsed);
-    if (!validated.success) {
-      return [];
-    }
-    return validated.data;
-  } catch {
-    return [];
-  }
+  return readStoredJson(getAttachmentsKey(sessionId), PersistedAttachmentsSchema, 'session') ?? [];
 }
 
 /**
@@ -131,35 +109,25 @@ export function persistInputAttachments(
   sessionId: string | null,
   attachments: MessageAttachment[]
 ): InputAttachmentsPersistenceResult {
-  if (!sessionId || typeof window === 'undefined') {
+  if (!sessionId) {
     return { ok: true, operation: 'skip' };
   }
   const operation = attachments.length > 0 ? 'save' : 'clear';
-  try {
-    if (attachments.length > 0) {
-      sessionStorage.setItem(getAttachmentsKey(sessionId), JSON.stringify(attachments));
-    } else {
-      sessionStorage.removeItem(getAttachmentsKey(sessionId));
-    }
-    return { ok: true, operation };
-  } catch (error) {
-    return { ok: false, operation, error };
-  }
+  const ok =
+    attachments.length > 0
+      ? writeStoredJson(getAttachmentsKey(sessionId), attachments, 'session')
+      : removeStorageItem(getAttachmentsKey(sessionId), 'session');
+  return { ok, operation };
 }
 
 /**
  * Clear persisted input attachments for a specific session.
  */
 export function clearInputAttachments(sessionId: string | null): InputAttachmentsPersistenceResult {
-  if (!sessionId || typeof window === 'undefined') {
+  if (!sessionId) {
     return { ok: true, operation: 'skip' };
   }
-  try {
-    sessionStorage.removeItem(getAttachmentsKey(sessionId));
-    return { ok: true, operation: 'clear' };
-  } catch (error) {
-    return { ok: false, operation: 'clear', error };
-  }
+  return { ok: removeStorageItem(getAttachmentsKey(sessionId), 'session'), operation: 'clear' };
 }
 
 // =============================================================================
@@ -179,36 +147,21 @@ const PersistedChatSettingsSchema = ChatSettingsSchema.partial({ reasoningEffort
  * Returns null if no settings are stored (caller should use defaults).
  */
 export function loadSettings(sessionId: string | null): ChatSettings | null {
-  if (!sessionId || typeof window === 'undefined') {
+  if (!sessionId) {
     return null;
   }
-  try {
-    const stored = sessionStorage.getItem(`${SETTINGS_KEY_PREFIX}${sessionId}`);
-    if (!stored) {
-      return null;
-    }
-    const parsed: unknown = JSON.parse(stored);
-    const validated = PersistedChatSettingsSchema.safeParse(parsed);
-    if (!validated.success) {
-      return null;
-    }
-    return validated.data;
-  } catch {
-    return null;
-  }
+  return (
+    readStoredJson(`${SETTINGS_KEY_PREFIX}${sessionId}`, PersistedChatSettingsSchema, 'session') ??
+    null
+  );
 }
 
 /**
  * Persist chat settings to sessionStorage for a specific session.
  */
 export function persistSettings(sessionId: string | null, settings: ChatSettings): void {
-  if (!sessionId || typeof window === 'undefined') {
-    return;
-  }
-  try {
-    sessionStorage.setItem(`${SETTINGS_KEY_PREFIX}${sessionId}`, JSON.stringify(settings));
-  } catch {
-    // Silently ignore storage errors
+  if (sessionId) {
+    writeStoredJson(`${SETTINGS_KEY_PREFIX}${sessionId}`, settings, 'session');
   }
 }
 
@@ -216,13 +169,8 @@ export function persistSettings(sessionId: string | null, settings: ChatSettings
  * Clear chat settings from sessionStorage for a specific session.
  */
 export function clearSettings(sessionId: string | null): void {
-  if (!sessionId || typeof window === 'undefined') {
-    return;
-  }
-  try {
-    sessionStorage.removeItem(`${SETTINGS_KEY_PREFIX}${sessionId}`);
-  } catch {
-    // Silently ignore storage errors
+  if (sessionId) {
+    removeStorageItem(`${SETTINGS_KEY_PREFIX}${sessionId}`, 'session');
   }
 }
 

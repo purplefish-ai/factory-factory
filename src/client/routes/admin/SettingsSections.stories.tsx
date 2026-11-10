@@ -12,6 +12,7 @@ import {
   COLOR_SCHEME_ATTRIBUTE,
 } from '@/client/lib/appearance';
 import { BROWSER_NOTIFICATIONS_KEY } from '@/client/lib/browser-notifications';
+import { readStorageItem, removeStorageItem, writeStorageItem } from '@/client/lib/browser-storage';
 import {
   STORY_TRPC_PENDING,
   StoryTrpcProvider,
@@ -202,8 +203,8 @@ function mockNotificationPermission(
   enabled = false
 ) {
   const descriptor = Object.getOwnPropertyDescriptor(window, 'Notification');
-  const preference = localStorage.getItem(BROWSER_NOTIFICATIONS_KEY);
-  localStorage.setItem(BROWSER_NOTIFICATIONS_KEY, JSON.stringify(enabled));
+  const preference = readStorageItem(BROWSER_NOTIFICATIONS_KEY);
+  writeStorageItem(BROWSER_NOTIFICATIONS_KEY, JSON.stringify(enabled));
   const api = {
     permission,
     requestPermission: () => onPermissionRequest(),
@@ -224,9 +225,9 @@ function mockNotificationPermission(
       Reflect.deleteProperty(window, 'Notification');
     }
     if (preference === null) {
-      localStorage.removeItem(BROWSER_NOTIFICATIONS_KEY);
+      removeStorageItem(BROWSER_NOTIFICATIONS_KEY);
     } else {
-      localStorage.setItem(BROWSER_NOTIFICATIONS_KEY, preference);
+      writeStorageItem(BROWSER_NOTIFICATIONS_KEY, preference);
     }
   };
 }
@@ -332,7 +333,7 @@ export const Appearance: Story = {
   // Solarized restyles the story as it would the app. Restore the page after.
   beforeEach: () => () => {
     applyAppearance(DEFAULT_APPEARANCE);
-    localStorage.removeItem(APPEARANCE_STORAGE_KEY);
+    removeStorageItem(APPEARANCE_STORAGE_KEY);
   },
   render: () => (
     <AppearanceStoryProvider>

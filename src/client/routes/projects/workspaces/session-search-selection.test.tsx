@@ -45,13 +45,13 @@ function LinkedPanelProbe({
   requested?: string | null;
   navigationKey?: string;
 }) {
-  const { activeTabId, selectTab } = useWorkspacePanel();
+  const { activeTabId, openTab, selectTab } = useWorkspacePanel();
   const activate = useCallback(() => selectTab('chat'), [selectTab]);
   useSelectedSessionId('ws', 'first', ['first', 'second'], requested, activate, navigationKey);
   return (
     <>
       <output>{activeTabId}</output>
-      <button type="button" onClick={() => selectTab('file:README.md')}>
+      <button type="button" onClick={() => openTab('file', 'README.md')}>
         Open file
       </button>
     </>
@@ -71,7 +71,7 @@ describe('conversation search selection', () => {
         )
       );
       await act(() => container.querySelector('button')?.click());
-      expect(container.querySelector('output')?.textContent).toBe('file:README.md');
+      expect(container.querySelector('output')?.textContent).toBe('file-README.md');
       await act(() =>
         root.render(
           <WorkspacePanelProvider workspaceId="ws" initialActiveTabId="chat">

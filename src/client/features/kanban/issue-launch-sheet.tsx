@@ -3,7 +3,9 @@ import { PlayIcon } from '@phosphor-icons/react/dist/csr/Play';
 import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
+import { z } from 'zod';
 import { RatchetToggleButton } from '@/client/features/workspace';
+import { usePersistedState } from '@/client/hooks/use-persisted-state';
 import { runInBackground } from '@/client/lib/background-task';
 import type { NormalizedIssue } from '@/client/lib/issue-normalization';
 import { trpc } from '@/client/lib/trpc';
@@ -57,14 +59,19 @@ export function IssueLaunchSheet({
     () => buildIssueStartPrompt({ url: issue.url, prompt: userSettings?.ticketDispatchPrompt }),
     [issue.url, userSettings?.ticketDispatchPrompt]
   );
-  const [ratchetEnabled, setRatchetEnabled] = useState(false);
   const [startupModePreset, setStartupModePreset] = useState<LaunchMode>('non_interactive');
   const [provider, setProvider] = useState<AgentProvider>('CLAUDE');
   const [promptText, setPromptText] = useState(promptPreview);
   const initializedProviderForOpenRef = useRef(false);
   const initializedPromptIssueKeyRef = useRef<string | null>(null);
   const lastPromptPreviewRef = useRef(promptPreview);
-  const ratchetPreferenceKey = `kanban:issue-ratchet:${projectId}:${issue.id}`;
+  // This issue's explicit choice, else the admin default once settings load.
+  const [storedRatchetEnabled, setStoredRatchetEnabled] = usePersistedState(
+    `kanban:issue-ratchet:${projectId}:${issue.id}`,
+    z.boolean().nullable(),
+    null
+  );
+  const ratchetEnabled = storedRatchetEnabled ?? userSettings?.ratchetEnabled ?? false;
   const issueProviderLabel = getIssueProviderLabel(issue);
   const issueKey = `${issue.provider}:${issue.id}`;
   const isPromptPreviewSyncPending =
@@ -100,23 +107,6 @@ export function IssueLaunchSheet({
     initializedProviderForOpenRef.current = true;
   }, [open, promptPreview, userSettings, issueKey]);
 
-  useEffect(() => {
-    if (!userSettings) {
-      return;
-    }
-
-    try {
-      const savedPreference = window.localStorage.getItem(ratchetPreferenceKey);
-      if (savedPreference === 'true' || savedPreference === 'false') {
-        setRatchetEnabled(savedPreference === 'true');
-        return;
-      }
-    } catch {
-      // Ignore localStorage failures and fall back to admin default.
-    }
-    setRatchetEnabled(userSettings.ratchetEnabled);
-  }, [ratchetPreferenceKey, userSettings]);
-
   const createWorkspaceMutation = trpc.workspace.create.useMutation({
     onSuccess: (workspace) => {
       seedCreatedWorkspaceDetail(queryClient, workspace);
@@ -134,12 +124,7 @@ export function IssueLaunchSheet({
   });
 
   const handleRatchetToggle = (enabled: boolean) => {
-    setRatchetEnabled(enabled);
-    try {
-      window.localStorage.setItem(ratchetPreferenceKey, String(enabled));
-    } catch {
-      // Ignore localStorage failures without interrupting the toggle.
-    }
+    setStoredRatchetEnabled(enabled);
   };
 
   const handleStart = () => {

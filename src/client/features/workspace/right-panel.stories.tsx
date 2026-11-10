@@ -7,6 +7,7 @@ import { expect, fn, userEvent, within } from 'storybook/test';
 import { ChatTranscript } from '@/client/features/chat';
 import type { SubagentSelection } from '@/client/features/subagents';
 import { runInBackground } from '@/client/lib/background-task';
+import { readStorageItem, removeStorageItem, writeStorageItem } from '@/client/lib/browser-storage';
 import { trpc } from '@/client/lib/trpc';
 import { invalidateWorkspaceDetail } from '@/client/lib/workspace-queries';
 import { Button } from '@/components/ui/button';
@@ -212,10 +213,10 @@ const meta = {
       [`workspace-panel-tabs-${workspaceId}`, '[]'],
       [`workspace-panel-active-tab-${workspaceId}`, 'chat'],
     ];
-    const previous = entries.map(([key]) => [key, localStorage.getItem(key ?? '')]);
+    const previous = entries.map(([key]) => [key, readStorageItem(key ?? '')]);
     for (const [key, value] of entries) {
       if (key && value) {
-        localStorage.setItem(key, value);
+        writeStorageItem(key, value);
       }
     }
     return () => {
@@ -227,9 +228,9 @@ const meta = {
           continue;
         }
         if (value == null) {
-          localStorage.removeItem(key);
+          removeStorageItem(key);
         } else {
-          localStorage.setItem(key, value);
+          writeStorageItem(key, value);
         }
       }
     };
@@ -237,15 +238,29 @@ const meta = {
 } satisfies Meta<typeof RightPanelStory>;
 export default meta;
 type Story = StoryObj<typeof meta>;
+/** Stored panel layout renders as saved, and mounting does not rewrite it. */
+export const RestoresStoredLayout: Story = {
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(await canvas.findByText('Log source')).toBeVisible();
+    await expect(readStorageItem(`workspace-panel-bottom-tab-${workspaceId}`)).toBe('setup-logs');
+    await expect(readStorageItem(`workspace-panel-tabs-${workspaceId}`)).toBe('[]');
+    await expect(readStorageItem(`workspace-panel-right-visible-${workspaceId}`)).toBe('false');
+  },
+};
+
 export const LegacyIterationPreference: Story = {
   beforeEach: () => {
-    localStorage.setItem(`workspace-right-panel-tab-${workspaceId}`, 'auto-iteration');
+    writeStorageItem(`workspace-right-panel-tab-${workspaceId}`, 'auto-iteration');
   },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await expect(await canvas.findByText('No changes')).toBeVisible();
     await expect(canvas.queryByRole('button', { name: 'Iterations' })).not.toBeInTheDocument();
-    await expect(localStorage.getItem(`workspace-right-panel-tab-${workspaceId}`)).toBe('changes');
+    // Reading a retired preference does not rewrite it; the next selection does.
+    await expect(readStorageItem(`workspace-right-panel-tab-${workspaceId}`)).toBe(
+      'auto-iteration'
+    );
   },
 };
 export const DeletedTaskPreference: Story = {
@@ -255,7 +270,7 @@ export const DeletedTaskPreference: Story = {
     await expect(
       canvas.queryByRole('button', { name: 'Scheduled automation' })
     ).not.toBeInTheDocument();
-    await expect(localStorage.getItem(`workspace-right-panel-tab-${workspaceId}`)).toBe('changes');
+    await expect(readStorageItem(`workspace-right-panel-tab-${workspaceId}`)).toBe('changes');
   },
 };
 export const DeleteWhileOpen: Story = {
@@ -265,7 +280,7 @@ export const DeleteWhileOpen: Story = {
     await canvas.findByText('Scheduled cleanup');
     await userEvent.click(canvas.getByRole('button', { name: 'Delete automation' }));
     await expect(await canvas.findByText('No changes')).toBeVisible();
-    await expect(localStorage.getItem(`workspace-right-panel-tab-${workspaceId}`)).toBe('changes');
+    await expect(readStorageItem(`workspace-right-panel-tab-${workspaceId}`)).toBe('changes');
   },
 };
 
@@ -311,9 +326,7 @@ export const OpenSubagentFromActivity: Story = {
     await userEvent.click(canvas.getByRole('button', { name: '1 subagent running' }));
     await expect(canvas.getByRole('tab', { name: /Review code/, selected: true })).toBeVisible();
     await expect(canvas.queryByRole('button', { name: 'Subagents' })).not.toBeInTheDocument();
-    await expect(localStorage.getItem(`workspace-panel-right-visible-${workspaceId}`)).toBe(
-      'false'
-    );
+    await expect(readStorageItem(`workspace-panel-right-visible-${workspaceId}`)).toBe('false');
   },
 };
 

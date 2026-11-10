@@ -1,7 +1,9 @@
+import { localStore } from '@/client/lib/browser-storage';
+
 export const SELECTED_PROJECT_KEY = 'factoryfactory_selected_project_slug';
 
 export function readSelectedProjectSlug(
-  storage: Pick<Storage, 'getItem'> = localStorage
+  storage: Pick<Storage, 'getItem'> = localStore
 ): string | null {
   try {
     return storage.getItem(SELECTED_PROJECT_KEY);
@@ -12,7 +14,7 @@ export function readSelectedProjectSlug(
 
 export function writeSelectedProjectSlug(
   slug: string,
-  storage: Pick<Storage, 'setItem'> = localStorage
+  storage: Pick<Storage, 'setItem'> = localStore
 ): void {
   try {
     storage.setItem(SELECTED_PROJECT_KEY, slug);

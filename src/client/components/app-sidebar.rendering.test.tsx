@@ -250,3 +250,52 @@ it('keeps cached workspace rows when a refresh fails', async () => {
     await unmount();
   }
 });
+
+it('follows the pointer while resizing and stores the width once the drag ends', async () => {
+  localStorage.setItem('sidebar_width', '400');
+  // jsdom has no pointer capture.
+  Object.assign(HTMLElement.prototype, {
+    setPointerCapture: () => undefined,
+    releasePointerCapture: () => undefined,
+    hasPointerCapture: () => true,
+  });
+  const setItem = vi.spyOn(Storage.prototype, 'setItem');
+  const container = document.createElement('div');
+  document.body.appendChild(container);
+  const root = createRoot(container);
+  try {
+    await act(() =>
+      root.render(
+        <MemoryRouter>
+          <SidebarProvider>
+            <AppSidebar navData={navData} />
+          </SidebarProvider>
+        </MemoryRouter>
+      )
+    );
+    const handle = container.querySelector<HTMLElement>('[aria-label="Resize sidebar"]');
+    const sidebar = handle?.parentElement;
+    expect(sidebar?.style.width).toBe('400px');
+    await act(() => {
+      handle?.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, clientX: 400 }));
+    });
+    for (const clientX of [420, 460, 480]) {
+      await act(() => {
+        window.dispatchEvent(new MouseEvent('pointermove', { clientX }));
+      });
+    }
+    expect(sidebar?.style.width).toBe('480px');
+    expect(setItem.mock.calls.filter(([key]) => key === 'sidebar_width')).toEqual([]);
+    await act(() => {
+      window.dispatchEvent(new MouseEvent('pointerup', {}));
+    });
+    expect(sidebar?.style.width).toBe('480px');
+    expect(setItem.mock.calls.filter(([key]) => key === 'sidebar_width')).toEqual([
+      ['sidebar_width', '480'],
+    ]);
+  } finally {
+    await act(() => root.unmount());
+    vi.restoreAllMocks();
+    localStorage.clear();
+  }
+});

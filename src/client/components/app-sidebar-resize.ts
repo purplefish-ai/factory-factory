@@ -1,19 +1,10 @@
-const SIDEBAR_WIDTH_STORAGE_KEY = 'sidebar_width';
+import { z } from 'zod';
 
-const SIDEBAR_DEFAULT_WIDTH = 352;
+export const SIDEBAR_WIDTH_STORAGE_KEY = 'sidebar_width';
+
+export const SIDEBAR_DEFAULT_WIDTH = 352;
 const SIDEBAR_MIN_WIDTH = 240;
 const SIDEBAR_MAX_WIDTH = 640;
-
-type SidebarWidthStorageReader = Pick<Storage, 'getItem'>;
-type SidebarWidthStorageWriter = Pick<Storage, 'setItem'>;
-
-function getLocalStorageSafe(): Storage | null {
-  try {
-    return globalThis.localStorage ?? null;
-  } catch {
-    return null;
-  }
-}
 
 export function clampSidebarWidth(width: number): number {
   if (!Number.isFinite(width)) {
@@ -30,29 +21,5 @@ export function parseSidebarWidth(value: string | null): number {
   return clampSidebarWidth(parsed);
 }
 
-export function getPersistedSidebarWidth(storage: SidebarWidthStorageReader | null = null): number {
-  const activeStorage = storage ?? getLocalStorageSafe();
-  if (!activeStorage) {
-    return SIDEBAR_DEFAULT_WIDTH;
-  }
-  try {
-    return parseSidebarWidth(activeStorage.getItem(SIDEBAR_WIDTH_STORAGE_KEY));
-  } catch {
-    return SIDEBAR_DEFAULT_WIDTH;
-  }
-}
-
-export function persistSidebarWidth(
-  width: number,
-  storage: SidebarWidthStorageWriter | null = null
-): void {
-  const activeStorage = storage ?? getLocalStorageSafe();
-  if (!activeStorage) {
-    return;
-  }
-  try {
-    activeStorage.setItem(SIDEBAR_WIDTH_STORAGE_KEY, String(clampSidebarWidth(width)));
-  } catch {
-    // Ignore storage access issues.
-  }
-}
+/** The stored width in pixels, clamped to the supported range. */
+export const StoredSidebarWidthSchema = z.string().transform(parseSidebarWidth);

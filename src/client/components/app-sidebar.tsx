@@ -30,6 +30,7 @@ import {
   getProjectSlugFromPath,
   type useAppNavigationData,
 } from '@/client/hooks/use-app-navigation-data';
+import { usePersistedState } from '@/client/hooks/use-persisted-state';
 import { type ProjectIssuesStatus, useProjectIssues } from '@/client/hooks/use-project-issues';
 import type { NormalizedIssue } from '@/client/lib/issue-normalization';
 import {
@@ -64,8 +65,9 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { cn } from '@/lib/utils';
 import {
   clampSidebarWidth,
-  getPersistedSidebarWidth,
-  persistSidebarWidth,
+  SIDEBAR_DEFAULT_WIDTH,
+  SIDEBAR_WIDTH_STORAGE_KEY,
+  StoredSidebarWidthSchema,
 } from './app-sidebar-resize';
 import { Logo } from './logo';
 import { ThemeToggle } from './theme-toggle';
@@ -672,7 +674,15 @@ export function AppSidebar({ navData }: { navData: NavigationData }) {
   const { open, openMobile, setOpenMobile, isMobile } = useSidebar();
   const [showNewWorkspaceForm, setShowNewWorkspaceForm] = useState(false);
   const [isResizingSidebar, setIsResizingSidebar] = useState(false);
-  const [sidebarWidth, setSidebarWidth] = useState<number>(getPersistedSidebarWidth);
+  const [storedSidebarWidth, setStoredSidebarWidth] = usePersistedState(
+    SIDEBAR_WIDTH_STORAGE_KEY,
+    StoredSidebarWidthSchema,
+    SIDEBAR_DEFAULT_WIDTH,
+    { format: 'text' }
+  );
+  // The width follows the pointer during a drag and is stored when it ends.
+  const [dragWidth, setDragWidth] = useState<number | null>(null);
+  const sidebarWidth = dragWidth ?? storedSidebarWidth;
 
   // Auto-close mobile sidebar on route navigation
   useEffect(() => {
@@ -688,10 +698,6 @@ export function AppSidebar({ navData }: { navData: NavigationData }) {
       setShowNewWorkspaceForm(false);
     }
   }, [navData.selectedProjectId]);
-
-  useEffect(() => {
-    persistSidebarWidth(sidebarWidth);
-  }, [sidebarWidth]);
 
   useEffect(() => {
     if (!open && resizeCleanupRef.current) {
@@ -732,6 +738,7 @@ export function AppSidebar({ navData }: { navData: NavigationData }) {
     const pointerId = event.pointerId;
     const startX = event.clientX;
     const startWidth = sidebarWidth;
+    let draggedWidth: number | null = null;
     const handleElement = event.currentTarget;
     const controller = new AbortController();
     const previousCursor = document.body.style.cursor;
@@ -739,6 +746,10 @@ export function AppSidebar({ navData }: { navData: NavigationData }) {
 
     const cleanup = () => {
       controller.abort();
+      if (draggedWidth !== null) {
+        setStoredSidebarWidth(draggedWidth);
+      }
+      setDragWidth(null);
       setIsResizingSidebar(false);
       document.body.style.cursor = previousCursor;
       document.body.style.userSelect = previousUserSelect;
@@ -759,7 +770,8 @@ export function AppSidebar({ navData }: { navData: NavigationData }) {
         return;
       }
       const deltaX = moveEvent.clientX - startX;
-      setSidebarWidth(clampSidebarWidth(startWidth + deltaX));
+      draggedWidth = clampSidebarWidth(startWidth + deltaX);
+      setDragWidth(draggedWidth);
     };
 
     const handlePointerEnd = (endEvent: PointerEvent) => {

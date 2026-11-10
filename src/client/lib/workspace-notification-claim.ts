@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { readStoredJson, writeStoredJson } from '@/client/lib/browser-storage';
 
 interface WorkspaceCompletionIdentity {
   workspaceId: string;
@@ -18,15 +19,7 @@ const recentCompletionsSchema = z
 
 /** Called only while the origin-wide exclusive Web Lock is held. */
 function claimStoredCompletion(identity: WorkspaceCompletionIdentity): boolean {
-  const text = localStorage.getItem(RECENT_COMPLETIONS_KEY) ?? '[]';
-  let raw: unknown;
-  try {
-    raw = JSON.parse(text);
-  } catch {
-    raw = null;
-  }
-  const parsed = recentCompletionsSchema.safeParse(raw);
-  const recent = parsed.success ? parsed.data : [];
+  const recent = readStoredJson(RECENT_COMPLETIONS_KEY, recentCompletionsSchema) ?? [];
   if (
     recent.some(
       (item) => item.workspaceId === identity.workspaceId && item.finishedAt === identity.finishedAt
@@ -34,12 +27,10 @@ function claimStoredCompletion(identity: WorkspaceCompletionIdentity): boolean {
   ) {
     return false;
   }
-  localStorage.setItem(
+  writeStoredJson(
     RECENT_COMPLETIONS_KEY,
-    JSON.stringify(
-      [...recent, { workspaceId: identity.workspaceId, finishedAt: identity.finishedAt }].slice(
-        -MAX_RECENT_COMPLETIONS
-      )
+    [...recent, { workspaceId: identity.workspaceId, finishedAt: identity.finishedAt }].slice(
+      -MAX_RECENT_COMPLETIONS
     )
   );
   return true;

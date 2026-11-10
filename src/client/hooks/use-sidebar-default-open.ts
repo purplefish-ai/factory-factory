@@ -1,18 +1,15 @@
 import { useState } from 'react';
+import { readStorageItem } from '@/client/lib/browser-storage';
 
 const STORAGE_KEY = 'sidebar_state';
 
 function getPersistedState(): boolean {
-  try {
-    // Migrate an existing explicit preference; the old board state was transient.
-    for (const key of [STORAGE_KEY, 'sidebar_state_workspace_detail', 'sidebar_state_default']) {
-      const value = localStorage.getItem(key);
-      if (value === 'true' || value === 'false') {
-        return value === 'true';
-      }
+  // Migrate an existing explicit preference; the old board state was transient.
+  for (const key of [STORAGE_KEY, 'sidebar_state_workspace_detail', 'sidebar_state_default']) {
+    const value = readStorageItem(key);
+    if (value === 'true' || value === 'false') {
+      return value === 'true';
     }
-  } catch {
-    // Storage is optional; navigation should still preserve the in-memory state.
   }
   return true;
 }

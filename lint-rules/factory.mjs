@@ -332,6 +332,8 @@ function readQueryFields(context, declarator) {
   return fields;
 }
 
+const WEB_STORAGE_NAMES = new Set(['localStorage', 'sessionStorage']);
+
 function isListedFile(context, paths) {
   const filename = context.filename.replaceAll('\\', '/');
   return paths.some((path) => filename === path || filename.endsWith(`/${path}`));
@@ -690,6 +692,68 @@ const rules = {
         },
         TemplateElement(node) {
           reportRawPaletteClass(context, node, node.value.cooked ?? node.value.raw);
+        },
+      };
+    },
+  },
+  'no-direct-web-storage': {
+    meta: {
+      schema: [
+        {
+          type: 'object',
+          properties: {
+            exceptions: {
+              type: 'object',
+              additionalProperties: { type: 'string', minLength: 1 },
+            },
+          },
+          additionalProperties: false,
+        },
+      ],
+    },
+    create(context) {
+      // `exceptions` maps repository-relative paths to the reason each file
+      // may touch Web Storage directly (src/client/lib/browser-storage.ts).
+      if (isListedFile(context, Object.keys(context.options[0]?.exceptions ?? {}))) {
+        return {};
+      }
+      const reported = new Set();
+      const report = (node) => {
+        const position = node.range?.[0] ?? node.start;
+        if (reported.has(position)) {
+          return;
+        }
+        reported.add(position);
+        context.report({
+          node,
+          message:
+            'Use usePersistedState or the helpers in src/client/lib/browser-storage.ts instead of localStorage/sessionStorage.',
+        });
+      };
+      return {
+        Identifier(node) {
+          if (!WEB_STORAGE_NAMES.has(node.name)) {
+            return;
+          }
+          const parent = node.parent;
+          const isName =
+            // `window.localStorage` is reported once, as a member access.
+            (parent?.type === 'MemberExpression' && parent.property === node && !parent.computed) ||
+            // `{ localStorage: 'local' }` names a key; `{ localStorage }` reports its value.
+            (parent?.type === 'Property' && parent.key === node && !parent.computed) ||
+            (['PropertyDefinition', 'MethodDefinition', 'TSPropertySignature'].includes(
+              parent?.type
+            ) &&
+              parent.key === node &&
+              !parent.computed);
+          if (!isName) {
+            report(node);
+          }
+        },
+        MemberExpression(node) {
+          if (WEB_STORAGE_NAMES.has(memberName(node))) {
+            report(node);
+          }
         },
       };
     },

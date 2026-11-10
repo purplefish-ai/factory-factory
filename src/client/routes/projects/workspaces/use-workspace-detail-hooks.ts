@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { runInBackground } from '@/client/lib/background-task';
+import { readStorageItem, removeStorageItem, writeStorageItem } from '@/client/lib/browser-storage';
 import { POLL_INTERVAL_MS } from '@/client/lib/query-options';
 import { trpc } from '@/client/lib/trpc';
 import {
@@ -254,7 +255,7 @@ export function useSelectedSessionId(
   });
 
   const [selectedDbSessionId, setSelectedDbSessionIdRaw] = useState<string | null>(() => {
-    const stored = localStorage.getItem(storageKey);
+    const stored = readStorageItem(storageKey);
     return requestedSessionId ?? stored ?? initialDbSessionId;
   });
 
@@ -269,7 +270,7 @@ export function useSelectedSessionId(
     ) {
       consumedLinkRef.current = linkIdentity;
       pendingSelectionRef.current = { id: null, setAtMs: null };
-      localStorage.setItem(storageKey, requestedSessionId);
+      writeStorageItem(storageKey, requestedSessionId);
       setSelectedDbSessionIdRaw(requestedSessionId);
       onLinkedSession?.();
       return;
@@ -279,7 +280,7 @@ export function useSelectedSessionId(
       pendingSelectionRef.current = { id: null, setAtMs: null };
     }
 
-    const persistedSessionId = localStorage.getItem(storageKey);
+    const persistedSessionId = readStorageItem(storageKey);
     const resolved = resolveSelectedSessionId({
       currentSelectedDbSessionId: selectedDbSessionId,
       persistedSessionId,
@@ -306,9 +307,9 @@ export function useSelectedSessionId(
       pendingSelectionRef.current = { id, setAtMs: id ? Date.now() : null };
       setSelectedDbSessionIdRaw(id);
       if (id) {
-        localStorage.setItem(storageKey, id);
+        writeStorageItem(storageKey, id);
       } else {
-        localStorage.removeItem(storageKey);
+        removeStorageItem(storageKey);
       }
     },
     [storageKey]

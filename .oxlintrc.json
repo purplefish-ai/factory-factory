@@ -127,6 +127,14 @@
             }
           }
         ],
+        "factory/no-direct-web-storage": [
+          "error",
+          {
+            "exceptions": {
+              "src/client/lib/browser-storage.ts": "The shared Web Storage module: guards every access and keeps mounted usePersistedState consumers of a key in agreement."
+            }
+          }
+        ],
         "factory/no-raw-spinner": [
           "error",
           {
@@ -179,6 +187,7 @@
         "factory/no-raw-palette-classes": "off",
         "factory/query-owner": "off",
         "factory/no-raw-spinner": "off",
+        "factory/no-direct-web-storage": "off",
         "factory/named-query-options": "off"
       }
     },

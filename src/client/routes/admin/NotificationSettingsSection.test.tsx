@@ -100,6 +100,11 @@ it('synchronizes same-window and other-tab changes and rejects malformed prefere
     window.dispatchEvent(new StorageEvent('storage', { key: BROWSER_NOTIFICATIONS_KEY }));
   });
   expect(toggle().getAttribute('aria-checked')).toBe('false');
+  localStorage.setItem(BROWSER_NOTIFICATIONS_KEY, 'true');
+  act(() => {
+    window.dispatchEvent(new StorageEvent('storage', { key: null }));
+  });
+  expect(toggle().getAttribute('aria-checked')).toBe('true');
 });
 
 it('reports storage failures without pretending the opt-in was saved', async () => {

@@ -2,6 +2,7 @@ import { ArrowCircleUpIcon } from '@phosphor-icons/react/dist/csr/ArrowCircleUp'
 import { CaretDownIcon } from '@phosphor-icons/react/dist/csr/CaretDown';
 import { XIcon } from '@phosphor-icons/react/dist/csr/X';
 import { useEffect, useId, useState } from 'react';
+import { readStorageItem, removeStorageItem, writeStorageItem } from '@/client/lib/browser-storage';
 import { POLL_INTERVAL_MS, QUERY_RETRY } from '@/client/lib/query-options';
 import { trpc } from '@/client/lib/trpc';
 import { Button } from '@/components/ui/button';
@@ -14,28 +15,20 @@ const PENDING_TARGET_KEY = 'ff_update_pending_target';
 const RELOADED_TARGET_KEY = 'ff_update_reloaded_target';
 const reloadedWithoutStorage = new Set<string>();
 
-function readStorage(kind: 'localStorage' | 'sessionStorage', key: string): string | null {
-  try {
-    return window[kind].getItem(key);
-  } catch {
-    return null;
-  }
+// Kept as thin adapters so call sites name the storage area they use.
+const STORAGE_AREAS = { localStorage: 'local', sessionStorage: 'session' } as const;
+
+function readStorage(kind: keyof typeof STORAGE_AREAS, key: string): string | null {
+  return readStorageItem(key, STORAGE_AREAS[kind]);
 }
 
-function writeStorage(kind: 'localStorage' | 'sessionStorage', key: string, value: string) {
-  try {
-    window[kind].setItem(key, value);
-  } catch {
-    // Updates and dismissal remain usable when browser storage is unavailable.
-  }
+function writeStorage(kind: keyof typeof STORAGE_AREAS, key: string, value: string) {
+  // Updates and dismissal remain usable when browser storage is unavailable.
+  writeStorageItem(key, value, STORAGE_AREAS[kind]);
 }
 
-function removeStorage(kind: 'localStorage' | 'sessionStorage', key: string) {
-  try {
-    window[kind].removeItem(key);
-  } catch {
-    // A previous dismissal must not prevent another update attempt.
-  }
+function removeStorage(kind: keyof typeof STORAGE_AREAS, key: string) {
+  removeStorageItem(key, STORAGE_AREAS[kind]);
 }
 
 function resetUpdateReload(targetVersion: string) {

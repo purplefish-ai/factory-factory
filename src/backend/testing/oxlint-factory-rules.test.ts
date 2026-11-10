@@ -29,6 +29,7 @@ const rules = [
   'query-owner',
   'use-pending-prop',
   'no-raw-spinner',
+  'no-direct-web-storage',
   'named-query-options',
   'query-error-handled',
 ];
@@ -166,6 +167,15 @@ describe('Oxlint project guardrails', () => {
     ['no-raw-spinner', 'const className = "motion-safe:animate-spin";'],
     ['no-raw-spinner', 'const x = <SpinnerGapIcon aria-hidden />;'],
     ['no-raw-spinner', 'const className = `p-2 animate-spin`;'],
+    ['no-direct-web-storage', 'const value = localStorage.getItem("key");'],
+    ['no-direct-web-storage', 'window.localStorage.setItem("key", "value");'],
+    ['no-direct-web-storage', 'sessionStorage.removeItem("key");'],
+    ['no-direct-web-storage', 'const storage = globalThis["sessionStorage"];'],
+    [
+      'no-direct-web-storage',
+      'const area = typeof window === "undefined" ? null : window.localStorage;',
+    ],
+    ['no-direct-web-storage', 'read({ localStorage });'],
     ['named-query-options', 'trpc.project.list.useQuery(input, { refetchInterval: 10_000 });'],
     ['named-query-options', 'useQuery({ refetchInterval: open ? 30_000 : false });'],
     ['named-query-options', 'useQuery({ refetchInterval: 2 * POLL_INTERVAL_MS.activity });'],
@@ -235,6 +245,10 @@ describe('Oxlint project guardrails', () => {
     'const x = <Spinner className="size-3" aria-hidden />;',
     'const className = "animate-spin-slow animate-pulse";',
     'const name = "no-animate-spin";',
+    'const value = readStorageItem("key");',
+    'const areas = { localStorage: "local", sessionStorage: "session" } as const;',
+    'const kind: "localStorage" | "sessionStorage" = "localStorage";',
+    'const value = storage.getItem("key"); type Reader = Pick<Storage, "getItem">;',
     'await utils.workspace.get.invalidate({ id });',
     'await utils.workspace.listForProject.cancel(input);',
     'const cached = utils.workspace.listForProject.getData(input);',
@@ -358,48 +372,76 @@ describe('raw palette class exceptions', () => {
   });
 });
 
-describe.each(['use-pending-prop', 'no-raw-spinner'])('factory/%s exceptions', (rule) => {
-  const projectConfig = overridesSchema.parse(
-    JSON.parse(readFileSync(resolve('.oxlintrc.json'), 'utf8'))
-  );
-  const exceptions = projectConfig.overrides.flatMap((override) => {
-    const setting = override.rules[`factory/${rule}`];
-    return Array.isArray(setting)
-      ? Object.entries(exceptionRuleSchema.parse(setting)[1].exceptions)
-      : [];
-  });
-
-  it('gives every file a reason', () => {
-    for (const [, reason] of exceptions) {
-      expect(reason.length).toBeGreaterThan(20);
-    }
-  });
-
-  it.runIf(exceptions.length > 0)('still needs every exception', () => {
-    // Lint the listed files with the rule and no exceptions: each must still report.
-    const ruleConfig = join(directory, `${rule}.oxlintrc.json`);
-    writeFileSync(
-      ruleConfig,
-      JSON.stringify({
-        categories: { correctness: 'off' },
-        plugins: [],
-        jsPlugins: [{ name: 'factory', specifier: resolve('lint-rules/factory.mjs') }],
-        rules: { [`factory/${rule}`]: 'error' },
-      })
+describe.each(['use-pending-prop', 'no-raw-spinner', 'no-direct-web-storage'])(
+  'factory/%s exceptions',
+  (rule) => {
+    const projectConfig = overridesSchema.parse(
+      JSON.parse(readFileSync(resolve('.oxlintrc.json'), 'utf8'))
     );
-    const files = exceptions.map(([file]) => file);
-    const result = spawnSync(binary, ['--config', ruleConfig, '--format', 'json', ...files], {
-      encoding: 'utf8',
+    const exceptions = projectConfig.overrides.flatMap((override) => {
+      const setting = override.rules[`factory/${rule}`];
+      return Array.isArray(setting)
+        ? Object.entries(exceptionRuleSchema.parse(setting)[1].exceptions)
+        : [];
     });
-    expect(result.error).toBeUndefined();
-    expect(result.stderr).toBe('');
-    const reported = new Set(
-      reportSchema
-        .parse(JSON.parse(result.stdout))
-        .diagnostics.filter(({ code }) => code === `factory(${rule})`)
-        .map(({ filename }) => filename)
-    );
-    expect(files.filter((file) => !reported.has(file))).toEqual([]);
+
+    it('gives every file a reason', () => {
+      for (const [, reason] of exceptions) {
+        expect(reason.length).toBeGreaterThan(20);
+      }
+    });
+
+    it.runIf(exceptions.length > 0)('still needs every exception', () => {
+      // Lint the listed files with the rule and no exceptions: each must still report.
+      const ruleConfig = join(directory, `${rule}.oxlintrc.json`);
+      writeFileSync(
+        ruleConfig,
+        JSON.stringify({
+          categories: { correctness: 'off' },
+          plugins: [],
+          jsPlugins: [{ name: 'factory', specifier: resolve('lint-rules/factory.mjs') }],
+          rules: { [`factory/${rule}`]: 'error' },
+        })
+      );
+      const files = exceptions.map(([file]) => file);
+      const result = spawnSync(binary, ['--config', ruleConfig, '--format', 'json', ...files], {
+        encoding: 'utf8',
+      });
+      expect(result.error).toBeUndefined();
+      expect(result.stderr).toBe('');
+      const reported = new Set(
+        reportSchema
+          .parse(JSON.parse(result.stdout))
+          .diagnostics.filter(({ code }) => code === `factory(${rule})`)
+          .map(({ filename }) => filename)
+      );
+      expect(files.filter((file) => !reported.has(file))).toEqual([]);
+    });
+  }
+);
+
+describe('web storage access', () => {
+  it('is limited to the shared storage module and exempts only tests', () => {
+    const overrides = overridesSchema.parse(
+      JSON.parse(readFileSync(resolve('.oxlintrc.json'), 'utf8'))
+    ).overrides;
+    const scopes = overrides
+      .filter((override) => override.rules['factory/no-direct-web-storage'] !== undefined)
+      .map((override) => [override.files, override.rules['factory/no-direct-web-storage']]);
+    expect(scopes).toEqual([
+      [
+        ['src/client/**/*.{ts,tsx}', 'src/components/**/*.{ts,tsx}', 'src/lib/**/*.{ts,tsx}'],
+        [
+          'error',
+          {
+            exceptions: {
+              'src/client/lib/browser-storage.ts': expect.any(String),
+            },
+          },
+        ],
+      ],
+      [['**/*.test.ts', '**/*.test.tsx'], 'off'],
+    ]);
   });
 });
 
