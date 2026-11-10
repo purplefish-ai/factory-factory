@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { flushSync } from 'react-dom';
-import { createRoot } from 'react-dom/client';
+import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { usePlanViewMode } from './plan-view-preference';
 
@@ -15,13 +15,15 @@ function Toggle() {
   );
 }
 
+const roots: Root[] = [];
+
 function mount() {
   const host = document.createElement('div');
   const root = createRoot(host);
+  roots.push(root);
   flushSync(() => root.render(<Toggle />));
   return {
     button: () => host.querySelector('button'),
-    unmount: () => flushSync(() => root.unmount()),
   };
 }
 
@@ -30,17 +32,18 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  for (const root of roots.splice(0)) {
+    flushSync(() => root.unmount());
+  }
   vi.restoreAllMocks();
 });
 
 it('defaults to rendered and falls back from invalid values', () => {
   const empty = mount();
   expect(empty.button()?.textContent).toBe('rendered');
-  empty.unmount();
   localStorage.setItem(KEY, 'invalid');
   const invalid = mount();
   expect(invalid.button()?.textContent).toBe('rendered');
-  invalid.unmount();
 });
 
 it('restores and stores the raw string preference without writing on mount', () => {
@@ -52,5 +55,4 @@ it('restores and stores the raw string preference without writing on mount', () 
   flushSync(() => view.button()?.click());
   expect(view.button()?.textContent).toBe('rendered');
   expect(localStorage.getItem(KEY)).toBe('rendered');
-  view.unmount();
 });

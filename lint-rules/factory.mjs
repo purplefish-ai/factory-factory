@@ -334,6 +334,25 @@ function readQueryFields(context, declarator) {
 
 const WEB_STORAGE_NAMES = new Set(['localStorage', 'sessionStorage']);
 
+/** `window`, `globalThis` or `self`: the objects that expose Web Storage. */
+function isWebStorageGlobal(node) {
+  return node?.type === 'Identifier' && ['window', 'globalThis', 'self'].includes(node.name);
+}
+
+/** A property or key name that does not depend on runtime values. */
+function staticKeyName(key, computed) {
+  if (!computed) {
+    return key.type === 'Identifier' ? key.name : key.value;
+  }
+  if (key.type === 'Literal') {
+    return key.value;
+  }
+  if (key.type === 'TemplateLiteral' && key.expressions.length === 0) {
+    return key.quasis[0].value.cooked;
+  }
+  return undefined;
+}
+
 function isListedFile(context, paths) {
   const filename = context.filename.replaceAll('\\', '/');
   return paths.some((path) => filename === path || filename.endsWith(`/${path}`));
@@ -697,20 +716,7 @@ const rules = {
     },
   },
   'no-direct-web-storage': {
-    meta: {
-      schema: [
-        {
-          type: 'object',
-          properties: {
-            exceptions: {
-              type: 'object',
-              additionalProperties: { type: 'string', minLength: 1 },
-            },
-          },
-          additionalProperties: false,
-        },
-      ],
-    },
+    meta: { schema: EXCEPTIONS_SCHEMA },
     create(context) {
       // `exceptions` maps repository-relative paths to the reason each file
       // may touch Web Storage directly (src/client/lib/browser-storage.ts).
@@ -737,7 +743,7 @@ const rules = {
           }
           const parent = node.parent;
           const isName =
-            // `window.localStorage` is reported once, as a member access.
+            // `window.localStorage` is reported as a member access; `record.localStorage` is data.
             (parent?.type === 'MemberExpression' && parent.property === node && !parent.computed) ||
             // `{ localStorage: 'local' }` names a key; `{ localStorage }` reports its value.
             (parent?.type === 'Property' && parent.key === node && !parent.computed) ||
@@ -751,8 +757,25 @@ const rules = {
           }
         },
         MemberExpression(node) {
-          if (WEB_STORAGE_NAMES.has(memberName(node))) {
+          if (
+            isWebStorageGlobal(node.object) &&
+            WEB_STORAGE_NAMES.has(staticKeyName(node.property, node.computed))
+          ) {
             report(node);
+          }
+        },
+        VariableDeclarator(node) {
+          // `const { localStorage: store } = window`
+          if (node.id.type !== 'ObjectPattern' || !isWebStorageGlobal(node.init)) {
+            return;
+          }
+          for (const property of node.id.properties) {
+            if (
+              property.type === 'Property' &&
+              WEB_STORAGE_NAMES.has(staticKeyName(property.key, property.computed))
+            ) {
+              report(property);
+            }
           }
         },
       };

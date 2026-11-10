@@ -35,10 +35,33 @@ function decode<T>(
     return fallback;
   }
   if (format === 'json') {
-    return decodeStoredJson(raw, schema) ?? fallback;
+    // A schema may accept a stored `null`; only a missing or invalid value falls back.
+    const decoded = decodeStoredJson(raw, schema);
+    return decoded === undefined ? fallback : decoded;
   }
   const result = schema.safeParse(raw);
   return result.success ? result.data : fallback;
+}
+
+/**
+ * The stored string for `value`, or `undefined` when it cannot be encoded
+ * (the encoder throws, or `JSON.stringify` yields no JSON, as for `undefined`).
+ */
+function encodeValue<T>(
+  value: T,
+  format: 'json' | 'text',
+  encode: ((value: T) => string) | undefined
+): string | undefined {
+  try {
+    const raw: unknown = encode
+      ? encode(value)
+      : format === 'json'
+        ? JSON.stringify(value)
+        : String(value);
+    return typeof raw === 'string' ? raw : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 /**
@@ -62,7 +85,8 @@ export function usePersistedState<T>(
   codec.current = { schema, fallback, encode };
   // The decoded value for the last raw string, so snapshots stay referentially
   // stable and a consumer keeps the exact object it last stored.
-  const cache = useRef<{ key: string; raw: string | null; value: T } | null>(null);
+  const cache = useRef<{ source: string; raw: string | null; value: T } | null>(null);
+  const source = `${area}:${format}:${key}`;
 
   const getSnapshot = useCallback((): T => {
     if (key === null) {
@@ -70,13 +94,13 @@ export function usePersistedState<T>(
     }
     const raw = readStorageItem(key, area);
     const cached = cache.current;
-    if (cached && cached.key === key && cached.raw === raw) {
+    if (cached && cached.source === source && cached.raw === raw) {
       return cached.value;
     }
     const value = decode(raw, codec.current.schema, codec.current.fallback, format);
-    cache.current = { key, raw, value };
+    cache.current = { source, raw, value };
     return value;
-  }, [key, area, format]);
+  }, [key, area, format, source]);
 
   const subscribe = useCallback(
     (listener: () => void) => subscribeStorageItem(key ?? '', listener, { area, crossTab }),
@@ -96,27 +120,22 @@ export function usePersistedState<T>(
         return;
       }
       const previous = getSnapshot();
-      const value = typeof next === 'function' ? (next as (previous: T) => T)(previous) : next;
-      let raw: string;
-      try {
-        const { encode: customEncode } = codec.current;
-        raw = customEncode
-          ? customEncode(value)
-          : format === 'json'
-            ? JSON.stringify(value)
-            : String(value);
-      } catch {
-        // A value that cannot be encoded is not stored or shown.
+      const isUpdater = typeof next === 'function';
+      const value = isUpdater ? (next as (previous: T) => T)(previous) : next;
+      // An updater that returns its input changes nothing. An explicit value is
+      // always stored, even when it equals the fallback or this page's copy.
+      if (isUpdater && Object.is(value, previous)) {
         return;
       }
-      // An explicit choice equal to the fallback is still stored.
-      if (Object.is(value, previous) && raw === readStorageItem(key, area)) {
+      const raw = encodeValue(value, format, codec.current.encode);
+      // A value that cannot be encoded is neither stored nor shown.
+      if (raw === undefined) {
         return;
       }
-      cache.current = { key, raw, value };
+      cache.current = { source, raw, value };
       rememberStorageItem(key, raw, area);
     },
-    [key, area, format, getSnapshot]
+    [key, area, format, source, getSnapshot]
   );
 
   return [key === null ? memoryValue : storedValue, setValue] as const;

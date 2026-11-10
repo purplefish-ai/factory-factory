@@ -133,6 +133,9 @@ describe('stored expansion state', () => {
       mockStorage.set('workspace-tool-call-expansion-workspace-1', JSON.stringify(payload));
       const { root, button } = renderHarness('workspace-1');
       expect(button()?.getAttribute('data-open')).toBe('false');
+      expect(mockStorage.get('workspace-tool-call-expansion-workspace-1')).toBe(
+        JSON.stringify(payload)
+      );
       root.unmount();
     }
   });

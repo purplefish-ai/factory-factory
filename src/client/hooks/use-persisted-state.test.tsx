@@ -51,6 +51,34 @@ function ItemProbe({ onRender }: { onRender: (value: Item, set: (next: Item) => 
   return null;
 }
 
+const NullableSchema = z.boolean().nullable();
+const OptionalSchema = z.undefined();
+const FormatSchema = z.union([z.number(), z.string()]);
+
+function NullableProbe({ onRender }: { onRender: (value: boolean | null) => void }) {
+  const [value] = usePersistedState('nullable', NullableSchema, true);
+  onRender(value);
+  return null;
+}
+
+function OptionalProbe({ onSetter }: { onSetter: (set: (next: undefined) => void) => void }) {
+  const [, setValue] = usePersistedState('optional', OptionalSchema, undefined);
+  onSetter(setValue);
+  return null;
+}
+
+function FormatProbe({
+  format,
+  onRender,
+}: {
+  format: 'json' | 'text';
+  onRender: (value: number | string) => void;
+}) {
+  const [value] = usePersistedState(KEY, FormatSchema, 0, { format });
+  onRender(value);
+  return null;
+}
+
 function mount(element: React.ReactNode) {
   const host = document.createElement('div');
   const root = createRoot(host);
@@ -114,6 +142,50 @@ describe('usePersistedState', () => {
     const view = mount(<Counter onRender={(_value, setValue) => (set = setValue)} />);
     flushSync(() => set?.(0));
     expect(localStorage.getItem(KEY)).toBe('0');
+    view.unmount();
+  });
+
+  it('stores an explicit value over another tab write it has not followed', () => {
+    let set: ((next: number) => void) | undefined;
+    const view = mount(<Counter onRender={(_value, setValue) => (set = setValue)} />);
+    localStorage.setItem(KEY, '5');
+    flushSync(() => set?.(0));
+    expect(localStorage.getItem(KEY)).toBe('0');
+    view.unmount();
+  });
+
+  it('skips an updater that returns its input', () => {
+    let set: ((next: (previous: number) => number) => void) | undefined;
+    const view = mount(<Counter onRender={(_value, setValue) => (set = setValue)} />);
+    const setItem = vi.spyOn(Storage.prototype, 'setItem');
+    flushSync(() => set?.((previous) => previous));
+    expect(setItem).not.toHaveBeenCalled();
+    view.unmount();
+  });
+
+  it('restores a stored null that the schema accepts', () => {
+    localStorage.setItem('nullable', 'null');
+    let current: boolean | null | undefined;
+    const view = mount(<NullableProbe onRender={(value) => (current = value)} />);
+    expect(current).toBeNull();
+    view.unmount();
+  });
+
+  it('does not store values that do not encode to a string', () => {
+    let set: ((next: undefined) => void) | undefined;
+    const view = mount(<OptionalProbe onSetter={(setter) => (set = setter)} />);
+    flushSync(() => set?.(undefined));
+    expect(localStorage.getItem('optional')).toBeNull();
+    view.unmount();
+  });
+
+  it('decodes again when the format changes', () => {
+    localStorage.setItem(KEY, '7');
+    let current: unknown;
+    const view = mount(<FormatProbe format="json" onRender={(value) => (current = value)} />);
+    expect(current).toBe(7);
+    view.rerender(<FormatProbe format="text" onRender={(value) => (current = value)} />);
+    expect(current).toBe('7');
     view.unmount();
   });
 
@@ -197,9 +269,12 @@ describe('usePersistedState', () => {
       );
     });
     expect(view.texts()).toEqual(['5', '0']);
+    // An event for another storage area does not re-read local storage.
+    localStorage.setItem(KEY, '6');
     flushSync(() => {
       window.dispatchEvent(new StorageEvent('storage', { key: KEY, storageArea: sessionStorage }));
     });
+    expect(view.texts()).toEqual(['5', '0']);
     localStorage.clear();
     flushSync(() => {
       window.dispatchEvent(new StorageEvent('storage', { key: null, storageArea: localStorage }));

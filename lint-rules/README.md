@@ -84,9 +84,10 @@ is left to its consumer; reads through a local alias are followed. The rule
 checks that an error field is read, not how it is rendered. It has no
 exceptions.
 
-`no-direct-web-storage` rejects `localStorage` and `sessionStorage` (including
-`window.localStorage` and `globalThis["sessionStorage"]`) in `src/client`,
-`src/components` and `src/lib`. Keep UI state in Web Storage with
+`no-direct-web-storage` rejects `localStorage` and `sessionStorage`, read
+directly or from `window`, `globalThis` or `self` (including computed keys and
+destructuring), in `src/client`, `src/components` and `src/lib`; a field of that
+name on other objects is allowed. Keep UI state in Web Storage with
 `usePersistedState` (`src/client/hooks/use-persisted-state.ts`): it reads and
 validates the stored value with Zod on the first render, writes in its stable
 setter, keeps every mounted consumer of a key in agreement, keeps working in
