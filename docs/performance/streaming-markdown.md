@@ -1,10 +1,12 @@
 # Streaming Markdown
 
 The backend flushes assistant text deltas about every 25 ms. The client appends
-each delta's chunk to the accumulated message text, producing a new string.
-Application Markdown uses Streamdown 2.7.1 with our existing typography, links,
-images and Mermaid renderer. The React Markdown primitive remains available as
-the comparison baseline.
+each delta's chunk to the accumulated message text, producing a new string. The
+chat transport coalesces deltas that arrive within one animation frame; see
+[chat message flow](../chat-message-flow.md#frontend-updates). Application
+Markdown uses Streamdown 2.7.1 with our existing typography, links, images and
+Mermaid renderer. The React Markdown primitive remains available as the
+comparison baseline.
 
 ## Approach
 
@@ -29,9 +31,10 @@ The chosen foreground timing budget is up to 100 ms from client receipt to the
 next text snapshot, followed by a 120 ms fade to full opacity. New words begin
 fading as soon as that snapshot commits; there is no stagger or word queue. Thus
 the nominal budget to full opacity is 220 ms after client receipt, or about 245
-ms including the backend's 25 ms batching window. Network transit, Markdown
-rendering, a paint frame and main-thread scheduling add to that budget; it is
-not a hard wall-clock maximum, particularly for a busy or hidden tab.
+ms including the backend's 25 ms batching window. Network transit, up to one
+animation frame of client delta coalescing (none for a reply's first token),
+Markdown rendering, a paint frame and main-thread scheduling add to that budget;
+it is not a hard wall-clock maximum, particularly for a busy or hidden tab.
 
 Issue #2880 originally proposed an 80–120 ms total visual-delay target for a
 queued character-reveal experiment. After trying the comparison, the user chose

@@ -41,6 +41,7 @@ import {
 } from './chat-persistence';
 import { type ChatAction, type ChatState, chatReducer, createInitialChatState } from './reducer';
 import { reduceSettingsSlice } from './reducer/slices/settings';
+import { useStreamDeltaCoalescedDispatch } from './stream-delta-coalescer';
 import { createToolInputAccumulatorState } from './streaming-utils';
 import type { SendMessageOptions } from './use-chat-actions';
 import { useChatActions } from './use-chat-actions';
@@ -116,8 +117,11 @@ function showAttachmentPersistenceError(operation: 'save' | 'clear') {
 export function useChatState(options: UseChatStateOptions): UseChatStateReturn {
   const { dbSessionId, send, connected } = options;
 
-  // Reducer for chat state
-  const [state, dispatch] = useReducer(chatReducer, undefined, createInitialChatState);
+  // Reducer for chat state. Every dispatch goes through the coalescer, so
+  // stream deltas buffered for the next frame reach the reducer before any
+  // later action, including session switches, disconnects and user sends.
+  const [state, reducerDispatch] = useReducer(chatReducer, undefined, createInitialChatState);
+  const dispatch = useStreamDeltaCoalescedDispatch(reducerDispatch);
 
   // Local state for input attachments (for recovery on rejection)
   const [inputAttachments, setInputAttachmentsState] = useState<MessageAttachment[]>([]);
@@ -158,7 +162,7 @@ export function useChatState(options: UseChatStateOptions): UseChatStateReturn {
     if (stateRef.current.chatSettings !== previousSettings) {
       persistSettings(dbSessionIdRef.current, stateRef.current.chatSettings);
     }
-  }, [sessionContext]);
+  }, [dispatch, sessionContext]);
 
   const wasConnectedRef = useRef(connected);
   useEffect(() => {
@@ -241,17 +245,20 @@ export function useChatState(options: UseChatStateOptions): UseChatStateReturn {
 
   // Settings confirmations and rollbacks must be visible to an immediate send,
   // including multiple transport events batched before React commits a render.
-  const dispatchTransportAction = useCallback((action: ChatAction) => {
-    const previousState = stateRef.current;
-    const nextState = reduceSettingsSlice(previousState, action);
-    if (nextState !== previousState) {
-      stateRef.current = nextState;
-      if (nextState.chatSettings !== previousState.chatSettings) {
-        persistSettings(dbSessionIdRef.current, nextState.chatSettings);
+  const dispatchTransportAction = useCallback(
+    (action: ChatAction) => {
+      const previousState = stateRef.current;
+      const nextState = reduceSettingsSlice(previousState, action);
+      if (nextState !== previousState) {
+        stateRef.current = nextState;
+        if (nextState.chatSettings !== previousState.chatSettings) {
+          persistSettings(dbSessionIdRef.current, nextState.chatSettings);
+        }
       }
-    }
-    dispatch(action);
-  }, []);
+      dispatch(action);
+    },
+    [dispatch]
+  );
 
   const { handleMessage: handleTransportMessage } = useChatTransport({
     dispatch: dispatchTransportAction,
@@ -295,7 +302,7 @@ export function useChatState(options: UseChatStateOptions): UseChatStateReturn {
       // Clear the rejected message state after processing
       dispatch({ type: 'CLEAR_REJECTED_MESSAGE' });
     }
-  }, [state.lastRejectedMessage, inputDraft, setInputDraft, setInputAttachments]);
+  }, [dispatch, state.lastRejectedMessage, inputDraft, setInputDraft, setInputAttachments]);
 
   // =============================================================================
   // Action Callbacks Hook
@@ -372,6 +379,7 @@ export function useChatState(options: UseChatStateOptions): UseChatStateReturn {
       setInputAttachments,
       handleMessage,
       handleDisconnected,
+      dispatch,
     ]
   );
 }
