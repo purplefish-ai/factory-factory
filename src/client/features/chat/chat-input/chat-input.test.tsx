@@ -11,6 +11,7 @@ import { ChatInput } from './chat-input';
 const mocks = vi.hoisted(() => ({
   fileSelect: vi.fn(async () => undefined),
   callbacks: [] as unknown[],
+  quickActionOpeners: [] as unknown[],
 }));
 
 vi.mock('@/client/lib/trpc', () => ({
@@ -30,7 +31,10 @@ vi.mock('@/client/features/composer', () => ({
 vi.mock('./hooks/use-file-mentions', () => ({ useFileMentions: () => ({}) }));
 vi.mock('./hooks/use-textarea-resize', () => ({ useTextareaResize: () => undefined }));
 vi.mock('./hooks/use-chat-input-actions', () => ({
-  useChatInputActions: () => ({ handleFileSelect: mocks.fileSelect }),
+  useChatInputActions: ({ onOpenQuickActions }: { onOpenQuickActions?: () => void }) => {
+    mocks.quickActionOpeners.push(onOpenQuickActions);
+    return { handleFileSelect: mocks.fileSelect };
+  },
 }));
 vi.mock('./components/input-controls', async (importOriginal) => ({
   ...(await importOriginal<typeof import('./components/input-controls')>()),
@@ -58,6 +62,22 @@ describe('ChatInput file controls', () => {
       expect(container.querySelector('textarea')?.getAttribute('enterkeyhint')).toBe('send');
       expect(mocks.callbacks).toHaveLength(2);
       expect(mocks.callbacks[1]).toBe(mocks.callbacks[0]);
+    } finally {
+      flushSync(() => root.unmount());
+    }
+  });
+
+  it('keeps the quick-actions opener stable so keyboard shortcuts are not rebuilt', () => {
+    mocks.quickActionOpeners.length = 0;
+    const container = document.createElement('div');
+    const root = createRoot(container);
+    const onSend = vi.fn();
+    try {
+      flushSync(() => root.render(createElement(ChatInput, { onSend, placeholder: 'First' })));
+      flushSync(() => root.render(createElement(ChatInput, { onSend, placeholder: 'Second' })));
+      expect(mocks.quickActionOpeners).toHaveLength(2);
+      expect(mocks.quickActionOpeners[0]).toBeTypeOf('function');
+      expect(mocks.quickActionOpeners[1]).toBe(mocks.quickActionOpeners[0]);
     } finally {
       flushSync(() => root.unmount());
     }

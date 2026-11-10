@@ -108,9 +108,16 @@ export function useChatInputActions({
     capabilities?.attachments.enabled === true && capabilities.attachments.kinds.includes('image');
   const modelSelectorEnabled = capabilities?.model.enabled === true;
   const reasoningSelectorEnabled = capabilities?.reasoning.enabled === true;
-  const modelValues = new Set(capabilities?.model.options.map((option) => option.value) ?? []);
-  const reasoningValues = new Set(
-    capabilities?.reasoning.options.map((option) => option.value) ?? []
+  const modelOptions = capabilities?.model.options;
+  const reasoningOptions = capabilities?.reasoning.options;
+  // Stable sets keep the change handlers, and the memoized controls using them, stable.
+  const modelValues = useMemo(
+    () => new Set(modelOptions?.map((option) => option.value) ?? []),
+    [modelOptions]
+  );
+  const reasoningValues = useMemo(
+    () => new Set(reasoningOptions?.map((option) => option.value) ?? []),
+    [reasoningOptions]
   );
 
   const sendFromInput = useCallback(

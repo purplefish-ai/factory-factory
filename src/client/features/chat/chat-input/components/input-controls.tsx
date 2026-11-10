@@ -4,7 +4,7 @@ import { MapTrifoldIcon } from '@phosphor-icons/react/dist/csr/MapTrifold';
 import { PaperPlaneTiltIcon } from '@phosphor-icons/react/dist/csr/PaperPlaneTilt';
 import { SlidersHorizontalIcon } from '@phosphor-icons/react/dist/csr/SlidersHorizontal';
 import { SquareIcon } from '@phosphor-icons/react/dist/csr/Square';
-import { memo, useState } from 'react';
+import { memo, useMemo, useState } from 'react';
 import { getConfigPresentation } from '@/client/components/acp-config-presentation';
 import { AcpConfigSelector } from '@/client/components/acp-config-selector';
 import { getRuntimeControlVisibility } from '@/client/features/chat/chat-input/runtime-control-visibility';
@@ -126,7 +126,17 @@ export interface LeftControlsProps {
   onSetConfigOption?: (configId: string, value: string) => void;
 }
 
-function getRuntimeControls(props: LeftControlsProps) {
+type RuntimeControlsInput = Pick<
+  LeftControlsProps,
+  | 'capabilities'
+  | 'capabilitiesLoaded'
+  | 'settings'
+  | 'acpConfigOptions'
+  | 'onSetConfigOption'
+  | 'onModelChange'
+>;
+
+function getRuntimeControls(props: RuntimeControlsInput) {
   const { capabilities, settings, onSetConfigOption } = props;
   const { modelOption, nativeOptions, showReasoning, showThinking, showPlanning } =
     getRuntimeControlVisibility(props);
@@ -161,17 +171,54 @@ function getRuntimeControls(props: LeftControlsProps) {
 
 type RuntimeControls = ReturnType<typeof getRuntimeControls>;
 
-const RuntimeOptions = memo(function RuntimeOptions({
-  props,
-  controls,
-  mobile = false,
-}: {
-  props: LeftControlsProps;
+/** Recomputes the controls only when their inputs change, so memoized children can skip renders. */
+function useRuntimeControls({
+  capabilities,
+  capabilitiesLoaded,
+  settings,
+  acpConfigOptions,
+  onSetConfigOption,
+  onModelChange,
+}: RuntimeControlsInput): RuntimeControls {
+  return useMemo(
+    () =>
+      getRuntimeControls({
+        capabilities,
+        capabilitiesLoaded,
+        settings,
+        acpConfigOptions,
+        onSetConfigOption,
+        onModelChange,
+      }),
+    [capabilities, capabilitiesLoaded, settings, acpConfigOptions, onSetConfigOption, onModelChange]
+  );
+}
+
+/** Passed as individual props so the memoized options skip renders that change none of them. */
+interface RuntimeOptionsProps extends Pick<
+  LeftControlsProps,
+  | 'capabilities'
+  | 'settings'
+  | 'onSetConfigOption'
+  | 'onReasoningChange'
+  | 'onThinkingChange'
+  | 'onPlanModeChange'
+> {
   controls: RuntimeControls;
-  mobile?: boolean;
-}) {
-  const { capabilities, settings, onSetConfigOption } = props;
-  const disabled = props.disabled || props.stopping;
+  disabled?: boolean;
+}
+
+const RuntimeOptions = memo(function RuntimeOptions({
+  controls,
+  capabilities,
+  settings,
+  onSetConfigOption,
+  onReasoningChange,
+  onThinkingChange,
+  onPlanModeChange,
+  disabled,
+  mobile = false,
+}: RuntimeOptionsProps & { mobile?: boolean }) {
   const row = (label: string, control: React.ReactNode) =>
     mobile ? (
       <div className="flex items-center justify-between gap-2 rounded-md border p-2">
@@ -203,7 +250,7 @@ const RuntimeOptions = memo(function RuntimeOptions({
           <ModelSelector
             selectedModel={settings?.reasoningEffort ?? capabilities?.reasoning.selected ?? ''}
             options={capabilities?.reasoning.options ?? []}
-            onChange={props.onReasoningChange}
+            onChange={onReasoningChange}
             disabled={disabled}
           />
         )}
@@ -212,7 +259,7 @@ const RuntimeOptions = memo(function RuntimeOptions({
           'Extended thinking',
           <SettingsToggle
             pressed={settings?.thinkingEnabled ?? false}
-            onPressedChange={props.onThinkingChange}
+            onPressedChange={onThinkingChange}
             disabled={disabled}
             icon={BrainIcon}
             label="Extended thinking mode"
@@ -225,7 +272,7 @@ const RuntimeOptions = memo(function RuntimeOptions({
           'Planning mode',
           <SettingsToggle
             pressed={settings?.planModeEnabled ?? false}
-            onPressedChange={props.onPlanModeChange}
+            onPressedChange={onPlanModeChange}
             disabled={disabled}
             icon={MapTrifoldIcon}
             label="Planning mode"
@@ -237,13 +284,8 @@ const RuntimeOptions = memo(function RuntimeOptions({
   );
 });
 
-const MobileSettingsSheet = memo(function MobileSettingsSheet({
-  props,
-  controls,
-}: {
-  props: LeftControlsProps;
-  controls: RuntimeControls;
-}) {
+const MobileSettingsSheet = memo(function MobileSettingsSheet(props: RuntimeOptionsProps) {
+  const { controls } = props;
   const [open, setOpen] = useState(false);
   if (
     !(
@@ -279,7 +321,7 @@ const MobileSettingsSheet = memo(function MobileSettingsSheet({
           <SheetDescription>Settings apply to the next turn.</SheetDescription>
         </SheetHeader>
         <div className="space-y-3 py-4">
-          <RuntimeOptions props={props} controls={controls} mobile />
+          <RuntimeOptions {...props} mobile />
         </div>
       </SheetContent>
     </Sheet>
@@ -304,8 +346,18 @@ function getModelDisabledReason(props: LeftControlsProps, controls: RuntimeContr
 
 export const LeftControls = memo(function LeftControls(props: LeftControlsProps) {
   const isMobile = useIsMobile();
-  const controls = getRuntimeControls(props);
+  const controls = useRuntimeControls(props);
   const disabledReason = getModelDisabledReason(props, controls);
+  const runtimeOptions: RuntimeOptionsProps = {
+    controls,
+    capabilities: props.capabilities,
+    settings: props.settings,
+    onSetConfigOption: props.onSetConfigOption,
+    onReasoningChange: props.onReasoningChange,
+    onThinkingChange: props.onThinkingChange,
+    onPlanModeChange: props.onPlanModeChange,
+    disabled: props.disabled || props.stopping,
+  };
   const showAttachments =
     props.capabilities?.attachments.enabled === true &&
     props.capabilities.attachments.kinds.includes('image');
@@ -323,10 +375,10 @@ export const LeftControls = memo(function LeftControls(props: LeftControlsProps)
         disabledReason={disabledReason}
       />
       {isMobile ? (
-        <MobileSettingsSheet props={props} controls={controls} />
+        <MobileSettingsSheet {...runtimeOptions} />
       ) : (
         <div className="flex min-w-0 items-center gap-1 overflow-x-auto scrollbar-hide">
-          <RuntimeOptions props={props} controls={controls} />
+          <RuntimeOptions {...runtimeOptions} />
         </div>
       )}
       {showAttachments && (
