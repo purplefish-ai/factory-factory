@@ -104,3 +104,30 @@ it('saves an image dropped on the sidebar while the creation form is still loadi
     expect(container.querySelector('[aria-label="New workspace"]')?.textContent).toBe('queued.png')
   );
 });
+
+it('closes the new workspace form when another project is selected', async () => {
+  formChunk.release();
+  const sidebar = (navData: AppNavigationData) => (
+    <MemoryRouter initialEntries={[`/projects/${projectId}/workspaces`]}>
+      <SidebarProvider>
+        <AppSidebar navData={navData} />
+      </SidebarProvider>
+    </MemoryRouter>
+  );
+  await act(() => root.render(sidebar(navigation)));
+  const newWorkspace = [...container.querySelectorAll('button')].find(
+    (button) => button.textContent === 'New workspace'
+  );
+  await act(() => newWorkspace?.click());
+  await waitForReact(() =>
+    expect(container.querySelector('[aria-label="New workspace"]')).not.toBeNull()
+  );
+
+  await act(() =>
+    root.render(
+      sidebar({ ...navigation, selectedProjectSlug: 'other', selectedProjectId: 'other-id' })
+    )
+  );
+  expect(container.querySelector('[aria-label="New workspace"]')).toBeNull();
+  expect(container.textContent).toContain('New workspace');
+});
