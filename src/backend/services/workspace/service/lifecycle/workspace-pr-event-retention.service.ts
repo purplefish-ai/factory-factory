@@ -3,7 +3,8 @@ import { workspacePrEventAccessor } from '@/backend/services/workspace/resources
 
 /**
  * Bounded retention for the PR fact ledger. Only unclaimed SUPERSEDED and
- * CANCELLED facts are eligible; see `pruneTerminalEvents` for the predicate.
+ * CANCELLED facts, and unclaimed PENDING facts of ARCHIVED workspaces, are
+ * eligible; see `pruneTerminalEvents` for the predicate.
  */
 export const PR_EVENT_RETENTION = Object.freeze({
   /** Terminal facts stay this long for short-term inspection. */

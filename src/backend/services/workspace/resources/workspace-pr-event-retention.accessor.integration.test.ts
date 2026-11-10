@@ -51,6 +51,7 @@ beforeEach(async () => {
   for (const [id, status] of [
     ['w', 'READY'],
     ['archived', 'ARCHIVED'],
+    ['archiving', 'ARCHIVING'],
   ] as const) {
     await db.prisma.workspace.create({
       data: {
@@ -146,7 +147,6 @@ it('prunes only old, unclaimed terminal facts and keeps live and delivery eviden
     { id: 'pending', state: 'PENDING' },
     { id: 'dispatching', state: 'DISPATCHING' },
     { id: 'delivered', state: 'DELIVERED' },
-    { id: 'archived-pending', workspaceId: 'archived', state: 'PENDING' },
     // Too recent.
     { id: 'recent-superseded', state: 'SUPERSEDED', createdAt: RECENT },
     { id: 'boundary-superseded', state: 'SUPERSEDED', createdAt: CUTOFF },
@@ -168,7 +168,6 @@ it('prunes only old, unclaimed terminal facts and keeps live and delivery eviden
 
   expect(await remainingIds()).toEqual(
     [
-      'archived-pending',
       'blocked-batch-member',
       'boundary-superseded',
       'cancelled-batch-member',
@@ -192,6 +191,72 @@ it('prunes only old, unclaimed terminal facts and keeps live and delivery eviden
   expect(await workspacePrEventAccessor.pruneTerminalEvents({ before: CUTOFF, limit: 100 })).toBe(
     0
   );
+});
+
+it('prunes undeliverable pending facts of ARCHIVED workspaces under the same rule', async () => {
+  await db.prisma.workspacePRDelivery.create({
+    data: {
+      id: 'archived-batch',
+      workspaceId: 'archived',
+      eventIds: ['archived-batch-member'],
+      state: 'PENDING',
+      attempts: 1,
+    },
+  });
+  await createEvents([
+    { id: 'archived-pending', workspaceId: 'archived', state: 'PENDING' },
+    { id: 'archived-pending-merged', workspaceId: 'archived', state: 'PENDING', kind: 'PR_MERGED' },
+    // Not ARCHIVED: still deliverable, or an archive that can roll back to READY.
+    { id: 'ready-pending', state: 'PENDING' },
+    { id: 'archiving-pending', workspaceId: 'archiving', state: 'PENDING' },
+    // ARCHIVED, but outside the existing retention rule.
+    { id: 'archived-recent', workspaceId: 'archived', state: 'PENDING', createdAt: RECENT },
+    { id: 'archived-dispatching', workspaceId: 'archived', state: 'DISPATCHING' },
+    { id: 'archived-delivered', workspaceId: 'archived', state: 'DELIVERED' },
+    { id: 'archived-recovered', workspaceId: 'archived', state: 'PENDING', kind: 'CI_RECOVERED' },
+    {
+      id: 'archived-control',
+      workspaceId: 'archived',
+      state: 'PENDING',
+      kind: 'MONITORING_ENABLED',
+    },
+    {
+      id: 'archived-batch-member',
+      workspaceId: 'archived',
+      state: 'PENDING',
+      batchId: 'archived-batch',
+    },
+    {
+      id: 'archived-legacy-receipt',
+      workspaceId: 'archived',
+      state: 'PENDING',
+      legacy: { deliveryId: 'legacy-archived' },
+    },
+  ]);
+
+  expect(await workspacePrEventAccessor.pruneTerminalEvents({ before: CUTOFF, limit: 100 })).toBe(
+    2
+  );
+
+  expect(await remainingIds()).toEqual(
+    [
+      'archived-batch-member',
+      'archived-control',
+      'archived-delivered',
+      'archived-dispatching',
+      'archived-legacy-receipt',
+      'archived-recent',
+      'archived-recovered',
+      'archiving-pending',
+      'ready-pending',
+    ].sort()
+  );
+  // The archived workspace's frozen batch keeps the membership export validates.
+  const events = await db.prisma.workspacePREvent.findMany({
+    where: { workspaceId: 'archived', deliveryId: null },
+  });
+  const deliveries = await db.prisma.workspacePRDelivery.findMany();
+  expect(() => workspacePrEventAccessor.exportEvents(events, deliveries)).not.toThrow();
 });
 
 it('deletes at most one batch per call, oldest first', async () => {
