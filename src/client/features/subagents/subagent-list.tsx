@@ -269,7 +269,14 @@ export function SubagentList({
   }, [groups.active.length]);
 
   if (state.kind === 'unsupported') {
-    return null;
+    return (
+      <EmptyState
+        size="compact"
+        icon={RobotIcon}
+        title="Subagents unavailable"
+        description="Subagent browsing is not currently available for this session. History may be unavailable after the session stops."
+      />
+    );
   }
 
   if (state.kind === 'loading') {

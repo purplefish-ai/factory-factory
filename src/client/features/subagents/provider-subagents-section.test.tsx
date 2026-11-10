@@ -248,7 +248,7 @@ describe('ProviderSubagentsSection', () => {
     });
   });
 
-  it('omits the entire section for unsupported providers', () => {
+  it('explains unavailable browsing instead of omitting the section', () => {
     mocks.queryResult.data = { supported: false };
     render({
       sessionId: 'session-1',
@@ -256,7 +256,9 @@ describe('ProviderSubagentsSection', () => {
       enabled: true,
       onSelect: vi.fn(),
     });
-    expect(container.innerHTML).toBe('');
+    expect(container.querySelector('[aria-label="Subagents"]')).not.toBeNull();
+    expect(container.textContent).toContain('Subagents unavailable');
+    expect(container.querySelector('[aria-label="Active subagents"]')).toBeNull();
   });
 
   it('selects a sub-agent with its parent session identity', () => {

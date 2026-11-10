@@ -173,3 +173,27 @@ export const LiveSubagentUpdates: Story = {
     await expect(canvas.getByLabelText('Active subagents')).toHaveTextContent('2');
   },
 };
+
+export const StoppedSessionUnavailable: Story = {
+  parameters: {
+    trpc: { handlers: { 'session.listSubagents': () => ({ supported: false }) } },
+  },
+  render: () => (
+    <div className="w-[320px] border bg-background">
+      <ProviderSubagentsSection
+        sessionId="stopped-session"
+        parentSessionName="Stopped session"
+        enabled
+        onSelect={fn()}
+      />
+    </div>
+  ),
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(await canvas.findByText('Subagents unavailable')).toBeVisible();
+    await expect(
+      canvas.getByText(/History may be unavailable after the session stops/)
+    ).toBeVisible();
+    await expect(canvas.queryByLabelText('Active subagents')).not.toBeInTheDocument();
+  },
+};
