@@ -12,14 +12,14 @@ shutdown stops this job before draining agent runtimes.
 Recurring backend work is declared to `jobRunner`
 (`src/backend/services/job-runner.service.ts`), which owns the loop lifecycle
 for the poll loops: the snapshot reconciliation safety net, the PR
-sync/discovery poll, the periodic reconciliation cleanup, PR monitoring, PR
-event ledger retention, the periodic-task poll, GitHub agent source intake,
-event evaluation/admission, and workspace metadata updates. Each owning service
-or orchestrator registers its job and exposes thin `start()`/`stop()` delegates.
-GitHub agent intake registers through `createAgentRuntime()` in the
-agent-runtime orchestrator; its poll service owns neither registration nor
-lifecycle methods. These delegates are the injection seam `server.ts` and
-`server.upgrade.test.ts` use.
+sync/discovery poll, the periodic reconciliation cleanup, archived workspace
+data retention, PR monitoring, PR event ledger retention, the periodic-task
+poll, GitHub agent source intake, event evaluation/admission, and workspace
+metadata updates. Each owning service or orchestrator registers its job and
+exposes thin `start()`/`stop()` delegates. GitHub agent intake registers through
+`createAgentRuntime()` in the agent-runtime orchestrator; its poll service owns
+neither registration nor lifecycle methods. These delegates are the injection
+seam `server.ts` and `server.upgrade.test.ts` use.
 
 Both PR pollers live in `src/backend/orchestration/pull-requests/`:
 `scheduler.service.ts` owns `pr-poll` (PR sync and discovery), and
@@ -121,6 +121,21 @@ Fatal cleanup has a 30-second deadline, after which the standalone backend exits
 with status 1. This bounds failed-process cleanup without changing normal job
 `stop()` drains. Electron's separate backend stop/kill budget still applies to
 the desktop utility process; this deadline does not extend it.
+
+## Archived workspace data
+
+The `archived-workspace-blob-retention` job is registered beside
+`reconciliation-cleanup` and starts and stops with it, so the shutdown plan's
+reconciliation step drains both. It waits ten minutes, then releases ARCHIVED
+workspaces that still carry `initialAttachments` or more setup log than they
+keep (see [workspace state](workspace-state.md)). A run updates at most 50
+batches of 10 rows, in id order, with each batch a separate short SQL statement
+that re-checks ARCHIVED; it yields between batches and stops before the next one
+on abort. A backlog of about 1,400 rows drains in three runs, about half an hour
+after startup. Once nothing is left, a run is one read-only query over the
+archived rows that selects nothing. Archive releases new workspaces itself, so
+the job only finds rows archived before that existed, missed releases, and
+imported backups.
 
 ## Timer dispatch ownership
 

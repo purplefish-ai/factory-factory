@@ -14,7 +14,7 @@ import {
  * Narrow workspace reads for client detail and polled endpoints. These reads
  * leave out what their callers never use: the startup-script log, session
  * provider metadata, and `creationMetadata` (which retains base64 initial
- * attachments after init) beyond the initial prompt.
+ * attachments until archive) beyond the initial prompt.
  */
 
 type WorkspaceDetailRow = FlattenedWorkspaceRow<

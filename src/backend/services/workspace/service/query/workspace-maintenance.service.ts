@@ -1,5 +1,6 @@
 import { workspacePrAccessor } from '@/backend/services/workspace/resources/workspace-pr.accessor';
 import { workspaceAccessor } from '@/backend/services/workspace/resources/workspace.accessor';
+import { archivedWorkspaceBlobRetentionService } from '@/backend/services/workspace/service/lifecycle/archived-workspace-blob-retention.service';
 
 class WorkspaceMaintenanceService {
   findNeedingWorktree() {
@@ -27,6 +28,11 @@ class WorkspaceMaintenanceService {
 
   findActiveWithSessionsAndProject() {
     return workspaceAccessor.findAllNonArchivedWithSessionsAndProject();
+  }
+
+  /** One bounded run of the archived-workspace attachment and setup-log release. */
+  releaseArchivedBlobs(signal?: AbortSignal) {
+    return archivedWorkspaceBlobRetentionService.releaseBacklog({ signal });
   }
 }
 

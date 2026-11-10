@@ -154,6 +154,7 @@ export function configureDomainBridges(services: BridgeServices): void {
     workspace: {
       initializeWorktree: (id, options) => initializeWorkspaceWorktree(id, options),
       findNeedingWorktree: () => workspaceMaintenanceService.findNeedingWorktree(),
+      releaseArchivedBlobs: (signal) => workspaceMaintenanceService.releaseArchivedBlobs(signal),
       recoverStaleProvisioningWorkspace: (id, reason) =>
         recoverStaleProvisioningWorkspace(id, reason),
     },
