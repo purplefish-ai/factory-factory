@@ -464,7 +464,8 @@ describe('stream delta coalescing', () => {
 /**
  * Feeds one simulated second of deltas, arriving at `arrivals` (ms), through
  * the real frame scheduler on fake 16 ms animation frames. Returns how many
- * actions reached the reducer, which is the number of React commits.
+ * actions reached the reducer dispatch. Each separately delivered dispatch can
+ * cost a React commit; the `useChatState` integration test counts renders.
  */
 function countDispatches(arrivals: number[], { animationFrames = true } = {}) {
   vi.useFakeTimers({
@@ -502,12 +503,12 @@ describe('stream delta dispatch rate', () => {
   const second = (spacing: number, burst = 1) =>
     Array.from({ length: 40 }, (_, index) => Math.floor(index / burst) * spacing * burst);
 
-  it('commits an evenly spaced 25 ms stream once per delta', () => {
+  it('dispatches an evenly spaced 25 ms stream once per delta', () => {
     // Each 25 ms delta lands in its own 16 ms frame: nothing to merge.
     expect(countDispatches(second(25))).toEqual({ dispatches: 40, deltas: 40 });
   });
 
-  it('commits once per frame when a busy main thread delivers deltas in bursts', () => {
+  it('dispatches once per frame when a busy main thread delivers deltas in bursts', () => {
     // 40 deltas per second delivered four at a time, as when a long commit holds
     // the main thread for 100 ms: 40 dispatches without coalescing.
     expect(countDispatches(second(25, 4))).toEqual({ dispatches: 11, deltas: 40 });

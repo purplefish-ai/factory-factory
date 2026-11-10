@@ -304,20 +304,23 @@ re-checking their shape. The reducer handles snapshots and replay batches as
 well as live events; replay uses the same event-to-action mapping.
 
 `useChatState` routes every reducer dispatch through a stream-delta coalescer
-(`stream-delta-coalescer.ts`), so a streaming reply commits about once per
-animation frame at most, rather than once per WebSocket message. Assistant text
-deltas, `content_block_delta` agent messages (thinking and tool-input JSON) and
-`TOOL_INPUT_UPDATE` actions count as deltas. A delta that follows at least 250
-ms without one, such as a reply's first token, is dispatched immediately; later
-deltas are buffered and dispatched together as one `STREAM_DELTA_BATCH` at the
-next animation frame. Hidden tabs run no animation frames, so a 50 ms fallback
-timer (which browsers may throttle) also drains the buffer. Any other action,
-including session switches, disconnects and local sends, first dispatches the
-buffer, and unmounting dispatches it too. The reducer applies a batch's actions
-in order, so it reaches exactly the state that dispatching each message would
-have committed. An evenly spaced 25 ms stream still commits per delta, since
-each delta lands in its own frame. Deltas merge when several arrive within one
-frame, as when a long commit holds the main thread.
+(`stream-delta-coalescer.ts`), so buffered deltas in a streaming reply reach the
+reducer together at the next animation frame rather than once per WebSocket
+message. Assistant text deltas, `content_block_delta` agent messages (text,
+thinking and tool-input JSON) and `TOOL_INPUT_UPDATE` actions count as deltas. A
+delta that arrives at least 250 ms after the previous one while nothing is
+buffered, such as a reply's first token, is dispatched immediately; other deltas
+are buffered and dispatched in one action at the next animation frame, as a
+`STREAM_DELTA_BATCH` when more than one is pending. Hidden tabs run no animation
+frames, so a 50 ms fallback timer (which browsers may throttle) also drains the
+buffer. Any other action, including session switches, disconnects and local
+sends, first dispatches the buffer, and unmounting dispatches it too. The
+reducer applies a batch's actions in order, so it reaches exactly the state that
+dispatching each message would have committed. In a foreground tab that paints
+normally, an evenly spaced 25 ms stream still dispatches per delta, since each
+delta lands in its own frame. Deltas merge when several arrive within one frame,
+as when a long commit holds the main thread, and in hidden tabs, where the
+fallback timer groups them.
 
 | Wire event                                             | Reducer action or handling                             |
 | ------------------------------------------------------ | ------------------------------------------------------ |
