@@ -64,12 +64,17 @@ describe('VoiceModeSection saving', () => {
 
   it('keeps a newer pending change when an older one fails', async () => {
     await act(async () => toggle()?.click());
+    // React Query renders cache changes on a later timer than `act` waits for;
+    // until the switch shows the flip, a second click would repeat `false`.
+    await waitForCheck(() => expect(toggle()?.getAttribute('aria-checked')).toBe('false'));
     await act(async () => toggle()?.click());
     await waitForCheck(() => expect(updates()).toHaveLength(1));
+    expect(updates()[0]?.input).toEqual({ enabled: false });
     expect(toggle()?.getAttribute('aria-checked')).toBe('true');
 
     await act(async () => updates()[0]?.reject('Deepgram unavailable'));
     await waitForCheck(() => expect(updates()).toHaveLength(2));
+    expect(updates()[1]?.input).toEqual({ enabled: true });
     expect(toggle()?.getAttribute('aria-checked')).toBe('true');
 
     config = { ...config, enabled: true };
