@@ -10,7 +10,6 @@ import { XIcon } from '@phosphor-icons/react/dist/csr/X';
 import {
   lazy,
   memo,
-  type PointerEvent as ReactPointerEvent,
   type ReactNode,
   Suspense,
   useEffect,
@@ -30,7 +29,6 @@ import {
   getProjectSlugFromPath,
   type useAppNavigationData,
 } from '@/client/hooks/use-app-navigation-data';
-import { usePersistedState } from '@/client/hooks/use-persisted-state';
 import { type ProjectIssuesStatus, useProjectIssues } from '@/client/hooks/use-project-issues';
 import type { NormalizedIssue } from '@/client/lib/issue-normalization';
 import {
@@ -63,14 +61,9 @@ import {
 } from '@/components/ui/sidebar';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
-import {
-  clampSidebarWidth,
-  SIDEBAR_DEFAULT_WIDTH,
-  SIDEBAR_WIDTH_STORAGE_KEY,
-  StoredSidebarWidthSchema,
-} from './app-sidebar-resize';
 import { Logo } from './logo';
 import { ThemeToggle } from './theme-toggle';
+import { useSidebarResize } from './use-sidebar-resize';
 import { WorkspaceItemContent } from './workspace-item-content';
 import { groupWorkspacesForSidebar } from './workspace-sidebar-grouping';
 
@@ -650,50 +643,30 @@ function SidebarInner({
 // Main sidebar component
 // =============================================================================
 
-export function AppSidebar({ navData }: { navData: NavigationData }) {
+// Memoized: the layout re-renders for route and query changes, and the
+// navigation data keeps its identity when none of it changed.
+export const AppSidebar = memo(function AppSidebar({ navData }: { navData: NavigationData }) {
   const { pathname } = useLocation();
   const prevPathnameRef = useRef(pathname);
-  const prevSelectedProjectIdRef = useRef(navData.selectedProjectId);
-  const resizeCleanupRef = useRef<(() => void) | null>(null);
   const { open, openMobile, setOpenMobile, isMobile } = useSidebar();
-  const [showNewWorkspaceForm, setShowNewWorkspaceForm] = useState(false);
-  const [isResizingSidebar, setIsResizingSidebar] = useState(false);
-  const [storedSidebarWidth, setStoredSidebarWidth] = usePersistedState(
-    SIDEBAR_WIDTH_STORAGE_KEY,
-    StoredSidebarWidthSchema,
-    SIDEBAR_DEFAULT_WIDTH,
-    { format: 'text' }
-  );
-  // The width follows the pointer during a drag and is stored when it ends.
-  const [dragWidth, setDragWidth] = useState<number | null>(null);
-  const sidebarWidth = dragWidth ?? storedSidebarWidth;
+  const { width: sidebarWidth, isResizing, onResizePointerDown } = useSidebarResize(open);
 
-  // Auto-close mobile sidebar on route navigation
+  // The new workspace form belongs to the selected project.
+  const [formProjectId, setFormProjectId] = useState(navData.selectedProjectId);
+  const [showNewWorkspaceForm, setShowNewWorkspaceForm] = useState(false);
+  if (formProjectId !== navData.selectedProjectId) {
+    setFormProjectId(navData.selectedProjectId);
+    setShowNewWorkspaceForm(false);
+  }
+
+  // Auto-close the mobile sheet on route navigation. The sheet's state belongs
+  // to SidebarProvider, so this cannot happen while rendering.
   useEffect(() => {
     if (pathname !== prevPathnameRef.current) {
       setOpenMobile(false);
     }
     prevPathnameRef.current = pathname;
   }, [pathname, setOpenMobile]);
-
-  useEffect(() => {
-    if (prevSelectedProjectIdRef.current !== navData.selectedProjectId) {
-      prevSelectedProjectIdRef.current = navData.selectedProjectId;
-      setShowNewWorkspaceForm(false);
-    }
-  }, [navData.selectedProjectId]);
-
-  useEffect(() => {
-    if (!open && resizeCleanupRef.current) {
-      resizeCleanupRef.current();
-    }
-  }, [open]);
-
-  useEffect(() => {
-    return () => {
-      resizeCleanupRef.current?.();
-    };
-  }, []);
 
   // Fetch issues for the Todo section
   const {
@@ -710,65 +683,6 @@ export function AppSidebar({ navData }: { navData: NavigationData }) {
   const { waiting, working, done } = useMemo(() => {
     return groupWorkspacesForSidebar(navData.serverWorkspaces ?? []);
   }, [navData.serverWorkspaces]);
-
-  const handleResizePointerDown = (event: ReactPointerEvent<HTMLButtonElement>) => {
-    if (event.button !== 0 || !open) {
-      return;
-    }
-
-    event.preventDefault();
-    resizeCleanupRef.current?.();
-
-    const pointerId = event.pointerId;
-    const startX = event.clientX;
-    const startWidth = sidebarWidth;
-    let draggedWidth: number | null = null;
-    const handleElement = event.currentTarget;
-    const controller = new AbortController();
-    const previousCursor = document.body.style.cursor;
-    const previousUserSelect = document.body.style.userSelect;
-
-    const cleanup = () => {
-      controller.abort();
-      if (draggedWidth !== null) {
-        setStoredSidebarWidth(draggedWidth);
-      }
-      setDragWidth(null);
-      setIsResizingSidebar(false);
-      document.body.style.cursor = previousCursor;
-      document.body.style.userSelect = previousUserSelect;
-      resizeCleanupRef.current = null;
-      if (handleElement.hasPointerCapture(pointerId)) {
-        handleElement.releasePointerCapture(pointerId);
-      }
-    };
-
-    resizeCleanupRef.current = cleanup;
-    setIsResizingSidebar(true);
-    document.body.style.cursor = 'col-resize';
-    document.body.style.userSelect = 'none';
-    handleElement.setPointerCapture(pointerId);
-
-    const handlePointerMove = (moveEvent: PointerEvent) => {
-      if (moveEvent.pointerId !== pointerId) {
-        return;
-      }
-      const deltaX = moveEvent.clientX - startX;
-      draggedWidth = clampSidebarWidth(startWidth + deltaX);
-      setDragWidth(draggedWidth);
-    };
-
-    const handlePointerEnd = (endEvent: PointerEvent) => {
-      if (endEvent.pointerId !== pointerId) {
-        return;
-      }
-      cleanup();
-    };
-
-    window.addEventListener('pointermove', handlePointerMove, { signal: controller.signal });
-    window.addEventListener('pointerup', handlePointerEnd, { signal: controller.signal });
-    window.addEventListener('pointercancel', handlePointerEnd, { signal: controller.signal });
-  };
 
   const sharedProps = {
     navData,
@@ -818,7 +732,7 @@ export function AppSidebar({ navData }: { navData: NavigationData }) {
     <div
       className={cn(
         'shrink-0 overflow-hidden transition-[width] duration-150 ease-out motion-reduce:transition-none',
-        isResizingSidebar && 'duration-0'
+        isResizing && 'duration-0'
       )}
       style={{ width: open ? `${sidebarWidth}px` : '0px' }}
     >
@@ -832,10 +746,10 @@ export function AppSidebar({ navData }: { navData: NavigationData }) {
             type="button"
             aria-label="Resize sidebar"
             className="absolute inset-y-0 right-0 z-30 w-3 cursor-col-resize touch-none bg-transparent hover:bg-sidebar-border/40"
-            onPointerDown={handleResizePointerDown}
+            onPointerDown={onResizePointerDown}
           />
         )}
       </div>
     </div>
   );
-}
+});

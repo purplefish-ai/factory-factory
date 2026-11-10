@@ -249,7 +249,8 @@
               "src/client/features/agents/event-dashboard-story.tsx": "Story fixture: the conflict story needs a newer server revision to land one commit after the editor opens."
             }
           }
-        ]
+        ],
+        "factory/stable-context-value": ["error", { "exceptions": {} }]
       }
     },
     {
@@ -283,7 +284,8 @@
         "factory/no-render-ref-write": "off",
         "factory/no-state-sync-effect": "off",
         "factory/tooltip-provider-root": "off",
-        "factory/no-raw-tab-role": "off"
+        "factory/no-raw-tab-role": "off",
+        "factory/stable-context-value": "off"
       }
     },
     {

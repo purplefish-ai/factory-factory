@@ -32,6 +32,8 @@ const mocks = vi.hoisted(() => ({
   dismissArchiveGitLock: vi.fn(),
   retryGitLockedArchives: vi.fn(),
   archiveWorkspace: vi.fn(async (_workspaceId: string) => undefined),
+  toggleWorkspaceRatcheting: vi.fn(),
+  renameWorkspace: vi.fn(async (_workspaceId: string, _name: string) => undefined),
   columnProps: [] as Array<{
     column: { id: string };
     workspaces: WorkspaceWithKanban[];
@@ -118,11 +120,11 @@ vi.mock('./kanban-context', () => ({
     error: mocks.workspacesError,
     isFetching: false,
     refetch: mocks.refetch,
-    toggleWorkspaceRatcheting: vi.fn(),
+    toggleWorkspaceRatcheting: mocks.toggleWorkspaceRatcheting,
     togglingWorkspaceIds: [],
-    renameWorkspace: vi.fn(),
-    // The real context recreates its commands on every render.
-    archiveWorkspace: (workspaceId: string) => mocks.archiveWorkspace(workspaceId),
+    renameWorkspace: mocks.renameWorkspace,
+    // The real context keeps each command for its lifetime (kanban-context.test.tsx).
+    archiveWorkspace: mocks.archiveWorkspace,
     bulkArchiveColumn: vi.fn(),
     archiveGitLockWorkspaceIds: ['workspace-1'],
     dismissArchiveGitLock: mocks.dismissArchiveGitLock,

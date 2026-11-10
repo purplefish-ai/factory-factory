@@ -10,6 +10,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import type { TopPanelTab } from './right-panel-state';
 import { useWorkspacePanel } from './workspace-panel-context';
 
 const overflowTools = [
@@ -24,18 +25,20 @@ const tabClassName =
   'h-9 flex-none rounded-none px-2.5 text-xs group-data-[orientation=horizontal]/tabs:after:bottom-0';
 
 export function MobileToolSwitcher({
+  activeTopTab,
   periodicTaskId,
   unreadCount,
   onOpenLogs,
   children,
 }: {
+  /** The top tab RightPanel shows (resolveTopTab). */
+  activeTopTab: TopPanelTab;
   periodicTaskId: string | null;
   unreadCount?: number;
   onOpenLogs: () => void;
   children: ReactNode;
 }) {
-  const { mobilePanel, activeTopTab, activeBottomTab, setActiveTopTab, setActiveBottomTab } =
-    useWorkspacePanel();
+  const { mobilePanel, activeBottomTab, setActiveTopTab, setActiveBottomTab } = useWorkspacePanel();
   const activeTool =
     mobilePanel === 'top' ? activeTopTab : activeBottomTab === 'terminal' ? 'terminal' : 'logs';
   const activeOverflowTool = overflowTools.find((tool) => tool.value === activeTool);

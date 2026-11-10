@@ -24,7 +24,7 @@ const mocks = vi.hoisted(() => ({
   worktreePath: '/tmp/worktree' as string | null,
 }));
 vi.mock('./kanban-context', () => ({
-  useKanban: () => ({
+  useKanbanState: () => ({
     workspaces: [
       {
         id: 'workspace',

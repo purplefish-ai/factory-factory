@@ -129,7 +129,7 @@ vi.mock('@/client/lib/trpc', () => ({
 }));
 
 vi.mock('./workspace-panel-context', () => ({
-  useWorkspacePanel: () => ({ openTab: mocks.openTab }),
+  useWorkspacePanelActions: () => ({ openTab: mocks.openTab }),
 }));
 
 afterEach(() => {

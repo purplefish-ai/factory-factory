@@ -31,7 +31,7 @@ vi.mock('@/client/hooks/use-project-issues', () => ({
   useProjectIssues: () => ({ issues: [], isLoading: false, refetch: vi.fn() }),
 }));
 vi.mock('@/client/hooks/use-toggle-ratcheting', () => ({
-  useToggleRatcheting: () => ({ mutateAsync: vi.fn(), pendingWorkspaceIds: [] }),
+  useToggleRatcheting: () => ({ mutate: vi.fn(), pendingWorkspaceIds: [] }),
 }));
 vi.mock('@/hooks/use-mobile', () => ({
   MOBILE_BREAKPOINT: 768,
@@ -48,8 +48,11 @@ vi.mock('@/client/components/project-header', () => ({
 }));
 vi.mock('@/client/features/kanban', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/client/features/kanban')>();
+  const { useKanban } = await vi.importActual<
+    typeof import('@/client/features/kanban/kanban-context')
+  >('@/client/features/kanban/kanban-context');
   function Probe() {
-    mocks.context = actual.useKanban();
+    mocks.context = useKanban();
     return <div>Project: {mocks.context.projectId}</div>;
   }
   return {

@@ -15,7 +15,7 @@ const query = vi.hoisted(() => ({
   refetch: vi.fn(),
 }));
 vi.mock('./workspace-panel-context', () => ({
-  useWorkspacePanel: () => ({ getScrollState: () => null, setScrollState: () => undefined }),
+  useWorkspacePanelScroll: () => ({ getScrollState: () => null, setScrollState: () => undefined }),
 }));
 vi.mock('@/client/lib/trpc', () => ({
   trpc: {

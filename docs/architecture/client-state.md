@@ -27,8 +27,9 @@ act on it). Instead:
 
   React re-renders before committing, so no commit shows stale state. Examples:
   `useAgentsController`, `usePaletteKeyboardNavigation`, `useIssueLaunchDraft`
-  in the issue launch sheet, `useRightPanelTopTab` and the chat composer's
-  `useChatPersistence`, which loads the next session's draft and attachments.
+  in the issue launch sheet, `useLastLogsTab` in the right panel, the new
+  workspace form in `AppSidebar` and the chat composer's `useChatPersistence`,
+  which loads the next session's draft and attachments.
 
 - **Derive** values that are a function of props and state instead of storing
   them.
@@ -89,6 +90,33 @@ reads the session with `useChatSessionState`; the route reads a summary
 `useChatSessionSummary`, published in a layout effect so it updates before
 paint. Route code may not call or value-import `useChatWebSocket`; type imports
 remain allowed.
+
+## Context values
+
+Every consumer of a context re-renders when its `value` changes identity, even
+inside `memo`. Keep the value stable and let consumers subscribe narrowly:
+
+- **Memoize the value**, and give commands one identity for the provider's
+  lifetime with `useStableCallback`. A command that reads state through its
+  closure (`openTab` reading the tabs) would otherwise change with that state.
+- **Split state from commands** when consumers want only one side.
+  `KanbanProvider` serves `useKanbanState` and `useKanbanActions`;
+  `WorkspacePanelProvider` serves `useWorkspacePanelState`,
+  `useWorkspacePanelActions` and `useWorkspacePanelScroll`. A component that
+  only opens tabs never re-renders when a tab changes.
+- **Subscribe per item** when many consumers each want one fact from a shared
+  set. Keep the set in a small store behind a stable context value and read each
+  item's answer with `useSyncExternalStore`, as the Kanban family highlight and
+  the file tree's expanded folders do; only the items whose answer changes
+  re-render.
+- **Lift state to its owner** instead of pushing it up from a child in an
+  effect. `RightPanel` calls `useTerminalTabs` and renders both the tab bar and
+  a controlled `TerminalPanel`, so they change in the same commit.
+
+`factory/stable-context-value` rejects a context `value` built in the JSX: an
+object, array or JSX literal, a function, `new`, or a call other than a hook
+that keeps its result (`useMemo`, `useCallback`, `useRef`, `useStableCallback`,
+`useLatestRef`).
 
 ## Shared behaviours
 

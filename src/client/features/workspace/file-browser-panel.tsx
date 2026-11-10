@@ -6,7 +6,7 @@ import { trpc } from '@/client/lib/trpc';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { FileTree } from './file-tree';
 import { FileTreeProvider } from './file-tree-context';
-import { useWorkspacePanel } from './workspace-panel-context';
+import { useWorkspacePanelActions } from './workspace-panel-context';
 
 // =============================================================================
 // Types
@@ -21,7 +21,7 @@ interface FileBrowserPanelProps {
 // =============================================================================
 
 export function FileBrowserPanel({ workspaceId }: FileBrowserPanelProps) {
-  const { openTab } = useWorkspacePanel();
+  const { openTab } = useWorkspacePanelActions();
   const utils = trpc.useUtils();
 
   const handleFileSelect = useCallback(

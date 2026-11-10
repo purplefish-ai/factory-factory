@@ -40,7 +40,7 @@ const sessions = vi.hoisted(() => {
 });
 
 vi.mock('./kanban-context', () => ({
-  useKanban: () => ({ workspaces: [{ id: 'workspace', name: 'Review workspace' }] }),
+  useKanbanState: () => ({ workspaces: [{ id: 'workspace', name: 'Review workspace' }] }),
 }));
 vi.mock('./quick-chat-content', () => ({ QuickChatContent: () => null }));
 vi.mock('@/client/features/workspace', () => ({ getNewChatUnavailableReason: () => null }));

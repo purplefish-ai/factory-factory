@@ -6,7 +6,8 @@ import { createRoot } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { TERMINAL_OUTPUT_MAX_CHARS, TERMINAL_TRUNCATION_MARKER } from '@/client/lib/rolling-output';
 import type { TerminalOutputStream } from '@/client/lib/terminal-output-stream';
-import { TerminalPanel, type TerminalTabState } from './terminal-panel';
+import { TerminalPanel } from './terminal-panel';
+import { type TerminalTabs, useTerminalTabs } from './use-terminal-tabs';
 
 const mocks = vi.hoisted(() => ({
   create: vi.fn(),
@@ -68,15 +69,32 @@ vi.mock('./use-terminal-websocket', () => ({
   },
 }));
 
-/** Opens tabs through the state the panel lifts to its parent, as the right panel does. */
-function trackPanel(onState?: (state: TerminalTabState) => void) {
-  let latest: TerminalTabState | undefined;
+/** Owns the tabs and renders the controlled panel, as the right panel does. */
+function TerminalPanelHarness({
+  workspaceId,
+  autoCreateWhenEmpty = false,
+  isVisible = true,
+  onStateChange,
+}: {
+  workspaceId: string;
+  autoCreateWhenEmpty?: boolean;
+  isVisible?: boolean;
+  onStateChange?: (state: TerminalTabs) => void;
+}) {
+  const terminal = useTerminalTabs({ workspaceId, autoCreate: autoCreateWhenEmpty && isVisible });
+  onStateChange?.(terminal);
+  return createElement(TerminalPanel, { terminal, isVisible, autoCreateWhenEmpty });
+}
+
+/** Records each render's tabs so a test can drive them like the tab bar does. */
+function trackPanel(onState?: (state: TerminalTabs) => void) {
+  let latest: TerminalTabs | undefined;
   return {
-    onStateChange: (state: TerminalTabState) => {
+    onStateChange: (state: TerminalTabs) => {
       latest = state;
       onState?.(state);
     },
-    newTab: () => latest?.onNewTab(),
+    newTab: () => latest?.newTab(),
   };
 }
 
@@ -112,7 +130,7 @@ describe('TerminalPanel', () => {
     try {
       flushSync(() =>
         root.render(
-          createElement(TerminalPanel, {
+          createElement(TerminalPanelHarness, {
             workspaceId: 'new-workspace',
             autoCreateWhenEmpty: true,
           })
@@ -135,12 +153,12 @@ describe('TerminalPanel', () => {
     const container = document.createElement('div');
     document.body.appendChild(container);
     const root = createRoot(container);
-    const states: TerminalTabState[] = [];
+    const states: TerminalTabs[] = [];
     const panel = trackPanel((state) => states.push(state));
     const render = () =>
       flushSync(() =>
         root.render(
-          createElement(TerminalPanel, {
+          createElement(TerminalPanelHarness, {
             workspaceId: 'workspace-1',
             autoCreateWhenEmpty: true,
             onStateChange: panel.onStateChange,
@@ -156,7 +174,7 @@ describe('TerminalPanel', () => {
       );
       mocks.connected = false;
       render();
-      flushSync(() => states.at(-1)?.onCloseTab('tab-terminal-existing'));
+      flushSync(() => states.at(-1)?.closeTab('tab-terminal-existing'));
       await vi.waitFor(() => expect(states.at(-1)?.tabs).toEqual([]));
 
       mocks.connected = true;
@@ -175,14 +193,14 @@ describe('TerminalPanel', () => {
     const container = document.createElement('div');
     document.body.appendChild(container);
     const root = createRoot(container);
-    const terminalStates: TerminalTabState[] = [];
+    const terminalStates: TerminalTabs[] = [];
     const panel = trackPanel((state) => {
       terminalStates.push(state);
     });
 
     flushSync(() => {
       root.render(
-        createElement(TerminalPanel, {
+        createElement(TerminalPanelHarness, {
           workspaceId: 'workspace-1',
           onStateChange: panel.onStateChange,
         })
@@ -203,7 +221,7 @@ describe('TerminalPanel', () => {
     });
 
     expect(terminalStates.at(-1)?.tabs).toEqual([
-      { id: 'tab-terminal-existing', label: 'Terminal 1' },
+      { id: 'tab-terminal-existing', label: 'Terminal 1', terminalId: 'terminal-existing' },
     ]);
 
     root.unmount();
@@ -213,11 +231,11 @@ describe('TerminalPanel', () => {
     const container = document.createElement('div');
     document.body.appendChild(container);
     const root = createRoot(container);
-    const states: TerminalTabState[] = [];
+    const states: TerminalTabs[] = [];
     const panel = trackPanel((state) => states.push(state));
     flushSync(() => {
       root.render(
-        createElement(TerminalPanel, {
+        createElement(TerminalPanelHarness, {
           workspaceId: 'workspace-1',
           onStateChange: panel.onStateChange,
         })
@@ -252,7 +270,7 @@ describe('TerminalPanel', () => {
     expect(states.at(-1)?.tabs).toEqual(before?.tabs);
     expect(states.at(-1)?.activeTabId).toBe(before?.activeTabId);
 
-    flushSync(() => states.at(-1)?.onSelectTab(before?.tabs[0]?.id ?? ''));
+    flushSync(() => states.at(-1)?.selectTab(before?.tabs[0]?.id ?? ''));
     expect(renderedOutput()).toBe('before A\r\nmissed A\r\n');
     flushSync(() => mocks.options?.onOutput?.('terminal-a', 'live A\r\n'));
     expect(renderedOutput()).toBe('before A\r\nmissed A\r\nlive A\r\n');
@@ -267,7 +285,7 @@ describe('TerminalPanel', () => {
 
     flushSync(() => {
       root.render(
-        createElement(TerminalPanel, {
+        createElement(TerminalPanelHarness, {
           workspaceId: 'workspace-1',
           onStateChange: panel.onStateChange,
         })
@@ -306,7 +324,7 @@ describe('TerminalPanel', () => {
 
     flushSync(() => {
       root.render(
-        createElement(TerminalPanel, {
+        createElement(TerminalPanelHarness, {
           workspaceId: 'workspace-1',
           onStateChange: panel.onStateChange,
         })
@@ -339,7 +357,7 @@ describe('TerminalPanel', () => {
 
     flushSync(() => {
       root.render(
-        createElement(TerminalPanel, {
+        createElement(TerminalPanelHarness, {
           workspaceId: 'workspace-1',
           onStateChange: panel.onStateChange,
         })
@@ -356,7 +374,7 @@ describe('TerminalPanel', () => {
     mocks.connected = false;
     flushSync(() => {
       root.render(
-        createElement(TerminalPanel, {
+        createElement(TerminalPanelHarness, {
           workspaceId: 'workspace-1',
           onStateChange: panel.onStateChange,
         })
@@ -379,7 +397,7 @@ describe('TerminalPanel', () => {
     const root = createRoot(container);
 
     flushSync(() => {
-      root.render(createElement(TerminalPanel, { workspaceId: 'workspace-1' }));
+      root.render(createElement(TerminalPanelHarness, { workspaceId: 'workspace-1' }));
     });
     await vi.dynamicImportSettled();
 
@@ -405,7 +423,7 @@ describe('TerminalPanel', () => {
 
     flushSync(() => {
       root.render(
-        createElement(TerminalPanel, {
+        createElement(TerminalPanelHarness, {
           workspaceId: 'workspace-1',
           onStateChange: panel.onStateChange,
         })
@@ -429,7 +447,7 @@ describe('TerminalPanel', () => {
 
     flushSync(() => {
       root.render(
-        createElement(TerminalPanel, {
+        createElement(TerminalPanelHarness, {
           workspaceId: 'workspace-1',
           onStateChange: panel.onStateChange,
         })
@@ -463,7 +481,7 @@ describe('TerminalPanel', () => {
 
     flushSync(() => {
       root.render(
-        createElement(TerminalPanel, {
+        createElement(TerminalPanelHarness, {
           workspaceId: 'workspace-1',
           onStateChange: panel.onStateChange,
         })
@@ -495,7 +513,7 @@ describe('TerminalPanel', () => {
 
     flushSync(() => {
       root.render(
-        createElement(TerminalPanel, {
+        createElement(TerminalPanelHarness, {
           workspaceId: 'workspace-1',
           onStateChange: panel.onStateChange,
         })
@@ -521,7 +539,7 @@ describe('TerminalPanel', () => {
     root.unmount();
   });
 
-  it('appends live output without re-rendering the panel or notifying its parent', async () => {
+  it('appends live output without re-rendering the panel or its owner', async () => {
     const container = document.createElement('div');
     document.body.appendChild(container);
     const root = createRoot(container);
@@ -530,7 +548,7 @@ describe('TerminalPanel', () => {
 
     flushSync(() => {
       root.render(
-        createElement(TerminalPanel, {
+        createElement(TerminalPanelHarness, {
           workspaceId: 'workspace-1',
           onStateChange: panel.onStateChange,
         })
@@ -580,7 +598,7 @@ describe('TerminalPanel', () => {
     const render = (isVisible: boolean) =>
       flushSync(() => {
         root.render(
-          createElement(TerminalPanel, {
+          createElement(TerminalPanelHarness, {
             workspaceId: 'workspace-1',
             onStateChange: panel.onStateChange,
             isVisible,

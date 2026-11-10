@@ -14,7 +14,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from '@/components/ui/sheet';
-import { useKanban } from './kanban-context';
+import { useKanbanState } from './kanban-context';
 import { QuickChatContent } from './quick-chat-content';
 import { useQuickChat } from './use-quick-chat';
 
@@ -118,7 +118,7 @@ function getChatLimitUnavailableReason(query: {
 }
 
 export function QuickChatSheet({ workspaceId, onClose }: QuickChatSheetProps) {
-  const { workspaces } = useKanban();
+  const { workspaces } = useKanbanState();
   const workspace = useMemo(
     () => workspaces?.find((w) => w.id === workspaceId) ?? null,
     [workspaces, workspaceId]

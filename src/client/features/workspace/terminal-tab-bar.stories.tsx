@@ -60,12 +60,12 @@ function PanelHeader({ empty = false }: { empty?: boolean }) {
     <div className="flex w-full max-w-[600px] items-center gap-0.5 bg-shell p-1">
       <TerminalControls
         activeBottomTab={active ? 'terminal' : 'setup-logs'}
-        terminalTabState={{
+        terminal={{
           tabs,
           activeTabId,
-          onSelectTab: setActiveTabId,
-          onCloseTab: (id) => setTabs(tabs.filter((tab) => tab.id !== id)),
-          onNewTab: () => undefined,
+          selectTab: setActiveTabId,
+          closeTab: (id) => setTabs(tabs.filter((tab) => tab.id !== id)),
+          newTab: () => undefined,
         }}
         onTabChange={openTerminal}
         leadingTabs={

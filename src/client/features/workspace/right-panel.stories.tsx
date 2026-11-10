@@ -270,7 +270,8 @@ export const DeletedTaskPreference: Story = {
     await expect(
       canvas.queryByRole('tab', { name: 'Scheduled automation' })
     ).not.toBeInTheDocument();
-    await expect(readStorageItem(`workspace-right-panel-tab-${workspaceId}`)).toBe('changes');
+    // Changes is shown; the stored choice stays until the user picks a tab.
+    await expect(readStorageItem(`workspace-right-panel-tab-${workspaceId}`)).toBe('periodic-task');
   },
 };
 export const DeleteWhileOpen: Story = {
@@ -280,7 +281,8 @@ export const DeleteWhileOpen: Story = {
     await canvas.findByText('Scheduled cleanup');
     await userEvent.click(canvas.getByRole('button', { name: 'Delete automation' }));
     await expect(await canvas.findByText('No changes')).toBeVisible();
-    await expect(readStorageItem(`workspace-right-panel-tab-${workspaceId}`)).toBe('changes');
+    // Changes is shown; the stored choice stays until the user picks a tab.
+    await expect(readStorageItem(`workspace-right-panel-tab-${workspaceId}`)).toBe('periodic-task');
   },
 };
 

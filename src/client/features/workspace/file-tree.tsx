@@ -84,17 +84,12 @@ const DirectoryNode = memo(function DirectoryNode({
   depth,
   onFileSelect,
 }: DirectoryNodeProps) {
-  const { isExpanded: checkExpanded, toggleExpanded } = useFileTreeExpansion();
-  const isExpanded = checkExpanded(entry.path);
-
-  const toggleExpand = useCallback(() => {
-    toggleExpanded(entry.path);
-  }, [toggleExpanded, entry.path]);
+  const { expanded: isExpanded, toggle } = useFileTreeExpansion(entry.path);
 
   return (
     <div>
       <FileTreeRow
-        onClick={toggleExpand}
+        onClick={toggle}
         depth={depth}
         expanded={isExpanded}
         icon={<FolderIcon className="h-4 w-4 text-brand" />}

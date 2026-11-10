@@ -15,7 +15,7 @@ import { DiffLines } from './diff-lines';
 import type { ScrollState } from './scroll-state';
 import { useDiffHighlighting } from './use-diff-highlighting';
 import { usePersistentScroll } from './use-persistent-scroll';
-import { useWorkspacePanel } from './workspace-panel-context';
+import { useWorkspacePanelScroll } from './workspace-panel-context';
 
 // =============================================================================
 // Types
@@ -68,7 +68,7 @@ function MarkdownPreview({ workspaceId, filePath }: MarkdownPreviewProps) {
 
 export function DiffViewer({ workspaceId, filePath, tabId }: DiffViewerProps) {
   const { resolvedTheme } = useTheme();
-  const { getScrollState, setScrollState } = useWorkspacePanel();
+  const { getScrollState, setScrollState } = useWorkspacePanelScroll();
   const saveDiffScrollState = useCallback(
     (state: ScrollState) => setScrollState(tabId, 'code', state),
     [setScrollState, tabId]

@@ -10,7 +10,7 @@ import { Spinner } from '@/components/ui/spinner';
 import { cn } from '@/lib/utils';
 import { FileChangeItem, type FileChangeKind, FileChangeStatus } from './file-change-item';
 import { FILE_TREE_ROW_HEIGHT, FileTreeRow } from './file-tree-row';
-import { useWorkspacePanel } from './workspace-panel-context';
+import { useWorkspacePanelActions } from './workspace-panel-context';
 
 export interface ChangeListEntry {
   path: string;
@@ -152,7 +152,7 @@ export const VirtualizedChangeList = memo(function VirtualizedChangeList({
 });
 
 export function useOpenDiffTab() {
-  const { openTab } = useWorkspacePanel();
+  const { openTab } = useWorkspacePanelActions();
   return useCallback(
     (path: string) => {
       openTab('diff', path, `Diff: ${path.split('/').pop()}`);

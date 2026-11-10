@@ -1,9 +1,15 @@
 import type { ReactNode } from 'react';
-import { useKanban } from './kanban-context';
+import { useKanbanActions } from './kanban-context';
 import { WorkspaceCreationImageDropZone } from './workspace-creation-image-drop-zone';
 
-export function KanbanImageDropZone({ children }: { children: ReactNode }) {
-  const { projectId, setShowInlineForm } = useKanban();
+export function KanbanImageDropZone({
+  projectId,
+  children,
+}: {
+  projectId: string;
+  children: ReactNode;
+}) {
+  const { setShowInlineForm } = useKanbanActions();
   return (
     <WorkspaceCreationImageDropZone
       projectId={projectId}

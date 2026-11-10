@@ -38,11 +38,6 @@ describe('useLogStream', () => {
   let container: HTMLDivElement;
   let root: ReturnType<typeof createRoot>;
   let mounted: boolean;
-  let nextAnimationFrameId: number;
-  let animationFrames: Map<number, FrameRequestCallback>;
-  let requestAnimationFrameMock: ReturnType<typeof vi.fn>;
-  let cancelAnimationFrameMock: ReturnType<typeof vi.fn>;
-  let scrollIntoViewMock: ReturnType<typeof vi.fn>;
   const resultRef: { current: UseLogStreamResult | null } = { current: null };
   const renderCountRef = { current: 0 };
 
@@ -64,22 +59,6 @@ describe('useLogStream', () => {
     });
   }
 
-  function attachOutputEndMarker() {
-    const marker = document.createElement('div');
-    Object.defineProperty(marker, 'scrollIntoView', { value: scrollIntoViewMock });
-    if (resultRef.current) {
-      resultRef.current.outputEndRef.current = marker;
-    }
-  }
-
-  function runAnimationFrames() {
-    const pendingFrames = [...animationFrames.entries()];
-    animationFrames.clear();
-    for (const [, callback] of pendingFrames) {
-      callback(0);
-    }
-  }
-
   function unmount() {
     if (!mounted) {
       return;
@@ -95,20 +74,6 @@ describe('useLogStream', () => {
     capturedOptions = null;
     resultRef.current = null;
     renderCountRef.current = 0;
-    nextAnimationFrameId = 1;
-    animationFrames = new Map();
-    requestAnimationFrameMock = vi.fn((callback: FrameRequestCallback) => {
-      const frameId = nextAnimationFrameId;
-      nextAnimationFrameId += 1;
-      animationFrames.set(frameId, callback);
-      return frameId;
-    });
-    cancelAnimationFrameMock = vi.fn((frameId: number) => {
-      animationFrames.delete(frameId);
-    });
-    scrollIntoViewMock = vi.fn();
-    vi.stubGlobal('requestAnimationFrame', requestAnimationFrameMock);
-    vi.stubGlobal('cancelAnimationFrame', cancelAnimationFrameMock);
     container = document.createElement('div');
     document.body.appendChild(container);
     root = createRoot(container);
@@ -130,9 +95,8 @@ describe('useLogStream', () => {
     expect(capturedOptions?.queuePolicy).toBe('drop');
   });
 
-  it('buffers a high-frequency hidden burst without rerendering or scrolling', () => {
+  it('buffers a high-frequency hidden burst without rerendering', () => {
     render();
-    attachOutputEndMarker();
     const rendersAfterMount = renderCountRef.current;
 
     flushSync(() => {
@@ -144,8 +108,6 @@ describe('useLogStream', () => {
 
     expect(renderCountRef.current).toBe(rendersAfterMount);
     expect(resultRef.current?.output).toBe('');
-    expect(requestAnimationFrameMock).not.toHaveBeenCalled();
-    expect(scrollIntoViewMock).not.toHaveBeenCalled();
   });
 
   it('immediately hydrates buffered output when the stream becomes visible', () => {
@@ -244,27 +206,6 @@ describe('useLogStream', () => {
     expect(output.endsWith('newest')).toBe(true);
   });
 
-  it('scrolls once on an animation frame after visible output is committed', () => {
-    render(true);
-    attachOutputEndMarker();
-
-    flushSync(() => {
-      capturedOptions?.onMessage?.({ type: 'output', data: 'one\n' });
-      capturedOptions?.onMessage?.({ type: 'output', data: 'two\n' });
-      capturedOptions?.onMessage?.({ type: 'output', data: 'three\n' });
-      vi.advanceTimersByTime(100);
-    });
-
-    expect(requestAnimationFrameMock).toHaveBeenCalledTimes(1);
-    expect(scrollIntoViewMock).not.toHaveBeenCalled();
-
-    flushSync(() => {
-      runAnimationFrames();
-    });
-    expect(scrollIntoViewMock).toHaveBeenCalledTimes(1);
-    expect(scrollIntoViewMock).toHaveBeenCalledWith({ behavior: 'smooth' });
-  });
-
   it('cancels a pending visible flush when the stream becomes hidden', () => {
     render(true);
     flushSync(() => {
@@ -284,46 +225,18 @@ describe('useLogStream', () => {
     expect(resultRef.current?.output).toBe('pending\n');
   });
 
-  it('cancels a pending animation frame when the stream becomes hidden', () => {
+  it('cancels a pending flush on unmount', () => {
     render(true);
-    attachOutputEndMarker();
-    flushSync(() => {
-      capturedOptions?.onMessage?.({ type: 'output', data: 'visible\n' });
-      vi.advanceTimersByTime(100);
-    });
-    expect(animationFrames.size).toBe(1);
-
-    render(false);
-
-    expect(animationFrames.size).toBe(0);
-    expect(cancelAnimationFrameMock).toHaveBeenCalledTimes(1);
-    flushSync(() => {
-      runAnimationFrames();
-    });
-    expect(scrollIntoViewMock).not.toHaveBeenCalled();
-  });
-
-  it('cancels pending flush and animation-frame work on unmount', () => {
-    render(true);
-    attachOutputEndMarker();
     flushSync(() => {
       capturedOptions?.onMessage?.({ type: 'output', data: 'first\n' });
       vi.advanceTimersByTime(100);
       capturedOptions?.onMessage?.({ type: 'output', data: 'second\n' });
     });
     expect(vi.getTimerCount()).toBe(1);
-    expect(animationFrames.size).toBe(1);
 
     unmount();
 
     expect(vi.getTimerCount()).toBe(0);
-    expect(animationFrames.size).toBe(0);
-    expect(cancelAnimationFrameMock).toHaveBeenCalledTimes(1);
-    flushSync(() => {
-      vi.runAllTimers();
-      runAnimationFrames();
-    });
-    expect(scrollIntoViewMock).not.toHaveBeenCalled();
   });
 
   it('ignores empty and schema-invalid messages', () => {
@@ -337,7 +250,6 @@ describe('useLogStream', () => {
     });
 
     expect(resultRef.current?.output).toBe('');
-    expect(requestAnimationFrameMock).not.toHaveBeenCalled();
   });
 
   // The server sends its retained buffer as a `replay` frame on every

@@ -12,7 +12,7 @@ import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Spinner } from '@/components/ui/spinner';
-import { useWorkspacePanel } from './workspace-panel-context';
+import { useWorkspacePanelActions } from './workspace-panel-context';
 
 // =============================================================================
 // Types
@@ -35,7 +35,7 @@ export function ScreenshotsPanel({
   isTakingScreenshots,
   onTakeScreenshots,
 }: ScreenshotsPanelProps) {
-  const { openTab } = useWorkspacePanel();
+  const { openTab } = useWorkspacePanelActions();
   const utils = trpc.useUtils();
 
   // Deleting unlinks the file from the worktree, so it is confirmed first. The

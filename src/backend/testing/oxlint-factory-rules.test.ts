@@ -43,6 +43,7 @@ const rules = [
   'icon-button-tooltip',
   'tooltip-provider-root',
   'focus-ring',
+  'stable-context-value',
 ];
 const workspaceQueryOwner = 'owned/workspace-queries.ts';
 const userSettingsOwner = 'owned/user-settings-queries.ts';
@@ -357,6 +358,26 @@ describe('Oxlint project guardrails', () => {
       'function useRows(rows) { const seen = useRef(0); return useMemo(() => { seen.current = rows.length; return rows; }, [rows]); }',
     ],
     ['no-state-sync-effect', 'React.useLayoutEffect(() => setSelected(items[0]), [items]);'],
+    [
+      'stable-context-value',
+      'const x = <KanbanContext.Provider value={{ a, b }}>{c}</KanbanContext.Provider>;',
+    ],
+    [
+      'stable-context-value',
+      'const x = <PanelContext value={[state, setState]}>{c}</PanelContext>;',
+    ],
+    ['stable-context-value', 'const x = <Ctx.Provider value={() => run()}>{c}</Ctx.Provider>;'],
+    ['stable-context-value', 'const x = <SearchContext value={buildValue(a)}>{c}</SearchContext>;'],
+    [
+      'stable-context-value',
+      'const x = <Ctx.Provider value={ready ? { a } : null}>{c}</Ctx.Provider>;',
+    ],
+    ['stable-context-value', 'const x = <StoreContext value={new Store()}>{c}</StoreContext>;'],
+    ['stable-context-value', 'const x = <Ctx.Provider value={{ a } as Value}>{c}</Ctx.Provider>;'],
+    ['stable-context-value', 'const x = createElement(Ctx.Provider, { value: { a } }, c);'],
+    ['stable-context-value', 'const x = React.createElement(NavContext, { value: [a] }, c);'],
+    ['stable-context-value', 'const x = <SlotContext value={<Icon />}>{c}</SlotContext>;'],
+    ['stable-context-value', 'const x = <Ctx.Provider value={useState(0)}>{c}</Ctx.Provider>;'],
   ];
   const rejectedFixtures = rejectedSources.map(([rule, source], index) => ({
     rule,
@@ -487,6 +508,15 @@ describe('Oxlint project guardrails', () => {
     'useEffect(() => { if (!enabled) { return; } }, [enabled]);',
     'useEffect(() => { setTimeout(flush, delay); }, [delay]);',
     'function useRows(rows) { const seen = useRef(0); const onClick = useCallback(() => { seen.current = rows.length; }, [rows]); return onClick; }',
+    'const x = <KanbanContext.Provider value={value}>{c}</KanbanContext.Provider>;',
+    'const x = <PanelContext value={state}>{c}</PanelContext>;',
+    'const x = <ThemeContext value="dark">{c}</ThemeContext>;',
+    'const x = <Ctx.Provider value={useMemo(() => ({ a }), [a])}>{c}</Ctx.Provider>;',
+    'const x = <Ctx.Provider value={React.useCallback(run, [])}>{c}</Ctx.Provider>;',
+    'const x = <Ctx.Provider value={context ?? DEFAULT_CONTEXT}>{c}</Ctx.Provider>;',
+    'const x = <Select value={{ id }} />;',
+    'const x = <Tooltip.Root value={[a]} />;',
+    'const x = createElement(Ctx.Provider, { value }, c);',
   ]
     .map((source, index) => ({ source, file: join(directory, `accepted-${index}.tsx`) }))
     .concat(
@@ -591,6 +621,7 @@ describe.each([
   'tooltip-provider-root',
   'focus-ring',
   'no-raw-tab-role',
+  'stable-context-value',
 ])('factory/%s exceptions', (rule) => {
   const projectConfig = overridesSchema.parse(
     JSON.parse(readFileSync(resolve('.oxlintrc.json'), 'utf8'))
