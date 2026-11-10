@@ -1,6 +1,7 @@
 import { execFile } from 'node:child_process';
 import { lstat, readdir, readFile, readlink, realpath, stat } from 'node:fs/promises';
-import * as path from 'node:path';
+// The sweep only runs on macOS and Linux, so path logic is POSIX everywhere.
+import { posix as path } from 'node:path';
 
 /**
  * Terminates processes left running inside a workspace worktree that no
@@ -16,7 +17,13 @@ export interface ListedProcess {
   /** True when the process has a controlling terminal, or when that is unknown. */
   hasTty: boolean;
   cwd?: string;
+  /**
+   * Linux: `/proc/<pid>/exe`. macOS: `ps` `comm`, the command path as invoked;
+   * a bare name never matches, so relative invocations rely on `cwd`.
+   */
   executable?: string;
+  /** Opaque start-time identity; a reused PID has a different value. */
+  startedAt?: string;
 }
 
 export type ProcessLister = () => Promise<ListedProcess[]>;
@@ -41,9 +48,9 @@ export type WorktreeProcessSweepResult =
   | {
       status: 'swept';
       matched: number[];
-      /** Exited after SIGTERM. */
+      /** Exited after SIGTERM, or before it could be sent. */
       terminated: number[];
-      /** Still matched after the grace period and received SIGKILL. */
+      /** Still matched with the same start identity after the grace period; received SIGKILL. */
       killed: number[];
       /** Could not be signalled, or had not exited by the deadline. */
       survivors: number[];
@@ -205,9 +212,22 @@ export function parseLsofCwd(output: string): Map<number, string> {
   return cwdByPid;
 }
 
+/** Parses `ps -A -o pid=,lstart=`; the start time is compared only for equality. */
+export function parseDarwinStartTimes(output: string): Map<number, string> {
+  const startedAtByPid = new Map<number, string>();
+  for (const line of output.split('\n')) {
+    const match = /^\s*(\d+)\s+(\S.*?)\s*$/.exec(line);
+    if (match?.[1] && match[2]) {
+      startedAtByPid.set(Number(match[1]), match[2]);
+    }
+  }
+  return startedAtByPid;
+}
+
 async function listDarwinProcesses(uid: number, timeoutMs: number): Promise<ListedProcess[]> {
-  const [psOutput, lsofOutput] = await Promise.all([
+  const [psOutput, startOutput, lsofOutput] = await Promise.all([
     execFileStdout('ps', ['-A', '-ww', '-o', 'pid=,ppid=,uid=,tty=,comm='], timeoutMs),
+    execFileStdout('ps', ['-A', '-o', 'pid=,lstart='], timeoutMs),
     execFileStdout(
       'lsof',
       ['-a', '-u', String(uid), '-d', 'cwd', '-n', '-P', '-w', '-Fpn'],
@@ -215,18 +235,29 @@ async function listDarwinProcesses(uid: number, timeoutMs: number): Promise<List
     ),
   ]);
   const cwdByPid = parseLsofCwd(lsofOutput);
-  return parseDarwinPs(psOutput).map((entry) => ({ ...entry, cwd: cwdByPid.get(entry.pid) }));
+  const startedAtByPid = parseDarwinStartTimes(startOutput);
+  return parseDarwinPs(psOutput).map((entry) => ({
+    ...entry,
+    cwd: cwdByPid.get(entry.pid),
+    startedAt: startedAtByPid.get(entry.pid),
+  }));
 }
 
 /** Parses `/proc/<pid>/stat`; the command name may contain spaces and parentheses. */
-export function parseLinuxStat(content: string): { ppid: number; ttyNr: number } | undefined {
+export function parseLinuxStat(
+  content: string
+): { ppid: number; ttyNr: number; startedAt: string } | undefined {
+  // Fields after the command name start at field 3 (state); starttime is field 22.
   const fields = content
     .slice(content.lastIndexOf(')') + 1)
     .trim()
     .split(/\s+/);
   const ppid = Number(fields[1]);
   const ttyNr = Number(fields[4]);
-  return Number.isInteger(ppid) && Number.isInteger(ttyNr) ? { ppid, ttyNr } : undefined;
+  const startedAt = fields[19];
+  return Number.isInteger(ppid) && Number.isInteger(ttyNr) && startedAt && /^\d+$/.test(startedAt)
+    ? { ppid, ttyNr, startedAt }
+    : undefined;
 }
 
 async function readLinuxProcess(pid: number, uid: number): Promise<ListedProcess | undefined> {
@@ -244,6 +275,7 @@ async function readLinuxProcess(pid: number, uid: number): Promise<ListedProcess
       ppid: parsed.ppid,
       uid: owner.uid,
       hasTty: parsed.ttyNr !== 0,
+      startedAt: parsed.startedAt,
     };
     if (owner.uid === uid) {
       // A removed directory reads as "<path> (deleted)" and therefore never matches.
@@ -298,13 +330,17 @@ async function withTimeout<T>(operation: Promise<T>, timeoutMs: number): Promise
   }
 }
 
-function sendSignal(signaller: Signaller, pid: number, signal: NodeJS.Signals | 0): boolean {
+function sendSignal(
+  signaller: Signaller,
+  pid: number,
+  signal: NodeJS.Signals
+): 'sent' | 'gone' | 'denied' {
   try {
     signaller(pid, signal);
-    return true;
-  } catch {
-    // ESRCH: already gone. EPERM: not ours to signal; reported as a survivor.
-    return false;
+    return 'sent';
+  } catch (error) {
+    // EPERM and anything unexpected are reported as survivors.
+    return (error as NodeJS.ErrnoException).code === 'ESRCH' ? 'gone' : 'denied';
   }
 }
 
@@ -331,8 +367,9 @@ async function waitForExit(signaller: Signaller, pids: number[], graceMs: number
 
 /**
  * Sends SIGTERM to matching processes, waits a bounded grace period, then
- * re-lists and sends SIGKILL only to survivors that still match, so a reused
- * PID is never killed. Worst case is two listings plus both grace periods.
+ * re-lists and sends SIGKILL only to survivors that still match with the same
+ * start identity, so a reused PID is not killed. Worst case is two listings
+ * plus both grace periods.
  * Throws when the worktree path is unsafe or identification fails.
  */
 export async function sweepWorktreeProcesses(
@@ -363,29 +400,41 @@ export async function sweepWorktreeProcesses(
       process.kill(pid, signal);
     });
 
-  const matched = selectWorktreeProcesses(await withTimeout(lister(), listTimeoutMs), roots, self);
+  const listing = await withTimeout(lister(), listTimeoutMs);
+  const matched = selectWorktreeProcesses(listing, roots, self);
   if (matched.length === 0) {
     return { status: 'swept', matched, terminated: [], killed: [], survivors: [] };
   }
-  const signalled = matched.filter((pid) => sendSignal(signaller, pid, 'SIGTERM'));
-  const unsignalled = matched.filter((pid) => !signalled.includes(pid));
+  const termOutcomes = new Map(matched.map((pid) => [pid, sendSignal(signaller, pid, 'SIGTERM')]));
+  const signalled = matched.filter((pid) => termOutcomes.get(pid) === 'sent');
+  const denied = matched.filter((pid) => termOutcomes.get(pid) === 'denied');
   const remaining = await waitForExit(
     signaller,
     signalled,
     options.termGraceMs ?? DEFAULT_TERM_GRACE_MS
   );
-  const terminated = signalled.filter((pid) => !remaining.includes(pid));
+  const terminated = matched.filter(
+    (pid) =>
+      termOutcomes.get(pid) === 'gone' || (signalled.includes(pid) && !remaining.includes(pid))
+  );
   if (remaining.length === 0) {
-    return { status: 'swept', matched, terminated, killed: [], survivors: unsignalled };
+    return { status: 'swept', matched, terminated, killed: [], survivors: denied };
   }
 
-  // Escalate only for PIDs that still match: one that stopped matching has
-  // exited, become a zombie, or been reused by an unrelated process.
-  const stillMatching = new Set(
-    selectWorktreeProcesses(await withTimeout(lister(), listTimeoutMs), roots, self)
-  );
-  const escalate = remaining.filter((pid) => stillMatching.has(pid));
-  const killed = escalate.filter((pid) => sendSignal(signaller, pid, 'SIGKILL'));
+  // Escalate only for PIDs that still match with the same start identity: a
+  // PID that changed has exited, become a zombie, or been reused.
+  const startedAt = new Map(listing.map((entry) => [entry.pid, entry.startedAt]));
+  const relisted = await withTimeout(lister(), listTimeoutMs);
+  const relistedStartedAt = new Map(relisted.map((entry) => [entry.pid, entry.startedAt]));
+  const stillMatching = new Set(selectWorktreeProcesses(relisted, roots, self));
+  const escalate = remaining.filter((pid) => {
+    const identity = startedAt.get(pid);
+    return (
+      stillMatching.has(pid) && identity !== undefined && identity === relistedStartedAt.get(pid)
+    );
+  });
+  const killOutcomes = new Map(escalate.map((pid) => [pid, sendSignal(signaller, pid, 'SIGKILL')]));
+  const killed = escalate.filter((pid) => killOutcomes.get(pid) === 'sent');
   const unexited = await waitForExit(
     signaller,
     killed,
@@ -394,8 +443,12 @@ export async function sweepWorktreeProcesses(
   return {
     status: 'swept',
     matched,
-    terminated,
+    terminated: [...terminated, ...escalate.filter((pid) => killOutcomes.get(pid) === 'gone')],
     killed,
-    survivors: [...unsignalled, ...escalate.filter((pid) => !killed.includes(pid)), ...unexited],
+    survivors: [
+      ...denied,
+      ...escalate.filter((pid) => killOutcomes.get(pid) === 'denied'),
+      ...unexited,
+    ],
   };
 }

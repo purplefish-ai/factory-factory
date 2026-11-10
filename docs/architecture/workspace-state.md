@@ -555,15 +555,16 @@ it belongs to the server's user, has no controlling terminal, is not the server,
 one of its ancestors or PID 0/1, and has its working directory or executable on
 a path boundary inside the worktree. Both the configured and realpath-resolved
 worktree paths are checked, and each must be strictly inside the matching
-project worktree base. Command-line arguments are never matched, so an editor
-opened on the worktree is left alone. Matches receive SIGTERM; after three
-seconds, the processes are listed again and survivors that still match receive
-SIGKILL, so a reused PID is never killed. Each listing is bounded to four
-seconds. macOS uses `ps` and `lsof`, Linux reads `/proc`, and other platforms
-skip the sweep. A sweep failure is logged and never blocks the archive or
-delete: it leaves exactly the processes earlier versions left. Workspaces
-archived before this sweep existed keep their leftover processes until they exit
-or are stopped by hand.
+project worktree base. Command-line arguments are never matched, so a process
+that only names the worktree in its arguments, such as an editor opened on it,
+is left alone. Matches receive SIGTERM. After three seconds the processes are
+listed again, and survivors that still match with the same start time receive
+SIGKILL; a PID reused in the meantime is not killed. Each listing is bounded to
+four seconds. macOS uses `ps` and `lsof`, Linux reads `/proc`, and other
+platforms skip the sweep. A sweep failure is logged and never blocks the archive
+or delete; a sweep that fails partway may already have stopped some processes
+and left others running. Workspaces archived before this sweep existed keep
+their leftover processes until they exit or are stopped by hand.
 
 Startup archive recovery runs in the background after essential session and
 workspace state repairs. Slow Git worktree cleanup does not delay HTTP/WebSocket

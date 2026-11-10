@@ -8,6 +8,7 @@ import {
   isPathInsideRoot,
   type ListedProcess,
   parseDarwinPs,
+  parseDarwinStartTimes,
   parseLinuxStat,
   parseLsofCwd,
   platformProcessLister,
@@ -20,7 +21,7 @@ const ROOT = '/base/workspace-abc';
 const SELF = { pid: 500, uid: 501 };
 
 function proc(overrides: Partial<ListedProcess> & { pid: number }): ListedProcess {
-  return { ppid: 1, uid: 501, hasTty: false, ...overrides };
+  return { ppid: 1, uid: 501, hasTty: false, startedAt: 'start', ...overrides };
 }
 
 describe('isPathInsideRoot', () => {
@@ -82,7 +83,9 @@ describe('selectWorktreeProcesses', () => {
   });
 });
 
-describe('resolveWorktreeRoots', () => {
+const onWindows = process.platform === 'win32';
+
+describe.skipIf(onWindows)('resolveWorktreeRoots', () => {
   let base: string;
 
   beforeEach(async () => {
@@ -154,6 +157,17 @@ describe('process listing parsers', () => {
     ]);
   });
 
+  it('parses macOS start times as opaque identities', () => {
+    expect(
+      parseDarwinStartTimes('    1 Tue Oct 27 10:19:42 2026    \n  101 Sun Nov  8 20:31:42 2026\n')
+    ).toEqual(
+      new Map([
+        [1, 'Tue Oct 27 10:19:42 2026'],
+        [101, 'Sun Nov  8 20:31:42 2026'],
+      ])
+    );
+  });
+
   it('parses lsof cwd fields', () => {
     expect(parseLsofCwd('p103\nfcwd\nn/\np130\nfcwd\nn/base/workspace abc\n')).toEqual(
       new Map([
@@ -164,10 +178,13 @@ describe('process listing parsers', () => {
   });
 
   it('parses Linux stat with a command name containing parentheses and spaces', () => {
-    expect(parseLinuxStat('42 (node (x) y) S 7 42 42 0 -1 4194560')).toEqual({
+    const tail = '4194560 0 0 0 0 1 2 0 0 20 0 1 0 98765 1000 10';
+    expect(parseLinuxStat(`42 (node (x) y) S 7 42 42 0 -1 ${tail}`)).toEqual({
       ppid: 7,
       ttyNr: 0,
+      startedAt: '98765',
     });
+    expect(parseLinuxStat('42 (node) S 7 42 42 0 -1 4194560')).toBeUndefined();
     expect(parseLinuxStat('garbage')).toBeUndefined();
   });
 
@@ -177,7 +194,7 @@ describe('process listing parsers', () => {
   });
 });
 
-describe('sweepWorktreeProcesses with an injected lister', () => {
+describe.skipIf(onWindows)('sweepWorktreeProcesses with an injected lister', () => {
   let base: string;
   let worktree: string;
 
@@ -243,25 +260,51 @@ describe('sweepWorktreeProcesses with an injected lister', () => {
 
   it('escalates to SIGKILL only for processes that still match after the grace period', async () => {
     const fake = fakeProcesses(
-      [proc({ pid: 10, cwd: worktree }), proc({ pid: 11, cwd: worktree })],
+      [
+        proc({ pid: 10, cwd: worktree }),
+        proc({ pid: 11, cwd: worktree }),
+        proc({ pid: 12, cwd: worktree }),
+      ],
       { ignoreTerm: true }
     );
     const originalList = fake.listProcesses;
     let listings = 0;
-    // PID 11 is reused by an unrelated process before the second listing.
+    // Before the second listing, PID 11 is reused by another process in the
+    // worktree and PID 12 by a process elsewhere.
     fake.listProcesses = async () => {
       listings++;
       const processes = await originalList();
       return listings === 1
         ? processes
-        : processes.map((entry) => (entry.pid === 11 ? { ...entry, cwd: '/elsewhere' } : entry));
+        : processes.map((entry) => {
+            if (entry.pid === 11) {
+              return { ...entry, startedAt: 'later' };
+            }
+            return entry.pid === 12 ? { ...entry, cwd: '/elsewhere' } : entry;
+          });
     };
 
     const result = await sweepWorktreeProcesses({ ...sweepOptions(), ...fake });
 
-    expect(result).toMatchObject({ matched: [10, 11], killed: [10], survivors: [] });
+    expect(result).toMatchObject({ matched: [10, 11, 12], killed: [10], survivors: [] });
     expect(fake.signals).not.toContainEqual([11, 'SIGKILL']);
+    expect(fake.signals).not.toContainEqual([12, 'SIGKILL']);
     expect(fake.alive.has(11)).toBe(true);
+    expect(fake.alive.has(12)).toBe(true);
+  });
+
+  it('counts a process that exits before SIGTERM as terminated, not as a survivor', async () => {
+    const fake = fakeProcesses([proc({ pid: 10, cwd: worktree })]);
+    const listing = await fake.listProcesses();
+    fake.alive.clear();
+
+    const result = await sweepWorktreeProcesses({
+      ...sweepOptions(),
+      ...fake,
+      listProcesses: async () => listing,
+    });
+
+    expect(result).toMatchObject({ matched: [10], terminated: [10], survivors: [] });
   });
 
   it('refuses to sweep a worktree containing the server working directory', async () => {
