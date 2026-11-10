@@ -196,8 +196,8 @@ export function KanbanProvider({
   });
 
   const refetch = useStableCallback(() => {
-    runInBackground(refetchWorkspaces(), "Couldn't refresh data.");
-    runInBackground(refetchProjectIssues(), "Couldn't refresh data.");
+    runInBackground(refetchWorkspaces());
+    runInBackground(refetchProjectIssues());
   });
 
   const syncAndRefetch = useStableCallback(() => {
