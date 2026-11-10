@@ -376,11 +376,13 @@ snapshot. The snapshot has a 120-second transaction budget and a 5-second busy
 wait. Account exports include identity metadata only, excluding credentials and
 homes.
 
-An ARCHIVED workspace exports its `creationMetadata` without
-`initialAttachments` and at most a failed setup's log tail, because archive
-releases both (see the archive flow under the Kanban model). Imports still
-accept older backups whose archived rows carry them; the
-`archived-workspace-blob-retention` job releases those rows after import.
+Export copies `creationMetadata` and `initOutput` as stored. Archive normally
+removes `initialAttachments` and all but a failed setup's log tail (see the
+archive flow under the Kanban model), so an ARCHIVED workspace usually exports
+without them. A row whose release failed, or that predates it and the
+`archived-workspace-blob-retention` job has not reached yet, still exports both.
+Imports still accept older backups whose archived rows carry them; the job
+releases those rows after import.
 
 Backup export and import map columns by hand.
 `src/backend/orchestration/data-backup/data-backup-columns.test.ts` lists every
@@ -595,12 +597,12 @@ or delete; a sweep that fails partway may already have stopped some processes
 and left others running. Workspaces archived before this sweep existed keep
 their leftover processes until they exit or are stopped by hand.
 
-Once a workspace is durably ARCHIVED, archive releases the data only Retry
-needed. `initialAttachments` is removed from `creationMetadata`; the initial
-prompt and every other key stay, and SQL NULL stays NULL. `initOutput` keeps a
-4,096-character tail, marked as truncated, when `initErrorMessage` is set (a
-failed or warned setup) and is cleared otherwise. The rewrite runs in SQL and
-re-checks ARCHIVED, so an ARCHIVING workspace, which can roll back, keeps
+Once a workspace is durably ARCHIVED, archive releases data that only Retry
+setup needed. `initialAttachments` is removed from `creationMetadata`; the
+initial prompt and every other key stay, and SQL NULL stays NULL. `initOutput`
+keeps a 4,096-character tail, marked as truncated, when `initErrorMessage` is
+set (a failed or warned setup) and is cleared otherwise. The rewrite runs in SQL
+and re-checks ARCHIVED, so an ARCHIVING workspace, which can roll back, keeps
 everything; it leaves `updatedAt` alone. A failed release is logged and does not
 affect the archive. The `archived-workspace-blob-retention` job
 ([background jobs](background-jobs.md#archived-workspace-data)) releases rows

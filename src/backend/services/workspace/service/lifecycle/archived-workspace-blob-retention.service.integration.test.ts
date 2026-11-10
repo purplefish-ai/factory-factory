@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { workspaceArchivedBlobsAccessor } from '@/backend/services/workspace/resources/workspace-archived-blobs.accessor';
 import {
   createIntegrationDatabase,
   destroyIntegrationDatabase,
@@ -156,6 +157,21 @@ describe('release after archive', () => {
     expect(await Promise.all(ids.map(async (id) => (await storage(id))?.initOutput))).toEqual(
       ids.map(() => null)
     );
+  });
+
+  it('rejects a tail no longer than the truncation marker before running any statement', async () => {
+    await createWorkspace('failed', { initErrorMessage: 'Startup script failed' });
+    const before = await storage('failed');
+
+    for (const tailChars of [0, '[...truncated...]\n'.length, 100.5]) {
+      await expect(workspaceArchivedBlobsAccessor.releaseOne('failed', tailChars)).rejects.toThrow(
+        RangeError
+      );
+      await expect(
+        workspaceArchivedBlobsAccessor.releaseBatch({ afterId: '', limit: 10, tailChars })
+      ).rejects.toThrow(RangeError);
+    }
+    expect(await storage('failed')).toEqual(before);
   });
 
   it('removes an attachments key whose value is null', async () => {

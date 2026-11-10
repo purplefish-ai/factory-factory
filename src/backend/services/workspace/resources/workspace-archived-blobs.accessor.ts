@@ -32,7 +32,13 @@ function initOutputOverLimit(tailChars: number) {
     AND ("initErrorMessage" IS NULL OR length("initOutput") > ${tailChars}))`;
 }
 
+/** Every statement builds this predicate before it runs, so the guard covers them all. */
 function releasable(tailChars: number) {
+  // A tail no longer than the marker would make the "truncated" log longer
+  // than the one it replaces, and it would grow again on every run.
+  if (!Number.isInteger(tailChars) || tailChars <= TRUNCATION_MARKER.length) {
+    throw new RangeError(`initOutput tail must exceed ${TRUNCATION_MARKER.length} characters`);
+  }
   return Prisma.sql`"status" = 'ARCHIVED'
     AND (${hasAttachments()} OR ${initOutputOverLimit(tailChars)})`;
 }
