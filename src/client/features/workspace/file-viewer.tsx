@@ -41,17 +41,25 @@ export function FileViewer({ workspaceId, filePath, tabId }: FileViewerProps) {
   });
   const syntaxTheme = resolvedTheme === 'dark' ? 'dark' : 'light';
 
+  // A refresh notice sits above the loaded file, so the file fills the rest of the column.
   return (
-    <QueryState
-      query={query}
-      errorTitle="Couldn't load file"
-      loadingMessage="Loading file…"
-      className="h-full"
-    >
-      {(data) => (
-        <FileViewerLoaded filePath={filePath} tabId={tabId} data={data} syntaxTheme={syntaxTheme} />
-      )}
-    </QueryState>
+    <div className="flex h-full flex-col">
+      <QueryState
+        query={query}
+        errorTitle="Couldn't load file"
+        loadingMessage="Loading file…"
+        className="h-full"
+      >
+        {(data) => (
+          <FileViewerLoaded
+            filePath={filePath}
+            tabId={tabId}
+            data={data}
+            syntaxTheme={syntaxTheme}
+          />
+        )}
+      </QueryState>
+    </div>
   );
 }
 
@@ -205,7 +213,7 @@ function FileViewerLoaded({ filePath, tabId, data, syntaxTheme }: FileViewerLoad
   const onTogglePreview = () => setShowPreview((prev) => !prev);
 
   return (
-    <div className="h-full flex flex-col">
+    <div className="flex min-h-0 flex-1 flex-col">
       <FileViewerHeader
         filePath={filePath}
         isMarkdown={isMarkdown && !data.isBinary}

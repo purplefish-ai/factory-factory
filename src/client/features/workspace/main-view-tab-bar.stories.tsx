@@ -135,6 +135,29 @@ export const WithSessions: Story = {
   ),
 };
 
+/** A new chat is being created and the selected chat is restarting. */
+export const CreatingAndRestarting: Story = {
+  render: () => (
+    <WorkspacePanelProvider workspaceId="creating-story">
+      <MainViewTabBar
+        workspaceId="creating-story"
+        sessions={[{ id: 'existing', name: 'Chat 1', status: 'RUNNING', provider: 'CLAUDE' }]}
+        currentSessionId="existing"
+        onCreateSession={fn()}
+        onRestartSession={fn()}
+        isCreatingSession
+        isRestartingSession
+        disabled
+      />
+    </WorkspacePanelProvider>
+  ),
+  play: async ({ canvasElement }) => {
+    const create = within(canvasElement).getByRole('button', { name: 'Creating session' });
+    await expect(create).toBeDisabled();
+    await expect(create).toHaveAttribute('aria-busy', 'true');
+  },
+};
+
 export const AgentStates: Story = {
   render: () => (
     <WorkspacePanelProvider workspaceId="agent-status-states">

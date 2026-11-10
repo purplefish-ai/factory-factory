@@ -13,6 +13,8 @@ interface UseFileMentionsReturn {
   fileMentionFilter: string;
   files: string[];
   filesLoading: boolean;
+  /** The file list failed to load; the palette shows it instead of "No files found". */
+  filesError: string | null;
   paletteRef: React.RefObject<FileMentionPaletteHandle | null>;
   handleFileMentionSelect: (filePath: string) => void;
   handleFileMentionMenuClose: () => void;
@@ -36,7 +38,11 @@ export function useFileMentions({
   const paletteRef = useRef<FileMentionPaletteHandle>(null);
 
   // Fetch files from backend with debouncing via tRPC's built-in caching
-  const { data: filesData, isLoading: filesLoading } = trpc.workspace.listAllFiles.useQuery(
+  const {
+    data: filesData,
+    isLoading: filesLoading,
+    error,
+  } = trpc.workspace.listAllFiles.useQuery(
     {
       workspaceId: workspaceId ?? '',
       query: fileMentionFilter,
@@ -171,6 +177,7 @@ export function useFileMentions({
     fileMentionFilter,
     files,
     filesLoading,
+    filesError: error?.message ?? null,
     paletteRef,
     handleFileMentionSelect,
     handleFileMentionMenuClose,

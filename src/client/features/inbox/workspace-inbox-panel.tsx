@@ -1,10 +1,10 @@
 import { EnvelopeSimpleIcon } from '@phosphor-icons/react/dist/csr/EnvelopeSimple';
 import { useState } from 'react';
-import { Loading } from '@/client/components/loading';
+import { EmptyState } from '@/client/components/empty-state';
+import { QueryState } from '@/client/components/query-state';
 import { POLL_INTERVAL_MS } from '@/client/lib/query-options';
 import { trpc } from '@/client/lib/trpc';
 import { Button } from '@/components/ui/button';
-import { Spinner } from '@/components/ui/spinner';
 import { cn } from '@/lib/utils';
 import type { WorkspaceMailSummary } from '@/shared/workspace-mail';
 import { WorkspaceMailDetail } from './workspace-mail-detail';
@@ -42,6 +42,13 @@ function WorkspaceInbox({ workspaceId }: { workspaceId: string }) {
     ).values(),
   ];
   const unread = items.filter(isUnread).length;
+  // Retry repeats the failed action: an older page, or the list itself.
+  const mailQuery = {
+    data: mail.data,
+    error: mail.error,
+    isFetching: mail.isFetching,
+    refetch: () => (mail.isFetchNextPageError ? mail.fetchNextPage() : mail.refetch()),
+  };
 
   if (selected) {
     return (
@@ -81,17 +88,11 @@ function WorkspaceInbox({ workspaceId }: { workspaceId: string }) {
             <Button
               variant="outline"
               size="sm"
-              disabled={retryWake.isPending}
+              pending={retryWake.isPending}
+              pendingLabel="Retrying notification…"
               onClick={() => retryWake.mutate({ workspaceId })}
             >
-              {retryWake.isPending ? (
-                <>
-                  <Spinner className="size-3" aria-hidden="true" />
-                  Retrying notification…
-                </>
-              ) : (
-                'Retry mail notification'
-              )}
+              Retry mail notification
             </Button>
             {retryWake.isError && (
               <p role="alert" className="text-destructive">
@@ -100,67 +101,65 @@ function WorkspaceInbox({ workspaceId }: { workspaceId: string }) {
             )}
           </div>
         )}
-        {mail.isLoading && <Loading size="compact" message="Loading inbox…" />}
-        {mail.isError && (
-          <div role="alert" className="space-y-2 p-4 text-sm">
-            <p>Couldn't load inbox. {mail.error.message}</p>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() =>
-                void (mail.isFetchNextPageError ? mail.fetchNextPage() : mail.refetch())
-              }
-            >
-              Try again
-            </Button>
-          </div>
-        )}
-        {mail.data && items.length === 0 && (
-          <p className="p-4 text-sm text-muted-foreground">No messages yet</p>
-        )}
-        <ul className="divide-y divide-border/50">
-          {items.map((item) => (
-            <li key={item.id}>
-              <button
-                type="button"
-                className="w-full space-y-1.5 px-3 py-3 text-left transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
-                onClick={() => setSelected(item)}
-              >
-                <span className="flex items-start justify-between gap-2">
-                  <span className={cn('break-words text-sm', isUnread(item) && 'font-semibold')}>
-                    {item.subject || 'Workspace message'}
-                  </span>
-                  {isUnread(item) && (
-                    <span className="shrink-0 rounded bg-primary/10 px-1.5 py-0.5 text-[10px] text-primary">
-                      Unread
-                    </span>
-                  )}
-                </span>
-                <MailMetadata mail={item} />
-                <span className="line-clamp-2 break-words text-xs text-muted-foreground">
-                  {item.preview}
-                </span>
-                {item.acknowledgedAt && (
-                  <span className="block text-xs text-muted-foreground">Acknowledged</span>
-                )}
-              </button>
-            </li>
-          ))}
-        </ul>
-        {mail.hasNextPage && (
-          <div className="p-3">
-            <Button
-              variant="outline"
-              size="sm"
-              className="w-full"
-              disabled={mail.isFetching}
-              onClick={() => void mail.fetchNextPage()}
-            >
-              {mail.isFetchingNextPage && <Spinner className="size-3" aria-hidden="true" />}
-              {mail.isFetchingNextPage ? 'Loading messages…' : 'Load older messages'}
-            </Button>
-          </div>
-        )}
+        <QueryState
+          query={mailQuery}
+          errorTitle="Couldn't load inbox"
+          loadingMessage="Loading inbox…"
+          size="compact"
+          isEmpty={() => items.length === 0}
+          empty={<EmptyState size="compact" icon={EnvelopeSimpleIcon} title="No messages yet" />}
+        >
+          {() => (
+            <>
+              <ul className="divide-y divide-border/50">
+                {items.map((item) => (
+                  <li key={item.id}>
+                    <button
+                      type="button"
+                      className="w-full space-y-1.5 px-3 py-3 text-left transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+                      onClick={() => setSelected(item)}
+                    >
+                      <span className="flex items-start justify-between gap-2">
+                        <span
+                          className={cn('break-words text-sm', isUnread(item) && 'font-semibold')}
+                        >
+                          {item.subject || 'Workspace message'}
+                        </span>
+                        {isUnread(item) && (
+                          <span className="shrink-0 rounded bg-primary/10 px-1.5 py-0.5 text-[10px] text-primary">
+                            Unread
+                          </span>
+                        )}
+                      </span>
+                      <MailMetadata mail={item} />
+                      <span className="line-clamp-2 break-words text-xs text-muted-foreground">
+                        {item.preview}
+                      </span>
+                      {item.acknowledgedAt && (
+                        <span className="block text-xs text-muted-foreground">Acknowledged</span>
+                      )}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+              {mail.hasNextPage && (
+                <div className="p-3">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="w-full"
+                    disabled={mail.isFetching}
+                    pending={mail.isFetchingNextPage}
+                    pendingLabel="Loading messages…"
+                    onClick={() => void mail.fetchNextPage()}
+                  >
+                    Load older messages
+                  </Button>
+                </div>
+              )}
+            </>
+          )}
+        </QueryState>
       </div>
     </section>
   );

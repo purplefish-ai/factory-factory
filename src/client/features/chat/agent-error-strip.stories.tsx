@@ -73,6 +73,16 @@ export const StartupFailureWithoutRetry: Story = {
   },
 };
 
+/** While the restart request is in flight, Restart agent shows a spinner and is disabled. */
+export const Restarting: Story = {
+  args: { restartPending: true },
+  play: async ({ canvasElement }) => {
+    const restart = within(canvasElement).getByRole('button', { name: 'Restarting…' });
+    await expect(restart).toBeDisabled();
+    await expect(restart).toHaveAttribute('aria-busy', 'true');
+  },
+};
+
 /** Retry is disabled while the chat connection is down. */
 export const RetryDisabledOffline: Story = {
   args: { retryDisabled: true },

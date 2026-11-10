@@ -13,6 +13,7 @@ import {
   type RenderedSettings,
   renderWithSettingsServer,
   type SettingsServer,
+  settle,
   TEST_USER_SETTINGS,
   waitForCheck,
 } from './user-settings-queries.test-harness';
@@ -174,6 +175,8 @@ describe('useUpdateUserSettings', () => {
     await act(async () => saves()[1]?.reject('Save rejected'));
     await waitForCheck(() => expect(text('model')).toBe('opus'));
     await act(async () => reads()[1]?.resolve(settings()));
+    // A late result would render on React Query's notify timer, after `act`.
+    await settle();
     expect(text('model')).toBe('opus');
   });
 });

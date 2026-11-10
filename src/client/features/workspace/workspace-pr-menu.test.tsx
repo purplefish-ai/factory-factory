@@ -125,6 +125,30 @@ describe('WorkspacePrMenu', () => {
     await vi.waitFor(() => expect(item('Run review').getAttribute('aria-disabled')).toBe('true'));
     expect(item('Remove from workspace').getAttribute('aria-disabled')).toBe('true');
   });
+  it('shows a spinner only on the review in flight', async () => {
+    await render(
+      <WorkspacePrMenu
+        prs={[makePR('a'), makePR('b')]}
+        onReview={vi.fn()}
+        isReviewing={(id) => id === 'b'}
+        pending
+      />
+    );
+    await open();
+    for (const [id, reviewing] of [
+      ['a', false],
+      ['b', true],
+    ] as const) {
+      const row = Array.from(document.querySelectorAll('[role="menuitem"]')).find((element) =>
+        element.textContent?.includes(`Title ${id}`)
+      )!;
+      await key(row, 'ArrowRight');
+      await vi.waitFor(() => expect(item('Run review')).toBeTruthy());
+      expect(item('Run review').getAttribute('aria-busy')).toBe(reviewing ? 'true' : null);
+      await key(item('Run review'), 'ArrowLeft');
+      await vi.waitFor(() => expect(document.body.textContent).not.toContain('Run review'));
+    }
+  });
 });
 
 it('shows checked destination, description and disables controls while changing mode', async () => {

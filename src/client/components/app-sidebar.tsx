@@ -22,6 +22,7 @@ import {
 import { Link, useLocation, useNavigate } from 'react-router';
 import { Loading } from '@/client/components/loading';
 import { ProjectIssuesState } from '@/client/components/project-issues-state';
+import { QueryErrorState, QueryRefreshError } from '@/client/components/query-error-state';
 import type { ServerWorkspace } from '@/client/components/use-workspace-list-state';
 import { ErrorBoundary } from '@/client/error-boundary';
 import { WorkspaceCreationImageDropZone } from '@/client/features/kanban/workspace-creation-image-drop-zone';
@@ -29,6 +30,7 @@ import {
   getProjectSlugFromPath,
   type useAppNavigationData,
 } from '@/client/hooks/use-app-navigation-data';
+import { usePersistedState } from '@/client/hooks/use-persisted-state';
 import { type ProjectIssuesStatus, useProjectIssues } from '@/client/hooks/use-project-issues';
 import type { NormalizedIssue } from '@/client/lib/issue-normalization';
 import {
@@ -63,8 +65,9 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { cn } from '@/lib/utils';
 import {
   clampSidebarWidth,
-  getPersistedSidebarWidth,
-  persistSidebarWidth,
+  SIDEBAR_DEFAULT_WIDTH,
+  SIDEBAR_WIDTH_STORAGE_KEY,
+  StoredSidebarWidthSchema,
 } from './app-sidebar-resize';
 import { Logo } from './logo';
 import { ThemeToggle } from './theme-toggle';
@@ -217,6 +220,70 @@ function WorkspaceGroup({
         )}
       </SidebarGroupContent>
     </SidebarGroup>
+  );
+}
+
+/** A failed list load must not read as three empty groups. */
+function WorkspaceGroups({
+  navData,
+  working,
+  waiting,
+  done,
+}: {
+  navData: NavigationData;
+  working: ServerWorkspace[];
+  waiting: ServerWorkspace[];
+  done: ServerWorkspace[];
+}) {
+  const error = navData.serverWorkspacesError;
+  // Without a selected project the list is not requested, so its groups stay empty.
+  if (navData.serverWorkspaces === undefined && navData.selectedProjectId) {
+    return error ? (
+      <QueryErrorState
+        title="Couldn't load workspaces"
+        error={error}
+        onRetry={error.retry}
+        isRetrying={error.isRetrying}
+        className="p-2"
+      />
+    ) : (
+      <Loading size="compact" message="Loading workspaces…" />
+    );
+  }
+  const groupProps = {
+    projectSlug: navData.selectedProjectSlug,
+    currentWorkspaceId: navData.currentWorkspaceId,
+    unreadMailCounts: navData.unreadMailCounts,
+  };
+  return (
+    <>
+      {error ? (
+        <QueryRefreshError
+          title="Couldn't refresh workspaces"
+          error={error}
+          onRetry={error.retry}
+          isRetrying={error.isRetrying}
+        />
+      ) : null}
+      <WorkspaceGroup
+        label="Working"
+        workspaces={working}
+        emptyText="No active workspaces"
+        {...groupProps}
+      />
+      <WorkspaceGroup
+        label="Waiting"
+        workspaces={waiting}
+        emptyText="No waiting workspaces"
+        {...groupProps}
+      />
+      <WorkspaceGroup
+        label="Done"
+        workspaces={done}
+        emptyText="No completed workspaces"
+        {...groupProps}
+      />
+    </>
   );
 }
 
@@ -528,30 +595,7 @@ function SidebarInner({
           </SidebarGroupContent>
         </SidebarGroup>
 
-        <WorkspaceGroup
-          label="Working"
-          workspaces={working}
-          projectSlug={navData.selectedProjectSlug}
-          currentWorkspaceId={navData.currentWorkspaceId}
-          unreadMailCounts={navData.unreadMailCounts}
-          emptyText="No active workspaces"
-        />
-        <WorkspaceGroup
-          label="Waiting"
-          workspaces={waiting}
-          projectSlug={navData.selectedProjectSlug}
-          currentWorkspaceId={navData.currentWorkspaceId}
-          unreadMailCounts={navData.unreadMailCounts}
-          emptyText="No waiting workspaces"
-        />
-        <WorkspaceGroup
-          label="Done"
-          workspaces={done}
-          projectSlug={navData.selectedProjectSlug}
-          currentWorkspaceId={navData.currentWorkspaceId}
-          unreadMailCounts={navData.unreadMailCounts}
-          emptyText="No completed workspaces"
-        />
+        <WorkspaceGroups navData={navData} working={working} waiting={waiting} done={done} />
         <IssueGroup
           issues={issues}
           status={issuesStatus}
@@ -630,7 +674,15 @@ export function AppSidebar({ navData }: { navData: NavigationData }) {
   const { open, openMobile, setOpenMobile, isMobile } = useSidebar();
   const [showNewWorkspaceForm, setShowNewWorkspaceForm] = useState(false);
   const [isResizingSidebar, setIsResizingSidebar] = useState(false);
-  const [sidebarWidth, setSidebarWidth] = useState<number>(getPersistedSidebarWidth);
+  const [storedSidebarWidth, setStoredSidebarWidth] = usePersistedState(
+    SIDEBAR_WIDTH_STORAGE_KEY,
+    StoredSidebarWidthSchema,
+    SIDEBAR_DEFAULT_WIDTH,
+    { format: 'text' }
+  );
+  // The width follows the pointer during a drag and is stored when it ends.
+  const [dragWidth, setDragWidth] = useState<number | null>(null);
+  const sidebarWidth = dragWidth ?? storedSidebarWidth;
 
   // Auto-close mobile sidebar on route navigation
   useEffect(() => {
@@ -646,10 +698,6 @@ export function AppSidebar({ navData }: { navData: NavigationData }) {
       setShowNewWorkspaceForm(false);
     }
   }, [navData.selectedProjectId]);
-
-  useEffect(() => {
-    persistSidebarWidth(sidebarWidth);
-  }, [sidebarWidth]);
 
   useEffect(() => {
     if (!open && resizeCleanupRef.current) {
@@ -690,6 +738,7 @@ export function AppSidebar({ navData }: { navData: NavigationData }) {
     const pointerId = event.pointerId;
     const startX = event.clientX;
     const startWidth = sidebarWidth;
+    let draggedWidth: number | null = null;
     const handleElement = event.currentTarget;
     const controller = new AbortController();
     const previousCursor = document.body.style.cursor;
@@ -697,6 +746,10 @@ export function AppSidebar({ navData }: { navData: NavigationData }) {
 
     const cleanup = () => {
       controller.abort();
+      if (draggedWidth !== null) {
+        setStoredSidebarWidth(draggedWidth);
+      }
+      setDragWidth(null);
       setIsResizingSidebar(false);
       document.body.style.cursor = previousCursor;
       document.body.style.userSelect = previousUserSelect;
@@ -717,7 +770,8 @@ export function AppSidebar({ navData }: { navData: NavigationData }) {
         return;
       }
       const deltaX = moveEvent.clientX - startX;
-      setSidebarWidth(clampSidebarWidth(startWidth + deltaX));
+      draggedWidth = clampSidebarWidth(startWidth + deltaX);
+      setDragWidth(draggedWidth);
     };
 
     const handlePointerEnd = (endEvent: PointerEvent) => {

@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { getMutationKey } from '@trpc/react-query';
 import { act, createRef } from 'react';
 import { createRoot } from 'react-dom/client';
 import { toast } from 'sonner';
@@ -180,6 +181,7 @@ async function mount(initialCapabilities = capabilities) {
   return {
     container,
     socket,
+    queryClient,
     switchSession: async (sessionId: string) => {
       await act(() => render(sessionId));
     },
@@ -586,6 +588,40 @@ it('hydrates only a complete correlated replay and discards a partial replay acr
   expect(harness.chat.messages).toMatchObject([
     { id: 'framed-user', text, timestamp: '2026-10-18T12:00:00Z', order: 7 },
   ]);
+});
+
+it('reports a restart as pending only for the session being restarted', async () => {
+  const harness = await mount();
+  const startRestart = (id: string) =>
+    act(async () => {
+      harness.queryClient.getMutationCache().build(
+        harness.queryClient,
+        { mutationKey: getMutationKey(trpc.session.restartSession) },
+        {
+          context: undefined,
+          data: undefined,
+          error: null,
+          failureCount: 0,
+          failureReason: null,
+          isPaused: false,
+          status: 'pending',
+          variables: { id },
+          submittedAt: 0,
+        }
+      );
+      // The mutation cache notifies subscribers on the next tick.
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+  expect(harness.chat.isRestartingSession).toBe(false);
+  await startRestart('websocket-config');
+  expect(harness.chat.isRestartingSession).toBe(true);
+  // A second session's restart neither clears nor borrows the first one's state.
+  await startRestart('other-session');
+  expect(harness.chat.isRestartingSession).toBe(true);
+  await harness.switchSession('idle-session');
+  expect(harness.chat.isRestartingSession).toBe(false);
+  await harness.switchSession('other-session');
+  expect(harness.chat.isRestartingSession).toBe(true);
 });
 
 describe('invalid chat frames', () => {

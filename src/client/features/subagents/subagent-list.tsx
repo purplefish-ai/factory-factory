@@ -3,6 +3,7 @@ import { CaretRightIcon } from '@phosphor-icons/react/dist/csr/CaretRight';
 import { RobotIcon } from '@phosphor-icons/react/dist/csr/Robot';
 import { WarningCircleIcon } from '@phosphor-icons/react/dist/csr/WarningCircle';
 import { useEffect, useMemo, useState } from 'react';
+import { EmptyState } from '@/client/components/empty-state';
 import { Loading } from '@/client/components/loading';
 import { SubagentIcon } from '@/client/components/subagent-icon';
 import {
@@ -12,7 +13,6 @@ import {
 import { useRememberedDisclosure } from '@/client/hooks/use-remembered-disclosure';
 import { getSubagentIconIndices } from '@/client/lib/subagent-icon-indices';
 import { Button } from '@/components/ui/button';
-import { Spinner } from '@/components/ui/spinner';
 import { cn } from '@/lib/utils';
 import { isActiveSubagent } from './subagent-status';
 import type { SubagentListItem } from './types';
@@ -194,30 +194,25 @@ function EmptyReadyState({ state }: { state: Extract<SubagentListState, { kind: 
   return (
     <div>
       {state.error && <PaginationError error={state.error} />}
-      <div className="flex flex-col items-center justify-center gap-3 px-4 py-8 text-center">
-        <div className="flex flex-col items-center gap-2">
-          <RobotIcon className="h-7 w-7 text-muted-foreground/40" />
-          <p className="text-sm text-muted-foreground">No subagents for this session.</p>
-        </div>
-        {state.hasMore && state.onLoadMore && !state.error && (
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            disabled={state.loadingMore}
-            onClick={state.onLoadMore}
-          >
-            {state.loadingMore ? (
-              <>
-                <Spinner className="size-3" aria-hidden="true" />
-                Loading more…
-              </>
-            ) : (
-              'Load more'
-            )}
-          </Button>
-        )}
-      </div>
+      <EmptyState
+        size="compact"
+        icon={RobotIcon}
+        title="No subagents for this session"
+        action={
+          state.hasMore && state.onLoadMore && !state.error ? (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              pending={state.loadingMore}
+              pendingLabel="Loading more…"
+              onClick={state.onLoadMore}
+            >
+              Load more
+            </Button>
+          ) : null
+        }
+      />
     </div>
   );
 }
@@ -367,17 +362,11 @@ export function SubagentList({
             type="button"
             variant="outline"
             size="sm"
-            disabled={state.loadingMore}
+            pending={state.loadingMore}
+            pendingLabel="Loading more…"
             onClick={state.onLoadMore}
           >
-            {state.loadingMore ? (
-              <>
-                <Spinner className="size-3" aria-hidden="true" />
-                Loading more…
-              </>
-            ) : (
-              'Load more'
-            )}
+            Load more
           </Button>
         </div>
       )}

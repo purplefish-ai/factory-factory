@@ -92,7 +92,7 @@ export function UsageControl({
           className={cn('h-7 shrink-0 gap-1.5 px-1.5 text-xs tabular-nums', usageColor(percent))}
         >
           {compacting ? (
-            <Spinner aria-hidden="true" className="h-3.5 w-3.5" />
+            <Spinner aria-hidden="true" className="size-3.5" />
           ) : (
             <svg
               aria-hidden="true"
@@ -176,23 +176,21 @@ export function UsageControl({
               size="sm"
               className="h-6 px-2 text-xs"
               onClick={onCompact}
-              disabled={!canCompact(context, onCompact) || busy || compacting || disabled}
+              disabled={!canCompact(context, onCompact) || busy || disabled}
+              pending={compacting}
+              pendingLabel="Compacting…"
             >
-              {compacting ? 'Compacting…' : 'Compact'}
+              Compact
             </Button>
             <Button
               variant="ghost"
               size="icon"
               aria-label="Refresh usage"
-              disabled={refreshing}
+              pending={refreshing}
               onClick={onRefresh}
               className="h-6 w-6"
             >
-              {refreshing ? (
-                <Spinner aria-hidden="true" className="h-3.5 w-3.5" />
-              ) : (
-                <ArrowClockwiseIcon aria-hidden="true" className="h-3.5 w-3.5" />
-              )}
+              <ArrowClockwiseIcon aria-hidden="true" className="h-3.5 w-3.5" />
             </Button>
           </div>
         </div>

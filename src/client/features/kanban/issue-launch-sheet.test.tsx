@@ -150,7 +150,13 @@ vi.mock('@/components/ui/textarea', () => ({
 }));
 
 vi.mock('@/client/features/workspace', () => ({
-  RatchetToggleButton: () => null,
+  RatchetToggleButton: ({
+    enabled,
+    onToggle,
+  }: {
+    enabled: boolean;
+    onToggle: (enabled: boolean) => void;
+  }) => createElement('button', { type: 'button', onClick: () => onToggle(!enabled) }, 'Ratchet'),
 }));
 
 const issue: NormalizedIssue = {
@@ -246,6 +252,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  localStorage.clear();
   document.body.innerHTML = '';
   vi.clearAllMocks();
 });
@@ -430,5 +437,41 @@ describe('IssueLaunchSheet', () => {
 
     actFlushSync(() => root.unmount());
     container.remove();
+  });
+
+  describe('ratchet preference', () => {
+    const preferenceKey = 'kanban:issue-ratchet:project-1:github-42';
+    const startRatchet = () =>
+      mocks.createWorkspaceMutateMock.mock.calls.at(-1)?.[0]?.ratchetEnabled as unknown;
+
+    it('falls back to the admin default without a stored choice', () => {
+      mocks.userSettings = { ...mocks.userSettings, ratchetEnabled: true };
+      const { container, root } = renderSheet();
+      clickButton(container, 'Start');
+      expect(startRatchet()).toBe(true);
+      expect(localStorage.getItem(preferenceKey)).toBeNull();
+      actFlushSync(() => root.unmount());
+    });
+
+    it.each([
+      ['true', false, true],
+      ['false', true, false],
+    ])('uses a stored %s over the admin default', (stored, adminDefault, expected) => {
+      localStorage.setItem(preferenceKey, stored);
+      mocks.userSettings = { ...mocks.userSettings, ratchetEnabled: adminDefault };
+      const { container, root } = renderSheet();
+      clickButton(container, 'Start');
+      expect(startRatchet()).toBe(expected);
+      actFlushSync(() => root.unmount());
+    });
+
+    it('stores the toggled choice for this issue', () => {
+      const { container, root } = renderSheet();
+      clickButton(container, 'Ratchet');
+      expect(localStorage.getItem(preferenceKey)).toBe('true');
+      clickButton(container, 'Start');
+      expect(startRatchet()).toBe(true);
+      actFlushSync(() => root.unmount());
+    });
   });
 });

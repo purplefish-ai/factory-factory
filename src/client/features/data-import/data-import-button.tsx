@@ -126,12 +126,13 @@ export function DataImportButton({
     <>
       <Button
         onClick={() => fileInputRef.current?.click()}
-        disabled={importData.isPending}
+        pending={importData.isPending}
+        pendingLabel="Importing…"
         variant={variant}
         className={className}
       >
         <UploadIcon className="w-4 h-4 mr-2" />
-        {importData.isPending ? 'Importing…' : children || 'Import data'}
+        {children || 'Import data'}
       </Button>
       <input
         ref={fileInputRef}
@@ -153,6 +154,7 @@ export function DataImportButton({
         title="Confirm import"
         description={`Review the data to be imported. Existing records will be skipped.\n\n${confirmState.summary}`}
         confirmText="Import"
+        pendingText="Importing…"
         onConfirm={handleConfirmImport}
         isPending={importData.isPending}
       />

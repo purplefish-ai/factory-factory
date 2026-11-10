@@ -12,7 +12,6 @@ import { runInBackground } from '@/client/lib/background-task';
 import { trpc } from '@/client/lib/trpc';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Spinner } from '@/components/ui/spinner';
 import { SettingsSection } from './settings-section';
 
 export function ProjectFactoryConfigCard({
@@ -119,14 +118,10 @@ export function ProjectFactoryConfigCard({
             variant="outline"
             size="sm"
             onClick={handleRefresh}
-            disabled={refreshConfigs.isPending}
+            pending={refreshConfigs.isPending}
             className="w-full gap-2 sm:w-auto"
           >
-            {refreshConfigs.isPending ? (
-              <Spinner className="w-4 h-4" aria-hidden="true" />
-            ) : (
-              <ArrowsClockwiseIcon className="w-4 h-4" />
-            )}
+            <ArrowsClockwiseIcon className="w-4 h-4" />
             Refresh Workspaces
           </Button>
         </div>

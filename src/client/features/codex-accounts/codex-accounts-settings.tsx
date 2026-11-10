@@ -4,6 +4,7 @@ import { POLL_INTERVAL_MS, QUERY_RETRY } from '@/client/lib/query-options';
 import { trpc } from '@/client/lib/trpc';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Spinner } from '@/components/ui/spinner';
 import { Switch } from '@/components/ui/switch';
 import type { CodexAccountSummary, CodexLoginState } from '@/shared/codex-accounts';
 import { CodexAccountLoginDialog } from './codex-account-login-dialog';
@@ -13,15 +14,47 @@ interface AccountsViewProps {
   loading?: boolean;
   error?: string;
   busy?: boolean;
+  /** The account whose sign-in is starting. */
+  signingInId?: string;
+  /** The account whose "Use for Auto" change is saving. */
+  updatingId?: string;
   onAdd: () => void;
   onLogin: (id: string) => void;
   onUpdate: (id: string, enabled: boolean) => void;
 }
+function AccountUsage({ usage }: { usage: CodexAccountSummary['usage'] }) {
+  return usage.status === 'available' && usage.windows.length ? (
+    usage.windows.map((window) => (
+      <div key={window.id} className="space-y-1 text-xs">
+        <div className="flex justify-between gap-2">
+          <span>{window.label}</span>
+          <span>{Math.round(window.usedPercent)}% used</span>
+        </div>
+        <div className="h-1 overflow-hidden rounded bg-muted">
+          <div
+            className="h-full bg-primary"
+            style={{ width: `${Math.max(0, Math.min(100, window.usedPercent))}%` }}
+          />
+        </div>
+        <p className="text-muted-foreground">
+          {window.resetsAt === null
+            ? 'Reset time unavailable'
+            : `Resets ${new Date(window.resetsAt * 1000).toLocaleString()}`}
+        </p>
+      </div>
+    ))
+  ) : (
+    <p className="text-xs text-muted-foreground">{usage.message ?? 'Usage unavailable'}</p>
+  );
+}
+
 export function CodexAccountsView({
   accounts,
   loading,
   error,
   busy,
+  signingInId,
+  updatingId,
   onAdd,
   onLogin,
   onUpdate,
@@ -66,6 +99,7 @@ export function CodexAccountsView({
                   variant="ghost"
                   onClick={() => onLogin(account.id)}
                   disabled={busy}
+                  pending={signingInId === account.id}
                 >
                   {account.authenticated ? 'Sign in again' : 'Sign in'}
                 </Button>
@@ -80,37 +114,17 @@ export function CodexAccountsView({
                 <code className="rounded bg-muted px-1">ff codex login</code> in your terminal.
               </p>
             )}
-            {account.usage.status === 'available' && account.usage.windows.length ? (
-              account.usage.windows.map((window) => (
-                <div key={window.id} className="space-y-1 text-xs">
-                  <div className="flex justify-between gap-2">
-                    <span>{window.label}</span>
-                    <span>{Math.round(window.usedPercent)}% used</span>
-                  </div>
-                  <div className="h-1 overflow-hidden rounded bg-muted">
-                    <div
-                      className="h-full bg-primary"
-                      style={{ width: `${Math.max(0, Math.min(100, window.usedPercent))}%` }}
-                    />
-                  </div>
-                  <p className="text-muted-foreground">
-                    {window.resetsAt === null
-                      ? 'Reset time unavailable'
-                      : `Resets ${new Date(window.resetsAt * 1000).toLocaleString()}`}
-                  </p>
-                </div>
-              ))
-            ) : (
-              <p className="text-xs text-muted-foreground">
-                {account.usage.message ?? 'Usage unavailable'}
-              </p>
-            )}
+            <AccountUsage usage={account.usage} />
             <label className="flex items-center justify-between gap-2 text-xs">
-              <span>Use for Auto</span>
+              <span className="flex items-center gap-1.5">
+                Use for Auto
+                {updatingId === account.id && <Spinner aria-hidden="true" className="size-3" />}
+              </span>
               <Switch
                 aria-label={`Use ${account.label} for Auto`}
                 checked={account.enabled}
                 disabled={busy}
+                aria-busy={updatingId === account.id || undefined}
                 onCheckedChange={(enabled) => onUpdate(account.id, enabled)}
               />
             </label>
@@ -218,6 +232,8 @@ export function CodexAccountsSettings() {
             : undefined
         }
         busy={busy || update.isPending || login?.status === 'pending'}
+        signingInId={start.isPending ? start.variables?.id : undefined}
+        updatingId={update.isPending ? update.variables?.id : undefined}
         onAdd={() => {
           setLogin(undefined);
           setError(undefined);

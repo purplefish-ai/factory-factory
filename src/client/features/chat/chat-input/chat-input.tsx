@@ -277,6 +277,7 @@ export const ChatInput = memo(function ChatInput({
         files={fileMentions.files}
         isOpen={fileMentions.fileMentionMenuOpen}
         isLoading={fileMentions.filesLoading}
+        error={fileMentions.filesError}
         onClose={fileMentions.handleFileMentionMenuClose}
         onSelect={fileMentions.handleFileMentionSelect}
         filter={fileMentions.fileMentionFilter}

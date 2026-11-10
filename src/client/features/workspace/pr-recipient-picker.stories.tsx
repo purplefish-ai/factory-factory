@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { fn } from 'storybook/test';
+import { expect, fn, within } from 'storybook/test';
 import { PRRecipientPicker } from './pr-recipient-picker';
 
 const meta = {
@@ -19,4 +19,14 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 export const MultipleConversations: Story = {};
 export const NoConversation: Story = { args: { candidates: [] } };
-export const Pending: Story = { args: { pending: true } };
+export const Pending: Story = {
+  args: { pending: true },
+  play: async () => {
+    const confirm = await within(document.body).findByRole('button', {
+      name: 'Enabling PR updates…',
+    });
+    // No conversation is selected yet, so disabled alone would not prove pending.
+    await expect(confirm).toHaveAttribute('aria-busy', 'true');
+    await expect(confirm.querySelector('[data-slot=spinner]')).not.toBeNull();
+  },
+};

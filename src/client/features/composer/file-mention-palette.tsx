@@ -38,6 +38,8 @@ export interface FileMentionPaletteProps {
   isOpen: boolean;
   /** Whether the files are still loading */
   isLoading?: boolean;
+  /** Why the file list failed to load; shown in place of "No files found". */
+  error?: string | null;
   /** Called when the palette should close */
   onClose: () => void;
   /** Called when a file is selected */
@@ -107,10 +109,31 @@ function usePlacement(
   return placement;
 }
 
+function FileListStatus({ isLoading, error }: { isLoading: boolean; error: string | null }) {
+  // An empty message is still a failure, never "No files found".
+  if (error !== null) {
+    return (
+      <span role="alert" className="text-xs text-destructive">
+        Couldn't load files.{error ? ` ${error}` : ''}
+      </span>
+    );
+  }
+  if (isLoading) {
+    return (
+      <span className="inline-flex items-center gap-2 text-xs text-muted-foreground">
+        <Spinner className="size-3" aria-hidden="true" />
+        Loading files…
+      </span>
+    );
+  }
+  return 'No files found';
+}
+
 export function FileMentionPalette({
   files,
   isOpen,
   isLoading = false,
+  error = null,
   onClose,
   onSelect,
   filter,
@@ -165,14 +188,7 @@ export function FileMentionPalette({
       >
         <CommandList>
           <CommandEmpty>
-            {isLoading ? (
-              <span className="inline-flex items-center gap-2 text-xs text-muted-foreground">
-                <Spinner className="size-3" aria-hidden="true" />
-                Loading files…
-              </span>
-            ) : (
-              'No files found'
-            )}
+            <FileListStatus isLoading={isLoading} error={error} />
           </CommandEmpty>
           <CommandGroup>
             {files.map((filePath, index) => {

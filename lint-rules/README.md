@@ -37,17 +37,24 @@ color classes (`bg-red-500`, `dark:text-emerald-300`) in `src/client`,
 `src/components` and `src/lib`, which must use theme tokens instead
 ([status colors](../docs/status-colors.md)). The palette rule's file exceptions
 are its `exceptions` option, a map from path to reason in `.oxlintrc.json`; a
-test fails if an exception no longer needs it. `query-owner` keeps tRPC hooks
-and cache helpers for named procedures inside owner modules. Each entry in its
-`groups` option lists procedures, the module callers should `use`, its `owners`
-(that module and its helpers), the reason, and which helpers it covers: `cache`
-covers helpers that install options or write data (`useQuery`, `fetch`,
-`setData` and similar) plus `getQueryKey`, and `all` covers every hook, cache
-helper and key helper, including `useMutation`. `workspace.get` and
-`workspace.listForProject` use `cache`, so every read installs the snapshot
-reconciler ([workspace state](../docs/architecture/workspace-state.md)).
-`userSettings.get` and `userSettings.update` use `all`: settings are read and
-written only through `useUserSettings` and `useUpdateUserSettings` in
+test fails if an exception no longer needs it. `use-pending-prop` rejects a
+`Spinner`, `SpinnerGapIcon` or `animate-spin` element inside `Button` or
+`DropdownMenuItem`, which take `pending` instead, and `no-raw-spinner` rejects a
+bare `SpinnerGapIcon` and `animate-spin` outside the shared `Spinner`
+([pending controls](../docs/architecture/client-loading.md#pending-controls)).
+Each takes its own `exceptions` map in the same shape; their test lints each
+listed file with the rule and no exceptions and fails once a file stops
+reporting. `query-owner` keeps tRPC hooks and cache helpers for named procedures
+inside owner modules. Each entry in its `groups` option lists procedures, the
+module callers should `use`, its `owners` (that module and its helpers), the
+reason, and which helpers it covers: `cache` covers helpers that install options
+or write data (`useQuery`, `fetch`, `setData` and similar) plus `getQueryKey`,
+and `all` covers every hook, cache helper and key helper, including
+`useMutation`. `workspace.get` and `workspace.listForProject` use `cache`, so
+every read installs the snapshot reconciler
+([workspace state](../docs/architecture/workspace-state.md)). `userSettings.get`
+and `userSettings.update` use `all`: settings are read and written only through
+`useUserSettings` and `useUpdateUserSettings` in
 `src/client/lib/user-settings-queries.ts`, which own the optimistic cache
 strategy and error toast. Tests are exempt so they can seed caches.
 `named-query-options` keeps query options in one place
@@ -65,6 +72,30 @@ settings card uses `SettingsSection` from `settings-section.tsx`, which also
 owns the query loading and error states. The section shell and `StatCard` are
 the only exceptions, listed in a later override; a test fails if either stops
 needing it.
+
+`query-error-handled` flags a query hook result (`useQuery`, `useInfiniteQuery`
+or a `use…Query` wrapper, but not suspense queries) whose destructuring or
+member reads take `isLoading`, `isPending` or `isInitialLoading` but none of
+`error`, `isError`, `status`, `isLoadingError` or `isRefetchError`, so a failed
+request cannot read as loading or empty
+([client loading](../docs/architecture/client-loading.md)). A result passed on
+whole, such as `<QueryState query={query}>`, or destructured with a rest element
+is left to its consumer; reads through a local alias are followed. The rule
+checks that an error field is read, not how it is rendered. It has no
+exceptions.
+
+`no-direct-web-storage` rejects `localStorage` and `sessionStorage`, read
+directly or from `window`, `globalThis` or `self` (including static computed
+keys and destructuring; a dynamic `window[key]` is not detected), in
+`src/client`, `src/components` and `src/lib`; a field of that name on other
+objects is allowed. Keep UI state in Web Storage with `usePersistedState`
+(`src/client/hooks/use-persisted-state.ts`): it reads and validates the stored
+value with Zod on the first render, writes in its stable setter, keeps every
+mounted consumer of a key in agreement, keeps working in memory when storage is
+blocked or full, and follows other tabs when asked. Module-level stores use the
+guarded helpers in `src/client/lib/browser-storage.ts`, the only file in its
+`exceptions` map; a test fails if that exception is no longer needed. Tests may
+seed storage directly.
 
 ## Remaining Biome checks
 

@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { type QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { TRPCClientError } from '@trpc/client';
 import { observable } from '@trpc/server/observable';
 import { act, useState } from 'react';
@@ -9,6 +9,7 @@ import { useParams } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { ProjectHeaderNavigation } from '@/client/components/project-header';
+import { createAppQueryClient } from '@/client/lib/query-client';
 import { trpc } from '@/client/lib/trpc';
 import { actFlushSync, waitForReact } from '@/test-utils/react-act';
 import {
@@ -19,7 +20,9 @@ import {
 import { AgentsPage } from './agents-page';
 import type { Agent } from './types';
 
-const notifications = vi.hoisted(() => ({ error: vi.fn() }));
+// The app wraps `toast.error` with its defaults, so assertions use the original spy.
+const errorToast = vi.hoisted(() => vi.fn());
+const notifications = vi.hoisted(() => ({ error: errorToast }));
 vi.mock('sonner', () => ({ toast: notifications }));
 const navigation = vi.hoisted(
   (): {
@@ -236,8 +239,12 @@ function ScopedPage() {
   );
 }
 function render(path = '/projects/owner-slug/agents/agent') {
-  queryClient = new QueryClient({
-    defaultOptions: { queries: { retry: false, gcTime: 0 }, mutations: { retry: false } },
+  // The app client installs the fallback error toast, so tests can assert that
+  // inline-reported failures are not toasted as well.
+  queryClient = createAppQueryClient();
+  queryClient.setDefaultOptions({
+    queries: { retry: false, gcTime: 0 },
+    mutations: { retry: false },
   });
   const client = trpc.createClient({
     links: [
@@ -307,7 +314,7 @@ beforeEach(() => {
     configurable: true,
     value: vi.fn(),
   });
-  notifications.error.mockClear();
+  errorToast.mockClear();
   failMutation = null;
   failQuery = null;
   missing = false;
@@ -480,16 +487,14 @@ describe('AgentsPage coordination', () => {
         ?.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
     );
     await waitForReact(() => expect(container.textContent).toContain('Server refused the change'));
-    expect(notifications.error).toHaveBeenCalled();
     await act(async () => {
       await queryClient.invalidateQueries();
     });
     expect(container.querySelector<HTMLInputElement>('input[name="name"]')?.value).toBe(
       'Changed name'
     );
-    expect(notifications.error).toHaveBeenCalledWith(
-      "Couldn't update automation. Server refused the change"
-    );
+    // The form reports the failure beside the draft; no toast repeats it.
+    expect(errorToast).not.toHaveBeenCalled();
     failQuery = 'periodicTask.get';
     await act(async () => {
       await queryClient.invalidateQueries();
@@ -524,10 +529,10 @@ describe('AgentsPage coordination', () => {
     );
     failMutation = 'periodicTask.toggleEnabled';
     actFlushSync(() => button('Pause').click());
-    await waitForReact(() => expect(container.textContent).toContain('Server refused the change'));
-    expect(notifications.error).toHaveBeenCalled();
-    expect(notifications.error).toHaveBeenCalledWith(
-      "Couldn't pause automation. Server refused the change"
+    await waitForReact(() =>
+      expect(container.querySelector('[role="alert"]')?.textContent).toBe(
+        "Couldn't pause automation. Server refused the change"
+      )
     );
     failMutation = 'periodicTask.delete';
     actFlushSync(() => button('Delete').click());
@@ -539,10 +544,11 @@ describe('AgentsPage coordination', () => {
     await waitForReact(() =>
       expect(document.body.textContent).toContain('Server refused the change')
     );
-    expect(document.querySelector('[role="alertdialog"]')).not.toBeNull();
-    expect(notifications.error).toHaveBeenCalledWith(
+    expect(document.querySelector('[role="alertdialog"]')?.textContent).toContain(
       "Couldn't delete automation. Server refused the change"
     );
+    // Both failures are reported inline only.
+    expect(errorToast).not.toHaveBeenCalled();
     expect(container.querySelector('output')?.textContent).toBe(
       '/projects/owner-slug/agents/agent'
     );
@@ -640,7 +646,8 @@ describe('AgentsPage coordination', () => {
       button('Pause').click();
       button('Pause').click();
     });
-    expect(button('Pause').disabled).toBe(true);
+    expect(button('Pausing…').disabled).toBe(true);
+    expect(button('Pausing…').getAttribute('aria-busy')).toBe('true');
     await waitForReact(() =>
       expect(
         requests.filter((request) => request.path === 'periodicTask.toggleEnabled')
@@ -783,13 +790,10 @@ describe('AgentsPage coordination', () => {
         ?.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
     );
     await waitForReact(() => expect(container.textContent).toContain('Server refused the change'));
-    expect(notifications.error).toHaveBeenCalled();
     expect(container.querySelector<HTMLInputElement>('input[name="name"]')?.value).toBe(
       'Daily agent'
     );
-    expect(notifications.error).toHaveBeenCalledWith(
-      "Couldn't create automation. Server refused the change"
-    );
+    expect(errorToast).not.toHaveBeenCalled();
     failMutation = null;
     await act(async () =>
       container

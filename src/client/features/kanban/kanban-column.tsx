@@ -40,7 +40,7 @@ interface KanbanColumnProps {
   onWaitingSortOrderChange?: (order: WaitingSortOrder) => void;
   unreadMailCounts?: Record<string, number>;
   onToggleRatcheting?: (workspaceId: string, enabled: boolean) => void;
-  togglingWorkspaceId?: string | null;
+  togglingWorkspaceIds?: readonly string[];
   onArchive?: (workspaceId: string) => void;
   onBulkArchive?: () => void;
   isBulkArchiving?: boolean;
@@ -56,7 +56,7 @@ export function KanbanColumn({
   onWaitingSortOrderChange,
   unreadMailCounts,
   onToggleRatcheting,
-  togglingWorkspaceId,
+  togglingWorkspaceIds,
   onArchive,
   onBulkArchive,
   isBulkArchiving,
@@ -87,7 +87,7 @@ export function KanbanColumn({
                 variant="ghost"
                 size="sm"
                 onClick={onBulkArchive}
-                disabled={isBulkArchiving}
+                pending={isBulkArchiving}
                 className="h-7 px-2"
               >
                 <ArchiveIcon className="h-4 w-4" />
@@ -113,7 +113,7 @@ export function KanbanColumn({
                 projectSlug={projectSlug}
                 unreadCount={unreadMailCounts?.[workspace.id]}
                 onToggleRatcheting={onToggleRatcheting}
-                isTogglePending={togglingWorkspaceId === workspace.id}
+                isTogglePending={togglingWorkspaceIds?.includes(workspace.id) ?? false}
                 onArchive={onArchive}
                 onOpenQuickChat={onOpenQuickChat}
                 onRename={onRename}

@@ -1,9 +1,10 @@
-import { useEffect, useState, useSyncExternalStore } from 'react';
+import { useEffect, useState } from 'react';
 import { QueryState } from '@/client/components/query-state';
+import { usePersistedState } from '@/client/hooks/use-persisted-state';
 import {
-  readBrowserNotificationsEnabled,
+  BROWSER_NOTIFICATIONS_KEY,
+  BrowserNotificationsEnabledSchema,
   readNotificationPermission,
-  subscribeBrowserNotifications,
   writeBrowserNotificationsEnabled,
 } from '@/client/lib/browser-notifications';
 import { useUpdateUserSettings, useUserSettings } from '@/client/lib/user-settings-queries';
@@ -34,10 +35,11 @@ function notificationDescription(
 export function NotificationSettingsSection() {
   const settingsQuery = useUserSettings();
   const updateSettings = useUpdateUserSettings();
-  const enabled = useSyncExternalStore(
-    subscribeBrowserNotifications,
-    readBrowserNotificationsEnabled,
-    () => false
+  const [enabled] = usePersistedState(
+    BROWSER_NOTIFICATIONS_KEY,
+    BrowserNotificationsEnabledSchema,
+    false,
+    { crossTab: true }
   );
   const [permission, setPermission] = useState(readNotificationPermission);
   const [requesting, setRequesting] = useState(false);

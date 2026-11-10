@@ -3,6 +3,7 @@ import { CheckCircleIcon } from '@phosphor-icons/react/dist/csr/CheckCircle';
 import { CircleDashedIcon } from '@phosphor-icons/react/dist/csr/CircleDashed';
 import { TerminalIcon } from '@phosphor-icons/react/dist/csr/Terminal';
 import { WarningIcon } from '@phosphor-icons/react/dist/csr/Warning';
+import { QueryErrorState, QueryRefreshError } from '@/client/components/query-error-state';
 import { useCLIHealthRefresh } from '@/client/hooks/use-cli-health-refresh';
 import { trpc } from '@/client/lib/trpc';
 import { Button } from '@/components/ui/button';
@@ -91,12 +92,20 @@ export function OnboardingCliHealth({ onOpenTerminal }: OnboardingCliHealthProps
   const { refresh, isRefreshing } = useCLIHealthRefresh();
   const {
     data: health,
-    isLoading,
+    error,
     isRefetching,
   } = trpc.admin.checkCLIHealth.useQuery({ forceRefresh: false }, { staleTime: 60_000 });
 
-  if (isLoading) {
-    return (
+  if (!health) {
+    return error ? (
+      <QueryErrorState
+        title="Couldn't check CLI prerequisites"
+        error={error}
+        onRetry={() => void refresh()}
+        isRetrying={isRefreshing}
+        className="p-3"
+      />
+    ) : (
       <div className="flex items-center gap-2 text-sm text-muted-foreground py-2">
         <Spinner className="h-4 w-4" />
         <span>Checking CLI prerequisites…</span>
@@ -104,15 +113,20 @@ export function OnboardingCliHealth({ onOpenTerminal }: OnboardingCliHealthProps
     );
   }
 
-  if (!health) {
-    return null;
-  }
-
   const items = buildItems(health);
   const hasIssues = items.some((item) => item.status !== 'ok');
 
   return (
     <div className="space-y-3">
+      {error ? (
+        <QueryRefreshError
+          title="Couldn't refresh CLI prerequisites"
+          error={error}
+          onRetry={() => void refresh()}
+          isRetrying={isRefreshing || isRefetching}
+          className="rounded-md border"
+        />
+      ) : null}
       <div className="flex items-center justify-between">
         <p className="text-sm font-medium text-muted-foreground">CLI Prerequisites</p>
         <Button
@@ -121,13 +135,9 @@ export function OnboardingCliHealth({ onOpenTerminal }: OnboardingCliHealthProps
           size="sm"
           className="h-7 px-2 text-xs text-muted-foreground"
           onClick={() => void refresh()}
-          disabled={isRefetching || isRefreshing}
+          pending={isRefetching || isRefreshing}
         >
-          {isRefetching || isRefreshing ? (
-            <Spinner className="mr-1 h-3 w-3" aria-hidden="true" />
-          ) : (
-            <ArrowsClockwiseIcon className="mr-1 h-3 w-3" />
-          )}
+          <ArrowsClockwiseIcon className="mr-1 h-3 w-3" />
           Recheck
         </Button>
       </div>

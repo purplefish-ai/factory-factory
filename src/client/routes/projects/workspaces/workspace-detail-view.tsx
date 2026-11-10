@@ -1,5 +1,9 @@
+import { WarningCircleIcon } from '@phosphor-icons/react/dist/csr/WarningCircle';
 import { type Dispatch, memo, type SetStateAction, useCallback, useState } from 'react';
+import { EmptyState } from '@/client/components/empty-state';
 import { Loading } from '@/client/components/loading';
+import { QueryErrorState, QueryRefreshError } from '@/client/components/query-error-state';
+import { isNotFoundError } from '@/client/components/query-state';
 import { WorkspaceToolsDrawer } from '@/client/components/workspace-tools-drawer';
 import { ErrorBoundary } from '@/client/error-boundary';
 import type { SubagentSelection } from '@/client/features/subagents';
@@ -23,9 +27,13 @@ import { WorkspaceSidePanel } from './workspace-side-panel';
 const TAKE_SCREENSHOTS_PROMPT =
   'Take a screenshot of the workspace dev app using Playwright MCP tools. Read factory-factory.json for the scripts.run command, pick a free port, replace {port}, and start the dev server in the background. Once ready, determine the most relevant screen and save a screenshot to .factory-factory/screenshots/ with a descriptive filename.';
 
+type WorkspaceData = ReturnType<typeof useWorkspaceData>;
+
 interface WorkspaceStateProps {
-  workspaceLoading: boolean;
-  workspace: ReturnType<typeof useWorkspaceData>['workspace'];
+  workspace: WorkspaceData['workspace'];
+  workspaceError: WorkspaceData['workspaceError'];
+  isFetchingWorkspace: boolean;
+  refetchWorkspace: WorkspaceData['refetchWorkspace'];
   workspaceId: string;
   handleBackToWorkspaces: () => void;
   isScriptFailed: boolean;
@@ -54,6 +62,7 @@ interface SessionTabsProps {
   handleNewChat: ReturnType<typeof useSessionManagement>['handleNewChat'];
   handleCloseChatSession: ReturnType<typeof useSessionManagement>['handleCloseSession'];
   handleRestartSession: () => void;
+  isRestartingSession: boolean;
   handleOpenSubagentTab: (selection: SubagentSelection) => void;
   maxSessions: ReturnType<typeof useWorkspaceData>['maxSessions'];
   hasWorktreePath: boolean;
@@ -174,18 +183,39 @@ export const WorkspaceDetailView = memo(function WorkspaceDetailView({
     ]
   );
 
-  if (workspaceState.workspaceLoading) {
-    return <Loading message="Loading workspace…" />;
+  const { workspaceError } = workspaceState;
+  const retryWorkspace = () => {
+    void workspaceState.refetchWorkspace();
+  };
+  // Only a NOT_FOUND answer means the workspace is gone; any other failure
+  // keeps cached detail on screen, or offers Retry when there is none.
+  if (isNotFoundError(workspaceError)) {
+    return (
+      <EmptyState
+        icon={WarningCircleIcon}
+        title="Workspace not found"
+        description="It may have been archived or deleted."
+        action={
+          <Button variant="outline" onClick={workspaceState.handleBackToWorkspaces}>
+            Workspaces
+          </Button>
+        }
+        className="h-full"
+      />
+    );
   }
 
   if (!workspaceState.workspace) {
-    return (
-      <div className="flex flex-col items-center justify-center h-full gap-4">
-        <p className="text-destructive">Workspace not found</p>
-        <Button variant="outline" onClick={workspaceState.handleBackToWorkspaces}>
-          Workspaces
-        </Button>
-      </div>
+    return workspaceError ? (
+      <QueryErrorState
+        title="Couldn't load workspace"
+        error={workspaceError}
+        onRetry={retryWorkspace}
+        isRetrying={workspaceState.isFetchingWorkspace}
+        className="h-full"
+      />
+    ) : (
+      <Loading message="Loading workspace…" />
     );
   }
 
@@ -203,6 +233,7 @@ export const WorkspaceDetailView = memo(function WorkspaceDetailView({
         onCreateSession={sessionTabs.handleNewChat}
         onCloseSession={sessionTabs.handleCloseChatSession}
         onRestartSession={sessionTabs.handleRestartSession}
+        isRestartingSession={sessionTabs.isRestartingSession}
         maxSessions={sessionTabs.maxSessions}
         hasWorktreePath={sessionTabs.hasWorktreePath}
         emptyState={
@@ -245,6 +276,15 @@ export const WorkspaceDetailView = memo(function WorkspaceDetailView({
   return (
     <div className="relative flex h-full flex-col overflow-hidden">
       {header.archivePending && <ArchivingOverlay />}
+
+      {workspaceError ? (
+        <QueryRefreshError
+          title="Couldn't refresh workspace"
+          error={workspaceError}
+          onRetry={retryWorkspace}
+          isRetrying={workspaceState.isFetchingWorkspace}
+        />
+      ) : null}
 
       <ScriptBanner
         workspaceId={workspaceState.workspaceId}

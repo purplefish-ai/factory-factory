@@ -26,6 +26,25 @@ const meta = {
 } satisfies Meta<typeof OnboardingCliHealth>;
 export default meta;
 type Story = StoryObj<typeof meta>;
+/** A failed check reads as an error with Retry, not as a passed check. */
+export const CheckFailed: Story = {
+  parameters: {
+    trpc: {
+      handlers: {
+        'admin.checkCLIHealth': () => {
+          throw new Error('Backend unavailable');
+        },
+      },
+    },
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const alert = await canvas.findByRole('alert');
+    await expect(alert).toHaveTextContent("Couldn't check CLI prerequisites");
+    await expect(within(alert).getByRole('button', { name: 'Retry' })).toBeVisible();
+  },
+};
+
 export const TemporaryRuntimeFailure: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);

@@ -4,6 +4,7 @@ import { useWorkspaceUnreadCounts } from '@/client/features/inbox';
 import type { SubagentSelection } from '@/client/features/subagents';
 import { useWorkspaceDetailQuery } from '@/client/hooks/use-workspace-detail-query';
 import { useWorkspaceDrawer } from '@/client/hooks/use-workspace-drawer';
+import { readStorageItem } from '@/client/lib/browser-storage';
 import { POLL_INTERVAL_MS } from '@/client/lib/query-options';
 import { trpc } from '@/client/lib/trpc';
 import { TabButton } from '@/components/ui/tab-button';
@@ -58,8 +59,6 @@ export const RightPanel = memo(function RightPanel({
   selectedSessionControlRuntimeId,
   onOpenSubagent = () => undefined,
 }: RightPanelProps) {
-  // Track which workspaceId has been loaded to handle workspace changes
-  const loadedForWorkspaceRef = useRef<string | null>(null);
   const {
     mobilePanel,
     activeBottomTab,
@@ -112,20 +111,6 @@ export const RightPanel = memo(function RightPanel({
     }
   );
 
-  // Reset workspace-specific terminal and log state on mount or workspace change.
-  useEffect(() => {
-    if (loadedForWorkspaceRef.current === workspaceId) {
-      return;
-    }
-    loadedForWorkspaceRef.current = workspaceId;
-
-    // Reset terminal tab state when workspace changes
-    setTerminalTabState(null);
-
-    // Reset logs subtab selection to default when workspace changes
-    setLastLogsTab('setup-logs');
-  }, [workspaceId]);
-
   useEffect(() => {
     if (workspace === undefined) {
       return;
@@ -140,29 +125,14 @@ export const RightPanel = memo(function RightPanel({
     void onTakeScreenshots?.();
   }, [handleTopTabChange, onTakeScreenshots]);
 
-  // Auto-select the periodic-task tab on first load,
-  // but only when the user has no persisted tab preference for this workspace.
+  // Auto-select the periodic-task tab on first load, but only when the user
+  // has no persisted tab preference for this workspace. WorkspacePanelProvider
+  // remounts this panel for each workspace.
   const periodicTaskTabSelectedRef = useRef(false);
-  const prevWorkspaceIdRef = useRef(workspaceId);
   useEffect(() => {
-    if (prevWorkspaceIdRef.current !== workspaceId) {
-      prevWorkspaceIdRef.current = workspaceId;
-      periodicTaskTabSelectedRef.current = false;
-    }
-    const hasPersistedTabCheck = () => {
-      if (typeof window === 'undefined') {
-        return false;
-      }
-      try {
-        return localStorage.getItem(`${STORAGE_KEY_TOP_TAB_PREFIX}${workspaceId}`) != null;
-      } catch {
-        return false;
-      }
-    };
-
     if (periodicTaskId && !periodicTaskTabSelectedRef.current) {
       periodicTaskTabSelectedRef.current = true;
-      if (!hasPersistedTabCheck()) {
+      if (readStorageItem(`${STORAGE_KEY_TOP_TAB_PREFIX}${workspaceId}`) === null) {
         handleTopTabChange('periodic-task');
       }
     }

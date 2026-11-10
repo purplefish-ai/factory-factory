@@ -192,3 +192,110 @@ it.each<ProjectIssuesStatus>(['ready', 'loading', 'not-connected', 'error', 'no-
     await act(() => root.unmount());
   }
 );
+
+async function renderSidebar(data: AppNavigationData) {
+  const container = document.createElement('div');
+  document.body.appendChild(container);
+  const root = createRoot(container);
+  await act(() =>
+    root.render(
+      <MemoryRouter>
+        <SidebarProvider>
+          <AppSidebar navData={data} />
+        </SidebarProvider>
+      </MemoryRouter>
+    )
+  );
+  return { container, unmount: () => act(() => root.unmount()) };
+}
+
+it('shows a failed workspace list as an error with Retry, not as empty groups', async () => {
+  const retry = vi.fn();
+  const { container, unmount } = await renderSidebar({
+    ...navData,
+    serverWorkspaces: undefined,
+    serverWorkspacesError: { message: 'Failed to fetch', isRetrying: false, retry },
+  });
+  try {
+    const alert = container.querySelector('[role="alert"]');
+    expect(alert?.textContent).toContain("Couldn't load workspaces");
+    expect(container.textContent).not.toContain('No active workspaces');
+    act(() => alert?.querySelector('button')?.click());
+    expect(retry).toHaveBeenCalledOnce();
+  } finally {
+    await unmount();
+  }
+});
+
+it('shows an unresolved workspace list as loading, not as empty groups', async () => {
+  const { container, unmount } = await renderSidebar({ ...navData, serverWorkspaces: undefined });
+  try {
+    expect(container.textContent).toContain('Loading workspaces…');
+    expect(container.textContent).not.toContain('No active workspaces');
+  } finally {
+    await unmount();
+  }
+});
+
+it('keeps cached workspace rows when a refresh fails', async () => {
+  const { container, unmount } = await renderSidebar({
+    ...navData,
+    serverWorkspacesError: { message: 'Failed to fetch', isRetrying: false, retry: vi.fn() },
+  });
+  try {
+    expect(rowRenders).toHaveBeenCalledTimes(3);
+    expect(container.querySelector('[role="alert"]')).toBeNull();
+    expect(container.textContent).toContain("Couldn't refresh workspaces");
+  } finally {
+    await unmount();
+  }
+});
+
+it('follows the pointer while resizing and stores the width once the drag ends', async () => {
+  localStorage.setItem('sidebar_width', '400');
+  // jsdom has no pointer capture.
+  Object.assign(HTMLElement.prototype, {
+    setPointerCapture: () => undefined,
+    releasePointerCapture: () => undefined,
+    hasPointerCapture: () => true,
+  });
+  const setItem = vi.spyOn(Storage.prototype, 'setItem');
+  const container = document.createElement('div');
+  document.body.appendChild(container);
+  const root = createRoot(container);
+  try {
+    await act(() =>
+      root.render(
+        <MemoryRouter>
+          <SidebarProvider>
+            <AppSidebar navData={navData} />
+          </SidebarProvider>
+        </MemoryRouter>
+      )
+    );
+    const handle = container.querySelector<HTMLElement>('[aria-label="Resize sidebar"]');
+    const sidebar = handle?.parentElement;
+    expect(sidebar?.style.width).toBe('400px');
+    await act(() => {
+      handle?.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, clientX: 400 }));
+    });
+    for (const clientX of [420, 460, 480]) {
+      await act(() => {
+        window.dispatchEvent(new MouseEvent('pointermove', { clientX }));
+      });
+    }
+    expect(sidebar?.style.width).toBe('480px');
+    expect(setItem.mock.calls.filter(([key]) => key === 'sidebar_width')).toEqual([]);
+    await act(() => {
+      window.dispatchEvent(new MouseEvent('pointerup', {}));
+    });
+    expect(sidebar?.style.width).toBe('480px');
+    expect(setItem.mock.calls.filter(([key]) => key === 'sidebar_width')).toEqual([
+      ['sidebar_width', '480'],
+    ]);
+  } finally {
+    await act(() => root.unmount());
+    vi.restoreAllMocks();
+    localStorage.clear();
+  }
+});

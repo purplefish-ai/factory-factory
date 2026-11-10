@@ -299,13 +299,15 @@ export function useSessionLaunchSelection(
       : undefined,
     options
   );
-  const { data: catalog, isLoading: modelsLoading } = trpc.userSettings.getProviderOptions.useQuery(
-    getAccountInput(selection.codexAccountId),
-    {
-      enabled: scopeKey !== null,
-      staleTime: 60_000,
-    }
-  );
+  const {
+    data: catalog,
+    isLoading: modelsLoading,
+    error: catalogError,
+    refetch: refetchCatalog,
+  } = trpc.userSettings.getProviderOptions.useQuery(getAccountInput(selection.codexAccountId), {
+    enabled: scopeKey !== null,
+    staleTime: 60_000,
+  });
   const account = useCodexAccountControl(scopeKey, selection);
   const error =
     options.error ?? (!settings && settingsError ? "Couldn't load chat defaults" : undefined);
@@ -363,6 +365,11 @@ export function useSessionLaunchSelection(
     error,
     onRetry: retry,
     modelsLoading,
+    // Cached models stay usable when only a refetch failed.
+    modelsError: catalog ? undefined : catalogError?.message,
+    onRetryModels: () => {
+      void refetchCatalog();
+    },
     onProviderChange: selection.onProviderChange,
     onModelChange: selection.onModelChange,
     label: 'New conversation provider and model',

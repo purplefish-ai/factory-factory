@@ -10,6 +10,7 @@ import {
   IssueRefreshRecoveryFixture,
   exerciseIssueRefreshRecovery,
 } from '@/client/components/project-issues-recovery.story-fixtures';
+import { readStorageItem, removeStorageItem } from '@/client/lib/browser-storage';
 import { STORY_TRPC_PENDING, type StoryTrpcHandlers } from '@/client/lib/storybook-trpc';
 import { SidebarProvider } from '@/components/ui/sidebar';
 import { IssueProvider } from '@/shared/core/enums';
@@ -203,9 +204,10 @@ export const LoadError: Story = {
     },
   },
   play: async ({ canvasElement }) => {
-    await expect(
-      await within(canvasElement).findByText("Couldn't load workspaces. Database is locked")
-    ).toBeVisible();
+    const alert = await within(canvasElement).findByRole('alert');
+    await expect(alert).toHaveTextContent("Couldn't load workspaces");
+    await expect(alert).toHaveTextContent('Database is locked');
+    await expect(within(alert).getByRole('button', { name: 'Retry' })).toBeVisible();
   },
 };
 
@@ -354,8 +356,8 @@ export const ArchiveDoneColumn: Story = {
 
 export const WaitingSort: Story = {
   beforeEach: () => {
-    localStorage.removeItem('kanban-waiting-sort-order');
-    return () => localStorage.removeItem('kanban-waiting-sort-order');
+    removeStorageItem('kanban-waiting-sort-order');
+    return () => removeStorageItem('kanban-waiting-sort-order');
   },
   parameters: {
     trpc: {
@@ -424,7 +426,7 @@ export const WaitingSort: Story = {
     await userEvent.click(body.getByRole('menuitemradio', { name: 'Created' }));
     await expect(ids()).toEqual(['newer-created', 'older-created']);
     await expect(doneIds()).toEqual(['done-latest-message', 'done-newer-created']);
-    await expect(localStorage.getItem('kanban-waiting-sort-order')).toBe('created');
+    await expect(readStorageItem('kanban-waiting-sort-order')).toBe('created');
     await userEvent.click(canvas.getByRole('button', { name: 'Waiting sort order' }));
     await expect(body.getByRole('menuitemradio', { name: 'Created' })).toHaveAttribute(
       'aria-checked',

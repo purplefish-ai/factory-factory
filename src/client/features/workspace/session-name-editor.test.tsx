@@ -5,11 +5,23 @@ import { userEvent, within } from 'storybook/test';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { SessionNameEditor } from './session-name-editor';
 
-const mocks = vi.hoisted(() => ({ save: vi.fn(), invalidate: vi.fn() }));
+const mocks = vi.hoisted(() => ({ save: vi.fn(), invalidate: vi.fn(), pending: false }));
 vi.mock('@/client/lib/trpc', () => ({
   trpc: {
     useUtils: () => ({ session: { listSessions: { invalidate: mocks.invalidate } } }),
-    session: { updateSession: { useMutation: () => ({ mutateAsync: mocks.save }) } },
+    session: {
+      updateSession: {
+        // Mirrors useMutation: mutateAsync settles after the options' onSuccess.
+        useMutation: (options: { onSuccess: () => Promise<unknown> }) => ({
+          isPending: mocks.pending,
+          mutateAsync: async (input: unknown) => {
+            const result: unknown = await mocks.save(input);
+            await options.onSuccess();
+            return result;
+          },
+        }),
+      },
+    },
   },
 }));
 let root: Root;
@@ -18,6 +30,7 @@ beforeEach(() => {
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
   mocks.save.mockReset().mockResolvedValue({});
   mocks.invalidate.mockReset().mockResolvedValue(undefined);
+  mocks.pending = false;
   container = document.createElement('div');
   document.body.append(container);
   root = createRoot(container);
@@ -43,6 +56,13 @@ it('saves a trimmed name and refreshes the workspace sessions', async () => {
   expect(mocks.save).toHaveBeenCalledWith({ id: 's1', name: 'Review API' });
   expect(mocks.invalidate).toHaveBeenCalledWith({ workspaceId: 'w1' });
   expect(onDone).toHaveBeenCalledOnce();
+});
+it('shows a spinner and keeps the name read-only while saving', async () => {
+  mocks.pending = true;
+  const { input } = await renderEditor();
+  expect((input as HTMLInputElement).readOnly).toBe(true);
+  expect(input.getAttribute('aria-busy')).toBe('true');
+  expect(container.querySelector('[data-slot=spinner]')).not.toBeNull();
 });
 it('cancels with Escape without saving', async () => {
   const { input, onDone } = await renderEditor();

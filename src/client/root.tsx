@@ -30,7 +30,7 @@ function BannerBoundary({ children }: { children: ReactNode }) {
 }
 
 function RootLayout() {
-  const { projects, isLoading } = useProjects();
+  const { projects } = useProjects();
   const navigate = useNavigate();
   const { pathname, search } = useLocation();
   const { height: viewportHeight, offsetTop: viewportOffsetTop } = useVisualViewportHeight();
@@ -41,8 +41,8 @@ function RootLayout() {
   // Only redirect from top-level paths, not from specific project routes
   useEffect(() => {
     const isProjectSpecificRoute = /^\/projects\/[^/]+/.test(pathname);
+    // Only a loaded empty list redirects; loading and failed lists leave projects undefined.
     if (
-      !isLoading &&
       projects?.length === 0 &&
       !pathname.startsWith('/projects/new') &&
       !isProjectSpecificRoute &&
@@ -51,7 +51,7 @@ function RootLayout() {
     ) {
       void navigate('/projects/new');
     }
-  }, [isLoading, projects, pathname, search, navigate]);
+  }, [projects, pathname, search, navigate]);
 
   return (
     <div

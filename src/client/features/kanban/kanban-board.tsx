@@ -1,5 +1,6 @@
-import { ArrowsClockwiseIcon } from '@phosphor-icons/react/dist/csr/ArrowsClockwise';
 import { useMemo, useState } from 'react';
+import { EmptyState } from '@/client/components/empty-state';
+import { QueryErrorState, QueryRefreshError } from '@/client/components/query-error-state';
 import { ArchiveGitLockDialog, ArchiveWorkspaceDialog } from '@/client/features/workspace';
 import { useStableCallback } from '@/client/hooks/use-stable-callback';
 import { runInBackground } from '@/client/lib/background-task';
@@ -44,11 +45,11 @@ function KanbanBoardContent() {
     workspaces,
     issues,
     isLoading,
-    isError,
     error,
+    isFetching,
     refetch,
     toggleWorkspaceRatcheting,
-    togglingWorkspaceId,
+    togglingWorkspaceIds,
     renameWorkspace,
     archiveWorkspace,
     bulkArchiveColumn,
@@ -148,6 +149,7 @@ function KanbanBoardContent() {
       workspaceCount={archiveGitLockWorkspaceIds.length}
       onRetry={handleRetryGitLockedArchives}
       onRemoveLockAndArchive={handleRemoveGitLocksAndArchive}
+      isPending={isArchiving}
     />
   );
 
@@ -167,17 +169,16 @@ function KanbanBoardContent() {
     );
   }
 
-  if (isError) {
+  // A failed refresh keeps the cached board, so open forms and scroll survive.
+  if (error && !workspaces) {
     return (
-      <div className="flex flex-col items-center justify-center py-12 text-center">
-        <p className="text-destructive mb-4">
-          Couldn't load workspaces. {error?.message ?? 'Unknown error'}
-        </p>
-        <Button variant="outline" onClick={() => refetch()}>
-          <ArrowsClockwiseIcon className="h-4 w-4 mr-2" />
-          Retry
-        </Button>
-      </div>
+      <QueryErrorState
+        title="Couldn't load workspaces"
+        error={error}
+        onRetry={refetch}
+        isRetrying={isFetching}
+        className="py-12"
+      />
     );
   }
 
@@ -204,7 +205,7 @@ function KanbanBoardContent() {
         onWaitingSortOrderChange={setWaitingSortOrder}
         unreadMailCounts={unreadMailCounts}
         onToggleRatcheting={handleToggleRatcheting}
-        togglingWorkspaceId={togglingWorkspaceId}
+        togglingWorkspaceIds={togglingWorkspaceIds}
         onArchive={handleArchiveWorkspace}
         onBulkArchive={() => handleBulkArchive(column.id)}
         isBulkArchiving={isBulkArchiving}
@@ -218,6 +219,15 @@ function KanbanBoardContent() {
     : 0;
   return (
     <div className="flex flex-col h-full min-h-0 gap-3">
+      {error ? (
+        <QueryRefreshError
+          title="Couldn't refresh workspaces"
+          error={error}
+          onRetry={refetch}
+          isRetrying={isFetching}
+          className="rounded-md border"
+        />
+      ) : null}
       {workspaces?.length === 0 && !showInlineForm && !isArchiving && (
         <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border p-4">
           <div>
@@ -235,7 +245,7 @@ function KanbanBoardContent() {
       {search &&
         Object.values(workspacesByColumn).every((rows) => rows.length === 0) &&
         visibleIssues.length === 0 && (
-          <p className="text-sm text-muted-foreground">No matching issues or workspaces</p>
+          <EmptyState size="compact" title="No matching issues or workspaces" />
         )}
       {isMobile ? (
         <MobileBoardSections

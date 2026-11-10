@@ -18,6 +18,8 @@ type State =
   | 'healthy'
   | 'failed'
   | 'loading'
+  | 'load-error'
+  | 'refresh-error'
   | 'empty'
   | 'project-switch'
   | 'issues-empty'
@@ -53,10 +55,10 @@ function IssueQueryStatus({ projectId }: { projectId: string }) {
 }
 
 function getStoryWorkspaces(state: State) {
-  if (state === 'loading') {
+  if (state === 'loading' || state === 'load-error') {
     return undefined;
   }
-  if (state !== 'board-counts') {
+  if (state !== 'board-counts' && state !== 'refresh-error') {
     return [];
   }
   return (['WORKING', 'WORKING', 'WAITING', 'DONE'] as const).map((kanbanColumn, index) => ({
@@ -69,6 +71,18 @@ function getStoryWorkspaces(state: State) {
     }),
     kanbanColumn,
   }));
+}
+
+function getStoryWorkspacesError(state: State): Pick<AppNavigationData, 'serverWorkspacesError'> {
+  return state === 'load-error' || state === 'refresh-error'
+    ? {
+        serverWorkspacesError: {
+          message: 'Failed to fetch',
+          isRetrying: false,
+          retry: () => undefined,
+        },
+      }
+    : {};
 }
 
 function SidebarStory({
@@ -97,6 +111,7 @@ function SidebarStory({
     selectProjectSlug: () => undefined,
     issueProvider: 'GITHUB',
     serverWorkspaces: getStoryWorkspaces(state),
+    ...getStoryWorkspacesError(state),
     reviewCount: 0,
     agentsSummary: summary,
     needsAttention: () => false,
@@ -167,6 +182,8 @@ const meta = {
         'healthy',
         'failed',
         'loading',
+        'load-error',
+        'refresh-error',
         'empty',
         'project-switch',
         'issues-empty',
@@ -184,6 +201,24 @@ export const Healthy: Story = {};
 export const Failed: Story = { args: { state: 'failed' } };
 export const Loading: Story = { args: { state: 'loading' } };
 export const Empty: Story = { args: { state: 'empty' } };
+/** A failed list load reads as an error with Retry, never as empty groups. */
+export const WorkspacesLoadError: Story = {
+  args: { state: 'load-error' },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(await canvas.findByText("Couldn't load workspaces")).toBeVisible();
+    await expect(canvas.queryByText('No active workspaces')).toBeNull();
+  },
+};
+/** Cached rows stay after a failed refresh, under a Retry notice. */
+export const WorkspacesRefreshError: Story = {
+  args: { state: 'refresh-error' },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(await canvas.findByRole('link', { name: /Workspace 1/ })).toBeVisible();
+    await expect(canvas.getByText("Couldn't refresh workspaces.")).toBeVisible();
+  },
+};
 export const ProjectSwitch: Story = { args: { state: 'project-switch' } };
 
 export const NewWorkspaceImageDrop: Story = {

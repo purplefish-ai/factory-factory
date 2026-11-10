@@ -1,12 +1,15 @@
 import type { Meta, StoryObj } from '@storybook/react';
 import { expect, waitFor, within } from 'storybook/test';
+import { readStorageItem, removeStorageItem } from '@/client/lib/browser-storage';
 import TranscriptScrollFixture from './transcript-scroll-fixture';
 
 const meta: Meta<typeof TranscriptScrollFixture> = {
   title: 'Chat/Transcript/ScrollBursts',
   component: TranscriptScrollFixture,
   parameters: { layout: 'fullscreen' },
-  beforeEach: () => localStorage.removeItem('workspace-panel-scroll-fixture-W1'),
+  beforeEach: () => {
+    removeStorageItem('workspace-panel-scroll-fixture-W1');
+  },
 };
 export default meta;
 type Story = StoryObj<typeof meta>;
@@ -25,7 +28,7 @@ export const WindowTrimming: Story = {
       await new Promise(requestAnimationFrame);
       canvas.getByRole('button', { name: 'Trim window' }).click();
       await new Promise(requestAnimationFrame);
-      await expect(localStorage.getItem('workspace-panel-scroll-fixture-W1') ?? '').not.toContain(
+      await expect(readStorageItem('workspace-panel-scroll-fixture-W1') ?? '').not.toContain(
         '"intent":"reading"'
       );
     }

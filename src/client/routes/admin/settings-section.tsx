@@ -72,6 +72,7 @@ export function SettingsSection<TData>(props: StaticSectionProps | QuerySectionP
             query={props.query}
             errorTitle={props.errorTitle}
             loading={<Skeleton className="h-10 w-full" />}
+            refreshErrorClassName="rounded-md border"
           >
             {props.children}
           </QueryState>

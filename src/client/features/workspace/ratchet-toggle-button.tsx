@@ -10,6 +10,8 @@ interface RatchetToggleButtonProps {
   animated?: boolean;
   onToggle: (enabled: boolean) => void;
   disabled?: boolean;
+  /** A toggle for this workspace is in flight. */
+  pending?: boolean;
   stopPropagation?: boolean;
   className?: string;
   label?: string;
@@ -29,6 +31,7 @@ export function RatchetToggleButton({
   animated = false,
   onToggle,
   disabled = false,
+  pending = false,
   stopPropagation = false,
   className,
   label,
@@ -53,6 +56,7 @@ export function RatchetToggleButton({
             onToggle(!enabled);
           }}
           disabled={disabled}
+          pending={pending}
           aria-label={enabled ? 'Disable PR updates' : 'Enable PR updates'}
           aria-pressed={enabled}
           className={cn(

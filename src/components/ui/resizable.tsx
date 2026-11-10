@@ -4,6 +4,7 @@ import { useCallback, useMemo } from 'react';
 import type { Layout, LayoutChangedMeta } from 'react-resizable-panels';
 import { Group, Panel, Separator } from 'react-resizable-panels';
 import { z } from 'zod';
+import { readStoredJson, writeStoredJson } from '@/client/lib/browser-storage';
 import { cn } from '@/lib/utils';
 
 type ResizablePanelGroupProps = Omit<ComponentProps<typeof Group>, 'orientation'> & {
@@ -23,25 +24,12 @@ function isLayout(value: unknown): value is Layout {
 
 const LayoutSchema = z.custom<Layout>(isLayout);
 
-// Helper to load layout from localStorage synchronously
-function loadLayoutFromStorage(autoSaveId: string): Layout | undefined {
-  if (typeof window === 'undefined') {
-    return undefined;
-  }
+function layoutStorageKey(autoSaveId: string): string {
+  return `resizable-panels:${autoSaveId}`;
+}
 
-  try {
-    const stored = localStorage.getItem(`resizable-panels:${autoSaveId}`);
-    if (stored) {
-      const parsed: unknown = JSON.parse(stored);
-      const validated = LayoutSchema.safeParse(parsed);
-      if (validated.success) {
-        return validated.data;
-      }
-    }
-  } catch {
-    // Ignore storage errors
-  }
-  return undefined;
+function loadLayoutFromStorage(autoSaveId: string): Layout | undefined {
+  return readStoredJson(layoutStorageKey(autoSaveId), LayoutSchema);
 }
 
 const ResizablePanelGroup = ({
@@ -58,7 +46,7 @@ const ResizablePanelGroup = ({
     [autoSaveId]
   );
 
-  // Save layout to localStorage when it changes
+  // Save layout when it changes
   const handleLayoutChange = useCallback(
     (layout: Layout, meta: LayoutChangedMeta) => {
       // Call the consumer's callback first
@@ -81,14 +69,7 @@ const ResizablePanelGroup = ({
         return;
       }
 
-      try {
-        localStorage.setItem(
-          `resizable-panels:${autoSaveId}`,
-          JSON.stringify(meta.requestedLayout ?? layout)
-        );
-      } catch {
-        // Ignore storage errors
-      }
+      writeStoredJson(layoutStorageKey(autoSaveId), meta.requestedLayout ?? layout);
     },
     [autoSaveId, onLayoutChangedProp]
   );

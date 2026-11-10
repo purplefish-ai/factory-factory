@@ -16,6 +16,7 @@ const mocks = vi.hoisted(() => ({
     | undefined,
   deletePending: false,
   listError: null as Error | null,
+  readError: null as Error | null,
   listHasData: true,
   listFetching: false,
   refetch: vi.fn(),
@@ -61,7 +62,14 @@ vi.mock('@/components/ui/confirm-dialog', () => ({
           ),
           createElement(
             'button',
-            { type: 'button', 'data-testid': 'cancel', onClick: () => onOpenChange(false) },
+            // Like the real dialog, which disables Cancel and ignores close
+            // requests while pending (src/components/ui/pending-controls.test.tsx).
+            {
+              type: 'button',
+              'data-testid': 'cancel',
+              onClick: () => onOpenChange(false),
+              disabled: isPending,
+            },
             'Cancel'
           )
         )
@@ -114,7 +122,7 @@ vi.mock('@/client/lib/trpc', () => ({
         }),
       },
       readScreenshot: {
-        useQuery: () => ({ data: undefined, isLoading: false }),
+        useQuery: () => ({ data: undefined, isLoading: false, error: mocks.readError }),
       },
     },
   },
@@ -130,6 +138,7 @@ afterEach(() => {
   mocks.deleteOptions = undefined;
   mocks.deletePending = false;
   mocks.listError = null;
+  mocks.readError = null;
   mocks.listHasData = true;
   mocks.listFetching = false;
   vi.clearAllMocks();
@@ -297,6 +306,19 @@ describe('ScreenshotsPanel', () => {
     expect(container.querySelector('[aria-label="Open screenshot home.png"]')).not.toBeNull();
     expect(container.querySelector('[role="alert"]')).toBeNull();
     expect(container.textContent).not.toContain("Couldn't load screenshots");
+    expect(container.querySelector('[role="status"]')?.textContent).toContain("Couldn't refresh");
+
+    flushSync(() => root.unmount());
+  });
+
+  it('marks a thumbnail whose image failed to load instead of leaving it blank', () => {
+    mocks.screenshots = [{ name: 'home.png', path: 'home.png', size: 1 }];
+    mocks.readError = new Error('ENOENT');
+    const { container, root } = renderPanel();
+
+    const thumbnail = container.querySelector('[aria-label="Open screenshot home.png"]');
+    expect(thumbnail?.textContent).toContain("Couldn't load preview");
+    expect(thumbnail?.querySelector('[title="ENOENT"]')).not.toBeNull();
 
     flushSync(() => root.unmount());
   });

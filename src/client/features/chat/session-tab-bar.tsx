@@ -40,6 +40,8 @@ interface SessionTabBarProps {
   onCloseSession: (sessionId: string) => void;
   disabled?: boolean;
   createDisabled?: boolean;
+  /** A new session is being created: the new-session button shows a spinner. */
+  createPending?: boolean;
   className?: string;
   readOnly?: boolean;
 }
@@ -224,6 +226,7 @@ export function SessionTabBar({
   onCloseSession,
   disabled = false,
   createDisabled = false,
+  createPending = false,
   className,
   readOnly = false,
 }: SessionTabBarProps) {
@@ -362,6 +365,7 @@ export function SessionTabBar({
           provider={sessions[0]?.provider ?? workspaceProvider}
           onCreate={onCreateSession}
           disabled={disabled || createDisabled}
+          pending={createPending}
         />
       )}
     </div>

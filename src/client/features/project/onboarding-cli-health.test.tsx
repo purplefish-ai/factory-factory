@@ -5,28 +5,57 @@ import { OnboardingCliHealth } from './onboarding-cli-health';
 vi.mock('@/client/hooks/use-cli-health-refresh', () => ({
   useCLIHealthRefresh: () => ({ refresh: vi.fn(), isRefreshing: false }),
 }));
+const query = vi.hoisted(() => ({ failed: false, refreshFailed: false }));
 vi.mock('@/client/lib/trpc', () => ({
   trpc: {
     admin: {
       checkCLIHealth: {
         useQuery: () => ({
-          data: {
-            claude: { isInstalled: true, isAuthenticated: true },
-            codex: {
-              isInstalled: false,
-              isAuthenticated: false,
-              error:
-                'Please try again in a few moments. If this continues, try restarting Factory Factory.',
-            },
-            github: { isInstalled: true, isAuthenticated: true },
-          },
-          isLoading: false,
+          error: query.failed || query.refreshFailed ? { message: 'Backend unavailable' } : null,
+          data: query.failed
+            ? undefined
+            : {
+                claude: { isInstalled: true, isAuthenticated: true },
+                codex: {
+                  isInstalled: false,
+                  isAuthenticated: false,
+                  error:
+                    'Please try again in a few moments. If this continues, try restarting Factory Factory.',
+                },
+                github: { isInstalled: true, isAuthenticated: true },
+              },
           isRefetching: false,
         }),
       },
     },
   },
 }));
+
+it('shows a failed health check as an error with Retry', () => {
+  query.failed = true;
+  try {
+    const markup = renderToStaticMarkup(<OnboardingCliHealth onOpenTerminal={() => undefined} />);
+    expect(markup).toContain('role="alert"');
+    expect(markup).toContain('Couldn&#x27;t check CLI prerequisites');
+    expect(markup).toContain('Backend unavailable');
+    expect(markup).not.toContain('Checking CLI prerequisites');
+  } finally {
+    query.failed = false;
+  }
+});
+
+it('keeps cached prerequisites under a notice when a recheck fails', () => {
+  query.refreshFailed = true;
+  try {
+    const markup = renderToStaticMarkup(<OnboardingCliHealth onOpenTerminal={() => undefined} />);
+    expect(markup).toContain('Couldn&#x27;t refresh CLI prerequisites');
+    expect(markup).toContain('Backend unavailable');
+    expect(markup).toContain('CLI Prerequisites');
+    expect(markup).not.toContain('role="alert"');
+  } finally {
+    query.refreshFailed = false;
+  }
+});
 
 it('shows retry guidance in onboarding when a Codex runtime check fails', () => {
   const markup = renderToStaticMarkup(<OnboardingCliHealth onOpenTerminal={() => undefined} />);

@@ -137,14 +137,13 @@ it('shows a proposal widget while ordinary tool activity is collapsed', async ()
         ?.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
       await new Promise((resolve) => setTimeout(resolve, 20));
     });
+    // The failure is reported once, inline beside the draft, not also as a toast.
     await vi.waitFor(() =>
-      expect(document.querySelector('[data-sonner-toast]')?.textContent).toContain(
+      expect(container.querySelector('[role="alert"]')?.textContent).toContain(
         'Could not save this automation.'
       )
     );
-    expect(container.querySelector('[role="alert"]')?.textContent).toContain(
-      'Could not save this automation.'
-    );
+    expect(document.querySelector('[data-sonner-toast]')).toBeNull();
   } finally {
     await act(() => root.unmount());
     queryClient.clear();

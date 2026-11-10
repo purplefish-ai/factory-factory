@@ -193,7 +193,9 @@ function createInitStatus(
 function createViewProps(activeChildCount: number): WorkspaceDetailViewProps {
   return {
     workspaceState: {
-      workspaceLoading: false,
+      workspaceError: null,
+      isFetchingWorkspace: false,
+      refetchWorkspace: vi.fn(),
       workspace: {
         id: 'workspace-1',
       } as WorkspaceDetailViewProps['workspaceState']['workspace'],
@@ -234,6 +236,7 @@ function createViewProps(activeChildCount: number): WorkspaceDetailViewProps {
       handleNewChat: vi.fn(),
       handleCloseChatSession: vi.fn(),
       handleRestartSession: vi.fn(),
+      isRestartingSession: false,
       handleOpenSubagentTab: vi.fn(),
       maxSessions: 5,
       hasWorktreePath: true,
@@ -487,6 +490,60 @@ describe('WorkspaceDetailView', () => {
     ).toBe('session-streamed');
     expect(workspaceContentViewMock).toHaveBeenCalledTimes(layoutRenders);
     expect(rightPanelMock).toHaveBeenCalledTimes(panelRenders);
+    act(() => root.unmount());
+  });
+});
+
+describe('workspace load failures', () => {
+  function withError(
+    workspace: WorkspaceDetailViewProps['workspaceState']['workspace'] | undefined,
+    error: { message: string; data?: { code: string } }
+  ) {
+    const props = createViewProps(0);
+    props.workspaceState.workspace = workspace;
+    props.workspaceState.workspaceError = Object.assign(new Error(error.message), {
+      data: error.data,
+    });
+    return props;
+  }
+
+  it('says not found only for a NOT_FOUND answer', () => {
+    const props = withError(undefined, {
+      message: 'Workspace not found: workspace-1',
+      data: { code: 'NOT_FOUND' },
+    });
+    const { container, root } = renderView(props);
+
+    expect(container.textContent).toContain('Workspace not found');
+    expect(container.querySelector('[role="alert"]')).toBeNull();
+    act(() => root.unmount());
+  });
+
+  it('offers Retry, not "not found", when the load fails without data', () => {
+    const props = withError(undefined, {
+      message: 'Database is locked',
+      data: { code: 'INTERNAL_SERVER_ERROR' },
+    });
+    const { container, root } = renderView(props);
+
+    const alert = container.querySelector('[role="alert"]');
+    expect(alert?.textContent).toContain("Couldn't load workspace");
+    expect(alert?.textContent).toContain('Database is locked');
+    expect(container.textContent).not.toContain('Workspace not found');
+    act(() => alert?.querySelector('button')?.click());
+    expect(props.workspaceState.refetchWorkspace).toHaveBeenCalledOnce();
+    act(() => root.unmount());
+  });
+
+  it('keeps the cached workspace on screen when a refetch fails', () => {
+    const props = withError(createViewProps(0).workspaceState.workspace, {
+      message: 'Failed to fetch',
+    });
+    const { container, root } = renderView(props);
+
+    expect(container.querySelector('[data-testid="archive-dialog"]')).not.toBeNull();
+    expect(container.querySelector('[role="alert"]')).toBeNull();
+    expect(container.textContent).toContain("Couldn't refresh workspace");
     act(() => root.unmount());
   });
 });

@@ -1,5 +1,6 @@
 import { ArrowBendUpLeftIcon } from '@phosphor-icons/react/dist/csr/ArrowBendUpLeft';
 import { TreeStructureIcon } from '@phosphor-icons/react/dist/csr/TreeStructure';
+import { WarningCircleIcon } from '@phosphor-icons/react/dist/csr/WarningCircle';
 import { Link } from 'react-router';
 import { useWorkspaceDetailQuery } from '@/client/hooks/use-workspace-detail-query';
 import { POLL_INTERVAL_MS } from '@/client/lib/query-options';
@@ -109,6 +110,34 @@ function FamilyMember({
   );
 }
 
+function FamilyLoading({ label }: { label: string }) {
+  return (
+    <p
+      className="inline-flex items-center gap-2 px-2 py-1 text-xs text-muted-foreground"
+      role="status"
+    >
+      <Spinner className="size-3" aria-hidden="true" />
+      {label}
+    </p>
+  );
+}
+
+/** A menu row that retries a failed family query without closing the menu. */
+function FamilyRetryItem({ label, query }: { label: string; query: { refetch: () => unknown } }) {
+  return (
+    <DropdownMenuItem
+      className="text-xs"
+      onSelect={(event) => {
+        event.preventDefault();
+        void query.refetch();
+      }}
+    >
+      <WarningCircleIcon className="size-3.5 text-destructive" aria-hidden="true" />
+      {label}. Retry
+    </DropdownMenuItem>
+  );
+}
+
 function FamilyChildren({
   workspace,
   projectSlug,
@@ -122,33 +151,21 @@ function FamilyChildren({
     { parentWorkspaceId: rootId },
     { refetchInterval: POLL_INTERVAL_MS.workspaceContext }
   );
-  if (children.isPending) {
-    return (
-      <p
-        className="inline-flex items-center gap-2 px-2 py-1 text-xs text-muted-foreground"
-        role="status"
-      >
-        <Spinner className="size-3" aria-hidden="true" />
-        Loading children…
-      </p>
-    );
-  }
-  if (children.isError) {
-    return (
-      <DropdownMenuItem
-        onSelect={(event) => {
-          event.preventDefault();
-          void children.refetch();
-        }}
-      >
-        Couldn't load children. Retry
-      </DropdownMenuItem>
+  // The list polls, so a failed poll keeps the children already shown.
+  if (!children.data) {
+    return children.error ? (
+      <FamilyRetryItem label="Couldn't load children" query={children} />
+    ) : (
+      <FamilyLoading label="Loading children…" />
     );
   }
   const includeCurrent =
     workspace.parentWorkspace && !children.data.some((child) => child.id === workspace.id);
   return (
     <>
+      {children.error ? (
+        <FamilyRetryItem label="Couldn't refresh children" query={children} />
+      ) : null}
       {children.data.map((child) => (
         <FamilyMember
           key={child.id}
@@ -196,24 +213,12 @@ function FamilyMenuContent({
           parent
         />
       )}
-      {parent && root.isPending && (
-        <p
-          className="inline-flex items-center gap-2 px-2 py-1 text-xs text-muted-foreground"
-          role="status"
-        >
-          <Spinner className="size-3" aria-hidden="true" />
-          Loading parent…
-        </p>
-      )}
-      {parent && root.isError && (
-        <DropdownMenuItem
-          onSelect={(event) => {
-            event.preventDefault();
-            void root.refetch();
-          }}
-        >
-          Couldn't load parent. Retry
-        </DropdownMenuItem>
+      {parent && !root.data && !root.error && <FamilyLoading label="Loading parent…" />}
+      {parent && root.error && (
+        <FamilyRetryItem
+          label={root.data ? "Couldn't refresh parent" : "Couldn't load parent"}
+          query={root}
+        />
       )}
       <DropdownMenuSeparator />
       <FamilyChildren workspace={workspace} projectSlug={projectSlug} rootId={rootId} />

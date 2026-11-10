@@ -118,6 +118,35 @@
             }
           }
         ],
+        "factory/use-pending-prop": [
+          "error",
+          {
+            "exceptions": {
+              "src/client/features/chat/usage-stats/provider-usage-control.tsx": "The usage popover trigger shows compaction status (including automatic compaction) and must stay openable, so it cannot be disabled by pending; its actions use pending.",
+              "src/client/features/voice/voice-mode-toggle.tsx": "While voice capture connects the toggle is the only way to stop it, so it must stay clickable; pending would disable it."
+            }
+          }
+        ],
+        "factory/no-direct-web-storage": [
+          "error",
+          {
+            "exceptions": {
+              "src/client/lib/browser-storage.ts": "The shared Web Storage module: guards every access and keeps mounted usePersistedState consumers of a key in agreement."
+            }
+          }
+        ],
+        "factory/no-raw-spinner": [
+          "error",
+          {
+            "exceptions": {
+              "src/components/ui/spinner.tsx": "The shared Spinner itself: the one component allowed to apply animate-spin to a pending indicator.",
+              "src/client/components/agent-session-status.tsx": "Agent status glyph: the running status spins its status-tone icon beside the robot; it is a status, not a pending control.",
+              "src/client/components/todo-item.tsx": "Todo status ring: an in-progress task spins its bordered status ring, a status rather than a pending control.",
+              "src/client/features/workspace/main-view-tab-bar.tsx": "Session tab status icon: a running session spins its status-tone glyph, a status rather than a pending control.",
+              "src/client/features/workspace/workspace-status-badge.tsx": "Workspace status badge: Setting up and Archiving spin their status glyph inside a labelled badge, a status rather than a pending control."
+            }
+          }
+        ],
         "factory/query-owner": [
           "error",
           {
@@ -142,7 +171,8 @@
             ]
           }
         ],
-        "factory/named-query-options": "error"
+        "factory/named-query-options": "error",
+        "factory/query-error-handled": "error"
       }
     },
     {
@@ -156,6 +186,8 @@
       "rules": {
         "factory/no-raw-palette-classes": "off",
         "factory/query-owner": "off",
+        "factory/no-raw-spinner": "off",
+        "factory/no-direct-web-storage": "off",
         "factory/named-query-options": "off"
       }
     },

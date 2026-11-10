@@ -7,8 +7,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   createToolCallExpansionKey,
   createToolSequenceExpansionKey,
-  loadToolExpansionState,
-  saveToolExpansionState,
   useWorkspaceToolExpansionState,
 } from './tool-expansion-state';
 
@@ -30,6 +28,10 @@ const mockLocalStorage = {
 
 beforeEach(() => {
   mockStorage.clear();
+  mockLocalStorage.getItem.mockImplementation((key: string) => mockStorage.get(key) ?? null);
+  mockLocalStorage.setItem.mockImplementation((key: string, value: string) =>
+    mockStorage.set(key, value)
+  );
   vi.stubGlobal('localStorage', mockLocalStorage);
   vi.stubGlobal('window', { localStorage: mockLocalStorage });
 });
@@ -114,63 +116,60 @@ describe('tool expansion keys', () => {
   });
 });
 
-describe('loadToolExpansionState', () => {
-  it('loads stored expansion state when valid', () => {
-    mockStorage.set(
-      'workspace-tool-call-expansion-workspace-1',
-      JSON.stringify({
-        'sequence:tool-seq-1': true,
-        'call:tool-seq-1:call-1': false,
-      })
-    );
+function renderHarness(workspaceId?: string) {
+  const container = document.createElement('div');
+  document.body.appendChild(container);
+  const root = createRoot(container);
+  flushSync(() => {
+    root.render(createElement(HookHarness, { workspaceId }));
+  });
+  const button = () => container.querySelector('button');
+  return { root, button };
+}
 
-    expect(loadToolExpansionState('workspace-1')).toEqual({
-      'sequence:tool-seq-1': true,
-      'call:tool-seq-1:call-1': false,
-    });
+describe('stored expansion state', () => {
+  it('ignores invalid payloads', () => {
+    for (const payload of [['bad'], { 'sequence:tool-seq-1': 'true' }]) {
+      mockStorage.set('workspace-tool-call-expansion-workspace-1', JSON.stringify(payload));
+      const { root, button } = renderHarness('workspace-1');
+      expect(button()?.getAttribute('data-open')).toBe('false');
+      expect(mockStorage.get('workspace-tool-call-expansion-workspace-1')).toBe(
+        JSON.stringify(payload)
+      );
+      root.unmount();
+    }
   });
 
-  it('returns empty state for invalid payloads', () => {
-    mockStorage.set('workspace-tool-call-expansion-workspace-1', JSON.stringify(['bad']));
-    expect(loadToolExpansionState('workspace-1')).toEqual({});
-
-    mockStorage.set(
-      'workspace-tool-call-expansion-workspace-1',
-      JSON.stringify({ 'sequence:tool-seq-1': 'true' })
-    );
-    expect(loadToolExpansionState('workspace-1')).toEqual({});
-  });
-
-  it('returns empty state when storage throws', () => {
-    mockLocalStorage.getItem.mockImplementationOnce(() => {
+  it('starts closed when storage reads throw', () => {
+    mockLocalStorage.getItem.mockImplementation(() => {
       throw new Error('storage unavailable');
     });
-
-    expect(loadToolExpansionState('workspace-1')).toEqual({});
-  });
-});
-
-describe('saveToolExpansionState', () => {
-  it('persists expansion state to localStorage', () => {
-    saveToolExpansionState('workspace-1', {
-      'sequence:tool-seq-1': false,
-    });
-
-    expect(mockStorage.get('workspace-tool-call-expansion-workspace-1')).toBe(
-      JSON.stringify({ 'sequence:tool-seq-1': false })
-    );
+    const { root, button } = renderHarness('workspace-1');
+    expect(button()?.getAttribute('data-open')).toBe('false');
+    root.unmount();
   });
 
-  it('silently ignores storage write errors', () => {
-    mockLocalStorage.setItem.mockImplementationOnce(() => {
+  it('still toggles when storage writes throw', () => {
+    mockLocalStorage.setItem.mockImplementation(() => {
       throw new Error('quota exceeded');
     });
+    const { root, button } = renderHarness('workspace-1');
+    flushSync(() => {
+      button()?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    expect(button()?.getAttribute('data-open')).toBe('true');
+    expect(mockStorage.has('workspace-tool-call-expansion-workspace-1')).toBe(false);
+    root.unmount();
+  });
 
-    expect(() =>
-      saveToolExpansionState('workspace-1', {
-        'sequence:tool-seq-1': true,
-      })
-    ).not.toThrow();
+  it('keeps state in memory without a workspace', () => {
+    const { root, button } = renderHarness();
+    flushSync(() => {
+      button()?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    expect(button()?.getAttribute('data-open')).toBe('true');
+    expect(mockStorage.size).toBe(0);
+    root.unmount();
   });
 });
 
@@ -277,7 +276,7 @@ describe('useWorkspaceToolExpansionState', () => {
 
     const storedRaw = mockStorage.get(storageKey);
     expect(storedRaw).toBeTruthy();
-    const stored = loadToolExpansionState('workspace-1');
+    const stored: Record<string, boolean> = JSON.parse(storedRaw ?? '{}');
     expect(Object.keys(stored)).toHaveLength(500);
     expect(stored['entry-0']).toBeUndefined();
     expect(stored['entry-500']).toBe(true);

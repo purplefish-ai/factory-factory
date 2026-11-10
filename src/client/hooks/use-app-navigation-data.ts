@@ -177,7 +177,12 @@ export function useAppNavigationData() {
     }
   }, [reviewProject, utils]);
 
-  const { data: projectState } = useProjectWorkspaceQuery(selectedProjectId);
+  const {
+    data: projectState,
+    error: workspacesError,
+    isFetching: isFetchingWorkspaces,
+    refetch: refetchWorkspaces,
+  } = useProjectWorkspaceQuery(selectedProjectId);
 
   // Sync PR statuses from GitHub once when project changes
   usePRStatusSync(selectedProjectId);
@@ -226,6 +231,18 @@ export function useAppNavigationData() {
     selectedProjectId,
     issueProvider,
     serverWorkspaces,
+    // Present only after a failed load, so the sidebar can tell it from an empty list.
+    ...(workspacesError
+      ? {
+          serverWorkspacesError: {
+            message: workspacesError.message,
+            isRetrying: isFetchingWorkspaces,
+            retry: () => {
+              void refetchWorkspaces();
+            },
+          },
+        }
+      : {}),
     reviewCount,
     agentsSummary,
     needsAttention,

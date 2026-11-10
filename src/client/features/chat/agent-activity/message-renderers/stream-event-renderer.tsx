@@ -1,8 +1,9 @@
-import { SpinnerGapIcon } from '@phosphor-icons/react/dist/csr/SpinnerGap';
+import { BrainIcon } from '@phosphor-icons/react/dist/csr/Brain';
 import { WarningIcon } from '@phosphor-icons/react/dist/csr/Warning';
 import { memo } from 'react';
 import { MarkdownRenderer } from '@/client/components/markdown';
 import { CompactBoundaryIndicator } from '@/client/features/chat/compact-boundary-indicator';
+import { Spinner } from '@/components/ui/spinner';
 import type { AgentMessage, AgentStreamEvent, ContentBlockDelta } from '@/lib/chat-protocol';
 import { isTextContent, isThinkingContent } from '@/lib/chat-protocol';
 import { cn } from '@/lib/utils';
@@ -175,7 +176,11 @@ export const ThinkingRenderer = memo(function ThinkingRenderer({
       )}
     >
       <div className="flex items-center gap-1 text-xs text-muted-foreground mb-1">
-        <SpinnerGapIcon className={cn('h-3 w-3', isInProgress && 'animate-spin')} />
+        {isInProgress ? (
+          <Spinner aria-hidden="true" className="size-3" />
+        ) : (
+          <BrainIcon aria-hidden="true" className="h-3 w-3" />
+        )}
         <span>Thinking</span>
       </div>
       <MarkdownRenderer

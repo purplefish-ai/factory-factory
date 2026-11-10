@@ -16,7 +16,6 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
-import { Spinner } from '@/components/ui/spinner';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 
 interface ProjectSettingsDialogProps {
@@ -123,8 +122,7 @@ export function ProjectSettingsDialog({
           <Button variant="outline" onClick={() => setOpen(false)}>
             Cancel
           </Button>
-          <Button onClick={handleSave} disabled={updateProject.isPending}>
-            {updateProject.isPending && <Spinner className="mr-2" />}
+          <Button onClick={handleSave} pending={updateProject.isPending} pendingLabel="Saving…">
             Save Changes
           </Button>
         </DialogFooter>

@@ -41,6 +41,18 @@ export const Busy: Story = {
   },
 };
 
+/** A restart is in flight: Restart agent swaps its icon for a spinner and is disabled. */
+/** Selecting Restart closes the menu, so the trigger shows the restart in flight. */
+export const Restarting: Story = {
+  args: { restartPending: true },
+  play: async ({ canvasElement }) => {
+    const trigger = within(canvasElement).getByRole('button', { name: 'Restarting agent' });
+    await expect(trigger).toBeDisabled();
+    await expect(trigger).toHaveAttribute('aria-busy', 'true');
+    await expect(trigger.querySelector('[data-slot=spinner]')).not.toBeNull();
+  },
+};
+
 export const Dark: Story = { globals: { theme: 'dark' } };
 
 export const Rename: Story = {

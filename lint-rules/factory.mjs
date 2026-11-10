@@ -269,9 +269,170 @@ function readsToolInput(node) {
   return false;
 }
 
+// Query result fields that only say the request is unresolved or in flight, and
+// the fields that say it failed (docs/architecture/client-loading.md).
+const QUERY_LOADING_FIELDS = new Set(['isLoading', 'isPending', 'isInitialLoading']);
+const QUERY_ERROR_FIELDS = new Set([
+  'error',
+  'isError',
+  'status',
+  'isLoadingError',
+  'isRefetchError',
+]);
+
+/**
+ * `useQuery`, `useInfiniteQuery` and wrapper hooks named `use…Query`, called
+ * directly or on a tRPC procedure. Suspense queries throw to an error boundary.
+ */
+function isQueryHookCall(node) {
+  if (node?.type !== 'CallExpression') {
+    return false;
+  }
+  const name = node.callee.type === 'Identifier' ? node.callee.name : memberName(node.callee);
+  return typeof name === 'string' && /^use\w*Query$/.test(name) && !name.startsWith('useSuspense');
+}
+
+/** Fields read from a query result, or `undefined` when the whole result escapes. */
+function readQueryFields(context, declarator) {
+  if (declarator.id.type === 'ObjectPattern') {
+    const fields = [];
+    for (const property of declarator.id.properties) {
+      if (property.type !== 'Property' || property.computed) {
+        return undefined;
+      }
+      fields.push(property.key.name ?? property.key.value);
+    }
+    return fields;
+  }
+  if (declarator.id.type !== 'Identifier') {
+    return undefined;
+  }
+  const fields = [];
+  for (const variable of context.sourceCode.getDeclaredVariables(declarator)) {
+    for (const reference of variable.references) {
+      const parent = reference.identifier.parent;
+      if (parent === declarator) {
+        continue;
+      }
+      // `const { isLoading } = query` and `const alias = query` read through another binding.
+      if (parent.type === 'VariableDeclarator' && parent.init === reference.identifier) {
+        const aliased = readQueryFields(context, parent);
+        if (!aliased) {
+          return undefined;
+        }
+        fields.push(...aliased);
+        continue;
+      }
+      if (parent.type !== 'MemberExpression' || parent.object !== reference.identifier) {
+        return undefined;
+      }
+      fields.push(memberName(parent));
+    }
+  }
+  return fields;
+}
+
+const WEB_STORAGE_NAMES = new Set(['localStorage', 'sessionStorage']);
+
+/** `window`, `globalThis` or `self`: the objects that expose Web Storage. */
+function isWebStorageGlobal(node) {
+  return node?.type === 'Identifier' && ['window', 'globalThis', 'self'].includes(node.name);
+}
+
+/** A property or key name that does not depend on runtime values. */
+function staticKeyName(key, computed) {
+  if (!computed) {
+    return key.type === 'Identifier' ? key.name : key.value;
+  }
+  if (key.type === 'Literal') {
+    return key.value;
+  }
+  if (key.type === 'TemplateLiteral' && key.expressions.length === 0) {
+    return key.quasis[0].value.cooked;
+  }
+  return undefined;
+}
+
 function isListedFile(context, paths) {
   const filename = context.filename.replaceAll('\\', '/');
   return paths.some((path) => filename === path || filename.endsWith(`/${path}`));
+}
+
+// `exceptions` maps repository-relative paths to the reason each file may keep
+// the reported pattern; a test fails once a listed file no longer needs it.
+const EXCEPTIONS_SCHEMA = [
+  {
+    type: 'object',
+    properties: {
+      exceptions: {
+        type: 'object',
+        additionalProperties: { type: 'string', minLength: 1 },
+      },
+    },
+    additionalProperties: false,
+  },
+];
+
+function isExceptedFile(context) {
+  return isListedFile(context, Object.keys(context.options[0]?.exceptions ?? {}));
+}
+
+// `animate-spin` as a class, with optional variants (`motion-safe:animate-spin`).
+const ANIMATE_SPIN_CLASS = /(?<=^|[\s'"`:!])animate-spin(?![\w-])/;
+
+function hasSpinClass(text) {
+  return typeof text === 'string' && ANIMATE_SPIN_CLASS.test(text);
+}
+
+const SPINNER_ELEMENTS = new Set(['Spinner', 'SpinnerGapIcon']);
+const PENDING_CONTROLS = new Set(['Button', 'DropdownMenuItem']);
+
+function classNameSpins(attribute, sourceCode) {
+  return (
+    attribute.type === 'JSXAttribute' &&
+    attribute.name.name === 'className' &&
+    Boolean(attribute.value) &&
+    hasSpinClass(sourceCode.getText(attribute.value))
+  );
+}
+
+/** The first spinner rendered among a control's children, through conditionals and fragments. */
+function findChildSpinner(node, sourceCode) {
+  switch (node?.type) {
+    case 'JSXElement': {
+      const opening = node.openingElement;
+      if (
+        SPINNER_ELEMENTS.has(jsxTagName(opening.name)) ||
+        opening.attributes.some((attribute) => classNameSpins(attribute, sourceCode))
+      ) {
+        return node;
+      }
+      return findInChildren(node.children, sourceCode);
+    }
+    case 'JSXFragment':
+      return findInChildren(node.children, sourceCode);
+    case 'JSXExpressionContainer':
+      return findChildSpinner(node.expression, sourceCode);
+    case 'ConditionalExpression':
+      return (
+        findChildSpinner(node.consequent, sourceCode) ??
+        findChildSpinner(node.alternate, sourceCode)
+      );
+    case 'LogicalExpression':
+      return findChildSpinner(node.left, sourceCode) ?? findChildSpinner(node.right, sourceCode);
+    default:
+      return undefined;
+  }
+}
+
+function findInChildren(children, sourceCode) {
+  for (const child of children) {
+    const spinner = findChildSpinner(child, sourceCode);
+    if (spinner) {
+      return spinner;
+    }
+  }
+  return undefined;
 }
 
 const rules = {
@@ -405,6 +566,28 @@ const rules = {
       };
     },
   },
+  'query-error-handled': {
+    create(context) {
+      return {
+        VariableDeclarator(node) {
+          if (!isQueryHookCall(node.init)) {
+            return;
+          }
+          const fields = readQueryFields(context, node);
+          if (
+            fields?.some((field) => QUERY_LOADING_FIELDS.has(field)) &&
+            !fields.some((field) => QUERY_ERROR_FIELDS.has(field))
+          ) {
+            context.report({
+              node,
+              message:
+                'This query reads a loading flag but not `error`, so a failed request reads as loading or empty. Render it with QueryState, or handle `error` (docs/architecture/client-loading.md).',
+            });
+          }
+        },
+      };
+    },
+  },
   'icon-button-name': {
     create(context) {
       return {
@@ -462,25 +645,64 @@ const rules = {
       };
     },
   },
-  'no-raw-palette-classes': {
-    meta: {
-      schema: [
-        {
-          type: 'object',
-          properties: {
-            exceptions: {
-              type: 'object',
-              additionalProperties: { type: 'string', minLength: 1 },
-            },
-          },
-          additionalProperties: false,
-        },
-      ],
-    },
+  'use-pending-prop': {
+    meta: { schema: EXCEPTIONS_SCHEMA },
     create(context) {
-      // `exceptions` maps repository-relative paths to the reason each file
-      // may keep fixed palette colors (see docs/status-colors.md).
-      if (isListedFile(context, Object.keys(context.options[0]?.exceptions ?? {}))) {
+      if (isExceptedFile(context)) {
+        return {};
+      }
+      return {
+        JSXElement(node) {
+          const name = jsxTagName(node.openingElement.name);
+          if (!PENDING_CONTROLS.has(name)) {
+            return;
+          }
+          const spinner = findInChildren(node.children, context.sourceCode);
+          if (spinner) {
+            context.report({
+              node: spinner,
+              message: `Pass \`pending\` to ${name} instead of rendering a spinner inside it; pending disables the control and shows the shared Spinner in place of its icon.`,
+            });
+          }
+        },
+      };
+    },
+  },
+  'no-raw-spinner': {
+    meta: { schema: EXCEPTIONS_SCHEMA },
+    create(context) {
+      if (isExceptedFile(context)) {
+        return {};
+      }
+      const message =
+        'Use the shared Spinner (src/components/ui/spinner.tsx) instead of SpinnerGapIcon or animate-spin (docs/architecture/client-loading.md).';
+      const report = (node, text) => {
+        if (hasSpinClass(text)) {
+          context.report({ node, message });
+        }
+      };
+      return {
+        // Class strings are also built in variables, `cn()` arguments and
+        // status config objects, so every string is checked, not only JSX.
+        Literal(node) {
+          report(node, node.value);
+        },
+        TemplateElement(node) {
+          report(node, node.value.cooked ?? node.value.raw);
+        },
+        JSXOpeningElement(node) {
+          if (jsxTagName(node.name) === 'SpinnerGapIcon') {
+            context.report({ node, message });
+          }
+        },
+      };
+    },
+  },
+  'no-raw-palette-classes': {
+    meta: { schema: EXCEPTIONS_SCHEMA },
+    create(context) {
+      // Fixed palette exceptions are explained in docs/status-colors.md.
+      if (isExceptedFile(context)) {
         return {};
       }
       return {
@@ -489,6 +711,72 @@ const rules = {
         },
         TemplateElement(node) {
           reportRawPaletteClass(context, node, node.value.cooked ?? node.value.raw);
+        },
+      };
+    },
+  },
+  'no-direct-web-storage': {
+    meta: { schema: EXCEPTIONS_SCHEMA },
+    create(context) {
+      // `exceptions` maps repository-relative paths to the reason each file
+      // may touch Web Storage directly (src/client/lib/browser-storage.ts).
+      if (isListedFile(context, Object.keys(context.options[0]?.exceptions ?? {}))) {
+        return {};
+      }
+      const reported = new Set();
+      const report = (node) => {
+        const position = node.range?.[0] ?? node.start;
+        if (reported.has(position)) {
+          return;
+        }
+        reported.add(position);
+        context.report({
+          node,
+          message:
+            'Use usePersistedState or the helpers in src/client/lib/browser-storage.ts instead of localStorage/sessionStorage.',
+        });
+      };
+      return {
+        Identifier(node) {
+          if (!WEB_STORAGE_NAMES.has(node.name)) {
+            return;
+          }
+          const parent = node.parent;
+          const isName =
+            // `window.localStorage` is reported as a member access; `record.localStorage` is data.
+            (parent?.type === 'MemberExpression' && parent.property === node && !parent.computed) ||
+            // `{ localStorage: 'local' }` names a key; `{ localStorage }` reports its value.
+            (parent?.type === 'Property' && parent.key === node && !parent.computed) ||
+            (['PropertyDefinition', 'MethodDefinition', 'TSPropertySignature'].includes(
+              parent?.type
+            ) &&
+              parent.key === node &&
+              !parent.computed);
+          if (!isName) {
+            report(node);
+          }
+        },
+        MemberExpression(node) {
+          if (
+            isWebStorageGlobal(node.object) &&
+            WEB_STORAGE_NAMES.has(staticKeyName(node.property, node.computed))
+          ) {
+            report(node);
+          }
+        },
+        VariableDeclarator(node) {
+          // `const { localStorage: store } = window`
+          if (node.id.type !== 'ObjectPattern' || !isWebStorageGlobal(node.init)) {
+            return;
+          }
+          for (const property of node.id.properties) {
+            if (
+              property.type === 'Property' &&
+              WEB_STORAGE_NAMES.has(staticKeyName(property.key, property.computed))
+            ) {
+              report(property);
+            }
+          }
         },
       };
     },

@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import { EmptyState } from '@/client/components/empty-state';
 import { Loading } from '@/client/components/loading';
-import { QueryErrorState } from '@/client/components/query-error-state';
+import { QueryErrorState, QueryRefreshError } from '@/client/components/query-error-state';
 import { type SessionData, SessionTabBar } from '@/client/features/chat';
 import { getNewChatUnavailableReason } from '@/client/features/workspace';
 import { trpc } from '@/client/lib/trpc';
@@ -71,33 +71,50 @@ function QuickChatSessionState({
   );
 }
 
-function getChatLimitUnavailableReason(query: { data?: number; isError: boolean }): string | null {
-  if (query.isError) {
-    return "Couldn't load the chat limit.";
-  }
-  return query.data === undefined ? 'Loading chat limit…' : null;
-}
-
 function QuickChatLimitError({
-  visible,
-  retrying,
-  onRetry,
+  query,
 }: {
-  visible: boolean;
-  retrying: boolean;
-  onRetry: () => void;
+  query: {
+    data?: number;
+    error: { message: string } | null;
+    isFetching: boolean;
+    refetch: () => unknown;
+  };
 }) {
-  if (!visible) {
+  if (!query.error) {
     return null;
   }
+  // A cached limit still applies, so a failed refetch only adds a notice.
+  if (query.data !== undefined) {
+    return (
+      <QueryRefreshError
+        title="Couldn't refresh the chat limit"
+        error={query.error}
+        onRetry={() => void query.refetch()}
+        isRetrying={query.isFetching}
+      />
+    );
+  }
   return (
-    <div role="alert" className="flex items-center gap-2 border-b px-4 py-2 text-sm">
-      <span>Couldn't load the chat limit.</span>
-      <Button size="sm" variant="outline" disabled={retrying} onClick={onRetry}>
-        Retry chat limit
-      </Button>
-    </div>
+    <QueryErrorState
+      title="Couldn't load the chat limit"
+      error={query.error}
+      onRetry={() => void query.refetch()}
+      isRetrying={query.isFetching}
+      className="shrink-0 border-b p-3"
+    />
   );
+}
+
+/** A cached limit still applies when only a refetch failed. */
+function getChatLimitUnavailableReason(query: {
+  data?: number;
+  error: { message: string } | null;
+}): string | null {
+  if (query.data !== undefined) {
+    return null;
+  }
+  return query.error ? "Couldn't load the chat limit." : 'Loading chat limit…';
 }
 
 export function QuickChatSheet({ workspaceId, onClose }: QuickChatSheetProps) {
@@ -192,15 +209,12 @@ export function QuickChatSheet({ workspaceId, onClose }: QuickChatSheetProps) {
               onCloseSession={handleCloseSession}
               disabled={tabBarDisabled}
               createDisabled={Boolean(newChatUnavailableReason)}
+              createPending={isCreatingSession}
             />
           </div>
         </div>
 
-        <QuickChatLimitError
-          visible={maxSessionsQuery.isError}
-          retrying={maxSessionsQuery.isFetching}
-          onRetry={() => void maxSessionsQuery.refetch()}
-        />
+        <QuickChatLimitError query={maxSessionsQuery} />
 
         {/* Chat content */}
         <div className="flex-1 min-h-0">

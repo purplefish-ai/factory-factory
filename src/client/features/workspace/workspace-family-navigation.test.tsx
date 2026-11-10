@@ -169,6 +169,32 @@ it('offers retry after a failed family read instead of claiming there are no chi
   );
 });
 
+it('keeps listed children when a later poll fails', async () => {
+  let unavailable = false;
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const { open } = await renderMenu((path) => {
+    if (path === 'workspace.listChildren') {
+      if (unavailable) {
+        throw new Error('Offline');
+      }
+      return children;
+    }
+    return { ...parent, status: 'READY', kanbanColumn: 'WAITING' };
+  }, queryClient);
+  await open();
+  await waitForReact(() =>
+    expect(document.querySelector('[role="menu"]')?.textContent).toContain('Auth tests')
+  );
+  unavailable = true;
+  await act(() => queryClient.refetchQueries());
+  await waitForReact(() =>
+    expect(document.querySelector('[role="menu"]')?.textContent).toContain(
+      "Couldn't refresh children. Retry"
+    )
+  );
+  expect(document.querySelector('[role="menu"]')?.textContent).toContain('Auth tests');
+});
+
 it('keeps the live stream state of a parent over its polled HTTP detail', async () => {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const owner = getProjectWorkspaceCacheReconciler(queryClient, 'api');

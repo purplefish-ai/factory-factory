@@ -3,10 +3,10 @@ import { useState } from 'react';
 import { createAppQueryClient } from './query-client';
 import { createTrpcClient, trpc } from './trpc';
 
-/** Hook to get non-archived projects list - used for sidebar visibility */
+/** Non-archived projects; `undefined` until the list loads, and after a failed load. */
 export function useProjects() {
-  const { data: projects, isLoading } = trpc.project.list.useQuery({ isArchived: false });
-  return { projects, isLoading };
+  const { data: projects } = trpc.project.list.useQuery({ isArchived: false });
+  return { projects };
 }
 
 export function TRPCProvider({ children }: { children: React.ReactNode }) {
