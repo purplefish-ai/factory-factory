@@ -486,6 +486,19 @@ export const TurnLimit: Story = {
   },
 };
 
+export const CustomTurnLimit: Story = {
+  render: () => (
+    <SettingsStoryProvider settings={{ turnLimitMinutes: 1 }}>
+      <ChatProviderDefaultsSection />
+    </SettingsStoryProvider>
+  ),
+  play: async ({ canvasElement }) => {
+    await expect(await within(canvasElement).findByLabelText('Turn limit')).toHaveTextContent(
+      '1 minute'
+    );
+  },
+};
+
 export const NativePermissionDefaults: Story = {
   render: () => (
     <SettingsStoryProvider settings={{ defaultWorkspacePermissions: 'RELAXED' }}>

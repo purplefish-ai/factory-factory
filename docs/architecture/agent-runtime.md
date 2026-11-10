@@ -772,9 +772,9 @@ Factory Factory versions; native configuration for other servers is retained.
 Session stop history is durable: `SessionLifecycleEvent` rows are append-only,
 deduplicated by session/attempt key, and rendered as structured chat rows after
 reconnect or restart. Provider history keeps its transcript order; each card
-follows the last provider message timestamped at or before it. Codex turns have
-no elapsed-time deadline; normal Claude turns retain a four-hour deadline.
-Startup/stop incarnation fences protect runtime replacement and shutdown.
+follows the last provider message timestamped at or before it. Claude and Codex
+turns use the configurable Turn limit, defaulting to unlimited. Startup/stop
+incarnation fences protect runtime replacement and shutdown.
 
 Provider protocol schemas are maintained by upstream adapters. Keep focused ACP
 client contract tests when upgrading either dependency, including saved-session

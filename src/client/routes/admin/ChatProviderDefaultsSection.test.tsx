@@ -32,6 +32,7 @@ const mocks = vi.hoisted(() => ({
     },
   },
   userSettings: {
+    turnLimitMinutes: null as number | null,
     defaultSessionProvider: 'CLAUDE',
     defaultClaudeModel: 'sonnet',
     defaultCodexModel: 'default',
@@ -69,6 +70,7 @@ vi.mock('@/client/lib/trpc', () => ({
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mocks.userSettings.turnLimitMinutes = null;
   mocks.userSettings.defaultClaudeModel = 'sonnet';
   mocks.userSettings.defaultCodexModel = 'default';
 });
@@ -195,6 +197,15 @@ describe('ChatProviderDefaultsSection', () => {
       )
     );
     expect(trigger?.textContent).toBe('Default — Opus 4.8 (1M)');
+    root.unmount();
+  });
+  it('renders a saved one-minute turn limit with a singular label', () => {
+    mocks.userSettings.turnLimitMinutes = 1;
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    flushSync(() => root.render(createElement(ChatProviderDefaultsSection)));
+    expect(container.querySelector('#turn-limit')?.textContent).toBe('1 minute');
     root.unmount();
   });
   it('defaults turn limit to Unlimited and saves a selected limit separately', () => {

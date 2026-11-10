@@ -193,7 +193,9 @@ export function ChatProviderDefaultsSection() {
               {settings?.turnLimitMinutes != null &&
                 ![30, 60, 120, 240, 480, 1440].includes(settings.turnLimitMinutes) && (
                   <SelectItem value={String(settings.turnLimitMinutes)}>
-                    {settings.turnLimitMinutes} minutes
+                    {settings.turnLimitMinutes === 1
+                      ? '1 minute'
+                      : `${settings.turnLimitMinutes} minutes`}
                   </SelectItem>
                 )}
             </SelectContent>
