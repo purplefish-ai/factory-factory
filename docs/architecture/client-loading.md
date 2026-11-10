@@ -65,11 +65,13 @@ connect from loopback, so the server keys only on `Accept-Encoding`.
   with the original content type and cache headers, `Content-Encoding`, and
   `Vary: Accept-Encoding`. The SPA fallback serves `index.html` the same way. No
   compression runs at request time.
-- API responses are not compressed: tRPC queries stream `application/jsonl`
-  through `httpBatchStreamLink`, and the remaining JSON is small. The port-share
-  proxy, health routes and WebSockets are not compressed either. Possible
-  follow-ups are compressing the tRPC jsonl stream with a flush per line, and
-  WebSocket `permessage-deflate` for large session replay frames.
+- API responses are not compressed. The browser client sends tRPC queries
+  through `httpBatchStreamLink`, which streams `application/jsonl`; the
+  remaining JSON (mutations and the workspace MCP server's local `fetch` calls)
+  is small. The port-share proxy, health routes and WebSockets are not
+  compressed either. Possible follow-ups are compressing the tRPC jsonl stream
+  with a flush per line, and WebSocket `permessage-deflate` for large session
+  replay frames.
 
 Chunk budgets and `pnpm check:client-chunks` measure the uncompressed files;
 siblings do not match their name patterns. A cold load of the startup closure
