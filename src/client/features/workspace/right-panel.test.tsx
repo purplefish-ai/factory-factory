@@ -55,18 +55,6 @@ vi.mock('@/components/ui/resizable', () => ({
     createElement('div', null, children),
 }));
 
-vi.mock('@/components/ui/tab-button', () => ({
-  TabButton: ({
-    label,
-    isActive,
-    onSelect,
-  }: {
-    label: string;
-    isActive: boolean;
-    onSelect: () => void;
-  }) => createElement('button', { 'aria-pressed': isActive, onClick: onSelect }, label),
-}));
-
 vi.mock('@/components/ui/tooltip', () => ({
   Tooltip: ({ children }: { children: ReactNode }) => createElement('div', null, children),
   TooltipContent: ({ children }: { children: ReactNode }) => createElement('div', null, children),
@@ -407,7 +395,7 @@ describe('RightPanel Agents tab', () => {
     expect(
       [...container.querySelectorAll('button')]
         .find((button) => button.textContent === 'Changes')
-        ?.getAttribute('aria-pressed')
+        ?.getAttribute('aria-selected')
     ).toBe('true');
   });
 

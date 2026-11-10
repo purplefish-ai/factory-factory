@@ -3,11 +3,14 @@ import type { ComponentProps, ReactNode } from 'react';
 import { getStatusToneStyle, type StatusTone } from '@/client/lib/status-tones';
 import { cn } from '@/lib/utils';
 
+const DOT_SIZES = { xs: 'h-1.5 w-1.5', sm: 'h-2 w-2', md: 'h-2.5 w-2.5' } as const;
+
 interface StatusDotProps {
   tone: StatusTone;
   /** Overrides the tone's default animation (only `working` pulses by default). */
   pulse?: boolean;
-  size?: 'sm' | 'md';
+  /** `xs` (6px) sits beside small text, e.g. in tabs and log banners. */
+  size?: keyof typeof DOT_SIZES;
   /** Accessible name; omit when adjacent text already names the status. */
   label?: string;
   className?: string;
@@ -18,7 +21,7 @@ export function StatusDot({ tone, pulse, size = 'sm', label, className }: Status
   const style = getStatusToneStyle(tone);
   const dotClassName = cn(
     'inline-block shrink-0 rounded-full',
-    size === 'sm' ? 'h-2 w-2' : 'h-2.5 w-2.5',
+    DOT_SIZES[size],
     style.dot,
     (pulse ?? style.pulse) && 'animate-pulse motion-reduce:animate-none',
     className

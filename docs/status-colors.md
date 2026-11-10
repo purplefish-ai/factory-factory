@@ -88,6 +88,12 @@ classes. Tinted chips and callouts use `bg-<token>-accent/15` with
 `text-<token>` in light mode and `bg-<token>/10` in dark mode; the Badge
 `success`, `warning`, `info` and `danger` variants reuse the chip classes.
 
+`StatusDot` sizes are `xs` (6px, beside small text such as tabs and log
+banners), `sm` and `md`. Session tabs in the workspace and quick chat take their
+icon, color and label from `deriveSessionTabRuntime`
+([`session-tab-runtime.ts`](../src/client/lib/session-tab-runtime.ts)) and
+render them with `SessionStatusIcon`.
+
 ## Callouts and chips
 
 Each kind of status surface has one component:

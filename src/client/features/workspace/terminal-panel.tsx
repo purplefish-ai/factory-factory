@@ -452,7 +452,6 @@ export function TerminalPanel({
             activeTabId={activeTabId}
             onSelectTab={handleSelectTab}
             onCloseTab={handleCloseTab}
-            showNewButton={false}
           />
         </div>
       )}

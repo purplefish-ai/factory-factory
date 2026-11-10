@@ -4,6 +4,7 @@ import { EmptyState } from '@/client/components/empty-state';
 import { Loading } from '@/client/components/loading';
 import { QueryErrorState } from '@/client/components/query-error-state';
 import { StatusCallout } from '@/client/components/status-callout';
+import { StatusDot } from '@/client/components/status-indicators';
 import { POLL_INTERVAL_MS } from '@/client/lib/query-options';
 import { trpc } from '@/client/lib/trpc';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -128,7 +129,7 @@ function ChangesDecorators({
       )}
       {hasIndicatorEntries && (
         <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-          <span className="h-1.5 w-1.5 rounded-full bg-info shrink-0" />
+          <StatusDot tone="info" size="xs" />
           <span>{indicatorLabel}</span>
         </div>
       )}

@@ -1,6 +1,6 @@
+import type { WorkspaceSessionRuntimeSummary } from '@/client/lib/session-tab-runtime';
 import type { SessionStatus as DbSessionStatus } from '@/shared/core';
 import { sessionUiStatusKindFromSummary } from '@/shared/session-runtime';
-import type { WorkspaceSessionRuntimeSummary } from './session-tab-runtime';
 
 /**
  * Unsent queued messages, tagged with the session they belong to. The chat

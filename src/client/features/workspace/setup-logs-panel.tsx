@@ -1,3 +1,4 @@
+import { StatusDot } from '@/client/components/status-indicators';
 import { useFollowOutput } from '@/client/hooks/use-follow-output';
 import { POLL_INTERVAL_MS } from '@/client/lib/query-options';
 import { trpc } from '@/client/lib/trpc';
@@ -46,10 +47,7 @@ export function SetupLogsPanel({ workspaceId, className }: SetupLogsPanelProps) 
       )}
       {showStatusBanner && (
         <div className="flex items-center gap-2 px-4 py-1.5 border-b text-xs text-muted-foreground">
-          {status === 'PROVISIONING' && (
-            <span className="w-1.5 h-1.5 rounded-full bg-running animate-pulse motion-reduce:animate-none" />
-          )}
-          {status === 'FAILED' && <span className="w-1.5 h-1.5 rounded-full bg-destructive" />}
+          <StatusDot tone={status === 'FAILED' ? 'danger' : 'working'} size="xs" />
           <span>Startup script: {statusLabel}</span>
         </div>
       )}

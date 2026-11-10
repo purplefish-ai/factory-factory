@@ -15,6 +15,7 @@ import { within } from 'storybook/test';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { SubagentIcon } from '@/client/components/subagent-icon';
 import type { SubagentSelection } from '@/client/features/subagents';
+import type { WorkspaceSessionRuntimeSummary } from '@/client/lib/session-tab-runtime';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import {
   cleanupSubagentTabTestEnvironment,
@@ -23,7 +24,6 @@ import {
 } from '@/test-utils/subagent-tabs';
 import { MainViewTabBar } from './main-view-tab-bar';
 import * as tabBarStories from './main-view-tab-bar.stories';
-import type { WorkspaceSessionRuntimeSummary } from './session-tab-runtime';
 import { WorkspacePanelProvider } from './workspace-panel-context';
 
 const { RunningSubagent } = composeStories(tabBarStories);

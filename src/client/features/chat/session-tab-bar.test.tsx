@@ -1,7 +1,7 @@
 import { CheckCircleIcon } from '@phosphor-icons/react/dist/csr/CheckCircle';
 // @vitest-environment jsdom
 import { CircleIcon } from '@phosphor-icons/react/dist/csr/Circle';
-import { PauseCircleIcon } from '@phosphor-icons/react/dist/csr/PauseCircle';
+import { ProhibitIcon } from '@phosphor-icons/react/dist/csr/Prohibit';
 import { PulseIcon } from '@phosphor-icons/react/dist/csr/Pulse';
 import { RobotIcon } from '@phosphor-icons/react/dist/csr/Robot';
 import { XCircleIcon } from '@phosphor-icons/react/dist/csr/XCircle';
@@ -53,7 +53,7 @@ it('shows legacy agent identity in quick chat while preserving ordinary session 
 it.each([
   ['IDLE', 'Idle', CircleIcon],
   ['RUNNING', 'Running', PulseIcon],
-  ['PAUSED', 'Paused', PauseCircleIcon],
+  ['PAUSED', 'Paused', ProhibitIcon],
   ['COMPLETED', 'Completed', CheckCircleIcon],
   ['FAILED', 'Failed', XCircleIcon],
 ] as const)(
@@ -96,6 +96,43 @@ it.each([
       expect(icons[1]?.innerHTML).toBe(expected.querySelectorAll('svg')[1]?.innerHTML);
       expect(icons[1]?.classList.contains('animate-pulse')).toBe(status === 'RUNNING');
       expect(container.querySelector('[role="tab"]')?.textContent).toBe('Custom agent');
+    } finally {
+      actFlushSync(() => root.unmount());
+    }
+  }
+);
+
+it.each([
+  ['IDLE', false, 'Idle', 'text-muted-foreground'],
+  ['PAUSED', false, 'Paused', 'text-muted-foreground'],
+  ['COMPLETED', false, 'Completed', 'text-success'],
+  ['FAILED', false, 'Failed', 'text-destructive'],
+  ['RUNNING', false, 'Running', 'text-running'],
+  // The running session id wins over a stale persisted status.
+  ['IDLE', true, 'Running', 'text-running'],
+] as const)(
+  'labels a %s chat (running id: %s) with the shared session status map',
+  (status, running, label, color) => {
+    Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
+    const container = document.createElement('div');
+    const root = createRoot(container);
+    try {
+      actFlushSync(() =>
+        root.render(
+          <SessionTabBar
+            sessions={[{ id: 'chat', name: 'Chat', status, createdAt: new Date(0) }]}
+            currentSessionId="chat"
+            runningSessionId={running ? 'chat' : null}
+            onSelectSession={() => undefined}
+            onCreateSession={() => undefined}
+            onCloseSession={() => undefined}
+          />
+        )
+      );
+      const icon = within(container).getByRole('img', { name: label });
+      expect(icon.classList.contains(color)).toBe(true);
+      expect(icon.classList.contains('animate-pulse')).toBe(label === 'Running');
+      expect(container.querySelector('[role="tab"]')?.getAttribute('title')).toBe(label);
     } finally {
       actFlushSync(() => root.unmount());
     }

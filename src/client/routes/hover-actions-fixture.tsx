@@ -12,7 +12,7 @@ import { WorkspacePanelProvider } from '@/client/features/workspace/workspace-pa
 import { trpc } from '@/client/lib/trpc';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { SidebarMenuAction } from '@/components/ui/sidebar';
-import { TabButton } from '@/components/ui/tab-button';
+import { TabButton, TabList } from '@/components/ui/tab-button';
 import { TooltipProvider } from '@/components/ui/tooltip';
 
 /** Frontend-only regression surface for actions that used to require hover. */
@@ -104,13 +104,15 @@ export function HoverActionsFixture() {
                 <ScreenshotsPanel workspaceId="hover-fixture" isTakingScreenshots={false} />
               </div>
             </WorkspacePanelProvider>
-            <TabButton
-              icon={null}
-              label="File"
-              isActive={false}
-              onSelect={() => undefined}
-              onClose={() => undefined}
-            />
+            <TabList aria-label="Open tabs">
+              <TabButton
+                label="File"
+                isActive={false}
+                tabStop
+                onSelect={() => undefined}
+                onClose={() => undefined}
+              />
+            </TabList>
             <QueuedMessages
               messages={
                 removed

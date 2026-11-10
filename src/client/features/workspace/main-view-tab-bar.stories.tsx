@@ -2,8 +2,8 @@ import type { Meta, StoryObj } from '@storybook/react';
 import { useEffect, useState } from 'react';
 import { expect, fn, userEvent, waitFor, within } from 'storybook/test';
 import type { SubagentSelection } from '@/client/features/subagents';
+import type { WorkspaceSessionRuntimeSummary } from '@/client/lib/session-tab-runtime';
 import { MainViewTabBar } from './main-view-tab-bar';
-import type { WorkspaceSessionRuntimeSummary } from './session-tab-runtime';
 import { useWorkspacePanel, WorkspacePanelProvider } from './workspace-panel-context';
 
 const runningSelection: SubagentSelection = {

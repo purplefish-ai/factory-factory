@@ -184,13 +184,16 @@ Unified diff parsing removes the terminating stdout newline before splitting
 lines, preserving real blank context lines without fabricating a final row or
 line number in the workspace viewer or PR panel.
 
-The compact terminal tabs stay visible beside Logs. Switching to Logs keeps the
-terminal connection, tab identity and selection alive, while hiding terminal
-content. An empty Terminal tab opens Terminal 1 on click, after the server
-terminal list loads; closing the last terminal while viewing it recreates
-Terminal 1. Closing it from Logs leaves the empty Terminal tab until selected.
-The server always sends the initial terminal list, including an empty list for
-workspaces with no running terminals, so first-terminal creation can proceed.
+The compact terminal tabs stay visible beside Logs. On desktop they share one
+tablist with it, so the arrow keys move between Logs and the terminals; on
+phones Logs is reached from the drawer's tool switcher instead, and the bar
+holds only the terminals. Switching to Logs keeps the terminal connection, tab
+identity and selection alive, while hiding terminal content. An empty Terminal
+tab opens Terminal 1 on click, after the server terminal list loads; closing the
+last terminal while viewing it recreates Terminal 1. Closing it from Logs leaves
+the empty Terminal tab until selected. The server always sends the initial
+terminal list, including an empty list for workspaces with no running terminals,
+so first-terminal creation can proceed.
 
 Workspace terminals never automatically take keyboard focus when created,
 restored, or selected. Click inside the terminal to type, so asynchronous

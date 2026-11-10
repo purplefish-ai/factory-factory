@@ -3,6 +3,7 @@
 import { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { WorkspaceSessionRuntimeSummary } from '@/client/lib/session-tab-runtime';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import {
   cleanupSubagentTabTestEnvironment,
@@ -10,7 +11,6 @@ import {
 } from '@/test-utils/subagent-tabs';
 import { MainViewTabBar } from './main-view-tab-bar';
 import type { SessionQueuedMessageCount } from './session-close-guard';
-import type { WorkspaceSessionRuntimeSummary } from './session-tab-runtime';
 import { WorkspacePanelProvider } from './workspace-panel-context';
 
 const sessions = [

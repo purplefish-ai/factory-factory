@@ -256,7 +256,7 @@ export const LegacyIterationPreference: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await expect(await canvas.findByText('No changes')).toBeVisible();
-    await expect(canvas.queryByRole('button', { name: 'Iterations' })).not.toBeInTheDocument();
+    await expect(canvas.queryByRole('tab', { name: 'Iterations' })).not.toBeInTheDocument();
     // Reading a retired preference does not rewrite it; the next selection does.
     await expect(readStorageItem(`workspace-right-panel-tab-${workspaceId}`)).toBe(
       'auto-iteration'
@@ -268,7 +268,7 @@ export const DeletedTaskPreference: Story = {
     const canvas = within(canvasElement);
     await expect(await canvas.findByText('No changes')).toBeVisible();
     await expect(
-      canvas.queryByRole('button', { name: 'Scheduled automation' })
+      canvas.queryByRole('tab', { name: 'Scheduled automation' })
     ).not.toBeInTheDocument();
     await expect(readStorageItem(`workspace-right-panel-tab-${workspaceId}`)).toBe('changes');
   },
@@ -295,10 +295,17 @@ export const ToolTabLabels: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await canvas.findByText('Scheduled cleanup');
-    await expect(canvas.getByRole('button', { name: 'Scheduled automation' })).toBeVisible();
-    await expect(canvas.queryByRole('button', { name: 'Agent' })).not.toBeInTheDocument();
-    await expect(canvas.queryByRole('button', { name: 'Sessions' })).not.toBeInTheDocument();
-    await userEvent.click(canvas.getByRole('button', { name: 'Subagents' }));
+    await expect(canvas.getByRole('tab', { name: 'Scheduled automation' })).toBeVisible();
+    await expect(canvas.queryByRole('tab', { name: 'Agent' })).not.toBeInTheDocument();
+    await expect(canvas.queryByRole('tab', { name: 'Sessions' })).not.toBeInTheDocument();
+    await userEvent.click(canvas.getByRole('tab', { name: 'Subagents' }));
+    await expect(canvas.getByRole('tab', { name: 'Subagents' })).toHaveAttribute(
+      'aria-selected',
+      'true'
+    );
+    // The icon-only Screenshots tab is part of the same tablist.
+    const tools = canvas.getByRole('tablist', { name: 'Workspace tools' });
+    await expect(within(tools).getByRole('tab', { name: 'Screenshots' })).toBeVisible();
     await expect(await canvas.findByText('Child workspaces')).toBeVisible();
     await expect(await canvas.findByText('No child workspaces yet')).toBeVisible();
   },
@@ -325,7 +332,7 @@ export const OpenSubagentFromActivity: Story = {
     const canvas = within(canvasElement);
     await userEvent.click(canvas.getByRole('button', { name: '1 subagent running' }));
     await expect(canvas.getByRole('tab', { name: /Review code/, selected: true })).toBeVisible();
-    await expect(canvas.queryByRole('button', { name: 'Subagents' })).not.toBeInTheDocument();
+    await expect(canvas.queryByRole('tab', { name: 'Subagents' })).not.toBeInTheDocument();
     await expect(readStorageItem(`workspace-panel-right-visible-${workspaceId}`)).toBe('false');
   },
 };
