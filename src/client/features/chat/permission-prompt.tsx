@@ -221,7 +221,7 @@ function PlanViewToggle({ value, onChange }: PlanViewToggleProps) {
           size="sm"
           pressed={value === mode}
           onPressedChange={() => onChange(mode)}
-          className="h-6 min-w-0 rounded-sm px-2 text-[11px] font-normal text-muted-foreground hover:bg-transparent hover:text-foreground data-[state=on]:bg-muted data-[state=on]:text-foreground"
+          className="h-6 min-w-0 rounded-sm px-2 text-2xs font-normal text-muted-foreground hover:bg-transparent hover:text-foreground data-[state=on]:bg-muted data-[state=on]:text-foreground"
         >
           {mode === 'rendered' ? 'Rendered' : 'Raw'}
         </Toggle>

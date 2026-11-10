@@ -72,7 +72,7 @@ export function WorkspacePrMenu({
             variant="ghost"
             size={compact ? 'xs' : 'compact'}
             aria-label={`PRs (${prs.length})`}
-            className={compact ? 'px-0 text-[11px]' : undefined}
+            className={compact ? 'px-0 text-2xs' : undefined}
             onClick={(event) => event.stopPropagation()}
             onPointerDown={(event) => event.stopPropagation()}
             onPointerUp={(event) => event.stopPropagation()}

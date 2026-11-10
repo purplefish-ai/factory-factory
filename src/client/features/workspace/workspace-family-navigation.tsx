@@ -262,7 +262,7 @@ export function WorkspaceFamilyMenu({
             title="Navigate parent and child workspaces"
             className={cn(
               'pointer-events-auto relative z-10 shrink-0 px-1.5 text-info',
-              compact && 'text-[11px]'
+              compact && 'text-2xs'
             )}
           >
             <TreeStructureIcon aria-hidden />
