@@ -17,7 +17,7 @@ const overflowTools = [
   { value: 'inbox', label: 'Inbox' },
   { value: 'agents', label: 'Subagents' },
   { value: 'screenshots', label: 'Screenshots' },
-  { value: 'periodic-task', label: 'Scheduled automation' },
+  { value: 'periodic-task', label: 'Runs' },
   { value: 'logs', label: 'Logs' },
 ] as const;
 

@@ -1,4 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react';
+import { expect, userEvent, within } from 'storybook/test';
 import { Button } from '@/components/ui/button';
 import { createRecoveryImportReport } from '@/shared/recovery-import-report';
 import { recoveryMetadataSchema } from '@/shared/schemas/recovery-envelope.schema';
@@ -214,6 +215,16 @@ export const PeriodicHistoryAllSkipped: Story = {
 };
 
 export const AutomationDefinitionBodiesRecovery: Story = {
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(canvas.getByRole('button', { name: 'Show import results' }));
+    const dialog = within(await within(document.body).findByRole('alertdialog'));
+    await expect(
+      dialog.getByRole('region', { name: 'Scheduled run history recovery' })
+    ).toBeVisible();
+    await expect(dialog.getByText('Scheduled runs: 3 imported, 6 skipped')).toBeVisible();
+    await expect(dialog.getByText(/event-triggered run history are excluded/)).toBeVisible();
+  },
   args: {
     result: {
       ...mixed,

@@ -269,7 +269,9 @@ ledger entry, session queue delivery or receipt protocol.
 The UI calls saved instructions and triggers **automations**, each execution a
 **run**, and the AI carrying out the work an **agent**. Existing `/agents` URLs
 and stored identifiers retain their names for compatibility. Event automation
-procedures use the `automation` tRPC namespace.
+procedures use the `automation` tRPC namespace. Tool tabs use **Runs** and
+history headings use **Run history**, independent of trigger kind. **Scheduled**
+and **Event-triggered** describe the trigger or the creation choice.
 
 The mixed Automations page at `/projects/:slug/agents` groups definitions under
 **Scheduled** and **Event-triggered** headings. Event pagination stays in its
@@ -345,19 +347,19 @@ workspaces and conversations remain available. Failed requests show an error and
 preserve form drafts. The management page polls task/history data without
 replacing unsaved edits.
 
-Both the management page and the workspace's **Scheduled automation** origin
-panel use the shared run history query, showing up to 50 recent runs with
-status, start time, workspace/PR links and errors. Workspace links use the
-automation owner's slug and remain available for non-null IDs, including
-archived workspaces. A running run without a workspace ID says no workspace yet;
-a terminal run without one says workspace unavailable. The origin panel links
-back to automation management.
+Both the management page and the workspace's **Runs** origin panel use the
+shared run history query, showing up to 50 recent runs with status, start time,
+workspace/PR links and errors. Workspace links use the automation owner's slug
+and remain available for non-null IDs, including archived workspaces. A running
+run without a workspace ID says no workspace yet; a terminal run without one
+says workspace unavailable. The origin panel links back to automation
+management.
 
 The workspace's provider subagent/child-workspace tab is **Subagents**. Stored
-panel keys remain `agents` for Subagents and `periodic-task` for Scheduled
-automation. Once workspace data loads, an unavailable origin tab falls back to
-Changes, as does a retired auto-iteration preference. Deleting a definition
-therefore cannot leave that panel blank.
+panel keys remain `agents` for Subagents and `periodic-task` for Runs. Once
+workspace data loads, an unavailable origin tab falls back to Changes, as does a
+retired auto-iteration preference. Deleting a definition therefore cannot leave
+that panel blank.
 
 Service capsule: `src/backend/services/periodic-task/`.
 
