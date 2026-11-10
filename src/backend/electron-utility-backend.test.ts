@@ -66,6 +66,20 @@ describe('runElectronUtilityBackend', () => {
     expect(harness.exit).not.toHaveBeenCalled();
   });
 
+  it('waits for an asynchronous backup and migration before composing the server', async () => {
+    const migration = deferred<void>();
+    const harness = createHarness({ migrate: vi.fn(() => migration.promise) });
+
+    const running = runElectronUtilityBackend(harness.deps);
+    await Promise.resolve();
+    expect(harness.deps.createServer).not.toHaveBeenCalled();
+
+    migration.resolve();
+    await running;
+    expect(harness.deps.createServer).toHaveBeenCalledTimes(1);
+    expect(harness.posted).toEqual([{ type: 'ready', url: 'http://localhost:3001' }]);
+  });
+
   it('reports migration failures and exits without creating a server', async () => {
     vi.useFakeTimers();
     try {

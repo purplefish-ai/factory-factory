@@ -5,7 +5,7 @@ import type { Socket } from 'node:net';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
 import chalk from 'chalk';
-import { runMigrations as runDbMigrations } from '@/backend/migrate';
+import { runMigrationsWithBackup } from '@/backend/migrate-with-backup';
 import { getCurrentProcessEnv } from '@/backend/services/logger.service';
 import {
   type AuthenticationCheck,
@@ -174,9 +174,9 @@ class BruteForceGuard {
   }
 }
 
-function runMigrations(projectRoot: string, databasePath: string): void {
+function runMigrations(projectRoot: string, databasePath: string): Promise<void> {
   const migrationsPath = join(projectRoot, 'prisma', 'migrations');
-  runDbMigrations({
+  return runMigrationsWithBackup({
     databasePath,
     migrationsPath,
     log: () => {
@@ -778,7 +778,7 @@ export async function runProxyCommand({
   const databasePath = resolveDatabasePath();
   ensureDataDir(databasePath);
   try {
-    runMigrations(projectRoot, databasePath);
+    await runMigrations(projectRoot, databasePath);
   } catch (error) {
     console.error(chalk.red(`\n❌ ${describeMigrationFailure(error)}`));
     detachSignalHandlers();

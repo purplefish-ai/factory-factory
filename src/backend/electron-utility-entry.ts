@@ -11,7 +11,7 @@
 import { createApplication, disposeApplication } from './app-context';
 import { type ParentPortLike, runElectronUtilityBackend } from './electron-utility-backend';
 import { toError } from './lib/error-utils';
-import { runMigrations } from './migrate';
+import { runMigrationsWithBackup } from './migrate-with-backup';
 import { createServer } from './server';
 import { configService } from './services/config.service';
 import { createLogger } from './services/logger.service';
@@ -36,12 +36,15 @@ void runElectronUtilityBackend({
   parentPort,
   process,
   logger,
-  migrate: () => {
+  migrate: async () => {
     const migrationsPath = configService.getMigrationsPath();
     if (!migrationsPath) {
       throw new Error('MIGRATIONS_PATH is required for the desktop backend');
     }
-    runMigrations({ databasePath: configService.getDatabasePath(), migrationsPath });
+    await runMigrationsWithBackup({
+      databasePath: configService.getDatabasePath(),
+      migrationsPath,
+    });
   },
   createServer: async () => {
     const application = createApplication();

@@ -1,10 +1,10 @@
 import { execFile, type ChildProcess, type Serializable } from 'node:child_process';
 import { mkdirSync, rmSync } from 'node:fs';
-import { chmod, copyFile, mkdir, readFile, rm } from 'node:fs/promises';
+import { copyFile, mkdir, readFile, rm } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { promisify } from 'node:util';
-import Database from 'better-sqlite3';
 import { z } from 'zod';
+import { snapshotSqliteDatabase } from '@/backend/lib/sqlite-snapshot';
 import {
   applicationUpdateStatusSchema,
   updateSupervisorMessageSchema,
@@ -119,14 +119,8 @@ export async function runSupervisedServeSession(options: ServeOptions & { databa
       }
       backupPath = join(dirname(supervisor.recoveryPath), 'database-backup');
       const snapshot = backupPath;
-      const database = new Database(options.databasePath, { readonly: true, fileMustExist: true });
-      try {
-        await database.backup(snapshot);
-        await chmod(snapshot, 0o600);
-        snapshotExists = true;
-      } finally {
-        database.close();
-      }
+      await snapshotSqliteDatabase(options.databasePath, snapshot);
+      snapshotExists = true;
       return async () => {
         await copyFile(snapshot, options.databasePath);
         // A failed migration can leave a journal which must not be replayed over the snapshot.

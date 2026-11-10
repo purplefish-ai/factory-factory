@@ -2,7 +2,7 @@ import { type ChildProcess, spawn } from 'node:child_process';
 import { join } from 'node:path';
 import chalk from 'chalk';
 import type { Command } from 'commander';
-import { runMigrations } from '@/backend/migrate';
+import { runMigrationsWithBackup } from '@/backend/migrate-with-backup';
 import { getCurrentProcessEnv } from '@/backend/services/logger.service';
 import { stopChild, watchChild } from './child-lifecycle';
 import { resolveDatabasePath } from './database-path';
@@ -37,7 +37,7 @@ export async function runTailscaleSession(params: {
     signal.throwIfAborted();
     const databasePath = resolveDatabasePath({ databasePath: options.databasePath });
     ensureDataDir(databasePath);
-    runMigrations({
+    await runMigrationsWithBackup({
       databasePath,
       migrationsPath: join(projectRoot, 'prisma', 'migrations'),
       log: console.log,

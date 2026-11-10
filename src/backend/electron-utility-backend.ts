@@ -55,8 +55,8 @@ export interface ElectronUtilityBackendDependencies {
   parentPort: ParentPortLike;
   process: UtilityProcessLike;
   logger: UtilityBackendLogger;
-  /** Applies pending SQLite migrations before any backend module opens the database. */
-  migrate(): void;
+  /** Backs up and applies pending SQLite migrations before any backend module opens the database. */
+  migrate(): void | Promise<void>;
   /** Composes the application and server, and registers the server instance. */
   createServer(): Promise<BackendServer>;
   errorExitDelayMs?: number;
@@ -105,7 +105,7 @@ export async function runElectronUtilityBackend({
   });
 
   try {
-    migrate();
+    await migrate();
     server = await createServer();
     const url = await server.start();
     if (shutdownRequested) {
