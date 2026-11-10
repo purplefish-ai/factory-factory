@@ -12,6 +12,11 @@ const MANUAL_FOCUS_MEDIA_QUERY = `(max-width: ${WORKSPACE_DRAWER_BREAKPOINT - 1}
 
 const DEFAULT_TERMINAL_FONT_FAMILY = 'Menlo, Monaco, "Courier New", monospace';
 
+// Erase the screen (ED 2) and scrollback (ED 3), then home the cursor. Sent
+// through write() so it is parsed after any chunks still queued in xterm;
+// terminal.clear() would run synchronously, ahead of them.
+export const TERMINAL_CLEAR_SEQUENCE = '\x1b[2J\x1b[3J\x1b[H';
+
 // =============================================================================
 // Types
 // =============================================================================
@@ -158,25 +163,16 @@ export function TerminalInstance({
       return;
     }
     // A fresh xterm is empty; one that already shows another stream is cleared.
-    if (attachedOutputRef.current !== null) {
-      terminal.clear();
-    }
+    const clearPrefix = attachedOutputRef.current === null ? '' : TERMINAL_CLEAR_SEQUENCE;
     attachedOutputRef.current = output;
-    const snapshot = output.snapshot();
-    if (snapshot.length > 0) {
-      terminal.write(snapshot);
+    const replay = clearPrefix + output.snapshot();
+    if (replay.length > 0) {
+      terminal.write(replay);
     }
     return output.subscribe((event) => {
-      if (event.type === 'append') {
-        terminal.write(event.data);
-        return;
-      }
-      // The retained output was replaced, e.g. by a reconnect buffer that does
-      // not extend what this terminal already shows.
-      terminal.clear();
-      if (event.output.length > 0) {
-        terminal.write(event.output);
-      }
+      // A reset means the retained output was replaced, e.g. by a reconnect
+      // buffer that does not extend what this terminal already shows.
+      terminal.write(event.type === 'append' ? event.data : TERMINAL_CLEAR_SEQUENCE + event.output);
     });
   }, [output]);
 

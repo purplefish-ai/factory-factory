@@ -57,6 +57,20 @@ export const ReconnectReplay: Story = {
 
 export const RollingWindowReplay: Story = {
   render: () => <ReplayPreview truncated />,
+  play: async ({ canvasElement }) => {
+    const rows = () => canvasElement.querySelector('.xterm-rows')?.textContent ?? '';
+    await waitFor(async () => {
+      await expect(rows()).toContain('Running 12 tests');
+    });
+    await userEvent.click(
+      within(canvasElement).getByRole('button', { name: 'Replay reconnect buffer' })
+    );
+    // The replacement does not extend the shown output, so it repaints.
+    await waitFor(async () => {
+      await expect(rows()).toContain('Older output has rolled out');
+    });
+    await expect(rows()).not.toContain('Running 12 tests');
+  },
 };
 
 const STREAM_LINE_COUNT = 2000;
@@ -74,7 +88,7 @@ function StreamingPreview() {
   return (
     <div className="w-[700px] space-y-3">
       <p className="text-sm text-muted-foreground">
-        Chunks past the 128 KiB replay window are appended to xterm, not repainted.
+        Chunks past the 128K-character replay window are appended to xterm, not repainted.
       </p>
       <Button onClick={stream}>Stream past the replay window</Button>
       <div className="h-[280px] overflow-hidden rounded border bg-background">

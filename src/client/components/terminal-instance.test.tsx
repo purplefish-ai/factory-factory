@@ -8,7 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { TERMINAL_OUTPUT_MAX_CHARS } from '@/client/lib/rolling-output';
 import { TerminalOutputStream } from '@/client/lib/terminal-output-stream';
 import { DEFAULT_APPEARANCE } from '@/shared/appearance';
-import { TerminalInstance } from './terminal-instance';
+import { TERMINAL_CLEAR_SEQUENCE, TerminalInstance } from './terminal-instance';
 
 const mocks = vi.hoisted(() => ({
   appearance: {
@@ -330,8 +330,12 @@ describe('TerminalInstance', () => {
     });
     output.replace('server\r\n');
 
-    expect(mocks.clear).toHaveBeenCalledTimes(1);
-    expect(mocks.write.mock.calls).toEqual([['local\r\n'], ['server\r\n']]);
+    // Cleared in-band so chunks xterm has not parsed yet cannot land afterwards.
+    expect(mocks.clear).not.toHaveBeenCalled();
+    expect(mocks.write.mock.calls).toEqual([
+      ['local\r\n'],
+      [`${TERMINAL_CLEAR_SEQUENCE}server\r\n`],
+    ]);
 
     root.unmount();
   });
@@ -350,8 +354,12 @@ describe('TerminalInstance', () => {
     second.append(' live');
 
     expect(vi.mocked(Terminal)).toHaveBeenCalledOnce();
-    expect(mocks.clear).toHaveBeenCalledTimes(1);
-    expect(mocks.write.mock.calls).toEqual([['first'], ['second'], [' live']]);
+    expect(mocks.clear).not.toHaveBeenCalled();
+    expect(mocks.write.mock.calls).toEqual([
+      ['first'],
+      [`${TERMINAL_CLEAR_SEQUENCE}second`],
+      [' live'],
+    ]);
 
     root.unmount();
   });

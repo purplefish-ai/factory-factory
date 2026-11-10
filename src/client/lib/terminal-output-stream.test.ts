@@ -41,6 +41,19 @@ describe('TerminalOutputStream', () => {
     expect(listener.mock.calls).toEqual([[{ type: 'append', data: 'missed\r\n' }]]);
   });
 
+  it('emits a reset when a capped window shifts, even if the replacement extends it', () => {
+    const full = 'd'.repeat(TERMINAL_OUTPUT_MAX_CHARS + 10);
+    const stream = new TerminalOutputStream(full);
+    const listener = vi.fn();
+    stream.subscribe(listener);
+
+    stream.replace(`${full}more`);
+
+    expect(listener.mock.calls).toEqual([[{ type: 'reset', output: stream.snapshot() }]]);
+    expect(stream.snapshot().endsWith('more')).toBe(true);
+    expect(stream.snapshot().length).toBe(TERMINAL_OUTPUT_MAX_CHARS);
+  });
+
   it('emits a bounded reset when a replacement does not extend the current output', () => {
     const stream = new TerminalOutputStream('local');
     const listener = vi.fn();
