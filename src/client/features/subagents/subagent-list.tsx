@@ -274,7 +274,7 @@ export function SubagentList({
         size="compact"
         icon={RobotIcon}
         title="Subagents unavailable"
-        description="This session’s provider does not currently make subagents available. History may be unavailable after the session stops."
+        description="Subagent browsing is not currently available for this session. History may be unavailable after the session stops."
       />
     );
   }
