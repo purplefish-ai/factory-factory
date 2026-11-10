@@ -177,6 +177,7 @@ function SubagentRow({
 function ListError({ error }: { error: { message: string; onRetry: () => void } }) {
   return (
     <StatusCallout
+      role="alert"
       tone="danger"
       size="sm"
       className="mx-3 my-3"

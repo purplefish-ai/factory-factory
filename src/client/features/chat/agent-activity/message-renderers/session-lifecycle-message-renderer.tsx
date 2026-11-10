@@ -17,10 +17,7 @@ const ERROR_REASONS = new Set(['PROVIDER_ERROR', 'UNEXPECTED_EXIT']);
 
 function LifecycleTime({ timestamp, className }: { timestamp: string; className?: string }) {
   return (
-    <time
-      className={cn('shrink-0 whitespace-nowrap text-xs opacity-80', className)}
-      dateTime={timestamp}
-    >
+    <time className={cn('shrink-0 whitespace-nowrap text-xs', className)} dateTime={timestamp}>
       {new Intl.DateTimeFormat(undefined, {
         hour: 'numeric',
         minute: '2-digit',

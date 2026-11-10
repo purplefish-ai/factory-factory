@@ -11,7 +11,7 @@ export interface StatusCalloutProps extends Omit<ComponentProps<'div'>, 'title'>
    * (such as a `Spinner`) to render it as is, or `false` for none.
    */
   icon?: boolean | Icon | ReactElement;
-  /** Bold first line; may be a heading element. */
+  /** Medium-weight first line; may be a heading element. */
   title?: ReactNode;
   /**
    * The message, under the title. All callout text uses the tone color, which
@@ -57,6 +57,7 @@ export function StatusCallout({
   const hasTitle = title !== undefined && title !== null && title !== false;
   return (
     <div
+      {...props}
       data-status-tone={tone}
       data-slot="status-callout"
       className={cn(
@@ -67,7 +68,6 @@ export function StatusCallout({
         getStatusToneStyle(tone).surface,
         className
       )}
-      {...props}
     >
       <CalloutIcon tone={tone} icon={icon} size={size} />
       <div className="min-w-0 flex-1 basis-48 break-words">

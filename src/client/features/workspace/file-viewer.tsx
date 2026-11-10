@@ -120,13 +120,13 @@ function FileViewerWarnings({ truncated, fileSizeLabel, isBinary }: FileViewerWa
   return (
     <>
       {truncated && (
-        <StatusCallout tone="warning" variant="strip">
+        <StatusCallout tone="warning" variant="strip" className="px-4">
           File truncated to 1MB. Actual size: {fileSizeLabel}
         </StatusCallout>
       )}
 
       {isBinary && (
-        <StatusCallout tone="neutral" variant="strip" icon={WarningIcon}>
+        <StatusCallout tone="neutral" variant="strip" icon={WarningIcon} className="px-4">
           Binary file cannot be displayed
         </StatusCallout>
       )}

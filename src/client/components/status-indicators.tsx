@@ -87,8 +87,8 @@ export function StatusChip({
   const ChipIcon = icon === true ? style.icon : icon || null;
   return (
     <span
-      data-status-tone={tone}
       {...props}
+      data-status-tone={tone}
       className={cn(
         'inline-flex w-fit shrink-0 items-center gap-1 rounded-sm border font-medium whitespace-nowrap',
         size === 'sm' ? 'px-1.5 py-0.5 text-2xs' : 'px-2 py-0.5 text-xs',

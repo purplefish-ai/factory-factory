@@ -46,11 +46,13 @@ describe('ScriptFailedBanner', () => {
     const message = Array.from(container.querySelectorAll('p')).find((node) =>
       node.textContent?.startsWith('Init script failed:')
     );
-    const messageColumn = message?.parentElement?.parentElement;
-    expect(messageColumn?.className).toContain('break-words');
+    const messageColumn = message?.closest('.break-words');
     expect(messageColumn?.className).toContain('min-w-0');
+    expect(banner?.contains(messageColumn ?? null)).toBe(true);
 
-    const actionRow = messageColumn?.nextElementSibling;
+    const actionRow = Array.from(banner?.children ?? []).find((child) =>
+      child.textContent?.includes('Show output')
+    );
     expect(actionRow?.className).toContain('flex-wrap');
     expect(actionRow?.textContent).toContain('Show output');
     expect(actionRow?.textContent).toContain('Retry');

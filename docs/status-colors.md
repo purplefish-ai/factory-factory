@@ -101,14 +101,14 @@ Each kind of status surface has one component:
 | A query that failed                      | `QueryErrorState` / `QueryRefreshError` (both callouts)  |
 
 `StatusCallout` takes a `tone`, an optional `icon` (the tone's icon by default,
-a specific Phosphor icon, an element such as `Spinner`, or `false`), a bold
-`title`, the message as children and trailing `action` controls, which wrap
-under the message in narrow containers. `variant="card"` is a rounded box;
-`variant="strip"` spans the top of a pane with only a bottom border. `size="sm"`
-uses `text-xs` for dense panels. All callout text uses the tone color: the
-palette test checks it on every tone's surface, while the foreground color falls
-below AA on some tints (Solarized). Pass `role="alert"` for an error raised by
-an action and `role="status"` for a polite live update.
+a specific Phosphor icon, an element such as `Spinner`, or `false`), a
+medium-weight `title`, the message as children and trailing `action` controls,
+which wrap under the message in narrow containers. `variant="card"` is a rounded
+box; `variant="strip"` spans the top of a pane with only a bottom border.
+`size="sm"` uses `text-xs` for dense panels. All callout text uses the tone
+color: the palette test checks it on every tone's surface, while the foreground
+color falls below AA on some tints (Solarized). Pass `role="alert"` for an error
+raised by an action and `role="status"` for a polite live update.
 
 `StatusChip` uses `text-2xs` at its default `sm` size and `text-xs` at `md`,
 with an optional tone icon, and passes span attributes through (`title`, `role`,
