@@ -48,6 +48,33 @@ including when folded into the entry or a shared chunk. Missing metadata fails
 closed. Dynamic imports are excluded. To measure another production build, pass
 its assets directory: `pnpm check:client-chunks /tmp/client-build/assets`.
 
+## Compression
+
+Remote clients (`tailscale serve`, `ff proxy`, the mobile web app) receive the
+client compressed; loopback and Electron get the same bytes, which costs them
+nothing. Peer addresses cannot identify remote clients because the tunnels
+connect from loopback, so the server keys only on `Accept-Encoding`.
+
+- `vite build` runs `scripts/precompress-assets.ts`, which writes `.br`
+  (quality 11) and `.gz` (level 9) siblings beside every text-like output file
+  of at least 1 KiB that compresses by 10% or more. Images, woff2 and audio are
+  skipped. The siblings ship in the npm package and the desktop app.
+- `createPrecompressedStatic` in `src/backend/middleware/` lists the siblings
+  once at startup and serves one when the client accepts it, preferring Brotli,
+  with the original content type and cache headers, `Content-Encoding`, and
+  `Vary: Accept-Encoding`. The SPA fallback serves `index.html` the same way. No
+  compression runs at request time for static files.
+- `/api/trpc` compresses complete JSON responses of 1 KiB or more (Brotli
+  quality 4 or gzip level 1). Queries use `httpBatchStreamLink`, whose
+  `application/jsonl` responses are never buffered or compressed, so in practice
+  this covers mutations and non-streaming callers. The port-share proxy, health
+  routes and WebSockets are not compressed.
+
+Chunk budgets and `pnpm check:client-chunks` measure the uncompressed files;
+siblings do not match their name patterns. A cold load of the startup closure
+(`index.html`, entry CSS and the static JS import graph) is about 1.26 MB raw,
+330 KB with Brotli and 375 KB with gzip.
+
 ## Loading, empty and error states
 
 Pick the loading pattern by what the user is waiting for:
