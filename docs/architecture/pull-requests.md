@@ -18,22 +18,24 @@ owner/repo matching. Undefined input retains the global review-count bridge and
 snapshot contract.
 
 `GitHubCLIService.listReviewRequests` caches each search for two minutes, keyed
-by lowercase repository (the global search has its own entry), so every window
-and the review-count bridge share one `gh api graphql` search per repository per
-interval. The cache is stale-while-revalidate: a stale entry is returned at once
-while one background search refreshes it, and a failed refresh keeps the stale
-entry until a later read succeeds. The page's Refresh and Retry buttons send
-`forceRefresh`, which rechecks gh health and waits for a new search, then fill
-the shared query key. A submitted review drops every cached entry and stops
-searches already running from refilling it, so the next read searches again. New
-requests made on GitHub can therefore take up to about four minutes to appear
-without Refresh.
+by lowercase repository, so every window shares one `gh api graphql` search per
+repository per interval. The review-count bridge's global search has its own
+entry and runs at most once per interval. The cache is stale-while-revalidate: a
+stale entry is returned at once while one background search refreshes it, and a
+failed refresh keeps the stale entry until a later read succeeds. The page's
+Refresh and Retry buttons send `forceRefresh`, which rechecks gh health and
+waits for a new search, then fill the shared query key. A submitted review drops
+every cached entry and stops searches already running from refilling it, so the
+next read searches again. New requests made on GitHub can therefore take up to
+about four minutes to appear without Refresh.
 
 The `gh` health check (`--version` and `auth status`) caches a healthy result
 for five minutes and an unhealthy one for 30 seconds, so `gh auth login` is
 noticed quickly. A `gh` command failing with missing authentication or a missing
-binary marks a healthy result stale. Health and settings checks that pass
-`forceRefresh` (the CLI health Recheck) still run immediately.
+binary discards a healthy result, so the next read waits for a new check, and
+drops cached review requests that may belong to the previous account. Health and
+settings checks that pass `forceRefresh` (the CLI health Recheck) still run
+immediately.
 
 Legacy `/reviews` links redirect to the selected project. Explicit `repo` links
 resolve a configured owner (selected match, active match, then archived match)

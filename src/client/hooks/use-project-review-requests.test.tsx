@@ -20,8 +20,13 @@ function Consumer() {
   return null;
 }
 let latest: ReturnType<typeof useProjectReviewRequests> | undefined;
+let sidebar: ReturnType<typeof useProjectReviewRequests> | undefined;
 function Probe() {
   latest = useProjectReviewRequests(project);
+  return null;
+}
+function SidebarProbe() {
+  sidebar = useProjectReviewRequests(project);
   return null;
 }
 function Providers({
@@ -105,6 +110,7 @@ it('polls on the server cache cadence and forces a fresh search on explicit refr
       root.render(
         <Providers client={client} queryClient={queryClient}>
           <Probe />
+          <SidebarProbe />
         </Providers>
       )
     );
@@ -117,16 +123,22 @@ it('polls on the server cache cadence and forces a fresh search on explicit refr
     expect(REVIEW_REQUESTS_POLL_MS).toBe(120_000);
     expect(latest?.prs.map((row) => row.number)).toEqual([1]);
 
-    await act(async () => {
-      await latest?.refresh();
+    // Repeated clicks while a refresh runs join it instead of queueing more gh searches.
+    actFlushSync(() => {
+      latest?.refresh();
+      latest?.refresh();
     });
+    // The forced result fills the shared page/sidebar key without another poll.
+    await act(() =>
+      vi.waitFor(() => {
+        expect(latest?.prs.map((row) => row.number)).toEqual([2]);
+        expect(sidebar?.prs.map((row) => row.number)).toEqual([2]);
+      })
+    );
     expect(requests.mock.calls).toEqual([
       [{ projectId: 'p' }],
       [{ projectId: 'p', forceRefresh: true }],
     ]);
-    // The forced result fills the shared page/sidebar key without another poll.
-    await act(() => vi.waitFor(() => expect(latest?.prs.map((row) => row.number)).toEqual([2])));
-    expect(requests).toHaveBeenCalledTimes(2);
     expect(queryClient.getQueryCache().getAll()).toHaveLength(1);
   } finally {
     actFlushSync(() => root.unmount());

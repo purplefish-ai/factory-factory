@@ -116,16 +116,19 @@ class GitHubCLIService {
     });
   }
 
-  /** A logged-out or missing gh makes the next health read recheck instead of trusting the cache. */
+  /**
+   * A logged-out or missing gh makes the next health read wait for a new check,
+   * and drops review requests that may belong to the previous account.
+   */
   private markHealthStaleAfterFailure(error: unknown): void {
-    const cached = this.cachedHealth;
-    if (!cached?.result.isAuthenticated) {
+    if (!this.cachedHealth?.result.isAuthenticated) {
       return;
     }
     const missingCli =
       typeof error === 'object' && error !== null && 'code' in error && error.code === 'ENOENT';
     if (missingCli || classifyError(error) === 'auth_required') {
-      this.cachedHealth = { ...cached, fetchedAt: 0 };
+      this.cachedHealth = null;
+      this.reviewRequests.invalidate();
     }
   }
 

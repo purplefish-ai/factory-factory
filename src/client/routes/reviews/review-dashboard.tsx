@@ -472,7 +472,7 @@ export function ReviewDashboard({ project }: { project: ReviewProject }) {
       <ReviewRouteState
         error={error?.message ?? data?.error ?? "Couldn't load reviews"}
         onRetry={() => {
-          void refresh();
+          refresh();
         }}
       />
     );
@@ -482,7 +482,7 @@ export function ReviewDashboard({ project }: { project: ReviewProject }) {
       <ReviewRouteState
         error="GitHub CLI must be installed and authenticated to load reviews"
         onRetry={() => {
-          void refresh();
+          refresh();
         }}
       />
     );
@@ -494,7 +494,7 @@ export function ReviewDashboard({ project }: { project: ReviewProject }) {
     return (
       <ReviewsEmptyState
         onRefresh={() => {
-          void refresh();
+          refresh();
         }}
       />
     );

@@ -63,6 +63,7 @@ afterEach(() => {
 it('serves repeated polls from one search per repository until the entry is stale', async () => {
   vi.mocked(execFile)
     .mockResolvedValueOnce(searchPage(1) as never)
+    .mockResolvedValueOnce(searchPage(5) as never)
     .mockResolvedValueOnce(searchPage(9) as never);
 
   expect(await numbers('o/r')).toEqual([1]);
@@ -72,8 +73,11 @@ it('serves repeated polls from one search per repository until the entry is stal
   expect(execFile).toHaveBeenCalledTimes(1);
 
   // Another repository and the global search are cached separately.
+  expect(await numbers('other/repo')).toEqual([5]);
   expect(await numbers()).toEqual([9]);
-  expect(execFile).toHaveBeenCalledTimes(2);
+  expect(await numbers('o/r')).toEqual([1]);
+  expect(await numbers('other/repo')).toEqual([5]);
+  expect(execFile).toHaveBeenCalledTimes(3);
 });
 
 it('returns the stale entry while one background search refreshes it', async () => {
@@ -117,6 +121,43 @@ it('searches again for an explicit refresh even when the entry is fresh', async 
   expect(await numbers('o/r', { forceRefresh: true })).toEqual([2]);
   expect(await numbers('o/r')).toEqual([2]);
   expect(execFile).toHaveBeenCalledTimes(2);
+});
+
+it('does not let an explicit refresh reuse a background search that was already running', async () => {
+  const running = deferred<unknown>();
+  vi.mocked(execFile)
+    .mockResolvedValueOnce(searchPage(1) as never)
+    .mockReturnValueOnce(running.promise as never)
+    .mockResolvedValueOnce(searchPage(3) as never);
+
+  await numbers('o/r');
+  now = REVIEW_REQUEST_CACHE_TTL_MS;
+  await numbers('o/r'); // starts the background search
+  const forced = numbers('o/r', { forceRefresh: true });
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  expect(execFile).toHaveBeenCalledTimes(2);
+
+  running.resolve(searchPage(2));
+  expect(await forced).toEqual([3]);
+  expect(await numbers('o/r')).toEqual([3]);
+  expect(execFile).toHaveBeenCalledTimes(3);
+});
+
+it('drops cached requests when gh reports the account is no longer authenticated', async () => {
+  vi.mocked(execFile)
+    .mockResolvedValueOnce({ stdout: 'gh version 2.20.0', stderr: '' } as never)
+    .mockResolvedValueOnce({ stdout: '', stderr: '' } as never)
+    .mockResolvedValueOnce(searchPage(1) as never)
+    .mockRejectedValueOnce(
+      Object.assign(new Error('Command failed'), { stderr: 'To get started, run: gh auth login' })
+    )
+    .mockResolvedValueOnce(searchPage(4) as never);
+
+  await githubCLIService.checkHealth();
+  await numbers('o/r');
+  await expect(githubCLIService.getPRPreview('o/r', 1)).rejects.toThrow();
+  expect(await numbers('o/r')).toEqual([4]);
+  expect(execFile).toHaveBeenCalledTimes(5);
 });
 
 it('drops cached requests after a submitted review, including searches already running', async () => {

@@ -1,5 +1,5 @@
-import { useCallback } from 'react';
-import { toast } from 'sonner';
+import { useCallback, useRef } from 'react';
+import { runInBackground } from '@/client/lib/background-task';
 import { trpc } from '@/client/lib/trpc';
 import { githubPRPreviewInputSchema } from '@/shared/github-pr-preview';
 
@@ -35,17 +35,23 @@ export function useProjectReviewRequests(project: ReviewProject | undefined) {
     }
   );
   const utils = trpc.useUtils();
+  const refreshing = useRef<Promise<void> | null>(null);
   // Explicit refreshes bypass the server cache and gh health cache, then fill the shared key.
-  const refresh = useCallback(async () => {
-    try {
-      const result = await utils.client.prReview.listReviewRequests.query({
-        projectId,
-        forceRefresh: true,
-      });
-      utils.prReview.listReviewRequests.setData({ projectId }, result);
-    } catch {
-      toast.error("Couldn't refresh reviews.");
+  // Clicks while one is running join it rather than queueing another gh search.
+  const refresh = useCallback(() => {
+    if (refreshing.current !== null) {
+      return;
     }
+    const task = utils.client.prReview.listReviewRequests
+      .query({ projectId, forceRefresh: true })
+      .then((result) => {
+        utils.prReview.listReviewRequests.setData({ projectId }, result);
+      })
+      .finally(() => {
+        refreshing.current = null;
+      });
+    refreshing.current = task;
+    runInBackground(task, "Couldn't refresh reviews.");
   }, [projectId, utils]);
   // Project metadata can change while this project-keyed response is cached.
   const health = query.data?.health;

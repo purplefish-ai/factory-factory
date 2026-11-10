@@ -90,10 +90,8 @@ it('rechecks a healthy result after a gh read reports missing authentication', a
     .mockResolvedValueOnce({ stdout: 'gh version 2.20.0', stderr: '' })
     .mockRejectedValueOnce(new Error('not logged in'));
   await expect(githubCLIService.getPRPreview('o/r', 1)).rejects.toThrow();
-  await githubCLIService.checkHealth();
-  await vi.waitFor(async () =>
-    expect((await githubCLIService.checkHealth()).isAuthenticated).toBe(false)
-  );
+  // The next read waits for a new check rather than returning the healthy answer once more.
+  expect((await githubCLIService.checkHealth()).isAuthenticated).toBe(false);
   expect(mockExecFile).toHaveBeenCalledTimes(5);
 });
 
