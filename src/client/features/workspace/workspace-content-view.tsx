@@ -7,7 +7,7 @@ import type { AppRouter } from '@/client/lib/trpc';
 import { MainViewContent } from './main-view-content';
 import { MainViewTabBar } from './main-view-tab-bar';
 import type { SessionQueuedMessageCount } from './session-close-guard';
-import { useWorkspacePanel } from './workspace-panel-context';
+import { useWorkspacePanelActions } from './workspace-panel-context';
 
 // =============================================================================
 // Types
@@ -70,7 +70,7 @@ export const WorkspaceContentView = memo(function WorkspaceContentView({
   hasWorktreePath,
 }: WorkspaceContentViewProps) {
   const hasNoSessions = sessions && sessions.length === 0;
-  const { openTab } = useWorkspacePanel();
+  const { openTab } = useWorkspacePanelActions();
 
   // Always show tab bar (with "+" button), but render empty state content when no sessions exist
   return (

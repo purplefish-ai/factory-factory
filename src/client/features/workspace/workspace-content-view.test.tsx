@@ -25,7 +25,11 @@ vi.mock('./closed-session-transcript-view', () => ({ ClosedSessionTranscriptView
 vi.mock('./screenshot-viewer-tab', () => ({ ScreenshotViewerTab: () => null }));
 vi.mock('./file-viewer', () => ({ FileViewer: () => <p>File viewer</p> }));
 vi.mock('./diff-viewer', () => ({ DiffViewer: () => <p>Diff viewer</p> }));
-vi.mock('./workspace-panel-context', () => ({ useWorkspacePanel: () => panel }));
+vi.mock('./workspace-panel-context', () => ({
+  useWorkspacePanelState: () => panel,
+  useWorkspacePanelActions: () => panel,
+  useWorkspacePanelScroll: () => panel,
+}));
 
 describe('WorkspaceContentView sessionless recovery', () => {
   it.each(['file', 'diff'])(

@@ -5,9 +5,14 @@ import { expect, it, vi } from 'vitest';
 import { MainViewContent } from './main-view-content';
 
 vi.mock('./workspace-panel-context', () => ({
-  useWorkspacePanel: () => ({
+  useWorkspacePanelState: () => ({
     tabs: [{ id: 'file1', type: 'file', path: 'example.ts' }],
     activeTabId: 'file1',
+  }),
+  useWorkspacePanelScroll: () => ({
+    getScrollState: () => null,
+    createScrollStateWriter: () => () => undefined,
+    clearScrollState: () => undefined,
   }),
 }));
 const chunk = vi.hoisted(() => {

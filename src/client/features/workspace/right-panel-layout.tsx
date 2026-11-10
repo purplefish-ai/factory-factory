@@ -3,7 +3,7 @@ import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@/componen
 import { TabsContent } from '@/components/ui/tabs';
 import { cn } from '@/lib/utils';
 import { MobileToolSwitcher } from './mobile-tool-switcher';
-import { useWorkspacePanel } from './workspace-panel-context';
+import { useWorkspacePanelState } from './workspace-panel-context';
 
 export function RightPanelLayout({
   workspaceId,
@@ -26,7 +26,7 @@ export function RightPanelLayout({
   topPanel: ReactNode;
   bottomPanel: ReactNode;
 }) {
-  const { activeTopTab, activeBottomTab } = useWorkspacePanel();
+  const { activeTopTab, activeBottomTab } = useWorkspacePanelState();
   const [bottomMountedFor, setBottomMountedFor] = useState<string | null>(null);
   if (mobilePanel === 'bottom' && bottomMountedFor !== workspaceId) {
     setBottomMountedFor(workspaceId);

@@ -13,14 +13,14 @@ import {
   ContextMenuTrigger,
 } from '@/components/ui/context-menu';
 import { DevServerSetupPanel } from './dev-server-setup-panel';
-import { useWorkspacePanel } from './workspace-panel-context';
+import { useWorkspacePanelActions } from './workspace-panel-context';
 
 interface RunScriptButtonProps {
   workspaceId: string;
 }
 
 export function RunScriptButton({ workspaceId }: RunScriptButtonProps) {
-  const { setActiveBottomTab, setRightPanelVisible } = useWorkspacePanel();
+  const { setActiveBottomTab, setRightPanelVisible } = useWorkspacePanelActions();
   const [setupPanelOpen, setSetupPanelOpen] = useState(false);
 
   const utils = trpc.useUtils();

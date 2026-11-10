@@ -11,6 +11,7 @@ import {
 import { z } from 'zod';
 import type { SubagentSelection } from '@/client/features/subagents';
 import { usePersistedState } from '@/client/hooks/use-persisted-state';
+import { useStableCallback } from '@/client/hooks/use-stable-callback';
 import { useWorkspaceDrawer } from '@/client/hooks/use-workspace-drawer';
 import { localStore, readStorageItem } from '@/client/lib/browser-storage';
 import { subagentSummarySchema } from '@/shared/acp-protocol';
@@ -53,7 +54,8 @@ export interface WorkspacePanelState {
   mobilePanel: 'top' | 'bottom';
 }
 
-interface WorkspacePanelContextValue extends WorkspacePanelState {
+/** Commands that keep their identity for the provider's lifetime. */
+export interface WorkspacePanelActions {
   openTab: (type: Exclude<MainViewTab['type'], 'subagent'>, path?: string, label?: string) => void;
   openSubagentTab: (selection: SubagentSelection) => void;
   updateSubagentTab: (selection: SubagentSelection) => void;
@@ -63,11 +65,19 @@ interface WorkspacePanelContextValue extends WorkspacePanelState {
   setRightPanelVisible: (visible: boolean) => void;
   setActiveBottomTab: (tab: BottomPanelTab) => void;
   setActiveTopTab: (tab: TopPanelTab) => void;
+}
+
+/** Saved viewer scroll positions, read and written outside React state. */
+export interface WorkspacePanelScroll {
   createScrollStateWriter: (tabId: string, mode: ScrollMode) => (state: ScrollState) => void;
   getScrollState: (tabId: string, mode: ScrollMode) => ScrollState | null;
   setScrollState: (tabId: string, mode: ScrollMode, state: ScrollState) => void;
   clearScrollState: (tabId: string) => void;
 }
+
+type WorkspacePanelContextValue = WorkspacePanelState &
+  WorkspacePanelActions &
+  WorkspacePanelScroll;
 
 // =============================================================================
 // Constants
@@ -173,7 +183,11 @@ function readLegacyBottomTab(workspaceId: string): BottomPanelTab {
 // Context
 // =============================================================================
 
-const WorkspacePanelContext = createContext<WorkspacePanelContextValue | null>(null);
+// Three contexts so a consumer that only opens tabs or saves scroll positions
+// does not re-render on every tab or panel change.
+const WorkspacePanelStateContext = createContext<WorkspacePanelState | null>(null);
+const WorkspacePanelActionsContext = createContext<WorkspacePanelActions | null>(null);
+const WorkspacePanelScrollContext = createContext<WorkspacePanelScroll | null>(null);
 
 // =============================================================================
 // Provider
@@ -271,20 +285,19 @@ function WorkspacePanelState({
     }
   }, [workspaceId]);
 
-  const setRightPanelVisible = useCallback(
-    (visible: boolean) => {
-      if (isMobile) {
-        setMobileRightPanelVisible(visible);
-      } else {
-        setStoredRightPanelVisible(visible);
-      }
-    },
-    [isMobile, setStoredRightPanelVisible]
-  );
+  // Actions read this render's values through useStableCallback, so they keep
+  // one identity while tabs and panels change.
+  const setRightPanelVisible = useStableCallback((visible: boolean) => {
+    if (isMobile) {
+      setMobileRightPanelVisible(visible);
+    } else {
+      setStoredRightPanelVisible(visible);
+    }
+  });
 
-  const toggleRightPanel = useCallback(() => {
+  const toggleRightPanel = useStableCallback(() => {
     setRightPanelVisible(!rightPanelVisible);
-  }, [rightPanelVisible, setRightPanelVisible]);
+  });
 
   // Entering the mobile layout starts with its right panel closed.
   const [panelLayoutIsMobile, setPanelLayoutIsMobile] = useState(isMobile);
@@ -362,7 +375,7 @@ function WorkspacePanelState({
     [scheduleScrollPersist, scrollRevisions]
   );
 
-  const openTab = useCallback(
+  const openTab = useStableCallback(
     (type: Exclude<MainViewTab['type'], 'subagent'>, path?: string, label?: string) => {
       if (isMobile) {
         setMobileRightPanelVisible(false);
@@ -397,8 +410,7 @@ function WorkspacePanelState({
 
       setTabs((prev) => [...prev, newTab]);
       setActiveTabId(id);
-    },
-    [tabs, isMobile, setTabs, setActiveTabId]
+    }
   );
 
   const openSubagentTab = useCallback(
@@ -442,37 +454,21 @@ function WorkspacePanelState({
     [setTabs]
   );
 
-  const closeTab = useCallback(
-    (id: string) => {
-      // Prevent closing the chat tab
-      if (id === 'chat') {
-        return;
-      }
+  const closeTab = useStableCallback((id: string) => {
+    // Prevent closing the chat tab
+    if (id === 'chat') {
+      return;
+    }
 
-      clearScrollState(id);
-      setTabs((prev) => {
-        const newTabs = prev.filter((tab) => tab.id !== id);
-
-        // If we closed the active tab, switch to another one
-        if (activeTabId === id) {
-          const closedIndex = prev.findIndex((tab) => tab.id === id);
-          // Prefer the tab to the left, or the chat tab
-          const newActiveTab = newTabs[closedIndex - 1] ?? newTabs[0] ?? CHAT_TAB;
-          setActiveTabId(newActiveTab.id);
-        }
-
-        return newTabs;
-      });
-    },
-    [activeTabId, clearScrollState, setTabs, setActiveTabId]
-  );
-
-  const selectTab = useCallback(
-    (id: string) => {
-      setActiveTabId(id);
-    },
-    [setActiveTabId]
-  );
+    clearScrollState(id);
+    // If we closed the active tab, switch to the tab on its left, or chat.
+    if (activeTabId === id) {
+      const closedIndex = tabs.findIndex((tab) => tab.id === id);
+      const remaining = tabs.filter((tab) => tab.id !== id);
+      setActiveTabId((remaining[closedIndex - 1] ?? remaining[0] ?? CHAT_TAB).id);
+    }
+    setTabs((prev) => prev.filter((tab) => tab.id !== id));
+  });
 
   const setActiveBottomTab = useCallback(
     (tab: BottomPanelTab) => {
@@ -482,62 +478,70 @@ function WorkspacePanelState({
     [setActiveBottomTabState]
   );
 
-  const value = useMemo<WorkspacePanelContextValue>(
+  const state = useMemo<WorkspacePanelState>(
+    () => ({ tabs, activeTabId, rightPanelVisible, activeBottomTab, activeTopTab, mobilePanel }),
+    [tabs, activeTabId, rightPanelVisible, activeBottomTab, activeTopTab, mobilePanel]
+  );
+  const actions = useMemo<WorkspacePanelActions>(
     () => ({
-      tabs,
-      activeTabId,
-      rightPanelVisible,
-      activeBottomTab,
-      activeTopTab,
-      mobilePanel,
       openTab,
       openSubagentTab,
       updateSubagentTab,
       closeTab,
-      selectTab,
+      selectTab: setActiveTabId,
       toggleRightPanel,
       setRightPanelVisible,
       setActiveBottomTab,
       setActiveTopTab,
-      createScrollStateWriter,
-      getScrollState,
-      setScrollState,
-      clearScrollState,
     }),
-    [
-      tabs,
-      activeTabId,
-      rightPanelVisible,
-      activeBottomTab,
-      activeTopTab,
-      mobilePanel,
-      openTab,
-      openSubagentTab,
-      updateSubagentTab,
-      closeTab,
-      selectTab,
-      toggleRightPanel,
-      setRightPanelVisible,
-      setActiveBottomTab,
-      setActiveTopTab,
-      createScrollStateWriter,
-      getScrollState,
-      setScrollState,
-      clearScrollState,
-    ]
+    [openSubagentTab, updateSubagentTab, setActiveTabId, setActiveBottomTab, setActiveTopTab]
+  );
+  const scroll = useMemo<WorkspacePanelScroll>(
+    () => ({ createScrollStateWriter, getScrollState, setScrollState, clearScrollState }),
+    [createScrollStateWriter, getScrollState, setScrollState, clearScrollState]
   );
 
-  return <WorkspacePanelContext.Provider value={value}>{children}</WorkspacePanelContext.Provider>;
+  return (
+    <WorkspacePanelActionsContext value={actions}>
+      <WorkspacePanelScrollContext value={scroll}>
+        <WorkspacePanelStateContext value={state}>{children}</WorkspacePanelStateContext>
+      </WorkspacePanelScrollContext>
+    </WorkspacePanelActionsContext>
+  );
 }
 
 // =============================================================================
-// Hook
+// Hooks
 // =============================================================================
 
-export function useWorkspacePanel(): WorkspacePanelContextValue {
-  const context = useContext(WorkspacePanelContext);
-  if (!context) {
-    throw new Error('useWorkspacePanel must be used within a WorkspacePanelProvider');
+function useRequiredContext<T>(context: React.Context<T | null>, hook: string): T {
+  const value = useContext(context);
+  if (!value) {
+    throw new Error(`${hook} must be used within a WorkspacePanelProvider`);
   }
-  return context;
+  return value;
+}
+
+/** Tabs and panel visibility; the consumer re-renders when any of it changes. */
+export function useWorkspacePanelState(): WorkspacePanelState {
+  return useRequiredContext(WorkspacePanelStateContext, 'useWorkspacePanelState');
+}
+
+/** Tab and panel commands. They never change, so they never re-render a consumer. */
+export function useWorkspacePanelActions(): WorkspacePanelActions {
+  return useRequiredContext(WorkspacePanelActionsContext, 'useWorkspacePanelActions');
+}
+
+/** Saved viewer scroll positions. They never change, so they never re-render a consumer. */
+export function useWorkspacePanelScroll(): WorkspacePanelScroll {
+  return useRequiredContext(WorkspacePanelScrollContext, 'useWorkspacePanelScroll');
+}
+
+/** Panel state, commands and scroll positions together. */
+export function useWorkspacePanel(): WorkspacePanelContextValue {
+  return {
+    ...useWorkspacePanelState(),
+    ...useWorkspacePanelActions(),
+    ...useWorkspacePanelScroll(),
+  };
 }

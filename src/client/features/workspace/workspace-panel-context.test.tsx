@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { act, createElement } from 'react';
+import { act, createElement, memo } from 'react';
 import { createRoot } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SubagentSelection } from '@/client/features/subagents';
@@ -8,6 +8,8 @@ import { actFlushSync } from '@/test-utils/react-act';
 import {
   type MainViewTab,
   useWorkspacePanel,
+  useWorkspacePanelActions,
+  useWorkspacePanelScroll,
   WorkspacePanelProvider,
 } from './workspace-panel-context';
 
@@ -556,4 +558,59 @@ it('revokes only the cleared tab writer and preserves other viewer records', asy
   });
   await act(() => root.unmount());
   vi.useRealTimers();
+});
+
+const renderCounts = { actions: 0, scroll: 0 };
+const actionIdentities = {
+  openTab: new Set<unknown>(),
+  closeTab: new Set<unknown>(),
+  toggle: new Set<unknown>(),
+};
+const ActionsConsumer = memo(function ActionsConsumer() {
+  renderCounts.actions += 1;
+  useWorkspacePanelActions();
+  return null;
+});
+const ScrollConsumer = memo(function ScrollConsumer() {
+  renderCounts.scroll += 1;
+  useWorkspacePanelScroll();
+  return null;
+});
+function StateAndActionsProbe() {
+  const { openTab, closeTab, toggleRightPanel } = useWorkspacePanel();
+  actionIdentities.openTab.add(openTab);
+  actionIdentities.closeTab.add(closeTab);
+  actionIdentities.toggle.add(toggleRightPanel);
+  return (
+    <button type="button" onClick={toggleRightPanel}>
+      Toggle panel
+    </button>
+  );
+}
+
+it('keeps actions stable and leaves action and scroll consumers alone on tab and panel changes', async () => {
+  renderCounts.actions = 0;
+  renderCounts.scroll = 0;
+  for (const identities of Object.values(actionIdentities)) {
+    identities.clear();
+  }
+  const { container, root } = renderPanel(
+    <>
+      <WorkspacePanelActionsProbe />
+      <StateAndActionsProbe />
+      <ActionsConsumer />
+      <ScrollConsumer />
+    </>
+  );
+  await clickButton(container, 'Open screenshot');
+  await clickButton(container, 'Select chat');
+  await clickButton(container, 'Toggle panel');
+  await clickButton(container, 'Open running');
+  await clickButton(container, 'Close active');
+  expect(readProbe(container).activeTabId).toBe('screenshot-/tmp/capture.png');
+  expect(renderCounts).toEqual({ actions: 1, scroll: 1 });
+  expect([...Object.values(actionIdentities)].map((identities) => identities.size)).toEqual([
+    1, 1, 1,
+  ]);
+  await act(() => root.unmount());
 });

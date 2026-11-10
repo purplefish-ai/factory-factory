@@ -10,7 +10,7 @@ import { TooltipProvider } from '@/components/ui/tooltip';
 import { FileBrowserPanel } from './file-browser-panel';
 
 vi.mock('./workspace-panel-context', () => ({
-  useWorkspacePanel: () => ({ openTab: vi.fn() }),
+  useWorkspacePanelActions: () => ({ openTab: vi.fn() }),
 }));
 
 beforeEach(() => {
