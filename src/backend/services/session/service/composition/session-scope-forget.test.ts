@@ -13,9 +13,11 @@ const settings = {
   planModeEnabled: false,
 };
 
-// Workspace deletion cascades its session rows, then reports each through
-// `forgetProviderHistoryIdentity`; it never calls `clearSession` itself.
-it('clears every per-session collaborator when a cascaded session is forgotten', () => {
+// Covers what the composed scope does once a durably deleted session is
+// reported through `forgetProviderHistoryIdentity`. Workspace deletion reports
+// each cascaded session that way and never calls `clearSession` itself;
+// `workspace.router.test.ts` pins that reporting.
+it('clears every per-session collaborator when a deleted session is reported', () => {
   const sessionId = 'cascade-deleted';
   const kept = 'cascade-kept';
   const config = vi.spyOn(sessionConfigService, 'releaseSessionConfiguration');
