@@ -157,7 +157,9 @@ describe('ThinkingFooter', () => {
       flushSync(() => root.render(<ThinkingFooter active={false} latestThinking={null} />));
       expect(document.querySelector('[data-slot="popover-content"]')).toBeNull();
       expect(host.querySelector('[inert]')).not.toBeNull();
-      expect(host.querySelector('[aria-hidden="true"]')).toBeNull();
+      // The idle footer is inert rather than aria-hidden; only its decorative
+      // spinner is hidden, because the status text already says what is pending.
+      expect(host.querySelector('[aria-hidden="true"]:not([data-slot="spinner"])')).toBeNull();
       expect(host.querySelector('button')?.disabled).toBe(true);
       expect(host.querySelector('button')?.tabIndex).toBe(-1);
       flushSync(() => root.render(<ThinkingFooter active latestThinking="Next turn" />));

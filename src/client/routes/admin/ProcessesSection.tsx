@@ -13,7 +13,6 @@ import { trpc } from '@/client/lib/trpc';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Spinner } from '@/components/ui/spinner';
 import {
   Table,
   TableBody,
@@ -91,14 +90,11 @@ function StopSessionButton({
       variant="ghost"
       size="sm"
       onClick={onStop}
-      disabled={isStopping || disabled}
+      pending={isStopping}
+      disabled={disabled}
       title={isStopping ? 'Stopping session…' : 'Stop session'}
     >
-      {isStopping ? (
-        <Spinner className="w-4 h-4" aria-hidden="true" />
-      ) : (
-        <XCircleIcon className="w-4 h-4" />
-      )}
+      <XCircleIcon className="w-4 h-4" />
     </Button>
   );
 }
