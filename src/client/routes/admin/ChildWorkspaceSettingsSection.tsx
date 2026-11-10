@@ -1,71 +1,34 @@
-import { toast } from 'sonner';
-import { runInBackground } from '@/client/lib/background-task';
-import { trpc } from '@/client/lib/trpc';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Label } from '@/components/ui/label';
-import { Skeleton } from '@/components/ui/skeleton';
+import { useUpdateUserSettings, useUserSettings } from '@/client/lib/user-settings-queries';
 import { Switch } from '@/components/ui/switch';
+import { SettingRow, SettingsSection } from './settings-section';
 
 export function ChildWorkspaceSettingsSection() {
-  const { data: settings, isLoading, isError } = trpc.userSettings.get.useQuery();
-  const utils = trpc.useUtils();
-  const updateSettings = trpc.userSettings.update.useMutation({
-    onSuccess: (result) => {
-      utils.userSettings.get.setData(undefined, result);
-      runInBackground(utils.userSettings.get.invalidate(), "Couldn't refresh data.");
-    },
-    onError: (error) => {
-      toast.error(`Couldn't update settings. ${error.message}`);
-    },
-  });
-
-  const handleToggleChildren = (checked: boolean) => {
-    updateSettings.mutate({ childWorkspacesEnabled: checked });
-  };
-
-  if (isLoading || (isError && !settings)) {
-    return (
-      <Card>
-        <CardHeader>
-          <CardTitle>Child workspaces</CardTitle>
-          <CardDescription>Delegate work to separate child workspaces</CardDescription>
-        </CardHeader>
-        <CardContent>
-          {isLoading ? (
-            <Skeleton className="h-10 w-full" />
-          ) : (
-            <p role="alert" className="text-sm text-destructive">
-              Couldn't load child workspace settings. Try refreshing the page.
-            </p>
-          )}
-        </CardContent>
-      </Card>
-    );
-  }
+  const settingsQuery = useUserSettings();
+  const updateSettings = useUpdateUserSettings();
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Child workspaces</CardTitle>
-        <CardDescription>Delegate work to separate child workspaces</CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-          <div className="space-y-0.5">
-            <Label htmlFor="child-workspaces-toggle">Enable child workspaces</Label>
-            <p className="text-sm text-muted-foreground">
-              Show child workspace controls and let agents delegate work. Existing workspaces are
-              preserved when disabled.
-            </p>
-          </div>
+    <SettingsSection
+      title="Child workspaces"
+      description="Delegate work to separate child workspaces"
+      query={settingsQuery}
+      errorTitle="Couldn't load child workspace settings"
+    >
+      {(settings) => (
+        <SettingRow
+          label="Enable child workspaces"
+          htmlFor="child-workspaces-toggle"
+          description="Show child workspace controls and let agents delegate work. Existing workspaces are preserved when disabled."
+          saving={updateSettings.isSaving('childWorkspacesEnabled')}
+        >
           <Switch
             id="child-workspaces-toggle"
-            checked={settings?.childWorkspacesEnabled ?? true}
-            onCheckedChange={handleToggleChildren}
-            disabled={updateSettings.isPending}
+            checked={settings.childWorkspacesEnabled}
+            onCheckedChange={(checked) =>
+              updateSettings.mutate({ childWorkspacesEnabled: checked })
+            }
           />
-        </div>
-      </CardContent>
-    </Card>
+        </SettingRow>
+      )}
+    </SettingsSection>
   );
 }

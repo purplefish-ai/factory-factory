@@ -26,10 +26,11 @@ const rules = [
   'no-unsafe-resolver-cast',
   'no-tool-input-cast',
   'no-raw-palette-classes',
-  'workspace-query-owner',
+  'query-owner',
   'named-query-options',
 ];
 const workspaceQueryOwner = 'owned/workspace-queries.ts';
+const userSettingsOwner = 'owned/user-settings-queries.ts';
 writeFileSync(
   config,
   JSON.stringify({
@@ -38,7 +39,27 @@ writeFileSync(
     jsPlugins: [{ name: 'factory', specifier: resolve('lint-rules/factory.mjs') }],
     rules: {
       ...Object.fromEntries(rules.map((rule) => [`factory/${rule}`, 'error'])),
-      'factory/workspace-query-owner': ['error', { owners: [workspaceQueryOwner] }],
+      'factory/query-owner': [
+        'error',
+        {
+          groups: [
+            {
+              procedures: ['workspace.get', 'workspace.listForProject'],
+              use: workspaceQueryOwner,
+              owners: [workspaceQueryOwner],
+              helpers: 'cache',
+              reason: 'plain reads bypass the reconciler',
+            },
+            {
+              procedures: ['userSettings.get', 'userSettings.update'],
+              use: userSettingsOwner,
+              owners: [userSettingsOwner],
+              helpers: 'all',
+              reason: 'its hooks share one cache strategy',
+            },
+          ],
+        },
+      ],
     },
   })
 );
@@ -107,20 +128,23 @@ describe('Oxlint project guardrails', () => {
     ['no-raw-palette-classes', 'const className = "dark:text-red-500";'],
     ['no-raw-palette-classes', 'const className = "p-2 !bg-red-500";'],
     ['no-raw-palette-classes', 'const glow = "inset-ring-amber-400/50";'],
-    ['workspace-query-owner', 'const query = trpc.workspace.get.useQuery({ id });'],
-    [
-      'workspace-query-owner',
-      'const query = trpc.workspace.listForProject.useSuspenseQuery(input);',
-    ],
-    ['workspace-query-owner', 'await utils.workspace.get.fetch({ id });'],
-    ['workspace-query-owner', 'await utils.workspace.listForProject.ensureData(input);'],
-    ['workspace-query-owner', 'void utils.workspace.get.prefetch({ id });'],
-    ['workspace-query-owner', 'utils.workspace.listForProject.setData(input, (old) => old);'],
-    ['workspace-query-owner', 'utils.workspace["get"].setData({ id }, detail);'],
-    ['workspace-query-owner', 'const options = utils.workspace.get.queryOptions({ id });'],
-    ['workspace-query-owner', 'const fetchDetail = utils.workspace.get.fetch;'],
-    ['workspace-query-owner', "const key = getQueryKey(trpc.workspace.get, { id }, 'query');"],
-    ['workspace-query-owner', 'const key = getQueryKey(trpc.workspace.listForProject);'],
+    ['query-owner', 'const query = trpc.workspace.get.useQuery({ id });'],
+    ['query-owner', 'const query = trpc.workspace.listForProject.useSuspenseQuery(input);'],
+    ['query-owner', 'await utils.workspace.get.fetch({ id });'],
+    ['query-owner', 'await utils.workspace.listForProject.ensureData(input);'],
+    ['query-owner', 'void utils.workspace.get.prefetch({ id });'],
+    ['query-owner', 'utils.workspace.listForProject.setData(input, (old) => old);'],
+    ['query-owner', 'utils.workspace["get"].setData({ id }, detail);'],
+    ['query-owner', 'const options = utils.workspace.get.queryOptions({ id });'],
+    ['query-owner', 'const fetchDetail = utils.workspace.get.fetch;'],
+    ['query-owner', "const key = getQueryKey(trpc.workspace.get, { id }, 'query');"],
+    ['query-owner', 'const key = getQueryKey(trpc.workspace.listForProject);'],
+    ['query-owner', 'const settings = trpc.userSettings.get.useQuery();'],
+    ['query-owner', 'const update = trpc.userSettings.update.useMutation();'],
+    ['query-owner', 'await utils.userSettings.get.invalidate();'],
+    ['query-owner', 'const cached = utils.userSettings.get.getData();'],
+    ['query-owner', 'const saved = await utils.client.userSettings.get.query();'],
+    ['query-owner', 'const key = getMutationKey(trpc.userSettings.update);'],
     ['named-query-options', 'trpc.project.list.useQuery(input, { refetchInterval: 10_000 });'],
     ['named-query-options', 'useQuery({ refetchInterval: open ? 30_000 : false });'],
     ['named-query-options', 'useQuery({ refetchInterval: 2 * POLL_INTERVAL_MS.activity });'],
@@ -180,6 +204,10 @@ describe('Oxlint project guardrails', () => {
     'const project = trpc.project.get.useQuery({ id });',
     "const key = getQueryKey(trpc.workspace.listChildren, { id }, 'query');",
     'const value = map.get.fetch();',
+    'const options = trpc.userSettings.getProviderOptions.useQuery();',
+    'const test = trpc.userSettings.testCustomCommand.useMutation();',
+    'const key = getMutationKey(trpc.workspace.get);',
+    'const settings = useUserSettings({ enabled });',
     'useQuery({ refetchInterval: open ? POLL_INTERVAL_MS.background : false });',
     'useQuery({ refetchInterval: (query) => (query.state.data.length > 0 ? POLL_INTERVAL_MS.external : false) });',
     'useQuery({ refetchInterval(query) { const n = items.filter((x) => x > 0).length; return n === 0 ? false : POLL_INTERVAL_MS.progress; } });',
@@ -192,11 +220,18 @@ describe('Oxlint project guardrails', () => {
     'const step = { file: "a.ts", old_string: "retry: false" };',
   ]
     .map((source, index) => ({ source, file: join(directory, `accepted-${index}.tsx`) }))
-    .concat({
-      // The configured owner is the one file allowed to build these options.
-      source: 'utils.workspace.get.setData({ id }, detail); getQueryKey(trpc.workspace.get);',
-      file: join(directory, workspaceQueryOwner),
-    });
+    .concat(
+      {
+        // The configured owner is the one file allowed to build these options.
+        source: 'utils.workspace.get.setData({ id }, detail); getQueryKey(trpc.workspace.get);',
+        file: join(directory, workspaceQueryOwner),
+      },
+      {
+        source:
+          'trpc.userSettings.update.useMutation(); utils.userSettings.get.setData(undefined, saved);',
+        file: join(directory, userSettingsOwner),
+      }
+    );
 
   let report: z.infer<typeof reportSchema>;
   beforeAll(() => {
@@ -273,24 +308,49 @@ describe('raw palette class exceptions', () => {
   });
 });
 
-describe('workspace query owners', () => {
+describe('query owners', () => {
   const projectConfig = overridesSchema.parse(
     JSON.parse(readFileSync(resolve('.oxlintrc.json'), 'utf8'))
   );
-  const owners = projectConfig.overrides.flatMap((override) => {
-    const rule = override.rules['factory/workspace-query-owner'];
+  const groupSchema = z.object({
+    procedures: z.array(z.string()),
+    use: z.string(),
+    owners: z.array(z.string()),
+    helpers: z.enum(['cache', 'all']),
+    reason: z.string().min(20),
+  });
+  const groups = projectConfig.overrides.flatMap((override) => {
+    const rule = override.rules['factory/query-owner'];
     return Array.isArray(rule)
-      ? z.tuple([z.literal('error'), z.object({ owners: z.array(z.string()) })]).parse(rule)[1]
-          .owners
+      ? z.tuple([z.literal('error'), z.object({ groups: z.array(groupSchema) })]).parse(rule)[1]
+          .groups
       : [];
   });
 
-  it('names the query module and its reconciler as the only owners', () => {
-    expect(owners).toEqual([
-      'src/client/lib/workspace-queries.ts',
-      'src/client/lib/workspace-cache-reconciler.ts',
+  it('names one owner module for each guarded procedure group', () => {
+    expect(
+      groups.map(({ procedures, use, owners, helpers }) => ({ procedures, use, owners, helpers }))
+    ).toEqual([
+      {
+        procedures: ['workspace.get', 'workspace.listForProject'],
+        use: 'src/client/lib/workspace-queries.ts',
+        owners: [
+          'src/client/lib/workspace-queries.ts',
+          'src/client/lib/workspace-cache-reconciler.ts',
+        ],
+        helpers: 'cache',
+      },
+      {
+        procedures: ['userSettings.get', 'userSettings.update'],
+        use: 'src/client/lib/user-settings-queries.ts',
+        owners: ['src/client/lib/user-settings-queries.ts'],
+        helpers: 'all',
+      },
     ]);
-    for (const owner of owners) {
+    for (const group of groups) {
+      expect(group.owners).toContain(group.use);
+    }
+    for (const owner of groups.flatMap((group) => group.owners)) {
       expect(existsSync(resolve(owner))).toBe(true);
     }
   });
@@ -306,5 +366,70 @@ describe('tool input casts', () => {
       .filter((override) => override.rules['factory/no-tool-input-cast'] !== undefined)
       .map((override) => [override.files, override.rules['factory/no-tool-input-cast']]);
     expect(scopes).toEqual([[['src/client/features/chat/agent-activity/**/*.{ts,tsx}'], 'error']]);
+  });
+});
+
+describe('settings section card exceptions', () => {
+  const projectConfig = overridesSchema.parse(
+    JSON.parse(readFileSync(resolve('.oxlintrc.json'), 'utf8'))
+  );
+  const adminFiles = projectConfig.overrides
+    .filter(
+      (override) =>
+        override.rules['no-restricted-imports'] === 'off' &&
+        override.files.every((file) => file.startsWith('src/client/routes/admin/'))
+    )
+    .flatMap((override) => override.files);
+
+  it('lets only the section shell and stat tiles build card headers', () => {
+    expect(adminFiles).toEqual([
+      'src/client/routes/admin/settings-section.tsx',
+      'src/client/routes/admin/StatCard.tsx',
+    ]);
+  });
+
+  it.each(adminFiles)('%s still needs its exception', (file) => {
+    expect(readFileSync(resolve(file), 'utf8')).toMatch(
+      /\b(?:CardHeader|CardTitle|CardDescription|CardAction)\b[^;]*from '@\/components\/ui\/card'/
+    );
+  });
+});
+
+describe('settings section card restriction', () => {
+  const restriction = overridesSchema
+    .parse(JSON.parse(readFileSync(resolve('.oxlintrc.json'), 'utf8')))
+    .overrides.find((override) => override.files.includes('src/client/routes/admin/**/*.tsx'))
+    ?.rules['no-restricted-imports'];
+  const fixtures = {
+    rejected: "import { CardHeader, CardTitle } from '@/components/ui/card';",
+    accepted: "import { Card, CardContent } from '@/components/ui/card';",
+  };
+
+  it('rejects card header parts and allows the card body with the project options', () => {
+    expect(restriction).toBeDefined();
+    const ruleDirectory = mkdtempSync(join(directory, 'card-'));
+    const ruleConfig = join(ruleDirectory, '.oxlintrc.json');
+    writeFileSync(
+      ruleConfig,
+      JSON.stringify({
+        categories: { correctness: 'off' },
+        plugins: [],
+        rules: { 'no-restricted-imports': restriction },
+      })
+    );
+    const files = Object.entries(fixtures).map(([name, source]) => {
+      const file = join(ruleDirectory, `${name}.tsx`);
+      writeFileSync(file, source);
+      return file;
+    });
+    const result = spawnSync(binary, ['--config', ruleConfig, '--format', 'json', ...files], {
+      cwd: ruleDirectory,
+      encoding: 'utf8',
+    });
+    const diagnostics = reportSchema.parse(JSON.parse(result.stdout)).diagnostics;
+    expect(diagnostics.map(({ filename, code }) => [filename, code])).toEqual([
+      ['rejected.tsx', 'eslint(no-restricted-imports)'],
+      ['rejected.tsx', 'eslint(no-restricted-imports)'],
+    ]);
   });
 });

@@ -11,6 +11,7 @@ import {
 import { getProjectSectionPath } from '@/client/lib/project-navigation';
 import { playSound } from '@/client/lib/sound';
 import { trpc } from '@/client/lib/trpc';
+import { useUserSettings } from '@/client/lib/user-settings-queries';
 import { claimWorkspaceCompletion } from '@/client/lib/workspace-notification-claim';
 import { fetchWorkspaceDetail } from '@/client/lib/workspace-queries';
 
@@ -73,7 +74,7 @@ function showDesktopNotification(request: NotificationRequest, onOpen: () => Pro
 
 /** Workspace completion sound, attention and explicitly enabled desktop alerts. */
 export function WorkspaceNotificationManager() {
-  const { data: settings, isSuccess } = trpc.userSettings.get.useQuery();
+  const { data: settings, isSuccess } = useUserSettings();
   const utils = trpc.useUtils();
   const queryClient = useQueryClient();
   const navigate = useNavigate();

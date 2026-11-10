@@ -212,3 +212,24 @@ defaults. It checks the literal written at the option, not what an identifier
 resolves to, so define any other interval as a tier rather than a local
 constant. `REVIEW_REQUESTS_POLL_MS` is the deliberate exception: it matches the
 server's review-request cache lifetime.
+
+## User settings and settings sections
+
+Read and write user settings only through `useUserSettings` and
+`useUpdateUserSettings` (`src/client/lib/user-settings-queries.ts`); the
+`factory/query-owner` lint rule rejects other `userSettings.get` and
+`userSettings.update` hooks and cache helpers. Writes run in order and patch the
+cache before the request, so a switch or select shows its new value at once. A
+failure restores the fields it changed and shows one "Couldn't save settings."
+toast; a newer pending write of the same field keeps its value and inherits the
+one to restore if it fails too; when the last pending write settles, the saved
+settings are committed and refetched. `isSaving(field)` is true while a write of
+that field is pending.
+
+Admin settings cards use `SettingsSection`
+(`src/client/routes/admin/settings-section.tsx`). Given a `query`, it renders a
+skeleton until data arrives and `QueryErrorState` with Retry if the query fails,
+so controls never render editable defaults. Inside it, `SettingRow` (label and
+description beside a switch or button), `SettingField` (label above a control)
+and `SettingSelect` share the label, help text and saving spinner; size fields
+with `SETTING_FIELD_WIDTH`.

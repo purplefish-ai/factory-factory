@@ -1,35 +1,28 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { toast } from 'sonner';
 import { trpc } from '@/client/lib/trpc';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import { Skeleton } from '@/components/ui/skeleton';
+  type UserSettingsPatch,
+  useUpdateUserSettings,
+  useUserSettings,
+} from '@/client/lib/user-settings-queries';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { SettingField, SettingSelect, SettingsSection } from './settings-section';
+
+const IDE_OPTIONS = [
+  { value: 'cursor', label: 'Cursor' },
+  { value: 'vscode', label: 'VS Code' },
+  { value: 'custom', label: 'Custom' },
+] as const;
+type IdeOption = (typeof IDE_OPTIONS)[number]['value'];
 
 export function IdeSettingsSection() {
-  const { data: settings, isLoading } = trpc.userSettings.get.useQuery();
-  const utils = trpc.useUtils();
+  const settingsQuery = useUserSettings();
+  const updateSettings = useUpdateUserSettings();
+  // Custom is chosen before its command is saved; until then the saved IDE stays in effect.
   const [isConfiguringCustomIde, setIsConfiguringCustomIde] = useState(false);
-  const updateSettings = trpc.userSettings.update.useMutation({
-    onSuccess: async () => {
-      await Promise.all([
-        utils.userSettings.get.invalidate(),
-        utils.workspace.getAvailableIdes.invalidate(),
-      ]);
-      setIsConfiguringCustomIde(false);
-    },
-    onError: (error) => {
-      toast.error(`Couldn't update settings. ${error.message}`);
-    },
-  });
+  const [commandDraft, setCommandDraft] = useState<string | null>(null);
 
   const testCommand = trpc.userSettings.testCustomCommand.useMutation({
     onSuccess: () => {
@@ -40,129 +33,109 @@ export function IdeSettingsSection() {
     },
   });
 
-  const [localCustomCommand, setLocalCustomCommand] = useState(settings?.customIdeCommand || '');
-
-  // Sync local state when settings change externally
-  useEffect(() => {
-    setLocalCustomCommand(settings?.customIdeCommand || '');
-  }, [settings?.customIdeCommand]);
-
-  const saveCustomCommand = (value: string) => {
-    const command = value.trim();
-    if (!command) {
-      return;
-    }
-    updateSettings.mutate({
-      preferredIde: 'custom',
-      customIdeCommand: command,
+  const saveIde = (patch: UserSettingsPatch) =>
+    updateSettings.mutate(patch, {
+      onSuccess: () => {
+        setIsConfiguringCustomIde(false);
+        // A saved command replaces the draft; other IDE changes keep unsaved text.
+        if (
+          patch.customIdeCommand !== undefined &&
+          patch.customIdeCommand === commandDraft?.trim()
+        ) {
+          setCommandDraft(null);
+        }
+      },
     });
-  };
-
-  const handleIdeChange = (value: string) => {
-    if (value === 'custom') {
-      setIsConfiguringCustomIde(true);
-      if (settings?.customIdeCommand?.trim()) {
-        updateSettings.mutate({
-          preferredIde: 'custom',
-          customIdeCommand: settings.customIdeCommand,
-        });
-      }
-    } else if (value === 'cursor' || value === 'vscode') {
-      setIsConfiguringCustomIde(false);
-      updateSettings.mutate({ preferredIde: value });
-    }
-  };
-
-  const selectedIde = isConfiguringCustomIde ? 'custom' : (settings?.preferredIde ?? 'cursor');
-
-  const handleTestCommand = () => {
-    if (!localCustomCommand.trim()) {
-      toast.error("Couldn't test the command. Enter a custom command first.");
-      return;
-    }
-    testCommand.mutate({ customCommand: localCustomCommand });
-  };
-
-  if (isLoading) {
-    return (
-      <Card>
-        <CardHeader>
-          <CardTitle>IDE settings</CardTitle>
-          <CardDescription>Configure your preferred IDE for opening workspaces</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Skeleton className="h-10 w-full" />
-        </CardContent>
-      </Card>
-    );
-  }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>IDE settings</CardTitle>
-        <CardDescription>Configure your preferred IDE for opening workspaces</CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <div className="space-y-2">
-          <Label htmlFor="ide-select">Preferred IDE</Label>
-          <Select
-            value={selectedIde}
-            onValueChange={handleIdeChange}
-            disabled={updateSettings.isPending}
-          >
-            <SelectTrigger id="ide-select">
-              <SelectValue placeholder="Select an IDE" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="cursor">Cursor</SelectItem>
-              <SelectItem value="vscode">VS Code</SelectItem>
-              <SelectItem value="custom">Custom</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
+    <SettingsSection
+      title="IDE settings"
+      description="Configure your preferred IDE for opening workspaces"
+      query={settingsQuery}
+      errorTitle="Couldn't load IDE settings"
+    >
+      {(settings) => {
+        const savedCommand = settings.customIdeCommand ?? '';
+        const command = commandDraft ?? savedCommand;
+        const savedIde =
+          IDE_OPTIONS.find((option) => option.value === settings.preferredIde)?.value ?? 'cursor';
+        const selectedIde = isConfiguringCustomIde ? 'custom' : savedIde;
+        const handleIdeChange = (value: IdeOption) => {
+          setIsConfiguringCustomIde(value === 'custom');
+          if (value !== 'custom') {
+            saveIde({ preferredIde: value });
+          } else if (savedCommand.trim()) {
+            saveIde({ preferredIde: 'custom', customIdeCommand: savedCommand });
+          }
+        };
+        const handleTestCommand = () => {
+          if (!command.trim()) {
+            toast.error("Couldn't test the command. Enter a custom command first.");
+            return;
+          }
+          testCommand.mutate({ customCommand: command });
+        };
+        return (
+          <>
+            <SettingSelect
+              id="ide-select"
+              label="Preferred IDE"
+              saving={updateSettings.isSaving('preferredIde')}
+              value={selectedIde}
+              options={IDE_OPTIONS}
+              onValueChange={handleIdeChange}
+            />
 
-        {selectedIde === 'custom' && (
-          <div className="space-y-2">
-            <Label htmlFor="custom-command">Custom command</Label>
-            <form
-              className="flex flex-col gap-2 sm:flex-row"
-              onSubmit={(event) => {
-                event.preventDefault();
-                saveCustomCommand(localCustomCommand);
-              }}
-            >
-              <Input
-                id="custom-command"
-                value={localCustomCommand}
-                onChange={(e) => setLocalCustomCommand(e.target.value)}
-                placeholder="code-insiders {workspace}"
-                className="font-mono text-sm flex-1"
-                disabled={updateSettings.isPending}
-              />
-              <Button
-                type="submit"
-                disabled={updateSettings.isPending || !localCustomCommand.trim()}
+            {selectedIde === 'custom' && (
+              <SettingField
+                label="Custom command"
+                htmlFor="custom-command"
+                saving={updateSettings.isSaving('customIdeCommand')}
+                description={
+                  <>
+                    Use <code className="bg-muted px-1 py-0.5 rounded">{'{workspace}'}</code> as a
+                    placeholder for the workspace path. Example:{' '}
+                    <code className="bg-muted px-1 py-0.5 rounded">
+                      code-insiders {'{workspace}'}
+                    </code>
+                  </>
+                }
               >
-                {updateSettings.isPending ? 'Saving…' : 'Save'}
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={handleTestCommand}
-                disabled={testCommand.isPending || !localCustomCommand.trim()}
-              >
-                {testCommand.isPending ? 'Testing…' : 'Test'}
-              </Button>
-            </form>
-            <p className="text-xs text-muted-foreground">
-              Use <code className="bg-muted px-1 py-0.5 rounded">{'{workspace}'}</code> as a
-              placeholder for the workspace path. Example:{' '}
-              <code className="bg-muted px-1 py-0.5 rounded">code-insiders {'{workspace}'}</code>
-            </p>
-          </div>
-        )}
-      </CardContent>
-    </Card>
+                <form
+                  className="flex flex-col gap-2 sm:flex-row"
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    const customIdeCommand = command.trim();
+                    if (customIdeCommand) {
+                      saveIde({ preferredIde: 'custom', customIdeCommand });
+                    }
+                  }}
+                >
+                  <Input
+                    id="custom-command"
+                    value={command}
+                    onChange={(e) => setCommandDraft(e.target.value)}
+                    placeholder="code-insiders {workspace}"
+                    className="font-mono text-sm flex-1"
+                    disabled={updateSettings.isPending}
+                  />
+                  <Button type="submit" disabled={updateSettings.isPending || !command.trim()}>
+                    {updateSettings.isPending ? 'Saving…' : 'Save'}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={handleTestCommand}
+                    disabled={testCommand.isPending || !command.trim()}
+                  >
+                    {testCommand.isPending ? 'Testing…' : 'Test'}
+                  </Button>
+                </form>
+              </SettingField>
+            )}
+          </>
+        );
+      }}
+    </SettingsSection>
   );
 }

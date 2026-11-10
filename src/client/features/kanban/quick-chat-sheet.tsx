@@ -5,6 +5,7 @@ import { QueryErrorState } from '@/client/components/query-error-state';
 import { type SessionData, SessionTabBar } from '@/client/features/chat';
 import { getNewChatUnavailableReason } from '@/client/features/workspace';
 import { trpc } from '@/client/lib/trpc';
+import { useUserSettings } from '@/client/lib/user-settings-queries';
 import { Button } from '@/components/ui/button';
 import {
   Sheet,
@@ -110,7 +111,7 @@ export function QuickChatSheet({ workspaceId, onClose }: QuickChatSheetProps) {
     workspace?.defaultSessionProvider === 'CODEX' || workspace?.defaultSessionProvider === 'CLAUDE'
       ? workspace.defaultSessionProvider
       : undefined;
-  const settings = trpc.userSettings.get.useQuery(undefined, {
+  const settings = useUserSettings({
     enabled: !!workspaceId && !explicitWorkspaceProvider,
     staleTime: 30_000,
   });

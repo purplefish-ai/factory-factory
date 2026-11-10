@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
+import { SettingsSection } from './settings-section';
 import { StatCard } from './StatCard';
 
 export interface ApiUsageData {
@@ -27,9 +27,9 @@ export function ApiUsageSection({ apiUsage, onReset, isResetting }: ApiUsageSect
   const [confirmOpen, setConfirmOpen] = useState(false);
 
   return (
-    <Card>
-      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
-        <CardTitle>API usage</CardTitle>
+    <SettingsSection
+      title="API usage"
+      action={
         <Button
           variant="link"
           onClick={() => setConfirmOpen(true)}
@@ -38,7 +38,9 @@ export function ApiUsageSection({ apiUsage, onReset, isResetting }: ApiUsageSect
         >
           Reset Stats
         </Button>
-      </CardHeader>
+      }
+      contentClassName=""
+    >
       <ConfirmDialog
         open={confirmOpen}
         onOpenChange={(open) => {
@@ -59,22 +61,20 @@ export function ApiUsageSection({ apiUsage, onReset, isResetting }: ApiUsageSect
           );
         }}
       />
-      <CardContent>
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <StatCard
-            title="Requests/min"
-            value={apiUsage?.requestsLastMinute || 0}
-            status={apiUsage?.isRateLimited ? 'warning' : 'ok'}
-          />
-          <StatCard title="Requests/hour" value={apiUsage?.requestsLastHour || 0} />
-          <StatCard title="Total Requests" value={apiUsage?.totalRequests || 0} />
-          <StatCard
-            title="Queue Depth"
-            value={apiUsage?.queueDepth || 0}
-            status={apiUsage?.queueDepth && apiUsage.queueDepth > 10 ? 'warning' : 'ok'}
-          />
-        </div>
-      </CardContent>
-    </Card>
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <StatCard
+          title="Requests/min"
+          value={apiUsage?.requestsLastMinute || 0}
+          status={apiUsage?.isRateLimited ? 'warning' : 'ok'}
+        />
+        <StatCard title="Requests/hour" value={apiUsage?.requestsLastHour || 0} />
+        <StatCard title="Total Requests" value={apiUsage?.totalRequests || 0} />
+        <StatCard
+          title="Queue Depth"
+          value={apiUsage?.queueDepth || 0}
+          status={apiUsage?.queueDepth && apiUsage.queueDepth > 10 ? 'warning' : 'ok'}
+        />
+      </div>
+    </SettingsSection>
   );
 }

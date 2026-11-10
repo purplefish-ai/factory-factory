@@ -1,33 +1,21 @@
 import { ArrowsClockwiseIcon } from '@phosphor-icons/react/dist/csr/ArrowsClockwise';
 import { toast } from 'sonner';
 import { RatchetWrenchIcon } from '@/client/features/workspace';
-import { runInBackground } from '@/client/lib/background-task';
 import { trpc } from '@/client/lib/trpc';
+import { useUpdateUserSettings, useUserSettings } from '@/client/lib/user-settings-queries';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Label } from '@/components/ui/label';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import { Skeleton } from '@/components/ui/skeleton';
 import { Spinner } from '@/components/ui/spinner';
 import { Switch } from '@/components/ui/switch';
+import { SettingRow, SettingSelect, SettingsSection } from './settings-section';
+
+const REVIEW_TRIGGER_OPTIONS = [
+  { value: 'CHANGES_REQUESTED', label: 'Changes requested and unresolved threads' },
+  { value: 'ALL_REVIEW_FEEDBACK', label: 'All review feedback' },
+] as const;
 
 export function RatchetSettingsSection() {
-  const { data: settings, isLoading } = trpc.userSettings.get.useQuery();
-  const utils = trpc.useUtils();
-  const updateSettings = trpc.userSettings.update.useMutation({
-    onSuccess: () => {
-      runInBackground(utils.userSettings.get.invalidate(), "Couldn't refresh data.");
-    },
-    onError: (error) => {
-      toast.error(`Couldn't update settings. ${error.message}`);
-    },
-  });
+  const settingsQuery = useUserSettings();
+  const updateSettings = useUpdateUserSettings();
 
   const triggerRatchetCheck = trpc.admin.triggerRatchetCheck.useMutation({
     onSuccess: (result) => {
@@ -40,120 +28,69 @@ export function RatchetSettingsSection() {
     },
   });
 
-  if (isLoading) {
-    return (
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <RatchetWrenchIcon enabled className="w-5 h-5" iconClassName="w-3.5 h-3.5" />
-            PR updates
-          </CardTitle>
-          <CardDescription>
-            Queue CI, review and merge-conflict updates in the main conversation for its next turn
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Skeleton className="h-10 w-full" />
-        </CardContent>
-      </Card>
-    );
-  }
-
-  const currentReviewTriggerMode = settings?.ratchetReviewTriggerMode ?? 'CHANGES_REQUESTED';
-
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <RatchetWrenchIcon enabled className="w-5 h-5" iconClassName="w-3.5 h-3.5" />
-          PR updates
-        </CardTitle>
-        <CardDescription>
-          Queue CI, review and merge-conflict updates in the main conversation for its next turn
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <div className="rounded-md border bg-muted/40 p-3 space-y-1.5">
-          <p className="text-sm text-muted-foreground">
-            When a workspace has an open pull request, Factory Factory can automatically:
-          </p>
-          <ul className="text-sm text-muted-foreground list-disc list-inside space-y-0.5 ml-2">
-            <li>Queue failing CI checks for the next turn</li>
-            <li>Queue actionable code review feedback</li>
-          </ul>
-        </div>
-
-        {/* Default for new workspaces */}
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-          <div className="space-y-0.5">
-            <Label htmlFor="ratchet-enabled">Default for new workspaces</Label>
+    <SettingsSection
+      title="PR updates"
+      icon={<RatchetWrenchIcon enabled className="w-5 h-5" iconClassName="w-3.5 h-3.5" />}
+      description="Queue CI, review and merge-conflict updates in the main conversation for its next turn"
+      query={settingsQuery}
+      errorTitle="Couldn't load PR update settings"
+    >
+      {(settings) => (
+        <>
+          <div className="rounded-md border bg-muted/40 p-3 space-y-1.5">
             <p className="text-sm text-muted-foreground">
-              Enable PR updates for workspaces created from GitHub issues
+              When a workspace has an open pull request, Factory Factory can automatically:
             </p>
+            <ul className="text-sm text-muted-foreground list-disc list-inside space-y-0.5 ml-2">
+              <li>Queue failing CI checks for the next turn</li>
+              <li>Queue actionable code review feedback</li>
+            </ul>
           </div>
-          <Switch
-            id="ratchet-enabled"
-            checked={settings?.ratchetEnabled ?? false}
-            onCheckedChange={(checked) => {
-              updateSettings.mutate({ ratchetEnabled: checked });
-            }}
-            disabled={updateSettings.isPending}
-          />
-        </div>
 
-        <div className="space-y-2">
-          <Label htmlFor="ratchet-review-trigger">Review feedback trigger</Label>
-          <Select
-            value={currentReviewTriggerMode}
-            onValueChange={(value) => {
-              if (value === 'CHANGES_REQUESTED' || value === 'ALL_REVIEW_FEEDBACK') {
-                updateSettings.mutate({ ratchetReviewTriggerMode: value });
-              }
-            }}
-            disabled={updateSettings.isPending}
+          <SettingRow
+            label="Default for new workspaces"
+            htmlFor="ratchet-enabled"
+            description="Enable PR updates for workspaces created from GitHub issues"
+            saving={updateSettings.isSaving('ratchetEnabled')}
           >
-            <SelectTrigger id="ratchet-review-trigger">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="CHANGES_REQUESTED">
-                Changes requested and unresolved threads
-              </SelectItem>
-              <SelectItem value="ALL_REVIEW_FEEDBACK">All review feedback</SelectItem>
-            </SelectContent>
-          </Select>
-          <p className="text-xs text-muted-foreground">
-            All review feedback also lets top-level commented review summaries queue updates.
-            Ordinary PR conversation comments do not queue updates.
-          </p>
-        </div>
+            <Switch
+              id="ratchet-enabled"
+              checked={settings.ratchetEnabled}
+              onCheckedChange={(checked) => updateSettings.mutate({ ratchetEnabled: checked })}
+            />
+          </SettingRow>
 
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-          <div className="space-y-0.5">
-            <Label htmlFor="ratchet-reply-to-pr-comments">Reply to PR comments</Label>
-            <p className="text-sm text-muted-foreground">
-              Allow the main session to reply on review threads when it addresses feedback
-            </p>
-          </div>
-          <Switch
-            id="ratchet-reply-to-pr-comments"
-            checked={settings?.ratchetReplyToPrComments ?? true}
-            onCheckedChange={(checked) => {
-              updateSettings.mutate({ ratchetReplyToPrComments: checked });
-            }}
-            disabled={updateSettings.isPending}
+          <SettingSelect
+            id="ratchet-review-trigger"
+            label="Review feedback trigger"
+            description="All review feedback also lets top-level commented review summaries queue updates. Ordinary PR conversation comments do not queue updates."
+            saving={updateSettings.isSaving('ratchetReviewTriggerMode')}
+            value={settings.ratchetReviewTriggerMode}
+            options={REVIEW_TRIGGER_OPTIONS}
+            onValueChange={(value) => updateSettings.mutate({ ratchetReviewTriggerMode: value })}
           />
-        </div>
 
-        {/* Manual trigger button */}
-        <div className="border-t pt-4">
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-            <div className="space-y-0.5">
-              <Label>Manual check</Label>
-              <p className="text-sm text-muted-foreground">
-                Check monitored PRs and queue actionable updates
-              </p>
-            </div>
+          <SettingRow
+            label="Reply to PR comments"
+            htmlFor="ratchet-reply-to-pr-comments"
+            description="Allow the main session to reply on review threads when it addresses feedback"
+            saving={updateSettings.isSaving('ratchetReplyToPrComments')}
+          >
+            <Switch
+              id="ratchet-reply-to-pr-comments"
+              checked={settings.ratchetReplyToPrComments}
+              onCheckedChange={(checked) =>
+                updateSettings.mutate({ ratchetReplyToPrComments: checked })
+              }
+            />
+          </SettingRow>
+
+          <SettingRow
+            className="border-t pt-4"
+            label="Manual check"
+            description="Check monitored PRs and queue actionable updates"
+          >
             <Button
               variant="outline"
               size="sm"
@@ -172,9 +109,9 @@ export function RatchetSettingsSection() {
                 </>
               )}
             </Button>
-          </div>
-        </div>
-      </CardContent>
-    </Card>
+          </SettingRow>
+        </>
+      )}
+    </SettingsSection>
   );
 }

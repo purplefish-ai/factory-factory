@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { OnboardingCliHealth } from '@/client/features/project/onboarding-cli-health';
 import { SetupTerminalModal } from '@/client/features/project/setup-terminal-modal';
 import { useCLIHealthRefresh } from '@/client/hooks/use-cli-health-refresh';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { SettingsSection } from './settings-section';
 
 export function CliAuthSection() {
   const [terminalOpen, setTerminalOpen] = useState(false);
@@ -15,20 +15,13 @@ export function CliAuthSection() {
   };
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <TerminalIcon className="w-5 h-5" />
-          CLI authentication
-        </CardTitle>
-        <CardDescription>
-          Check and manage authentication for Claude, Codex, and GitHub CLI
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        <OnboardingCliHealth onOpenTerminal={() => setTerminalOpen(true)} />
-        <SetupTerminalModal open={terminalOpen} onClose={handleCloseTerminal} />
-      </CardContent>
-    </Card>
+    <SettingsSection
+      title="CLI authentication"
+      icon={<TerminalIcon className="w-5 h-5" />}
+      description="Check and manage authentication for Claude, Codex, and GitHub CLI"
+    >
+      <OnboardingCliHealth onOpenTerminal={() => setTerminalOpen(true)} />
+      <SetupTerminalModal open={terminalOpen} onClose={handleCloseTerminal} />
+    </SettingsSection>
   );
 }

@@ -1,5 +1,5 @@
 import { ProviderSubagentsSection, type SubagentSelection } from '@/client/features/subagents';
-import { trpc } from '@/client/lib/trpc';
+import { useUserSettings } from '@/client/lib/user-settings-queries';
 import { ChildWorkspacesPanel } from './child-workspaces-panel';
 
 export interface AgentsPanelProps {
@@ -23,7 +23,7 @@ export function AgentsPanel({
   isParentWorkspace,
   onOpenSubagent,
 }: AgentsPanelProps) {
-  const { data: settings } = trpc.userSettings.get.useQuery(undefined, {
+  const { data: settings } = useUserSettings({
     enabled: isParentWorkspace,
   });
   return (
