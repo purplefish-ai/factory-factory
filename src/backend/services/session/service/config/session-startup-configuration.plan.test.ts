@@ -9,7 +9,7 @@ import {
 } from '@/backend/services/session/service/data/session-launch-settings';
 import { userSettingsService } from '@/backend/services/settings';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
-import { applyStartupLaunchPlan } from './session-startup-plan';
+import { SessionStartupPermissions } from './session-permission-policy';
 import { SessionConfigService } from './session.config.service';
 vi.mock('@/backend/services/settings', () => ({ userSettingsService: { get: vi.fn() } }));
 function fixture(provider: 'CLAUDE' | 'CODEX', enabled: boolean) {
@@ -44,12 +44,22 @@ function fixture(provider: 'CLAUDE' | 'CODEX', enabled: boolean) {
   };
   return { handle, session, runtime };
 }
+type Fixture = ReturnType<typeof fixture>;
+function applyPlan(f: Fixture, preset: 'STRICT' | 'RELAXED' | undefined) {
+  const service = new SessionConfigService({
+    repository: unsafeCoerce({}),
+    runtimeManager: unsafeCoerce(f.runtime),
+    codexModelCatalogService: { getModels: vi.fn() },
+    sessionDomainService: unsafeCoerce({}),
+  });
+  return service.applyStartupLaunchPlan('session', f.session, f.handle, preset);
+}
 describe('startup native planning', () => {
   it.each(['CLAUDE', 'CODEX'] as const)(
     'applies and confirms explicit %s Plan before readiness',
     async (provider) => {
       const f = fixture(provider, true);
-      await applyStartupLaunchPlan('session', f.session, f.handle, 'STRICT', f.runtime);
+      await applyPlan(f, 'STRICT');
       expect(f.handle.configOptions[0]?.currentValue).toBe('plan');
     }
   );
@@ -64,7 +74,7 @@ describe('startup native planning', () => {
       ...option,
       category: undefined,
     }));
-    await applyStartupLaunchPlan('session', f.session, f.handle, 'STRICT', f.runtime);
+    await applyPlan(f, 'STRICT');
     expect(f.handle.configOptions[0]?.currentValue).toBe(enabled ? 'plan' : 'default');
   });
   it.each([true, false])(
@@ -81,7 +91,7 @@ describe('startup native planning', () => {
       f.runtime.setSessionMode.mockImplementation((sessionId, modeId) =>
         controller.setSessionMode(f.handle, modeId, sessionId)
       );
-      await applyStartupLaunchPlan('session', f.session, f.handle, 'STRICT', f.runtime);
+      await applyPlan(f, 'STRICT');
       expect(f.handle.configOptions[0]?.currentValue).toBe(enabled ? 'plan' : 'default');
       expect(nativeSetSessionMode).toHaveBeenCalledWith({
         sessionId: f.handle.acpSessionId,
@@ -91,7 +101,7 @@ describe('startup native planning', () => {
   );
   it('turns Claude Plan off into configured STRICT access rather than legacy bypass', async () => {
     const f = fixture('CLAUDE', false);
-    await applyStartupLaunchPlan('session', f.session, f.handle, 'STRICT', f.runtime);
+    await applyPlan(f, 'STRICT');
     expect(f.runtime.setSessionMode).toHaveBeenCalledWith('session', 'default');
     expect(f.handle.configOptions[0]?.currentValue).toBe('default');
   });
@@ -119,20 +129,12 @@ describe('startup native planning', () => {
         }
         return apply(sid, value === 'auto' && auto === 'model-fallback' ? 'acceptEdits' : value);
       });
-      const confirmTarget = vi.fn();
-      await applyStartupLaunchPlan(
-        'session',
-        f.session,
-        f.handle,
-        'RELAXED',
-        f.runtime,
-        undefined,
-        undefined,
-        { assertCurrent: vi.fn(), confirmTarget }
-      );
+      const confirmTarget = vi.spyOn(SessionStartupPermissions.prototype, 'expectLaunchTarget');
+      await applyPlan(f, 'RELAXED');
       expect(f.runtime.setSessionMode).toHaveBeenCalledWith('session', requested);
       expect(f.handle.configOptions[0]?.currentValue).toBe(expected);
-      expect(confirmTarget).toHaveBeenCalledWith('mode', expected);
+      expect(confirmTarget).toHaveBeenCalledWith(f.handle, 'mode', expected);
+      confirmTarget.mockRestore();
     }
   );
   it('resolves configured Claude access when require-existing resume omits its permission preset', async () => {
@@ -153,20 +155,16 @@ describe('startup native planning', () => {
   it('propagates Plan rejection and rejects an unchanged native response', async () => {
     const f = fixture('CODEX', true);
     f.runtime.setConfigOption.mockRejectedValueOnce(new Error('Plan rejected'));
-    await expect(
-      applyStartupLaunchPlan('session', f.session, f.handle, 'STRICT', f.runtime)
-    ).rejects.toThrow('Plan rejected');
+    await expect(applyPlan(f, 'STRICT')).rejects.toThrow('Plan rejected');
     f.runtime.setConfigOption.mockResolvedValueOnce(f.handle.configOptions);
-    await expect(
-      applyStartupLaunchPlan('session', f.session, f.handle, 'STRICT', f.runtime)
-    ).rejects.toThrow('not applied');
+    await expect(applyPlan(f, 'STRICT')).rejects.toThrow('not applied');
   });
   it('ignores consumed launch Plan intent after later native session changes', async () => {
     const f = fixture('CODEX', true);
     f.session.providerMetadata = unsafeCoerce(
       markSessionLaunchSettingsApplied(f.session.providerMetadata)
     );
-    await applyStartupLaunchPlan('session', f.session, f.handle, 'STRICT', f.runtime);
+    await applyPlan(f, 'STRICT');
     expect(f.runtime.setConfigOption).not.toHaveBeenCalled();
     expect(readSessionLaunchSettings(f.session.providerMetadata)?.applied).toBe(true);
   });

@@ -306,8 +306,9 @@ describe('load configuration projection', () => {
       const test = setup();
       test.setHandle(options('retired'));
       test.repository.getSessionById.mockResolvedValue(row('CODEX', options('durable')));
-      const resolve = test.config.getSessionConfigProjection.bind(test.config);
-      vi.spyOn(test.config, 'getSessionConfigProjection').mockImplementation(async (id) => {
+      // The convenience readers resolve through the reader that owns them.
+      const resolve = test.config.reader.getSessionConfigProjection.bind(test.config.reader);
+      vi.spyOn(test.config.reader, 'getSessionConfigProjection').mockImplementation(async (id) => {
         const resolved = await resolve(id);
         queueMicrotask(test.retireHandle);
         return resolved;
