@@ -26,6 +26,12 @@ export interface AgentSessionRecord {
   updatedAt: Date;
 }
 
+/**
+ * A session without `providerMetadata` (provider config snapshots), returned by
+ * workspace session lists, which are polled and never read it.
+ */
+export type AgentSessionSummaryRecord = Omit<AgentSessionRecord, 'providerMetadata'>;
+
 export interface AgentSessionRecordWithWorkspace extends AgentSessionRecord {
   workspace: SessionWorkspaceRecord;
 }

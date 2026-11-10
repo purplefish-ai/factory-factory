@@ -10,6 +10,10 @@ import {
 import { prMonitoringBackupSchema } from '@/shared/schemas/pr-monitoring-backup.schema';
 import type { Prisma, WorkspacePRMonitoring } from '@prisma-gen/client';
 import { workspacePrEventAccessor } from './workspace-pr-event.accessor';
+import {
+  findPRIdsWithoutObservation,
+  withObservationPresence,
+} from './workspace-pr-observation-presence';
 
 export interface PRBindingInput {
   workspaceId: string;
@@ -266,15 +270,34 @@ class WorkspacePrMonitoringAccessor {
       })
       .then((rows) => rows.map(normalizeConfig));
   }
+  /**
+   * Enabled monitoring configs with their attached PRs, for the PR watcher. The
+   * read loads no workspace columns and no PR observation; each PR carries the
+   * `hasObservation` flag the polling policy reads instead.
+   */
   listEnabled() {
-    return prisma.workspacePRMonitoring
-      .findMany({
+    return prisma.$transaction(async (tx) => {
+      const rows = await tx.workspacePRMonitoring.findMany({
         where: { enabled: true, workspace: { status: 'READY' } },
         include: {
-          workspace: { include: { project: true, prs: { where: { detachedAt: null } } } },
+          workspace: {
+            select: {
+              prs: { where: { detachedAt: null }, omit: { observation: true } },
+            },
+          },
         },
-      })
-      .then((rows) => rows.map(normalizeConfig));
+      });
+      const missing = await findPRIdsWithoutObservation(
+        tx,
+        rows.flatMap(({ workspace }) => workspace.prs.map(({ id }) => id))
+      );
+      return rows.map(({ workspace, ...config }) =>
+        normalizeConfig({
+          ...config,
+          workspace: { prs: withObservationPresence(workspace.prs, missing) },
+        })
+      );
+    });
   }
   completeLegacyRetirement(workspaceId: string, expectedBindingRevision: number) {
     return prisma.$transaction(async (tx) => {

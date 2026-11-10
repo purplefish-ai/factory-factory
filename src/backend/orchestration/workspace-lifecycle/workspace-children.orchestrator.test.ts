@@ -86,7 +86,6 @@ function createProject(
     id: 'archived-project',
     name: 'Archived project',
     slug: 'archived-project',
-    workspaces: [],
     repoPath: '/repo',
     worktreeBasePath: '/worktrees',
     defaultBranch: 'main',

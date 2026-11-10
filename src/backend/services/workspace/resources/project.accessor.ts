@@ -3,8 +3,6 @@ import type { IssueProvider } from '@/shared/core/enums';
 import type { IssueTrackerConfig } from '@/shared/schemas/issue-tracker-config.schema';
 import { Prisma, type Project } from '@prisma-gen/client';
 
-type ProjectWithWorkspaces = Prisma.ProjectGetPayload<{ include: { workspaces: true } }>;
-
 interface CreateProjectInput {
   repoPath: string;
   defaultBranch: string;
@@ -76,28 +74,13 @@ class ProjectAccessor {
     throw new Error('Unable to create project: too many projects with similar names');
   }
 
-  findById(id: string): Promise<ProjectWithWorkspaces | null> {
-    return prisma.project.findUnique({
-      where: { id },
-      include: {
-        workspaces: {
-          orderBy: { createdAt: 'desc' },
-          take: 10,
-        },
-      },
-    });
+  /** The project row alone; `project.getById` serves it to clients and several polls read it. */
+  findById(id: string): Promise<Project | null> {
+    return prisma.project.findUnique({ where: { id } });
   }
 
-  findBySlug(slug: string): Promise<ProjectWithWorkspaces | null> {
-    return prisma.project.findUnique({
-      where: { slug },
-      include: {
-        workspaces: {
-          orderBy: { createdAt: 'desc' },
-          take: 10,
-        },
-      },
-    });
+  findBySlug(slug: string): Promise<Project | null> {
+    return prisma.project.findUnique({ where: { slug } });
   }
 
   update(id: string, data: UpdateProjectInput): Promise<Project> {

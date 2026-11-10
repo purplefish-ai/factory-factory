@@ -39,7 +39,7 @@ function createProject(slug = 'demo') {
 }
 
 describe('project persistence contracts', () => {
-  it('reads the same persisted project by id and slug with only its ten newest workspaces', async () => {
+  it('reads the same persisted project by id and slug without loading its workspaces', async () => {
     const project = await createProject();
     const other = await createProject('other');
     await db.prisma.workspace.createMany({
@@ -67,9 +67,10 @@ describe('project persistence contracts', () => {
       startupScriptPath: null,
       startupScriptTimeout: 120,
     });
-    expect(byId?.workspaces.map((workspace) => workspace.name)).toEqual(
-      Array.from({ length: 10 }, (_, index) => `workspace-${11 - index}`)
-    );
+    // `project.getById`/`getBySlug` serve this row to clients and several polls
+    // read it; nothing reads workspaces from it, and full workspace rows carry
+    // startup logs and base64 attachments.
+    expect(byId).not.toHaveProperty('workspaces');
     await expect(projectAccessor.findById('missing')).resolves.toBeNull();
     await expect(projectAccessor.findBySlug('missing')).resolves.toBeNull();
   });

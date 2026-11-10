@@ -310,10 +310,10 @@ it('stops merged polling while waking pending terminal deliveries and polling op
       ...config.workspace.prs[0],
       id: 'merged',
       state: 'MERGED',
-      observation: {},
+      hasObservation: true,
       syncedAt: new Date(),
     },
-    { ...config.workspace.prs[0], id: 'open', observation: {}, syncedAt: new Date() },
+    { ...config.workspace.prs[0], id: 'open', hasObservation: true, syncedAt: new Date() },
   ];
   mocks.listEnabled.mockResolvedValue([{ ...config, workspace: { prs } }]);
   mocks.listPending.mockResolvedValue([{ id: 'terminal-event', prId: 'merged', state: 'PENDING' }]);
@@ -333,21 +333,21 @@ it('backs off closed PRs but observes them again to detect reopening', async () 
       ...config.workspace.prs[0],
       id: 'recent',
       state: 'CLOSED',
-      observation: {},
+      hasObservation: true,
       syncedAt: new Date(now - 10 * 60_000),
     },
     {
       ...config.workspace.prs[0],
       id: 'due',
       state: 'CLOSED',
-      observation: {},
+      hasObservation: true,
       syncedAt: new Date(now - 31 * 60_000),
     },
     {
       ...config.workspace.prs[0],
       id: 'legacy',
       state: 'MERGED',
-      observation: null,
+      hasObservation: false,
       syncedAt: new Date(now - 10 * 60_000),
     },
   ];
@@ -367,7 +367,7 @@ it('eliminates recurring observations for four initialized merged PRs across thi
     ...config.workspace.prs[0],
     id: `merged-${index}`,
     state: 'MERGED',
-    observation: {},
+    hasObservation: true,
     syncedAt: new Date(),
   }));
   mocks.listEnabled.mockResolvedValue([{ ...config, workspace: { prs } }]);
@@ -386,7 +386,7 @@ it('initializes terminal facts for a new monitoring epoch before applying backof
     ...config.workspace.prs[0],
     id: state,
     state,
-    observation: {},
+    hasObservation: true,
     observationEpoch: 0,
     syncedAt: new Date(),
   }));
