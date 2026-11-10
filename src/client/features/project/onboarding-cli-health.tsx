@@ -3,6 +3,7 @@ import { CheckCircleIcon } from '@phosphor-icons/react/dist/csr/CheckCircle';
 import { CircleDashedIcon } from '@phosphor-icons/react/dist/csr/CircleDashed';
 import { TerminalIcon } from '@phosphor-icons/react/dist/csr/Terminal';
 import { WarningIcon } from '@phosphor-icons/react/dist/csr/Warning';
+import { QueryErrorState } from '@/client/components/query-error-state';
 import { useCLIHealthRefresh } from '@/client/hooks/use-cli-health-refresh';
 import { trpc } from '@/client/lib/trpc';
 import { Button } from '@/components/ui/button';
@@ -91,21 +92,25 @@ export function OnboardingCliHealth({ onOpenTerminal }: OnboardingCliHealthProps
   const { refresh, isRefreshing } = useCLIHealthRefresh();
   const {
     data: health,
-    isLoading,
+    error,
     isRefetching,
   } = trpc.admin.checkCLIHealth.useQuery({ forceRefresh: false }, { staleTime: 60_000 });
 
-  if (isLoading) {
-    return (
+  if (!health) {
+    return error ? (
+      <QueryErrorState
+        title="Couldn't check CLI prerequisites"
+        error={error}
+        onRetry={() => void refresh()}
+        isRetrying={isRefreshing}
+        className="p-3"
+      />
+    ) : (
       <div className="flex items-center gap-2 text-sm text-muted-foreground py-2">
         <Spinner className="h-4 w-4" />
         <span>Checking CLI prerequisites…</span>
       </div>
     );
-  }
-
-  if (!health) {
-    return null;
   }
 
   const items = buildItems(health);

@@ -6,15 +6,23 @@ import { createRoot } from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { type ChangeListEntry, ChangeTreeView } from './change-panel-shared';
 
-const mocks = vi.hoisted(() => ({
-  listFilesUseQuery: vi.fn(() => ({
-    data: {
-      entries: [{ name: 'a.ts', path: 'myfolder/a.ts', type: 'file' as const }],
-    },
-    isError: false,
-    isLoading: false,
-  })),
-}));
+const mocks = vi.hoisted(() => {
+  const listed = {
+    entries: [{ name: 'a.ts', path: 'myfolder/a.ts', type: 'file' as const }],
+  };
+  const refetch = vi.fn();
+  return {
+    listed,
+    refetch,
+    listFilesUseQuery: vi.fn(
+      (): {
+        data: typeof listed | undefined;
+        error: { message: string } | null;
+        refetch: typeof refetch;
+      } => ({ data: listed, error: null, refetch })
+    ),
+  };
+});
 
 vi.mock('@phosphor-icons/react/dist/csr/CaretDown', () => ({ CaretDownIcon: () => null }));
 vi.mock('@phosphor-icons/react/dist/csr/CaretRight', () => ({ CaretRightIcon: () => null }));
@@ -39,6 +47,11 @@ vi.mock('@/client/lib/trpc', () => ({
 afterEach(() => {
   document.body.innerHTML = '';
   vi.clearAllMocks();
+  mocks.listFilesUseQuery.mockReturnValue({
+    data: mocks.listed,
+    error: null,
+    refetch: mocks.refetch,
+  });
 });
 
 describe('ChangeTreeView', () => {
@@ -118,5 +131,51 @@ describe('ChangeTreeView', () => {
     ).toHaveLength(1);
 
     root.unmount();
+  });
+
+  function renderUntrackedDirectory() {
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    flushSync(() => {
+      root.render(
+        createElement(ChangeTreeView, {
+          entries: [{ path: 'myfolder/', kind: 'untracked', statusCode: '?' }],
+          onFileClick: vi.fn(),
+          workspaceId: 'workspace-1',
+        })
+      );
+    });
+    return { container, unmount: () => root.unmount() };
+  }
+
+  it('offers Retry when an untracked directory cannot be read', () => {
+    mocks.listFilesUseQuery.mockReturnValue({
+      data: undefined,
+      error: { message: 'EACCES' },
+      refetch: mocks.refetch,
+    });
+    const { container, unmount } = renderUntrackedDirectory();
+
+    expect(container.textContent).toContain("Couldn't load directory contents");
+    const retry = Array.from(container.querySelectorAll('button')).find(
+      (button) => button.textContent === 'Retry'
+    );
+    flushSync(() => retry?.click());
+    expect(mocks.refetch).toHaveBeenCalledOnce();
+    unmount();
+  });
+
+  it('keeps listed directory contents when a later read fails', () => {
+    mocks.listFilesUseQuery.mockReturnValue({
+      data: mocks.listed,
+      error: { message: 'EACCES' },
+      refetch: mocks.refetch,
+    });
+    const { container, unmount } = renderUntrackedDirectory();
+
+    expect(container.textContent).toContain("Couldn't refresh directory contents");
+    expect(container.textContent).toContain('a.ts');
+    unmount();
   });
 });

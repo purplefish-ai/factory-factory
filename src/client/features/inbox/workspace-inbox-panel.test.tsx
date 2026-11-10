@@ -490,7 +490,7 @@ describe('WorkspaceInboxPanel', () => {
     await waitForText("Couldn't read message");
     expect(container.querySelector<HTMLButtonElement>('[data-mail-ack]')?.disabled).toBe(true);
     fail = false;
-    await click('Try again');
+    await click('Retry');
     await waitForText('Recovered report');
     expect(requests.some((item) => item.path === 'workspace.ackMail')).toBe(false);
   });
@@ -502,7 +502,7 @@ describe('WorkspaceInboxPanel', () => {
     expect(container.textContent).toContain('Loading inbox');
     await waitForText("Couldn't load inbox");
     respond = () => ({ items: [], revision: 0, nextCursor: null });
-    await click('Try again');
+    await click('Retry');
     await waitForText('No messages yet');
   });
 });

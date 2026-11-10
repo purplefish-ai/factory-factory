@@ -203,9 +203,10 @@ export const LoadError: Story = {
     },
   },
   play: async ({ canvasElement }) => {
-    await expect(
-      await within(canvasElement).findByText("Couldn't load workspaces. Database is locked")
-    ).toBeVisible();
+    const alert = await within(canvasElement).findByRole('alert');
+    await expect(alert).toHaveTextContent("Couldn't load workspaces");
+    await expect(alert).toHaveTextContent('Database is locked');
+    await expect(within(alert).getByRole('button', { name: 'Retry' })).toBeVisible();
   },
 };
 

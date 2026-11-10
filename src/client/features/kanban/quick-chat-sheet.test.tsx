@@ -18,6 +18,7 @@ const mocks = vi.hoisted(() => ({
   content: vi.fn(),
   maxSessions: 2,
   maxSessionsError: false,
+  maxSessionsRefreshError: false,
   retryLimit: vi.fn(),
   deleting: false,
   worktreePath: '/tmp/worktree' as string | null,
@@ -45,8 +46,12 @@ vi.mock('@/client/lib/trpc', () => ({
     session: {
       getMaxSessionsPerWorkspace: {
         useQuery: () => ({
-          data: mocks.maxSessions,
-          isError: mocks.maxSessionsError,
+          data: mocks.maxSessionsError ? undefined : mocks.maxSessions,
+          error:
+            mocks.maxSessionsError || mocks.maxSessionsRefreshError
+              ? { message: 'Database is locked' }
+              : null,
+          isFetching: false,
           refetch: mocks.retryLimit,
         }),
       },
@@ -103,6 +108,7 @@ beforeEach(() => {
   mocks.workspaceProvider = 'CLAUDE';
   mocks.maxSessions = 10;
   mocks.maxSessionsError = false;
+  mocks.maxSessionsRefreshError = false;
   mocks.deleting = false;
   mocks.worktreePath = '/tmp/worktree';
   vi.clearAllMocks();
@@ -309,11 +315,28 @@ it('reports and retries a failed chat-limit query instead of claiming chats are 
     expect(mocks.content).toHaveBeenLastCalledWith(
       expect.objectContaining({ newChatUnavailableReason: "Couldn't load the chat limit." })
     );
-    const retry = [...document.querySelectorAll('button')].find(
-      (button) => button.textContent === 'Retry chat limit'
-    );
+    const alert = document.querySelector('[role="alert"]');
+    expect(alert?.textContent).toContain("Couldn't load the chat limit");
+    expect(alert?.textContent).toContain('Database is locked');
+    const retry = alert?.querySelector('button');
     await act(() => retry?.click());
     expect(mocks.retryLimit).toHaveBeenCalledOnce();
+  } finally {
+    await act(() => root.unmount());
+    container.remove();
+  }
+});
+it('keeps applying a cached chat limit when only its refetch failed', async () => {
+  mocks.maxSessionsRefreshError = true;
+  const container = document.createElement('div');
+  document.body.append(container);
+  const root = createRoot(container);
+  try {
+    await act(() => root.render(<QuickChatSheet workspaceId="workspace" onClose={vi.fn()} />));
+    expect(mocks.content).toHaveBeenLastCalledWith(
+      expect.objectContaining({ newChatUnavailableReason: null })
+    );
+    expect(document.querySelector('[role="alert"]')).toBeNull();
   } finally {
     await act(() => root.unmount());
     container.remove();

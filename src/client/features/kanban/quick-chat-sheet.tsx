@@ -71,33 +71,39 @@ function QuickChatSessionState({
   );
 }
 
-function getChatLimitUnavailableReason(query: { data?: number; isError: boolean }): string | null {
-  if (query.isError) {
-    return "Couldn't load the chat limit.";
-  }
-  return query.data === undefined ? 'Loading chat limit…' : null;
-}
-
 function QuickChatLimitError({
-  visible,
-  retrying,
-  onRetry,
+  query,
 }: {
-  visible: boolean;
-  retrying: boolean;
-  onRetry: () => void;
+  query: {
+    data?: number;
+    error: { message: string } | null;
+    isFetching: boolean;
+    refetch: () => unknown;
+  };
 }) {
-  if (!visible) {
+  if (!query.error || query.data !== undefined) {
     return null;
   }
   return (
-    <div role="alert" className="flex items-center gap-2 border-b px-4 py-2 text-sm">
-      <span>Couldn't load the chat limit.</span>
-      <Button size="sm" variant="outline" disabled={retrying} onClick={onRetry}>
-        Retry chat limit
-      </Button>
-    </div>
+    <QueryErrorState
+      title="Couldn't load the chat limit"
+      error={query.error}
+      onRetry={() => void query.refetch()}
+      isRetrying={query.isFetching}
+      className="shrink-0 border-b p-3"
+    />
   );
+}
+
+/** A cached limit still applies when only a refetch failed. */
+function getChatLimitUnavailableReason(query: {
+  data?: number;
+  error: { message: string } | null;
+}): string | null {
+  if (query.data !== undefined) {
+    return null;
+  }
+  return query.error ? "Couldn't load the chat limit." : 'Loading chat limit…';
 }
 
 export function QuickChatSheet({ workspaceId, onClose }: QuickChatSheetProps) {
@@ -196,11 +202,7 @@ export function QuickChatSheet({ workspaceId, onClose }: QuickChatSheetProps) {
           </div>
         </div>
 
-        <QuickChatLimitError
-          visible={maxSessionsQuery.isError}
-          retrying={maxSessionsQuery.isFetching}
-          onRetry={() => void maxSessionsQuery.refetch()}
-        />
+        <QuickChatLimitError query={maxSessionsQuery} />
 
         {/* Chat content */}
         <div className="flex-1 min-h-0">

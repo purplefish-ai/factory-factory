@@ -40,8 +40,16 @@ export function WorkspaceDetailContainer() {
   const { key: navigationKey } = useLocation();
   const utils = trpc.useUtils();
 
-  const { workspace, workspaceLoading, sessions, initialDbSessionId, maxSessions } =
-    useWorkspaceData({ workspaceId: workspaceId });
+  const {
+    workspace,
+    workspaceLoading,
+    workspaceError,
+    isFetchingWorkspace,
+    refetchWorkspace,
+    sessions,
+    initialDbSessionId,
+    maxSessions,
+  } = useWorkspaceData({ workspaceId: workspaceId });
 
   const {
     rightPanelVisible,
@@ -386,8 +394,10 @@ export function WorkspaceDetailContainer() {
 
   const workspaceState = useMemo(
     () => ({
-      workspaceLoading,
       workspace,
+      workspaceError,
+      isFetchingWorkspace,
+      refetchWorkspace,
       workspaceId,
       handleBackToWorkspaces,
       isScriptFailed,
@@ -396,8 +406,10 @@ export function WorkspaceDetailContainer() {
       dismissSetupWarning,
     }),
     [
-      workspaceLoading,
       workspace,
+      workspaceError,
+      isFetchingWorkspace,
+      refetchWorkspace,
       workspaceId,
       handleBackToWorkspaces,
       isScriptFailed,

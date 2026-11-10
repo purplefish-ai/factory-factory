@@ -123,7 +123,7 @@ export const workspaceCoreRouter = router({
       ctx.appContext.services;
     const workspace = await workspaceDataService.findDetailById(input.id);
     if (!workspace) {
-      throw new Error(`Workspace not found: ${input.id}`);
+      throw new TRPCError({ code: 'NOT_FOUND', message: `Workspace not found: ${input.id}` });
     }
     const flowState = deriveWorkspaceFlowStateFromWorkspace(workspace);
     const pendingRequests = sessionDomainService.getAllPendingRequests();

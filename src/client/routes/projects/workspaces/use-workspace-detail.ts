@@ -42,7 +42,13 @@ interface UseWorkspaceDataOptions {
 export function useWorkspaceData({ workspaceId }: UseWorkspaceDataOptions) {
   const utils = trpc.useUtils();
 
-  const { data: workspace, isLoading: workspaceLoading } = useWorkspaceDetailQuery(workspaceId);
+  const {
+    data: workspace,
+    isLoading: workspaceLoading,
+    error: workspaceError,
+    isFetching: isFetchingWorkspace,
+    refetch: refetchWorkspace,
+  } = useWorkspaceDetailQuery(workspaceId);
 
   // Expose invalidate function for external triggers (e.g., when session stops running)
   const invalidateWorkspace = useCallback(() => {
@@ -73,7 +79,7 @@ export function useWorkspaceData({ workspaceId }: UseWorkspaceDataOptions) {
     }
   }, [workspace?.prs.length, workspaceId, syncPRStatus]);
 
-  const { data: sessions, isLoading: sessionsLoading } = trpc.session.listSessions.useQuery(
+  const { data: sessions } = trpc.session.listSessions.useQuery(
     { workspaceId },
     {
       refetchInterval: POLL_INTERVAL_MS.activity,
@@ -90,8 +96,10 @@ export function useWorkspaceData({ workspaceId }: UseWorkspaceDataOptions) {
   return {
     workspace,
     workspaceLoading,
+    workspaceError,
+    isFetchingWorkspace,
+    refetchWorkspace,
     sessions,
-    sessionsLoading,
     initialDbSessionId,
     maxSessions,
     invalidateWorkspace,

@@ -22,6 +22,7 @@ import {
 import { Link, useLocation, useNavigate } from 'react-router';
 import { Loading } from '@/client/components/loading';
 import { ProjectIssuesState } from '@/client/components/project-issues-state';
+import { QueryErrorState, QueryRefreshError } from '@/client/components/query-error-state';
 import type { ServerWorkspace } from '@/client/components/use-workspace-list-state';
 import { ErrorBoundary } from '@/client/error-boundary';
 import { WorkspaceCreationImageDropZone } from '@/client/features/kanban/workspace-creation-image-drop-zone';
@@ -217,6 +218,67 @@ function WorkspaceGroup({
         )}
       </SidebarGroupContent>
     </SidebarGroup>
+  );
+}
+
+/** A failed list load must not read as three empty groups. */
+function WorkspaceGroups({
+  navData,
+  working,
+  waiting,
+  done,
+}: {
+  navData: NavigationData;
+  working: ServerWorkspace[];
+  waiting: ServerWorkspace[];
+  done: ServerWorkspace[];
+}) {
+  const error = navData.serverWorkspacesError;
+  if (error && navData.serverWorkspaces === undefined) {
+    return (
+      <QueryErrorState
+        title="Couldn't load workspaces"
+        error={error}
+        onRetry={error.retry}
+        isRetrying={error.isRetrying}
+        className="p-2"
+      />
+    );
+  }
+  const groupProps = {
+    projectSlug: navData.selectedProjectSlug,
+    currentWorkspaceId: navData.currentWorkspaceId,
+    unreadMailCounts: navData.unreadMailCounts,
+  };
+  return (
+    <>
+      {error ? (
+        <QueryRefreshError
+          title="Couldn't refresh workspaces"
+          error={error}
+          onRetry={error.retry}
+          isRetrying={error.isRetrying}
+        />
+      ) : null}
+      <WorkspaceGroup
+        label="Working"
+        workspaces={working}
+        emptyText="No active workspaces"
+        {...groupProps}
+      />
+      <WorkspaceGroup
+        label="Waiting"
+        workspaces={waiting}
+        emptyText="No waiting workspaces"
+        {...groupProps}
+      />
+      <WorkspaceGroup
+        label="Done"
+        workspaces={done}
+        emptyText="No completed workspaces"
+        {...groupProps}
+      />
+    </>
   );
 }
 
@@ -528,30 +590,7 @@ function SidebarInner({
           </SidebarGroupContent>
         </SidebarGroup>
 
-        <WorkspaceGroup
-          label="Working"
-          workspaces={working}
-          projectSlug={navData.selectedProjectSlug}
-          currentWorkspaceId={navData.currentWorkspaceId}
-          unreadMailCounts={navData.unreadMailCounts}
-          emptyText="No active workspaces"
-        />
-        <WorkspaceGroup
-          label="Waiting"
-          workspaces={waiting}
-          projectSlug={navData.selectedProjectSlug}
-          currentWorkspaceId={navData.currentWorkspaceId}
-          unreadMailCounts={navData.unreadMailCounts}
-          emptyText="No waiting workspaces"
-        />
-        <WorkspaceGroup
-          label="Done"
-          workspaces={done}
-          projectSlug={navData.selectedProjectSlug}
-          currentWorkspaceId={navData.currentWorkspaceId}
-          unreadMailCounts={navData.unreadMailCounts}
-          emptyText="No completed workspaces"
-        />
+        <WorkspaceGroups navData={navData} working={working} waiting={waiting} done={done} />
         <IssueGroup
           issues={issues}
           status={issuesStatus}

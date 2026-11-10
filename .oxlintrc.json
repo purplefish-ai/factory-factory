@@ -142,7 +142,26 @@
             ]
           }
         ],
-        "factory/named-query-options": "error"
+        "factory/named-query-options": "error",
+        "factory/query-error-handled": [
+          "error",
+          {
+            "exceptions": {
+              "src/client/features/kanban/inline-workspace-form.tsx": "Its userSettings.get loading flag is fixed by PR ux-settings-sections, which owns userSettings queries.",
+              "src/client/features/kanban/issue-launch-sheet.tsx": "Its userSettings.get loading flag is fixed by PR ux-settings-sections, which owns userSettings queries.",
+              "src/client/features/session-selection/use-session-launch-selection.ts": "Its userSettings.getProviderOptions loading flag is fixed by PR ux-settings-sections, which owns userSettings queries.",
+              "src/client/lib/providers.tsx": "useProjects exposes isLoading for root.tsx, which PR ux-render-resilience owns; root only redirects on a loaded empty list, so a failed load never reads as empty.",
+              "src/client/routes/admin/AdversarialReviewSection.tsx": "Settings sections are migrated by PR ux-settings-sections.",
+              "src/client/routes/admin/AppInfoSection.tsx": "Settings sections are migrated by PR ux-settings-sections.",
+              "src/client/routes/admin/AppearanceSettingsSection.tsx": "Settings sections are migrated by PR ux-settings-sections.",
+              "src/client/routes/admin/ChatProviderDefaultsSection.tsx": "Settings sections are migrated by PR ux-settings-sections.",
+              "src/client/routes/admin/IdeSettingsSection.tsx": "Settings sections are migrated by PR ux-settings-sections.",
+              "src/client/routes/admin/NotificationSettingsSection.tsx": "Settings sections are migrated by PR ux-settings-sections.",
+              "src/client/routes/admin/RatchetSettingsSection.tsx": "Settings sections are migrated by PR ux-settings-sections.",
+              "src/client/routes/admin/VoiceModeSection.tsx": "Settings sections are migrated by PR ux-settings-sections."
+            }
+          }
+        ]
       }
     },
     {

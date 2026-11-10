@@ -1,6 +1,7 @@
 import { CheckCircleIcon } from '@phosphor-icons/react/dist/csr/CheckCircle';
 import { TerminalIcon } from '@phosphor-icons/react/dist/csr/Terminal';
 import { WarningIcon } from '@phosphor-icons/react/dist/csr/Warning';
+import { QueryErrorState } from '@/client/components/query-error-state';
 import { type ScriptType, StartupScriptForm } from '@/client/features/project/startup-script-form';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
@@ -11,12 +12,27 @@ import { Spinner } from '@/components/ui/spinner';
 function AuthStatusSection({
   authStatus,
   isCheckingAuth,
+  authError,
+  onRetryAuth,
   onOpenTerminal,
 }: {
   authStatus: { authenticated: boolean; user?: string; error?: string } | undefined;
   isCheckingAuth: boolean;
+  authError: { message: string } | null;
+  onRetryAuth: () => void;
   onOpenTerminal: () => void;
 }) {
+  if (!authStatus && authError) {
+    return (
+      <QueryErrorState
+        title="Couldn't check GitHub authentication"
+        error={authError}
+        onRetry={onRetryAuth}
+        className="rounded-md border p-3"
+      />
+    );
+  }
+
   if (isCheckingAuth) {
     return (
       <div className="space-y-2">
@@ -64,6 +80,9 @@ export interface GithubUrlFormProps {
   parsedRepo: { owner: string; repo: string } | null;
   authStatus: { authenticated: boolean; user?: string; error?: string } | undefined;
   isCheckingAuth: boolean;
+  /** The auth check failed; shown with Retry instead of hiding the section. */
+  authError: { message: string } | null;
+  onRetryAuth: () => void;
   onOpenTerminal: () => void;
   scriptType: ScriptType;
   setScriptType: (value: ScriptType) => void;
@@ -85,6 +104,8 @@ export function GithubUrlForm({
   parsedRepo,
   authStatus,
   isCheckingAuth,
+  authError,
+  onRetryAuth,
   onOpenTerminal,
   scriptType,
   setScriptType,
@@ -136,6 +157,8 @@ export function GithubUrlForm({
       <AuthStatusSection
         authStatus={authStatus}
         isCheckingAuth={isCheckingAuth}
+        authError={authError}
+        onRetryAuth={onRetryAuth}
         onOpenTerminal={onOpenTerminal}
       />
 

@@ -48,3 +48,48 @@ export function QueryErrorState({
     </div>
   );
 }
+
+interface QueryRefreshErrorProps {
+  /** What failed to refresh, e.g. "Couldn't refresh workspaces". */
+  title?: string;
+  error: { message: string };
+  onRetry: () => void;
+  isRetrying?: boolean;
+  className?: string;
+}
+
+/**
+ * Non-blocking notice for a query whose cached data is still shown after a
+ * background refetch failed. It sits above the content in normal flow, so the
+ * content keeps its state; place it inside a `flex-col` parent and give
+ * fixed-height content `min-h-0 flex-1`.
+ */
+export function QueryRefreshError({
+  title = "Couldn't refresh",
+  error,
+  onRetry,
+  isRetrying = false,
+  className,
+}: QueryRefreshErrorProps) {
+  const detail = error.message.trim();
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      className={cn(
+        'flex shrink-0 items-center gap-2 border-b bg-destructive/5 px-3 py-1 text-xs',
+        className
+      )}
+    >
+      <WarningCircleIcon className="size-3.5 shrink-0 text-destructive" aria-hidden="true" />
+      <p className="min-w-0 flex-1 truncate" title={detail || undefined}>
+        <span className="font-medium text-foreground">{title}.</span>{' '}
+        <span className="text-muted-foreground">Showing the last loaded data.</span>
+      </p>
+      <Button variant="ghost" size="xs" onClick={onRetry} disabled={isRetrying}>
+        {isRetrying ? <Spinner className="size-3" aria-hidden="true" /> : null}
+        {isRetrying ? 'Retrying…' : 'Retry'}
+      </Button>
+    </div>
+  );
+}

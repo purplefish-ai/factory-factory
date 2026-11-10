@@ -116,7 +116,7 @@ describe('AgentRunHistory', () => {
     expect(container.textContent).toContain('Loading run history');
     expect(container.textContent).not.toContain('No runs yet');
     const retry = vi.fn();
-    renderHistory(undefined, { error: 'Connection lost', onRetry: retry });
+    renderHistory(undefined, { error: { message: 'Connection lost', retry } });
     expect(container.textContent).toContain('Connection lost');
     actFlushSync(() => container.querySelector('button')?.click());
     expect(retry).toHaveBeenCalledOnce();

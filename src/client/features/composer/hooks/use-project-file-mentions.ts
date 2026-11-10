@@ -16,6 +16,8 @@ interface UseProjectFileMentionsReturn {
   fileMentionFilter: string;
   files: string[];
   filesLoading: boolean;
+  /** The file list failed to load; the palette shows it instead of "No files found". */
+  filesError: string | null;
   paletteRef: React.RefObject<FileMentionPaletteHandle | null>;
   handleFileMentionSelect: (filePath: string) => void;
   handleFileMentionMenuClose: () => void;
@@ -36,7 +38,11 @@ export function useProjectFileMentions({
   const [fileMentionFilter, setFileMentionFilter] = useState('');
   const paletteRef = useRef<FileMentionPaletteHandle>(null);
 
-  const { data: filesData, isLoading: filesLoading } = trpc.project.listAllFiles.useQuery(
+  const {
+    data: filesData,
+    isLoading: filesLoading,
+    error,
+  } = trpc.project.listAllFiles.useQuery(
     {
       projectId,
       query: fileMentionFilter,
@@ -158,6 +164,7 @@ export function useProjectFileMentions({
     fileMentionFilter,
     files,
     filesLoading,
+    filesError: error?.message ?? null,
     paletteRef,
     handleFileMentionSelect,
     handleFileMentionMenuClose,

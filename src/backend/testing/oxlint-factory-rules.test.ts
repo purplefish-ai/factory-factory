@@ -28,6 +28,7 @@ const rules = [
   'no-raw-palette-classes',
   'query-owner',
   'named-query-options',
+  'query-error-handled',
 ];
 const workspaceQueryOwner = 'owned/workspace-queries.ts';
 const userSettingsOwner = 'owned/user-settings-queries.ts';
@@ -160,6 +161,14 @@ describe('Oxlint project guardrails', () => {
     ['named-query-options', 'useQuery({ staleTime: 60_000, retry: false });'],
     ['named-query-options', 'useQuery({ retry: 1, retryDelay: 1000 });'],
     ['named-query-options', 'const previewOptions = { retry: true } as const;'],
+    ['query-error-handled', 'const { data, isLoading } = trpc.project.list.useQuery();'],
+    ['query-error-handled', 'const { data, isPending } = useQuery(options);'],
+    ['query-error-handled', 'const { data, isLoading: loading } = useWorkspaceDetailQuery(id);'],
+    [
+      'query-error-handled',
+      'const mail = trpc.workspace.listMail.useInfiniteQuery(input); show(mail.isLoading, mail.data);',
+    ],
+    ['query-error-handled', 'const q = trpc.a.b.useQuery(); const busy = q?.isPending;'],
   ];
   const rejectedFixtures = rejectedSources.map(([rule, source], index) => ({
     rule,
@@ -218,6 +227,16 @@ describe('Oxlint project guardrails', () => {
     'new QueryClient({ defaultOptions: { queries: { retry: false, refetchOnWindowFocus: false } } });',
     'const defaults = { queries: { retry: 0 }, mutations: { retry: false } };',
     'const step = { file: "a.ts", old_string: "retry: false" };',
+    'const { data, isLoading, error } = trpc.project.list.useQuery();',
+    'const { data, isPending, isError } = useQuery(options);',
+    'const { data, isLoading, status } = useProjectWorkspaceQuery(id);',
+    'const { data } = trpc.project.list.useQuery();',
+    'const { data, isFetching, refetch } = trpc.project.list.useQuery();',
+    'const { data, isLoading } = trpc.project.list.useSuspenseQuery();',
+    'const { isLoading, ...query } = trpc.project.list.useQuery();',
+    'const { isPending } = trpc.project.create.useMutation();',
+    'const q = trpc.a.b.useQuery(); if (q.isLoading) { show(q.error); }',
+    'const q = trpc.a.b.useQuery(); const busy = q.isLoading; const el = <QueryState query={q} />;',
   ]
     .map((source, index) => ({ source, file: join(directory, `accepted-${index}.tsx`) }))
     .concat(
@@ -273,7 +292,7 @@ describe('Oxlint project guardrails', () => {
   });
 });
 
-const paletteRuleSchema = z.tuple([
+const exceptionRuleSchema = z.tuple([
   z.literal('error'),
   z.object({ exceptions: z.record(z.string(), z.string().min(1)) }),
 ]);
@@ -289,7 +308,7 @@ describe('raw palette class exceptions', () => {
   );
   const exceptions = projectConfig.overrides.flatMap((override) => {
     const rule = override.rules['factory/no-raw-palette-classes'];
-    return Array.isArray(rule) ? Object.entries(paletteRuleSchema.parse(rule)[1].exceptions) : [];
+    return Array.isArray(rule) ? Object.entries(exceptionRuleSchema.parse(rule)[1].exceptions) : [];
   });
 
   it('keeps the allowlist small, with a reason for every file', () => {
@@ -305,6 +324,43 @@ describe('raw palette class exceptions', () => {
     expect(readFileSync(resolve(file), 'utf8')).toMatch(
       /(?<=^|[\s'"`:!])(?:bg|text|border(?:-[trblxyse])?|ring(?:-offset)?|inset-ring|outline|fill|stroke|from|via|to|decoration|divide|shadow|inset-shadow|text-shadow|drop-shadow|accent|caret|placeholder)-(?:red|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose|slate|gray|zinc|neutral|stone)-(?:50|[1-9]00|950)(?![\w-])/
     );
+  });
+});
+
+describe('query error exceptions', () => {
+  const projectConfig = overridesSchema.parse(
+    JSON.parse(readFileSync(resolve('.oxlintrc.json'), 'utf8'))
+  );
+  const exceptions = projectConfig.overrides.flatMap((override) => {
+    const rule = override.rules['factory/query-error-handled'];
+    return Array.isArray(rule) ? Object.entries(exceptionRuleSchema.parse(rule)[1].exceptions) : [];
+  });
+  let diagnostics: z.infer<typeof reportSchema>['diagnostics'] = [];
+  beforeAll(() => {
+    // The fixture config enables the rule without exceptions.
+    const result = spawnSync(
+      binary,
+      ['--config', config, '--format', 'json', ...exceptions.map(([file]) => resolve(file))],
+      { cwd: directory, encoding: 'utf8' }
+    );
+    expect(result.error).toBeUndefined();
+    diagnostics = reportSchema.parse(JSON.parse(result.stdout)).diagnostics;
+  });
+
+  it('gives every file a reason or the pull request that migrates it', () => {
+    expect(exceptions.length).toBeGreaterThan(0);
+    for (const [, reason] of exceptions) {
+      expect(reason.length).toBeGreaterThan(20);
+    }
+  });
+
+  it.each(exceptions.map(([file]) => file))('%s still needs its exception', (file) => {
+    expect(
+      diagnostics.some(
+        ({ filename, code }) =>
+          code === 'factory(query-error-handled)' && resolve(directory, filename) === resolve(file)
+      )
+    ).toBe(true);
   });
 });
 

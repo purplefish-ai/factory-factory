@@ -506,6 +506,7 @@ export function InlineWorkspaceForm({
             files={fileMentions.files}
             isOpen={fileMentions.fileMentionMenuOpen}
             isLoading={fileMentions.filesLoading}
+            error={fileMentions.filesError}
             onClose={fileMentions.handleFileMentionMenuClose}
             onSelect={fileMentions.handleFileMentionSelect}
             filter={fileMentions.fileMentionFilter}

@@ -1,34 +1,10 @@
 import { Link, Outlet, useParams } from 'react-router';
+import { EmptyState } from '@/client/components/empty-state';
 import { Loading } from '@/client/components/loading';
+import { QueryErrorState, QueryRefreshError } from '@/client/components/query-error-state';
+import { isNotFoundError } from '@/client/components/query-state';
 import { trpc } from '@/client/lib/trpc';
 import { Button } from '@/components/ui/button';
-
-function ProjectLoadError({
-  message,
-  retry,
-  pending,
-  notFound = false,
-}: {
-  message: string;
-  retry: () => void;
-  pending: boolean;
-  notFound?: boolean;
-}) {
-  return (
-    <div role="alert" className="space-y-3 p-6 text-center">
-      <p className="text-sm text-muted-foreground">{message}</p>
-      {notFound ? (
-        <Button variant="outline" asChild>
-          <Link to="/projects">Go to projects</Link>
-        </Button>
-      ) : (
-        <Button variant="outline" onClick={retry} disabled={pending}>
-          Retry project
-        </Button>
-      )}
-    </div>
-  );
-}
 
 export function ProjectLayout() {
   const { slug = '' } = useParams<{ slug: string }>();
@@ -41,7 +17,7 @@ export function ProjectLayout() {
   const retry = () => {
     void refetch();
   };
-  const notFound = error?.data?.code === 'NOT_FOUND';
+  const notFound = isNotFoundError(error);
 
   // Recoverable background failures must not unmount owned editors and drafts.
   // Also reject data for another slug rather than keeping a previous owner alive.
@@ -49,10 +25,11 @@ export function ProjectLayout() {
     return (
       <>
         {error ? (
-          <ProjectLoadError
-            message={`Couldn't refresh project. ${error.message}`}
-            retry={retry}
-            pending={isFetching}
+          <QueryRefreshError
+            title="Couldn't refresh project"
+            error={error}
+            onRetry={retry}
+            isRetrying={isFetching}
           />
         ) : null}
         <Outlet />
@@ -63,12 +40,24 @@ export function ProjectLayout() {
   if (!error) {
     return <Loading message="Loading project…" className="h-64" />;
   }
+  if (notFound) {
+    return (
+      <EmptyState
+        title="Project not found"
+        action={
+          <Button variant="outline" asChild>
+            <Link to="/projects">Go to projects</Link>
+          </Button>
+        }
+      />
+    );
+  }
   return (
-    <ProjectLoadError
-      message={notFound ? 'Project not found' : `Couldn't load project. ${error.message}`}
-      retry={retry}
-      pending={isFetching}
-      notFound={notFound}
+    <QueryErrorState
+      title="Couldn't load project"
+      error={error}
+      onRetry={retry}
+      isRetrying={isFetching}
     />
   );
 }

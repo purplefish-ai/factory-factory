@@ -90,7 +90,7 @@ const rawPre = (container: Element) =>
     (node) => node.textContent
   );
 
-const staleNotice = 'Latest transcript read failed. Showing previously loaded history.';
+const staleNotice = "Couldn't refresh. Showing the last loaded data.";
 const failureKinds = ['network', 'server', 'malformed', 'schema'] as const;
 function readFailure(kind: (typeof failureKinds)[number]): {
   wire?: unknown;
@@ -278,7 +278,9 @@ describe('compatible archive view with real query selection, projection and rich
           clock.mockRestore();
         }
         await vi.waitFor(() =>
-          expect(fixture.container.querySelector('[role="status"]')?.textContent).toBe(staleNotice)
+          expect(fixture.container.querySelector('[role="status"] p')?.textContent).toBe(
+            staleNotice
+          )
         );
         expect(fixture.container.querySelectorAll('[role="status"]')).toHaveLength(1);
         expect(fixture.container.querySelector('[role="status"]')?.getAttribute('aria-live')).toBe(
@@ -311,7 +313,7 @@ describe('compatible archive view with real query selection, projection and rich
     failRead(fixture, kind);
     await fixture.queryClient.refetchQueries();
     await vi.waitFor(() =>
-      expect(fixture.container.querySelector('[role="status"]')?.textContent).toBe(staleNotice)
+      expect(fixture.container.querySelector('[role="status"] p')?.textContent).toBe(staleNotice)
     );
     expect(fixture.container.textContent).toContain('No messages in this session');
     fixture.response.error = undefined;
@@ -343,7 +345,7 @@ describe('compatible archive view with real query selection, projection and rich
     failRead(fixture, 'network');
     await fixture.queryClient.refetchQueries();
     await vi.waitFor(() =>
-      expect(fixture.container.querySelector('[role="status"]')?.textContent).toBe(staleNotice)
+      expect(fixture.container.querySelector('[role="status"] p')?.textContent).toBe(staleNotice)
     );
     fixture.response.error = undefined;
     fixture.response.wire = JSON.stringify({ messages: [user('new session')] });
@@ -378,10 +380,12 @@ describe('compatible archive view with real query selection, projection and rich
     failRead(fixture, 'network');
     await fixture.queryClient.refetchQueries();
     await vi.waitFor(() =>
-      expect(fixture.container.querySelector('[role="status"]')?.textContent).toBe(staleNotice)
+      expect(fixture.container.querySelector('[role="status"] p')?.textContent).toBe(staleNotice)
     );
     expect(fixture.container.querySelector('[data-radix-scroll-area-viewport]')).toBe(viewport);
-    expect(fixture.container.querySelector('button')).toBe(control);
+    expect(fixture.container.querySelector('[data-radix-scroll-area-viewport] button')).toBe(
+      control
+    );
     expect(document.activeElement).toBe(control);
     expect(viewport.scrollTop).toBe(180);
     fixture.response.error = undefined;

@@ -176,10 +176,13 @@ it('preserves the actual canonical Agent editor and draft through background pro
   expect(container.querySelector('input[name="name"]')).toBe(input);
   expect(input.value).toBe('Unsaved canonical draft');
   await waitForReact(() =>
-    expect(container.querySelector('[role="alert"]')?.textContent).toContain(
-      'Project connection lost'
+    expect(container.querySelector('[role="status"]')?.textContent).toContain(
+      "Couldn't refresh project."
     )
   );
+  expect(
+    container.querySelector('[role="status"] [title="Project connection lost"]')
+  ).not.toBeNull();
   let resolveRetry: ((value: unknown) => void) | undefined;
   projectRead.mockImplementation(
     () =>
@@ -187,11 +190,11 @@ it('preserves the actual canonical Agent editor and draft through background pro
         resolveRetry = resolve;
       })
   );
-  actFlushSync(() => button(container, 'Retry project').click());
+  actFlushSync(() => button(container, 'Retry').click());
   expect(container.querySelector('input[name="name"]')).toBe(input);
   expect(input.value).toBe('Unsaved canonical draft');
   await act(async () => resolveRetry?.(projects[0]));
-  await waitForReact(() => expect(container.querySelector('[role="alert"]')).toBeNull());
+  await waitForReact(() => expect(container.textContent).not.toContain("Couldn't refresh project"));
   expect(container.querySelector('input[name="name"]')).toBe(input);
   expect(input.value).toBe('Unsaved canonical draft');
 });
@@ -204,7 +207,7 @@ it('distinguishes first-load transport failure and retries the real outlet', asy
   expect(container.textContent).not.toContain('Project not found');
   expect(container.textContent).not.toContain('Scheduled review');
   projectRead.mockResolvedValue(projects[0]);
-  actFlushSync(() => button(container, 'Retry project').click());
+  actFlushSync(() => button(container, 'Retry').click());
   await waitForReact(() => expect(container.textContent).toContain('Edit automation'));
 });
 it('reports actual first-load NOT_FOUND without exposing an Agent editor', async () => {

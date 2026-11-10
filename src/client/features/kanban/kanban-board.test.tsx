@@ -27,6 +27,8 @@ const mocks = vi.hoisted(() => ({
   isArchiving: false,
   inlineFormRequest: 0,
   workspaces: [] as WorkspaceWithKanban[],
+  workspacesError: null as { message: string } | null,
+  refetch: vi.fn(),
   dismissArchiveGitLock: vi.fn(),
   retryGitLockedArchives: vi.fn(),
   archiveWorkspace: vi.fn(async (_workspaceId: string) => undefined),
@@ -113,9 +115,9 @@ vi.mock('./kanban-context', () => ({
     workspaces: mocks.workspaces,
     issues: [],
     isLoading: false,
-    isError: false,
-    error: null,
-    refetch: vi.fn(),
+    error: mocks.workspacesError,
+    isFetching: false,
+    refetch: mocks.refetch,
     toggleWorkspaceRatcheting: vi.fn(),
     togglingWorkspaceId: null,
     renameWorkspace: vi.fn(),
@@ -192,6 +194,8 @@ describe('KanbanBoard', () => {
     mocks.showInlineForm = false;
     mocks.isArchiving = false;
     mocks.inlineFormRequest = 0;
+    mocks.workspacesError = null;
+    mocks.refetch.mockClear();
     mocks.workspaces = [
       {
         ...createOptimisticWorkspaceSummary({
@@ -438,6 +442,31 @@ describe('KanbanBoard', () => {
     mocks.workspaces = loaded;
     act(() => root.render(createElement(BoardWithHeader)));
     expect(container.querySelector('input[aria-label="Task name"]')).not.toBeNull();
+    expect(container.querySelector('[data-column="WAITING"]')).not.toBeNull();
+  });
+
+  it('shows a failed load as an error with Retry, not as an empty board', () => {
+    mocks.workspaces = undefined as unknown as WorkspaceWithKanban[];
+    mocks.workspacesError = { message: 'Database is locked' };
+    act(() => root.render(createElement(BoardWithHeader)));
+    const alert = container.querySelector('[role="alert"]');
+    expect(alert?.textContent).toContain("Couldn't load workspaces");
+    expect(alert?.textContent).toContain('Database is locked');
+    expect(container.textContent).not.toContain('Create your first workspace');
+    act(() => alert?.querySelector('button')?.click());
+    expect(mocks.refetch).toHaveBeenCalledOnce();
+  });
+
+  it('keeps the board and an open composer when a background refresh fails', () => {
+    act(() => root.render(createElement(BoardWithHeader)));
+    click('New workspace');
+    const formInput = container.querySelector('input[aria-label="Task name"]');
+    expect(formInput).not.toBeNull();
+    mocks.workspacesError = { message: 'Failed to fetch' };
+    act(() => root.render(createElement(BoardWithHeader)));
+    expect(container.querySelector('[role="alert"]')).toBeNull();
+    expect(container.textContent).toContain("Couldn't refresh workspaces");
+    expect(container.querySelector('input[aria-label="Task name"]')).toBe(formInput);
     expect(container.querySelector('[data-column="WAITING"]')).not.toBeNull();
   });
 

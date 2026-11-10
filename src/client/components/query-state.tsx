@@ -1,11 +1,12 @@
 import type { ReactNode } from 'react';
 import { Loading } from './loading';
-import { QueryErrorState } from './query-error-state';
+import { QueryErrorState, QueryRefreshError } from './query-error-state';
 
 /** The subset of a TanStack/tRPC query result that `QueryState` reads. */
 export interface QueryStateQuery<TData> {
   data: TData | undefined;
-  error: { message: string } | null;
+  /** tRPC errors carry `data.code`, which `notFound` matches. */
+  error: { message: string; data?: { code?: string } | null } | null;
   isFetching: boolean;
   refetch: () => unknown;
 }
@@ -20,6 +21,11 @@ interface QueryStateProps<TData> {
   isEmpty?: (data: TData) => boolean;
   /** Rendered when `isEmpty` returns true; usually an `EmptyState`. */
   empty?: ReactNode;
+  /**
+   * Rendered when the request failed with a tRPC `NOT_FOUND` code, even over
+   * cached data, because the thing is gone. Without it, `NOT_FOUND` is an error.
+   */
+  notFound?: ReactNode;
   /** Replaces the default `Loading`, e.g. with a `Skeleton` of the content. */
   loading?: ReactNode;
   /** Message for the default `Loading`. */
@@ -28,6 +34,11 @@ interface QueryStateProps<TData> {
   size?: 'default' | 'compact';
   /** Applied to the default loading and error states. */
   className?: string;
+}
+
+/** True for a tRPC error with the `NOT_FOUND` code. */
+export function isNotFoundError(error: QueryStateQuery<unknown>['error']): boolean {
+  return error?.data?.code === 'NOT_FOUND';
 }
 
 /**
@@ -40,25 +51,38 @@ export function QueryState<TData>({
   children,
   isEmpty,
   empty = null,
+  notFound,
   loading,
   loadingMessage,
   size = 'default',
   className,
 }: QueryStateProps<TData>) {
+  const { data, error } = query;
+  const retry = () => {
+    void query.refetch();
+  };
+  if (notFound !== undefined && isNotFoundError(error)) {
+    return notFound;
+  }
   // Cached data wins over a background refetch error, and an error without
   // data wins over loading so a failed query never reads as an empty one.
-  const { data, error } = query;
   if (data !== undefined) {
-    return isEmpty?.(data) ? empty : children(data);
+    // The notice keeps its slot so the content never remounts when it appears.
+    return (
+      <>
+        {error ? (
+          <QueryRefreshError error={error} onRetry={retry} isRetrying={query.isFetching} />
+        ) : null}
+        {isEmpty?.(data) ? empty : children(data)}
+      </>
+    );
   }
   if (error) {
     return (
       <QueryErrorState
         title={errorTitle}
         error={error}
-        onRetry={() => {
-          void query.refetch();
-        }}
+        onRetry={retry}
         isRetrying={query.isFetching}
         className={className}
       />
