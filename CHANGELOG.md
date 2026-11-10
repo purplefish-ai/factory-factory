@@ -8,6 +8,71 @@ and this project adheres to
 
 ## [Unreleased]
 
+## [0.5.9] - 2026-11-10
+
+### Added
+
+- Make the turn duration limit configurable in settings, with unlimited turns by
+  default (#3145)
+- Show subagent models in the main chat and side panel (#3093)
+- Explain blocked PR update deliveries and offer a confirmed discard action to
+  resume monitoring (#3114)
+
+### Changed
+
+- Rename Agents to Automations across the UI, MCP tools and public APIs, and
+  default automations to explicit Auto review permissions (#3090, #3092, #3096)
+- Label scheduled automation tool tabs Runs and align run history and recovery
+  report terminology (#3168)
+- Improve chat streaming and terminal responsiveness by batching chat deltas,
+  keeping the composer stable, writing terminal output directly to xterm, and
+  narrowing context subscriptions (#3120, #3124, #3130, #3161, #3163)
+- Speed up workspace and session reads by skipping large blob columns, sharing
+  provider history hydration, and caching launcher thinking levels (#3094,
+  #3108, #3134, #3138)
+- Reduce GitHub CLI polling overhead with cached health and review requests,
+  fewer subprocesses, and backoff for stable pull requests (#3119, #3123)
+- Serve compressed web assets to remote clients and self-host optional
+  Appearance fonts (#3132, #3135)
+- Standardize tabs, buttons, status indicators, settings sections, pending
+  controls and browser state persistence across the UI (#3149, #3151, #3153,
+  #3155, #3156, #3157, #3158, #3160)
+- Rotate server logs by size and keep test runs out of the server log (#3122)
+- Use consistent sentence case in tool activity summaries and provider icons for
+  issue links (#3165, #3167)
+- Simplify the context compaction divider with a centered label and dotted waves
+  (#3169)
+
+### Fixed
+
+- Back up the database before migrations on every entry point and refuse
+  production startup against a database migrated by a newer version (#3099,
+  #3111)
+- Coordinate session teardown and cancel queue retries during shutdown; prevent
+  startup lease changes from blocking queue dispatch (#3100, #3110, #3131)
+- Terminate leftover worktree processes, release attachments and setup logs, and
+  prune undeliverable PR events when workspaces are archived (#3121, #3137,
+  #3148)
+- Keep pinned workspace renames from retaining a generated-name key (#3144)
+- Prevent repeated Steer clicks while delivery is pending (#3125)
+- Display query failures explicitly and contain rendering failures to the
+  affected message or panel (#3146, #3147, #3150)
+- Remove excess space below the mobile Kanban board (#3089)
+- Explain when subagent browsing or history is unavailable instead of showing a
+  blank tab (#3166)
+- Fix the startup-script background process cleanup and bootstrap process ID
+  race (#3140, #3152)
+
+### Security
+
+- Bind the backend to loopback by default and validate browser Origin and
+  loopback Host headers for every tRPC procedure (#3102, #3112, #3118)
+- Require a password for `ff proxy` by default; make explicit `--public` tunnels
+  read-only and block chat, terminal and sensitive query access (#3128)
+- Restore full access through password-protected tunnels with tunnel-origin
+  validation, hardened session cookies and bounded password-attempt limits
+  (#3142)
+
 ## [0.5.8] - 2026-11-06
 
 ### Changed
