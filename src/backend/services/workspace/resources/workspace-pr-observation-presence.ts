@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { Prisma } from '@prisma-gen/client';
 
 const idRowsSchema = z.array(z.object({ id: z.string() }));
+const ID_CHUNK_SIZE = 500;
 
 /**
  * Polled PR reads leave the `observation` blob (review bodies included) out,
@@ -19,13 +20,18 @@ export async function findPRIdsWithoutObservation(
   client: Prisma.TransactionClient,
   prIds: readonly string[]
 ): Promise<Set<string>> {
-  if (prIds.length === 0) {
-    return new Set();
+  const missing = new Set<string>();
+  // Bound the bound parameters per statement well below SQLite's host-parameter limit.
+  for (let index = 0; index < prIds.length; index += ID_CHUNK_SIZE) {
+    const chunk = prIds.slice(index, index + ID_CHUNK_SIZE);
+    const rows = idRowsSchema.parse(
+      await client.$queryRaw`SELECT "id" FROM "WorkspacePR" WHERE "id" IN (${Prisma.join(chunk)}) AND (typeof("observation") = 'null' OR (octet_length("observation") = 4 AND "observation" = 'null'))`
+    );
+    for (const { id } of rows) {
+      missing.add(id);
+    }
   }
-  const rows = idRowsSchema.parse(
-    await client.$queryRaw`SELECT "id" FROM "WorkspacePR" WHERE "id" IN (${Prisma.join(prIds)}) AND (typeof("observation") = 'null' OR (octet_length("observation") = 4 AND "observation" = 'null'))`
-  );
-  return new Set(rows.map(({ id }) => id));
+  return missing;
 }
 
 /** Annotate blob-free PR rows with the presence flag `shouldPollPR` reads. */
