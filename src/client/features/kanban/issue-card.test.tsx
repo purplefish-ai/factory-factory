@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createElement, type ReactNode } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { NormalizedIssue } from '@/client/lib/issue-normalization';
 import { actFlushSync } from '@/test-utils/react-act';
 import { IssueCard } from './issue-card';
 
@@ -115,7 +116,10 @@ vi.mock('@/client/features/workspace', () => ({
   RatchetToggleButton: () => null,
 }));
 
-function renderCard(): { container: HTMLDivElement; root: Root } {
+function renderCard(provider: NormalizedIssue['provider'] = 'github'): {
+  container: HTMLDivElement;
+  root: Root;
+} {
   const container = document.createElement('div');
   document.body.appendChild(container);
   const root = createRoot(container);
@@ -130,10 +134,13 @@ function renderCard(): { container: HTMLDivElement; root: Root } {
         projectId: 'project-1',
         issue: {
           id: 'github-42',
-          provider: 'github',
+          provider,
           title: 'Fix login redirect',
           body: 'Issue body',
-          url: 'https://github.com/acme/repo/issues/42',
+          url:
+            provider === 'github'
+              ? 'https://github.com/acme/repo/issues/42'
+              : 'https://linear.app/acme/issue/ENG-42',
           displayId: '#42',
           author: 'octocat',
           createdAt: '2026-03-14T12:00:00.000Z',
@@ -175,6 +182,25 @@ afterEach(() => {
 });
 
 describe('IssueCard', () => {
+  it.each(['github', 'linear'] as const)(
+    'shows only the %s icon in the external link',
+    (provider) => {
+      const { container, root } = renderCard(provider);
+      const external = container.querySelector('a')!;
+
+      expect(external.textContent?.trim()).toBe('');
+      expect(external.getAttribute('aria-label')).toBe('Open #42 externally');
+      expect(external.getAttribute('target')).toBe('_blank');
+      expect(external.querySelector('svg')?.getAttribute('viewBox')).toBe(
+        provider === 'github' ? '0 0 256 256' : '0 0 24 24'
+      );
+      expect(external.querySelector('svg')?.getAttribute('aria-hidden')).toBe('true');
+
+      actFlushSync(() => root.unmount());
+      container.remove();
+    }
+  );
+
   it('mounts the issue launch sheet only after starting an issue', () => {
     const { container, root } = renderCard();
 
