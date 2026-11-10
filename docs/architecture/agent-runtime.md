@@ -1232,19 +1232,21 @@ finalization each have one coordinator or service.
 in-memory state. Collaborators register disposers in the composition root, and
 the coordinators run the scope's stages instead of listing collaborators:
 
-| Stage           | Run by                                   | Disposers                                                                                |
-| --------------- | ---------------------------------------- | ---------------------------------------------------------------------------------------- |
-| `beginTeardown` | Stop and runtime exit, first             | Prompt-turn completion, queued ACP prompts                                               |
-| `quiesce`       | Stop, before the runtime stops           | Streaming and replay state, pending permissions                                          |
-| `settle`        | Stop and exit, after orphan finalization | ACP event state; permissions on exit                                                     |
-| `completeStop`  | Every stop, before the reservation ends  | Dispatch claim, steering, retries, mail claims                                           |
-| `forget`        | `session_permanently_deleted`            | Dispatch state and manual resume, configuration, observed-empty, cached provider history |
+| Stage           | Run by                                   | Disposers                                                                                                                                                                        |
+| --------------- | ---------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `beginTeardown` | Stop and runtime exit, first             | Prompt-turn completion, queued ACP prompts                                                                                                                                       |
+| `quiesce`       | Stop, before the runtime stops           | Streaming and replay state, pending permissions                                                                                                                                  |
+| `settle`        | Stop and exit, after orphan finalization | ACP event state; permissions on exit                                                                                                                                             |
+| `completeStop`  | Every stop, before the reservation ends  | Dispatch claim, steering, retries, mail claims                                                                                                                                   |
+| `forget`        | `session_permanently_deleted`            | Configuration, observed-empty, queued PR delivery tokens, cached provider history, session store and initial message, transient archive marker, dispatch state and manual resume |
 
 Stages run disposers in registration order and log, rather than propagate, a
 disposer failure. Every stop caller (WebSocket, tRPC, admin, orchestration)
 therefore resets dispatch state while the stop reservation still blocks new
-dispatch. New per-session state should register a disposer instead of adding a
-call to a coordinator.
+dispatch. Every durable deletion reaches `forget`: session deletion through the
+session data service or repository, and workspace deletion, which forgets each
+cascaded session after the rows are gone. New per-session state should register
+a disposer instead of adding a call to a coordinator.
 
 When changing lifecycle behavior, keep these boundaries intact: coordinators and
 services own their named responsibility and reconciliation evidence where

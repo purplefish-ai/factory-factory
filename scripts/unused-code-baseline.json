@@ -647,23 +647,7 @@
       "disposition": "review-required",
       "reason": "Visibility candidate in a reachable module; trace callers and schema/type contracts before narrowing this export."
     },
-    "src/backend/services/session/service/index.ts::exports::AcpClientHandler": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
-    "src/backend/services/session/service/index.ts::exports::ClaudeModelCatalogService": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
     "src/backend/services/session/service/index.ts::exports::SessionLifecycleService": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
-    "src/backend/services/session/service/index.ts::exports::SessionPermissionService": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
-    "src/backend/services/session/service/index.ts::exports::SessionService": {
       "disposition": "maintained-api",
       "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
     },

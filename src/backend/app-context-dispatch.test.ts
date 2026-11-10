@@ -36,7 +36,6 @@ function createGraph(label: string) {
     attempts,
     configure: vi.fn(),
     setManualDispatchResume: vi.fn(),
-    resetDispatchState: vi.fn(),
     steerQueuedMessage: vi.fn(),
     steerWorkspaceMailSignal: vi.fn(),
     shutdown: vi.fn(async () => undefined),
@@ -316,7 +315,6 @@ describe('application queue producer composition', () => {
       services.sessionDispatchService = {
         configure: vi.fn(),
         setManualDispatchResume: vi.fn(),
-        resetDispatchState: vi.fn(),
         steerQueuedMessage: vi.fn(),
         steerWorkspaceMailSignal: vi.fn(),
         shutdown: vi.fn(async () => undefined),

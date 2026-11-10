@@ -176,12 +176,7 @@ export class AcpEventProcessor {
             deltaIndex: index,
             delta,
           });
-          this.handleAcpDelta(
-            sid,
-            delta as SessionDeltaEvent,
-            configSource,
-            isReplayExemptSessionUpdate(update)
-          );
+          this.handleAcpDelta(sid, delta, configSource, isReplayExemptSessionUpdate(update));
         }
       },
     };
@@ -448,7 +443,7 @@ export class AcpEventProcessor {
         elapsed_time_seconds: 0,
         ...(pending.acpKind ? { acpKind: pending.acpKind } : {}),
         ...(pending.acpLocations ? { acpLocations: pending.acpLocations } : {}),
-      } as SessionDeltaEvent;
+      } satisfies SessionDeltaEvent;
       this.handleAcpDelta(sid, syntheticProgress);
 
       const syntheticResult = {
@@ -467,7 +462,7 @@ export class AcpEventProcessor {
             ],
           },
         },
-      } as SessionDeltaEvent;
+      } satisfies SessionDeltaEvent;
       this.handleAcpDelta(sid, syntheticResult);
 
       acpTraceLogger.log(sid, 'translated_delta', {

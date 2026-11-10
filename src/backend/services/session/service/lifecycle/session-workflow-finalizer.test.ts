@@ -199,8 +199,6 @@ describe('SessionWorkflowFinalizer', () => {
       harness.finalizer.finalizeRuntimeExit({
         session: harness.session!,
         sessionId: 'session-1',
-        exitCode: 1,
-        deliberate: false,
       })
     ).resolves.toBeUndefined();
 
@@ -219,14 +217,10 @@ describe('SessionWorkflowFinalizer', () => {
     await harness.finalizer.finalizeRuntimeExit({
       session: harness.session!,
       sessionId: 'session-1',
-      exitCode: 0,
-      deliberate: true,
     });
     await harness.finalizer.finalizeRuntimeExit({
       session: harness.session!,
       sessionId: 'session-1',
-      exitCode: 1,
-      deliberate: false,
     });
 
     expect(harness.autoIterationExit.onAutoIterationSessionExit).not.toHaveBeenCalled();
@@ -241,8 +235,6 @@ describe('SessionWorkflowFinalizer', () => {
     await harness.finalizer.finalizeRuntimeExit({
       session: harness.session!,
       sessionId: 'session-1',
-      exitCode: 0,
-      deliberate: false,
     });
 
     expect(harness.workspaceBridge.resetPRDiscoveryBackoff).toHaveBeenCalledWith('workspace-1');

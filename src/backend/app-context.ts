@@ -171,7 +171,6 @@ export type ApplicationServices = BridgeServices & {
     | 'configure'
     | 'tryDispatchNextMessage'
     | 'setManualDispatchResume'
-    | 'resetDispatchState'
     | 'shutdown'
     | 'steerQueuedMessage'
     | 'steerWorkspaceMailSignal'

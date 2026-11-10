@@ -202,8 +202,6 @@ export class SessionRuntimeExitCoordinator {
       await this.dependencies.workflowFinalizer.finalizeRuntimeExit({
         session,
         sessionId: event.sessionId,
-        exitCode: event.exitCode,
-        deliberate,
       });
     } catch (error) {
       logger.warn('Failed to process ACP session exit', {
