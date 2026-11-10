@@ -16,6 +16,10 @@ import { Prisma as PrismaValues } from '@prisma-gen/client';
 import type { Prisma, WorkspacePR, WorkspaceStatus } from '@prisma-gen/client';
 import { workspacePrDiscoveryAccessor } from './workspace-pr-discovery.accessor';
 import { workspacePrEventAccessor } from './workspace-pr-event.accessor';
+import {
+  findPRIdsWithoutObservation,
+  withObservationPresence,
+} from './workspace-pr-observation-presence';
 
 export interface WorkspacePRFields {
   title?: string | null;
@@ -424,33 +428,45 @@ class WorkspacePRAccessor {
       return ids;
     });
   }
+  /**
+   * Stale PRs for the scheduler to refresh, as workspace id, PR id and URL. The
+   * read loads no blob columns. Prisma cannot compare a PR's observation epoch
+   * with its workspace's monitoring epoch, and the terminal policy depends on
+   * that comparison, so terminal PRs still match the SQL filter and are dropped
+   * here by the same predicate the watcher uses.
+   */
   async findNeedingSync(staleThresholdMinutes = 5) {
     const now = Date.now();
-    const rows = await prisma.workspacePR.findMany({
-      where: {
-        detachedAt: null,
-        workspace: { status: 'READY' },
-        OR: [
-          { syncedAt: null },
-          { syncedAt: { lt: new Date(now - staleThresholdMinutes * 60_000) } },
-        ],
-      },
-      include: {
-        workspace: { include: { project: true, prMonitoring: { select: { eventEpoch: true } } } },
-      },
-      orderBy: { syncedAt: 'asc' },
-    });
-    // Prisma cannot compare a PR field with its related monitoring epoch. Filter
-    // before scheduling GitHub reads, using the same predicate as the watcher.
-    return rows
-      .filter(({ workspace, ...pr }) =>
-        shouldPollPR(pr, workspace.prMonitoring?.eventEpoch ?? pr.observationEpoch, now)
+    const where: Prisma.WorkspacePRWhereInput = {
+      detachedAt: null,
+      workspace: { status: 'READY' },
+      OR: [
+        { syncedAt: null },
+        { syncedAt: { lt: new Date(now - staleThresholdMinutes * 60_000) } },
+      ],
+    };
+    const [rows, withoutObservation] = await prisma.$transaction([
+      prisma.workspacePR.findMany({
+        where,
+        select: {
+          id: true,
+          workspaceId: true,
+          url: true,
+          state: true,
+          syncedAt: true,
+          observationEpoch: true,
+          workspace: { select: { prMonitoring: { select: { eventEpoch: true } } } },
+        },
+        orderBy: { syncedAt: 'asc' },
+      }),
+      findPRIdsWithoutObservation(where),
+    ]);
+    const missing = new Set(withoutObservation.map(({ id }) => id));
+    return withObservationPresence(rows, missing)
+      .filter((pr) =>
+        shouldPollPR(pr, pr.workspace.prMonitoring?.eventEpoch ?? pr.observationEpoch, now)
       )
-      .map(({ workspace: { prMonitoring: _prMonitoring, ...workspace }, ...pr }) => ({
-        ...workspace,
-        prId: pr.id,
-        ...flattenWorkspacePR(pr),
-      }));
+      .map((pr) => ({ id: pr.workspaceId, prId: pr.id, prUrl: pr.url }));
   }
   findNeedingDiscovery(limit: number, dueAt = new Date()) {
     return workspacePrDiscoveryAccessor.findNeedingDiscovery(limit, dueAt);

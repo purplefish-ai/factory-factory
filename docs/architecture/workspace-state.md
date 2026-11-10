@@ -651,6 +651,20 @@ startup log, `findInitialMessageContext` for the first-message prompt and
 attachments, `findMetadataContext` for auto-generated name provenance, and the
 session and PR capsules' own reads for provider metadata and observations.
 
+Polled and per-message reads follow the same rule. Project reads
+(`project.getById`/`getBySlug`, and the 30- and 60-second review and issue
+polls) load the project row without workspaces. Session reads join only the
+workspace's `status`, `worktreePath` and `initErrorMessage`; terminal session
+reads join the workspace without its blobs. Workspace session lists
+(`session.listSessions`, the event collector) leave out `providerMetadata`;
+`findAgentSessionById` still returns it. The child-workspace panel, the PR
+watcher's monitoring list and both PR scheduler candidate reads select no blob
+columns. The Prisma client has no client-level default `omit`:
+`Prisma.TransactionClient` does not carry one, so functions that take a
+transaction client, the backup export among them, would be typed as returning
+columns that were never loaded. Narrow each read with `select` or `omit`
+instead.
+
 `workspace.get` reads `findDetailById`, which adds the `initialPrompt` for the
 details dialog to that narrow row. Polled git, file and init-status reads use
 the narrow `findWorktreeContext`/`findInitStatus` selects instead of full rows.

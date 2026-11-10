@@ -946,19 +946,16 @@ class WorkspaceAccessor {
     });
   }
 
-  /**
-   * Find child workspaces with session counts included, for status summaries.
-   */
-  async findChildrenWithStatus(parentId: string): Promise<
-    Flattened<
-      Prisma.WorkspaceGetPayload<{
-        include: { agentSessions: true; project: true } & SideTableInclude;
-      }>
-    >[]
-  > {
+  /** Child workspaces with their sessions, for the polled status panel, without blob columns. */
+  async findChildrenWithStatus(parentId: string) {
     const rows = await prisma.workspace.findMany({
       where: { parentWorkspaceId: parentId, status: { not: 'ARCHIVED' } },
-      include: { agentSessions: true, project: true, ...sideTables },
+      omit: workspaceBlobOmit,
+      include: {
+        agentSessions: sessionsWithoutBlobs.agentSessions,
+        project: true,
+        ...sideTables,
+      },
       orderBy: { createdAt: 'asc' },
     });
     return rows.map(flatten);

@@ -408,9 +408,17 @@ observation are initialized before this policy applies. Enabling monitoring or
 changing its recipient/destination initializes facts for the new observation
 epoch before terminal backoff applies. A reopened PR returns to the normal
 cadence. The stale-data scheduler applies the same terminal policy, so its
-three-minute pass cannot bypass the closed-PR backoff. Explicit refreshes (the
-Kanban Sync button and PR attachment) and delivery preparation's freshness
-checks force their observation and remain unrestricted.
+three-minute pass cannot bypass the closed-PR backoff.
+
+The policy (`shouldPollPR`) reads only whether an observation is stored, not its
+contents. The watcher's monitoring list and the scheduler's stale-PR read leave
+the observation out and, in the same read transaction, ask SQLite which PRs have
+none (SQL NULL or JSON null). Terminal PRs still match the scheduler's SQL
+filter and are dropped in application code: the policy compares each PR's
+observation epoch with its workspace's monitoring epoch, which a Prisma filter
+cannot express. Explicit refreshes (the Kanban Sync button and PR attachment)
+and delivery preparation's freshness checks force their observation and remain
+unrestricted.
 
 Automatic refreshes are unforced: the workspace-idle refresh, the app-load and
 project-switch sweep, and the workspace page-load sync. They reuse an

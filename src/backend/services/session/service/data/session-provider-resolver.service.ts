@@ -17,7 +17,7 @@ class SessionProviderResolverImplementation {
     workspaceId: string;
     explicitProvider?: SessionProvider;
     explicitModel?: string;
-    workspace?: Workspace;
+    workspace?: Pick<Workspace, 'defaultSessionProvider'>;
   }): Promise<{ provider: SessionProvider; model: string }> {
     const provider = await this.resolveSessionProvider(params);
     return this.resolveModelDefaults(provider, params.explicitModel);
@@ -57,7 +57,7 @@ class SessionProviderResolverImplementation {
   async resolveSessionProvider(params: {
     workspaceId: string;
     explicitProvider?: SessionProvider;
-    workspace?: Workspace;
+    workspace?: Pick<Workspace, 'defaultSessionProvider'>;
   }): Promise<SessionProvider> {
     if (params.explicitProvider) {
       return params.explicitProvider;

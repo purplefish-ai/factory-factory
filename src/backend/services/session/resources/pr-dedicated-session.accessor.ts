@@ -32,7 +32,11 @@ class PRDedicatedSessionAccessor {
         throw error;
       });
   }
-  async findWorkspace(target: PRTarget): Promise<Workspace | null> {
+  /**
+   * The provider default of the PR's ready workspace, for session defaults.
+   * Neither the PR observation nor the workspace blob columns are loaded.
+   */
+  async findWorkspace(target: PRTarget): Promise<Pick<Workspace, 'defaultSessionProvider'> | null> {
     const pr = await prisma.workspacePR.findFirst({
       where: {
         id: target.prId,
@@ -40,14 +44,14 @@ class PRDedicatedSessionAccessor {
         detachedAt: null,
         workspace: { status: 'READY' },
       },
-      include: { workspace: true },
+      select: { workspace: { select: { defaultSessionProvider: true } } },
     });
     return pr?.workspace ?? null;
   }
   async find(target: PRTarget): Promise<AgentSession | null> {
     const pr = await prisma.workspacePR.findFirst({
       where: { id: target.prId, workspaceId: target.workspaceId, detachedAt: null },
-      include: { dedicatedSession: { include: { session: true } } },
+      select: { dedicatedSession: { select: { session: true } } },
     });
     const session = pr?.dedicatedSession?.session;
     return session && this.owns(target, session) ? session : null;

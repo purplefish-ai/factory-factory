@@ -7,9 +7,26 @@ import { findEventSessionForCreation } from './event-session-creation';
 
 export type AgentSessionRecord = AgentSession;
 
+/**
+ * The workspace columns session reads need. A full workspace row carries the
+ * startup log and `creationMetadata` (base64 initial attachments), and
+ * `findById` runs on every dispatch and session load.
+ */
+const sessionWorkspaceSelect = {
+  status: true,
+  worktreePath: true,
+  initErrorMessage: true,
+} satisfies Prisma.WorkspaceSelect;
+
 export type AgentSessionRecordWithWorkspace = Prisma.AgentSessionGetPayload<{
-  include: { workspace: true };
+  include: { workspace: { select: typeof sessionWorkspaceSelect } };
 }>;
+
+/**
+ * A session without `providerMetadata` (provider config snapshots), for list
+ * reads that never use it. Reads that need it go through `findById`.
+ */
+export type AgentSessionSummaryRecord = Omit<AgentSession, 'providerMetadata'>;
 
 const ACTIVE_AGENT_SESSION_STATUSES: SessionStatus[] = [SessionStatus.RUNNING, SessionStatus.IDLE];
 
@@ -113,7 +130,7 @@ export interface AgentSessionAccessor {
   findByWorkspaceId(
     workspaceId: string,
     filters?: AgentSessionFilters
-  ): Promise<AgentSessionRecord[]>;
+  ): Promise<AgentSessionSummaryRecord[]>;
   update(id: string, data: UpdateAgentSessionInput): Promise<AgentSessionRecord>;
   updateIfStatus(
     id: string,
@@ -181,7 +198,7 @@ class PrismaAgentSessionAccessor implements AgentSessionAccessor {
   findById(id: string): Promise<AgentSessionRecordWithWorkspace | null> {
     return prisma.agentSession.findUnique({
       where: { id },
-      include: { workspace: true },
+      include: { workspace: { select: sessionWorkspaceSelect } },
     });
   }
 
@@ -215,7 +232,7 @@ class PrismaAgentSessionAccessor implements AgentSessionAccessor {
   findByWorkspaceId(
     workspaceId: string,
     filters?: AgentSessionFilters
-  ): Promise<AgentSessionRecord[]> {
+  ): Promise<AgentSessionSummaryRecord[]> {
     const where: Prisma.AgentSessionWhereInput = { workspaceId };
 
     if (filters?.status) {
@@ -228,6 +245,7 @@ class PrismaAgentSessionAccessor implements AgentSessionAccessor {
 
     return prisma.agentSession.findMany({
       where,
+      omit: { providerMetadata: true },
       take: filters?.limit,
       orderBy: { createdAt: 'asc' },
     });

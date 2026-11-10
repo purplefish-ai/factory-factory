@@ -19,9 +19,16 @@ interface FindByWorkspaceIdFilters {
   limit?: number;
 }
 
-// Type for TerminalSession with workspace included
+/**
+ * The joined workspace leaves out the startup log and `creationMetadata`
+ * (base64 initial attachments), which terminal reads never use.
+ */
+const workspaceWithoutBlobs = {
+  omit: { initOutput: true, creationMetadata: true },
+} satisfies Prisma.WorkspaceDefaultArgs;
+
 type TerminalSessionWithWorkspace = Prisma.TerminalSessionGetPayload<{
-  include: { workspace: true };
+  include: { workspace: typeof workspaceWithoutBlobs };
 }>;
 
 class TerminalSessionAccessor {
@@ -50,9 +57,7 @@ class TerminalSessionAccessor {
   findById(id: string): Promise<TerminalSessionWithWorkspace | null> {
     return prisma.terminalSession.findUnique({
       where: { id },
-      include: {
-        workspace: true,
-      },
+      include: { workspace: workspaceWithoutBlobs },
     });
   }
 
