@@ -1,5 +1,6 @@
 import { elementScroll, useVirtualizer } from '@tanstack/react-virtual';
 import { type RefObject, useEffect, useRef, useState } from 'react';
+import { useLatestRef } from '@/client/hooks/use-stable-callback';
 import type { DiffLine } from '@/lib/diff/types';
 import { createDiffScrollController } from './diff-scroll-controller';
 import type { ScrollState } from './scroll-state';
@@ -18,8 +19,7 @@ export function useDiffScroll({
   scrollState,
   onScrollStateChange,
 }: DiffScrollOptions) {
-  const latest = useRef({ scrollState, onScrollStateChange });
-  latest.current = { scrollState, onScrollStateChange };
+  const latest = useLatestRef({ scrollState, onScrollStateChange });
   const controller = useRef<ReturnType<typeof createDiffScrollController> | null>(null);
   const [measurementVersion, setMeasurementVersion] = useState(0);
   const virtualized = lines.length > 200;

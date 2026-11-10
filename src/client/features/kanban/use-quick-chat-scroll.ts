@@ -12,13 +12,6 @@ export function useQuickChatScroll(
   const identity = `${workspaceId ?? 'none'}/quick/${sessionId ?? 'none'}`;
   const revision = revisions.current.get(identity) ?? 0;
   const scope = useMemo(() => ({ active: false, identity, revision }), [identity, revision]);
-  const mounted = useRef(false);
-  useLayoutEffect(() => {
-    mounted.current = true;
-    return () => {
-      mounted.current = false;
-    };
-  }, []);
   useLayoutEffect(() => {
     scope.active = true;
     return () => {
@@ -27,7 +20,8 @@ export function useQuickChatScroll(
   }, [scope]);
   const onPositionChange = useCallback(
     (position: TranscriptPosition) => {
-      if (mounted.current && scope.active && (revisions.current.get(identity) ?? 0) === revision) {
+      // The scope is inactive before mount, after unmount and once superseded.
+      if (scope.active && (revisions.current.get(identity) ?? 0) === revision) {
         positions.current.set(identity, position);
       }
     },

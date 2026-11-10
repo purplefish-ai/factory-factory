@@ -9,6 +9,7 @@ import { Fragment, useEffect, useState } from 'react';
 import { EmptyState } from '@/client/components/empty-state';
 import { QueryState } from '@/client/components/query-state';
 import { SectionLabel } from '@/client/components/section-label';
+import { useDebouncedValue } from '@/client/hooks/use-debounced-value';
 import { useDownloadServerLog } from '@/client/hooks/use-download-server-log';
 import { runInBackground } from '@/client/lib/background-task';
 import { formatDate, formatDateTime, toDateTimeIso } from '@/client/lib/date-time';
@@ -175,7 +176,6 @@ function formatPageLabel(currentPage: number, totalPages: number | null): string
 
 export default function LogsPage() {
   const [search, setSearch] = useState('');
-  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [level, setLevel] = useState<LogLevel | 'all'>('all');
   const [timeRange, setTimeRange] = useState<string>('all');
   const [relativeMinute, setRelativeMinute] = useState(() => Math.floor(Date.now() / 60_000));
@@ -191,17 +191,15 @@ export default function LogsPage() {
   }, [timeRange]);
   const [sinceDate, setSinceDate] = useState<Date | undefined>();
   const [untilDate, setUntilDate] = useState<Date | undefined>();
+  const debouncedSearch = useDebouncedValue(search, 300);
   const [offset, setOffset] = useState(0);
+  // Each new search starts from the first page.
+  const [pagedSearch, setPagedSearch] = useState(debouncedSearch);
+  if (pagedSearch !== debouncedSearch) {
+    setPagedSearch(debouncedSearch);
+    setOffset(0);
+  }
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
-
-  // Debounce search input
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setDebouncedSearch(search);
-      setOffset(0);
-    }, 300);
-    return () => clearTimeout(timer);
-  }, [search]);
 
   const handleLevelChange = (v: string) => {
     setLevel(v as LogLevel | 'all');

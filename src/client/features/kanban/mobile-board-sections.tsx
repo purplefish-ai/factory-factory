@@ -92,7 +92,7 @@ export function MobileBoardSections({
 
   useEffect(() => {
     updateActiveSection(sections);
-  }, [sections, updateActiveSection]);
+  }, [sections]);
 
   useEffect(() => {
     if (!showInlineForm) {
@@ -101,14 +101,14 @@ export function MobileBoardSections({
       lastRevealedFormRequest.current = inlineFormRequest;
       revealSection('ISSUES');
     }
-  }, [showInlineForm, inlineFormRequest, revealSection]);
+  }, [showInlineForm, inlineFormRequest]);
 
   useEffect(() => {
     if (workspaceCreationRequest > lastCreationRequest.current) {
       revealSection('WORKING');
     }
     lastCreationRequest.current = workspaceCreationRequest;
-  }, [workspaceCreationRequest, revealSection]);
+  }, [workspaceCreationRequest]);
 
   return (
     <div

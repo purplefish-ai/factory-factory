@@ -1,6 +1,6 @@
 import { FileCodeIcon } from '@phosphor-icons/react/dist/csr/FileCode';
 import { PlayIcon } from '@phosphor-icons/react/dist/csr/Play';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -44,15 +44,23 @@ export function DevServerSetupPanel({
   const [postRunCommand, setPostRunCommand] = useState('');
   const [cleanupCommand, setCleanupCommand] = useState('');
 
-  // Reset form fields when panel opens
-  useEffect(() => {
+  // Each opening loads the saved config, as does a saved config that changes while open.
+  const savedConfig = JSON.stringify([
+    currentConfig?.run,
+    currentConfig?.setup,
+    currentConfig?.postRun,
+    currentConfig?.cleanup,
+  ]);
+  const [loaded, setLoaded] = useState<{ open: boolean; savedConfig: string } | null>(null);
+  if (loaded?.open !== open || loaded.savedConfig !== savedConfig) {
+    setLoaded({ open, savedConfig });
     if (open) {
       setRunCommand(currentConfig?.run ?? 'npm run dev');
       setSetupCommand(currentConfig?.setup ?? '');
       setPostRunCommand(currentConfig?.postRun ?? '');
       setCleanupCommand(currentConfig?.cleanup ?? '');
     }
-  }, [open, currentConfig]);
+  }
 
   const handleSave = () => {
     onSave({

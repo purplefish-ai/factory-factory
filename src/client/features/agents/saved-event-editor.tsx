@@ -17,6 +17,7 @@ export function SavedEventEditor({
   const utils = trpc.useUtils();
   const update = trpc.automation.updateSaved.useMutation({ meta: { errorToast: false } });
   const validation = trpc.automation.validateDraft.useMutation({ meta: { errorToast: false } });
+  // A save that settles after the editor closes must not reset the page's mode.
   const active = useRef(true);
   useEffect(() => {
     active.current = true;

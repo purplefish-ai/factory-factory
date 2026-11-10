@@ -151,6 +151,7 @@ export function CodexAccountsSettings() {
   const create = trpc.codexAccounts.create.useMutation({ meta: { errorToast: false } });
   const start = trpc.codexAccounts.startLogin.useMutation({ meta: { errorToast: false } });
   const cancel = trpc.codexAccounts.cancelLogin.useMutation({ meta: { errorToast: false } });
+  // A login still starting when the settings close is cancelled instead of left running.
   const mounted = useRef(true);
   const activeLoginId = useRef<string | undefined>(undefined);
   useEffect(() => {

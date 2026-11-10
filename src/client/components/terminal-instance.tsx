@@ -3,6 +3,7 @@ import { Terminal } from '@xterm/xterm';
 import '@xterm/xterm/css/xterm.css';
 import { useCallback, useEffect, useRef } from 'react';
 import { useAppearance } from '@/client/components/appearance-provider';
+import { useLatestRef } from '@/client/hooks/use-stable-callback';
 import { WORKSPACE_DRAWER_BREAKPOINT } from '@/client/hooks/use-workspace-drawer';
 import type { TerminalOutputStream } from '@/client/lib/terminal-output-stream';
 import { scaledTerminalFontSize } from '@/shared/appearance';
@@ -55,13 +56,8 @@ export function TerminalInstance({
   // Store callbacks in refs to avoid reinitializing terminal when they change
   // This is critical because onData/onResize depend on parent state (tabs)
   // and would otherwise cause the terminal to dispose/recreate on every output
-  const onDataRef = useRef(onData);
-  const onResizeRef = useRef(onResize);
-
-  useEffect(() => {
-    onDataRef.current = onData;
-    onResizeRef.current = onResize;
-  }, [onData, onResize]);
+  const onDataRef = useLatestRef(onData);
+  const onResizeRef = useLatestRef(onResize);
 
   // xterm sizes text in pixels, so the appearance font scale and monospace
   // font are applied here rather than through CSS.

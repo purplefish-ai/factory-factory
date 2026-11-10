@@ -34,7 +34,8 @@ records when the task needs an earlier decision or migration.
 Keyboard behavior is documented in [Keyboard shortcuts](keyboard-shortcuts.md).
 
 UI writing follows the [copy guide](architecture/client-copy.md); loading and
-query recovery follow [client loading](architecture/client-loading.md).
+query recovery follow [client loading](architecture/client-loading.md); state
+resets, refs and effects follow [client state](architecture/client-state.md).
 
 ## Proposals and design records
 

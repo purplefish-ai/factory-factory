@@ -1,6 +1,13 @@
 // @vitest-environment jsdom
 
-import { act, type ChangeEvent, createElement, createRef, type RefObject } from 'react';
+import {
+  act,
+  type ChangeEvent,
+  createElement,
+  createRef,
+  type RefObject,
+  useLayoutEffect,
+} from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { CommandInfo } from '@/lib/chat-protocol';
@@ -11,21 +18,27 @@ type SlashCommandsResult = ReturnType<typeof useSlashCommands>;
 interface HarnessProps {
   inputRef: RefObject<HTMLTextAreaElement | null>;
   slashCommands: CommandInfo[];
+  enabled: boolean;
   onResult: (result: SlashCommandsResult) => void;
+  onCommit: (result: SlashCommandsResult) => void;
 }
 
-function Harness({ inputRef, slashCommands, onResult }: HarnessProps) {
+function Harness({ inputRef, slashCommands, enabled, onResult, onCommit }: HarnessProps) {
   const result = useSlashCommands({
     inputRef,
     slashCommands,
+    enabled,
   });
   onResult(result);
+  // Layout effects see each commit before passive effects could correct it.
+  useLayoutEffect(() => onCommit(result));
   return createElement('textarea', { ref: inputRef });
 }
 
 interface RenderedHook {
   getResult: () => SlashCommandsResult;
-  rerender: (slashCommands: CommandInfo[]) => void;
+  rerender: (slashCommands: CommandInfo[], enabled?: boolean) => void;
+  commits: SlashCommandsResult[];
   textarea: HTMLTextAreaElement;
 }
 
@@ -42,14 +55,19 @@ function renderHook(initialSlashCommands: CommandInfo[]): RenderedHook {
   const root = createRoot(container);
   const inputRef = createRef<HTMLTextAreaElement>();
   let result: SlashCommandsResult | undefined;
+  const commits: SlashCommandsResult[] = [];
 
-  const render = (slashCommands: CommandInfo[]) => {
+  const render = (slashCommands: CommandInfo[], enabled = true) => {
     root.render(
       createElement(Harness, {
         inputRef,
         slashCommands,
+        enabled,
         onResult: (nextResult) => {
           result = nextResult;
+        },
+        onCommit: (committed) => {
+          commits.push(committed);
         },
       })
     );
@@ -71,9 +89,10 @@ function renderHook(initialSlashCommands: CommandInfo[]): RenderedHook {
       }
       return result;
     },
-    rerender: (slashCommands) => {
-      void act(() => render(slashCommands));
+    rerender: (slashCommands, enabled) => {
+      void act(() => render(slashCommands, enabled));
     },
+    commits,
     textarea,
   };
 }
@@ -149,5 +168,23 @@ describe('useSlashCommands async loading', () => {
 
     expect(rendered.getResult().slashMenuOpen).toBe(true);
     expect(rendered.getResult().slashFilter).toBe('he');
+  });
+});
+
+describe('useSlashCommands when disabled', () => {
+  it('closes the palette and clears its filter in the first commit after disabling', () => {
+    const rendered = renderHook([helpCommand]);
+    changeInput(rendered, '/he');
+    expect(rendered.getResult().slashMenuOpen).toBe(true);
+
+    const before = rendered.commits.length;
+    rendered.rerender([helpCommand], false);
+
+    expect(
+      rendered.commits.slice(before).map(({ slashMenuOpen, slashFilter }) => ({
+        slashMenuOpen,
+        slashFilter,
+      }))
+    ).toEqual([{ slashMenuOpen: false, slashFilter: '' }]);
   });
 });

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef } from 'react';
+import { useLatestRef } from '@/client/hooks/use-stable-callback';
 import { type ChatMessage, QUEUED_MESSAGE_ORDER_BASE } from '@/lib/chat-protocol';
 import type { ChatAction, ChatState } from './reducer';
 
@@ -23,8 +24,7 @@ interface Options {
 
 /** Lazy requests bypass the query cache; the reducer owns retained history. */
 export function useTranscriptHistory(options: Options): TranscriptHistoryControls {
-  const latest = useRef(options);
-  latest.current = options;
+  const latest = useLatestRef(options);
   const inFlight = useRef<{
     requestId: string;
     history: Options['history'];

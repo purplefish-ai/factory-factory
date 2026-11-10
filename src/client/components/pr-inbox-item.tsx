@@ -1,4 +1,4 @@
-import { forwardRef } from 'react';
+import type { Ref } from 'react';
 import { DIFF_STAT_CLASS_NAMES } from '@/client/lib/status-tones';
 import { formatRelativeTime } from '@/lib/utils';
 import type { PRWithFullDetails } from '@/shared/github-types';
@@ -17,12 +17,10 @@ export interface PRInboxItemProps {
   pr: PRWithFullDetails;
   isSelected: boolean;
   onSelect: () => void;
+  ref?: Ref<HTMLButtonElement>;
 }
 
-export const PRInboxItem = forwardRef<HTMLButtonElement, PRInboxItemProps>(function PRInboxItem(
-  { pr, isSelected, onSelect },
-  ref
-) {
+export function PRInboxItem({ pr, isSelected, onSelect, ref }: PRInboxItemProps) {
   const needsReview = pr.reviewDecision !== 'APPROVED';
   const isApproved = pr.reviewDecision === 'APPROVED';
 
@@ -93,4 +91,4 @@ export const PRInboxItem = forwardRef<HTMLButtonElement, PRInboxItemProps>(funct
       </div>
     </button>
   );
-});
+}

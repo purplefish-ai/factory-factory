@@ -391,6 +391,179 @@ function staticKeyName(key, computed) {
   return undefined;
 }
 
+// Components and hooks by name: `function Panel()`, `const useThing = () => {}`,
+// and the render function passed to `memo()` or `forwardRef()`.
+const COMPONENT_OR_HOOK_NAME = /^(?:use[A-Z0-9]|[A-Z])/;
+
+function functionName(node) {
+  if (node.id?.name) {
+    return node.id.name;
+  }
+  const parent = node.parent;
+  if (parent?.type === 'VariableDeclarator' && parent.id.type === 'Identifier') {
+    return parent.id.name;
+  }
+  if (
+    parent?.type === 'CallExpression' &&
+    parent.arguments[0] === node &&
+    ['memo', 'forwardRef'].includes(
+      parent.callee.type === 'Identifier' ? parent.callee.name : memberName(parent.callee)
+    )
+  ) {
+    return functionName(parent);
+  }
+  return undefined;
+}
+
+function isComponentOrHook(node) {
+  return isFunction(node) && COMPONENT_OR_HOOK_NAME.test(functionName(node) ?? '');
+}
+
+function enclosingFunction(node) {
+  let current = node.parent;
+  while (current && !isFunction(current)) {
+    current = current.parent;
+  }
+  return current;
+}
+
+/** `ref.current`, `ref.current!` or `(ref.current)` for the same `ref` text. */
+function readsCurrentOf(node, sourceCode, objectText) {
+  let current = node;
+  while (current?.type === 'TSNonNullExpression' || current?.type === 'ParenthesizedExpression') {
+    current = current.expression;
+  }
+  return (
+    current?.type === 'MemberExpression' &&
+    memberName(current) === 'current' &&
+    sourceCode.getText(current.object) === objectText
+  );
+}
+
+/** `if (ref.current === null)`, `== null`, `=== undefined` or `!ref.current`: lazy init. */
+function isLazyInitTest(test, sourceCode, objectText) {
+  if (test.type === 'UnaryExpression' && test.operator === '!') {
+    return readsCurrentOf(test.argument, sourceCode, objectText);
+  }
+  if (test.type !== 'BinaryExpression' || !['===', '=='].includes(test.operator)) {
+    return false;
+  }
+  const empty = (side) =>
+    (side.type === 'Literal' && side.value === null) || isIdentifier(side, 'undefined');
+  return (
+    (readsCurrentOf(test.left, sourceCode, objectText) && empty(test.right)) ||
+    (readsCurrentOf(test.right, sourceCode, objectText) && empty(test.left))
+  );
+}
+
+/** `ref.current ??= value`, or a write inside the consequent of a lazy-init `if`. */
+function isLazyInit(assignment, fn, sourceCode) {
+  if (assignment.operator === '??=') {
+    return true;
+  }
+  const objectText = sourceCode.getText(assignment.left.object);
+  let child = assignment;
+  for (let node = assignment.parent; node && node !== fn; node = node.parent) {
+    if (
+      node.type === 'IfStatement' &&
+      node.consequent === child &&
+      isLazyInitTest(node.test, sourceCode, objectText)
+    ) {
+      return true;
+    }
+    child = node;
+  }
+  return false;
+}
+
+// Hook callbacks that React calls while rendering, by hook name and argument.
+const RENDER_PHASE_CALLBACKS = { useMemo: 0, useState: 0, useReducer: 2 };
+
+/** The component or hook whose render runs `fn`, looking through render-phase callbacks. */
+function renderingFunction(fn) {
+  let current = fn;
+  for (;;) {
+    const call = current?.parent;
+    const name =
+      call?.type === 'CallExpression' &&
+      (call.callee.type === 'Identifier' ? call.callee.name : memberName(call.callee));
+    if (
+      !(name in RENDER_PHASE_CALLBACKS) ||
+      call.arguments[RENDER_PHASE_CALLBACKS[name]] !== current
+    ) {
+      return current;
+    }
+    current = enclosingFunction(call);
+  }
+}
+
+const EFFECT_HOOKS = new Set(['useEffect', 'useLayoutEffect']);
+// `setX(...)` state setters, but not the timer globals.
+const STATE_SETTER = /^set(?!Timeout$|Interval$|Immediate$)[A-Z]/;
+
+/**
+ * Whether an expression only combines values already available while
+ * rendering: no calls (other than updater functions passed to a setter), no
+ * ref or DOM reads through `.current`, and no `await`, `new` or `this`.
+ */
+function isRenderDerivable(node, visitorKeys) {
+  if (!node || typeof node.type !== 'string') {
+    return true;
+  }
+  if (isFunction(node)) {
+    return isRenderDerivable(node.body, visitorKeys);
+  }
+  if (
+    ['CallExpression', 'NewExpression', 'AwaitExpression', 'ThisExpression'].includes(node.type) ||
+    (node.type === 'MemberExpression' && memberName(node) === 'current')
+  ) {
+    return false;
+  }
+  return (visitorKeys[node.type] ?? []).every((key) => {
+    const child = node[key];
+    return Array.isArray(child)
+      ? child.every((value) => isRenderDerivable(value, visitorKeys))
+      : isRenderDerivable(child, visitorKeys);
+  });
+}
+
+/** A statement that only calls state setters with render-derivable values, possibly behind ifs. */
+function onlySetsState(node, visitorKeys) {
+  switch (node?.type) {
+    case 'BlockStatement':
+      return node.body.length > 0 && node.body.every((child) => onlySetsState(child, visitorKeys));
+    case 'IfStatement':
+      return (
+        isRenderDerivable(node.test, visitorKeys) &&
+        onlySetsState(node.consequent, visitorKeys) &&
+        (!node.alternate || onlySetsState(node.alternate, visitorKeys))
+      );
+    case 'ReturnStatement':
+      return node.argument === null;
+    case 'ExpressionStatement':
+      return onlySetsState(node.expression, visitorKeys);
+    case 'CallExpression':
+      return (
+        node.callee.type === 'Identifier' &&
+        STATE_SETTER.test(node.callee.name) &&
+        node.arguments.every((argument) => isRenderDerivable(argument, visitorKeys))
+      );
+    default:
+      return false;
+  }
+}
+
+/** At least one setter call, so a body of bare returns is not reported. */
+function callsSetter(node) {
+  if (node?.type === 'BlockStatement') {
+    return node.body.some(callsSetter);
+  }
+  if (node?.type === 'IfStatement') {
+    return callsSetter(node.consequent) || callsSetter(node.alternate);
+  }
+  return node?.type === 'ExpressionStatement' || node?.type === 'CallExpression';
+}
+
 function isListedFile(context, paths) {
   const filename = context.filename.replaceAll('\\', '/');
   return paths.some((path) => filename === path || filename.endsWith(`/${path}`));
@@ -865,6 +1038,88 @@ const rules = {
         },
         TemplateElement(node) {
           report(node, node.value.cooked ?? node.value.raw);
+        },
+      };
+    },
+  },
+  'no-forward-ref': {
+    create(context) {
+      return {
+        CallExpression(node) {
+          const callee = node.callee;
+          if (
+            isIdentifier(callee, 'forwardRef') ||
+            (callee.type === 'MemberExpression' && memberName(callee) === 'forwardRef')
+          ) {
+            context.report({
+              node,
+              message:
+                'React 19 passes `ref` as a prop; take it from props instead of wrapping the component in forwardRef.',
+            });
+          }
+        },
+      };
+    },
+  },
+  'no-render-ref-write': {
+    meta: { schema: EXCEPTIONS_SCHEMA },
+    create(context) {
+      if (isExceptedFile(context)) {
+        return {};
+      }
+      const check = (node, target) => {
+        if (target.type !== 'MemberExpression' || memberName(target) !== 'current') {
+          return;
+        }
+        const fn = renderingFunction(enclosingFunction(node));
+        if (!isComponentOrHook(fn)) {
+          return;
+        }
+        if (node.type === 'AssignmentExpression' && isLazyInit(node, fn, context.sourceCode)) {
+          return;
+        }
+        context.report({
+          node,
+          message:
+            'Do not write a ref while rendering. Use useLatestRef or useStableCallback (src/client/hooks/use-stable-callback.ts) for the latest value, or write it in an effect or handler.',
+        });
+      };
+      return {
+        AssignmentExpression(node) {
+          check(node, node.left);
+        },
+        UpdateExpression(node) {
+          check(node, node.argument);
+        },
+      };
+    },
+  },
+  'no-state-sync-effect': {
+    meta: { schema: EXCEPTIONS_SCHEMA },
+    create(context) {
+      if (isExceptedFile(context)) {
+        return {};
+      }
+      return {
+        CallExpression(node) {
+          const name =
+            node.callee.type === 'Identifier' ? node.callee.name : memberName(node.callee);
+          const [callback, dependencies] = node.arguments;
+          if (
+            !EFFECT_HOOKS.has(name) ||
+            !isFunction(callback) ||
+            dependencies?.type !== 'ArrayExpression' ||
+            dependencies.elements.length === 0 ||
+            !callsSetter(callback.body) ||
+            !onlySetsState(callback.body, context.sourceCode.visitorKeys)
+          ) {
+            return;
+          }
+          context.report({
+            node,
+            message:
+              'This effect only sets state from values known while rendering, so the previous state shows for one commit. Derive the value, reset with `key`, or adjust state during render (docs/architecture/client-state.md).',
+          });
         },
       };
     },

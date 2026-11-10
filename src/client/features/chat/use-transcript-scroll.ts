@@ -7,6 +7,7 @@ import {
   type Virtualizer,
 } from '@tanstack/react-virtual';
 import { useCallback, useLayoutEffect, useRef, useState } from 'react';
+import { useLatestRef } from '@/client/hooks/use-stable-callback';
 import {
   createTranscriptScrollController,
   type TranscriptScrollController,
@@ -30,11 +31,12 @@ function sameKeys(left: string[], right: string[]) {
 
 /** Returns the previous array while the row key values are unchanged. */
 function useSameKeys(keys: string[]) {
-  const previous = useRef(keys);
-  if (previous.current !== keys && !sameKeys(previous.current, keys)) {
-    previous.current = keys;
+  const [previous, setPrevious] = useState(keys);
+  if (previous !== keys && !sameKeys(previous, keys)) {
+    setPrevious(keys);
+    return keys;
   }
-  return previous.current;
+  return previous;
 }
 
 export function useTranscriptScroll(
@@ -43,16 +45,13 @@ export function useTranscriptScroll(
   options: TranscriptScrollOptions,
   anchorHeaderToContent = false
 ) {
-  const headerAnchoring = useRef(anchorHeaderToContent);
-  headerAnchoring.current = anchorHeaderToContent;
-  const latest = useRef(options);
-  latest.current = options;
+  const headerAnchoring = useLatestRef(anchorHeaderToContent);
+  const latest = useLatestRef(options);
   const controller = useRef<TranscriptScrollController | null>(null);
   const observer = useRef<ReturnType<typeof observeTranscriptScroll> | null>(null);
   // Virtual rows are replaced as they leave the window. Keep their measurements
   // weakly so bookkeeping does not retain detached row DOM for the whole chat.
   const measurements = useRef(new WeakMap<HTMLDivElement, Measurement>());
-  const engineRef = useRef<Virtualizer<HTMLDivElement, HTMLDivElement> | null>(null);
   const committedTotal = useRef(-1);
   const livePosition = useRef<TranscriptPosition | null>(null);
   const [hasContentBelow, setHasContentBelow] = useState(false);
@@ -200,7 +199,8 @@ export function useTranscriptScroll(
       return height;
     },
   });
-  engineRef.current = engine;
+  // Read by the viewport effect above, which must be installed before the engine's.
+  const engineRef = useLatestRef<Virtualizer<HTMLDivElement, HTMLDivElement> | null>(engine);
   // Reading anchors skip the history header, even while it overlaps the viewport.
   // Compensate its collapse after paging so the anchored content stays in place.
   engine.shouldAdjustScrollPositionOnItemSizeChange = (item, delta, instance) =>

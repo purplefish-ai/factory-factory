@@ -343,7 +343,16 @@ function ActionButtons({ pr, approving, onOpenGitHub, onApprove }: ActionButtons
   );
 }
 
-export function PRDetailPanel({
+export function PRDetailPanel(props: PRDetailPanelProps) {
+  const { pr } = props;
+  if (!pr) {
+    return <NoPRSelected />;
+  }
+  // Each PR opens on its Info tab.
+  return <PRDetail key={`${pr.repository.nameWithOwner}#${pr.number}`} {...props} pr={pr} />;
+}
+
+function PRDetail({
   pr,
   diff,
   diffLoading,
@@ -352,31 +361,19 @@ export function PRDetailPanel({
   onOpenGitHub,
   onApprove,
   approving = false,
-}: PRDetailPanelProps) {
+}: PRDetailPanelProps & { pr: PRWithFullDetails }) {
   const [activeTab, setActiveTab] = useState<Tab>('info');
-  const prKey = pr ? `${pr.repository.nameWithOwner}#${pr.number}` : null;
-
-  // Reset tab when PR changes
-  useEffect(() => {
-    if (prKey) {
-      setActiveTab('info');
-    }
-  }, [prKey]);
 
   // Fetch diff when diff tab is selected
   useEffect(() => {
-    if (activeTab === 'diff' && pr && !diff && !diffLoading && !diffError) {
+    if (activeTab === 'diff' && !diff && !diffLoading && !diffError) {
       onFetchDiff();
     }
-  }, [activeTab, pr, diff, diffLoading, diffError, onFetchDiff]);
+  }, [activeTab, diff, diffLoading, diffError, onFetchDiff]);
 
   // Plain-key shortcuts yield to modified keys (⌘D bookmarks the page), text fields and menus.
-  useShortcut('reviews.showDiff', () => setActiveTab('diff'), Boolean(pr));
-  useShortcut('reviews.showInfo', () => setActiveTab('info'), Boolean(pr));
-
-  if (!pr) {
-    return <NoPRSelected />;
-  }
+  useShortcut('reviews.showDiff', () => setActiveTab('diff'));
+  useShortcut('reviews.showInfo', () => setActiveTab('info'));
 
   return (
     <div className="h-full flex flex-col text-sm overflow-hidden">

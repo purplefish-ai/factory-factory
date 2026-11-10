@@ -86,6 +86,7 @@
     "factory/no-zod-any": "error",
     "factory/no-unsafe-json-parse-cast": "error",
     "factory/no-unsafe-resolver-cast": "error",
+    "factory/no-forward-ref": "error",
     "typescript/no-floating-promises": "error",
     "typescript/no-misused-promises": "error"
   },
@@ -198,6 +199,42 @@
       }
     },
     {
+      "files": [
+        "src/client/**/*.{ts,tsx}",
+        "src/components/**/*.{ts,tsx}",
+        "src/hooks/**/*.{ts,tsx}"
+      ],
+      "rules": {
+        "factory/no-render-ref-write": [
+          "error",
+          {
+            "exceptions": {
+              "src/client/features/chat/use-chat-state.ts": "Chat session state moves into a chat-scoped store in a later change, which replaces these render-time snapshot refs.",
+              "src/client/features/chat/use-chat-websocket.ts": "Chat session state moves into a chat-scoped store in a later change, which replaces this render-time handler ref.",
+              "src/client/features/chat/agent-activity/tool-renderers/tool-expansion-state.ts": "Transcript rows call the stable getExpansionState while rendering, so its ref must hold this render's expansion state, not the last commit's.",
+              "src/client/hooks/use-persisted-state.ts": "useSyncExternalStore calls getSnapshot while rendering, so the codec ref must hold this render's schema and fallback; the write is idempotent."
+            }
+          }
+        ],
+        "factory/no-state-sync-effect": [
+          "error",
+          {
+            "exceptions": {
+              "src/client/features/agents/event-dashboard-story.tsx": "Story fixture: the conflict story needs a newer server revision to land one commit after the editor opens.",
+              "src/client/routes/admin/ProjectFactoryConfigCard.tsx": "The admin routes are outside this change; closing the editor when the config query fails can move to render time there.",
+              "src/client/routes/admin/project-settings-row.tsx": "The admin routes are outside this change; remembering that a row has opened can move to render time there."
+            }
+          }
+        ]
+      }
+    },
+    {
+      "files": ["src/components/ui/**/*.{ts,tsx}"],
+      "rules": {
+        "factory/no-forward-ref": "off"
+      }
+    },
+    {
       "files": ["src/client/features/chat/agent-activity/**/*.{ts,tsx}"],
       "rules": {
         "factory/no-tool-input-cast": "error"
@@ -212,13 +249,21 @@
         "factory/no-direct-web-storage": "off",
         "factory/named-query-options": "off",
         "factory/no-arbitrary-font-size": "off",
-        "factory/use-status-callout": "off"
+        "factory/use-status-callout": "off",
+        "factory/no-render-ref-write": "off",
+        "factory/no-state-sync-effect": "off"
       }
     },
     {
       "files": ["**/*.test.ts", "**/*.test.tsx", "**/*.stories.tsx"],
       "rules": {
         "typescript/no-non-null-assertion": "off"
+      }
+    },
+    {
+      "files": ["**/*.stories.tsx"],
+      "rules": {
+        "factory/no-state-sync-effect": "off"
       }
     },
     {

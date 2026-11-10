@@ -1,7 +1,7 @@
 import { CameraIcon } from '@phosphor-icons/react/dist/csr/Camera';
 import { WarningCircleIcon } from '@phosphor-icons/react/dist/csr/WarningCircle';
 import { XIcon } from '@phosphor-icons/react/dist/csr/X';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import { toast } from 'sonner';
 import { EmptyState } from '@/client/components/empty-state';
 import { QueryState } from '@/client/components/query-state';
@@ -68,11 +68,9 @@ export function ScreenshotsPanel({
 
   // Close the confirmation if its screenshot leaves the list (deleted elsewhere,
   // or the list emptied/failed), so it cannot reopen later with a stale target.
-  useEffect(() => {
-    if (deleteDialogOpen && !deleteMutation.isPending && !deleteTargetListed) {
-      setDeleteDialogOpen(false);
-    }
-  }, [deleteDialogOpen, deleteMutation.isPending, deleteTargetListed]);
+  if (deleteDialogOpen && !deleteMutation.isPending && !deleteTargetListed) {
+    setDeleteDialogOpen(false);
+  }
 
   return (
     <div className="flex h-full min-h-0 flex-col">

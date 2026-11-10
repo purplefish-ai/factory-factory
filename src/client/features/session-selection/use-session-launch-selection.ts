@@ -1,4 +1,5 @@
-import { useCallback, useLayoutEffect, useRef, useState } from 'react';
+import { useCallback, useState } from 'react';
+import { useLatestRef } from '@/client/hooks/use-stable-callback';
 import { QUERY_RETRY } from '@/client/lib/query-options';
 import { trpc } from '@/client/lib/trpc';
 import { useUserSettings } from '@/client/lib/user-settings-queries';
@@ -52,10 +53,7 @@ export function useSessionLaunchSelectionState(
     ...restoration.snapshot,
     restoredSnapshot: restoration.snapshot,
   }));
-  const committedInputs = useRef({ scopeKey, defaults, restoration });
-  useLayoutEffect(() => {
-    committedInputs.current = { scopeKey, defaults, restoration };
-  }, [scopeKey, defaults, restoration]);
+  const committedInputs = useLatestRef({ scopeKey, defaults, restoration });
   const reset = useCallback(() => {
     const current = committedInputs.current;
     const snapshot = { defaults: current.defaults, drafts: {} };
@@ -92,8 +90,8 @@ export function useSessionLaunchSelectionState(
     provider === 'CODEX'
       ? state.defaults?.defaultCodexReasoningEffort
       : state.defaults?.defaultClaudeReasoningEffort;
-  const latestState = useRef(state);
-  latestState.current = state;
+  // Updates write ahead so a second update in the same event builds on the first.
+  const latestState = useLatestRef(state);
   const commit = (next: LaunchSelectionState) => {
     const snapshot: SessionLaunchSelectionSnapshot = {
       provider: next.provider,
