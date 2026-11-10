@@ -275,9 +275,9 @@ it('renders exact periodic counters with entire-source enabled scope and downloa
   };
   await act(() => publish(periodicResult));
   for (const text of [
-    'Periodic configurations: 2 imported, 3 skipped',
+    'Scheduled automation configurations: 2 imported, 3 skipped',
     'Enabled in entire source section: 4; restored disabled: 2',
-    'Skips by reason: existing task ID: 1; project not created by this import: 2.',
+    'Skips by reason: existing automation ID: 1; project not created by this import: 2.',
   ]) {
     expect(document.body.textContent).toContain(text);
   }
@@ -297,9 +297,11 @@ it('shows only source-link units, unavailable imported dependencies and overlapp
     ),
   };
   await act(() => publish(linkedResult));
-  const section = document.querySelector('[aria-label="Periodic workspace link recovery"]');
+  const section = document.querySelector(
+    '[aria-label="Scheduled automation workspace link recovery"]'
+  );
   expect(section?.textContent).toBe(
-    'Periodic workspace links: 2 imported, 3 skippedOnly links present in the backup are counted; these counts overlap workspace totals.Skips by reason: workspace or task not created by this import: 3.'
+    'Scheduled automation workspace links: 2 imported, 3 skippedOnly links present in the backup are counted; these counts overlap workspace totals.Skips by reason: workspace or automation not created by this import: 3.'
   );
   expect(document.body.textContent).toContain('Workspaces: 3 imported, 4 skipped');
   for (const warning of linkedResult.recovery.warnings) {
@@ -313,7 +315,9 @@ it('shows only source-link units, unavailable imported dependencies and overlapp
   });
   await click('Dismiss');
   await act(() => publish(result));
-  expect(document.querySelector('[aria-label="Periodic workspace link recovery"]')).toBeNull();
+  expect(
+    document.querySelector('[aria-label="Scheduled automation workspace link recovery"]')
+  ).toBeNull();
 });
 
 it('renders source history versus actual transforms and downloads the exact typed report', async () => {
@@ -341,15 +345,15 @@ it('renders source history versus actual transforms and downloads the exact type
     ),
   };
   await act(() => publish(historyResult));
-  const section = document.querySelector('[aria-label="Periodic execution history recovery"]');
+  const section = document.querySelector('[aria-label="Scheduled run history recovery"]');
   expect(section?.textContent?.replace(/\s+/g, ' ')).toContain(
-    'Periodic executions: 3 imported, 6 skipped'
+    'Scheduled runs: 3 imported, 6 skipped'
   );
   expect(section?.textContent?.replace(/\s+/g, ' ')).toContain(
     'RUNNING in entire source section: 5; restored FAILED as historical only: 2; restored settled: 1'
   );
   expect(section?.textContent?.replace(/\s+/g, ' ')).toContain(
-    'existing execution ID: 1; occupied workspace: 2; dependency not created by this import: 3'
+    'existing run ID: 1; occupied workspace: 2; dependency not created by this import: 3'
   );
   await click('Download JSON');
   expect(JSON.parse(download.mock.calls[0]![0].data)).toEqual(historyResult);
@@ -382,7 +386,7 @@ it('keeps and downloads exact definition-body results with all five normative pa
   ).toEqual([
     'Automation definition bodies: 2 imported, 3 skipped',
     'Enabled in entire source section: 4; restored disabled: 2',
-    'Only definition bodies and execution preferences are restored. Connections, event configuration and automation history are excluded.',
+    'Only definition bodies and run preferences are restored. Connections, event configuration and event-triggered run history are excluded.',
     'Inspect recovered bodies and author new complete event configuration where editing is available.',
     'Skips by reason: existing definition ID: 1; project not created by this import: 2.',
   ]);
@@ -412,7 +416,7 @@ it('qualifies new-only definition scope and downloads the independent full Slack
   await act(() => publish(storyResult));
   expect(storyResult).toEqual(expectedSlack);
   expect(document.body.textContent).toContain(
-    'Only definition bodies and execution preferences are restored. Connection bindings, event configuration and automation history are excluded. Slack connection metadata is reported separately.'
+    'Only definition bodies and run preferences are restored. Connection bindings, event configuration and event-triggered run history are excluded. Slack connection metadata is reported separately.'
   );
   expect(document.body.textContent).toContain(
     'Slack connection metadata restored disabled: 2 imported, 3 skipped; 4 enabled in the entire source section; 2 restored disabled without credentials.'

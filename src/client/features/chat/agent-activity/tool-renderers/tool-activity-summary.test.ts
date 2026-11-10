@@ -11,6 +11,36 @@ function call(name: string, input: Record<string, unknown>): PairedToolCall {
 }
 
 describe('compact activity summaries', () => {
+  it('uses sentence case for adapter titles after commands and within fallback groups', () => {
+    const commands = [
+      call('Bash', { command: 'pnpm test' }),
+      call('Bash', { command: 'git status' }),
+    ];
+    const editing = { ...call('Editing files', {}), status: 'pending' as const };
+    const reviewing = call('Reviewing Button.tsx', {});
+
+    expect(getToolGroupLabel([...commands, editing])).toBe('Ran commands, editing files');
+    expect(getToolGroupLabel([...commands, editing, reviewing])).toBe(
+      'Ran commands, editing files, reviewing Button.tsx'
+    );
+    expect(getToolGroupLabel([editing, reviewing])).toBe('Editing files, reviewing Button.tsx');
+    expect(getToolGroupLabel([editing])).toBe('Editing files');
+  });
+
+  it('lowercases built-in activity verbs while preserving command, filename and service casing', () => {
+    expect(
+      getToolGroupLabel([
+        call('Bash', { command: 'pnpm test' }),
+        call('Bash', { command: 'git status' }),
+        { ...call('fileChange', {}), status: 'pending' },
+        call('Read', { path: '/project/Button.tsx' }),
+        call('Grep', {}),
+        call('List files', {}),
+        call('mcp__github__fetch_status', {}),
+      ])
+    ).toBe('Ran commands, editing files, read file Button.tsx, searched, listed files, GitHub');
+  });
+
   it.each([
     ["python3 - <<'PY'\nimport subprocess\nPY", 'Ran python3'],
     ['/usr/bin/python3 /tmp/check.py', 'Ran python3'],

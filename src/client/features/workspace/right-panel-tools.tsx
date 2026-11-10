@@ -86,7 +86,7 @@ export function TopPanelArea({
         />
         {periodicTaskId && (
           <TabButton
-            label="Scheduled automation"
+            label="Runs"
             icon={<RobotIcon className="h-3.5 w-3.5" />}
             isActive={showPeriodicTask}
             onSelect={() => onTopTabChange('periodic-task')}

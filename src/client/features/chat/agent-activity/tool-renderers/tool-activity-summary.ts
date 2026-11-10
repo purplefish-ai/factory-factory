@@ -136,6 +136,10 @@ function mcpGroupLabel(group: PairedToolCall[]): string {
     .join(', ');
 }
 
+function sentenceCaseLabel(label: string, index: number): string {
+  return index === 0 ? label : label.charAt(0).toLowerCase() + label.slice(1);
+}
+
 function activityGroupLabel(kind: ToolActivityKind, group: PairedToolCall[]): string {
   const pending = group.some((call) => call.status === 'pending');
   switch (kind) {
@@ -159,7 +163,9 @@ function activityGroupLabel(kind: ToolActivityKind, group: PairedToolCall[]): st
         ...new Set(
           group.map((call) => getDisplayToolName(call.name, call.input, { summary: true }))
         ),
-      ].join(', ');
+      ]
+        .map(sentenceCaseLabel)
+        .join(', ');
   }
 }
 
@@ -179,9 +185,7 @@ export function getToolGroupLabel(calls: PairedToolCall[]): string {
   return [...groups]
     .map(([kind, group], index) => {
       const label = activityGroupLabel(kind, group);
-      return index === 0 || kind === 'other' || kind === 'mcp'
-        ? label
-        : label.charAt(0).toLowerCase() + label.slice(1);
+      return kind === 'mcp' ? label : sentenceCaseLabel(label, index);
     })
     .join(', ');
 }

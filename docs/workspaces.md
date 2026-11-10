@@ -28,8 +28,9 @@ existing names, shown in parentheses where they differ.
   **Automations** section. A **scheduled automation** (`PeriodicTask`) runs on a
   cadence; an **event-triggered automation** stores event triggers in a paused
   definition. Event listening and automatic event runs are not yet available.
-  Each scheduled execution is a **run**, carried out by an agent. Labels name
-  the kind, as in a workspace's **Scheduled automation** tool tab.
+  Each execution is a **run**, carried out by an agent. Use **Runs** for tool
+  tabs and **Run history** for history headings, regardless of trigger kind. Use
+  **Scheduled** and **Event-triggered** to describe or configure triggers.
 - **Subagent** (`subagent`): a helper that the provider starts inside a chat. It
   works in the chat's workspace and appears in the workspace's **Subagents**
   tool tab and as a transcript tab. UI text spells it "subagent".
