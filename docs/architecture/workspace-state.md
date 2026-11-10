@@ -547,6 +547,24 @@ recovery. Requests that lose the conditional state transition re-read the
 workspace and retry once if it has rolled back to an archivable state. Other
 invalid transitions and cleanup failures remain errors.
 
+Archive and delete stop the workspace's sessions, run script and terminals
+first; any failure there aborts the operation. After they succeed and before the
+worktree is removed, a best-effort sweep terminates leftover processes such as a
+dev server an agent detached from a background shell. A process matches only if
+it belongs to the server's user, has no controlling terminal, is not the server,
+one of its ancestors or PID 0/1, and has its working directory or executable on
+a path boundary inside the worktree. Both the configured and realpath-resolved
+worktree paths are checked, and each must be strictly inside the matching
+project worktree base. Command-line arguments are never matched, so an editor
+opened on the worktree is left alone. Matches receive SIGTERM; after three
+seconds, the processes are listed again and survivors that still match receive
+SIGKILL, so a reused PID is never killed. Each listing is bounded to four
+seconds. macOS uses `ps` and `lsof`, Linux reads `/proc`, and other platforms
+skip the sweep. A sweep failure is logged and never blocks the archive or
+delete: it leaves exactly the processes earlier versions left. Workspaces
+archived before this sweep existed keep their leftover processes until they exit
+or are stopped by hand.
+
 Startup archive recovery runs in the background after essential session and
 workspace state repairs. Slow Git worktree cleanup does not delay HTTP/WebSocket
 readiness or the CLI startup signal; affected workspaces remain ARCHIVING until

@@ -264,10 +264,12 @@ synchronize normally after saves settle.
 
 ## Worktree cleanup
 
-Archiving or deleting a workspace removes its worktree. Worktrees can still be
-left behind by a failed cleanup or an older version. **Worktree Cleanup** in
-**System** lists `workspace-*` folders under each project's worktree directory
-that no non-archived workspace owns. Cleanup also protects configured project
+Archiving or deleting a workspace removes its worktree after stopping processes
+still running inside it, such as a dev server an agent started in the background
+([details](architecture/workspace-state.md)). Worktrees can still be left behind
+by a failed cleanup or an older version. **Worktree Cleanup** in **System**
+lists `workspace-*` folders under each project's worktree directory that no
+non-archived workspace owns. Cleanup also protects configured project
 repositories, including paths reached through symlinks or inside a candidate
 folder. Standalone repositories, folders containing nested repositories
 (including bare repositories), and linked worktrees whose owning repository
