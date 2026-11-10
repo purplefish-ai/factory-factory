@@ -747,22 +747,38 @@ entirely.
 Each cache entry watches its worktree and private Git directory, while linked
 worktrees share one reference-counted watcher for the repo's common `.git`
 directory. Worktree files and private metadata such as `HEAD`, `index`, and
-`config.worktree` invalidate only their owning worktree. Common metadata changes
-invalidate every dependent entry, including shared config, refs, info attributes
-and excludes, and reftable state. Object and reflog writes are ignored because
-the associated ref event performs the invalidation. If the shared watcher fails,
-all of its dependents switch to the five-minute fallback expiry; removing the
-last dependent closes it. On Linux all of these watches are nonrecursive, so
-installation never traverses dependency trees, Git objects, logs or other
-worktrees. Linux snapshots expire after five seconds even with healthy watches;
-existing snapshot readers refresh nested working-tree edits and ref changes that
-shallow watches cannot see. Watch failures retain that five-second limit on
-Linux. Other platforms retain recursive watching and the five-minute failure
-fallback. Worktree removal closes its watchers before Git or filesystem deletion
-and suspends watcher installation until that operation settles. Concurrent
-snapshot reads cannot reinstall watches during deletion. On success or failure,
-it retires any snapshots calculated during deletion; the next read may recreate
-watchers lazily if the worktree survives.
+`config.worktree` invalidate only their owning worktree. Loose branch,
+remote-tracking and tag refs (and their `.lock` files) invalidate only snapshots
+that read them: the branch named by the worktree's private `HEAD`, and every
+full ref Git could resolve the merge-base revisions it tried
+(`origin/<defaultBranch>`, then `<defaultBranch>`) or its upstream to. A commit
+or push in one worktree therefore recomputes that worktree, while moving the
+default branch still recomputes everyone. A snapshot's refs are treated as
+unknown, so any ref change invalidates it, while its calculation is running,
+when `HEAD` cannot be read, when one of those refs is a loose symbolic ref, and
+when the upstream lookup fails for any reason other than "no upstream
+configured" or a detached `HEAD` (a configured upstream whose tracking ref is
+missing could reappear). Ref names are compared case-insensitively after NFC
+normalization, so canonically equivalent Unicode names match, and a directory
+event covers every ref beneath it. Every other common metadata change still
+invalidates every dependent entry, including `packed-refs`, other ref namespaces
+such as `refs/replace`, shared config, info attributes and excludes, reftable
+state, and events without a filename. Object and reflog writes are ignored
+because the associated ref event performs the invalidation, and so is
+`packed-refs.lock`: Git takes and releases it around ordinary loose ref updates,
+while an actual rewrite also reports `packed-refs.new` and `packed-refs`. If the
+shared watcher fails, all of its dependents switch to the five-minute fallback
+expiry; removing the last dependent closes it. On Linux all of these watches are
+nonrecursive, so installation never traverses dependency trees, Git objects,
+logs or other worktrees. Linux snapshots expire after five seconds even with
+healthy watches; existing snapshot readers refresh nested working-tree edits and
+ref changes that shallow watches cannot see. Watch failures retain that
+five-second limit on Linux. Other platforms retain recursive watching and the
+five-minute failure fallback. Worktree removal closes its watchers before Git or
+filesystem deletion and suspends watcher installation until that operation
+settles. Concurrent snapshot reads cannot reinstall watches during deletion. On
+success or failure, it retires any snapshots calculated during deletion; the
+next read may recreate watchers lazily if the worktree survives.
 
 Git snapshots keep one running calculation per worktree/default-branch pair.
 Invalidation clears the cached result and fences the running generation without
