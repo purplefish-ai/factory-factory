@@ -24,6 +24,7 @@ const rules = [
   'no-zod-any',
   'no-unsafe-json-parse-cast',
   'no-unsafe-resolver-cast',
+  'no-tool-input-cast',
   'no-raw-palette-classes',
   'workspace-query-owner',
   'named-query-options',
@@ -91,6 +92,11 @@ describe('Oxlint project guardrails', () => {
     ['no-unsafe-json-parse-cast', 'const value = JSON.parse(input) as unknown as Response;'],
     ['no-unsafe-resolver-cast', 'const callback = resolve as (value: unknown) => void;'],
     ['no-unsafe-resolver-cast', 'const callback = resolve as (value: Array<unknown>) => void;'],
+    ['no-tool-input-cast', 'const todos = input.todos as Todo[] | undefined;'],
+    ['no-tool-input-cast', 'const path = (input.file_path as string) ?? "";'],
+    ['no-tool-input-cast', 'const offset = input?.["offset"] as number;'],
+    ['no-tool-input-cast', 'const path = call.input.file_path as string;'],
+    ['no-tool-input-cast', 'const payload = input as unknown as Payload;'],
     ['no-raw-palette-classes', 'const className = "flex bg-red-500";'],
     ['no-raw-palette-classes', 'export const chip = <span className="dark:text-emerald-300" />;'],
     ['no-raw-palette-classes', 'const className = `${base} hover:border-sky-500/40`;'],
@@ -152,6 +158,10 @@ describe('Oxlint project guardrails', () => {
     'const schema = z.unknown();',
     'const parsed = JSON.parse(input); const value = schema.parse(parsed);',
     'const callback = resolve as (value: string) => void;',
+    'const parsed = parseToolInput(readToolInputSchema, input);',
+    'const keys = ["file_path", "offset"] as const;',
+    'const textarea = inputRef.current as HTMLTextAreaElement;',
+    'const name = tool.name as string;',
     'const description = "use client";',
     'function example() { return "use server"; }',
     'const className = "bg-success/10 text-running border-destructive/30";',
@@ -281,5 +291,18 @@ describe('workspace query owners', () => {
     for (const owner of owners) {
       expect(existsSync(resolve(owner))).toBe(true);
     }
+  });
+});
+
+describe('tool input casts', () => {
+  const projectConfig = overridesSchema.parse(
+    JSON.parse(readFileSync(resolve('.oxlintrc.json'), 'utf8'))
+  );
+
+  it('applies to the agent activity renderers without file exceptions', () => {
+    const scopes = projectConfig.overrides
+      .filter((override) => override.rules['factory/no-tool-input-cast'] !== undefined)
+      .map((override) => [override.files, override.rules['factory/no-tool-input-cast']]);
+    expect(scopes).toEqual([[['src/client/features/chat/agent-activity/**/*.{ts,tsx}'], 'error']]);
   });
 });

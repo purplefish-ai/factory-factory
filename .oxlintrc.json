@@ -131,6 +131,12 @@
       }
     },
     {
+      "files": ["src/client/features/chat/agent-activity/**/*.{ts,tsx}"],
+      "rules": {
+        "factory/no-tool-input-cast": "error"
+      }
+    },
+    {
       "files": ["**/*.test.ts", "**/*.test.tsx"],
       "rules": {
         "factory/no-raw-palette-classes": "off",

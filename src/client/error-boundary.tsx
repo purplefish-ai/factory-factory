@@ -29,7 +29,7 @@ interface ErrorBoundaryState {
 }
 
 /** React can catch any thrown value, including null and undefined. */
-function normalizeThrownError(error: unknown): Error {
+export function normalizeThrownError(error: unknown): Error {
   if (error instanceof Error) {
     return error;
   }

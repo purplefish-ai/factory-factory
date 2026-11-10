@@ -241,6 +241,24 @@ function numericIntervalLiteral(node, visitorKeys) {
   }
 }
 
+/** `input`, `input.todos`, `call.input.file_path`, `input?.["offset"]` and similar. */
+function readsToolInput(node) {
+  let current = node;
+  while (current) {
+    if (current.type === 'ChainExpression' || current.type === 'ParenthesizedExpression') {
+      current = current.expression;
+    } else if (current.type === 'MemberExpression') {
+      if (memberName(current) === 'input') {
+        return true;
+      }
+      current = current.object;
+    } else {
+      return isIdentifier(current, 'input');
+    }
+  }
+  return false;
+}
+
 function isListedFile(context, paths) {
   const filename = context.filename.replaceAll('\\', '/');
   return paths.some((path) => filename === path || filename.endsWith(`/${path}`));
@@ -498,6 +516,23 @@ const rules = {
           }
         },
       };
+    },
+  },
+  'no-tool-input-cast': {
+    create(context) {
+      // Tool input is agent-supplied; renderers parse it with the schemas in
+      // tool-renderers/tool-input-schemas.ts and fall back to raw JSON.
+      const report = (node) => {
+        if (node.typeAnnotation.typeName?.name === 'const' || !readsToolInput(node.expression)) {
+          return;
+        }
+        context.report({
+          node,
+          message:
+            'Parse agent tool input with parseToolInput and a Zod schema instead of a type assertion.',
+        });
+      };
+      return { TSAsExpression: report, TSTypeAssertion: report };
     },
   },
   'no-unsafe-resolver-cast': {

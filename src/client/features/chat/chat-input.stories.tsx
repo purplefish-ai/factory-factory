@@ -124,10 +124,16 @@ export const RestoredDraft: Story = {
   },
 };
 
+/** While connecting, the placeholder changes but the field keeps its accessible name. */
 export const Disabled: Story = {
   args: {
     onSend: onSendAction,
     disabled: true,
+  },
+  play: async ({ canvasElement }) => {
+    const textbox = within(canvasElement).getByRole('textbox', { name: 'Message' });
+    await expect(textbox).toBeDisabled();
+    await expect(textbox).toHaveAttribute('placeholder', 'Connecting…');
   },
 };
 

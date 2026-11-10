@@ -5,6 +5,7 @@ import { TRPCProvider } from '@/client/lib/providers';
 import { ErrorBoundary } from './error-boundary';
 import { ProjectLayout } from './layouts/project-layout';
 import { Root } from './root';
+import { RouteErrorFallback } from './route-error-fallback';
 
 // Route modules load only when their page is rendered.
 const AgentsPage = lazy(() => import('./routes/agents'));
@@ -22,6 +23,7 @@ const WorkspacesListPage = lazy(() => import('./routes/projects/workspaces/list'
 const NewWorkspaceRedirectPage = lazy(() => import('./routes/projects/workspaces/new'));
 const ReviewsPage = lazy(() => import('./routes/reviews'));
 const LegacyReviewsPage = lazy(() => import('./routes/reviews/legacy'));
+const NotFoundPage = lazy(() => import('./routes/not-found'));
 
 const isDevelopmentMode = import.meta.env.MODE === 'development';
 const enableMobileBaselineRoute =
@@ -72,6 +74,7 @@ export const router = createBrowserRouter([
         <Root />
       </ErrorBoundary>
     ),
+    errorElement: <RouteErrorFallback />,
     children: [
       {
         index: true,
@@ -137,6 +140,7 @@ export const router = createBrowserRouter([
         path: 'logs',
         element: <LogsPage />,
       },
+      { path: '*', element: <NotFoundPage /> },
     ],
   },
 ]);

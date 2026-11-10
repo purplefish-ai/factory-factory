@@ -3,6 +3,7 @@ import { AppHeader } from '@/client/components/app-header';
 import { AppHeaderProvider } from '@/client/components/app-header-context';
 import { AppShortcuts } from '@/client/components/app-shortcuts';
 import { AppSidebar } from '@/client/components/app-sidebar';
+import { ErrorBoundary } from '@/client/error-boundary';
 import {
   AppNavigationDataProvider,
   useAppNavigationData,
@@ -37,7 +38,16 @@ export function AppLayout({ children, className, banners }: AppLayoutProps) {
               <AppHeader showSidebarToggle={!isFirstRun} />
               {banners}
               <div className="flex flex-1 min-h-0 overflow-hidden">
-                {isFirstRun ? null : <AppSidebar navData={navData} />}
+                {isFirstRun ? null : (
+                  <ErrorBoundary
+                    variant="compact"
+                    title="Couldn't show the sidebar"
+                    showRetry
+                    className="w-56 shrink-0 border-r"
+                  >
+                    <AppSidebar navData={navData} />
+                  </ErrorBoundary>
+                )}
                 <main className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-background">
                   {children}
                 </main>
