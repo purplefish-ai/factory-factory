@@ -56,6 +56,7 @@ function rawRequest(
   });
 }
 
+const writeCallbackSawHeadersSent: boolean[] = [];
 const largePayload = { items: Array.from({ length: 200 }, (_, index) => ({ index, name: 'x' })) };
 
 function createExpressApp(): express.Express {
@@ -78,6 +79,14 @@ function createExpressApp(): express.Express {
     res.write('{"items":[');
     res.write(Buffer.from(largePayload.items.map((item) => JSON.stringify(item)).join(',')));
     res.end(']}');
+  });
+  app.get('/write-callback', (_req, res) => {
+    res.type('json');
+    res.write(JSON.stringify(largePayload), () => {
+      // A buffered write completes only once the response has gone out.
+      writeCallbackSawHeadersSent.push(res.headersSent);
+    });
+    res.end();
   });
   app.get('/no-content', (_req, res) => {
     res.status(204).end();
@@ -115,6 +124,15 @@ describe('createJsonCompressionMiddleware', () => {
     expect(JSON.parse(gunzipSync(response.body).toString())).toEqual(largePayload);
   });
 
+  it('runs buffered write callbacks after the response is sent', async () => {
+    writeCallbackSawHeadersSent.length = 0;
+    const server = await listen(createExpressApp());
+    const response = await rawRequest(server, '/write-callback', { 'accept-encoding': 'gzip' });
+
+    expect(response.headers['content-encoding']).toBe('gzip');
+    expect(writeCallbackSawHeadersSent).toEqual([true]);
+  });
+
   it('sends identity with Vary when the client accepts no coding', async () => {
     const server = await listen(createExpressApp());
     const response = await rawRequest(server, '/large');
@@ -136,7 +154,7 @@ describe('createJsonCompressionMiddleware', () => {
     const server = await listen(createExpressApp());
     const response = await rawRequest(server, path, { 'accept-encoding': 'br' });
 
-    expect(response.headers['content-encoding']).not.toBe('br');
+    expect(response.headers['content-encoding']).toBe(path === '/encoded' ? 'identity' : undefined);
     expect(response.headers.vary).toBeUndefined();
   });
 

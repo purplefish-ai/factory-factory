@@ -12,12 +12,16 @@ type StaticOptions = NonNullable<Parameters<typeof express.static>[1]>;
 
 /** URL path below the mount point → codings with a sibling file on disk. */
 function scanPrecompressedFiles(root: string): Map<string, ContentEncoding[]> {
+  const variants = new Map<string, ContentEncoding[]>();
+  // `express.static` tolerates a missing root (e.g. a build without `assets/`); so must the scan.
+  if (!existsSync(root)) {
+    return variants;
+  }
   const files = new Set(
     readdirSync(root, { recursive: true, withFileTypes: true })
       .filter((entry) => entry.isFile())
       .map((entry) => relative(root, join(entry.parentPath, entry.name)).split(sep).join('/'))
   );
-  const variants = new Map<string, ContentEncoding[]>();
   for (const file of files) {
     const encodings = CONTENT_ENCODINGS.filter((encoding) =>
       files.has(`${file}${PRECOMPRESSED_SUFFIXES[encoding]}`)

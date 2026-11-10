@@ -61,6 +61,18 @@ function findCallback(...args: unknown[]): Callback | undefined {
   return args.find((argument): argument is Callback => typeof argument === 'function');
 }
 
+/** Identity clients are never buffered; plain JSON still gets `Vary` as its headers go out. */
+function addVaryToPlainJson(res: Response): void {
+  const originalWriteHead = res.writeHead;
+  res.writeHead = ((...args: unknown[]) => {
+    res.writeHead = originalWriteHead;
+    if (isPlainJsonResponse(res)) {
+      res.vary('Accept-Encoding');
+    }
+    return Reflect.apply(originalWriteHead, res, args);
+  }) as typeof res.writeHead;
+}
+
 /**
  * Compresses complete JSON responses above a size threshold for clients that
  * accept br or gzip. Streaming requests are never wrapped. Other responses are
@@ -76,19 +88,27 @@ export function createJsonCompressionMiddleware(
       return;
     }
     const encoding = selectContentEncoding(req.headers['accept-encoding']);
+    if (encoding === null) {
+      addVaryToPlainJson(res);
+      next();
+      return;
+    }
     const originalWrite = res.write;
     const originalEnd = res.end;
     const write: Write = (...args) => Reflect.apply(originalWrite, res, args);
     const end: End = (...args) => Reflect.apply(originalEnd, res, args);
-    const chunks: Buffer[] = [];
+    const chunks: Array<{ buffer: Buffer; callback: Callback | undefined }> = [];
     let buffering: boolean | null = null;
 
-    const passThrough = () => {
-      buffering = false;
+    const restore = () => {
       res.write = originalWrite;
       res.end = originalEnd;
-      for (const pending of chunks.splice(0)) {
-        write(pending);
+    };
+    const passThrough = () => {
+      buffering = false;
+      restore();
+      for (const { buffer, callback } of chunks.splice(0)) {
+        write(buffer, callback);
       }
     };
     const startBody = () => {
@@ -96,10 +116,19 @@ export function createJsonCompressionMiddleware(
       return buffering;
     };
 
-    const finish = (body: Buffer, done: Callback | undefined) => {
+    const finish = (endCallback: Callback | undefined) => {
+      const pending = chunks.splice(0);
+      const body = Buffer.concat(pending.map(({ buffer }) => buffer));
+      // Buffered writes complete only once the whole response has been sent.
+      const done = (error?: Error | null) => {
+        for (const { callback } of pending) {
+          callback?.(error);
+        }
+        endCallback?.(error);
+      };
       res.vary('Accept-Encoding');
       const bodyless = res.statusCode === 204 || res.statusCode === 304;
-      if (encoding === null || body.length < threshold || bodyless) {
+      if (body.length < threshold || bodyless) {
         end(body, done);
         return;
       }
@@ -123,11 +152,7 @@ export function createJsonCompressionMiddleware(
         passThrough();
         return write(chunk, chunkEncoding, callback);
       }
-      chunks.push(buffer);
-      const done = findCallback(chunkEncoding, callback);
-      if (done) {
-        process.nextTick(done);
-      }
+      chunks.push({ buffer, callback: findCallback(chunkEncoding, callback) });
       return true;
     };
 
@@ -138,12 +163,11 @@ export function createJsonCompressionMiddleware(
         passThrough();
         return end(chunk, chunkEncoding, callback);
       }
-      res.write = originalWrite;
-      res.end = originalEnd;
+      restore();
       if (tail !== null) {
-        chunks.push(tail);
+        chunks.push({ buffer: tail, callback: undefined });
       }
-      finish(Buffer.concat(chunks), findCallback(chunk, chunkEncoding, callback));
+      finish(findCallback(chunk, chunkEncoding, callback));
       return res;
     };
 

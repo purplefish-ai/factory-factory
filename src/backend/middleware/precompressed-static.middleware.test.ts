@@ -203,6 +203,15 @@ describe('createPrecompressedStatic', () => {
     expect(response.headers['content-encoding']).toBe('br');
     expect(brotliDecompressSync(response.body).toString()).toBe(html);
   });
+
+  it('tolerates a missing root like express.static', async () => {
+    const app = express();
+    app.use('/assets', createPrecompressedStatic(join(root, 'missing'), {}));
+    const server = await listen(app);
+    const response = await rawRequest(server, '/assets/app.js', { 'accept-encoding': 'br' });
+
+    expect(response.status).toBe(404);
+  });
 });
 
 describe('sendPrecompressedHtml', () => {

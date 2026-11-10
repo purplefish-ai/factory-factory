@@ -17,6 +17,9 @@ describe('selectContentEncoding', () => {
     ['*', 'br'],
     ['*;q=0.5, br;q=0', 'gzip'],
     ['gzip;q=invalid', null],
+    // Out-of-range weights are malformed and must not outrank valid ones.
+    ['br;q=2, gzip;q=0.5', 'gzip'],
+    ['br;q=-1', null],
   ])('selects for %j', (header, expected) => {
     expect(selectContentEncoding(header)).toBe(expected);
   });

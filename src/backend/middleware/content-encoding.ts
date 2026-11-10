@@ -12,8 +12,9 @@ function parseQuality(parameters: string[]): number {
   for (const parameter of parameters) {
     const [name, value] = parameter.split('=').map((part) => part.trim());
     if (name?.toLowerCase() === 'q') {
+      // HTTP qvalues lie in [0, 1]; treat anything else as a refusal.
       const quality = Number(value);
-      return Number.isFinite(quality) ? quality : 0;
+      return quality >= 0 && quality <= 1 ? quality : 0;
     }
   }
   return 1;
