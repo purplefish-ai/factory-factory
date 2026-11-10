@@ -46,10 +46,11 @@ it('drives cutover, observation, wakes and monitoring changes through the suppli
   await ratchet.wakePendingEvents('custom-workspace');
   expect(monitoring.get).toHaveBeenCalledWith('custom-workspace');
 
+  monitoring.get.mockClear();
   await expect(
     ratchet.setWorkspaceRatcheting('custom-workspace', true, { expectedBindingRevision: 5 })
   ).rejects.toThrow();
-  expect(monitoring.get).toHaveBeenLastCalledWith('custom-workspace');
+  expect(monitoring.get).toHaveBeenCalledExactlyOnceWith('custom-workspace');
 
   await ratchet.stop();
   expect(snapshots.find).not.toHaveBeenCalled();

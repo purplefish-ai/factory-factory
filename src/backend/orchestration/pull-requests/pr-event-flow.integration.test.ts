@@ -588,12 +588,15 @@ it('queues a committed failure after an empty idle wake without waiting for anot
     where: { workspaceId },
     data: { recipientSessionId: sessionId },
   });
+  // Spreading builds the test graph's own poll, so construct this one afterwards: the job
+  // runner keeps the last registration, and delivery reads `graph.ratchetService` per call.
+  const graph = { ...services };
+  const delivery = createPRDeliveryPorts(graph);
   const wake = vi.fn((id: string, isCurrent?: () => boolean) =>
     wakePRDelivery(id, delivery, isCurrent)
   );
   const ratchetService = new RatchetService({ observe: vi.fn(), wake, setMonitoring: vi.fn() });
-  const graph = { ...services, ratchetService };
-  const delivery = createPRDeliveryPorts(graph);
+  graph.ratchetService = ratchetService;
   const logger = { info: vi.fn(), debug: vi.fn(), warn: vi.fn(), error: vi.fn() };
   const collector = createEventCollectorOrchestrator({
     createLogger: () => logger,

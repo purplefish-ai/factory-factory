@@ -181,19 +181,18 @@ Invalid transitions throw `WorkspaceStateMachineError`.
 
 ## PR and Ratchet Progression
 
-The PR monitoring poll (`pr-event-poll`) is implemented in
-`src/backend/orchestration/pull-requests/ratchet.service.ts` and composed per
-application graph by `createRatchetService()` in `ratchet-dependencies.ts`. It
-uses the shared `SERVICE_INTERVAL_MS.prEventPoll` interval of two minutes,
-observes the eligible PRs of monitoring-enabled workspaces, recomputes their
-Ratchet state, and wakes queued PR event delivery; see
-[PR event delivery destinations](architecture/pull-requests.md#pr-event-delivery-destinations).
+The Ratchet capsule is implemented in
+`src/backend/services/ratchet/service/ratchet.service.ts`. Its monitor loop uses
+the shared `SERVICE_INTERVAL_MS.ratchetPoll` interval of two minutes. It
+evaluates `READY`, Ratchet-enabled workspaces with PRs, refreshes their Ratchet
+state from live GitHub data, and dispatches fixer sessions when the decision
+policy requires one.
 
-The PR scheduler (`pr-poll`) in
+The PR scheduler in
 `src/backend/orchestration/pull-requests/scheduler.service.ts` uses
-`SERVICE_INTERVAL_MS.prPoll` to sync stale PR snapshots and discover new PRs
-every three minutes. Page-load `syncPRStatus` calls and these periodic syncs
-converge cached PR state; see
+`SERVICE_INTERVAL_MS.schedulerPrSync` to sync stale PR snapshots and discover
+new PRs every three minutes. Page-load `syncPRStatus` calls and these periodic
+syncs converge cached PR state; see
 [terminal PR polling](architecture/pull-requests.md#terminal-pr-polling) for
 which refreshes are forced.
 
@@ -507,9 +506,8 @@ Key tests are located at:
   `src/backend/services/workspace/service/lifecycle/state-machine.service.test.ts`;
 - query projections:
   `src/backend/services/workspace/service/query/workspace-query.service.test.ts`;
-- PR monitoring poll behavior, wakes, shutdown and enablement semantics:
-  `src/backend/orchestration/pull-requests/ratchet-observation-watcher.test.ts`
-  and `ratchet-collection-policy.test.ts`;
+- Ratchet behavior, dispatch retries, and disable semantics:
+  `src/backend/services/ratchet/service/ratchet.service.test.ts`;
 - Ratchet visual-state helpers:
   `src/client/features/workspace/ratchet-state.test.ts`;
 - snapshot propagation and reconciliation:

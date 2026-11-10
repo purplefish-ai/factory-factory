@@ -1,3 +1,4 @@
+import { createLogger } from '@/backend/services/logger.service';
 import { createPRDeliveryPorts } from './pr-delivery-dependencies';
 import { wakePRDelivery } from './pr-event-delivery.orchestrator';
 import { retireLegacyRatchetSessions } from './pr-monitoring-cutover.orchestrator';
@@ -23,7 +24,8 @@ export function createRatchetService(getServices: () => PRMonitoringServices): R
       const services = getServices();
       ports = {
         observation: createPRObservationPorts(services),
-        delivery: createPRDeliveryPorts(services),
+        // Wake-path dispatch warnings keep the category they had when domain bridges wired the poll.
+        delivery: createPRDeliveryPorts(services, createLogger('domain-bridges')),
       };
     }
     return ports;
