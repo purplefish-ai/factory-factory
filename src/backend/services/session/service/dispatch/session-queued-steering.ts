@@ -46,7 +46,10 @@ type MailSteering = {
 
 /** Holds normal queue dispatch while an explicit native delivery is unsettled. */
 export class SessionQueuedSteering {
-  private readonly requests = new Map<string, { messageId: string; operation: Promise<void> }>();
+  private readonly requests = new Map<
+    string,
+    { messageId: string; kind: 'human' | 'mail'; operation: Promise<void> }
+  >();
   private readonly lateRecoveryRequested = new Set<string>();
   private readonly pending = new Map<string, { token: symbol; messageId: string }>();
   constructor(private readonly ports: SteeringPorts) {}
@@ -71,15 +74,16 @@ export class SessionQueuedSteering {
   }
 
   async steer(sessionId: string, messageId: string, mail?: MailSteering): Promise<void> {
+    const kind: 'human' | 'mail' = mail ? 'mail' : 'human';
     const existing = this.requests.get(sessionId);
     if (existing) {
-      if (existing.messageId === messageId) {
+      if (existing.messageId === messageId && existing.kind === kind) {
         return await existing.operation;
       }
       throw new Error('Another queued message is being steered. Try again when it finishes.');
     }
     const operation = this.performSteer(sessionId, messageId, mail);
-    const entry = { messageId, operation };
+    const entry = { messageId, kind, operation };
     this.requests.set(sessionId, entry);
     try {
       await operation;

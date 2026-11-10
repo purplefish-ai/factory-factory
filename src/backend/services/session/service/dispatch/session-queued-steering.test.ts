@@ -2,7 +2,7 @@ import { afterEach, expect, it, vi } from 'vitest';
 import { sessionDomainService } from '@/backend/services/session/service/session-domain.service';
 import { SessionQueuedSteering } from './session-queued-steering';
 
-function fixture() {
+function fixture(messageId = 'message') {
   let generation = 0;
   const completions: Array<(outcome: { outcome: 'promptRequired' }) => void> = [];
   const send = vi.fn(
@@ -22,7 +22,7 @@ function fixture() {
     dispatch: vi.fn().mockResolvedValue(undefined),
   });
   sessionDomainService.enqueue('session', {
-    id: 'message',
+    id: messageId,
     text: 'steer',
     timestamp: new Date().toISOString(),
     settings: {
@@ -68,6 +68,7 @@ it('starts a fresh operation after reset and keeps its ownership when the old op
   await vi.waitFor(() => expect(f.send).toHaveBeenCalledTimes(2));
   f.completions[0]!({ outcome: 'promptRequired' });
   await old;
+  expect(f.steering.isPending('session')).toBe(true);
   const completed = vi.fn();
   const joined = f.steering.steer('session', 'message').then(completed);
   await Promise.resolve();
@@ -97,5 +98,44 @@ it('delivers the original failure to joined requesters', async () => {
     { status: 'rejected', reason: error },
     { status: 'rejected', reason: error },
   ]);
+  expect(f.send).toHaveBeenCalledOnce();
+  expect(f.steering.isPending('session')).toBe(false);
+  const retry = f.steering.steer('session', 'message');
+  await vi.waitFor(() => expect(f.send).toHaveBeenCalledTimes(2));
+  expect(f.steering.isPending('session')).toBe(true);
+  f.completions[0]!({ outcome: 'promptRequired' });
+  await retry;
+  expect(f.steering.isPending('session')).toBe(false);
+});
+
+it('does not join an ordinary user request to a mail-signal operation', async () => {
+  const id = 'workspace-mail-wake-message';
+  const f = fixture(id);
+  const mail = f.steering.steerMailSignal(
+    'session',
+    id,
+    async () => true,
+    () => undefined,
+    {
+      arm: async () => true,
+      disarm: async () => true,
+      accept: async () => true,
+      quarantine: () => undefined,
+    }
+  );
+  await vi.waitFor(() => expect(f.send).toHaveBeenCalledOnce());
+  const user = f.steering.steer('session', id);
+  const finished = vi.fn();
+  void user.then(
+    () => finished('joined'),
+    () => finished('rejected')
+  );
+  await Promise.resolve();
+  await Promise.resolve();
+  expect(finished).toHaveBeenCalledExactlyOnceWith('rejected');
+  await expect(user).rejects.toThrow('Another queued message');
+  expect(f.steering.isPending('session')).toBe(true);
+  f.completions[0]!({ outcome: 'promptRequired' });
+  await mail;
   expect(f.send).toHaveBeenCalledOnce();
 });
