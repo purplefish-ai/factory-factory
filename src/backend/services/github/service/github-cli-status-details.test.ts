@@ -70,72 +70,90 @@ it('rejects malformed core data instead of defaulting a check result to success'
   await expect(githubCLIService.getPRStatusDetails('org/repo', 42)).rejects.toThrow();
 });
 
-it.each(['reviews', 'comments'])(
-  'does not couple core reads to unavailable %s metadata',
-  async (failure) => {
-    vi.mocked(execFile).mockImplementation(((_command: string, args: string[]) => {
-      if (args[0] === 'api') {
-        return failure === 'reviews'
-          ? Promise.reject(new Error('reviews unavailable'))
-          : Promise.resolve({ stdout: '[[]]', stderr: '' });
-      }
-      if (args.at(-1) === 'updatedAt,comments') {
-        return failure === 'comments'
-          ? Promise.reject(new Error('comments unavailable'))
-          : Promise.resolve({
-              stdout: JSON.stringify({ updatedAt: metadata.updatedAt, comments: [] }),
-              stderr: '',
-            });
-      }
-      return Promise.resolve({ stdout: JSON.stringify(metadata), stderr: '' });
-    }) as never);
-    const signal = new AbortController().signal;
-    await expect(githubCLIService.getPRReviewDetails('org/repo', 42, signal)).rejects.toThrow(
-      `${failure} unavailable`
-    );
-    await expect(
-      githubCLIService.getPRStatusDetails('org/repo', 42, signal)
-    ).resolves.toMatchObject({ headRefOid: 'head' });
-    for (const call of vi.mocked(execFile).mock.calls) {
-      expect(call[2]).toMatchObject({ signal });
-    }
-  }
-);
-
-it('preserves ordered review mapping and conversation timestamp fallback', async () => {
-  vi.mocked(execFile).mockImplementation(((_command: string, args: string[]) =>
-    Promise.resolve({
-      stdout:
-        args[0] === 'api'
-          ? JSON.stringify([
-              [
-                {
-                  node_id: 'review-1',
-                  user: { login: 'reviewer' },
-                  state: 'CHANGES_REQUESTED',
-                  submitted_at: metadata.updatedAt,
-                  body: 'fix this',
-                },
-              ],
-            ])
-          : JSON.stringify({
-              updatedAt: metadata.updatedAt,
-              comments: [
-                {
-                  id: 'comment-1',
-                  author: { login: 'me' },
-                  body: 'summary',
-                  createdAt: metadata.updatedAt,
-                  url: metadata.url,
-                },
-              ],
-            }),
-      stderr: '',
-    })) as never);
-  expect(await githubCLIService.getPRReviewDetails('org/repo', 42)).toMatchObject({
-    reviews: [{ id: 'review-1', chronologicalOrder: 0 }],
+it('reads core metadata and conversation comments in one gh pr view', async () => {
+  vi.mocked(execFile).mockResolvedValue({
+    stdout: JSON.stringify({
+      ...metadata,
+      comments: [
+        {
+          id: 'comment-1',
+          author: { login: 'me' },
+          body: 'summary',
+          createdAt: metadata.updatedAt,
+          url: metadata.url,
+        },
+      ],
+    }),
+    stderr: '',
+  } as never);
+  const controller = new AbortController();
+  const result = await githubCLIService.getPRObservationDetails('org/repo', 42, controller.signal);
+  expect(result).toMatchObject({
+    headRefOid: 'head',
+    reviewDecision: null,
+    mergeStateStatus: 'DIRTY',
+    statusCheckRollup: [
+      expect.objectContaining({ name: 'build', conclusion: 'STARTUP_FAILURE' }),
+      expect.objectContaining({ name: 'external', conclusion: 'SUCCESS' }),
+    ],
+    // gh does not export comment edit times; the creation time stands in.
     comments: [{ id: 'comment-1', updatedAt: metadata.updatedAt }],
   });
+  expect(execFile).toHaveBeenCalledExactlyOnceWith(
+    'gh',
+    [
+      'pr',
+      'view',
+      '42',
+      '--repo',
+      'org/repo',
+      '--json',
+      'number,title,url,updatedAt,isDraft,state,reviewDecision,statusCheckRollup,headRefOid,headRefName,baseRefName,mergeStateStatus,comments',
+    ],
+    expect.objectContaining({ signal: controller.signal, maxBuffer: 10 * 1024 * 1024 })
+  );
+});
+
+it('does not couple core reads to unavailable review metadata', async () => {
+  vi.mocked(execFile).mockImplementation(((_command: string, args: string[]) =>
+    args[0] === 'api'
+      ? Promise.reject(new Error('reviews unavailable'))
+      : Promise.resolve({ stdout: JSON.stringify(metadata), stderr: '' })) as never);
+  const signal = new AbortController().signal;
+  await expect(githubCLIService.getPRReviews('org/repo', 42, signal)).rejects.toThrow(
+    'reviews unavailable'
+  );
+  await expect(githubCLIService.getPRStatusDetails('org/repo', 42, signal)).resolves.toMatchObject({
+    headRefOid: 'head',
+  });
+  for (const call of vi.mocked(execFile).mock.calls) {
+    expect(call[2]).toMatchObject({ signal });
+  }
+});
+
+it('preserves ordered review mapping', async () => {
+  vi.mocked(execFile).mockResolvedValue({
+    stdout: JSON.stringify([
+      [
+        {
+          node_id: 'review-1',
+          user: { login: 'reviewer' },
+          state: 'CHANGES_REQUESTED',
+          submitted_at: metadata.updatedAt,
+          body: 'fix this',
+        },
+      ],
+    ]),
+    stderr: '',
+  } as never);
+  expect(await githubCLIService.getPRReviews('org/repo', 42)).toMatchObject([
+    { id: 'review-1', chronologicalOrder: 0 },
+  ]);
+  expect(execFile).toHaveBeenCalledExactlyOnceWith(
+    'gh',
+    ['api', 'repos/org/repo/pulls/42/reviews?per_page=100', '--paginate', '--slurp'],
+    expect.anything()
+  );
 });
 
 it.each([

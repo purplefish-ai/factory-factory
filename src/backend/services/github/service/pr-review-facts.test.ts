@@ -20,6 +20,19 @@ function ports() {
   };
 }
 
+function inlineComment(id: number) {
+  return {
+    id,
+    author: { login: 'reviewer' },
+    body: 'inline',
+    path: 'src/file.ts',
+    line: null,
+    createdAt: updatedAt,
+    updatedAt,
+    url: `${url}#${id}`,
+  };
+}
+
 it('keeps review filtering, stable hashes, paths and timestamp fallbacks in the review owner', async () => {
   const source = ports();
   const marker = `${ADVERSARIAL_REVIEW_MARKER}\nPlease fix this`;
@@ -150,6 +163,7 @@ it('keeps epoch fallback and pagination incompleteness explicit', async () => {
     ],
     comments: [],
   });
+  source.readComments.mockResolvedValue([inlineComment(3)]);
   source.readResolvedIds.mockImplementation((_repo, _number, _signal, incomplete) => {
     incomplete?.();
     return Promise.resolve(new Set([3]));
@@ -169,6 +183,7 @@ it('keeps epoch fallback and pagination incompleteness explicit', async () => {
 it('passes the exact abort signal to every review I/O capability', async () => {
   const source = ports();
   const signal = new AbortController().signal;
+  source.readComments.mockResolvedValue([inlineComment(1)]);
   await fetchPRReviewFacts(source, 'org/repo', 1, url, signal);
   expect(source.readUsername).toHaveBeenCalledWith(signal);
   expect(source.readDetails).toHaveBeenCalledWith('org/repo', 1, signal);
@@ -180,4 +195,26 @@ it('passes the exact abort signal to every review I/O capability', async () => {
     expect.any(Function)
   );
   expect(source.readResolvedIds).toHaveBeenCalledWith('org/repo', 1, signal, expect.any(Function));
+});
+
+it('reads review threads only when inline comments exist or their pages were truncated', async () => {
+  const none = ports();
+  expect(await fetchPRReviewFacts(none, 'org/repo', 1, url)).toEqual({
+    reviewsComplete: true,
+    actionableReviews: [],
+    resolvedReviewIds: [],
+  });
+  expect(none.readResolvedIds).not.toHaveBeenCalled();
+
+  const truncated = ports();
+  truncated.readComments.mockImplementation((_repo, _number, _since, _signal, incomplete) => {
+    incomplete?.();
+    return Promise.resolve([]);
+  });
+  truncated.readResolvedIds.mockResolvedValue(new Set([5]));
+  expect(await fetchPRReviewFacts(truncated, 'org/repo', 1, url)).toMatchObject({
+    reviewsComplete: false,
+    resolvedReviewIds: ['comment:5'],
+  });
+  expect(truncated.readResolvedIds).toHaveBeenCalledOnce();
 });

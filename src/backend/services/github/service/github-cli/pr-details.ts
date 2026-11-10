@@ -1,5 +1,6 @@
+import type { z } from 'zod';
 import { createLogger } from '@/backend/services/logger.service';
-import type { PRWithFullDetails } from '@/shared/github-types';
+import type { GitHubReview, PRWithFullDetails } from '@/shared/github-types';
 import { GH_MAX_BUFFER_BYTES, GH_TIMEOUT_MS } from './constants';
 import {
   classifyError,
@@ -9,8 +10,8 @@ import {
 } from './errors';
 import { mapComments, mapLabels, mapStatusChecks } from './mappers';
 import { getChronologicalReviews } from './reviews';
-import { fullPRDetailsSchema, prReviewDetailsSchema, prStatusDetailsSchema } from './schemas';
-import type { PRReviewDetails, PRStatusDetails } from './types';
+import { fullPRDetailsSchema, prObservationDetailsSchema, prStatusDetailsSchema } from './schemas';
+import type { PRObservationDetails, PRStatusDetails } from './types';
 import { parseGhJson } from './utils';
 
 const logger = createLogger('github-cli');
@@ -18,6 +19,16 @@ type PRMetadataRead = (
   args: string[],
   options: { timeout?: number; maxBuffer?: number; signal?: AbortSignal }
 ) => Promise<{ stdout: string }>;
+
+function mapStatusDetails<T extends z.infer<typeof prStatusDetailsSchema>>(data: T) {
+  return {
+    ...data,
+    statusCheckRollup: data.statusCheckRollup ? mapStatusChecks(data.statusCheckRollup) : null,
+    headRefName: data.headRefName || '',
+    baseRefName: data.baseRefName || '',
+    mergeStateStatus: data.mergeStateStatus || 'UNKNOWN',
+  };
+}
 
 /** Core monitoring facts do not fetch review bodies or conversation comments. */
 export async function getPRStatusDetails(
@@ -32,36 +43,43 @@ export async function getPRStatusDetails(
     { timeout: GH_TIMEOUT_MS.default, maxBuffer: GH_MAX_BUFFER_BYTES.fullPRDetails, signal }
   );
   signal?.throwIfAborted();
-  const data = parseGhJson(prStatusDetailsSchema, stdout, 'getPRStatusDetails');
-  return {
-    ...data,
-    statusCheckRollup: data.statusCheckRollup ? mapStatusChecks(data.statusCheckRollup) : null,
-    headRefName: data.headRefName || '',
-    baseRefName: data.baseRefName || '',
-    mergeStateStatus: data.mergeStateStatus || 'UNKNOWN',
-  };
+  return mapStatusDetails(parseGhJson(prStatusDetailsSchema, stdout, 'getPRStatusDetails'));
 }
 
-/** Optional review metadata uses the same shared gh budget as core reads. */
-export async function getPRReviewDetails(
+/**
+ * Core facts plus conversation comments in one `gh pr view` (one GraphQL
+ * request): the same fields and export as the separate core and comment reads.
+ */
+export async function getPRObservationDetails(
   repo: string,
   prNumber: number,
   read: PRMetadataRead,
   signal?: AbortSignal
-): Promise<PRReviewDetails> {
-  const [{ stdout }, reviews] = await Promise.all([
-    read(['pr', 'view', String(prNumber), '--repo', repo, '--json', 'updatedAt,comments'], {
-      timeout: GH_TIMEOUT_MS.default,
-      maxBuffer: GH_MAX_BUFFER_BYTES.fullPRDetails,
-      signal,
-    }),
-    getChronologicalReviews(repo, prNumber, (args, options) =>
-      read(args, { ...options, timeout: GH_TIMEOUT_MS.default, signal })
-    ),
-  ]);
+): Promise<PRObservationDetails> {
+  const fields = Object.keys(prObservationDetailsSchema.shape).join(',');
+  const { stdout } = await read(
+    ['pr', 'view', String(prNumber), '--repo', repo, '--json', fields],
+    { timeout: GH_TIMEOUT_MS.default, maxBuffer: GH_MAX_BUFFER_BYTES.fullPRDetails, signal }
+  );
   signal?.throwIfAborted();
-  const data = parseGhJson(prReviewDetailsSchema, stdout, 'getPRReviewDetails');
-  return { updatedAt: data.updatedAt, comments: mapComments(data.comments), reviews };
+  const data = mapStatusDetails(
+    parseGhJson(prObservationDetailsSchema, stdout, 'getPRObservationDetails')
+  );
+  return { ...data, comments: mapComments(data.comments) };
+}
+
+/** REST reviews in chronological order, on the same shared gh budget as core reads. */
+export async function getPRReviews(
+  repo: string,
+  prNumber: number,
+  read: PRMetadataRead,
+  signal?: AbortSignal
+): Promise<GitHubReview[]> {
+  const reviews = await getChronologicalReviews(repo, prNumber, (args, options) =>
+    read(args, { ...options, timeout: GH_TIMEOUT_MS.default, signal })
+  );
+  signal?.throwIfAborted();
+  return reviews;
 }
 
 /**

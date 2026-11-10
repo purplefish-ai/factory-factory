@@ -128,9 +128,9 @@ export const prStatusDetailsSchema = fullPRDetailsSchema.pick({
   mergeStateStatus: true,
 });
 
-export const prReviewDetailsSchema = fullPRDetailsSchema.pick({
-  updatedAt: true,
-  comments: true,
+/** Core facts plus conversation comments, read together while monitoring is on. */
+export const prObservationDetailsSchema = prStatusDetailsSchema.extend({
+  comments: fullPRDetailsSchema.shape.comments,
 });
 
 export const issueSchema = z.object({

@@ -2,7 +2,7 @@ import { createLogger } from '@/backend/services/logger.service';
 import type { AgentIssueEventRequest } from '@/shared/agent-source';
 import { githubIssuePreviewSchema } from '@/shared/github-issue-preview';
 import { githubPRPreviewSchema } from '@/shared/github-pr-preview';
-import type { PRWithFullDetails, ReviewAction } from '@/shared/github-types';
+import type { GitHubReview, PRWithFullDetails, ReviewAction } from '@/shared/github-types';
 import { getAgentRepositoryIdentity, listAgentIssueEvents } from './github-cli/agent-issue-events';
 import { getAgentRepository } from './github-cli/agent-sources';
 import { GH_MAX_BUFFER_BYTES, GH_TIMEOUT_MS } from './github-cli/constants';
@@ -17,7 +17,8 @@ import { searchIssues } from './github-cli/issue-search';
 import {
   getPRDiff,
   getPRFullDetails,
-  getPRReviewDetails,
+  getPRObservationDetails,
+  getPRReviews,
   getPRStatusDetails,
 } from './github-cli/pr-details';
 import {
@@ -40,8 +41,8 @@ import type {
   GitHubIssue,
   OpenPullRequest,
   PRInfo,
+  PRObservationDetails,
   PRStatusDetails,
-  PRReviewDetails,
   ReviewRequestedPR,
 } from './github-cli/types';
 import { parseGhJson } from './github-cli/utils';
@@ -293,13 +294,23 @@ class GitHubCLIService {
     return getPRStatusDetails(repo, prNumber, (args, options) => this.exec(args, options), signal);
   }
 
-  /** Optional review bodies and conversation comments. */
-  getPRReviewDetails(
+  /** Core facts plus conversation comments in one read, for review-enabled observations. */
+  getPRObservationDetails(
     repo: string,
     prNumber: number,
     signal?: AbortSignal
-  ): Promise<PRReviewDetails> {
-    return getPRReviewDetails(repo, prNumber, (args, options) => this.exec(args, options), signal);
+  ): Promise<PRObservationDetails> {
+    return getPRObservationDetails(
+      repo,
+      prNumber,
+      (args, options) => this.exec(args, options),
+      signal
+    );
+  }
+
+  /** Optional review bodies, in REST's chronological order. */
+  getPRReviews(repo: string, prNumber: number, signal?: AbortSignal): Promise<GitHubReview[]> {
+    return getPRReviews(repo, prNumber, (args, options) => this.exec(args, options), signal);
   }
 
   /** Full PR details retained for existing detail callers. */
