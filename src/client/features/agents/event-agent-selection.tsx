@@ -36,7 +36,7 @@ function RetainedPageSession({ agent }: { agent: EventAgent }) {
   const utils = trpc.useUtils();
   const page = trpc.automation.get.useQuery(
     { projectId: agent.projectId, agentId: agent.id, retainedCursor: cursor },
-    { enabled: !!cursor, retry: false }
+    { enabled: !!cursor }
   );
   const stale =
     !!cursor && !!page.data && page.data.managementRevision !== agent.managementRevision;

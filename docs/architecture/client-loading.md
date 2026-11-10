@@ -137,3 +137,24 @@ these defaults from `src/components/ui/sonner.tsx`, because sonner has no
 per-type duration. Other toast types keep sonner's 4-second default. Prefer
 `toast.error(title, { description: error.message })` over raw server text as the
 title.
+
+## Query retries and polling
+
+The app `QueryClient` sets the query defaults once: no refetch on window focus,
+and `shouldRetryQuery` as the retry policy. A tRPC error with a 4xx status (not
+found, forbidden, invalid input) fails on the first attempt, so not-found and
+error UI appear at once; network failures, 5xx and non-tRPC errors retry twice
+with backoff (1 s, then 2 s). Don't restate either default at a call site. When
+a query must not retry, use a named reason from `QUERY_RETRY`
+(`src/client/lib/query-options.ts`): `costlyRead` for reads that spawn `gh` or a
+provider process or call an external service, `permanentServerError` for
+procedures that report permanent failures as server errors, and `nextPoll` for a
+tight poll whose next tick is the retry.
+
+Polling intervals come from the `POLL_INTERVAL_MS` tiers in the same module,
+chosen by what the user is waiting for: `progress` (1 s), `runningProcess` (2
+s), `capture` (3 s), `localStatus` (5 s), `activity` (10 s), `workspaceContext`
+(15 s), `background` (30 s), `external` (60 s) and `releaseCheck` (1 h).
+`factory/named-query-options` rejects numeric `refetchInterval` values,
+`refetchOnWindowFocus: false` and literal `retry` values outside `QueryClient`
+defaults.

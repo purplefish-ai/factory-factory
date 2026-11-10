@@ -2,6 +2,7 @@ import { ArrowBendUpLeftIcon } from '@phosphor-icons/react/dist/csr/ArrowBendUpL
 import { TreeStructureIcon } from '@phosphor-icons/react/dist/csr/TreeStructure';
 import { Link } from 'react-router';
 import { useWorkspaceDetailQuery } from '@/client/hooks/use-workspace-detail-query';
+import { POLL_INTERVAL_MS } from '@/client/lib/query-options';
 import { trpc } from '@/client/lib/trpc';
 import { Button } from '@/components/ui/button';
 import {
@@ -119,7 +120,7 @@ function FamilyChildren({
 }) {
   const children = trpc.workspace.listChildren.useQuery(
     { parentWorkspaceId: rootId },
-    { refetchInterval: 15_000 }
+    { refetchInterval: POLL_INTERVAL_MS.workspaceContext }
   );
   if (children.isPending) {
     return (
@@ -179,7 +180,7 @@ function FamilyMenuContent({
   // A parent in another project has no live stream, so the menu keeps polling it.
   const root = useWorkspaceDetailQuery(rootId, {
     enabled: Boolean(parent),
-    refetchInterval: 15_000,
+    refetchInterval: POLL_INTERVAL_MS.workspaceContext,
     staleTime: 5000,
   });
   const rootWorkspace = parent ? root.data : workspace;

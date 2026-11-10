@@ -407,7 +407,6 @@ export function projectWorkspaceQueryOptions(
     queryFn: ({ signal }) => owner.fetch(fetchWorkspaces, signal),
     structuralSharing: owner.structuralSharing,
     staleTime: Number.POSITIVE_INFINITY,
-    refetchOnWindowFocus: false,
   });
 }
 
@@ -614,7 +613,6 @@ export function workspaceDetailCacheOptions(queryClient: QueryClient, workspaceI
     queryKey: owner.queryKey,
     structuralSharing: getWorkspaceDetailCommitState(queryClient).structuralSharing,
     staleTime: Number.POSITIVE_INFINITY,
-    refetchOnWindowFocus: false,
   };
 }
 

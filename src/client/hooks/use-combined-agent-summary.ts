@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { POLL_INTERVAL_MS } from '@/client/lib/query-options';
 import { trpc } from '@/client/lib/trpc';
 
 type Summary = { totalCount: number; failedCount: number };
@@ -6,11 +7,11 @@ type Summary = { totalCount: number; failedCount: number };
 export function useCombinedAgentSummary(projectId: string | undefined) {
   const scheduled = trpc.periodicTask.navigationSummary.useQuery(
     { projectId: projectId ?? '' },
-    { enabled: !!projectId, refetchInterval: 10_000 }
+    { enabled: !!projectId, refetchInterval: POLL_INTERVAL_MS.activity }
   );
   const event = trpc.automation.navigationSummary.useQuery(
     { projectId: projectId ?? '' },
-    { enabled: !!projectId, refetchInterval: 10_000 }
+    { enabled: !!projectId, refetchInterval: POLL_INTERVAL_MS.activity }
   );
   const successful = useRef(new Map<string, Summary>());
   const [combined, setCombined] = useState<{ projectId: string; summary: Summary }>();

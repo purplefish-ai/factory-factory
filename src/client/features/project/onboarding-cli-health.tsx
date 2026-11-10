@@ -93,10 +93,7 @@ export function OnboardingCliHealth({ onOpenTerminal }: OnboardingCliHealthProps
     data: health,
     isLoading,
     isRefetching,
-  } = trpc.admin.checkCLIHealth.useQuery(
-    { forceRefresh: false },
-    { refetchOnWindowFocus: false, staleTime: 60_000 }
-  );
+  } = trpc.admin.checkCLIHealth.useQuery({ forceRefresh: false }, { staleTime: 60_000 });
 
   if (isLoading) {
     return (

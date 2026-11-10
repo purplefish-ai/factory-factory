@@ -40,8 +40,13 @@ and similar) and `getQueryKey` for `workspace.get` and
 `workspace.listForProject` inside the files in its `owners` option, so every
 read installs the snapshot reconciler
 ([workspace state](../docs/architecture/workspace-state.md)). Tests are exempt
-so they can seed caches. Regression tests invoke the real Oxlint binary against
-accepted and rejected fixtures.
+so they can seed caches. `named-query-options` keeps query options in one place
+([query retries and polling](../docs/architecture/client-loading.md#query-retries-and-polling)):
+it rejects a numeric `refetchInterval`, including inside a conditional or a
+callback's return value, `refetchOnWindowFocus: false`, and a boolean or numeric
+`retry`. `QueryClient` defaults (`queries` and `mutations` objects) and tests
+are exempt. Regression tests invoke the real Oxlint binary against accepted and
+rejected fixtures.
 
 ## Remaining Biome checks
 

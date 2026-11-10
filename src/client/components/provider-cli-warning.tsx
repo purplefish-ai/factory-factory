@@ -97,7 +97,6 @@ export function ProviderCliWarning({
   const { data: health, isRefetching } = trpc.admin.checkCLIHealth.useQuery(
     { forceRefresh: false },
     {
-      refetchOnWindowFocus: false,
       refetchOnReconnect: false,
       staleTime: 60_000,
     }
@@ -106,7 +105,6 @@ export function ProviderCliWarning({
   const { data: accounts } = trpc.codexAccounts.list.useQuery(undefined, {
     enabled: provider === 'CODEX' && (!!codexAccountId || health?.codex.isAuthenticated === false),
     staleTime: 30_000,
-    retry: false,
   });
   const hasUsableCodexAccount =
     accounts?.some(

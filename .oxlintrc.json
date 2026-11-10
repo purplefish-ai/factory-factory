@@ -126,14 +126,16 @@
               "src/client/lib/workspace-cache-reconciler.ts"
             ]
           }
-        ]
+        ],
+        "factory/named-query-options": "error"
       }
     },
     {
       "files": ["**/*.test.ts", "**/*.test.tsx"],
       "rules": {
         "factory/no-raw-palette-classes": "off",
-        "factory/workspace-query-owner": "off"
+        "factory/workspace-query-owner": "off",
+        "factory/named-query-options": "off"
       }
     },
     {

@@ -3,6 +3,7 @@ import { WarningCircleIcon } from '@phosphor-icons/react/dist/csr/WarningCircle'
 import { EmptyState } from '@/client/components/empty-state';
 import { Loading } from '@/client/components/loading';
 import { QueryErrorState } from '@/client/components/query-error-state';
+import { POLL_INTERVAL_MS } from '@/client/lib/query-options';
 import { trpc } from '@/client/lib/trpc';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { type ChangeListEntry, ChangeTreeView, useOpenDiffTab } from './change-panel-shared';
@@ -262,7 +263,7 @@ export function CombinedChangesPanel({ workspaceId }: CombinedChangesPanelProps)
     refetch: refetchGit,
   } = trpc.workspace.getGitStatus.useQuery(
     { workspaceId },
-    { refetchInterval: 15_000, staleTime: 10_000 }
+    { refetchInterval: POLL_INTERVAL_MS.workspaceContext, staleTime: 10_000 }
   );
   const {
     data: diffData,
@@ -272,7 +273,7 @@ export function CombinedChangesPanel({ workspaceId }: CombinedChangesPanelProps)
     refetch: refetchDiff,
   } = trpc.workspace.getDiffVsMain.useQuery(
     { workspaceId },
-    { refetchInterval: 15_000, staleTime: 10_000 }
+    { refetchInterval: POLL_INTERVAL_MS.workspaceContext, staleTime: 10_000 }
   );
   const {
     data: unpushedData,
@@ -282,7 +283,7 @@ export function CombinedChangesPanel({ workspaceId }: CombinedChangesPanelProps)
     refetch: refetchUnpushed,
   } = trpc.workspace.getUnpushedFiles.useQuery(
     { workspaceId },
-    { refetchInterval: 15_000, staleTime: 10_000 }
+    { refetchInterval: POLL_INTERVAL_MS.workspaceContext, staleTime: 10_000 }
   );
 
   if (isGitLoading || isDiffLoading || isUnpushedLoading) {

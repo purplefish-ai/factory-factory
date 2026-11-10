@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Loading } from '@/client/components/loading';
+import { POLL_INTERVAL_MS, QUERY_RETRY } from '@/client/lib/query-options';
 import { trpc } from '@/client/lib/trpc';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -126,7 +127,7 @@ export function CodexAccountsView({
 
 export function CodexAccountsSettings() {
   const utils = trpc.useUtils();
-  const accounts = trpc.codexAccounts.list.useQuery(undefined, { retry: false, staleTime: 30_000 });
+  const accounts = trpc.codexAccounts.list.useQuery(undefined, { staleTime: 30_000 });
   const [open, setOpen] = useState(false);
   const [login, setLogin] = useState<CodexLoginState>();
   const [error, setError] = useState<string>();
@@ -155,9 +156,8 @@ export function CodexAccountsSettings() {
     { id: login?.accountId ?? '' },
     {
       enabled: login?.status === 'pending',
-      refetchInterval: login?.status === 'pending' ? 1000 : false,
-      refetchOnWindowFocus: false,
-      retry: false,
+      refetchInterval: login?.status === 'pending' ? POLL_INTERVAL_MS.progress : false,
+      retry: QUERY_RETRY.nextPoll,
     }
   );
   useEffect(() => {

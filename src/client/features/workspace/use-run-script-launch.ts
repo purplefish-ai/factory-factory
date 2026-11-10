@@ -1,4 +1,5 @@
 import { usePortSharing } from '@/client/hooks/use-port-sharing';
+import { POLL_INTERVAL_MS } from '@/client/lib/query-options';
 import { trpc } from '@/client/lib/trpc';
 
 interface RunScriptLaunchInfo {
@@ -13,7 +14,9 @@ export function useRunScriptLaunch(workspaceId: string): RunScriptLaunchInfo | n
     { workspaceId },
     {
       refetchInterval: (query) => {
-        return query.state.data?.status === 'RUNNING' ? 2000 : 5000;
+        return query.state.data?.status === 'RUNNING'
+          ? POLL_INTERVAL_MS.runningProcess
+          : POLL_INTERVAL_MS.localStatus;
       },
     }
   );
