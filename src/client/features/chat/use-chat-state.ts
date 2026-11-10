@@ -118,7 +118,7 @@ export function useChatState(options: UseChatStateOptions): UseChatStateReturn {
   const { dbSessionId, send, connected } = options;
 
   // Reducer for chat state. Every dispatch goes through the coalescer, so
-  // stream deltas buffered for the next frame reach the reducer before any
+  // stream deltas buffered in the current window reach the reducer before any
   // later action, including session switches, disconnects and user sends.
   const [state, reducerDispatch] = useReducer(chatReducer, undefined, createInitialChatState);
   const dispatch = useStreamDeltaCoalescedDispatch(reducerDispatch);

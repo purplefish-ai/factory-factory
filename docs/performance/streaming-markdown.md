@@ -2,8 +2,7 @@
 
 The backend flushes assistant text deltas about every 25 ms. The client appends
 each delta's chunk to the accumulated message text, producing a new string.
-`useChatState` coalesces deltas that arrive within one animation frame into one
-reducer dispatch; see
+`useChatState` coalesces deltas into one reducer dispatch per 100 ms window; see
 [chat message flow](../chat-message-flow.md#frontend-updates). Application
 Markdown uses Streamdown 2.7.1 with our existing typography, links, images and
 Mermaid renderer. The React Markdown primitive remains available as the
@@ -15,11 +14,13 @@ comparison baseline.
 streaming while the agent is running. Only that message's `TextRenderer` changes
 behavior:
 
-- **Throttled snapshot.** `useStreamingTextSnapshot` commits the latest text at
-  most every 100 ms, always at the trailing edge, so Markdown renders about ten
-  times per second rather than forty. When the message stops streaming (the
-  agent stops, or another message follows it), the exact text renders in the
-  same commit.
+- **One clock.** The chat state's stream-delta coalescer commits streamed text
+  at most once per 100 ms window, so Markdown renders about ten times per second
+  rather than forty. `TextRenderer` renders each committed text directly; it has
+  no throttle of its own. A second timer in the renderer would run out of phase
+  with the window, and the two delays would add (see the measurements below).
+  When the message stops streaming (the agent stops, or another message follows
+  it), the exact text renders in the same commit.
 - **Streamdown blocks.** Streamdown memoizes completed blocks and reuses stable
   block boundaries for append-only updates. The growing tail still re-parses;
   large code fences, reference definitions and footnotes can require more work.
@@ -29,21 +30,39 @@ behavior:
   repairs disabled and removes the animation spans. History renders immediately.
 
 The chosen foreground timing budget is up to 100 ms from client receipt to the
-next text snapshot, followed by a 120 ms fade to full opacity. New words begin
-fading as soon as that snapshot commits; there is no stagger or word queue. Thus
-the nominal budget to full opacity is 220 ms after client receipt, or about 245
-ms including the backend's 25 ms batching window. Network transit, client delta
-coalescing (up to one animation frame in a foreground tab, or the 50 ms fallback
-timer, which browsers may throttle, in a hidden tab; none for the first delta
-after a 250 ms gap with nothing buffered, such as a reply's first token),
-Markdown rendering, a paint frame and main-thread scheduling add to that budget;
-it is not a hard wall-clock maximum, particularly for a busy or hidden tab.
+next text commit, followed by a 120 ms fade to full opacity. The coalescing
+window is that 100 ms: a delta waits at most one window, and none when it
+arrives a full window after the last committed delta (such as a reply's first
+token). New words begin fading as soon as their text commits; there is no
+stagger or word queue. Thus the nominal budget to full opacity is 220 ms after
+client receipt, or about 245 ms including the backend's 25 ms batching window.
+Network transit, Markdown rendering, a paint frame and main-thread scheduling
+add to that budget; it is not a hard wall-clock maximum, particularly for a busy
+tab, or a hidden tab, where browsers throttle the window timer.
+
+Composition with fake timers and zero render cost (25 ms deltas, worst case of
+12 runs over two seconds, with and without three other events a second):
+
+| Pipeline                                         | Worst, deltas only | Worst, with events | Reducer commits per second |
+| ------------------------------------------------ | -----------------: | -----------------: | -------------------------: |
+| Before: per-delta dispatch, 100 ms snapshot hook |             100 ms |             100 ms |                         40 |
+| 100 ms window and the snapshot hook              |             101 ms |             175 ms |                         10 |
+| 50 ms window and the snapshot hook               |             150 ms |             150 ms |                         20 |
+| 100 ms window, renderer unthrottled (current)    |             100 ms |             100 ms |                         10 |
+
+The snapshot hook timed its interval from its own last commit, so a window flush
+that landed just after its timer, or an early flush caused by another event,
+waited for a further interval. Removing the renderer's timer keeps the 100 ms
+worst case while cutting text commits by four.
+`use-chat-state.stream-coalescing.integration.test.tsx` checks the 100 ms bound
+through the real renderer.
 
 Issue #2880 originally proposed an 80–120 ms total visual-delay target for a
 queued character-reveal experiment. After trying the comparison, the user chose
-these 120 ms word fades with the existing 100 ms parse throttle. That accepted
-tradeoff allows a longer time to full opacity while avoiding accumulated reveal
-debt. Completed messages flush immediately without waiting for the fade.
+these 120 ms word fades with the existing 100 ms parse throttle (since replaced
+by the equivalent 100 ms coalescing window). That accepted tradeoff allows a
+longer time to full opacity while avoiding accumulated reveal debt. Completed
+messages flush immediately without waiting for the fade.
 
 The animation stylesheet and Tailwind sources live in `src/client/globals.css`,
 so the application and Storybook use the same styling. File navigation, GitHub
@@ -115,7 +134,8 @@ The adapter uses 120 ms word fades with zero stagger. Streamdown's backlog
 budget is soft: a nonzero stagger can still schedule seconds of animation for a
 large burst. Zero stagger avoids that queue. Reduced-motion preferences disable
 the animation, and completed messages remove the animation spans. The production
-transcript uses this adapter with the existing snapshot interval.
+transcript uses this adapter with text committed every 100 ms by the chat
+state's coalescing window.
 
 The optional `renderContent` boundary on the Markdown primitive lets the
 comparison reuse our existing file links, GitHub previews, image validation,
@@ -140,8 +160,8 @@ append-only block reuse without an ever-growing benchmark input. Repeated prose
 sections are separated by blank lines; the code case appends complete new lines
 inside the open fence. Streamdown's word-span creation is included; browser
 animation, layout, paint, scrolling, and visual latency are not. These
-measurements cannot establish perceived smoothness or justify removing the
-existing throttle by themselves.
+measurements cannot establish perceived smoothness or justify removing the 100
+ms coalescing window by themselves.
 
 On macOS arm64 with Node 26.12.1, a local run on 2026-11-03 reported mean
 per-update costs of about 0.48 ms for the React Markdown baseline versus

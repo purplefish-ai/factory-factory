@@ -3,49 +3,19 @@ import { isStreamEventMessage } from '@/lib/chat-protocol';
 import type { ChatAction, StreamDeltaAction } from './reducer';
 
 /**
- * Upper bound on how long a buffered delta waits when no animation frame
- * arrives. Hidden tabs do not run animation frames, and browsers may throttle
- * this timer there; either way the buffer is always drained.
+ * Stream deltas reach the reducer at most once per window, so a streaming
+ * reply commits about ten times a second instead of once per 25 ms delta.
+ * Streaming Markdown renders directly from these commits.
  */
-export const STREAM_DELTA_FALLBACK_FLUSH_MS = 50;
+export const STREAM_DELTA_WINDOW_MS = 100;
 
-/**
- * A delta arriving this long after the previous one starts a new burst, such as
- * the first token of a reply, and is dispatched without waiting for a frame.
- * The backend flushes every 25 ms, so a steady stream never reaches this gap.
- */
-export const STREAM_DELTA_IDLE_MS = 250;
+/** Runs `callback` once after `delayMs` and returns a cancel function. */
+export type DeltaTimer = (callback: () => void, delayMs: number) => () => void;
 
-/** Runs a callback once, at the next frame or after the fallback, and returns a cancel function. */
-export type FrameScheduler = (callback: () => void) => () => void;
-
-export function createFrameScheduler(
-  fallbackMs: number = STREAM_DELTA_FALLBACK_FLUSH_MS
-): FrameScheduler {
-  return (callback) => {
-    let frameId: number | null = null;
-    let timerId: ReturnType<typeof setTimeout> | null = null;
-    const cancel = () => {
-      if (frameId !== null) {
-        cancelAnimationFrame(frameId);
-        frameId = null;
-      }
-      if (timerId !== null) {
-        clearTimeout(timerId);
-        timerId = null;
-      }
-    };
-    const run = () => {
-      cancel();
-      callback();
-    };
-    if (typeof requestAnimationFrame === 'function') {
-      frameId = requestAnimationFrame(run);
-    }
-    timerId = setTimeout(run, fallbackMs);
-    return cancel;
-  };
-}
+const setDeltaTimer: DeltaTimer = (callback, delayMs) => {
+  const timerId = setTimeout(callback, delayMs);
+  return () => clearTimeout(timerId);
+};
 
 /**
  * Streamed text, thinking and tool-input updates. Other agent messages, such as
@@ -66,36 +36,42 @@ export function isStreamDeltaAction(action: ChatAction): action is StreamDeltaAc
 }
 
 export interface StreamDeltaCoalescerOptions {
-  scheduleFrame?: FrameScheduler;
+  windowMs?: number;
+  setTimer?: DeltaTimer;
   now?: () => number;
 }
 
 export interface StreamDeltaCoalescer {
-  /** Forwards an action, buffering stream deltas until the next frame. */
+  /** Forwards an action, buffering stream deltas until the window closes. */
   dispatch: (action: ChatAction) => void;
-  /** Forwards buffered deltas now and cancels the pending frame. */
+  /** Forwards buffered deltas now and cancels the pending timer. */
   flush: () => void;
 }
 
 /**
- * Coalesces stream deltas so the reducer commits at most once per frame while
- * a reply streams.
+ * Coalesces stream deltas so the reducer receives them at most once per
+ * `windowMs`, measured from the last time deltas were forwarded.
  *
- * A delta that follows a pause of `STREAM_DELTA_IDLE_MS` with nothing buffered
- * is forwarded immediately, so a new reply is not delayed. Other deltas are
- * buffered and forwarded together as one `STREAM_DELTA_BATCH` at the next
- * animation frame (or the fallback timer). Any other action first forwards the
+ * A delta that arrives at least `windowMs` after the last forwarded delta,
+ * with nothing buffered, is forwarded immediately, so a reply's first token is
+ * not delayed. Other deltas are buffered and forwarded together, as one
+ * `STREAM_DELTA_BATCH` when more than one is pending, once the window closes.
+ * No delta waits longer than `windowMs`. Any other action first forwards the
  * buffer, so the reducer receives every action in arrival order.
+ *
+ * The window is a timer rather than an animation frame, so hidden tabs drain
+ * the buffer too, at whatever rate the browser throttles timers to.
  */
 export function createStreamDeltaCoalescer(
   forward: (action: ChatAction) => void,
   options: StreamDeltaCoalescerOptions = {}
 ): StreamDeltaCoalescer {
-  const scheduleFrame = options.scheduleFrame ?? createFrameScheduler();
+  const windowMs = options.windowMs ?? STREAM_DELTA_WINDOW_MS;
+  const setTimer = options.setTimer ?? setDeltaTimer;
   const now = options.now ?? (() => performance.now());
   let buffer: StreamDeltaAction[] = [];
-  let cancelFrame: (() => void) | null = null;
-  let lastDeltaAt = Number.NEGATIVE_INFINITY;
+  let cancelTimer: (() => void) | null = null;
+  let lastForwardAt = Number.NEGATIVE_INFINITY;
 
   const forwardBuffer = () => {
     if (buffer.length === 0) {
@@ -103,6 +79,7 @@ export function createStreamDeltaCoalescer(
     }
     const actions = buffer;
     buffer = [];
+    lastForwardAt = now();
     const [only] = actions;
     forward(
       actions.length === 1 && only ? only : { type: 'STREAM_DELTA_BATCH', payload: { actions } }
@@ -110,13 +87,13 @@ export function createStreamDeltaCoalescer(
   };
 
   const flush = () => {
-    cancelFrame?.();
-    cancelFrame = null;
+    cancelTimer?.();
+    cancelTimer = null;
     forwardBuffer();
   };
 
-  const onFrame = () => {
-    cancelFrame = null;
+  const onTimer = () => {
+    cancelTimer = null;
     forwardBuffer();
   };
 
@@ -127,14 +104,14 @@ export function createStreamDeltaCoalescer(
       return;
     }
     const arrivedAt = now();
-    const startsBurst = arrivedAt - lastDeltaAt >= STREAM_DELTA_IDLE_MS;
-    lastDeltaAt = arrivedAt;
-    if (startsBurst && buffer.length === 0) {
+    const waitMs = lastForwardAt + windowMs - arrivedAt;
+    if (buffer.length === 0 && waitMs <= 0) {
+      lastForwardAt = arrivedAt;
       forward(action);
       return;
     }
     buffer.push(action);
-    cancelFrame ??= scheduleFrame(onFrame);
+    cancelTimer ??= setTimer(onTimer, Math.max(0, waitMs));
   };
 
   return { dispatch, flush };

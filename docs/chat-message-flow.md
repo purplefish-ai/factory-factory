@@ -70,9 +70,10 @@ orchestrator calls retain an explicit default dispatcher binding.
 stores transcript changes, and emits session deltas. Streaming text accumulates
 under a stable message order so the client updates the existing message. Runtime
 and permission events update session state through their respective handlers.
-The client renders the streaming message's Markdown from a throttled snapshot.
-When the text splits safely into top-level blocks, only the growing tail block
-re-parses; see [streaming Markdown](performance/streaming-markdown.md).
+The client commits streaming deltas once per 100 ms window and renders the
+streaming message's Markdown from each commit. When the text splits safely into
+top-level blocks, only the growing tail block re-parses; see
+[streaming Markdown](performance/streaming-markdown.md).
 
 `SessionEventBus` is the transport-free outbound surface. `SessionPublisher`
 wraps incremental events in `session_delta`; `ChatConnectionRegistry` owns
@@ -304,23 +305,22 @@ re-checking their shape. The reducer handles snapshots and replay batches as
 well as live events; replay uses the same event-to-action mapping.
 
 `useChatState` routes every reducer dispatch through a stream-delta coalescer
-(`stream-delta-coalescer.ts`), so buffered deltas in a streaming reply reach the
-reducer together at the next animation frame rather than once per WebSocket
-message. Assistant text deltas, `content_block_delta` agent messages (text,
-thinking and tool-input JSON) and `TOOL_INPUT_UPDATE` actions count as deltas. A
-delta that arrives at least 250 ms after the previous one while nothing is
-buffered, such as a reply's first token, is dispatched immediately; other deltas
-are buffered and dispatched in one action at the next animation frame, as a
-`STREAM_DELTA_BATCH` when more than one is pending. Hidden tabs run no animation
-frames, so a 50 ms fallback timer (which browsers may throttle) also drains the
-buffer. Any other action, including session switches, disconnects and local
-sends, first dispatches the buffer, and unmounting dispatches it too. The
-reducer applies a batch's actions in order, so it reaches exactly the state that
-dispatching each message would have committed. In a foreground tab that paints
-normally, an evenly spaced 25 ms stream still dispatches per delta, since each
-delta lands in its own frame. Deltas merge when several arrive within one frame,
-as when a long commit holds the main thread, and in hidden tabs, where the
-fallback timer groups them.
+(`stream-delta-coalescer.ts`), so a streaming reply reaches the reducer about
+ten times a second rather than once per 25 ms WebSocket message. Assistant text
+deltas, `content_block_delta` agent messages (text, thinking and tool-input
+JSON) and `TOOL_INPUT_UPDATE` actions count as deltas and share one 100 ms
+window, measured from the last time deltas were dispatched. A delta that arrives
+a full window after that while nothing is buffered, such as a reply's first
+token, is dispatched immediately. Other deltas are buffered and dispatched in
+one action when the window closes, as a `STREAM_DELTA_BATCH` when more than one
+is pending, so no delta waits longer than 100 ms. The window is a timer, so
+hidden tabs drain the buffer too, at whatever rate the browser throttles timers
+to. Any other action, including session switches, disconnects and local sends,
+first dispatches the buffer, and unmounting dispatches it too. The reducer
+applies a batch's actions in order, so it reaches exactly the state that
+dispatching each message would have committed. The streaming Markdown renders
+each commit directly, so the window is the only clock between receipt and
+render; see [streaming Markdown](performance/streaming-markdown.md).
 
 | Wire event                                             | Reducer action or handling                             |
 | ------------------------------------------------------ | ------------------------------------------------------ |

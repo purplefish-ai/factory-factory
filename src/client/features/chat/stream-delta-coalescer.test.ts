@@ -9,12 +9,10 @@ import { DEFAULT_CHAT_SETTINGS } from '@/lib/chat-protocol';
 import { parseChatServerMessage } from '@/shared/acp-protocol/protocol/chat-server-message-schema';
 import { type ChatAction, type ChatState, chatReducer, createInitialChatState } from './reducer';
 import {
-  createFrameScheduler,
   createStreamDeltaCoalescer,
-  type FrameScheduler,
+  type DeltaTimer,
   isStreamDeltaAction,
-  STREAM_DELTA_FALLBACK_FLUSH_MS,
-  STREAM_DELTA_IDLE_MS,
+  STREAM_DELTA_WINDOW_MS,
 } from './stream-delta-coalescer';
 import { createToolInputAccumulatorState } from './streaming-utils';
 import { useChatTransport } from './use-chat-transport';
@@ -28,16 +26,20 @@ afterEach(() => {
 // Helpers
 // =============================================================================
 
-function createManualFrames() {
+/** A window timer the test fires by hand; records each requested delay. */
+function createManualTimer() {
   const pending = new Set<() => void>();
-  const scheduleFrame: FrameScheduler = (callback) => {
+  const delays: number[] = [];
+  const setTimer: DeltaTimer = (callback, delayMs) => {
     const entry = () => callback();
     pending.add(entry);
+    delays.push(delayMs);
     return () => pending.delete(entry);
   };
   return {
-    scheduleFrame,
-    runFrame: () => {
+    setTimer,
+    delays,
+    fire: () => {
       const callbacks = [...pending];
       pending.clear();
       for (const callback of callbacks) {
@@ -97,11 +99,11 @@ function mulberry32(seed: number): () => number {
   };
 }
 
-/** A wire frame, an action dispatched outside the transport, or an animation frame. */
+/** A wire frame, an action dispatched outside the transport, or the window timer firing. */
 type CoalescingStep =
   | { kind: 'message'; message: WebSocketMessage }
   | { kind: 'local'; action: ChatAction }
-  | { kind: 'frame' };
+  | { kind: 'timer' };
 
 const WORDS = ['alpha ', 'beta ', 'gamma ', 'delta ', '`code` ', '**bold** ', '\n\n', '- item\n'];
 
@@ -137,7 +139,7 @@ class CoalescingStepGenerator {
   }
 
   generate(length: number): CoalescingStep[] {
-    const frameChance = this.random();
+    const timerChance = this.random();
     const weighted: [number, () => void][] = [
       [30, () => this.textDelta()],
       [6, () => this.thinkingStart()],
@@ -158,8 +160,8 @@ class CoalescingStepGenerator {
         return roll < 0;
       });
       entry?.[1]();
-      if (this.random() < frameChance) {
-        this.steps.push({ kind: 'frame' });
+      if (this.random() < timerChance) {
+        this.steps.push({ kind: 'timer' });
       }
     }
     return this.steps;
@@ -318,22 +320,25 @@ function runSteps(steps: CoalescingStep[], coalesce: boolean) {
     }
     state = chatReducer(state, action);
   };
-  const frames = createManualFrames();
-  // The clock never advances, so only the very first delta skips the buffer.
+  const timer = createManualTimer();
+  // Wire messages arrive about 30 ms apart; the window timer fires only on
+  // `timer` steps, so both the buffered and the immediate paths run.
+  let clock = 0;
   const coalescer = createStreamDeltaCoalescer(reduce, {
-    scheduleFrame: frames.scheduleFrame,
-    now: () => 0,
+    setTimer: timer.setTimer,
+    now: () => clock,
   });
   const dispatch = coalesce ? coalescer.dispatch : reduce;
   const transport = renderTransport(dispatch);
 
   for (const step of steps) {
     if (step.kind === 'message') {
+      clock += 30;
       transport.handleMessage(step.message);
     } else if (step.kind === 'local') {
       dispatch(step.action);
     } else if (coalesce) {
-      frames.runFrame();
+      timer.fire();
     }
   }
   coalescer.flush();
@@ -398,45 +403,80 @@ describe('stream delta coalescing', () => {
     expect(isStreamDeltaAction({ type: 'SESSION_SWITCH_START' })).toBe(false);
   });
 
-  it('dispatches the first delta of a burst immediately and buffers the rest', () => {
-    const frames = createManualFrames();
+  it('dispatches the first delta at once and buffers the rest of its window', () => {
+    const timer = createManualTimer();
     let clock = 0;
     const forward = vi.fn<(action: ChatAction) => void>();
     const coalescer = createStreamDeltaCoalescer(forward, {
-      scheduleFrame: frames.scheduleFrame,
+      setTimer: timer.setTimer,
       now: () => clock,
     });
 
     coalescer.dispatch(textDelta(1, 0, 'Hel'));
     expect(forward).toHaveBeenCalledTimes(1);
-    expect(frames.pending).toBe(0);
+    expect(timer.pending).toBe(0);
 
     clock = 25;
     coalescer.dispatch(textDelta(1, 3, 'lo'));
     clock = 40;
     coalescer.dispatch(textDelta(1, 5, '!'));
     expect(forward).toHaveBeenCalledTimes(1);
-    expect(frames.pending).toBe(1);
+    // The window closes 100 ms after the last forward, not after the arrival.
+    expect(timer.delays).toEqual([STREAM_DELTA_WINDOW_MS - 25]);
 
-    frames.runFrame();
+    clock = STREAM_DELTA_WINDOW_MS;
+    timer.fire();
     expect(forward).toHaveBeenCalledTimes(2);
     expect(forward).toHaveBeenLastCalledWith({
       type: 'STREAM_DELTA_BATCH',
       payload: { actions: [textDelta(1, 3, 'lo'), textDelta(1, 5, '!')] },
     });
 
-    // After a pause, the next reply's first token is not delayed either.
-    clock = 40 + STREAM_DELTA_IDLE_MS;
+    // A delta a full window after the last forward is not delayed either.
+    clock = 2 * STREAM_DELTA_WINDOW_MS;
     coalescer.dispatch(textDelta(2, 0, 'Next'));
     expect(forward).toHaveBeenCalledTimes(3);
     expect(forward).toHaveBeenLastCalledWith(textDelta(2, 0, 'Next'));
   });
 
+  it('holds no delta longer than one window', () => {
+    // Random arrivals, bursts, gaps and non-delta events on fake timers.
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'performance'] });
+    const random = mulberry32(42);
+    const arrivals = new Map<number, number>();
+    const forwardedAt: number[] = [];
+    const coalescer = createStreamDeltaCoalescer((action) => {
+      const count = action.type === 'STREAM_DELTA_BATCH' ? action.payload.actions.length : 1;
+      if (isStreamDeltaAction(action) || action.type === 'STREAM_DELTA_BATCH') {
+        for (let index = 0; index < count; index += 1) {
+          forwardedAt.push(performance.now());
+        }
+      }
+    });
+    let sent = 0;
+    for (let time = 0; time < 5000; time += 1) {
+      const roll = random();
+      if (roll < 0.06) {
+        arrivals.set(sent, performance.now());
+        sent += 1;
+        coalescer.dispatch(textDelta(1, sent, 'x'));
+      } else if (roll < 0.063) {
+        coalescer.dispatch({ type: 'SDK_COMPACTING_START' });
+      }
+      vi.advanceTimersByTime(1);
+    }
+    vi.advanceTimersByTime(STREAM_DELTA_WINDOW_MS);
+
+    expect(forwardedAt).toHaveLength(sent);
+    const waits = forwardedAt.map((at, index) => at - (arrivals.get(index) ?? 0));
+    expect(Math.max(...waits)).toBeLessThanOrEqual(STREAM_DELTA_WINDOW_MS);
+  });
+
   it('forwards buffered deltas before any other action and on flush', () => {
-    const frames = createManualFrames();
+    const timer = createManualTimer();
     const forwarded: ChatAction[] = [];
     const coalescer = createStreamDeltaCoalescer((action) => forwarded.push(action), {
-      scheduleFrame: frames.scheduleFrame,
+      setTimer: timer.setTimer,
       now: () => 0,
     });
 
@@ -448,75 +488,68 @@ describe('stream delta coalescing', () => {
       textDelta(1, 1, 'b'),
       { type: 'SESSION_SWITCH_START' },
     ]);
-    expect(frames.pending).toBe(0);
+    expect(timer.pending).toBe(0);
 
     coalescer.dispatch(textDelta(1, 2, 'c'));
     coalescer.flush();
     expect(forwarded.at(-1)).toEqual(textDelta(1, 2, 'c'));
-    expect(frames.pending).toBe(0);
+    expect(timer.pending).toBe(0);
   });
 });
 
 // =============================================================================
-// Dispatch rate with the browser frame scheduler
+// Dispatch rate with the browser timer
 // =============================================================================
 
 /**
- * Feeds one simulated second of deltas, arriving at `arrivals` (ms), through
- * the real frame scheduler on fake 16 ms animation frames. Returns how many
- * actions reached the reducer dispatch. Each separately delivered dispatch can
- * cost a React commit; the `useChatState` integration test counts renders.
+ * Feeds deltas arriving at `arrivals` (ms) through the coalescer on fake
+ * timers. Returns how many actions reached the reducer dispatch, each of which
+ * costs one React commit, and how many deltas they carried. `minTimerMs`
+ * models a hidden tab, where browsers delay timers.
  */
-function countDispatches(arrivals: number[], { animationFrames = true } = {}) {
-  vi.useFakeTimers({
-    toFake: [
-      'setTimeout',
-      'clearTimeout',
-      'requestAnimationFrame',
-      'cancelAnimationFrame',
-      'performance',
-    ],
-  });
-  if (!animationFrames) {
-    // A hidden tab runs no animation frames; only the fallback timer fires.
-    vi.stubGlobal('requestAnimationFrame', undefined);
-  }
+function countDispatches(arrivals: number[], { minTimerMs = 0 } = {}) {
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'performance'] });
   const forward = vi.fn<(action: ChatAction) => void>();
-  const coalescer = createStreamDeltaCoalescer(forward, { scheduleFrame: createFrameScheduler() });
+  const coalescer = createStreamDeltaCoalescer(forward, {
+    setTimer: (callback, delayMs) => {
+      const timerId = setTimeout(callback, Math.max(delayMs, minTimerMs));
+      return () => clearTimeout(timerId);
+    },
+  });
   let offset = 0;
   arrivals.forEach((at, index) => {
     const delta = textDelta(1, offset, `w${index} `);
     setTimeout(() => coalescer.dispatch(delta), at);
     offset += `w${index} `.length;
   });
-  vi.advanceTimersByTime(1000 + STREAM_DELTA_FALLBACK_FLUSH_MS);
+  vi.advanceTimersByTime(Math.max(...arrivals) + Math.max(STREAM_DELTA_WINDOW_MS, minTimerMs));
   const deltas = forward.mock.calls.reduce(
     (count, [action]) =>
       count + (action.type === 'STREAM_DELTA_BATCH' ? action.payload.actions.length : 1),
     0
   );
-  vi.unstubAllGlobals();
   return { dispatches: forward.mock.calls.length, deltas };
 }
 
 describe('stream delta dispatch rate', () => {
-  const second = (spacing: number, burst = 1) =>
-    Array.from({ length: 40 }, (_, index) => Math.floor(index / burst) * spacing * burst);
+  // Ten seconds of the backend's 25 ms text flushes: 400 deltas, which
+  // uncoalesced dispatch delivers as 400 reducer commits.
+  const steadyStream = Array.from({ length: 400 }, (_, index) => index * 25);
 
-  it('dispatches an evenly spaced 25 ms stream once per delta', () => {
-    // Each 25 ms delta lands in its own 16 ms frame: nothing to merge.
-    expect(countDispatches(second(25))).toEqual({ dispatches: 40, deltas: 40 });
+  it('commits a steady 25 ms stream about ten times a second', () => {
+    // The first delta goes at once, then one batch per 100 ms window.
+    expect(countDispatches(steadyStream)).toEqual({ dispatches: 101, deltas: 400 });
   });
 
-  it('dispatches once per frame when a busy main thread delivers deltas in bursts', () => {
-    // 40 deltas per second delivered four at a time, as when a long commit holds
-    // the main thread for 100 ms: 40 dispatches without coalescing.
-    expect(countDispatches(second(25, 4))).toEqual({ dispatches: 11, deltas: 40 });
+  it('merges bursts from a busy main thread into one commit per window', () => {
+    // 40 deltas a second delivered four at a time every 100 ms.
+    const bursts = Array.from({ length: 400 }, (_, index) => Math.floor(index / 4) * 100);
+    expect(countDispatches(bursts)).toEqual({ dispatches: 100, deltas: 400 });
   });
 
-  it('drains a hidden tab through the fallback timer', () => {
-    const { dispatches, deltas } = countDispatches(second(25), { animationFrames: false });
-    expect(deltas).toBe(40);
-    expect(dispatches).toBeLessThanOrEqual(1 + 1000 / STREAM_DELTA_FALLBACK_FLUSH_MS);
+  it('drains a hidden tab when the browser throttles timers to once a second', () => {
+    const { dispatches, deltas } = countDispatches(steadyStream, { minTimerMs: 1000 });
+    expect(deltas).toBe(400);
+    expect(dispatches).toBeLessThanOrEqual(11);
   });
 });
