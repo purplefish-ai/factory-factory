@@ -286,7 +286,8 @@ describe.skipIf(onWindows)('sweepWorktreeProcesses with an injected lister', () 
 
     const result = await sweepWorktreeProcesses({ ...sweepOptions(), ...fake });
 
-    expect(result).toMatchObject({ matched: [10, 11, 12], killed: [10], survivors: [] });
+    // Reused PIDs are reported, never killed.
+    expect(result).toMatchObject({ matched: [10, 11, 12], killed: [10], survivors: [11, 12] });
     expect(fake.signals).not.toContainEqual([11, 'SIGKILL']);
     expect(fake.signals).not.toContainEqual([12, 'SIGKILL']);
     expect(fake.alive.has(11)).toBe(true);

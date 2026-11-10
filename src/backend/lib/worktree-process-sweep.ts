@@ -52,7 +52,10 @@ export type WorktreeProcessSweepResult =
       terminated: number[];
       /** Still matched with the same start identity after the grace period; received SIGKILL. */
       killed: number[];
-      /** Could not be signalled, or had not exited by the deadline. */
+      /**
+       * Could not be signalled, had not exited by the deadline, or was still
+       * present but no longer verifiably the matched process, so not killed.
+       */
       survivors: number[];
     };
 
@@ -435,6 +438,8 @@ export async function sweepWorktreeProcesses(
   });
   const killOutcomes = new Map(escalate.map((pid) => [pid, sendSignal(signaller, pid, 'SIGKILL')]));
   const killed = escalate.filter((pid) => killOutcomes.get(pid) === 'sent');
+  const notEscalated = remaining.filter((pid) => !escalate.includes(pid));
+  const unverified = notEscalated.filter((pid) => isAlive(signaller, pid));
   const unexited = await waitForExit(
     signaller,
     killed,
@@ -443,11 +448,16 @@ export async function sweepWorktreeProcesses(
   return {
     status: 'swept',
     matched,
-    terminated: [...terminated, ...escalate.filter((pid) => killOutcomes.get(pid) === 'gone')],
+    terminated: [
+      ...terminated,
+      ...notEscalated.filter((pid) => !unverified.includes(pid)),
+      ...escalate.filter((pid) => killOutcomes.get(pid) === 'gone'),
+    ],
     killed,
     survivors: [
       ...denied,
       ...escalate.filter((pid) => killOutcomes.get(pid) === 'denied'),
+      ...unverified,
       ...unexited,
     ],
   };
