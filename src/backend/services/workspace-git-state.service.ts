@@ -780,7 +780,9 @@ export class WorkspaceGitStateService {
       } else if (!/^[0-9a-f]{40,64}$/i.test(head)) {
         return null;
       }
-      if (refs.some((ref) => ref.split('/').some((part) => part === '' || part === '..'))) {
+      // Ref names never contain backslashes; split on both separators so no
+      // candidate can escape the common directory on Windows either.
+      if (refs.some((ref) => ref.split(/[\\/]/).some((part) => part === '' || part === '..'))) {
         return null;
       }
       const symbolic = await Promise.all(

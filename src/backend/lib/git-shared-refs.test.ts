@@ -23,6 +23,7 @@ describe('classifySharedGitEvent', () => {
     ['refs/heads/feature', 'refs/heads/feature'],
     ['refs/heads/feature.lock', 'refs/heads/feature'],
     ['refs/remotes/origin/Feature', 'refs/remotes/origin/feature'],
+    ['refs/heads/Café', 'refs/heads/café'],
     ['refs\\tags\\v1', 'refs/tags/v1'],
     ['./refs/heads/nested/name', 'refs/heads/nested/name'],
     ['refs/heads', 'refs/heads'],

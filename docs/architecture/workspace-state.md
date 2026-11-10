@@ -736,12 +736,13 @@ unknown, so any ref change invalidates it, while its calculation is running,
 when `HEAD` cannot be read, when one of those refs is a loose symbolic ref, and
 when the upstream lookup fails for any reason other than "no upstream
 configured" or a detached `HEAD` (a configured upstream whose tracking ref is
-missing could reappear). Ref names are compared case-insensitively, and a
-directory event covers every ref beneath it. Every other common metadata change
-still invalidates every dependent entry, including `packed-refs`, other ref
-namespaces such as `refs/replace`, shared config, info attributes and excludes,
-reftable state, and events without a filename. Object and reflog writes are
-ignored because the associated ref event performs the invalidation, and so is
+missing could reappear). Ref names are compared case-insensitively after NFC
+normalization, so canonically equivalent Unicode names match, and a directory
+event covers every ref beneath it. Every other common metadata change still
+invalidates every dependent entry, including `packed-refs`, other ref namespaces
+such as `refs/replace`, shared config, info attributes and excludes, reftable
+state, and events without a filename. Object and reflog writes are ignored
+because the associated ref event performs the invalidation, and so is
 `packed-refs.lock`: Git takes and releases it around ordinary loose ref updates,
 while an actual rewrite also reports `packed-refs.new` and `packed-refs`. If the
 shared watcher fails, all of its dependents switch to the five-minute fallback
