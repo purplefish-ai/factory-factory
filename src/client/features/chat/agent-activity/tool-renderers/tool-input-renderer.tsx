@@ -3,7 +3,6 @@ import { LightningIcon } from '@phosphor-icons/react/dist/csr/Lightning';
 import type { ReactElement } from 'react';
 import { memo } from 'react';
 import { TodoItem } from '@/client/components/todo-item';
-import type { Todo } from '@/client/features/chat/use-todo-tracker';
 import { withOccurrenceKeys } from '@/client/lib/list-keys';
 import type { ToolResultContentValue } from '@/lib/chat-protocol';
 import { calculateTodoProgress } from '@/lib/todo-utils';
@@ -14,6 +13,14 @@ import {
 } from './file-change-parser';
 import { CodexFileChangeRenderer } from './file-change-renderer';
 import { extractCommandPreviewFromInput, isRunLikeToolName } from './tool-display-utils';
+import {
+  editToolInputSchema,
+  parseToolInput,
+  readToolInputSchema,
+  taskToolInputSchema,
+  todoWriteToolInputSchema,
+  writeToolInputSchema,
+} from './tool-input-schemas';
 import {
   isWebSearchToolName,
   parseWebSearchToolInput,
@@ -37,6 +44,17 @@ function truncateContent(content: string, maxLength: number): string {
 // =============================================================================
 // Helper Components
 // =============================================================================
+
+/** Raw JSON view for unknown tools and for input that does not match its tool's schema. */
+function RawToolInput({ input }: { input: Record<string, unknown> }) {
+  return (
+    <div className="w-0 min-w-full">
+      <pre className="text-xs overflow-x-auto max-h-32 overflow-y-auto rounded bg-muted px-1.5 py-1">
+        {JSON.stringify(input, null, 2)}
+      </pre>
+    </div>
+  );
+}
 
 export const FilePathDisplay = memo(function FilePathDisplay({ path }: { path: string }) {
   if (!path) {
@@ -69,9 +87,11 @@ const TaskToolRenderer = memo(function TaskToolRenderer({
 }: {
   input: Record<string, unknown>;
 }) {
-  const subagentType = input.subagent_type as string | undefined;
-  const description = input.description as string | undefined;
-  const prompt = input.prompt as string | undefined;
+  const parsed = parseToolInput(taskToolInputSchema, input);
+  if (!parsed) {
+    return <RawToolInput input={input} />;
+  }
+  const { subagent_type: subagentType, description, prompt } = parsed;
 
   return (
     <div className="space-y-2 w-0 min-w-full">
@@ -126,9 +146,13 @@ const TodoWriteToolRenderer = memo(function TodoWriteToolRenderer({
 }: {
   input: Record<string, unknown>;
 }) {
-  const todos = input.todos as Todo[] | undefined;
+  const parsed = parseToolInput(todoWriteToolInputSchema, input);
+  if (!parsed) {
+    return <RawToolInput input={input} />;
+  }
+  const todos = parsed.todos ?? [];
 
-  if (!todos || todos.length === 0) {
+  if (todos.length === 0) {
     return <div className="text-xs text-muted-foreground">No todos</div>;
   }
 
@@ -239,13 +263,7 @@ const WebSearchToolRenderer = memo(function WebSearchToolRenderer({
   const payload = resultPayload ?? parseWebSearchToolInput(input);
 
   if (!payload) {
-    return (
-      <div className="w-0 min-w-full">
-        <pre className="text-xs overflow-x-auto max-h-32 overflow-y-auto rounded bg-muted px-1.5 py-1">
-          {JSON.stringify(input, null, 2)}
-        </pre>
-      </div>
-    );
+    return <RawToolInput input={input} />;
   }
 
   const queries = payload.action.queries ?? (payload.query ? [payload.query] : []);
@@ -271,6 +289,71 @@ const WebSearchToolRenderer = memo(function WebSearchToolRenderer({
     </div>
   );
 });
+
+// =============================================================================
+// File Tool Renderers
+// =============================================================================
+
+function ReadToolRenderer({ input }: { input: Record<string, unknown> }) {
+  const parsed = parseToolInput(readToolInputSchema, input);
+  if (!parsed) {
+    return <RawToolInput input={input} />;
+  }
+  const { file_path: filePath, offset, limit } = parsed;
+  return (
+    <div className="space-y-1 w-0 min-w-full">
+      <FilePathDisplay path={filePath ?? ''} />
+      {offset != null && (
+        <div className="text-xs text-muted-foreground">
+          Lines {offset} - {offset + (limit || 100)}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function WriteToolRenderer({ input }: { input: Record<string, unknown> }) {
+  const parsed = parseToolInput(writeToolInputSchema, input);
+  if (!parsed) {
+    return <RawToolInput input={input} />;
+  }
+  return (
+    <div className="space-y-1 w-0 min-w-full">
+      <FilePathDisplay path={parsed.file_path ?? ''} />
+      <div className="rounded bg-muted px-1.5 py-1">
+        <pre className="text-xs overflow-x-auto max-h-32 overflow-y-auto">
+          {truncateContent(parsed.content ?? '', TOOL_INPUT_CONTENT_TRUNCATE)}
+        </pre>
+      </div>
+    </div>
+  );
+}
+
+function EditToolRenderer({ input }: { input: Record<string, unknown> }) {
+  const parsed = parseToolInput(editToolInputSchema, input);
+  if (!parsed) {
+    return <RawToolInput input={input} />;
+  }
+  return (
+    <div className="space-y-1 w-0 min-w-full">
+      <FilePathDisplay path={parsed.file_path ?? ''} />
+      <div className="grid grid-cols-2 gap-1.5">
+        <div className="rounded bg-destructive/10 px-1.5 py-1 min-w-0">
+          <div className="text-[10px] font-medium text-destructive mb-0.5">Remove</div>
+          <pre className="text-xs overflow-x-auto max-h-16 overflow-y-auto">
+            {truncateContent(parsed.old_string ?? '', TOOL_INPUT_DIFF_TRUNCATE)}
+          </pre>
+        </div>
+        <div className="rounded bg-success/10 px-1.5 py-1 min-w-0">
+          <div className="text-[10px] font-medium text-success mb-0.5">Add</div>
+          <pre className="text-xs overflow-x-auto max-h-16 overflow-y-auto">
+            {truncateContent(parsed.new_string ?? '', TOOL_INPUT_DIFF_TRUNCATE)}
+          </pre>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 // =============================================================================
 // Tool Input Renderer
@@ -329,49 +412,13 @@ export const ToolInputRenderer = memo(function ToolInputRenderer({
   // Special rendering for common tools
   switch (name) {
     case 'Read':
-      return (
-        <div className="space-y-1 w-0 min-w-full">
-          <FilePathDisplay path={input.file_path as string} />
-          {input.offset !== undefined && (
-            <div className="text-xs text-muted-foreground">
-              Lines {String(input.offset)} - {Number(input.offset) + (Number(input.limit) || 100)}
-            </div>
-          )}
-        </div>
-      );
+      return <ReadToolRenderer input={input} />;
 
     case 'Write':
-      return (
-        <div className="space-y-1 w-0 min-w-full">
-          <FilePathDisplay path={input.file_path as string} />
-          <div className="rounded bg-muted px-1.5 py-1">
-            <pre className="text-xs overflow-x-auto max-h-32 overflow-y-auto">
-              {truncateContent((input.content as string) ?? '', TOOL_INPUT_CONTENT_TRUNCATE)}
-            </pre>
-          </div>
-        </div>
-      );
+      return <WriteToolRenderer input={input} />;
 
     case 'Edit':
-      return (
-        <div className="space-y-1 w-0 min-w-full">
-          <FilePathDisplay path={input.file_path as string} />
-          <div className="grid grid-cols-2 gap-1.5">
-            <div className="rounded bg-destructive/10 px-1.5 py-1 min-w-0">
-              <div className="text-[10px] font-medium text-destructive mb-0.5">Remove</div>
-              <pre className="text-xs overflow-x-auto max-h-16 overflow-y-auto">
-                {truncateContent((input.old_string as string) ?? '', TOOL_INPUT_DIFF_TRUNCATE)}
-              </pre>
-            </div>
-            <div className="rounded bg-success/10 px-1.5 py-1 min-w-0">
-              <div className="text-[10px] font-medium text-success mb-0.5">Add</div>
-              <pre className="text-xs overflow-x-auto max-h-16 overflow-y-auto">
-                {truncateContent((input.new_string as string) ?? '', TOOL_INPUT_DIFF_TRUNCATE)}
-              </pre>
-            </div>
-          </div>
-        </div>
-      );
+      return <EditToolRenderer input={input} />;
 
     case 'Bash':
       return (
@@ -397,13 +444,6 @@ export const ToolInputRenderer = memo(function ToolInputRenderer({
       );
 
     default:
-      // Generic JSON display for unknown tools
-      return (
-        <div className="w-0 min-w-full">
-          <pre className="text-xs overflow-x-auto max-h-32 overflow-y-auto rounded bg-muted px-1.5 py-1">
-            {JSON.stringify(input, null, 2)}
-          </pre>
-        </div>
-      );
+      return <RawToolInput input={input} />;
   }
 });

@@ -134,14 +134,32 @@ alongside `isEmpty` when the user needs an empty message or next action. Write
 branches by hand when a panel combines several queries, as
 `CombinedChangesPanel` does.
 
-Render errors are caught by `ErrorBoundary` (`src/client/error-boundary.tsx`).
-The app root and the routed page area each have one. The page boundary resets
-when the URL changes. Both offer Reload and Copy details (message, URL, stack
-and component trace). The page boundary wraps lazy route imports, so it uses
-Reload rather than Try again: a rejected lazy import stays rejected until the
-app reloads. Panels and lazy chunks use `variant="compact"` with a specific
-`title`, such as "Couldn't load the viewer". Offer `showRetry` only where
-re-rendering can succeed; the route, viewer and form boundaries omit it.
+Render errors are caught by `ErrorBoundary` (`src/client/error-boundary.tsx`);
+do not add another boundary class. The app root and the routed page area each
+have one. The page boundary resets when the URL changes. Both offer Reload and
+Copy details (message, URL, stack and component trace). The page boundary wraps
+lazy route imports, so it uses Reload rather than Try again: a rejected lazy
+import stays rejected until the app reloads. Panels and lazy chunks use
+`variant="compact"` with a specific `title`, such as "Couldn't load the viewer".
+Offer `showRetry` only where re-rendering can succeed; the route, viewer and
+form boundaries omit it.
+
+The shell renders the sidebar and banners outside the page boundary, so each has
+its own compact boundary, as do the workspace right panel and each transcript
+row (`GroupedMessageItemRenderer`). A message that fails to render shows
+"Couldn't render this message" in its place; replaying the transcript would
+otherwise crash the page again. Agent tool input is untrusted: tool renderers
+read it through `parseToolInput` and the schemas in
+`tool-renderers/tool-input-schemas.ts`, showing raw JSON when the shape does not
+match. Lazy components outside a panel boundary, such as the setup terminal, get
+a local boundary.
+
+`installChunkLoadRecovery` (`src/client/lib/chunk-load-recovery.ts`) listens for
+`vite:preloadError`, which usually means a deploy replaced the chunks this page
+expects, and shows one persistent toast with Reload. It does not cancel the
+event, so the import still rejects and the nearest boundary shows the failure.
+Unmatched URLs render `routes/not-found.tsx` inside the shell; the root route's
+`errorElement` uses the shared fallback for errors that reach the router.
 
 ## Query and mutation failures
 

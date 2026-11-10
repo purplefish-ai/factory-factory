@@ -26,8 +26,11 @@ describe('Automations routes', () => {
   });
   it('preserves the explicitly requested ID and rejects additional path segments', () => {
     expect(matchRoutes(router.routes, '/agents/missing-id')?.at(-1)?.params.id).toBe('missing-id');
-    expect(matchRoutes(router.routes, '/agents/agent-id/extra')).toBeNull();
-    expect(matchRoutes(router.routes, '/projects/example/agents/agent-id/extra')).toBeNull();
+    // Extra segments fall through to the in-shell not-found route.
+    expect(matchRoutes(router.routes, '/agents/agent-id/extra')?.at(-1)?.route.path).toBe('*');
+    expect(
+      matchRoutes(router.routes, '/projects/example/agents/agent-id/extra')?.at(-1)?.route.path
+    ).toBe('*');
     expect(matchRoutes(router.routes, '/projects/example/reviews')?.at(-1)?.route.path).toBe(
       'reviews'
     );

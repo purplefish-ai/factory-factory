@@ -12,6 +12,7 @@ import {
   useState,
 } from 'react';
 import { Loading } from '@/client/components/loading';
+import { ErrorBoundary } from '@/client/error-boundary';
 import {
   appendToRollingOutput,
   TERMINAL_OUTPUT_MAX_CHARS,
@@ -482,15 +483,21 @@ export const TerminalPanel = forwardRef<TerminalPanelRef, TerminalPanelProps>(
         {/* Terminal content */}
         <div className="flex-1 overflow-hidden bg-background">
           {activeTab && isVisible && (
-            <Suspense fallback={<Loading size="compact" message="Loading terminal…" />}>
-              <TerminalInstance
-                key={activeTab.id}
-                output={getOutputStream(activeTab.id)}
-                onData={handleData}
-                onResize={handleResize}
-                className="h-full"
-              />
-            </Suspense>
+            <ErrorBoundary
+              variant="compact"
+              title="Couldn't load the terminal"
+              resetKey={activeTab.id}
+            >
+              <Suspense fallback={<Loading size="compact" message="Loading terminal…" />}>
+                <TerminalInstance
+                  key={activeTab.id}
+                  output={getOutputStream(activeTab.id)}
+                  onData={handleData}
+                  onResize={handleResize}
+                  className="h-full"
+                />
+              </Suspense>
+            </ErrorBoundary>
           )}
         </div>
       </div>
