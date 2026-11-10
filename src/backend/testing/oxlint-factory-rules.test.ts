@@ -244,6 +244,7 @@ describe('Oxlint project guardrails', () => {
     ['no-raw-tab-role', 'const x = <div role={("tab")} />;'],
     ['no-raw-tab-role', 'const x = <div role={"tablist" as const} />;'],
     ['no-raw-tab-role', 'const x = <div role={"tab"!} />;'],
+    ['no-raw-tab-role', 'const x = createElement("div", { [`role`]: "tab" });'],
     ['named-query-options', 'trpc.project.list.useQuery(input, { refetchInterval: 10_000 });'],
     ['named-query-options', 'useQuery({ refetchInterval: open ? 30_000 : false });'],
     ['named-query-options', 'useQuery({ refetchInterval: 2 * POLL_INTERVAL_MS.activity });'],

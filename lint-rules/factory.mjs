@@ -1190,7 +1190,7 @@ const rules = {
         },
         // Props objects, e.g. `createElement('div', { role: 'tab' })` or a spread.
         Property(node) {
-          if (propertyKey(node) === 'role') {
+          if (staticKeyName(node.key, node.computed) === 'role') {
             report(node, node.value);
           }
         },

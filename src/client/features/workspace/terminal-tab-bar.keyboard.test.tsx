@@ -55,7 +55,7 @@ it('renders Logs and terminals as one tablist with a single Tab stop and arrow n
   await act(() => root.render(<Panel onSelect={select} />));
 
   const tablist = container.querySelector('[role="tablist"]');
-  expect(tablist?.getAttribute('aria-label')).toBe('Terminals');
+  expect(tablist?.getAttribute('aria-label')).toBe('Logs and terminals');
   const tabs = [...container.querySelectorAll<HTMLElement>('[role="tab"]')];
   expect(tabs.map((tab) => tab.textContent)).toEqual([
     'Logs',

@@ -45,7 +45,10 @@ export function TerminalTabBar({
   const hasActiveTab = tabs.some((tab) => tab.id === activeTabId);
   return (
     <div ref={tabBarRef} className={cn('flex min-w-0 items-center gap-1', className)}>
-      <TabList aria-label="Terminals" className="min-w-0 flex-1 gap-0.5">
+      <TabList
+        aria-label={leadingTabs ? 'Logs and terminals' : 'Terminals'}
+        className="min-w-0 flex-1 gap-0.5"
+      >
         {leadingTabs}
         {/* Leading tabs stay put while the terminals scroll. */}
         <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto scrollbar-hide">

@@ -112,7 +112,7 @@ export const KeyboardNavigation: Story = {
   render: () => <PanelHeader />,
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    await expect(canvas.getByRole('tablist', { name: 'Terminals' })).toBeVisible();
+    await expect(canvas.getByRole('tablist', { name: 'Logs and terminals' })).toBeVisible();
     const logs = canvas.getByRole('tab', { name: 'Logs' });
     await userEvent.click(logs);
     await userEvent.keyboard('{ArrowRight}');
@@ -135,7 +135,7 @@ export const Phone: Story = {
   globals: { theme: 'light', viewport: { value: 'phone', isRotated: false } },
   render: () => <PanelHeader />,
   play: async ({ canvasElement }) => {
-    const tablist = within(canvasElement).getByRole('tablist', { name: 'Terminals' });
+    const tablist = within(canvasElement).getByRole('tablist', { name: 'Logs and terminals' });
     // The header shrinks to the phone width; terminals scroll inside it.
     await expect(tablist.getBoundingClientRect().right).toBeLessThanOrEqual(
       canvasElement.ownerDocument.documentElement.clientWidth

@@ -185,8 +185,7 @@
           "error",
           {
             "exceptions": {
-              "src/components/ui/calendar.tsx": "shadcn registry source: the weekday and week-number labels keep upstream's 0.8rem so registry diffs stay clean (docs/shadcn.md).",
-              "src/client/features/workspace/right-panel.tsx": "Pending ux-tab-bars: the right panel tab bar's 10px label is restyled by that PR."
+              "src/components/ui/calendar.tsx": "shadcn registry source: the weekday and week-number labels keep upstream's 0.8rem so registry diffs stay clean (docs/shadcn.md)."
             }
           }
         ],

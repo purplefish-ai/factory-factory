@@ -1,4 +1,5 @@
 import { memo, type ReactNode, useCallback, useEffect, useRef, useState } from 'react';
+import { SectionLabel } from '@/client/components/section-label';
 import { StatusDot } from '@/client/components/status-indicators';
 import { useWorkspaceUnreadCounts } from '@/client/features/inbox';
 import type { SubagentSelection } from '@/client/features/subagents';
@@ -250,9 +251,7 @@ export const RightPanel = memo(function RightPanel({
             isMobile && '[&_button]:min-h-9 [&_button]:min-w-9'
           )}
         >
-          <span className="text-[10px] uppercase tracking-wide text-muted-foreground/80 font-medium whitespace-nowrap">
-            Log source
-          </span>
+          <SectionLabel className="whitespace-nowrap">Log source</SectionLabel>
           <TabList
             aria-label="Log source"
             className="gap-0.5 min-w-0 rounded-md border border-border/70 bg-muted/70 p-0.5"

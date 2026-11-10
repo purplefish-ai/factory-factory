@@ -3,7 +3,7 @@ import { FileCodeIcon } from '@phosphor-icons/react/dist/csr/FileCode';
 import { TerminalIcon } from '@phosphor-icons/react/dist/csr/Terminal';
 import type { Meta, StoryObj } from '@storybook/react';
 import { useState } from 'react';
-import { expect, userEvent, within } from 'storybook/test';
+import { expect, fn, userEvent, within } from 'storybook/test';
 import { SessionStatusIcon } from '@/client/components/session-status-icon';
 import { StatusDot } from '@/client/components/status-indicators';
 import { deriveSessionTabRuntime } from '@/client/lib/session-tab-runtime';
@@ -129,4 +129,25 @@ export const Dark: Story = { ...Light, globals: { theme: 'dark' } };
 export const Phone: Story = {
   ...Light,
   globals: { theme: 'light', viewport: { value: 'phone', isRotated: false } },
+};
+
+/** Enter and Space select the focused tab exactly once each (no extra native click). */
+export const KeyboardSelection: Story = {
+  args: { label: 'Alpha', isActive: false, onSelect: fn(), onClose: fn() },
+  render: (args) => (
+    <TabList aria-label="Keyboard selection">
+      <TabButton {...args} tabStop />
+    </TabList>
+  ),
+  play: async ({ args, canvasElement }) => {
+    const tab = within(canvasElement).getByRole('tab', { name: 'Alpha' });
+    tab.focus();
+    await userEvent.keyboard('{Enter}');
+    await expect(args.onSelect).toHaveBeenCalledTimes(1);
+    await userEvent.keyboard(' ');
+    await expect(args.onSelect).toHaveBeenCalledTimes(2);
+    await userEvent.click(tab);
+    await expect(args.onSelect).toHaveBeenCalledTimes(3);
+    await expect(args.onClose).not.toHaveBeenCalled();
+  },
 };
