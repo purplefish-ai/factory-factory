@@ -23,11 +23,15 @@ function primaryFamily(stack: string): string {
 
 describe('font loading', () => {
   it('loads no cross-origin resources from index.html', () => {
-    const urls = [...indexHtml.matchAll(/<(?:link|script)\b[^>]*?\b(?:href|src)="([^"]*)"/gi)].map(
-      ([, url]) => url
+    const tags = [...indexHtml.matchAll(/<(?:link|script)\b[^>]*>/gi)].map(([tag]) => tag);
+    // Double-quoted, single-quoted and unquoted attribute values.
+    const urls = tags.flatMap((tag) =>
+      [...tag.matchAll(/\s(?:href|src)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+))/gi)].map(
+        ([, double, single, bare]) => (double ?? single ?? bare ?? '').trim()
+      )
     );
     expect(urls.length).toBeGreaterThan(0);
-    expect(urls.filter((url) => /^(?:[a-z]+:)?\/\//i.test(url ?? ''))).toEqual([]);
+    expect(urls.filter((url) => /^(?:[a-z][a-z\d+.-]*:)?\/\//i.test(url))).toEqual([]);
   });
 
   it.each(

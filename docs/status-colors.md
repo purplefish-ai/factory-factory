@@ -164,8 +164,9 @@ are in `public/fonts/geist`, sourced from `vercel/geist-font` commit
 (Inter, IBM Plex Mono, Atkinson Hyperlegible Next and Mono) are also served
 locally from `public/fonts/<family>`, each with its license, using the
 Fontsource 5.3.0 builds of Google Fonts' unicode-range subsets. Their
-`@font-face` rules in `src/client/fonts.css` are fetched only when text uses
-that family, so the app loads no third-party stylesheet before first paint.
+`@font-face` rules in `src/client/fonts.css` load with the app stylesheet, but
+the browser fetches a font file only when text uses that family and falls in its
+range, and the app loads no third-party stylesheet before first paint.
 `src/client/fonts.test.ts` fails if a preset names a web font that is not
 bundled or if `index.html` gains a cross-origin resource.
 
