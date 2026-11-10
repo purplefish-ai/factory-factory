@@ -38,7 +38,16 @@ export const Workspace: Story = {
     await expect(canvas.getByRole('button', { name: 'Hide right panel' })).toBeVisible();
   },
 };
-export const WorkspaceFamily: Story = { args: { variant: 'family' } };
+/** The menu reads the parent through the workspace cache, as the app does. */
+export const WorkspaceFamily: Story = {
+  args: { variant: 'family' },
+  play: async ({ canvas, canvasElement }) => {
+    await userEvent.click(canvas.getByRole('button', { name: 'Navigate workspace family' }));
+    const menu = await within(canvasElement.ownerDocument.body).findByRole('menu');
+    await within(menu).findByText('Waiting');
+    await expect(menu).toHaveTextContent('Working');
+  },
+};
 export const TabletWorkspace: Story = {
   globals: { viewport: { value: 'tablet', isRotated: false } },
 };
