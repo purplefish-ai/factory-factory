@@ -308,8 +308,9 @@ describe('SubagentList', () => {
     expect(onRetry).toHaveBeenCalledOnce();
   });
 
-  it('renders nothing for unsupported providers', () => {
+  it('explains when subagent history is unavailable', () => {
     render({ state: { kind: 'unsupported' }, onSelect: vi.fn() });
-    expect(container.innerHTML).toBe('');
+    expect(container.textContent).toContain('Subagents unavailable');
+    expect(container.textContent).toContain('History may be unavailable after the session stops.');
   });
 });

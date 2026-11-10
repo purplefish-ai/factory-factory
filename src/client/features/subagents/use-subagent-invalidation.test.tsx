@@ -50,6 +50,42 @@ describe('live sub-agent list invalidation', () => {
     container.remove();
   });
 
+  it('shows an explanation when a stopped session has no browsing support', async () => {
+    const client = trpc.createClient({
+      links: [
+        () => () =>
+          observable((observer) => {
+            observer.next({ result: { data: { supported: false } } });
+            observer.complete();
+          }),
+      ],
+    });
+    await act(async () =>
+      root.render(
+        <trpc.Provider client={client} queryClient={queryClient}>
+          <QueryClientProvider client={queryClient}>
+            <ProviderSubagentsSection
+              sessionId="stopped-session"
+              parentSessionName="Stopped session"
+              enabled
+              onSelect={vi.fn()}
+            />
+          </QueryClientProvider>
+        </trpc.Provider>
+      )
+    );
+    await vi.waitFor(async () => {
+      await act(async () => new Promise((resolve) => setTimeout(resolve, 0)));
+      expect(container.textContent).toContain('Subagents unavailable');
+      expect(container.textContent).toContain(
+        'History may be unavailable after the session stops.'
+      );
+    });
+    expect(container.querySelector('[aria-label="Subagents"]')).not.toBeNull();
+    expect(container.querySelector('[aria-label="Active subagents"]')).toBeNull();
+    expect(container.textContent).not.toContain('No subagents for this session');
+  });
+
   it('refreshes infinite-query rows on spawn and completion events without refreshing other sessions', async () => {
     const first = child('First agent');
     const second = child('Second agent');

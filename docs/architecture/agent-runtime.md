@@ -1378,7 +1378,11 @@ hides the control without resuming automatic following.
 
 They are distinct from workspace-scoped child workspaces, and are recovered from
 the provider when a parent session is reloaded rather than persisted by Factory
-Factory.
+Factory. Stopped Codex sessions can restore a browse-only runtime to read native
+history without sending a prompt. Other stopped providers may not expose that
+history. When browsing is unavailable, the Subagents panel explains the
+limitation instead of rendering a blank tab; this is distinct from a supported
+session with no subagents.
 
 ## Child workspaces
 

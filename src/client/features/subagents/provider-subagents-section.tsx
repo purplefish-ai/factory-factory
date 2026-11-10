@@ -80,12 +80,14 @@ export function ProviderSubagentsSection({
     [onSelect, parentSessionName, sessionId]
   );
 
-  if (!queryEnabled || query.data?.pages.some((page) => page.supported === false)) {
+  if (!queryEnabled) {
     return null;
   }
 
   let state: SubagentListState;
-  if (error && !query.data) {
+  if (query.data?.pages.some((page) => page.supported === false)) {
+    state = { kind: 'unsupported' };
+  } else if (error && !query.data) {
     state = {
       kind: 'error',
       message: error.message,
