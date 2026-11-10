@@ -3,6 +3,7 @@ import { ClipboardTextIcon } from '@phosphor-icons/react/dist/csr/ClipboardText'
 import { GitPullRequestIcon } from '@phosphor-icons/react/dist/csr/GitPullRequest';
 import { ShieldWarningIcon } from '@phosphor-icons/react/dist/csr/ShieldWarning';
 import type { Meta, StoryObj } from '@storybook/react';
+import { StatusCallout } from '@/client/components/status-callout';
 import { StatusChip, StatusDot, StatusIcon } from '@/client/components/status-indicators';
 import { contrastRatio, mixOver, type Rgb } from '@/client/lib/color-contrast';
 import {
@@ -70,7 +71,7 @@ function ToneTable() {
             <th className="py-2 pr-3 font-medium">Icon</th>
             <th className="py-2 pr-3 font-medium">Chip</th>
             <th className="py-2 pr-3 font-medium">Text</th>
-            <th className="py-2 pr-3 font-medium">Banner</th>
+            <th className="py-2 pr-3 font-medium">Callout</th>
             <th className="py-2 pr-3 font-medium" title="Contrast of the token on bg / card / tint">
               Contrast bg · card · tint
             </th>
@@ -108,9 +109,9 @@ function ToneTable() {
                 </td>
                 <td className={`py-2 pr-3 font-medium ${style.text}`}>{style.name} text</td>
                 <td className="py-2 pr-3">
-                  <div className={`rounded-md border px-2 py-1.5 ${style.surface}`}>
-                    {style.name} banner
-                  </div>
+                  <StatusCallout tone={tone} size="sm">
+                    {style.name} callout
+                  </StatusCallout>
                 </td>
                 <td className="py-2 pr-3 font-mono whitespace-nowrap">
                   <Ratio value={ratio(background)} /> · <Ratio value={ratio(card)} /> ·{' '}
@@ -137,9 +138,19 @@ function BadgeVariants() {
       <Badge variant="success">Success</Badge>
       <Badge variant="warning">Warning</Badge>
       <Badge variant="info">Info</Badge>
+      <Badge variant="danger">Danger</Badge>
       <Badge variant="destructive">Destructive</Badge>
       <Badge variant="secondary">Secondary</Badge>
       <Badge variant="outline">Outline</Badge>
+      <Badge variant="secondary" size="count">
+        4
+      </Badge>
+      <Badge variant="warning" size="count">
+        12
+      </Badge>
+      <Badge variant="danger" size="count">
+        3
+      </Badge>
     </div>
   );
 }
@@ -270,7 +281,7 @@ const meta = {
     docs: {
       description: {
         component:
-          'Every status tone as a dot, icon, chip, badge, text and banner, plus typical surfaces. Use the toolbar or the per-scheme stories to compare presets. See docs/status-colors.md.',
+          'Every status tone as a dot, icon, chip, badge, text and callout, plus typical surfaces. Use the toolbar or the per-scheme stories to compare presets. See docs/status-colors.md.',
       },
     },
   },

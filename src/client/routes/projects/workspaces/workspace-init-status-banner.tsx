@@ -2,11 +2,18 @@ import { ArrowsClockwiseIcon } from '@phosphor-icons/react/dist/csr/ArrowsClockw
 import { PlayIcon } from '@phosphor-icons/react/dist/csr/Play';
 import { WarningIcon } from '@phosphor-icons/react/dist/csr/Warning';
 import { memo } from 'react';
-import { getStatusBannerClassName } from '@/client/lib/status-banner-styles';
+import { StatusCallout } from '@/client/components/status-callout';
+import type { StatusTone } from '@/client/lib/status-tones';
 import { Button } from '@/components/ui/button';
 import { Spinner } from '@/components/ui/spinner';
 import type { WorkspaceInitBanner } from '@/shared/workspace-init';
 import type { WorkspaceRetryAvailability } from '@/shared/workspace-init-retry';
+
+const INIT_BANNER_TONES: Record<WorkspaceInitBanner['kind'], StatusTone> = {
+  error: 'danger',
+  warning: 'warning',
+  info: 'info',
+};
 
 export interface InitStatusBannerProps {
   retryAvailability?: WorkspaceRetryAvailability;
@@ -27,51 +34,43 @@ export const InitStatusBanner = memo(function InitStatusBanner({
 
   return (
     <div className="px-4 pt-4">
-      <div
-        className={[
-          'rounded-md border p-3 text-sm flex items-start gap-3',
-          getStatusBannerClassName(banner.kind),
-        ].join(' ')}
+      <StatusCallout
+        tone={INIT_BANNER_TONES[banner.kind]}
+        // Setup in progress shows live work; failures keep the warning sign.
+        icon={banner.kind === 'info' ? <Spinner aria-hidden="true" /> : WarningIcon}
       >
-        {banner.kind === 'info' ? (
-          <Spinner aria-hidden="true" className="mt-0.5" />
-        ) : (
-          <WarningIcon className="h-4 w-4 mt-0.5 shrink-0" />
+        <p>{banner.message}</p>
+        {banner.showRetry && retryAvailability?.status !== 'AVAILABLE' && (
+          <p className="mt-1 text-xs">
+            {retryAvailability?.status === 'BLOCKED'
+              ? retryAvailability.explanation
+              : 'Checking setup retry availability…'}
+          </p>
         )}
-        <div className="min-w-0 flex-1">
-          <p>{banner.message}</p>
-          {banner.showRetry && retryAvailability?.status !== 'AVAILABLE' && (
-            <p className="mt-1 text-xs">
-              {retryAvailability?.status === 'BLOCKED'
-                ? retryAvailability.explanation
-                : 'Checking setup retry availability…'}
-            </p>
-          )}
-          {hasActions && (
-            <div className="mt-2 flex items-center gap-2">
-              {banner.showRetry && (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  pending={retryPending}
-                  pendingLabel="Retrying…"
-                  disabled={retryAvailability?.status !== 'AVAILABLE'}
-                  onClick={onRetry}
-                >
-                  <ArrowsClockwiseIcon className="h-3.5 w-3.5" />
-                  Retry setup
-                </Button>
-              )}
-              {banner.showPlay && (
-                <Button size="sm" onClick={onPlay}>
-                  <PlayIcon className="h-3.5 w-3.5 mr-1.5" />
-                  Dispatch queued messages
-                </Button>
-              )}
-            </div>
-          )}
-        </div>
-      </div>
+        {hasActions && (
+          <div className="mt-2 flex items-center gap-2">
+            {banner.showRetry && (
+              <Button
+                size="sm"
+                variant="outline"
+                pending={retryPending}
+                pendingLabel="Retrying…"
+                disabled={retryAvailability?.status !== 'AVAILABLE'}
+                onClick={onRetry}
+              >
+                <ArrowsClockwiseIcon className="h-3.5 w-3.5" />
+                Retry setup
+              </Button>
+            )}
+            {banner.showPlay && (
+              <Button size="sm" onClick={onPlay}>
+                <PlayIcon className="h-3.5 w-3.5 mr-1.5" />
+                Dispatch queued messages
+              </Button>
+            )}
+          </div>
+        )}
+      </StatusCallout>
     </div>
   );
 });

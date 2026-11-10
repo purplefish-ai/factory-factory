@@ -3,6 +3,7 @@ import { WarningCircleIcon } from '@phosphor-icons/react/dist/csr/WarningCircle'
 import { EmptyState } from '@/client/components/empty-state';
 import { Loading } from '@/client/components/loading';
 import { QueryErrorState } from '@/client/components/query-error-state';
+import { StatusCallout } from '@/client/components/status-callout';
 import { POLL_INTERVAL_MS } from '@/client/lib/query-options';
 import { trpc } from '@/client/lib/trpc';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -116,16 +117,14 @@ function ChangesDecorators({
   return (
     <div className="space-y-2">
       {partialDataWarning && (
-        <div className="flex items-start gap-2 rounded-md border border-warning/40 bg-warning/10 px-3 py-2 text-xs text-warning">
-          <WarningCircleIcon className="h-3.5 w-3.5 shrink-0 mt-px" />
-          <span>{partialDataWarning}</span>
-        </div>
+        <StatusCallout tone="warning" size="sm">
+          {partialDataWarning}
+        </StatusCallout>
       )}
       {noMergeBase && (
-        <div className="flex items-start gap-2 rounded-md border border-warning/40 bg-warning/10 px-3 py-2 text-xs text-warning">
-          <WarningCircleIcon className="h-3.5 w-3.5 shrink-0 mt-px" />
-          <span>No common history with main. Not-pushed detection may be incomplete.</span>
-        </div>
+        <StatusCallout tone="warning" size="sm">
+          No common history with main. Not-pushed detection may be incomplete.
+        </StatusCallout>
       )}
       {hasIndicatorEntries && (
         <div className="flex items-center gap-1.5 text-xs text-muted-foreground">

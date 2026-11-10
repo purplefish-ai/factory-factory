@@ -1,6 +1,8 @@
 import type { Meta, StoryObj } from '@storybook/react';
 import { expect, within } from 'storybook/test';
 import { MarkdownRenderer } from '@/client/components/markdown';
+import { SectionLabel } from '@/client/components/section-label';
+import { StatusChip } from '@/client/components/status-indicators';
 import { contrastRatio, parseThemeColor } from '@/client/lib/color-contrast';
 import { MarkdownRenderer as BaseMarkdownRenderer } from '@/components/ui/markdown';
 import { COLOR_SCHEME_IDS } from '@/shared/appearance';
@@ -209,3 +211,47 @@ export const HighContrastLight: Story = {
   globals: { theme: 'light', colorScheme: 'high-contrast' },
 };
 export const HighContrastDark: Story = { globals: { theme: 'dark', colorScheme: 'high-contrast' } };
+
+const TYPE_SCALE = [
+  ['text-2xs', '11px / 14px: chips, section labels and dense metadata'],
+  ['text-xs', '12px / 16px: secondary text, controls and badges'],
+  ['text-sm', '14px / 20px: body text in panels and forms'],
+  ['text-base', '16px / 24px: page body text'],
+] as const;
+
+/**
+ * The app type scale. `text-2xs` is the one step below `text-xs`; arbitrary
+ * sizes such as `text-[10px]` are rejected by factory/no-arbitrary-font-size.
+ */
+export const TypeScale: Story = {
+  render: () => (
+    <div className="max-w-2xl space-y-4">
+      <SectionLabel asChild>
+        <h2>Type scale</h2>
+      </SectionLabel>
+      <dl className="space-y-3">
+        {TYPE_SCALE.map(([className, usage]) => (
+          <div key={className} className="grid grid-cols-[8rem_1fr] items-baseline gap-4">
+            <dt className="font-mono text-xs text-muted-foreground">{className}</dt>
+            <dd data-type-step={className} className={className}>
+              {usage}
+            </dd>
+          </div>
+        ))}
+      </dl>
+      <div className="flex items-center gap-2">
+        <StatusChip tone="success">Passing</StatusChip>
+        <StatusChip tone="working">Agent working</StatusChip>
+        <SectionLabel>Section label</SectionLabel>
+      </div>
+    </div>
+  ),
+  play: async ({ canvasElement }) => {
+    const step = canvasElement.querySelector('[data-type-step="text-2xs"]');
+    await expect(step).not.toBeNull();
+    if (step) {
+      await expect(getComputedStyle(step).fontSize).toBe('11px');
+      await expect(getComputedStyle(step).lineHeight).toBe('14px');
+    }
+  },
+};

@@ -17,9 +17,10 @@ current toast styling.
 - Use Phosphor icons and the existing `@/lib/utils` helper. Do not add Lucide or
   the upstream `cn` package. `components.json` records the Phosphor preference.
 - Keep the application theme, compact cards and dialog/sheet spacing, semantic
-  success/warning/info badges (tinted, following
-  [status colors](status-colors.md)), tooltip delay/offset, and full-width
-  popper selects.
+  success/warning/info/danger badges (tinted with the status chip classes,
+  following [status colors](status-colors.md)), the Badge `count` size, tooltip
+  delay/offset, and full-width popper selects. The upstream `Alert` is not
+  installed: messages use the app's `StatusCallout`.
 - Keep default sizes overridable through `className`; data-state and responsive
   size selectors must not override compact controls or wide attachment dialogs.
   Alert actions merge caller classes through Button to retain destructive

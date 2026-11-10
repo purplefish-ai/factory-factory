@@ -32,6 +32,8 @@ const rules = [
   'no-direct-web-storage',
   'named-query-options',
   'query-error-handled',
+  'no-arbitrary-font-size',
+  'use-status-callout',
 ];
 const workspaceQueryOwner = 'owned/workspace-queries.ts';
 const userSettingsOwner = 'owned/user-settings-queries.ts';
@@ -206,6 +208,21 @@ describe('Oxlint project guardrails', () => {
       'query-error-handled',
       'const query = useFooQuery(); const { data, isLoading } = query; show(data, isLoading);',
     ],
+    ['no-arbitrary-font-size', 'const x = <span className="text-[10px] uppercase" />;'],
+    ['no-arbitrary-font-size', 'const className = "md:text-[11px]";'],
+    ['no-arbitrary-font-size', 'const className = `p-1 text-[0.8rem]`;'],
+    ['no-arbitrary-font-size', 'const className = cn("!text-[1.5em]", active && "font-medium");'],
+    [
+      'use-status-callout',
+      'const x = <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3" />;',
+    ],
+    ['use-status-callout', 'const className = "bg-warning/10 border-b border-warning/20";'],
+    [
+      'use-status-callout',
+      'const className = `border border-success-accent/50 bg-success-accent/15`;',
+    ],
+    ['use-status-callout', 'const className = "dark:bg-info/10 dark:border-info/30 px-2";'],
+    ['use-status-callout', 'const meta = { className: "text-info border-info bg-info/10" };'],
   ];
   const rejectedFixtures = rejectedSources.map(([rule, source], index) => ({
     rule,
@@ -286,6 +303,17 @@ describe('Oxlint project guardrails', () => {
     'const q = trpc.a.b.useQuery(); if (q.isLoading) { show(q.error); }',
     'const query = useFooQuery(); const { isLoading, error } = query; show(isLoading, error);',
     'const q = trpc.a.b.useQuery(); const busy = q.isLoading; const el = <QueryState query={q} />;',
+    'const className = "text-2xs text-xs text-[var(--size)] w-[10px] leading-[11px]";',
+    'const className = "text-[#ff0000] text-[color:var(--x)]";',
+    'const path = "/docs/text-[10px]-guide";',
+    // Hover, focus and data-state tints, a tint without a status border, a
+    // status border without a tint and mixed tokens are not callouts.
+    'const className = "border-warning/40 text-warning hover:bg-warning/10";',
+    'const className = "border-destructive/30 focus:bg-destructive/10 data-[state=open]:bg-destructive/10";',
+    'const className = "border-b bg-destructive/10 px-4 py-2";',
+    'const className = "border-running-accent/70 dark:border-running/40";',
+    'const className = "border-transparent bg-success-accent/15 text-success dark:bg-success/10";',
+    'const className = "bg-primary/10 border-primary/15";',
   ]
     .map((source, index) => ({ source, file: join(directory, `accepted-${index}.tsx`) }))
     .concat(
@@ -376,53 +404,56 @@ describe('raw palette class exceptions', () => {
   });
 });
 
-describe.each(['use-pending-prop', 'no-raw-spinner', 'no-direct-web-storage'])(
-  'factory/%s exceptions',
-  (rule) => {
-    const projectConfig = overridesSchema.parse(
-      JSON.parse(readFileSync(resolve('.oxlintrc.json'), 'utf8'))
+describe.each([
+  'use-pending-prop',
+  'no-raw-spinner',
+  'no-direct-web-storage',
+  'no-arbitrary-font-size',
+  'use-status-callout',
+])('factory/%s exceptions', (rule) => {
+  const projectConfig = overridesSchema.parse(
+    JSON.parse(readFileSync(resolve('.oxlintrc.json'), 'utf8'))
+  );
+  const exceptions = projectConfig.overrides.flatMap((override) => {
+    const setting = override.rules[`factory/${rule}`];
+    return Array.isArray(setting)
+      ? Object.entries(exceptionRuleSchema.parse(setting)[1].exceptions)
+      : [];
+  });
+
+  it('gives every file a reason', () => {
+    for (const [, reason] of exceptions) {
+      expect(reason.length).toBeGreaterThan(20);
+    }
+  });
+
+  it.runIf(exceptions.length > 0)('still needs every exception', () => {
+    // Lint the listed files with the rule and no exceptions: each must still report.
+    const ruleConfig = join(directory, `${rule}.oxlintrc.json`);
+    writeFileSync(
+      ruleConfig,
+      JSON.stringify({
+        categories: { correctness: 'off' },
+        plugins: [],
+        jsPlugins: [{ name: 'factory', specifier: resolve('lint-rules/factory.mjs') }],
+        rules: { [`factory/${rule}`]: 'error' },
+      })
     );
-    const exceptions = projectConfig.overrides.flatMap((override) => {
-      const setting = override.rules[`factory/${rule}`];
-      return Array.isArray(setting)
-        ? Object.entries(exceptionRuleSchema.parse(setting)[1].exceptions)
-        : [];
+    const files = exceptions.map(([file]) => file);
+    const result = spawnSync(binary, ['--config', ruleConfig, '--format', 'json', ...files], {
+      encoding: 'utf8',
     });
-
-    it('gives every file a reason', () => {
-      for (const [, reason] of exceptions) {
-        expect(reason.length).toBeGreaterThan(20);
-      }
-    });
-
-    it.runIf(exceptions.length > 0)('still needs every exception', () => {
-      // Lint the listed files with the rule and no exceptions: each must still report.
-      const ruleConfig = join(directory, `${rule}.oxlintrc.json`);
-      writeFileSync(
-        ruleConfig,
-        JSON.stringify({
-          categories: { correctness: 'off' },
-          plugins: [],
-          jsPlugins: [{ name: 'factory', specifier: resolve('lint-rules/factory.mjs') }],
-          rules: { [`factory/${rule}`]: 'error' },
-        })
-      );
-      const files = exceptions.map(([file]) => file);
-      const result = spawnSync(binary, ['--config', ruleConfig, '--format', 'json', ...files], {
-        encoding: 'utf8',
-      });
-      expect(result.error).toBeUndefined();
-      expect(result.stderr).toBe('');
-      const reported = new Set(
-        reportSchema
-          .parse(JSON.parse(result.stdout))
-          .diagnostics.filter(({ code }) => code === `factory(${rule})`)
-          .map(({ filename }) => filename)
-      );
-      expect(files.filter((file) => !reported.has(file))).toEqual([]);
-    });
-  }
-);
+    expect(result.error).toBeUndefined();
+    expect(result.stderr).toBe('');
+    const reported = new Set(
+      reportSchema
+        .parse(JSON.parse(result.stdout))
+        .diagnostics.filter(({ code }) => code === `factory(${rule})`)
+        .map(({ filename }) => filename)
+    );
+    expect(files.filter((file) => !reported.has(file))).toEqual([]);
+  });
+});
 
 describe('web storage access', () => {
   it('is limited to the shared storage module and exempts only tests', () => {

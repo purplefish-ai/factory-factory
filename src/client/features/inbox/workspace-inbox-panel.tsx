@@ -2,6 +2,7 @@ import { EnvelopeSimpleIcon } from '@phosphor-icons/react/dist/csr/EnvelopeSimpl
 import { useState } from 'react';
 import { EmptyState } from '@/client/components/empty-state';
 import { QueryState } from '@/client/components/query-state';
+import { StatusChip } from '@/client/components/status-indicators';
 import { POLL_INTERVAL_MS } from '@/client/lib/query-options';
 import { trpc } from '@/client/lib/trpc';
 import { Button } from '@/components/ui/button';
@@ -125,11 +126,7 @@ function WorkspaceInbox({ workspaceId }: { workspaceId: string }) {
                         >
                           {item.subject || 'Workspace message'}
                         </span>
-                        {isUnread(item) && (
-                          <span className="shrink-0 rounded bg-primary/10 px-1.5 py-0.5 text-[10px] text-primary">
-                            Unread
-                          </span>
-                        )}
+                        {isUnread(item) && <StatusChip tone="info">Unread</StatusChip>}
                       </span>
                       <MailMetadata mail={item} />
                       <span className="line-clamp-2 break-words text-xs text-muted-foreground">

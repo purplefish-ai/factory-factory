@@ -166,7 +166,7 @@ export function SearchDialog({
             {includeArchived && <span className="size-1.5 rounded-full bg-primary" />}
           </button>
           <span
-            className="hidden items-center gap-3 text-[11px] text-muted-foreground sm:flex"
+            className="hidden items-center gap-3 text-2xs text-muted-foreground sm:flex"
             aria-hidden="true"
           >
             <span>↑ ↓ navigate</span>

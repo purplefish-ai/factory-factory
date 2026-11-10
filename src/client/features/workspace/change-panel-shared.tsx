@@ -2,6 +2,7 @@ import { FolderIcon } from '@phosphor-icons/react/dist/csr/Folder';
 import { WarningCircleIcon } from '@phosphor-icons/react/dist/csr/WarningCircle';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { memo, useCallback, useMemo, useRef, useState } from 'react';
+import { SectionLabel } from '@/client/components/section-label';
 import { trpc } from '@/client/lib/trpc';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -72,9 +73,11 @@ export const ChangeSections = memo(function ChangeSections({
 
         return (
           <div key={section.key}>
-            <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider px-3 mb-1">
-              {section.title} ({section.entries.length})
-            </h3>
+            <SectionLabel asChild>
+              <h3 className="px-3 mb-1">
+                {section.title} ({section.entries.length})
+              </h3>
+            </SectionLabel>
             <ChangeList entries={section.entries} onFileClick={onFileClick} />
           </div>
         );

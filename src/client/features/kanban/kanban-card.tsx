@@ -105,7 +105,7 @@ function IssueAndPullRequestRow({
   return (
     <div
       data-testid="issue-pr-row"
-      className="pointer-events-none relative z-10 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-muted-foreground min-w-0 [&_button]:pointer-events-auto [&_a]:pointer-events-auto"
+      className="pointer-events-none relative z-10 flex flex-wrap items-center gap-x-3 gap-y-1 text-2xs text-muted-foreground min-w-0 [&_button]:pointer-events-auto [&_a]:pointer-events-auto"
     >
       {issue && (
         <button
@@ -163,7 +163,7 @@ function BranchRow({ branchName }: { branchName: string | null }) {
   }
 
   return (
-    <div className="flex items-center gap-2 text-[11px] text-muted-foreground min-w-0">
+    <div className="flex items-center gap-2 text-2xs text-muted-foreground min-w-0">
       <GitBranchIcon className="h-3 w-3 shrink-0" />
       <span className="font-mono truncate">{branchName}</span>
     </div>
@@ -396,7 +396,7 @@ function CardFamilyMetadata({
         </div>
       ) : (
         workspace.creationSource === 'CHILD_WORKSPACE' && (
-          <p className="text-[11px] text-muted-foreground">Child workspace</p>
+          <p className="text-2xs text-muted-foreground">Child workspace</p>
         )
       )}
     </>
@@ -564,7 +564,7 @@ export const KanbanCard = memo(function KanbanCard({
           )}
           <CardFamilyMetadata workspace={workspace} projectSlug={projectSlug} />
           {sessionRuntimeError && (
-            <div className="flex items-center gap-2 text-[11px] text-destructive min-w-0">
+            <div className="flex items-center gap-2 text-2xs text-destructive min-w-0">
               <WarningIcon className="h-3 w-3 shrink-0" />
               <span className="truncate">{sessionRuntimeError}</span>
             </div>

@@ -151,7 +151,7 @@ function WorkspacePrMenuRow({
             {pr.title ??
               (pr.state === 'NONE' ? 'Syncing' : pr.url.split('/').slice(3, 5).join('/'))}
           </span>
-          <span className="truncate text-[10px] text-muted-foreground">
+          <span className="truncate text-2xs text-muted-foreground">
             {pr.url.split('/').slice(3, 5).join('/')} {pr.headRefName && `· ${pr.headRefName}`}
           </span>
         </span>
@@ -162,7 +162,7 @@ function WorkspacePrMenuRow({
           size="sm"
           showAllStates={pr.state !== 'MERGED' && pr.state !== 'CLOSED'}
         />
-        <CiStatusChip ciState={getPrCiState(pr)} prState={pr.state} size="sm" showTooltip={false} />
+        <CiStatusChip ciState={getPrCiState(pr)} prState={pr.state} size="sm" />
       </DropdownMenuSubTrigger>
       <DropdownMenuPortal>
         <DropdownMenuSubContent

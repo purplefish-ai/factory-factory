@@ -1,11 +1,10 @@
-import { InfoIcon } from '@phosphor-icons/react/dist/csr/Info';
 import { MagnifyingGlassIcon } from '@phosphor-icons/react/dist/csr/MagnifyingGlass';
 import { PlusIcon } from '@phosphor-icons/react/dist/csr/Plus';
 import type { Meta, StoryObj } from '@storybook/react';
 import { useState } from 'react';
 import { toast } from 'sonner';
 import { expect } from 'storybook/test';
-import { Alert, AlertDescription, AlertTitle } from './alert';
+import { StatusCallout } from '@/client/components/status-callout';
 import { Badge } from './badge';
 import { Button } from './button';
 import { Calendar } from './calendar';
@@ -150,11 +149,9 @@ export const Surfaces: Story = {
           </div>
         </CardContent>
       </Card>
-      <Alert>
-        <InfoIcon />
-        <AlertTitle>Ready to work</AlertTitle>
-        <AlertDescription>Your workspace is up to date.</AlertDescription>
-      </Alert>
+      <StatusCallout tone="info" title="Ready to work">
+        Your workspace is up to date.
+      </StatusCallout>
       <Tabs defaultValue="overview">
         <TabsList>
           <TabsTrigger value="overview">Overview</TabsTrigger>

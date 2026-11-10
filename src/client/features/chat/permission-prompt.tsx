@@ -321,7 +321,7 @@ function PlanApprovalPrompt({ permission, onApprove, className }: PermissionProm
           <div className="text-xs text-muted-foreground italic">No plan content available</div>
         )}
 
-        <p className="text-[11px] text-muted-foreground">
+        <p className="text-2xs text-muted-foreground">
           Choose Keep planning to request revisions, then send follow-up guidance in chat.
         </p>
 

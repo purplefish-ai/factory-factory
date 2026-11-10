@@ -306,7 +306,7 @@ const PairedToolCallRenderer = memo(function PairedToolCallRenderer({
             <div className="break-all font-mono text-xs text-muted-foreground">{call.name}</div>
           )}
           <div className="min-w-0">
-            <div className="mb-0.5 text-[10px] font-medium text-muted-foreground">Input</div>
+            <div className="mb-0.5 text-2xs font-medium text-muted-foreground">Input</div>
             <ToolInputRenderer
               name={call.name}
               input={call.input}
@@ -315,7 +315,7 @@ const PairedToolCallRenderer = memo(function PairedToolCallRenderer({
           </div>
           {call.result && (
             <div className="min-w-0">
-              <div className="mb-0.5 text-[10px] font-medium text-muted-foreground">Result</div>
+              <div className="mb-0.5 text-2xs font-medium text-muted-foreground">Result</div>
               <ToolResultContentRenderer
                 content={call.result.content}
                 isError={call.result.isError}

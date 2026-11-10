@@ -66,6 +66,15 @@ resolve identifiers, so a local numeric constant passes. `QueryClient` defaults
 (`queries` and `mutations` objects) and tests are exempt. Regression tests
 invoke the real Oxlint binary against accepted and rejected fixtures.
 
+`no-arbitrary-font-size` rejects arbitrary font sizes such as `text-[10px]` or
+`md:text-[0.8rem]`; use the type scale's `text-2xs`, `text-xs` and up instead.
+`use-status-callout` rejects a class string pairing a tinted status background
+(`bg-destructive/5`) with a border of the same status token
+(`border-destructive/30`); render that surface with `StatusCallout` or
+`StatusChip` instead. Hover, focus and data-state tints pass
+([callouts and chips](../docs/status-colors.md#callouts-and-chips)). Both take
+an `exceptions` map with the same stale-exception test and skip tests.
+
 Oxlint's built-in `no-restricted-imports` keeps `CardHeader`, `CardTitle`,
 `CardDescription` and `CardAction` out of `src/client/routes/admin/`, so every
 settings card uses `SettingsSection` from `settings-section.tsx`, which also

@@ -48,12 +48,12 @@ describe('CiStatusChip', () => {
     ['CONFLICT', 'bg-warning/10'],
     ['UNKNOWN', 'bg-muted'],
   ] as const)('uses theme tokens for %s', (ciState, expected) => {
-    const markup = renderToStaticMarkup(<CiStatusChip ciState={ciState} showTooltip={false} />);
+    const markup = renderToStaticMarkup(<CiStatusChip ciState={ciState} />);
     expect(markup).toContain(expected);
     expect(markup).not.toMatch(RAW_PALETTE_CLASS);
   });
 
   it('renders nothing without a PR', () => {
-    expect(renderToStaticMarkup(<CiStatusChip ciState="NONE" showTooltip={false} />)).toBe('');
+    expect(renderToStaticMarkup(<CiStatusChip ciState="NONE" />)).toBe('');
   });
 });

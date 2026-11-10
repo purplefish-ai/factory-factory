@@ -47,7 +47,7 @@ export function IssueCard({ issue, projectId }: IssueCardProps) {
         </CardHeader>
         <CardContent className="pt-0">
           <div className="flex items-center justify-between gap-2">
-            <div className="flex items-center gap-2 text-[11px] text-muted-foreground min-w-0">
+            <div className="flex items-center gap-2 text-2xs text-muted-foreground min-w-0">
               <span className="inline-flex items-center gap-1 shrink-0">
                 <DotOutlineIcon className="h-3 w-3 text-success" />
                 <span>{issue.displayId}</span>

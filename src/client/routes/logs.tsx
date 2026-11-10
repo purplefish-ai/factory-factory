@@ -8,6 +8,7 @@ import { keepPreviousData } from '@tanstack/react-query';
 import { Fragment, useEffect, useState } from 'react';
 import { EmptyState } from '@/client/components/empty-state';
 import { QueryState } from '@/client/components/query-state';
+import { SectionLabel } from '@/client/components/section-label';
 import { useDownloadServerLog } from '@/client/hooks/use-download-server-log';
 import { runInBackground } from '@/client/lib/background-task';
 import { formatDate, formatDateTime, toDateTimeIso } from '@/client/lib/date-time';
@@ -80,9 +81,7 @@ function DatePicker({
   const [open, setOpen] = useState(false);
   return (
     <div className="flex flex-col gap-1">
-      <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
-        {label}
-      </span>
+      <SectionLabel>{label}</SectionLabel>
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger asChild>
           <Button
@@ -457,9 +456,9 @@ export default function LogsPage() {
                               <TableRow>
                                 <TableCell colSpan={4} className="bg-muted/30 p-4">
                                   <div className="space-y-2">
-                                    <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                                      Raw JSON
-                                    </div>
+                                    <SectionLabel asChild>
+                                      <div>Raw JSON</div>
+                                    </SectionLabel>
                                     <pre className="bg-background border rounded-md p-3 text-xs overflow-x-auto max-h-96 overflow-y-auto">
                                       {JSON.stringify(fullEntry, null, 2)}
                                     </pre>

@@ -2,9 +2,9 @@ import { ArrowsClockwiseIcon } from '@phosphor-icons/react/dist/csr/ArrowsClockw
 import { CaretDownIcon } from '@phosphor-icons/react/dist/csr/CaretDown';
 import { CaretRightIcon } from '@phosphor-icons/react/dist/csr/CaretRight';
 import { PlayIcon } from '@phosphor-icons/react/dist/csr/Play';
-import { WarningIcon } from '@phosphor-icons/react/dist/csr/Warning';
 import { XIcon } from '@phosphor-icons/react/dist/csr/X';
 import { useState } from 'react';
+import { StatusCallout } from '@/client/components/status-callout';
 import { Button } from '@/components/ui/button';
 import { Spinner } from '@/components/ui/spinner';
 import type { WorkspaceRetryAvailability } from '@/shared/workspace-init-retry';
@@ -42,22 +42,11 @@ export function ScriptFailedBanner({
   const { retry, retryInit } = useRetryWorkspaceInit(workspaceId, retryAvailability);
 
   return (
-    <div className="border-b bg-destructive/10 px-4 py-2">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div className="flex min-w-0 items-start gap-2 text-sm text-destructive">
-          <WarningIcon className="mt-0.5 h-3 w-3 shrink-0" />
-          <span className="min-w-0 break-words whitespace-normal">
-            Init script failed{initErrorMessage ? `: ${initErrorMessage}` : ''}
-            {retryAvailability?.status !== 'AVAILABLE' && (
-              <span className="mt-1 block text-xs">
-                {retryAvailability?.status === 'BLOCKED'
-                  ? retryAvailability.explanation
-                  : 'Checking setup retry availability…'}
-              </span>
-            )}
-          </span>
-        </div>
-        <div className="flex shrink-0 flex-wrap items-center gap-1 self-start sm:justify-end">
+    <StatusCallout
+      tone="danger"
+      variant="strip"
+      action={
+        <>
           {hasStartupScript && initOutput && (
             <Button
               variant="ghost"
@@ -108,15 +97,24 @@ export function ScriptFailedBanner({
               <XIcon className="h-3 w-3" />
             </Button>
           )}
-        </div>
-      </div>
+        </>
+      }
+    >
+      <p>Init script failed{initErrorMessage ? `: ${initErrorMessage}` : ''}</p>
+      {retryAvailability?.status !== 'AVAILABLE' && (
+        <p className="mt-1 text-xs">
+          {retryAvailability?.status === 'BLOCKED'
+            ? retryAvailability.explanation
+            : 'Checking setup retry availability…'}
+        </p>
+      )}
       {expanded && hasStartupScript && (
         <InitOutputPanel
           output={initOutput}
           className="mt-2 h-32 w-full rounded-md border bg-background"
         />
       )}
-    </div>
+    </StatusCallout>
   );
 }
 

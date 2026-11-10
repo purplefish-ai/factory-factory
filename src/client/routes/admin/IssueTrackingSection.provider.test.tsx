@@ -151,7 +151,7 @@ function expectProvider(provider: IssueProvider) {
   expect(container.querySelector('input[type="password"]') !== null).toBe(
     provider === IssueProvider.LINEAR
   );
-  expect(container.querySelector('[data-slot="badge"]')?.textContent).toBe(
+  expect(container.querySelector('[data-status-tone="success"]')?.textContent).toBe(
     provider === IssueProvider.LINEAR ? 'Linear' : 'GitHub'
   );
 }

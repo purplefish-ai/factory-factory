@@ -197,18 +197,10 @@ export function ProjectSelectorDropdown({
                       <span className="sr-only">
                         Working {project.boardCounts.working} Waiting {project.boardCounts.waiting}
                       </span>
-                      <Badge
-                        aria-hidden="true"
-                        variant="secondary"
-                        className="h-5 min-w-5 px-1.5 text-xs tabular-nums"
-                      >
+                      <Badge aria-hidden="true" variant="secondary" size="count">
                         {project.boardCounts.working}
                       </Badge>
-                      <Badge
-                        aria-hidden="true"
-                        variant="warning"
-                        className="h-5 min-w-5 px-1.5 text-xs tabular-nums"
-                      >
+                      <Badge aria-hidden="true" variant="warning" size="count">
                         {project.boardCounts.waiting}
                       </Badge>
                     </span>

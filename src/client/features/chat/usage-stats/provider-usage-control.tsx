@@ -4,6 +4,7 @@ import { POLL_INTERVAL_MS } from '@/client/lib/query-options';
 import { trpc } from '@/client/lib/trpc';
 import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Progress } from '@/components/ui/progress';
 import { Spinner } from '@/components/ui/spinner';
 import type { TokenStats } from '@/lib/chat-protocol';
 import { cn } from '@/lib/utils';
@@ -146,7 +147,7 @@ export function UsageControl({
                 </span>
                 <span>{Math.round(percent ?? 0)}% used</span>
               </div>
-              <UsageMeter percent={percent ?? 0} />
+              <UsageMeter percent={percent ?? 0} label="Context used" />
             </>
           ) : (
             <p className="text-muted-foreground">Context unavailable</p>
@@ -167,7 +168,7 @@ export function UsageControl({
           />
         </div>
         <div className="flex items-center justify-between gap-2 border-t pt-3">
-          <span className="min-w-0 truncate text-[11px] text-muted-foreground">
+          <span className="min-w-0 truncate text-2xs text-muted-foreground">
             {planUsage ? `Updated ${timestamp(planUsage.updatedAt)}` : 'No reading yet'}
           </span>
           <div className="flex shrink-0 items-center gap-1">
@@ -199,6 +200,17 @@ export function UsageControl({
   );
 }
 
+/** A usage bar that takes the usage text color: muted, then warning, then danger. */
+function UsageMeter({ percent, label }: { percent: number; label: string }) {
+  return (
+    <Progress
+      value={Math.min(100, Math.max(0, percent))}
+      aria-label={label}
+      className={cn('h-1 [&>div]:bg-current', usageColor(percent))}
+    />
+  );
+}
+
 function PlanWindows({
   planUsage,
   windows,
@@ -224,8 +236,8 @@ function PlanWindows({
                 {Math.round(window.usedPercent)}% used
               </span>
             </div>
-            <UsageMeter percent={window.usedPercent} />
-            <p className="text-[11px] text-muted-foreground">
+            <UsageMeter percent={window.usedPercent} label={`${window.label} used`} />
+            <p className="text-2xs text-muted-foreground">
               {window.resetsAt === null
                 ? 'Reset time unavailable'
                 : `Resets ${timestamp(window.resetsAt)}`}
@@ -239,17 +251,6 @@ function PlanWindows({
         </p>
       )}
     </>
-  );
-}
-
-function UsageMeter({ percent }: { percent: number }) {
-  return (
-    <div className="h-1 overflow-hidden rounded-full bg-muted">
-      <div
-        className={cn('h-full rounded-full bg-current', usageColor(percent))}
-        style={{ width: `${percent}%` }}
-      />
-    </div>
   );
 }
 

@@ -158,7 +158,7 @@ function PeriodicTaskConfigPanel({
         onScheduledTimeChange={setScheduledTime}
         disabled={isCreating}
       />
-      <p className="text-[10px] text-muted-foreground">
+      <p className="text-2xs text-muted-foreground">
         Creates a new workspace on this schedule. The first run starts immediately.
         {isLongCadence && scheduledTime ? ' Subsequent runs will use the time above.' : ''}
       </p>

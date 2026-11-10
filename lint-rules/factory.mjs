@@ -38,6 +38,44 @@ function containsUnknownType(node, visitorKeys) {
 const RAW_PALETTE_CLASS =
   /(?<=^|[\s'"`:!])(?:bg|text|border(?:-[trblxyse])?|ring(?:-offset)?|inset-ring|outline|fill|stroke|from|via|to|decoration|divide|shadow|inset-shadow|text-shadow|drop-shadow|accent|caret|placeholder)-(?:red|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose|slate|gray|zinc|neutral|stone)-(?:50|[1-9]00|950)(?![\w-])/;
 
+// An arbitrary font size such as `text-[10px]`, `md:text-[0.8rem]` or
+// `text-[1.5em]`; the type scale (`text-2xs`, `text-xs`, …) replaces them.
+const ARBITRARY_FONT_SIZE_CLASS = /(?<=^|[\s'"`:!])text-\[(?:\d*\.)?\d+(?:px|r?em)\](?![\w-])/;
+
+const STATUS_TOKENS = '(destructive|warning|success|info|running|merged)(?:-accent)?';
+const STATUS_BACKGROUND_TINT = new RegExp(`^bg-${STATUS_TOKENS}/\\d+$`);
+const STATUS_BORDER = new RegExp(`^border(?:-[trblxyse])?-${STATUS_TOKENS}(?:/\\d+)?$`);
+
+/**
+ * The status token of a hand-rolled callout surface in one class string: a
+ * tinted status background (`bg-warning/10`) paired with a border of the same
+ * status token (`border-warning/30`). Only unprefixed and `dark:` classes
+ * count, so hover, focus and data-state styling never match.
+ */
+function statusCalloutToken(text) {
+  if (typeof text !== 'string') {
+    return null;
+  }
+  const backgrounds = new Set();
+  const borders = new Set();
+  for (const token of text.split(/[\s'"`]+/)) {
+    const variants = token.split(':');
+    const utility = variants.pop().replace(/^!/, '');
+    if (variants.length > 1 || (variants.length === 1 && variants[0] !== 'dark')) {
+      continue;
+    }
+    const background = STATUS_BACKGROUND_TINT.exec(utility);
+    if (background) {
+      backgrounds.add(background[1]);
+    }
+    const border = STATUS_BORDER.exec(utility);
+    if (border) {
+      borders.add(border[1]);
+    }
+  }
+  return [...backgrounds].find((token) => borders.has(token)) ?? null;
+}
+
 function reportRawPaletteClass(context, node, text) {
   const match = typeof text === 'string' ? RAW_PALETTE_CLASS.exec(text) : null;
   if (match) {
@@ -777,6 +815,56 @@ const rules = {
               report(property);
             }
           }
+        },
+      };
+    },
+  },
+  'no-arbitrary-font-size': {
+    meta: { schema: EXCEPTIONS_SCHEMA },
+    create(context) {
+      if (isExceptedFile(context)) {
+        return {};
+      }
+      const report = (node, text) => {
+        const match = typeof text === 'string' ? ARBITRARY_FONT_SIZE_CLASS.exec(text) : null;
+        if (match) {
+          context.report({
+            node,
+            message: `Use the type scale (text-2xs, text-xs, text-sm, …) instead of "${match[0]}" (docs/status-colors.md#small-text).`,
+          });
+        }
+      };
+      return {
+        Literal(node) {
+          report(node, node.value);
+        },
+        TemplateElement(node) {
+          report(node, node.value.cooked ?? node.value.raw);
+        },
+      };
+    },
+  },
+  'use-status-callout': {
+    meta: { schema: EXCEPTIONS_SCHEMA },
+    create(context) {
+      if (isExceptedFile(context)) {
+        return {};
+      }
+      const report = (node, text) => {
+        const token = statusCalloutToken(text);
+        if (token) {
+          context.report({
+            node,
+            message: `Use StatusCallout (src/client/components/status-callout.tsx) or StatusChip instead of pairing a ${token} background tint with a ${token} border (docs/status-colors.md#callouts-and-chips).`,
+          });
+        }
+      };
+      return {
+        Literal(node) {
+          report(node, node.value);
+        },
+        TemplateElement(node) {
+          report(node, node.value.cooked ?? node.value.raw);
         },
       };
     },

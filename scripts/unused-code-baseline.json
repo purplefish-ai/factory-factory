@@ -193,10 +193,6 @@
       "disposition": "test-support",
       "reason": "workspace-header-fixture.stories.tsx renders this Storybook preview; keep visual fixture support."
     },
-    "src/components/ui/progress.tsx": {
-      "disposition": "maintained-api",
-      "reason": "Retained shadcn Progress primitive has Storybook consumers; preserve the maintained component API."
-    },
     "src/lib/claude-fixtures.ts": {
       "disposition": "test-support",
       "reason": "Claude protocol fixtures are consumed by tests, not application runtime."

@@ -143,10 +143,7 @@ export function MobileBoardSections({
             )}
           >
             {column.shortLabel ?? column.label}{' '}
-            <Badge
-              variant="outline"
-              className="h-5 min-w-5 px-1.5 text-xs tabular-nums text-inherit"
-            >
+            <Badge variant="outline" size="count" className="text-inherit">
               {count}
             </Badge>
           </a>
