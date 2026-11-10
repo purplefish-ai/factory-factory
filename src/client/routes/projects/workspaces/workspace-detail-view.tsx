@@ -1,6 +1,7 @@
 import { type Dispatch, memo, type SetStateAction, useCallback, useState } from 'react';
 import { Loading } from '@/client/components/loading';
 import { WorkspaceToolsDrawer } from '@/client/components/workspace-tools-drawer';
+import { ErrorBoundary } from '@/client/error-boundary';
 import type { SubagentSelection } from '@/client/features/subagents';
 import { ArchiveWorkspaceDialog } from '@/client/features/workspace';
 import { RightPanel } from '@/client/features/workspace/right-panel';
@@ -221,17 +222,24 @@ export const WorkspaceDetailView = memo(function WorkspaceDetailView({
   );
 
   const rightPanel = (
-    <RightPanel
-      workspaceId={workspaceState.workspaceId}
-      isTakingScreenshots={isTakingScreenshots}
-      onTakeScreenshots={handleTakeScreenshots}
-      selectedSessionId={sessionTabs.selectedDbSessionId}
-      selectedSessionName={selectedSessionName}
-      selectedSessionReady={sessionTabs.selectedSessionReady}
-      selectedSessionControlId={sessionTabs.selectedSessionControlId}
-      selectedSessionControlRuntimeId={sessionTabs.selectedSessionControlRuntimeId}
-      onOpenSubagent={handleOpenSubagent}
-    />
+    <ErrorBoundary
+      variant="compact"
+      title="Couldn't show the workspace tools"
+      showRetry
+      resetKey={`${workspaceState.workspaceId}:${sessionTabs.selectedDbSessionId ?? ''}`}
+    >
+      <RightPanel
+        workspaceId={workspaceState.workspaceId}
+        isTakingScreenshots={isTakingScreenshots}
+        onTakeScreenshots={handleTakeScreenshots}
+        selectedSessionId={sessionTabs.selectedDbSessionId}
+        selectedSessionName={selectedSessionName}
+        selectedSessionReady={sessionTabs.selectedSessionReady}
+        selectedSessionControlId={sessionTabs.selectedSessionControlId}
+        selectedSessionControlRuntimeId={sessionTabs.selectedSessionControlRuntimeId}
+        onOpenSubagent={handleOpenSubagent}
+      />
+    </ErrorBoundary>
   );
 
   return (

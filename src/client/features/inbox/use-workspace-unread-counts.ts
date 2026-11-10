@@ -1,3 +1,4 @@
+import { POLL_INTERVAL_MS } from '@/client/lib/query-options';
 import { trpc } from '@/client/lib/trpc';
 import type { WorkspaceUnreadMailCounts } from '@/shared/workspace-mail';
 
@@ -7,7 +8,11 @@ export function useWorkspaceUnreadCounts(projectId: string | undefined): {
 } {
   const query = trpc.workspace.unreadMailCounts.useQuery(
     { projectId: projectId ?? '' },
-    { enabled: Boolean(projectId), staleTime: 5000, refetchInterval: 15_000, retry: false }
+    {
+      enabled: Boolean(projectId),
+      staleTime: 5000,
+      refetchInterval: POLL_INTERVAL_MS.workspaceContext,
+    }
   );
   return { data: query.data };
 }

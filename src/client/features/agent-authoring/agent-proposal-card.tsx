@@ -265,7 +265,7 @@ function LatestProposalButton({
 
 export function AgentProposalCard({ reference }: { reference: AgentProposalReference }) {
   const input = { workspaceId: reference.workspaceId, proposalId: reference.proposalId };
-  const query = trpc.automation.getProposal.useQuery(input, { refetchOnWindowFocus: false });
+  const query = trpc.automation.getProposal.useQuery(input);
   const mutation = trpc.automation.create.useMutation({
     onError: (error) => toast.error(error.message),
   });

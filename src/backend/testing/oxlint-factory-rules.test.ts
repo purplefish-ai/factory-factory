@@ -24,8 +24,10 @@ const rules = [
   'no-zod-any',
   'no-unsafe-json-parse-cast',
   'no-unsafe-resolver-cast',
+  'no-tool-input-cast',
   'no-raw-palette-classes',
   'workspace-query-owner',
+  'named-query-options',
 ];
 const workspaceQueryOwner = 'owned/workspace-queries.ts';
 writeFileSync(
@@ -90,6 +92,13 @@ describe('Oxlint project guardrails', () => {
     ['no-unsafe-json-parse-cast', 'const value = JSON.parse(input) as unknown as Response;'],
     ['no-unsafe-resolver-cast', 'const callback = resolve as (value: unknown) => void;'],
     ['no-unsafe-resolver-cast', 'const callback = resolve as (value: Array<unknown>) => void;'],
+    ['no-tool-input-cast', 'const todos = input.todos as Todo[] | undefined;'],
+    ['no-tool-input-cast', 'const path = (input.file_path as string) ?? "";'],
+    ['no-tool-input-cast', 'const offset = input?.["offset"] as number;'],
+    ['no-tool-input-cast', 'const path = call.input.file_path as string;'],
+    ['no-tool-input-cast', 'const payload = input as unknown as Payload;'],
+    ['no-tool-input-cast', 'const todos = input!.todos as Todo[];'],
+    ['no-tool-input-cast', 'const path = call.input!.file_path as string;'],
     ['no-raw-palette-classes', 'const className = "flex bg-red-500";'],
     ['no-raw-palette-classes', 'export const chip = <span className="dark:text-emerald-300" />;'],
     ['no-raw-palette-classes', 'const className = `${base} hover:border-sky-500/40`;'],
@@ -112,6 +121,21 @@ describe('Oxlint project guardrails', () => {
     ['workspace-query-owner', 'const fetchDetail = utils.workspace.get.fetch;'],
     ['workspace-query-owner', "const key = getQueryKey(trpc.workspace.get, { id }, 'query');"],
     ['workspace-query-owner', 'const key = getQueryKey(trpc.workspace.listForProject);'],
+    ['named-query-options', 'trpc.project.list.useQuery(input, { refetchInterval: 10_000 });'],
+    ['named-query-options', 'useQuery({ refetchInterval: open ? 30_000 : false });'],
+    ['named-query-options', 'useQuery({ refetchInterval: 2 * POLL_INTERVAL_MS.activity });'],
+    [
+      'named-query-options',
+      'useQuery({ refetchInterval: (query) => (query.state.data ? false : 1000) });',
+    ],
+    [
+      'named-query-options',
+      'useQuery({ refetchInterval(query) { if (query.state.data) { return false; } return 5000; } });',
+    ],
+    ['named-query-options', 'useQuery({ enabled, refetchOnWindowFocus: false });'],
+    ['named-query-options', 'useQuery({ staleTime: 60_000, retry: false });'],
+    ['named-query-options', 'useQuery({ retry: 1, retryDelay: 1000 });'],
+    ['named-query-options', 'const previewOptions = { retry: true } as const;'],
   ];
   const rejectedFixtures = rejectedSources.map(([rule, source], index) => ({
     rule,
@@ -136,6 +160,10 @@ describe('Oxlint project guardrails', () => {
     'const schema = z.unknown();',
     'const parsed = JSON.parse(input); const value = schema.parse(parsed);',
     'const callback = resolve as (value: string) => void;',
+    'const parsed = parseToolInput(readToolInputSchema, input);',
+    'const keys = ["file_path", "offset"] as const;',
+    'const textarea = inputRef.current as HTMLTextAreaElement;',
+    'const name = tool.name as string;',
     'const description = "use client";',
     'function example() { return "use server"; }',
     'const className = "bg-success/10 text-running border-destructive/30";',
@@ -152,6 +180,16 @@ describe('Oxlint project guardrails', () => {
     'const project = trpc.project.get.useQuery({ id });',
     "const key = getQueryKey(trpc.workspace.listChildren, { id }, 'query');",
     'const value = map.get.fetch();',
+    'useQuery({ refetchInterval: open ? POLL_INTERVAL_MS.background : false });',
+    'useQuery({ refetchInterval: (query) => (query.state.data.length > 0 ? POLL_INTERVAL_MS.external : false) });',
+    'useQuery({ refetchInterval(query) { const n = items.filter((x) => x > 0).length; return n === 0 ? false : POLL_INTERVAL_MS.progress; } });',
+    'useQuery({ refetchInterval: (query) => query.state.data.length > 0 && POLL_INTERVAL_MS.activity });',
+    'useQuery({ refetchInterval: REVIEW_REQUESTS_POLL_MS, refetchOnWindowFocus: true });',
+    'useQuery({ retry: QUERY_RETRY.costlyRead });',
+    'useQuery({ retry: (count, error) => count < 1 });',
+    'new QueryClient({ defaultOptions: { queries: { retry: false, refetchOnWindowFocus: false } } });',
+    'const defaults = { queries: { retry: 0 }, mutations: { retry: false } };',
+    'const step = { file: "a.ts", old_string: "retry: false" };',
   ]
     .map((source, index) => ({ source, file: join(directory, `accepted-${index}.tsx`) }))
     .concat({
@@ -255,5 +293,18 @@ describe('workspace query owners', () => {
     for (const owner of owners) {
       expect(existsSync(resolve(owner))).toBe(true);
     }
+  });
+});
+
+describe('tool input casts', () => {
+  const projectConfig = overridesSchema.parse(
+    JSON.parse(readFileSync(resolve('.oxlintrc.json'), 'utf8'))
+  );
+
+  it('applies to the agent activity renderers without file exceptions', () => {
+    const scopes = projectConfig.overrides
+      .filter((override) => override.rules['factory/no-tool-input-cast'] !== undefined)
+      .map((override) => [override.files, override.rules['factory/no-tool-input-cast']]);
+    expect(scopes).toEqual([[['src/client/features/chat/agent-activity/**/*.{ts,tsx}'], 'error']]);
   });
 });

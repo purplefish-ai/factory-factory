@@ -1,4 +1,5 @@
 import { useCallback, useLayoutEffect, useRef, useState } from 'react';
+import { QUERY_RETRY } from '@/client/lib/query-options';
 import { trpc } from '@/client/lib/trpc';
 import { resolveEffectiveSessionProvider } from '@/lib/session-provider-selection';
 import type { ChatModelOption, ChatProvider } from '@/shared/chat-capabilities';
@@ -224,7 +225,7 @@ function useNativeLaunchOptions(
       model,
       ...(provider === 'CODEX' && codexAccountId ? { codexAccountId } : {}),
     },
-    { enabled: enabled && provider !== null, staleTime: 30_000, retry: false }
+    { enabled: enabled && provider !== null, staleTime: 30_000, retry: QUERY_RETRY.costlyRead }
   );
   // The query is keyed by input; confirmed native IDs may differ from requested aliases.
   const native = query.data?.provider === provider ? query.data : undefined;
@@ -260,7 +261,7 @@ function useCodexAccountControl(
   const { data: accounts } = trpc.codexAccounts.list.useQuery(undefined, {
     enabled: selection.provider === 'CODEX' && scopeKey !== null,
     staleTime: 30_000,
-    retry: false,
+    retry: QUERY_RETRY.costlyRead,
   });
   return getCodexAccountControl(
     selection.provider,

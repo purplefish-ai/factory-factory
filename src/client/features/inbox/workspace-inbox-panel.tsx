@@ -1,6 +1,7 @@
 import { EnvelopeSimpleIcon } from '@phosphor-icons/react/dist/csr/EnvelopeSimple';
 import { useState } from 'react';
 import { Loading } from '@/client/components/loading';
+import { POLL_INTERVAL_MS } from '@/client/lib/query-options';
 import { trpc } from '@/client/lib/trpc';
 import { Button } from '@/components/ui/button';
 import { Spinner } from '@/components/ui/spinner';
@@ -30,7 +31,10 @@ function WorkspaceInbox({ workspaceId }: { workspaceId: string }) {
   const [selected, setSelected] = useState<WorkspaceMailSummary | null>(null);
   const mail = trpc.workspace.listMail.useInfiniteQuery(
     { workspaceId, limit: 20 },
-    { getNextPageParam: (page) => page.nextCursor ?? undefined, refetchInterval: 15_000 }
+    {
+      getNextPageParam: (page) => page.nextCursor ?? undefined,
+      refetchInterval: POLL_INTERVAL_MS.workspaceContext,
+    }
   );
   const items = [
     ...new Map(

@@ -4,6 +4,7 @@ import { useWorkspaceUnreadCounts } from '@/client/features/inbox';
 import type { SubagentSelection } from '@/client/features/subagents';
 import { useWorkspaceDetailQuery } from '@/client/hooks/use-workspace-detail-query';
 import { useWorkspaceDrawer } from '@/client/hooks/use-workspace-drawer';
+import { POLL_INTERVAL_MS } from '@/client/lib/query-options';
 import { trpc } from '@/client/lib/trpc';
 import { TabButton } from '@/components/ui/tab-button';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
@@ -106,7 +107,7 @@ export const RightPanel = memo(function RightPanel({
           status === 'ARCHIVING' ||
           status === 'ARCHIVED'
           ? false
-          : 1000;
+          : POLL_INTERVAL_MS.progress;
       },
     }
   );

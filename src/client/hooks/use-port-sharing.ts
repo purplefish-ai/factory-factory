@@ -12,7 +12,6 @@ export function usePortSharing(): boolean | undefined {
   const { data, isError } = trpc.portShare.getStatus.useQuery(undefined, {
     enabled: remotePage,
     staleTime: Number.POSITIVE_INFINITY,
-    refetchOnWindowFocus: false,
   });
   if (!remotePage) {
     return false;

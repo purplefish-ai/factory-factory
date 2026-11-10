@@ -1,4 +1,5 @@
 import { useContext } from 'react';
+import { QUERY_RETRY } from '@/client/lib/query-options';
 import { trpc } from '@/client/lib/trpc';
 import { MarkdownLinkContext } from '@/components/ui/markdown';
 import { ChatImage, imageDataUrl, type ChatImageProps } from './chat-image';
@@ -38,7 +39,7 @@ function LocalImage({
 } & Pick<ChatImageProps, 'alt' | 'title' | 'interactive'>) {
   const query = trpc.workspace.readChatImage.useQuery(
     { workspaceId, path },
-    { retry: false, staleTime: 60_000, refetchOnWindowFocus: false }
+    { retry: QUERY_RETRY.permanentServerError, staleTime: 60_000 }
   );
   const src = query.data && imageDataUrl(query.data.mimeType, query.data.data);
   return (

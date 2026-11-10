@@ -134,14 +134,32 @@ alongside `isEmpty` when the user needs an empty message or next action. Write
 branches by hand when a panel combines several queries, as
 `CombinedChangesPanel` does.
 
-Render errors are caught by `ErrorBoundary` (`src/client/error-boundary.tsx`).
-The app root and the routed page area each have one. The page boundary resets
-when the URL changes. Both offer Reload and Copy details (message, URL, stack
-and component trace). The page boundary wraps lazy route imports, so it uses
-Reload rather than Try again: a rejected lazy import stays rejected until the
-app reloads. Panels and lazy chunks use `variant="compact"` with a specific
-`title`, such as "Couldn't load the viewer". Offer `showRetry` only where
-re-rendering can succeed; the route, viewer and form boundaries omit it.
+Render errors are caught by `ErrorBoundary` (`src/client/error-boundary.tsx`);
+do not add another boundary class. The app root and the routed page area each
+have one. The page boundary resets when the URL changes. Both offer Reload and
+Copy details (message, URL, stack and component trace). The page boundary wraps
+lazy route imports, so it uses Reload rather than Try again: a rejected lazy
+import stays rejected until the app reloads. Panels and lazy chunks use
+`variant="compact"` with a specific `title`, such as "Couldn't load the viewer".
+Offer `showRetry` only where re-rendering can succeed; the route, viewer and
+form boundaries omit it.
+
+The shell renders the sidebar and banners outside the page boundary, so each has
+its own compact boundary, as do the workspace right panel and each transcript
+row (`GroupedMessageItemRenderer`). A message that fails to render shows
+"Couldn't render this message" in its place; replaying the transcript would
+otherwise crash the page again. Agent tool input is untrusted: tool renderers
+read it through `parseToolInput` and the schemas in
+`tool-renderers/tool-input-schemas.ts`, showing raw JSON when the shape does not
+match. Lazy components outside a panel boundary, such as the setup terminal, get
+a local boundary.
+
+`installChunkLoadRecovery` (`src/client/lib/chunk-load-recovery.ts`) listens for
+`vite:preloadError`, which usually means a deploy replaced the chunks this page
+expects, and shows one persistent toast with Reload. It does not cancel the
+event, so the import still rejects and the nearest boundary shows the failure.
+Unmatched URLs render `routes/not-found.tsx` inside the shell; the root route's
+`errorElement` uses the shared fallback for errors that reach the router.
 
 ## Query and mutation failures
 
@@ -169,3 +187,28 @@ these defaults from `src/components/ui/sonner.tsx`, because sonner has no
 per-type duration. Other toast types keep sonner's 4-second default. Prefer
 `toast.error(title, { description: error.message })` over raw server text as the
 title.
+
+## Query retries and polling
+
+The app `QueryClient` sets the query defaults once: no refetch on window focus,
+and `shouldRetryQuery` as the retry policy. A tRPC error with a 4xx status (not
+found, forbidden, invalid input) fails on the first attempt, so a query without
+cached data shows its not-found or error UI at once (cached data keeps rendering
+as above); network failures, 5xx and non-tRPC errors retry twice with backoff (1
+s, then 2 s). Don't restate either default at a call site. When a query must not
+retry, use a named reason from `QUERY_RETRY`
+(`src/client/lib/query-options.ts`): `costlyRead` for reads that spawn `gh` or a
+provider process or call an external service, `permanentServerError` for
+procedures that report permanent failures as server errors, and `nextPoll` for a
+tight poll whose next tick is the retry.
+
+Polling intervals come from the `POLL_INTERVAL_MS` tiers in the same module,
+chosen by what the user is waiting for: `progress` (1 s), `runningProcess` (2
+s), `capture` (3 s), `localStatus` (5 s), `activity` (10 s), `workspaceContext`
+(15 s), `background` (30 s), `external` (60 s) and `releaseCheck` (1 h).
+`factory/named-query-options` rejects numeric `refetchInterval` values,
+`refetchOnWindowFocus: false` and literal `retry` values outside `QueryClient`
+defaults. It checks the literal written at the option, not what an identifier
+resolves to, so define any other interval as a tier rather than a local
+constant. `REVIEW_REQUESTS_POLL_MS` is the deliberate exception: it matches the
+server's review-request cache lifetime.

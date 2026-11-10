@@ -1,4 +1,5 @@
 import { useRef } from 'react';
+import { POLL_INTERVAL_MS } from '@/client/lib/query-options';
 import { trpc } from '@/client/lib/trpc';
 import { cn } from '@/lib/utils';
 
@@ -21,7 +22,7 @@ export function SetupLogsPanel({ workspaceId, className }: SetupLogsPanelProps) 
           status === 'ARCHIVING' ||
           status === 'ARCHIVED'
           ? false
-          : 1000;
+          : POLL_INTERVAL_MS.progress;
       },
     }
   );

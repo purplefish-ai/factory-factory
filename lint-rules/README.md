@@ -30,18 +30,26 @@ fixtures when upgrading it. The rules require accessible names for icon-only
 buttons (including the shared `Button` icon sizes), and reject awaited dynamic
 imports, native browser dialogs, Next.js directives, `z.any()`/`zod.any()`,
 assertions on `JSON.parse` results, casts of promise resolvers to function types
-accepting `unknown`, and fixed Tailwind palette color classes (`bg-red-500`,
-`dark:text-emerald-300`) in `src/client`, `src/components` and `src/lib`, which
-must use theme tokens instead ([status colors](../docs/status-colors.md)). The
-palette rule's file exceptions are its `exceptions` option, a map from path to
-reason in `.oxlintrc.json`; a test fails if an exception no longer needs it.
-`workspace-query-owner` keeps tRPC cache helpers (`useQuery`, `fetch`, `setData`
-and similar) and `getQueryKey` for `workspace.get` and
-`workspace.listForProject` inside the files in its `owners` option, so every
-read installs the snapshot reconciler
+accepting `unknown`, type assertions on agent tool input (`input.todos as …`,
+`call.input.file_path as …`) under `src/client/features/chat/agent-activity`,
+which must use `parseToolInput` with a Zod schema, and fixed Tailwind palette
+color classes (`bg-red-500`, `dark:text-emerald-300`) in `src/client`,
+`src/components` and `src/lib`, which must use theme tokens instead
+([status colors](../docs/status-colors.md)). The palette rule's file exceptions
+are its `exceptions` option, a map from path to reason in `.oxlintrc.json`; a
+test fails if an exception no longer needs it. `workspace-query-owner` keeps
+tRPC cache helpers (`useQuery`, `fetch`, `setData` and similar) and
+`getQueryKey` for `workspace.get` and `workspace.listForProject` inside the
+files in its `owners` option, so every read installs the snapshot reconciler
 ([workspace state](../docs/architecture/workspace-state.md)). Tests are exempt
-so they can seed caches. Regression tests invoke the real Oxlint binary against
-accepted and rejected fixtures.
+so they can seed caches. `named-query-options` keeps query options in one place
+([query retries and polling](../docs/architecture/client-loading.md#query-retries-and-polling)):
+it rejects a numeric `refetchInterval` literal, including inside a conditional,
+arithmetic or a callback's return value (comparison operands are ignored),
+`refetchOnWindowFocus: false`, and a boolean or numeric `retry`. It does not
+resolve identifiers, so a local numeric constant passes. `QueryClient` defaults
+(`queries` and `mutations` objects) and tests are exempt. Regression tests
+invoke the real Oxlint binary against accepted and rejected fixtures.
 
 ## Remaining Biome checks
 

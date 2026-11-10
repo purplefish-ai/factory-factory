@@ -153,6 +153,116 @@ function reconciledWorkspaceProcedure(node) {
     : undefined;
 }
 
+function propertyKey(node) {
+  if (node.computed) {
+    return node.key.type === 'Literal' ? node.key.value : undefined;
+  }
+  return node.key.type === 'Identifier' ? node.key.name : node.key.value;
+}
+
+/** `{ queries: { ... } }` or `{ mutations: { ... } }`: QueryClient defaults, not a call site. */
+function isQueryClientDefault(property) {
+  const owner = property.parent?.parent;
+  return (
+    owner?.type === 'Property' &&
+    owner.value === property.parent &&
+    ['queries', 'mutations'].includes(propertyKey(owner))
+  );
+}
+
+function isFunction(node) {
+  return ['ArrowFunctionExpression', 'FunctionExpression', 'FunctionDeclaration'].includes(
+    node?.type
+  );
+}
+
+/** Return values of a function body, not descending into nested functions. */
+function returnedExpressions(node, visitorKeys, found = []) {
+  if (!node || isFunction(node)) {
+    return found;
+  }
+  if (node.type === 'ReturnStatement') {
+    found.push(node.argument);
+    return found;
+  }
+  for (const key of visitorKeys[node.type] ?? []) {
+    const child = node[key];
+    for (const value of Array.isArray(child) ? child : [child]) {
+      if (value && typeof value.type === 'string') {
+        returnedExpressions(value, visitorKeys, found);
+      }
+    }
+  }
+  return found;
+}
+
+const COMPARISON_OPERATORS = new Set([
+  '==',
+  '!=',
+  '===',
+  '!==',
+  '<',
+  '<=',
+  '>',
+  '>=',
+  'in',
+  'instanceof',
+]);
+
+/** A numeric literal that the interval can evaluate to, through branches and callbacks. */
+function numericIntervalLiteral(node, visitorKeys) {
+  const find = (child) => numericIntervalLiteral(child, visitorKeys);
+  switch (node?.type) {
+    case 'Literal':
+      return typeof node.value === 'number' ? node : undefined;
+    case 'ConditionalExpression':
+      return find(node.consequent) ?? find(node.alternate);
+    case 'LogicalExpression':
+      return find(node.left) ?? find(node.right);
+    case 'BinaryExpression':
+      // A comparison yields a boolean; its operands are never the interval.
+      return COMPARISON_OPERATORS.has(node.operator)
+        ? undefined
+        : (find(node.left) ?? find(node.right));
+    case 'UnaryExpression':
+      return find(node.argument);
+    case 'ParenthesizedExpression':
+    case 'TSAsExpression':
+    case 'TSSatisfiesExpression':
+    case 'TSNonNullExpression':
+      return find(node.expression);
+    case 'ArrowFunctionExpression':
+    case 'FunctionExpression':
+      return node.body.type === 'BlockStatement'
+        ? returnedExpressions(node.body, visitorKeys).map(find).find(Boolean)
+        : find(node.body);
+    default:
+      return undefined;
+  }
+}
+
+/** `input`, `input.todos`, `call.input.file_path`, `input?.["offset"]` and similar. */
+function readsToolInput(node) {
+  let current = node;
+  while (current) {
+    if (
+      current.type === 'ChainExpression' ||
+      current.type === 'ParenthesizedExpression' ||
+      current.type === 'TSNonNullExpression'
+    ) {
+      current = current.expression;
+    } else if (current.type === 'MemberExpression') {
+      if (memberName(current) === 'input') {
+        return true;
+      }
+      current = current.object;
+    } else {
+      return isIdentifier(current, 'input');
+    }
+  }
+  return false;
+}
+
 function isListedFile(context, paths) {
   const filename = context.filename.replaceAll('\\', '/');
   return paths.some((path) => filename === path || filename.endsWith(`/${path}`));
@@ -193,6 +303,51 @@ const rules = {
           const procedure = reconciledWorkspaceProcedure(node.arguments[0]);
           if (procedure && isIdentifier(node.callee, 'getQueryKey')) {
             report(node, procedure);
+          }
+        },
+      };
+    },
+  },
+  'named-query-options': {
+    create(context) {
+      // Query defaults live in src/client/lib/query-client.ts and named
+      // intervals and retry exceptions in src/client/lib/query-options.ts.
+      return {
+        Property(node) {
+          if (isQueryClientDefault(node)) {
+            return;
+          }
+          const key = propertyKey(node);
+          const value = node.value;
+          if (key === 'refetchInterval') {
+            const literal = numericIntervalLiteral(value, context.sourceCode.visitorKeys);
+            if (literal) {
+              context.report({
+                node: literal,
+                message:
+                  'Use a POLL_INTERVAL_MS tier from src/client/lib/query-options.ts instead of a numeric refetchInterval.',
+              });
+            }
+          } else if (
+            key === 'refetchOnWindowFocus' &&
+            value.type === 'Literal' &&
+            value.value === false
+          ) {
+            context.report({
+              node,
+              message:
+                'Remove refetchOnWindowFocus: false; it is the app default (src/client/lib/query-client.ts).',
+            });
+          } else if (
+            key === 'retry' &&
+            value.type === 'Literal' &&
+            ['boolean', 'number'].includes(typeof value.value)
+          ) {
+            context.report({
+              node,
+              message:
+                'Rely on the app retry policy (src/client/lib/query-client.ts) or use a named QUERY_RETRY reason from src/client/lib/query-options.ts.',
+            });
           }
         },
       };
@@ -365,6 +520,23 @@ const rules = {
           }
         },
       };
+    },
+  },
+  'no-tool-input-cast': {
+    create(context) {
+      // Tool input is agent-supplied; renderers parse it with the schemas in
+      // tool-renderers/tool-input-schemas.ts and fall back to raw JSON.
+      const report = (node) => {
+        if (node.typeAnnotation.typeName?.name === 'const' || !readsToolInput(node.expression)) {
+          return;
+        }
+        context.report({
+          node,
+          message:
+            'Parse agent tool input with parseToolInput and a Zod schema instead of a type assertion.',
+        });
+      };
+      return { TSAsExpression: report, TSTypeAssertion: report };
     },
   },
   'no-unsafe-resolver-cast': {

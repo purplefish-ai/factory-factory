@@ -300,6 +300,8 @@ export const ChatInput = memo(function ChatInput({
           onDragOver={pasteDropHandler.handleDragOver}
           onDragLeave={pasteDropHandler.handleDragLeave}
           disabled={isDisabled}
+          // A stable name; the placeholder changes while connecting.
+          aria-label="Message"
           placeholder={isDisabled ? 'Connecting…' : placeholder}
           // Reserve a full line plus py-3 even while an empty field's intrinsic
           // size is recalculated; a transient shrink clamps the transcript above.

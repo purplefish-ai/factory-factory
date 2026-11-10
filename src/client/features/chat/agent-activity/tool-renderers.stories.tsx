@@ -308,6 +308,18 @@ export const ToolUseFileChange: Story = {
   },
 };
 
+/** Agent input that does not match the tool's schema shows as raw JSON instead of crashing. */
+export const ToolUseMalformedInput: Story = {
+  args: {
+    message: createToolUseClaudeMessage('TodoWrite', { todos: 'not a list' }),
+    defaultOpen: true,
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(await canvas.findByText(/"todos": "not a list"/)).toBeVisible();
+  },
+};
+
 // =============================================================================
 // Tool Result Stories
 // =============================================================================
