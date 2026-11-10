@@ -15,6 +15,13 @@ let fixture: Awaited<ReturnType<typeof createLedgerFixture>>;
 let feed: AgentIssueEventPage['events'];
 let calls: number[];
 let port: AgentGitHubSourcePort;
+let createAgentRuntime: typeof import('@/backend/orchestration/agents/agent-runtime.orchestrator').createAgentRuntime;
+let jobRunner: typeof import('@/backend/services/job-runner.service').jobRunner;
+let userSettingsService: typeof import('@/backend/services/settings').userSettingsService;
+let sessionProviderResolverService: typeof import('@/backend/services/session').sessionProviderResolverService;
+// The agent runtime composes the event-run consumer, so loading it pulls in the
+// session and workspace graph: seconds of one-off module loading, far more
+// under CPU load. Load it once here rather than in a test's 5s budget.
 beforeAll(async () => {
   db = await createIntegrationDatabase();
   runtime = await vi.importActual<typeof import('../index')>('../index');
@@ -23,6 +30,18 @@ beforeAll(async () => {
       '../resources/agent-source.accessor'
     )
   ).agentSourceAccessor;
+  ({ createAgentRuntime } = await vi.importActual<
+    typeof import('@/backend/orchestration/agents/agent-runtime.orchestrator')
+  >('@/backend/orchestration/agents/agent-runtime.orchestrator'));
+  ({ jobRunner } = await vi.importActual<typeof import('@/backend/services/job-runner.service')>(
+    '@/backend/services/job-runner.service'
+  ));
+  ({ userSettingsService } = await vi.importActual<typeof import('@/backend/services/settings')>(
+    '@/backend/services/settings'
+  ));
+  ({ sessionProviderResolverService } = await vi.importActual<
+    typeof import('@/backend/services/session')
+  >('@/backend/services/session'));
 }, 30_000);
 afterAll(async () => {
   await destroyIntegrationDatabase(db);
@@ -248,23 +267,9 @@ it('uses the application graph GitHub reads and page limit lazily', async () => 
     ...Array.from({ length: 201 }, (_, i) => ({ providerEventId: `old-${i}`, payload: null })),
     ...feed,
   ];
-  const { createAgentRuntime } = await vi.importActual<
-    typeof import('@/backend/orchestration/agents/agent-runtime.orchestrator')
-  >('@/backend/orchestration/agents/agent-runtime.orchestrator');
-  const { jobRunner } = await vi.importActual<
-    typeof import('@/backend/services/job-runner.service')
-  >('@/backend/services/job-runner.service');
   const graph = {
-    userSettingsQueryService: (
-      await vi.importActual<typeof import('@/backend/services/settings')>(
-        '@/backend/services/settings'
-      )
-    ).userSettingsService,
-    sessionProviderResolverService: (
-      await vi.importActual<typeof import('@/backend/services/session')>(
-        '@/backend/services/session'
-      )
-    ).sessionProviderResolverService,
+    userSettingsQueryService: userSettingsService,
+    sessionProviderResolverService,
     githubCLIService: {
       getAgentRepositoryIdentity: (
         _repository: string,

@@ -135,6 +135,14 @@ Work that outlives a test file and logs can fail CI with
 `EnvironmentTeardownError: Closing rpc while "onUserConsoleLog" was pending`;
 stop or drain its owner in teardown rather than muting the log.
 
+A worker's first import of the session, workspace or agent runtime graph (about
+570 modules) takes one to two seconds on an idle machine and several under CPU
+load; reloading it after `vi.resetModules()` takes tens of milliseconds. Import
+it after `createIntegrationDatabase()` in a `beforeAll` with an explicit
+timeout, not inside a test's 5-second budget. Suites that build an event fixture
+per test can call `preloadEventFixtureModules()` from `beforeAll`; it binds a
+throwaway integration database so the import never opens the default one.
+
 `pnpm check` covers linting (including the inline suppression policy),
 formatting, file lengths, environment access, ambiguous relative imports,
 ownership, foreign-key indexes, migration drift, dependency rules, unused files

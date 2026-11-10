@@ -1,5 +1,8 @@
-import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { createEventDeliveryFixture } from '@/backend/orchestration/testing/event-delivery.test-support';
+import { afterEach, beforeAll, beforeEach, expect, it, vi } from 'vitest';
+import {
+  createEventDeliveryFixture,
+  preloadEventFixtureModules,
+} from '@/backend/orchestration/testing/event-delivery.test-support';
 import {
   createIntegrationDatabase,
   destroyIntegrationDatabase,
@@ -9,6 +12,9 @@ let db: IntegrationDatabase;
 const warning = vi.fn();
 let h: Awaited<ReturnType<typeof createEventDeliveryFixture>>;
 let accessor: typeof import('@/backend/services/workspace/resources/workspace-event-init.accessor').workspaceEventInitAccessor;
+// Pay the worker's cold load of the fixture graph once, outside the per-test
+// hook; each test still resets modules, so the logger spy sees fresh instances.
+beforeAll(preloadEventFixtureModules, 30_000);
 beforeEach(async () => {
   db = await createIntegrationDatabase();
   warning.mockClear();
