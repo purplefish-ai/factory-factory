@@ -1,5 +1,3 @@
-vi.mock('./pr-monitoring.orchestrator', () => ({ bindIssueMonitoringSession: vi.fn() }));
-
 import { type Mock, vi } from 'vitest';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 

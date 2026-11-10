@@ -12,15 +12,19 @@ import {
   type IntegrationDatabase,
 } from '@/backend/testing/integration-db';
 import { redObservation } from '@/shared/pr-monitoring.test-helpers';
-import { defaultPRDeliveryPorts } from './pr-delivery-dependencies';
-import { prBackgroundDeliveryPort } from './pr-event-delivery-port';
+import { createPRDeliveryPorts } from './pr-delivery-dependencies';
+import { createPRBackgroundDeliveryPort } from './pr-event-delivery-port';
 import { preparePRDelivery, wakePRDelivery } from './pr-event-delivery.orchestrator';
 import { createPRFlowIntegrationDatabase } from './pr-event-flow.test-helpers';
+import { createPRMonitoringTestServices } from './testing/pr-monitoring-services.test-support';
+
+const deliveryPorts = createPRDeliveryPorts(createPRMonitoringTestServices());
+const prBackgroundDeliveryPort = createPRBackgroundDeliveryPort(deliveryPorts);
 
 let db: IntegrationDatabase;
 beforeEach(() => {
   // Match the delivery integration seam: freshness is supplied by its own port.
-  vi.spyOn(defaultPRDeliveryPorts, 'refreshObservation').mockResolvedValue(true);
+  vi.spyOn(deliveryPorts, 'refreshObservation').mockResolvedValue(true);
 });
 beforeAll(async () => {
   db = await createPRFlowIntegrationDatabase();
@@ -72,7 +76,7 @@ it('delivers and retries a saved merge event when all associations stop backgrou
   const observe = vi.fn().mockResolvedValue(true);
   ratchetService.configure({
     observe,
-    wake: (id, isCurrent) => wakePRDelivery(id, defaultPRDeliveryPorts, isCurrent),
+    wake: (id, isCurrent) => wakePRDelivery(id, deliveryPorts, isCurrent),
     setMonitoring: vi.fn(),
   });
   vi.mocked(sessionBackgroundDeliveryService.enqueue).mockClear();
@@ -84,7 +88,7 @@ it('delivers and retries a saved merge event when all associations stop backgrou
     bindingRevision: 1,
   });
   const request = { workspaceId, prId, bindingRevision: 1 };
-  const prepared = await preparePRDelivery({ sessionId, request });
+  const prepared = await preparePRDelivery({ sessionId, request }, deliveryPorts);
   if (prepared.status !== 'ready') {
     throw new Error('Expected terminal delivery');
   }
@@ -93,7 +97,7 @@ it('delivers and retries a saved merge event when all associations stop backgrou
     error: new Error('temporary transport failure'),
   });
   await ratchetService.checkWorkspaceById(workspaceId);
-  const retry = await preparePRDelivery({ sessionId, request });
+  const retry = await preparePRDelivery({ sessionId, request }, deliveryPorts);
   if (retry.status !== 'ready') {
     throw new Error('Expected terminal retry');
   }

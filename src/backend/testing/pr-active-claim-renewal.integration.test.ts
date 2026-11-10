@@ -22,7 +22,7 @@ it.each([
     const { createPRBackgroundDeliveryPort } = await vi.importActual<
       typeof import('@/backend/orchestration/pr-event-delivery-port')
     >('@/backend/orchestration/pr-event-delivery-port');
-    const { defaultPRDeliveryPorts } = await vi.importActual<
+    const { createPRDeliveryPorts } = await vi.importActual<
       typeof import('@/backend/orchestration/pr-delivery-dependencies')
     >('@/backend/orchestration/pr-delivery-dependencies');
     const findReceipt = vi.fn(async () => receipt);
@@ -32,7 +32,7 @@ it.each([
       .mockResolvedValue();
     graph.lifecycle.wireDomainBridges({ ...graph.services, findPRDeliveryReceipt: findReceipt });
     const port = createPRBackgroundDeliveryPort({
-      ...defaultPRDeliveryPorts,
+      ...createPRDeliveryPorts(graph.services),
       findPRDeliveryReceipt: findReceipt,
       refreshObservation: async () => true,
     });

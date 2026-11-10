@@ -1,10 +1,7 @@
 import { isPRMonitoringRecipient, type PRDeliveryMode } from '@/shared/pr-monitoring';
 import { createPRDeliveryPorts } from './pr-delivery-dependencies';
 import { wakePRDelivery } from './pr-event-delivery.orchestrator';
-import {
-  defaultPRMonitoringServices,
-  type PRMonitoringServices,
-} from './pr-monitoring-dependencies';
+import type { PRMonitoringServices } from './pr-monitoring-dependencies';
 
 const BINDING_CHANGED_MESSAGE =
   'PR monitoring changed while this request was in progress; refresh and retry';
@@ -24,7 +21,7 @@ export async function setPRMonitoring(
     recipientSessionId?: string | null;
     expectedBindingRevision: number;
   },
-  services: PRMonitoringServices = defaultPRMonitoringServices
+  services: PRMonitoringServices
 ) {
   const { workspacePRMonitoringService, sessionBackgroundDeliveryService } = services;
   const previous = await workspacePRMonitoringService.get(input.workspaceId);
@@ -88,7 +85,7 @@ async function resolvePRMonitoringRecipient(
 export async function bindIssueMonitoringSession(
   workspaceId: string,
   sessionId: string,
-  services: PRMonitoringServices = defaultPRMonitoringServices
+  services: PRMonitoringServices
 ) {
   const config = await services.workspacePRMonitoringService.get(workspaceId);
   if (config?.enabled && (config.deliveryMode ?? 'MAIN') === 'MAIN' && !config.recipientSessionId) {

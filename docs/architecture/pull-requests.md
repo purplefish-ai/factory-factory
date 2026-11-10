@@ -435,9 +435,12 @@ accepted observation. The producer imports no runtime application dependencies
 and receives no service objects or event emitters. Composition supplies a stable
 opaque `cacheScope` shared by polling, manual refresh, and delivery wrappers for
 one application graph; distinct graphs have independent in-flight and recent
-observation caches. Delivery receives a `refreshObservation` callback from
-composition wiring and awaits it before claiming events, then rechecks the
-recipient binding. Recipient readiness belongs to delivery.
+observation caches. The scope is keyed by the application's services object; the
+PR pipeline has no process-default services, so polling, refresh, delivery,
+monitoring changes and issue-start recipient binding all receive that object
+explicitly. Delivery receives a `refreshObservation` callback from composition
+wiring and awaits it before claiming events, then rechecks the recipient
+binding. Recipient readiness belongs to delivery.
 
 `prFactPayloadSchema` validates GitHub-derived facts; the transition reducer
 accepts and emits only those facts. `prMonitoringControlPayloadSchema` validates

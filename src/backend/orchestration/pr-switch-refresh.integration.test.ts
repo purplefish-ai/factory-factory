@@ -9,11 +9,9 @@ import {
 } from '@/backend/testing/integration-db';
 import { redObservation } from '@/shared/pr-monitoring.test-helpers';
 import { createPRFlowIntegrationDatabase } from './pr-event-flow.test-helpers';
-import {
-  createPRObservationPorts,
-  defaultPRMonitoringServices,
-} from './pr-monitoring-dependencies';
+import { createPRObservationPorts } from './pr-monitoring-dependencies';
 import { observeMonitoredPR } from './pr-observation.orchestrator';
+import { createPRMonitoringTestServices } from './testing/pr-monitoring-services.test-support';
 
 let db: IntegrationDatabase;
 beforeAll(async () => {
@@ -39,7 +37,7 @@ it('reuses a just-accepted PR-switch observation, then fetches again after coold
       prs: { create: { id: target.prId, url: redObservation.url } },
     },
   });
-  const ports = createPRObservationPorts({ ...defaultPRMonitoringServices });
+  const ports = createPRObservationPorts(createPRMonitoringTestServices());
   const fetchObservation = vi.fn().mockResolvedValue(redObservation);
   ports.fetchObservation = fetchObservation;
   const wake = vi.fn().mockResolvedValue(undefined);

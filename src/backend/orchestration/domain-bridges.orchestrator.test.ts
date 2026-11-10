@@ -168,12 +168,14 @@ import {
 } from '@/backend/services/workspace';
 import * as backgroundDispatch from './background-action-dispatch.orchestrator';
 import { type BridgeServices, configureDomainBridges } from './domain-bridges.orchestrator';
-import { defaultPRMonitoringServices } from './pr-monitoring-dependencies';
 import { reconciliationService } from './reconciliation.service';
+import { createPRMonitoringTestServices } from './testing/pr-monitoring-services.test-support';
 import {
   initializeWorkspaceWorktree,
   recoverStaleProvisioningWorkspace,
 } from './workspace-init.orchestrator';
+
+const prServices = createPRMonitoringTestServices();
 
 function getBridge<T>(mockFn: (arg: T) => void): T {
   return vi.mocked(mockFn).mock.calls[0]![0];
@@ -184,7 +186,7 @@ function createBridgeServices(
   createWorkspace: WorkspaceLaunchPorts['createWorkspace'] = mockWorkspaceCreationService.create
 ): BridgeServices {
   const services: BridgeServices = {
-    ...defaultPRMonitoringServices,
+    ...prServices,
     chatEventForwarderService,
     sessionDispatchService,
     createLogger,
@@ -724,9 +726,7 @@ describe('configureDomainBridges', () => {
 
       bridge.workspace.markSessionIdle('ws1', 's1', 12);
       expect(workspaceActivityService.markSessionIdle).toHaveBeenCalledWith('ws1', 's1', 12);
-      expect(defaultPRMonitoringServices.workspacePRMonitoringService.get).toHaveBeenCalledWith(
-        'ws1'
-      );
+      expect(prServices.workspacePRMonitoringService.get).toHaveBeenCalledWith('ws1');
     });
 
     it('chatEventForwarder workspace bridge delegates on', () => {
@@ -760,9 +760,7 @@ describe('configureDomainBridges', () => {
 
       bridge.workspace.markSessionIdle('ws1', 's1', 12);
       expect(workspaceActivityService.markSessionIdle).toHaveBeenCalledWith('ws1', 's1', 12);
-      expect(defaultPRMonitoringServices.workspacePRMonitoringService.get).toHaveBeenCalledWith(
-        'ws1'
-      );
+      expect(prServices.workspacePRMonitoringService.get).toHaveBeenCalledWith('ws1');
     });
 
     it('session lifecycle message queue bridge delegates pending dispatch to the dispatcher', async () => {
@@ -817,17 +815,17 @@ describe('configureDomainBridges', () => {
 
 it('wires PR monitoring through the injected graph rather than global instances', async () => {
   const monitoring = {
-    ...defaultPRMonitoringServices.workspacePRMonitoringService,
+    ...prServices.workspacePRMonitoringService,
     listLegacyRetirementCandidates: vi.fn(async () => []),
     get: vi.fn(async () => null),
   };
   const observer = { ...prObservationService, configure: vi.fn() };
   const background = {
-    ...defaultPRMonitoringServices.sessionBackgroundDeliveryService,
+    ...prServices.sessionBackgroundDeliveryService,
     configure: vi.fn(),
   };
   const settings = {
-    ...defaultPRMonitoringServices.userSettingsService,
+    ...prServices.userSettingsService,
     get: vi.fn(async () => ({ ratchetReviewTriggerMode: 'all' })),
   };
   configureDomainBridges(

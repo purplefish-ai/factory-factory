@@ -1,10 +1,9 @@
-import { defaultPRDeliveryPorts } from './pr-delivery-dependencies';
 import { isCurrentPRRecipient } from './pr-delivery-recipient';
 import type { PRDeliveryRecoveryPorts } from './pr-monitoring-ports';
 export async function recoverPRDeliveries(
   sessionId: string,
-  workspaceId?: string,
-  services: PRDeliveryRecoveryPorts = defaultPRDeliveryPorts
+  workspaceId: string | undefined,
+  services: PRDeliveryRecoveryPorts
 ) {
   const { sessionDataService, workspacePRMonitoringService, findPRDeliveryReceipt } = services;
   const session = await sessionDataService.findAgentSessionById(sessionId);

@@ -1,14 +1,9 @@
 import { z } from 'zod';
 import { createLogger } from '@/backend/services/logger.service';
-import {
-  defaultPRMonitoringServices,
-  type PRMonitoringServices,
-} from './pr-monitoring-dependencies';
+import type { PRMonitoringServices } from './pr-monitoring-dependencies';
 
 const logger = createLogger('pr-monitoring-cutover');
-export async function retireLegacyRatchetSessions(
-  services: PRMonitoringServices = defaultPRMonitoringServices
-): Promise<{
+export async function retireLegacyRatchetSessions(services: PRMonitoringServices): Promise<{
   retired: number;
   blockedWorkspaceIds: string[];
 }> {

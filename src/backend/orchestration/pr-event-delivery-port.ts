@@ -2,7 +2,6 @@ import { createLogger } from '@/backend/services/logger.service';
 import { RATCHET_DISPATCH_CHANGED } from '@/backend/services/ratchet';
 import type { PRBackgroundDeliveryPort, PRDeliveryFailureReason } from '@/backend/services/session';
 import type { ClaimedPRDelivery } from '@/shared/pr-monitoring';
-import { defaultPRDeliveryPorts } from './pr-delivery-dependencies';
 import { isCurrentPRRecipient } from './pr-delivery-recipient';
 import { recoverPRDeliveries } from './pr-delivery-recovery';
 import {
@@ -117,7 +116,6 @@ export function createPRBackgroundDeliveryPort(
     },
   };
 }
-export const prBackgroundDeliveryPort = createPRBackgroundDeliveryPort(defaultPRDeliveryPorts);
 
 async function invalidateRecipient(
   config: Awaited<ReturnType<PRDeliveryPorts['workspacePRMonitoringService']['get']>>,

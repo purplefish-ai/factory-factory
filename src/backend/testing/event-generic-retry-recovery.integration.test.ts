@@ -691,10 +691,18 @@ it.each([
       throw new Error('Missing workspace');
     }
     const guard = await captureWorkspaceRetryGuard(workspace);
-    const { prBackgroundDeliveryPort } = await vi.importActual<
+    const { createPRBackgroundDeliveryPort } = await vi.importActual<
       typeof import('@/backend/orchestration/pr-event-delivery-port')
     >('@/backend/orchestration/pr-event-delivery-port');
-    h.session.sessionBackgroundDeliveryService.configure(prBackgroundDeliveryPort);
+    const { createPRDeliveryPorts } = await vi.importActual<
+      typeof import('@/backend/orchestration/pr-delivery-dependencies')
+    >('@/backend/orchestration/pr-delivery-dependencies');
+    const { createPRMonitoringTestServices } = await vi.importActual<
+      typeof import('@/backend/orchestration/testing/pr-monitoring-services.test-support')
+    >('@/backend/orchestration/testing/pr-monitoring-services.test-support');
+    h.session.sessionBackgroundDeliveryService.configure(
+      createPRBackgroundDeliveryPort(createPRDeliveryPorts(createPRMonitoringTestServices()))
+    );
     const held = boundary();
     const get = h.workspace.workspacePRMonitoringService.get.bind(
       h.workspace.workspacePRMonitoringService

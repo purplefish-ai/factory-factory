@@ -25,16 +25,19 @@ import { redObservation } from '@/shared/pr-monitoring.test-helpers';
 import { exportDataSchema } from '@/shared/schemas/export-data.schema';
 import type { PrismaClient } from '@prisma-gen/client';
 import { dataBackupService } from './data-backup.service';
-import { defaultPRDeliveryPorts } from './pr-delivery-dependencies';
+import { createPRDeliveryPorts } from './pr-delivery-dependencies';
 import { recoverPRDeliveries } from './pr-delivery-recovery';
 import { preparePRDelivery, wakePRDelivery } from './pr-event-delivery.orchestrator';
 import type { PRDeliveryPorts } from './pr-monitoring-ports';
 import { reconciliationService } from './reconciliation.service';
+import { createPRMonitoringTestServices } from './testing/pr-monitoring-services.test-support';
 import {
   recoverStaleArchivingWorkspaces,
   type ArchiveWorkspaceDependencies,
 } from './workspace-archive.orchestrator';
 import * as workspaceChildren from './workspace-children.orchestrator';
+
+const baseDeliveryPorts = createPRDeliveryPorts(createPRMonitoringTestServices());
 
 const database = vi.hoisted(() => ({
   prisma: undefined as PrismaClient | undefined,
@@ -365,24 +368,22 @@ it.each([
     const providerSend = vi.fn();
     const queued = new Map<string, PRDeliveryRequest>();
     const drains: Promise<void>[] = [];
-    const findReceipt = vi.fn<typeof defaultPRDeliveryPorts.findPRDeliveryReceipt>(
-      async () => 'absent'
-    );
+    const findReceipt = vi.fn<typeof baseDeliveryPorts.findPRDeliveryReceipt>(async () => 'absent');
     const ports: PRDeliveryPorts = {
-      ...defaultPRDeliveryPorts,
+      ...baseDeliveryPorts,
       sessionDataService,
       workspacePRMonitoringService,
       acpRuntimeManager: {
-        ...defaultPRDeliveryPorts.acpRuntimeManager,
+        ...baseDeliveryPorts.acpRuntimeManager,
         isSessionPromptInFlight: () => false,
       },
       sessionBackgroundDeliveryService: {
-        ...defaultPRDeliveryPorts.sessionBackgroundDeliveryService,
+        ...baseDeliveryPorts.sessionBackgroundDeliveryService,
         isDeliveryActive: () => false,
       },
       sessionDomainService: { getPendingInteractiveRequest: () => null },
       backgroundDispatch: {
-        ...defaultPRDeliveryPorts.backgroundDispatch,
+        ...baseDeliveryPorts.backgroundDispatch,
         enqueue: (sessionId, request) => {
           queued.set(sessionId, request);
           return { queued: true };

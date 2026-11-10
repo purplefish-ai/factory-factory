@@ -25,50 +25,6 @@ const mocks = vi.hoisted(() => ({
   dedicated: vi.fn(),
   ensureDedicated: vi.fn(),
 }));
-vi.mock('@/backend/services/workspace', () => ({
-  workspacePRMonitoringService: {
-    get: mocks.get,
-    listPending: mocks.pending,
-    claimDelivery: mocks.claim,
-    recoverClaim: mocks.recover,
-    pauseWorkspace: mocks.pause,
-    pause: mocks.pause,
-    resume: mocks.resume,
-    cancelRecoveredDelivery: mocks.cancel,
-    settleDelivery: mocks.settle,
-  },
-  workspacePrSnapshotService: {
-    find: vi.fn(async () => ({ id: 'p' })),
-    list: vi.fn(async () => [{ id: 'p' }]),
-  },
-}));
-vi.mock('@/backend/services/ratchet', () => ({
-  ratchetService: { emit: mocks.emit },
-  RATCHET_DISPATCH_CHANGED: 'ratchet_dispatch_changed',
-}));
-vi.mock('@/backend/services/session', () => ({
-  acpRuntimeManager: {
-    isSessionPromptInFlight: mocks.busy,
-    isSessionWorking: () => true,
-  },
-  sessionDataService: {
-    findAgentSessionById: mocks.session,
-    findPRDedicatedSession: mocks.dedicated,
-  },
-  sessionDomainService: { getPendingInteractiveRequest: mocks.interaction },
-  sessionLifecycleService: {},
-  sessionDispatchService: { tryDispatchNextMessage: mocks.dispatch },
-  sessionBackgroundDeliveryService: {
-    invalidate: mocks.invalidate,
-    enqueue: mocks.enqueue,
-    isDeliveryActive: mocks.active,
-  },
-  findPRDeliveryReceipt: mocks.receipt,
-}));
-vi.mock('@/backend/services/settings', () => ({
-  userSettingsService: { get: vi.fn(async () => ({ ratchetReplyToPrComments: true })) },
-}));
-
 vi.mock('./pr-delivery-readiness', () => ({ recipientCanDispatch: mocks.otherReady }));
 vi.mock('./pr-observation.orchestrator', () => ({
   observeMonitoredPR: mocks.observe,
@@ -77,8 +33,49 @@ vi.mock('./pr-observation.orchestrator', () => ({
 vi.mock('./pr-dedicated-session.orchestrator', () => ({
   ensureDedicatedPRRecipient: mocks.ensureDedicated,
 }));
-import { defaultPRDeliveryPorts } from './pr-delivery-dependencies';
+import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
+import { createPRDeliveryPorts } from './pr-delivery-dependencies';
 import { preparePRDelivery, wakePRDelivery } from './pr-event-delivery.orchestrator';
+import type { PRMonitoringServices } from './pr-monitoring-dependencies';
+
+// One explicit application graph; delivery receives every capability as a port.
+const ports = createPRDeliveryPorts(
+  unsafeCoerce<PRMonitoringServices>({
+    prObservationService: {},
+    prSnapshotService: {},
+    ratchetService: { emit: mocks.emit },
+    acpRuntimeManager: {
+      isSessionPromptInFlight: mocks.busy,
+      isSessionWorking: () => true,
+    },
+    sessionDispatchService: { tryDispatchNextMessage: mocks.dispatch },
+    findPRDeliveryReceipt: mocks.receipt,
+    sessionBackgroundDeliveryService: {
+      invalidate: mocks.invalidate,
+      enqueue: mocks.enqueue,
+      isDeliveryActive: mocks.active,
+    },
+    sessionDataService: {
+      findAgentSessionById: mocks.session,
+      findPRDedicatedSession: mocks.dedicated,
+    },
+    sessionDomainService: { getPendingInteractiveRequest: mocks.interaction },
+    sessionLifecycleService: {},
+    userSettingsService: { get: vi.fn(async () => ({ ratchetReplyToPrComments: true })) },
+    workspacePRMonitoringService: {
+      get: mocks.get,
+      listPending: mocks.pending,
+      claimDelivery: mocks.claim,
+      recoverClaim: mocks.recover,
+      pauseWorkspace: mocks.pause,
+      pause: mocks.pause,
+      resume: mocks.resume,
+      cancelRecoveredDelivery: mocks.cancel,
+      settleDelivery: mocks.settle,
+    },
+    workspacePrSnapshotService: { find: vi.fn(), list: vi.fn() },
+  })
+);
 
 function fact(prId: string, id = `event-${prId}`) {
   return {
@@ -130,10 +127,10 @@ beforeEach(() => {
     bindingRevision: 1,
     attempt: 1,
   }));
-  vi.mocked(defaultPRDeliveryPorts.workspacePrSnapshotService.find).mockResolvedValue({
+  vi.mocked(ports.workspacePrSnapshotService.find).mockResolvedValue({
     id: 'p',
   } as never);
-  vi.mocked(defaultPRDeliveryPorts.workspacePrSnapshotService.list).mockResolvedValue([
+  vi.mocked(ports.workspacePrSnapshotService.list).mockResolvedValue([
     { id: 'p' },
     { id: 'q' },
     { id: 'unrelated-idle' },
@@ -152,14 +149,14 @@ it('dispatches the resolved PR batch through the injected background capabilitie
     },
     logger: { warn: vi.fn() },
   };
-  await wakePRDelivery('w', { ...defaultPRDeliveryPorts, backgroundDispatch });
+  await wakePRDelivery('w', { ...ports, backgroundDispatch });
   expect(operations).toEqual(['enqueue:main:p', 'enqueue:main:q', 'wake:main']);
   expect(mocks.enqueue).not.toHaveBeenCalled();
   expect(mocks.dispatch).not.toHaveBeenCalled();
 });
 it('refreshes each pending candidate PR once and skips unrelated attached PRs', async () => {
   mocks.pending.mockResolvedValue([fact('p'), fact('p', 'more-p'), fact('q')]);
-  expect(await preparePRDelivery({ sessionId: 'main', request })).toMatchObject({
+  expect(await preparePRDelivery({ sessionId: 'main', request }, ports)).toMatchObject({
     status: 'ready',
     delivery: { eventIds: ['event-p', 'more-p', 'event-q'] },
   });
@@ -172,7 +169,7 @@ it('leaves a failed candidate pending while preparing a healthy sibling', async 
     }
     return true;
   });
-  expect(await preparePRDelivery({ sessionId: 'main', request })).toMatchObject({
+  expect(await preparePRDelivery({ sessionId: 'main', request }, ports)).toMatchObject({
     status: 'ready',
     delivery: { eventIds: ['event-q'] },
   });
@@ -181,7 +178,7 @@ it('leaves a failed candidate pending while preparing a healthy sibling', async 
 it('bounds refresh concurrency while allowing independent candidates to start together', async () => {
   const ids = ['p', 'q', 'r', 's', 't'];
   mocks.pending.mockResolvedValue(ids.map((id) => fact(id)));
-  vi.mocked(defaultPRDeliveryPorts.workspacePrSnapshotService.list).mockResolvedValue(
+  vi.mocked(ports.workspacePrSnapshotService.list).mockResolvedValue(
     ids.map((id) => ({ id })) as never
   );
   let release!: () => void;
@@ -197,7 +194,7 @@ it('bounds refresh concurrency while allowing independent candidates to start to
     active--;
     return true;
   });
-  const preparation = preparePRDelivery({ sessionId: 'main', request });
+  const preparation = preparePRDelivery({ sessionId: 'main', request }, ports);
   try {
     await vi.waitFor(() => expect(mocks.observe).toHaveBeenCalledTimes(3), { timeout: 100 });
   } finally {
@@ -218,7 +215,7 @@ it('reuses frozen text and every original event without new GitHub refreshes', a
   }));
   mocks.pending.mockResolvedValue([...frozen, fact('newer')]);
   mocks.observe.mockRejectedValue(new Error('GitHub is offline'));
-  expect(await preparePRDelivery({ sessionId: 'main', request })).toMatchObject({
+  expect(await preparePRDelivery({ sessionId: 'main', request }, ports)).toMatchObject({
     status: 'ready',
     delivery: {
       deliveryId: 'frozen',
@@ -242,14 +239,14 @@ it('splits valid MAIN identity volume and claims exactly represented facts over 
       },
     };
   });
-  vi.mocked(defaultPRDeliveryPorts.workspacePrSnapshotService.list).mockResolvedValue(
+  vi.mocked(ports.workspacePrSnapshotService.list).mockResolvedValue(
     pending.map((event) => ({ id: event.prId })) as never
   );
   mocks.pending.mockImplementation(async () => pending);
   const delivered = new Set<string>();
   let batches = 0;
   while (pending.length && batches < 10) {
-    const result = await preparePRDelivery({ sessionId: 'main', request });
+    const result = await preparePRDelivery({ sessionId: 'main', request }, ports);
     expect(result.status).toBe('ready');
     if (result.status !== 'ready') {
       throw new Error('Expected bounded delivery');
@@ -279,6 +276,8 @@ it('discards an obsolete placeholder when refresh supersedes every pending fact'
     pending = [];
     return Promise.resolve(true);
   });
-  expect(await preparePRDelivery({ sessionId: 'main', request })).toEqual({ status: 'discard' });
+  expect(await preparePRDelivery({ sessionId: 'main', request }, ports)).toEqual({
+    status: 'discard',
+  });
   expect(mocks.claim).not.toHaveBeenCalled();
 });

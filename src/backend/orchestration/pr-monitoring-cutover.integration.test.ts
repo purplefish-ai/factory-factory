@@ -41,6 +41,7 @@ vi.mock('@/backend/services/session', () => ({
 }));
 
 import { retireLegacyRatchetSessions } from './pr-monitoring-cutover.orchestrator';
+import { createPRMonitoringTestServices } from './testing/pr-monitoring-services.test-support';
 
 function closedSession(workspaceId: string, sessionId: string) {
   return {
@@ -115,7 +116,7 @@ afterAll(async () => {
 });
 
 it('retires legacy fixers without visiting rows that cannot need retirement', async () => {
-  const result = await retireLegacyRatchetSessions();
+  const result = await retireLegacyRatchetSessions(createPRMonitoringTestServices());
 
   expect(result.retired).toBe(1);
   expect([...result.blockedWorkspaceIds].sort()).toEqual(['corrupt', 'missing']);
@@ -156,7 +157,7 @@ it('retires legacy fixers without visiting rows that cannot need retirement', as
 
 it('converges so a second startup only revisits retained or still-blocked rows', async () => {
   state.scanned = [];
-  const result = await retireLegacyRatchetSessions();
+  const result = await retireLegacyRatchetSessions(createPRMonitoringTestServices());
 
   expect(result.retired).toBe(0);
   expect([...result.blockedWorkspaceIds].sort()).toEqual(['corrupt', 'missing']);
