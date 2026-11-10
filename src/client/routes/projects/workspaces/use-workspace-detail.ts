@@ -173,23 +173,26 @@ export function useSessionManagement({
 
   // The hook does not rely on its caller remounting per workspace.
   const activeWorkspaceRef = useLatestRef(workspaceId);
-  const { createSession, deleteSession, createChat, createQuickActionAsync } =
-    useSessionCollectionCommands({
-      workspaceId,
-      sessions,
-      onCreated: (session, originatingWorkspaceId, kind) => {
-        if (activeWorkspaceRef.current !== originatingWorkspaceId) {
-          return;
-        }
-        setSelectedDbSessionId(session.id);
-        if (kind === 'chat') {
-          setTimeout(() => inputRef.current?.focus(), 0);
-        }
-      },
-    });
-  // The commands close over per-render mutation results; keep their identity
-  // stable so memoized tab bars and headers do not re-render on every chat event.
-  const handleNewChat = useStableCallback(createChat);
+  const {
+    createSession,
+    deleteSession,
+    createChat: handleNewChat,
+    createQuickActionAsync,
+  } = useSessionCollectionCommands({
+    workspaceId,
+    sessions,
+    onCreated: (session, originatingWorkspaceId, kind) => {
+      if (activeWorkspaceRef.current !== originatingWorkspaceId) {
+        return;
+      }
+      setSelectedDbSessionId(session.id);
+      if (kind === 'chat') {
+        setTimeout(() => inputRef.current?.focus(), 0);
+      }
+    },
+  });
+  // The command closes over per-render mutation results. The memoized composer
+  // and right panel receive it, so keep its identity stable.
   const handleQuickAction = useStableCallback(createQuickActionAsync);
 
   const archiveLifetime = useRef<symbol | null>(null);

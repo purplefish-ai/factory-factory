@@ -101,6 +101,19 @@ export function reduceSessionSlice(state: ChatState, action: ChatAction): ChatSt
             updatedAt: new Date().toISOString(),
           })
         : state;
+    case 'SESSION_HYDRATED':
+      return state.hydratedSessionId === action.payload.sessionId &&
+        state.controlsHydratedSessionId === action.payload.sessionId
+        ? state
+        : {
+            ...state,
+            hydratedSessionId: action.payload.sessionId,
+            controlsHydratedSessionId: action.payload.sessionId,
+          };
+    case 'CONNECTION_CHANGED':
+      return state.controlsHydratedSessionId === null
+        ? state
+        : { ...state, controlsHydratedSessionId: null };
     case 'STOP_REQUESTED':
       return withRuntime(state, {
         ...state.sessionRuntime,

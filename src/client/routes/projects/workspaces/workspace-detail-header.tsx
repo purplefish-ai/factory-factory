@@ -1,4 +1,3 @@
-import { memo } from 'react';
 import {
   HeaderLeftExtraSlot,
   HeaderLeftStartSlot,
@@ -40,7 +39,7 @@ import {
  * repeats them when they are hidden. The IDE action stays in the menu at every
  * width.
  */
-export const WorkspaceDetailHeaderSlot = memo(function WorkspaceDetailHeaderSlot({
+export function WorkspaceDetailHeaderSlot({
   workspace,
   workspaceId,
   availableIdes,
@@ -178,4 +177,4 @@ export const WorkspaceDetailHeaderSlot = memo(function WorkspaceDetailHeaderSlot
       </HeaderRightEndSlot>
     </>
   );
-});
+}

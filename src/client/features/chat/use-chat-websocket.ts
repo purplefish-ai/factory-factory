@@ -1,7 +1,8 @@
 import { useMutationState } from '@tanstack/react-query';
 import { getMutationKey } from '@trpc/react-query';
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useInsertionEffect, useRef } from 'react';
 import { toast } from 'sonner';
+import { useLatestRef } from '@/client/hooks/use-stable-callback';
 import { trpc } from '@/client/lib/trpc';
 import { useWebSocketTransport, type WebSocketSend } from '@/hooks/use-websocket-transport';
 import type {
@@ -66,9 +67,10 @@ export interface UseChatWebSocketReturn {
   sessionRuntime: SessionRuntimeState;
   /**
    * The dbSessionId the current reducer state was hydrated for, or null
-   * before the first hydration. Stays on the previous session during a
-   * session switch until the new session's hydration batch arrives, so
-   * consumers can tell whether sessionRuntime describes dbSessionId yet.
+   * before the first hydration. On the render that selects another session it
+   * still names the previous one; the switch then clears it until the new
+   * session's hydration arrives, so consumers can tell whether sessionRuntime
+   * describes dbSessionId yet.
    */
   runtimeSessionId: string | null;
   /** Current transport has accepted its own hydration, distinct from retained browsing state. */
@@ -170,9 +172,8 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
   // - useWebSocketTransport provides `send`, but needs `handleMessage` from chat state
   // Solution: Create a ref that starts as a no-op, pass a callback that uses the ref
   // to useChatState, then wire up the ref to transport.send after transport is created.
-  // This works because:
-  // 1. sendRef.current is updated synchronously after useWebSocketTransport returns
-  // 2. The callback wrapper ((msg) => sendRef.current(msg)) always uses the latest ref value
+  // The ref is wired in an insertion effect, before any layout or passive effect
+  // (including the transport's connect) can send.
   const replayAssembler = useRef(new SessionReplayAssembler(reportInvalidReplayFrame));
   const sendRef = useRef<WebSocketSend>(() => false);
   const currentLoadRequestIdRef = useRef<string | null>(null);
@@ -180,22 +181,6 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
   const currentLoadGenerationRef = useRef(0);
   const loadTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const cancelConnectLoadingRef = useRef<(() => void) | null>(null);
-  const controlHydratedSessionIdRef = useRef<string | null>(null);
-  const hydratedSessionIdRef = useRef<string | null>(null);
-
-  // Drop the hydration marker when the selected session moves away from the
-  // hydrated one. Without this, switching A -> B -> back to A before B
-  // hydrates would leave the marker claiming A is hydrated while the reducer
-  // state was reset by the switches, and consumers of runtimeSessionId would
-  // treat the reset runtime as authoritative for A. Same-session reconnects
-  // keep the marker so hydrated state isn't spuriously reported as loading.
-  useEffect(() => {
-    replayAssembler.current.reset();
-    if (hydratedSessionIdRef.current !== null && hydratedSessionIdRef.current !== dbSessionId) {
-      hydratedSessionIdRef.current = null;
-      controlHydratedSessionIdRef.current = null;
-    }
-  }, [dbSessionId]);
 
   const clearLoadTimeout = useCallback(() => {
     if (loadTimeoutRef.current) {
@@ -214,6 +199,12 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
     send: useCallback<WebSocketSend>((message, options) => sendRef.current(message, options), []),
     connected: false, // Transport lifecycle is forwarded through handleDisconnected below.
   });
+  // The hydration markers are reducer state: SESSION_HYDRATED records one, and a
+  // session switch (SESSION_SWITCH_START) clears both, so switching A -> B -> A
+  // before B hydrates cannot treat the reset runtime as A's. Same-session
+  // reconnects keep hydratedSessionId so hydrated state is not reported as loading.
+  // Connect handlers read it through this ref, which admission also updates.
+  const hydratedSessionIdRef = useLatestRef(chat.hydratedSessionId);
 
   const scheduleLoadRetry = useCallback(
     (loadGeneration: number, loadRequestId: string, retryAttempt = 1) => {
@@ -285,7 +276,7 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
       }
       if (dbSessionId) {
         hydratedSessionIdRef.current = dbSessionId;
-        controlHydratedSessionIdRef.current = dbSessionId;
+        chat.dispatch({ type: 'SESSION_HYDRATED', payload: { sessionId: dbSessionId } });
       }
       if (decision === 'match') {
         currentLoadRequestIdRef.current = null;
@@ -297,7 +288,7 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
       }
       return true;
     },
-    [clearConnectLoadingTimeout, clearLoadTimeout, dbSessionId]
+    [chat.dispatch, clearConnectLoadingTimeout, clearLoadTimeout, dbSessionId]
   );
 
   // Handle incoming messages: validate each reassembled frame once, then delegate
@@ -312,10 +303,12 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
     [admitHydrationBatch, chat.handleMessage, handleLoadError]
   );
 
-  // Handle connection established - request session data and available sessions
+  // Handle connection established - request session data and available sessions.
+  // The transport drops frames from a replaced socket, so resetting a partial
+  // replay here also keeps one from carrying over to another session.
   const handleConnected = useCallback(() => {
     replayAssembler.current.reset();
-    controlHydratedSessionIdRef.current = null;
+    chat.dispatch({ type: 'CONNECTION_CHANGED' });
     const hasHydratedSession = dbSessionId !== null && hydratedSessionIdRef.current === dbSessionId;
     clearConnectLoadingTimeout();
     cancelConnectLoadingRef.current = scheduleConnectLoadingStart({
@@ -336,7 +329,7 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
   // Handle disconnection - clear loading state to avoid stuck spinner
   const handleDisconnected = useCallback(() => {
     replayAssembler.current.reset();
-    controlHydratedSessionIdRef.current = null;
+    chat.dispatch({ type: 'CONNECTION_CHANGED' });
     chat.handleDisconnected();
     currentLoadRequestIdRef.current = null;
     exhaustedLoadRequestIdRef.current = null;
@@ -367,7 +360,9 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
   });
 
   // Wire up the send function to the transport
-  sendRef.current = transport.send;
+  useInsertionEffect(() => {
+    sendRef.current = transport.send;
+  }, [transport.send]);
 
   const { mutate: restartSessionMutate } = trpc.session.restartSession.useMutation({
     onError: (error) => toast.error(`Couldn't restart session. ${error.message}`),
@@ -386,13 +381,12 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
     restartSessionMutate({ id: dbSessionId });
   }, [dbSessionId, restartSessionMutate]);
 
+  const controlsHydrated =
+    transport.connected && dbSessionId !== null && chat.controlsHydratedSessionId === dbSessionId;
   const utils = trpc.useUtils();
   const transcriptHistory = useTranscriptHistory({
     sessionId: dbSessionId,
-    enabled:
-      transport.connected &&
-      controlHydratedSessionIdRef.current === dbSessionId &&
-      chat.sessionStatus.phase !== 'loading',
+    enabled: controlsHydrated && chat.sessionStatus.phase !== 'loading',
     messages: chat.messages,
     history: chat.transcriptHistory,
     dispatch: chat.dispatch,
@@ -408,11 +402,8 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
     transcriptHistory,
     transcriptPageBoundaries: chat.transcriptPageBoundaries,
     connected: transport.connected,
-    runtimeSessionId: hydratedSessionIdRef.current,
-    controlsHydrated:
-      transport.connected &&
-      controlHydratedSessionIdRef.current === dbSessionId &&
-      dbSessionId !== null,
+    runtimeSessionId: chat.hydratedSessionId,
+    controlsHydrated,
     sessionStatus: chat.sessionStatus,
     processStatus: chat.processStatus,
     sessionRuntime: chat.sessionRuntime,

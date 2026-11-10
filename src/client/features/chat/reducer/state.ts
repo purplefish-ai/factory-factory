@@ -90,6 +90,8 @@ function createSessionSwitchResetState(): Pick<
   | 'countedResultOrders'
   | 'processStatus'
   | 'sessionRuntime'
+  | 'hydratedSessionId'
+  | 'controlsHydratedSessionId'
   | 'chatCapabilities'
   | 'chatCapabilitiesLoaded'
   | 'modelSelectionSource'
@@ -108,6 +110,8 @@ function createSessionSwitchResetState(): Pick<
       ...createInitialSessionRuntimeState(),
       phase: 'loading', // Override to 'loading' for session switch
     },
+    hydratedSessionId: null,
+    controlsHydratedSessionId: null,
     slashCommands: [], // Clear for new session - populated on session load from cache/disk scan
     slashCommandsLoaded: false,
     chatCapabilities: EMPTY_CHAT_BAR_CAPABILITIES,
@@ -128,6 +132,8 @@ export function createInitialChatState(overrides?: Partial<ChatState>): ChatStat
     sessionStatus: { phase: 'loading' },
     processStatus: { state: 'unknown' },
     sessionRuntime: createInitialSessionRuntimeState(),
+    hydratedSessionId: null,
+    controlsHydratedSessionId: null,
     gitBranch: null,
     pendingRequest: { type: 'none' },
     chatSettings: DEFAULT_CHAT_SETTINGS,

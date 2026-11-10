@@ -2,7 +2,8 @@
  * Chat session management hook.
  *
  * This hook handles:
- * - Session switching detection
+ * - Resetting the reducer on a session switch, which also drops its hydration
+ *   markers (the composer switches while rendering; see use-chat-persistence)
  * - Settings loading on session change
  * - Tool input accumulator cleanup
  * - Loading state management
@@ -15,7 +16,7 @@
 import { useEffect, useRef } from 'react';
 import { DEFAULT_CHAT_SETTINGS } from '@/lib/chat-protocol';
 import { createDebugLogger, DEBUG_CHAT_WS } from '@/lib/debug';
-import { loadDraft, loadSettingsWithDefaults } from './chat-persistence';
+import { loadSettingsWithDefaults } from './chat-persistence';
 import type { ChatAction } from './reducer';
 import { clearToolInputAccumulator, type ToolInputAccumulatorState } from './streaming-utils';
 
@@ -33,19 +34,13 @@ export interface UseChatSessionOptions {
   sessionRuntimePhase: string;
 }
 
-export interface UseChatSessionReturn {
-  /** Loaded draft for the session */
-  loadedDraft: string;
-}
-
 /**
  * Hook for managing chat session switching and settings loading.
  */
-export function useChatSession(options: UseChatSessionOptions): UseChatSessionReturn {
+export function useChatSession(options: UseChatSessionOptions): void {
   const { dbSessionId, dispatch, toolInputAccumulatorRef, sessionRuntimePhase } = options;
 
   const prevDbSessionIdRef = useRef<string | null | undefined>(undefined);
-  const loadedDraftRef = useRef<string>('');
   const loadingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
@@ -74,7 +69,6 @@ export function useChatSession(options: UseChatSessionOptions): UseChatSessionRe
 
     // Load persisted data for the new session (queue comes from backend via session_snapshot)
     if (newDbSessionId) {
-      loadedDraftRef.current = loadDraft(newDbSessionId);
       dispatch({ type: 'SET_SETTINGS', payload: loadSettingsWithDefaults(newDbSessionId) });
 
       // Set loading state for the initial load.
@@ -91,7 +85,6 @@ export function useChatSession(options: UseChatSessionOptions): UseChatSessionRe
         loadingTimeoutRef.current = null;
       }, 10_000);
     } else {
-      loadedDraftRef.current = '';
       dispatch({ type: 'SET_SETTINGS', payload: DEFAULT_CHAT_SETTINGS });
     }
 
@@ -118,8 +111,4 @@ export function useChatSession(options: UseChatSessionOptions): UseChatSessionRe
       loadingTimeoutRef.current = null;
     }
   }, [sessionRuntimePhase]);
-
-  return {
-    loadedDraft: loadedDraftRef.current,
-  };
 }

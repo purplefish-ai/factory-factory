@@ -24,6 +24,12 @@ export type { SessionData } from './session-tab-bar';
 export { SessionTabBar } from './session-tab-bar';
 export { TodoPanel } from './todo-panel';
 // Hooks
+export {
+  ChatSessionProvider,
+  useChatSessionState,
+  useChatSessionStore,
+  useChatSessionSummary,
+} from './chat-session-provider';
 export type { UseChatWebSocketOptions, UseChatWebSocketReturn } from './use-chat-websocket';
 export { useChatWebSocket } from './use-chat-websocket';
 export { useGroupedChatMessages } from './use-grouped-chat-messages';
