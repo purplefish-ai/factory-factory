@@ -2,6 +2,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer as createNetServer, type Server as NetServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { brotliCompressSync } from 'node:zlib';
 import request from 'supertest';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { WebSocket } from 'ws';
@@ -892,6 +893,32 @@ describe('server websocket upgrade routing', () => {
     expect(response.headers['cache-control']).toBe('no-cache, no-store, must-revalidate');
     expect(response.headers.pragma).toBe('no-cache');
     expect(response.headers.expires).toBe('0');
+  });
+
+  it('serves build-time Brotli siblings for assets and the SPA fallback', async () => {
+    const frontendStaticPath = createStaticFrontendDir({ withIndex: true });
+    for (const file of ['assets/app.js', 'index.html']) {
+      writeFileSync(
+        join(frontendStaticPath, `${file}.br`),
+        brotliCompressSync(`compressed ${file}`)
+      );
+    }
+    const server = createTestServer(createTestApplication({ frontendStaticPath }));
+    const get = (path: string) =>
+      request(server.getHttpServer()).get(path).set('Accept-Encoding', 'gzip, deflate, br');
+
+    const asset = await get('/assets/app.js');
+    const fallback = await get('/workspace/abc');
+
+    expect(asset.headers['content-encoding']).toBe('br');
+    expect(asset.headers['cache-control']).toBe('public, max-age=31536000, immutable');
+    expect(asset.headers['content-type']).toBe('text/javascript; charset=utf-8');
+    expect(asset.headers.vary).toBe('Accept-Encoding');
+    expect(asset.text).toBe('compressed assets/app.js');
+    expect(fallback.headers['content-encoding']).toBe('br');
+    expect(fallback.headers['cache-control']).toBe('no-cache, no-store, must-revalidate');
+    expect(fallback.headers['content-type']).toBe('text/html; charset=utf-8');
+    expect(fallback.text).toBe('compressed index.html');
   });
 
   it('returns 503 when static fallback index.html is missing', async () => {

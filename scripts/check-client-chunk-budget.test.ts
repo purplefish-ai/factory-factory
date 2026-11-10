@@ -88,6 +88,17 @@ it('ignores dynamic imports, comments, and strings containing import text', () =
   expect(result.stdout).toContain('startup static closure: 1 JS files');
 });
 
+it('measures uncompressed chunks and ignores precompressed siblings', () => {
+  const entry = `/*${'a'.repeat(700_000)}*/`;
+  const result = check({
+    'index-entry.js': entry,
+    'index-entry.js.br': 'small',
+    'index-entry.js.gz': 'small',
+  });
+  expect(result.status).not.toBe(0);
+  expect(result.stderr).toContain('index-entry.js: 700004 bytes exceeds the 650000 byte budget');
+});
+
 it('fails closed when a static dependency is missing from the build', () => {
   const result = check({ 'index-entry.js': 'export * from "./missing.js";' });
   expect(result.status).not.toBe(0);

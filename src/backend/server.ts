@@ -13,7 +13,7 @@
  * - NODE_ENV: Environment (development/production)
  */
 
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync } from 'node:fs';
 import type { Server as HttpServer } from 'node:http';
 import { createServer as createHttpServer } from 'node:http';
 import { join } from 'node:path';
@@ -27,8 +27,12 @@ import { eventLoopMonitor } from './lib/event-loop-monitor';
 import { type CloseListeners, listenHttpServer } from './lib/http-listen';
 import {
   createCorsMiddleware,
+  createPrecompressedStatic,
   createRequestLoggerMiddleware,
+  type PrecompressedDocument,
+  readPrecompressedDocument,
   securityMiddleware,
+  sendPrecompressedHtml,
 } from './middleware';
 import { createHealthRouter } from './routers/health.router';
 import { createPortShareRouter } from './routers/port-share.router';
@@ -257,10 +261,10 @@ export function createServer(application: Application, requestedPort?: number): 
   if (frontendStaticPath && existsSync(frontendStaticPath)) {
     logger.info('Serving static files from', { path: frontendStaticPath });
     const indexHtmlPath = join(frontendStaticPath, 'index.html');
-    let indexHtml: string | null = null;
+    let indexHtml: PrecompressedDocument | null = null;
     const loadStaticIndexHtml = (message: string) => {
       try {
-        indexHtml = readFileSync(indexHtmlPath, 'utf8');
+        indexHtml = readPrecompressedDocument(indexHtmlPath);
         if (indexHtmlReloadInterval !== null) {
           clearInterval(indexHtmlReloadInterval);
           indexHtmlReloadInterval = null;
@@ -280,10 +284,11 @@ export function createServer(application: Application, requestedPort?: number): 
       indexHtmlReloadInterval.unref?.();
     }
 
-    // Serve hashed assets (JS, CSS in /assets/) with long cache - they have content hashes
+    // Serve hashed assets (JS, CSS in /assets/) with long cache - they have content hashes.
+    // Both static handlers prefer the build's .br/.gz siblings when the client accepts them.
     app.use(
       '/assets',
-      express.static(join(frontendStaticPath, 'assets'), {
+      createPrecompressedStatic(join(frontendStaticPath, 'assets'), {
         maxAge: '1y',
         immutable: true,
         etag: false, // Not needed with immutable content-hashed files
@@ -292,7 +297,7 @@ export function createServer(application: Application, requestedPort?: number): 
 
     // Serve other static files (favicon, images, etc.) with moderate cache
     app.use(
-      express.static(frontendStaticPath, {
+      createPrecompressedStatic(frontendStaticPath, {
         maxAge: '1d',
         etag: true,
         index: false, // Don't serve index.html from here - handle it separately below
@@ -333,7 +338,7 @@ export function createServer(application: Application, requestedPort?: number): 
         res.status(503).send('Service temporarily unavailable. Please refresh the page.');
         return;
       }
-      res.type('html').send(indexHtml);
+      sendPrecompressedHtml(req, res, indexHtml);
     });
   }
 
