@@ -339,6 +339,8 @@ export function proxyAuthenticatedHttpRequest(params: {
   sessionCookieName: string;
   authCookie?: string;
   localHost?: string;
+  /** Replaces the client's `Origin`, e.g. with the upstream's own origin. */
+  upstreamOrigin?: string;
 }): void {
   if (params.authCookie) {
     const existingCookieHeader = params.res.getHeader('set-cookie');
@@ -353,9 +355,22 @@ export function proxyAuthenticatedHttpRequest(params: {
     res: params.res,
     upstreamPort: params.upstreamPort,
     path: params.path,
-    headers: buildAuthenticatedProxyHeaders(params.req.headers, params.sessionCookieName),
+    headers: withUpstreamOrigin(
+      buildAuthenticatedProxyHeaders(params.req.headers, params.sessionCookieName),
+      params.upstreamOrigin
+    ),
     localHost: params.localHost,
   });
+}
+
+function withUpstreamOrigin(
+  headers: Record<string, string | string[] | undefined>,
+  upstreamOrigin: string | undefined
+): Record<string, string | string[] | undefined> {
+  if (upstreamOrigin !== undefined) {
+    headers.origin = upstreamOrigin;
+  }
+  return headers;
 }
 
 /**
@@ -438,12 +453,17 @@ export function proxyAuthenticatedWebSocketUpgrade(params: {
   sanitizedPath: string;
   sessionCookieName: string;
   localHost?: string;
+  /** Replaces the client's `Origin`, e.g. with the upstream's own origin. */
+  upstreamOrigin?: string;
 }): void {
   const localHost = params.localHost ?? DEFAULT_LOCAL_HOST;
 
   const upstreamSocket = createConnection(params.upstreamPort, localHost, () => {
     const headers: Record<string, string | string[] | undefined> = {
-      ...buildAuthenticatedProxyHeaders(params.req.headers, params.sessionCookieName),
+      ...withUpstreamOrigin(
+        buildAuthenticatedProxyHeaders(params.req.headers, params.sessionCookieName),
+        params.upstreamOrigin
+      ),
       host: `localhost:${params.upstreamPort}`,
       connection: 'Upgrade',
       upgrade: params.req.headers.upgrade,

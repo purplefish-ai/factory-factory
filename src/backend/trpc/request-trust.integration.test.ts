@@ -9,7 +9,13 @@ import { FORWARDED_CLIENT_ADDRESS_HEADERS } from '@/shared/proxy-utils';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 import { createContext, router, trustedLocalProcedure } from './trpc';
 
-function createApp(options: { trustProxyHeaders?: boolean; disableCorsChecks?: boolean } = {}) {
+function createApp(
+  options: {
+    trustProxyHeaders?: boolean;
+    disableCorsChecks?: boolean;
+    allowOwnLoopbackOrigin?: boolean;
+  } = {}
+) {
   const app = express();
   const state = { executions: 0 };
   const appContext = unsafeCoerce<AppContext>({
@@ -87,7 +93,8 @@ describe('privileged HTTP request trust', () => {
   });
 
   it('requires authentication before a private proxy can forward privileged requests', async () => {
-    const { app, state } = createApp();
+    // As `ff proxy` launches the backend: its own loopback origin is allowed.
+    const { app, state } = createApp({ allowOwnLoopbackOrigin: true });
     const upstream = createServer(app);
     await new Promise<void>((resolve) => upstream.listen(0, '127.0.0.1', resolve));
     const address = upstream.address();
@@ -99,21 +106,32 @@ describe('privileged HTTP request trust', () => {
       password: 'ABC123',
       magicToken: 'test-auth-token',
     });
+    authProxy.setTunnelUrl('https://quiet-river.trycloudflare.com');
     try {
       const proxy = request(`http://127.0.0.1:${authProxy.port}`);
       const denied = await proxy
         .post('/api/trpc/execute')
         .send({ json: null })
-        .set('cf-connecting-ip', '203.0.113.10');
+        .set('cf-connecting-ip', '203.0.113.10')
+        .set('origin', 'https://quiet-river.trycloudflare.com');
       expect(denied.type).toBe('text/html');
       expect(denied.text).toContain('password');
+      expect(state.executions).toBe(0);
+
+      // Browsers send Origin on every state-changing request; one without it is refused.
+      const withoutOrigin = await proxy
+        .post('/api/trpc/execute?token=test-auth-token')
+        .send({ json: null })
+        .set('cf-connecting-ip', '203.0.113.10');
+      expect(withoutOrigin.status).toBe(403);
       expect(state.executions).toBe(0);
 
       const allowed = await proxy
         .post('/api/trpc/execute?token=test-auth-token')
         .send({ json: null })
         .set('cf-connecting-ip', '203.0.113.10')
-        .set('x-forwarded-for', '203.0.113.10');
+        .set('x-forwarded-for', '203.0.113.10')
+        .set('origin', 'https://quiet-river.trycloudflare.com');
       expect(allowed.status).toBe(200);
       expect(state.executions).toBe(1);
     } finally {
