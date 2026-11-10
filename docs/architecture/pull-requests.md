@@ -358,11 +358,13 @@ requests.
 ### Ledger retention
 
 The `pr-event-retention` job, registered beside `pr-event-poll`, runs every 30
-minutes after its first interval. It deletes SUPERSEDED and CANCELLED facts
-older than 24 hours in batches of 100, oldest first, with at most 20 batches per
-run. Each batch is a separate short write; the delete re-checks the predicate,
-and the loop yields between batches and stops on shutdown. Superseded review
-facts copy the whole observation, so these rows hold most of the ledger's size.
+minutes after its first interval. It deletes SUPERSEDED and CANCELLED facts, and
+PENDING facts of ARCHIVED workspaces, older than 24 hours in batches of 100,
+oldest first, with at most 20 batches per run. Each batch is a separate short
+write; the delete re-checks the predicate, and the loop yields between batches
+and stops on shutdown. Superseded review facts copy the whole observation, so
+these rows hold most of the ledger's size. A `(state, createdAt)` index serves
+this cross-workspace query, so it reads only candidate rows.
 
 Only rows that no reader uses are eligible. Rows must have no `batchId`, no
 legacy receipt or frozen metadata, and a PR target. The reducer reads only
@@ -374,10 +376,14 @@ Eligible kinds are those whose deduplication key includes the PR's transition
 sequence: review feedback, CI failure, conflict, merge and close. That sequence
 persists with every accepted observation and only increases, so the reducer
 never regenerates a pruned key. `CI_RECOVERED` and legacy `MONITORING_ENABLED`
-rows are retained. ARCHIVED workspaces cannot return to READY; their terminal
-facts are pruned under the same rule, while their delivery evidence and
-unclaimed pending facts remain until workspace deletion. Logical backups simply
-omit pruned facts.
+rows are retained. ARCHIVED workspaces cannot return to READY, polling observes
+only READY workspaces, and claims require READY, so their unclaimed PENDING
+facts can never be delivered. Those facts, like their terminal facts, are pruned
+under the same rule. Their delivery evidence and members, DISPATCHING and
+DELIVERED rows, and retained kinds remain until workspace deletion. ARCHIVING
+workspaces keep their pending facts, because a failed archive rolls back to
+READY. Logical backups simply omit pruned facts; an import cancels unclaimed
+pending facts anyway.
 
 Deletion returns pages to SQLite's free list for reuse by later writes; it does
 not shrink the file. The app does not run `VACUUM` automatically: it rewrites

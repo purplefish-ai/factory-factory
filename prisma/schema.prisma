@@ -443,6 +443,8 @@ model WorkspacePREvent {
   @@unique([prId, deduplicationKey])
   @@unique([workspaceId, deduplicationKey])
   @@index([workspaceId, state, createdAt])
+  // Serves the cross-workspace pr-event-retention prune.
+  @@index([state, createdAt])
   @@index([deliveryId])
   @@index([batchId])
 }
