@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { AgentMessage, ChatMessage, WebSocketMessage } from '@/lib/chat-protocol';
+import type { AgentMessage, ChatMessage, SessionDeltaEvent } from '@/lib/chat-protocol';
 import {
   getToolUseIdFromEvent,
   isStreamEventMessage,
@@ -238,8 +238,8 @@ describe('renderer window hysteresis', () => {
 });
 
 describe('session replay lookups', () => {
-  function replayEvents(groups: number): WebSocketMessage[] {
-    return Array.from({ length: groups }, (_, group): WebSocketMessage[] => {
+  function replayEvents(groups: number): SessionDeltaEvent[] {
+    return Array.from({ length: groups }, (_, group): SessionDeltaEvent[] => {
       const base = group * 4;
       const id = `user-${group}`;
       return [
@@ -262,7 +262,7 @@ describe('session replay lookups', () => {
           messageId: `a${group}`,
           order: base + 2,
         },
-      ] as WebSocketMessage[];
+      ] as SessionDeltaEvent[];
     }).flat();
   }
 

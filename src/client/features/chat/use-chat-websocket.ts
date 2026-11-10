@@ -9,11 +9,13 @@ import type {
   MessageAttachment,
   QueuedMessage,
   TokenStats,
+  WebSocketMessage,
 } from '@/lib/chat-protocol';
 import { buildWebSocketUrl } from '@/lib/websocket-config';
 import { SessionReplayAssembler } from '@/shared/acp-protocol/protocol/replay-framing';
 import type { ChatBarCapabilities } from '@/shared/chat-capabilities';
 import type { SessionRuntimeState } from '@/shared/session-runtime';
+import { readChatFrame, reportInvalidReplayFrame } from './chat-frame-diagnostics';
 import type {
   AcpConfigOption,
   AcpPlanState,
@@ -27,7 +29,7 @@ import { useChatState } from './use-chat-state';
 import {
   evaluateHydrationBatch,
   evaluateLoadSessionRetry,
-  parseHydrationBatch,
+  getHydrationBatch,
   parseHydrationLoadError,
   scheduleConnectLoadingStart,
 } from './use-chat-websocket-hydration';
@@ -157,7 +159,7 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
   // This works because:
   // 1. sendRef.current is updated synchronously after useWebSocketTransport returns
   // 2. The callback wrapper ((msg) => sendRef.current(msg)) always uses the latest ref value
-  const replayAssembler = useRef(new SessionReplayAssembler());
+  const replayAssembler = useRef(new SessionReplayAssembler(reportInvalidReplayFrame));
   const sendRef = useRef<WebSocketSend>(() => false);
   const currentLoadRequestIdRef = useRef<string | null>(null);
   const exhaustedLoadRequestIdRef = useRef<string | null>(null);
@@ -230,7 +232,7 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
   );
 
   const handleLoadError = useCallback(
-    (data: unknown): boolean => {
+    (data: WebSocketMessage): boolean => {
       const loadError = parseHydrationLoadError(data);
       if (loadError) {
         if (loadError.loadRequestId !== currentLoadRequestIdRef.current) {
@@ -249,42 +251,51 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
     [chat.handleMessage, chat.dispatch, clearLoadTimeout, clearConnectLoadingTimeout]
   );
 
-  // Handle incoming messages - delegate to chat state
+  /** Records hydration for snapshots and replay batches; false drops a stale one. */
+  const admitHydrationBatch = useCallback(
+    (data: WebSocketMessage): boolean => {
+      const batch = getHydrationBatch(data);
+      if (!batch) {
+        return true;
+      }
+      const decision = evaluateHydrationBatch(
+        batch,
+        currentLoadRequestIdRef.current,
+        exhaustedLoadRequestIdRef.current
+      );
+      if (decision === 'drop') {
+        // A hydration response with a loadRequestId can arrive late (for example
+        // from a prior reconnect attempt). Ignore it so stale replay batches
+        // do not overwrite newer in-memory state.
+        return false;
+      }
+      if (dbSessionId) {
+        hydratedSessionIdRef.current = dbSessionId;
+        controlHydratedSessionIdRef.current = dbSessionId;
+      }
+      if (decision === 'match') {
+        currentLoadRequestIdRef.current = null;
+        exhaustedLoadRequestIdRef.current = null;
+        clearLoadTimeout();
+        clearConnectLoadingTimeout();
+      } else {
+        exhaustedLoadRequestIdRef.current = null;
+      }
+      return true;
+    },
+    [clearConnectLoadingTimeout, clearLoadTimeout, dbSessionId]
+  );
+
+  // Handle incoming messages: validate each reassembled frame once, then delegate
   const handleMessage = useCallback(
     (raw: unknown) => {
-      const data = replayAssembler.current.accept(raw);
-      if (data === null || handleLoadError(data)) {
+      const data = readChatFrame(replayAssembler.current.accept(raw));
+      if (data === null || handleLoadError(data) || !admitHydrationBatch(data)) {
         return;
-      }
-      const batch = parseHydrationBatch(data);
-      if (batch) {
-        const decision = evaluateHydrationBatch(
-          batch,
-          currentLoadRequestIdRef.current,
-          exhaustedLoadRequestIdRef.current
-        );
-        if (decision === 'drop') {
-          // A hydration response with a loadRequestId can arrive late (for example
-          // from a prior reconnect attempt). Ignore it so stale replay batches
-          // do not overwrite newer in-memory state.
-          return;
-        }
-        if (dbSessionId) {
-          hydratedSessionIdRef.current = dbSessionId;
-          controlHydratedSessionIdRef.current = dbSessionId;
-        }
-        if (decision === 'match') {
-          currentLoadRequestIdRef.current = null;
-          exhaustedLoadRequestIdRef.current = null;
-          clearLoadTimeout();
-          clearConnectLoadingTimeout();
-        } else {
-          exhaustedLoadRequestIdRef.current = null;
-        }
       }
       chat.handleMessage(data);
     },
-    [chat.handleMessage, clearConnectLoadingTimeout, clearLoadTimeout, dbSessionId, handleLoadError]
+    [admitHydrationBatch, chat.handleMessage, handleLoadError]
   );
 
   // Handle connection established - request session data and available sessions

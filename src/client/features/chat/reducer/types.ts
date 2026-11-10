@@ -16,8 +16,8 @@ import type {
   QueuedMessage,
   SessionRuntimeState,
   TokenStats,
+  SessionDeltaEvent,
   UserQuestionRequest,
-  WebSocketMessage,
 } from '@/lib/chat-protocol';
 import type { ChatBarCapabilities } from '@/shared/chat-capabilities';
 
@@ -295,7 +295,7 @@ export type ChatAction =
   | {
       type: 'SESSION_REPLAY_BATCH';
       payload: {
-        replayEvents: WebSocketMessage[];
+        replayEvents: SessionDeltaEvent[];
       };
     }
   | {
@@ -310,7 +310,7 @@ export type ChatAction =
           text: string;
           timestamp: string;
           attachments?: MessageAttachment[];
-          settings?: ChatSettings;
+          settings?: QueuedMessage['settings'];
           /** Backend-assigned order for reliable sorting. Undefined for ACCEPTED, defined for DISPATCHED. */
           order?: number;
           /** Source session for restoring a failed message to the correct composer. */

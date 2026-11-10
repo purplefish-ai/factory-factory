@@ -3,65 +3,39 @@ import type { ChatBarCapabilities } from '@/shared/chat-capabilities';
 import type { PendingInteractiveRequest } from '@/shared/pending-request-types';
 import type { SessionRuntimeState } from '@/shared/session-runtime';
 import type { AskUserQuestion } from './interaction';
-import type { ChatMessage } from './messages';
-import type { ChatSettings, CommandInfo } from './models';
+import type { AgentMessage, ChatMessage } from './messages';
+import type { CommandInfo } from './models';
 import type { MessageAttachment, QueuedMessage } from './queued';
 import type { SessionReplayChunk } from './replay-frame-schema';
 import type { MessageState } from './state-machine';
 
-interface WebSocketMessageCommon {
-  sessionId?: string;
-  dbSessionId?: string;
-  message?: string;
-  code?: number;
-  data?: unknown;
-  requestId?: string;
-  toolName?: string;
-  rawToolName?: string;
-  toolUseId?: string;
-  toolInput?: Record<string, unknown>;
-  elicitation?: 'form' | 'url';
-  planContent?: string | null;
-  questions?: AskUserQuestion[];
-  acpOptions?: Array<{
-    optionId: string;
-    name: string;
-    kind: 'allow_once' | 'allow_always' | 'reject_once' | 'reject_always';
-  }>;
-  text?: string;
-  id?: string;
-  messageId?: string;
-  order?: number;
-  offset?: number;
-  newState?: MessageState;
-  messages?: ChatMessage[];
-  sessionRuntime?: SessionRuntimeState;
-  pendingInteractiveRequest?: PendingInteractiveRequest | null;
-  queuedMessages?: QueuedMessage[];
-  loadRequestId?: string;
-  replayEvents?: WebSocketMessage[];
-  queuePosition?: number;
-  errorMessage?: string;
-  userMessage?: {
-    text: string;
-    timestamp: string;
-    attachments?: MessageAttachment[];
-    settings?: ChatSettings;
-    order?: number;
-    voiceMode?: boolean;
-  };
-  tool_use_id?: string;
-  tool_name?: string;
-  parent_tool_use_id?: string;
-  elapsed_time_seconds?: number;
-  slashCommands?: CommandInfo[];
-  workspaceId?: string;
-  workspaceName?: string;
-  sessionCount?: number;
-  finishedAt?: string;
-  capabilities?: ChatBarCapabilities;
+interface ChatConfigOptionValue {
+  value: string;
+  name: string;
+  description?: string | null;
 }
 
+/** ACP session configuration option as forwarded to the chat client. */
+export interface ChatConfigOption {
+  id: string;
+  name: string;
+  description?: string | null;
+  type: string;
+  category?: string | null;
+  currentValue: string | boolean;
+  options?: Array<ChatConfigOptionValue | { group: string; options: ChatConfigOptionValue[] }>;
+}
+
+type AcpPermissionOption = {
+  optionId: string;
+  name: string;
+  kind: 'allow_once' | 'allow_always' | 'reject_once' | 'reject_always';
+};
+
+/**
+ * Server-to-client payload for each chat WebSocket message type. The client
+ * validates these with `ChatServerMessageSchema` (chat-server-message-schema.ts).
+ */
 interface WebSocketMessagePayloadByType {
   session_snapshot: {
     messages: ChatMessage[];
@@ -103,10 +77,13 @@ interface WebSocketMessagePayloadByType {
     sessionRuntime: SessionRuntimeState;
   };
   agent_message: {
-    data: import('./messages').AgentMessage;
+    data: AgentMessage;
     /** Stable backend transcript identifier when emitted from snapshot/replay. */
     messageId?: string;
-    /** Backend-assigned transcript order. */
+    /**
+     * Backend-assigned transcript order. Optional for deltas the backend has not
+     * yet published; `ChatServerMessageSchema` requires it on the wire.
+     */
     order?: number;
   };
   assistant_text_delta: {
@@ -122,47 +99,43 @@ interface WebSocketMessagePayloadByType {
   error: {
     message: string;
     code?: number;
+    /** Correlates a command failure with the request that caused it. */
+    requestId?: string;
+    /** Correlates a failed load with its `load_session` request. */
+    loadRequestId?: string;
   };
   permission_request: {
-    requestId?: string;
-    toolName?: string;
+    requestId: string;
+    toolName: string;
     rawToolName?: string;
     toolUseId?: string;
     toolInput?: Record<string, unknown>;
     elicitation?: 'form' | 'url';
     planContent?: string | null;
     /** ACP permission options -- when present, frontend renders multi-option buttons instead of binary Allow/Deny */
-    acpOptions?: Array<{
-      optionId: string;
-      name: string;
-      kind: 'allow_once' | 'allow_always' | 'reject_once' | 'reject_always';
-    }>;
+    acpOptions?: AcpPermissionOption[];
   };
   user_question: {
-    requestId?: string;
+    requestId: string;
     toolName?: string;
     rawToolName?: string;
-    questions?: AskUserQuestion[];
+    questions: AskUserQuestion[];
     /** ACP permission options for mapping selected answer labels to option IDs. */
-    acpOptions?: Array<{
-      optionId: string;
-      name: string;
-      kind: 'allow_once' | 'allow_always' | 'reject_once' | 'reject_always';
-    }>;
+    acpOptions?: AcpPermissionOption[];
   };
   permission_cancelled: {
-    requestId?: string;
+    requestId: string;
   };
   message_state_changed: {
-    id?: string;
-    newState?: MessageState;
+    id: string;
+    newState: MessageState;
     queuePosition?: number;
     errorMessage?: string;
     userMessage?: {
       text: string;
       timestamp: string;
       attachments?: MessageAttachment[];
-      settings?: ChatSettings;
+      settings?: QueuedMessage['settings'];
       /** Backend-assigned order for reliable sorting */
       order?: number;
       /** Source session for restoring a failed message to the correct composer */
@@ -173,21 +146,27 @@ interface WebSocketMessagePayloadByType {
   };
   session_replay_chunk: SessionReplayChunk;
   session_replay_batch: {
-    /** Batch of WebSocket events for atomic session replay during hydration */
-    replayEvents?: WebSocketMessage[];
+    /** Correlates the replay with its `load_session` request. */
+    loadRequestId?: string;
+    /** Batch of session events for atomic session replay during hydration */
+    replayEvents?: SessionDeltaEvent[];
   };
   tool_progress: {
-    tool_use_id?: string;
+    tool_use_id: string;
+    /** Absent when an ACP tool update omits its title. */
     tool_name?: string;
     parent_tool_use_id?: string;
+    /** Present on terminal updates; in-progress ACP updates omit it. */
     elapsed_time_seconds?: number;
+    /** ACP tool call status; the backend uses it to retire tracked calls. */
+    acpStatus?: string;
     /** ACP tool call file locations for click-to-open rendering */
     acpLocations?: Array<{ path: string; line?: number | null }>;
     /** ACP tool kind (read, edit, execute, etc.) */
     acpKind?: string;
   };
   task_notification: {
-    message?: string;
+    message: string;
   };
   compact_boundary: object;
   compacting_start: object;
@@ -199,21 +178,13 @@ interface WebSocketMessagePayloadByType {
     finishedAt?: string;
   };
   slash_commands: {
-    slashCommands?: CommandInfo[];
+    slashCommands: CommandInfo[];
   };
   chat_capabilities: {
     capabilities: ChatBarCapabilities;
   };
   config_options_update: {
-    configOptions: Array<{
-      id: string;
-      name: string;
-      description?: string | null;
-      type: string;
-      category?: string | null;
-      currentValue: string | boolean;
-      options?: unknown[];
-    }>;
+    configOptions: ChatConfigOption[];
   };
   config_option_applied: { requestId: string };
 }
@@ -222,64 +193,21 @@ interface WebSocketMessagePayloadByType {
  * WebSocket message envelope types for the chat/agent-activity WebSocket protocol.
  */
 type WebSocketMessageType = keyof WebSocketMessagePayloadByType;
-export const SESSION_DELTA_EXCLUDED_MESSAGE_TYPES = [
-  'session_delta',
-  'session_snapshot',
-  'session_replay_batch',
-  'session_replay_chunk',
-] as const;
-type SessionDeltaExcludedMessageType = (typeof SESSION_DELTA_EXCLUDED_MESSAGE_TYPES)[number];
+/** Envelopes that never travel inside `session_delta` or a replay batch. */
+type SessionDeltaExcludedMessageType =
+  | 'session_delta'
+  | 'session_snapshot'
+  | 'session_replay_batch'
+  | 'session_replay_chunk';
 type SessionDeltaEventType = Exclude<WebSocketMessageType, SessionDeltaExcludedMessageType>;
 
 /**
  * Valid event payload forwarded within session_delta messages.
  */
 export type SessionDeltaEvent = {
-  [K in SessionDeltaEventType]: WebSocketMessageCommon & {
-    type: K;
-  } & WebSocketMessagePayloadByType[K];
+  [K in SessionDeltaEventType]: { type: K } & WebSocketMessagePayloadByType[K];
 }[SessionDeltaEventType];
 
 export type WebSocketMessage = {
-  [K in keyof WebSocketMessagePayloadByType]: WebSocketMessageCommon & {
-    type: K;
-  } & WebSocketMessagePayloadByType[K];
-}[keyof WebSocketMessagePayloadByType];
-
-/**
- * Canonical list of valid top-level WebSocket message types.
- * Used by runtime type guards to reject malformed/unknown payloads early.
- */
-const WEBSOCKET_MESSAGE_TYPE_MAP: Record<WebSocketMessage['type'], true> = {
-  session_snapshot: true,
-  session_delta: true,
-  queue_updated: true,
-  pending_request_updated: true,
-  transcript_message_committed: true,
-  subagents_changed: true,
-  session_runtime_snapshot: true,
-  session_runtime_updated: true,
-  agent_message: true,
-  assistant_text_delta: true,
-  error: true,
-  permission_request: true,
-  user_question: true,
-  permission_cancelled: true,
-  message_state_changed: true,
-  session_replay_batch: true,
-  session_replay_chunk: true,
-  tool_progress: true,
-  task_notification: true,
-  compact_boundary: true,
-  compacting_start: true,
-  compacting_end: true,
-  workspace_notification_request: true,
-  slash_commands: true,
-  chat_capabilities: true,
-  config_options_update: true,
-  config_option_applied: true,
-};
-
-export const WEBSOCKET_MESSAGE_TYPES = Object.keys(
-  WEBSOCKET_MESSAGE_TYPE_MAP
-) as WebSocketMessage['type'][];
+  [K in WebSocketMessageType]: { type: K } & WebSocketMessagePayloadByType[K];
+}[WebSocketMessageType];

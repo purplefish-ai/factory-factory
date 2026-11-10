@@ -11,6 +11,7 @@ import type {
   ChatSettings,
   PermissionRequest,
   UserQuestionRequest,
+  SessionDeltaEvent,
   WebSocketMessage,
 } from '@/lib/chat-protocol';
 import {
@@ -1074,7 +1075,7 @@ describe('chatReducer', () => {
     });
 
     it('keeps assistant text visible when an error arrives at the next backend order', () => {
-      const replayEvents: WebSocketMessage[] = Array.from({ length: 8 }, (_, order) => ({
+      const replayEvents: SessionDeltaEvent[] = Array.from({ length: 8 }, (_, order) => ({
         type: 'agent_message',
         messageId: `session-1-${order}`,
         order,
@@ -1121,7 +1122,7 @@ describe('chatReducer', () => {
     it('retains the error and assistant delta at the renderer transcript limit', () => {
       // The error fills the window; the delta then trims it back to the limit.
       const replayedCount = WINDOW_CAPACITY - 1;
-      const replayEvents = Array.from({ length: replayedCount }, (_, order): WebSocketMessage => ({
+      const replayEvents = Array.from({ length: replayedCount }, (_, order): SessionDeltaEvent => ({
         type: 'agent_message',
         messageId: `session-1-${order}`,
         order,
@@ -3167,20 +3168,6 @@ describe('chatReducer', () => {
 // =============================================================================
 
 describe('createActionFromWebSocketMessage', () => {
-  it('returns null for unknown legacy status-like message', () => {
-    const wsMessage = unsafeCoerce<WebSocketMessage>({ type: 'status' });
-    const action = createActionFromWebSocketMessage(wsMessage);
-
-    expect(action).toBeNull();
-  });
-
-  it('returns null for unknown legacy lifecycle-like messages', () => {
-    const wsMessage = unsafeCoerce<WebSocketMessage>({ type: 'starting' });
-    const action = createActionFromWebSocketMessage(wsMessage);
-
-    expect(action).toBeNull();
-  });
-
   it('should convert agent_message to WS_AGENT_MESSAGE action', () => {
     const claudeMsg: AgentMessage = {
       type: 'assistant',
@@ -3195,25 +3182,11 @@ describe('createActionFromWebSocketMessage', () => {
     });
   });
 
-  it('should return null for agent_message without data', () => {
-    const wsMessage = unsafeCoerce<WebSocketMessage>({ type: 'agent_message' });
-    const action = createActionFromWebSocketMessage(wsMessage);
-
-    expect(action).toBeNull();
-  });
-
   it('should convert error message to WS_ERROR action', () => {
     const wsMessage: WebSocketMessage = { type: 'error', message: 'Connection lost' };
     const action = createActionFromWebSocketMessage(wsMessage);
 
     expect(action).toEqual({ type: 'WS_ERROR', payload: { message: 'Connection lost' } });
-  });
-
-  it('should return null for error message without message field', () => {
-    const wsMessage = unsafeCoerce<WebSocketMessage>({ type: 'error' });
-    const action = createActionFromWebSocketMessage(wsMessage);
-
-    expect(action).toBeNull();
   });
 
   it('should convert config_options_update to CONFIG_OPTIONS_UPDATE action', () => {
@@ -3265,26 +3238,6 @@ describe('createActionFromWebSocketMessage', () => {
     expect((action as { payload: PermissionRequest }).payload.timestamp).toBeDefined();
   });
 
-  it('should return null for permission_request without requestId', () => {
-    const wsMessage: WebSocketMessage = {
-      type: 'permission_request',
-      toolName: 'Bash',
-    };
-    const action = createActionFromWebSocketMessage(wsMessage);
-
-    expect(action).toBeNull();
-  });
-
-  it('should return null for permission_request without toolName', () => {
-    const wsMessage: WebSocketMessage = {
-      type: 'permission_request',
-      requestId: 'req-123',
-    };
-    const action = createActionFromWebSocketMessage(wsMessage);
-
-    expect(action).toBeNull();
-  });
-
   it('should convert user_question to WS_USER_QUESTION action', () => {
     const questions = [
       {
@@ -3311,33 +3264,6 @@ describe('createActionFromWebSocketMessage', () => {
     expect((action as { payload: UserQuestionRequest }).payload.questions).toEqual(questions);
     expect((action as { payload: UserQuestionRequest }).payload.acpOptions).toEqual(acpOptions);
     expect((action as { payload: UserQuestionRequest }).payload.timestamp).toBeDefined();
-  });
-
-  it('should return null for user_question without requestId', () => {
-    const wsMessage: WebSocketMessage = {
-      type: 'user_question',
-      questions: [],
-    };
-    const action = createActionFromWebSocketMessage(wsMessage);
-
-    expect(action).toBeNull();
-  });
-
-  it('should return null for user_question without questions', () => {
-    const wsMessage: WebSocketMessage = {
-      type: 'user_question',
-      requestId: 'req-456',
-    };
-    const action = createActionFromWebSocketMessage(wsMessage);
-
-    expect(action).toBeNull();
-  });
-
-  it('should return null for unknown message type', () => {
-    const wsMessage = unsafeCoerce<WebSocketMessage>({ type: 'unknown_type' });
-    const action = createActionFromWebSocketMessage(wsMessage);
-
-    expect(action).toBeNull();
   });
 
   // -------------------------------------------------------------------------
@@ -3397,26 +3323,6 @@ describe('createActionFromWebSocketMessage', () => {
         errorMessage: 'Queue full',
       },
     });
-  });
-
-  it('should return null for message_state_changed without id', () => {
-    const wsMessage: WebSocketMessage = {
-      type: 'message_state_changed',
-      newState: MessageState.DISPATCHED,
-    };
-    const action = createActionFromWebSocketMessage(wsMessage);
-
-    expect(action).toBeNull();
-  });
-
-  it('should return null for message_state_changed without newState', () => {
-    const wsMessage: WebSocketMessage = {
-      type: 'message_state_changed',
-      id: 'msg-1',
-    };
-    const action = createActionFromWebSocketMessage(wsMessage);
-
-    expect(action).toBeNull();
   });
 });
 
@@ -3609,13 +3515,6 @@ describe('createActionFromWebSocketMessage - SDK Events', () => {
       type: 'SDK_TASK_NOTIFICATION',
       payload: { message: 'Agent started task' },
     });
-  });
-
-  it('should return null for task_notification without message', () => {
-    const message: WebSocketMessage = { type: 'task_notification' };
-    const action = createActionFromWebSocketMessage(message);
-
-    expect(action).toBeNull();
   });
 });
 

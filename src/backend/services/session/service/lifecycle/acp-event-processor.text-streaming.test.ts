@@ -193,7 +193,11 @@ describe('AcpEventProcessor assistant text streaming', () => {
 
     const emittedTextBytes = vi
       .mocked(deps.sessionDomainService.emitDelta)
-      .mock.calls.reduce((total, call) => total + (call[1].text?.length ?? 0), 0);
+      .mock.calls.reduce(
+        (total, [, event]) =>
+          total + (event.type === 'assistant_text_delta' ? event.text.length : 0),
+        0
+      );
     expect(emittedTextBytes).toBe(200);
   });
 

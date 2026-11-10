@@ -27,7 +27,12 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import type { WebSocketSend } from '@/hooks/use-websocket-transport';
-import type { ChatSettings, MessageAttachment, QueuedMessage } from '@/lib/chat-protocol';
+import type {
+  ChatSettings,
+  MessageAttachment,
+  QueuedMessage,
+  WebSocketMessage,
+} from '@/lib/chat-protocol';
 import {
   clearInputAttachments as clearPersistedInputAttachments,
   loadInputAttachments,
@@ -78,7 +83,8 @@ export interface UseChatStateReturn extends Omit<ChatState, 'queuedMessages'> {
   // ACP config option action
   setConfigOption: (configId: string, value: string) => void;
   // Message handler for transport
-  handleMessage: (data: unknown) => void;
+  // Handles a frame already validated by `parseChatServerMessage`.
+  handleMessage: (message: WebSocketMessage) => void;
   // Roll back private command replies lost with the transport.
   handleDisconnected: () => void;
   // Dispatch function for actions
@@ -255,9 +261,9 @@ export function useChatState(options: UseChatStateOptions): UseChatStateReturn {
 
   // Transport callbacks captured by a previous session cannot mutate this session.
   const handleMessage = useCallback(
-    (data: unknown) => {
+    (message: WebSocketMessage) => {
       if (sessionContextRef.current === sessionContext) {
-        handleTransportMessage(data);
+        handleTransportMessage(message);
       }
     },
     [sessionContext, handleTransportMessage]

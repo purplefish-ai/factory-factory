@@ -26,7 +26,7 @@ import {
   getChatConnectionRegistryForApplication,
 } from './chat-connection-registry';
 import { createChatMessageRouterForApplication } from './chat-message-router';
-import { parseWebSocketMessage } from './message-utils';
+import { parseWebSocketMessage, serializeChatFrame } from './message-utils';
 import { createWebSocketUpgradeHandler, sendBadRequest } from './upgrade-utils';
 
 // ============================================================================
@@ -103,8 +103,8 @@ export function createChatUpgradeHandler(appContext: AppContext) {
   }
 
   function sendChatError(ws: WebSocket, dbSessionId: string | null, message: string): void {
-    const errorResponse = { type: 'error', message };
-    sendStateful(ws, JSON.stringify(errorResponse), logger, 'chat error', {
+    const errorResponse = { type: 'error' as const, message };
+    sendStateful(ws, serializeChatFrame(errorResponse), logger, 'chat error', {
       onFlushed: (error) => {
         if (!error && dbSessionId) {
           sessionFileLogger.log(dbSessionId, 'OUT_TO_CLIENT', errorResponse);

@@ -1,8 +1,6 @@
 import { useCallback } from 'react';
 import { dispatchSubagentChange } from '@/client/lib/subagent-events';
 import type { WebSocketMessage } from '@/lib/chat-protocol';
-import { isWebSocketMessage, isWsAgentMessage } from '@/lib/chat-protocol';
-import { createDebugLogger, DEBUG_CHAT_WS } from '@/lib/debug';
 import type { ChatAction, ChatState } from './reducer';
 import { createActionFromWebSocketMessage } from './reducer';
 import {
@@ -10,13 +8,6 @@ import {
   handleToolInputStreaming,
   type ToolInputAccumulatorState,
 } from './streaming-utils';
-
-// =============================================================================
-// Debug Logging
-// =============================================================================
-
-const DEBUG_CHAT_TRANSPORT = DEBUG_CHAT_WS;
-const debug = createDebugLogger(DEBUG_CHAT_TRANSPORT);
 
 // =============================================================================
 // Types
@@ -29,7 +20,8 @@ export interface UseChatTransportOptions {
 }
 
 export interface UseChatTransportReturn {
-  handleMessage: (data: unknown) => void;
+  /** Handles a frame already validated by `parseChatServerMessage`. */
+  handleMessage: (message: WebSocketMessage) => void;
 }
 
 /**
@@ -86,16 +78,9 @@ export function useChatTransport(options: UseChatTransportOptions): UseChatTrans
   const { dispatch, toolInputAccumulatorRef } = options;
 
   const handleMessage = useCallback(
-    (data: unknown) => {
-      // Validate incoming data is a WebSocket message
-      if (!isWebSocketMessage(data)) {
-        debug.log('Received invalid WebSocket message:', data);
-        return;
-      }
-      const wsMessage = data;
-
+    (wsMessage: WebSocketMessage) => {
       // session_delta wraps an inner websocket event from the SessionStore stream
-      if (wsMessage.type === 'session_delta' && isWebSocketMessage(wsMessage.data)) {
+      if (wsMessage.type === 'session_delta') {
         handleMessage(wsMessage.data);
         return;
       }
@@ -109,7 +94,7 @@ export function useChatTransport(options: UseChatTransportOptions): UseChatTrans
       }
 
       // Handle Claude messages specially for tool input streaming
-      if (isWsAgentMessage(wsMessage)) {
+      if (wsMessage.type === 'agent_message') {
         handleClaudeMessageWithStreaming(wsMessage, toolInputAccumulatorRef, dispatch);
       }
 

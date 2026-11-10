@@ -3,6 +3,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, createRef } from 'react';
 import { createRoot } from 'react-dom/client';
+import { toast } from 'sonner';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { LeftControls } from '@/client/features/chat/chat-input/components/input-controls';
@@ -585,4 +586,86 @@ it('hydrates only a complete correlated replay and discards a partial replay acr
   expect(harness.chat.messages).toMatchObject([
     { id: 'framed-user', text, timestamp: '2026-10-18T12:00:00Z', order: 7 },
   ]);
+});
+
+describe('invalid chat frames', () => {
+  function loadRequestIdOf(socket: BrowserSocket) {
+    return socket.sent
+      .map((message) => outboundSchema.parse(JSON.parse(message)))
+      .findLast((message) => message.type === 'load_session')?.loadRequestId;
+  }
+
+  it('drops an invalid frame with a logged and visible diagnostic', async () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const toastError = vi.spyOn(toast, 'error');
+    try {
+      const harness = await mount();
+      await harness.hydrate(harness.socket, [modelOption]);
+      await act(() => harness.socket.receive({ type: 'permission_request', toolName: 'Bash' }));
+
+      expect(harness.chat.pendingRequest).toEqual({ type: 'none' });
+      expect(consoleError).toHaveBeenCalledWith(
+        '[chat] Dropped an invalid WebSocket frame',
+        expect.objectContaining({ type: 'permission_request' })
+      );
+      expect(toastError).toHaveBeenCalledOnce();
+    } finally {
+      consoleError.mockRestore();
+      toastError.mockRestore();
+    }
+  });
+
+  it('does not treat an invalid replay envelope as the pending load', async () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    try {
+      const harness = await mount();
+      await act(() =>
+        harness.socket.receive({
+          type: 'session_replay_batch',
+          loadRequestId: loadRequestIdOf(harness.socket),
+          replayEvents: 'not events',
+        })
+      );
+
+      expect(harness.chat.controlsHydrated).toBe(false);
+      expect(consoleError).toHaveBeenCalledOnce();
+    } finally {
+      consoleError.mockRestore();
+    }
+  });
+
+  it('replays the valid events of a batch and reports the dropped ones', async () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    try {
+      const harness = await mount();
+      await act(() =>
+        harness.socket.receive({
+          type: 'session_replay_batch',
+          loadRequestId: loadRequestIdOf(harness.socket),
+          replayEvents: [
+            {
+              type: 'message_state_changed',
+              id: 'kept',
+              newState: 'ACCEPTED',
+              userMessage: { text: 'kept', timestamp: '2026-11-09T00:00:00Z', order: 1 },
+            },
+            { type: 'message_state_changed', id: 'dropped', newState: 'LOST' },
+            { type: 'message_state_changed', id: 'kept', newState: 'COMMITTED' },
+          ],
+        })
+      );
+
+      expect(harness.chat.controlsHydrated).toBe(true);
+      expect(harness.chat.messages).toMatchObject([{ id: 'kept', text: 'kept' }]);
+      expect(consoleError).toHaveBeenCalledWith(
+        '[chat] Dropped invalid elements from a WebSocket frame',
+        expect.objectContaining({
+          type: 'session_replay_batch',
+          dropped: [expect.objectContaining({ path: 'replayEvents.1' })],
+        })
+      );
+    } finally {
+      consoleError.mockRestore();
+    }
+  });
 });

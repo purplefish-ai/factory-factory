@@ -40,10 +40,16 @@ function decodeJson(parts: Uint8Array[], length: number): unknown {
   return z.unknown().parse(JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes)));
 }
 
-/** Reassemble privately, publishing only a complete batch to existing hydration guards. */
+/**
+ * Reassemble privately, publishing only a complete batch to existing hydration guards.
+ * `onInvalidFrame` hears about malformed or oversized replay data; chunks that
+ * merely belong to an abandoned or superseded replay are dropped silently.
+ */
 export class SessionReplayAssembler {
   private pending: PendingReplay | null = null;
   private timeout: ReturnType<typeof setTimeout> | null = null;
+
+  constructor(private readonly onInvalidFrame: (error: unknown) => void = () => undefined) {}
 
   reset(): void {
     if (this.timeout !== null) {
@@ -59,6 +65,7 @@ export class SessionReplayAssembler {
       if (type === 'session_replay_batch') {
         this.reset();
         if (jsonBytes(data) > MAX_REPLAY_FRAME_BYTES) {
+          this.onInvalidFrame(new Error('Unframed replay batch exceeds its byte limit'));
           return null;
         }
       }
@@ -66,8 +73,9 @@ export class SessionReplayAssembler {
     }
     try {
       return this.acceptChunk(data, now);
-    } catch {
+    } catch (error) {
       this.reset();
+      this.onInvalidFrame(error);
       return null;
     }
   }
@@ -172,7 +180,9 @@ export class SessionReplayAssembler {
       now - pending.startedAt > MAX_REPLAY_AGE_MS ||
       (pending.batch !== null) !== (frame.encoding !== undefined)
     ) {
-      throw new Error('Mismatched replay sequence');
+      // Reconnects and superseding loads strand the rest of an older sequence.
+      this.reset();
+      return null;
     }
     this.appendFrame(pending, frame);
     pending.next++;
@@ -181,11 +191,10 @@ export class SessionReplayAssembler {
     }
     this.reset();
     if (pending.received !== pending.byteLength || pending.eventReceived) {
-      return null;
+      throw new Error('Replay ended before its declared byte length');
     }
-    const batch = SessionReplayBatchSchema.safeParse(
+    return SessionReplayBatchSchema.parse(
       pending.batch ?? decodeJson(pending.parts, pending.received)
     );
-    return batch.success ? batch.data : null;
   }
 }

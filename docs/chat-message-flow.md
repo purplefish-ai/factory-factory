@@ -259,8 +259,9 @@ replaces that state rather than patching it, and applying the delta matches what
 a snapshot would show for those fields. Ordering relies on the same per-viewer
 FIFO delivery as every other delta: the domain mutates the store and publishes
 synchronously, and a viewer that is loading receives these deltas after its
-replay. `src/shared/acp-protocol/protocol/session-state-delta-schema.ts`
-validates them at the client transport boundary; the committed entry uses
+replay. Their schemas live in
+`src/shared/acp-protocol/protocol/session-state-delta-schema.ts` and are part of
+the chat frame schema described below; the committed entry uses
 `ArchivedChatMessageSchema`.
 
 Full snapshots remain for explicit `emitSessionSnapshot` calls, process exit,
@@ -271,9 +272,33 @@ for a session nobody is viewing are still skipped.
 
 ## Frontend updates
 
+`useChatWebSocket` validates every server frame once, after reassembling replay
+chunks, with `parseChatServerMessage` from
+`src/shared/acp-protocol/protocol/chat-server-message-schema.ts`. That
+`ChatServerMessageSchema` is a Zod discriminated union over every type in the
+`WebSocketMessage` protocol type, and its output satisfies that type. Backend
+senders are typed against `WebSocketMessage`; direct requester replies go
+through `serializeChatFrame`. `agent_message` events must carry their transcript
+`order`. `session_lifecycle` rows in `agent_message` events and snapshot
+transcripts need an event id, copy and a parseable timestamp.
+
+An invalid frame is dropped before hydration bookkeeping or the reducer sees it.
+The client logs the Zod issues to the console and shows one deduplicated error
+toast. Snapshots, deltas and live events are all-or-nothing. A replay batch is
+the one exception: each invalid replay event is dropped and reported
+individually, so one malformed historical event cannot make a session
+unloadable. Malformed or oversized replay chunks are reported the same way;
+chunks stranded by a reconnect or a superseding load are dropped silently.
+
+Every snapshot and replay array is parsed in full; there is no cheaper envelope
+check. Parsing a replay of 1,000 agent messages (about 1 MB of JSON) took about
+3 ms in Node, with or without Zod's JIT; `JSON.parse` of the same frame took
+about 1.6 ms.
+
 `useChatTransport` unwraps `session_delta` before passing its inner event to
-`createActionFromWebSocketMessage`. The reducer handles snapshots and replay
-batches as well as live events; replay uses the same event-to-action mapping.
+`createActionFromWebSocketMessage`. Action creators map validated fields without
+re-checking their shape. The reducer handles snapshots and replay batches as
+well as live events; replay uses the same event-to-action mapping.
 
 | Wire event                                             | Reducer action or handling                             |
 | ------------------------------------------------------ | ------------------------------------------------------ |

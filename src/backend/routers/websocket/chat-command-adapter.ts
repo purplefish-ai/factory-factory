@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type { SessionCommandError, SessionCommandOutcome } from '@/backend/services/session';
 import { type MessageAttachment, MessageState, type WebSocketMessage } from '@/shared/acp-protocol';
 import { DirectInputContentItemSchema } from '@/shared/websocket/direct-input-content.schema';
+import { serializeChatFrame } from './message-utils';
 
 function recoverDirectInput(content: string | unknown[]) {
   const attachments: MessageAttachment[] = [];
@@ -133,11 +134,11 @@ export function applySessionCommandOutcome(
   for (const reply of replies) {
     if (reply.type === 'error') {
       if (reply.error.kind === 'user_input_failed') {
-        requester.send(JSON.stringify(buildUserInputRejection(reply.error)));
+        requester.send(serializeChatFrame(buildUserInputRejection(reply.error)));
         continue;
       }
       requester.send(
-        JSON.stringify({
+        serializeChatFrame({
           type: 'error',
           ...(reply.requestId !== undefined ? { requestId: reply.requestId } : {}),
           message: formatCommandError(reply.error),
@@ -145,10 +146,10 @@ export function applySessionCommandOutcome(
       );
     } else {
       try {
-        requester.send(JSON.stringify(reply));
+        requester.send(serializeChatFrame(reply));
       } catch (cause) {
         requester.send(
-          JSON.stringify({
+          serializeChatFrame({
             type: 'error',
             message: formatCommandError({ kind: 'set_model_failed', cause }),
           })

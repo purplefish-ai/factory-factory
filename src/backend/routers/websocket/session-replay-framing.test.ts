@@ -55,6 +55,21 @@ it('keeps small legacy batches unchanged', () => {
   expect([...frameSessionReplay({ ...batch, replayEvents: [] })]).toEqual([batch]);
 });
 
+it('reports malformed replay frames but not chunks stranded by a superseded replay', () => {
+  const frames = [...frameSessionReplay(largeBatch())];
+  const onInvalidFrame = vi.fn();
+  const assembler = new SessionReplayAssembler(onInvalidFrame);
+  expect(assembler.accept(frames[1])).toBeNull();
+  assembler.accept(frames[0]);
+  expect(assembler.accept(frames[2])).toBeNull();
+  expect(onInvalidFrame).not.toHaveBeenCalled();
+
+  expect(assembler.accept({ ...frames[0], replayId: '' })).toBeNull();
+  expect(onInvalidFrame).toHaveBeenCalledOnce();
+  expect(assembler.accept({ type: 'session_replay_chunk', index: 0 })).toBeNull();
+  expect(onInvalidFrame).toHaveBeenCalledTimes(2);
+});
+
 it('drops interrupted, reordered, expired and oversized batches and accepts a fresh replay', () => {
   const frames = [...frameSessionReplay(largeBatch())];
   const assembler = new SessionReplayAssembler();
@@ -112,18 +127,23 @@ it('rejects a complete sequence with a mismatched declared byte length', () => {
 });
 
 function ordinaryBatch(): Extract<WebSocketMessage, { type: 'session_replay_batch' }> {
-  return {
-    type: 'session_replay_batch',
+  // Framing preserves envelope keys outside the declared contract.
+  const batch = {
+    type: 'session_replay_batch' as const,
     loadRequestId: 'ordinary-load',
     sessionId: 'preserved-session',
     dbSessionId: 'preserved-db-session',
     replayEvents: Array.from({ length: 1000 }, (_, order) => ({
-      type: 'agent_message',
+      type: 'agent_message' as const,
       messageId: `message-${order}`,
       order,
-      data: { type: 'assistant', text: 'ordinary 👋 text with "quotes" and newline\n'.repeat(20) },
+      data: {
+        type: 'assistant' as const,
+        text: 'ordinary 👋 text with "quotes" and newline\n'.repeat(20),
+      },
     })),
   };
+  return batch;
 }
 
 it('keeps ordinary event frames close to original JSON bandwidth and preserves all metadata', () => {

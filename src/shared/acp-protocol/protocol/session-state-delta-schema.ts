@@ -8,10 +8,11 @@ import type { QueuedMessage } from './queued';
 /**
  * Wire schemas for the targeted session-state deltas that replace full
  * `session_snapshot` broadcasts for queue, commit, and interactive-request
- * changes. Each delta carries only the state it changes.
+ * changes. Each delta carries only the state it changes. They are members of
+ * `ChatServerMessageSchema` (chat-server-message-schema.ts).
  */
 
-const QueuedMessageWireSchema = z.object({
+export const QueuedMessageWireSchema = z.object({
   source: z.object({ type: z.literal('pr_event'), request: prDeliveryRequestSchema }).optional(),
   id: z.string(),
   text: z.string(),
@@ -21,13 +22,13 @@ const QueuedMessageWireSchema = z.object({
   settings: ChatSettingsSchema,
 }) satisfies z.ZodType<QueuedMessage>;
 
-const AcpPermissionOptionSchema = z.object({
+export const AcpPermissionOptionSchema = z.object({
   optionId: z.string(),
   name: z.string(),
   kind: z.enum(['allow_once', 'allow_always', 'reject_once', 'reject_always']),
 });
 
-const PendingInteractiveRequestWireSchema = z.object({
+export const PendingInteractiveRequestWireSchema = z.object({
   requestId: z.string(),
   toolName: z.string(),
   rawToolName: z.string().optional(),
@@ -40,43 +41,20 @@ const PendingInteractiveRequestWireSchema = z.object({
 }) satisfies z.ZodType<PendingInteractiveRequest>;
 
 /** Complete authoritative queue after an enqueue, removal, dequeue, or requeue. */
-const QueueUpdatedDeltaSchema = z.object({
+export const QueueUpdatedDeltaSchema = z.object({
   type: z.literal('queue_updated'),
   queuedMessages: z.array(QueuedMessageWireSchema),
 });
 
 /** Current pending interactive request, or null after it is resolved or cleared. */
-const PendingRequestUpdatedDeltaSchema = z.object({
+export const PendingRequestUpdatedDeltaSchema = z.object({
   type: z.literal('pending_request_updated'),
   pendingInteractiveRequest: PendingInteractiveRequestWireSchema.nullable(),
 });
 
 /** One committed transcript entry together with the queue that remains after it. */
-const TranscriptMessageCommittedDeltaSchema = z.object({
+export const TranscriptMessageCommittedDeltaSchema = z.object({
   type: z.literal('transcript_message_committed'),
   chatMessage: ArchivedChatMessageSchema,
   queuedMessages: z.array(QueuedMessageWireSchema),
 });
-
-const SESSION_STATE_DELTA_SCHEMAS = {
-  queue_updated: QueueUpdatedDeltaSchema,
-  pending_request_updated: PendingRequestUpdatedDeltaSchema,
-  transcript_message_committed: TranscriptMessageCommittedDeltaSchema,
-} as const;
-
-type SessionStateDeltaType = keyof typeof SESSION_STATE_DELTA_SCHEMAS;
-
-function isSessionStateDeltaType(type: string): type is SessionStateDeltaType {
-  return Object.hasOwn(SESSION_STATE_DELTA_SCHEMAS, type);
-}
-
-/**
- * Validates a targeted session-state delta. Returns null when `type` is not one
- * of these deltas, so callers can apply their other checks.
- */
-export function validateSessionStateDelta(type: string, data: unknown): boolean | null {
-  if (!isSessionStateDeltaType(type)) {
-    return null;
-  }
-  return SESSION_STATE_DELTA_SCHEMAS[type].safeParse(data).success;
-}
