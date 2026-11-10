@@ -65,7 +65,7 @@ it('reports typed periodic totals separately while preserving historical result 
     createRecoveryImportReport(recoveryMetadataSchema.parse(full.meta.recovery)).warnings
   );
   expect(result.warnings[2]).toBe(
-    'Periodic configuration restored disabled: 2 imported, 3 skipped; 4 enabled in the entire source section; 2 restored disabled. Skips by reason: existing task ID: 1; project not created by this import: 2. Periodic execution history excluded.'
+    'Scheduled automation configuration restored disabled: 2 imported, 3 skipped; 4 enabled in the entire source section; 2 restored disabled. Skips by reason: existing automation ID: 1; project not created by this import: 2. Scheduled run history excluded.'
   );
   for (const original of [fixed, workspace, full]) {
     const old = createRecoveryImportReport(recoveryMetadataSchema.parse(original.meta.recovery));
@@ -93,7 +93,7 @@ it.each([
     createRecoveryImportReport(recoveryMetadataSchema.parse(full.meta.recovery)).warnings
   );
   expect(report.warnings[2]).toBe(
-    `Periodic workspace links: ${counts.imported} imported, ${counts.skipped} skipped. Only links present in the backup are counted; these counts overlap workspace totals. Skips mean the workspace or task was not created by this import. Linked tasks are restored disabled; periodic execution history is excluded.`
+    `Scheduled automation workspace links: ${counts.imported} imported, ${counts.skipped} skipped. Only links present in the backup are counted; these counts overlap workspace totals. Skips mean the workspace or automation was not created by this import. Linked automations are restored disabled; scheduled run history is excluded.`
   );
   for (const original of [fixed, workspace, full, periodic]) {
     expect(
@@ -126,10 +126,10 @@ it('reports history source scope separately from actual transforms without old h
     counts
   );
   expect(report.periodicHistory).toEqual(counts);
-  expect(report.warnings.join(' ')).not.toMatch(/periodic execution history (?:is )?excluded/i);
+  expect(report.warnings.join(' ')).not.toMatch(/scheduled run history (?:is )?excluded/i);
   expect(report.warnings[0]).toContain('PeriodicTaskExecution.launchSnapshot');
   expect(report.warnings.at(-1)).toBe(
-    'Periodic execution history: 3 imported, 6 skipped; 5 RUNNING in the entire source section; 2 restored FAILED as historical only, provider outcome unknown; 1 restored settled. Skips by reason: existing execution ID: 1; occupied workspace: 2; dependency not created by this import: 3. Imported executions will not be resumed.'
+    'Scheduled run history: 3 imported, 6 skipped; 5 RUNNING in the entire source section; 2 restored FAILED as historical only, provider outcome unknown; 1 restored settled. Skips by reason: existing run ID: 1; occupied workspace: 2; dependency not created by this import: 3. Imported runs will not be resumed.'
   );
 });
 
@@ -183,7 +183,7 @@ it('reports exact definition-body scope and retains every cumulative history/nul
     report.warnings.filter((text) => !text.startsWith('Automation definition bodies'))
   ).toEqual(old.warnings);
   expect(report.warnings).toContain(
-    'Automation definition bodies restored disabled: 2 imported, 3 skipped; 4 enabled in the entire source section; 2 restored disabled. Skips by reason: existing definition ID: 1; project not created by this import: 2. Connections, event configuration, proposal provenance, activation and automation execution history are excluded. Inspect recovered bodies and author new complete event configuration where editing is available.'
+    'Automation definition bodies restored disabled: 2 imported, 3 skipped; 4 enabled in the entire source section; 2 restored disabled. Skips by reason: existing definition ID: 1; project not created by this import: 2. Connections, event configuration, proposal provenance, activation and event-triggered run history are excluded. Inspect recovered bodies and author new complete event configuration where editing is available.'
   );
   expect(report.manifest).toEqual(definitions.meta.recovery);
 });

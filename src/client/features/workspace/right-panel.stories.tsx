@@ -267,9 +267,7 @@ export const DeletedTaskPreference: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await expect(await canvas.findByText('No changes')).toBeVisible();
-    await expect(
-      canvas.queryByRole('tab', { name: 'Scheduled automation' })
-    ).not.toBeInTheDocument();
+    await expect(canvas.queryByRole('tab', { name: 'Runs' })).not.toBeInTheDocument();
     // Changes is shown; the stored choice stays until the user picks a tab.
     await expect(readStorageItem(`workspace-right-panel-tab-${workspaceId}`)).toBe('periodic-task');
   },
@@ -288,7 +286,7 @@ export const DeleteWhileOpen: Story = {
 
 /**
  * Tool tab labels follow the glossary in docs/workspaces.md: the scheduled-automation
- * origin panel is "Scheduled automation" (not the chat's coding agent), and the
+ * origin panel is "Runs" (not the chat's coding agent), and the
  * subagent/child-workspace panel is "Subagents" (not chat sessions). With no
  * chat selected, that panel shows only Child workspaces.
  */
@@ -297,7 +295,7 @@ export const ToolTabLabels: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await canvas.findByText('Scheduled cleanup');
-    await expect(canvas.getByRole('tab', { name: 'Scheduled automation' })).toBeVisible();
+    await expect(canvas.getByRole('tab', { name: 'Runs' })).toBeVisible();
     await expect(canvas.queryByRole('tab', { name: 'Agent' })).not.toBeInTheDocument();
     await expect(canvas.queryByRole('tab', { name: 'Sessions' })).not.toBeInTheDocument();
     await userEvent.click(canvas.getByRole('tab', { name: 'Subagents' }));

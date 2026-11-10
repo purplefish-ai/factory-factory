@@ -477,9 +477,9 @@ describe('RightPanel Agents tab', () => {
     render();
     expect(container.querySelector('[data-testid="periodic-task-panel"]')).not.toBeNull();
     expect(localStorage.getItem('workspace-right-panel-tab-workspace-1')).toBe('periodic-task');
-    // "Agent" alone read as the chat's coding agent; name the Agents-section concept.
+    // The workspace tool describes runs, independently of the automation trigger.
     expect([...container.querySelectorAll('button')].map((button) => button.textContent)).toContain(
-      'Scheduled automation'
+      'Runs'
     );
   });
 
