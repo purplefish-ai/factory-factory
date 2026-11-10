@@ -177,6 +177,16 @@ function getEffectivePort(url: URL): string {
   return url.protocol === 'https:' ? '443' : '80';
 }
 
+/** Parses `origin` if it is a canonical origin on a loopback hostname. */
+function parseLoopbackOrigin(origin: string): URL | undefined {
+  const parsedOrigin = parseOrigin(origin);
+  return parsedOrigin &&
+    isCanonicalOriginUrl(origin, parsedOrigin) &&
+    isLoopbackHostname(parsedOrigin.hostname)
+    ? parsedOrigin
+    : undefined;
+}
+
 export function isOriginAllowed(
   origin: string,
   allowedOrigins: readonly string[],
@@ -190,43 +200,19 @@ export function isOriginAllowed(
     return true;
   }
 
-  const parsedOrigin = parseOrigin(origin);
-  if (
-    !(
-      parsedOrigin &&
-      isCanonicalOriginUrl(origin, parsedOrigin) &&
-      isLoopbackHostname(parsedOrigin.hostname)
-    )
-  ) {
+  const parsedOrigin = parseLoopbackOrigin(origin);
+  if (!parsedOrigin) {
     return false;
   }
 
   return allowedOrigins.some((allowedOrigin) => {
-    const parsedAllowedOrigin = parseOrigin(allowedOrigin);
-    if (
-      !(
-        parsedAllowedOrigin &&
-        isCanonicalOriginUrl(allowedOrigin, parsedAllowedOrigin) &&
-        isLoopbackHostname(parsedAllowedOrigin.hostname)
-      )
-    ) {
-      return false;
-    }
-
+    const parsedAllowedOrigin = parseLoopbackOrigin(allowedOrigin);
     return (
+      parsedAllowedOrigin !== undefined &&
       parsedOrigin.protocol === parsedAllowedOrigin.protocol &&
       getEffectivePort(parsedOrigin) === getEffectivePort(parsedAllowedOrigin)
     );
   });
-}
-
-function isLoopbackOrigin(origin: string): boolean {
-  const parsedOrigin = parseOrigin(origin);
-  return (
-    parsedOrigin !== undefined &&
-    isCanonicalOriginUrl(origin, parsedOrigin) &&
-    isLoopbackHostname(parsedOrigin.hostname)
-  );
 }
 
 /**
@@ -242,7 +228,10 @@ export function shouldAllowOwnLoopbackOrigin(
   bindHost: string | undefined,
   allowedOrigins: readonly string[]
 ): boolean {
-  return isLoopbackBindHost(bindHost) && allowedOrigins.every(isLoopbackOrigin);
+  return (
+    isLoopbackBindHost(bindHost) &&
+    allowedOrigins.every((origin) => parseLoopbackOrigin(origin) !== undefined)
+  );
 }
 
 /** Origin policy fields shared by every browser-facing check. */
@@ -257,10 +246,9 @@ function isOwnLoopbackOrigin(origin: string, localPort: number | undefined): boo
   if (localPort === undefined) {
     return false;
   }
-  const parsedOrigin = parseOrigin(origin);
+  const parsedOrigin = parseLoopbackOrigin(origin);
   return (
     parsedOrigin !== undefined &&
-    isLoopbackOrigin(origin) &&
     parsedOrigin.protocol === 'http:' &&
     getEffectivePort(parsedOrigin) === String(localPort)
   );
