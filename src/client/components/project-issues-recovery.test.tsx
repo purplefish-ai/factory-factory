@@ -96,7 +96,9 @@ it.each(['board', 'sidebar'] as const)(
                   projectId="alpha"
                 />
               ) : (
-                <AppSidebar navData={navData} />
+                // AppSidebar is memoized and the mocked issues hook is not a
+                // subscription, so a new object stands in for a query update.
+                <AppSidebar navData={{ ...navData }} />
               )}
             </SidebarProvider>
           </MemoryRouter>
