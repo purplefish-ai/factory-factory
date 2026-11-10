@@ -253,9 +253,10 @@ no GitHub, delivery, session, or Linear runtime dependency.
 
 PR-switch handling immediately recomputes monitoring and wakes delivery using
 `checkWorkspaceById`. This automatic check retains the shared 90-second
-observation cooldown and terminal-PR policy; a just-accepted attachment or
-discovery observation is reused rather than fetched again. Explicit refreshes
-and delivery preparation retain their separate forced-observation contract.
+observation cooldown and terminal- and stable-PR policies; a just-accepted
+attachment or discovery observation is reused rather than fetched again.
+Explicit refreshes and delivery preparation retain their separate
+forced-observation contract.
 
 Manual workspace PR refreshes serialize per workspace so concurrent requests
 report a committed lifecycle transition only once. Sibling refresh failures log
@@ -386,13 +387,32 @@ checks force their observation and remain unrestricted.
 
 Automatic refreshes are unforced: the workspace-idle refresh, the app-load and
 project-switch sweep, and the workspace page-load sync. They reuse an
-observation accepted in the last 90 seconds, apply the same terminal policy, and
-defer to the scheduler's per-PR fetch coordinator. A merge is still observed
-once, because the policy reads the committed state, which remains open until a
-MERGED observation is accepted. `refreshWorkspace` and the `syncPRStatus` and
-`syncAllPRStatuses` procedures take an explicit `force` flag (default `false`
-for the procedures). An automatic project sweep in flight does not suppress an
-explicit forced sync.
+observation accepted in the last 90 seconds, apply the same terminal and
+[stable-PR](#stable-pr-polling) policies, and defer to the scheduler's per-PR
+fetch coordinator. A merge is still observed once, because the policy reads the
+committed state, which remains open until a MERGED observation is accepted.
+`refreshWorkspace` and the `syncPRStatus` and `syncAllPRStatuses` procedures
+take an explicit `force` flag (default `false` for the procedures). An automatic
+project sweep in flight does not suppress an explicit forced sync.
+
+### Stable PR polling
+
+Automatic observations also back off an open PR whose facts have stopped
+changing. Once three consecutive observations of a PR are identical apart from
+their observation time, with CI terminal (`SUCCESS` or `FAILURE`) and, while
+monitoring is on, complete review facts, unforced observations keep the
+committed facts until 10 minutes have passed since the last GitHub read, instead
+of reading every two-minute poll. Pending or unknown CI, incomplete reviews, a
+changed observation, and a write by another observer (a revision change) keep
+the normal cadence. A forced observation (explicit refresh, attachment, or
+delivery preparation's freshness check) always reads GitHub and starts a new
+count, as does a session in the workspace starting or finishing a turn, since
+that is when an agent pushes. The state is in memory, scoped like the 90-second
+reuse window, so a restart starts every PR at the normal cadence. A change made
+on GitHub while a stable PR is backed off, such as a new human review or a merge
+through the web UI, is therefore observed up to 10 minutes later. GitHub's
+`updatedAt` is not used to skip reads, because it is not known to change when a
+review thread is resolved.
 
 ### Observations and events
 
@@ -482,16 +502,23 @@ queued facts so the new recipient can receive them.
 
 Review policy defaults to `CHANGES_REQUESTED`: changes-requested review bodies
 and unresolved inline threads. `ALL_REVIEW_FEEDBACK` also includes commented
-review summaries. Ordinary PR conversation comments do not trigger updates. Core
-PR, head and check facts are fetched separately from optional review enrichment.
-Failed identity, review settings, review or comment lookups mark reviews
-incomplete without blocking CI, conflict or terminal-state observations. They
-claim no review resolutions, and the existing incomplete-review acceptance
-retains pending feedback. Identity must be known before accepting review facts;
-failed lookups retry on the next poll without disabling self-review filtering.
-The app's own [adversarial-review marker](../design/adversarial-review.md)
-remains an explicit exception to that filtering under its authenticated GitHub
-identity.
+review summaries. Ordinary PR conversation comments do not trigger updates.
+While monitoring is on, one `gh pr view` reads the core PR, head and check facts
+together with the conversation comments (one GraphQL request). Reviews (REST,
+for its chronological order), inline review comments (REST) and resolved review
+threads (GraphQL) are separate reads; the thread lookup is skipped when a
+complete inline-comment read found none, since resolution only filters inline
+comments. An observation therefore spawns four `gh` processes, or three without
+inline comments. If the combined read fails for any reason other than an abort
+or connectivity failure, the core facts are read again on their own and reviews
+are reported incomplete. Failed identity, review settings, review or comment
+lookups mark reviews incomplete without blocking CI, conflict or terminal-state
+observations. They claim no review resolutions, and the existing
+incomplete-review acceptance retains pending feedback. Identity must be known
+before accepting review facts; failed lookups retry on the next poll without
+disabling self-review filtering. The app's own
+[adversarial-review marker](../design/adversarial-review.md) remains an explicit
+exception to that filtering under its authenticated GitHub identity.
 
 While a workspace's monitoring is off, observations read only the core facts
 (one `gh pr view`); identity, review, review-comment and thread reads are

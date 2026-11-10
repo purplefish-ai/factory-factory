@@ -1,7 +1,13 @@
-import { expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { PRObservation } from '@/shared/pr-monitoring';
 import { redObservation } from '@/shared/pr-monitoring.test-helpers';
 import type { PRObservationPorts } from './pr-observation-ports';
-import { observeMonitoredPR } from './pr-observation.orchestrator';
+import {
+  observeMonitoredPR,
+  resetStablePRBackoff,
+  STABLE_PR_POLL_INTERVAL_MS,
+  STABLE_PR_REPEATS,
+} from './pr-observation.orchestrator';
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -147,7 +153,10 @@ it('releases in-flight work after acceptance fails', async () => {
   expect(ports.acceptObservation).toHaveBeenCalledTimes(2);
 });
 
-function storedPR(state: string, overrides: { observationEpoch?: number; syncedAt?: Date } = {}) {
+function storedPR(
+  state: string,
+  overrides: { observationEpoch?: number; syncedAt?: Date; revision?: number } = {}
+) {
   return {
     revision: 7,
     state,
@@ -232,4 +241,113 @@ it('fetches review data only while monitoring is enabled', async () => {
   expect(ports.acceptObservation).toHaveBeenLastCalledWith(
     expect.objectContaining({ expectedEventEpoch: 4 })
   );
+});
+
+describe('stable-PR backoff', () => {
+  const target = { workspaceId: 'w', prId: 'p' };
+  let now = 0;
+  beforeEach(() => {
+    now = 1_000_000_000;
+    vi.spyOn(Date, 'now').mockImplementation(() => now);
+  });
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  /** Ports whose stored revision advances with each accepted observation, like the accessor. */
+  function pollingPorts(observation: PRObservation = redObservation) {
+    const ports = observationPorts();
+    const revisions = new Map<string, number>();
+    const revision = (input: { workspaceId: string }) => revisions.get(input.workspaceId) ?? 7;
+    ports.findPR.mockImplementation(async (input) =>
+      storedPR('OPEN', { revision: revision(input) })
+    );
+    ports.acceptObservation.mockImplementation(({ target: input }) => {
+      revisions.set(input.workspaceId, revision(input) + 1);
+      return Promise.resolve({ applied: true, eventIds: [] });
+    });
+    ports.fetchObservation.mockImplementation(async () => ({
+      ...observation,
+      // A new observation time alone is not a change.
+      observedAt: new Date(now).toISOString(),
+    }));
+    return ports;
+  }
+  /** One two-minute poll cycle; returns whether it read GitHub. */
+  async function poll(ports: ReturnType<typeof observationPorts>, prTarget = target) {
+    now += 2 * 60_000;
+    const before = ports.fetchObservation.mock.calls.length;
+    expect(await observeMonitoredPR(ports, prTarget)).toBe(true);
+    return ports.fetchObservation.mock.calls.length > before;
+  }
+  async function pollTimes(ports: ReturnType<typeof observationPorts>, times: number) {
+    const fetched: boolean[] = [];
+    for (let i = 0; i < times; i += 1) {
+      fetched.push(await poll(ports));
+    }
+    return fetched;
+  }
+
+  it('stretches an unchanged settled PR to the stable interval after three identical reads', async () => {
+    expect(STABLE_PR_REPEATS).toBe(2);
+    expect(STABLE_PR_POLL_INTERVAL_MS).toBe(10 * 60_000);
+    const ports = pollingPorts();
+    expect(await pollTimes(ports, 3)).toEqual([true, true, true]);
+    // The next four polls keep the committed facts; the fifth is ten minutes on.
+    expect(await pollTimes(ports, 5)).toEqual([false, false, false, false, true]);
+    expect(await pollTimes(ports, 5)).toEqual([false, false, false, false, true]);
+  });
+
+  it('returns to the normal cadence as soon as an observation changes', async () => {
+    const ports = pollingPorts();
+    await pollTimes(ports, 3);
+    now += STABLE_PR_POLL_INTERVAL_MS;
+    ports.fetchObservation.mockResolvedValue({ ...redObservation, headSha: 'head-2' });
+    expect(await pollTimes(ports, 4)).toEqual([true, true, true, false]);
+  });
+
+  it.each([
+    ['running CI', { ciStatus: 'PENDING' }],
+    ['unknown CI', { ciStatus: 'UNKNOWN' }],
+    ['incomplete review facts', { reviewsComplete: false }],
+  ] as const)('keeps the normal cadence while a PR has %s', async (_name, overrides) => {
+    const ports = pollingPorts({ ...redObservation, ...overrides });
+    expect(await pollTimes(ports, 6)).toEqual(Array(6).fill(true));
+  });
+
+  it('backs off a core-only observation whose reviews were not requested', async () => {
+    const ports = pollingPorts({ ...redObservation, reviewsComplete: false });
+    ports.getMonitoring.mockResolvedValue({ eventEpoch: 3, enabled: false });
+    expect(await pollTimes(ports, 4)).toEqual([true, true, true, false]);
+  });
+
+  it('returns to the normal cadence after a forced read', async () => {
+    const ports = pollingPorts();
+    await pollTimes(ports, 3);
+    expect(await observeMonitoredPR(ports, target, { force: true })).toBe(true);
+    expect(ports.fetchObservation).toHaveBeenCalledTimes(4);
+    // The forced read starts a new run of identical reads; two more polls complete it.
+    expect(await pollTimes(ports, 3)).toEqual([true, true, false]);
+  });
+
+  it('returns only the reset workspace to the normal cadence', async () => {
+    const ports = pollingPorts();
+    const other = { workspaceId: 'w2', prId: 'p' };
+    for (let i = 0; i < 3; i += 1) {
+      await poll(ports);
+      now -= 2 * 60_000;
+      await poll(ports, other);
+    }
+    resetStablePRBackoff(ports, 'w');
+    expect(await poll(ports)).toBe(true);
+    now -= 2 * 60_000;
+    expect(await poll(ports, other)).toBe(false);
+  });
+
+  it('reads again when another writer changed the stored revision', async () => {
+    const ports = pollingPorts();
+    await pollTimes(ports, 3);
+    ports.findPR.mockResolvedValue(storedPR('OPEN', { revision: 99 }));
+    expect(await poll(ports)).toBe(true);
+  });
 });
