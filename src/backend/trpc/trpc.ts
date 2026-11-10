@@ -4,10 +4,10 @@ import superjson from 'superjson';
 import type { AppContext } from '@/backend/app-context';
 import { ApplicationError } from '@/backend/lib/application-error';
 import {
+  isBrowserOriginAllowed,
   isHostHeaderAllowed,
   isLoopbackBindHost,
   isLoopbackRemoteAddress,
-  isOriginAllowed,
   isTrustedLocalAddress,
 } from '@/backend/lib/request-trust';
 import { FORWARDED_CLIENT_ADDRESS_HEADERS } from '@/shared/proxy-utils';
@@ -20,6 +20,8 @@ export type RequestTrustInfo = {
   origin?: string;
   /** `Host` header, checked against DNS rebinding when bound to loopback. */
   host?: string;
+  /** Local port the connection arrived on: the port the server bound. */
+  localPort?: number;
   isLocal: boolean;
   hasForwardedClientAddressHeaders?: boolean;
 };
@@ -42,6 +44,7 @@ function buildRequestTrust(req: Request): RequestTrustInfo {
     remoteAddress,
     origin: getHeaderValue(req.headers.origin),
     host: req.headers.host,
+    localPort: req.socket.localPort,
     isLocal: isLoopbackRemoteAddress(remoteAddress),
     hasForwardedClientAddressHeaders: FORWARDED_CLIENT_ADDRESS_HEADERS.some(
       (header) => req.headers[header] !== undefined
@@ -87,8 +90,8 @@ function isAllowedBrowserContext(ctx: Context): boolean {
     return true;
   }
 
-  const { origin, host } = ctx.requestTrust;
-  if (origin !== undefined && !isOriginAllowed(origin, corsConfig.allowedOrigins)) {
+  const { origin, host, localPort } = ctx.requestTrust;
+  if (origin !== undefined && !isBrowserOriginAllowed(origin, corsConfig, localPort)) {
     return false;
   }
 
@@ -155,11 +158,7 @@ function isTrustedLocalContext(ctx: Context): boolean {
     return true;
   }
 
-  return isOriginAllowed(
-    ctx.requestTrust.origin,
-    corsConfig.allowedOrigins,
-    corsConfig.disableCorsChecks
-  );
+  return isBrowserOriginAllowed(ctx.requestTrust.origin, corsConfig, ctx.requestTrust.localPort);
 }
 
 /**

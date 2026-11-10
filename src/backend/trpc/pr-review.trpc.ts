@@ -12,12 +12,15 @@ import { publicProcedure, router } from './trpc';
 export const prReviewRouter = router({
   /**
    * List all PRs where the authenticated user is requested as a reviewer.
+   * Served from a short server cache; `forceRefresh` (explicit Refresh/Retry)
+   * rechecks gh health and searches GitHub again.
    */
   listReviewRequests: publicProcedure
-    .input(z.object({ projectId: z.string() }).optional())
+    .input(z.object({ projectId: z.string(), forceRefresh: z.boolean().optional() }).optional())
     .query(async ({ ctx, input }) => {
       const { githubCLIService } = ctx.appContext.services;
-      const health = await githubCLIService.checkHealth();
+      const forceRefresh = input?.forceRefresh ?? false;
+      const health = await githubCLIService.checkHealth(forceRefresh);
 
       if (!(health.isInstalled && health.isAuthenticated)) {
         return {
@@ -44,7 +47,9 @@ export const prReviewRouter = router({
             throw new Error('Invalid GitHub repository');
           }
         }
-        const prs = await ctx.appContext.services.listVisibleReviewRequests(repository);
+        const prs = await ctx.appContext.services.listVisibleReviewRequests(repository, {
+          forceRefresh,
+        });
         return {
           prs,
           health,

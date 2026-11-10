@@ -4,12 +4,18 @@ import '@xterm/xterm/css/xterm.css';
 import { useCallback, useEffect, useRef } from 'react';
 import { useAppearance } from '@/client/components/appearance-provider';
 import { WORKSPACE_DRAWER_BREAKPOINT } from '@/client/hooks/use-workspace-drawer';
+import type { TerminalOutputStream } from '@/client/lib/terminal-output-stream';
 import { scaledTerminalFontSize } from '@/shared/appearance';
 import { readTerminalTheme } from './terminal-theme';
 
 const MANUAL_FOCUS_MEDIA_QUERY = `(max-width: ${WORKSPACE_DRAWER_BREAKPOINT - 1}px), (any-pointer: coarse)`;
 
 const DEFAULT_TERMINAL_FONT_FAMILY = 'Menlo, Monaco, "Courier New", monospace';
+
+// Erase the screen (ED 2) and scrollback (ED 3), then home the cursor. Sent
+// through write() so it is parsed after any chunks still queued in xterm;
+// terminal.clear() would run synchronously, ahead of them.
+const TERMINAL_CLEAR_SEQUENCE = '\x1b[2J\x1b[3J\x1b[H';
 
 // =============================================================================
 // Types
@@ -18,7 +24,11 @@ const DEFAULT_TERMINAL_FONT_FAMILY = 'Menlo, Monaco, "Courier New", monospace';
 interface TerminalInstanceProps {
   onData: (data: string) => void;
   onResize: (cols: number, rows: number) => void;
-  output: string;
+  /**
+   * Output source. Its snapshot is replayed on mount; later chunks are written
+   * straight to xterm without re-rendering this component.
+   */
+  output: TerminalOutputStream;
   className?: string;
   /** Explicit focus request, e.g. for the setup dialog. Workspace terminals omit this. */
   isActive?: boolean;
@@ -39,8 +49,8 @@ export function TerminalInstance({
   const terminalRef = useRef<Terminal | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
   const resizeObserverRef = useRef<ResizeObserver | null>(null);
-  const lastOutputRef = useRef('');
-  const initialOutputRef = useRef(output);
+  // The stream whose output this xterm instance currently holds, if any.
+  const attachedOutputRef = useRef<TerminalOutputStream | null>(null);
 
   // Store callbacks in refs to avoid reinitializing terminal when they change
   // This is critical because onData/onResize depend on parent state (tabs)
@@ -102,12 +112,6 @@ export function TerminalInstance({
     // Report initial size via ref to get latest callback
     onResizeRef.current(terminal.cols, terminal.rows);
 
-    // Write initial output captured at mount time to avoid re-initializing on every update.
-    if (initialOutputRef.current) {
-      terminal.write(initialOutputRef.current);
-      lastOutputRef.current = initialOutputRef.current;
-    }
-
     // Handle user input via ref to always use latest callback
     terminal.onData((data) => {
       onDataRef.current(data);
@@ -132,6 +136,7 @@ export function TerminalInstance({
       terminal.dispose();
       terminalRef.current = null;
       fitAddonRef.current = null;
+      attachedOutputRef.current = null;
     };
   }, []);
 
@@ -150,32 +155,25 @@ export function TerminalInstance({
     onResizeRef.current(terminal.cols, terminal.rows);
   }, [fontSize, fontFamily]);
 
-  // Write output to terminal
+  // Replay the stream's rolling window, then write each new chunk directly.
+  // xterm keeps its own scrollback, so appends never clear or rewrite it.
   useEffect(() => {
-    if (!terminalRef.current) {
+    const terminal = terminalRef.current;
+    if (!terminal) {
       return;
     }
-
-    const lastOutput = lastOutputRef.current;
-
-    if (output === lastOutput) {
-      return;
+    // A fresh xterm is empty; one that already shows another stream is cleared.
+    const clearPrefix = attachedOutputRef.current === null ? '' : TERMINAL_CLEAR_SEQUENCE;
+    attachedOutputRef.current = output;
+    const replay = clearPrefix + output.snapshot();
+    if (replay.length > 0) {
+      terminal.write(replay);
     }
-
-    // Handle new output appended.
-    if (output.startsWith(lastOutput)) {
-      const newOutput = output.slice(lastOutput.length);
-      terminalRef.current.write(newOutput);
-      lastOutputRef.current = output;
-      return;
-    }
-
-    // Handle output reset or rolling-buffer rewrites after truncation.
-    terminalRef.current.clear();
-    if (output.length > 0) {
-      terminalRef.current.write(output);
-    }
-    lastOutputRef.current = output;
+    return output.subscribe((event) => {
+      // A reset means the retained output was replaced, e.g. by a reconnect
+      // buffer that does not extend what this terminal already shows.
+      terminal.write(event.type === 'append' ? event.data : TERMINAL_CLEAR_SEQUENCE + event.output);
+    });
   }, [output]);
 
   // Focus terminal when it becomes active (e.g., tab switch)

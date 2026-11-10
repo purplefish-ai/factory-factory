@@ -82,11 +82,13 @@ beforeEach(() => {
   });
   vi.spyOn(githubCLIService, 'getAuthenticatedUsername').mockResolvedValue('me');
   vi.spyOn(githubCLIService, 'getPRStatusDetails').mockResolvedValue(core);
-  vi.spyOn(githubCLIService, 'getPRReviewDetails').mockResolvedValue({
-    updatedAt: core.updatedAt,
-    reviews: [],
+  // With reviews, core facts arrive with the conversation comments in one read;
+  // delegate so each case's core-facts mock drives both reads.
+  vi.spyOn(githubCLIService, 'getPRObservationDetails').mockImplementation(async (...args) => ({
+    ...(await githubCLIService.getPRStatusDetails(...args)),
     comments: [],
-  });
+  }));
+  vi.spyOn(githubCLIService, 'getPRReviews').mockResolvedValue([]);
   vi.spyOn(githubCLIService, 'getReviewComments').mockResolvedValue([comment(1)]);
   vi.spyOn(githubCLIService, 'getResolvedReviewCommentIds').mockResolvedValue(new Set());
 });
@@ -140,7 +142,7 @@ it.each(['username', 'policy', 'reviews', 'comments', 'resolved threads'])(
     } else if (failure === 'policy') {
       readPolicy.mockRejectedValueOnce(unavailable);
     } else if (failure === 'reviews') {
-      vi.mocked(githubCLIService.getPRReviewDetails).mockRejectedValueOnce(unavailable);
+      vi.mocked(githubCLIService.getPRReviews).mockRejectedValueOnce(unavailable);
     } else if (failure === 'comments') {
       vi.mocked(githubCLIService.getReviewComments).mockRejectedValueOnce(unavailable);
     } else {
@@ -252,7 +254,7 @@ it.each(['core', 'abort'])('never accepts or publishes after a %s failure', asyn
 
 function reviewReads() {
   return [
-    githubCLIService.getPRReviewDetails,
+    githubCLIService.getPRReviews,
     githubCLIService.getReviewComments,
     githubCLIService.getResolvedReviewCommentIds,
   ].reduce((total, read) => total + vi.mocked(read).mock.calls.length, 0);
@@ -272,6 +274,7 @@ it('reads only core facts while monitoring is off and baselines reviews when it 
   const poll = () => observeMonitoredPR(ports, target);
   expect(await poll()).toBe(true);
   expect(reviewReads()).toBe(0);
+  expect(githubCLIService.getPRObservationDetails).not.toHaveBeenCalled();
   expect(await workspacePrSnapshotService.find(target)).toMatchObject({
     state: 'OPEN',
     observation: { reviewsComplete: false, actionableReviews: [] },

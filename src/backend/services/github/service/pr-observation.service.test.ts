@@ -1,4 +1,6 @@
 import { beforeEach, expect, it, vi } from 'vitest';
+import { GitHubConnectivityError } from '@/backend/lib/github-cli-error';
+import { ADVERSARIAL_REVIEW_MARKER } from '@/shared/adversarial-review';
 import type { PRWithFullDetails } from '@/shared/github-types';
 import { redObservation } from '@/shared/pr-monitoring.test-helpers';
 import { githubCLIService } from './github-cli.service';
@@ -40,6 +42,21 @@ function fullDetails(overrides: Partial<PRWithFullDetails> = {}): PRWithFullDeta
 }
 
 const target = { workspaceId: 'w', prId: 'p' };
+const reviewerComment = {
+  id: 2,
+  author: { login: 'reviewer' },
+  body: 'Please fix',
+  path: 'src/file.ts',
+  line: 2,
+  url: redObservation.url,
+  createdAt: redObservation.observedAt,
+  updatedAt: redObservation.observedAt,
+};
+/** Core facts come from the combined read with reviews, or the core read without. */
+function mockCore(details: PRWithFullDetails) {
+  vi.mocked(githubCLIService.getPRStatusDetails).mockResolvedValue(details);
+  vi.mocked(githubCLIService.getPRObservationDetails).mockResolvedValue(details);
+}
 let clock = Date.now();
 const readPolicy = vi.fn(async () => ({ reviewTriggerMode: 'CHANGES_REQUESTED' as const }));
 
@@ -54,7 +71,8 @@ beforeEach(() => {
   });
   vi.spyOn(githubCLIService, 'getAuthenticatedUsername').mockResolvedValue('me');
   vi.spyOn(githubCLIService, 'getPRStatusDetails').mockResolvedValue(fullDetails());
-  vi.spyOn(githubCLIService, 'getPRReviewDetails').mockResolvedValue(fullDetails());
+  vi.spyOn(githubCLIService, 'getPRObservationDetails').mockResolvedValue(fullDetails());
+  vi.spyOn(githubCLIService, 'getPRReviews').mockResolvedValue([]);
   vi.spyOn(githubCLIService, 'getReviewComments').mockResolvedValue([]);
   vi.spyOn(githubCLIService, 'getResolvedReviewCommentIds').mockResolvedValue(new Set());
 });
@@ -75,16 +93,7 @@ it('accepts core CI facts with unknown GitHub identity and retries enrichment ne
       createdAt: redObservation.observedAt,
       updatedAt: redObservation.observedAt,
     },
-    {
-      id: 2,
-      author: { login: 'reviewer' },
-      body: 'Please fix',
-      path: 'src/file.ts',
-      line: 2,
-      url: redObservation.url,
-      createdAt: redObservation.observedAt,
-      updatedAt: redObservation.observedAt,
-    },
+    reviewerComment,
   ]);
   await expect(prObservationService.fetch(target)).resolves.toMatchObject({
     ciStatus: 'FAILURE',
@@ -92,8 +101,9 @@ it('accepts core CI facts with unknown GitHub identity and retries enrichment ne
     actionableReviews: [],
     resolvedReviewIds: [],
   });
-  expect(githubCLIService.getPRStatusDetails).toHaveBeenCalledTimes(1);
-  expect(githubCLIService.getPRReviewDetails).not.toHaveBeenCalled();
+  expect(githubCLIService.getPRObservationDetails).toHaveBeenCalledTimes(1);
+  expect(githubCLIService.getPRStatusDetails).not.toHaveBeenCalled();
+  expect(githubCLIService.getPRReviews).not.toHaveBeenCalled();
   await expect(prObservationService.fetch(target)).resolves.toMatchObject({
     reviewsComplete: true,
     actionableReviews: [expect.objectContaining({ identity: 'comment:2', author: 'reviewer' })],
@@ -119,37 +129,84 @@ it('reads only core PR facts when review data is not requested', async () => {
   expect(githubCLIService.getPRStatusDetails).toHaveBeenCalledOnce();
   expect(readPolicy).not.toHaveBeenCalled();
   expect(githubCLIService.getAuthenticatedUsername).not.toHaveBeenCalled();
-  expect(githubCLIService.getPRReviewDetails).not.toHaveBeenCalled();
+  expect(githubCLIService.getPRObservationDetails).not.toHaveBeenCalled();
+  expect(githubCLIService.getPRReviews).not.toHaveBeenCalled();
   expect(githubCLIService.getReviewComments).not.toHaveBeenCalled();
   expect(githubCLIService.getResolvedReviewCommentIds).not.toHaveBeenCalled();
 });
 
 it('reads review data by default and when requested', async () => {
+  vi.mocked(githubCLIService.getReviewComments).mockResolvedValue([reviewerComment]);
   await prObservationService.fetch(target);
   await prObservationService.fetch(target, undefined, { includeReviews: true });
-  expect(githubCLIService.getPRReviewDetails).toHaveBeenCalledTimes(2);
+  expect(githubCLIService.getPRObservationDetails).toHaveBeenCalledTimes(2);
+  expect(githubCLIService.getPRReviews).toHaveBeenCalledTimes(2);
   expect(githubCLIService.getReviewComments).toHaveBeenCalledTimes(2);
   expect(githubCLIService.getResolvedReviewCommentIds).toHaveBeenCalledTimes(2);
+  // Core facts and conversation comments share one read.
+  expect(githubCLIService.getPRStatusDetails).not.toHaveBeenCalled();
+});
+
+it('reads conversation comments from the core read for the adversarial-review marker', async () => {
+  vi.mocked(githubCLIService.getPRObservationDetails).mockResolvedValue(
+    fullDetails({
+      comments: [
+        {
+          id: 'IC_1',
+          author: { login: 'me' },
+          body: `Review\n${ADVERSARIAL_REVIEW_MARKER}`,
+          createdAt: redObservation.observedAt,
+          updatedAt: redObservation.observedAt,
+          url: `${redObservation.url}#issuecomment-1`,
+        },
+      ],
+    })
+  );
+  const observation = await prObservationService.fetch(target);
+  expect(observation.actionableReviews.map((r) => r.identity)).toEqual(['conversation:IC_1']);
+  expect(githubCLIService.getPRObservationDetails).toHaveBeenCalledOnce();
+  expect(githubCLIService.getPRStatusDetails).not.toHaveBeenCalled();
+});
+
+it('skips the review-thread lookup when the PR has no inline review comments', async () => {
+  await expect(prObservationService.fetch(target)).resolves.toMatchObject({
+    reviewsComplete: true,
+    resolvedReviewIds: [],
+  });
+  expect(githubCLIService.getReviewComments).toHaveBeenCalledOnce();
+  expect(githubCLIService.getResolvedReviewCommentIds).not.toHaveBeenCalled();
+});
+
+it('filters inline comments in resolved threads once any exist', async () => {
+  vi.mocked(githubCLIService.getReviewComments).mockResolvedValue([reviewerComment]);
+  vi.mocked(githubCLIService.getResolvedReviewCommentIds).mockResolvedValue(new Set([2]));
+  await expect(prObservationService.fetch(target)).resolves.toMatchObject({
+    reviewsComplete: true,
+    actionableReviews: [],
+    resolvedReviewIds: ['comment:2'],
+  });
 });
 
 it('fetches the explicit association and rejects missing head metadata', async () => {
-  vi.mocked(githubCLIService.getPRStatusDetails).mockResolvedValue(
-    fullDetails({ headRefOid: undefined })
-  );
+  mockCore(fullDetails({ headRefOid: undefined }));
   await expect(prObservationService.fetch(target)).rejects.toThrow('head');
-  expect(githubCLIService.getPRStatusDetails).toHaveBeenCalledWith('org/repo', 1, undefined);
+  expect(githubCLIService.getPRObservationDetails).toHaveBeenCalledWith('org/repo', 1, undefined);
 });
 
-it.each(['username', 'policy', 'reviews', 'comments', 'resolved threads'])(
+it.each(['username', 'policy', 'reviews', 'conversation comments', 'comments', 'resolved threads'])(
   'preserves CI/conflict facts and claims no resolutions when %s enrichment fails',
   async (failure) => {
     const unavailable = new Error('optional enrichment unavailable');
+    vi.mocked(githubCLIService.getReviewComments).mockResolvedValue([reviewerComment]);
     if (failure === 'username') {
       vi.mocked(githubCLIService.getAuthenticatedUsername).mockRejectedValue(unavailable);
     } else if (failure === 'policy') {
       readPolicy.mockRejectedValue(unavailable);
     } else if (failure === 'reviews') {
-      vi.mocked(githubCLIService.getPRReviewDetails).mockRejectedValue(unavailable);
+      vi.mocked(githubCLIService.getPRReviews).mockRejectedValue(unavailable);
+    } else if (failure === 'conversation comments') {
+      // The combined read failed; the core facts are read again on their own.
+      vi.mocked(githubCLIService.getPRObservationDetails).mockRejectedValue(unavailable);
     } else if (failure === 'comments') {
       vi.mocked(githubCLIService.getReviewComments).mockRejectedValue(unavailable);
     } else {
@@ -193,9 +250,7 @@ it('carries resolved comment identities even when review comment pages are incom
 });
 
 it('carries the GitHub title into the normalized monitoring observation', async () => {
-  vi.mocked(githubCLIService.getPRStatusDetails).mockResolvedValue(
-    fullDetails({ title: 'Update title from GitHub' })
-  );
+  mockCore(fullDetails({ title: 'Update title from GitHub' }));
   await expect(prObservationService.fetch(target)).resolves.toMatchObject({
     title: 'Update title from GitHub',
   });
@@ -211,43 +266,52 @@ it.each(['core', 'review'])(
       return Promise.reject(reason);
     };
     if (read === 'core') {
-      vi.mocked(githubCLIService.getPRStatusDetails).mockImplementation(abort);
+      vi.mocked(githubCLIService.getPRObservationDetails).mockImplementation(abort);
     } else {
-      vi.mocked(githubCLIService.getPRReviewDetails).mockImplementation(abort);
+      vi.mocked(githubCLIService.getPRReviews).mockImplementation(abort);
     }
     await expect(prObservationService.fetch(target, controller.signal)).rejects.toBe(reason);
-    expect(githubCLIService.getPRStatusDetails).toHaveBeenCalledWith(
+    expect(githubCLIService.getPRObservationDetails).toHaveBeenCalledWith(
       'org/repo',
       1,
       controller.signal
     );
+    // An aborted combined read is not retried as a core-only read.
+    expect(githubCLIService.getPRStatusDetails).not.toHaveBeenCalled();
     if (read === 'review') {
-      expect(githubCLIService.getPRReviewDetails).toHaveBeenCalledWith(
-        'org/repo',
-        1,
-        controller.signal
-      );
+      expect(githubCLIService.getPRReviews).toHaveBeenCalledWith('org/repo', 1, controller.signal);
     }
   }
 );
 
 it('propagates an AbortError even when no supplied signal has been aborted', async () => {
   const error = new DOMException('aborted', 'AbortError');
-  vi.mocked(githubCLIService.getPRReviewDetails).mockRejectedValue(error);
+  vi.mocked(githubCLIService.getPRReviews).mockRejectedValue(error);
   await expect(prObservationService.fetch(target)).rejects.toBe(error);
 });
 
 it('rejects core failures and never fabricates a successful CI observation', async () => {
   const error = new Error('core GitHub fetch failed');
+  vi.mocked(githubCLIService.getPRObservationDetails).mockRejectedValue(
+    new Error('combined GitHub fetch failed')
+  );
   vi.mocked(githubCLIService.getPRStatusDetails).mockRejectedValue(error);
   await expect(prObservationService.fetch(target)).rejects.toBe(error);
+  await expect(
+    prObservationService.fetch(target, undefined, { includeReviews: false })
+  ).rejects.toBe(error);
+});
+
+it('propagates a connectivity failure of the combined read without a core-only retry', async () => {
+  const error = new GitHubConnectivityError('offline', new Error('offline'));
+  vi.mocked(githubCLIService.getPRObservationDetails).mockRejectedValue(error);
+  await expect(prObservationService.fetch(target)).rejects.toBe(error);
+  expect(githubCLIService.getPRStatusDetails).not.toHaveBeenCalled();
 });
 
 it('keeps terminal state and the current head when enrichment is unavailable', async () => {
   readPolicy.mockRejectedValue(new Error('settings offline'));
-  vi.mocked(githubCLIService.getPRStatusDetails).mockResolvedValue(
-    fullDetails({ state: 'MERGED', headRefOid: 'new-head', statusCheckRollup: null })
-  );
+  mockCore(fullDetails({ state: 'MERGED', headRefOid: 'new-head', statusCheckRollup: null }));
   await expect(prObservationService.fetch(target)).resolves.toMatchObject({
     prState: 'MERGED',
     headSha: 'new-head',
@@ -263,23 +327,17 @@ it('keeps a known merge conflict while GitHub is still computing mergeability', 
     findPR: async () => ({ url: redObservation.url, hasMergeConflict: true }),
     readPolicy,
   });
-  vi.mocked(githubCLIService.getPRStatusDetails).mockResolvedValue(
-    fullDetails({ mergeStateStatus: 'UNKNOWN' })
-  );
+  mockCore(fullDetails({ mergeStateStatus: 'UNKNOWN' }));
   expect(await prObservationService.fetch(target)).toMatchObject({ hasMergeConflict: true });
 
-  vi.mocked(githubCLIService.getPRStatusDetails).mockResolvedValue(
-    fullDetails({ mergeStateStatus: 'CLEAN' })
-  );
+  mockCore(fullDetails({ mergeStateStatus: 'CLEAN' }));
   expect(await prObservationService.fetch(target)).toMatchObject({ hasMergeConflict: false });
 
   prObservationService.configure({
     findPR: async () => ({ url: redObservation.url, hasMergeConflict: false }),
     readPolicy,
   });
-  vi.mocked(githubCLIService.getPRStatusDetails).mockResolvedValue(
-    fullDetails({ mergeStateStatus: 'UNKNOWN' })
-  );
+  mockCore(fullDetails({ mergeStateStatus: 'UNKNOWN' }));
   expect(await prObservationService.fetch(target)).toMatchObject({ hasMergeConflict: false });
 });
 

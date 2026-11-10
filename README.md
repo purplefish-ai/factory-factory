@@ -202,6 +202,15 @@ operations.
 
 The server listens on loopback only unless you pass another address with
 `ff serve --host` (for example `--host 0.0.0.0`, as the Docker image does).
+While it listens on loopback and every allowed origin is a loopback one (the
+default, and every local launch mode), its own page is always an allowed origin:
+an `http:` loopback origin (`localhost`, `127.x.x.x` or `[::1]`) on the port the
+server actually bound. When the requested port is taken and the server falls
+back to the next free one (for example a second desktop instance while
+`ff serve` holds 3001), the app on that port keeps working without listing it in
+`CORS_ALLOWED_ORIGINS`. Loopback pages on other, unconfigured ports are still
+rejected. A server bound beyond loopback, or configured with a public origin
+(`ff tailscale`, a reverse proxy), allows only the configured origins.
 
 Port selection rejects values outside the integer range 1–65535 before starting
 a process or binding a socket, then checks listening processes with `lsof` on
@@ -338,12 +347,14 @@ via nginx, Caddy, or another reverse proxy:
 
 - Set `CORS_ALLOWED_ORIGINS` to the exact public origin(s), comma-separated:
   `CORS_ALLOWED_ORIGINS=https://ff.example.com`. This gates HTTP CORS, every
-  tRPC API request that carries an `Origin` header, and WebSocket upgrades;
-  non-loopback origins must match exactly (scheme + host + non-default port, no
-  trailing slash). While the backend listens on loopback, tRPC requests must
-  also use a loopback `Host` or the host of an allowed origin, which blocks DNS
-  rebinding; a proxy that forwards `Host: ff.example.com` is covered by the
-  setting above.
+  tRPC API request that carries an `Origin` header, and WebSocket upgrades,
+  which must always carry an allowed `Origin`; non-loopback origins must match
+  exactly (scheme + host + non-default port, no trailing slash). With a public
+  origin configured, the backend no longer implies its own loopback origin, so
+  only the listed origins are accepted. While the backend listens on loopback,
+  tRPC requests must also use a loopback `Host` or the host of an allowed
+  origin, which blocks DNS rebinding; a proxy that forwards
+  `Host: ff.example.com` is covered by the setting above.
 - Keep the server on loopback so only your proxy can reach it: leave
   `BACKEND_HOST` unset (the backend then binds `127.0.0.1` and, where IPv6 is
   available, `::1`), or set it to `localhost` or `127.0.0.1`.
