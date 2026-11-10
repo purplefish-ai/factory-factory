@@ -186,6 +186,7 @@ interface WebSocketMessagePayloadByType {
   config_options_update: {
     configOptions: ChatConfigOption[];
   };
+  steer_settled: { requestId: string };
   config_option_applied: { requestId: string };
 }
 

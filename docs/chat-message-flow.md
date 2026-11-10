@@ -334,6 +334,14 @@ they show. Inside the transcript, the virtualizer's `getItemKey` and
 `rangeExtractor` change only when the row key values change, because a new
 `getItemKey` rebuilds every row measurement.
 
+The reverse holds while a session streams: each transcript update re-renders
+`ChatContent`, and the memoized `ChatInput` skips it only while its props keep
+their identity. Pass `leadingControls` as a memoized element, not inline JSX.
+Inside the composer, the usage control passed to `RightControls`, the runtime
+controls given to `RuntimeOptions`, and the model and reasoning change handlers
+are memoized from their inputs, so an unrelated composer render does not
+re-render the controls row.
+
 The renderer keeps a recent transcript window of
 `DEFAULT_RENDERER_TRANSCRIPT_LIMIT` messages. Snapshots and replay arrive
 trimmed to the limit; live appends then grow the window by up to a tenth of the

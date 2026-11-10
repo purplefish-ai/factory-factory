@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, expect, it, vi } from 'vitest';
-import { createAgentAuthoring } from '@/backend/orchestration/agent-authoring.orchestrator';
+import { createAgentAuthoring } from '@/backend/orchestration/agents/agent-authoring.orchestrator';
 import {
   createIntegrationDatabase,
   destroyIntegrationDatabase,

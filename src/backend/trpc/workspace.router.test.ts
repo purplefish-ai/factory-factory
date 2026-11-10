@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AppContext, ApplicationServices } from '@/backend/app-context';
 import { ApplicationError } from '@/backend/lib/application-error';
 import type { CLIHealthStatus } from '@/backend/orchestration/cli-health.service';
-import { launchWorkspace } from '@/backend/orchestration/workspace-launch.orchestrator';
+import { launchWorkspace } from '@/backend/orchestration/workspace-lifecycle/workspace-launch.orchestrator';
 import { applicationGraphMocks, createFakeApplicationGraph } from '@/test-utils/application-graph';
 import { PRState, RatchetState, WorkspaceStatus } from '@prisma-gen/client';
 
@@ -878,6 +878,7 @@ describe('workspaceCoreRouter', () => {
     expect(sessionDomainService.forgetProviderHistoryIdentity).toHaveBeenCalledWith(
       'deleted-session'
     );
+    const deletedWorkspace = { id: 'w1', project: { slug: 'demo' } };
     expect(mockCleanupWorkspaceRuntimeResources).toHaveBeenCalledWith(
       'w1',
       expect.objectContaining({
@@ -885,15 +886,13 @@ describe('workspaceCoreRouter', () => {
         runScriptService,
         terminalService,
       }),
-      'delete'
+      'delete',
+      deletedWorkspace
     );
     expect(sessionLifecycleService.stopWorkspaceSessions).toHaveBeenCalledWith('w1');
     expect(runScriptService.stopRunScript).toHaveBeenCalledWith('w1');
     expect(runScriptService.evictWorkspaceBuffers).toHaveBeenCalledWith('w1');
-    expect(mockCleanupWorkspaceWorktree).toHaveBeenCalledWith(
-      { id: 'w1', project: { slug: 'demo' } },
-      {}
-    );
+    expect(mockCleanupWorkspaceWorktree).toHaveBeenCalledWith(deletedWorkspace, {});
     const evictionCallOrder = runScriptService.evictWorkspaceBuffers.mock.invocationCallOrder[0];
     const deleteCallOrder = mockWorkspaceDataService.delete.mock.invocationCallOrder[0];
     if (evictionCallOrder === undefined || deleteCallOrder === undefined) {

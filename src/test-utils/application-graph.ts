@@ -15,8 +15,8 @@
  * no edit here either.
  */
 import { type Mock, vi } from 'vitest';
-import { createAgentAuthoring } from '@/backend/orchestration/agent-authoring.orchestrator';
-import { createAgentManagement } from '@/backend/orchestration/agent-management.orchestrator';
+import { createAgentAuthoring } from '@/backend/orchestration/agents/agent-authoring.orchestrator';
+import { createAgentManagement } from '@/backend/orchestration/agents/agent-management.orchestrator';
 import { applicationUpdateAdmission } from '@/backend/services/application-update-admission.service';
 import type {
   PreparedSessionLoad,
@@ -68,13 +68,13 @@ vi.mock('@/backend/services/application-update', () =>
 vi.mock('@/backend/orchestration/cli-health.service', () =>
   withAutoStubs('cli-health.service', { cliHealthService: {} })
 );
-vi.mock('@/backend/orchestration/data-backup.service', () =>
+vi.mock('@/backend/orchestration/data-backup/data-backup.service', () =>
   withAutoStubs('data-backup.service', { dataBackupService: {} })
 );
 vi.mock('@/backend/orchestration/domain-bridges.orchestrator', () =>
   withAutoStubs('domain-bridges.orchestrator', { configureDomainBridges: vi.fn() })
 );
-vi.mock('@/backend/orchestration/event-collector.orchestrator', () =>
+vi.mock('@/backend/orchestration/snapshots/event-collector.orchestrator', () =>
   withAutoStubs('event-collector.orchestrator', {
     createEventCollectorOrchestrator: vi.fn(() => ({
       start: vi.fn(),
@@ -88,15 +88,15 @@ vi.mock('@/backend/orchestration/linear-config.helper', () =>
     getWorkspaceLinearContext: vi.fn().mockResolvedValue(null),
   })
 );
-vi.mock('@/backend/orchestration/reconciliation.service', () =>
+vi.mock('@/backend/orchestration/workspace-lifecycle/reconciliation.service', () =>
   withAutoStubs('reconciliation.service', {
     reconciliationService: { stopPeriodicCleanup: vi.fn(async () => undefined) },
   })
 );
-vi.mock('@/backend/orchestration/scheduler.service', () =>
+vi.mock('@/backend/orchestration/pull-requests/scheduler.service', () =>
   withAutoStubs('scheduler.service', { schedulerService: { stop: vi.fn(async () => undefined) } })
 );
-vi.mock('@/backend/orchestration/snapshot-reconciliation.orchestrator', () =>
+vi.mock('@/backend/orchestration/snapshots/snapshot-reconciliation.orchestrator', () =>
   withAutoStubs('snapshot-reconciliation.orchestrator', {
     SnapshotReconciliationService: class {
       start = vi.fn();
@@ -107,14 +107,14 @@ vi.mock('@/backend/orchestration/snapshot-reconciliation.orchestrator', () =>
 vi.mock('@/backend/orchestration/adversarial-review.orchestrator', () =>
   withAutoStubs('adversarial-review.orchestrator', { triggerAdversarialReview: vi.fn() })
 );
-vi.mock('@/backend/orchestration/workspace-archive.orchestrator', () =>
+vi.mock('@/backend/orchestration/workspace-lifecycle/workspace-archive.orchestrator', () =>
   withAutoStubs('workspace-archive.orchestrator', {
     archiveWorkspace: vi.fn(),
     cleanupWorkspaceRuntimeResources: vi.fn(),
     recoverStaleArchivingWorkspaces: vi.fn(),
   })
 );
-vi.mock('@/backend/orchestration/workspace-children.orchestrator', () =>
+vi.mock('@/backend/orchestration/workspace-lifecycle/workspace-children.orchestrator', () =>
   withAutoStubs('workspace-children.orchestrator', {
     createChildWorkspace: vi.fn(),
     fireLifecycleNotification: vi.fn(),
@@ -122,13 +122,15 @@ vi.mock('@/backend/orchestration/workspace-children.orchestrator', () =>
     persistParentNotification: vi.fn(),
   })
 );
-vi.mock('@/backend/orchestration/workspace-notification-delivery.orchestrator', () =>
-  withAutoStubs('workspace-notification-delivery.orchestrator', {
-    deliverWorkspaceNotification: vi.fn(),
-    recoverWorkspaceMail: vi.fn().mockResolvedValue({ queued: false }),
-  })
+vi.mock(
+  '@/backend/orchestration/workspace-lifecycle/workspace-notification-delivery.orchestrator',
+  () =>
+    withAutoStubs('workspace-notification-delivery.orchestrator', {
+      deliverWorkspaceNotification: vi.fn(),
+      recoverWorkspaceMail: vi.fn().mockResolvedValue({ queued: false }),
+    })
 );
-vi.mock('@/backend/orchestration/workspace-init.orchestrator', () =>
+vi.mock('@/backend/orchestration/workspace-lifecycle/workspace-init.orchestrator', () =>
   withAutoStubs('workspace-init.orchestrator', {
     initializeWorkspaceWorktree: vi.fn(),
     enqueueWorkspaceInitializationTask: vi.fn((_id: string, task: () => Promise<unknown>) =>
@@ -138,13 +140,13 @@ vi.mock('@/backend/orchestration/workspace-init.orchestrator', () =>
     retryQueuedDispatchAfterWorkspaceReady: vi.fn(),
   })
 );
-vi.mock('@/backend/orchestration/workspace-retry-authority', () =>
+vi.mock('@/backend/orchestration/workspace-lifecycle/workspace-retry-authority', () =>
   withAutoStubs('workspace-retry-authority', {
     captureWorkspaceRetryGuard: vi.fn(),
     readWorkspaceRetryAvailability: vi.fn(),
   })
 );
-vi.mock('@/backend/orchestration/workspace-init-script-pipeline', () =>
+vi.mock('@/backend/orchestration/workspace-lifecycle/workspace-init-script-pipeline', () =>
   withAutoStubs('workspace-init-script-pipeline', { executeStartupScriptPipeline: vi.fn() })
 );
 vi.mock('@/backend/prompts/quick-actions', () =>
@@ -300,7 +302,7 @@ vi.mock('@/backend/services/session', async () => {
     sessionCommandFactories,
     sessionConfigService: {},
     sessionPermissionService: {},
-    sessionDispatchService: {},
+    sessionDispatchService: { shutdown: vi.fn().mockResolvedValue(undefined) },
     claudeModelCatalogService: { getModels: vi.fn() },
     codexModelCatalogService: { getModels: vi.fn() },
     providerUsageService: { getUsage: vi.fn() },
@@ -372,15 +374,15 @@ import type {
 import { prisma } from '@/backend/db';
 import { registerInterceptors, startInterceptors, stopInterceptors } from '@/backend/interceptors';
 import type { configureDomainBridges } from '@/backend/orchestration/domain-bridges.orchestrator';
+import { getWorkspaceLinearContext } from '@/backend/orchestration/linear-config.helper';
 import {
   createEventCollectorOrchestrator,
   type EventCollectorOrchestrator,
-} from '@/backend/orchestration/event-collector.orchestrator';
-import { getWorkspaceLinearContext } from '@/backend/orchestration/linear-config.helper';
-import { SnapshotReconciliationService } from '@/backend/orchestration/snapshot-reconciliation.orchestrator';
-import { recoverStaleArchivingWorkspaces } from '@/backend/orchestration/workspace-archive.orchestrator';
-import { enqueueWorkspaceInitializationTask } from '@/backend/orchestration/workspace-init.orchestrator';
-import { recoverWorkspaceMail } from '@/backend/orchestration/workspace-notification-delivery.orchestrator';
+} from '@/backend/orchestration/snapshots/event-collector.orchestrator';
+import { SnapshotReconciliationService } from '@/backend/orchestration/snapshots/snapshot-reconciliation.orchestrator';
+import { recoverStaleArchivingWorkspaces } from '@/backend/orchestration/workspace-lifecycle/workspace-archive.orchestrator';
+import { enqueueWorkspaceInitializationTask } from '@/backend/orchestration/workspace-lifecycle/workspace-init.orchestrator';
+import { recoverWorkspaceMail } from '@/backend/orchestration/workspace-lifecycle/workspace-notification-delivery.orchestrator';
 import { slackConnectionService } from '@/backend/services/agent-definition';
 import { codexAccountService } from '@/backend/services/codex-accounts';
 import { configService } from '@/backend/services/config.service';

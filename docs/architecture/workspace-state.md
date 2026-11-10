@@ -376,12 +376,12 @@ wait. Account exports include identity metadata only, excluding credentials and
 homes.
 
 Backup export and import map columns by hand.
-`src/backend/orchestration/data-backup-columns.test.ts` lists every Prisma
-scalar column of each model the recovery manifest covers. Each column is either
-declared exported, under a key the current export schema must have (possibly a
-flattened name), or excluded with a reason. A new column fails that test until
-it is classified. Reasons starting with `Gap:` are known omissions, such as
-`WorkspaceRunScript.postRunCommand`. The test checks the format, not the
+`src/backend/orchestration/data-backup/data-backup-columns.test.ts` lists every
+Prisma scalar column of each model the recovery manifest covers. Each column is
+either declared exported, under a key the current export schema must have
+(possibly a flattened name), or excluded with a reason. A new column fails that
+test until it is classified. Reasons starting with `Gap:` are known omissions,
+such as `WorkspaceRunScript.postRunCommand`. The test checks the format, not the
 hand-written mapping that fills it.
 
 ## Backup import
@@ -569,6 +569,25 @@ recovery. Requests that lose the conditional state transition re-read the
 workspace and retry once if it has rolled back to an archivable state. Other
 invalid transitions and cleanup failures remain errors.
 
+Archive and delete stop the workspace's sessions, run script and terminals
+first; any failure there aborts the operation. After they succeed and before the
+worktree is removed, a best-effort sweep terminates leftover processes such as a
+dev server an agent detached from a background shell. A process matches only if
+it belongs to the server's user, has no controlling terminal, is not the server,
+one of its ancestors or PID 0/1, and has its working directory or executable on
+a path boundary inside the worktree. Both the configured and realpath-resolved
+worktree paths are checked, and each must be strictly inside the matching
+project worktree base. Command-line arguments are never matched, so a process
+that only names the worktree in its arguments, such as an editor opened on it,
+is left alone. Matches receive SIGTERM. After three seconds the processes are
+listed again, and survivors that still match with the same start time receive
+SIGKILL; a PID reused in the meantime is not killed. Each listing is bounded to
+four seconds. macOS uses `ps` and `lsof`, Linux reads `/proc`, and other
+platforms skip the sweep. A sweep failure is logged and never blocks the archive
+or delete; a sweep that fails partway may already have stopped some processes
+and left others running. Workspaces archived before this sweep existed keep
+their leftover processes until they exit or are stopped by hand.
+
 Startup archive recovery runs in the background after essential session and
 workspace state repairs. Slow Git worktree cleanup does not delay HTTP/WebSocket
 readiness or the CLI startup signal; affected workspaces remain ARCHIVING until
@@ -747,22 +766,38 @@ entirely.
 Each cache entry watches its worktree and private Git directory, while linked
 worktrees share one reference-counted watcher for the repo's common `.git`
 directory. Worktree files and private metadata such as `HEAD`, `index`, and
-`config.worktree` invalidate only their owning worktree. Common metadata changes
-invalidate every dependent entry, including shared config, refs, info attributes
-and excludes, and reftable state. Object and reflog writes are ignored because
-the associated ref event performs the invalidation. If the shared watcher fails,
-all of its dependents switch to the five-minute fallback expiry; removing the
-last dependent closes it. On Linux all of these watches are nonrecursive, so
-installation never traverses dependency trees, Git objects, logs or other
-worktrees. Linux snapshots expire after five seconds even with healthy watches;
-existing snapshot readers refresh nested working-tree edits and ref changes that
-shallow watches cannot see. Watch failures retain that five-second limit on
-Linux. Other platforms retain recursive watching and the five-minute failure
-fallback. Worktree removal closes its watchers before Git or filesystem deletion
-and suspends watcher installation until that operation settles. Concurrent
-snapshot reads cannot reinstall watches during deletion. On success or failure,
-it retires any snapshots calculated during deletion; the next read may recreate
-watchers lazily if the worktree survives.
+`config.worktree` invalidate only their owning worktree. Loose branch,
+remote-tracking and tag refs (and their `.lock` files) invalidate only snapshots
+that read them: the branch named by the worktree's private `HEAD`, and every
+full ref Git could resolve the merge-base revisions it tried
+(`origin/<defaultBranch>`, then `<defaultBranch>`) or its upstream to. A commit
+or push in one worktree therefore recomputes that worktree, while moving the
+default branch still recomputes everyone. A snapshot's refs are treated as
+unknown, so any ref change invalidates it, while its calculation is running,
+when `HEAD` cannot be read, when one of those refs is a loose symbolic ref, and
+when the upstream lookup fails for any reason other than "no upstream
+configured" or a detached `HEAD` (a configured upstream whose tracking ref is
+missing could reappear). Ref names are compared case-insensitively after NFC
+normalization, so canonically equivalent Unicode names match, and a directory
+event covers every ref beneath it. Every other common metadata change still
+invalidates every dependent entry, including `packed-refs`, other ref namespaces
+such as `refs/replace`, shared config, info attributes and excludes, reftable
+state, and events without a filename. Object and reflog writes are ignored
+because the associated ref event performs the invalidation, and so is
+`packed-refs.lock`: Git takes and releases it around ordinary loose ref updates,
+while an actual rewrite also reports `packed-refs.new` and `packed-refs`. If the
+shared watcher fails, all of its dependents switch to the five-minute fallback
+expiry; removing the last dependent closes it. On Linux all of these watches are
+nonrecursive, so installation never traverses dependency trees, Git objects,
+logs or other worktrees. Linux snapshots expire after five seconds even with
+healthy watches; existing snapshot readers refresh nested working-tree edits and
+ref changes that shallow watches cannot see. Watch failures retain that
+five-second limit on Linux. Other platforms retain recursive watching and the
+five-minute failure fallback. Worktree removal closes its watchers before Git or
+filesystem deletion and suspends watcher installation until that operation
+settles. Concurrent snapshot reads cannot reinstall watches during deletion. On
+success or failure, it retires any snapshots calculated during deletion; the
+next read may recreate watchers lazily if the worktree survives.
 
 Git snapshots keep one running calculation per worktree/default-branch pair.
 Invalidation clears the cached result and fences the running generation without

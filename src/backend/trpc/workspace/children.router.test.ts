@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApplicationError } from '@/backend/lib/application-error';
-import type { DeliverWorkspaceNotificationInput } from '@/backend/orchestration/workspace-notification-delivery.orchestrator';
+import type { DeliverWorkspaceNotificationInput } from '@/backend/orchestration/workspace-lifecycle/workspace-notification-delivery.orchestrator';
 
 const mockArchiveWorkspace = vi.hoisted(() => vi.fn());
 const mockCreateChildWorkspace = vi.hoisted(() => vi.fn());

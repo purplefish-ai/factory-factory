@@ -1,5 +1,5 @@
 import { afterAll, afterEach, beforeAll, beforeEach, expect, it, vi } from 'vitest';
-import { dataBackupService } from '@/backend/orchestration/data-backup.service';
+import { dataBackupService } from '@/backend/orchestration/data-backup/data-backup.service';
 import { jobRunner } from '@/backend/services/job-runner.service';
 import { periodicTaskService } from '@/backend/services/periodic-task';
 import { expectBackupWriterUnopened } from '@/backend/services/settings/resources/backup-writer.test-support';

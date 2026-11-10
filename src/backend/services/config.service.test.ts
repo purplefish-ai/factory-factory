@@ -224,6 +224,39 @@ describe('configService environment accessors', () => {
     expect(configService.getCorsConfig().disableCorsChecks).toBe(false);
   });
 
+  it.each([
+    [undefined, true],
+    ['localhost', true],
+    ['127.0.0.1', true],
+    ['::1', true],
+    ['0.0.0.0', false],
+    ['::', false],
+    ['192.168.1.20', false],
+    ['factory.lan', false],
+  ])('allows the own loopback origin only when BACKEND_HOST=%s is loopback', (host, allowed) => {
+    Reflect.deleteProperty(process.env, 'CORS_ALLOWED_ORIGINS');
+    if (host === undefined) {
+      Reflect.deleteProperty(process.env, 'BACKEND_HOST');
+    } else {
+      process.env.BACKEND_HOST = host;
+    }
+    configService.reload();
+
+    expect(configService.getCorsConfig().allowOwnLoopbackOrigin).toBe(allowed);
+  });
+
+  it.each([
+    ['http://localhost:5173', true],
+    ['https://mac.tail123.ts.net', false],
+    ['https://ff.example.com,http://localhost:3001', false],
+  ])('derives the own-origin allowance from CORS_ALLOWED_ORIGINS=%s', (origins, allowed) => {
+    Reflect.deleteProperty(process.env, 'BACKEND_HOST');
+    process.env.CORS_ALLOWED_ORIGINS = origins;
+    configService.reload();
+
+    expect(configService.getCorsConfig().allowOwnLoopbackOrigin).toBe(allowed);
+  });
+
   it('expands BASE_DIR before dependent config paths', () => {
     const bracedBaseDir = '$' + '{BASE_DIR}';
     process.env.USER = 'testuser';
@@ -302,6 +335,8 @@ describe('configService environment accessors', () => {
       trustedLocalCidrs: ['172.17.0.1/32', '172.18.0.0/16'],
       trustProxyHeaders: true,
       disableCorsChecks: true,
+      // BACKEND_HOST=0.0.0.0 is not loopback.
+      allowOwnLoopbackOrigin: false,
     });
     expect(configService.getDebugConfig()).toEqual({ chatWebSocket: true });
     expect(configService.getCompressionConfig()).toEqual({ enabled: false });

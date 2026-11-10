@@ -44,6 +44,7 @@ export type SessionCommandError =
 
 export type SessionCommandReply =
   | { type: 'chat_capabilities'; capabilities: ChatBarCapabilities }
+  | { type: 'steer_settled'; requestId: string }
   | { type: 'config_option_applied'; requestId: string }
   | { type: 'error'; error: SessionCommandError; requestId?: string };
 

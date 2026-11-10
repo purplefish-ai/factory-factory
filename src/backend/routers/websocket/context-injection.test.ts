@@ -510,14 +510,17 @@ describe('HTTP and WebSocket application context injection', () => {
           'src/backend/routers/websocket/new.handler.ts',
           `
             import runtimeDefault from '@/backend/services/session';
-            import * as orchestration from '@/backend/orchestration/reconciliation.service';
+            import * as orchestration from '@/backend/orchestration/workspace-lifecycle/reconciliation.service';
             import '@/backend/services/rate-limiter.service';
             import database from '${absoluteDatabasePath}';
           `
         )
       ).toEqual([
         importViolation('src/backend/services/session', 'default'),
-        importViolation('src/backend/orchestration/reconciliation.service', '*'),
+        importViolation(
+          'src/backend/orchestration/workspace-lifecycle/reconciliation.service',
+          '*'
+        ),
         importViolation('src/backend/services/rate-limiter.service', 'side-effect'),
         importViolation('src/backend/db', 'default'),
       ]);

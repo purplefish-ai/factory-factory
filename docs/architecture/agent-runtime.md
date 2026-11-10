@@ -695,21 +695,24 @@ the active turn's configuration. Slash commands and automatic notifications
 remain queued. Concurrent steering of a different message reports a busy error;
 repeated clicks on the same pending message coalesce. If there is no active
 turn, a stale click on a later message is rejected instead of dispatching an
-earlier queue entry. Failed steering leaves the message queued. A steering
-acknowledgment has a 10-second deadline. On timeout, the client terminates that
-runtime before releasing queue ownership and withholds immediate automatic
-resend. Input may have been consumed before the missing acknowledgment, so a
-later explicit retry may repeat prior effects. The host requests
-`idleBehavior: "promptRequired"`, so a completion race falls back to ordinary
-prompt dispatch instead of creating an untracked adapter-owned turn. Accepted
-input is removed from the queue even if stopping advances the generation while
-the request settles, preventing a delivered steer from being replayed on resume.
-Queue-to-transcript handoffs publish the consumed input together with its
-committed transcript entries: each `transcript_message_committed` delta carries
-the entry and the remaining queue, so steering and batched sends never expose a
-partial state between removal and commit. The chat keeps each message row
-mounted and briefly collapses its queued controls when dispatched, respecting
-reduced-motion preferences.
+earlier queue entry. Failed steering leaves the message queued. The client
+immediately disables steering controls and shows “Steering…” for the selected
+message. A requester-only `steer_settled` acknowledgment or correlated error
+releases this pending state; disconnection and session changes also clear it. A
+steering acknowledgment has a 10-second deadline. On timeout, the client
+terminates that runtime before releasing queue ownership and withholds immediate
+automatic resend. Input may have been consumed before the missing
+acknowledgment, so a later explicit retry may repeat prior effects. The host
+requests `idleBehavior: "promptRequired"`, so a completion race falls back to
+ordinary prompt dispatch instead of creating an untracked adapter-owned turn.
+Accepted input is removed from the queue even if stopping advances the
+generation while the request settles, preventing a delivered steer from being
+replayed on resume. Queue-to-transcript handoffs publish the consumed input
+together with its committed transcript entries: each
+`transcript_message_committed` delta carries the entry and the remaining queue,
+so steering and batched sends never expose a partial state between removal and
+commit. The chat keeps each message row mounted and briefly collapses its queued
+controls when dispatched, respecting reduced-motion preferences.
 
 Codex uses native `turn/steer` without cancelling the current turn. Claude's
 native steering may pre-empt generation or background a foreground tool; neither
@@ -1134,7 +1137,10 @@ stop’s lifecycle write and suppresses a duplicate event only after durable
 success. A failed write retries the same event identity, replacing its transient
 banner if persistence recovers. Stops that suppress their own event still
 receive shutdown history. The supervisor's closed shutdown admission remains in
-effect after gate cleanup.
+effect after gate cleanup. Bulk shutdown does not run per-session stops, which
+own queue retries, so the next shutdown step (`SessionDispatchService.shutdown`)
+cancels pending retries, refuses new ones and waits for retries already
+dispatching before the database closes.
 
 Queue execution belongs to the single `SessionDispatchService` configured in
 `session-services.ts`. Initialization, notification delivery, lifecycle queue
@@ -1424,7 +1430,8 @@ existing owners.
 UI: `ChildWorkspacesPanel` in the right panel, a child badge on kanban cards,
 and an archive warning when a parent has active children.
 
-- Orchestration: `src/backend/orchestration/workspace-children.orchestrator.ts`
+- Orchestration:
+  `src/backend/orchestration/workspace-lifecycle/workspace-children.orchestrator.ts`
 - MCP entrypoint: `src/backend/mcp/workspace-mcp-server.ts`
 - Session MCP spawn configuration:
   `src/backend/services/session/service/acp/child-workspace-mcp-server.ts`

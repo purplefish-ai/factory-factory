@@ -16,6 +16,7 @@ function createBaseResetState(): Pick<
   | 'latestThinkingOrder'
   | 'latestThinkingDeltaOrder'
   | 'pendingMessages'
+  | 'pendingSteer'
   | 'lastRejectedMessage'
   | 'isCompacting'
   | 'toolProgress'
@@ -42,6 +43,7 @@ function createBaseResetState(): Pick<
     latestThinkingOrder: null,
     latestThinkingDeltaOrder: null,
     pendingMessages: new Map(),
+    pendingSteer: null,
     lastRejectedMessage: null,
     isCompacting: false,
     toolProgress: new Map(),
@@ -74,6 +76,7 @@ function createSessionSwitchResetState(): Pick<
   | 'latestThinkingOrder'
   | 'latestThinkingDeltaOrder'
   | 'pendingMessages'
+  | 'pendingSteer'
   | 'lastRejectedMessage'
   | 'queuedMessages'
   | 'sessionStatus'
@@ -141,6 +144,7 @@ export function createInitialChatState(overrides?: Partial<ChatState>): ChatStat
     latestThinkingOrder: null,
     latestThinkingDeltaOrder: null,
     pendingMessages: new Map(),
+    pendingSteer: null,
     lastRejectedMessage: null,
     isCompacting: false,
     toolProgress: new Map(),

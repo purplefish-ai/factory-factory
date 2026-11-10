@@ -188,7 +188,8 @@ evaluates `READY`, Ratchet-enabled workspaces with PRs, refreshes their Ratchet
 state from live GitHub data, and dispatches fixer sessions when the decision
 policy requires one.
 
-The PR scheduler in `src/backend/orchestration/scheduler.service.ts` uses
+The PR scheduler in
+`src/backend/orchestration/pull-requests/scheduler.service.ts` uses
 `SERVICE_INTERVAL_MS.schedulerPrSync` to sync stale PR snapshots and discover
 new PRs every three minutes. Page-load `syncPRStatus` calls and these periodic
 syncs converge cached PR state; see
@@ -511,6 +512,7 @@ Key tests are located at:
   `src/client/features/workspace/ratchet-state.test.ts`;
 - snapshot propagation and reconciliation:
   `src/backend/services/workspace/service/snapshot/workspace-snapshot-store.service.test.ts`
-  and `src/backend/orchestration/snapshot-reconciliation.orchestrator.test.ts`;
+  and
+  `src/backend/orchestration/snapshots/snapshot-reconciliation.orchestrator.test.ts`;
 - live event propagation:
-  `src/backend/orchestration/event-collector.orchestrator.test.ts`.
+  `src/backend/orchestration/snapshots/event-collector.orchestrator.test.ts`.

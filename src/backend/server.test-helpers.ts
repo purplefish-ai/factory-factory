@@ -85,9 +85,13 @@ export function createTestHarness(options: TestHarnessOptions = {}) {
       cleanup: vi.fn<(...args: unknown[]) => void>(),
       cleanupOldLogs: vi.fn<(...args: unknown[]) => void>(),
     },
+    cleanupOldLogFiles: vi.fn(async () => 0),
     sessionLifecycleService: {
       recoverStaleRunningSessions: vi.fn(async () => 0),
       stopAllClients: vi.fn(async () => undefined),
+    },
+    sessionDispatchService: {
+      shutdown: vi.fn(async () => undefined),
     },
     codexAccountService: {
       shutdown: vi.fn(async () => undefined),

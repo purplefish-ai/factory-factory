@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   launchWorkspace,
   type WorkspaceLaunchPorts,
-} from '@/backend/orchestration/workspace-launch.orchestrator';
+} from '@/backend/orchestration/workspace-lifecycle/workspace-launch.orchestrator';
 
 const mockLogger = vi.hoisted(() => ({
   info: vi.fn(),
@@ -19,7 +19,7 @@ vi.mock('@/backend/services/logger.service', () => ({
 
 vi.mock('@/backend/services/ratchet', () => ({ ratchetService: { configure: vi.fn() } }));
 
-vi.mock('./reconciliation.service', () => ({
+vi.mock('@/backend/orchestration/workspace-lifecycle/reconciliation.service', () => ({
   reconciliationService: { configure: vi.fn() },
 }));
 
@@ -128,16 +128,27 @@ vi.mock('@/backend/services/terminal', () => ({
   terminalSessionService: { recoverOrphanedSessions: vi.fn() },
 }));
 
-vi.mock('./workspace-init.orchestrator', () => ({
+vi.mock('@/backend/orchestration/workspace-lifecycle/workspace-init.orchestrator', () => ({
   initializeWorkspaceWorktree: vi.fn(),
   recoverStaleProvisioningWorkspace: vi.fn(),
 }));
 
-vi.mock('./pr-observation.orchestrator', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('./pr-observation.orchestrator')>()),
-  resetStablePRBackoff: vi.fn(),
-}));
+vi.mock(
+  '@/backend/orchestration/pull-requests/pr-observation.orchestrator',
+  async (importOriginal) => ({
+    ...(await importOriginal<
+      typeof import('@/backend/orchestration/pull-requests/pr-observation.orchestrator')
+    >()),
+    resetStablePRBackoff: vi.fn(),
+  })
+);
 
+import { resetStablePRBackoff } from '@/backend/orchestration/pull-requests/pr-observation.orchestrator';
+import { reconciliationService } from '@/backend/orchestration/workspace-lifecycle/reconciliation.service';
+import {
+  initializeWorkspaceWorktree,
+  recoverStaleProvisioningWorkspace,
+} from '@/backend/orchestration/workspace-lifecycle/workspace-init.orchestrator';
 import {
   githubCLIService,
   prFetchCoordinator,
@@ -173,13 +184,7 @@ import {
 } from '@/backend/services/workspace';
 import * as backgroundDispatch from './background-action-dispatch.orchestrator';
 import { type BridgeServices, configureDomainBridges } from './domain-bridges.orchestrator';
-import { resetStablePRBackoff } from './pr-observation.orchestrator';
-import { reconciliationService } from './reconciliation.service';
 import { createPRMonitoringTestServices } from './testing/pr-monitoring-services.test-support';
-import {
-  initializeWorkspaceWorktree,
-  recoverStaleProvisioningWorkspace,
-} from './workspace-init.orchestrator';
 
 const prServices = createPRMonitoringTestServices();
 

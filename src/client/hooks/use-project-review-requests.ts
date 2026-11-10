@@ -1,5 +1,10 @@
+import { useCallback, useRef } from 'react';
+import { runInBackground } from '@/client/lib/background-task';
 import { trpc } from '@/client/lib/trpc';
 import { githubPRPreviewInputSchema } from '@/shared/github-pr-preview';
+
+/** Matches the server's review-request cache, so a poll rarely finds it fresh twice. */
+export const REVIEW_REQUESTS_POLL_MS = 2 * 60_000;
 
 export interface ReviewProject {
   id: string;
@@ -20,10 +25,34 @@ export function getReviewRepository(project: ReviewProject | undefined): string 
 /** The page and sidebar share the same project key and freshness policy. */
 export function useProjectReviewRequests(project: ReviewProject | undefined) {
   const repository = getReviewRepository(project);
+  const projectId = project?.id ?? '';
   const query = trpc.prReview.listReviewRequests.useQuery(
-    { projectId: project?.id ?? '' },
-    { enabled: !!repository, staleTime: 30_000, refetchInterval: 30_000 }
+    { projectId },
+    {
+      enabled: !!repository,
+      staleTime: REVIEW_REQUESTS_POLL_MS,
+      refetchInterval: REVIEW_REQUESTS_POLL_MS,
+    }
   );
+  const utils = trpc.useUtils();
+  const refreshing = useRef<Promise<void> | null>(null);
+  // Explicit refreshes bypass the server cache and gh health cache, then fill the shared key.
+  // Clicks while one is running join it rather than queueing another gh search.
+  const refresh = useCallback(() => {
+    if (refreshing.current !== null) {
+      return;
+    }
+    const task = utils.client.prReview.listReviewRequests
+      .query({ projectId, forceRefresh: true })
+      .then((result) => {
+        utils.prReview.listReviewRequests.setData({ projectId }, result);
+      })
+      .finally(() => {
+        refreshing.current = null;
+      });
+    refreshing.current = task;
+    runInBackground(task, "Couldn't refresh reviews.");
+  }, [projectId, utils]);
   // Project metadata can change while this project-keyed response is cached.
   const health = query.data?.health;
   const unavailable =
@@ -33,5 +62,5 @@ export function useProjectReviewRequests(project: ReviewProject | undefined) {
       ? (query.data?.prs.filter((pr) => pr.repository.nameWithOwner.toLowerCase() === repository) ??
         [])
       : [];
-  return { ...query, prs, repository };
+  return { ...query, prs, repository, refresh };
 }

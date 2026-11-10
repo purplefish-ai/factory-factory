@@ -800,12 +800,12 @@ describe('explicit queued-message steering', () => {
     });
     const steer = h.dispatcher.steerQueuedMessage('session', selected.id);
     await vi.waitFor(() => expect(h.steerSessionMessage).toHaveBeenCalledOnce());
-    await h.dispatcher.steerQueuedMessage('session', selected.id);
+    const duplicate = h.dispatcher.steerQueuedMessage('session', selected.id);
     h.runtimeManager.isSessionPromptInFlight.mockReturnValue(false);
     await h.dispatcher.tryDispatchNextMessage('session');
     expect(h.sendSessionMessage).not.toHaveBeenCalled();
     pending.resolve();
-    await steer;
+    await Promise.all([steer, duplicate]);
     expect(h.steerSessionMessage).toHaveBeenCalledOnce();
     expect(sessionDomainService.getQueueSnapshot('session')).toEqual([]);
   });

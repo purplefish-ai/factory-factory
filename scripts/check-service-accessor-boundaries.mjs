@@ -230,7 +230,7 @@ const POLICY_BY_MODULE = new Map(
 
 const CROSS_OWNER_EXCEPTIONS = new Set([
   [
-    'src/backend/orchestration/data-backup.service.ts',
+    'src/backend/orchestration/data-backup/data-backup.service.ts',
     'src/backend/services/settings/resources/data-backup.accessor',
   ].join('::'),
 ]);

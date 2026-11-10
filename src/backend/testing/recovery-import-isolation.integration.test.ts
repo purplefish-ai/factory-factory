@@ -23,7 +23,7 @@ vi.mock('@/backend/db', () => ({
     return state.prisma;
   },
 }));
-import { dataBackupService } from '@/backend/orchestration/data-backup.service';
+import { dataBackupService } from '@/backend/orchestration/data-backup/data-backup.service';
 
 let db: IntegrationDatabase;
 let backup: ExportData;

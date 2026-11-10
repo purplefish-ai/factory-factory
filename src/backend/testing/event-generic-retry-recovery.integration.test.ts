@@ -22,8 +22,8 @@ it('rejects manual event RETRY while a generic startup script holds PROVISIONING
   await consumer.drain();
   const worktreePath = await recoveryWorktree();
   const { captureWorkspaceRetryGuard } = await vi.importActual<
-    typeof import('@/backend/orchestration/workspace-retry-authority')
-  >('@/backend/orchestration/workspace-retry-authority');
+    typeof import('@/backend/orchestration/workspace-lifecycle/workspace-retry-authority')
+  >('@/backend/orchestration/workspace-lifecycle/workspace-retry-authority');
   const source = await h.workspace.workspaceDataService.findByIdWithProject(
     h.claim.reservedWorkspaceId
   );
@@ -49,8 +49,8 @@ it('rejects manual event RETRY while a generic startup script holds PROVISIONING
     },
   });
   const { executeStartupScriptPipeline } = await vi.importActual<
-    typeof import('@/backend/orchestration/workspace-init-script-pipeline')
-  >('@/backend/orchestration/workspace-init-script-pipeline');
+    typeof import('@/backend/orchestration/workspace-lifecycle/workspace-init-script-pipeline')
+  >('@/backend/orchestration/workspace-lifecycle/workspace-init-script-pipeline');
   await db.prisma.project.update({
     where: { id: source.projectId },
     data: {
@@ -110,8 +110,8 @@ it('allows READY recovery during another session startup and fences the old gene
     },
   });
   const { captureWorkspaceRetryGuard } = await vi.importActual<
-    typeof import('@/backend/orchestration/workspace-retry-authority')
-  >('@/backend/orchestration/workspace-retry-authority');
+    typeof import('@/backend/orchestration/workspace-lifecycle/workspace-retry-authority')
+  >('@/backend/orchestration/workspace-lifecycle/workspace-retry-authority');
   const workspace = await h.workspace.workspaceDataService.findByIdWithProject(
     h.claim.reservedWorkspaceId
   );
@@ -139,8 +139,8 @@ it('allows READY recovery during another session startup and fences the old gene
   );
   const stop = vi.spyOn(h.session.sessionLifecycleService, 'stopWorkspaceSessions');
   const { initializeWorkspaceWorktree } = await vi.importActual<
-    typeof import('@/backend/orchestration/workspace-init.orchestrator')
-  >('@/backend/orchestration/workspace-init.orchestrator');
+    typeof import('@/backend/orchestration/workspace-lifecycle/workspace-init.orchestrator')
+  >('@/backend/orchestration/workspace-lifecycle/workspace-init.orchestrator');
   await db.prisma.workspace.update({ where: { id: workspace.id }, data: { status: 'FAILED' } });
   const initialization = initializeWorkspaceWorktree(workspace.id, { guard });
   try {
@@ -173,8 +173,8 @@ it.each([true, false])(
     providers[0]!.response.resolve({ stopReason: 'end_turn' });
     await consumer.drain();
     const { captureWorkspaceRetryGuard } = await vi.importActual<
-      typeof import('@/backend/orchestration/workspace-retry-authority')
-    >('@/backend/orchestration/workspace-retry-authority');
+      typeof import('@/backend/orchestration/workspace-lifecycle/workspace-retry-authority')
+    >('@/backend/orchestration/workspace-lifecycle/workspace-retry-authority');
     const workspace = await h.workspace.workspaceDataService.findByIdWithProject(
       h.claim.reservedWorkspaceId
     );
@@ -272,8 +272,8 @@ it.each([
       message: 'Recovered update',
     });
     const { captureWorkspaceRetryGuard } = await vi.importActual<
-      typeof import('@/backend/orchestration/workspace-retry-authority')
-    >('@/backend/orchestration/workspace-retry-authority');
+      typeof import('@/backend/orchestration/workspace-lifecycle/workspace-retry-authority')
+    >('@/backend/orchestration/workspace-lifecycle/workspace-retry-authority');
     const workspace = await h.workspace.workspaceDataService.findByIdWithProject(
       h.claim.reservedWorkspaceId
     );
@@ -465,8 +465,8 @@ it.each([true, false])(
       },
     });
     const { captureWorkspaceRetryGuard } = await vi.importActual<
-      typeof import('@/backend/orchestration/workspace-retry-authority')
-    >('@/backend/orchestration/workspace-retry-authority');
+      typeof import('@/backend/orchestration/workspace-lifecycle/workspace-retry-authority')
+    >('@/backend/orchestration/workspace-lifecycle/workspace-retry-authority');
     const workspace = await h.workspace.workspaceDataService.findByIdWithProject(
       h.claim.reservedWorkspaceId
     );
@@ -562,8 +562,8 @@ it.each([
     await h.session.sessionLifecycleService.startSession(other.id, { initialPrompt: '' });
     const provider = providers[1]!;
     const { captureWorkspaceRetryGuard } = await vi.importActual<
-      typeof import('@/backend/orchestration/workspace-retry-authority')
-    >('@/backend/orchestration/workspace-retry-authority');
+      typeof import('@/backend/orchestration/workspace-lifecycle/workspace-retry-authority')
+    >('@/backend/orchestration/workspace-lifecycle/workspace-retry-authority');
     const workspace = await h.workspace.workspaceDataService.findByIdWithProject(
       h.claim.reservedWorkspaceId
     );
@@ -682,8 +682,8 @@ it.each([
     });
     await h.session.sessionLifecycleService.startSession(other.id, { initialPrompt: '' });
     const { captureWorkspaceRetryGuard } = await vi.importActual<
-      typeof import('@/backend/orchestration/workspace-retry-authority')
-    >('@/backend/orchestration/workspace-retry-authority');
+      typeof import('@/backend/orchestration/workspace-lifecycle/workspace-retry-authority')
+    >('@/backend/orchestration/workspace-lifecycle/workspace-retry-authority');
     const workspace = await h.workspace.workspaceDataService.findByIdWithProject(
       h.claim.reservedWorkspaceId
     );
@@ -692,11 +692,11 @@ it.each([
     }
     const guard = await captureWorkspaceRetryGuard(workspace);
     const { createPRBackgroundDeliveryPort } = await vi.importActual<
-      typeof import('@/backend/orchestration/pr-event-delivery-port')
-    >('@/backend/orchestration/pr-event-delivery-port');
+      typeof import('@/backend/orchestration/pull-requests/pr-event-delivery-port')
+    >('@/backend/orchestration/pull-requests/pr-event-delivery-port');
     const { createPRDeliveryPorts } = await vi.importActual<
-      typeof import('@/backend/orchestration/pr-delivery-dependencies')
-    >('@/backend/orchestration/pr-delivery-dependencies');
+      typeof import('@/backend/orchestration/pull-requests/pr-delivery-dependencies')
+    >('@/backend/orchestration/pull-requests/pr-delivery-dependencies');
     const { createPRMonitoringTestServices } = await vi.importActual<
       typeof import('@/backend/orchestration/testing/pr-monitoring-services.test-support')
     >('@/backend/orchestration/testing/pr-monitoring-services.test-support');
@@ -778,8 +778,8 @@ it.each([true, false])(
       },
     });
     const { captureWorkspaceRetryGuard } = await vi.importActual<
-      typeof import('@/backend/orchestration/workspace-retry-authority')
-    >('@/backend/orchestration/workspace-retry-authority');
+      typeof import('@/backend/orchestration/workspace-lifecycle/workspace-retry-authority')
+    >('@/backend/orchestration/workspace-lifecycle/workspace-retry-authority');
     const workspace = await h.workspace.workspaceDataService.findByIdWithProject(
       h.claim.reservedWorkspaceId
     );

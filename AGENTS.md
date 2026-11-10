@@ -27,8 +27,10 @@ Read the applicable [backend service](src/backend/services/AGENTS.md) or
 areas.
 
 - Service capsules own logic and Prisma resources; cross-service coordination
-  belongs in `src/backend/orchestration/`. Use service/feature barrels across
-  boundaries, with the exceptions in the area guides.
+  belongs in `src/backend/orchestration/`, grouped by subsystem directory;
+  composition and cross-subsystem modules stay at its root, without barrels. Use
+  service/feature barrels across boundaries, with the exceptions in the area
+  guides.
 - Features own UI and hooks; routes compose them. `src/components/` is reserved
   for shadcn/ui; app code belongs in `src/client/`.
 - Client code may import backend only for tRPC types. `src/shared/` imports

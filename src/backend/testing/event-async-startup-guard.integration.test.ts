@@ -33,11 +33,11 @@ it.each([
     const graph = createDefaultApplicationDependencies();
     graph.lifecycle.wireDomainBridges(graph.services);
     const { ensureDedicatedPRRecipient } = await vi.importActual<
-      typeof import('@/backend/orchestration/pr-dedicated-session.orchestrator')
-    >('@/backend/orchestration/pr-dedicated-session.orchestrator');
+      typeof import('@/backend/orchestration/pull-requests/pr-dedicated-session.orchestrator')
+    >('@/backend/orchestration/pull-requests/pr-dedicated-session.orchestrator');
     const { createPRDeliveryPorts } = await vi.importActual<
-      typeof import('@/backend/orchestration/pr-delivery-dependencies')
-    >('@/backend/orchestration/pr-delivery-dependencies');
+      typeof import('@/backend/orchestration/pull-requests/pr-delivery-dependencies')
+    >('@/backend/orchestration/pull-requests/pr-delivery-dependencies');
     const { SessionConfigService } = await vi.importActual<
       typeof import('@/backend/services/session/service/config/session.config.service')
     >('@/backend/services/session/service/config/session.config.service');

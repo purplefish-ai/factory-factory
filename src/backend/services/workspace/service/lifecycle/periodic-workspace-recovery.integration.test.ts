@@ -1,6 +1,6 @@
 import { afterAll, afterEach, beforeAll, beforeEach, expect, it, vi } from 'vitest';
 import { z } from 'zod';
-import { dataBackupService } from '@/backend/orchestration/data-backup.service';
+import { dataBackupService } from '@/backend/orchestration/data-backup/data-backup.service';
 import { jobRunner } from '@/backend/services/job-runner.service';
 import { createLogger } from '@/backend/services/logger.service';
 import { periodicTaskService } from '@/backend/services/periodic-task';
@@ -29,22 +29,27 @@ const state = vi.hoisted(() => ({
     | ((tx: Prisma.TransactionClient, ids: Set<string>) => Promise<void>)
     | undefined,
 }));
-vi.mock('@/backend/orchestration/data-backup-legacy-collisions', async (importOriginal) => {
-  const original =
-    await importOriginal<typeof import('@/backend/orchestration/data-backup-legacy-collisions')>();
-  return {
-    ...original,
-    planLegacyImport: async (...args: Parameters<typeof original.planLegacyImport>) => {
-      const admission = await original.planLegacyImport(...args);
-      const create = args[0].project.create.bind(args[0].project);
-      vi.spyOn(args[0].project, 'create').mockImplementation((input) => {
-        state.firstWrite?.(admission.eligibleWorkspaceIds, state.occupiedIds);
-        return create(input);
-      });
-      return admission;
-    },
-  };
-});
+vi.mock(
+  '@/backend/orchestration/data-backup/data-backup-legacy-collisions',
+  async (importOriginal) => {
+    const original =
+      await importOriginal<
+        typeof import('@/backend/orchestration/data-backup/data-backup-legacy-collisions')
+      >();
+    return {
+      ...original,
+      planLegacyImport: async (...args: Parameters<typeof original.planLegacyImport>) => {
+        const admission = await original.planLegacyImport(...args);
+        const create = args[0].project.create.bind(args[0].project);
+        vi.spyOn(args[0].project, 'create').mockImplementation((input) => {
+          state.firstWrite?.(admission.eligibleWorkspaceIds, state.occupiedIds);
+          return create(input);
+        });
+        return admission;
+      },
+    };
+  }
+);
 vi.mock('@/backend/services/periodic-task', async (importOriginal) => {
   const original = await importOriginal<typeof import('@/backend/services/periodic-task')>();
   return {

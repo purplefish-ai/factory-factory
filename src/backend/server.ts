@@ -63,6 +63,7 @@ export function createServer(application: Application, requestedPort?: number): 
   const { lifecycle, services } = application;
   const {
     acpTraceLogger,
+    cleanupOldLogFiles,
     configService,
     createLogger,
     periodicTaskService,
@@ -575,6 +576,12 @@ export function createServer(application: Application, requestedPort?: number): 
 
         sessionFileLogger.cleanupOldLogs();
         acpTraceLogger.cleanupOldLogs();
+        await runStartupTask('Failed to clean up old server logs', async () => {
+          const deletedCount = await cleanupOldLogFiles();
+          if (deletedCount > 0) {
+            logger.info('Cleaned up old server log files', { deletedCount });
+          }
+        });
         await startRuntimeWork();
         startupComplete = true;
 

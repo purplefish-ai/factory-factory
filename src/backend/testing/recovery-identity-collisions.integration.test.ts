@@ -1,6 +1,6 @@
 import { afterAll, afterEach, beforeAll, beforeEach, expect, it, vi } from 'vitest';
-import { dataBackupService } from '@/backend/orchestration/data-backup.service';
-import { captureWorkspaceRunResults } from '@/backend/orchestration/workspace-deletion.orchestrator';
+import { dataBackupService } from '@/backend/orchestration/data-backup/data-backup.service';
+import { captureWorkspaceRunResults } from '@/backend/orchestration/workspace-lifecycle/workspace-deletion.orchestrator';
 import { workspaceDataService } from '@/backend/services/workspace';
 import { exportDataSchema, type ExportData } from '@/shared/schemas/export-data.schema';
 import type { PrismaClient } from '@prisma-gen/client';

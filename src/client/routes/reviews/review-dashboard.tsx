@@ -412,7 +412,7 @@ export function ReviewDashboard({ project }: { project: ReviewProject }) {
   const itemRefs = useRef<Map<number, HTMLButtonElement>>(new Map());
   const isMobile = useIsMobile();
 
-  const { prs, isLoading, error, data, refetch } = useProjectReviewRequests(project);
+  const { prs, isLoading, error, data, refresh } = useProjectReviewRequests(project);
 
   // Get details for selected PR
   const { boundedIndex, selectedPR, selectedKey, selectedDetails, selectedDiff, diffLoading } =
@@ -472,7 +472,7 @@ export function ReviewDashboard({ project }: { project: ReviewProject }) {
       <ReviewRouteState
         error={error?.message ?? data?.error ?? "Couldn't load reviews"}
         onRetry={() => {
-          void refetch();
+          refresh();
         }}
       />
     );
@@ -482,7 +482,7 @@ export function ReviewDashboard({ project }: { project: ReviewProject }) {
       <ReviewRouteState
         error="GitHub CLI must be installed and authenticated to load reviews"
         onRetry={() => {
-          void refetch();
+          refresh();
         }}
       />
     );
@@ -494,7 +494,7 @@ export function ReviewDashboard({ project }: { project: ReviewProject }) {
     return (
       <ReviewsEmptyState
         onRefresh={() => {
-          void refetch();
+          refresh();
         }}
       />
     );

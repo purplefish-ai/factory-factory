@@ -44,8 +44,8 @@ beforeEach(async () => {
   ({ agentRouter } = await vi.importActual<typeof import('./agent.trpc')>('./agent.trpc'));
   ({ createContext } = await vi.importActual<typeof import('./trpc')>('./trpc'));
   const { createAgentManagement } = await vi.importActual<
-    typeof import('@/backend/orchestration/agent-management.orchestrator')
-  >('@/backend/orchestration/agent-management.orchestrator');
+    typeof import('@/backend/orchestration/agents/agent-management.orchestrator')
+  >('@/backend/orchestration/agents/agent-management.orchestrator');
   const run = await db.prisma.agentRun.findUniqueOrThrow({ where: { id: h.claim.runId } });
   scope = { projectId: h.workspaceSource.projectId, agentId: run.agentDefinitionId, runId: run.id };
   services = unsafeCoerce<AppServices>({

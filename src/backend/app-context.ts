@@ -1,64 +1,64 @@
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
-import { createAgentAuthoring } from '@/backend/orchestration/agent-authoring.orchestrator';
-import { createAgentRuntime } from '@/backend/orchestration/agent-runtime.orchestrator';
-import { createShutdownPlan, runShutdownPlan } from './application-shutdown';
-import { prisma } from './db';
-import { registerInterceptors, startInterceptors, stopInterceptors } from './interceptors';
-import { triggerAdversarialReview } from './orchestration/adversarial-review.orchestrator';
-import { createAgentManagement } from './orchestration/agent-management.orchestrator';
-import {
-  ApplicationUpdateService,
-  createProcessUpdateSupervisor,
-} from './orchestration/application-update.service';
-import { cliHealthService } from './orchestration/cli-health.service';
-import { dataBackupService } from './orchestration/data-backup.service';
-import {
-  type BridgeServices,
-  configureDomainBridges,
-} from './orchestration/domain-bridges.orchestrator';
+import { createAgentAuthoring } from '@/backend/orchestration/agents/agent-authoring.orchestrator';
+import { createAgentManagement } from '@/backend/orchestration/agents/agent-management.orchestrator';
+import { createAgentRuntime } from '@/backend/orchestration/agents/agent-runtime.orchestrator';
+import { dataBackupService } from '@/backend/orchestration/data-backup/data-backup.service';
+import { bindIssueMonitoringSession } from '@/backend/orchestration/pull-requests/pr-monitoring.orchestrator';
+import { listVisibleReviewRequests } from '@/backend/orchestration/pull-requests/review-requests.orchestrator';
+import { schedulerService } from '@/backend/orchestration/pull-requests/scheduler.service';
 import {
   createEventCollectorOrchestrator,
   type EventCollectorOrchestrator,
-} from './orchestration/event-collector.orchestrator';
-import { searchGitHubIssues } from './orchestration/github-issue-search.orchestrator';
-import { getWorkspaceLinearContext } from './orchestration/linear-config.helper';
-import { bindIssueMonitoringSession } from './orchestration/pr-monitoring.orchestrator';
-import { updateProjectSettings } from './orchestration/project-settings.orchestrator';
-import { reconciliationService } from './orchestration/reconciliation.service';
-import { listVisibleReviewRequests } from './orchestration/review-requests.orchestrator';
-import { schedulerService } from './orchestration/scheduler.service';
-import { SnapshotReconciliationService } from './orchestration/snapshot-reconciliation.orchestrator';
+} from '@/backend/orchestration/snapshots/event-collector.orchestrator';
+import { SnapshotReconciliationService } from '@/backend/orchestration/snapshots/snapshot-reconciliation.orchestrator';
+import { reconciliationService } from '@/backend/orchestration/workspace-lifecycle/reconciliation.service';
 import {
   archiveWorkspace,
   cleanupWorkspaceRuntimeResources,
   recoverStaleArchivingWorkspaces,
-} from './orchestration/workspace-archive.orchestrator';
+} from '@/backend/orchestration/workspace-lifecycle/workspace-archive.orchestrator';
 import {
   createChildWorkspace,
   fireLifecycleNotification,
   persistChildNotification,
   persistParentNotification,
-} from './orchestration/workspace-children.orchestrator';
-import { createWorkspaceFollowUp } from './orchestration/workspace-follow-up.orchestrator';
-import { executeStartupScriptPipeline } from './orchestration/workspace-init-script-pipeline';
+} from '@/backend/orchestration/workspace-lifecycle/workspace-children.orchestrator';
+import { createWorkspaceFollowUp } from '@/backend/orchestration/workspace-lifecycle/workspace-follow-up.orchestrator';
+import { executeStartupScriptPipeline } from '@/backend/orchestration/workspace-lifecycle/workspace-init-script-pipeline';
 import {
   initializeWorkspaceWorktree,
   enqueueWorkspaceInitializationTask,
   recoverStaleProvisioningWorkspace,
   retryQueuedDispatchAfterWorkspaceReady,
-} from './orchestration/workspace-init.orchestrator';
-import { launchWorkspace } from './orchestration/workspace-launch.orchestrator';
-import { WorkspaceMetadataOrchestrator } from './orchestration/workspace-metadata.orchestrator';
+} from '@/backend/orchestration/workspace-lifecycle/workspace-init.orchestrator';
+import { launchWorkspace } from '@/backend/orchestration/workspace-lifecycle/workspace-launch.orchestrator';
+import { WorkspaceMetadataOrchestrator } from '@/backend/orchestration/workspace-lifecycle/workspace-metadata.orchestrator';
 import {
   deliverWorkspaceNotification,
   recoverWorkspaceMail,
-} from './orchestration/workspace-notification-delivery.orchestrator';
-import { createWorkspaceRename } from './orchestration/workspace-rename.orchestrator';
+} from '@/backend/orchestration/workspace-lifecycle/workspace-notification-delivery.orchestrator';
+import { createWorkspaceRename } from '@/backend/orchestration/workspace-lifecycle/workspace-rename.orchestrator';
 import {
   captureWorkspaceRetryGuard,
   readWorkspaceRetryAvailability,
-} from './orchestration/workspace-retry-authority';
+} from '@/backend/orchestration/workspace-lifecycle/workspace-retry-authority';
+import { createShutdownPlan, runShutdownPlan } from './application-shutdown';
+import { prisma } from './db';
+import { registerInterceptors, startInterceptors, stopInterceptors } from './interceptors';
+import { triggerAdversarialReview } from './orchestration/adversarial-review.orchestrator';
+import {
+  ApplicationUpdateService,
+  createProcessUpdateSupervisor,
+} from './orchestration/application-update.service';
+import { cliHealthService } from './orchestration/cli-health.service';
+import {
+  type BridgeServices,
+  configureDomainBridges,
+} from './orchestration/domain-bridges.orchestrator';
+import { searchGitHubIssues } from './orchestration/github-issue-search.orchestrator';
+import { getWorkspaceLinearContext } from './orchestration/linear-config.helper';
+import { updateProjectSettings } from './orchestration/project-settings.orchestrator';
 import { getQuickAction, listQuickActions } from './prompts/quick-actions';
 import { agentManagementService, type AgentManagementService } from './services/agent-definition';
 import { agentProposalService, slackConnectionService } from './services/agent-definition';
@@ -77,7 +77,7 @@ import {
 } from './services/github';
 import { jobRunner } from './services/job-runner.service';
 import { linearClientService, linearStateSyncService } from './services/linear';
-import { createLogger, getLogFilePath } from './services/logger.service';
+import { cleanupOldLogFiles, createLogger, getLogFilePath } from './services/logger.service';
 import { periodicTaskService } from './services/periodic-task';
 import { type PortShareService, portShareService } from './services/port-share';
 import { findAvailablePort } from './services/port.service';
@@ -162,13 +162,17 @@ export type ApplicationServices = BridgeServices & {
   agentAuthoring: ReturnType<typeof createAgentAuthoring>;
   agentManagement: ReturnType<typeof createAgentManagement>;
   agentManagementService: AgentManagementService;
-  listVisibleReviewRequests: (repository?: string) => ReturnType<typeof listVisibleReviewRequests>;
+  listVisibleReviewRequests: (
+    repository?: string,
+    options?: { forceRefresh?: boolean }
+  ) => ReturnType<typeof listVisibleReviewRequests>;
   sessionDispatchService: Pick<
     typeof sessionDispatchService,
     | 'configure'
     | 'tryDispatchNextMessage'
     | 'setManualDispatchResume'
     | 'resetDispatchState'
+    | 'shutdown'
     | 'steerQueuedMessage'
     | 'steerWorkspaceMailSignal'
   >;
@@ -201,6 +205,7 @@ export type ApplicationServices = BridgeServices & {
   gitCloneService: typeof gitCloneService;
   gitOpsService: typeof gitOpsService;
   getLogFilePath: typeof getLogFilePath;
+  cleanupOldLogFiles: typeof cleanupOldLogFiles;
   getQuickAction: typeof getQuickAction;
   getWorkspaceLinearContext: typeof getWorkspaceLinearContext;
   settingsHealthService: typeof settingsHealthService;
@@ -338,7 +343,8 @@ export function createDefaultApplicationDependencies(): ApplicationDependencies 
   const services: ApplicationServices = {
     applicationUpdateAdmission,
     applicationUpdateService,
-    listVisibleReviewRequests: (repository) => listVisibleReviewRequests(services, repository),
+    listVisibleReviewRequests: (repository, options) =>
+      listVisibleReviewRequests(services, repository, options),
     acpRuntimeManager,
     acpTraceLogger,
     chatEventForwarderService,
@@ -411,6 +417,7 @@ export function createDefaultApplicationDependencies(): ApplicationDependencies 
     gitCloneService,
     gitOpsService,
     getLogFilePath,
+    cleanupOldLogFiles,
     getQuickAction,
     getWorkspaceLinearContext,
     settingsHealthService,

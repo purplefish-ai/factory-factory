@@ -22,17 +22,19 @@ let queryClient: QueryClient;
 let runtime: typeof import('@/backend/services/agent-definition');
 let workspace: typeof import('@/backend/services/workspace');
 let router: typeof import('@/backend/trpc/agent.trpc');
-let orchestration: typeof import('@/backend/orchestration/agent-management.orchestrator');
+let orchestration: typeof import('@/backend/orchestration/agents/agent-management.orchestrator');
 beforeAll(async () => {
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
   db = await createIntegrationDatabase();
   runtime = await vi.importActual('@/backend/services/agent-definition');
   workspace = await vi.importActual('@/backend/services/workspace');
   router = await vi.importActual('@/backend/trpc/agent.trpc');
-  orchestration = await vi.importActual('@/backend/orchestration/agent-management.orchestrator');
+  orchestration = await vi.importActual(
+    '@/backend/orchestration/agents/agent-management.orchestrator'
+  );
   const { captureWorkspaceRunResults } = await vi.importActual<
-    typeof import('@/backend/orchestration/workspace-deletion.orchestrator')
-  >('@/backend/orchestration/workspace-deletion.orchestrator');
+    typeof import('@/backend/orchestration/workspace-lifecycle/workspace-deletion.orchestrator')
+  >('@/backend/orchestration/workspace-lifecycle/workspace-deletion.orchestrator');
   workspace.workspaceDataService.configureDeletionCapture(captureWorkspaceRunResults);
 }, 30_000);
 afterAll(async () => {

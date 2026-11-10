@@ -8,7 +8,7 @@ import { WS_READY_STATE } from '@/backend/constants/websocket';
 import {
   createWorkspaceRename,
   type RenamedWorkspace,
-} from '@/backend/orchestration/workspace-rename.orchestrator';
+} from '@/backend/orchestration/workspace-lifecycle/workspace-rename.orchestrator';
 import {
   type SnapshotChangedEvent,
   type SnapshotRemovedEvent,

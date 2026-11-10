@@ -6,7 +6,7 @@ import type { AppContext } from '@/backend/app-context';
 import {
   createWorkspaceRename,
   type RenamedWorkspace,
-} from '@/backend/orchestration/workspace-rename.orchestrator';
+} from '@/backend/orchestration/workspace-lifecycle/workspace-rename.orchestrator';
 import {
   createSnapshotsUpgradeHandler,
   disposeSnapshotsHandlerState,

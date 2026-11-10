@@ -9,15 +9,15 @@
       "disposition": "review-required",
       "reason": "Only mutex tests currently import this implementation; investigate lock ownership before removal."
     },
-    "src/backend/orchestration/data-backup.settings.test-support.ts": {
+    "src/backend/orchestration/data-backup/data-backup.settings.test-support.ts": {
       "disposition": "test-support",
       "reason": "User settings fixture for backup export/import and ticket prompt round-trip tests; no runtime consumers are expected."
     },
-    "src/backend/orchestration/pr-event-flow.test-helpers.ts": {
+    "src/backend/orchestration/pull-requests/pr-event-flow.test-helpers.ts": {
       "disposition": "test-support",
       "reason": "Test harness or fixture support remains explicit in this inventory; production callers are not expected."
     },
-    "src/backend/orchestration/snapshot-reconciliation.test-helpers.ts": {
+    "src/backend/orchestration/snapshots/snapshot-reconciliation.test-helpers.ts": {
       "disposition": "test-support",
       "reason": "Test harness or fixture support remains explicit in this inventory; production callers are not expected."
     },
@@ -33,7 +33,7 @@
       "disposition": "test-support",
       "reason": "Test harness or fixture support remains explicit in this inventory; production callers are not expected."
     },
-    "src/backend/orchestration/workspace-init.test-harness.ts": {
+    "src/backend/orchestration/workspace-lifecycle/workspace-init.test-harness.ts": {
       "disposition": "test-support",
       "reason": "Test harness or fixture support remains explicit in this inventory; production callers are not expected."
     },
@@ -295,7 +295,7 @@
       "disposition": "review-required",
       "reason": "Visibility candidate in a reachable module; trace callers and schema/type contracts before narrowing this export."
     },
-    "src/backend/orchestration/snapshot-reconciliation.orchestrator.ts::exports::snapshotReconciliationService": {
+    "src/backend/orchestration/snapshots/snapshot-reconciliation.orchestrator.ts::exports::snapshotReconciliationService": {
       "disposition": "review-required",
       "reason": "Visibility candidate in a reachable module; trace callers and schema/type contracts before narrowing this export."
     },

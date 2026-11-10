@@ -172,6 +172,8 @@ function createSessionEventAction(event: SessionDeltaEvent): ChatAction | null {
           configOptions: event.configOptions.flatMap((option) => toAcpConfigOption(option) ?? []),
         },
       };
+    case 'steer_settled':
+      return { type: 'STEER_SETTLED', requestId: event.requestId };
     case 'config_option_applied':
       return { type: 'CONFIG_OPTION_APPLIED', payload: { requestId: event.requestId } };
     // Browser-level events are dispatched by the transport, not the reducer.

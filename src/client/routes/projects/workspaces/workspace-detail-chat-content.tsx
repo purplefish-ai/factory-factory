@@ -65,6 +65,7 @@ export interface ChatContentProps {
   setInputAttachments: ReturnType<typeof useChatWebSocket>['setInputAttachments'];
   queuedMessages: ReturnType<typeof useChatWebSocket>['queuedMessages'];
   removeQueuedMessage: ReturnType<typeof useChatWebSocket>['removeQueuedMessage'];
+  pendingSteer?: ReturnType<typeof useChatWebSocket>['pendingSteer'];
   steerQueuedMessage: ReturnType<typeof useChatWebSocket>['steerQueuedMessage'];
   resumeQueuedMessages: ReturnType<typeof useChatWebSocket>['resumeQueuedMessages'];
   latestThinking: ReturnType<typeof useChatWebSocket>['latestThinking'];
@@ -228,6 +229,7 @@ export const ChatContent = memo(function ChatContent(props: ChatContentProps) {
   const stopping = props.sessionStatus.phase === 'stopping';
   const displayStartingState = shouldShowStartingState(props.sessionStatus.phase, autoStartPending);
   const loadingSession = props.sessionStatus.phase === 'loading';
+  const inputDisabled = !props.connected || loadingSession;
 
   const permissionRequestId =
     props.pendingRequest.type === 'permission' ? props.pendingRequest.request.requestId : null;
@@ -280,6 +282,19 @@ export const ChatContent = memo(function ChatContent(props: ChatContentProps) {
     [visibleInitBanner, retryAvailability, retryInit.isPending, retry, resumeQueuedMessages]
   );
 
+  // A stable element keeps the memoized composer from re-rendering on every streamed chunk.
+  const voiceToggle = useMemo(
+    () => (
+      <VoiceModeToggle
+        sessionId={props.sessionId}
+        onFinalTranscript={sendMessage}
+        running={running}
+        disabled={inputDisabled}
+      />
+    ),
+    [props.sessionId, sendMessage, running, inputDisabled]
+  );
+
   return (
     <div className="relative flex h-full flex-col overflow-hidden">
       <ChatTranscript
@@ -308,6 +323,7 @@ export const ChatContent = memo(function ChatContent(props: ChatContentProps) {
         loadingSession={loadingSession}
         latestThinking={props.latestThinking ?? null}
         scroll={transcriptScroll}
+        pendingSteerMessageId={props.pendingSteer?.messageId}
         queuedMessageIds={queuedMessageIds}
         onRemoveQueuedMessage={props.removeQueuedMessage}
         onSteerQueuedMessage={
@@ -340,19 +356,12 @@ export const ChatContent = memo(function ChatContent(props: ChatContentProps) {
 
         <div className="flex min-h-0 shrink items-stretch gap-2">
           <ChatInput
-            leadingControls={
-              <VoiceModeToggle
-                sessionId={props.sessionId}
-                onFinalTranscript={sendMessage}
-                running={running}
-                disabled={!props.connected || loadingSession}
-              />
-            }
+            leadingControls={voiceToggle}
             className="mx-auto w-full max-w-4xl flex-1 min-w-0"
             onSend={sendMessage}
             onCompact={handleCompact}
             onStop={props.stopChat}
-            disabled={!props.connected || loadingSession}
+            disabled={inputDisabled}
             running={running}
             promptInFlight={promptInFlight}
             stopping={stopping}

@@ -319,7 +319,7 @@ describe('check-single-writer', () => {
     it('allows nested creation of all three rows alongside a workspace', () => {
       const tempRoot = createTempBackend([
         {
-          relPath: 'src/backend/orchestration/data-backup.service.ts',
+          relPath: 'src/backend/orchestration/data-backup/data-backup.service.ts',
           content: `
             async function restore(tx, projectId) {
               await tx.workspace.create({
@@ -348,7 +348,7 @@ describe('check-single-writer', () => {
     it('rejects a nested create of a side table in a workspace update', () => {
       const tempRoot = createTempBackend([
         {
-          relPath: 'src/backend/orchestration/data-backup.service.ts',
+          relPath: 'src/backend/orchestration/data-backup/data-backup.service.ts',
           content: `
             async function reinstate(tx, id) {
               await tx.workspace.update({
@@ -373,7 +373,7 @@ describe('check-single-writer', () => {
     it('rejects a nested create in an update beside a legitimate workspace create', () => {
       const tempRoot = createTempBackend([
         {
-          relPath: 'src/backend/orchestration/data-backup.service.ts',
+          relPath: 'src/backend/orchestration/data-backup/data-backup.service.ts',
           content: `
             async function restore(tx, projectId, id) {
               await tx.workspace.create({
@@ -401,7 +401,7 @@ describe('check-single-writer', () => {
     it('rejects a nested create in an update evaluated inside a create argument', () => {
       const tempRoot = createTempBackend([
         {
-          relPath: 'src/backend/orchestration/data-backup.service.ts',
+          relPath: 'src/backend/orchestration/data-backup/data-backup.service.ts',
           content: `
             async function restore(tx, projectId, id) {
               await tx.workspace.create({
@@ -436,7 +436,7 @@ describe('check-single-writer', () => {
     it('allows a nested create when the create argument spreads other options in', () => {
       const tempRoot = createTempBackend([
         {
-          relPath: 'src/backend/orchestration/data-backup.service.ts',
+          relPath: 'src/backend/orchestration/data-backup/data-backup.service.ts',
           content: `
             async function restore(tx) {
               await tx.workspace.create({

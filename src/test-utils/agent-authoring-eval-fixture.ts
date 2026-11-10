@@ -3,7 +3,7 @@ import { createServer } from 'node:http';
 import { createExpressMiddleware } from '@trpc/server/adapters/express';
 import express from 'express';
 import { vi } from 'vitest';
-import { createAgentAuthoring } from '@/backend/orchestration/agent-authoring.orchestrator';
+import { createAgentAuthoring } from '@/backend/orchestration/agents/agent-authoring.orchestrator';
 import {
   createIntegrationDatabase,
   destroyIntegrationDatabase,

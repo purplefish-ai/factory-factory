@@ -1,4 +1,4 @@
-import type { PRMonitoringServices } from '@/backend/orchestration/pr-monitoring-dependencies';
+import type { PRMonitoringServices } from '@/backend/orchestration/pull-requests/pr-monitoring-dependencies';
 import { configService } from '@/backend/services/config.service';
 import { prObservationService, prSnapshotService } from '@/backend/services/github';
 import { ratchetService } from '@/backend/services/ratchet';
