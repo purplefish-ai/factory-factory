@@ -11,6 +11,7 @@ import { closedSessionPersistenceService } from '@/backend/services/session/serv
 import { SessionConfigService } from '@/backend/services/session/service/config/session.config.service';
 import { hydrateProviderHistoryIfNeeded } from '@/backend/services/session/service/data/session-provider-history-hydrator';
 import { sessionRepository } from '@/backend/services/session/service/data/session.repository';
+import { sessionBackgroundDeliveryService } from '@/backend/services/session/service/delivery/session-background-delivery.service';
 import { SessionNotificationDeliveryService } from '@/backend/services/session/service/delivery/session-notification-delivery.service';
 import {
   EventInitialDispatcher,
@@ -111,6 +112,13 @@ sessionScope.register('session-configuration', {
 sessionScope.register('observed-empty-provider-session', {
   forget: (id) => acpRuntimeManager.forgetObservedEmptyProviderSession(id),
 });
+sessionScope.register('pr-background-delivery', {
+  forget: (id) => sessionBackgroundDeliveryService.forgetSession(id),
+});
+// Workspace deletion forgets its cascaded sessions but never clears their stores.
+sessionScope.register('session-store', {
+  forget: (id) => sessionDomainService.clearSession(id),
+});
 sessionDomainService.on('session_permanently_deleted', (sessionId: string) => {
   sessionScope.forget(sessionId);
 });
@@ -160,6 +168,9 @@ const sessionWorkflowFinalizer = new SessionWorkflowFinalizer({
   hydrateProviderHistory: hydrateProviderHistoryIfNeeded,
   runtimeManager: acpRuntimeManager,
   countViewers: (sessionId) => sessionEventBus.countViewers(sessionId),
+});
+sessionScope.register('workflow-finalizer', {
+  forget: (id) => sessionWorkflowFinalizer.forgetSession(id),
 });
 
 const sessionPromptCoordinator = new SessionService({

@@ -49,6 +49,11 @@ export class SessionWorkflowFinalizer {
     this.workspaceBridge = bridges.workspace;
   }
 
+  /** A session deleted by another path no longer needs its transient archive marker. */
+  forgetSession(sessionId: string): void {
+    this.persistedTransientSessionIds.delete(sessionId);
+  }
+
   async finalizeDeliberateStop(input: {
     session: AgentSessionRecord | null;
     sessionId: string;
@@ -65,8 +70,6 @@ export class SessionWorkflowFinalizer {
   async finalizeRuntimeExit(input: {
     session: AgentSessionRecord;
     sessionId: string;
-    exitCode: number | null;
-    deliberate: boolean;
   }): Promise<void> {
     const { session, sessionId } = input;
     if (this.workspaceBridge) {
