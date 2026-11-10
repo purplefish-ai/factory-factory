@@ -103,7 +103,6 @@ export const serviceNames = [
   'terminal',
   'github',
   'linear',
-  'ratchet',
   'run-script',
   'port-share',
   'settings',
@@ -214,10 +213,6 @@ export const serviceRegistry = {
   },
   linear: {
     dependsOn: [],
-    ownsModels: [],
-  },
-  ratchet: {
-    dependsOn: ['workspace'],
     ownsModels: [],
   },
   'run-script': {

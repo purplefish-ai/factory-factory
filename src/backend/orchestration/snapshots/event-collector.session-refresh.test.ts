@@ -10,7 +10,7 @@ vi.mock('@/backend/services/github', () => ({
   PR_URL_ATTACHED: 'pr_url_attached',
   PR_DETACHED: 'pr_detached',
 }));
-vi.mock('@/backend/services/ratchet', () => ({
+vi.mock('@/backend/orchestration/pull-requests/ratchet.service', () => ({
   RATCHET_DISPATCH_CHANGED: 'ratchet_dispatch_changed',
   RATCHET_STATE_CHANGED: 'ratchet_state_changed',
   RATCHET_TOGGLED: 'ratchet_toggled',

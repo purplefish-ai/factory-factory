@@ -1,28 +1,22 @@
-import type { CodexRuntimeContext } from '@/backend/services/codex-accounts';
 import { createLogger } from '@/backend/services/logger.service';
-import { codexSessionHistoryLoaderService } from '@/backend/services/session/service/data/codex-session-history-loader.service';
-import { claudeSessionHistoryLoaderService } from '@/backend/services/session/service/data/session-history-loader.service';
 import {
   sessionDomainService,
   type SessionDomainService,
 } from '@/backend/services/session/service/session-domain.service';
 import { mergeLifecycleMessage } from '@/backend/services/session/service/store/session-lifecycle-transcript';
 import { isLocalTranscriptMessage } from '@/backend/services/session/service/store/session-local-transcript';
-import { buildTranscriptFromHistoryCooperatively } from '@/backend/services/session/service/store/session-transcript';
 import type { ChatMessage } from '@/shared/acp-protocol';
+import {
+  loadProviderHistoryTranscript,
+  type ProviderHistorySession,
+  type ProviderHistoryTranscriptResult,
+} from './provider-history-transcript-loader';
+
+export type { ProviderHistorySession };
 
 const logger = createLogger('session-provider-history-hydrator');
 const HISTORY_READ_RETRY_COOLDOWN_MS = 30_000;
 const CODEX_TOOL_BACKFILL_RECHECK_COOLDOWN_MS = 5000;
-
-export type ProviderHistorySession = {
-  provider: 'CLAUDE' | 'CODEX';
-  codexAccountId?: string | null;
-  codexAccountContext?: CodexRuntimeContext;
-  providerSessionId: string | null;
-  providerMetadata: unknown;
-  workspace: { worktreePath: string | null };
-};
 
 export type ProviderHistoryHydrationDomain = Pick<
   SessionDomainService,
@@ -49,10 +43,11 @@ export function createProviderHistoryHydrator(domain: ProviderHistoryHydrationDo
 
 export const hydrateProviderHistoryIfNeeded = createProviderHistoryHydrator(sessionDomainService);
 
-type ProviderHistoryLoadResult =
-  | Awaited<ReturnType<typeof claudeSessionHistoryLoaderService.loadSessionHistory>>
-  | Awaited<ReturnType<typeof codexSessionHistoryLoaderService.loadSessionHistory>>;
-type LoadedProviderHistory = Extract<ProviderHistoryLoadResult, { status: 'loaded' }>;
+type LoadedProviderHistory = Extract<ProviderHistoryTranscriptResult, { status: 'loaded' }>;
+type UnavailableProviderHistory = Exclude<
+  ProviderHistoryTranscriptResult,
+  { status: 'loaded' | 'cancelled' }
+>;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -149,13 +144,17 @@ async function hydrateProviderHistory(
   }
 
   const loadStart = Date.now();
-  const loadResult = await loadProviderHistory(dbSession, providerSessionId, historyIsCurrent);
-  if (!historyIsCurrent()) {
+  const loadResult = await loadProviderHistoryTranscript(
+    sessionId,
+    dbSession,
+    providerSessionId,
+    historyIsCurrent
+  );
+  if (!historyIsCurrent() || loadResult.status === 'cancelled') {
     return;
   }
   if (loadResult.status === 'loaded') {
-    await handleLoadedProviderHistory(domain, {
-      isCurrent: historyIsCurrent,
+    handleLoadedProviderHistory(domain, {
       sessionId,
       dbSession,
       providerSessionId,
@@ -171,28 +170,7 @@ async function hydrateProviderHistory(
   });
 }
 
-async function loadProviderHistory(
-  dbSession: ProviderHistorySession,
-  providerSessionId: string,
-  isCurrent: () => boolean
-): Promise<ProviderHistoryLoadResult> {
-  const input = {
-    providerSessionId,
-    workingDir: dbSession.workspace.worktreePath ?? '',
-    isCurrent,
-  };
-  return dbSession.provider === 'CLAUDE'
-    ? await claudeSessionHistoryLoaderService.loadSessionHistory(input)
-    : await codexSessionHistoryLoaderService.loadSessionHistory({
-        ...input,
-        ...(dbSession.codexAccountId ? { codexAccountId: dbSession.codexAccountId } : {}),
-        ...(dbSession.codexAccountContext
-          ? { codexAccountContext: dbSession.codexAccountContext }
-          : {}),
-      });
-}
-
-async function handleLoadedProviderHistory(
+function handleLoadedProviderHistory(
   domain: ProviderHistoryHydrationDomain,
   {
     sessionId,
@@ -201,7 +179,6 @@ async function handleLoadedProviderHistory(
     loadResult,
     shouldAttemptCodexToolBackfill,
     loadStart,
-    isCurrent,
   }: {
     sessionId: string;
     dbSession: ProviderHistorySession;
@@ -209,9 +186,8 @@ async function handleLoadedProviderHistory(
     loadResult: LoadedProviderHistory;
     shouldAttemptCodexToolBackfill: boolean;
     loadStart: number;
-    isCurrent: () => boolean;
   }
-): Promise<void> {
+): void {
   domain.clearHistoryRetryCooldown(sessionId);
   if (
     domain.getHistoryHydrationSource(sessionId) === 'jsonl' ||
@@ -222,16 +198,9 @@ async function handleLoadedProviderHistory(
     return;
   }
 
-  const loadedTranscript = await buildTranscriptFromHistoryCooperatively(
-    loadResult.history,
-    isCurrent
-  );
-  if (
-    !(loadedTranscript && isCurrent()) ||
-    domain.getHistoryHydrationSource(sessionId) === 'jsonl'
-  ) {
-    return;
-  }
+  // Stores may reassign an entry's top-level fields in place (tool-use enrichment),
+  // so give this store its own entries; nested message data stays shared.
+  const loadedTranscript = loadResult.transcript.map((message) => ({ ...message }));
   const latestTranscript = domain.getTranscriptSnapshot(sessionId);
   const latestProviderMessages = providerMessages(latestTranscript);
   if (latestProviderMessages.length > 0) {
@@ -260,7 +229,7 @@ async function handleLoadedProviderHistory(
     provider: dbSession.provider,
     providerSessionId,
     filePath: loadResult.filePath,
-    historyCount: loadResult.history.length,
+    historySource: loadResult.source,
     transcriptCount: mergedTranscript.length,
     loadDurationMs: Date.now() - loadStart,
   });
@@ -362,7 +331,7 @@ function handleUnavailableProviderHistory(
   sessionId: string,
   dbSession: ProviderHistorySession,
   providerSessionId: string,
-  loadResult: Exclude<ProviderHistoryLoadResult, { status: 'loaded' }>,
+  loadResult: UnavailableProviderHistory,
   options?: { shouldRecheckCodexToolBackfill?: boolean }
 ): void {
   const latestProviderMessages = providerMessages(domain.getTranscriptSnapshot(sessionId));

@@ -21,6 +21,15 @@ agent-runtime orchestrator; its poll service owns neither registration nor
 lifecycle methods. These delegates are the injection seam `server.ts` and
 `server.upgrade.test.ts` use.
 
+Both PR pollers live in `src/backend/orchestration/pull-requests/`:
+`scheduler.service.ts` owns `pr-poll` (PR sync and discovery), and
+`ratchet.service.ts` owns `pr-event-poll` (PR monitoring) and
+`pr-event-retention`. The composition root builds one `RatchetService` per
+application graph through `createRatchetService()`, which supplies its
+observation, delivery-wake, cutover and monitoring-change operations. Shutdown
+labels these drains `pr-poll` and `pr-event-poll` after their jobs, and their
+cadences are `SERVICE_INTERVAL_MS.prPoll` and `prEventPoll`.
+
 ## Pacing
 
 Jobs are paced **sequentially**: the delay runs from the end of one run to the
@@ -31,11 +40,11 @@ next start to `interval + d`.
 
 Two per-job options carry behaviour the loops depended on:
 
-- `runImmediately` — the ratchet, periodic tasks and snapshot reconciliation
-  poll once on start; PR sync and reconciliation cleanup wait out the first
+- `runImmediately` — `pr-event-poll`, periodic tasks and snapshot reconciliation
+  poll once on start; `pr-poll` and reconciliation cleanup wait out the first
   interval.
-- `computeDelay` — consulted after every run, which is how the ratchet stretches
-  its interval under GitHub rate limiting.
+- `computeDelay` — consulted after every run, which is how `pr-event-poll`
+  stretches its interval under GitHub rate limiting.
 
 Every cadence lives in `SERVICE_INTERVAL_MS`
 (`src/backend/services/constants.ts`). Snapshot reconciliation's used to be a
@@ -69,23 +78,23 @@ stopped on one path is stopped on the other; the server adds only its transport
 and timer work through hooks at fixed points.
 
 The plan calls six jobs' `stop()` (application update idle, reconciliation
-cleanup, PR sync, snapshot reconciliation, ratchet and PR event retention,
-periodic tasks) as soon as it begins, so none starts new work during teardown
-and their in-flight runs drain concurrently with session/process teardown and
-with each other: shutdown waits for the slowest drain, not the sum. Agent
-runtime and workspace metadata jobs stop at their own ordered steps instead:
-agent runtime first, workspace metadata before transports and sessions close.
-The drains are awaited only after sessions, Codex logins, run scripts and the
-rate limiter have stopped, and all of them before the database disconnects. Two
-edges are kept by awaiting in order: the event collector stops after the PR sync
-drains, and the Git state service stops after snapshot reconciliation drains.
-`jobRunner.stopAll()` then runs as a backstop, so a registered job without an
-owner in the plan is still stopped before the disconnect. A failed job `stop()`
-is logged with its job name and does not block the other drains or the
-disconnect. A failed step is logged with its step name; the later steps still
-run, and shutdown then rejects. Startup re-checks for cleanup after each await
-before starting more jobs, since a start issued after its stop would revive the
-job; a startup interrupted that way rejects once cleanup finishes.
+cleanup, `pr-poll`, snapshot reconciliation, `pr-event-poll` with PR event
+retention, periodic tasks) as soon as it begins, so none starts new work during
+teardown and their in-flight runs drain concurrently with session/process
+teardown and with each other: shutdown waits for the slowest drain, not the sum.
+Agent runtime and workspace metadata jobs stop at their own ordered steps
+instead: agent runtime first, workspace metadata before transports and sessions
+close. The drains are awaited only after sessions, Codex logins, run scripts and
+the rate limiter have stopped, and all of them before the database disconnects.
+Two edges are kept by awaiting in order: the event collector stops after
+`pr-poll` drains, and the Git state service stops after snapshot reconciliation
+drains. `jobRunner.stopAll()` then runs as a backstop, so a registered job
+without an owner in the plan is still stopped before the disconnect. A failed
+job `stop()` is logged with its job name and does not block the other drains or
+the disconnect. A failed step is logged with its step name; the later steps
+still run, and shutdown then rejects. Startup re-checks for cleanup after each
+await before starting more jobs, since a start issued after its stop would
+revive the job; a startup interrupted that way rejects once cleanup finishes.
 
 There is deliberately no "run this job now" API. The two loops with a
 cancellable sleep only ever cancelled it from their own `stop()`, so

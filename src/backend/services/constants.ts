@@ -26,8 +26,8 @@ export const SERVICE_INTERVAL_MS = Object.freeze({
   agentSourcePoll: 60_000,
   agentEventEvaluation: 5000,
   workspaceMetadata: 10_000,
-  ratchetPoll: 2 * 60_000, // Increased from 1min to 2min to reduce GitHub API pressure
-  schedulerPrSync: 3 * 60 * 1000, // Increased from 2min to 3min to reduce GitHub API pressure
+  prEventPoll: 2 * 60_000, // Increased from 1min to 2min to reduce GitHub API pressure
+  prPoll: 3 * 60 * 1000, // Increased from 2min to 3min to reduce GitHub API pressure
   reconciliationCleanup: 5 * 60 * 1000,
   periodicTaskPoll: 60_000, // Check for due periodic tasks every 60 seconds
   snapshotReconciliation: 60_000, // Safety-net recompute of workspace snapshots

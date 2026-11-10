@@ -73,15 +73,10 @@ vi.mock('@/backend/services/github', () => ({
   prFetchCoordinator: { removeWorkspace: vi.fn() },
 }));
 
-vi.mock('@/backend/services/ratchet', () => ({
+vi.mock('@/backend/orchestration/pull-requests/ratchet.service', () => ({
   RATCHET_DISPATCH_CHANGED: 'ratchet_dispatch_changed',
   RATCHET_STATE_CHANGED: 'ratchet_state_changed',
   RATCHET_TOGGLED: 'ratchet_toggled',
-  ratchetService: {
-    on: vi.fn(),
-    off: vi.fn(),
-    checkWorkspaceById: vi.fn().mockResolvedValue(null),
-  },
 }));
 
 vi.mock('@/backend/services/run-script', () => ({
@@ -138,7 +133,6 @@ vi.mock('@/backend/orchestration/linear-config.helper', () => ({
 import { getWorkspaceLinearContext } from '@/backend/orchestration/linear-config.helper';
 import { prFetchCoordinator, prSnapshotService } from '@/backend/services/github';
 import { linearStateSyncService } from '@/backend/services/linear';
-import { ratchetService } from '@/backend/services/ratchet';
 import { runScriptStateMachine } from '@/backend/services/run-script';
 import {
   chatEventForwarderService,
@@ -160,6 +154,12 @@ import {
   type EventCollectorOrchestrator,
 } from './event-collector.orchestrator';
 
+const ratchetService = {
+  on: vi.fn(),
+  off: vi.fn(),
+  checkWorkspaceById: vi.fn().mockResolvedValue(null),
+};
+
 let activeEventCollector: EventCollectorOrchestrator | null = null;
 function configureEventCollector(): void {
   activeEventCollector?.stop();
@@ -172,7 +172,7 @@ function configureEventCollector(): void {
     linearStateSyncService,
     prFetchCoordinator,
     prSnapshotService,
-    ratchetService,
+    ratchetService: ratchetService as never,
     runScriptStateMachine,
     sessionDataService,
     sessionDomainService,

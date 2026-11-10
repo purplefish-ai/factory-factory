@@ -2,7 +2,6 @@
 import './pr-event-flow.test-helpers';
 import { afterAll, beforeAll, expect, it, vi } from 'vitest';
 import { createPRMonitoringTestServices } from '@/backend/orchestration/testing/pr-monitoring-services.test-support';
-import { ratchetService } from '@/backend/services/ratchet';
 import { workspacePrSnapshotService } from '@/backend/services/workspace';
 import {
   destroyIntegrationDatabase,
@@ -12,6 +11,7 @@ import { redObservation } from '@/shared/pr-monitoring.test-helpers';
 import { createPRFlowIntegrationDatabase } from './pr-event-flow.test-helpers';
 import { createPRObservationPorts } from './pr-monitoring-dependencies';
 import { observeMonitoredPR } from './pr-observation.orchestrator';
+import { RatchetService } from './ratchet.service';
 
 let db: IntegrationDatabase;
 beforeAll(async () => {
@@ -41,7 +41,7 @@ it('reuses a just-accepted PR-switch observation, then fetches again after coold
   const fetchObservation = vi.fn().mockResolvedValue(redObservation);
   ports.fetchObservation = fetchObservation;
   const wake = vi.fn().mockResolvedValue(undefined);
-  ratchetService.configure({
+  const ratchetService = new RatchetService({
     observe: (pr, signal) => observeMonitoredPR(ports, pr, { signal }),
     wake,
     setMonitoring: vi.fn(),
