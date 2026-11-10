@@ -66,9 +66,11 @@ connect from loopback, so the server keys only on `Accept-Encoding`.
   `Vary: Accept-Encoding`. The SPA fallback serves `index.html` the same way. No
   compression runs at request time.
 - API responses are not compressed. The browser client sends tRPC queries
-  through `httpBatchStreamLink`, which streams `application/jsonl`; the
-  remaining JSON (mutations and the workspace MCP server's local `fetch` calls)
-  is small. The port-share proxy, health routes and WebSockets are not
+  through `httpBatchStreamLink`, which streams `application/jsonl`; its
+  remaining JSON (mutations) is usually small. The workspace MCP server fetches
+  queries as ordinary JSON, and automation proposals can reach tens of
+  kilobytes, but the MCP server runs on the backend's machine, where compression
+  saves nothing. The port-share proxy, health routes and WebSockets are not
   compressed either. Possible follow-ups are compressing the tRPC jsonl stream
   with a flush per line, and WebSocket `permessage-deflate` for large session
   replay frames.
