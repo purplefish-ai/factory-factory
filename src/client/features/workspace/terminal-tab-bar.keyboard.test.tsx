@@ -123,3 +123,24 @@ it('closes the focused terminal with Delete and keeps focus in the tab bar', asy
   expect(document.activeElement).toBe(tabs[2]);
   expect(tabs[2]?.tabIndex).toBe(0);
 });
+
+it('closes the focused terminal with Backspace on macOS and keeps focus in the tab bar', async () => {
+  setShortcutEnvironmentForTesting({ platform: 'mac', runtime: 'browser' });
+  await act(() => root.render(<Panel onSelect={() => undefined} />));
+  const tabs = [...container.querySelectorAll<HTMLElement>('[role="tab"]')];
+  expect(tabs[2]?.getAttribute('aria-keyshortcuts')).toBe('Backspace');
+
+  tabs[2]!.focus();
+  // Delete is not the macOS close key, so it leaves the tab open.
+  await act(() => {
+    press('Delete');
+  });
+  expect(container.textContent).toContain('Terminal 2');
+  await act(() => {
+    press('Backspace');
+  });
+  await act(() => new Promise((resolve) => setTimeout(resolve, 20)));
+  expect(container.textContent).not.toContain('Terminal 2');
+  expect(document.activeElement).toBe(tabs[3]);
+  expect(tabs[3]?.tabIndex).toBe(0);
+});
