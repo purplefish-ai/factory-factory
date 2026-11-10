@@ -376,12 +376,12 @@ wait. Account exports include identity metadata only, excluding credentials and
 homes.
 
 Backup export and import map columns by hand.
-`src/backend/orchestration/data-backup-columns.test.ts` lists every Prisma
-scalar column of each model the recovery manifest covers. Each column is either
-declared exported, under a key the current export schema must have (possibly a
-flattened name), or excluded with a reason. A new column fails that test until
-it is classified. Reasons starting with `Gap:` are known omissions, such as
-`WorkspaceRunScript.postRunCommand`. The test checks the format, not the
+`src/backend/orchestration/data-backup/data-backup-columns.test.ts` lists every
+Prisma scalar column of each model the recovery manifest covers. Each column is
+either declared exported, under a key the current export schema must have
+(possibly a flattened name), or excluded with a reason. A new column fails that
+test until it is classified. Reasons starting with `Gap:` are known omissions,
+such as `WorkspaceRunScript.postRunCommand`. The test checks the format, not the
 hand-written mapping that fills it.
 
 ## Backup import

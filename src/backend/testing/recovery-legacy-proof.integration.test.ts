@@ -1,12 +1,12 @@
 import { afterAll, beforeAll, expect, it, vi } from 'vitest';
-import { dataBackupService } from '@/backend/orchestration/data-backup.service';
-import { createPRDeliveryPorts } from '@/backend/orchestration/pr-delivery-dependencies';
-import { recoverPRDeliveries } from '@/backend/orchestration/pr-delivery-recovery';
+import { dataBackupService } from '@/backend/orchestration/data-backup/data-backup.service';
+import { createPRDeliveryPorts } from '@/backend/orchestration/pull-requests/pr-delivery-dependencies';
+import { recoverPRDeliveries } from '@/backend/orchestration/pull-requests/pr-delivery-recovery';
 import {
   preparePRDelivery,
   wakePRDelivery,
-} from '@/backend/orchestration/pr-event-delivery.orchestrator';
-import type { PRDeliveryPorts } from '@/backend/orchestration/pr-monitoring-ports';
+} from '@/backend/orchestration/pull-requests/pr-event-delivery.orchestrator';
+import type { PRDeliveryPorts } from '@/backend/orchestration/pull-requests/pr-monitoring-ports';
 import { createPRMonitoringTestServices } from '@/backend/orchestration/testing/pr-monitoring-services.test-support';
 import { sessionDataService } from '@/backend/services/session';
 import {

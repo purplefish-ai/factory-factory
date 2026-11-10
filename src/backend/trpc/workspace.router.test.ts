@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AppContext, ApplicationServices } from '@/backend/app-context';
 import { ApplicationError } from '@/backend/lib/application-error';
 import type { CLIHealthStatus } from '@/backend/orchestration/cli-health.service';
-import { launchWorkspace } from '@/backend/orchestration/workspace-launch.orchestrator';
+import { launchWorkspace } from '@/backend/orchestration/workspace-lifecycle/workspace-launch.orchestrator';
 import { applicationGraphMocks, createFakeApplicationGraph } from '@/test-utils/application-graph';
 import { PRState, RatchetState, WorkspaceStatus } from '@prisma-gen/client';
 

@@ -122,7 +122,9 @@ export function createChatMessageRouter(services: ChatMessageRouterServices) {
             {
               type: 'error',
               error: { kind: 'no_session' },
-              ...((message.type === 'set_model' || message.type === 'set_config_option') &&
+              ...((message.type === 'set_model' ||
+                message.type === 'set_config_option' ||
+                message.type === 'steer_queued_message') &&
               message.requestId !== undefined
                 ? { requestId: message.requestId }
                 : {}),

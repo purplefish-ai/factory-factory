@@ -44,7 +44,7 @@ it.each([
   'src/backend/services/port.service.test.js',
   'src/cli/proxy.spec.d.ts.map',
   'src/backend/server.test-helpers.js',
-  'src/backend/orchestration/workspace-init.test-harness.d.ts',
+  'src/backend/orchestration/workspace-lifecycle/workspace-init.test-harness.d.ts',
   'src/backend/testing/integration-db.js',
   'src/backend/test/helper.js',
   'src/backend/tests/helper.js',

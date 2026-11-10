@@ -170,11 +170,13 @@ export class ChatConnectionRegistry {
   /**
    * Forward a payload to all connections viewing a session. Returns the
    * number of viewer writes admitted. onWritten observes a successful local write.
+   * `serialized`, when given, must be `JSON.stringify(payload)`; it is sent as-is.
    */
   broadcastToSession(
     dbSessionId: string,
     payload: WebSocketMessage,
-    onWritten?: () => void
+    onWritten?: () => void,
+    serialized?: string
   ): number {
     this.chatWsMsgCounter++;
     const msgNum = this.chatWsMsgCounter;
@@ -196,7 +198,8 @@ export class ChatConnectionRegistry {
       });
     }
     const incoming = this.incomingReplays.get(dbSessionId);
-    const sent = this.broadcaster.broadcastWith(dbSessionId, payload, (ws, message) => {
+    const wire = serialized ?? payload;
+    const sent = this.broadcaster.broadcastWith(dbSessionId, wire, (ws, message) => {
       if (payload.type === 'session_replay_chunk') {
         return this.sendChunk(ws, payload, message, incoming, written);
       }
@@ -523,9 +526,14 @@ export function attachChatTransport(
   });
 
   const sessionOutboundListener = (event: SessionOutboundEvent) => {
-    registry.broadcastToSession(event.sessionId, event.payload, () => {
-      sessionFileLogger.log(event.sessionId, 'OUT_TO_CLIENT', event.payload);
-    });
+    registry.broadcastToSession(
+      event.sessionId,
+      event.payload,
+      () => {
+        sessionFileLogger.log(event.sessionId, 'OUT_TO_CLIENT', event.payload);
+      },
+      event.serialized
+    );
   };
   const chatBroadcastListener = (event: ChatBroadcastEvent) => {
     registry.broadcastToAll(event.payload);

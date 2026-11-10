@@ -1,12 +1,12 @@
 import { describe, expect, it, vi } from 'vitest';
 const runtimeWiring = vi.hoisted(() => ({ create: vi.fn<(getServices: () => unknown) => void>() }));
-vi.mock('./orchestration/agent-runtime.orchestrator', () => ({
+vi.mock('@/backend/orchestration/agents/agent-runtime.orchestrator', () => ({
   createAgentRuntime: (getServices: () => unknown) => {
     runtimeWiring.create(getServices);
     return { start: vi.fn(), stop: vi.fn().mockResolvedValue(undefined) };
   },
 }));
-import type { RenamedWorkspace } from '@/backend/orchestration/workspace-rename.orchestrator';
+import type { RenamedWorkspace } from '@/backend/orchestration/workspace-lifecycle/workspace-rename.orchestrator';
 import { createFakeApplicationGraph } from '@/test-utils/application-graph';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 import {
@@ -209,11 +209,11 @@ describe('createApplication', () => {
 
   it('routes child creation through the graph-owned project lookup and launch capability', async () => {
     const actualChildren = await vi.importActual<
-      typeof import('@/backend/orchestration/workspace-children.orchestrator')
-    >('@/backend/orchestration/workspace-children.orchestrator');
+      typeof import('@/backend/orchestration/workspace-lifecycle/workspace-children.orchestrator')
+    >('@/backend/orchestration/workspace-lifecycle/workspace-children.orchestrator');
     const children = await vi.importMock<
-      typeof import('@/backend/orchestration/workspace-children.orchestrator')
-    >('@/backend/orchestration/workspace-children.orchestrator');
+      typeof import('@/backend/orchestration/workspace-lifecycle/workspace-children.orchestrator')
+    >('@/backend/orchestration/workspace-lifecycle/workspace-children.orchestrator');
     vi.mocked(children.createChildWorkspace).mockImplementationOnce(
       actualChildren.createChildWorkspace
     );

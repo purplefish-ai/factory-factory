@@ -22,6 +22,7 @@ export type ShutdownGraph = {
     readonly agentRuntime?: { stop(): Promise<void> };
     readonly workspaceMetadata?: { stop(): Promise<void> };
     readonly sessionLifecycleService: { stopAllClients(timeoutMs?: number): Promise<void> };
+    readonly sessionDispatchService: { shutdown(): Promise<void> };
     readonly codexAccountService: { shutdown(): Promise<void> };
     readonly terminalService: { cleanup(): void };
     readonly runScriptService: { cleanup(): Promise<void> };
@@ -91,6 +92,9 @@ export function createShutdownPlan(
       name: 'sessions',
       stop: () => services.sessionLifecycleService.stopAllClients(SESSION_SHUTDOWN_TIMEOUT_MS),
     },
+    // Stopping every client skips per-session stops, which own queue retries;
+    // cancel the retries the teardown itself armed before the database closes.
+    { name: 'session-dispatch', stop: () => services.sessionDispatchService.shutdown() },
     // Session teardown retains its final observation drain, which still reads
     // account context; cancelling an in-flight login waits until it settles.
     { name: 'codex-accounts', stop: () => services.codexAccountService.shutdown() },

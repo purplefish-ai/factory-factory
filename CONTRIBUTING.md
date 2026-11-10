@@ -81,6 +81,15 @@ Draft persistence also has a browser storage suite:
 installed Playwright Chromium and a frontend-only Vite server; the regular
 Vitest suite does not require a browser installation.
 
+Test processes never write the real server log. When `NODE_ENV` is `test` or the
+process runs under Vitest (including children that inherit its environment), the
+logger opens `logs/server.log` only if `BASE_DIR` points inside the OS temporary
+directory. Without a file, development and test logging still prints to the
+console, production-mode logging (for example a child that sets
+`NODE_ENV=production`) keeps only errors on stderr, and fatal records use the
+stderr fallback. Tests that assert file output set `BASE_DIR` to a `mkdtemp`
+directory.
+
 Run `pnpm test:integration` for changes to integration behavior. Subsystem notes
 may name additional focused checks for their contracts. Inspect the final diff,
 report failed or unavailable checks, and never weaken assertions or guardrails
@@ -120,7 +129,11 @@ polling. Create a fresh `eventProviderCollection()` in each test fixture, add
 providers through its `add` method, and await `waitForProviders(count)` to
 retain exact-count assertions and a bounded failure when startup stalls. Fixture
 teardown tracks real background PR wakes through completion and drains newly
-spawned work before disconnecting the private database.
+spawned work before disconnecting the private database; the generic retry
+fixture also shuts down session queue retries, as application shutdown does.
+Work that outlives a test file and logs can fail CI with
+`EnvironmentTeardownError: Closing rpc while "onUserConsoleLog" was pending`;
+stop or drain its owner in teardown rather than muting the log.
 
 `pnpm check` covers linting (including the inline suppression policy),
 formatting, file lengths, environment access, ambiguous relative imports,

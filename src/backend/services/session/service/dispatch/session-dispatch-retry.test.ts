@@ -1,4 +1,5 @@
 import { afterEach, expect, it, vi } from 'vitest';
+import { deferred } from '@/test-utils/deferred';
 import { getPermanentBlockedDispatchReason } from './session-dispatch-gate';
 import { SessionDispatchRetry } from './session-dispatch-retry';
 import type { DispatchOptions } from './session-dispatch.types';
@@ -96,6 +97,43 @@ it('does not shorten a pending retry when another caller requests a smaller mini
   expect(dispatch).not.toHaveBeenCalled();
   await vi.advanceTimersByTimeAsync(1);
   expect(dispatch).toHaveBeenCalledOnce();
+});
+
+it('cancels pending retries on stop and refuses ones armed afterwards', async () => {
+  vi.useFakeTimers();
+  const dispatch = vi
+    .fn<(id: string, options?: DispatchOptions) => Promise<void>>()
+    .mockResolvedValue(undefined);
+  const retry = new SessionDispatchRetry(dispatch);
+  retry.schedule('pending', undefined, 1000);
+  await retry.stop();
+  retry.schedule('late', undefined, 1000);
+  expect(retry.has('pending')).toBe(false);
+  expect(retry.has('late')).toBe(false);
+  await vi.advanceTimersByTimeAsync(60_000);
+  expect(dispatch).not.toHaveBeenCalled();
+});
+
+it('waits on stop for a dispatching retry and drops the retry it re-arms', async () => {
+  vi.useFakeTimers();
+  const release = deferred();
+  const retry = new SessionDispatchRetry(async (id) => {
+    await release.promise;
+    // A failed mail recovery re-arms its own retry before the dispatch settles.
+    retry.schedule(id, undefined, 1000);
+  });
+  retry.schedule('session', undefined, 1000);
+  await vi.advanceTimersByTimeAsync(1000);
+  let stopped = false;
+  const stopping = retry.stop().then(() => {
+    stopped = true;
+  });
+  await vi.advanceTimersByTimeAsync(0);
+  expect(stopped).toBe(false);
+  release.resolve();
+  await stopping;
+  expect(retry.has('session')).toBe(false);
+  expect(vi.getTimerCount()).toBe(0);
 });
 
 it('permanently rejects failed setup with a whitespace-only worktree path', () => {

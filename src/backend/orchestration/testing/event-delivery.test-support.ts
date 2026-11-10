@@ -322,8 +322,8 @@ export async function createEventAdmissionFixture(
 ) {
   const seed = await createQueuedEventSeed(db, provider);
   const { captureWorkspaceRunResults } = await vi.importActual<
-    typeof import('@/backend/orchestration/workspace-deletion.orchestrator')
-  >('@/backend/orchestration/workspace-deletion.orchestrator');
+    typeof import('@/backend/orchestration/workspace-lifecycle/workspace-deletion.orchestrator')
+  >('@/backend/orchestration/workspace-lifecycle/workspace-deletion.orchestrator');
   seed.workspace.workspaceDataService.configureDeletionCapture(captureWorkspaceRunResults);
   return seed;
 }

@@ -26,6 +26,16 @@ const runtime = {
   updatedAt: '2026-10-27T12:00:00.000Z',
 } as const;
 
+/** A small replay is published whole, with the JSON it was measured by. */
+function replayEvent(loadRequestId: string) {
+  const payload = {
+    type: 'session_replay_batch',
+    replayEvents: [{ type: 'session_runtime_snapshot', sessionRuntime: runtime }],
+    loadRequestId,
+  };
+  return { sessionId: 's1', payload, serialized: JSON.stringify(payload) };
+}
+
 function setup() {
   const calls: unknown[] = [];
   const bus = new SessionEventBus();
@@ -72,14 +82,7 @@ describe('executeSessionLoad', () => {
       await executeSessionLoad({ sessionId: 's1', loadRequestId: 'load-1' }, test.deps)
     ).toEqual({ replies: [] });
     expect(test.calls).toEqual([
-      {
-        sessionId: 's1',
-        payload: {
-          type: 'session_replay_batch',
-          loadRequestId: 'load-1',
-          replayEvents: [{ type: 'session_runtime_snapshot', sessionRuntime: runtime }],
-        },
-      },
+      replayEvent('load-1'),
       {
         sessionId: 's1',
         payload: {
@@ -189,14 +192,7 @@ describe('executeSessionLoad', () => {
     await Promise.resolve();
     await executeSessionLoad({ sessionId: 's1', loadRequestId: 'second' }, test.deps);
     expect(test.calls).toEqual([
-      {
-        sessionId: 's1',
-        payload: {
-          type: 'session_replay_batch',
-          loadRequestId: 'first',
-          replayEvents: [{ type: 'session_runtime_snapshot', sessionRuntime: runtime }],
-        },
-      },
+      replayEvent('first'),
       {
         sessionId: 's1',
         payload: {
@@ -204,14 +200,7 @@ describe('executeSessionLoad', () => {
           data: { type: 'session_runtime_updated', sessionRuntime: runtime },
         },
       },
-      {
-        sessionId: 's1',
-        payload: {
-          type: 'session_replay_batch',
-          loadRequestId: 'second',
-          replayEvents: [{ type: 'session_runtime_snapshot', sessionRuntime: runtime }],
-        },
-      },
+      replayEvent('second'),
       {
         sessionId: 's1',
         payload: {

@@ -500,7 +500,7 @@ describe('check-service-accessor-boundaries', () => {
   it('allows only the exact backup orchestration deep accessor import', () => {
     const allowed = runChecker([
       {
-        path: 'src/backend/orchestration/data-backup.service.ts',
+        path: 'src/backend/orchestration/data-backup/data-backup.service.ts',
         content:
           "import { dataBackupAccessor } from '@/backend/services/settings/resources/data-backup.accessor';\n",
       },
@@ -521,14 +521,14 @@ describe('check-service-accessor-boundaries', () => {
   it('does not extend the backup import exception to accessor re-exports', () => {
     const direct = runChecker([
       {
-        path: 'src/backend/orchestration/data-backup.service.ts',
+        path: 'src/backend/orchestration/data-backup/data-backup.service.ts',
         content:
           "export { dataBackupAccessor } from '@/backend/services/settings/resources/data-backup.accessor';\n",
       },
     ]);
     const importedThenExported = runChecker([
       {
-        path: 'src/backend/orchestration/data-backup.service.ts',
+        path: 'src/backend/orchestration/data-backup/data-backup.service.ts',
         content:
           "import { dataBackupAccessor } from '@/backend/services/settings/resources/data-backup.accessor';\nexport { dataBackupAccessor };\n",
       },

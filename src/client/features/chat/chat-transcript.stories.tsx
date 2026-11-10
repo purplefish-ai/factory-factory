@@ -324,6 +324,21 @@ export const QueuedMessageSteering: Story = {
   },
 };
 
+export const QueuedMessageSteeringPending: Story = {
+  ...QueuedMessageSteering,
+  args: {
+    ...QueuedMessageSteering.args,
+    pendingSteerMessageId: startupMessage.id,
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const steer = canvas.getByRole('button', { name: 'Steering queued message' });
+    await expect(steer).toBeDisabled();
+    await expect(steer).toHaveTextContent('Steering…');
+    await expect(steer).toHaveAttribute('aria-busy', 'true');
+  },
+};
+
 function QueueHandoffPreview(args: ComponentProps<typeof ChatTranscript>) {
   const [queued, setQueued] = useState(true);
   return (

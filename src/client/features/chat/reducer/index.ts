@@ -94,6 +94,7 @@ function createReplayBaseState(state: ChatState): ChatState {
       state.transcriptPageBoundaries.size > 0 ? undefined : state.rendererTranscriptLimit,
     // Preserve optimistic pending sends that are not yet reflected in replayed events.
     pendingMessages: state.pendingMessages,
+    pendingSteer: state.pendingSteer,
     // Preserve queued messages - they will be reconstructed from replay events,
     // but preserving them ensures they remain visible during replay processing.
     queuedMessages: state.queuedMessages,
