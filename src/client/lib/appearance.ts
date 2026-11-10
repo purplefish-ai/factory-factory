@@ -8,6 +8,7 @@
  */
 
 import { z } from 'zod';
+import { localStore } from '@/client/lib/browser-storage';
 import {
   type AppearanceSettings,
   appearanceSettingsSchema,
@@ -110,10 +111,8 @@ export function writeStoredAppearance(
   resolved: ResolvedAppearance,
   storage?: Pick<Storage, 'setItem'>
 ): void {
-  // Resolve localStorage inside the guard: merely touching it throws when
-  // storage is blocked, and that must not take the app down.
   try {
-    (storage ?? localStorage).setItem(APPEARANCE_STORAGE_KEY, JSON.stringify(resolved));
+    (storage ?? localStore).setItem(APPEARANCE_STORAGE_KEY, JSON.stringify(resolved));
   } catch {
     // Non-blocking: the preferences still apply, the next load just flashes briefly.
   }
@@ -123,7 +122,7 @@ export function readStoredAppearance(
   storage?: Pick<Storage, 'getItem'>
 ): ResolvedAppearance | null {
   try {
-    const raw = (storage ?? localStorage).getItem(APPEARANCE_STORAGE_KEY);
+    const raw = (storage ?? localStore).getItem(APPEARANCE_STORAGE_KEY);
     if (!raw) {
       return null;
     }

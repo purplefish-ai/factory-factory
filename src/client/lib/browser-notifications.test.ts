@@ -3,7 +3,6 @@ import { afterEach, expect, it, vi } from 'vitest';
 import {
   BROWSER_NOTIFICATIONS_KEY,
   readBrowserNotificationsEnabled,
-  subscribeBrowserNotifications,
   writeBrowserNotificationsEnabled,
 } from './browser-notifications';
 afterEach(() => {
@@ -23,17 +22,13 @@ it('reads safely when storage is unavailable', () => {
   });
   expect(readBrowserNotificationsEnabled()).toBe(false);
 });
-it('notifies same-window writes, relevant other-tab changes and clearing storage only', () => {
-  const listener = vi.fn();
-  const unsubscribe = subscribeBrowserNotifications(listener);
+it('stores the preference as JSON and throws when storage refuses it', () => {
   writeBrowserNotificationsEnabled(true);
-  expect(listener).toHaveBeenCalledOnce();
-  window.dispatchEvent(new StorageEvent('storage', { key: 'unrelated' }));
-  expect(listener).toHaveBeenCalledOnce();
-  window.dispatchEvent(new StorageEvent('storage', { key: BROWSER_NOTIFICATIONS_KEY }));
-  window.dispatchEvent(new StorageEvent('storage', { key: null }));
-  expect(listener).toHaveBeenCalledTimes(3);
-  unsubscribe();
-  writeBrowserNotificationsEnabled(false);
-  expect(listener).toHaveBeenCalledTimes(3);
+  expect(localStorage.getItem(BROWSER_NOTIFICATIONS_KEY)).toBe('true');
+  expect(readBrowserNotificationsEnabled()).toBe(true);
+  vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+    throw new Error('Denied');
+  });
+  expect(() => writeBrowserNotificationsEnabled(false)).toThrow();
+  expect(readBrowserNotificationsEnabled()).toBe(true);
 });

@@ -394,20 +394,22 @@ describe('RightPanel Agents tab', () => {
     expect(container.querySelector('[data-testid="agents-panel"]')).not.toBeNull();
   });
 
-  it.each(['periodic-task', 'auto-iteration'])(
-    'falls back from unavailable persisted %s tab',
-    (tab) => {
-      localStorage.setItem('workspace-right-panel-tab-workspace-1', tab);
-      render();
-      expect(container.querySelector('[data-testid="changes-panel"]')).not.toBeNull();
-      expect(localStorage.getItem('workspace-right-panel-tab-workspace-1')).toBe('changes');
-      expect(
-        [...container.querySelectorAll('button')]
-          .find((button) => button.textContent === 'Changes')
-          ?.getAttribute('aria-pressed')
-      ).toBe('true');
-    }
-  );
+  // An unavailable periodic task is replaced; a retired tab reads as Changes
+  // and is left in storage until the user picks a tab.
+  it.each([
+    ['periodic-task', 'changes'],
+    ['auto-iteration', 'auto-iteration'],
+  ])('falls back from unavailable persisted %s tab', (tab, storedAfterwards) => {
+    localStorage.setItem('workspace-right-panel-tab-workspace-1', tab);
+    render();
+    expect(container.querySelector('[data-testid="changes-panel"]')).not.toBeNull();
+    expect(localStorage.getItem('workspace-right-panel-tab-workspace-1')).toBe(storedAfterwards);
+    expect(
+      [...container.querySelectorAll('button')]
+        .find((button) => button.textContent === 'Changes')
+        ?.getAttribute('aria-pressed')
+    ).toBe('true');
+  });
 
   it('opens Changes for a former auto-iteration workspace after its data loads', () => {
     localStorage.setItem('workspace-right-panel-tab-workspace-1', 'auto-iteration');
@@ -422,7 +424,7 @@ describe('RightPanel Agents tab', () => {
     render();
     expect(container.querySelector('[data-testid="changes-panel"]')).not.toBeNull();
     expect(container.textContent).not.toContain('Iterations');
-    expect(localStorage.getItem('workspace-right-panel-tab-workspace-1')).toBe('changes');
+    expect(localStorage.getItem('workspace-right-panel-tab-workspace-1')).toBe('auto-iteration');
   });
 
   it('waits for workspace capabilities before rejecting a periodic-task preference', () => {

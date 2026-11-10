@@ -1,77 +1,29 @@
-import { describe, expect, it, vi } from 'vitest';
-import { loadPersistedTopPanelState, parseStoredTopTab } from './right-panel-state';
-
-function memoryStorage(entries: Record<string, string> = {}): Storage {
-  const values = new Map(Object.entries(entries));
-  return {
-    get length() {
-      return values.size;
-    },
-    clear: () => values.clear(),
-    getItem: (key) => values.get(key) ?? null,
-    key: (index) => [...values.keys()][index] ?? null,
-    removeItem: (key) => values.delete(key),
-    setItem: (key, value) => values.set(key, value),
-  };
-}
+import { describe, expect, it } from 'vitest';
+import { parseStoredTopTab, StoredTopTabSchema } from './right-panel-state';
 
 describe('right panel persisted state', () => {
   it('restores the Inbox preference', () => {
     expect(parseStoredTopTab('inbox')).toBe('inbox');
   });
+
   it('round-trips the Agents tab', () => {
     expect(parseStoredTopTab('agents')).toBe('agents');
-    const storage = memoryStorage({ 'workspace-right-panel-tab-workspace-1': 'agents' });
-    expect(loadPersistedTopPanelState(storage, 'workspace-1')).toEqual({ topTab: 'agents' });
+    expect(StoredTopTabSchema.parse('agents')).toBe('agents');
   });
 
-  it('migrates the legacy child-workspaces tab and rewrites storage', () => {
-    const storage = memoryStorage({
-      'workspace-right-panel-tab-workspace-1': 'child-workspaces',
-    });
-    const setItem = vi.spyOn(storage, 'setItem');
-
-    expect(loadPersistedTopPanelState(storage, 'workspace-1')).toEqual({ topTab: 'agents' });
-    expect(setItem).toHaveBeenCalledWith('workspace-right-panel-tab-workspace-1', 'agents');
-  });
-
-  it('uses a parsed legacy tab when the best-effort migration write fails', () => {
-    const storage = memoryStorage({
-      'workspace-right-panel-tab-workspace-1': 'child-workspaces',
-    });
-    vi.spyOn(storage, 'setItem').mockImplementation(() => {
-      throw new Error('write blocked');
-    });
-
-    expect(loadPersistedTopPanelState(storage, 'workspace-1')).toEqual({ topTab: 'agents' });
+  it('migrates the legacy child-workspaces tab', () => {
+    expect(StoredTopTabSchema.parse('child-workspaces')).toBe('agents');
   });
 
   it.each(['unstaged', 'diff-vs-main', 'auto-iteration', 'tasks'])(
     'keeps the existing %s migration',
     (legacyTab) => {
-      const storage = memoryStorage({ 'workspace-right-panel-tab-workspace-1': legacyTab });
-      const setItem = vi.spyOn(storage, 'setItem');
-
-      expect(loadPersistedTopPanelState(storage, 'workspace-1')).toEqual({ topTab: 'changes' });
-      expect(setItem).toHaveBeenCalledWith('workspace-right-panel-tab-workspace-1', 'changes');
+      expect(StoredTopTabSchema.parse(legacyTab)).toBe('changes');
     }
   );
 
-  it('falls back to changes for unknown values and storage failures', () => {
+  it('rejects unknown values so the caller falls back to changes', () => {
     expect(parseStoredTopTab('mystery')).toBeNull();
-    expect(
-      loadPersistedTopPanelState(
-        memoryStorage({ 'workspace-right-panel-tab-workspace-1': 'mystery' }),
-        'workspace-1'
-      )
-    ).toEqual({ topTab: 'changes' });
-
-    const failingStorage = memoryStorage();
-    vi.spyOn(failingStorage, 'getItem').mockImplementation(() => {
-      throw new Error('blocked');
-    });
-    expect(loadPersistedTopPanelState(failingStorage, 'workspace-1')).toEqual({
-      topTab: 'changes',
-    });
+    expect(StoredTopTabSchema.safeParse('mystery').success).toBe(false);
   });
 });

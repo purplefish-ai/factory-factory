@@ -6,6 +6,7 @@ import { lazy, Suspense, useEffect, useState } from 'react';
 import { ErrorBoundary } from '@/client/error-boundary';
 import { useCLIHealthRefresh } from '@/client/hooks/use-cli-health-refresh';
 import { runInBackground } from '@/client/lib/background-task';
+import { readStorageItem, removeStorageItem, writeStorageItem } from '@/client/lib/browser-storage';
 import { trpc } from '@/client/lib/trpc';
 import { Button } from '@/components/ui/button';
 
@@ -76,18 +77,6 @@ export function collectIssues(health: CliHealthForBanner): HealthIssue[] {
   return issues;
 }
 
-function getStorage(): Storage | null {
-  if (typeof window === 'undefined') {
-    return null;
-  }
-
-  try {
-    return window.localStorage;
-  } catch {
-    return null;
-  }
-}
-
 export function getCLIHealthWarningFingerprint(issues: HealthIssue[]): string {
   return JSON.stringify(
     issues.map((issue) => ({
@@ -100,31 +89,20 @@ export function getCLIHealthWarningFingerprint(issues: HealthIssue[]): string {
 }
 
 export function readDismissedCLIHealthWarningFingerprint(): string | null {
-  try {
-    return getStorage()?.getItem(CLI_HEALTH_WARNING_DISMISSED_KEY) ?? null;
-  } catch {
-    return null;
-  }
+  return readStorageItem(CLI_HEALTH_WARNING_DISMISSED_KEY);
 }
 
 export function isCLIHealthWarningDismissed(fingerprint: string): boolean {
   return readDismissedCLIHealthWarningFingerprint() === fingerprint;
 }
 
+/** Best effort: the banner stays dismissed for this page when storage refuses it. */
 export function rememberDismissedCLIHealthWarning(fingerprint: string) {
-  try {
-    getStorage()?.setItem(CLI_HEALTH_WARNING_DISMISSED_KEY, fingerprint);
-  } catch {
-    // Non-blocking: ignore localStorage failures.
-  }
+  writeStorageItem(CLI_HEALTH_WARNING_DISMISSED_KEY, fingerprint);
 }
 
 export function forgetDismissedCLIHealthWarning() {
-  try {
-    getStorage()?.removeItem(CLI_HEALTH_WARNING_DISMISSED_KEY);
-  } catch {
-    // Non-blocking: ignore localStorage failures.
-  }
+  removeStorageItem(CLI_HEALTH_WARNING_DISMISSED_KEY);
 }
 
 export function CLIHealthBannerContent({
