@@ -21,6 +21,11 @@ export const CHAT_BROADCAST_EVENT = 'chat_broadcast';
 export interface SessionOutboundEvent {
   sessionId: string;
   payload: WebSocketMessage;
+  /**
+   * `JSON.stringify(payload)`, when the publisher already produced it (replay
+   * framing). The transport sends it verbatim instead of serializing again.
+   */
+  serialized?: string;
 }
 
 export interface ChatBroadcastEvent {
@@ -34,13 +39,15 @@ export class SessionEventBus extends EventEmitter {
 
   /**
    * Publish a payload to all clients viewing a session. No-op when the
-   * session id is null (connection without a selected session).
+   * session id is null (connection without a selected session). Pass
+   * `serialized` only when it is exactly `JSON.stringify(payload)`.
    */
-  publishToSession(sessionId: string | null, payload: WebSocketMessage): void {
+  publishToSession(sessionId: string | null, payload: WebSocketMessage, serialized?: string): void {
     if (!sessionId) {
       return;
     }
-    const event: SessionOutboundEvent = { sessionId, payload };
+    const event: SessionOutboundEvent =
+      serialized === undefined ? { sessionId, payload } : { sessionId, payload, serialized };
     this.emit(SESSION_OUTBOUND_EVENT, event);
   }
 

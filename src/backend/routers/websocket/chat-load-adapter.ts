@@ -35,7 +35,7 @@ export async function executeSessionLoad(
       replayEvents: replay.replayEvents,
       ...(loadRequestId ? { loadRequestId } : {}),
     })) {
-      deps.eventBus.publishToSession(sessionId, frame);
+      deps.eventBus.publishToSession(sessionId, frame.payload, frame.json);
     }
   } catch (error) {
     if (!(error instanceof SessionReplayLimitError)) {

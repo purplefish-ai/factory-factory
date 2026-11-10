@@ -107,13 +107,16 @@ normal JSON event frames, with base64 fragments for an oversized event. When
 batch metadata itself cannot fit in a JSON event frame, the entire batch uses
 base64 fragments instead. The client rejects direct replay batches above 128
 KiB; every complete wire envelope stays within that bound, including large tool
-results and images. The client reconstructs the exact batch atomically before
-applying the existing load-request guard; incomplete, malformed, or out-of-order
-chunks cannot publish a partial transcript. Assembly expires after 30 seconds
-and resets on disconnect, session change, or unmount. The transport rejects
-batches above 128 MiB explicitly. Framing bounds each message, rather than
-reducing total replay bytes or adding pagination; the existing renderer
-transcript window and full backend transcript retention still apply.
+results and images. The server serializes each event once and sends frames built
+from that JSON; the client measures each received event once for both the frame
+bound and the declared replay length. The client reconstructs the exact batch
+atomically before applying the existing load-request guard; incomplete,
+malformed, or out-of-order chunks cannot publish a partial transcript. Assembly
+expires after 30 seconds and resets on disconnect, session change, or unmount.
+The transport rejects batches above 128 MiB explicitly. Framing bounds each
+message, rather than reducing total replay bytes or adding pagination; the
+existing renderer transcript window and full backend transcript retention still
+apply.
 
 Main and quick-chat transcripts initially load the newest 1,000 entries. Near
 the top of the loaded transcript, the client automatically requests older pages

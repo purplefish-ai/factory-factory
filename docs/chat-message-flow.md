@@ -197,16 +197,19 @@ rejected state. Increase the configured limit within its supported range,
 restart the backend, and explicitly reconnect to retry; snapshots remain
 available over HTTP. A successfully accepted baseline releases that guard.
 
-Replay retains the responsive history loading and 128 KiB wire chunks. Chunk
-envelopes carry the bounded load correlation ID, including the byte-fragment
-fallback for unusually large replay metadata. The configured budget also bounds
-the logical replay; the existing 128 MiB replay assembly ceiling remains an
-absolute upper bound. A viewer queues one bounded replay sequence, writes one
-chunk at a time as local write callbacks finish, and holds at most 1 MiB of
-dependent updates until the complete baseline is written. Serialized replay
-storage is bounded by twice its declared source size plus 1 KiB per bounded
-chunk for base64/envelope overhead. Independent command replies and
-notifications remain available. A retry of the same pending load reuses its
+Replay retains the responsive history loading and 128 KiB wire chunks. Framing
+serializes each replay event once, assembles event-frame JSON from those strings
+and publishes each frame with its JSON; the transport sends that JSON instead of
+serializing the frame again. Framing and publication remain one synchronous
+pass. Chunk envelopes carry the bounded load correlation ID, including the
+byte-fragment fallback for unusually large replay metadata. The configured
+budget also bounds the logical replay; the existing 128 MiB replay assembly
+ceiling remains an absolute upper bound. A viewer queues one bounded replay
+sequence, writes one chunk at a time as local write callbacks finish, and holds
+at most 1 MiB of dependent updates until the complete baseline is written.
+Serialized replay storage is bounded by twice its declared source size plus 1
+KiB per bounded chunk for base64/envelope overhead. Independent command replies
+and notifications remain available. A retry of the same pending load reuses its
 sequence; a newer distinct request explicitly supersedes and settles the older
 request with a correlated 409 error. Neither coalesced retries nor failed writes
 create OUT_TO_CLIENT records. These records describe successful local socket
