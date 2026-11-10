@@ -10,8 +10,8 @@ import {
   type SettingsServer,
   type SettingsServerOptions,
   stubRadixLayout,
-  waitForCheck,
 } from '@/client/lib/user-settings-queries.test-harness';
+import { waitForCheck } from '@/test-utils/react-act';
 import { IdeSettingsSection } from './IdeSettingsSection';
 
 const toast = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn() }));
