@@ -4,7 +4,6 @@ import {
   type prObservationService,
   type prSnapshotService,
 } from '@/backend/services/github';
-import type { ratchetService } from '@/backend/services/ratchet';
 import type {
   acpRuntimeManager,
   sessionDispatchService,
@@ -20,12 +19,13 @@ import type {
   workspacePrSnapshotService,
 } from '@/backend/services/workspace';
 import type { PRObservationPorts } from './pr-observation-ports';
+import type { RatchetService } from './ratchet.service';
 
 export type PRMonitoringServices = {
   configService: typeof configService;
   prObservationService: typeof prObservationService;
   prSnapshotService: typeof prSnapshotService;
-  ratchetService: typeof ratchetService;
+  ratchetService: RatchetService;
   acpRuntimeManager: typeof acpRuntimeManager;
   sessionDispatchService: Pick<typeof sessionDispatchService, 'tryDispatchNextMessage'>;
   findPRDeliveryReceipt: typeof findPRDeliveryReceipt;

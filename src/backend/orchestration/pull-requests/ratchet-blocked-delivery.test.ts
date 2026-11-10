@@ -14,7 +14,7 @@ import { RATCHET_DISPATCH_CHANGED, RatchetService } from './ratchet.service';
 beforeEach(() => vi.resetAllMocks());
 
 it('publishes a monitoring change only when a blocked delivery was discarded', async () => {
-  const service = new RatchetService();
+  const service = new RatchetService({ observe: vi.fn(), wake: vi.fn(), setMonitoring: vi.fn() });
   const changed = vi.fn();
   service.on(RATCHET_DISPATCH_CHANGED, changed);
   mocks.discardBlockedDeliveries

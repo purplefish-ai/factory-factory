@@ -48,7 +48,8 @@ export interface RatchetCheckResult {
   actionsTriggered: number;
   results: WorkspaceRatchetResult[];
 }
-interface MonitoringBridge {
+/** PR monitoring operations the poll loop drives; composition supplies them per graph. */
+export interface PRMonitoringBridge {
   retireLegacy?(): Promise<unknown>;
   observe(target: PRTarget, signal?: AbortSignal): Promise<boolean>;
   wake(workspaceId: string, isCurrent?: () => boolean): Promise<void>;
@@ -68,8 +69,11 @@ interface MonitoringBridge {
       }
   >;
 }
+/**
+ * Owns the `pr-event-poll` loop, the `pr-event-retention` job and the delivery
+ * wakes they start. One instance per application graph.
+ */
 export class RatchetService extends EventEmitter {
-  private bridge: MonitoringBridge | null = null;
   private stopped = false;
   private backoff = new RateLimitBackoff();
   private limit = pLimit(3);
@@ -78,11 +82,11 @@ export class RatchetService extends EventEmitter {
   private pendingWakes = new Set<Promise<void>>();
   /** Bumped by stop() so a restart cannot revive a wake from an earlier run. */
   private generation = 0;
-  constructor() {
+  constructor(private readonly bridge: PRMonitoringBridge) {
     super();
     jobRunner.register({
       name: POLL_JOB,
-      intervalMs: SERVICE_INTERVAL_MS.ratchetPoll,
+      intervalMs: SERVICE_INTERVAL_MS.prEventPoll,
       runImmediately: true,
       run: async (signal) => {
         this.backoff.beginCycle();
@@ -102,12 +106,9 @@ export class RatchetService extends EventEmitter {
       },
     });
   }
-  configure(bridge: MonitoringBridge) {
-    this.bridge = bridge;
-  }
   async start() {
     this.stopped = false;
-    await this.bridge?.retireLegacy?.();
+    await this.bridge.retireLegacy?.();
     if (!this.stopped) {
       jobRunner.start(POLL_JOB);
       jobRunner.start(RETENTION_JOB);
@@ -123,19 +124,18 @@ export class RatchetService extends EventEmitter {
     await Promise.allSettled(this.pendingWakes);
   }
   async wakePendingEvents(workspaceId: string): Promise<void> {
-    if (this.stopped || !this.bridge) {
+    if (this.stopped) {
       return;
     }
-    await this.trackWake(this.bridge, workspaceId);
+    await this.trackWake(workspaceId);
   }
   /** Shutdown invalidates and drains every delivery wake this service starts. */
   private async trackWake(
-    bridge: MonitoringBridge,
     workspaceId: string,
     isCurrent: () => boolean = () => true
   ): Promise<void> {
     const generation = this.generation;
-    const wake = bridge.wake(
+    const wake = this.bridge.wake(
       workspaceId,
       () => !this.stopped && this.generation === generation && isCurrent()
     );
@@ -201,19 +201,15 @@ export class RatchetService extends EventEmitter {
       AbortSignal.timeout(SERVICE_TIMEOUT_MS.ratchetWorkspaceCheck),
       ...(parentSignal ? [parentSignal] : []),
     ]);
-    const bridge = this.bridge;
-    if (!bridge) {
-      return Promise.reject(new Error('PR monitoring bridge is not configured'));
-    }
     const run = (async () => {
       try {
-        await this.observeAssociations(config, bridge, signal);
+        await this.observeAssociations(config, signal);
         signal.throwIfAborted();
         await workspacePRMonitoringService.markChecked(config.workspaceId);
         signal.throwIfAborted();
         const queued = await workspacePRMonitoringService.listPending(config.workspaceId);
         signal.throwIfAborted();
-        await this.trackWake(bridge, config.workspaceId, () => !signal.aborted);
+        await this.trackWake(config.workspaceId, () => !signal.aborted);
         signal.throwIfAborted();
         this.emit(RATCHET_DISPATCH_CHANGED, { workspaceId: config.workspaceId });
         signal.throwIfAborted();
@@ -238,7 +234,7 @@ export class RatchetService extends EventEmitter {
             logger,
             'PR monitoring',
             { workspaceId: config.workspaceId, prUrl: config.workspace.prs[0]?.url ?? '' },
-            SERVICE_INTERVAL_MS.ratchetPoll
+            SERVICE_INTERVAL_MS.prEventPoll
           );
         }
         return {
@@ -260,7 +256,6 @@ export class RatchetService extends EventEmitter {
   }
   private async observeAssociations(
     config: Awaited<ReturnType<typeof workspacePRMonitoringService.listEnabled>>[number],
-    bridge: MonitoringBridge,
     signal: AbortSignal
   ) {
     for (const pr of config.workspace.prs) {
@@ -269,7 +264,7 @@ export class RatchetService extends EventEmitter {
         continue;
       }
       try {
-        await bridge.observe({ workspaceId: config.workspaceId, prId: pr.id }, signal);
+        await this.bridge.observe({ workspaceId: config.workspaceId, prId: pr.id }, signal);
       } catch (error) {
         signal.throwIfAborted();
         const rateLimited = this.backoff.handleError(
@@ -277,7 +272,7 @@ export class RatchetService extends EventEmitter {
           logger,
           'PR monitoring',
           { workspaceId: config.workspaceId, prUrl: pr.url },
-          SERVICE_INTERVAL_MS.ratchetPoll
+          SERVICE_INTERVAL_MS.prEventPoll
         );
         if (rateLimited) {
           break;
@@ -316,9 +311,6 @@ export class RatchetService extends EventEmitter {
       resume?: boolean;
     }
   ) {
-    if (!this.bridge) {
-      throw new Error('PR monitoring bridge is not configured');
-    }
     const config = await workspacePRMonitoringService.get(workspaceId);
     const result = await this.bridge.setMonitoring({
       workspaceId,
@@ -338,4 +330,3 @@ export class RatchetService extends EventEmitter {
     return result;
   }
 }
-export const ratchetService = new RatchetService();

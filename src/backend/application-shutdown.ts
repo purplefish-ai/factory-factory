@@ -75,9 +75,9 @@ export function createShutdownPlan(
       name: 'reconciliation-cleanup',
       stop: () => services.reconciliationService.stopPeriodicCleanup(),
     },
-    { name: 'pr-sync', stop: () => services.schedulerService.stop() },
+    { name: 'pr-poll', stop: () => services.schedulerService.stop() },
     { name: 'snapshot-reconciliation', stop: () => lifecycle.snapshotReconciliation.stop() },
-    { name: 'ratchet', stop: () => services.ratchetService.stop() },
+    { name: 'pr-event-poll', stop: () => services.ratchetService.stop() },
     { name: 'periodic-task-poll', stop: () => services.periodicTaskService.stop() },
   ];
   const steps: ShutdownStep[] = [
@@ -106,10 +106,10 @@ export function createShutdownPlan(
     { name: 'rate-limiter', stop: () => services.rateLimiter.stop() },
     // Every drain is already under way, so waiting on them here costs only the
     // slowest; these edges just keep the orderings that matter. The event
-    // collector keeps projecting until the PR sync has settled.
+    // collector keeps projecting until the PR poll has settled.
     {
       name: 'event-collector',
-      after: ['application-update-idle', 'pr-sync'],
+      after: ['application-update-idle', 'pr-poll'],
       stop: () => lifecycle.eventCollector.stop(),
     },
     // Snapshot reconciliation's Git-stats pass must settle before the Git
@@ -123,7 +123,7 @@ export function createShutdownPlan(
     // running when the database disconnects.
     {
       name: 'job-runner',
-      after: ['ratchet', 'periodic-task-poll', 'reconciliation-cleanup'],
+      after: ['pr-event-poll', 'periodic-task-poll', 'reconciliation-cleanup'],
       stop: () => lifecycle.jobs.stopAll(),
     },
     { name: 'database', stop: () => lifecycle.database.$disconnect() },

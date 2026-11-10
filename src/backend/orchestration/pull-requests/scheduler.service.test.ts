@@ -504,7 +504,7 @@ describe('SchedulerService', () => {
       mockFindNeedingPRDiscovery.mockResolvedValue([]);
 
       schedulerService.start();
-      await vi.advanceTimersByTimeAsync(SERVICE_INTERVAL_MS.schedulerPrSync);
+      await vi.advanceTimersByTimeAsync(SERVICE_INTERVAL_MS.prPoll);
 
       expect(mockFindNeedingPRSync).toHaveBeenCalledTimes(1);
       expect(mockFindNeedingPRDiscovery).toHaveBeenCalledTimes(1);
@@ -526,8 +526,8 @@ describe('SchedulerService', () => {
 
       schedulerService.start();
 
-      await vi.advanceTimersByTimeAsync(SERVICE_INTERVAL_MS.schedulerPrSync);
-      await vi.advanceTimersByTimeAsync(SERVICE_INTERVAL_MS.schedulerPrSync);
+      await vi.advanceTimersByTimeAsync(SERVICE_INTERVAL_MS.prPoll);
+      await vi.advanceTimersByTimeAsync(SERVICE_INTERVAL_MS.prPoll);
 
       const syncCalls = mockFindNeedingPRSync.mock.calls.length;
       const discoveryCalls = mockFindNeedingPRDiscovery.mock.calls.length;
@@ -563,7 +563,7 @@ describe('SchedulerService', () => {
       mockRefreshPR.mockImplementation(() => deferredSync.promise);
 
       schedulerService.start();
-      await vi.advanceTimersByTimeAsync(SERVICE_INTERVAL_MS.schedulerPrSync);
+      await vi.advanceTimersByTimeAsync(SERVICE_INTERVAL_MS.prPoll);
 
       let stopped = false;
       const stopPromise = schedulerService.stop().then(() => {
@@ -596,7 +596,7 @@ describe('SchedulerService', () => {
       mockFindNeedingPRDiscovery.mockResolvedValue([]);
 
       schedulerService.start();
-      await vi.advanceTimersByTimeAsync(SERVICE_INTERVAL_MS.schedulerPrSync);
+      await vi.advanceTimersByTimeAsync(SERVICE_INTERVAL_MS.prPoll);
       await schedulerService.stop();
 
       await expect(schedulerService.syncPRStatuses()).resolves.toEqual({ synced: 0, failed: 0 });
@@ -626,7 +626,7 @@ describe('SchedulerService', () => {
       mockRefreshPR.mockImplementation(() => deferredSync.promise);
 
       schedulerService.start();
-      await vi.advanceTimersByTimeAsync(SERVICE_INTERVAL_MS.schedulerPrSync);
+      await vi.advanceTimersByTimeAsync(SERVICE_INTERVAL_MS.prPoll);
 
       schedulerService.start();
 

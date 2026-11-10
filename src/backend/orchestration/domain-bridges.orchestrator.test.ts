@@ -17,8 +17,6 @@ vi.mock('@/backend/services/logger.service', () => ({
   createLogger: () => mockLogger,
 }));
 
-vi.mock('@/backend/services/ratchet', () => ({ ratchetService: { configure: vi.fn() } }));
-
 vi.mock('@/backend/orchestration/workspace-lifecycle/reconciliation.service', () => ({
   reconciliationService: { configure: vi.fn() },
 }));
@@ -157,7 +155,6 @@ import {
 } from '@/backend/services/github';
 import { createLogger } from '@/backend/services/logger.service';
 import { periodicTaskService } from '@/backend/services/periodic-task';
-import { ratchetService } from '@/backend/services/ratchet';
 import { startupScriptService } from '@/backend/services/run-script';
 import {
   acpRuntimeManager,
@@ -206,7 +203,6 @@ function createBridgeServices(
     periodicTaskService,
     prFetchCoordinator,
     prSnapshotService,
-    ratchetService,
     recoverStaleProvisioningWorkspace,
     reconciliationService,
     sessionLifecycleEventService,
@@ -280,10 +276,9 @@ describe('configureDomainBridges', () => {
     expect(sessionDispatchService.tryDispatchNextMessage).not.toHaveBeenCalled();
   });
 
-  it('configures all ratchet domain services', () => {
+  it('configures the reconciliation bridge', () => {
     configureDomainBridges(createBridgeServices());
 
-    expect(ratchetService.configure).toHaveBeenCalledTimes(1);
     expect(reconciliationService.configure).toHaveBeenCalledTimes(1);
   });
 
@@ -846,18 +841,13 @@ describe('configureDomainBridges', () => {
       configureDomainBridges(createBridgeServices());
       configureDomainBridges(createBridgeServices());
 
-      expect(ratchetService.configure).toHaveBeenCalledTimes(2);
+      expect(reconciliationService.configure).toHaveBeenCalledTimes(2);
       expect(workspaceQueryService.configure).toHaveBeenCalledTimes(2);
     });
   });
 });
 
 it('wires PR monitoring through the injected graph rather than global instances', async () => {
-  const monitoring = {
-    ...prServices.workspacePRMonitoringService,
-    listLegacyRetirementCandidates: vi.fn(async () => []),
-    get: vi.fn(async () => null),
-  };
   const observer = { ...prObservationService, configure: vi.fn() };
   const background = {
     ...prServices.sessionBackgroundDeliveryService,
@@ -869,18 +859,12 @@ it('wires PR monitoring through the injected graph rather than global instances'
   };
   configureDomainBridges(
     createBridgeServices({
-      workspacePRMonitoringService:
-        monitoring as unknown as BridgeServices['workspacePRMonitoringService'],
       prObservationService: observer as unknown as BridgeServices['prObservationService'],
       sessionBackgroundDeliveryService:
         background as unknown as BridgeServices['sessionBackgroundDeliveryService'],
       userSettingsService: settings as unknown as BridgeServices['userSettingsService'],
     })
   );
-  await getBridge(vi.mocked(ratchetService.configure)).retireLegacy?.();
-  await getBridge(vi.mocked(ratchetService.configure)).wake('custom-workspace');
-  expect(monitoring.listLegacyRetirementCandidates).toHaveBeenCalledOnce();
-  expect(monitoring.get).toHaveBeenCalledWith('custom-workspace');
   expect(background.configure).toHaveBeenCalledOnce();
   await getBridge(observer.configure).readPolicy();
   expect(settings.get).toHaveBeenCalledOnce();

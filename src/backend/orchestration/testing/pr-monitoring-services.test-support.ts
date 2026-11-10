@@ -1,7 +1,8 @@
 import type { PRMonitoringServices } from '@/backend/orchestration/pull-requests/pr-monitoring-dependencies';
+import { createRatchetService } from '@/backend/orchestration/pull-requests/ratchet-dependencies';
+import type { RatchetService } from '@/backend/orchestration/pull-requests/ratchet.service';
 import { configService } from '@/backend/services/config.service';
 import { prObservationService, prSnapshotService } from '@/backend/services/github';
-import { ratchetService } from '@/backend/services/ratchet';
 import {
   acpRuntimeManager,
   findPRDeliveryReceipt,
@@ -25,7 +26,8 @@ import {
  * object for one graph.
  */
 export function createPRMonitoringTestServices(): PRMonitoringServices {
-  return {
+  let ratchetService: RatchetService | undefined;
+  const services: PRMonitoringServices = {
     get configService() {
       return configService;
     },
@@ -36,6 +38,7 @@ export function createPRMonitoringTestServices(): PRMonitoringServices {
       return prSnapshotService;
     },
     get ratchetService() {
+      ratchetService ??= createRatchetService(() => services);
       return ratchetService;
     },
     get acpRuntimeManager() {
@@ -69,4 +72,5 @@ export function createPRMonitoringTestServices(): PRMonitoringServices {
       return workspacePrSnapshotService;
     },
   };
+  return services;
 }

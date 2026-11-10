@@ -1,12 +1,12 @@
 import { EventEmitter } from 'node:events';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { RATCHET_DISPATCH_CHANGED } from '@/backend/orchestration/pull-requests/ratchet.service';
 import {
   createEventCollectorOrchestrator,
   type EventCollectorDependencies,
   type EventCollectorOrchestrator,
 } from '@/backend/orchestration/snapshots/event-collector.orchestrator';
 import { PR_URL_ATTACHED } from '@/backend/services/github';
-import { RATCHET_DISPATCH_CHANGED } from '@/backend/services/ratchet';
 import {
   deriveWorkspaceFlowState,
   SNAPSHOT_CHANGED,

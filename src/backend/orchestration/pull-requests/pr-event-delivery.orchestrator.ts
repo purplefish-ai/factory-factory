@@ -6,7 +6,6 @@ import {
 } from '@/backend/orchestration/background-action-dispatch.orchestrator';
 import { buildPREventBatch } from '@/backend/prompts/pr-event';
 import { createLogger } from '@/backend/services/logger.service';
-import { RATCHET_DISPATCH_CHANGED } from '@/backend/services/ratchet';
 import type { PRBackgroundDeliveryPort } from '@/backend/services/session';
 import { type PRDeliveryRequest } from '@/shared/pr-monitoring';
 import { prFactPayloadSchema } from '@/shared/schemas/pr-event.schema';
@@ -15,6 +14,7 @@ import { recipientCanDispatch } from './pr-delivery-readiness';
 import { isCurrentPRRecipient } from './pr-delivery-recipient';
 import { recoverPRDeliveries } from './pr-delivery-recovery';
 import type { PRDeliveryPorts } from './pr-monitoring-ports';
+import { RATCHET_DISPATCH_CHANGED } from './ratchet.service';
 
 const logger = createLogger('pr-event-delivery');
 
