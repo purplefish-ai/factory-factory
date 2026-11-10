@@ -15,7 +15,7 @@ async function checkBoundary(producer: string, ports = 'export interface Ports {
     'src/backend/services/github/index.ts':
       'export const service = true; export interface Contract {}',
     'src/backend/services/session/index.ts': 'export const service = true;',
-    'src/backend/services/ratchet/index.ts': 'export const service = true;',
+    'src/backend/orchestration/pull-requests/ratchet.service.ts': 'export const service = true;',
     'src/shared/observation.ts': 'export interface Observation {}',
   };
   try {
@@ -41,7 +41,7 @@ it('allows observation to depend on its narrow ports and shared contracts', asyn
 it.each([
   '../../services/github',
   '../../services/session',
-  '../../services/ratchet',
+  './ratchet.service',
   './pr-delivery-dependencies',
 ])('rejects producer runtime imports from %s', async (dependency) => {
   const result = await checkBoundary(

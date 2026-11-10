@@ -5,6 +5,7 @@ import { createAgentManagement } from '@/backend/orchestration/agents/agent-mana
 import { createAgentRuntime } from '@/backend/orchestration/agents/agent-runtime.orchestrator';
 import { dataBackupService } from '@/backend/orchestration/data-backup/data-backup.service';
 import { bindIssueMonitoringSession } from '@/backend/orchestration/pull-requests/pr-monitoring.orchestrator';
+import { createRatchetService } from '@/backend/orchestration/pull-requests/ratchet-dependencies';
 import { listVisibleReviewRequests } from '@/backend/orchestration/pull-requests/review-requests.orchestrator';
 import { schedulerService } from '@/backend/orchestration/pull-requests/scheduler.service';
 import {
@@ -81,7 +82,6 @@ import { cleanupOldLogFiles, createLogger, getLogFilePath } from './services/log
 import { periodicTaskService } from './services/periodic-task';
 import { type PortShareService, portShareService } from './services/port-share';
 import { findAvailablePort } from './services/port.service';
-import { ratchetService } from './services/ratchet';
 import { rateLimiter } from './services/rate-limiter.service';
 import {
   createRunScriptService,
@@ -447,7 +447,7 @@ export function createDefaultApplicationDependencies(): ApplicationDependencies 
     prFetchCoordinator,
     prSnapshotService,
     prObservationService,
-    ratchetService,
+    ratchetService: createRatchetService(() => services),
     rateLimiter,
     recoverStaleProvisioningWorkspace,
     runScriptConfigPersistenceService,

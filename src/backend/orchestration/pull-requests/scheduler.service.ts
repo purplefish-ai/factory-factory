@@ -61,7 +61,7 @@ class SchedulerService {
   constructor() {
     jobRunner.register({
       name: PR_POLL_JOB,
-      intervalMs: SERVICE_INTERVAL_MS.schedulerPrSync,
+      intervalMs: SERVICE_INTERVAL_MS.prPoll,
       // Sync and discovery stay a single job so they keep sharing one cadence
       // and one in-flight window, as they did under the old shared interval.
       // Pacing them separately would let them overlap against the same GitHub

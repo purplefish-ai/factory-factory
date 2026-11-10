@@ -8,7 +8,6 @@ import { isTextContent, isThinkingContent } from '@/lib/chat-protocol';
 import { cn } from '@/lib/utils';
 import { useIsTextStreaming } from './streaming-text-context';
 import { useIsThinkingInProgress } from './thinking-completion-context';
-import { useStreamingTextSnapshot } from './use-streaming-text-snapshot';
 
 // =============================================================================
 // Stream Event Renderer
@@ -111,7 +110,7 @@ export const StreamDeltaRenderer = memo(function StreamDeltaRenderer({
 
 export interface TextRendererProps {
   text: string;
-  /** The ID of the ChatMessage containing this text (for streaming throttling) */
+  /** The ID of the ChatMessage containing this text (to detect the streaming reply) */
   messageId?: string;
   resolveWorkspaceFileLink?: (href: string) => string | null;
   onWorkspaceFileLink?: (path: string) => void;
@@ -119,7 +118,8 @@ export interface TextRendererProps {
 
 /**
  * Renders text content with full markdown support. While the message is
- * streaming, Markdown renders from a throttled snapshot split into blocks.
+ * streaming, Markdown renders with word fades. The chat state's stream-delta
+ * coalescer paces streaming text updates, so each update renders directly.
  */
 export const TextRenderer = memo(function TextRenderer({
   text,
@@ -128,10 +128,9 @@ export const TextRenderer = memo(function TextRenderer({
   onWorkspaceFileLink,
 }: TextRendererProps) {
   const streaming = useIsTextStreaming(messageId);
-  const content = useStreamingTextSnapshot(text, streaming);
   return (
     <MarkdownRenderer
-      content={content}
+      content={text}
       streaming={streaming}
       resolveWorkspaceFileLink={resolveWorkspaceFileLink}
       onWorkspaceFileLink={onWorkspaceFileLink}

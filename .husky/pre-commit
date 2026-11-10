@@ -1,6 +1,7 @@
 pnpm exec lint-staged
 pnpm run typecheck
-pnpm exec prisma migrate diff --from-schema prisma/schema.prisma --to-migrations prisma/migrations --exit-code
+pnpm run check:migrations
+pnpm run check:imports
 pnpm run deps:check
 pnpm run knip
 pnpm run check:unused-code

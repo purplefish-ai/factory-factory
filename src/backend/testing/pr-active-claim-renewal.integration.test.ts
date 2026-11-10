@@ -30,7 +30,9 @@ it.each([
     const dispatch = vi
       .spyOn(h.session.sessionDispatchService, 'tryDispatchNextMessage')
       .mockResolvedValue();
-    graph.lifecycle.wireDomainBridges({ ...graph.services, findPRDeliveryReceipt: findReceipt });
+    // The PR event poll reads its graph lazily, so the receipt override belongs on that graph.
+    graph.services.findPRDeliveryReceipt = findReceipt;
+    graph.lifecycle.wireDomainBridges(graph.services);
     const port = createPRBackgroundDeliveryPort({
       ...createPRDeliveryPorts(graph.services),
       findPRDeliveryReceipt: findReceipt,

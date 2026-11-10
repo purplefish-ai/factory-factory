@@ -33,10 +33,9 @@ beforeEach(() => {
 });
 
 it('wakes committed events without fetching GitHub and ignores wakes after stop', async () => {
-  const service = new RatchetService();
   const observe = vi.fn();
   const wake = vi.fn().mockResolvedValue(undefined);
-  service.configure({ observe, wake, setMonitoring: vi.fn() });
+  const service = new RatchetService({ observe, wake, setMonitoring: vi.fn() });
   await service.wakePendingEvents('w');
   expect(wake).toHaveBeenCalledExactlyOnceWith('w', expect.any(Function));
   expect(observe).not.toHaveBeenCalled();
@@ -47,10 +46,9 @@ it('wakes committed events without fetching GitHub and ignores wakes after stop'
 });
 
 it('invalidates an in-flight event wake and drains it before shutdown finishes', async () => {
-  const service = new RatchetService();
   const pending = deferred<void>();
   const wake = vi.fn((_id: string, _isCurrent?: () => boolean) => pending.promise);
-  service.configure({ observe: vi.fn(), wake, setMonitoring: vi.fn() });
+  const service = new RatchetService({ observe: vi.fn(), wake, setMonitoring: vi.fn() });
   const waking = service.wakePendingEvents('w');
   const isCurrent = wake.mock.calls[0]?.[1];
   expect(isCurrent?.()).toBe(true);
@@ -68,10 +66,9 @@ it('invalidates an in-flight event wake and drains it before shutdown finishes',
 });
 
 it('keeps a wake from before stop invalidated when monitoring restarts during the drain', async () => {
-  const service = new RatchetService();
   const pending = deferred<void>();
   const wake = vi.fn((_id: string, _isCurrent?: () => boolean) => pending.promise);
-  service.configure({ observe: vi.fn(), wake, setMonitoring: vi.fn() });
+  const service = new RatchetService({ observe: vi.fn(), wake, setMonitoring: vi.fn() });
   const waking = service.wakePendingEvents('w');
   const isCurrent = wake.mock.calls[0]?.[1];
   const stopping = service.stop();
@@ -110,8 +107,7 @@ it('observes every association and wakes the main queue once without creating fi
   mocks.listPending.mockResolvedValue([]);
   const observe = vi.fn().mockResolvedValue(true),
     wake = vi.fn().mockResolvedValue(undefined);
-  const ratchetService = new RatchetService();
-  ratchetService.configure({ observe, wake, setMonitoring: vi.fn() });
+  const ratchetService = new RatchetService({ observe, wake, setMonitoring: vi.fn() });
   await ratchetService.checkAllWorkspaces();
   expect(observe.mock.calls.map((c) => c[0])).toEqual([
     { workspaceId: 'w', prId: 'p1' },
@@ -140,7 +136,7 @@ it('observes every association and wakes the main queue once without creating fi
 
 it('registers bounded PR event retention as its own job', async () => {
   mocks.register.mockClear();
-  new RatchetService();
+  new RatchetService({ observe: vi.fn(), wake: vi.fn(), setMonitoring: vi.fn() });
   const retention = mocks.register.mock.calls
     .map(([job]) => job)
     .find((job) => job.name === 'pr-event-retention');
@@ -183,8 +179,7 @@ it.each(['all', 'single'] as const)(
     mocks.listEnabled.mockReturnValue(loaded.promise);
     const observe = vi.fn().mockResolvedValue(true);
     const wake = vi.fn().mockResolvedValue(undefined);
-    const service = new RatchetService();
-    service.configure({ observe, wake, setMonitoring: vi.fn() });
+    const service = new RatchetService({ observe, wake, setMonitoring: vi.fn() });
     const checking =
       scope === 'all' ? service.checkAllWorkspaces() : service.checkWorkspaceById('w');
     await service.stop();
@@ -200,9 +195,8 @@ it.each([
   { resume: true },
   { recipientSessionId: 'replacement' },
 ])('refreshes monitoring projection without a false state reset for %j', async (options) => {
-  const service = new RatchetService();
   const setMonitoring = vi.fn().mockResolvedValue({ status: 'updated', bindingRevision: 8 });
-  service.configure({ observe: vi.fn(), wake: vi.fn(), setMonitoring });
+  const service = new RatchetService({ observe: vi.fn(), wake: vi.fn(), setMonitoring });
   const toggled = vi.fn(),
     changed = vi.fn();
   service.on(RATCHET_TOGGLED, toggled);
@@ -214,9 +208,8 @@ it.each([
 
 it.each([false, true])('publishes only an actual enablement transition to %s', async (enabled) => {
   mocks.get.mockResolvedValue({ enabled: !enabled, bindingRevision: 7 });
-  const service = new RatchetService();
   const setMonitoring = vi.fn().mockResolvedValue({ status: 'updated', bindingRevision: 8 });
-  service.configure({ observe: vi.fn(), wake: vi.fn(), setMonitoring });
+  const service = new RatchetService({ observe: vi.fn(), wake: vi.fn(), setMonitoring });
   const toggled = vi.fn(),
     changed = vi.fn();
   service.on(RATCHET_TOGGLED, toggled);
@@ -231,9 +224,8 @@ it.each([false, true])('publishes only an actual enablement transition to %s', a
 });
 
 it('preserves the displayed revision rather than substituting the latest one', async () => {
-  const service = new RatchetService();
   const setMonitoring = vi.fn().mockRejectedValue(new Error('revision changed'));
-  service.configure({ observe: vi.fn(), wake: vi.fn(), setMonitoring });
+  const service = new RatchetService({ observe: vi.fn(), wake: vi.fn(), setMonitoring });
   const toggled = vi.fn(),
     changed = vi.fn();
   service.on(RATCHET_TOGGLED, toggled);
@@ -257,8 +249,11 @@ it('invalidates and drains the delivery wake of an in-flight manual check on sto
     entered.resolve();
     return pending.promise;
   });
-  const service = new RatchetService();
-  service.configure({ observe: vi.fn().mockResolvedValue(true), wake, setMonitoring: vi.fn() });
+  const service = new RatchetService({
+    observe: vi.fn().mockResolvedValue(true),
+    wake,
+    setMonitoring: vi.fn(),
+  });
   const checking = service.checkWorkspaceById('w');
   await entered.promise;
   const isCurrent = wake.mock.calls[0]?.[1];
@@ -288,8 +283,7 @@ it.each(['markChecked', 'listPending', 'wake', 'snapshot'] as const)(
       entered.resolve();
       return release.promise;
     });
-    const service = new RatchetService();
-    service.configure({ observe, wake, setMonitoring: vi.fn() });
+    const service = new RatchetService({ observe, wake, setMonitoring: vi.fn() });
     const dispatchChanged = vi.fn(),
       stateChanged = vi.fn();
     service.on(RATCHET_DISPATCH_CHANGED, dispatchChanged);
@@ -325,8 +319,7 @@ it('stops merged polling while waking pending terminal deliveries and polling op
   mocks.listPending.mockResolvedValue([{ id: 'terminal-event', prId: 'merged', state: 'PENDING' }]);
   const observe = vi.fn().mockResolvedValue(true);
   const wake = vi.fn().mockResolvedValue(undefined);
-  const service = new RatchetService();
-  service.configure({ observe, wake, setMonitoring: vi.fn() });
+  const service = new RatchetService({ observe, wake, setMonitoring: vi.fn() });
   const result = await service.checkAllWorkspaces();
   expect(observe.mock.calls.map(([target]) => target.prId)).toEqual(['open']);
   expect(wake).toHaveBeenCalledExactlyOnceWith('w', expect.any(Function));
@@ -360,8 +353,7 @@ it('backs off closed PRs but observes them again to detect reopening', async () 
   ];
   mocks.listEnabled.mockResolvedValue([{ ...config, workspace: { prs } }]);
   const observe = vi.fn().mockResolvedValue(true);
-  const service = new RatchetService();
-  service.configure({
+  const service = new RatchetService({
     observe,
     wake: vi.fn().mockResolvedValue(undefined),
     setMonitoring: vi.fn(),
@@ -381,8 +373,7 @@ it('eliminates recurring observations for four initialized merged PRs across thi
   mocks.listEnabled.mockResolvedValue([{ ...config, workspace: { prs } }]);
   const observe = vi.fn().mockResolvedValue(true);
   const wake = vi.fn().mockResolvedValue(undefined);
-  const service = new RatchetService();
-  service.configure({ observe, wake, setMonitoring: vi.fn() });
+  const service = new RatchetService({ observe, wake, setMonitoring: vi.fn() });
   for (let cycle = 0; cycle < 30; cycle++) {
     await service.checkAllWorkspaces();
   }
@@ -407,8 +398,7 @@ it('initializes terminal facts for a new monitoring epoch before applying backof
     }
     return Promise.resolve(true);
   });
-  const service = new RatchetService();
-  service.configure({
+  const service = new RatchetService({
     observe,
     wake: vi.fn().mockResolvedValue(undefined),
     setMonitoring: vi.fn(),

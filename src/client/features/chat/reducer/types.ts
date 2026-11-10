@@ -212,6 +212,21 @@ export interface ChatState {
 // Action Types
 // =============================================================================
 
+/**
+ * Actions the chat transport may coalesce into a `STREAM_DELTA_BATCH`. The
+ * transport only buffers agent messages that carry a `content_block_delta`.
+ */
+export type StreamDeltaAction =
+  | {
+      type: 'WS_AGENT_MESSAGE';
+      payload: { message: AgentMessage; order: number; messageId?: string };
+    }
+  | {
+      type: 'WS_ASSISTANT_TEXT_DELTA';
+      payload: { messageId: string; order: number; offset: number; text: string };
+    }
+  | { type: 'TOOL_INPUT_UPDATE'; payload: { toolUseId: string; input: Record<string, unknown> } };
+
 export type ChatAction =
   | { type: 'TRANSCRIPT_HISTORY_START'; requestId: string; beforeMessageId: string }
   | {
@@ -224,14 +239,10 @@ export type ChatAction =
   // WebSocket message actions
   | { type: 'SESSION_RUNTIME_SNAPSHOT'; payload: { sessionRuntime: SessionRuntimeState } }
   | { type: 'SESSION_RUNTIME_UPDATED'; payload: { sessionRuntime: SessionRuntimeState } }
-  | {
-      type: 'WS_AGENT_MESSAGE';
-      payload: { message: AgentMessage; order: number; messageId?: string };
-    }
-  | {
-      type: 'WS_ASSISTANT_TEXT_DELTA';
-      payload: { messageId: string; order: number; offset: number; text: string };
-    }
+  // WS_AGENT_MESSAGE, WS_ASSISTANT_TEXT_DELTA and TOOL_INPUT_UPDATE
+  | StreamDeltaAction
+  // Stream deltas buffered within one animation frame, reduced in order
+  | { type: 'STREAM_DELTA_BATCH'; payload: { actions: StreamDeltaAction[] } }
   | { type: 'WS_ERROR'; payload: { message: string; requestId?: string } }
   | { type: 'WS_PERMISSION_REQUEST'; payload: PermissionRequest }
   | { type: 'WS_USER_QUESTION'; payload: UserQuestionRequest }
@@ -241,8 +252,6 @@ export type ChatAction =
   | { type: 'SESSION_SWITCH_START' }
   | { type: 'SESSION_LOADING_START' }
   | { type: 'SESSION_LOADING_END' }
-  // Tool input streaming action
-  | { type: 'TOOL_INPUT_UPDATE'; payload: { toolUseId: string; input: Record<string, unknown> } }
   // Track tool use message index
   | { type: 'TOOL_USE_INDEXED'; payload: { toolUseId: string; index: number } }
   // Permission/question response actions

@@ -1,6 +1,5 @@
 import type { ExistingSessionDispatchPorts } from '@/backend/orchestration/background-action-dispatch.orchestrator';
 import type { configService } from '@/backend/services/config.service';
-import type { ratchetService } from '@/backend/services/ratchet';
 import type {
   acpRuntimeManager,
   findPRDeliveryReceipt,
@@ -15,6 +14,7 @@ import type {
   workspacePrSnapshotService,
 } from '@/backend/services/workspace';
 import type { PRTarget } from '@/shared/pr-monitoring';
+import type { RatchetService } from './ratchet.service';
 
 export interface PRRecipientReadinessPorts {
   sessionDataService: Pick<typeof sessionDataService, 'findAgentSessionsByWorkspaceId'>;
@@ -65,7 +65,7 @@ export type PRDeliveryPorts = PRDedicatedSessionPorts &
     backgroundDispatch: ExistingSessionDispatchPorts;
     userSettingsService: Pick<typeof userSettingsService, 'get'>;
     workspacePrSnapshotService: Pick<typeof workspacePrSnapshotService, 'find' | 'list'>;
-    ratchetService: Pick<typeof ratchetService, 'emit'>;
+    ratchetService: Pick<RatchetService, 'emit'>;
     sessionBackgroundDeliveryService: Pick<typeof sessionBackgroundDeliveryService, 'invalidate'>;
     workspacePRMonitoringService: Pick<
       typeof workspacePRMonitoringService,

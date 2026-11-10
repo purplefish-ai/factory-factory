@@ -22,6 +22,15 @@ import {
   hasWorkingSessionSummary,
 } from '@/backend/lib/session-summaries';
 import type { getWorkspaceLinearContext } from '@/backend/orchestration/linear-config.helper';
+import {
+  RATCHET_DISPATCH_CHANGED,
+  RATCHET_STATE_CHANGED,
+  RATCHET_TOGGLED,
+  type RatchetDispatchChangedEvent,
+  type RatchetStateChangedEvent,
+  type RatchetToggledEvent,
+  type RatchetService,
+} from '@/backend/orchestration/pull-requests/ratchet.service';
 import type { fireLifecycleNotification } from '@/backend/orchestration/workspace-lifecycle/workspace-children.orchestrator';
 import { SERVICE_LIMITS } from '@/backend/services/constants';
 import {
@@ -35,15 +44,6 @@ import {
 } from '@/backend/services/github';
 import type { linearStateSyncService } from '@/backend/services/linear';
 import type { createLogger } from '@/backend/services/logger.service';
-import {
-  RATCHET_DISPATCH_CHANGED,
-  RATCHET_STATE_CHANGED,
-  RATCHET_TOGGLED,
-  type RatchetDispatchChangedEvent,
-  type RatchetStateChangedEvent,
-  type RatchetToggledEvent,
-  type ratchetService,
-} from '@/backend/services/ratchet';
 import {
   RUN_SCRIPT_STATUS_CHANGED,
   type RunScriptStatusChangedEvent,
@@ -141,7 +141,7 @@ export type EventCollectorDependencies = {
   linearStateSyncService: typeof linearStateSyncService;
   prFetchCoordinator: typeof prFetchCoordinator;
   prSnapshotService: typeof prSnapshotService;
-  ratchetService: typeof ratchetService;
+  ratchetService: RatchetService;
   runScriptStateMachine: typeof runScriptStateMachine;
   sessionDataService: typeof sessionDataService;
   sessionDomainService: typeof sessionDomainService;

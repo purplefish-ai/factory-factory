@@ -44,6 +44,7 @@ export type {
   ProcessStatus,
   RejectedMessageInfo,
   SessionStatus,
+  StreamDeltaAction,
   TaskNotification,
   ToolProgressInfo,
 } from './types';
@@ -134,6 +135,14 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
     // One batch, so transcript lookups grow in place across replayed messages
     // instead of being copied for each one.
     return runRendererTranscriptBatch(() => replaySessionEvents(state, replayEvents));
+  }
+
+  if (action.type === 'STREAM_DELTA_BATCH') {
+    // Reducing each buffered delta in order yields exactly the state that
+    // dispatching them one at a time would have committed.
+    return runRendererTranscriptBatch(() =>
+      action.payload.actions.reduce(reduceSingleAction, state)
+    );
   }
 
   return reduceSingleAction(state, action);

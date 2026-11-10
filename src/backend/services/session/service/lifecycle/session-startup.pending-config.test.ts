@@ -258,7 +258,7 @@ describe('real supervisor and startup configuration phase ordering', () => {
         await reading.wait();
         return row;
       });
-      const persistence = vi.spyOn(h.config, 'persistAcpConfigSnapshot');
+      const persistence = vi.spyOn(h.config.writer, 'persistAcpConfigSnapshot');
       h.config.applyConfigOptionsUpdateDelta(
         h.session.id,
         h.handle,
