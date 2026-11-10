@@ -1,10 +1,10 @@
 // @vitest-environment jsdom
-import { useRef } from 'react';
+import { useReducer, useRef } from 'react';
 import { flushSync } from 'react-dom';
 import { createRoot } from 'react-dom/client';
 import { expect, it, vi } from 'vitest';
 import { createUserMessage } from '@/lib/claude-fixtures';
-import { createInitialChatState } from './reducer';
+import { chatReducer, createInitialChatState } from './reducer';
 import { TranscriptRenderingFixture } from './transcript-rendering.test-utils';
 import { useChatActions, type UseChatActionsOptions } from './use-chat-actions';
 
@@ -16,10 +16,16 @@ function SteeringFixture({
   dispatch,
   onClearInput,
 }: Pick<UseChatActionsOptions, 'send' | 'dispatch' | 'onClearInput'>) {
+  const [state, reduce] = useReducer(chatReducer, undefined, createInitialChatState);
+  const stateRef = useRef(state);
+  stateRef.current = state;
   const actions = useChatActions({
     send,
-    dispatch,
-    stateRef: useRef(createInitialChatState()),
+    dispatch: (action) => {
+      dispatch(action);
+      reduce(action);
+    },
+    stateRef,
     dbSessionIdRef: useRef('session'),
     inputAttachmentsRef: useRef([]),
     onClearInput,
@@ -29,6 +35,7 @@ function SteeringFixture({
       messages={[history, queued]}
       queuedMessageIds={new Set([queued.id])}
       onSteerQueuedMessage={actions.steerQueuedMessage}
+      pendingSteerMessageId={state.pendingSteer?.messageId}
       running
       startingSession={false}
       loadingSession={false}
@@ -50,12 +57,18 @@ it('steers the selected queued message without removing it before delivery is co
       'button[aria-label="Steer queued message"]'
     );
     expect(buttons).toHaveLength(1);
-    flushSync(() => buttons[0]?.click());
+    flushSync(() => {
+      buttons[0]?.click();
+      buttons[0]?.click();
+    });
     expect(send).toHaveBeenCalledExactlyOnceWith(
-      { type: 'steer_queued_message', messageId: queued.id },
+      { type: 'steer_queued_message', messageId: queued.id, requestId: expect.any(String) },
       { queuePolicy: 'drop' }
     );
-    expect(dispatch).not.toHaveBeenCalled();
+    expect(buttons[0]?.disabled).toBe(true);
+    expect(buttons[0]?.textContent).toContain('Steering');
+    flushSync(() => buttons[0]?.click());
+    expect(send).toHaveBeenCalledTimes(1);
     expect(onClearInput).not.toHaveBeenCalled();
     expect(container.textContent).toContain(queued.text);
   } finally {
@@ -124,6 +137,27 @@ it.each([
     } else {
       expect(actions).toBeNull();
     }
+  } finally {
+    flushSync(() => root.unmount());
+  }
+});
+
+it('leaves Steer available when the transport cannot send the request', () => {
+  const container = document.createElement('div');
+  const root = createRoot(container);
+  const send = vi.fn(() => false);
+  try {
+    flushSync(() =>
+      root.render(<SteeringFixture send={send} dispatch={vi.fn()} onClearInput={vi.fn()} />)
+    );
+    const button = container.querySelector<HTMLButtonElement>(
+      'button[aria-label="Steer queued message"]'
+    )!;
+    flushSync(() => button.click());
+    expect(button.disabled).toBe(false);
+    expect(button.textContent).toBe('Steer');
+    flushSync(() => button.click());
+    expect(send).toHaveBeenCalledTimes(2);
   } finally {
     flushSync(() => root.unmount());
   }

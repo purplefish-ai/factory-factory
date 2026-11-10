@@ -70,6 +70,7 @@ export const ChatMessageSchema = z.discriminatedUnion('type', [
   z.object({
     type: z.literal('steer_queued_message'),
     messageId: z.string().min(1),
+    requestId: z.string().min(1).optional(),
   }),
 
   // Remove a queued message

@@ -30,6 +30,7 @@ export interface TranscriptDisplayProps {
   startingLabel?: string;
   /** Set of message IDs that are still queued (not yet dispatched to agent) */
   queuedMessageIds?: Set<string>;
+  pendingSteerMessageId?: string;
   /** Callback to remove/cancel a queued message */
   onRemoveQueuedMessage?: (id: string) => void;
   /** Send a queued human message into the active turn. */
