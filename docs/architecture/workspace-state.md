@@ -362,6 +362,14 @@ snapshot. The snapshot has a 120-second transaction budget and a 5-second busy
 wait. Account exports include identity metadata only, excluding credentials and
 homes.
 
+The export maps columns by hand in both directions.
+`src/backend/orchestration/data-backup-columns.test.ts` lists every Prisma
+scalar column of each model the recovery manifest covers. Each column is either
+carried by the current export format, possibly under a flattened name, or
+excluded with a reason. A new column fails that test until it is classified.
+Reasons starting with `Gap:` are known omissions, such as
+`WorkspaceRunScript.postRunCommand`.
+
 ## Backup import
 
 Backup imports require the same trusted local client boundary as project
