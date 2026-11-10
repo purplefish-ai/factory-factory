@@ -15,7 +15,9 @@ function fixture(minimum: string) {
   const root = mkdtempSync(join(tmpdir(), 'ff-bootstrap-'));
   directories.push(root);
   writeFileSync(join(root, 'package.json'), '{"type":"module"}');
-  writeFileSync(join(root, '.node-version'), minimum);
+  writeFileSync(join(root, '.node-minimum'), minimum);
+  // Updating the development pin must never raise the consumer requirement.
+  writeFileSync(join(root, '.node-version'), '999.0.0');
   for (const file of ['bootstrap.mjs', 'setup-prerequisites.mjs']) {
     copyFileSync(new URL(file, import.meta.url), join(root, file));
   }
@@ -33,13 +35,15 @@ it('reports unsupported Node without importing the application or prompting on p
   writeFileSync(join(root, 'index.js'), 'throw new Error("APP WAS LOADED");');
   const result = spawnSync(process.execPath, [join(root, 'bootstrap.mjs'), 'serve'], {
     encoding: 'utf8',
+    // Keep prerequisite probes independent of the host's version managers.
+    env: { ...process.env, PATH: root },
     timeout: 15_000,
   });
   expect(result.status).toBe(1);
   expect(result.stderr).toContain('requires Node.js 999.0.0');
   expect(result.stderr).not.toContain('APP WAS LOADED');
   expect(result.stdout).not.toContain('[y/N]');
-});
+}, 20_000);
 it('forwards arguments verbatim and preserves the application exit code', () => {
   const root = fixture('1.0.0');
   const result = spawnSync(
@@ -58,9 +62,9 @@ it('keeps the shipped version floor consistent with package engines', () => {
       bin: z.record(z.string(), z.string()),
     })
     .parse(JSON.parse(readFileSync(new URL('../../package.json', import.meta.url), 'utf8')));
-  const minimum = readFileSync(new URL('../../.node-version', import.meta.url), 'utf8').trim();
+  const minimum = readFileSync(new URL('../../.node-minimum', import.meta.url), 'utf8').trim();
   expect(pkg.engines.node).toBe(`>=${minimum}`);
-  expect(pkg.files).toContain('.node-version');
+  expect(pkg.files).toContain('.node-minimum');
   expect(pkg.bin.ff).toBe('./dist/src/cli/bootstrap.mjs');
   expect(pkg.bin['factory-factory']).toBe(pkg.bin.ff);
 });

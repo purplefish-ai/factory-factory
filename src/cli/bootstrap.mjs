@@ -14,7 +14,7 @@ while (!existsSync(join(root, 'package.json')) && dirname(root) !== root) {
 }
 
 async function main() {
-  const minimum = readFileSync(join(root, '.node-version'), 'utf8').trim();
+  const minimum = readFileSync(join(root, '.node-minimum'), 'utf8').trim();
   if (!/^\d+\.\d+\.\d+$/.test(minimum)) {
     throw new Error(
       'The installation has an invalid Node.js requirement. Reinstall Factory Factory.'
