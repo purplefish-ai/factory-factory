@@ -100,14 +100,30 @@ async function importEventFixtureModules() {
  * `vi.resetModules()` takes tens of milliseconds. Suites that build a fixture
  * per test can call this from `beforeAll` so the first test's hook does not
  * pay it. Loading binds the database module, so a throwaway integration
- * database keeps it away from the default one.
+ * database keeps it away from the default one; any database the suite had
+ * already bound is restored afterwards.
  */
 export async function preloadEventFixtureModules() {
+  const previousPrisma = globalThis.prismaGlobal;
+  const previousEnvironment = {
+    DATABASE_PATH: process.env.DATABASE_PATH,
+    BASE_DIR: process.env.BASE_DIR,
+  };
   const preload = await createIntegrationDatabase();
   try {
     await importEventFixtureModules();
   } finally {
     await destroyIntegrationDatabase(preload);
+    globalThis.prismaGlobal = previousPrisma;
+    for (const [key, value] of Object.entries(previousEnvironment)) {
+      if (value === undefined) {
+        Reflect.deleteProperty(process.env, key);
+      } else {
+        process.env[key] = value;
+      }
+    }
+    // Later imports rebind to the restored database; the fetched modules stay cached.
+    vi.resetModules();
   }
 }
 
