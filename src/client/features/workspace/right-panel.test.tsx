@@ -1,8 +1,9 @@
 // @vitest-environment jsdom
 
-import { act, createElement, type ReactNode } from 'react';
+import { act, createElement, Profiler, type ReactNode, useEffect, useRef } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { TerminalOutputStream } from '@/client/lib/terminal-output-stream';
 import { RightPanel } from './right-panel';
 import { useWorkspacePanel, WorkspacePanelProvider } from './workspace-panel-context';
 
@@ -10,6 +11,7 @@ const mocks = vi.hoisted(() => ({
   agentsProps: vi.fn(),
   mobile: false,
   terminalOptions: null as null | {
+    onOutput?: (terminalId: string, data: string) => void;
     onCreated?: (id: string, requestId?: string, output?: string) => void;
     onTerminalList?: (
       terminals: Array<{ id: string; createdAt: string; outputBuffer?: string }>
@@ -128,8 +130,22 @@ vi.mock('./screenshots-panel', () => ({ ScreenshotsPanel: () => null }));
 vi.mock('./setup-logs-panel', () => ({ SetupLogsPanel: () => null }));
 
 vi.mock('@/client/components/terminal-instance', () => ({
-  TerminalInstance: ({ output }: { output: string }) =>
-    createElement('pre', { 'data-testid': 'terminal-output' }, output),
+  // Stands in for xterm: replays the snapshot, then writes chunks to the DOM.
+  TerminalInstance: function MockTerminalInstance({ output }: { output: TerminalOutputStream }) {
+    const ref = useRef<HTMLPreElement>(null);
+    useEffect(() => {
+      const pre = ref.current;
+      if (!pre) {
+        return;
+      }
+      pre.textContent = output.snapshot();
+      return output.subscribe((event) => {
+        pre.textContent =
+          event.type === 'append' ? `${pre.textContent}${event.data}` : event.output;
+      });
+    }, [output]);
+    return createElement('pre', { 'data-testid': 'terminal-output', ref });
+  },
 }));
 vi.mock('./use-terminal-websocket', () => ({
   useTerminalWebSocket: (options: typeof mocks.terminalOptions) => {
@@ -241,6 +257,49 @@ describe('RightPanel Agents tab', () => {
     );
     expect(mocks.selectTerminal).toHaveBeenLastCalledWith('second');
     expect(mocks.createTerminal).not.toHaveBeenCalled();
+  });
+
+  it('writes terminal chunks without re-rendering the right panel, even while hidden', async () => {
+    const commits = vi.fn();
+    void act(() =>
+      root.render(
+        <WorkspacePanelProvider workspaceId="workspace-1">
+          <Profiler id="right-panel" onRender={commits}>
+            <RightPanel workspaceId="workspace-1" />
+          </Profiler>
+        </WorkspacePanelProvider>
+      )
+    );
+    await act(async () => {
+      mocks.terminalOptions?.onTerminalList?.([
+        { id: 'dev-server', createdAt: '', outputBuffer: 'ready\r\n' },
+      ]);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    const button = (label: string) =>
+      [...container.querySelectorAll('button')].find((b) => b.textContent === label)!;
+    await act(async () => button('Terminal 1').click());
+    await vi.dynamicImportSettled();
+    const terminalOutput = () =>
+      container.querySelector('[data-testid="terminal-output"]')?.textContent;
+    expect(terminalOutput()).toBe('ready\r\n');
+    commits.mockClear();
+
+    act(() => {
+      mocks.terminalOptions?.onOutput?.('dev-server', 'GET / 200\r\n');
+      mocks.terminalOptions?.onOutput?.('dev-server', 'GET /app.js 200\r\n');
+    });
+    expect(terminalOutput()).toBe('ready\r\nGET / 200\r\nGET /app.js 200\r\n');
+    expect(commits).not.toHaveBeenCalled();
+
+    // A dev server keeps writing while the user reads logs.
+    act(() => button('Logs').click());
+    commits.mockClear();
+    act(() => mocks.terminalOptions?.onOutput?.('dev-server', 'GET /hidden 200\r\n'));
+    expect(commits).not.toHaveBeenCalled();
+
+    await act(async () => button('Terminal 1').click());
+    expect(terminalOutput()).toBe('ready\r\nGET / 200\r\nGET /app.js 200\r\nGET /hidden 200\r\n');
   });
 
   it('creates Terminal 1 when the empty Terminal tab is clicked', async () => {

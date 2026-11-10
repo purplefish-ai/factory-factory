@@ -48,7 +48,7 @@ import { wakePRDelivery } from './pr-event-delivery.orchestrator';
 import { retireLegacyRatchetSessions } from './pr-monitoring-cutover.orchestrator';
 import { createPRObservationPorts, type PRMonitoringServices } from './pr-monitoring-dependencies';
 import { setPRMonitoring } from './pr-monitoring.orchestrator';
-import { observeMonitoredPR } from './pr-observation.orchestrator';
+import { observeMonitoredPR, resetStablePRBackoff } from './pr-observation.orchestrator';
 import type { reconciliationService } from './reconciliation.service';
 import { listVisibleReviewRequests } from './review-requests.orchestrator';
 import { captureWorkspaceRunResults } from './workspace-deletion.orchestrator';
@@ -195,7 +195,13 @@ export function configureDomainBridges(services: BridgeServices): void {
   });
 
   // === Session domain bridges ===
+  // A turn starting or finishing may push, so its PRs leave the stable-PR backoff.
+  const markSessionRunning = (workspaceId: string, sessionId: string) => {
+    resetStablePRBackoff(observationPorts, workspaceId);
+    return workspaceActivityService.markSessionRunning(workspaceId, sessionId);
+  };
   const markSessionIdle = (workspaceId: string, sessionId: string, generation?: number) => {
+    resetStablePRBackoff(observationPorts, workspaceId);
     workspaceActivityService.markSessionIdle(workspaceId, sessionId, generation);
     void wakePRDelivery(workspaceId, deliveryPorts).catch((error) => {
       logger.warn('PR delivery wake deferred after session became idle', { workspaceId, error });
@@ -203,15 +209,14 @@ export function configureDomainBridges(services: BridgeServices): void {
   };
   chatEventForwarderService.configure({
     workspace: {
-      markSessionRunning: (wsId, sId) => workspaceActivityService.markSessionRunning(wsId, sId),
+      markSessionRunning,
       markSessionIdle,
       on: (event, handler) => workspaceActivityService.on(event, handler),
     },
   });
 
   const sessionWorkspaceBridge = {
-    markSessionRunning: (wsId: string, sId: string) =>
-      workspaceActivityService.markSessionRunning(wsId, sId),
+    markSessionRunning,
     markSessionIdle,
     resetPRDiscoveryBackoff: (workspaceId: string) =>
       workspaceDataService.resetPRDiscoveryBackoff(workspaceId),

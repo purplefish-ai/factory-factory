@@ -69,4 +69,6 @@ export type PRStatusDetails = Pick<
   | 'mergeStateStatus'
 >;
 
+export type PRObservationDetails = PRStatusDetails & Pick<PRWithFullDetails, 'comments'>;
+
 export type PRReviewDetails = Pick<PRWithFullDetails, 'updatedAt' | 'reviews' | 'comments'>;

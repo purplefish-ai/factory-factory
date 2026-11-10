@@ -202,6 +202,19 @@ Workspace terminal reconnects replace each existing tab's output with its server
 rolling buffer by terminal ID. Tab identity and selection are preserved; output
 outside the server's bounded buffer cannot be recovered.
 
+Terminal output stays out of React state. Each tab owns a `TerminalOutputStream`
+(`src/client/lib/terminal-output-stream.ts`); PTY chunks are written straight to
+the mounted xterm instance, which keeps its own scrollback. A chunk re-renders
+neither the terminal panel nor the right panel, including while the terminal is
+hidden behind Logs, and chunks past the retained window's cap (128 Ki UTF-16
+code units, not bytes) are appended rather than repainting it. The retained
+window is replayed when a terminal mounts (on tab selection, or when the panel
+becomes visible again and refits) or switches streams. A reconnect buffer that
+extends the retained output writes only the missing suffix; any other
+replacement clears and repaints, with the clear sent through xterm's write queue
+so earlier chunks cannot land on top of it. The project setup terminal uses the
+same stream.
+
 Terminal CPU and memory usage is sampled only when the admin processes view asks
 for it, with one batched `pidusage` call; there is no background polling. If the
 batch fails (for example because a process exited), each terminal is sampled
@@ -361,6 +374,15 @@ closed. Ordinary WAL writers can commit while export reads its consistent
 snapshot. The snapshot has a 120-second transaction budget and a 5-second busy
 wait. Account exports include identity metadata only, excluding credentials and
 homes.
+
+Backup export and import map columns by hand.
+`src/backend/orchestration/data-backup-columns.test.ts` lists every Prisma
+scalar column of each model the recovery manifest covers. Each column is either
+declared exported, under a key the current export schema must have (possibly a
+flattened name), or excluded with a reason. A new column fails that test until
+it is classified. Reasons starting with `Gap:` are known omissions, such as
+`WorkspaceRunScript.postRunCommand`. The test checks the format, not the
+hand-written mapping that fills it.
 
 ## Backup import
 

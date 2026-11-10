@@ -5,8 +5,13 @@ import { createElement } from 'react';
 import { flushSync } from 'react-dom';
 import { createRoot } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { TERMINAL_OUTPUT_MAX_CHARS } from '@/client/lib/rolling-output';
+import { TerminalOutputStream } from '@/client/lib/terminal-output-stream';
 import { DEFAULT_APPEARANCE } from '@/shared/appearance';
 import { TerminalInstance } from './terminal-instance';
+
+// Erase screen and scrollback, then home the cursor (written in-band by resets).
+const TERMINAL_CLEAR_SEQUENCE = '\x1b[2J\x1b[3J\x1b[H';
 
 const mocks = vi.hoisted(() => ({
   appearance: {
@@ -96,7 +101,7 @@ describe('TerminalInstance', () => {
           createElement(TerminalInstance, {
             onData: vi.fn(),
             onResize: vi.fn(),
-            output: 'session output',
+            output: new TerminalOutputStream('session output'),
           })
         )
       );
@@ -146,7 +151,7 @@ describe('TerminalInstance', () => {
         createElement(TerminalInstance, {
           onData: vi.fn(),
           onResize: vi.fn(),
-          output: 'unchanged',
+          output: new TerminalOutputStream('unchanged'),
         })
       )
     );
@@ -174,7 +179,7 @@ describe('TerminalInstance', () => {
     const container = document.createElement('div');
     document.body.appendChild(container);
     const root = createRoot(container);
-    const props = { onData: vi.fn(), onResize: vi.fn(), output: '' };
+    const props = { onData: vi.fn(), onResize: vi.fn(), output: new TerminalOutputStream() };
     flushSync(() => root.render(createElement(TerminalInstance, { ...props, isActive: false })));
     flushSync(() => root.render(createElement(TerminalInstance, { ...props, isActive: true })));
     expect(mocks.focus).not.toHaveBeenCalled();
@@ -187,12 +192,10 @@ describe('TerminalInstance', () => {
     const container = document.createElement('div');
     document.body.appendChild(container);
     const root = createRoot(container);
-    const props = { onData: vi.fn(), onResize: vi.fn(), output: '' };
+    const props = { onData: vi.fn(), onResize: vi.fn(), output: new TerminalOutputStream() };
     try {
       flushSync(() => root.render(createElement(TerminalInstance, props)));
-      flushSync(() =>
-        root.render(createElement(TerminalInstance, { ...props, output: '$ ready' }))
-      );
+      props.output.append('$ ready');
       expect(mocks.focus).not.toHaveBeenCalled();
       container.querySelector<HTMLElement>('[role="application"]')?.click();
       expect(mocks.focus).toHaveBeenCalledOnce();
@@ -208,7 +211,11 @@ describe('TerminalInstance', () => {
 
     flushSync(() => {
       root.render(
-        createElement(TerminalInstance, { onData: vi.fn(), onResize: vi.fn(), output: '' })
+        createElement(TerminalInstance, {
+          onData: vi.fn(),
+          onResize: vi.fn(),
+          output: new TerminalOutputStream(),
+        })
       );
     });
 
@@ -227,9 +234,10 @@ describe('TerminalInstance', () => {
     document.body.appendChild(container);
     const root = createRoot(container);
     const onResize = vi.fn();
+    const output = new TerminalOutputStream();
 
     flushSync(() => {
-      root.render(createElement(TerminalInstance, { onData: vi.fn(), onResize, output: '' }));
+      root.render(createElement(TerminalInstance, { onData: vi.fn(), onResize, output }));
     });
 
     expect(vi.mocked(Terminal).mock.calls[0]?.[0]).toMatchObject({
@@ -242,7 +250,7 @@ describe('TerminalInstance', () => {
 
     mocks.appearance.fontScale = 100;
     flushSync(() => {
-      root.render(createElement(TerminalInstance, { onData: vi.fn(), onResize, output: '' }));
+      root.render(createElement(TerminalInstance, { onData: vi.fn(), onResize, output }));
     });
 
     const instance = vi.mocked(Terminal).mock.results[0]?.value as {
@@ -256,64 +264,105 @@ describe('TerminalInstance', () => {
     root.unmount();
   });
 
-  it('appends only the new suffix when output grows', () => {
+  it('replays the snapshot on mount and writes later chunks directly', () => {
     const container = document.createElement('div');
     document.body.appendChild(container);
     const root = createRoot(container);
+    const output = new TerminalOutputStream('abc');
 
     flushSync(() => {
-      root.render(
-        createElement(TerminalInstance, {
-          onData: vi.fn(),
-          onResize: vi.fn(),
-          output: 'abc',
-        })
-      );
+      root.render(createElement(TerminalInstance, { onData: vi.fn(), onResize: vi.fn(), output }));
     });
-
-    flushSync(() => {
-      root.render(
-        createElement(TerminalInstance, {
-          onData: vi.fn(),
-          onResize: vi.fn(),
-          output: 'abcdef',
-        })
-      );
-    });
+    output.append('def');
 
     expect(mocks.clear).not.toHaveBeenCalled();
     expect(mocks.write.mock.calls).toEqual([['abc'], ['def']]);
 
     root.unmount();
+    output.append('ghi');
+    expect(mocks.write.mock.calls).toEqual([['abc'], ['def']]);
   });
 
-  it('repaints when rolling output is rewritten without growing', () => {
+  // Replaces "repaints when rolling output is rewritten without growing": once
+  // the rolling window was full, every chunk used to clear xterm and rewrite
+  // the whole window. xterm keeps its own scrollback, so chunks now append.
+  it('appends chunks past the rolling-window cap without clearing or rewriting', () => {
     const container = document.createElement('div');
     document.body.appendChild(container);
     const root = createRoot(container);
+    const output = new TerminalOutputStream('a'.repeat(TERMINAL_OUTPUT_MAX_CHARS));
 
     flushSync(() => {
-      root.render(
-        createElement(TerminalInstance, {
-          onData: vi.fn(),
-          onResize: vi.fn(),
-          output: '[cut]\nklmnop',
-        })
-      );
+      root.render(createElement(TerminalInstance, { onData: vi.fn(), onResize: vi.fn(), output }));
     });
+    mocks.write.mockClear();
+    output.append('next chunk\r\n');
+    output.append('another chunk\r\n');
+
+    expect(mocks.clear).not.toHaveBeenCalled();
+    expect(mocks.write.mock.calls).toEqual([['next chunk\r\n'], ['another chunk\r\n']]);
+
+    root.unmount();
+  });
+
+  it('writes only the suffix when a reconnect buffer extends the output', () => {
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    const output = new TerminalOutputStream('before\r\n');
 
     flushSync(() => {
-      root.render(
-        createElement(TerminalInstance, {
-          onData: vi.fn(),
-          onResize: vi.fn(),
-          output: '[cut]\nopqrst',
-        })
-      );
+      root.render(createElement(TerminalInstance, { onData: vi.fn(), onResize: vi.fn(), output }));
     });
+    output.replace('before\r\nmissed\r\n');
 
-    expect(mocks.clear).toHaveBeenCalledTimes(1);
-    expect(mocks.write.mock.calls).toEqual([['[cut]\nklmnop'], ['[cut]\nopqrst']]);
+    expect(mocks.clear).not.toHaveBeenCalled();
+    expect(mocks.write.mock.calls).toEqual([['before\r\n'], ['missed\r\n']]);
+
+    root.unmount();
+  });
+
+  it('repaints when a reconnect buffer replaces the output', () => {
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    const output = new TerminalOutputStream('local\r\n');
+
+    flushSync(() => {
+      root.render(createElement(TerminalInstance, { onData: vi.fn(), onResize: vi.fn(), output }));
+    });
+    output.replace('server\r\n');
+
+    // Cleared in-band so chunks xterm has not parsed yet cannot land afterwards.
+    expect(mocks.clear).not.toHaveBeenCalled();
+    expect(mocks.write.mock.calls).toEqual([
+      ['local\r\n'],
+      [`${TERMINAL_CLEAR_SEQUENCE}server\r\n`],
+    ]);
+
+    root.unmount();
+  });
+
+  it('clears and replays when switched to another stream', () => {
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    const first = new TerminalOutputStream('first');
+    const second = new TerminalOutputStream('second');
+    const props = { onData: vi.fn(), onResize: vi.fn() };
+
+    flushSync(() => root.render(createElement(TerminalInstance, { ...props, output: first })));
+    flushSync(() => root.render(createElement(TerminalInstance, { ...props, output: second })));
+    first.append(' stale');
+    second.append(' live');
+
+    expect(vi.mocked(Terminal)).toHaveBeenCalledOnce();
+    expect(mocks.clear).not.toHaveBeenCalled();
+    expect(mocks.write.mock.calls).toEqual([
+      ['first'],
+      [`${TERMINAL_CLEAR_SEQUENCE}second`],
+      [' live'],
+    ]);
 
     root.unmount();
   });
