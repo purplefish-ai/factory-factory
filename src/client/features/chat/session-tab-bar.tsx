@@ -172,13 +172,12 @@ export function SessionTabBar({
       {showLeftArrow && (
         <Button
           variant="ghost"
-          size="icon"
-          className="h-7 w-7 shrink-0"
+          size="icon-compact"
           onClick={scrollLeft}
           disabled={disabled}
           aria-label="Scroll session tabs left"
         >
-          <CaretLeftIcon className="h-4 w-4" />
+          <CaretLeftIcon />
         </Button>
       )}
 
@@ -220,13 +219,12 @@ export function SessionTabBar({
       {showRightArrow && (
         <Button
           variant="ghost"
-          size="icon"
-          className="h-7 w-7 shrink-0"
+          size="icon-compact"
           onClick={scrollRight}
           disabled={disabled}
           aria-label="Scroll session tabs right"
         >
-          <CaretRightIcon className="h-4 w-4" />
+          <CaretRightIcon />
         </Button>
       )}
 

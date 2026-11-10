@@ -1,10 +1,9 @@
 import { PlusIcon } from '@phosphor-icons/react/dist/csr/Plus';
 import { TerminalIcon } from '@phosphor-icons/react/dist/csr/Terminal';
 import type { ReactNode } from 'react';
+import { IconButton } from '@/client/components/icon-button';
 import { useTablistFocus } from '@/client/hooks/use-tablist-focus';
-import { Button } from '@/components/ui/button';
 import { TabButton, TabList } from '@/components/ui/tab-button';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 
 // =============================================================================
@@ -68,14 +67,9 @@ export function TerminalTabBar({
       </TabList>
 
       {onNewTab && (
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button variant="ghost" size="icon-xs" onClick={onNewTab} aria-label="New terminal">
-              <PlusIcon />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>New terminal</TooltipContent>
-        </Tooltip>
+        <IconButton label="New terminal" size="icon-xs" onClick={onNewTab}>
+          <PlusIcon />
+        </IconButton>
       )}
     </div>
   );

@@ -199,22 +199,8 @@
             }
           }
         ],
-        "factory/button-icon-size": [
-          "error",
-          {
-            "exceptions": {
-              "src/client/features/chat/session-tab-bar.tsx": "Pending ux-tab-bars: the session tab bar's scroll and new-session buttons are being rebuilt in that PR."
-            }
-          }
-        ],
-        "factory/button-size-variant": [
-          "error",
-          {
-            "exceptions": {
-              "src/client/features/chat/session-tab-bar.tsx": "Pending ux-tab-bars: the session tab bar's scroll and new-session buttons are being rebuilt in that PR."
-            }
-          }
-        ],
+        "factory/button-icon-size": ["error", { "exceptions": {} }],
+        "factory/button-size-variant": ["error", { "exceptions": {} }],
         "factory/icon-button-tooltip": ["error", { "exceptions": {} }],
         "factory/tooltip-provider-root": [
           "error",
@@ -227,9 +213,7 @@
               "src/client/routes/hover-actions-fixture.tsx": "Fixture route: /__mobile-baseline mounts outside Root, so the fixture supplies its own provider.",
               "src/client/routes/mobile-agents-fixture.tsx": "Fixture route: /__mobile-baseline mounts outside Root, so the fixture supplies its own provider.",
               "src/client/routes/transcript-scroll-fixture.tsx": "Fixture route: /__transcript-scroll mounts outside Root, so the fixture supplies its own provider.",
-              "src/client/routes/workspace-header-fixture.tsx": "Fixture route: renders the workspace header outside Root for the mobile baseline, so it supplies its own provider.",
-              "src/client/features/workspace/right-panel.tsx": "Pending ux-tab-bars: the right-panel tab bar is being rebuilt in that PR.",
-              "src/client/features/workspace/right-panel-tools.tsx": "Pending ux-tab-bars: the right-panel tool tabs are being rebuilt in that PR."
+              "src/client/routes/workspace-header-fixture.tsx": "Fixture route: renders the workspace header outside Root for the mobile baseline, so it supplies its own provider."
             }
           }
         ]

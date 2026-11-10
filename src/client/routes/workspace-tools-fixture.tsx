@@ -8,7 +8,6 @@ import { RightPanel } from '@/client/features/workspace/right-panel';
 import { useWorkspaceDrawer } from '@/client/hooks/use-workspace-drawer';
 import { trpc } from '@/client/lib/trpc';
 import { Button } from '@/components/ui/button';
-import { TooltipProvider } from '@/components/ui/tooltip';
 
 const workspaceId = 'mobile-tools-fixture';
 
@@ -73,12 +72,9 @@ export function WorkspaceToolsFixture() {
   return (
     <trpc.Provider client={client} queryClient={queryClient}>
       <QueryClientProvider client={queryClient}>
-        {/* The app layout provides tooltips in production. */}
-        <TooltipProvider delayDuration={0}>
-          <WorkspacePanelProvider workspaceId={workspaceId}>
-            <ToolsSession />
-          </WorkspacePanelProvider>
-        </TooltipProvider>
+        <WorkspacePanelProvider workspaceId={workspaceId}>
+          <ToolsSession />
+        </WorkspacePanelProvider>
       </QueryClientProvider>
     </trpc.Provider>
   );
