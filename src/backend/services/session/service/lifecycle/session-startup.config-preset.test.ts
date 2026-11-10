@@ -1,7 +1,7 @@
 import type { SessionConfigOption } from '@agentclientprotocol/sdk/unstable';
 import { describe, expect, it, vi } from 'vitest';
+import { settleConfig } from '@/backend/services/session/service/config/session-config-authority.test-helpers';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
-import { settleConfig } from './session-config-authority.test-helpers';
 import { setupStartupConfig, startupConfigOptions } from './session-startup-config.test-helpers';
 
 vi.mock('@/backend/services/workspace', () => ({

@@ -1,7 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
+import {
+  gate,
+  settleConfig,
+} from '@/backend/services/session/service/config/session-config-authority.test-helpers';
+import { readSessionLaunchSettings } from '@/backend/services/session/service/data/session-launch-settings';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
-import { gate, settleConfig } from './session-config-authority.test-helpers';
-import { readSessionLaunchSettings } from './session-launch-settings';
 import { SessionStartupCancelledError } from './session-lifecycle-gate';
 import { setupStartupConfig } from './session-startup-config.test-helpers';
 

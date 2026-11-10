@@ -2,16 +2,16 @@ import { WorkspaceInitFenceError } from '@/backend/lib/workspace-init-fence-erro
 import { createLogger } from '@/backend/services/logger.service';
 import { AcpSteeringNotSentError } from '@/backend/services/session/service/acp/acp-steering';
 import type { SessionCallerGuard } from '@/backend/services/session/service/bridges';
-import { EventSessionFenceError } from '@/backend/services/session/service/lifecycle/event-session-fence-error';
 import type {
   MailRecoveryRetry,
   MailSignalReceipt,
-} from '@/backend/services/session/service/lifecycle/session-notification-delivery.service';
+} from '@/backend/services/session/service/delivery/session-notification-delivery.service';
+import { EventSessionFenceError } from '@/backend/services/session/service/event-agent/event-session-fence-error';
+import { sessionDomainService as domain } from '@/backend/services/session/service/session-domain.service';
 import {
   isTurnAlreadyInProgressError,
   toErrorMessage,
-} from '@/backend/services/session/service/lifecycle/session.error-message';
-import { sessionDomainService as domain } from '@/backend/services/session/service/session-domain.service';
+} from '@/backend/services/session/service/session.error-message';
 import type { QueuedMessage } from '@/shared/acp-protocol';
 import type { SessionDispatchNotificationDeliveryService } from './session-dispatch.types';
 import type { SessionQueuedSteering } from './session-queued-steering';

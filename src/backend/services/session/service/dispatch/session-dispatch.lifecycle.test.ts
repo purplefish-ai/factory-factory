@@ -80,7 +80,7 @@ vi.mock('@/backend/services/session/service/acp', () => ({
   acpRuntimeManager: mockSessionService,
 }));
 
-vi.mock('@/backend/services/session/service/lifecycle/session-core-services', () => ({
+vi.mock('@/backend/services/session/service/composition/session-core-services', () => ({
   sessionConfigService: mockSessionService,
   sessionLifecycleService: mockSessionService,
   sessionPermissionService: {},

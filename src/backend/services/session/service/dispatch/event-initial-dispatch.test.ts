@@ -1,5 +1,5 @@
 import { expect, it, vi } from 'vitest';
-import { EventSessionAuthority } from '@/backend/services/session/service/lifecycle/event-session-authority';
+import { EventSessionAuthority } from '@/backend/services/session/service/event-agent/event-session-authority';
 import type { InitialDeliveryFence } from '@/shared/event-agent-delivery';
 import { EventInitialDispatcher } from './event-initial-dispatch';
 const attempt = {

@@ -1,6 +1,6 @@
 import { afterEach, expect, it, vi } from 'vitest';
-import { EventSessionFenceError } from '@/backend/services/session/service/lifecycle/event-session-fence-error';
-import { sessionBackgroundDeliveryService } from '@/backend/services/session/service/lifecycle/session-background-delivery.service';
+import { sessionBackgroundDeliveryService } from '@/backend/services/session/service/delivery/session-background-delivery.service';
+import { EventSessionFenceError } from '@/backend/services/session/service/event-agent/event-session-fence-error';
 import { sessionDomainService } from '@/backend/services/session/service/session-domain.service';
 import { SessionDispatchService } from './session-dispatch.service';
 const logger = vi.hoisted(() => ({ debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() }));

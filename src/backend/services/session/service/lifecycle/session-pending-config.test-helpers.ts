@@ -5,9 +5,9 @@ import type {
   ProviderIdentityExpectation,
 } from '@/backend/services/session/resources/agent-session.accessor';
 import { createTestProcessHandle } from '@/backend/services/session/service/acp/acp-runtime-manager.test-helpers';
+import { SessionRepository } from '@/backend/services/session/service/data/session.repository';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 import { createDeferred, createLifecycleHarness } from './session-lifecycle.test-helpers';
-import { SessionRepository } from './session.repository';
 
 export function startupConfigOptions(
   model = 'first',

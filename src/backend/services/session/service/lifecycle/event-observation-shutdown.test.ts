@@ -1,7 +1,7 @@
 import { afterEach, expect, it, vi } from 'vitest';
 import { AcpRuntimeQuiescence } from '@/backend/services/session/service/acp/acp-runtime-quiescence';
+import { EventSessionAuthority } from '@/backend/services/session/service/event-agent/event-session-authority';
 import type { InitialDeliveryFence, RuntimeStopEvidence } from '@/shared/event-agent-delivery';
-import { EventSessionAuthority } from './event-session-authority';
 import { createDeferred, createTerminationHarness } from './session-lifecycle.test-helpers';
 import { SessionTerminationCoordinator } from './session-termination.coordinator';
 

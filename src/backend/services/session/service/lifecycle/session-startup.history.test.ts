@@ -7,6 +7,8 @@ import {
   defaultContext,
 } from '@/backend/services/session/service/acp/acp-runtime-manager.test-helpers';
 import { AcpRuntimeSupervisor } from '@/backend/services/session/service/acp/acp-runtime-supervisor';
+import { createProviderHistoryHydrator } from '@/backend/services/session/service/data/session-provider-history-hydrator';
+import { AcpEventProcessor } from '@/backend/services/session/service/events/acp-event-processor';
 import { SessionDomainService } from '@/backend/services/session/service/session-domain.service';
 import {
   mergeLifecycleMessage,
@@ -15,10 +17,8 @@ import {
 import { buildTranscriptFromHistory } from '@/backend/services/session/service/store/session-transcript';
 import type { HistoryMessage } from '@/shared/acp-protocol';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
-import { AcpEventProcessor } from './acp-event-processor';
 import { SessionStartupCancelledError } from './session-lifecycle-gate';
 import { createDeferred, createLifecycleHarness } from './session-lifecycle.test-helpers';
-import { createProviderHistoryHydrator } from './session-provider-history-hydrator';
 import {
   createSessionHistoryBarrier,
   prepareSessionHistoryForResume,

@@ -655,8 +655,8 @@ it.each(['lifecycle', 'retained stop source'] as const)(
       typeof import('@/backend/services/agent-definition/resources/agent-run-settlement-writes')
     >('@/backend/services/agent-definition/resources/agent-run-settlement-writes');
     const { sessionLifecycleGate } = await vi.importActual<
-      typeof import('@/backend/services/session/service/lifecycle/session-core-services')
-    >('@/backend/services/session/service/lifecycle/session-core-services');
+      typeof import('@/backend/services/session/service/composition/session-core-services')
+    >('@/backend/services/session/service/composition/session-core-services');
     const gate = boundary();
     const write = writes.writeRunSettlement;
     vi.spyOn(writes, 'writeRunSettlement').mockImplementation(async (...args) => {

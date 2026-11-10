@@ -85,7 +85,7 @@
       "disposition": "test-support",
       "reason": "Test harness or fixture support remains explicit in this inventory; production callers are not expected."
     },
-    "src/backend/services/session/service/lifecycle/session-config-authority.test-helpers.ts": {
+    "src/backend/services/session/service/config/session-config-authority.test-helpers.ts": {
       "disposition": "test-support",
       "reason": "Test harness or fixture support remains explicit in this inventory; production callers are not expected."
     },
@@ -787,11 +787,11 @@
       "disposition": "test-support",
       "reason": "Test-support export visibility candidate; inspect fixture consumers before narrowing this helper API."
     },
-    "src/backend/services/session/service/lifecycle/session-services.ts::exports::sessionRetryService": {
+    "src/backend/services/session/service/composition/session-services.ts::exports::sessionRetryService": {
       "disposition": "review-required",
       "reason": "Visibility candidate in a reachable module; trace callers and schema/type contracts before narrowing this export."
     },
-    "src/backend/services/session/service/lifecycle/session-services.ts::types::SessionPromptService": {
+    "src/backend/services/session/service/composition/session-services.ts::types::SessionPromptService": {
       "disposition": "review-required",
       "reason": "Visibility candidate in a reachable module; trace callers and schema/type contracts before narrowing this export."
     },

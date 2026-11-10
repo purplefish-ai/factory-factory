@@ -8,14 +8,14 @@ import {
   type MockChildProcess,
 } from '@/backend/services/session/service/acp/acp-runtime-manager.test-helpers';
 import { AcpRuntimeSupervisor } from '@/backend/services/session/service/acp/acp-runtime-supervisor';
+import { SessionConfigService } from '@/backend/services/session/service/config/session.config.service';
+import { AcpEventProcessor } from '@/backend/services/session/service/events/acp-event-processor';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
-import { AcpEventProcessor } from './acp-event-processor';
 import {
   gate,
   setupStartupConfig,
   startupConfigOptions,
 } from './session-pending-config.test-helpers';
-import { SessionConfigService } from './session.config.service';
 
 vi.mock('@/backend/services/workspace', () => ({
   workspaceDataService: { findById: vi.fn() },

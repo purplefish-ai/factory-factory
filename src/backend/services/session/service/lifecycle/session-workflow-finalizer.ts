@@ -1,14 +1,14 @@
 import { createLogger } from '@/backend/services/logger.service';
 import type { AgentSessionRecord } from '@/backend/services/session/resources/agent-session.accessor';
 import type { AcpRuntimeManager } from '@/backend/services/session/service/acp';
+import type { PersistClosedSessionInput } from '@/backend/services/session/service/archive/closed-session-persistence.service';
 import type { SessionLifecycleWorkspaceBridge } from '@/backend/services/session/service/bridges';
+import { getProviderHistorySessionId } from '@/backend/services/session/service/data/session-provider-history-hydrator';
+import type { SessionRepository } from '@/backend/services/session/service/data/session.repository';
+import { schedulePRDiscovery } from '@/backend/services/session/service/delivery/session-pr-discovery.service';
 import type { SessionDomainService } from '@/backend/services/session/service/session-domain.service';
 import { isLocalTranscriptMessage } from '@/backend/services/session/service/store/session-local-transcript';
-import type { PersistClosedSessionInput } from './closed-session-persistence.service';
 import type { SessionLifecycleEventService } from './session-lifecycle-event.service';
-import { schedulePRDiscovery } from './session-pr-discovery.service';
-import { getProviderHistorySessionId } from './session-provider-history-hydrator';
-import type { SessionRepository } from './session.repository';
 
 const logger = createLogger('session-workflow-finalizer');
 

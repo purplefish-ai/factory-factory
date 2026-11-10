@@ -301,8 +301,8 @@ it.each([
       },
     });
     const { SessionNotificationDeliveryService } = await vi.importActual<
-      typeof import('@/backend/services/session/service/lifecycle/session-notification-delivery.service')
-    >('@/backend/services/session/service/lifecycle/session-notification-delivery.service');
+      typeof import('@/backend/services/session/service/delivery/session-notification-delivery.service')
+    >('@/backend/services/session/service/delivery/session-notification-delivery.service');
     const recover = SessionNotificationDeliveryService.prototype.recoverPending;
     let recovered = 0;
     vi.spyOn(SessionNotificationDeliveryService.prototype, 'recoverPending').mockImplementation(
@@ -315,8 +315,8 @@ it.each([
       }
     );
     const { SessionConfigService } = await vi.importActual<
-      typeof import('@/backend/services/session/service/lifecycle/session.config.service')
-    >('@/backend/services/session/service/lifecycle/session.config.service');
+      typeof import('@/backend/services/session/service/config/session.config.service')
+    >('@/backend/services/session/service/config/session.config.service');
     const configure = SessionConfigService.prototype.configureQueuedMessage;
     const held = boundary();
     let complete: () => void = () => undefined;

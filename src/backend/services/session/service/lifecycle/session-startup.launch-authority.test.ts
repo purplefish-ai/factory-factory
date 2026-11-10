@@ -1,8 +1,14 @@
 import { describe, expect, it, vi } from 'vitest';
+import {
+  gate,
+  settleConfig,
+} from '@/backend/services/session/service/config/session-config-authority.test-helpers';
+import {
+  createSessionLaunchMetadata,
+  readSessionLaunchSettings,
+} from '@/backend/services/session/service/data/session-launch-settings';
 import { ADVERSARIAL_REVIEW_WORKFLOW } from '@/shared/adversarial-review';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
-import { gate, settleConfig } from './session-config-authority.test-helpers';
-import { createSessionLaunchMetadata, readSessionLaunchSettings } from './session-launch-settings';
 import { setupStartupConfig, startupConfigOptions } from './session-startup-config.test-helpers';
 
 vi.mock('@/backend/services/workspace', () => ({
