@@ -170,21 +170,35 @@ Useful commands:
 
 ```bash
 ff serve --help     # Ports, database path, host, and other options
-ff proxy --private  # Share the app through a password-protected Cloudflare tunnel
+ff proxy            # Share the app through a password-protected Cloudflare tunnel
 ff tailscale        # Start with private HTTPS access through your Tailscale network
 ff db:studio        # Inspect the local database with Prisma Studio
 ```
 
 `ff proxy` requires `cloudflared` on your `PATH`. Factory Factory automatically
 runs database migrations, finds an available port, and opens the browser when
-the server is ready. Use `--private` to require a password. Public tunnels
-cannot invoke privileged operations; their forwarded requests are rejected even
-when they omit the `Origin` header. The tunnel's `https://*.trycloudflare.com`
-origin is not one of the backend's allowed origins, so browsers using either
-tunnel can load data, but their API mutations and WebSocket connections (chat,
-terminals) are rejected. Both tunnel modes disable inherited
-`TRUST_PROXY_HEADERS` and dotenv override settings before launching the backend;
-private mode authenticates clients before stripping forwarded-address headers.
+the server is ready. cloudflared always reaches the server through a local proxy
+started by the command:
+
+- **Password-protected (default).** The command prints a six-character password
+  and a direct link that signs in without it. The proxy authenticates each
+  request (a signed session cookie after sign-in), then strips forwarded-address
+  headers before forwarding. `--private` is still accepted and changes nothing.
+  The tunnel's `https://*.trycloudflare.com` origin is not one of the backend's
+  allowed origins, so a signed-in browser can load data, but its API mutations
+  and WebSocket connections (chat, terminals) are rejected.
+- **Public (`ff proxy --public`).** No password: **anyone with the URL can view
+  the app, including workspace file contents**. The proxy forwards only `GET`
+  and `HEAD` requests without a body and refuses every other method and every
+  WebSocket upgrade, whatever headers the client sends, so nothing reached
+  through a public tunnel can change state, start agent sessions or run
+  commands. tRPC runs only queries over `GET`. `--public` cannot be combined
+  with `--private`.
+
+Both tunnel modes disable inherited `TRUST_PROXY_HEADERS` and dotenv override
+settings before launching the backend. A public tunnel keeps (or adds)
+forwarded-address headers, so the backend also refuses its trusted-local
+operations.
 
 The server listens on loopback only unless you pass another address with
 `ff serve --host` (for example `--host 0.0.0.0`, as the Docker image does).

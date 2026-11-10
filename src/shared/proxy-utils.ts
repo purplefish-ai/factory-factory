@@ -340,6 +340,37 @@ export function proxyAuthenticatedHttpRequest(params: {
   authCookie?: string;
   localHost?: string;
 }): void {
+  if (params.authCookie) {
+    const existingCookieHeader = params.res.getHeader('set-cookie');
+    params.res.setHeader(
+      'set-cookie',
+      mergeSetCookieValues(existingCookieHeader, params.authCookie)
+    );
+  }
+
+  forwardHttpRequest({
+    req: params.req,
+    res: params.res,
+    upstreamPort: params.upstreamPort,
+    path: params.path,
+    headers: buildAuthenticatedProxyHeaders(params.req.headers, params.sessionCookieName),
+    localHost: params.localHost,
+  });
+}
+
+/**
+ * Forwards a request to the loopback upstream with the given headers, setting
+ * `Host` to the upstream's own loopback name, and streams the response back.
+ * Callers decide which client headers may cross the proxy.
+ */
+export function forwardHttpRequest(params: {
+  req: IncomingMessage;
+  res: ServerResponse;
+  upstreamPort: number;
+  path: string;
+  headers: Record<string, string | string[] | undefined>;
+  localHost?: string;
+}): void {
   const localHost = params.localHost ?? DEFAULT_LOCAL_HOST;
 
   const endProxyErrorResponse = () => {
@@ -351,19 +382,6 @@ export function proxyAuthenticatedHttpRequest(params: {
     }
   };
 
-  if (params.authCookie) {
-    const existingCookieHeader = params.res.getHeader('set-cookie');
-    params.res.setHeader(
-      'set-cookie',
-      mergeSetCookieValues(existingCookieHeader, params.authCookie)
-    );
-  }
-
-  const upstreamHeaders = buildAuthenticatedProxyHeaders(
-    params.req.headers,
-    params.sessionCookieName
-  );
-
   const upstreamRequest = httpRequest(
     {
       host: localHost,
@@ -371,7 +389,7 @@ export function proxyAuthenticatedHttpRequest(params: {
       method: params.req.method,
       path: params.path,
       headers: {
-        ...upstreamHeaders,
+        ...params.headers,
         host: `localhost:${params.upstreamPort}`,
       },
     },

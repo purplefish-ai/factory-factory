@@ -1,7 +1,6 @@
 import { type ChildProcess, execFile } from 'node:child_process';
 import { randomBytes, randomInt } from 'node:crypto';
 import { createServer as createHttpServer, type IncomingMessage } from 'node:http';
-import type { Socket } from 'node:net';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
 import chalk from 'chalk';
@@ -26,6 +25,14 @@ import {
 } from '@/shared/proxy-utils';
 import { resolveDatabasePath } from './database-path';
 import { describeMigrationFailure, resolveUnknownMigrationPolicy } from './migration-policy';
+import { type ListeningLocalProxy, listenLocalProxy, PROXY_LOCAL_HOST } from './proxy-listen';
+import {
+  PUBLIC_MODE_WARNING,
+  type ProxyCommandOptions,
+  type ProxyMode,
+  resolveProxyMode,
+} from './proxy-mode';
+import { createReadOnlyProxy } from './proxy-read-only';
 import { ensureDataDir, findAvailablePort, treeKillAsync } from './runtime-utils';
 import { startFactoryFactoryServer } from './server-startup';
 import { supportsTerminalQrRendering, tryRenderTerminalQrCode } from './terminal-qr';
@@ -38,14 +45,10 @@ const PASSWORD_CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
 const PASSWORD_LENGTH = 6;
 const SESSION_COOKIE_NAME = 'ff_proxy_session';
 const LOGIN_PATH = '/__proxy_auth/login';
-const LOCAL_HOST = '127.0.0.1';
+const LOCAL_HOST = PROXY_LOCAL_HOST;
 const LOCKOUT_THRESHOLD_PER_IP = 5;
 const LOCKOUT_WINDOW_MS = 5 * 60 * 1000;
 const MAX_BRUTE_FORCE_TRACKED_IPS = 5000;
-
-interface ProxyCommandOptions {
-  private?: boolean;
-}
 
 interface RunProxyCommandParams {
   options: ProxyCommandOptions;
@@ -583,10 +586,9 @@ function createAuthProxy(params: {
   upstreamPort: number;
   password: string;
   magicToken: string;
-}): Promise<{ port: number; close: () => Promise<void> }> {
+}): Promise<ListeningLocalProxy> {
   const bruteForceGuard = new BruteForceGuard();
   const cookieSecret = randomBytes(32);
-  const activeSockets = new Set<Socket>();
 
   const server = createHttpServer((req, res) => {
     void handleAuthHttpRequest({
@@ -603,13 +605,6 @@ function createAuthProxy(params: {
         res.statusCode = 500;
         res.end('Proxy error');
       }
-    });
-  });
-
-  server.on('connection', (socket) => {
-    activeSockets.add(socket);
-    socket.once('close', () => {
-      activeSockets.delete(socket);
     });
   });
 
@@ -649,37 +644,7 @@ function createAuthProxy(params: {
     });
   });
 
-  return new Promise((resolve, reject) => {
-    server.once('error', reject);
-    server.listen(0, LOCAL_HOST, () => {
-      const address = server.address();
-      if (!address || typeof address === 'string') {
-        reject(new Error('Could not determine auth proxy port'));
-        return;
-      }
-
-      resolve({
-        port: address.port,
-        close: async () => {
-          await new Promise<void>((closeResolve) => {
-            const timeout = setTimeout(() => {
-              closeResolve();
-            }, 1000);
-            timeout.unref?.();
-
-            server.close(() => {
-              clearTimeout(timeout);
-              closeResolve();
-            });
-
-            for (const socket of activeSockets) {
-              socket.destroy();
-            }
-          });
-        },
-      });
-    });
-  });
+  return listenLocalProxy(server);
 }
 
 function createExitPromise(
@@ -715,10 +680,18 @@ export async function runProxyCommand({
   options,
   projectRoot,
 }: RunProxyCommandParams): Promise<void> {
-  const usePrivateMode = options.private ?? false;
+  let mode: ProxyMode;
+  try {
+    mode = resolveProxyMode(options);
+  } catch (error) {
+    console.error(chalk.red(`\n❌ ${(error as Error).message}`));
+    process.exit(1);
+    return;
+  }
+  const usePrivateMode = mode === 'private';
   const shutdownState = { shuttingDown: false };
   const processes: ProcessRecord[] = [];
-  let authProxyClose: (() => Promise<void>) | null = null;
+  let localProxyClose: (() => Promise<void>) | null = null;
   let signalHandlersAttached = false;
 
   const shutdown = async (exitCode: number, message?: string) => {
@@ -736,9 +709,9 @@ export async function runProxyCommand({
       }
     }
 
-    if (authProxyClose) {
+    if (localProxyClose) {
       try {
-        await authProxyClose();
+        await localProxyClose();
       } catch {
         // Ignore close failures during shutdown.
       }
@@ -806,31 +779,31 @@ export async function runProxyCommand({
 
   processes.push({ name: 'server', proc: backend.process });
 
-  let targetPort = backend.port;
   let password: string | null = null;
   let directToken: string | null = null;
 
-  if (usePrivateMode) {
-    password = generatePassword();
-    directToken = generateMagicToken();
-
-    let authProxy: { port: number; close: () => Promise<void> };
-    try {
-      authProxy = await createAuthProxy({
+  // cloudflared always targets a local proxy, never the backend directly.
+  let localProxy: ListeningLocalProxy;
+  try {
+    if (usePrivateMode) {
+      password = generatePassword();
+      directToken = generateMagicToken();
+      localProxy = await createAuthProxy({
         upstreamPort: backend.port,
         password,
         magicToken: directToken,
       });
-    } catch (error) {
-      await shutdown(1, `❌ ${(error as Error).message}`);
-      return;
+    } else {
+      localProxy = await createReadOnlyProxy({ upstreamPort: backend.port });
     }
-
-    targetPort = authProxy.port;
-    authProxyClose = authProxy.close;
+  } catch (error) {
+    await shutdown(1, `❌ ${(error as Error).message}`);
+    return;
   }
+  const targetPort = localProxy.port;
+  localProxyClose = localProxy.close;
 
-  console.log(chalk.blue('Starting tunnel...'));
+  console.log(chalk.blue(usePrivateMode ? 'Starting tunnel...' : 'Starting public tunnel...'));
 
   let tunnel: { proc: ChildProcess; publicUrl: string };
   try {
@@ -855,6 +828,7 @@ export async function runProxyCommand({
     console.log('Press Ctrl+C to stop.');
   } else {
     console.log(chalk.green(`🌍 Public URL:  ${tunnel.publicUrl}\n`));
+    console.log(chalk.yellow(`${PUBLIC_MODE_WARNING}\n`));
     console.log('Press Ctrl+C to stop.');
   }
 
