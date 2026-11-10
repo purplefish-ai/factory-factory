@@ -43,34 +43,28 @@ it('settles a stale queue request without reporting an error', async () => {
   });
 });
 
-it.each([false, true])(
-  'joins an in-flight request from a reconnected requester (failure: %s)',
-  async (fail) => {
-    let finish!: () => void;
-    let reject!: (cause: Error) => void;
-    const steerQueuedMessage = vi.fn(
+it('correlates the busy error for another message without settling the active request', async () => {
+  let finish!: () => void;
+  const steerQueuedMessage = vi
+    .fn()
+    .mockImplementationOnce(
       () =>
-        new Promise<void>((resolve, rejectOperation) => {
+        new Promise<void>((resolve) => {
           finish = resolve;
-          reject = rejectOperation;
         })
-    );
-    const handler = createSteerQueuedMessageHandler({ steerQueuedMessage });
-    const original = handler(context, command);
-    const completed = vi.fn();
-    const reconnected = handler(context, { ...command, requestId: 'reconnected' });
-    void Promise.resolve(reconnected).then(completed);
-    await Promise.resolve();
-    expect(completed).not.toHaveBeenCalled();
-    expect(steerQueuedMessage).toHaveBeenCalledTimes(1);
-    if (fail) {
-      reject(new Error('Rejected'));
-    } else {
-      finish();
-    }
-    await original;
-    expect(await reconnected).toMatchObject({
-      replies: [{ type: fail ? 'error' : 'steer_settled', requestId: 'reconnected' }],
-    });
-  }
-);
+    )
+    .mockRejectedValueOnce(new Error('Another queued message is being steered'));
+  const handler = createSteerQueuedMessageHandler({ steerQueuedMessage });
+  const original = handler(context, command);
+  const busy = await handler(context, {
+    ...command,
+    messageId: 'other',
+    requestId: 'other-request',
+  });
+  expect(busy).toMatchObject({
+    replies: [{ type: 'error', error: { kind: 'steer_failed' }, requestId: 'other-request' }],
+  });
+  expect(steerQueuedMessage).toHaveBeenNthCalledWith(2, 'session', 'other');
+  finish();
+  expect(await original).toEqual({ replies: [{ type: 'steer_settled', requestId: 'request' }] });
+});

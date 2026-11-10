@@ -256,7 +256,7 @@ export const SessionDeltaEventSchema = z.discriminatedUnion('type', [
     type: z.literal('config_options_update'),
     configOptions: z.array(ConfigOptionSchema),
   }),
-  z.object({ type: z.literal('steer_settled'), requestId: z.string() }),
+  z.object({ type: z.literal('steer_settled'), requestId: z.string().min(1) }),
   z.object({ type: z.literal('config_option_applied'), requestId: z.string() }),
 ]) satisfies z.ZodType<SessionDeltaEvent>;
 

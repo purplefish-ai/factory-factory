@@ -21,10 +21,23 @@ describe('pending steering', () => {
     expect(
       chatReducer(state, { type: 'WS_ERROR', payload: { message: 'Unrelated' } }).pendingSteer
     ).toEqual(state.pendingSteer);
+    const failed = chatReducer(state, {
+      type: 'WS_ERROR',
+      payload: { message: 'Failed', requestId: 'request' },
+    });
+    expect(failed.pendingSteer).toBeNull();
     expect(
-      chatReducer(state, { type: 'WS_ERROR', payload: { message: 'Failed', requestId: 'request' } })
+      chatReducer(failed, { type: 'STEER_REQUESTED', messageId: 'message', requestId: 'retry' })
         .pendingSteer
-    ).toBeNull();
+    ).toEqual({ messageId: 'message', requestId: 'retry' });
+  });
+  it('preserves a pending steer during session replay', () => {
+    const state = pending();
+    const replayed = chatReducer(state, {
+      type: 'SESSION_REPLAY_BATCH',
+      payload: { replayEvents: [] },
+    });
+    expect(replayed.pendingSteer).toEqual(state.pendingSteer);
   });
   it('clears lost requests on disconnect and session switch', () => {
     expect(chatReducer(pending(), { type: 'CONFIG_OPTIONS_DISCONNECTED' }).pendingSteer).toBeNull();

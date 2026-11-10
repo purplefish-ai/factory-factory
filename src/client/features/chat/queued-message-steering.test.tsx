@@ -67,6 +67,7 @@ it('steers the selected queued message without removing it before delivery is co
     );
     expect(buttons[0]?.disabled).toBe(true);
     expect(buttons[0]?.textContent).toContain('Steering');
+    expect(buttons[0]?.getAttribute('aria-label')).toBe('Steering queued message');
     flushSync(() => buttons[0]?.click());
     expect(send).toHaveBeenCalledTimes(1);
     expect(onClearInput).not.toHaveBeenCalled();

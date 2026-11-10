@@ -93,7 +93,7 @@ function QueuedMessageSteerAction({
       )}
       title="Send into the active turn now. The agent may redirect its current work."
       type="button"
-      aria-label="Steer queued message"
+      aria-label={isSteering ? 'Steering queued message' : 'Steer queued message'}
     >
       <SteeringWheelIcon className="h-3.5 w-3.5" />
       {isSteering ? 'Steering…' : 'Steer'}

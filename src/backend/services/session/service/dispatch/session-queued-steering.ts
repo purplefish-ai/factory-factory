@@ -46,6 +46,7 @@ type MailSteering = {
 
 /** Holds normal queue dispatch while an explicit native delivery is unsettled. */
 export class SessionQueuedSteering {
+  private readonly requests = new Map<string, { messageId: string; operation: Promise<void> }>();
   private readonly lateRecoveryRequested = new Set<string>();
   private readonly pending = new Map<string, { token: symbol; messageId: string }>();
   constructor(private readonly ports: SteeringPorts) {}
@@ -55,6 +56,7 @@ export class SessionQueuedSteering {
 
   reset(sessionId: string): void {
     this.pending.delete(sessionId);
+    this.requests.delete(sessionId);
     this.lateRecoveryRequested.delete(sessionId);
   }
 
@@ -69,6 +71,31 @@ export class SessionQueuedSteering {
   }
 
   async steer(sessionId: string, messageId: string, mail?: MailSteering): Promise<void> {
+    const existing = this.requests.get(sessionId);
+    if (existing) {
+      if (existing.messageId === messageId) {
+        return await existing.operation;
+      }
+      throw new Error('Another queued message is being steered. Try again when it finishes.');
+    }
+    const operation = this.performSteer(sessionId, messageId, mail);
+    const entry = { messageId, operation };
+    this.requests.set(sessionId, entry);
+    try {
+      await operation;
+    } finally {
+      // A stopped operation cannot release a replacement session's request.
+      if (this.requests.get(sessionId) === entry) {
+        this.requests.delete(sessionId);
+      }
+    }
+  }
+
+  private async performSteer(
+    sessionId: string,
+    messageId: string,
+    mail?: MailSteering
+  ): Promise<void> {
     if (this.hasPendingSteer(sessionId, messageId)) {
       return;
     }

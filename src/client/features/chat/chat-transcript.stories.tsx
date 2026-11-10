@@ -332,7 +332,7 @@ export const QueuedMessageSteeringPending: Story = {
   },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    const steer = canvas.getByRole('button', { name: 'Steer queued message' });
+    const steer = canvas.getByRole('button', { name: 'Steering queued message' });
     await expect(steer).toBeDisabled();
     await expect(steer).toHaveTextContent('Steering…');
     await expect(steer).toHaveAttribute('aria-busy', 'true');
