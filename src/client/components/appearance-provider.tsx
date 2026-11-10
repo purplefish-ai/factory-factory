@@ -4,7 +4,7 @@ import {
   readStoredAppearance,
   writeStoredAppearance,
 } from '@/client/lib/appearance';
-import { trpc } from '@/client/lib/trpc';
+import { useUserSettings } from '@/client/lib/user-settings-queries';
 import {
   type AppearanceSettings,
   appearanceFromUserSettings,
@@ -25,7 +25,7 @@ interface AppearanceProviderProps {
  * terminal do not jump once the saved values arrive.
  */
 export function AppearanceProvider({ children }: AppearanceProviderProps) {
-  const { data: settings } = trpc.userSettings.get.useQuery();
+  const { data: settings } = useUserSettings();
   const [cached] = useState(() => readStoredAppearance()?.appearance ?? null);
   const appearance = useMemo(
     () => (settings ? appearanceFromUserSettings(settings) : null),

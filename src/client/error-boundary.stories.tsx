@@ -138,3 +138,29 @@ export const CaughtByBoundary: Story = {
     await expect(await canvas.findByText('Panel recovered')).toBeVisible();
   },
 };
+
+function CrashingMessage(): never {
+  throw new TypeError('todos.filter is not a function');
+}
+
+/** Each transcript row has its own boundary, so one bad message leaves the rest readable. */
+export const TranscriptRow: Story = {
+  render: () => (
+    <div className="m-4 w-[420px] space-y-3 text-sm">
+      <p>Message before the failure</p>
+      <ErrorBoundary variant="compact" title="Couldn't render this message" className="h-auto py-3">
+        <CrashingMessage />
+      </ErrorBoundary>
+      <p>Message after the failure</p>
+    </div>
+  ),
+  beforeEach: CaughtByBoundary.beforeEach,
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(await canvas.findByRole('alert')).toHaveTextContent(
+      "Couldn't render this message"
+    );
+    await expect(canvas.getByText('Message before the failure')).toBeVisible();
+    await expect(canvas.getByText('Message after the failure')).toBeVisible();
+  },
+};

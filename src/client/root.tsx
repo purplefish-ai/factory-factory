@@ -1,4 +1,4 @@
-import { Suspense, useEffect } from 'react';
+import { type ReactNode, Suspense, useEffect } from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router';
 import { AppearanceProvider } from '@/client/components/appearance-provider';
 import { CLIHealthBanner } from '@/client/components/cli-health-banner';
@@ -14,6 +14,20 @@ import { hasExplicitLegacyProjectOwner } from '@/client/lib/project-navigation';
 import { TRPCProvider, useProjects } from '@/client/lib/providers';
 import { Toaster } from '@/components/ui/sonner';
 import { useVisualViewportHeight } from '@/hooks/use-visual-viewport-height';
+
+/** Banners render outside the page boundary; a failing one must not take down the app. */
+function BannerBoundary({ children }: { children: ReactNode }) {
+  return (
+    <ErrorBoundary
+      variant="compact"
+      title="Couldn't show a notice"
+      showRetry
+      className="h-auto border-b py-2"
+    >
+      {children}
+    </ErrorBoundary>
+  );
+}
 
 function RootLayout() {
   const { projects, isLoading } = useProjects();
@@ -50,9 +64,15 @@ function RootLayout() {
         className="flex-1 overflow-hidden"
         banners={
           <>
-            <FactoryUpdateBanner />
-            <CLIHealthBanner />
-            <ModelCatalogWarning />
+            <BannerBoundary>
+              <FactoryUpdateBanner />
+            </BannerBoundary>
+            <BannerBoundary>
+              <CLIHealthBanner />
+            </BannerBoundary>
+            <BannerBoundary>
+              <ModelCatalogWarning />
+            </BannerBoundary>
           </>
         }
       >

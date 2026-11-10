@@ -125,6 +125,14 @@ describe('ProjectFactoryConfigCard', () => {
     renderCard();
     expect(document.querySelector('[role="dialog"]')).toBeNull();
     expect(mocks.saveMutate).not.toHaveBeenCalled();
+    // The cached scripts stay, with the refresh failure explaining the disabled Edit.
+    expect(container.textContent).toContain('pnpm dev');
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain(
+      "Couldn't refresh configuration"
+    );
+    expect(
+      container.querySelector('button[aria-label="Edit factory configuration"]')
+    ).toHaveProperty('disabled', true);
   });
 
   it('surfaces a failed save in a toast and keeps the editor open with its error', () => {

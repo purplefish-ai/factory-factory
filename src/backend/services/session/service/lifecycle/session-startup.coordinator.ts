@@ -42,7 +42,6 @@ import type { AcpEventProcessor } from '@/backend/services/session/service/event
 import { getAcpWorkState } from '@/backend/services/session/service/events/session-work-state';
 import type { SessionDomainService } from '@/backend/services/session/service/session-domain.service';
 import { toErrorMessage } from '@/backend/services/session/service/session.error-message';
-import type { SessionDeltaEvent } from '@/shared/acp-protocol';
 import { ADVERSARIAL_REVIEW_WORKFLOW } from '@/shared/adversarial-review';
 import { SessionStatus } from '@/shared/core';
 import {
@@ -589,7 +588,7 @@ export class SessionStartupCoordinator {
       this.dependencies.sessionDomainService.emitDelta(sessionId, {
         type: 'config_options_update',
         configOptions: handle.configOptions,
-      } as SessionDeltaEvent);
+      });
     }
     this.dependencies.sessionDomainService.emitDelta(sessionId, {
       type: 'chat_capabilities',

@@ -1,191 +1,79 @@
 import { ShieldWarningIcon } from '@phosphor-icons/react/dist/csr/ShieldWarning';
-import { useEffect, useState } from 'react';
-import { toast } from 'sonner';
 import { ProviderCliWarning } from '@/client/components/provider-cli-warning';
-import { runInBackground } from '@/client/lib/background-task';
 import { trpc } from '@/client/lib/trpc';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Label } from '@/components/ui/label';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import { Skeleton } from '@/components/ui/skeleton';
+import { useUpdateUserSettings, useUserSettings } from '@/client/lib/user-settings-queries';
 import { Switch } from '@/components/ui/switch';
+import { PROVIDER_OPTIONS, withSavedOption } from './provider-model-options';
+import { SettingRow, SettingSelect, SettingsSection } from './settings-section';
 
 export function AdversarialReviewSection() {
-  const { data: settings, isLoading } = trpc.userSettings.get.useQuery();
+  const settingsQuery = useUserSettings();
   const { data: providerOptions } = trpc.userSettings.getProviderOptions.useQuery(undefined, {
     staleTime: 30_000,
   });
-  const utils = trpc.useUtils();
-  const [localClaudeModel, setLocalClaudeModel] = useState('sonnet');
-  const [localCodexModel, setLocalCodexModel] = useState('default');
-  const updateSettings = trpc.userSettings.update.useMutation({
-    onSuccess: () => {
-      runInBackground(utils.userSettings.get.invalidate(), "Couldn't refresh data.");
-    },
-    onError: (error, variables) => {
-      // Roll back only the selector this failed mutation touched, and only if
-      // a newer selection hasn't already replaced it — otherwise a slow,
-      // now-superseded model save could clobber a value the user picked
-      // after it was sent.
-      const savedSettings = utils.userSettings.get.getData() ?? settings;
-      if (variables.reviewerClaudeModel !== undefined) {
-        setLocalClaudeModel((model) =>
-          model === variables.reviewerClaudeModel
-            ? (savedSettings?.reviewerClaudeModel ?? 'sonnet')
-            : model
-        );
-      }
-      if (variables.reviewerCodexModel !== undefined) {
-        setLocalCodexModel((model) =>
-          model === variables.reviewerCodexModel
-            ? (savedSettings?.reviewerCodexModel ?? 'default')
-            : model
-        );
-      }
-      toast.error(`Couldn't update adversarial review settings. ${error.message}`);
-    },
-  });
-
-  useEffect(() => {
-    setLocalClaudeModel(settings?.reviewerClaudeModel ?? 'sonnet');
-    setLocalCodexModel(settings?.reviewerCodexModel ?? 'default');
-  }, [settings?.reviewerClaudeModel, settings?.reviewerCodexModel]);
-
-  if (isLoading) {
-    return (
-      <Card>
-        <CardHeader>
-          <CardTitle>Adversarial review</CardTitle>
-          <CardDescription>Reviewer provider for the open PR</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Skeleton className="h-10 w-full" />
-        </CardContent>
-      </Card>
-    );
-  }
-
-  const currentProvider = settings?.reviewerSessionProvider ?? 'CODEX';
-  const currentClaudeModel = settings?.reviewerClaudeModel ?? 'sonnet';
-  const currentCodexModel = settings?.reviewerCodexModel ?? 'default';
-  const postReviewToGitHub = settings?.postReviewToGitHub ?? true;
-
-  const getModelOptions = (provider: 'CLAUDE' | 'CODEX', currentValue: string) => {
-    const options = providerOptions?.[provider]?.models ?? [];
-    if (options.some((option) => option.value === currentValue)) {
-      return options;
-    }
-    return [{ value: currentValue, label: currentValue }, ...options];
-  };
-
-  const saveModel = (provider: 'CLAUDE' | 'CODEX', value: string) => {
-    if (provider === 'CLAUDE') {
-      setLocalClaudeModel(value);
-      updateSettings.mutate({ reviewerClaudeModel: value });
-    } else {
-      setLocalCodexModel(value);
-      updateSettings.mutate({ reviewerCodexModel: value });
-    }
-  };
+  const updateSettings = useUpdateUserSettings();
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <ShieldWarningIcon className="w-5 h-5" />
-          Adversarial review
-        </CardTitle>
-        <CardDescription>
-          Review an open PR with a different provider/model than the one that built it — e.g. build
-          with Claude, review with Codex.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-3">
-        <Label htmlFor="reviewer-provider">Reviewer provider</Label>
-        <Select
-          value={currentProvider}
-          onValueChange={(value) => {
-            if (value === 'CLAUDE' || value === 'CODEX') {
-              updateSettings.mutate({ reviewerSessionProvider: value });
-            }
-          }}
-          disabled={updateSettings.isPending}
-        >
-          <SelectTrigger id="reviewer-provider">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="CLAUDE">Claude</SelectItem>
-            <SelectItem value="CODEX">Codex</SelectItem>
-          </SelectContent>
-        </Select>
-        <ProviderCliWarning provider={currentProvider} />
+    <SettingsSection
+      title="Adversarial review"
+      icon={<ShieldWarningIcon className="w-5 h-5" />}
+      description="Review an open PR with a different provider/model than the one that built it — e.g. build with Claude, review with Codex."
+      query={settingsQuery}
+      errorTitle="Couldn't load adversarial review settings"
+    >
+      {(settings) => {
+        const claudeModel = settings.reviewerClaudeModel ?? 'sonnet';
+        const codexModel = settings.reviewerCodexModel ?? 'default';
+        return (
+          <>
+            <div className="space-y-3">
+              <SettingSelect
+                id="reviewer-provider"
+                label="Reviewer provider"
+                saving={updateSettings.isSaving('reviewerSessionProvider')}
+                value={settings.reviewerSessionProvider}
+                options={PROVIDER_OPTIONS}
+                onValueChange={(value) => updateSettings.mutate({ reviewerSessionProvider: value })}
+              />
+              <ProviderCliWarning provider={settings.reviewerSessionProvider} />
+            </div>
 
-        <div className="grid gap-3 pt-1 sm:grid-cols-2">
-          <div className="space-y-2">
-            <Label htmlFor="reviewer-claude-model">Claude reviewer model</Label>
-            <Select
-              value={localClaudeModel}
-              onValueChange={(value) => saveModel('CLAUDE', value)}
-              disabled={updateSettings.isPending}
-            >
-              <SelectTrigger id="reviewer-claude-model">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {getModelOptions('CLAUDE', currentClaudeModel).map((option) => (
-                  <SelectItem key={option.value} value={option.value}>
-                    {option.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="reviewer-codex-model">Codex reviewer model</Label>
-            <Select
-              value={localCodexModel}
-              onValueChange={(value) => saveModel('CODEX', value)}
-              disabled={updateSettings.isPending}
-            >
-              <SelectTrigger id="reviewer-codex-model">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {getModelOptions('CODEX', currentCodexModel).map((option) => (
-                  <SelectItem key={option.value} value={option.value}>
-                    {option.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        </div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <SettingSelect
+                id="reviewer-claude-model"
+                label="Claude reviewer model"
+                saving={updateSettings.isSaving('reviewerClaudeModel')}
+                value={claudeModel}
+                options={withSavedOption(providerOptions?.CLAUDE.models, claudeModel)}
+                onValueChange={(value) => updateSettings.mutate({ reviewerClaudeModel: value })}
+              />
+              <SettingSelect
+                id="reviewer-codex-model"
+                label="Codex reviewer model"
+                saving={updateSettings.isSaving('reviewerCodexModel')}
+                value={codexModel}
+                options={withSavedOption(providerOptions?.CODEX.models, codexModel)}
+                onValueChange={(value) => updateSettings.mutate({ reviewerCodexModel: value })}
+              />
+            </div>
 
-        <div className="flex flex-col gap-2 pt-1 sm:flex-row sm:items-center sm:justify-between">
-          <div className="space-y-0.5">
-            <Label htmlFor="post-review-to-github">Post reviews to GitHub</Label>
-            <p className="text-sm text-muted-foreground">
-              Post the review as a summary plus inline comments on the PR. Off runs the review
-              in-app only.
-            </p>
-          </div>
-          <Switch
-            id="post-review-to-github"
-            checked={postReviewToGitHub}
-            onCheckedChange={(checked) => {
-              updateSettings.mutate({ postReviewToGitHub: checked });
-            }}
-            disabled={updateSettings.isPending}
-          />
-        </div>
-      </CardContent>
-    </Card>
+            <SettingRow
+              label="Post reviews to GitHub"
+              htmlFor="post-review-to-github"
+              description="Post the review as a summary plus inline comments on the PR. Off runs the review in-app only."
+              saving={updateSettings.isSaving('postReviewToGitHub')}
+            >
+              <Switch
+                id="post-review-to-github"
+                checked={settings.postReviewToGitHub}
+                onCheckedChange={(checked) =>
+                  updateSettings.mutate({ postReviewToGitHub: checked })
+                }
+              />
+            </SettingRow>
+          </>
+        );
+      }}
+    </SettingsSection>
   );
 }

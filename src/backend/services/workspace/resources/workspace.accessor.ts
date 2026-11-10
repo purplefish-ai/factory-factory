@@ -158,8 +158,8 @@ export type WorkspaceWithRatchet = Flattened<
 /**
  * Large columns that hot workspace reads leave out. SQLite reads run on the
  * main event loop, so loading them competes with WebSocket streaming:
- * `creationMetadata` keeps base64 initial attachments (up to 10 MB per image),
- * `initOutput` holds up to 50 KB of startup log, and session
+ * until archive, `creationMetadata` keeps base64 initial attachments (up to
+ * 10 MB per image) and `initOutput` up to 50 KB of startup log, and session
  * `providerMetadata` carries provider config snapshots. Callers that need one
  * use a separately named finder in `workspace-detail-read.accessor.ts` or the
  * session capsule's own reads.
@@ -946,19 +946,16 @@ class WorkspaceAccessor {
     });
   }
 
-  /**
-   * Find child workspaces with session counts included, for status summaries.
-   */
-  async findChildrenWithStatus(parentId: string): Promise<
-    Flattened<
-      Prisma.WorkspaceGetPayload<{
-        include: { agentSessions: true; project: true } & SideTableInclude;
-      }>
-    >[]
-  > {
+  /** Child workspaces with their sessions, for the polled status panel, without blob columns. */
+  async findChildrenWithStatus(parentId: string) {
     const rows = await prisma.workspace.findMany({
       where: { parentWorkspaceId: parentId, status: { not: 'ARCHIVED' } },
-      include: { agentSessions: true, project: true, ...sideTables },
+      omit: workspaceBlobOmit,
+      include: {
+        agentSessions: sessionsWithoutBlobs.agentSessions,
+        project: true,
+        ...sideTables,
+      },
       orderBy: { createdAt: 'asc' },
     });
     return rows.map(flatten);

@@ -302,7 +302,7 @@ function UntrackedDirContents({
 }) {
   const { data, isLoading, isError } = trpc.workspace.listFiles.useQuery(
     { workspaceId, path: dirPath },
-    { staleTime: 20_000, refetchOnWindowFocus: false }
+    { staleTime: 20_000 }
   );
 
   if (isLoading) {

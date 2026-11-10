@@ -51,6 +51,16 @@ it('invalidates only unstarted tokens for the captured binding', () => {
   expect(sessionDomainService.getQueueLength('invalidate-test')).toBe(1);
   expect(sessionDomainService.peekNextMessage('invalidate-test')?.id).toBe('human');
 });
+it('forgets only the deleted session’s queued tokens', () => {
+  const service = new SessionBackgroundDeliveryService();
+  service.enqueue('forget-deleted', request);
+  service.enqueue('forget-kept', request);
+  service.forgetSession('forget-deleted');
+  // Invalidation reaches queued updates only through their retained tokens.
+  service.invalidate('w', 1);
+  expect(sessionDomainService.getQueueLength('forget-deleted')).toBe(1);
+  expect(sessionDomainService.getQueueLength('forget-kept')).toBe(0);
+});
 it('can enqueue again after discarding an obsolete background token', async () => {
   const service = new SessionBackgroundDeliveryService();
   service.enqueue('discard-test', request);

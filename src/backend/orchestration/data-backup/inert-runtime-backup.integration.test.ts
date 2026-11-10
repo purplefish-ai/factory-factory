@@ -507,6 +507,7 @@ it('keeps actual startup and idle consumers away from imported process and workf
       findNeedingWorktree: () => workspaceMaintenanceService.findNeedingWorktree(),
       initializeWorktree: forbidden,
       recoverStaleProvisioningWorkspace: forbidden,
+      releaseArchivedBlobs: forbidden,
     },
     terminal: terminalSessionService,
   });

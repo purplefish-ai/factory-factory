@@ -2,6 +2,7 @@ import { ArrowCircleUpIcon } from '@phosphor-icons/react/dist/csr/ArrowCircleUp'
 import { CaretDownIcon } from '@phosphor-icons/react/dist/csr/CaretDown';
 import { XIcon } from '@phosphor-icons/react/dist/csr/X';
 import { useEffect, useId, useState } from 'react';
+import { POLL_INTERVAL_MS, QUERY_RETRY } from '@/client/lib/query-options';
 import { trpc } from '@/client/lib/trpc';
 import { Button } from '@/components/ui/button';
 import { Spinner } from '@/components/ui/spinner';
@@ -238,14 +239,13 @@ export function FactoryUpdateBanner() {
   const [localStatus, setLocalStatus] = useState<ApplicationUpdateStatus>();
   const [dismissed, setDismissed] = useState<Set<string>>(() => new Set());
   const query = trpc.admin.checkUpdates.useQuery(undefined, {
-    retry: false,
-    refetchOnWindowFocus: false,
+    retry: QUERY_RETRY.costlyRead,
     refetchInterval: (state) =>
       isActive(
         localStatus ?? state.state.data?.status ?? lastConfirmed?.status ?? { phase: 'idle' }
       )
-        ? 5000
-        : 3_600_000,
+        ? POLL_INTERVAL_MS.localStatus
+        : POLL_INTERVAL_MS.releaseCheck,
   });
   const confirmed = query.data ?? lastConfirmed;
   const acceptStatus = (status: ApplicationUpdateStatus) => {

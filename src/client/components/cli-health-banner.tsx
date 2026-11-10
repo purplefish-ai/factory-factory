@@ -3,6 +3,7 @@ import { ArrowSquareOutIcon } from '@phosphor-icons/react/dist/csr/ArrowSquareOu
 import { WarningIcon } from '@phosphor-icons/react/dist/csr/Warning';
 import { XIcon } from '@phosphor-icons/react/dist/csr/X';
 import { lazy, Suspense, useEffect, useState } from 'react';
+import { ErrorBoundary } from '@/client/error-boundary';
 import { useCLIHealthRefresh } from '@/client/hooks/use-cli-health-refresh';
 import { runInBackground } from '@/client/lib/background-task';
 import { trpc } from '@/client/lib/trpc';
@@ -237,7 +238,6 @@ export function CLIHealthBanner() {
     { forceRefresh: false },
     {
       // Check on mount, but don't poll - user can manually refresh
-      refetchOnWindowFocus: false,
       refetchOnReconnect: false,
       staleTime: 60_000, // Consider stale after 1 minute
     }
@@ -270,16 +270,22 @@ export function CLIHealthBanner() {
   return (
     <>
       {terminalProvider && (
-        <Suspense fallback={null}>
-          <SetupTerminalModal
-            open
-            initialProvider={terminalProvider}
-            onClose={() => {
-              setTerminalProvider(null);
-              void refresh();
-            }}
-          />
-        </Suspense>
+        <ErrorBoundary
+          variant="compact"
+          title="Couldn't open the sign-in terminal"
+          className="h-auto border-b py-2"
+        >
+          <Suspense fallback={null}>
+            <SetupTerminalModal
+              open
+              initialProvider={terminalProvider}
+              onClose={() => {
+                setTerminalProvider(null);
+                void refresh();
+              }}
+            />
+          </Suspense>
+        </ErrorBoundary>
       )}
       <CLIHealthBannerContent
         onSignIn={setTerminalProvider}

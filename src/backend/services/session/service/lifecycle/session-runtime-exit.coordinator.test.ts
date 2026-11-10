@@ -257,9 +257,7 @@ describe('SessionRuntimeExitCoordinator', () => {
       status: SessionStatus.COMPLETED,
     });
     expect(harness.lifecycleEvents.record).not.toHaveBeenCalled();
-    expect(harness.workflowFinalizer.finalizeRuntimeExit).toHaveBeenCalledWith(
-      expect.objectContaining({ exitCode: 0, deliberate: false })
-    );
+    expect(harness.workflowFinalizer.finalizeRuntimeExit).toHaveBeenCalledOnce();
   });
 
   it('continues durable exit effects after the persisted status update fails', async () => {
@@ -314,9 +312,7 @@ describe('SessionRuntimeExitCoordinator', () => {
 
       expect(harness.repository.updateSession).not.toHaveBeenCalled();
       expect(harness.lifecycleEvents.record).not.toHaveBeenCalled();
-      expect(harness.workflowFinalizer.finalizeRuntimeExit).toHaveBeenCalledWith(
-        expect.objectContaining({ deliberate: true })
-      );
+      expect(harness.workflowFinalizer.finalizeRuntimeExit).toHaveBeenCalledOnce();
     }
   );
 
@@ -336,9 +332,7 @@ describe('SessionRuntimeExitCoordinator', () => {
       expect(harness.repository.updateSession).toHaveBeenCalledWith('session-1', {
         status,
       });
-      expect(harness.workflowFinalizer.finalizeRuntimeExit).toHaveBeenCalledWith(
-        expect.objectContaining({ deliberate: true })
-      );
+      expect(harness.workflowFinalizer.finalizeRuntimeExit).toHaveBeenCalledOnce();
     }
   );
 
@@ -359,8 +353,6 @@ describe('SessionRuntimeExitCoordinator', () => {
     expect(harness.workflowFinalizer.finalizeRuntimeExit).toHaveBeenCalledWith({
       session: harness.session,
       sessionId: 'session-1',
-      exitCode: 1,
-      deliberate: true,
     });
   });
 

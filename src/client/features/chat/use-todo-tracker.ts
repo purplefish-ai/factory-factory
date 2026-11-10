@@ -6,7 +6,7 @@ import { isToolSequence } from '@/lib/chat-protocol';
 import { calculateTodoProgress } from '@/lib/todo-utils';
 import type { AcpPlanState } from './reducer';
 
-const todoSchema = z.object({
+export const todoSchema = z.object({
   content: z.string(),
   activeForm: z.string().optional(),
   status: z.enum(['pending', 'in_progress', 'completed']),

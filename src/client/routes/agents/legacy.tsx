@@ -12,11 +12,11 @@ import { Button } from '@/components/ui/button';
 
 function LegacyAgentDetail({ id }: { id: string }) {
   const navigation = useAppNavigationDataContext();
-  const task = trpc.periodicTask.get.useQuery({ id }, { retry: false });
+  const task = trpc.periodicTask.get.useQuery({ id });
   const listedOwner = navigation.projects?.find((project) => project.id === task.data?.projectId);
   const owner = trpc.project.getById.useQuery(
     { id: task.data?.projectId ?? '' },
-    { enabled: !!task.data && !listedOwner, retry: false }
+    { enabled: !!task.data && !listedOwner }
   );
   if (task.error) {
     return (

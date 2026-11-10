@@ -118,28 +118,77 @@
             }
           }
         ],
-        "factory/workspace-query-owner": [
+        "factory/query-owner": [
           "error",
           {
-            "owners": [
-              "src/client/lib/workspace-queries.ts",
-              "src/client/lib/workspace-cache-reconciler.ts"
+            "groups": [
+              {
+                "procedures": ["workspace.get", "workspace.listForProject"],
+                "use": "src/client/lib/workspace-queries.ts",
+                "owners": [
+                  "src/client/lib/workspace-queries.ts",
+                  "src/client/lib/workspace-cache-reconciler.ts"
+                ],
+                "helpers": "cache",
+                "reason": "plain tRPC reads and writes bypass the snapshot reconciler"
+              },
+              {
+                "procedures": ["userSettings.get", "userSettings.update"],
+                "use": "src/client/lib/user-settings-queries.ts",
+                "owners": ["src/client/lib/user-settings-queries.ts"],
+                "helpers": "all",
+                "reason": "its hooks share one optimistic cache strategy and error toast for every settings control"
+              }
             ]
           }
-        ]
+        ],
+        "factory/named-query-options": "error"
+      }
+    },
+    {
+      "files": ["src/client/features/chat/agent-activity/**/*.{ts,tsx}"],
+      "rules": {
+        "factory/no-tool-input-cast": "error"
       }
     },
     {
       "files": ["**/*.test.ts", "**/*.test.tsx"],
       "rules": {
         "factory/no-raw-palette-classes": "off",
-        "factory/workspace-query-owner": "off"
+        "factory/query-owner": "off",
+        "factory/named-query-options": "off"
       }
     },
     {
       "files": ["**/*.test.ts", "**/*.test.tsx", "**/*.stories.tsx"],
       "rules": {
         "typescript/no-non-null-assertion": "off"
+      }
+    },
+    {
+      "files": ["src/client/routes/admin/**/*.tsx"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "paths": [
+              {
+                "name": "@/components/ui/card",
+                "importNames": ["CardHeader", "CardTitle", "CardDescription", "CardAction"],
+                "message": "Use SettingsSection from routes/admin/settings-section.tsx for a settings card's title, icon, description and loading/error states."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": [
+        "src/client/routes/admin/settings-section.tsx",
+        "src/client/routes/admin/StatCard.tsx"
+      ],
+      "rules": {
+        "no-restricted-imports": "off"
       }
     }
   ],

@@ -30,18 +30,41 @@ fixtures when upgrading it. The rules require accessible names for icon-only
 buttons (including the shared `Button` icon sizes), and reject awaited dynamic
 imports, native browser dialogs, Next.js directives, `z.any()`/`zod.any()`,
 assertions on `JSON.parse` results, casts of promise resolvers to function types
-accepting `unknown`, and fixed Tailwind palette color classes (`bg-red-500`,
-`dark:text-emerald-300`) in `src/client`, `src/components` and `src/lib`, which
-must use theme tokens instead ([status colors](../docs/status-colors.md)). The
-palette rule's file exceptions are its `exceptions` option, a map from path to
-reason in `.oxlintrc.json`; a test fails if an exception no longer needs it.
-`workspace-query-owner` keeps tRPC cache helpers (`useQuery`, `fetch`, `setData`
-and similar) and `getQueryKey` for `workspace.get` and
-`workspace.listForProject` inside the files in its `owners` option, so every
-read installs the snapshot reconciler
-([workspace state](../docs/architecture/workspace-state.md)). Tests are exempt
-so they can seed caches. Regression tests invoke the real Oxlint binary against
-accepted and rejected fixtures.
+accepting `unknown`, type assertions on agent tool input (`input.todos as …`,
+`call.input.file_path as …`) under `src/client/features/chat/agent-activity`,
+which must use `parseToolInput` with a Zod schema, and fixed Tailwind palette
+color classes (`bg-red-500`, `dark:text-emerald-300`) in `src/client`,
+`src/components` and `src/lib`, which must use theme tokens instead
+([status colors](../docs/status-colors.md)). The palette rule's file exceptions
+are its `exceptions` option, a map from path to reason in `.oxlintrc.json`; a
+test fails if an exception no longer needs it. `query-owner` keeps tRPC hooks
+and cache helpers for named procedures inside owner modules. Each entry in its
+`groups` option lists procedures, the module callers should `use`, its `owners`
+(that module and its helpers), the reason, and which helpers it covers: `cache`
+covers helpers that install options or write data (`useQuery`, `fetch`,
+`setData` and similar) plus `getQueryKey`, and `all` covers every hook, cache
+helper and key helper, including `useMutation`. `workspace.get` and
+`workspace.listForProject` use `cache`, so every read installs the snapshot
+reconciler ([workspace state](../docs/architecture/workspace-state.md)).
+`userSettings.get` and `userSettings.update` use `all`: settings are read and
+written only through `useUserSettings` and `useUpdateUserSettings` in
+`src/client/lib/user-settings-queries.ts`, which own the optimistic cache
+strategy and error toast. Tests are exempt so they can seed caches.
+`named-query-options` keeps query options in one place
+([query retries and polling](../docs/architecture/client-loading.md#query-retries-and-polling)):
+it rejects a numeric `refetchInterval` literal, including inside a conditional,
+arithmetic or a callback's return value (comparison operands are ignored),
+`refetchOnWindowFocus: false`, and a boolean or numeric `retry`. It does not
+resolve identifiers, so a local numeric constant passes. `QueryClient` defaults
+(`queries` and `mutations` objects) and tests are exempt. Regression tests
+invoke the real Oxlint binary against accepted and rejected fixtures.
+
+Oxlint's built-in `no-restricted-imports` keeps `CardHeader`, `CardTitle`,
+`CardDescription` and `CardAction` out of `src/client/routes/admin/`, so every
+settings card uses `SettingsSection` from `settings-section.tsx`, which also
+owns the query loading and error states. The section shell and `StatCard` are
+the only exceptions, listed in a later override; a test fails if either stops
+needing it.
 
 ## Remaining Biome checks
 

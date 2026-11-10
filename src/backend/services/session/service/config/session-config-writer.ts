@@ -5,7 +5,6 @@ import { isReasoningConfigOption } from '@/backend/services/session/service/acp/
 import type { SessionCallerGuard } from '@/backend/services/session/service/bridges';
 import type { SessionRepository } from '@/backend/services/session/service/data/session.repository';
 import type { SessionDomainService } from '@/backend/services/session/service/session-domain.service';
-import type { SessionDeltaEvent } from '@/shared/acp-protocol';
 import {
   type AcceptedConfigCommit,
   SessionConfigCommitAuthority,
@@ -116,7 +115,7 @@ export class SessionConfigWriter {
     this.sessionDomainService.emitDelta(sessionId, {
       type: 'config_options_update',
       configOptions,
-    } as SessionDeltaEvent);
+    });
   }
 
   emitCapabilities(

@@ -198,6 +198,18 @@ export class SessionBackgroundDeliveryService {
       }
     }
   }
+  /**
+   * Durable deletion drops the session's PR-update tokens. Its queued
+   * placeholders are cleared with the session store, and a delivery already
+   * prepared for dispatch stays with its complete/fail owner.
+   */
+  forgetSession(sessionId: string) {
+    for (const [key, token] of this.tokens) {
+      if (token.sessionId === sessionId) {
+        this.tokens.delete(key);
+      }
+    }
+  }
   private forgetToken(messageId: string) {
     for (const [key, token] of this.tokens) {
       if (token.messageId === messageId) {

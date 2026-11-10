@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { runInBackground } from '@/client/lib/background-task';
+import { POLL_INTERVAL_MS } from '@/client/lib/query-options';
 import { trpc } from '@/client/lib/trpc';
 import {
   forgetSetupWarningDismissed,
@@ -59,20 +60,20 @@ export function useWorkspaceInitStatus(
         const status = query.state.data?.status;
         const availability = query.state.data?.retryAvailability;
         if (query.state.status === 'error' || !availability) {
-          return 1000;
+          return POLL_INTERVAL_MS.progress;
         }
         if (
           availability?.status === 'BLOCKED' &&
           !['NOT_RETRYABLE', 'RETRY_LIMIT'].includes(availability.reason)
         ) {
-          return 1000;
+          return POLL_INTERVAL_MS.progress;
         }
         return status === 'READY' ||
           status === 'FAILED' ||
           status === 'ARCHIVING' ||
           status === 'ARCHIVED'
           ? false
-          : 1000;
+          : POLL_INTERVAL_MS.progress;
       },
     }
   );

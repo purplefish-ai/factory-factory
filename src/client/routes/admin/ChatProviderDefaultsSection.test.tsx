@@ -1,244 +1,151 @@
 // @vitest-environment jsdom
 
 import { createElement } from 'react';
-import { flushSync } from 'react-dom';
-import { createRoot } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+  chooseOption,
+  createSettingsServer,
+  type RenderedSettings,
+  renderWithSettingsServer,
+  type SettingsServer,
+  type SettingsServerOptions,
+  stubRadixLayout,
+  waitForCheck,
+} from '@/client/lib/user-settings-queries.test-harness';
 import { ChatProviderDefaultsSection } from './ChatProviderDefaultsSection';
 
-const mocks = vi.hoisted(() => ({
-  updateSettingsMutate: vi.fn(),
-  onUpdateError: (
-    _error: Error,
-    _variables: { defaultClaudeModel?: string; defaultCodexModel?: string }
-  ) => undefined,
-  providerOptions: {
-    CLAUDE: {
-      source: 'cli',
-      models: [
-        { value: 'default', label: 'Default — Opus 4.8 (1M)' },
-        { value: 'claude-fable-5[1m]', label: 'Fable 5' },
-        { value: 'sonnet', label: 'Sonnet 5' },
-      ],
-      efforts: [{ value: 'medium', label: 'Medium' }],
-    },
-    CODEX: {
-      source: 'fallback',
-      models: [
-        { value: 'default', label: 'Default' },
-        { value: 'gpt-test', label: 'Test Codex Model' },
-      ],
-      efforts: [{ value: 'medium', label: 'Medium' }],
-    },
-  },
-  userSettings: {
-    turnLimitMinutes: null as number | null,
-    defaultSessionProvider: 'CLAUDE',
-    defaultClaudeModel: 'sonnet',
-    defaultCodexModel: 'default',
-    defaultClaudeReasoningEffort: null,
-    defaultCodexReasoningEffort: null,
-    defaultWorkspacePermissions: 'STRICT',
-  },
-}));
+vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() }, Toaster: () => null }));
+vi.mock('@/client/components/provider-cli-warning', () => ({ ProviderCliWarning: () => null }));
 
-vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
-vi.mock('@/client/lib/trpc', () => ({
-  trpc: {
-    useUtils: () => ({
-      userSettings: {
-        get: {
-          invalidate: vi.fn(),
-          cancel: vi.fn(),
-          setData: vi.fn(),
-          getData: () => mocks.userSettings,
-        },
-      },
-    }),
-    userSettings: {
-      get: { useQuery: () => ({ data: mocks.userSettings, isLoading: false }) },
-      update: {
-        useMutation: (options: { onError: typeof mocks.onUpdateError }) => {
-          mocks.onUpdateError = options.onError;
-          return { mutate: mocks.updateSettingsMutate, isPending: false };
-        },
-      },
-      getProviderOptions: { useQuery: () => ({ data: mocks.providerOptions }) },
-    },
+const providerOptions = {
+  CLAUDE: {
+    source: 'cli',
+    models: [
+      { value: 'default', label: 'Default — Opus 4.8 (1M)' },
+      { value: 'claude-fable-5[1m]', label: 'Fable 5' },
+      { value: 'sonnet', label: 'Sonnet 5' },
+    ],
+    efforts: [{ value: 'medium', label: 'Medium' }],
   },
-}));
+  CODEX: {
+    source: 'fallback',
+    models: [
+      { value: 'default', label: 'Default' },
+      { value: 'gpt-test', label: 'Test Codex Model' },
+    ],
+    efforts: [{ value: 'medium', label: 'Medium' }],
+  },
+};
+
+let server: SettingsServer;
+let view: RenderedSettings | undefined;
+
+async function render(options: SettingsServerOptions = {}) {
+  server = createSettingsServer({
+    ...options,
+    handlers: { 'userSettings.getProviderOptions': () => providerOptions },
+  });
+  view = await renderWithSettingsServer(createElement(ChatProviderDefaultsSection), server);
+  return view.container;
+}
+
+const updates = () =>
+  server.requests.filter(({ path }) => path === 'userSettings.update').map(({ input }) => input);
 
 beforeEach(() => {
   vi.clearAllMocks();
-  mocks.userSettings.turnLimitMinutes = null;
-  mocks.userSettings.defaultClaudeModel = 'sonnet';
-  mocks.userSettings.defaultCodexModel = 'default';
+  stubRadixLayout();
 });
-afterEach(() => {
-  document.body.innerHTML = '';
+afterEach(async () => {
+  await view?.unmount();
+  view = undefined;
+  vi.unstubAllGlobals();
 });
-vi.mock('@/client/components/provider-cli-warning', () => ({ ProviderCliWarning: () => null }));
 
 describe('ChatProviderDefaultsSection', () => {
-  it('renders Claude model labels and saves the selected raw value', () => {
-    const container = document.createElement('div');
-    document.body.appendChild(container);
-    const root = createRoot(container);
+  it('renders Claude model labels and saves the selected raw value', async () => {
+    const container = await render();
+    const trigger = container.querySelector('#default-claude-model');
+    expect(trigger?.textContent).toBe('Sonnet 5');
 
-    flushSync(() => {
-      root.render(createElement(ChatProviderDefaultsSection));
-    });
+    await chooseOption(container, 'default-claude-model', 'Fable 5');
 
-    const trigger = container.querySelector<HTMLElement>('#default-claude-model');
-    flushSync(() => {
-      trigger?.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0 }));
-      trigger?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    });
-
-    const listbox = document.body.querySelector<HTMLElement>('[role="listbox"]');
-    expect(listbox?.textContent).toContain('Default — Opus 4.8 (1M)');
-    expect(listbox?.textContent).toContain('Fable 5');
-    expect(listbox?.textContent).toContain('Sonnet 5');
-    const fableOption = Array.from(
-      listbox?.querySelectorAll<HTMLElement>('[role="option"]') ?? []
-    ).find((option) => option.textContent === 'Fable 5');
-    expect(fableOption).toBeDefined();
-
-    flushSync(() => {
-      fableOption?.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0 }));
-      fableOption?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    });
-
-    expect(mocks.updateSettingsMutate).toHaveBeenCalledWith({
-      defaultClaudeModel: 'claude-fable-5[1m]',
-    });
-
-    root.unmount();
+    expect(trigger?.textContent).toBe('Fable 5');
+    await waitForCheck(() =>
+      expect(updates()).toEqual([{ defaultClaudeModel: 'claude-fable-5[1m]' }])
+    );
   });
 
-  it('identifies a saved Claude model absent from the catalog', () => {
+  it('shows the raw saved model while the catalog loads', async () => {
     const savedModel = 'claude-sonnet-4-5-20250929';
-    mocks.userSettings.defaultClaudeModel = savedModel;
-    const container = document.createElement('div');
-    document.body.appendChild(container);
-    const root = createRoot(container);
-
-    flushSync(() => {
-      root.render(createElement(ChatProviderDefaultsSection));
+    const container = await render({
+      settings: { defaultClaudeModel: savedModel },
+      hold: ['userSettings.getProviderOptions'],
     });
-
-    const trigger = container.querySelector<HTMLElement>('#default-claude-model');
-    expect(trigger?.textContent).toContain(`Saved model — ${savedModel} (not in current catalog)`);
-    flushSync(() => {
-      trigger?.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0 }));
-      trigger?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    });
-
-    const listbox = document.body.querySelector<HTMLElement>('[role="listbox"]');
-    expect(listbox?.textContent).toContain(`Saved model — ${savedModel} (not in current catalog)`);
-    expect(listbox?.textContent).toContain('Default — Opus 4.8 (1M)');
-    expect(listbox?.textContent).toContain('Fable 5');
-    expect(listbox?.textContent).toContain('Sonnet 5');
-
-    root.unmount();
+    expect(container.querySelector('#default-claude-model')?.textContent).toBe(savedModel);
   });
+
+  it('identifies a saved Claude model absent from the catalog', async () => {
+    const savedModel = 'claude-sonnet-4-5-20250929';
+    const container = await render({ settings: { defaultClaudeModel: savedModel } });
+    const saved = `Saved model — ${savedModel} (not in current catalog)`;
+    expect(container.querySelector('#default-claude-model')?.textContent).toContain(saved);
+    await chooseOption(container, 'default-claude-model', saved);
+    expect(updates()).toEqual([]);
+  });
+
   it.each([
-    {
-      id: 'default-claude-model',
-      selected: 'Fable 5',
-      saved: 'Sonnet 5',
-      payload: { defaultClaudeModel: 'claude-fable-5[1m]' },
-    },
-    {
-      id: 'default-codex-model',
-      selected: 'Test Codex Model',
-      saved: 'Default',
-      payload: { defaultCodexModel: 'gpt-test' },
-    },
-  ])('restores $id after the server rejects a model change', ({ id, selected, saved, payload }) => {
-    const container = document.createElement('div');
-    document.body.appendChild(container);
-    const root = createRoot(container);
-    flushSync(() => root.render(createElement(ChatProviderDefaultsSection)));
-    const trigger = container.querySelector<HTMLElement>(`#${id}`);
-    flushSync(() => trigger?.click());
-    const option = Array.from(document.querySelectorAll<HTMLElement>('[role="option"]')).find(
-      (element) => element.textContent === selected
-    );
-    expect(option).toBeDefined();
-    flushSync(() => option?.click());
-    expect(trigger?.textContent).toBe(selected);
-    expect(mocks.updateSettingsMutate).toHaveBeenLastCalledWith(payload);
-    flushSync(() =>
-      mocks.onUpdateError(new Error('Save rejected'), mocks.updateSettingsMutate.mock.calls[0]?.[0])
-    );
-    expect(trigger?.textContent).toBe(saved);
-    root.unmount();
+    { id: 'default-claude-model', selected: 'Fable 5', saved: 'Sonnet 5' },
+    { id: 'default-codex-model', selected: 'Test Codex Model', saved: 'Default' },
+  ])('restores $id after the server rejects a model change', async ({ id, selected, saved }) => {
+    const container = await render();
+    server.failUpdates = 'Save rejected';
+    await chooseOption(container, id, selected);
+    await waitForCheck(() => expect(container.querySelector(`#${id}`)?.textContent).toBe(saved));
+    expect(updates()).toHaveLength(1);
   });
 
-  it('does not overwrite a newer selection when an older model update fails', () => {
-    const container = document.createElement('div');
-    document.body.appendChild(container);
-    const root = createRoot(container);
-    flushSync(() => root.render(createElement(ChatProviderDefaultsSection)));
-    const trigger = container.querySelector<HTMLElement>('#default-claude-model');
-    for (const label of ['Fable 5', 'Default — Opus 4.8 (1M)']) {
-      flushSync(() => trigger?.click());
-      const option = Array.from(document.querySelectorAll<HTMLElement>('[role="option"]')).find(
-        (element) => element.textContent === label
-      );
-      expect(option).toBeDefined();
-      flushSync(() => option?.click());
-    }
-    flushSync(() =>
-      mocks.onUpdateError(
-        new Error('Earlier save rejected'),
-        mocks.updateSettingsMutate.mock.calls[0]?.[0]
-      )
-    );
-    expect(trigger?.textContent).toBe('Default — Opus 4.8 (1M)');
-    root.unmount();
-  });
-  it('renders a saved one-minute turn limit with a singular label', () => {
-    mocks.userSettings.turnLimitMinutes = 1;
-    const container = document.createElement('div');
-    document.body.appendChild(container);
-    const root = createRoot(container);
-    flushSync(() => root.render(createElement(ChatProviderDefaultsSection)));
+  it('renders a saved one-minute turn limit with a singular label', async () => {
+    const container = await render({ settings: { turnLimitMinutes: 1 } });
     expect(container.querySelector('#turn-limit')?.textContent).toBe('1 minute');
-    root.unmount();
   });
-  it('defaults turn limit to Unlimited and saves a selected limit separately', () => {
-    const container = document.createElement('div');
-    document.body.appendChild(container);
-    const root = createRoot(container);
-    flushSync(() => root.render(createElement(ChatProviderDefaultsSection)));
-    const trigger = container.querySelector<HTMLElement>('#turn-limit');
-    expect(trigger?.textContent).toBe('Unlimited');
-    flushSync(() => trigger?.click());
-    const option = Array.from(document.querySelectorAll<HTMLElement>('[role="option"]')).find(
-      (element) => element.textContent === '4 hours'
+
+  it('defaults turn limit to Unlimited and saves limits independently', async () => {
+    const container = await render();
+    expect(container.querySelector('#turn-limit')?.textContent).toBe('Unlimited');
+    await chooseOption(container, 'turn-limit', '4 hours');
+    await waitForCheck(() => expect(updates()).toEqual([{ turnLimitMinutes: 240 }]));
+    expect(container.querySelector('#turn-limit')?.textContent).toBe('4 hours');
+    await chooseOption(container, 'turn-limit', 'Unlimited');
+    await waitForCheck(() =>
+      expect(updates()).toEqual([{ turnLimitMinutes: 240 }, { turnLimitMinutes: null }])
     );
-    expect(option).toBeDefined();
-    flushSync(() => option?.click());
-    expect(mocks.updateSettingsMutate).toHaveBeenLastCalledWith({ turnLimitMinutes: 240 });
-    root.unmount();
+    expect(container.querySelector('#turn-limit')?.textContent).toBe('Unlimited');
   });
-  it('defaults automation permissions to Auto review and saves them separately', () => {
-    const container = document.createElement('div');
-    document.body.appendChild(container);
-    const root = createRoot(container);
-    flushSync(() => root.render(createElement(ChatProviderDefaultsSection)));
-    const trigger = container.querySelector<HTMLElement>('#automation-permissions');
-    expect(trigger?.textContent).toBe('Auto review');
+
+  it('restores the saved turn limit after a rejected change', async () => {
+    const container = await render({ settings: { turnLimitMinutes: 240 } });
+    server.failUpdates = 'Save rejected';
+    await chooseOption(container, 'turn-limit', 'Unlimited');
+    await waitForCheck(() =>
+      expect(container.querySelector('#turn-limit')?.textContent).toBe('4 hours')
+    );
+    expect(updates()).toEqual([{ turnLimitMinutes: null }]);
+  });
+
+  it('defaults automation permissions to Auto review and saves them separately', async () => {
+    const container = await render();
+    expect(container.querySelector('#automation-permissions')?.textContent).toBe('Auto review');
     expect(container.querySelector('#workspace-permissions')?.textContent).toBe('Standard');
-    flushSync(() => trigger?.click());
-    const option = Array.from(document.querySelectorAll<HTMLElement>('[role="option"]')).find(
-      (element) => element.textContent === 'Full access'
-    );
-    expect(option).toBeDefined();
-    flushSync(() => option?.click());
-    expect(mocks.updateSettingsMutate).toHaveBeenLastCalledWith({ automationPermissions: 'YOLO' });
-    root.unmount();
+    await chooseOption(container, 'automation-permissions', 'Full access');
+    await waitForCheck(() => expect(updates()).toEqual([{ automationPermissions: 'YOLO' }]));
+    expect(container.querySelector('#workspace-permissions')?.textContent).toBe('Standard');
+  });
+
+  it('clears a saved effort back to the provider default', async () => {
+    const container = await render({ settings: { defaultCodexReasoningEffort: 'medium' } });
+    expect(container.querySelector('#default-codex-effort')?.textContent).toBe('Medium');
+    await chooseOption(container, 'default-codex-effort', 'Provider default');
+    await waitForCheck(() => expect(updates()).toEqual([{ defaultCodexReasoningEffort: null }]));
   });
 });

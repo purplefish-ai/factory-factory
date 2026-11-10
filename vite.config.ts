@@ -4,6 +4,7 @@ import react from '@vitejs/plugin-react';
 import { defineConfig } from 'vite';
 import { clientModuleManifest } from './scripts/client-module-manifest.ts';
 import { phosphorIconWeights } from './scripts/phosphor-icon-weights.ts';
+import { precompressAssets } from './scripts/precompress-assets.ts';
 import { workerSafeAliases } from './scripts/vite-worker-aliases.ts';
 import {
   allowedPhosphorWeights,
@@ -59,6 +60,7 @@ export default defineConfig({
         },
       ],
     },
+    precompressAssets(),
   ],
   envPrefix: 'VITE_',
   define: {

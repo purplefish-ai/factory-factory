@@ -17,7 +17,7 @@ export type {
   AcpSubagentsChangedEvent,
   ClaudeModelCatalogEntry,
 } from './acp';
-export { AcpClientHandler, AcpProcessHandle, AcpRuntimeManager, acpRuntimeManager } from './acp';
+export { AcpProcessHandle, AcpRuntimeManager, acpRuntimeManager } from './acp';
 // Bridge interfaces for orchestration layer wiring
 export type { SessionInitPolicyBridge, SessionWorkspaceBridge } from './bridges';
 // Chat services
@@ -57,7 +57,6 @@ export {
 } from './data/session-provider-resolver.service';
 export type { SessionInterceptorBridge } from './interceptor.bridge';
 export { sessionInterceptorBridge } from './interceptor.bridge';
-export { ClaudeModelCatalogService } from './providers/claude-model-catalog.service';
 export type { ClosedSessionTranscript } from './archive/closed-session-persistence.service';
 export type { ArchivedProviderIdentity } from './archive/closed-session-reader';
 export { CodexModelCatalogService } from './providers/codex-model-catalog.service';
@@ -71,10 +70,8 @@ export {
   type StopSessionOptions,
 } from './lifecycle/session.lifecycle.service';
 export { SessionStartupCancelledError } from './lifecycle/session-lifecycle-gate';
-export { SessionPermissionService } from './events/session.permission.service';
 export { buildChildWorkspaceContext } from './prompt/session.prompt-builder';
 export { sessionRepository } from './data/session.repository';
-export { SessionService } from './prompt/session.service';
 export {
   type PRBackgroundDeliveryPort,
   sessionBackgroundDeliveryService,

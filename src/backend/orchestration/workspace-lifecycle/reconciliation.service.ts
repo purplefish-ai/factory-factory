@@ -22,14 +22,19 @@ export interface ReconciliationWorkspaceBridge {
     options?: { branchName?: string; useExistingBranch?: boolean }
   ): Promise<void>;
   findNeedingWorktree(): Promise<WorkspaceNeedingWorktree[]>;
+  /** One bounded run of the archived-workspace attachment and setup-log release. */
+  releaseArchivedBlobs(
+    signal: AbortSignal
+  ): Promise<{ released: number; batches: number; complete: boolean }>;
 }
 
 export interface ReconciliationTerminalBridge {
   recoverOrphanedSessions(): Promise<number>;
 }
 
-/** Job name this service registers with the shared runner. */
+/** Job names this service registers with the shared runner. */
 const RECONCILIATION_CLEANUP_JOB = 'reconciliation-cleanup';
+const ARCHIVED_BLOB_RETENTION_JOB = 'archived-workspace-blob-retention';
 
 class ReconciliationService {
   private _workspace: ReconciliationWorkspaceBridge | null = null;
@@ -56,6 +61,18 @@ class ReconciliationService {
         } finally {
           // Scoped to this run; see the note in `scheduler.service.ts`.
           this.runSignal = null;
+        }
+      },
+    });
+    // Drains attachments and setup logs that ARCHIVED workspaces kept from
+    // before archive released them, or that a backup import brought back.
+    jobRunner.register({
+      name: ARCHIVED_BLOB_RETENTION_JOB,
+      intervalMs: SERVICE_INTERVAL_MS.archivedWorkspaceBlobRetention,
+      run: async (signal) => {
+        const result = await this.workspace.releaseArchivedBlobs(signal);
+        if (result.released > 0) {
+          logger.info('Released archived workspace attachments and setup logs', { ...result });
         }
       },
     });
@@ -109,6 +126,7 @@ class ReconciliationService {
   startPeriodicCleanup(): void {
     this.stopped = false;
     jobRunner.start(RECONCILIATION_CLEANUP_JOB);
+    jobRunner.start(ARCHIVED_BLOB_RETENTION_JOB);
   }
 
   /**
@@ -117,7 +135,10 @@ class ReconciliationService {
    */
   async stopPeriodicCleanup(): Promise<void> {
     this.stopped = true;
-    await jobRunner.stop(RECONCILIATION_CLEANUP_JOB);
+    await Promise.all([
+      jobRunner.stop(RECONCILIATION_CLEANUP_JOB),
+      jobRunner.stop(ARCHIVED_BLOB_RETENTION_JOB),
+    ]);
     await this.startupInitialization;
   }
 

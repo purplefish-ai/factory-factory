@@ -5,8 +5,9 @@ import {
   type IntegrationDatabase,
 } from '@/backend/testing/integration-db';
 import { redObservation } from '@/shared/pr-monitoring.test-helpers';
-import type { PrismaClient } from '@prisma-gen/client';
+import { Prisma, type PrismaClient } from '@prisma-gen/client';
 import { workspacePrMonitoringAccessor } from './workspace-pr-monitoring.accessor';
+import { findPRIdsWithoutObservation } from './workspace-pr-observation-presence';
 import { workspacePrAccessor } from './workspace-pr.accessor';
 
 const database = vi.hoisted(() => ({ prisma: undefined as PrismaClient | undefined }));
@@ -210,3 +211,74 @@ it.each(['enable', 'recipient'] as const)(
     ).toEqual([]);
   }
 );
+
+it('treats SQL NULL and JSON null observations as missing without loading observations', async () => {
+  const workspaceId = 'null-observations';
+  await db.prisma.workspace.create({
+    data: {
+      id: workspaceId,
+      projectId: 'polling-project',
+      name: workspaceId,
+      status: 'READY',
+      prMonitoring: { create: { enabled: true } },
+    },
+  });
+  const merged = { workspaceId, state: 'MERGED' as const, syncedAt: new Date(0) };
+  await db.prisma.workspacePR.createMany({
+    data: [
+      { ...merged, id: 'sql-null', url: 'https://github.com/org/repo/pull/20' },
+      {
+        ...merged,
+        id: 'json-null',
+        url: 'https://github.com/org/repo/pull/21',
+        observation: Prisma.JsonNull,
+      },
+      {
+        ...merged,
+        id: 'observed',
+        url: 'https://github.com/org/repo/pull/22',
+        observation: { ...redObservation, prState: 'MERGED' },
+      },
+      // Stored as the same four bytes long as JSON null, but present.
+      {
+        ...merged,
+        id: 'four-bytes',
+        url: 'https://github.com/org/repo/pull/23',
+        observation: true,
+      },
+    ],
+  });
+
+  expect(
+    (await workspacePrAccessor.findNeedingSync())
+      .filter((pr) => pr.id === workspaceId)
+      .map((pr) => pr.prId)
+      .sort()
+  ).toEqual(['json-null', 'sql-null']);
+  const config = (await workspacePrMonitoringAccessor.listEnabled()).find(
+    (row) => row.workspaceId === workspaceId
+  );
+  expect(
+    Object.fromEntries(config?.workspace.prs.map((pr) => [pr.id, pr.hasObservation]) ?? [])
+  ).toEqual({ 'sql-null': false, 'json-null': false, observed: true, 'four-bytes': true });
+});
+
+it('reads observation presence for more PRs than one bounded statement holds', async () => {
+  const workspaceId = 'many-prs';
+  await db.prisma.workspace.create({
+    data: { id: workspaceId, projectId: 'polling-project', name: workspaceId },
+  });
+  const ids = Array.from({ length: 1201 }, (_, index) => `many-${index}`);
+  await db.prisma.workspacePR.createMany({
+    data: ids.map((id, index) => ({
+      id,
+      workspaceId,
+      url: `https://github.com/org/repo/pull/${1000 + index}`,
+      ...(index < 1000 ? { observation: redObservation } : {}),
+    })),
+  });
+
+  const missing = await findPRIdsWithoutObservation(db.prisma, ids);
+
+  expect([...missing].sort()).toEqual(ids.slice(1000).sort());
+});

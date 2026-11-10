@@ -1,5 +1,6 @@
 import { ArrowClockwiseIcon } from '@phosphor-icons/react/dist/csr/ArrowClockwise';
 import { useEffect, useRef, useState } from 'react';
+import { POLL_INTERVAL_MS } from '@/client/lib/query-options';
 import { trpc } from '@/client/lib/trpc';
 import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -273,8 +274,7 @@ export function ProviderUsageControl({
     { provider, ...(provider === 'CODEX' && codexAccountId ? { codexAccountId } : {}) },
     {
       staleTime: 30_000,
-      refetchInterval: open ? 30_000 : false,
-      refetchOnWindowFocus: false,
+      refetchInterval: open ? POLL_INTERVAL_MS.background : false,
     }
   );
   const wasBusy = useRef(Boolean(props.busy || props.compacting));

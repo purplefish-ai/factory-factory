@@ -2,6 +2,7 @@ import { ArrowSquareOutIcon } from '@phosphor-icons/react/dist/csr/ArrowSquareOu
 import { Link } from 'react-router';
 import { formatDateTime, toDateTimeIso } from '@/client/lib/date-time';
 import { getProjectSectionPath } from '@/client/lib/project-navigation';
+import { POLL_INTERVAL_MS } from '@/client/lib/query-options';
 import { trpc } from '@/client/lib/trpc';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -131,7 +132,7 @@ export function AgentRunHistoryQuery({
 }) {
   const history = trpc.periodicTask.listExecutions.useQuery(
     { periodicTaskId, limit: 50 },
-    { refetchInterval: 10_000 }
+    { refetchInterval: POLL_INTERVAL_MS.activity }
   );
   return (
     <AgentRunHistory

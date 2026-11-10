@@ -3,6 +3,7 @@ import { PlayIcon } from '@phosphor-icons/react/dist/csr/Play';
 import { SquareIcon } from '@phosphor-icons/react/dist/csr/Square';
 import { useState } from 'react';
 import { runInBackground } from '@/client/lib/background-task';
+import { POLL_INTERVAL_MS } from '@/client/lib/query-options';
 import { trpc } from '@/client/lib/trpc';
 import { Button } from '@/components/ui/button';
 import {
@@ -32,7 +33,9 @@ export function RunScriptButton({ workspaceId }: RunScriptButtonProps) {
     {
       refetchInterval: (query) => {
         // Poll more frequently when running
-        return query.state.data?.status === 'RUNNING' ? 2000 : 5000;
+        return query.state.data?.status === 'RUNNING'
+          ? POLL_INTERVAL_MS.runningProcess
+          : POLL_INTERVAL_MS.localStatus;
       },
     }
   );

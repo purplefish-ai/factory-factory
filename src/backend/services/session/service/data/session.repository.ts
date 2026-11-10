@@ -1,5 +1,6 @@
 import {
   type AgentSessionRecord,
+  type AgentSessionSummaryRecord,
   agentSessionAccessor,
   type ProviderIdentityExpectation,
   type ProviderIdentityRolloverInput,
@@ -42,7 +43,7 @@ type SessionAccessor = {
   ): Promise<number>;
   rolloverProviderIdentity(id: string, input: ProviderIdentityRolloverInput): Promise<number>;
   findById(id: string): Promise<AgentSessionRecord | null>;
-  findByWorkspaceId(workspaceId: string): Promise<AgentSessionRecord[]>;
+  findByWorkspaceId(workspaceId: string): Promise<AgentSessionSummaryRecord[]>;
   update(id: string, data: SessionUpdateData): Promise<AgentSessionRecord>;
   updateIfStatus(
     id: string,
@@ -71,7 +72,7 @@ export class SessionRepository {
     return this.sessions.findById(sessionId);
   }
 
-  getSessionsByWorkspaceId(workspaceId: string): Promise<AgentSessionRecord[]> {
+  getSessionsByWorkspaceId(workspaceId: string): Promise<AgentSessionSummaryRecord[]> {
     return this.sessions.findByWorkspaceId(workspaceId);
   }
 

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { EmptyState } from '@/client/components/empty-state';
 import { QueryState } from '@/client/components/query-state';
+import { POLL_INTERVAL_MS } from '@/client/lib/query-options';
 import { trpc } from '@/client/lib/trpc';
 import { Button } from '@/components/ui/button';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
@@ -55,7 +56,7 @@ export function ScreenshotsPanel({
   const screenshotsQuery = trpc.workspace.listScreenshots.useQuery(
     { workspaceId },
     {
-      refetchInterval: isTakingScreenshots ? 3000 : 10_000,
+      refetchInterval: isTakingScreenshots ? POLL_INTERVAL_MS.capture : POLL_INTERVAL_MS.activity,
       staleTime: isTakingScreenshots ? 1000 : 5000,
     }
   );

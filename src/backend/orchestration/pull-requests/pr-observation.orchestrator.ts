@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import type { PRObservation, PRTarget } from '@/shared/pr-monitoring';
-import { shouldPollPR } from '@/shared/pr-polling';
+import { hasPRObservation, shouldPollPR } from '@/shared/pr-polling';
 import type { PRObservationPorts } from './pr-observation-ports';
 
 /** Automatic observations reuse an accepted observation for this long. */
@@ -54,7 +54,7 @@ function committedFactsAreCurrent(
       return age < STABLE_PR_POLL_INTERVAL_MS;
     }
   }
-  return !shouldPollPR(row, eventEpoch);
+  return !shouldPollPR({ ...row, hasObservation: hasPRObservation(row.observation) }, eventEpoch);
 }
 function fingerprint(observation: PRObservation): string {
   const { observedAt: _observedAt, ...facts } = observation;

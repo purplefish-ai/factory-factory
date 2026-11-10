@@ -3,6 +3,7 @@ import { Link } from 'react-router';
 import { Loading } from '@/client/components/loading';
 import { AgentRunHistoryQuery, describeAgentSchedule } from '@/client/features/agents';
 import { getProjectAgentPath, getProjectSectionPath } from '@/client/lib/project-navigation';
+import { POLL_INTERVAL_MS } from '@/client/lib/query-options';
 import { trpc } from '@/client/lib/trpc';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -90,7 +91,10 @@ function MissingAgentState({
 }
 
 export function PeriodicTaskPanel({ periodicTaskId, projectId }: PeriodicTaskPanelProps) {
-  const task = trpc.periodicTask.get.useQuery({ id: periodicTaskId }, { refetchInterval: 10_000 });
+  const task = trpc.periodicTask.get.useQuery(
+    { id: periodicTaskId },
+    { refetchInterval: POLL_INTERVAL_MS.activity }
+  );
   const ownerProjectId = task.data?.projectId ?? projectId;
   const project = trpc.project.getById.useQuery(
     { id: ownerProjectId ?? '' },

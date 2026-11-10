@@ -2,6 +2,7 @@ import { toast } from 'sonner';
 import { Loading } from '@/client/components/loading';
 import { QueryErrorState } from '@/client/components/query-error-state';
 import { runInBackground } from '@/client/lib/background-task';
+import { POLL_INTERVAL_MS } from '@/client/lib/query-options';
 import { trpc } from '@/client/lib/trpc';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
@@ -27,12 +28,12 @@ function SectionQueryError(props: React.ComponentProps<typeof QueryErrorState>) 
 
 export function SystemSettingsSection() {
   const statsQuery = trpc.admin.getSystemStats.useQuery(undefined, {
-    refetchInterval: 5000,
+    refetchInterval: POLL_INTERVAL_MS.localStatus,
   });
   const { data: stats, refetch } = statsQuery;
 
   const processesQuery = trpc.admin.getActiveProcesses.useQuery(undefined, {
-    refetchInterval: 5000,
+    refetchInterval: POLL_INTERVAL_MS.localStatus,
   });
   const { data: processes } = processesQuery;
 

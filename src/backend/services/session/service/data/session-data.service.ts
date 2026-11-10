@@ -5,6 +5,7 @@ import {
   agentSessionAccessor,
   type AgentSessionRecord as PersistenceAgentSessionRecord,
   type AgentSessionRecordWithWorkspace as PersistenceAgentSessionRecordWithWorkspace,
+  type AgentSessionSummaryRecord as PersistenceAgentSessionSummaryRecord,
 } from '@/backend/services/session/resources/agent-session.accessor';
 import {
   type ClosedSessionRecord,
@@ -23,6 +24,7 @@ import type {
   PRDedicatedSessionAcquisition,
   AgentSessionRecord,
   AgentSessionRecordWithWorkspace,
+  AgentSessionSummaryRecord,
 } from '@/backend/services/session/types';
 import type { SessionStatus } from '@/shared/core';
 import { eventSessionCreationSchema, type EventSessionCreation } from '@/shared/event-agent-launch';
@@ -33,7 +35,9 @@ import {
   type SessionProviderResolverService,
 } from './session-provider-resolver.service';
 
-function toAgentSessionRecord(session: PersistenceAgentSessionRecord): AgentSessionRecord {
+function toAgentSessionSummaryRecord(
+  session: PersistenceAgentSessionSummaryRecord
+): AgentSessionSummaryRecord {
   return {
     id: session.id,
     workspaceId: session.workspaceId,
@@ -47,10 +51,13 @@ function toAgentSessionRecord(session: PersistenceAgentSessionRecord): AgentSess
     providerSessionId: session.providerSessionId,
     providerProjectPath: session.providerProjectPath,
     providerProcessPid: session.providerProcessPid,
-    providerMetadata: session.providerMetadata,
     createdAt: session.createdAt,
     updatedAt: session.updatedAt,
   };
+}
+
+function toAgentSessionRecord(session: PersistenceAgentSessionRecord): AgentSessionRecord {
+  return { ...toAgentSessionSummaryRecord(session), providerMetadata: session.providerMetadata };
 }
 
 function toAgentSessionRecordWithWorkspace(
@@ -86,12 +93,13 @@ class SessionDataImplementation {
     return (await agentSessionAccessor.findByIds(ids)).map(toAgentSessionRecord);
   }
 
+  /** The workspace's sessions without `providerMetadata`; `findAgentSessionById` reads it. */
   async findAgentSessionsByWorkspaceId(
     workspaceId: string,
     filters?: { status?: SessionStatus; provider?: SessionProvider; limit?: number }
-  ): Promise<AgentSessionRecord[]> {
+  ): Promise<AgentSessionSummaryRecord[]> {
     return (await agentSessionAccessor.findByWorkspaceId(workspaceId, filters)).map(
-      toAgentSessionRecord
+      toAgentSessionSummaryRecord
     );
   }
 

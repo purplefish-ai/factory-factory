@@ -11,6 +11,7 @@ export function flattenPRDiscovery(row?: WorkspacePRDiscovery | null) {
 }
 
 class WorkspacePRDiscoveryAccessor {
+  /** Discovery candidates, reading only the columns the scheduler matches and claims on. */
   async findNeedingDiscovery(limit: number, dueAt: Date) {
     const rows = await prisma.workspace.findMany({
       where: {
@@ -19,7 +20,14 @@ class WorkspacePRDiscoveryAccessor {
         project: { githubOwner: { not: null }, githubRepo: { not: null } },
         prDiscovery: { OR: [{ nextCheckAt: null }, { nextCheckAt: { lte: dueAt } }] },
       },
-      include: { project: true, prDiscovery: true },
+      select: {
+        id: true,
+        branchName: true,
+        createdAt: true,
+        updatedAt: true,
+        project: { select: { githubOwner: true, githubRepo: true } },
+        prDiscovery: true,
+      },
       orderBy: [{ prDiscovery: { nextCheckAt: 'asc' } }, { updatedAt: 'desc' }],
       take: limit,
     });

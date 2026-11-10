@@ -2,6 +2,7 @@ import { type ChildProcess, execFile } from 'node:child_process';
 import { randomBytes, randomInt } from 'node:crypto';
 import { createServer as createHttpServer, type IncomingMessage } from 'node:http';
 import { join } from 'node:path';
+import type { Duplex } from 'node:stream';
 import { promisify } from 'node:util';
 import chalk from 'chalk';
 import { runMigrationsWithBackup } from '@/backend/migrate-with-backup';
@@ -25,6 +26,7 @@ import {
 } from '@/shared/proxy-utils';
 import { resolveDatabasePath } from './database-path';
 import { describeMigrationFailure, resolveUnknownMigrationPolicy } from './migration-policy';
+import { BruteForceGuard, GlobalPasswordLockout } from './proxy-brute-force';
 import { type ListeningLocalProxy, listenLocalProxy, PROXY_LOCAL_HOST } from './proxy-listen';
 import {
   PUBLIC_MODE_WARNING,
@@ -33,6 +35,7 @@ import {
   resolveProxyMode,
 } from './proxy-mode';
 import { createReadOnlyProxy } from './proxy-read-only';
+import { decideTunnelOrigin, toTunnelOrigin } from './proxy-tunnel-origin';
 import { ensureDataDir, findAvailablePort, treeKillAsync } from './runtime-utils';
 import { startFactoryFactoryServer } from './server-startup';
 import { supportsTerminalQrRendering, tryRenderTerminalQrCode } from './terminal-qr';
@@ -43,12 +46,11 @@ const execFileAsync = promisify(execFile);
 
 const PASSWORD_CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
 const PASSWORD_LENGTH = 6;
-const SESSION_COOKIE_NAME = 'ff_proxy_session';
+// `__Host-` makes browsers reject the cookie unless it is Secure, host-only and
+// Path=/, so no other host can set or shadow it.
+const SESSION_COOKIE_NAME = '__Host-ff_proxy_session';
 const LOGIN_PATH = '/__proxy_auth/login';
 const LOCAL_HOST = PROXY_LOCAL_HOST;
-const LOCKOUT_THRESHOLD_PER_IP = 5;
-const LOCKOUT_WINDOW_MS = 5 * 60 * 1000;
-const MAX_BRUTE_FORCE_TRACKED_IPS = 5000;
 
 interface RunProxyCommandParams {
   options: ProxyCommandOptions;
@@ -112,69 +114,6 @@ function getClientIp(req: IncomingMessage): string {
   }
 
   return req.socket.remoteAddress || 'unknown';
-}
-
-class BruteForceGuard {
-  private readonly attemptsByIp = new Map<
-    string,
-    { failures: number; lockedUntilMs: number; lastSeenMs: number }
-  >();
-
-  private evictStaleEntries(nowMs: number): void {
-    for (const [ip, state] of this.attemptsByIp.entries()) {
-      const lockExpired = state.lockedUntilMs <= nowMs;
-      const stale = nowMs - state.lastSeenMs > LOCKOUT_WINDOW_MS;
-      if (lockExpired && stale) {
-        this.attemptsByIp.delete(ip);
-      }
-    }
-
-    while (this.attemptsByIp.size > MAX_BRUTE_FORCE_TRACKED_IPS) {
-      const oldest = this.attemptsByIp.keys().next().value;
-      if (!oldest) {
-        break;
-      }
-      this.attemptsByIp.delete(oldest);
-    }
-  }
-
-  isLocked(ip: string, nowMs = Date.now()): { locked: boolean; retryAfterSeconds: number } {
-    this.evictStaleEntries(nowMs);
-    const state = this.attemptsByIp.get(ip);
-    if (!state || state.lockedUntilMs <= 0) {
-      return { locked: false, retryAfterSeconds: 0 };
-    }
-
-    if (state.lockedUntilMs <= nowMs) {
-      this.attemptsByIp.delete(ip);
-      return { locked: false, retryAfterSeconds: 0 };
-    }
-
-    return {
-      locked: true,
-      retryAfterSeconds: Math.max(1, Math.ceil((state.lockedUntilMs - nowMs) / 1000)),
-    };
-  }
-
-  registerFailure(ip: string, nowMs = Date.now()): { ipLocked: boolean } {
-    this.evictStaleEntries(nowMs);
-    const current = this.attemptsByIp.get(ip) ?? { failures: 0, lockedUntilMs: 0, lastSeenMs: 0 };
-    // A failure during an active lockout keeps it. Locked entries store 0 failures,
-    // so an expired lockout starts a fresh count.
-    const activeLockUntilMs = current.lockedUntilMs > nowMs ? current.lockedUntilMs : 0;
-    const nextFailures = current.failures + 1;
-    const ipLocked = activeLockUntilMs > 0 || nextFailures >= LOCKOUT_THRESHOLD_PER_IP;
-
-    // Reinsert to keep map order roughly LRU for bounded eviction.
-    this.attemptsByIp.delete(ip);
-    this.attemptsByIp.set(ip, {
-      failures: ipLocked ? 0 : nextFailures,
-      lockedUntilMs: activeLockUntilMs || (ipLocked ? nowMs + LOCKOUT_WINDOW_MS : 0),
-      lastSeenMs: nowMs,
-    });
-
-    return { ipLocked };
-  }
 }
 
 function runMigrations(projectRoot: string, databasePath: string): Promise<void> {
@@ -454,6 +393,31 @@ function writeLoginPage(res: import('node:http').ServerResponse): void {
   res.end(createLoginPage());
 }
 
+interface AuthProxyState {
+  upstreamPort: number;
+  password: string;
+  magicToken: string;
+  cookieSecret: Buffer;
+  guard: BruteForceGuard;
+  passwordLockout: GlobalPasswordLockout;
+  /** The tunnel's public origin, once cloudflared has reported it. */
+  tunnelOrigin: string | null;
+}
+
+function writeGlobalLockoutResponse(
+  res: import('node:http').ServerResponse,
+  retryAfterSeconds: number
+): void {
+  res.statusCode = 429;
+  res.setHeader('Retry-After', String(retryAfterSeconds));
+  res.setHeader('Content-Type', 'text/html; charset=utf-8');
+  res.end(
+    createLoginPage(
+      `Too many failed sign-in attempts. Try again in ${retryAfterSeconds} seconds, or use the direct link.`
+    )
+  );
+}
+
 function registerFailureAndRespond(params: {
   guard: BruteForceGuard;
   ip: string;
@@ -478,11 +442,10 @@ function registerFailureAndRespond(params: {
 async function handleLoginSubmission(params: {
   req: IncomingMessage;
   res: import('node:http').ServerResponse;
-  guard: BruteForceGuard;
+  state: AuthProxyState;
   ip: string;
-  password: string;
-  cookieSecret: Buffer;
 }): Promise<'handled'> {
+  const { state } = params;
   let submittedPassword = '';
   try {
     const body = await readRequestBody(params.req);
@@ -492,41 +455,51 @@ async function handleLoginSubmission(params: {
     submittedPassword = '';
   }
 
-  // Already-locked IPs get 429 before the body is read; check again because concurrent
-  // attempts from this IP may have triggered the lockout while this body was read.
-  const lockState = params.guard.isLocked(params.ip);
+  // Locked clients get 429 before the body is read; check again because concurrent
+  // attempts may have triggered a lockout while this body was read. No await
+  // separates these checks from the comparison and the failure it records, so
+  // the global limit is exact.
+  const lockState = state.guard.isLocked(params.ip);
   if (lockState.locked) {
     writeRateLimitResponse(params.res, lockState.retryAfterSeconds);
     return 'handled';
   }
+  const globalRetryAfter = state.passwordLockout.retryAfterSeconds();
+  if (globalRetryAfter > 0) {
+    writeGlobalLockoutResponse(params.res, globalRetryAfter);
+    return 'handled';
+  }
 
-  if (submittedPassword && matchesPassword(submittedPassword, params.password)) {
-    setSessionCookie(params.res, params.cookieSecret);
+  if (submittedPassword && matchesPassword(submittedPassword, state.password)) {
+    setSessionCookie(params.res, state.cookieSecret);
     params.res.statusCode = 302;
     params.res.setHeader('Location', '/');
     params.res.end();
     return 'handled';
   }
 
+  state.passwordLockout.registerFailure();
   return registerFailureAndRespond({
-    guard: params.guard,
+    guard: state.guard,
     ip: params.ip,
     res: params.res,
     message: 'Invalid password. Please try again.',
   });
 }
 
+/** The backend's own loopback origin; it accepts this as a same-origin request. */
+function getBackendOrigin(state: AuthProxyState): string {
+  return `http://localhost:${state.upstreamPort}`;
+}
+
 async function handleAuthHttpRequest(params: {
   req: IncomingMessage;
   res: import('node:http').ServerResponse;
-  upstreamPort: number;
-  password: string;
-  magicToken: string;
-  cookieSecret: Buffer;
-  guard: BruteForceGuard;
+  state: AuthProxyState;
 }): Promise<void> {
+  const { state } = params;
   const ip = getClientIp(params.req);
-  const lockState = params.guard.isLocked(ip);
+  const lockState = state.guard.isLocked(ip);
   const isLoginPath = params.req.url?.startsWith(LOGIN_PATH) ?? false;
   const isLoginSubmission = params.req.method === 'POST' && isLoginPath;
 
@@ -537,26 +510,24 @@ async function handleAuthHttpRequest(params: {
 
   const auth = authenticateRequest({
     req: params.req,
-    cookieSecret: params.cookieSecret,
-    magicToken: params.magicToken,
+    cookieSecret: state.cookieSecret,
+    magicToken: state.magicToken,
   });
 
   if (isLoginSubmission) {
-    await handleLoginSubmission({
-      req: params.req,
-      res: params.res,
-      guard: params.guard,
-      ip,
-      password: params.password,
-      cookieSecret: params.cookieSecret,
-    });
+    const globalRetryAfter = state.passwordLockout.retryAfterSeconds();
+    if (globalRetryAfter > 0) {
+      writeGlobalLockoutResponse(params.res, globalRetryAfter);
+      return;
+    }
+    await handleLoginSubmission({ req: params.req, res: params.res, state, ip });
     return;
   }
 
   if (!auth.authenticated) {
     if (auth.invalidToken) {
       registerFailureAndRespond({
-        guard: params.guard,
+        guard: state.guard,
         ip,
         res: params.res,
         message: 'Invalid token. Please use the shared link again.',
@@ -568,38 +539,128 @@ async function handleAuthHttpRequest(params: {
     return;
   }
 
+  const origin = decideTunnelOrigin({
+    method: params.req.method,
+    origin: params.req.headers.origin,
+    isUpgrade: false,
+    tunnelOrigin: state.tunnelOrigin,
+    backendOrigin: getBackendOrigin(state),
+  });
+  if (!origin.allowed) {
+    params.res.statusCode = origin.status;
+    params.res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+    params.res.setHeader('Cache-Control', 'no-store');
+    params.res.setHeader('Connection', 'close');
+    params.res.end(origin.message);
+    return;
+  }
+
   if (auth.viaToken) {
-    setSessionCookie(params.res, params.cookieSecret);
+    setSessionCookie(params.res, state.cookieSecret);
   }
 
   proxyAuthenticatedHttpRequest({
     req: params.req,
     res: params.res,
-    upstreamPort: params.upstreamPort,
+    upstreamPort: state.upstreamPort,
     path: auth.sanitizedPath,
     sessionCookieName: SESSION_COOKIE_NAME,
     localHost: LOCAL_HOST,
+    upstreamOrigin: origin.upstreamOrigin,
   });
 }
 
-function createAuthProxy(params: {
+const UPGRADE_STATUS_TEXT = {
+  401: 'Unauthorized',
+  403: 'Forbidden',
+  429: 'Too Many Requests',
+  503: 'Service Unavailable',
+} as const;
+
+function rejectUpgrade(socket: Duplex, status: keyof typeof UPGRADE_STATUS_TEXT): void {
+  socket.end(
+    `HTTP/1.1 ${status} ${UPGRADE_STATUS_TEXT[status]}\r\nConnection: close\r\nContent-Length: 0\r\n\r\n`
+  );
+  socket.destroy();
+}
+
+function handleAuthUpgrade(
+  state: AuthProxyState,
+  req: IncomingMessage,
+  socket: Duplex,
+  head: Buffer
+): void {
+  const ip = getClientIp(req);
+  if (state.guard.isLocked(ip).locked) {
+    rejectUpgrade(socket, 429);
+    return;
+  }
+
+  const auth = authenticateRequest({
+    req,
+    cookieSecret: state.cookieSecret,
+    magicToken: state.magicToken,
+  });
+  if (!auth.authenticated) {
+    if (auth.invalidToken) {
+      state.guard.registerFailure(ip);
+    }
+    rejectUpgrade(socket, 401);
+    return;
+  }
+
+  const origin = decideTunnelOrigin({
+    method: req.method,
+    origin: req.headers.origin,
+    isUpgrade: true,
+    tunnelOrigin: state.tunnelOrigin,
+    backendOrigin: getBackendOrigin(state),
+  });
+  if (!origin.allowed) {
+    rejectUpgrade(socket, origin.status);
+    return;
+  }
+
+  proxyAuthenticatedWebSocketUpgrade({
+    req,
+    socket,
+    head,
+    upstreamPort: state.upstreamPort,
+    sanitizedPath: auth.sanitizedPath,
+    sessionCookieName: SESSION_COOKIE_NAME,
+    localHost: LOCAL_HOST,
+    upstreamOrigin: origin.upstreamOrigin,
+  });
+}
+
+interface AuthProxy extends ListeningLocalProxy {
+  /** Records the URL cloudflared printed; requests carrying an Origin must match it. */
+  setTunnelUrl: (publicUrl: string) => void;
+}
+
+/**
+ * The proxy behind a password-protected tunnel. It authenticates every request
+ * (signed session cookie or the direct-link token), lets only the tunnel's own
+ * origin change state or open WebSockets, and forwards those to the backend as
+ * same-origin requests without client-address headers.
+ */
+async function createAuthProxy(params: {
   upstreamPort: number;
   password: string;
   magicToken: string;
-}): Promise<ListeningLocalProxy> {
-  const bruteForceGuard = new BruteForceGuard();
-  const cookieSecret = randomBytes(32);
+}): Promise<AuthProxy> {
+  const state: AuthProxyState = {
+    upstreamPort: params.upstreamPort,
+    password: params.password,
+    magicToken: params.magicToken,
+    cookieSecret: randomBytes(32),
+    guard: new BruteForceGuard(),
+    passwordLockout: new GlobalPasswordLockout(),
+    tunnelOrigin: null,
+  };
 
   const server = createHttpServer((req, res) => {
-    void handleAuthHttpRequest({
-      req,
-      res,
-      upstreamPort: params.upstreamPort,
-      password: params.password,
-      magicToken: params.magicToken,
-      cookieSecret,
-      guard: bruteForceGuard,
-    }).catch((error) => {
+    void handleAuthHttpRequest({ req, res, state }).catch((error) => {
       process.stderr.write(chalk.red(`  [proxy] ${(error as Error).message}\n`));
       if (!res.headersSent) {
         res.statusCode = 500;
@@ -609,42 +670,16 @@ function createAuthProxy(params: {
   });
 
   server.on('upgrade', (req, socket, head) => {
-    const ip = getClientIp(req);
-    const lockState = bruteForceGuard.isLocked(ip);
-
-    if (lockState.locked) {
-      socket.write('HTTP/1.1 429 Too Many Requests\r\nConnection: close\r\n\r\n');
-      socket.destroy();
-      return;
-    }
-
-    const auth = authenticateRequest({
-      req,
-      cookieSecret,
-      magicToken: params.magicToken,
-    });
-
-    if (!auth.authenticated) {
-      if (auth.invalidToken) {
-        bruteForceGuard.registerFailure(ip);
-      }
-      socket.write('HTTP/1.1 401 Unauthorized\r\nConnection: close\r\n\r\n');
-      socket.destroy();
-      return;
-    }
-
-    proxyAuthenticatedWebSocketUpgrade({
-      req,
-      socket,
-      head,
-      upstreamPort: params.upstreamPort,
-      sanitizedPath: auth.sanitizedPath,
-      sessionCookieName: SESSION_COOKIE_NAME,
-      localHost: LOCAL_HOST,
-    });
+    handleAuthUpgrade(state, req, socket, head);
   });
 
-  return listenLocalProxy(server);
+  const listening = await listenLocalProxy(server);
+  return {
+    ...listening,
+    setTunnelUrl: (publicUrl) => {
+      state.tunnelOrigin = toTunnelOrigin(publicUrl);
+    },
+  };
 }
 
 function createExitPromise(
@@ -784,15 +819,18 @@ export async function runProxyCommand({
 
   // cloudflared always targets a local proxy, never the backend directly.
   let localProxy: ListeningLocalProxy;
+  let setTunnelUrl: ((publicUrl: string) => void) | null = null;
   try {
     if (usePrivateMode) {
       password = generatePassword();
       directToken = generateMagicToken();
-      localProxy = await createAuthProxy({
+      const authProxy = await createAuthProxy({
         upstreamPort: backend.port,
         password,
         magicToken: directToken,
       });
+      localProxy = authProxy;
+      setTunnelUrl = authProxy.setTunnelUrl;
     } else {
       localProxy = await createReadOnlyProxy({ upstreamPort: backend.port });
     }
@@ -817,6 +855,12 @@ export async function runProxyCommand({
   }
 
   processes.push({ name: 'cloudflared', proc: tunnel.proc });
+  try {
+    setTunnelUrl?.(tunnel.publicUrl);
+  } catch (error) {
+    await shutdown(1, `❌ ${(error as Error).message}`);
+    return;
+  }
 
   if (usePrivateMode && password && directToken) {
     const directLink = `${tunnel.publicUrl}?token=${directToken}`;

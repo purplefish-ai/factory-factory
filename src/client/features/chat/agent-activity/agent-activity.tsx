@@ -1,6 +1,7 @@
 import { SteeringWheelIcon } from '@phosphor-icons/react/dist/csr/SteeringWheel';
 import { XIcon } from '@phosphor-icons/react/dist/csr/X';
 import { memo } from 'react';
+import { ErrorBoundary } from '@/client/error-boundary';
 import { AttachmentPreview } from '@/client/features/composer';
 import type { ChatMessage, GroupedMessageItem } from '@/lib/chat-protocol';
 import { isToolSequence } from '@/lib/chat-protocol';
@@ -270,9 +271,27 @@ export interface GroupedMessageItemRendererProps {
 }
 
 /**
- * Renders either a regular message or a tool sequence group.
+ * Renders either a regular message or a tool sequence group. A row that fails
+ * to render shows a compact error in its place; replaying the same transcript
+ * would otherwise crash the whole page again. The boundary retries when the
+ * row's item changes, e.g. as a streamed message grows.
  */
-export const GroupedMessageItemRenderer = memo(function GroupedMessageItemRenderer({
+export const GroupedMessageItemRenderer = memo(function GroupedMessageItemRenderer(
+  props: GroupedMessageItemRendererProps
+) {
+  return (
+    <ErrorBoundary
+      variant="compact"
+      title="Couldn't render this message"
+      resetKey={props.item}
+      className="h-auto py-3"
+    >
+      <GroupedMessageItemContent {...props} />
+    </ErrorBoundary>
+  );
+});
+
+function GroupedMessageItemContent({
   item,
   isQueued,
   onRemove,
@@ -284,7 +303,6 @@ export const GroupedMessageItemRenderer = memo(function GroupedMessageItemRender
   onOpenSubagent,
   getToolExpansionState,
   setToolExpansionState,
-  toolExpansionToken: _toolExpansionToken,
 }: GroupedMessageItemRendererProps) {
   if (isToolSequence(item)) {
     const sequenceDefaultOpen = false;
@@ -328,4 +346,4 @@ export const GroupedMessageItemRenderer = memo(function GroupedMessageItemRender
       onWorkspaceFileLink={onWorkspaceFileLink}
     />
   );
-});
+}

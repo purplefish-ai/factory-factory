@@ -23,7 +23,7 @@ import type { WorkspaceSnapshotEntry } from '@/shared/workspace-snapshot';
  * responses with the snapshot stream. A plain tRPC `useQuery`, `fetch` or
  * `setData` on one of these keys would therefore commit HTTP data without the
  * reconciler and leave it uninstalled for later refetches. Every reader here
- * installs the reconciler; `factory/workspace-query-owner` keeps callers on
+ * installs the reconciler; `factory/query-owner` keeps callers on
  * this module (see docs/architecture/workspace-state.md).
  */
 

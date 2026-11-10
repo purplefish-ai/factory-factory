@@ -84,6 +84,21 @@ describe('ChatInput file controls', () => {
   });
 });
 
+it.each([false, true])('keeps the message field named while connecting (%s)', (disabled) => {
+  const container = document.createElement('div');
+  const root = createRoot(container);
+  try {
+    flushSync(() => root.render(<ChatInput onSend={vi.fn()} disabled={disabled} />));
+    const textarea = container.querySelector('textarea');
+    expect(textarea?.getAttribute('aria-label')).toBe('Message');
+    expect(textarea?.getAttribute('placeholder')).toBe(
+      disabled ? 'Connecting…' : 'Type a message…'
+    );
+  } finally {
+    flushSync(() => root.unmount());
+  }
+});
+
 it.each([
   { promptInFlight: false, label: 'Send message' },
   { promptInFlight: true, label: 'Queue message' },

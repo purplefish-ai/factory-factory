@@ -63,7 +63,7 @@ it('loads issue metadata only when focused and keeps normal link navigation', as
   expect(document.body.textContent).not.toContain('files');
   expect(useQuery).toHaveBeenCalledWith(
     { repo: 'owner/repo', number: 42 },
-    expect.objectContaining({ staleTime: 60_000, retry: false, refetchOnWindowFocus: false })
+    expect.objectContaining({ staleTime: 60_000, retry: false })
   );
   await act(() =>
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))

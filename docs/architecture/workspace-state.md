@@ -246,10 +246,11 @@ selects separate child and periodic-task policies, described in
 [integrations](integrations.md#periodic-tasks).
 
 Setup failures retain the workspace and its original instructions and
-attachments. The board shows **Setup failed** in Waiting, and the workspace
-exposes **Retry setup** even when no chat session exists. Retrying uses the same
-workspace. A creation response preserves an existing live summary rather than
-replacing a newer setup failure with a synthetic Setting up state.
+attachments until it is archived. The board shows **Setup failed** in Waiting,
+and the workspace exposes **Retry setup** even when no chat session exists.
+Retrying uses the same workspace. A creation response preserves an existing live
+summary rather than replacing a newer setup failure with a synthetic Setting up
+state.
 
 ## Accepted workspace names
 
@@ -374,6 +375,14 @@ closed. Ordinary WAL writers can commit while export reads its consistent
 snapshot. The snapshot has a 120-second transaction budget and a 5-second busy
 wait. Account exports include identity metadata only, excluding credentials and
 homes.
+
+Export copies `creationMetadata` and `initOutput` as stored. Archive normally
+removes `initialAttachments` and all but a failed setup's log tail (see the
+archive flow under the Kanban model), so an ARCHIVED workspace usually exports
+without them. A row whose release failed, or that predates it and the
+`archived-workspace-blob-retention` job has not reached yet, still exports both.
+Imports still accept older backups whose archived rows carry them; the job
+releases those rows after import.
 
 Backup export and import map columns by hand.
 `src/backend/orchestration/data-backup/data-backup-columns.test.ts` lists every
@@ -504,17 +513,17 @@ instead: `resetWorkspaceDetail`, `invalidateWorkspaceDetail`,
 still carry their key for `useQuery`; never pass it to a raw QueryClient fetch
 or write.
 
-The `factory/workspace-query-owner` lint rule rejects tRPC `useQuery`, `fetch`,
+The `factory/query-owner` lint rule rejects tRPC `useQuery`, `fetch`,
 `ensureData`, `prefetch`, `setData` and related helpers, plus `getQueryKey`, for
-either procedure outside the module and the reconciler (its `owners` option in
-`.oxlintrc.json`); tests are exempt. The reconciler relies on three React Query
-behaviours. First, it calls a function `structuralSharing` synchronously at the
-commit. Second, a thrown `CancelledError({ revert: true })` commits nothing and
-sets no error state: a refetch resolves with the previous data, while an initial
-fetch rejects and stays `pending`. Third, the latest fetch or observer of a key
-installs the options that later option-less refetches and writes use.
-`query-core-commit-contract.test.ts` pins each case so a React Query upgrade
-fails loudly instead of disabling reconciliation.
+either procedure outside the module and the reconciler (the `owners` of its
+workspace group in `.oxlintrc.json`); tests are exempt. The reconciler relies on
+three React Query behaviours. First, it calls a function `structuralSharing`
+synchronously at the commit. Second, a thrown `CancelledError({ revert: true })`
+commits nothing and sets no error state: a refetch resolves with the previous
+data, while an initial fetch rejects and stays `pending`. Third, the latest
+fetch or observer of a key installs the options that later option-less refetches
+and writes use. `query-core-commit-contract.test.ts` pins each case so a React
+Query upgrade fails loudly instead of disabling reconciliation.
 
 Reconciliation ownership is scoped to the QueryClient, project, and connection
 lifetime. Disconnecting or leaving a project retires that token, cancels its
@@ -588,6 +597,19 @@ or delete; a sweep that fails partway may already have stopped some processes
 and left others running. Workspaces archived before this sweep existed keep
 their leftover processes until they exit or are stopped by hand.
 
+Once a workspace is durably ARCHIVED, archive releases data that only Retry
+setup needed. `initialAttachments` is removed from `creationMetadata`; the
+initial prompt and every other key stay, and SQL NULL stays NULL. `initOutput`
+keeps a 4,096-character tail, marked as truncated, when `initErrorMessage` is
+set (a failed or warned setup) and is cleared otherwise. The rewrite runs in SQL
+and re-checks ARCHIVED, so an ARCHIVING workspace, which can roll back, keeps
+everything; it leaves `updatedAt` alone. A failed release is logged and does not
+affect the archive. The `archived-workspace-blob-retention` job
+([background jobs](background-jobs.md#archived-workspace-data)) releases rows
+archived before this existed, rows a failed release missed and archived rows
+restored from older backups ([backup export](#backup-export)). The Setup logs
+tab says the log is not kept for an archived workspace, and labels a kept tail.
+
 Startup archive recovery runs in the background after essential session and
 workspace state repairs. Slow Git worktree cleanup does not delay HTTP/WebSocket
 readiness or the CLI startup signal; affected workspaces remain ARCHIVING until
@@ -642,7 +664,7 @@ hydrate omitted metadata through the shared detail options.
 
 SQLite reads run synchronously on the main event loop, so hot workspace reads
 leave out the large columns: `initOutput`, `creationMetadata` (base64
-`initialAttachments` stay stored there after init), agent-session
+`initialAttachments` stay stored there until archive), agent-session
 `providerMetadata`, and the PR `observation`. `findById`, the project list
 (`findByProjectIdWithSessions`) and the 60-second snapshot reconciliation read
 (`findAllNonArchivedWithSessionsAndProject`) omit them, and their return types
@@ -650,6 +672,20 @@ do too. Callers that need a blob use a named finder: `findInitStatus` for the
 startup log, `findInitialMessageContext` for the first-message prompt and
 attachments, `findMetadataContext` for auto-generated name provenance, and the
 session and PR capsules' own reads for provider metadata and observations.
+
+Polled and per-message reads follow the same rule. Project reads
+(`project.getById`/`getBySlug`, and the 30- and 60-second review and issue
+polls) load the project row without workspaces. Session reads join only the
+workspace's `status`, `worktreePath` and `initErrorMessage`; terminal session
+reads join the workspace without its blobs. Workspace session lists
+(`session.listSessions`, the event collector) leave out `providerMetadata`;
+`findAgentSessionById` still returns it. The child-workspace panel, the PR
+watcher's monitoring list and both PR scheduler candidate reads select no blob
+columns. The Prisma client has no client-level default `omit`:
+`Prisma.TransactionClient` does not carry one, so functions that take a
+transaction client, the backup export among them, would be typed as returning
+columns that were never loaded. Narrow each read with `select` or `omit`
+instead.
 
 `workspace.get` reads `findDetailById`, which adds the `initialPrompt` for the
 details dialog to that narrow row. Polled git, file and init-status reads use

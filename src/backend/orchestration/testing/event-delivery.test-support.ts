@@ -1,6 +1,10 @@
 import { vi } from 'vitest';
 import { createLogger } from '@/backend/services/logger.service';
-import type { IntegrationDatabase } from '@/backend/testing/integration-db';
+import {
+  createIntegrationDatabase,
+  destroyIntegrationDatabase,
+  type IntegrationDatabase,
+} from '@/backend/testing/integration-db';
 import { agentEvaluationSnapshotSchema, agentEventPayloadSchema } from '@/shared/agent-runtime';
 import type { EventAgentExecution } from '@/shared/event-agent-launch';
 
@@ -73,12 +77,8 @@ export function boundary() {
   };
 }
 
-/** Shared source identity and execution settings for both admission fixture boundaries. */
-async function createEventSeed(
-  db: IntegrationDatabase,
-  provider: 'CLAUDE' | 'CODEX',
-  admission: 'source' | 'persisted'
-) {
+/** Application modules the event fixtures compose (about 570 modules). */
+async function importEventFixtureModules() {
   const owner = await vi.importActual<typeof import('@/backend/services/agent-definition')>(
     '@/backend/services/agent-definition'
   );
@@ -88,6 +88,52 @@ async function createEventSeed(
   const session = await vi.importActual<typeof import('@/backend/services/session')>(
     '@/backend/services/session'
   );
+  const { captureWorkspaceRunResults } = await vi.importActual<
+    typeof import('@/backend/orchestration/workspace-lifecycle/workspace-deletion.orchestrator')
+  >('@/backend/orchestration/workspace-lifecycle/workspace-deletion.orchestrator');
+  return { owner, workspace, session, captureWorkspaceRunResults };
+}
+
+/**
+ * A worker's first load of the fixture graph fetches every module from the
+ * Vitest server and takes seconds, far longer under CPU load; reloading it after
+ * `vi.resetModules()` takes tens of milliseconds. Suites that build a fixture
+ * per test can call this from `beforeAll` so the first test's hook does not
+ * pay it. Loading binds the database module, so a throwaway integration
+ * database keeps it away from the default one; any database the suite had
+ * already bound is restored afterwards.
+ */
+export async function preloadEventFixtureModules() {
+  const previousPrisma = globalThis.prismaGlobal;
+  const previousEnvironment = {
+    DATABASE_PATH: process.env.DATABASE_PATH,
+    BASE_DIR: process.env.BASE_DIR,
+  };
+  const preload = await createIntegrationDatabase();
+  try {
+    await importEventFixtureModules();
+  } finally {
+    await destroyIntegrationDatabase(preload);
+    globalThis.prismaGlobal = previousPrisma;
+    for (const [key, value] of Object.entries(previousEnvironment)) {
+      if (value === undefined) {
+        Reflect.deleteProperty(process.env, key);
+      } else {
+        process.env[key] = value;
+      }
+    }
+    // Later imports rebind to the restored database; the fetched modules stay cached.
+    vi.resetModules();
+  }
+}
+
+/** Shared source identity and execution settings for both admission fixture boundaries. */
+async function createEventSeed(
+  db: IntegrationDatabase,
+  provider: 'CLAUDE' | 'CODEX',
+  admission: 'source' | 'persisted'
+) {
+  const { owner, workspace, session } = await importEventFixtureModules();
   const execution: EventAgentExecution =
     provider === 'CLAUDE'
       ? {
@@ -321,9 +367,7 @@ export async function createEventAdmissionFixture(
   provider: 'CLAUDE' | 'CODEX' = 'CLAUDE'
 ) {
   const seed = await createQueuedEventSeed(db, provider);
-  const { captureWorkspaceRunResults } = await vi.importActual<
-    typeof import('@/backend/orchestration/workspace-lifecycle/workspace-deletion.orchestrator')
-  >('@/backend/orchestration/workspace-lifecycle/workspace-deletion.orchestrator');
+  const { captureWorkspaceRunResults } = await importEventFixtureModules();
   seed.workspace.workspaceDataService.configureDeletionCapture(captureWorkspaceRunResults);
   return seed;
 }

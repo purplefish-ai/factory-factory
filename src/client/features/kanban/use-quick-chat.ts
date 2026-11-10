@@ -19,7 +19,7 @@ export function useQuickChat(workspaceId: string | null, workspaceProvider?: 'CL
     isFetching: isFetchingSessions,
   } = trpc.session.listSessions.useQuery(
     { workspaceId: workspaceId ?? '' },
-    { enabled: !!workspaceId, staleTime: 0, refetchOnWindowFocus: false }
+    { enabled: !!workspaceId, staleTime: 0 }
   );
 
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);

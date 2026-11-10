@@ -11,9 +11,24 @@ import {
 let db: IntegrationDatabase;
 let runtime: typeof import('../index');
 let fixture: Awaited<ReturnType<typeof createLedgerFixture>>;
+let userSettingsService: typeof import('@/backend/services/settings').userSettingsService;
+let createSessionProviderResolverService: typeof import('@/backend/services/session').createSessionProviderResolverService;
+let resolveAgentExecutionConfig: typeof import('@/backend/orchestration/agents/agent-runtime.orchestrator').resolveAgentExecutionConfig;
+// The session barrel and agent runtime orchestrator pull in the session and
+// workspace graph: seconds of one-off module loading, far more under CPU load.
+// Load it once here rather than in a test's 5s budget.
 beforeAll(async () => {
   db = await createIntegrationDatabase();
   runtime = await vi.importActual('../index');
+  ({ userSettingsService } = await vi.importActual<typeof import('@/backend/services/settings')>(
+    '@/backend/services/settings'
+  ));
+  ({ createSessionProviderResolverService } = await vi.importActual<
+    typeof import('@/backend/services/session')
+  >('@/backend/services/session'));
+  ({ resolveAgentExecutionConfig } = await vi.importActual<
+    typeof import('@/backend/orchestration/agents/agent-runtime.orchestrator')
+  >('@/backend/orchestration/agents/agent-runtime.orchestrator'));
 }, 30_000);
 afterAll(async () => {
   await destroyIntegrationDatabase(db);
@@ -213,15 +228,6 @@ it.each(['pause', 'revision'] as const)(
   }
 );
 it('resolves provider-specific saved defaults and preserves explicit execution overrides', async () => {
-  const { userSettingsService } = await vi.importActual<
-    typeof import('@/backend/services/settings')
-  >('@/backend/services/settings');
-  const { createSessionProviderResolverService } = await vi.importActual<
-    typeof import('@/backend/services/session')
-  >('@/backend/services/session');
-  const { resolveAgentExecutionConfig } = await vi.importActual<
-    typeof import('@/backend/orchestration/agents/agent-runtime.orchestrator')
-  >('@/backend/orchestration/agents/agent-runtime.orchestrator');
   await userSettingsService.update({
     defaultSessionProvider: 'CODEX',
     defaultClaudeModel: 'opus',
