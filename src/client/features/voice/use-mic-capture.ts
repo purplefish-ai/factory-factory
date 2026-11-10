@@ -1,4 +1,5 @@
 import { useCallback, useRef, useState } from 'react';
+import { useLatestRef, useStableCallback } from '@/client/hooks/use-stable-callback';
 import { trpc } from '@/client/lib/trpc';
 import {
   DEFAULT_VOICE_BARGE_IN_SUSTAINED_MS,
@@ -486,6 +487,8 @@ export interface UseMicCaptureOptions {
   utteranceEndMs?: number;
   /** Admin "barge-in sensitivity" setting: sustained loud-frame duration (ms) before barge-in triggers. */
   bargeInSustainedMs?: number;
+  /** Called with each capture failure as `error` is set: a failed start or a lost connection. */
+  onError?: (message: string) => void;
 }
 
 export interface UseMicCaptureResult {
@@ -513,10 +516,15 @@ export function useMicCapture({
   onSpeechEnded,
   utteranceEndMs = DEFAULT_VOICE_UTTERANCE_END_MS,
   bargeInSustainedMs = DEFAULT_VOICE_BARGE_IN_SUSTAINED_MS,
+  onError,
 }: UseMicCaptureOptions): UseMicCaptureResult {
   const [isCapturing, setIsCapturing] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const reportError = useStableCallback((message: string) => {
+    setError(message);
+    onError?.(message);
+  });
   const mintGrantToken = trpc.voice.mintGrantToken.useMutation({ meta: { errorToast: false } });
 
   const audioContextRef = useRef<AudioContext | null>(null);
@@ -527,8 +535,7 @@ export function useMicCapture({
   const speechDetectorRef = useRef<SpeechActivityDetector | null>(null);
   // Read fresh each call without forcing start()/cleanup() to re-run —
   // `running` flips mid-capture as the agent turn starts and finishes.
-  const runningRef = useRef(running ?? false);
-  runningRef.current = running ?? false;
+  const runningRef = useLatestRef(running ?? false);
 
   // Bumped by stop() and by every start() call. A start() attempt checks
   // this after each await; if it no longer matches the generation it was
@@ -573,7 +580,7 @@ export function useMicCapture({
         onSpeechEnded,
         socketRef,
         cleanup,
-        setError,
+        setError: reportError,
         utteranceEndMs,
         bargeInSustainedMs,
       });
@@ -591,7 +598,7 @@ export function useMicCapture({
       setIsCapturing(true);
     } catch (err) {
       if (!isStale()) {
-        setError(err instanceof Error ? err.message : "Couldn't start voice capture");
+        reportError(err instanceof Error ? err.message : "Couldn't start voice capture");
       }
     } finally {
       if (!isStale()) {

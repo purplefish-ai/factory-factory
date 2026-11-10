@@ -1,8 +1,8 @@
 import { ChatsCircleIcon } from '@phosphor-icons/react/dist/csr/ChatsCircle';
-import { useEffect, useRef } from 'react';
 import { EmptyState } from '@/client/components/empty-state';
 import { QueryState } from '@/client/components/query-state';
 import { GroupedMessageItemRenderer } from '@/client/features/chat';
+import { useFollowOutput } from '@/client/hooks/use-follow-output';
 import { trpc } from '@/client/lib/trpc';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { parseClosedSessionReadTranscript } from '@/shared/acp-protocol/protocol/closed-session-transcript-schema';
@@ -13,22 +13,11 @@ interface ClosedSessionTranscriptViewProps {
 }
 
 export function ClosedSessionTranscriptView({ sessionId }: ClosedSessionTranscriptViewProps) {
-  const scrollAreaRef = useRef<HTMLDivElement>(null);
+  const followOutputRef = useFollowOutput();
   const transcriptQuery = trpc.closedSessions.getTranscriptJson.useQuery(
     { id: sessionId },
     { select: parseClosedSessionReadTranscript, structuralSharing: false }
   );
-  const transcript = transcriptQuery.data;
-
-  // Auto-scroll to bottom when transcript loads
-  useEffect(() => {
-    if (transcript && scrollAreaRef.current) {
-      const viewport = scrollAreaRef.current.querySelector('[data-radix-scroll-area-viewport]');
-      if (viewport) {
-        viewport.scrollTop = viewport.scrollHeight;
-      }
-    }
-  }, [transcript]);
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -55,7 +44,7 @@ export function ClosedSessionTranscriptView({ sessionId }: ClosedSessionTranscri
         }
       >
         {(data) => (
-          <ScrollArea ref={scrollAreaRef} className="min-h-0 flex-1">
+          <ScrollArea key={sessionId} viewportRef={followOutputRef} className="min-h-0 flex-1">
             <div className="p-4 space-y-4">
               {projectClosedSessionTranscriptRows(data.messages).map(({ item, key }) =>
                 item.kind === 'rich' ? (

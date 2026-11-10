@@ -34,6 +34,9 @@ const rules = [
   'query-error-handled',
   'no-arbitrary-font-size',
   'use-status-callout',
+  'no-forward-ref',
+  'no-render-ref-write',
+  'no-state-sync-effect',
 ];
 const workspaceQueryOwner = 'owned/workspace-queries.ts';
 const userSettingsOwner = 'owned/user-settings-queries.ts';
@@ -223,6 +226,45 @@ describe('Oxlint project guardrails', () => {
     ],
     ['use-status-callout', 'const className = "dark:bg-info/10 dark:border-info/30 px-2";'],
     ['use-status-callout', 'const meta = { className: "text-info border-info bg-info/10" };'],
+    ['no-forward-ref', 'const Item = forwardRef(function Item(props, ref) { return null; });'],
+    ['no-forward-ref', 'const Item = React.forwardRef((props, ref) => null);'],
+    [
+      'no-render-ref-write',
+      'function Panel() { const ref = useRef(0); ref.current = 1; return null; }',
+    ],
+    [
+      'no-render-ref-write',
+      'function useLatest(value) { const latest = useRef(value); latest.current = value; return latest; }',
+    ],
+    [
+      'no-render-ref-write',
+      'const Row = memo(function Row() { const renders = useRef(0); renders.current++; return null; });',
+    ],
+    [
+      'no-render-ref-write',
+      'const usePrevious = (value) => { const previous = useRef(value); if (previous.current !== value) { previous.current = value; } };',
+    ],
+    [
+      'no-state-sync-effect',
+      'function Panel({ id }) { const [tab, setTab] = useState("info"); useEffect(() => { setTab("info"); }, [id]); return null; }',
+    ],
+    [
+      'no-state-sync-effect',
+      'useEffect(() => { if (!open) { return; } setIndex(0); setCount((count) => count + 1); }, [open]);',
+    ],
+    [
+      'no-render-ref-write',
+      'function Panel() { const last = useRef(null); last.current ||= value; return null; }',
+    ],
+    [
+      'no-render-ref-write',
+      'function Panel() { const last = useRef(null); if (last.current === null) { init(); } else { last.current = value; } return null; }',
+    ],
+    [
+      'no-render-ref-write',
+      'function useRows(rows) { const seen = useRef(0); return useMemo(() => { seen.current = rows.length; return rows; }, [rows]); }',
+    ],
+    ['no-state-sync-effect', 'React.useLayoutEffect(() => setSelected(items[0]), [items]);'],
   ];
   const rejectedFixtures = rejectedSources.map(([rule, source], index) => ({
     rule,
@@ -314,6 +356,19 @@ describe('Oxlint project guardrails', () => {
     'const className = "border-running-accent/70 dark:border-running/40";',
     'const className = "border-transparent bg-success-accent/15 text-success dark:bg-success/10";',
     'const className = "bg-primary/10 border-primary/15";',
+    'function Item({ ref }) { return <button ref={ref} />; }',
+    'function Panel() { const cache = useRef(null); if (cache.current === null) { cache.current = new Map(); } return null; }',
+    'function Panel() { const cache = useRef(null); cache.current ??= new Map(); return null; }',
+    'function Panel() { const count = useRef(0); useEffect(() => { count.current = 1; }); const onClick = () => { count.current += 1; }; return null; }',
+    'function resetScope(scope) { scope.current = null; }',
+    'useEffect(() => { setWidth(container.current.offsetWidth); }, [items]);',
+    'useEffect(() => { setReady(true); }, []);',
+    'useEffect(() => { const timer = setTimeout(() => setValue(next), 300); return () => clearTimeout(timer); }, [next]);',
+    'useEffect(() => { toast.error(error); setOpen(false); }, [error]);',
+    'useEffect(() => { setValue(readStoredValue(key)); }, [key]);',
+    'useEffect(() => { if (!enabled) { return; } }, [enabled]);',
+    'useEffect(() => { setTimeout(flush, delay); }, [delay]);',
+    'function useRows(rows) { const seen = useRef(0); const onClick = useCallback(() => { seen.current = rows.length; }, [rows]); return onClick; }',
   ]
     .map((source, index) => ({ source, file: join(directory, `accepted-${index}.tsx`) }))
     .concat(
@@ -410,6 +465,8 @@ describe.each([
   'no-direct-web-storage',
   'no-arbitrary-font-size',
   'use-status-callout',
+  'no-render-ref-write',
+  'no-state-sync-effect',
 ])('factory/%s exceptions', (rule) => {
   const projectConfig = overridesSchema.parse(
     JSON.parse(readFileSync(resolve('.oxlintrc.json'), 'utf8'))
@@ -538,6 +595,22 @@ describe('tool input casts', () => {
       .filter((override) => override.rules['factory/no-tool-input-cast'] !== undefined)
       .map((override) => [override.files, override.rules['factory/no-tool-input-cast']]);
     expect(scopes).toEqual([[['src/client/features/chat/agent-activity/**/*.{ts,tsx}'], 'error']]);
+  });
+});
+
+describe('forwardRef restriction', () => {
+  const projectConfig = z
+    .object({ rules: z.record(z.string(), z.unknown()) })
+    .and(overridesSchema)
+    .parse(JSON.parse(readFileSync(resolve('.oxlintrc.json'), 'utf8')));
+
+  it('applies everywhere except the shadcn/ui primitives', () => {
+    expect(projectConfig.rules['factory/no-forward-ref']).toBe('error');
+    expect(
+      projectConfig.overrides
+        .filter((override) => override.rules['factory/no-forward-ref'] !== undefined)
+        .map((override) => [override.files, override.rules['factory/no-forward-ref']])
+    ).toEqual([[['src/components/ui/**/*.{ts,tsx}'], 'off']]);
   });
 });
 

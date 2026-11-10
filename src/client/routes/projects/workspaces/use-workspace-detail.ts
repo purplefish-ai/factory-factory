@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router';
 import { toast } from 'sonner';
 import { useSessionCollectionCommands } from '@/client/features/chat';
 import { useWorkspaceArchiveCommand } from '@/client/features/workspace';
-import { useStableCallback } from '@/client/hooks/use-stable-callback';
+import { useLatestRef, useStableCallback } from '@/client/hooks/use-stable-callback';
 import { useWorkspaceDetailQuery } from '@/client/hooks/use-workspace-detail-query';
 import { runInBackground } from '@/client/lib/background-task';
 import { POLL_INTERVAL_MS } from '@/client/lib/query-options';
@@ -174,10 +174,8 @@ export function useSessionManagement({
   const navigate = useNavigate();
   const utils = trpc.useUtils();
 
-  const activeWorkspaceRef = useRef(workspaceId);
-  useLayoutEffect(() => {
-    activeWorkspaceRef.current = workspaceId;
-  }, [workspaceId]);
+  // The hook does not rely on its caller remounting per workspace.
+  const activeWorkspaceRef = useLatestRef(workspaceId);
   const { createSession, deleteSession, createChat, createQuickActionAsync } =
     useSessionCollectionCommands({
       workspaceId,
@@ -240,7 +238,7 @@ export function useSessionManagement({
   });
   const archiveWorkspace = useMemo<UseSessionManagementReturn['archiveWorkspace']>(
     () => ({ isPending: archiveCommand.isArchiving, mutate: archiveMutate }),
-    [archiveCommand.isArchiving, archiveMutate]
+    [archiveCommand.isArchiving]
   );
   const { openInIde, availableIdes, preferredIde } = useWorkspaceIdeActions();
 

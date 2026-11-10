@@ -1,7 +1,7 @@
 import { ArrowSquareOutIcon } from '@phosphor-icons/react/dist/csr/ArrowSquareOut';
 import { PlayIcon } from '@phosphor-icons/react/dist/csr/Play';
 import { useQueryClient } from '@tanstack/react-query';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import { z } from 'zod';
 import { RatchetToggleButton } from '@/client/features/workspace';
@@ -41,6 +41,60 @@ interface IssueLaunchSheetProps {
 
 type LaunchMode = 'non_interactive' | 'plan';
 type AgentProvider = 'CLAUDE' | 'CODEX';
+/** What the open sheet has adopted: its issue, prompt preview and default provider. */
+interface OpeningSync {
+  issueKey: string;
+  promptPreview: string;
+  providerDefaulted: boolean;
+}
+
+/**
+ * The editable prompt and provider. Each opening and each issue starts from
+ * the prompt preview, an untouched prompt follows preview changes, and the
+ * provider takes the user's default once per opening. Adjusted during render
+ * so no commit shows a stale prompt.
+ */
+function useIssueLaunchDraft({
+  open,
+  issueKey,
+  promptPreview,
+  defaultProvider,
+}: {
+  open: boolean;
+  issueKey: string;
+  promptPreview: string;
+  /** Undefined until settings load. */
+  defaultProvider: AgentProvider | undefined;
+}) {
+  const [provider, setProvider] = useState<AgentProvider>('CLAUDE');
+  const [promptText, setPromptText] = useState(promptPreview);
+  const [opening, setOpening] = useState<OpeningSync | null>(null);
+  if (!open) {
+    if (opening) {
+      setOpening(null);
+    }
+    return { provider, setProvider, promptText, setPromptText };
+  }
+  let next: OpeningSync = opening ?? { issueKey: '', promptPreview: '', providerDefaulted: false };
+  if (next.issueKey !== issueKey) {
+    setPromptText(promptPreview);
+    next = { ...next, issueKey, promptPreview };
+  } else if (next.promptPreview !== promptPreview) {
+    if (promptText === next.promptPreview) {
+      setPromptText(promptPreview);
+    }
+    next = { ...next, promptPreview };
+  }
+  if (defaultProvider && !next.providerDefaulted) {
+    setProvider(defaultProvider);
+    next = { ...next, providerDefaulted: true };
+  }
+  if (next !== opening) {
+    setOpening(next);
+  }
+  return { provider, setProvider, promptText, setPromptText };
+}
+
 function getIssueProviderLabel(issue: NormalizedIssue) {
   return issue.provider === 'linear' ? 'Linear' : 'GitHub';
 }
@@ -60,11 +114,6 @@ export function IssueLaunchSheet({
     [issue.url, userSettings?.ticketDispatchPrompt]
   );
   const [startupModePreset, setStartupModePreset] = useState<LaunchMode>('non_interactive');
-  const [provider, setProvider] = useState<AgentProvider>('CLAUDE');
-  const [promptText, setPromptText] = useState(promptPreview);
-  const initializedProviderForOpenRef = useRef(false);
-  const initializedPromptIssueKeyRef = useRef<string | null>(null);
-  const lastPromptPreviewRef = useRef(promptPreview);
   // This issue's explicit choice, else the admin default once settings load.
   const [storedRatchetEnabled, setStoredRatchetEnabled] = usePersistedState(
     `kanban:issue-ratchet:${projectId}:${issue.id}`,
@@ -73,39 +122,12 @@ export function IssueLaunchSheet({
   );
   const ratchetEnabled = storedRatchetEnabled ?? userSettings?.ratchetEnabled ?? false;
   const issueProviderLabel = getIssueProviderLabel(issue);
-  const issueKey = `${issue.provider}:${issue.id}`;
-  const isPromptPreviewSyncPending =
-    open &&
-    initializedPromptIssueKeyRef.current === issueKey &&
-    lastPromptPreviewRef.current !== promptPreview &&
-    promptText === lastPromptPreviewRef.current;
-
-  useEffect(() => {
-    if (!open) {
-      initializedProviderForOpenRef.current = false;
-      initializedPromptIssueKeyRef.current = null;
-      lastPromptPreviewRef.current = promptPreview;
-      return;
-    }
-
-    const previousPromptPreview = lastPromptPreviewRef.current;
-    if (initializedPromptIssueKeyRef.current !== issueKey) {
-      setPromptText(promptPreview);
-      initializedPromptIssueKeyRef.current = issueKey;
-    } else if (previousPromptPreview !== promptPreview) {
-      setPromptText((currentPromptText) =>
-        currentPromptText === previousPromptPreview ? promptPreview : currentPromptText
-      );
-    }
-    lastPromptPreviewRef.current = promptPreview;
-
-    if (!userSettings || initializedProviderForOpenRef.current) {
-      return;
-    }
-
-    setProvider(userSettings.defaultSessionProvider ?? 'CLAUDE');
-    initializedProviderForOpenRef.current = true;
-  }, [open, promptPreview, userSettings, issueKey]);
+  const { provider, setProvider, promptText, setPromptText } = useIssueLaunchDraft({
+    open,
+    issueKey: `${issue.provider}:${issue.id}`,
+    promptPreview,
+    defaultProvider: userSettings ? (userSettings.defaultSessionProvider ?? 'CLAUDE') : undefined,
+  });
 
   const createWorkspaceMutation = trpc.workspace.create.useMutation({
     onSuccess: (workspace) => {
@@ -128,8 +150,7 @@ export function IssueLaunchSheet({
   };
 
   const handleStart = () => {
-    const currentPromptText = isPromptPreviewSyncPending ? promptPreview : promptText;
-    const trimmedPrompt = currentPromptText.trim();
+    const trimmedPrompt = promptText.trim();
     if (issue.provider === 'linear' && issue.linearIssueId && issue.linearIssueIdentifier) {
       createWorkspaceMutation.mutate({
         type: 'LINEAR_ISSUE',
@@ -257,7 +278,6 @@ export function IssueLaunchSheet({
             disabled={
               createWorkspaceMutation.isPending ||
               isLoadingSettings ||
-              isPromptPreviewSyncPending ||
               (issue.provider === 'github' && !promptText.trim())
             }
             className="w-full sm:w-auto"

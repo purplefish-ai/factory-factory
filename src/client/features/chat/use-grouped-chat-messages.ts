@@ -1,8 +1,7 @@
-import { useRef } from 'react';
+import { useMemo } from 'react';
 import type { ChatMessage, GroupedMessageItem } from '@/lib/chat-protocol';
 import {
   createIncrementalChatGrouper,
-  type IncrementalChatGrouper,
   type IncrementalChatGroupingOptions,
 } from './incremental-chat-grouping';
 
@@ -11,24 +10,11 @@ export function useGroupedChatMessages(
   options: IncrementalChatGroupingOptions = {}
 ): GroupedMessageItem[] {
   const filterDuplicateResults = options.filterDuplicateResults ?? false;
-  const cacheRef = useRef<{
-    filterDuplicateResults: boolean;
-    groupBoundaries?: ReadonlySet<string>;
-    grouper: IncrementalChatGrouper;
-  } | null>(null);
-  if (
-    !cacheRef.current ||
-    cacheRef.current.filterDuplicateResults !== filterDuplicateResults ||
-    cacheRef.current.groupBoundaries !== options.groupBoundaries
-  ) {
-    cacheRef.current = {
-      filterDuplicateResults,
-      groupBoundaries: options.groupBoundaries,
-      grouper: createIncrementalChatGrouper({
-        filterDuplicateResults,
-        groupBoundaries: options.groupBoundaries,
-      }),
-    };
-  }
-  return cacheRef.current.grouper.group(messages);
+  const { groupBoundaries } = options;
+  // The grouper reuses its previous result, so it lives as long as its options.
+  const grouper = useMemo(
+    () => createIncrementalChatGrouper({ filterDuplicateResults, groupBoundaries }),
+    [filterDuplicateResults, groupBoundaries]
+  );
+  return grouper.group(messages);
 }

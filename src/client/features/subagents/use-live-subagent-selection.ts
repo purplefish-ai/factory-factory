@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useLatestRef } from '@/client/hooks/use-stable-callback';
 import { subscribeToSubagentChanges } from '@/client/lib/subagent-events';
 import { getSubagentIconIndices } from '@/client/lib/subagent-icon-indices';
 import { createTrailingRefresh } from '@/client/lib/trailing-refresh';
@@ -109,7 +110,7 @@ export function useLiveSubagent(selection: SubagentSelection): {
       candidate?.id ?? selection.subagent.id
     ) ?? 0;
   const candidateWasCachedAtMount = useRef(refreshed !== undefined);
-  const querySnapshot = useRef({
+  const querySnapshot = useLatestRef({
     dataUpdatedAt: query.dataUpdatedAt,
     loadedPageCount: query.data?.pages.length ?? 0,
   });
@@ -117,10 +118,6 @@ export function useLiveSubagent(selection: SubagentSelection): {
     dataUpdatedAt: number;
     loadedPageCount: number;
   } | null>(null);
-  querySnapshot.current = {
-    dataUpdatedAt: query.dataUpdatedAt,
-    loadedPageCount: query.data?.pages.length ?? 0,
-  };
 
   const refetch = useCallback(async () => {
     const before = querySnapshot.current;

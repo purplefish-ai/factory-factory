@@ -106,19 +106,34 @@ guarded helpers in `src/client/lib/browser-storage.ts`, the only file in its
 `exceptions` map; a test fails if that exception is no longer needed. Tests may
 seed storage directly.
 
+`no-forward-ref` rejects `forwardRef` outside `src/components/ui/`: React 19
+passes `ref` as a prop. `no-render-ref-write` rejects assigning or incrementing
+`ref.current` directly in a component or hook body (a function named `use…` or
+starting with a capital, including one passed to `memo` or `forwardRef`), except
+lazy initialisation (`if (ref.current === null)`, `!ref.current`, `??=`).
+`no-state-sync-effect` rejects a `useEffect` or `useLayoutEffect` with
+dependencies whose body only calls `set…` functions, possibly behind `if`s, with
+values that contain no call, `.current` read, `await` or `new`. Both apply to
+`src/client`, `src/components` and `src/hooks` outside tests, with
+`no-state-sync-effect` also off in stories; their `exceptions` maps work like
+the spinner rules' ([client state](../docs/architecture/client-state.md)).
+
 ## Remaining Biome checks
 
 Biome remains a linter for CSS and checks without equivalent Oxlint coverage. It
-no longer formats files, sorts imports or runs Grit plugins. Explicit rules that
-remain are `noImplicitAnyLet`, `noAssignInExpressions`, `noBannedTypes`,
-`noExcessiveCognitiveComplexity`, `useSimplifiedLogicExpression`, `noDelete`,
-`useExhaustiveDependencies`, `useHookAtTopLevel`, `useConsistentArrayType`,
-`noConfusingVoidType`, `useAwait`, `noFloatingPromises`, `noMisusedPromises`,
-`useOptionalChain`, `noAccumulatingSpread`, `noUnusedImports`,
-`noEmptyBlockStatements` and `noDangerouslySetInnerHtml`. The existing
-recommended preset remains for other checks until their coverage has been
-compared. Rules explicitly migrated to Oxlint are disabled in Biome. The
-existing cognitive-complexity exceptions remain file-specific.
+no longer formats files, sorts imports or runs Grit plugins.
+`useExhaustiveDependencies` treats the results of `useLatestRef` and
+`useStableCallback` as stable, like `useRef`, so they stay out of dependency
+arrays. Explicit rules that remain are `noImplicitAnyLet`,
+`noAssignInExpressions`, `noBannedTypes`, `noExcessiveCognitiveComplexity`,
+`useSimplifiedLogicExpression`, `noDelete`, `useExhaustiveDependencies`,
+`useHookAtTopLevel`, `useConsistentArrayType`, `noConfusingVoidType`,
+`useAwait`, `noFloatingPromises`, `noMisusedPromises`, `useOptionalChain`,
+`noAccumulatingSpread`, `noUnusedImports`, `noEmptyBlockStatements` and
+`noDangerouslySetInnerHtml`. The existing recommended preset remains for other
+checks until their coverage has been compared. Rules explicitly migrated to
+Oxlint are disabled in Biome. The existing cognitive-complexity exceptions
+remain file-specific.
 
 Native Oxlint equivalents for hooks, promises and some style rules have
 different coverage. For example, native hook naming checks flag Storybook render

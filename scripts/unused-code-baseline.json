@@ -225,6 +225,10 @@
       "disposition": "test-support",
       "reason": "Auto-stubbing doubles for the fake application graph and its module mocks; only tests import this helper."
     },
+    "src/test-utils/commit-probe.ts": {
+      "disposition": "test-support",
+      "reason": "Test harness or fixture support remains explicit in this inventory; production callers are not expected."
+    },
     "src/test-utils/deferred.ts": {
       "disposition": "test-support",
       "reason": "Test harness or fixture support remains explicit in this inventory; production callers are not expected."

@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useFollowOutput } from '@/client/hooks/use-follow-output';
 import { ScrollArea } from '@/components/ui/scroll-area';
 
 interface InitOutputPanelProps {
@@ -12,16 +12,10 @@ export function InitOutputPanel({
   className,
   emptyMessage = 'Waiting for output…',
 }: InitOutputPanelProps) {
-  const scrollRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (scrollRef.current && output !== null) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-    }
-  }, [output]);
+  const followOutputRef = useFollowOutput();
 
   return (
-    <ScrollArea viewportRef={scrollRef} className={className}>
+    <ScrollArea viewportRef={followOutputRef} className={className}>
       <pre className="p-2 text-xs font-mono text-foreground whitespace-pre-wrap break-words">
         {output || <span className="text-foreground italic">{emptyMessage}</span>}
       </pre>

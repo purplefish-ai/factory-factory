@@ -1,8 +1,9 @@
 import { MagnifyingGlassIcon } from '@phosphor-icons/react/dist/csr/MagnifyingGlass';
-import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
+import { lazy, Suspense, useCallback, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { ErrorBoundary } from '@/client/error-boundary';
 import { runShortcutCommand, useShortcut, useShortcutCommands } from '@/client/features/shortcuts';
+import { useDebouncedValue } from '@/client/hooks/use-debounced-value';
 import { normalizeGitHubIssue } from '@/client/lib/issue-normalization';
 import {
   formatShortcut,
@@ -53,7 +54,6 @@ export function GlobalSearch() {
   > | null>(null);
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
-  const [debouncedQuery, setDebouncedQuery] = useState('');
   const [submittedIssueQuery, setSubmittedIssueQuery] = useState('');
   const [includeArchived, setIncludeArchived] = useState(false);
   const [archivePreview, setArchivePreview] = useState<SearchResult | null>(null);
@@ -69,16 +69,13 @@ export function GlobalSearch() {
       }
       if (!value) {
         setQuery('');
-        setDebouncedQuery('');
         setSubmittedIssueQuery('');
       }
     },
     [selectedIssue]
   );
-  useEffect(() => {
-    const timer = window.setTimeout(() => setDebouncedQuery(query.trim()), 150);
-    return () => window.clearTimeout(timer);
-  }, [query]);
+  // A closed dialog drops its query at once, so reopening never searches the old one.
+  const debouncedQuery = useDebouncedValue(query.trim(), 150, { immediate: !open });
   useShortcut('app.search', () => setSearchOpen(!open));
   const commands = useShortcutCommands();
   // A command moves focus itself (the composer, another page or dialog), so the

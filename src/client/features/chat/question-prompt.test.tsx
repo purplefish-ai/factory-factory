@@ -1,10 +1,11 @@
 // @vitest-environment jsdom
 
-import { createElement } from 'react';
+import { createElement, Fragment } from 'react';
 import { flushSync } from 'react-dom';
 import { createRoot } from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { UserQuestionRequest } from '@/lib/chat-protocol';
+import { CommitProbe } from '@/test-utils/commit-probe';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 import { QuestionPrompt } from './question-prompt';
 
@@ -13,6 +14,49 @@ afterEach(() => {
 });
 
 describe('QuestionPrompt', () => {
+  it('shows a replaced request without the previous answers in its first commit', () => {
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    const request = (requestId: string): UserQuestionRequest => ({
+      requestId,
+      timestamp: '2026-10-18T00:00:00Z',
+      questions: [
+        {
+          question: 'Pick one',
+          options: [
+            { label: 'A', description: '' },
+            { label: 'B', description: '' },
+          ],
+          allowOther: false,
+        },
+      ],
+    });
+    const committed: boolean[] = [];
+    const onCommit = () =>
+      committed.push(Boolean(container.querySelector('[role="radio"][aria-checked="true"]')));
+    const render = (requestId: string) =>
+      flushSync(() =>
+        root.render(
+          createElement(
+            Fragment,
+            null,
+            createElement(QuestionPrompt, { question: request(requestId), onAnswer: vi.fn() }),
+            createElement(CommitProbe, { onCommit })
+          )
+        )
+      );
+
+    render('first');
+    flushSync(() => container.querySelector<HTMLButtonElement>('[role="radio"]')!.click());
+    expect(container.querySelector('[role="radio"][aria-checked="true"]')).not.toBeNull();
+
+    const before = committed.length;
+    render('second');
+    expect([...new Set(committed.slice(before))]).toEqual([false]);
+    root.unmount();
+  });
+
   it('keeps skipped optional progress dots unanswered while allowing navigation', () => {
     const container = document.createElement('div');
     document.body.appendChild(container);

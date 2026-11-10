@@ -142,6 +142,13 @@ export const VoiceModeToggle = memo(function VoiceModeToggle({
     [onFinalTranscript]
   );
 
+  const handleCaptureError = useCallback((message: string) => {
+    toast.error(message);
+    // Capture failed to start or dropped mid-session after we optimistically
+    // flipped this on — make sure playback doesn't stay "enabled" without capture.
+    setVoiceModeOn(false);
+  }, []);
+
   const { isCapturing, isConnecting, error, start, stop } = useMicCapture({
     onFinalTranscript: handleFinalTranscript,
     running,
@@ -150,6 +157,7 @@ export const VoiceModeToggle = memo(function VoiceModeToggle({
     onSpeechEnded: endBargeIn,
     utteranceEndMs: config?.utteranceEndMs,
     bargeInSustainedMs: config?.bargeInSustainedMs,
+    onError: handleCaptureError,
   });
 
   useEffect(() => {
@@ -196,15 +204,6 @@ export const VoiceModeToggle = memo(function VoiceModeToggle({
       window.dispatchEvent(new CustomEvent('voice-mode-changed', { detail: { active: false } }));
     };
   }, [isCapturing]);
-
-  useEffect(() => {
-    if (error) {
-      toast.error(error);
-      // start() failed after we optimistically flipped this on — make sure
-      // playback doesn't stay "enabled" for a capture session that never started.
-      setVoiceModeOn(false);
-    }
-  }, [error]);
 
   // An admin can disable voice mode or remove its API key while a workspace
   // is open. Without this, the toggle just disappears (the early return

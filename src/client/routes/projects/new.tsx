@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router';
 import { HeaderLeftStartSlot, useAppHeader } from '@/client/components/app-header-context';
 import { Logo } from '@/client/components/logo';
@@ -13,6 +13,7 @@ import {
 import { SetupTerminalModal } from '@/client/features/project/setup-terminal-modal';
 import type { ScriptType } from '@/client/features/project/startup-script-form';
 import { useCLIHealthRefresh } from '@/client/hooks/use-cli-health-refresh';
+import { useDebouncedValue } from '@/client/hooks/use-debounced-value';
 import { useProjectHeaderNavigation } from '@/client/hooks/use-project-header-navigation';
 import { runInBackground } from '@/client/lib/background-task';
 import { trpc } from '@/client/lib/trpc';
@@ -44,7 +45,6 @@ export default function NewProjectPage() {
   const [error, setError] = useState('');
   const [startupScript, setStartupScript] = useState('');
   const [scriptType, setScriptType] = useState<ScriptType>('command');
-  const [debouncedRepoPath, setDebouncedRepoPath] = useState('');
 
   // GitHub URL state
   const [githubUrl, setGithubUrl] = useState('');
@@ -64,6 +64,7 @@ export default function NewProjectPage() {
   }, [githubUrl]);
 
   // Check for factory-factory.json (local path)
+  const debouncedRepoPath = useDebouncedValue(repoPath.trim(), 500);
   const { data: factoryConfig } = trpc.project.checkFactoryConfig.useQuery(
     { repoPath: debouncedRepoPath },
     { enabled: debouncedRepoPath.length > 0 }
@@ -79,14 +80,6 @@ export default function NewProjectPage() {
   } = trpc.project.checkGithubAuth.useQuery(undefined, {
     enabled: source === 'github',
   });
-
-  // Debounce repo path changes for API calls
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setDebouncedRepoPath(repoPath.trim());
-    }, 500);
-    return () => clearTimeout(timer);
-  }, [repoPath]);
 
   const handleBrowse = async () => {
     if (!window.electronAPI?.showOpenDialog) {

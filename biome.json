@@ -35,7 +35,15 @@
         "noUnusedImports": "error",
         "noUnusedPrivateClassMembers": "off",
         "noUnusedFunctionParameters": "off",
-        "useExhaustiveDependencies": "error",
+        "useExhaustiveDependencies": {
+          "level": "error",
+          "options": {
+            "hooks": [
+              { "name": "useLatestRef", "stableResult": true },
+              { "name": "useStableCallback", "stableResult": true }
+            ]
+          }
+        },
         "useHookAtTopLevel": "error"
       },
       "style": {

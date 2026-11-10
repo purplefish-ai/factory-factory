@@ -1,12 +1,12 @@
 // @vitest-environment jsdom
 
-import { createElement, createRef } from 'react';
+import { createElement } from 'react';
 import { flushSync } from 'react-dom';
 import { createRoot } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { TERMINAL_OUTPUT_MAX_CHARS, TERMINAL_TRUNCATION_MARKER } from '@/client/lib/rolling-output';
 import type { TerminalOutputStream } from '@/client/lib/terminal-output-stream';
-import { TerminalPanel, type TerminalPanelRef, type TerminalTabState } from './terminal-panel';
+import { TerminalPanel, type TerminalTabState } from './terminal-panel';
 
 const mocks = vi.hoisted(() => ({
   create: vi.fn(),
@@ -68,6 +68,18 @@ vi.mock('./use-terminal-websocket', () => ({
   },
 }));
 
+/** Opens tabs through the state the panel lifts to its parent, as the right panel does. */
+function trackPanel(onState?: (state: TerminalTabState) => void) {
+  let latest: TerminalTabState | undefined;
+  return {
+    onStateChange: (state: TerminalTabState) => {
+      latest = state;
+      onState?.(state);
+    },
+    newTab: () => latest?.onNewTab(),
+  };
+}
+
 /** Output the mounted terminal would show: its stream's rolling window. */
 function renderedOutput(): string {
   return mocks.renderedStream?.snapshot() ?? '';
@@ -119,28 +131,66 @@ describe('TerminalPanel', () => {
     }
   });
 
+  it('waits for the terminal list after a reconnect before auto-creating', async () => {
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    const states: TerminalTabState[] = [];
+    const panel = trackPanel((state) => states.push(state));
+    const render = () =>
+      flushSync(() =>
+        root.render(
+          createElement(TerminalPanel, {
+            workspaceId: 'workspace-1',
+            autoCreateWhenEmpty: true,
+            onStateChange: panel.onStateChange,
+          })
+        )
+      );
+    try {
+      render();
+      flushSync(() =>
+        mocks.options?.onTerminalList?.([
+          { id: 'terminal-existing', createdAt: '2026-08-13T00:00:00.000Z' },
+        ])
+      );
+      mocks.connected = false;
+      render();
+      flushSync(() => states.at(-1)?.onCloseTab('tab-terminal-existing'));
+      await vi.waitFor(() => expect(states.at(-1)?.tabs).toEqual([]));
+
+      mocks.connected = true;
+      render();
+      expect(mocks.create).not.toHaveBeenCalled();
+
+      flushSync(() => mocks.options?.onTerminalList?.([]));
+      expect(mocks.create).toHaveBeenCalledOnce();
+    } finally {
+      root.unmount();
+    }
+  });
+
   it('ignores disconnected create requests without blocking terminal restoration', () => {
     mocks.connected = false;
     const container = document.createElement('div');
     document.body.appendChild(container);
     const root = createRoot(container);
-    const panelRef = createRef<TerminalPanelRef>();
     const terminalStates: TerminalTabState[] = [];
+    const panel = trackPanel((state) => {
+      terminalStates.push(state);
+    });
 
     flushSync(() => {
       root.render(
         createElement(TerminalPanel, {
           workspaceId: 'workspace-1',
-          ref: panelRef,
-          onStateChange: (state) => {
-            terminalStates.push(state);
-          },
+          onStateChange: panel.onStateChange,
         })
       );
     });
 
     flushSync(() => {
-      panelRef.current?.createNewTerminal();
+      panel.newTab();
     });
 
     expect(mocks.create).not.toHaveBeenCalled();
@@ -163,20 +213,19 @@ describe('TerminalPanel', () => {
     const container = document.createElement('div');
     document.body.appendChild(container);
     const root = createRoot(container);
-    const panelRef = createRef<TerminalPanelRef>();
     const states: TerminalTabState[] = [];
+    const panel = trackPanel((state) => states.push(state));
     flushSync(() => {
       root.render(
         createElement(TerminalPanel, {
           workspaceId: 'workspace-1',
-          ref: panelRef,
-          onStateChange: (state) => states.push(state),
+          onStateChange: panel.onStateChange,
         })
       );
     });
     flushSync(() => {
-      panelRef.current?.createNewTerminal();
-      panelRef.current?.createNewTerminal();
+      panel.newTab();
+      panel.newTab();
     });
     flushSync(() => {
       mocks.options?.onCreated?.('terminal-a', mocks.create.mock.calls[0]?.[0], 'before A\r\n');
@@ -214,15 +263,20 @@ describe('TerminalPanel', () => {
     const container = document.createElement('div');
     document.body.appendChild(container);
     const root = createRoot(container);
-    const panelRef = createRef<TerminalPanelRef>();
+    const panel = trackPanel();
 
     flushSync(() => {
-      root.render(createElement(TerminalPanel, { workspaceId: 'workspace-1', ref: panelRef }));
+      root.render(
+        createElement(TerminalPanel, {
+          workspaceId: 'workspace-1',
+          onStateChange: panel.onStateChange,
+        })
+      );
     });
 
     flushSync(() => {
-      panelRef.current?.createNewTerminal();
-      panelRef.current?.createNewTerminal();
+      panel.newTab();
+      panel.newTab();
     });
 
     const firstRequestId = mocks.create.mock.calls[0]?.[0] as string;
@@ -248,14 +302,19 @@ describe('TerminalPanel', () => {
     const container = document.createElement('div');
     document.body.appendChild(container);
     const root = createRoot(container);
-    const panelRef = createRef<TerminalPanelRef>();
+    const panel = trackPanel();
 
     flushSync(() => {
-      root.render(createElement(TerminalPanel, { workspaceId: 'workspace-1', ref: panelRef }));
+      root.render(
+        createElement(TerminalPanel, {
+          workspaceId: 'workspace-1',
+          onStateChange: panel.onStateChange,
+        })
+      );
     });
 
     flushSync(() => {
-      panelRef.current?.createNewTerminal();
+      panel.newTab();
     });
 
     const requestId = mocks.create.mock.calls[0]?.[0] as string;
@@ -276,13 +335,18 @@ describe('TerminalPanel', () => {
     const container = document.createElement('div');
     document.body.appendChild(container);
     const root = createRoot(container);
-    const panelRef = createRef<TerminalPanelRef>();
+    const panel = trackPanel();
 
     flushSync(() => {
-      root.render(createElement(TerminalPanel, { workspaceId: 'workspace-1', ref: panelRef }));
+      root.render(
+        createElement(TerminalPanel, {
+          workspaceId: 'workspace-1',
+          onStateChange: panel.onStateChange,
+        })
+      );
     });
     flushSync(() => {
-      panelRef.current?.createNewTerminal();
+      panel.newTab();
     });
     const requestId = mocks.create.mock.calls[0]?.[0] as string;
     flushSync(() => {
@@ -291,7 +355,12 @@ describe('TerminalPanel', () => {
 
     mocks.connected = false;
     flushSync(() => {
-      root.render(createElement(TerminalPanel, { workspaceId: 'workspace-1', ref: panelRef }));
+      root.render(
+        createElement(TerminalPanel, {
+          workspaceId: 'workspace-1',
+          onStateChange: panel.onStateChange,
+        })
+      );
     });
     await vi.dynamicImportSettled();
 
@@ -332,13 +401,18 @@ describe('TerminalPanel', () => {
     const container = document.createElement('div');
     document.body.appendChild(container);
     const root = createRoot(container);
-    const panelRef = createRef<TerminalPanelRef>();
+    const panel = trackPanel();
 
     flushSync(() => {
-      root.render(createElement(TerminalPanel, { workspaceId: 'workspace-1', ref: panelRef }));
+      root.render(
+        createElement(TerminalPanel, {
+          workspaceId: 'workspace-1',
+          onStateChange: panel.onStateChange,
+        })
+      );
     });
     flushSync(() => {
-      panelRef.current?.createNewTerminal();
+      panel.newTab();
     });
     await vi.dynamicImportSettled();
 
@@ -351,14 +425,19 @@ describe('TerminalPanel', () => {
     const container = document.createElement('div');
     document.body.appendChild(container);
     const root = createRoot(container);
-    const panelRef = createRef<TerminalPanelRef>();
+    const panel = trackPanel();
 
     flushSync(() => {
-      root.render(createElement(TerminalPanel, { workspaceId: 'workspace-1', ref: panelRef }));
+      root.render(
+        createElement(TerminalPanel, {
+          workspaceId: 'workspace-1',
+          onStateChange: panel.onStateChange,
+        })
+      );
     });
 
     flushSync(() => {
-      panelRef.current?.createNewTerminal();
+      panel.newTab();
     });
 
     const requestId = mocks.create.mock.calls[0]?.[0] as string;
@@ -380,14 +459,19 @@ describe('TerminalPanel', () => {
     const container = document.createElement('div');
     document.body.appendChild(container);
     const root = createRoot(container);
-    const panelRef = createRef<TerminalPanelRef>();
+    const panel = trackPanel();
 
     flushSync(() => {
-      root.render(createElement(TerminalPanel, { workspaceId: 'workspace-1', ref: panelRef }));
+      root.render(
+        createElement(TerminalPanel, {
+          workspaceId: 'workspace-1',
+          onStateChange: panel.onStateChange,
+        })
+      );
     });
 
     flushSync(() => {
-      panelRef.current?.createNewTerminal();
+      panel.newTab();
     });
 
     const requestId = mocks.create.mock.calls[0]?.[0] as string;
@@ -407,14 +491,19 @@ describe('TerminalPanel', () => {
     const container = document.createElement('div');
     document.body.appendChild(container);
     const root = createRoot(container);
-    const panelRef = createRef<TerminalPanelRef>();
+    const panel = trackPanel();
 
     flushSync(() => {
-      root.render(createElement(TerminalPanel, { workspaceId: 'workspace-1', ref: panelRef }));
+      root.render(
+        createElement(TerminalPanel, {
+          workspaceId: 'workspace-1',
+          onStateChange: panel.onStateChange,
+        })
+      );
     });
 
     flushSync(() => {
-      panelRef.current?.createNewTerminal();
+      panel.newTab();
     });
 
     const requestId = mocks.create.mock.calls[0]?.[0] as string;
@@ -436,16 +525,19 @@ describe('TerminalPanel', () => {
     const container = document.createElement('div');
     document.body.appendChild(container);
     const root = createRoot(container);
-    const panelRef = createRef<TerminalPanelRef>();
     const onStateChange = vi.fn();
+    const panel = trackPanel(onStateChange);
 
     flushSync(() => {
       root.render(
-        createElement(TerminalPanel, { workspaceId: 'workspace-1', ref: panelRef, onStateChange })
+        createElement(TerminalPanel, {
+          workspaceId: 'workspace-1',
+          onStateChange: panel.onStateChange,
+        })
       );
     });
     flushSync(() => {
-      panelRef.current?.createNewTerminal();
+      panel.newTab();
     });
     flushSync(() => {
       mocks.options?.onCreated?.('terminal-a', mocks.create.mock.calls[0]?.[0], '$ ');
@@ -484,17 +576,21 @@ describe('TerminalPanel', () => {
     const container = document.createElement('div');
     document.body.appendChild(container);
     const root = createRoot(container);
-    const panelRef = createRef<TerminalPanelRef>();
+    const panel = trackPanel();
     const render = (isVisible: boolean) =>
       flushSync(() => {
         root.render(
-          createElement(TerminalPanel, { workspaceId: 'workspace-1', ref: panelRef, isVisible })
+          createElement(TerminalPanel, {
+            workspaceId: 'workspace-1',
+            onStateChange: panel.onStateChange,
+            isVisible,
+          })
         );
       });
 
     render(true);
     flushSync(() => {
-      panelRef.current?.createNewTerminal();
+      panel.newTab();
     });
     flushSync(() => {
       mocks.options?.onCreated?.('terminal-a', mocks.create.mock.calls[0]?.[0], '$ ');
