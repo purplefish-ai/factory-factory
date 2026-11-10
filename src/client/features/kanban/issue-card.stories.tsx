@@ -33,6 +33,10 @@ const meta: Meta<typeof IssueCard> = {
     await expect(link).toHaveAttribute('href', args.issue.url);
     await expect(link.textContent).toBe('');
     await expect(link.querySelector('svg')).toBeInTheDocument();
+    const minimumTarget = window.matchMedia('(any-pointer: coarse)').matches ? 36 : 24;
+    const bounds = link.getBoundingClientRect();
+    await expect(bounds.width).toBeGreaterThanOrEqual(minimumTarget);
+    await expect(bounds.height).toBeGreaterThanOrEqual(minimumTarget);
   },
 };
 export default meta;
@@ -43,7 +47,7 @@ export const GitHub: Story = {};
 export const Linear: Story = {
   args: {
     issue: {
-      id: 'linear-42',
+      id: 'linear-uuid-42',
       provider: 'linear',
       displayId: 'ENG-42',
       title: 'Fix login redirect',

@@ -70,7 +70,7 @@ export function IssueCard({ issue, projectId }: IssueCardProps) {
               href={issue.url}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex shrink-0 items-center rounded-sm text-muted-foreground hover:text-foreground focus-ring"
+              className="inline-flex min-h-6 min-w-6 shrink-0 items-center justify-center rounded-sm text-muted-foreground hover:text-foreground focus-ring [@media(any-pointer:coarse)]:min-h-9 [@media(any-pointer:coarse)]:min-w-9"
               aria-label={`Open ${issue.displayId} externally`}
             >
               {issue.provider === 'github' ? (
