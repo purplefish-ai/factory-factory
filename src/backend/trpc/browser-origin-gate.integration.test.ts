@@ -4,7 +4,7 @@ import express from 'express';
 import request from 'supertest';
 import { describe, expect, it } from 'vitest';
 import type { AppContext } from '@/backend/app-context';
-import { isLoopbackBindHost } from '@/backend/lib/request-trust';
+import { shouldAllowOwnLoopbackOrigin } from '@/backend/lib/request-trust';
 import type { CorsConfig } from '@/backend/services/config.service';
 import { proxyInternals } from '@/cli/proxy';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
@@ -21,13 +21,14 @@ type GateOptions = {
 function createApp({ backendHost, cors }: GateOptions = {}) {
   const app = express();
   const state = { reads: 0, writes: 0, privileged: 0 };
+  const allowedOrigins = cors?.allowedOrigins ?? DEFAULT_ORIGINS;
   const corsConfig: CorsConfig = {
-    allowedOrigins: DEFAULT_ORIGINS,
+    allowedOrigins,
     trustedLocalCidrs: [],
     trustProxyHeaders: false,
     disableCorsChecks: false,
-    // As configService derives it from BACKEND_HOST.
-    allowOwnLoopbackOrigin: isLoopbackBindHost(backendHost),
+    // As configService derives it.
+    allowOwnLoopbackOrigin: shouldAllowOwnLoopbackOrigin(backendHost, allowedOrigins),
     ...cors,
   };
   const appContext = unsafeCoerce<AppContext>({
@@ -203,6 +204,30 @@ describe('browser origin gate per launch mode', () => {
         .post('/api/trpc/write')
         .send({ json: null })
         .set({ origin: `http://localhost:${server.port}`, host: `localhost:${server.port}` });
+
+      expect(response.status).toBe(403);
+      expect(state.writes).toBe(0);
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("ff tailscale: a page on the remote user's own localhost:<backend port> is not implied", async () => {
+    const { app, state } = createApp({
+      backendHost: '127.0.0.1',
+      cors: { allowedOrigins: ['https://mac.tail123.ts.net'], trustProxyHeaders: true },
+    });
+    const server = await listen(app);
+    try {
+      // Serve forwards the remote browser's Origin to the backend's own port.
+      const response = await server.client
+        .post('/api/trpc/write')
+        .send({ json: null })
+        .set({
+          origin: `http://localhost:${server.port}`,
+          host: 'mac.tail123.ts.net',
+          'x-forwarded-for': '100.100.100.100',
+        });
 
       expect(response.status).toBe(403);
       expect(state.writes).toBe(0);

@@ -75,13 +75,16 @@ async function listenBlocker(port: number, host: string): Promise<number> {
  * or another desktop instance holds 3001, so it binds a fallback port that no
  * launcher put in CORS_ALLOWED_ORIGINS.
  */
-async function startOnFallbackPort(backendHost: string | undefined) {
+async function startOnFallbackPort(
+  backendHost: string | undefined,
+  configuredOrigins: (requestedPort: number) => string = (port) => `http://localhost:${port}`
+) {
   const requestedPort = await listenBlocker(0, '127.0.0.1');
   // `localhost` may resolve to `::1`; hold that family too where it exists.
   await listenBlocker(requestedPort, '::1').catch(() => undefined);
 
   // The real configuration, as a launcher's environment produces it.
-  process.env = { ...ORIGINAL_ENV, CORS_ALLOWED_ORIGINS: `http://localhost:${requestedPort}` };
+  process.env = { ...ORIGINAL_ENV, CORS_ALLOWED_ORIGINS: configuredOrigins(requestedPort) };
   Reflect.deleteProperty(process.env, 'DISABLE_CORS_CHECKS');
   if (backendHost === undefined) {
     Reflect.deleteProperty(process.env, 'BACKEND_HOST');
@@ -165,7 +168,7 @@ describe('server own origin on a fallback port', () => {
   it.each([
     ['unset (desktop app)', undefined],
     ['localhost (ff serve)', 'localhost'],
-    ['127.0.0.1 (ff proxy and ff tailscale)', '127.0.0.1'],
+    ['127.0.0.1 (ff proxy)', '127.0.0.1'],
   ])('allows its own loopback origin when BACKEND_HOST is %s', async (_label, backendHost) => {
     const { target } = await startOnFallbackPort(backendHost);
 
@@ -203,6 +206,17 @@ describe('server own origin on a fallback port', () => {
       postMutation(target, { origin: `http://${rebound}`, host: rebound })
     ).resolves.toBe(403);
     await expect(postMutation(target, { host: rebound })).resolves.toBe(403);
+  });
+
+  it('implies nothing when a public origin is configured (ff tailscale, reverse proxy)', async () => {
+    const { target } = await startOnFallbackPort('127.0.0.1', () => 'https://mac.tail123.ts.net');
+    // A proxy forwards a remote page on that user's own localhost at this port.
+    const origin = `http://localhost:${target.port}`;
+
+    await expect(postMutation(target, { origin, host: `localhost:${target.port}` })).resolves.toBe(
+      403
+    );
+    await expect(upgrade(target, origin)).resolves.toBe(400);
   });
 
   it('keeps accepting the configured origins', async () => {

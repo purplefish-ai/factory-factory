@@ -234,11 +234,24 @@ describe('configService environment accessors', () => {
     ['192.168.1.20', false],
     ['factory.lan', false],
   ])('allows the own loopback origin only when BACKEND_HOST=%s is loopback', (host, allowed) => {
+    Reflect.deleteProperty(process.env, 'CORS_ALLOWED_ORIGINS');
     if (host === undefined) {
       Reflect.deleteProperty(process.env, 'BACKEND_HOST');
     } else {
       process.env.BACKEND_HOST = host;
     }
+    configService.reload();
+
+    expect(configService.getCorsConfig().allowOwnLoopbackOrigin).toBe(allowed);
+  });
+
+  it.each([
+    ['http://localhost:5173', true],
+    ['https://mac.tail123.ts.net', false],
+    ['https://ff.example.com,http://localhost:3001', false],
+  ])('derives the own-origin allowance from CORS_ALLOWED_ORIGINS=%s', (origins, allowed) => {
+    Reflect.deleteProperty(process.env, 'BACKEND_HOST');
+    process.env.CORS_ALLOWED_ORIGINS = origins;
     configService.reload();
 
     expect(configService.getCorsConfig().allowOwnLoopbackOrigin).toBe(allowed);

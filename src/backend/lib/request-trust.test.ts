@@ -6,6 +6,7 @@ import {
   isLoopbackRemoteAddress,
   isOriginAllowed,
   isTrustedLocalAddress,
+  shouldAllowOwnLoopbackOrigin,
 } from './request-trust';
 
 describe('request trust helpers', () => {
@@ -81,6 +82,29 @@ describe('request trust helpers', () => {
     it('allows any origin when disableCorsChecks is set', () => {
       expect(isOriginAllowed('https://attacker.example', [], true)).toBe(true);
       expect(isOriginAllowed('not a url', ['http://localhost:3000'], true)).toBe(true);
+    });
+  });
+
+  describe('shouldAllowOwnLoopbackOrigin', () => {
+    const localOrigins = ['http://localhost:3000', 'http://127.0.0.1:3001', 'http://[::1]:5173'];
+
+    it.each([undefined, 'localhost', '127.0.0.1', '::1'])(
+      'implies the own origin for a loopback bind (%s) with loopback origins only',
+      (bindHost) => {
+        expect(shouldAllowOwnLoopbackOrigin(bindHost, localOrigins)).toBe(true);
+      }
+    );
+
+    it.each(['0.0.0.0', '::', '192.168.1.20'])('never implies it for a %s bind', (bindHost) => {
+      expect(shouldAllowOwnLoopbackOrigin(bindHost, localOrigins)).toBe(false);
+    });
+
+    it.each([
+      ['ff tailscale', ['https://mac.tail123.ts.net']],
+      ['a reverse proxy', ['https://ff.example.com', 'http://localhost:3001']],
+      ['a malformed entry', ['http://localhost:3001', '']],
+    ])('keeps the configured list only with %s', (_label, allowedOrigins) => {
+      expect(shouldAllowOwnLoopbackOrigin('127.0.0.1', allowedOrigins)).toBe(false);
     });
   });
 

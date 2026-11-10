@@ -220,11 +220,36 @@ export function isOriginAllowed(
   });
 }
 
+function isLoopbackOrigin(origin: string): boolean {
+  const parsedOrigin = parseOrigin(origin);
+  return (
+    parsedOrigin !== undefined &&
+    isCanonicalOriginUrl(origin, parsedOrigin) &&
+    isLoopbackHostname(parsedOrigin.hostname)
+  );
+}
+
+/**
+ * Whether the server's own loopback origin is implied (see
+ * `isBrowserOriginAllowed`). It is only for servers used locally: bound to
+ * loopback, with every configured origin a loopback one. A configured public
+ * origin (a reverse proxy, `ff tailscale`) means remote browsers reach this
+ * listener through a proxy, where the connection's port is the upstream port
+ * and a page on the remote user's own `localhost` at that port would match;
+ * those servers keep exactly the configured list.
+ */
+export function shouldAllowOwnLoopbackOrigin(
+  bindHost: string | undefined,
+  allowedOrigins: readonly string[]
+): boolean {
+  return isLoopbackBindHost(bindHost) && allowedOrigins.every(isLoopbackOrigin);
+}
+
 /** Origin policy fields shared by every browser-facing check. */
 export interface BrowserOriginPolicy {
   allowedOrigins: readonly string[];
   disableCorsChecks?: boolean;
-  /** Set while the server is bound to loopback only; see `isBrowserOriginAllowed`. */
+  /** From `shouldAllowOwnLoopbackOrigin`; see `isBrowserOriginAllowed`. */
   allowOwnLoopbackOrigin?: boolean;
 }
 
@@ -235,20 +260,20 @@ function isOwnLoopbackOrigin(origin: string, localPort: number | undefined): boo
   const parsedOrigin = parseOrigin(origin);
   return (
     parsedOrigin !== undefined &&
-    isCanonicalOriginUrl(origin, parsedOrigin) &&
+    isLoopbackOrigin(origin) &&
     parsedOrigin.protocol === 'http:' &&
-    isLoopbackHostname(parsedOrigin.hostname) &&
     getEffectivePort(parsedOrigin) === String(localPort)
   );
 }
 
 /**
  * The Origin rule for the CORS middleware, tRPC procedures and WebSocket
- * upgrades. Besides the configured origins, a loopback-bound server always
- * accepts its own page: an `http:` loopback origin on `localPort`, the local
- * port of the connection the request arrived on. That is the port the server
- * actually bound, so a fallback port no launcher configured keeps working,
- * while other ports, non-loopback hosts and non-loopback binds do not.
+ * upgrades. Besides the configured origins, a locally used server (see
+ * `shouldAllowOwnLoopbackOrigin`) accepts its own page: an `http:` loopback
+ * origin on `localPort`, the local port of the connection the request arrived
+ * on. That is the port the server actually bound, so a fallback port no
+ * launcher configured keeps working, while other ports and non-loopback hosts
+ * do not.
  */
 export function isBrowserOriginAllowed(
   origin: string,

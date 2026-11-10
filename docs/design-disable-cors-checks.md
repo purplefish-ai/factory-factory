@@ -67,17 +67,20 @@ case already works without configuration — this flag is for the less common
 cases that fall outside that auto-configured origin.
 
 The server's own origin needs no configuration either. While `BACKEND_HOST`
-keeps the server on loopback (unset, `localhost` or a loopback address),
-`buildCorsConfig()` sets `allowOwnLoopbackOrigin`, and
+keeps the server on loopback (unset, `localhost` or a loopback address) and
+every allowed origin is a loopback origin, `buildCorsConfig()` sets
+`allowOwnLoopbackOrigin` (`shouldAllowOwnLoopbackOrigin()`), and
 `isBrowserOriginAllowed()` then also accepts an `http:` loopback origin
 (`localhost`, `127.x.x.x`, `[::1]`) whose port is the local port of the
 connection the request arrived on — the port the server actually bound. A server
 that fell back from a taken port (`bindServerWithPortFallback`, for example the
 desktop app when 3001 is busy) therefore still accepts its own window, while
-loopback pages on other ports, any non-loopback origin, and every origin on a
-server bound beyond loopback (Docker, `--host 0.0.0.0`) follow the configured
-list only. The `Host` check against DNS rebinding already accepts loopback names
-on any port.
+loopback pages on other ports and any non-loopback origin are still rejected.
+Servers bound beyond loopback (Docker, `--host 0.0.0.0`) or configured with a
+public origin (`ff tailscale`, a reverse proxy) follow the configured list only:
+behind a proxy the connection's port is the upstream port, so a page on the
+remote user's own `localhost` at that port would otherwise match. The `Host`
+check against DNS rebinding already accepts loopback names on any port.
 
 ### Existing precedent: `TRUST_PROXY_HEADERS`
 
