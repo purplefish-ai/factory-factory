@@ -1,49 +1,18 @@
 import { useMemo } from 'react';
-import { type TranscriptPosition, useChatSessionState } from '@/client/features/chat';
+import {
+  type TranscriptPosition,
+  type UseChatWebSocketReturn,
+  useChatSessionState,
+} from '@/client/features/chat';
 import { WorkspaceChatImageDropZone } from './workspace-chat-image-drop-zone';
 import { ChatContent, type ChatContentProps } from './workspace-detail-chat-content';
 import { hasUserMessageWithoutAgentMessage } from './workspace-detail-container.utils';
 
 /** Props the chat takes from its session rather than from the workspace. */
 type SessionContentProps =
-  | 'messages'
+  | Exclude<keyof UseChatWebSocketReturn, 'inputRef'>
   | 'history'
-  | 'transcriptPageBoundaries'
-  | 'acpPlan'
-  | 'sessionStatus'
-  | 'sessionRuntime'
   | 'transcriptScroll'
-  | 'pendingRequest'
-  | 'approvePermission'
-  | 'answerQuestion'
-  | 'connected'
-  | 'controlsHydrated'
-  | 'sendMessage'
-  | 'stopChat'
-  | 'restartSession'
-  | 'isRestartingSession'
-  | 'chatSettings'
-  | 'chatCapabilities'
-  | 'chatCapabilitiesLoaded'
-  | 'updateSettings'
-  | 'inputDraft'
-  | 'setInputDraft'
-  | 'inputAttachments'
-  | 'inputDraftGeneration'
-  | 'setInputAttachments'
-  | 'queuedMessages'
-  | 'removeQueuedMessage'
-  | 'pendingSteer'
-  | 'steerQueuedMessage'
-  | 'resumeQueuedMessages'
-  | 'latestThinking'
-  | 'pendingMessages'
-  | 'isCompacting'
-  | 'slashCommands'
-  | 'slashCommandsLoaded'
-  | 'tokenStats'
-  | 'acpConfigOptions'
-  | 'setConfigOption'
   | 'autoStartPending';
 
 export interface WorkspaceChatProps extends Omit<ChatContentProps, SessionContentProps> {
