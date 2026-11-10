@@ -86,7 +86,7 @@ function slackConnectionWarnings(
 ): string[] {
   return slackConnections
     ? [
-        `Slack connection metadata restored disabled: ${slackConnections.imported} imported, ${slackConnections.skipped} skipped; ${slackConnections.sourceEnabled} enabled in the entire source section; ${slackConnections.restoredDisabled} restored disabled without credentials. Skips by reason: existing connection ID or Slack workspace identity: ${slackConnections.reasons.EXISTING_IDENTITY}. Reconnect a workspace manually in Slack settings using a new bot token. GitHub connections, connection bindings, event configuration, activation and automation execution history are excluded.`,
+        `Slack connection metadata restored disabled: ${slackConnections.imported} imported, ${slackConnections.skipped} skipped; ${slackConnections.sourceEnabled} enabled in the entire source section; ${slackConnections.restoredDisabled} restored disabled without credentials. Skips by reason: existing connection ID or Slack workspace identity: ${slackConnections.reasons.EXISTING_IDENTITY}. Reconnect a workspace manually in Slack settings using a new bot token. GitHub connections, connection bindings, event configuration, activation and event-triggered run history are excluded.`,
       ]
     : [];
 }
@@ -113,23 +113,23 @@ export function createRecoveryImportReport(
       'Paths and provider-session IDs may be metadata; repository/worktree files, provider history bytes, secrets, native account homes and live runtime authority are excluded.',
       ...(periodicConfig
         ? [
-            `Periodic configuration restored disabled: ${periodicConfig.imported} imported, ${periodicConfig.skipped} skipped; ${periodicConfig.sourceEnabled} enabled in the entire source section; ${periodicConfig.restoredDisabled} restored disabled. Skips by reason: existing task ID: ${periodicConfig.reasons.EXISTING_IDENTITY}; project not created by this import: ${periodicConfig.reasons.INCOMPLETE_DEPENDENCY}.${includesPeriodicHistory(metadata) ? '' : ' Periodic execution history excluded.'}`,
+            `Scheduled automation configuration restored disabled: ${periodicConfig.imported} imported, ${periodicConfig.skipped} skipped; ${periodicConfig.sourceEnabled} enabled in the entire source section; ${periodicConfig.restoredDisabled} restored disabled. Skips by reason: existing automation ID: ${periodicConfig.reasons.EXISTING_IDENTITY}; project not created by this import: ${periodicConfig.reasons.INCOMPLETE_DEPENDENCY}.${includesPeriodicHistory(metadata) ? '' : ' Scheduled run history excluded.'}`,
           ]
         : []),
       ...(periodicWorkspaceLinks
         ? [
-            `Periodic workspace links: ${periodicWorkspaceLinks.imported} imported, ${periodicWorkspaceLinks.skipped} skipped. Only links present in the backup are counted; these counts overlap workspace totals. Skips mean the workspace or task was not created by this import. Linked tasks are restored disabled${includesPeriodicHistory(metadata) ? '.' : '; periodic execution history is excluded.'}`,
+            `Scheduled automation workspace links: ${periodicWorkspaceLinks.imported} imported, ${periodicWorkspaceLinks.skipped} skipped. Only links present in the backup are counted; these counts overlap workspace totals. Skips mean the workspace or automation was not created by this import. Linked automations are restored disabled${includesPeriodicHistory(metadata) ? '.' : '; scheduled run history is excluded.'}`,
           ]
         : []),
       ...(automationDefinitions
         ? [
-            `Automation definition bodies restored disabled: ${automationDefinitions.imported} imported, ${automationDefinitions.skipped} skipped; ${automationDefinitions.sourceEnabled} enabled in the entire source section; ${automationDefinitions.restoredDisabled} restored disabled. Skips by reason: existing definition ID: ${automationDefinitions.reasons.EXISTING_IDENTITY}; project not created by this import: ${automationDefinitions.reasons.INCOMPLETE_DEPENDENCY}. ${definitionConnectionScope(metadata)}, event configuration, proposal provenance, activation and automation execution history are excluded. Inspect recovered bodies and author new complete event configuration where editing is available.`,
+            `Automation definition bodies restored disabled: ${automationDefinitions.imported} imported, ${automationDefinitions.skipped} skipped; ${automationDefinitions.sourceEnabled} enabled in the entire source section; ${automationDefinitions.restoredDisabled} restored disabled. Skips by reason: existing definition ID: ${automationDefinitions.reasons.EXISTING_IDENTITY}; project not created by this import: ${automationDefinitions.reasons.INCOMPLETE_DEPENDENCY}. ${definitionConnectionScope(metadata)}, event configuration, proposal provenance, activation and event-triggered run history are excluded. Inspect recovered bodies and author new complete event configuration where editing is available.`,
           ]
         : []),
       ...slackConnectionWarnings(slackConnections),
       ...(periodicHistory
         ? [
-            `Periodic execution history: ${periodicHistory.imported} imported, ${periodicHistory.skipped} skipped; ${periodicHistory.sourceRunning} RUNNING in the entire source section; ${periodicHistory.restoredHistoricalFailed} restored FAILED as historical only, provider outcome unknown; ${periodicHistory.restoredSettled} restored settled. Skips by reason: existing execution ID: ${periodicHistory.reasons.EXISTING_IDENTITY}; occupied workspace: ${periodicHistory.reasons.CONFLICTING_IDENTITY_OR_PARENT}; dependency not created by this import: ${periodicHistory.reasons.INCOMPLETE_DEPENDENCY}. Imported executions will not be resumed.`,
+            `Scheduled run history: ${periodicHistory.imported} imported, ${periodicHistory.skipped} skipped; ${periodicHistory.sourceRunning} RUNNING in the entire source section; ${periodicHistory.restoredHistoricalFailed} restored FAILED as historical only, provider outcome unknown; ${periodicHistory.restoredSettled} restored settled. Skips by reason: existing run ID: ${periodicHistory.reasons.EXISTING_IDENTITY}; occupied workspace: ${periodicHistory.reasons.CONFLICTING_IDENTITY_OR_PARENT}; dependency not created by this import: ${periodicHistory.reasons.INCOMPLETE_DEPENDENCY}. Imported runs will not be resumed.`,
           ]
         : []),
     ],

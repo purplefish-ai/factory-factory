@@ -45,18 +45,19 @@ export function DataBackupSection() {
       <p className="text-sm text-muted-foreground">
         Partial export includes projects, workspaces, session metadata, preferences and scheduled
         automation configuration, workspace links to newly imported paused automations and retained
-        run history. RUNNING runs restore FAILED as historical only, with unknown provider outcome
-        and no resume authority. Repository and worktree files, provider history bytes, archives,
-        mail, secrets, native account homes and live runtime authority are excluded. Automation
-        definition bodies and run preferences restore disabled; connection bindings, event
-        configuration, proposal provenance and event-triggered run history are excluded. Inspect
-        recovered bodies and author new complete event configuration where editing is available;
-        archived projects and definitions that have reached their revision limit retain their
-        ordinary editing restrictions. Slack connection metadata restores disconnected, without
-        tokens; reconnect manually in Slack settings. GitHub connections and event configuration are
-        excluded. Provider-session identities may remain metadata. Workspace.creationMetadata,
-        WorkspacePR.observation on actual included PR rows, AgentSession.providerMetadata and
-        PeriodicTaskExecution.launchSnapshot preserve SQL NULL versus top-level JSON null.
+        scheduled run history. RUNNING runs restore FAILED as historical only, with unknown provider
+        outcome and no resume authority. Repository and worktree files, provider history bytes,
+        archives, mail, secrets, native account homes and live runtime authority are excluded.
+        Automation definition bodies and run preferences restore disabled; connection bindings,
+        event configuration, proposal provenance and event-triggered run history are excluded.
+        Inspect recovered bodies and author new complete event configuration where editing is
+        available; archived projects and definitions that have reached their revision limit retain
+        their ordinary editing restrictions. Slack connection metadata restores disconnected,
+        without tokens; reconnect manually in Slack settings. GitHub connections and event
+        configuration are excluded. Provider-session identities may remain metadata.
+        Workspace.creationMetadata, WorkspacePR.observation on actual included PR rows,
+        AgentSession.providerMetadata and PeriodicTaskExecution.launchSnapshot preserve SQL NULL
+        versus top-level JSON null.
       </p>
     </SettingsSection>
   );

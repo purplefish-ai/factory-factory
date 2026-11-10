@@ -223,7 +223,12 @@ export const AutomationDefinitionBodiesRecovery: Story = {
       dialog.getByRole('region', { name: 'Scheduled run history recovery' })
     ).toBeVisible();
     await expect(dialog.getByText('Scheduled runs: 3 imported, 6 skipped')).toBeVisible();
-    await expect(dialog.getByText(/event-triggered run history are excluded/)).toBeVisible();
+    await expect(
+      dialog.getByText(
+        'Only definition bodies and run preferences are restored. Connections, event configuration and event-triggered run history are excluded.',
+        { exact: true }
+      )
+    ).toBeVisible();
   },
   args: {
     result: {

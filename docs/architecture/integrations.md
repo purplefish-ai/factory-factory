@@ -269,9 +269,11 @@ ledger entry, session queue delivery or receipt protocol.
 The UI calls saved instructions and triggers **automations**, each execution a
 **run**, and the AI carrying out the work an **agent**. Existing `/agents` URLs
 and stored identifiers retain their names for compatibility. Event automation
-procedures use the `automation` tRPC namespace. Tool tabs use **Runs** and
-history headings use **Run history**, independent of trigger kind. **Scheduled**
-and **Event-triggered** describe the trigger or the creation choice.
+procedures use the `automation` tRPC namespace. The naming convention is
+**Runs** for tool tabs and **Run history** for history headings, independent of
+trigger kind. Currently only scheduled automations expose these views;
+event-triggered automations have no run history panel yet. **Scheduled** and
+**Event-triggered** describe the trigger or the creation choice.
 
 The mixed Automations page at `/projects/:slug/agents` groups definitions under
 **Scheduled** and **Event-triggered** headings. Event pagination stays in its
