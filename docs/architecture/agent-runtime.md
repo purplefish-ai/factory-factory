@@ -93,6 +93,26 @@ available to other consumers. Stopping the session invalidates its shared
 hydration generation before publication; a later startup starts fresh hydration
 instead of joining the superseded preparation.
 
+Passive loads, startup and workflow finalization share one provider history read
+and projection per session, provider identity, worktree and Codex account
+(`data/provider-history-transcript-loader.ts`). Each caller applies the result
+through its own domain and fences. The read stops only when every caller is
+stale and is never cached then; a caller that is still current starts afresh. A
+caller never joins a read with a stale caller, since a stop, reset or rollover
+after the read began may have changed the file.
+
+Completed projections stay in `ProviderHistoryTranscriptCache`
+(`data/provider-history-transcript-cache.ts`), so reopening an idle session
+whose store was cleared skips the read. Entries are keyed by provider, provider
+session ID and file path, and serve only the exact file identity (path, size,
+modification time and inode) observed before and after the read; a changed file
+is reread and replaces its entry. The cache holds only file projections, never
+store state, so clearing a store keeps its preservation rules and later loads
+merge retained local entries as before. It keeps at most 16 entries and 128 MiB
+estimated from file sizes, evicting the least recently used first. An entry used
+by a live store does not expire; `session_cleared` starts a five-minute TTL and
+permanent deletion drops the session's entries through `SessionScope`.
+
 Cold resumes overlap history hydration with adapter spawning and ACP
 initialization. Provider session loading/creation waits for the history barrier,
 which restores timestamps and establishes replay suppression before provider
@@ -1204,13 +1224,13 @@ finalization each have one coordinator or service.
 in-memory state. Collaborators register disposers in the composition root, and
 the coordinators run the scope's stages instead of listing collaborators:
 
-| Stage           | Run by                                   | Disposers                                                       |
-| --------------- | ---------------------------------------- | --------------------------------------------------------------- |
-| `beginTeardown` | Stop and runtime exit, first             | Prompt-turn completion, queued ACP prompts                      |
-| `quiesce`       | Stop, before the runtime stops           | Streaming and replay state, pending permissions                 |
-| `settle`        | Stop and exit, after orphan finalization | ACP event state; permissions on exit                            |
-| `completeStop`  | Every stop, before the reservation ends  | Dispatch claim, steering, retries, mail claims                  |
-| `forget`        | `session_permanently_deleted`            | Dispatch state and manual resume, configuration, observed-empty |
+| Stage           | Run by                                   | Disposers                                                                                |
+| --------------- | ---------------------------------------- | ---------------------------------------------------------------------------------------- |
+| `beginTeardown` | Stop and runtime exit, first             | Prompt-turn completion, queued ACP prompts                                               |
+| `quiesce`       | Stop, before the runtime stops           | Streaming and replay state, pending permissions                                          |
+| `settle`        | Stop and exit, after orphan finalization | ACP event state; permissions on exit                                                     |
+| `completeStop`  | Every stop, before the reservation ends  | Dispatch claim, steering, retries, mail claims                                           |
+| `forget`        | `session_permanently_deleted`            | Dispatch state and manual resume, configuration, observed-empty, cached provider history |
 
 Stages run disposers in registration order and log, rather than propagate, a
 disposer failure. Every stop caller (WebSocket, tRPC, admin, orchestration)

@@ -6,6 +6,12 @@ import { createLogger } from '@/backend/services/logger.service';
 import { summarizeZodIssues } from '@/backend/services/session/service/zod-issue-summary';
 import type { HistoryMessage, ToolResultContentValue } from '@/shared/acp-protocol';
 import { buildHistoryImageAttachments, HistoryImageSourceSchema } from './history-image-attachment';
+import {
+  type HistoryFileReuse,
+  type HistoryLoadResult,
+  loadHistoryFile,
+  type ReusedHistoryFile,
+} from './session-history-file';
 import { readNonEmptyJsonlLines } from './session-history-jsonl-reader';
 
 const logger = createLogger('session-history-loader');
@@ -50,11 +56,7 @@ const ClaudeHistoryEntrySchema = z
 type ClaudeSessionHistoryEntry = z.infer<typeof ClaudeHistoryEntrySchema>;
 const SAFE_PROVIDER_SESSION_ID_PATTERN = /^[A-Za-z0-9_-]+$/;
 
-export type ClaudeSessionHistoryLoadResult =
-  | { status: 'loaded'; history: HistoryMessage[]; filePath: string }
-  | { status: 'not_found' }
-  | { status: 'skipped'; reason: 'missing_provider_session_id' | 'invalid_provider_session_id' }
-  | { status: 'error'; reason: 'read_failed'; filePath: string };
+export type ClaudeSessionHistoryLoadResult = HistoryLoadResult;
 
 function getClaudeConfigDir(): string {
   return configService.getClaudeConfigDir();
@@ -485,13 +487,14 @@ async function findSessionFileInProject(
 }
 
 class ClaudeSessionHistoryLoaderService {
-  async loadSessionHistory(params: {
+  async loadSessionHistory<T = never>(params: {
     providerSessionId: string | null | undefined;
     workingDir: string;
     /** Parse only transcript lines containing this text, found by a byte search. */
     onlyLinesContaining?: string;
     isCurrent?: () => boolean;
-  }): Promise<ClaudeSessionHistoryLoadResult> {
+    reuse?: HistoryFileReuse<T>;
+  }): Promise<ClaudeSessionHistoryLoadResult | ReusedHistoryFile<T>> {
     if (!params.providerSessionId) {
       return { status: 'skipped', reason: 'missing_provider_session_id' };
     }
@@ -511,16 +514,18 @@ class ClaudeSessionHistoryLoaderService {
       return { status: 'not_found' };
     }
 
-    const readResult = await this.readHistoryFromFile(
+    const providerSessionId = params.providerSessionId;
+    return await loadHistoryFile({
       filePath,
-      params.providerSessionId,
-      params.onlyLinesContaining,
-      params.isCurrent
-    );
-    if (readResult.hadReadError) {
-      return { status: 'error', reason: 'read_failed', filePath };
-    }
-    return { status: 'loaded', history: readResult.history, filePath };
+      reuse: params.reuse,
+      read: () =>
+        this.readHistoryFromFile(
+          filePath,
+          providerSessionId,
+          params.onlyLinesContaining,
+          params.isCurrent
+        ),
+    });
   }
 
   private async readHistoryFromFile(

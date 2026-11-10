@@ -233,10 +233,14 @@ not built, since a viewer that arrives later hydrates through `load_session`;
 load replies are always sent.
 
 Provider history comes from the Claude or Codex history loader selected by the
-session's provider and identity. Codex tool-history backfill defers transcript
-renumbering while a session is starting, running, or stopping, including turns
-that begin during the history read. This preserves the message orders used by
-live text deltas. A later idle load can recover the missing tools.
+session's provider and identity. Concurrent loads, retries and an overlapping
+startup share one read, and reopening an idle session reuses its projection
+while the history file is unchanged; see
+[agent runtime](architecture/agent-runtime.md). Codex tool-history backfill
+defers transcript renumbering while a session is starting, running, or stopping,
+including turns that begin during the history read. This preserves the message
+orders used by live text deltas. A later idle load can recover the missing
+tools.
 
 In-memory pending requests can survive a viewer reconnect while the session
 exists; they are not a durable permission request that can be resumed after a

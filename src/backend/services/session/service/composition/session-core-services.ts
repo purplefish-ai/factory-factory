@@ -9,6 +9,7 @@ import {
 import { fetchClaudePlanUsage } from '@/backend/services/session/service/acp/claude-plan-usage-loader';
 import { closedSessionPersistenceService } from '@/backend/services/session/service/archive/closed-session-persistence.service';
 import { SessionConfigService } from '@/backend/services/session/service/config/session.config.service';
+import { providerHistoryTranscriptCache } from '@/backend/services/session/service/data/provider-history-transcript-cache';
 import { hydrateProviderHistoryIfNeeded } from '@/backend/services/session/service/data/session-provider-history-hydrator';
 import { sessionRepository } from '@/backend/services/session/service/data/session.repository';
 import { SessionNotificationDeliveryService } from '@/backend/services/session/service/delivery/session-notification-delivery.service';
@@ -111,8 +112,14 @@ sessionScope.register('session-configuration', {
 sessionScope.register('observed-empty-provider-session', {
   forget: (id) => acpRuntimeManager.forgetObservedEmptyProviderSession(id),
 });
+sessionScope.register('provider-history-transcript-cache', {
+  forget: (id) => providerHistoryTranscriptCache.forget(id),
+});
 sessionDomainService.on('session_permanently_deleted', (sessionId: string) => {
   sessionScope.forget(sessionId);
+});
+sessionDomainService.on('session_cleared', (sessionId: string) => {
+  providerHistoryTranscriptCache.release(sessionId);
 });
 
 export const sessionPromptTurnCompletionService = new SessionPromptTurnCompletionService();

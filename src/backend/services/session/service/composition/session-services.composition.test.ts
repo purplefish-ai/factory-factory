@@ -4,6 +4,7 @@ import {
   sessionLifecycleService as publicSessionLifecycleService,
   sessionDispatchService as publicSessionDispatchService,
 } from '@/backend/services/session';
+import { providerHistoryTranscriptCache } from '@/backend/services/session/service/data/provider-history-transcript-cache';
 import {
   createLifecycleHarness,
   createLifecycleTestSession,
@@ -119,6 +120,16 @@ describe('session services composition', () => {
       'workspace-composed',
       'session-composed'
     );
+  });
+
+  it('starts cached history expiry on store clearing and drops it on permanent deletion', () => {
+    const release = vi.spyOn(providerHistoryTranscriptCache, 'release');
+    const forget = vi.spyOn(providerHistoryTranscriptCache, 'forget');
+    sessionDomainService.clearSession('cached-session', { preserveRejections: true });
+    expect(release).toHaveBeenCalledExactlyOnceWith('cached-session');
+    expect(forget).not.toHaveBeenCalled();
+    sessionDomainService.clearSession('cached-session', { permanentlyDeleted: true });
+    expect(forget).toHaveBeenCalledExactlyOnceWith('cached-session');
   });
 });
 

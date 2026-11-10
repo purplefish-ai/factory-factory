@@ -94,6 +94,7 @@ describe('history hydration after provider identity rollover', () => {
       providerSessionId: 'new',
       workingDir: '/tmp/history-fixture',
       isCurrent: expect.any(Function),
+      reuse: expect.any(Function),
     });
     expect(
       sessionDomainService.getTranscriptSnapshot('history-session').map((entry) => entry.text)
@@ -121,6 +122,7 @@ describe('history hydration after provider identity rollover', () => {
       providerSessionId: 'new',
       workingDir: '/tmp/history-fixture',
       isCurrent: expect.any(Function),
+      reuse: expect.any(Function),
     });
     expect(sessionDomainService.getTranscriptSnapshot('history-session')[0]?.text).toBe(
       'new Claude turn'
