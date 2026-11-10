@@ -6,6 +6,7 @@ import { agentRunResultSchema } from '@/shared/agent-runtime';
 import { initialDeliveryEvidenceSchema } from '@/shared/event-agent-delivery';
 import { eventAgentExecutionSchema } from '@/shared/event-agent-launch';
 import { eventLaunchPreparationSchema } from '@/shared/event-agent-preparation';
+import { turnLimitMs } from '@/shared/turn-limit';
 
 export function publicReason(reason: string | null) {
   return reason === null
@@ -26,6 +27,7 @@ export function runHistoryProjection(
   const evidence = initialDeliveryEvidenceSchema.safeParse(row.initialDelivery?.evidence);
   const result = agentRunResultSchema.safeParse(row.result);
   const execution = eventAgentExecutionSchema.safeParse(row.effectiveExecution);
+  const timeoutMs = turnLimitMs(execution.success ? execution.data.turnLimitMinutes : null);
   const outcome = evidence.success ? evidence.data.outcome : undefined;
   return agentRunHistorySchema.parse({
     context:
@@ -53,8 +55,8 @@ export function runHistoryProjection(
           ).toISOString()
         : null,
     turnDeadlineAt:
-      row.initialDelivery?.sendingAt && !(execution.success && execution.data.provider === 'CODEX')
-        ? new Date(row.initialDelivery.sendingAt.getTime() + 4 * 60 * 60 * 1000).toISOString()
+      row.initialDelivery?.sendingAt && timeoutMs !== undefined
+        ? new Date(row.initialDelivery.sendingAt.getTime() + timeoutMs).toISOString()
         : null,
     preparation: preparation.success ? preparation.data : null,
     delivery: row.initialDelivery

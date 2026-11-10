@@ -505,6 +505,7 @@ describe('DataBackupService', () => {
           defaultClaudeModel: 'sonnet',
           defaultCodexModel: 'gpt-5-codex',
           defaultWorkspacePermissions: 'STRICT',
+          turnLimitMinutes: 120,
           automationPermissions: 'YOLO',
           reviewerSessionProvider: SessionProvider.CLAUDE,
           reviewerClaudeModel: 'opus',
@@ -548,6 +549,7 @@ describe('DataBackupService', () => {
 
       expect(exportedData.data.userSettings?.ratchetReviewTriggerMode).toBe('CHANGES_REQUESTED');
       expect(exportedData.data.userSettings?.childWorkspacesEnabled).toBe(true);
+      expect(exportedData.data.userSettings?.turnLimitMinutes).toBeNull();
     });
 
     it('exports null user settings when absent', async () => {
@@ -706,7 +708,7 @@ describe('DataBackupService', () => {
   });
 
   describe('importData', () => {
-    it('round-trips ticket prompts and explicit automation permissions through current backups', async () => {
+    it('round-trips ticket prompts, turn limits and automation permissions through current backups', async () => {
       vi.mocked(prisma.project.findMany).mockResolvedValue([]);
       vi.mocked(prisma.workspace.findMany).mockResolvedValue([]);
       vi.mocked(prisma.agentSession.findMany).mockResolvedValue([]);
@@ -716,9 +718,11 @@ describe('DataBackupService', () => {
       vi.mocked(mockTx.userSettings.create).mockResolvedValue(mockUserSettings);
       const exported = await dataBackupService.exportData('test');
       expect(exported.meta.schemaVersion).toBe(8);
+      expect(exported.data.userSettings?.turnLimitMinutes).toBe(120);
       await dataBackupService.importData(exported);
       expect(mockTx.userSettings.create).toHaveBeenCalledWith({
         data: expect.objectContaining({
+          turnLimitMinutes: 120,
           ticketDispatchPrompt: mockUserSettings.ticketDispatchPrompt,
           automationPermissions: 'YOLO',
         }),

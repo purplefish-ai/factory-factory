@@ -27,6 +27,7 @@ export type AggregateUserSettings = {
 }
 
 export type UserSettingsAvgAggregateOutputType = {
+  turnLimitMinutes: number | null
   voiceTtsSpeed: number | null
   voiceUtteranceEndMs: number | null
   voiceBargeInSustainedMs: number | null
@@ -34,6 +35,7 @@ export type UserSettingsAvgAggregateOutputType = {
 }
 
 export type UserSettingsSumAggregateOutputType = {
+  turnLimitMinutes: number | null
   voiceTtsSpeed: number | null
   voiceUtteranceEndMs: number | null
   voiceBargeInSustainedMs: number | null
@@ -41,6 +43,7 @@ export type UserSettingsSumAggregateOutputType = {
 }
 
 export type UserSettingsMinAggregateOutputType = {
+  turnLimitMinutes: number | null
   id: string | null
   userId: string | null
   preferredIde: string | null
@@ -80,6 +83,7 @@ export type UserSettingsMinAggregateOutputType = {
 }
 
 export type UserSettingsMaxAggregateOutputType = {
+  turnLimitMinutes: number | null
   id: string | null
   userId: string | null
   preferredIde: string | null
@@ -119,6 +123,7 @@ export type UserSettingsMaxAggregateOutputType = {
 }
 
 export type UserSettingsCountAggregateOutputType = {
+  turnLimitMinutes: number
   id: number
   userId: number
   preferredIde: number
@@ -162,6 +167,7 @@ export type UserSettingsCountAggregateOutputType = {
 
 
 export type UserSettingsAvgAggregateInputType = {
+  turnLimitMinutes?: true
   voiceTtsSpeed?: true
   voiceUtteranceEndMs?: true
   voiceBargeInSustainedMs?: true
@@ -169,6 +175,7 @@ export type UserSettingsAvgAggregateInputType = {
 }
 
 export type UserSettingsSumAggregateInputType = {
+  turnLimitMinutes?: true
   voiceTtsSpeed?: true
   voiceUtteranceEndMs?: true
   voiceBargeInSustainedMs?: true
@@ -176,6 +183,7 @@ export type UserSettingsSumAggregateInputType = {
 }
 
 export type UserSettingsMinAggregateInputType = {
+  turnLimitMinutes?: true
   id?: true
   userId?: true
   preferredIde?: true
@@ -215,6 +223,7 @@ export type UserSettingsMinAggregateInputType = {
 }
 
 export type UserSettingsMaxAggregateInputType = {
+  turnLimitMinutes?: true
   id?: true
   userId?: true
   preferredIde?: true
@@ -254,6 +263,7 @@ export type UserSettingsMaxAggregateInputType = {
 }
 
 export type UserSettingsCountAggregateInputType = {
+  turnLimitMinutes?: true
   id?: true
   userId?: true
   preferredIde?: true
@@ -382,6 +392,7 @@ export type UserSettingsGroupByArgs<ExtArgs extends runtime.Types.Extensions.Int
 }
 
 export type UserSettingsGroupByOutputType = {
+  turnLimitMinutes: number | null
   id: string
   userId: string
   preferredIde: string
@@ -446,6 +457,7 @@ export type UserSettingsWhereInput = {
   AND?: Prisma.UserSettingsWhereInput | Prisma.UserSettingsWhereInput[]
   OR?: Prisma.UserSettingsWhereInput[]
   NOT?: Prisma.UserSettingsWhereInput | Prisma.UserSettingsWhereInput[]
+  turnLimitMinutes?: Prisma.IntNullableFilter<"UserSettings"> | number | null
   id?: Prisma.StringFilter<"UserSettings"> | string
   userId?: Prisma.StringFilter<"UserSettings"> | string
   preferredIde?: Prisma.StringFilter<"UserSettings"> | string
@@ -487,6 +499,7 @@ export type UserSettingsWhereInput = {
 }
 
 export type UserSettingsOrderByWithRelationInput = {
+  turnLimitMinutes?: Prisma.SortOrderInput | Prisma.SortOrder
   id?: Prisma.SortOrder
   userId?: Prisma.SortOrder
   preferredIde?: Prisma.SortOrder
@@ -533,6 +546,7 @@ export type UserSettingsWhereUniqueInput = Prisma.AtLeast<{
   AND?: Prisma.UserSettingsWhereInput | Prisma.UserSettingsWhereInput[]
   OR?: Prisma.UserSettingsWhereInput[]
   NOT?: Prisma.UserSettingsWhereInput | Prisma.UserSettingsWhereInput[]
+  turnLimitMinutes?: Prisma.IntNullableFilter<"UserSettings"> | number | null
   preferredIde?: Prisma.StringFilter<"UserSettings"> | string
   customIdeCommand?: Prisma.StringNullableFilter<"UserSettings"> | string | null
   playSoundOnComplete?: Prisma.BoolFilter<"UserSettings"> | boolean
@@ -572,6 +586,7 @@ export type UserSettingsWhereUniqueInput = Prisma.AtLeast<{
 }, "id" | "userId">
 
 export type UserSettingsOrderByWithAggregationInput = {
+  turnLimitMinutes?: Prisma.SortOrderInput | Prisma.SortOrder
   id?: Prisma.SortOrder
   userId?: Prisma.SortOrder
   preferredIde?: Prisma.SortOrder
@@ -621,6 +636,7 @@ export type UserSettingsScalarWhereWithAggregatesInput = {
   AND?: Prisma.UserSettingsScalarWhereWithAggregatesInput | Prisma.UserSettingsScalarWhereWithAggregatesInput[]
   OR?: Prisma.UserSettingsScalarWhereWithAggregatesInput[]
   NOT?: Prisma.UserSettingsScalarWhereWithAggregatesInput | Prisma.UserSettingsScalarWhereWithAggregatesInput[]
+  turnLimitMinutes?: Prisma.IntNullableWithAggregatesFilter<"UserSettings"> | number | null
   id?: Prisma.StringWithAggregatesFilter<"UserSettings"> | string
   userId?: Prisma.StringWithAggregatesFilter<"UserSettings"> | string
   preferredIde?: Prisma.StringWithAggregatesFilter<"UserSettings"> | string
@@ -662,6 +678,7 @@ export type UserSettingsScalarWhereWithAggregatesInput = {
 }
 
 export type UserSettingsCreateInput = {
+  turnLimitMinutes?: number | null
   id?: string
   userId?: string
   preferredIde?: string
@@ -703,6 +720,7 @@ export type UserSettingsCreateInput = {
 }
 
 export type UserSettingsUncheckedCreateInput = {
+  turnLimitMinutes?: number | null
   id?: string
   userId?: string
   preferredIde?: string
@@ -744,6 +762,7 @@ export type UserSettingsUncheckedCreateInput = {
 }
 
 export type UserSettingsUpdateInput = {
+  turnLimitMinutes?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   id?: Prisma.StringFieldUpdateOperationsInput | string
   userId?: Prisma.StringFieldUpdateOperationsInput | string
   preferredIde?: Prisma.StringFieldUpdateOperationsInput | string
@@ -785,6 +804,7 @@ export type UserSettingsUpdateInput = {
 }
 
 export type UserSettingsUncheckedUpdateInput = {
+  turnLimitMinutes?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   id?: Prisma.StringFieldUpdateOperationsInput | string
   userId?: Prisma.StringFieldUpdateOperationsInput | string
   preferredIde?: Prisma.StringFieldUpdateOperationsInput | string
@@ -826,6 +846,7 @@ export type UserSettingsUncheckedUpdateInput = {
 }
 
 export type UserSettingsCreateManyInput = {
+  turnLimitMinutes?: number | null
   id?: string
   userId?: string
   preferredIde?: string
@@ -867,6 +888,7 @@ export type UserSettingsCreateManyInput = {
 }
 
 export type UserSettingsUpdateManyMutationInput = {
+  turnLimitMinutes?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   id?: Prisma.StringFieldUpdateOperationsInput | string
   userId?: Prisma.StringFieldUpdateOperationsInput | string
   preferredIde?: Prisma.StringFieldUpdateOperationsInput | string
@@ -908,6 +930,7 @@ export type UserSettingsUpdateManyMutationInput = {
 }
 
 export type UserSettingsUncheckedUpdateManyInput = {
+  turnLimitMinutes?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   id?: Prisma.StringFieldUpdateOperationsInput | string
   userId?: Prisma.StringFieldUpdateOperationsInput | string
   preferredIde?: Prisma.StringFieldUpdateOperationsInput | string
@@ -949,6 +972,7 @@ export type UserSettingsUncheckedUpdateManyInput = {
 }
 
 export type UserSettingsCountOrderByAggregateInput = {
+  turnLimitMinutes?: Prisma.SortOrder
   id?: Prisma.SortOrder
   userId?: Prisma.SortOrder
   preferredIde?: Prisma.SortOrder
@@ -990,6 +1014,7 @@ export type UserSettingsCountOrderByAggregateInput = {
 }
 
 export type UserSettingsAvgOrderByAggregateInput = {
+  turnLimitMinutes?: Prisma.SortOrder
   voiceTtsSpeed?: Prisma.SortOrder
   voiceUtteranceEndMs?: Prisma.SortOrder
   voiceBargeInSustainedMs?: Prisma.SortOrder
@@ -997,6 +1022,7 @@ export type UserSettingsAvgOrderByAggregateInput = {
 }
 
 export type UserSettingsMaxOrderByAggregateInput = {
+  turnLimitMinutes?: Prisma.SortOrder
   id?: Prisma.SortOrder
   userId?: Prisma.SortOrder
   preferredIde?: Prisma.SortOrder
@@ -1036,6 +1062,7 @@ export type UserSettingsMaxOrderByAggregateInput = {
 }
 
 export type UserSettingsMinOrderByAggregateInput = {
+  turnLimitMinutes?: Prisma.SortOrder
   id?: Prisma.SortOrder
   userId?: Prisma.SortOrder
   preferredIde?: Prisma.SortOrder
@@ -1075,6 +1102,7 @@ export type UserSettingsMinOrderByAggregateInput = {
 }
 
 export type UserSettingsSumOrderByAggregateInput = {
+  turnLimitMinutes?: Prisma.SortOrder
   voiceTtsSpeed?: Prisma.SortOrder
   voiceUtteranceEndMs?: Prisma.SortOrder
   voiceBargeInSustainedMs?: Prisma.SortOrder
@@ -1100,6 +1128,7 @@ export type FloatFieldUpdateOperationsInput = {
 
 
 export type UserSettingsSelect<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetSelect<{
+  turnLimitMinutes?: boolean
   id?: boolean
   userId?: boolean
   preferredIde?: boolean
@@ -1141,6 +1170,7 @@ export type UserSettingsSelect<ExtArgs extends runtime.Types.Extensions.Internal
 }, ExtArgs["result"]["userSettings"]>
 
 export type UserSettingsSelectCreateManyAndReturn<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetSelect<{
+  turnLimitMinutes?: boolean
   id?: boolean
   userId?: boolean
   preferredIde?: boolean
@@ -1182,6 +1212,7 @@ export type UserSettingsSelectCreateManyAndReturn<ExtArgs extends runtime.Types.
 }, ExtArgs["result"]["userSettings"]>
 
 export type UserSettingsSelectUpdateManyAndReturn<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetSelect<{
+  turnLimitMinutes?: boolean
   id?: boolean
   userId?: boolean
   preferredIde?: boolean
@@ -1223,6 +1254,7 @@ export type UserSettingsSelectUpdateManyAndReturn<ExtArgs extends runtime.Types.
 }, ExtArgs["result"]["userSettings"]>
 
 export type UserSettingsSelectScalar = {
+  turnLimitMinutes?: boolean
   id?: boolean
   userId?: boolean
   preferredIde?: boolean
@@ -1263,12 +1295,13 @@ export type UserSettingsSelectScalar = {
   updatedAt?: boolean
 }
 
-export type UserSettingsOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "userId" | "preferredIde" | "customIdeCommand" | "playSoundOnComplete" | "notificationSoundPath" | "childWorkspacesEnabled" | "ticketDispatchPrompt" | "workspaceOrder" | "cachedSlashCommands" | "ratchetEnabled" | "ratchetReplyToPrComments" | "ratchetReviewTriggerMode" | "defaultSessionProvider" | "defaultClaudeModel" | "defaultCodexModel" | "defaultClaudeReasoningEffort" | "defaultCodexReasoningEffort" | "defaultWorkspacePermissions" | "automationPermissions" | "reviewerSessionProvider" | "reviewerClaudeModel" | "reviewerCodexModel" | "postReviewToGitHub" | "voiceModeEnabled" | "deepgramApiKeyEncrypted" | "voiceTtsModel" | "voiceTtsSpeed" | "voiceUtteranceEndMs" | "voiceBargeInSustainedMs" | "appearanceColorScheme" | "appearanceBackgroundColor" | "appearanceForegroundColor" | "appearanceFontScale" | "appearanceFontSans" | "appearanceFontMono" | "createdAt" | "updatedAt", ExtArgs["result"]["userSettings"]>
+export type UserSettingsOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"turnLimitMinutes" | "id" | "userId" | "preferredIde" | "customIdeCommand" | "playSoundOnComplete" | "notificationSoundPath" | "childWorkspacesEnabled" | "ticketDispatchPrompt" | "workspaceOrder" | "cachedSlashCommands" | "ratchetEnabled" | "ratchetReplyToPrComments" | "ratchetReviewTriggerMode" | "defaultSessionProvider" | "defaultClaudeModel" | "defaultCodexModel" | "defaultClaudeReasoningEffort" | "defaultCodexReasoningEffort" | "defaultWorkspacePermissions" | "automationPermissions" | "reviewerSessionProvider" | "reviewerClaudeModel" | "reviewerCodexModel" | "postReviewToGitHub" | "voiceModeEnabled" | "deepgramApiKeyEncrypted" | "voiceTtsModel" | "voiceTtsSpeed" | "voiceUtteranceEndMs" | "voiceBargeInSustainedMs" | "appearanceColorScheme" | "appearanceBackgroundColor" | "appearanceForegroundColor" | "appearanceFontScale" | "appearanceFontSans" | "appearanceFontMono" | "createdAt" | "updatedAt", ExtArgs["result"]["userSettings"]>
 
 export type $UserSettingsPayload<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
   name: "UserSettings"
   objects: {}
   scalars: runtime.Types.Extensions.GetPayloadResult<{
+    turnLimitMinutes: number | null
     id: string
     userId: string
     preferredIde: string
@@ -1390,8 +1423,8 @@ export interface UserSettingsDelegate<ExtArgs extends runtime.Types.Extensions.I
    * // Get first 10 UserSettings
    * const userSettings = await prisma.userSettings.findMany({ take: 10 })
    * 
-   * // Only select the `id`
-   * const userSettingsWithIdOnly = await prisma.userSettings.findMany({ select: { id: true } })
+   * // Only select the `turnLimitMinutes`
+   * const userSettingsWithTurnLimitMinutesOnly = await prisma.userSettings.findMany({ select: { turnLimitMinutes: true } })
    * 
    */
   findMany<T extends UserSettingsFindManyArgs>(args?: Prisma.SelectSubset<T, UserSettingsFindManyArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$UserSettingsPayload<ExtArgs>, T, "findMany", GlobalOmitOptions>>
@@ -1435,9 +1468,9 @@ export interface UserSettingsDelegate<ExtArgs extends runtime.Types.Extensions.I
    *   ]
    * })
    * 
-   * // Create many UserSettings and only return the `id`
-   * const userSettingsWithIdOnly = await prisma.userSettings.createManyAndReturn({
-   *   select: { id: true },
+   * // Create many UserSettings and only return the `turnLimitMinutes`
+   * const userSettingsWithTurnLimitMinutesOnly = await prisma.userSettings.createManyAndReturn({
+   *   select: { turnLimitMinutes: true },
    *   data: [
    *     // ... provide data here
    *   ]
@@ -1526,9 +1559,9 @@ export interface UserSettingsDelegate<ExtArgs extends runtime.Types.Extensions.I
    *   ]
    * })
    * 
-   * // Update zero or more UserSettings and only return the `id`
-   * const userSettingsWithIdOnly = await prisma.userSettings.updateManyAndReturn({
-   *   select: { id: true },
+   * // Update zero or more UserSettings and only return the `turnLimitMinutes`
+   * const userSettingsWithTurnLimitMinutesOnly = await prisma.userSettings.updateManyAndReturn({
+   *   select: { turnLimitMinutes: true },
    *   where: {
    *     // ... provide filter here
    *   },
@@ -1730,6 +1763,7 @@ export interface Prisma__UserSettingsClient<T, Null = never, ExtArgs extends run
  * Fields of the UserSettings model
  */
 export interface UserSettingsFieldRefs {
+  readonly turnLimitMinutes: Prisma.FieldRef<"UserSettings", 'Int'>
   readonly id: Prisma.FieldRef<"UserSettings", 'String'>
   readonly userId: Prisma.FieldRef<"UserSettings", 'String'>
   readonly preferredIde: Prisma.FieldRef<"UserSettings", 'String'>

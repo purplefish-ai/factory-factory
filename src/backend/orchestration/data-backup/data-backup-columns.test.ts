@@ -175,6 +175,7 @@ const exportColumns: Record<string, ModelColumns> = {
     defaultClaudeReasoningEffort: exported(),
     defaultCodexReasoningEffort: exported(),
     defaultWorkspacePermissions: exported(),
+    turnLimitMinutes: exported(),
     automationPermissions: exported(),
     reviewerSessionProvider: exported(),
     reviewerClaudeModel: exported(),

@@ -11,6 +11,7 @@ export const onRequest = fn<(path: string, input: unknown) => void>();
 const defaultSettings = {
   playSoundOnComplete: true,
   childWorkspacesEnabled: true,
+  turnLimitMinutes: null as number | null,
   ticketDispatchPrompt: null as string | null,
   preferredIde: 'cursor',
   customIdeCommand: null as string | null,

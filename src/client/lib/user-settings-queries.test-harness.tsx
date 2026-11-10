@@ -39,6 +39,7 @@ export async function chooseOption(container: HTMLElement, triggerId: string, la
 
 /** Server-side user settings for frontend tests; extend per test with `settings`. */
 export const TEST_USER_SETTINGS = {
+  turnLimitMinutes: null as number | null,
   preferredIde: 'cursor',
   customIdeCommand: null as string | null,
   playSoundOnComplete: true,

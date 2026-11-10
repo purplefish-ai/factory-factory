@@ -39,6 +39,34 @@ export function ChatProviderDefaultsSection() {
             />
             <ProviderCliWarning provider={settings.defaultSessionProvider} />
           </div>
+          <SettingSelect
+            id="turn-limit"
+            label="Turn limit"
+            description="Maximum duration of a Claude or Codex turn. Unlimited by default. Changes apply to new turns and future automation runs."
+            saving={updateSettings.isSaving('turnLimitMinutes')}
+            value={
+              settings.turnLimitMinutes == null ? 'unlimited' : String(settings.turnLimitMinutes)
+            }
+            options={withSavedOption(
+              [
+                { value: 'unlimited', label: 'Unlimited' },
+                ...[30, 60, 120, 240, 480, 1440].map((minutes) => ({
+                  value: String(minutes),
+                  label:
+                    minutes < 60
+                      ? `${minutes} minutes`
+                      : `${minutes / 60} ${minutes === 60 ? 'hour' : 'hours'}`,
+                })),
+              ],
+              settings.turnLimitMinutes == null ? 'unlimited' : String(settings.turnLimitMinutes),
+              settings.turnLimitMinutes === 1 ? '1 minute' : `${settings.turnLimitMinutes} minutes`
+            )}
+            onValueChange={(value) =>
+              updateSettings.mutate({
+                turnLimitMinutes: value === 'unlimited' ? null : Number(value),
+              })
+            }
+          />
           <div className="grid gap-3 sm:grid-cols-2">
             <SettingSelect
               id="default-claude-model"

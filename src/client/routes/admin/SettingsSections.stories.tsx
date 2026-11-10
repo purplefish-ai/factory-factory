@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react';
 import { ThemeProvider } from 'next-themes';
-import { type ReactNode } from 'react';
+import type { ReactNode } from 'react';
 import { toast } from 'sonner';
 import { expect, fn, userEvent, waitFor, within } from 'storybook/test';
 import { AppearanceProvider } from '@/client/components/appearance-provider';
@@ -336,6 +336,39 @@ export const ChatDefaults: Story = {
       expect(onRequest).toHaveBeenCalledWith('userSettings.update', {
         defaultClaudeModel: 'claude-fable-5[1m]',
       })
+    );
+  },
+};
+
+export const TurnLimit: Story = {
+  render: () => (
+    <SettingsStoryProvider settings={{ turnLimitMinutes: 240 }}>
+      <ChatProviderDefaultsSection />
+    </SettingsStoryProvider>
+  ),
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const select = await canvas.findByLabelText('Turn limit');
+    await expect(select).toHaveTextContent('4 hours');
+    await userEvent.click(select);
+    await userEvent.click(await within(document.body).findByRole('option', { name: 'Unlimited' }));
+    await waitFor(() =>
+      expect(onRequest).toHaveBeenCalledWith('userSettings.update', {
+        turnLimitMinutes: null,
+      })
+    );
+  },
+};
+
+export const CustomTurnLimit: Story = {
+  render: () => (
+    <SettingsStoryProvider settings={{ turnLimitMinutes: 1 }}>
+      <ChatProviderDefaultsSection />
+    </SettingsStoryProvider>
+  ),
+  play: async ({ canvasElement }) => {
+    await expect(await within(canvasElement).findByLabelText('Turn limit')).toHaveTextContent(
+      '1 minute'
     );
   },
 };

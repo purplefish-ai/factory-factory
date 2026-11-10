@@ -63,6 +63,7 @@ describe('sessionProviderResolverService', () => {
     vi.mocked(userSettingsService.get).mockResolvedValue({
       id: 'settings-1',
       userId: 'default',
+      turnLimitMinutes: null,
       preferredIde: 'cursor',
       customIdeCommand: null,
       playSoundOnComplete: true,

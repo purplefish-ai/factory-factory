@@ -105,6 +105,34 @@ describe('ChatProviderDefaultsSection', () => {
     expect(updates()).toHaveLength(1);
   });
 
+  it('renders a saved one-minute turn limit with a singular label', async () => {
+    const container = await render({ settings: { turnLimitMinutes: 1 } });
+    expect(container.querySelector('#turn-limit')?.textContent).toBe('1 minute');
+  });
+
+  it('defaults turn limit to Unlimited and saves limits independently', async () => {
+    const container = await render();
+    expect(container.querySelector('#turn-limit')?.textContent).toBe('Unlimited');
+    await chooseOption(container, 'turn-limit', '4 hours');
+    await waitForCheck(() => expect(updates()).toEqual([{ turnLimitMinutes: 240 }]));
+    expect(container.querySelector('#turn-limit')?.textContent).toBe('4 hours');
+    await chooseOption(container, 'turn-limit', 'Unlimited');
+    await waitForCheck(() =>
+      expect(updates()).toEqual([{ turnLimitMinutes: 240 }, { turnLimitMinutes: null }])
+    );
+    expect(container.querySelector('#turn-limit')?.textContent).toBe('Unlimited');
+  });
+
+  it('restores the saved turn limit after a rejected change', async () => {
+    const container = await render({ settings: { turnLimitMinutes: 240 } });
+    server.failUpdates = 'Save rejected';
+    await chooseOption(container, 'turn-limit', 'Unlimited');
+    await waitForCheck(() =>
+      expect(container.querySelector('#turn-limit')?.textContent).toBe('4 hours')
+    );
+    expect(updates()).toEqual([{ turnLimitMinutes: null }]);
+  });
+
   it('defaults automation permissions to Auto review and saves them separately', async () => {
     const container = await render();
     expect(container.querySelector('#automation-permissions')?.textContent).toBe('Auto review');

@@ -71,3 +71,17 @@ it.each([' ', '\t', ' padded', 'padded '])(
     }
   }
 );
+
+it.each([claude, codex])('validates frozen turn limits for $provider', (execution) => {
+  for (const turnLimitMinutes of [1, 240, 10_080, null]) {
+    expect(
+      eventAgentExecutionSchema.parse({ ...execution, turnLimitMinutes }).turnLimitMinutes
+    ).toBe(turnLimitMinutes);
+  }
+  expect(eventAgentExecutionSchema.parse(execution)).not.toHaveProperty('turnLimitMinutes');
+  for (const turnLimitMinutes of [0, 10_081, 1.5]) {
+    expect(eventAgentExecutionSchema.safeParse({ ...execution, turnLimitMinutes }).success).toBe(
+      false
+    );
+  }
+});

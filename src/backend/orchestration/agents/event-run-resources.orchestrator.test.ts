@@ -83,6 +83,7 @@ it('recovers the frozen permission intent without rereading mutable defaults or 
   const execution: EventAgentExecution = {
     version: 1,
     provider: 'CODEX',
+    turnLimitMinutes: 120,
     model: 'gpt-5.4',
     reasoningEffort: null,
     codexAccountId: 'original-account',
@@ -117,5 +118,23 @@ it.each(['CLAUDE', 'CODEX'] as const)(
     expect(ports.freeze.mock.calls[0]?.[0].execution.accessMode).toBe(
       provider === 'CODEX' ? 'agent' : 'auto'
     );
+  }
+);
+
+it.each(['CLAUDE', 'CODEX'] as const)(
+  'freezes the selected turn limit for %s resources',
+  async (provider) => {
+    for (const [settings, expected] of [
+      [{ turnLimitMinutes: 120 }, 120],
+      [{ turnLimitMinutes: null }, null],
+      [{}, null],
+    ] as const) {
+      ports.settings.mockResolvedValue(settings);
+      await createEventLaunchResources(claim, run(provider), vi.fn());
+      const execution = ports.freeze.mock.lastCall?.[0].execution;
+      expect(execution).toMatchObject({ provider, turnLimitMinutes: expected });
+      expect(ports.workspace).toHaveBeenLastCalledWith(expect.objectContaining({ execution }));
+      expect(ports.session).toHaveBeenLastCalledWith(expect.objectContaining({ execution }));
+    }
   }
 );

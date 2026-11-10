@@ -621,6 +621,7 @@ model ClosedSession {
 }
 
 model UserSettings {
+  turnLimitMinutes      Int?     // null means unlimited; applies to new turns
   id                    String   @id @default(cuid())
   userId                String   @default("default") @unique  // Single user for now, expandable later
 

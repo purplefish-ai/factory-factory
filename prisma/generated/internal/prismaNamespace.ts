@@ -3505,6 +3505,7 @@ export type ClosedSessionScalarFieldEnum = (typeof ClosedSessionScalarFieldEnum)
 
 
 export const UserSettingsScalarFieldEnum = {
+  turnLimitMinutes: 'turnLimitMinutes',
   id: 'id',
   userId: 'userId',
   preferredIde: 'preferredIde',

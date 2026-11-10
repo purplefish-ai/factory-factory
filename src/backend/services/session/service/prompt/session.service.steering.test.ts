@@ -1,6 +1,7 @@
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { EventSessionAuthority } from '@/backend/services/session/service/event-agent/event-session-authority';
 import { SessionLifecycleGate } from '@/backend/services/session/service/lifecycle/session-lifecycle-gate';
+import { userSettingsService } from '@/backend/services/settings';
 import type { AgentContentItem } from '@/shared/acp-protocol';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 import { SessionService, type SessionServiceDependencies } from './session.service';
@@ -40,6 +41,10 @@ const image: AgentContentItem = {
   type: 'image',
   source: { type: 'base64', data: 'aW1hZ2U=', media_type: 'image/png' },
 };
+
+beforeEach(() => {
+  vi.spyOn(userSettingsService, 'get').mockResolvedValue({ turnLimitMinutes: null } as never);
+});
 
 describe('SessionService steering conversion', () => {
   it('forwards mail timeout preservation and late receipts unchanged to the runtime', async () => {

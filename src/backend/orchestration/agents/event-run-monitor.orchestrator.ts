@@ -11,6 +11,7 @@ import {
 } from '@/backend/services/session';
 import { workspacePrSnapshotService, workspaceDataService } from '@/backend/services/workspace';
 import { compactAgentRunResult } from '@/shared/agent-run-result';
+import { turnLimitMs } from '@/shared/turn-limit';
 
 const monitor = new AgentRunMonitorService();
 /** Coordinates public owner reads without starting/restoring a provider. */
@@ -112,10 +113,11 @@ function interruptionCause(
   if (evidence.stop) {
     return evidence.stop.cause;
   }
+  const timeoutMs = turnLimitMs(run.effectiveExecution?.turnLimitMinutes);
   if (
-    run.effectiveExecution?.provider !== 'CODEX' &&
+    timeoutMs !== undefined &&
     run.delivery.sendingAt &&
-    Date.now() >= run.delivery.sendingAt.getTime() + 4 * 60 * 60 * 1000
+    Date.now() >= run.delivery.sendingAt.getTime() + timeoutMs
   ) {
     return 'TIMEOUT';
   }

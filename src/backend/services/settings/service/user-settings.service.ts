@@ -7,6 +7,7 @@ import type {
 } from '@prisma-gen/client';
 
 export interface UpdateUserSettingsInput {
+  turnLimitMinutes?: number | null;
   preferredIde?: string;
   customIdeCommand?: string | null;
   playSoundOnComplete?: boolean;

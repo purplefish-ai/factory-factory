@@ -23,12 +23,13 @@ import {
   toErrorMessage,
   toProviderFailureChatMessage,
 } from '@/backend/services/session/service/session.error-message';
+import { userSettingsService } from '@/backend/services/settings';
 import type { AgentContentItem } from '@/shared/acp-protocol';
 import { SessionLifecycleEventKind, SessionLifecycleEventReason } from '@/shared/core';
 import type { SessionRuntimeState } from '@/shared/session-runtime';
+import { turnLimitMs, turnLimitMessage } from '@/shared/turn-limit';
 
 const logger = createLogger('session');
-const CLAUDE_USER_PROMPT_TIMEOUT_MS = 4 * 60 * 60 * 1000;
 export type SessionServiceDependencies = {
   eventAuthority?: EventSessionAuthority;
   ownedWork?: EventOwnedWork;
@@ -278,6 +279,11 @@ export class SessionService {
     guard?: SessionCallerGuard
   ): Promise<string> {
     const stopGeneration = this.lifecycleGate.getGeneration(sessionId);
+    const minutes = permit
+      ? permit.execution.turnLimitMinutes
+      : (await userSettingsService.get()).turnLimitMinutes;
+    this.assertPromptGeneration(sessionId, stopGeneration);
+    const timeoutMs = turnLimitMs(minutes);
     const workspaceId = this.acpEventProcessor.getWorkspaceId(sessionId);
     let workspaceActivityGeneration: number | undefined;
     let promptCompleted = false;
@@ -301,7 +307,7 @@ export class SessionService {
 
     try {
       const observed = this.initialObservation(sessionId, stopGeneration, permit);
-      const result = await this.sendRuntimePrompt(sessionId, prompt, observed, guard);
+      const result = await this.sendRuntimePrompt(sessionId, prompt, timeoutMs, observed, guard);
       promptCompleted = true;
       this.completeSuccessfulPromptTurn({
         sessionId,
@@ -377,13 +383,10 @@ export class SessionService {
   private sendRuntimePrompt(
     sessionId: string,
     prompt: ContentBlock[],
+    timeoutMs: number | undefined,
     observed?: import('@/backend/services/session/service/acp/acp-runtime-manager').ObservedAcpPrompt,
     guard?: SessionCallerGuard
   ) {
-    const timeoutMs =
-      this.acpEventProcessor.getProvider(sessionId) === 'CODEX'
-        ? undefined
-        : CLAUDE_USER_PROMPT_TIMEOUT_MS;
     if (guard) {
       return this.runtimeManager.sendPrompt(sessionId, prompt, timeoutMs, observed, guard);
     }
@@ -526,7 +529,7 @@ export class SessionService {
       reason,
       message:
         error instanceof PromptTimeoutError
-          ? 'Turn stopped: reached the 4-hour limit.'
+          ? turnLimitMessage(error.timeoutMs)
           : toProviderFailureChatMessage(this.acpEventProcessor.getProvider(sessionId), error),
       dedupeKey: `turn:${attemptKey}:stop`,
     });
