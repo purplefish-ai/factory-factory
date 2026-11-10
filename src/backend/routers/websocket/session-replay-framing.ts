@@ -33,10 +33,16 @@ interface SerializedBatch {
   eventBytes: readonly number[];
 }
 
-function serializeEvent(event: unknown): string {
-  // Like JSON arrays, encode a value that has no JSON form as null.
-  const json: string | undefined = JSON.stringify(event);
-  return json ?? 'null';
+/**
+ * Serialize an event exactly as it appears at `index` of the replay array: a
+ * `toJSON` method receives that index as its key, and a value with no JSON
+ * form becomes null.
+ */
+function serializeEvent(event: unknown, index: number): string {
+  const key = String(index);
+  const holder = JSON.stringify({ [key]: event });
+  // `{"<key>":<event>}`, or `{}` when the event has no JSON form.
+  return holder === '{}' ? 'null' : holder.slice(key.length + 4, -1);
 }
 
 function serializeBatch(batch: ReplayBatch): SerializedBatch {

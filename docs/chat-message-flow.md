@@ -198,9 +198,9 @@ restart the backend, and explicitly reconnect to retry; snapshots remain
 available over HTTP. A successfully accepted baseline releases that guard.
 
 Replay retains the responsive history loading and 128 KiB wire chunks. Framing
-serializes each replay event once, assembles every frame's JSON from those
-strings and publishes it with the frame; the transport sends that JSON instead
-of serializing the frame again. Framing and publication remain one synchronous
+serializes each replay event once, assembles event-frame JSON from those strings
+and publishes each frame with its JSON; the transport sends that JSON instead of
+serializing the frame again. Framing and publication remain one synchronous
 pass. Chunk envelopes carry the bounded load correlation ID, including the
 byte-fragment fallback for unusually large replay metadata. The configured
 budget also bounds the logical replay; the existing 128 MiB replay assembly

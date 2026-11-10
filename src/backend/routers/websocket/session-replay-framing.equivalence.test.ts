@@ -223,4 +223,32 @@ describe('frameSessionReplay single serialization', () => {
     expect(frames.length).toBeGreaterThan(1);
     expect(calls).toEqual(replayEvents.map((_, order) => order));
   });
+
+  it.each([
+    ['whole', 'x'],
+    ['framed', 'x'.repeat(1000)],
+  ])('serializes events as array elements of the %s batch', (_name, padding) => {
+    // toJSON sees the array index as its key; values without JSON form become null.
+    const replayEvents = unsafeCoerce<SessionDeltaEvent[]>([
+      ...Array.from({ length: 300 }, () => ({
+        toJSON: (key: string) => ({ type: 'task_notification', message: `${key} ${padding}` }),
+      })),
+      undefined,
+      () => undefined,
+    ]);
+    const batch: ReplayBatch = { type: 'session_replay_batch', replayEvents };
+    const expected = JSON.stringify(batch);
+    const frames = [...frameSessionReplay(batch)];
+    const assembler = new SessionReplayAssembler();
+    let replay: unknown = null;
+    for (const frame of frames) {
+      replay = assembler.accept(JSON.parse(frame.json));
+    }
+    if (frames.length === 1) {
+      expect(frames[0]?.json).toBe(expected);
+    } else {
+      expect(frames[0]?.payload).toMatchObject({ byteLength: Buffer.byteLength(expected) });
+    }
+    expect(replay).toEqual(JSON.parse(expected));
+  });
 });
