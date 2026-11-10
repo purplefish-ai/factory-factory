@@ -20,6 +20,7 @@ import { registerCodexCommand } from './codex';
 import { resolveDatabasePath } from './database-path';
 import { describeMigrationFailure, resolveUnknownMigrationPolicy } from './migration-policy';
 import { runProxyCommand } from './proxy';
+import { registerProxyCommand } from './proxy-mode';
 import { ensureDataDir, findAvailablePort } from './runtime-utils';
 import { buildHttpOrigin, buildServeEnv } from './serve-env';
 import { checkServePrerequisites } from './serve-prerequisites';
@@ -96,10 +97,6 @@ interface ServeOptions {
 
 interface MigrateOptions {
   databasePath?: string;
-}
-
-interface ProxyOptions {
-  private?: boolean;
 }
 
 const program = new Command();
@@ -365,13 +362,7 @@ registerBuildCommand(program, PROJECT_ROOT);
 // proxy command
 // ============================================================================
 
-program
-  .command('proxy')
-  .description('Start a public tunnel to your local Factory Factory server')
-  .option('--private', 'Enable password authentication')
-  .action(async (options: ProxyOptions) => {
-    await runProxyCommand({ options, projectRoot: PROJECT_ROOT });
-  });
+registerProxyCommand(program, (options) => runProxyCommand({ options, projectRoot: PROJECT_ROOT }));
 
 // Run native CLI commands using the same provider runtimes bundled with ACP.
 registerClaudeCommand(program);
