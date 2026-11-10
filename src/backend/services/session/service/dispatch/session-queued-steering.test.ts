@@ -1,5 +1,5 @@
 import { afterEach, expect, it, vi } from 'vitest';
-import { sessionDomainService } from '../session-domain.service';
+import { sessionDomainService } from '@/backend/services/session/service/session-domain.service';
 import { SessionQueuedSteering } from './session-queued-steering';
 
 function fixture() {
