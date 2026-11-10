@@ -26,11 +26,11 @@ export async function settle(rounds = 3) {
  * cache changes after an async chain (for example a mutation's callbacks): its
  * notification timer is then queued after any timer the test starts alongside.
  */
-export async function waitForCheck(check: () => void) {
+export async function waitForCheck(check: () => void | Promise<void>) {
   for (let round = 1; ; round++) {
     await settle(1);
     try {
-      check();
+      await check();
       return;
     } catch (error) {
       if (round >= 20) {
