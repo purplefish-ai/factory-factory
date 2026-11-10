@@ -8,6 +8,7 @@ import { z } from 'zod';
 import { selectJobs } from '../.github/scripts/select-ci.mjs';
 
 const stepSchema = z.object({
+  env: z.record(z.string(), z.string()).optional(),
   uses: z.string().optional(),
   with: z.record(z.string(), z.unknown()).optional(),
   name: z.string().optional(),
@@ -171,6 +172,11 @@ describe('required CI gates', () => {
     const step = ci.jobs['require-build']?.steps?.[1];
     expect(step?.run).toBe(gateCommand);
     expect(step?.name).toBe('Require minimum runtime compatibility');
+    expect(step?.env).toEqual({
+      SELECTION_RESULT: '${{ needs.changes.result }}',
+      SELECTED: '${{ needs.changes.outputs.app }}',
+      WORK_RESULT: '${{ needs.minimum-node.result }}',
+    });
   });
 
   it('accepts successful selected work and explicitly omitted work', () => {
