@@ -11,6 +11,7 @@ let capturedOptions: UseWebSocketTransportOptions | null = null;
 const send = vi.fn();
 const reconnect = vi.fn();
 const transportState = { connected: false, gaveUp: false };
+let harnessRenders = 0;
 
 Object.defineProperty(globalThis, 'IS_REACT_ACT_ENVIRONMENT', {
   configurable: true,
@@ -31,6 +32,7 @@ interface HarnessProps {
 }
 
 function Harness({ open, resultRef }: HarnessProps) {
+  harnessRenders += 1;
   resultRef.current = useSetupTerminal(open);
   return null;
 }
@@ -150,7 +152,7 @@ describe('useSetupTerminal', () => {
     void act(() =>
       capturedOptions?.onMessage?.({ type: 'error', message: 'Bundled runtime is unavailable' })
     );
-    expect(resultRef.current?.output).toContain('Bundled runtime is unavailable');
+    expect(resultRef.current?.output.snapshot()).toContain('Bundled runtime is unavailable');
     expect(resultRef.current?.authenticatingProvider).toBeNull();
     void act(() => resultRef.current?.authenticate('CODEX'));
     expect(send).toHaveBeenLastCalledWith({
@@ -188,7 +190,28 @@ describe('useSetupTerminal', () => {
       capturedOptions?.onMessage?.('garbage');
     });
 
-    expect(resultRef.current?.output).toBe('$ gh auth login\r\n');
+    expect(resultRef.current?.output.snapshot()).toBe('$ gh auth login\r\n');
+  });
+
+  it('streams output chunks without re-rendering the modal', () => {
+    render(true);
+    connect();
+    const stream = resultRef.current?.output;
+    const appended = vi.fn();
+    stream?.subscribe(appended);
+    const renders = harnessRenders;
+
+    void act(() => {
+      capturedOptions?.onMessage?.({ type: 'output', data: 'first\r\n' });
+      capturedOptions?.onMessage?.({ type: 'output', data: 'second\r\n' });
+    });
+
+    expect(harnessRenders).toBe(renders);
+    expect(appended.mock.calls).toEqual([
+      [{ type: 'append', data: 'first\r\n' }],
+      [{ type: 'append', data: 'second\r\n' }],
+    ]);
+    expect(resultRef.current?.output).toBe(stream);
   });
 
   it('keeps the terminal visible across a disconnect and requests a fresh shell on reconnect', () => {
@@ -204,7 +227,7 @@ describe('useSetupTerminal', () => {
     connect();
 
     expect(send).toHaveBeenCalledWith({ type: 'create', cols: 80, rows: 24 });
-    expect(resultRef.current?.output).toContain('starting a new shell');
+    expect(resultRef.current?.output.snapshot()).toContain('starting a new shell');
   });
 
   it('sends input and resize messages, using the latest size for reconnect creates', () => {
@@ -243,7 +266,7 @@ describe('useSetupTerminal', () => {
 
     render(true);
     connect();
-    expect(resultRef.current?.output).not.toContain('starting a new shell');
+    expect(resultRef.current?.output.snapshot()).not.toContain('starting a new shell');
   });
 
   it('exposes the transport gave-up state and manual reconnect', () => {
@@ -269,7 +292,7 @@ describe('useSetupTerminal', () => {
       });
     });
 
-    const output = resultRef.current?.output ?? '';
+    const output = resultRef.current?.output.snapshot() ?? '';
     expect(output.length).toBeLessThanOrEqual(TERMINAL_OUTPUT_MAX_CHARS);
     expect(output).toContain(TERMINAL_TRUNCATION_MARKER.trim());
   });
@@ -284,7 +307,7 @@ describe('useSetupTerminal', () => {
     transportState.connected = false;
     render(false);
 
-    expect(resultRef.current?.output).toBe('');
+    expect(resultRef.current?.output.snapshot()).toBe('');
     expect(resultRef.current?.showTerminal).toBe(false);
     expect(capturedOptions?.url).toBeNull();
   });

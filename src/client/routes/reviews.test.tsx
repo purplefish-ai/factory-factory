@@ -288,7 +288,7 @@ describe('project reviews', () => {
     expect(view.container.querySelector('nav')?.textContent).toBe('Alpha');
     expect(listReviewRequestsMock).toHaveBeenCalledWith(
       { projectId: 'alpha-id' },
-      expect.objectContaining({ staleTime: 30_000, enabled: true })
+      expect.objectContaining({ staleTime: 120_000, refetchInterval: 120_000, enabled: true })
     );
     view.unmount();
   });

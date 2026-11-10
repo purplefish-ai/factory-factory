@@ -2,7 +2,7 @@ import { createLogger } from '@/backend/services/logger.service';
 import type { AgentIssueEventRequest } from '@/shared/agent-source';
 import { githubIssuePreviewSchema } from '@/shared/github-issue-preview';
 import { githubPRPreviewSchema } from '@/shared/github-pr-preview';
-import type { PRWithFullDetails, ReviewAction } from '@/shared/github-types';
+import type { GitHubReview, PRWithFullDetails, ReviewAction } from '@/shared/github-types';
 import { getAgentRepositoryIdentity, listAgentIssueEvents } from './github-cli/agent-issue-events';
 import { getAgentRepository } from './github-cli/agent-sources';
 import { GH_MAX_BUFFER_BYTES, GH_TIMEOUT_MS } from './github-cli/constants';
@@ -17,13 +17,15 @@ import { searchIssues } from './github-cli/issue-search';
 import {
   getPRDiff,
   getPRFullDetails,
-  getPRReviewDetails,
+  getPRObservationDetails,
+  getPRReviews,
   getPRStatusDetails,
 } from './github-cli/pr-details';
 import {
   collectResolvedReviewCommentIds,
   type TruncatedResolvedThread,
 } from './github-cli/resolved-review-comments';
+import { ReviewRequestCache } from './github-cli/review-request-cache';
 import { listReviewRequests } from './github-cli/review-requests';
 import {
   issueSchema,
@@ -40,8 +42,8 @@ import type {
   GitHubIssue,
   OpenPullRequest,
   PRInfo,
+  PRObservationDetails,
   PRStatusDetails,
-  PRReviewDetails,
   ReviewRequestedPR,
 } from './github-cli/types';
 import { parseGhJson } from './github-cli/utils';
@@ -78,29 +80,57 @@ class GitHubCLIService {
 
   private cachedHealth: { result: GitHubCLIHealthStatus; fetchedAt: number } | null = null;
   private healthRefreshInFlight: Promise<GitHubCLIHealthStatus> | null = null;
-  private readonly HEALTH_CACHE_TTL_MS = 30_000;
+  /** A healthy gh rarely changes; failed reads below mark it stale sooner. */
+  private readonly HEALTHY_CACHE_TTL_MS = 5 * 60_000;
+  /** Keep recovery after `gh auth login` or an install prompt. */
+  private readonly UNHEALTHY_CACHE_TTL_MS = 30_000;
 
   private readonly issueCache = new Map<string, { issues: GitHubIssue[]; fetchedAt: number }>();
   private readonly issueRefreshInFlight = new Set<string>();
   private readonly ISSUE_CACHE_TTL_MS = 60_000;
+
+  private readonly reviewRequests = new ReviewRequestCache();
 
   clearCaches(): void {
     this.cachedHealth = null;
     this.healthRefreshInFlight = null;
     this.issueCache.clear();
     this.issueRefreshInFlight.clear();
+    this.reviewRequests.clear();
     this.executor.clearBackoff();
   }
 
   private exec(args: string[], options?: ReadExecOptions): Promise<ExecResult> {
-    return this.executor.read(args, options);
+    return this.executor.read(args, options).catch((error: unknown) => {
+      this.markHealthStaleAfterFailure(error);
+      throw error;
+    });
   }
 
   private execMutating(
     args: string[],
     options?: { timeout?: number; maxBuffer?: number }
   ): Promise<ExecResult> {
-    return this.executor.mutate(args, options);
+    return this.executor.mutate(args, options).catch((error: unknown) => {
+      this.markHealthStaleAfterFailure(error);
+      throw error;
+    });
+  }
+
+  /**
+   * A logged-out or missing gh makes the next health read wait for a new check,
+   * and drops review requests that may belong to the previous account.
+   */
+  private markHealthStaleAfterFailure(error: unknown): void {
+    if (!this.cachedHealth?.result.isAuthenticated) {
+      return;
+    }
+    const missingCli =
+      typeof error === 'object' && error !== null && 'code' in error && error.code === 'ENOENT';
+    if (missingCli || classifyError(error) === 'auth_required') {
+      this.cachedHealth = null;
+      this.reviewRequests.invalidate();
+    }
   }
 
   /**
@@ -127,7 +157,10 @@ class GitHubCLIService {
       await this.healthRefreshInFlight.catch(() => undefined);
     }
     const cached = this.cachedHealth;
-    if (!forceRefresh && cached && Date.now() - cached.fetchedAt < this.HEALTH_CACHE_TTL_MS) {
+    const ttl = cached?.result.isAuthenticated
+      ? this.HEALTHY_CACHE_TTL_MS
+      : this.UNHEALTHY_CACHE_TTL_MS;
+    if (!forceRefresh && cached && Date.now() - cached.fetchedAt < ttl) {
       return cached.result;
     }
     if (!this.healthRefreshInFlight) {
@@ -199,10 +232,18 @@ class GitHubCLIService {
 
   /**
    * List all PRs where the authenticated user is requested as a reviewer.
-   * Uses paginated GraphQL search calls to fetch all matching PRs.
+   * Uses paginated GraphQL search calls, cached per repository for two minutes
+   * (stale-while-revalidate); `forceRefresh` waits for a new search.
    */
-  listReviewRequests(repository?: string): Promise<ReviewRequestedPR[]> {
-    return listReviewRequests((args, options) => this.exec(args, options), repository);
+  listReviewRequests(
+    repository?: string,
+    options: { forceRefresh?: boolean } = {}
+  ): Promise<ReviewRequestedPR[]> {
+    return this.reviewRequests.get(
+      repository,
+      (repo) => listReviewRequests((args, execOptions) => this.exec(args, execOptions), repo),
+      options
+    );
   }
 
   /** List every open pull request in a repository for local branch matching. */
@@ -293,13 +334,23 @@ class GitHubCLIService {
     return getPRStatusDetails(repo, prNumber, (args, options) => this.exec(args, options), signal);
   }
 
-  /** Optional review bodies and conversation comments. */
-  getPRReviewDetails(
+  /** Core facts plus conversation comments in one read, for review-enabled observations. */
+  getPRObservationDetails(
     repo: string,
     prNumber: number,
     signal?: AbortSignal
-  ): Promise<PRReviewDetails> {
-    return getPRReviewDetails(repo, prNumber, (args, options) => this.exec(args, options), signal);
+  ): Promise<PRObservationDetails> {
+    return getPRObservationDetails(
+      repo,
+      prNumber,
+      (args, options) => this.exec(args, options),
+      signal
+    );
+  }
+
+  /** Optional review bodies, in REST's chronological order. */
+  getPRReviews(repo: string, prNumber: number, signal?: AbortSignal): Promise<GitHubReview[]> {
+    return getPRReviews(repo, prNumber, (args, options) => this.exec(args, options), signal);
   }
 
   /** Full PR details retained for existing detail callers. */
@@ -338,6 +389,8 @@ class GitHubCLIService {
 
     try {
       await this.execMutating(args, { timeout: GH_TIMEOUT_MS.default });
+      // Reviewing can remove the PR from review-requested:@me; refetch instead of serving it.
+      this.reviewRequests.invalidate();
       logger.info('PR review submitted successfully', { repo, prNumber, action });
     } catch (error) {
       const errorType = classifyError(error);

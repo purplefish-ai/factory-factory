@@ -369,7 +369,12 @@ export const workspaceCoreRouter = router({
       input.id,
       async () => {
         // Clean up running sessions, terminals, and dev processes before deleting
-        await cleanupWorkspaceRuntimeResources(input.id, ctx.appContext.services, 'delete');
+        await cleanupWorkspaceRuntimeResources(
+          input.id,
+          ctx.appContext.services,
+          'delete',
+          workspace
+        );
         ctx.appContext.services.runScriptService.evictWorkspaceBuffers(input.id);
 
         try {

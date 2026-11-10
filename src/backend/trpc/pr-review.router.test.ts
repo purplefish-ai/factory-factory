@@ -2,8 +2,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { prReviewRouter } from './pr-review.trpc';
 
 function createCaller(overrides?: {
-  checkHealth?: () => Promise<{ isInstalled: boolean; isAuthenticated: boolean }>;
-  listReviewRequests?: (repository?: string) => Promise<unknown[]>;
+  checkHealth?: (
+    forceRefresh?: boolean
+  ) => Promise<{ isInstalled: boolean; isAuthenticated: boolean }>;
+  listReviewRequests?: (repository?: string, options?: unknown) => Promise<unknown[]>;
   findProject?: (id: string) => Promise<unknown>;
   getPRFullDetails?: (repo: string, number: number) => Promise<unknown>;
   getPRDiff?: (repo: string, number: number) => Promise<string>;
@@ -107,9 +109,25 @@ describe('project-scoped reviews', () => {
     const caller = createCaller({ listReviewRequests, findProject });
     expect((await caller.listReviewRequests({ projectId: 'p' })).prs).toEqual([{ number: 7 }]);
     expect(findProject).toHaveBeenCalledWith('p');
-    expect(listReviewRequests).toHaveBeenCalledWith('Owner/Repo');
+    expect(listReviewRequests).toHaveBeenCalledWith('Owner/Repo', { forceRefresh: false });
     await caller.listReviewRequests();
-    expect(listReviewRequests).toHaveBeenLastCalledWith(undefined);
+    expect(listReviewRequests).toHaveBeenLastCalledWith(undefined, { forceRefresh: false });
+  });
+
+  it('bypasses the gh health and review-request caches for an explicit refresh', async () => {
+    const checkHealth = vi.fn(async (_forceRefresh?: boolean) => ({
+      isInstalled: true,
+      isAuthenticated: true,
+    }));
+    const listReviewRequests = vi.fn(async () => [{ number: 7 }]);
+    const findProject = vi.fn(async () => ({ githubOwner: 'Owner', githubRepo: 'Repo' }));
+    const caller = createCaller({ checkHealth, listReviewRequests, findProject });
+
+    await caller.listReviewRequests({ projectId: 'p' });
+    expect(checkHealth).toHaveBeenLastCalledWith(false);
+    await caller.listReviewRequests({ projectId: 'p', forceRefresh: true });
+    expect(checkHealth).toHaveBeenLastCalledWith(true);
+    expect(listReviewRequests).toHaveBeenLastCalledWith('Owner/Repo', { forceRefresh: true });
   });
 
   it.each([

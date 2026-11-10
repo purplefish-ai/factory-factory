@@ -3,7 +3,7 @@ import type { Duplex } from 'node:stream';
 import type { WebSocket, WebSocketServer } from 'ws';
 import type { ApplicationServices } from '@/backend/app-context';
 import { toError } from '@/backend/lib/error-utils';
-import { isOriginAllowed, isTrustedLocalAddress } from '@/backend/lib/request-trust';
+import { isBrowserOriginAllowed, isTrustedLocalAddress } from '@/backend/lib/request-trust';
 import { FORWARDED_CLIENT_ADDRESS_HEADERS } from '@/shared/proxy-utils';
 
 type WebSocketOriginLogger = Pick<ReturnType<ApplicationServices['createLogger']>, 'warn'>;
@@ -54,7 +54,7 @@ export function validateWebSocketOrigin({
     return false;
   }
 
-  if (!isOriginAllowed(origin, corsConfig.allowedOrigins)) {
+  if (!isBrowserOriginAllowed(origin, corsConfig, request.socket?.localPort)) {
     logger.warn(`Rejected ${connectionName} connection from unauthorized origin`, { origin });
     sendBadRequest(socket, 'Unauthorized origin');
     return false;

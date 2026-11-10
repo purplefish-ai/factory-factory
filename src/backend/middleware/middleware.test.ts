@@ -17,6 +17,7 @@ function createMockReq(overrides: Record<string, unknown> = {}): Request {
     method: 'GET',
     path: '/api/test',
     headers: {},
+    socket: {},
     ...overrides,
   } as Request;
 }
@@ -223,6 +224,28 @@ describe('corsMiddleware', () => {
       corsMiddleware(mockReq, toResponse(mockRes), mockNext);
 
       expect(mockRes.headers['Access-Control-Allow-Origin']).toBe('http://127.0.0.1:4000');
+    });
+
+    it('should reflect the own loopback origin on the port the request arrived on', () => {
+      mockGetCorsConfig.mockReturnValue({
+        allowedOrigins: ['http://localhost:3001'],
+        allowOwnLoopbackOrigin: true,
+      });
+      const ownOrigin = createMockReq({
+        headers: { origin: 'http://localhost:3002' },
+        socket: { localPort: 3002 },
+      });
+      const otherPort = createMockReq({
+        headers: { origin: 'http://localhost:3003' },
+        socket: { localPort: 3002 },
+      });
+
+      corsMiddleware(ownOrigin, toResponse(mockRes), mockNext);
+      expect(mockRes.headers['Access-Control-Allow-Origin']).toBe('http://localhost:3002');
+
+      const otherRes = createMockRes();
+      corsMiddleware(otherPort, toResponse(otherRes), mockNext);
+      expect(otherRes.headers['Access-Control-Allow-Origin']).toBeUndefined();
     });
 
     it('should reflect any origin when disableCorsChecks is set', () => {

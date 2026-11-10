@@ -162,7 +162,10 @@ export type ApplicationServices = BridgeServices & {
   agentAuthoring: ReturnType<typeof createAgentAuthoring>;
   agentManagement: ReturnType<typeof createAgentManagement>;
   agentManagementService: AgentManagementService;
-  listVisibleReviewRequests: (repository?: string) => ReturnType<typeof listVisibleReviewRequests>;
+  listVisibleReviewRequests: (
+    repository?: string,
+    options?: { forceRefresh?: boolean }
+  ) => ReturnType<typeof listVisibleReviewRequests>;
   sessionDispatchService: Pick<
     typeof sessionDispatchService,
     | 'configure'
@@ -339,7 +342,8 @@ export function createDefaultApplicationDependencies(): ApplicationDependencies 
   const services: ApplicationServices = {
     applicationUpdateAdmission,
     applicationUpdateService,
-    listVisibleReviewRequests: (repository) => listVisibleReviewRequests(services, repository),
+    listVisibleReviewRequests: (repository, options) =>
+      listVisibleReviewRequests(services, repository, options),
     acpRuntimeManager,
     acpTraceLogger,
     chatEventForwarderService,

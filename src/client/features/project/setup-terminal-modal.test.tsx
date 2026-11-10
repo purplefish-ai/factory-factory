@@ -3,6 +3,7 @@
 import { act, createElement } from 'react';
 import { createRoot } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { TerminalOutputStream } from '@/client/lib/terminal-output-stream';
 import { SetupTerminalModal } from './setup-terminal-modal';
 import type { UseSetupTerminalResult } from './use-setup-terminal';
 
@@ -19,7 +20,7 @@ const setupTerminalState: UseSetupTerminalResult = {
   gaveUp: false,
   reconnect: vi.fn(),
   showTerminal: false,
-  output: '',
+  output: new TerminalOutputStream(),
   handleData: vi.fn(),
   handleResize: vi.fn(),
 };
