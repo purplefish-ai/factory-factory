@@ -1,4 +1,6 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createLogger } from './logger.service';
 
 // Mock write stream that we can access in tests
@@ -12,6 +14,8 @@ vi.mock('node:fs', () => {
   return {
     existsSync: vi.fn(() => true),
     mkdirSync: vi.fn(),
+    openSync: vi.fn(() => 42),
+    fstatSync: vi.fn(() => ({ size: 0 })),
     createWriteStream: vi.fn(() => mockWriteStream),
   };
 });
@@ -28,6 +32,13 @@ function lastLogEntry() {
 describe('LoggerService', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // Test processes only get a log file under the OS temp directory. node:fs
+    // is mocked, so nothing is created there.
+    vi.stubEnv('BASE_DIR', join(tmpdir(), 'ff-logger-service-test'));
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
   });
 
   describe('circular reference handling', () => {

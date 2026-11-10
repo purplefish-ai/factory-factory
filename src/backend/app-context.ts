@@ -77,7 +77,7 @@ import {
 } from './services/github';
 import { jobRunner } from './services/job-runner.service';
 import { linearClientService, linearStateSyncService } from './services/linear';
-import { createLogger, getLogFilePath } from './services/logger.service';
+import { cleanupOldLogFiles, createLogger, getLogFilePath } from './services/logger.service';
 import { periodicTaskService } from './services/periodic-task';
 import { type PortShareService, portShareService } from './services/port-share';
 import { findAvailablePort } from './services/port.service';
@@ -204,6 +204,7 @@ export type ApplicationServices = BridgeServices & {
   gitCloneService: typeof gitCloneService;
   gitOpsService: typeof gitOpsService;
   getLogFilePath: typeof getLogFilePath;
+  cleanupOldLogFiles: typeof cleanupOldLogFiles;
   getQuickAction: typeof getQuickAction;
   getWorkspaceLinearContext: typeof getWorkspaceLinearContext;
   settingsHealthService: typeof settingsHealthService;
@@ -415,6 +416,7 @@ export function createDefaultApplicationDependencies(): ApplicationDependencies 
     gitCloneService,
     gitOpsService,
     getLogFilePath,
+    cleanupOldLogFiles,
     getQuickAction,
     getWorkspaceLinearContext,
     settingsHealthService,

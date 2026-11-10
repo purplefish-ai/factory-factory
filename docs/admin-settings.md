@@ -311,6 +311,15 @@ row to inspect its raw JSON. **Download log file** saves up to the most recent
 10 MB of the server log. Navigation and filters remain available while entries
 load; if loading fails, use **Retry** to request the logs again.
 
+The page and download read only the current `logs/server.log` under `BASE_DIR`
+(default `~/factory-factory`). The backend rotates that file when it reaches 10
+MB, keeping the three previous files as `server.log.1` (newest) to
+`server.log.3`; open those directly for older history. A file already over 10 MB
+when the backend starts, such as one written before rotation existed, is moved
+to `server.log.1` unchanged before the first write. Backend startup deletes
+rotated files last modified more than seven days ago, alongside the session and
+ACP trace log cleanup.
+
 Relative log time ranges use minute boundaries and advance automatically while
 the page polls every ten seconds. Rendering or expanding a log row does not
 trigger another request. Custom date ranges keep their selected day boundaries.
