@@ -131,6 +131,7 @@ describe('WorkspaceCreationService', () => {
     const mockUserSettings: UserSettings = {
       id: '1',
       userId: 'default',
+      turnLimitMinutes: null,
       preferredIde: 'cursor',
       customIdeCommand: '',
       playSoundOnComplete: true,
@@ -289,6 +290,7 @@ describe('WorkspaceCreationService', () => {
         const disabledSettings: UserSettings = {
           id: '1',
           userId: 'default',
+          turnLimitMinutes: null,
           preferredIde: 'cursor',
           customIdeCommand: '',
           playSoundOnComplete: true,

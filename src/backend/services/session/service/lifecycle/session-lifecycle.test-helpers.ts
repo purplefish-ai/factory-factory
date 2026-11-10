@@ -895,3 +895,13 @@ export function createLifecycleHarness(
     tryDispatchNextMessage: messageQueueBridge.tryDispatchNextMessage,
   };
 }
+
+export function mockActivePromptClient(runtimeManager: AcpRuntimeManager) {
+  vi.mocked(runtimeManager.getClient).mockReturnValue(unsafeCoerce({ supportsImages: () => true }));
+}
+
+export const activeRuntime = {
+  incarnationId: '11111111-1111-4111-8111-111111111111',
+  purpose: 'active',
+  managed: false,
+} as const;

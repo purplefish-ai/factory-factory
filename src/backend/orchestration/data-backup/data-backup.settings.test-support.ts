@@ -3,6 +3,7 @@ import { SessionProvider, type UserSettings } from '@prisma-gen/client';
 export const mockUserSettings: UserSettings = {
   id: 'settings-1',
   userId: 'default',
+  turnLimitMinutes: null,
   preferredIde: 'cursor',
   customIdeCommand: null,
   playSoundOnComplete: true,

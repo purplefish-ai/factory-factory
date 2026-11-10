@@ -13,6 +13,7 @@ import {
   fontScaleSchema,
   hexColorSchema,
 } from '@/shared/appearance';
+import { turnLimitMinutesSchema } from '@/shared/turn-limit';
 import {
   RatchetReviewTriggerMode,
   SessionPermissionPreset,
@@ -175,6 +176,7 @@ export const userSettingsRouter = router({
   update: trustedLocalProcedure
     .input(
       z.object({
+        turnLimitMinutes: turnLimitMinutesSchema.optional(),
         preferredIde: z.enum(['cursor', 'vscode', 'custom']).optional(),
         customIdeCommand: z
           .string()

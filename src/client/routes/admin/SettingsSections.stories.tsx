@@ -37,6 +37,7 @@ const onRequest = fn<(path: string, input: unknown) => void>();
 const defaultSettings = {
   playSoundOnComplete: true,
   childWorkspacesEnabled: true,
+  turnLimitMinutes: null as number | null,
   ticketDispatchPrompt: null as string | null,
   preferredIde: 'cursor',
   customIdeCommand: null as string | null,
@@ -460,6 +461,26 @@ export const ChatDefaults: Story = {
     await waitFor(() =>
       expect(onRequest).toHaveBeenCalledWith('userSettings.update', {
         defaultClaudeModel: 'claude-fable-5[1m]',
+      })
+    );
+  },
+};
+
+export const TurnLimit: Story = {
+  render: () => (
+    <SettingsStoryProvider settings={{ turnLimitMinutes: 240 }}>
+      <ChatProviderDefaultsSection />
+    </SettingsStoryProvider>
+  ),
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const select = await canvas.findByLabelText('Turn limit');
+    await expect(select).toHaveTextContent('4 hours');
+    await userEvent.click(select);
+    await userEvent.click(await within(document.body).findByRole('option', { name: 'Unlimited' }));
+    await waitFor(() =>
+      expect(onRequest).toHaveBeenCalledWith('userSettings.update', {
+        turnLimitMinutes: null,
       })
     );
   },

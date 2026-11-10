@@ -3,6 +3,7 @@ import { AcpBrowseSessionUnavailableError } from '@/backend/services/session/ser
 import { AcpRuntimeQuiescence } from '@/backend/services/session/service/acp/acp-runtime-quiescence';
 import { SessionService } from '@/backend/services/session/service/prompt/session.service';
 import { SessionDomainService } from '@/backend/services/session/service/session-domain.service';
+import { userSettingsService } from '@/backend/services/settings';
 import { workspaceNotificationService } from '@/backend/services/workspace';
 import { SessionStatus } from '@/shared/core';
 import {
@@ -74,6 +75,7 @@ function installRuntimeQuiescence(harness: LifecycleHarness): AcpRuntimeQuiescen
 describe('SessionStartupCoordinator', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.spyOn(userSettingsService, 'get').mockResolvedValue({ turnLimitMinutes: null } as never);
     vi.mocked(workspaceNotificationService.claimWake).mockResolvedValue(null);
     vi.mocked(workspaceNotificationService.markDelivered).mockResolvedValue();
   });

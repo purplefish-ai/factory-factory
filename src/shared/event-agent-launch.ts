@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { agentExecutionConfigSchema } from './schemas/agent-definition.schema';
+import { turnLimitMinutesSchema } from './turn-limit';
 
 export const eventLaunchIdentifierSchema = z
   .string()
@@ -12,6 +13,7 @@ export const eventAgentExecutionSchema = z
   .discriminatedUnion('provider', [
     z.strictObject({
       version: z.literal(1),
+      turnLimitMinutes: turnLimitMinutesSchema.optional(),
       provider: z.literal('CLAUDE'),
       model: identifier,
       reasoningEffort: identifier.nullable(),
@@ -22,6 +24,7 @@ export const eventAgentExecutionSchema = z
     }),
     z.strictObject({
       version: z.literal(1),
+      turnLimitMinutes: turnLimitMinutesSchema.optional(),
       provider: z.literal('CODEX'),
       model: identifier,
       reasoningEffort: identifier.nullable(),

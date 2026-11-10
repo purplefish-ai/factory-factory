@@ -65,9 +65,10 @@ export async function createEventLaunchResources(
   return binding;
 }
 async function resolveExecution(run: Run, codexAccountId: string | null) {
-  const { automationPermissions } = await userSettingsService.get();
+  const { automationPermissions, turnLimitMinutes } = await userSettingsService.get();
   return eventAgentExecutionSchema.parse({
     ...run.execution,
+    turnLimitMinutes: turnLimitMinutes ?? null,
     reasoningEffort: run.execution.reasoningEffort ?? null,
     codexAccountId,
     startupModePreset: 'non_interactive',

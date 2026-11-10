@@ -58,6 +58,18 @@ describe('userSettingsRouter', () => {
     ]);
   });
 
+  it.each([null, 1, 30, 240, 10_080])('saves turn limit %s', async (turnLimitMinutes) => {
+    await createCaller().update({ turnLimitMinutes });
+    expect(mockUpdate).toHaveBeenCalledWith({ turnLimitMinutes });
+  });
+  it.each([0, -1, 1.5, 10_081, '240'])(
+    'rejects invalid turn limit %s',
+    async (turnLimitMinutes) => {
+      await expect(createCaller().update({ turnLimitMinutes } as never)).rejects.toThrow();
+      expect(mockUpdate).not.toHaveBeenCalled();
+    }
+  );
+
   it('accepts the child workspace toggle without dropping false', async () => {
     await createCaller().update({ childWorkspacesEnabled: false });
     expect(mockUpdate).toHaveBeenCalledWith({ childWorkspacesEnabled: false });

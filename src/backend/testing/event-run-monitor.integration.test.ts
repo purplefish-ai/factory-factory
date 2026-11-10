@@ -21,9 +21,16 @@ let h: Awaited<ReturnType<typeof createEventDeliveryFixture>>;
 let provider: ReturnType<typeof fakeEventProvider>;
 let launch: Promise<unknown>;
 let observe: typeof import('@/backend/orchestration/agents/event-run-monitor.orchestrator').observeEventRun;
-beforeEach(async () => {
+beforeEach(async (context) => {
   db = await createIntegrationDatabase();
   h = await createEventDeliveryFixture(db, 'CLAUDE', false, true);
+  if (context.task.name.includes('configured four-hour')) {
+    await db.prisma.userSettings.upsert({
+      where: { userId: 'default' },
+      create: { userId: 'default', turnLimitMinutes: 240 },
+      update: { turnLimitMinutes: 240 },
+    });
+  }
   vi.spyOn(process, 'kill').mockImplementation(() => {
     throw new Error('No host signals');
   });
@@ -384,7 +391,12 @@ it('unions PR results while held and preserves success despite a later ordinary 
   });
 });
 
-it('settles the original four-hour send timeout only after strict owned stop', async () => {
+it('settles the configured four-hour send timeout only after strict owned stop', async () => {
+  // Updating the global default must not erase this run's frozen deadline.
+  await db.prisma.userSettings.update({
+    where: { userId: 'default' },
+    data: { turnLimitMinutes: null },
+  });
   const groups = await vi.importActual<
     typeof import('@/backend/services/session/service/acp/acp-owned-group')
   >('@/backend/services/session/service/acp/acp-owned-group');
@@ -394,12 +406,37 @@ it('settles the original four-hour send timeout only after strict owned stop', a
     where: { runId: h.claim.runId },
     data: { sendingAt: new Date(Date.now() - 4 * 60 * 60 * 1000 - 1) },
   });
+  const management = new h.owner.AgentManagementService();
+  const run = await row();
+  const history = await management.runs({
+    projectId: h.workspaceSource.projectId,
+    agentId: run.agentDefinitionId,
+  });
+  expect(history.items.find((item) => item.id === run.id)?.turnDeadlineAt).toBe(
+    new Date(
+      (
+        await db.prisma.agentInitialDelivery.findUniqueOrThrow({
+          where: { runId: run.id },
+        })
+      ).sendingAt!.getTime() +
+        4 * 60 * 60 * 1000
+    ).toISOString()
+  );
   expect(await observe(h.claim)).toBe('SETTLED');
   expect(await row()).toMatchObject({ status: 'FAILED', launchPhase: 'FINISHED' });
   expect((await h.read()).evidence?.stop).toMatchObject({
     cause: 'TIMEOUT',
     status: 'LOCAL_RUNTIME_GROUP_STOPPED',
   });
+});
+
+it('keeps a default Claude event running beyond four hours', async () => {
+  await db.prisma.agentInitialDelivery.update({
+    where: { runId: h.claim.runId },
+    data: { sendingAt: new Date(Date.now() - 5 * 60 * 60 * 1000) },
+  });
+  expect(await observe(h.claim)).toBe('HELD');
+  expect((await h.read()).evidence?.stop).toBeUndefined();
 });
 
 it('keeps a Codex event turn running past four hours without advertising a deadline', async () => {

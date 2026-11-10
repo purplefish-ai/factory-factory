@@ -1709,10 +1709,11 @@ unknown; importing a matching workspace revokes that coverage even when the
 workspace already exists. Backfilling surviving children retains holds but does
 not certify an empty history. A terminal failure/cancellation, unexpected exit,
 timeout or workspace removal also needs correlated strict runtime-stop evidence.
-Claude event runs use the durable send timestamp for their four-hour turn
-deadline. Codex event runs have no turn deadline, including in run history.
-SHUTDOWN uncertainty remains reserved for recovery and does not fall through to
-timeout.
+Event runs freeze the global turn limit at launch and use the durable send
+timestamp for their deadline. Both providers default to unlimited, including
+historical runs without a saved limit; run history advertises no deadline in
+that case. Ordinary turns read the setting when each prompt starts. SHUTDOWN
+uncertainty remains reserved for recovery and does not fall through to timeout.
 
 The owner transaction persists the work proof and terminal result together,
 checking worker, send attempt and current source. Settlement linearizes at its

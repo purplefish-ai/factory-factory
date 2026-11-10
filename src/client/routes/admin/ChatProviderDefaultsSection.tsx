@@ -165,6 +165,44 @@ export function ChatProviderDefaultsSection() {
           </SelectContent>
         </Select>
         <ProviderCliWarning provider={currentProvider} />
+        <div className="space-y-2">
+          <Label htmlFor="turn-limit">Turn limit</Label>
+          <Select
+            value={
+              settings?.turnLimitMinutes == null ? 'unlimited' : String(settings.turnLimitMinutes)
+            }
+            onValueChange={(value) =>
+              updateSettings.mutate({
+                turnLimitMinutes: value === 'unlimited' ? null : Number(value),
+              })
+            }
+            disabled={!settings || updateSettings.isPending}
+          >
+            <SelectTrigger id="turn-limit">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="unlimited">Unlimited</SelectItem>
+              {[30, 60, 120, 240, 480, 1440].map((minutes) => (
+                <SelectItem key={minutes} value={String(minutes)}>
+                  {minutes < 60
+                    ? `${minutes} minutes`
+                    : `${minutes / 60} ${minutes === 60 ? 'hour' : 'hours'}`}
+                </SelectItem>
+              ))}
+              {settings?.turnLimitMinutes != null &&
+                ![30, 60, 120, 240, 480, 1440].includes(settings.turnLimitMinutes) && (
+                  <SelectItem value={String(settings.turnLimitMinutes)}>
+                    {settings.turnLimitMinutes} minutes
+                  </SelectItem>
+                )}
+            </SelectContent>
+          </Select>
+          <p className="text-xs text-muted-foreground">
+            Maximum duration of a Claude or Codex turn. Unlimited by default. Changes apply to new
+            turns and future automation runs.
+          </p>
+        </div>
         <div className="grid gap-3 pt-1 sm:grid-cols-2">
           <div className="space-y-2">
             <Label htmlFor="default-claude-model">Default Claude model</Label>

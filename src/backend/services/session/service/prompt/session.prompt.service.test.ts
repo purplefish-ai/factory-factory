@@ -8,7 +8,12 @@ import { createTestProcessHandle } from '@/backend/services/session/service/acp/
 import type { EventSessionAuthority } from '@/backend/services/session/service/event-agent/event-session-authority';
 import { AcpEventProcessor } from '@/backend/services/session/service/events/acp-event-processor';
 import { SessionLifecycleEventService } from '@/backend/services/session/service/lifecycle/session-lifecycle-event.service';
+import { userSettingsService } from '@/backend/services/settings';
 import { SessionService } from './session.service';
+
+vi.mock('@/backend/services/settings', () => ({
+  userSettingsService: { get: vi.fn(async () => ({ turnLimitMinutes: null })) },
+}));
 
 function createPromptService(eventAuthority?: EventSessionAuthority) {
   const runtimeManager = {
@@ -375,7 +380,7 @@ describe('SessionService prompt coordination', () => {
 
   it.each([
     ['CODEX', undefined],
-    ['CLAUDE', 14_400_000],
+    ['CLAUDE', undefined],
   ] as const)('uses the turn timeout policy for %s messages', async (provider, timeoutMs) => {
     const { service, runtimeManager, acpEventProcessor } = createPromptService();
     acpEventProcessor.getProvider.mockReturnValue(provider);
@@ -389,6 +394,32 @@ describe('SessionService prompt coordination', () => {
       [{ type: 'text', text: 'continue' }],
       timeoutMs
     );
+  });
+
+  it.each(['CLAUDE', 'CODEX'])('applies a configured turn limit to %s', async (provider) => {
+    vi.mocked(userSettingsService.get).mockResolvedValueOnce({ turnLimitMinutes: 30 } as never);
+    const { service, runtimeManager, acpEventProcessor } = createPromptService();
+    acpEventProcessor.getProvider.mockReturnValue(provider);
+    runtimeManager.sendPrompt.mockResolvedValue({ stopReason: 'end_turn' });
+    await service.sendSessionMessage('session-1', 'continue');
+    expect(runtimeManager.sendPrompt).toHaveBeenCalledWith(
+      'session-1',
+      [{ type: 'text', text: 'continue' }],
+      1_800_000
+    );
+  });
+
+  it('does not dispatch after the lifecycle changes during the settings read', async () => {
+    const settings = createDeferred<never>();
+    vi.mocked(userSettingsService.get).mockClear().mockReturnValueOnce(settings.promise);
+    const { service, runtimeManager, isGenerationCurrent } = createPromptService();
+    const sending = service.sendSessionMessage('session-1', 'continue');
+    const rejected = expect(sending).rejects.toThrow('Session lifecycle changed');
+    await vi.waitFor(() => expect(userSettingsService.get).toHaveBeenCalled());
+    isGenerationCurrent.mockReturnValue(false);
+    settings.resolve({ turnLimitMinutes: null } as never);
+    await rejected;
+    expect(runtimeManager.sendPrompt).not.toHaveBeenCalled();
   });
 
   it('allows a Codex turn to finish after more than four hours', async () => {
@@ -656,7 +687,7 @@ describe('SessionService prompt coordination', () => {
     const second = service.sendSessionMessage('session-2', 'second');
     await Promise.resolve();
 
-    expect(runtimeManager.sendPrompt).toHaveBeenCalledTimes(2);
+    await vi.waitFor(() => expect(runtimeManager.sendPrompt).toHaveBeenCalledTimes(2));
 
     firstPrompt.resolve({ stopReason: 'end_turn' });
     secondPrompt.resolve({ stopReason: 'end_turn' });

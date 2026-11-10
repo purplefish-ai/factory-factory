@@ -250,6 +250,13 @@ preserves the saved custom command for later use.
 
 ## Chat defaults
 
+**Turn limit** sets the maximum duration of each Claude or Codex turn. It starts
+at **Unlimited**, including after upgrading from the old fixed Claude four-hour
+limit. Choose 30 minutes, 1, 2, 4, 8 or 24 hours to stop long turns. Changes
+apply when the next turn starts; event automations retain the limit selected
+when their run launches. Historical events without a saved limit are unlimited.
+A timeout message names the selected duration.
+
 An app-wide warning appears when a saved default Claude or Codex model is
 missing from its live catalog. **Review chat defaults** opens Settings so you
 can choose a current model. The warning clears after the default changes or the
