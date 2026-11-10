@@ -6,9 +6,10 @@ export async function listVisibleReviewRequests(
     githubCLIService: Pick<typeof githubCLIService, 'listReviewRequests'>;
     workspaceQueryService: Pick<typeof workspaceQueryService, 'filterReviewRequests'>;
   },
-  repository?: string
+  repository?: string,
+  options?: { forceRefresh?: boolean }
 ) {
-  const prs = await services.githubCLIService.listReviewRequests(repository);
+  const prs = await services.githubCLIService.listReviewRequests(repository, options);
   const scoped = repository
     ? prs.filter((pr) => pr.repository.nameWithOwner.toLowerCase() === repository.toLowerCase())
     : prs;

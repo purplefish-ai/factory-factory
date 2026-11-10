@@ -1,5 +1,10 @@
+import { useCallback } from 'react';
+import { toast } from 'sonner';
 import { trpc } from '@/client/lib/trpc';
 import { githubPRPreviewInputSchema } from '@/shared/github-pr-preview';
+
+/** Matches the server's review-request cache, so a poll rarely finds it fresh twice. */
+export const REVIEW_REQUESTS_POLL_MS = 2 * 60_000;
 
 export interface ReviewProject {
   id: string;
@@ -20,10 +25,28 @@ export function getReviewRepository(project: ReviewProject | undefined): string 
 /** The page and sidebar share the same project key and freshness policy. */
 export function useProjectReviewRequests(project: ReviewProject | undefined) {
   const repository = getReviewRepository(project);
+  const projectId = project?.id ?? '';
   const query = trpc.prReview.listReviewRequests.useQuery(
-    { projectId: project?.id ?? '' },
-    { enabled: !!repository, staleTime: 30_000, refetchInterval: 30_000 }
+    { projectId },
+    {
+      enabled: !!repository,
+      staleTime: REVIEW_REQUESTS_POLL_MS,
+      refetchInterval: REVIEW_REQUESTS_POLL_MS,
+    }
   );
+  const utils = trpc.useUtils();
+  // Explicit refreshes bypass the server cache and gh health cache, then fill the shared key.
+  const refresh = useCallback(async () => {
+    try {
+      const result = await utils.client.prReview.listReviewRequests.query({
+        projectId,
+        forceRefresh: true,
+      });
+      utils.prReview.listReviewRequests.setData({ projectId }, result);
+    } catch {
+      toast.error("Couldn't refresh reviews.");
+    }
+  }, [projectId, utils]);
   // Project metadata can change while this project-keyed response is cached.
   const health = query.data?.health;
   const unavailable =
@@ -33,5 +56,5 @@ export function useProjectReviewRequests(project: ReviewProject | undefined) {
       ? (query.data?.prs.filter((pr) => pr.repository.nameWithOwner.toLowerCase() === repository) ??
         [])
       : [];
-  return { ...query, prs, repository };
+  return { ...query, prs, repository, refresh };
 }

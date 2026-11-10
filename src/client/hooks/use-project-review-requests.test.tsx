@@ -6,7 +6,7 @@ import { createRoot } from 'react-dom/client';
 import { beforeEach, expect, it, vi } from 'vitest';
 import { trpc } from '@/client/lib/trpc';
 import { actFlushSync } from '@/test-utils/react-act';
-import { useProjectReviewRequests } from './use-project-review-requests';
+import { REVIEW_REQUESTS_POLL_MS, useProjectReviewRequests } from './use-project-review-requests';
 
 beforeEach(() => {
   Object.defineProperty(globalThis, 'IS_REACT_ACT_ENVIRONMENT', {
@@ -17,6 +17,11 @@ beforeEach(() => {
 const project = { id: 'p', githubOwner: 'o', githubRepo: 'r' };
 function Consumer() {
   useProjectReviewRequests(project);
+  return null;
+}
+let latest: ReturnType<typeof useProjectReviewRequests> | undefined;
+function Probe() {
+  latest = useProjectReviewRequests(project);
   return null;
 }
 function Providers({
@@ -68,6 +73,61 @@ it('shares page and navigation fetches and never uses an undefined global input'
       )
     );
     expect(requests.mock.calls).toEqual([[{ projectId: 'p' }]]);
+  } finally {
+    actFlushSync(() => root.unmount());
+    queryClient.clear();
+  }
+});
+
+it('polls on the server cache cadence and forces a fresh search on explicit refresh', async () => {
+  const requests = vi.fn();
+  const pr = (number: number) => ({
+    number,
+    reviewDecision: 'REVIEW_REQUIRED',
+    repository: { nameWithOwner: 'o/r' },
+  });
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const client = trpc.createClient({
+    links: [
+      () =>
+        ({ op }) =>
+          observable((observer) => {
+            requests(op.input);
+            const forced = (op.input as { forceRefresh?: boolean }).forceRefresh;
+            observer.next({ result: { data: { prs: [pr(forced ? 2 : 1)], error: null } } });
+            observer.complete();
+          }),
+    ],
+  });
+  const root = createRoot(document.createElement('div'));
+  try {
+    await act(async () =>
+      root.render(
+        <Providers client={client} queryClient={queryClient}>
+          <Probe />
+        </Providers>
+      )
+    );
+    await act(() => vi.waitFor(() => expect(latest?.status).toBe('success')));
+    const cached = queryClient.getQueryCache().getAll()[0];
+    expect(cached?.observers[0]?.options).toMatchObject({
+      staleTime: REVIEW_REQUESTS_POLL_MS,
+      refetchInterval: REVIEW_REQUESTS_POLL_MS,
+    });
+    expect(REVIEW_REQUESTS_POLL_MS).toBe(120_000);
+    expect(latest?.prs.map((row) => row.number)).toEqual([1]);
+
+    await act(async () => {
+      await latest?.refresh();
+    });
+    expect(requests.mock.calls).toEqual([
+      [{ projectId: 'p' }],
+      [{ projectId: 'p', forceRefresh: true }],
+    ]);
+    // The forced result fills the shared page/sidebar key without another poll.
+    await act(() => vi.waitFor(() => expect(latest?.prs.map((row) => row.number)).toEqual([2])));
+    expect(requests).toHaveBeenCalledTimes(2);
+    expect(queryClient.getQueryCache().getAll()).toHaveLength(1);
   } finally {
     actFlushSync(() => root.unmount());
     queryClient.clear();

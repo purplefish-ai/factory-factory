@@ -174,8 +174,8 @@ it('defensively restricts repository identity case-insensitively before workspac
         githubCLIService: {
           checkHealth: async () => ({ isInstalled: true, isAuthenticated: true }),
         },
-        listVisibleReviewRequests: (repository?: string) =>
-          listVisibleReviewRequests(services, repository),
+        listVisibleReviewRequests: (repository?: string, options?: { forceRefresh?: boolean }) =>
+          listVisibleReviewRequests(services, repository, options),
       },
     },
   } as never);
@@ -185,6 +185,6 @@ it('defensively restricts repository identity case-insensitively before workspac
     'https://github.com/o/r/pull/6',
     'https://github.com/o/r/pull/8',
   ]);
-  expect(list).toHaveBeenCalledWith('O/R');
+  expect(list).toHaveBeenCalledWith('O/R', { forceRefresh: false });
   expect((await caller.listReviewRequests()).prs).toHaveLength(4);
 });
