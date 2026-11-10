@@ -364,7 +364,8 @@ oldest first, with at most 20 batches per run. Each batch is a separate short
 write; the delete re-checks the predicate, and the loop yields between batches
 and stops on shutdown. Superseded review facts copy the whole observation, so
 these rows hold most of the ledger's size. A `(state, createdAt)` index serves
-this cross-workspace query, so it reads only candidate rows.
+this cross-workspace query, so it reads only old rows in those states, never
+delivered history.
 
 Only rows that no reader uses are eligible. Rows must have no `batchId`, no
 legacy receipt or frozen metadata, and a PR target. The reducer reads only

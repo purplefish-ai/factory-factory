@@ -95,7 +95,9 @@ const PRUNABLE_FACT_KINDS = [
  * workspaces and claims require READY, so those facts have no reader either.
  * Delivery members and any legacy receipt evidence are retained, because
  * frozen batches must keep their complete membership. The `(state, createdAt)`
- * index serves both branches, so the prune never scans unrelated history.
+ * index narrows both branches by state and age, so DELIVERED history is never
+ * scanned; the PENDING range still covers old pending rows of every workspace,
+ * and the ARCHIVED check runs per row.
  */
 function prunableTerminalEventWhere(before: Date) {
   return {
