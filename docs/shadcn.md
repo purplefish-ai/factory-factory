@@ -74,8 +74,12 @@ every button to a 36px minimum target.
 An icon-only button with a tooltip is `IconButton` from
 `src/client/components/icon-button.tsx`: its `label` is both the accessible name
 and the tooltip, `tooltip` takes richer content such as a shortcut, and it
-forwards props and its ref, so it works inside `DropdownMenuTrigger asChild`.
-Tooltips render under one `TooltipProvider` at the app root (`AppLayout`,
+forwards props and its ref, so it works inside `DropdownMenuTrigger asChild`. A
+disabled button takes no pointer events, so its tooltip only shows while it is
+enabled; `tooltipWhileDisabled` opens it from a wrapper span instead, as the
+chat Stop button does while stopping. Icons sit directly in the button with no
+horizontal margin: the size variant's `gap` spaces icon and label. Tooltips
+render under one `TooltipProvider` at the app root (`AppLayout`,
 `delayDuration={0}`; the sidebar's provider uses the same delay). A nested
 provider without props would reset the open delay to Radix's 700ms default, so
 only the roots, fixture routes and the GitHub link preview (a deliberate 350ms

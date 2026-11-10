@@ -83,7 +83,7 @@ export default function ProjectsListPage() {
   const archiveMutation = trpc.project.archive.useMutation({
     onSuccess: () => {
       setArchiveDialogOpen(false);
-      runInBackground(refetch({ throwOnError: true }), "Couldn't refresh data.");
+      runInBackground(refetch({ throwOnError: true }));
     },
     onError: (error) => {
       toast.error(error.message || "Couldn't archive project.");

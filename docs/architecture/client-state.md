@@ -77,6 +77,8 @@ remaining one says which.
   search cleared when its dialog closes.
 - `useFollowOutput()` returns a callback ref for a scrolling log. It starts at
   the end and follows new content only while the reader is at the end; scrolling
-  up stops following and scrolling back resumes it. Smooth scrolling comes from
-  the element's CSS (`scroll-smooth`). The chat transcript has its own
-  controller because it also restores saved positions in a virtualized list.
+  up stops following and scrolling back resumes it. It follows DOM changes and,
+  where `ResizeObserver` exists, size changes such as a narrower view rewrapping
+  long lines. Smooth scrolling comes from the element's CSS (`scroll-smooth`).
+  The chat transcript has its own controller because it also restores saved
+  positions in a virtualized list.

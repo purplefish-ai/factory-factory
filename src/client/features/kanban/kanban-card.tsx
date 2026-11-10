@@ -10,6 +10,7 @@ import { WarningIcon } from '@phosphor-icons/react/dist/csr/Warning';
 import { memo, type RefObject, useState } from 'react';
 import { Link } from 'react-router';
 import { IconButton } from '@/client/components/icon-button';
+import { StatusDot } from '@/client/components/status-indicators';
 import { UnreadMailBadge } from '@/client/features/inbox';
 import {
   ArchiveWorkspaceDialog,
@@ -279,7 +280,7 @@ function CardTitleIcons({
         >
           <ChatIcon />
           {workspace.pendingRequestType && (
-            <span className="absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full bg-warning" />
+            <StatusDot tone="attention" className="absolute -top-0.5 -right-0.5" />
           )}
         </IconButton>
       )}

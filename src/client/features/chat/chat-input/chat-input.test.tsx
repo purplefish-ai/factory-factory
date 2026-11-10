@@ -20,16 +20,17 @@ vi.mock('@/client/lib/trpc', () => ({
     codexAccounts: {
       list: { useQuery: () => ({ data: [{ id: 'work', label: 'Work' }] }) },
     },
+    workspace: { listAllFiles: {} },
   },
 }));
 
 vi.mock('@/client/features/composer', () => ({
   FileMentionPalette: () => null,
   SlashCommandPalette: () => null,
+  useFileMentions: () => ({}),
   usePasteDropHandler: () => ({}),
   useSlashCommands: () => ({}),
 }));
-vi.mock('./hooks/use-file-mentions', () => ({ useFileMentions: () => ({}) }));
 vi.mock('./hooks/use-textarea-resize', () => ({ useTextareaResize: () => undefined }));
 vi.mock('./hooks/use-chat-input-actions', () => ({
   useChatInputActions: ({ onOpenQuickActions }: { onOpenQuickActions?: () => void }) => {

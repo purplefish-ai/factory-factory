@@ -201,7 +201,7 @@ export class ProjectWorkspaceCacheReconciler {
       return;
     }
     if (query.isActive() && query.state.data !== undefined) {
-      runInBackground(this.queryClient.invalidateQueries(filter), "Couldn't refresh data.");
+      runInBackground(this.queryClient.invalidateQueries(filter));
       return;
     }
     const cached = query.state.data;
@@ -217,7 +217,7 @@ export class ProjectWorkspaceCacheReconciler {
     ) {
       this.queryClient.removeQueries(filter);
     }
-    runInBackground(reset, "Couldn't refresh data.");
+    runInBackground(reset);
   }
 
   /** Query.setData calls this synchronously at its actual success commit. */
@@ -504,7 +504,7 @@ class WorkspaceDetailCacheReconciler {
       return;
     }
     if (query.isActive() && query.state.data !== undefined) {
-      runInBackground(this.queryClient.invalidateQueries(filter), "Couldn't refresh data.");
+      runInBackground(this.queryClient.invalidateQueries(filter));
       return;
     }
     const reset = this.queryClient.resetQueries(filter);
@@ -517,7 +517,7 @@ class WorkspaceDetailCacheReconciler {
     ) {
       this.queryClient.removeQueries(filter);
     }
-    runInBackground(reset, "Couldn't refresh data.");
+    runInBackground(reset);
   }
 
   commitHttpResult(previous: unknown, http: WorkspaceDetailHttpResult): unknown {

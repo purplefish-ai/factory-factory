@@ -78,10 +78,15 @@ export const LoadError: Story = {
     await expect(await within(canvasElement).findByText("Couldn't load projects")).toBeVisible();
   },
 };
+/** The project settings section shows the settings skeleton until the list loads. */
 export const Loading: Story = {
   parameters: { trpc: { handlers: { 'project.list': () => new Promise(() => undefined) } } },
   play: async ({ canvasElement }) => {
-    await expect(await within(canvasElement).findByText('Loading projects…')).toBeVisible();
+    const description = await within(canvasElement).findByText(/Expand a project to configure/);
+    const card = description.closest<HTMLElement>('[data-slot="card"]');
+    await expect(card).not.toBeNull();
+    await expect(card?.querySelector('[data-slot="skeleton"]')).toBeVisible();
+    await expect(within(card as HTMLElement).queryByText(/No projects yet/)).toBeNull();
   },
 };
 

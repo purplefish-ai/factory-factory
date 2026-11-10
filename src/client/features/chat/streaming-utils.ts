@@ -7,7 +7,7 @@
  */
 
 import { z } from 'zod';
-import type { AgentMessage, AgentStreamEvent, InputJsonDelta } from '@/lib/chat-protocol';
+import type { AgentMessage, AgentStreamEvent } from '@/lib/chat-protocol';
 import { isStreamEventMessage } from '@/lib/chat-protocol';
 import { createDebugLogger, DEBUG_CHAT_WS } from '@/lib/debug';
 import type { ChatAction } from './reducer';
@@ -18,6 +18,13 @@ import type { ChatAction } from './reducer';
 
 const DEBUG_STREAMING = DEBUG_CHAT_WS;
 const debug = createDebugLogger(DEBUG_STREAMING);
+
+/** A streamed tool input fragment; other deltas, or one without its JSON, are skipped. */
+const InputJsonDeltaSchema = z.object({
+  type: z.literal('input_json_delta'),
+  partial_json: z.string(),
+});
+const ToolInputSchema = z.record(z.string(), z.unknown());
 
 // =============================================================================
 // Stream Event Extraction
@@ -86,9 +93,12 @@ function handleToolInputDelta(
     return null;
   }
 
-  // Cast delta to check for input_json_delta
-  const delta = event.delta as InputJsonDelta | typeof event.delta;
-  if (delta.type !== 'input_json_delta' || !('partial_json' in delta)) {
+  // Text and thinking deltas are the common case; skip them before parsing.
+  if (event.delta.type !== 'input_json_delta') {
+    return null;
+  }
+  const delta = InputJsonDeltaSchema.safeParse(event.delta);
+  if (!delta.success) {
     return null;
   }
 
@@ -98,13 +108,12 @@ function handleToolInputDelta(
   }
 
   const currentJson = toolInputAccumulatorRef.current.inputJsonByToolUseId.get(toolUseId) ?? '';
-  const newJson = currentJson + delta.partial_json;
+  const newJson = currentJson + delta.data.partial_json;
   toolInputAccumulatorRef.current.inputJsonByToolUseId.set(toolUseId, newJson);
 
   // Try to parse the accumulated JSON and create update action
   try {
     const parsed = JSON.parse(newJson);
-    const ToolInputSchema = z.record(z.string(), z.unknown());
     const parsedInput = ToolInputSchema.parse(parsed);
     debug.log('Tool input updated:', toolUseId, Object.keys(parsedInput));
     return { type: 'TOOL_INPUT_UPDATE', payload: { toolUseId, input: parsedInput } };

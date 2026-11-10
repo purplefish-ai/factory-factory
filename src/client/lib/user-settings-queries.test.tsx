@@ -1,11 +1,16 @@
 // @vitest-environment jsdom
 
+import { QueryClientProvider } from '@tanstack/react-query';
 import { act } from 'react';
+import { createRoot } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { createAppQueryClient } from '@/client/lib/query-client';
+import { trpc } from '@/client/lib/trpc';
 import { settle, waitForCheck } from '@/test-utils/react-act';
 import {
   SAVE_SETTINGS_ERROR,
   type UserSettingsPatch,
+  useProviderOptions,
   useUpdateUserSettings,
   useUserSettings,
 } from './user-settings-queries';
@@ -177,5 +182,42 @@ describe('useUpdateUserSettings', () => {
     // A late result would render on React Query's notify timer, after `act`.
     await settle();
     expect(text('model')).toBe('opus');
+  });
+});
+
+function CatalogProbe() {
+  useProviderOptions(undefined, { enabled: true });
+  return null;
+}
+
+describe('useProviderOptions', () => {
+  it('shares one stale time and does not retry discovery automatically', async () => {
+    const catalogServer = createSettingsServer({
+      handlers: { 'userSettings.getProviderOptions': () => ({ claude: [], codex: [] }) },
+    });
+    // The app's own client, whose default retry policy retries failed reads.
+    const queryClient = createAppQueryClient();
+    expect(queryClient.getDefaultOptions().queries?.retry).not.toBe(false);
+    const container = document.createElement('div');
+    const root = createRoot(container);
+    await act(() =>
+      root.render(
+        <trpc.Provider client={catalogServer.client} queryClient={queryClient}>
+          <QueryClientProvider client={queryClient}>
+            <CatalogProbe />
+          </QueryClientProvider>
+        </trpc.Provider>
+      )
+    );
+    try {
+      const [query] = queryClient
+        .getQueryCache()
+        .findAll()
+        .filter(({ queryKey }) => JSON.stringify(queryKey).includes('getProviderOptions'));
+      expect(query?.options).toMatchObject({ staleTime: 60_000, retry: false });
+    } finally {
+      await act(async () => root.unmount());
+      queryClient.clear();
+    }
   });
 });

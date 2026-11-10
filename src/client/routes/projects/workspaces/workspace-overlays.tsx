@@ -49,7 +49,7 @@ export function ScriptFailedBanner({
         <>
           {hasStartupScript && initOutput && (
             <Button variant="ghost" size="xs" onClick={() => setExpanded(!expanded)}>
-              {expanded ? <CaretDownIcon className="mr-1" /> : <CaretRightIcon className="mr-1" />}
+              {expanded ? <CaretDownIcon /> : <CaretRightIcon />}
               {expanded ? 'Hide output' : 'Show output'}
             </Button>
           )}
@@ -66,7 +66,7 @@ export function ScriptFailedBanner({
           </Button>
           {showPlay && (
             <Button variant="outline" size="xs" onClick={onPlay} disabled={!onPlay}>
-              <PlayIcon className="mr-1" />
+              <PlayIcon />
               Dispatch queued messages
             </Button>
           )}

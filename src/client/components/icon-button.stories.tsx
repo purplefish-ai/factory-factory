@@ -87,6 +87,26 @@ export const Pending: Story = {
   },
 };
 
+/** `tooltipWhileDisabled` keeps the tooltip on a disabled or pending button. */
+export const TooltipWhileDisabled: Story = {
+  args: {
+    label: 'Stop agent',
+    tooltip: 'Stop agent (Esc)',
+    tooltipWhileDisabled: true,
+    pending: true,
+    pendingLabel: 'Stopping…',
+    children: <XIcon />,
+  },
+  play: async ({ canvasElement }) => {
+    const button = within(canvasElement).getByRole('button', { name: 'Stopping…' });
+    await expect(button).toBeDisabled();
+    await userEvent.hover(button.parentElement as HTMLElement);
+    await expect(await within(document.body).findByRole('tooltip')).toHaveTextContent(
+      'Stop agent (Esc)'
+    );
+  },
+};
+
 /** Inside `DropdownMenuTrigger asChild` the button keeps its tooltip and opens the menu. */
 export const MenuTrigger: Story = {
   render: () => (

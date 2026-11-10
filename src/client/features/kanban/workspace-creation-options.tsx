@@ -12,7 +12,6 @@ import {
   type SessionLaunchControlsProps,
 } from '@/client/features/session-selection';
 import { RatchetToggleButton } from '@/client/features/workspace';
-import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { cn } from '@/lib/utils';
 
@@ -53,17 +52,16 @@ export function WorkspaceCreationOptions({
       <div className="flex items-center justify-between gap-2">
         {enabled && (
           <div className="flex shrink-0 items-center gap-1">
-            <Button
+            <IconButton
               type="button"
-              variant="ghost"
+              label="Attach files"
               size="icon-compact"
               className="shrink-0"
-              aria-label="Attach files"
               onClick={onAttach}
               disabled={disabled}
             >
               <PaperclipIcon />
-            </Button>
+            </IconButton>
             <WorkspaceSettings
               selection={selection}
               disabled={disabled}

@@ -12,8 +12,8 @@ import {
   collectAttachments,
   FileMentionPalette,
   SlashCommandPalette,
+  useFileMentions,
   usePasteDropHandler,
-  useProjectFileMentions,
   useSlashCommands,
 } from '@/client/features/composer';
 import { invalidateAgentProjectQueries } from '@/client/lib/agent-query-cache';
@@ -256,8 +256,10 @@ export function InlineWorkspaceForm({
     );
   };
 
-  const fileMentions = useProjectFileMentions({
-    projectId,
+  const fileMentions = useFileMentions({
+    fileQuery: trpc.project.listAllFiles,
+    scope: { projectId },
+    scopeReady: !!projectId,
     inputRef: textareaRef,
     onChange: setInitialPrompt,
   });
@@ -324,8 +326,7 @@ export function InlineWorkspaceForm({
         });
       }
       runInBackground(
-        utils.workspace.listForProject.invalidate({ projectId: workspace.projectId }),
-        "Couldn't refresh data."
+        utils.workspace.listForProject.invalidate({ projectId: workspace.projectId })
       );
       completeCreation(context?.submission ?? submitted.current, () => {
         // The selected pending route owns navigation after an immediate launch.
@@ -365,10 +366,7 @@ export function InlineWorkspaceForm({
     onMutate: () => ({ submission: submitted.current }),
     onSuccess: (task, _input, context) => {
       toast.success(`Automation "${task.name}" created`);
-      runInBackground(
-        invalidateAgentProjectQueries(utils, task.projectId),
-        "Couldn't refresh data."
-      );
+      runInBackground(invalidateAgentProjectQueries(utils, task.projectId));
       completeCreation(context?.submission ?? submitted.current, onCancel);
     },
     onError: (error, _input, context) => {

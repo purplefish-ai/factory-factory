@@ -4,18 +4,19 @@ import { ProviderUsageControl } from '@/client/features/chat/usage-stats/provide
 import {
   FileMentionPalette,
   SlashCommandPalette,
+  useFileMentions,
   usePasteDropHandler,
   useSlashCommands,
 } from '@/client/features/composer';
 import { useShortcut } from '@/client/features/shortcuts';
 import { runInBackground } from '@/client/lib/background-task';
+import { trpc } from '@/client/lib/trpc';
 import { InputGroup, InputGroupAddon, InputGroupTextarea } from '@/components/ui/input-group';
 import type { ChatSettings, CommandInfo, MessageAttachment, TokenStats } from '@/lib/chat-protocol';
 import { cn } from '@/lib/utils';
 import type { ChatBarCapabilities } from '@/shared/chat-capabilities';
 import { AttachmentSection, LeftControls, RightControls } from './components/input-controls';
 import { useChatInputActions } from './hooks/use-chat-input-actions';
-import { useFileMentions } from './hooks/use-file-mentions';
 import { useTextareaResize } from './hooks/use-textarea-resize';
 
 // =============================================================================
@@ -142,7 +143,9 @@ export const ChatInput = memo(function ChatInput({
 
   // File mentions hook
   const fileMentions = useFileMentions({
-    workspaceId,
+    fileQuery: trpc.workspace.listAllFiles,
+    scope: { workspaceId: workspaceId ?? '' },
+    scopeReady: !!workspaceId,
     inputRef: resolvedInputRef,
     onChange,
   });

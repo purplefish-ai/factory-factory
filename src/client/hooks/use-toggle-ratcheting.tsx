@@ -69,15 +69,9 @@ export function useToggleRatcheting(projectId?: string): UseToggleRatchetingRetu
       toast.error(`Couldn't update PR monitoring. ${error.message}`);
     },
     onSettled: (_data, _error, input) => {
-      runInBackground(
-        utils.workspace.get.invalidate({ id: input.workspaceId }),
-        "Couldn't refresh data."
-      );
+      runInBackground(utils.workspace.get.invalidate({ id: input.workspaceId }));
       if (projectId) {
-        runInBackground(
-          utils.workspace.listForProject.invalidate({ projectId }),
-          "Couldn't refresh data."
-        );
+        runInBackground(utils.workspace.listForProject.invalidate({ projectId }));
       }
     },
   });

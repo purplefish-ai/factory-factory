@@ -21,6 +21,9 @@ interface RatchetToggleButtonProps {
   label?: string;
 }
 
+/** One name in both states: `aria-pressed` says whether PR updates are on. */
+const ACCESSIBLE_NAME = 'PR updates';
+
 function getTooltip(enabled: boolean, state: RatchetStateLike): string {
   if (!enabled) {
     return 'PR updates are off. Click to queue CI and review updates in the main conversation.';
@@ -41,7 +44,6 @@ export function RatchetToggleButton({
   size = 'icon-compact',
   label,
 }: RatchetToggleButtonProps) {
-  const accessibleName = enabled ? 'Disable PR updates' : 'Enable PR updates';
   const tooltip = getTooltip(enabled, state);
   const buttonProps = {
     type: 'button',
@@ -70,7 +72,7 @@ export function RatchetToggleButton({
             {...buttonProps}
             variant="ghost"
             size="compact"
-            aria-label={accessibleName}
+            aria-label={ACCESSIBLE_NAME}
             className={cn('aria-pressed:bg-accent', className)}
           >
             <RatchetWrenchIcon enabled={enabled} animated={animated} />
@@ -85,7 +87,7 @@ export function RatchetToggleButton({
   return (
     <IconButton
       {...buttonProps}
-      label={accessibleName}
+      label={ACCESSIBLE_NAME}
       tooltip={tooltip}
       tooltipSide="top"
       size={size}

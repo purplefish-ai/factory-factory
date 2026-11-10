@@ -43,7 +43,7 @@ export function RunScriptButton({ workspaceId }: RunScriptButtonProps) {
   const startScript = trpc.workspace.startRunScript.useMutation({
     meta: { errorToast: "Couldn't start dev server." },
     onSuccess: () => {
-      runInBackground(refetch(), "Couldn't refresh data.");
+      runInBackground(refetch());
       setActiveBottomTab('dev-logs');
       setRightPanelVisible(true);
     },
@@ -52,7 +52,7 @@ export function RunScriptButton({ workspaceId }: RunScriptButtonProps) {
   const stopScript = trpc.workspace.stopRunScript.useMutation({
     meta: { errorToast: "Couldn't stop dev server." },
     onSuccess: () => {
-      runInBackground(refetch(), "Couldn't refresh data.");
+      runInBackground(refetch());
     },
   });
 
@@ -60,10 +60,7 @@ export function RunScriptButton({ workspaceId }: RunScriptButtonProps) {
     // The setup panel renders the error inline.
     meta: { errorToast: false },
     onSuccess: () => {
-      runInBackground(
-        utils.workspace.getRunScriptStatus.invalidate({ workspaceId }),
-        "Couldn't refresh data."
-      );
+      runInBackground(utils.workspace.getRunScriptStatus.invalidate({ workspaceId }));
       setSetupPanelOpen(false);
     },
   });

@@ -41,6 +41,10 @@ it('keeps the project rail visible beside task errors and links explicit selecti
     'Review code'
   );
   expect(container.querySelector('a[aria-current="page"]')).toBeNull();
+  // An active automation shows the shared success status dot beside "Active".
+  const dot = container.querySelector('a[href="/projects/project/agents/one"] [data-status-tone]');
+  expect(dot?.getAttribute('data-status-tone')).toBe('success');
+  expect(dot?.nextElementSibling?.textContent).toBe('Active');
   expect(container.textContent).toContain('Automation not found');
   expect(container.querySelector('[role=combobox]')).toBeNull();
   actFlushSync(() => root.unmount());

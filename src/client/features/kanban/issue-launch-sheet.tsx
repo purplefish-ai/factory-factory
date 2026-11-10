@@ -133,10 +133,7 @@ export function IssueLaunchSheet({
     onSuccess: (workspace) => {
       seedCreatedWorkspaceDetail(queryClient, workspace);
 
-      runInBackground(
-        utils.workspace.listForProject.invalidate({ projectId }),
-        "Couldn't refresh data."
-      );
+      runInBackground(utils.workspace.listForProject.invalidate({ projectId }));
       onOpenChange(false);
       onStarted?.();
     },
@@ -282,7 +279,7 @@ export function IssueLaunchSheet({
             }
             className="w-full sm:w-auto"
           >
-            <PlayIcon className="mr-2" />
+            <PlayIcon />
             {createWorkspaceMutation.isPending ? 'Starting…' : 'Start'}
           </Button>
         </SheetFooter>

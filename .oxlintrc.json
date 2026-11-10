@@ -175,6 +175,13 @@
                 "owners": ["src/client/lib/user-settings-queries.ts"],
                 "helpers": "all",
                 "reason": "its hooks share one optimistic cache strategy and error toast for every settings control"
+              },
+              {
+                "procedures": ["userSettings.getProviderOptions"],
+                "use": "src/client/lib/user-settings-queries.ts",
+                "owners": ["src/client/lib/user-settings-queries.ts"],
+                "helpers": "cache",
+                "reason": "live model discovery starts provider processes, so every reader shares one stale time through useProviderOptions"
               }
             ]
           }
@@ -241,9 +248,7 @@
           "error",
           {
             "exceptions": {
-              "src/client/features/agents/event-dashboard-story.tsx": "Story fixture: the conflict story needs a newer server revision to land one commit after the editor opens.",
-              "src/client/routes/admin/ProjectFactoryConfigCard.tsx": "The admin routes are outside this change; closing the editor when the config query fails can move to render time there.",
-              "src/client/routes/admin/project-settings-row.tsx": "The admin routes are outside this change; remembering that a row has opened can move to render time there."
+              "src/client/features/agents/event-dashboard-story.tsx": "Story fixture: the conflict story needs a newer server revision to land one commit after the editor opens."
             }
           }
         ]
@@ -262,7 +267,7 @@
       }
     },
     {
-      "files": ["src/client/features/chat/agent-activity/**/*.{ts,tsx}"],
+      "files": ["src/client/features/chat/**/*.{ts,tsx}"],
       "rules": {
         "factory/no-tool-input-cast": "error"
       }

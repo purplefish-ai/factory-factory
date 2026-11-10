@@ -298,6 +298,9 @@ describe('SubagentList', () => {
     });
 
     expect(container.textContent).toContain('Provider unavailable');
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain(
+      "Couldn't load subagents"
+    );
     const retry = [...container.querySelectorAll('button')].find(
       (button) => button.textContent === 'Retry'
     );

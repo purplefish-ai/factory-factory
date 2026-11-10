@@ -25,7 +25,7 @@ export function ServerLogsSection() {
         pendingLabel="Downloading…"
         className="w-full sm:w-auto"
       >
-        <DownloadIcon className="mr-2" />
+        <DownloadIcon />
         Download log file
       </Button>
     </SettingsSection>

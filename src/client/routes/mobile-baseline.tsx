@@ -217,11 +217,11 @@ function GeneralMobileBaselinePage() {
             <ListIcon />
           </Button>
           <Button variant="outline" size="sm">
-            <GitBranchIcon className="mr-2" />
+            <GitBranchIcon />
             Resume branch
           </Button>
           <Button size="sm">
-            <PlusIcon className="mr-2" />
+            <PlusIcon />
             New workspace
           </Button>
         </PageHeader>

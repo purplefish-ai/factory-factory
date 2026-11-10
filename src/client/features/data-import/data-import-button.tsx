@@ -131,7 +131,7 @@ export function DataImportButton({
         variant={variant}
         className={className}
       >
-        <UploadIcon className="mr-2" />
+        <UploadIcon />
         {children || 'Import data'}
       </Button>
       <input

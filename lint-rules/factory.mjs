@@ -290,8 +290,14 @@ function numericIntervalLiteral(node, visitorKeys) {
   }
 }
 
-/** `input`, `input.todos`, `call.input.file_path`, `input?.["offset"]` and similar. */
-function readsToolInput(node) {
+/** Agent-supplied members: tool input, and stream event deltas and content blocks. */
+const AGENT_PAYLOAD_MEMBERS = new Set(['input', 'delta', 'content_block']);
+
+/**
+ * `input`, `input.todos`, `call.input.file_path`, `input?.["offset"]`,
+ * `event.delta`, `event.content_block` and similar.
+ */
+function readsAgentPayload(node) {
   let current = node;
   while (current) {
     if (
@@ -301,7 +307,7 @@ function readsToolInput(node) {
     ) {
       current = current.expression;
     } else if (current.type === 'MemberExpression') {
-      if (memberName(current) === 'input') {
+      if (AGENT_PAYLOAD_MEMBERS.has(memberName(current))) {
         return true;
       }
       current = current.object;
@@ -667,6 +673,12 @@ const HAND_ROLLED_FOCUS_CLASS =
 // `h-4`, `w-[18px]`, `md:w-3`: any height or width class on an icon.
 const ICON_DIMENSION_CLASS = /(?<=^|[\s'"`:!])[hw]-[\w.[\]/-]+/;
 
+// `mr-2`, `ml-1.5`, `md:me-1`, `mx-[3px]`, `m-1`: a positive horizontal margin
+// (including all-sides `m-`), which adds to the control's `gap`. Negative
+// optical offsets (`-ml-1`), `ml-auto` and vertical margins (`my-1`) pass.
+const ICON_HORIZONTAL_MARGIN_CLASS =
+  /(?<=^|[\s'"`:!])m[lrxse]?-(?:\d+(?:\.\d+)?|px|\[[^\]\s]+\])(?![\w./-])/;
+
 function classNameText(opening, sourceCode) {
   const attribute = opening.attributes.find(
     (candidate) => candidate.type === 'JSXAttribute' && candidate.name.name === 'className'
@@ -723,6 +735,36 @@ function collectIcons(node, found = []) {
   }
 }
 
+/**
+ * Icons that are flex items of the control: its children, through conditionals
+ * and fragments but not wrapper elements, whose own layout spaces their icons.
+ * With `asChild`, the rendered child's children.
+ */
+function collectDirectIcons(node, found = []) {
+  switch (node?.type) {
+    case 'JSXElement':
+      if (isIconElement(node.openingElement)) {
+        found.push(node.openingElement);
+      }
+      return found;
+    case 'JSXFragment':
+      for (const child of node.children) {
+        collectDirectIcons(child, found);
+      }
+      return found;
+    case 'JSXExpressionContainer':
+      return collectDirectIcons(node.expression, found);
+    case 'ConditionalExpression':
+      collectDirectIcons(node.consequent, found);
+      return collectDirectIcons(node.alternate, found);
+    case 'LogicalExpression':
+      collectDirectIcons(node.left, found);
+      return collectDirectIcons(node.right, found);
+    default:
+      return found;
+  }
+}
+
 /** The element an `asChild` trigger renders: its only JSX child, if any. */
 function onlyElementChild(node) {
   const children = node.children.filter(
@@ -772,13 +814,35 @@ const rules = {
           if (!SIZED_BUTTONS.has(name)) {
             return;
           }
+          // One report per icon: a sized icon is fixed first.
+          const reported = new Set();
           for (const child of node.children) {
             for (const icon of collectIcons(child)) {
               const match = ICON_DIMENSION_CLASS.exec(classNameText(icon, context.sourceCode));
               if (match) {
+                reported.add(icon);
                 context.report({
                   node: icon,
                   message: `Remove "${match[0]}": the ${name} size variant sizes its icons. Use a size-* class only for a deliberate exception (src/components/ui/button.tsx).`,
+                });
+              }
+            }
+          }
+          const rendered = jsxAttribute(node.openingElement, 'asChild')
+            ? onlyElementChild(node)
+            : node;
+          for (const child of rendered?.children ?? []) {
+            for (const icon of collectDirectIcons(child)) {
+              if (reported.has(icon)) {
+                continue;
+              }
+              const match = ICON_HORIZONTAL_MARGIN_CLASS.exec(
+                classNameText(icon, context.sourceCode)
+              );
+              if (match) {
+                context.report({
+                  node: icon,
+                  message: `Remove "${match[0]}": the ${name} gap already spaces its icon from the label (src/components/ui/button.tsx).`,
                 });
               }
             }
@@ -1495,16 +1559,17 @@ const rules = {
   },
   'no-tool-input-cast': {
     create(context) {
-      // Tool input is agent-supplied; renderers parse it with the schemas in
-      // tool-renderers/tool-input-schemas.ts and fall back to raw JSON.
+      // Tool input and stream payloads are agent-supplied; renderers parse tool
+      // input with the schemas in tool-renderers/tool-input-schemas.ts and fall
+      // back to raw JSON, and the reducer path skips payloads it cannot parse.
       const report = (node) => {
-        if (node.typeAnnotation.typeName?.name === 'const' || !readsToolInput(node.expression)) {
+        if (node.typeAnnotation.typeName?.name === 'const' || !readsAgentPayload(node.expression)) {
           return;
         }
         context.report({
           node,
           message:
-            'Parse agent tool input with parseToolInput and a Zod schema instead of a type assertion.',
+            'Parse agent tool input (parseToolInput) or stream payloads with a Zod schema instead of a type assertion.',
         });
       };
       return { TSAsExpression: report, TSTypeAssertion: report };

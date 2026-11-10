@@ -30,17 +30,20 @@ fixtures when upgrading it. The rules require accessible names for icon-only
 buttons (including the shared `Button` icon sizes), and reject awaited dynamic
 imports, native browser dialogs, Next.js directives, `z.any()`/`zod.any()`,
 assertions on `JSON.parse` results, casts of promise resolvers to function types
-accepting `unknown`, type assertions on agent tool input (`input.todos as …`,
-`call.input.file_path as …`) under `src/client/features/chat/agent-activity`,
-which must use `parseToolInput` with a Zod schema, and fixed Tailwind palette
-color classes (`bg-red-500`, `dark:text-emerald-300`) in `src/client`,
-`src/components` and `src/lib`, which must use theme tokens instead
-([status colors](../docs/status-colors.md)). The palette rule's file exceptions
-are its `exceptions` option, a map from path to reason in `.oxlintrc.json`; a
-test fails if an exception no longer needs it. `use-pending-prop` rejects a
-`Spinner`, `SpinnerGapIcon` or `animate-spin` element inside `Button` or
-`DropdownMenuItem`, which take `pending` instead, and `no-raw-spinner` rejects a
-bare `SpinnerGapIcon` and `animate-spin` outside the shared `Spinner`
+accepting `unknown`, type assertions on agent-supplied data under
+`src/client/features/chat` (tool input such as `input.todos as …` or
+`call.input.file_path as …`, which renderers parse with `parseToolInput` and a
+Zod schema, and stream payloads such as `event.delta as …` or
+`event.content_block as …`, which the reducer path parses with Zod and skips
+when they do not match), and fixed Tailwind palette color classes (`bg-red-500`,
+`dark:text-emerald-300`) in `src/client`, `src/components` and `src/lib`, which
+must use theme tokens instead ([status colors](../docs/status-colors.md)). The
+palette rule's file exceptions are its `exceptions` option, a map from path to
+reason in `.oxlintrc.json`; a test fails if an exception no longer needs it.
+`use-pending-prop` rejects a `Spinner`, `SpinnerGapIcon` or `animate-spin`
+element inside `Button` or `DropdownMenuItem`, which take `pending` instead, and
+`no-raw-spinner` rejects a bare `SpinnerGapIcon` and `animate-spin` outside the
+shared `Spinner`
 ([pending controls](../docs/architecture/client-loading.md#pending-controls)).
 `no-raw-tab-role` rejects a `role="tab"` or `role="tablist"` attribute (or
 `role` prop) outside the shared `TabList` and `TabButton` in
@@ -60,8 +63,10 @@ including `useMutation`. `workspace.get` and `workspace.listForProject` use
 and `userSettings.update` use `all`: settings are read and written only through
 `useUserSettings` and `useUpdateUserSettings` in
 `src/client/lib/user-settings-queries.ts`, which own the optimistic cache
-strategy and error toast. Tests are exempt so they can seed caches.
-`named-query-options` keeps query options in one place
+strategy and error toast. `userSettings.getProviderOptions` uses `cache` and is
+read through `useProviderOptions` in the same module, so every reader of the
+live model catalog shares one stale time. Tests are exempt so they can seed
+caches. `named-query-options` keeps query options in one place
 ([query retries and polling](../docs/architecture/client-loading.md#query-retries-and-polling)):
 it rejects a numeric `refetchInterval` literal, including inside a conditional,
 arithmetic or a callback's return value (comparison operands are ignored),
@@ -127,18 +132,22 @@ Button sizing follows the `size` variant
 `button-icon-size` rejects `h-*`/`w-*` classes on an icon (`*Icon`, `svg`)
 anywhere inside a `Button` or `IconButton`, through conditionals, fragments and
 wrappers; the variant sizes icons and a `size-*` class is the explicit opt-out.
-`button-size-variant` rejects a fixed `h-N`, `w-N` or `size-N` (with any variant
-prefix) in a `Button` or `IconButton` `className`; keywords such as `w-full` and
-`h-auto`, arbitrary values and `min-`/`max-` widths are layout and pass.
-`icon-button-tooltip` rejects an icon-size `Button` rendered by
-`TooltipTrigger asChild` (also through nested `…Trigger asChild` elements) or
-carrying a native `title`; use `IconButton`. `tooltip-provider-root` rejects
-`<TooltipProvider>` outside the root providers, and `focus-ring` (`src/client`
-only) rejects the hand-rolled `focus-visible:ring-2` and
-`focus-visible:outline…` styles that the `focus-ring` utility replaces. Each
-takes an `exceptions` map, checked by the same still-needed test as the pending
-rules; tests are exempt from `tooltip-provider-root` so they can supply their
-own provider.
+It also rejects a positive horizontal margin (`mr-2`, `md:ml-1.5`, `me-1`,
+`m-1`) on an icon that is a direct flex item of the control (through
+conditionals, fragments and an `asChild` child), because the variant's `gap`
+already spaces icon and label; negative optical offsets, `ml-auto`, vertical
+margins and icons inside a wrapper element pass. `button-size-variant` rejects a
+fixed `h-N`, `w-N` or `size-N` (with any variant prefix) in a `Button` or
+`IconButton` `className`; keywords such as `w-full` and `h-auto`, arbitrary
+values and `min-`/`max-` widths are layout and pass. `icon-button-tooltip`
+rejects an icon-size `Button` rendered by `TooltipTrigger asChild` (also through
+nested `…Trigger asChild` elements) or carrying a native `title`; use
+`IconButton`. `tooltip-provider-root` rejects `<TooltipProvider>` outside the
+root providers, and `focus-ring` (`src/client` only) rejects the hand-rolled
+`focus-visible:ring-2` and `focus-visible:outline…` styles that the `focus-ring`
+utility replaces. Each takes an `exceptions` map, checked by the same
+still-needed test as the pending rules; tests are exempt from
+`tooltip-provider-root` so they can supply their own provider.
 
 ## Remaining Biome checks
 
@@ -194,11 +203,12 @@ preserved. Server signal cleanup reports failure and exits unsuccessfully, and
 run-script cleanup falls back to its synchronous cleanup when needed.
 
 Client event and subscription callbacks use `runInBackground` for detached work.
-It catches unexpected rejection and reports a contextual error toast; repeated
-failures for the same action update one toast. Explicit user-triggered rechecks
-request rejection from the query API so failures reach this boundary. Existing
-handlers keep their own error handling. Query refreshes remain in the background
-so mutation pending state and subsequent UI actions keep their previous timing.
+It catches unexpected rejection and reports a contextual error toast, by default
+"Couldn't refresh data." for cache refreshes; repeated failures for the same
+action update one toast. Explicit user-triggered rechecks request rejection from
+the query API so failures reach this boundary. Existing handlers keep their own
+error handling. Query refreshes remain in the background so mutation pending
+state and subsequent UI actions keep their previous timing.
 
 Staged formatter commands permit batches containing only ignored files, such as
 `pnpm-lock.yaml`. Supported files still format normally, and parse errors still

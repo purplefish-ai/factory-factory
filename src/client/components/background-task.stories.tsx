@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 
 function BackgroundRefreshExample() {
   const refresh = (message: string) => {
-    runInBackground(Promise.reject(new Error(message)), "Couldn't refresh data.");
+    runInBackground(Promise.reject(new Error(message)));
   };
   return (
     <div className="flex gap-2 p-4">

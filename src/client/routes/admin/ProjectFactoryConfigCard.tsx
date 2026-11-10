@@ -2,7 +2,7 @@ import { ArrowsClockwiseIcon } from '@phosphor-icons/react/dist/csr/ArrowsClockw
 import { CheckCircleIcon } from '@phosphor-icons/react/dist/csr/CheckCircle';
 import { FileCodeIcon } from '@phosphor-icons/react/dist/csr/FileCode';
 import { PencilIcon } from '@phosphor-icons/react/dist/csr/Pencil';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { toast } from 'sonner';
 import { FactoryConfigScripts } from '@/client/components/factory-config-scripts';
 import { QueryErrorState } from '@/client/components/query-error-state';
@@ -26,18 +26,15 @@ export function ProjectFactoryConfigCard({
   const configQuery = trpc.workspace.getFactoryConfig.useQuery({ projectId });
   const { data: factoryConfig, isSuccess } = configQuery;
 
-  useEffect(() => {
-    if (!isSuccess) {
-      setEditPanelOpen(false);
-    }
-  }, [isSuccess]);
+  // Editing waits for a fresh read: close the editor in the same render the
+  // config stops being current, so a recovered read does not reopen it.
+  if (editPanelOpen && !isSuccess) {
+    setEditPanelOpen(false);
+  }
 
   const saveConfig = trpc.project.saveFactoryConfig.useMutation({
     onSuccess: () => {
-      runInBackground(
-        utils.workspace.getFactoryConfig.invalidate({ projectId }),
-        "Couldn't refresh data."
-      );
+      runInBackground(utils.workspace.getFactoryConfig.invalidate({ projectId }));
       setEditPanelOpen(false);
     },
     onError: (error) => {

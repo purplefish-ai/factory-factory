@@ -32,6 +32,24 @@ function SidebarBoundary({ children }: { children: ReactNode }) {
   );
 }
 
+/**
+ * The header also renders outside the page boundary. Its fallback takes the
+ * header's place, below the safe area, as one row that wraps on narrow
+ * screens, and leaves the page and sidebar running.
+ */
+export function HeaderBoundary({ children }: { children: ReactNode }) {
+  return (
+    <ErrorBoundary
+      variant="compact"
+      title="Couldn't show the header"
+      showRetry
+      className="h-auto min-h-12 shrink-0 flex-row flex-wrap gap-x-3 gap-y-1 border-b bg-shell px-3 py-1.5 pt-[max(0.375rem,env(safe-area-inset-top))] text-left"
+    >
+      {children}
+    </ErrorBoundary>
+  );
+}
+
 interface AppLayoutProps {
   children: ReactNode;
   className?: string;
@@ -54,7 +72,9 @@ export function AppLayout({ children, className, banners }: AppLayoutProps) {
           <AppNavigationDataProvider value={navData}>
             <AppHeaderProvider>
               <AppShortcuts navData={navData} />
-              <AppHeader showSidebarToggle={!isFirstRun} />
+              <HeaderBoundary>
+                <AppHeader showSidebarToggle={!isFirstRun} />
+              </HeaderBoundary>
               {banners}
               <div className="flex flex-1 min-h-0 overflow-hidden">
                 {isFirstRun ? null : (

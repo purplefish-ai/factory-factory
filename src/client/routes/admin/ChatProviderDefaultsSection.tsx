@@ -1,6 +1,9 @@
 import { ProviderCliWarning } from '@/client/components/provider-cli-warning';
-import { trpc } from '@/client/lib/trpc';
-import { useUpdateUserSettings, useUserSettings } from '@/client/lib/user-settings-queries';
+import {
+  useProviderOptions,
+  useUpdateUserSettings,
+  useUserSettings,
+} from '@/client/lib/user-settings-queries';
 import { NATIVE_PERMISSION_DESCRIPTION, NATIVE_PERMISSION_OPTIONS } from './native-permission-copy';
 import {
   effortOptions,
@@ -13,9 +16,7 @@ import { SettingSelect, SettingsSection } from './settings-section';
 
 export function ChatProviderDefaultsSection() {
   const settingsQuery = useUserSettings();
-  const { data: providerOptions } = trpc.userSettings.getProviderOptions.useQuery(undefined, {
-    staleTime: 30_000,
-  });
+  const { data: providerOptions } = useProviderOptions();
   const updateSettings = useUpdateUserSettings();
 
   return (

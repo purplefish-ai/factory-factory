@@ -112,7 +112,7 @@ export default function NewProjectPage() {
   // Local path creation
   const createProject = trpc.project.create.useMutation({
     onSuccess: (project) => {
-      runInBackground(utils.project.list.invalidate(), "Couldn't refresh data.");
+      runInBackground(utils.project.list.invalidate());
       void navigate(`/projects/${project.slug}`);
     },
     onError: (err) => setError(err.message),
@@ -121,7 +121,7 @@ export default function NewProjectPage() {
   // GitHub URL creation
   const createFromGithub = trpc.project.createFromGithub.useMutation({
     onSuccess: (project) => {
-      runInBackground(utils.project.list.invalidate(), "Couldn't refresh data.");
+      runInBackground(utils.project.list.invalidate());
       void navigate(`/projects/${project.slug}`);
     },
     onError: (err) => setGithubError(err.message),
@@ -173,7 +173,7 @@ export default function NewProjectPage() {
   const handleTerminalClose = useCallback(() => {
     setTerminalOpen(false);
     // Re-check auth after terminal closes
-    runInBackground(refetchAuth(), "Couldn't refresh data.");
+    runInBackground(refetchAuth());
     void refreshCLIHealth();
   }, [refetchAuth, refreshCLIHealth]);
 

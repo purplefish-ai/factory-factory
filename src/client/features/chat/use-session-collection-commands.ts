@@ -73,8 +73,7 @@ export function useSessionCollectionCommands({
   const createSession = trpc.session.createAndStartSession.useMutation({
     onSuccess: (_session, variables) => {
       runInBackground(
-        utils.session.listSessions.invalidate({ workspaceId: variables.workspaceId }),
-        "Couldn't refresh data."
+        utils.session.listSessions.invalidate({ workspaceId: variables.workspaceId })
       );
     },
     onError: (error) => {
@@ -103,8 +102,7 @@ export function useSessionCollectionCommands({
     onSettled: (_data, _error, _variables, context) => {
       if (context?.workspaceId) {
         runInBackground(
-          utils.session.listSessions.invalidate({ workspaceId: context.workspaceId }),
-          "Couldn't refresh data."
+          utils.session.listSessions.invalidate({ workspaceId: context.workspaceId })
         );
       }
     },
