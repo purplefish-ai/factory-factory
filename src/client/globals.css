@@ -46,6 +46,20 @@
   }
 }
 
+/* Keyboard focus for raw interactive elements (row buttons, inline links,
+ * summaries). `Button` and the shadcn primitives bring their own focus style.
+ * Add `focus-visible:ring-inset` where an outer ring would be clipped.
+ */
+@utility focus-ring {
+  /* A transparent outline, not none, so forced-colors mode still shows focus. */
+  outline: 2px solid transparent;
+  outline-offset: 2px;
+
+  &:focus-visible {
+    @apply ring-2 ring-ring;
+  }
+}
+
 :root {
   --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
   --font-mono: var(--font-geist-mono), 'IBM Plex Mono', ui-monospace, monospace;
@@ -147,6 +161,13 @@
   --radius-2xl: calc(var(--radius) + 8px);
   --radius-3xl: calc(var(--radius) + 12px);
   --radius-4xl: calc(var(--radius) + 16px);
+  /*
+   * One step below text-xs for chips, section labels and dense metadata.
+   * 11px replaces the former ad hoc 10px and 11px sizes; a 14px line keeps
+   * single-line chips compact (docs/status-colors.md#small-text).
+   */
+  --text-2xs: 0.6875rem;
+  --text-2xs--line-height: calc(0.875 / 0.6875);
   --color-background: var(--background);
   --color-shell: var(--shell);
   --color-foreground: var(--foreground);

@@ -1,7 +1,7 @@
 import { BrainIcon } from '@phosphor-icons/react/dist/csr/Brain';
-import { WarningIcon } from '@phosphor-icons/react/dist/csr/Warning';
 import { memo } from 'react';
 import { MarkdownRenderer } from '@/client/components/markdown';
+import { StatusCallout } from '@/client/components/status-callout';
 import { CompactBoundaryIndicator } from '@/client/features/chat/compact-boundary-indicator';
 import { Spinner } from '@/components/ui/spinner';
 import type { AgentMessage, AgentStreamEvent, ContentBlockDelta } from '@/lib/chat-protocol';
@@ -212,15 +212,9 @@ export const ErrorRenderer = memo(function ErrorRenderer({
   const errorText = message.error || 'An unknown error occurred';
 
   return (
-    <div
-      className={cn(
-        'flex items-start gap-2 rounded-md border border-destructive/50 bg-destructive/10 p-3',
-        className
-      )}
-    >
-      <WarningIcon className="h-4 w-4 text-destructive shrink-0 mt-0.5" />
-      <div className="text-sm text-destructive">{errorText}</div>
-    </div>
+    <StatusCallout tone="danger" className={className}>
+      {errorText}
+    </StatusCallout>
   );
 });
 

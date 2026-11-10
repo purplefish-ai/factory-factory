@@ -1,7 +1,8 @@
 import { RobotIcon } from '@phosphor-icons/react/dist/csr/Robot';
-import { WarningCircleIcon } from '@phosphor-icons/react/dist/csr/WarningCircle';
 import { EmptyState } from '@/client/components/empty-state';
 import { Loading } from '@/client/components/loading';
+import { SectionLabel } from '@/client/components/section-label';
+import { StatusCallout } from '@/client/components/status-callout';
 import { ChatTranscript, type TranscriptScrollOptions } from '@/client/features/chat';
 import { Button } from '@/components/ui/button';
 import type { ChatMessage } from '@/lib/chat-protocol';
@@ -40,28 +41,26 @@ function UnavailableState({
   const preview = selection.subagent.resultPreview ?? selection.subagent.latestActivity;
   return (
     <div className="flex h-full items-center justify-center p-4 sm:p-8">
-      <div className="w-full max-w-xl rounded-lg border border-destructive/30 bg-destructive/5 p-4">
-        <div className="flex items-start gap-3">
-          <WarningCircleIcon className="mt-0.5 h-5 w-5 shrink-0 text-destructive" />
-          <div className="min-w-0 flex-1 space-y-3">
-            <div>
-              <h2 className="text-sm font-medium">Transcript unavailable</h2>
-              <p className="mt-1 break-words text-xs text-muted-foreground">{message}</p>
-            </div>
-            {preview && (
-              <div className="rounded-md border bg-background/80 p-3">
-                <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-                  Last result
-                </p>
-                <p className="mt-1 whitespace-pre-wrap break-words text-sm">{preview}</p>
-              </div>
-            )}
-            <Button type="button" variant="outline" size="sm" onClick={onRetry}>
-              Retry
-            </Button>
+      <StatusCallout
+        tone="danger"
+        title={<h2>Transcript unavailable</h2>}
+        action={
+          <Button type="button" variant="outline" size="sm" onClick={onRetry}>
+            Retry
+          </Button>
+        }
+        className="w-full max-w-xl"
+      >
+        <p>{message}</p>
+        {preview && (
+          <div className="mt-3 rounded-md border bg-background/80 p-3">
+            <SectionLabel asChild>
+              <p>Last result</p>
+            </SectionLabel>
+            <p className="mt-1 whitespace-pre-wrap break-words">{preview}</p>
           </div>
-        </div>
-      </div>
+        )}
+      </StatusCallout>
     </div>
   );
 }
@@ -99,29 +98,18 @@ function ReadyState({
         state.error || state.hasOlder ? (
           <div className="space-y-4 pt-3 sm:pt-4">
             {state.error && (
-              <div
+              <StatusCallout
                 role="alert"
-                className="rounded-md border border-destructive/30 bg-destructive/5 p-3"
+                tone="danger"
+                title="Transcript update failed"
+                action={
+                  <Button type="button" variant="outline" size="sm" onClick={state.error.onRetry}>
+                    Retry
+                  </Button>
+                }
               >
-                <div className="flex items-start gap-2">
-                  <WarningCircleIcon className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm font-medium">Transcript update failed</p>
-                    <p className="mt-1 break-words text-xs text-muted-foreground">
-                      {state.error.message}
-                    </p>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="mt-2"
-                      onClick={state.error.onRetry}
-                    >
-                      Retry
-                    </Button>
-                  </div>
-                </div>
-              </div>
+                {state.error.message}
+              </StatusCallout>
             )}
             {state.hasOlder && !state.error && (
               <div className="flex justify-center">

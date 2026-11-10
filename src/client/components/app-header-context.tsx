@@ -5,10 +5,10 @@ import {
   useEffect,
   useLayoutEffect,
   useMemo,
-  useRef,
   useState,
 } from 'react';
 import { createPortal } from 'react-dom';
+import { useLatestRef } from '@/client/hooks/use-stable-callback';
 
 interface AppHeaderContextValue {
   title: ReactNode;
@@ -52,7 +52,7 @@ export function AppHeaderProvider({ children }: { children: ReactNode }) {
     [title, rightSlot, rightEndSlot, leftStartSlot, leftExtraSlot]
   );
 
-  return <AppHeaderContext.Provider value={value}>{children}</AppHeaderContext.Provider>;
+  return <AppHeaderContext value={value}>{children}</AppHeaderContext>;
 }
 
 export function useAppHeaderContext(): AppHeaderContextValue {
@@ -76,8 +76,7 @@ export function useAppHeaderTitle(title: ReactNode) {
   }, [title, ctx]);
 
   // Clean up title on unmount
-  const ctxRef = useRef(ctx);
-  ctxRef.current = ctx;
+  const ctxRef = useLatestRef(ctx);
   useEffect(() => {
     return () => {
       ctxRef.current.setTitle('');

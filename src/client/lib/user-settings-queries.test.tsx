@@ -2,6 +2,7 @@
 
 import { act } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { settle, waitForCheck } from '@/test-utils/react-act';
 import {
   SAVE_SETTINGS_ERROR,
   type UserSettingsPatch,
@@ -13,9 +14,7 @@ import {
   type RenderedSettings,
   renderWithSettingsServer,
   type SettingsServer,
-  settle,
   TEST_USER_SETTINGS,
-  waitForCheck,
 } from './user-settings-queries.test-harness';
 
 // The app wraps `toast.error` with its defaults, so assert on the wrapped spy.

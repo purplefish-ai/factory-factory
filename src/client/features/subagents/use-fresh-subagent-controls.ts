@@ -1,4 +1,11 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
+
+interface ControlScope {
+  key: string;
+  baselineUpdatedAt: number;
+  hadFetch: boolean;
+  freshReadAfter?: number;
+}
 
 /** Browsing caches stay visible, but each live connection/runtime must refresh control authority. */
 export function useFreshSubagentControls({
@@ -25,18 +32,15 @@ export function useFreshSubagentControls({
     controlSessionId && controlSessionId === sessionId && controlRuntimeId
       ? JSON.stringify([sessionId, controlRuntimeId])
       : null;
-  const scopeRef = useRef<{
-    key: string;
-    baselineUpdatedAt: number;
-    hadFetch: boolean;
-    freshReadAfter?: number;
-  } | null>(null);
-  if (scopeRef.current?.key !== scopeKey) {
-    scopeRef.current = scopeKey
-      ? { key: scopeKey, baselineUpdatedAt: dataUpdatedAt, hadFetch: isFetching }
-      : null;
+  // Each control scope records the query state it started from.
+  const createScope = (): ControlScope | null =>
+    scopeKey ? { key: scopeKey, baselineUpdatedAt: dataUpdatedAt, hadFetch: isFetching } : null;
+  const [storedScope, setStoredScope] = useState(createScope);
+  let scope = storedScope;
+  if ((scope?.key ?? null) !== scopeKey) {
+    scope = createScope();
+    setStoredScope(scope);
   }
-  const scope = scopeRef.current;
   const [confirmedScope, setConfirmedScope] = useState<object | null>(null);
   useEffect(() => {
     if (!scope) {

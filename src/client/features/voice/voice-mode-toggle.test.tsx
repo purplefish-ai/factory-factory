@@ -2,6 +2,7 @@
 import { flushSync } from 'react-dom';
 import { createRoot } from 'react-dom/client';
 import { describe, expect, it, vi } from 'vitest';
+import type { UseMicCaptureOptions } from './use-mic-capture';
 import { VoiceModeToggle } from './voice-mode-toggle';
 
 const capture = vi.hoisted(() => ({
@@ -10,10 +11,22 @@ const capture = vi.hoisted(() => ({
   error: null,
   start: vi.fn(),
   stop: vi.fn(),
+  options: null as UseMicCaptureOptions | null,
 }));
-vi.mock('./use-mic-capture', () => ({ useMicCapture: () => capture }));
+const toastError = vi.hoisted(() => vi.fn());
+vi.mock('sonner', () => ({ toast: { error: toastError } }));
+vi.mock('./use-mic-capture', () => ({
+  useMicCapture: (options: UseMicCaptureOptions) => {
+    capture.options = options;
+    return capture;
+  },
+}));
+const playback = vi.hoisted(() => ({ enabled: false }));
 vi.mock('./use-voice-playback', () => ({
-  useVoicePlayback: () => ({ isSpeaking: false, primeAudioContext: vi.fn() }),
+  useVoicePlayback: (options: { enabled: boolean }) => {
+    playback.enabled = options.enabled;
+    return { isSpeaking: false, primeAudioContext: vi.fn() };
+  },
 }));
 vi.mock('@/client/lib/trpc', () => ({
   trpc: {
@@ -45,6 +58,30 @@ describe('VoiceModeToggle session invalidation', () => {
       expect(capture.stop).not.toHaveBeenCalled();
       render(nextSessionId);
       expect(capture.stop).toHaveBeenCalledOnce();
+    } finally {
+      flushSync(() => root.unmount());
+    }
+  });
+});
+
+describe('VoiceModeToggle capture errors', () => {
+  it('toasts each capture failure and turns voice mode back off', () => {
+    capture.isCapturing = false;
+    capture.isConnecting = false;
+    const container = document.createElement('div');
+    const root = createRoot(container);
+    const button = () => container.querySelector('button');
+    try {
+      flushSync(() =>
+        root.render(<VoiceModeToggle sessionId="session-1" onFinalTranscript={vi.fn()} />)
+      );
+      flushSync(() => button()?.click());
+      expect(capture.start).toHaveBeenCalled();
+      expect(playback.enabled).toBe(true);
+
+      flushSync(() => capture.options?.onError?.('Microphone access was denied'));
+      expect(toastError).toHaveBeenCalledWith('Microphone access was denied');
+      expect(playback.enabled).toBe(false);
     } finally {
       flushSync(() => root.unmount());
     }

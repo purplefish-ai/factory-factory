@@ -44,27 +44,14 @@ export function usePaletteKeyboardNavigation({
   const containerRef = useRef<HTMLDivElement>(null);
   const itemRefs = useRef<Array<HTMLDivElement | null>>([]);
   const [selectedIndex, setSelectedIndex] = useState(0);
-  const selectedIndexRef = useRef(selectedIndex);
-  const prevResetKeyRef = useRef(resetKey);
-  const prevIsOpenRef = useRef(isOpen);
-
-  // Reset selection when the palette opens or its input filter changes.
-  useEffect(() => {
-    const justOpened = isOpen && !prevIsOpenRef.current;
-    const filterChanged = prevResetKeyRef.current !== resetKey;
-    prevIsOpenRef.current = isOpen;
-    prevResetKeyRef.current = resetKey;
-
-    if (isOpen && (justOpened || filterChanged)) {
+  // Select the first item when the palette opens or its input filter changes.
+  const [selectionScope, setSelectionScope] = useState({ isOpen, resetKey });
+  if (selectionScope.isOpen !== isOpen || selectionScope.resetKey !== resetKey) {
+    setSelectionScope({ isOpen, resetKey });
+    if (isOpen) {
       setSelectedIndex(0);
-      selectedIndexRef.current = 0;
     }
-  }, [isOpen, resetKey]);
-
-  // Keep selectedIndex ref in sync with state.
-  useEffect(() => {
-    selectedIndexRef.current = selectedIndex;
-  }, [selectedIndex]);
+  }
 
   // Keep refs array in sync with current item count.
   useEffect(() => {
@@ -118,12 +105,11 @@ export function usePaletteKeyboardNavigation({
     if (itemCount <= 0) {
       return false;
     }
-    const currentIndex = selectedIndexRef.current;
-    if (currentIndex < 0 || currentIndex >= itemCount) {
+    if (selectedIndex < 0 || selectedIndex >= itemCount) {
       return false;
     }
-    return onSelectByIndex(currentIndex);
-  }, [itemCount, onSelectByIndex]);
+    return onSelectByIndex(selectedIndex);
+  }, [itemCount, onSelectByIndex, selectedIndex]);
 
   const handleEnter = useCallback((): PaletteKeyResult => {
     if (selectCurrentItem()) {

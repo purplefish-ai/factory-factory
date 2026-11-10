@@ -99,12 +99,12 @@ export function AttachmentPreview({
               {!readOnly && onRemove && (
                 <Button
                   variant="ghost"
-                  size="icon"
+                  size="icon-xs"
                   onClick={(e) => handleRemove(e, attachment.id)}
-                  className="h-5 w-5 rounded-full hover:bg-destructive/20 hover:text-destructive ml-1"
+                  className="rounded-full hover:bg-destructive/20 hover:text-destructive ml-1"
                   aria-label="Remove attachment"
                 >
-                  <XIcon className="h-3 w-3" />
+                  <XIcon />
                 </Button>
               )}
             </AttachmentContainer>

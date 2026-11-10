@@ -4,6 +4,7 @@ import { act, createElement } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { dispatchSubagentChange } from '@/client/lib/subagent-events';
+import { TooltipProvider } from '@/components/ui/tooltip';
 import { ProviderSubagentsSection } from './provider-subagents-section';
 import type { SubagentListItem } from './types';
 
@@ -56,6 +57,11 @@ vi.mock('@/client/lib/trpc', () => ({
   },
 }));
 
+/** Renders the section under the TooltipProvider the app root provides. */
+function section(props: Parameters<typeof ProviderSubagentsSection>[0]) {
+  return createElement(TooltipProvider, null, createElement(ProviderSubagentsSection, props));
+}
+
 describe('ProviderSubagentsSection', () => {
   let container: HTMLDivElement;
   let root: Root;
@@ -91,7 +97,7 @@ describe('ProviderSubagentsSection', () => {
   });
 
   function render(props: Parameters<typeof ProviderSubagentsSection>[0]) {
-    void act(() => root.render(createElement(ProviderSubagentsSection, props)));
+    void act(() => root.render(section(props)));
   }
 
   it.each<{ statuses: SubagentListItem['status'][]; count: number }>([
@@ -551,7 +557,7 @@ describe('ProviderSubagentsSection', () => {
     });
     await act(() =>
       root.render(
-        createElement(ProviderSubagentsSection, {
+        section({
           ...props,
           controlSessionId: 'parent',
           controlRuntimeId: 'runtime',
@@ -591,39 +597,23 @@ describe('ProviderSubagentsSection', () => {
           finish = resolve;
         })
     );
-    await act(() => root.render(createElement(ProviderSubagentsSection, props)));
+    await act(() => root.render(section(props)));
     expect(container.querySelector('button[aria-label^="Stop subagent:"]')).toBeNull();
     await act(() => finish({ isError: false, data: mocks.queryResult.data, dataUpdatedAt: 20 }));
     expect(container.querySelector('button[aria-label^="Stop subagent:"]')).not.toBeNull();
-    await act(() =>
-      root.render(
-        createElement(ProviderSubagentsSection, { ...props, controlSessionId: undefined })
-      )
-    );
-    await act(() =>
-      root.render(
-        createElement(ProviderSubagentsSection, { ...props, controlRuntimeId: 'new-runtime' })
-      )
-    );
+    await act(() => root.render(section({ ...props, controlSessionId: undefined })));
+    await act(() => root.render(section({ ...props, controlRuntimeId: 'new-runtime' })));
     expect(container.textContent).toContain('Child');
     expect(container.querySelector('button[aria-label^="Stop subagent:"]')).toBeNull();
     await act(() => finish({ isError: true, data: mocks.queryResult.data }));
     expect(container.querySelector('button[aria-label^="Stop subagent:"]')).toBeNull();
-    await act(() =>
-      root.render(
-        createElement(ProviderSubagentsSection, { ...props, controlSessionId: undefined })
-      )
-    );
+    await act(() => root.render(section({ ...props, controlSessionId: undefined })));
     mocks.queryResult.data = {
       supported: true,
       subagents: [{ ...child, stopControl: { controlId: 'new-live', runtimeId: 'new-runtime' } }],
       nextCursor: null,
     };
-    await act(() =>
-      root.render(
-        createElement(ProviderSubagentsSection, { ...props, controlRuntimeId: 'new-runtime' })
-      )
-    );
+    await act(() => root.render(section({ ...props, controlRuntimeId: 'new-runtime' })));
     expect(container.querySelector('button[aria-label^="Stop subagent:"]')).toBeNull();
     await act(() => finish({ isError: false, data: mocks.queryResult.data, dataUpdatedAt: 20 }));
     expect(container.querySelector('button[aria-label^="Stop subagent:"]')).not.toBeNull();
@@ -652,7 +642,7 @@ describe('ProviderSubagentsSection', () => {
     });
     await act(() =>
       root.render(
-        createElement(ProviderSubagentsSection, {
+        section({
           sessionId: 'parent',
           parentSessionName: 'Parent',
           enabled: true,

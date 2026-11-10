@@ -18,6 +18,7 @@ export function SessionNameEditor({
   onDone: () => void;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
+  // A save that settles after the editor closes must not close a newer editor.
   const mounted = useRef(false);
   useLayoutEffect(() => {
     mounted.current = true;
@@ -40,11 +41,6 @@ export function SessionNameEditor({
     onSuccess: () => utils.session.listSessions.invalidate({ workspaceId }),
   });
   const saving = update.isPending;
-  const runIfMounted = (action: () => void) => {
-    if (mounted.current) {
-      action();
-    }
-  };
   const save = async () => {
     if (inFlight.current || cancelled.current) {
       return;
@@ -58,9 +54,11 @@ export function SessionNameEditor({
     setError(false);
     try {
       await update.mutateAsync({ id: sessionId, name: trimmed });
-      runIfMounted(onDone);
+      if (mounted.current) {
+        onDone();
+      }
     } catch {
-      runIfMounted(() => setError(true));
+      setError(true);
     } finally {
       inFlight.current = false;
     }

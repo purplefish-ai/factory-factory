@@ -5,6 +5,7 @@ import { useState } from 'react';
 import { Link } from 'react-router';
 import { toast } from 'sonner';
 import { EmptyState } from '@/client/components/empty-state';
+import { IconButton } from '@/client/components/icon-button';
 import { Loading } from '@/client/components/loading';
 import { QueryErrorState } from '@/client/components/query-error-state';
 import { StatusIcon } from '@/client/components/status-indicators';
@@ -209,20 +210,14 @@ export function ChildWorkspacesPanel({ workspaceId, embedded = false }: ChildWor
           <TreeStructureIcon className="h-3.5 w-3.5 text-muted-foreground" />
           <span className="text-xs font-medium">Child workspaces</span>
           {children && children.length > 0 && (
-            <Badge variant="secondary" className="text-[10px] h-4 px-1.5">
+            <Badge variant="secondary" size="count">
               {children.length}
             </Badge>
           )}
         </div>
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-6 w-6"
-          onClick={() => setDialogOpen(true)}
-          title="New child workspace"
-        >
-          <PlusIcon className="h-3.5 w-3.5" />
-        </Button>
+        <IconButton label="New child workspace" size="icon-xs" onClick={() => setDialogOpen(true)}>
+          <PlusIcon />
+        </IconButton>
       </div>
 
       {/* Content */}
@@ -275,7 +270,7 @@ export function ChildWorkspacesPanel({ workspaceId, embedded = false }: ChildWor
                   </span>
                   <div className="flex-1 min-w-0 space-y-0.5">
                     <p className="text-sm font-medium truncate">{child.name}</p>
-                    <p className="text-[11px] text-muted-foreground truncate">
+                    <p className="text-2xs text-muted-foreground truncate">
                       {child.projectName}
                       {child.kanbanColumn && (
                         <>

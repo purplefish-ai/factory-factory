@@ -32,6 +32,16 @@ const rules = [
   'no-direct-web-storage',
   'named-query-options',
   'query-error-handled',
+  'no-arbitrary-font-size',
+  'use-status-callout',
+  'no-forward-ref',
+  'no-render-ref-write',
+  'no-state-sync-effect',
+  'button-icon-size',
+  'button-size-variant',
+  'icon-button-tooltip',
+  'tooltip-provider-root',
+  'focus-ring',
 ];
 const workspaceQueryOwner = 'owned/workspace-queries.ts';
 const userSettingsOwner = 'owned/user-settings-queries.ts';
@@ -105,6 +115,51 @@ describe('Oxlint project guardrails', () => {
       'const x = <Button size="icon"><span aria-hidden="true">Close</span></Button>;',
     ],
     ['icon-button-name', 'const x = <Button size="icon" aria-label=""><PlusIcon /></Button>;'],
+    [
+      'button-icon-size',
+      'const x = <Button size="sm"><PlayIcon className="h-3 w-3" />Run</Button>;',
+    ],
+    [
+      'button-icon-size',
+      'const x = <Button>{busy ? <XIcon className="mr-1 md:w-4" /> : null}Go</Button>;',
+    ],
+    [
+      'button-icon-size',
+      'const x = <IconButton label="Close"><span><XIcon className="h-5 w-5" /></span></IconButton>;',
+    ],
+    [
+      'button-size-variant',
+      'const x = <Button size="icon" className="h-6 w-6" aria-label="Close"><XIcon /></Button>;',
+    ],
+    [
+      'button-size-variant',
+      'const x = <Button size="sm" className={cn("md:h-8", x)}>Run</Button>;',
+    ],
+    [
+      'button-size-variant',
+      'const x = <IconButton label="Close" className="size-7"><XIcon /></IconButton>;',
+    ],
+    [
+      'icon-button-tooltip',
+      'const x = <Tooltip><TooltipTrigger asChild><Button size="icon" aria-label="Close"><XIcon /></Button></TooltipTrigger><TooltipContent>Close</TooltipContent></Tooltip>;',
+    ],
+    [
+      'icon-button-tooltip',
+      'const x = <TooltipTrigger asChild><DropdownMenuTrigger asChild><Button size="icon-xs" aria-label="More"><DotsIcon /></Button></DropdownMenuTrigger></TooltipTrigger>;',
+    ],
+    ['icon-button-tooltip', 'const x = <Button size="icon-sm" title="Close"><XIcon /></Button>;'],
+    [
+      'icon-button-tooltip',
+      'const x = <TooltipTrigger asChild><Button size="icon" title="Close"><XIcon /></Button></TooltipTrigger>;',
+    ],
+    ['icon-button-name', 'const x = <IconButton label=""><XIcon /></IconButton>;'],
+    ['icon-button-name', 'const x = <IconButton label={``}><XIcon /></IconButton>;'],
+    ['tooltip-provider-root', 'const x = <TooltipProvider><Tooltip /></TooltipProvider>;'],
+    [
+      'focus-ring',
+      'const c = "rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";',
+    ],
+    ['focus-ring', 'const x = <a className="hover:underline focus-visible:outline-ring" />;'],
     ['no-await-import', 'async function load() { return await import("./module"); }'],
     ['no-native-dialogs', 'window.confirm("Continue?");'],
     ['no-native-dialogs', 'prompt("Name", "default");'],
@@ -206,6 +261,60 @@ describe('Oxlint project guardrails', () => {
       'query-error-handled',
       'const query = useFooQuery(); const { data, isLoading } = query; show(data, isLoading);',
     ],
+    ['no-arbitrary-font-size', 'const x = <span className="text-[10px] uppercase" />;'],
+    ['no-arbitrary-font-size', 'const className = "md:text-[11px]";'],
+    ['no-arbitrary-font-size', 'const className = `p-1 text-[0.8rem]`;'],
+    ['no-arbitrary-font-size', 'const className = cn("!text-[1.5em]", active && "font-medium");'],
+    [
+      'use-status-callout',
+      'const x = <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3" />;',
+    ],
+    ['use-status-callout', 'const className = "bg-warning/10 border-b border-warning/20";'],
+    [
+      'use-status-callout',
+      'const className = `border border-success-accent/50 bg-success-accent/15`;',
+    ],
+    ['use-status-callout', 'const className = "dark:bg-info/10 dark:border-info/30 px-2";'],
+    ['use-status-callout', 'const meta = { className: "text-info border-info bg-info/10" };'],
+    ['no-forward-ref', 'const Item = forwardRef(function Item(props, ref) { return null; });'],
+    ['no-forward-ref', 'const Item = React.forwardRef((props, ref) => null);'],
+    [
+      'no-render-ref-write',
+      'function Panel() { const ref = useRef(0); ref.current = 1; return null; }',
+    ],
+    [
+      'no-render-ref-write',
+      'function useLatest(value) { const latest = useRef(value); latest.current = value; return latest; }',
+    ],
+    [
+      'no-render-ref-write',
+      'const Row = memo(function Row() { const renders = useRef(0); renders.current++; return null; });',
+    ],
+    [
+      'no-render-ref-write',
+      'const usePrevious = (value) => { const previous = useRef(value); if (previous.current !== value) { previous.current = value; } };',
+    ],
+    [
+      'no-state-sync-effect',
+      'function Panel({ id }) { const [tab, setTab] = useState("info"); useEffect(() => { setTab("info"); }, [id]); return null; }',
+    ],
+    [
+      'no-state-sync-effect',
+      'useEffect(() => { if (!open) { return; } setIndex(0); setCount((count) => count + 1); }, [open]);',
+    ],
+    [
+      'no-render-ref-write',
+      'function Panel() { const last = useRef(null); last.current ||= value; return null; }',
+    ],
+    [
+      'no-render-ref-write',
+      'function Panel() { const last = useRef(null); if (last.current === null) { init(); } else { last.current = value; } return null; }',
+    ],
+    [
+      'no-render-ref-write',
+      'function useRows(rows) { const seen = useRef(0); return useMemo(() => { seen.current = rows.length; return rows; }, [rows]); }',
+    ],
+    ['no-state-sync-effect', 'React.useLayoutEffect(() => setSelected(items[0]), [items]);'],
   ];
   const rejectedFixtures = rejectedSources.map(([rule, source], index) => ({
     rule,
@@ -223,6 +332,19 @@ describe('Oxlint project guardrails', () => {
     'const x = <Button size="icon"><PlusIcon /><span className="sr-only">Add workspace</span></Button>;',
     'const x = <Button><PlusIcon />Add workspace</Button>;',
     'const x = <Button aria-labelledby={labelId}><PlusIcon /></Button>;',
+    'const x = <Button size="sm"><PlayIcon />Run</Button>;',
+    'const x = <Button size="sm"><PlayIcon className="size-3 shrink-0" />Run</Button>;',
+    'const x = <Button className="w-full sm:w-auto">Go</Button>;',
+    'const x = <Button className="w-1/2">Go</Button>;',
+    'const x = <IconButton label={label}><XIcon /></IconButton>;',
+    'const x = <Button variant="link" className="h-auto p-0">More</Button>;',
+    'const x = <Button className="min-w-0 max-w-[14rem] sm:w-[160px]">Go</Button>;',
+    'const x = <div className="h-6 w-6"><XIcon className="h-3 w-3" /></div>;',
+    'const x = <IconButton label="Close" size="icon-xs"><XIcon /></IconButton>;',
+    'const x = <Tooltip><TooltipTrigger asChild><Button size="sm">Archive</Button></TooltipTrigger></Tooltip>;',
+    'const x = <Button size="sm" title="Archive every workspace">Archive</Button>;',
+    'const c = "focus-ring focus-visible:ring-inset";',
+    'const c = "focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50";',
 
     'import { example } from "./module";',
     'async function load() { return import("./module"); }',
@@ -286,6 +408,30 @@ describe('Oxlint project guardrails', () => {
     'const q = trpc.a.b.useQuery(); if (q.isLoading) { show(q.error); }',
     'const query = useFooQuery(); const { isLoading, error } = query; show(isLoading, error);',
     'const q = trpc.a.b.useQuery(); const busy = q.isLoading; const el = <QueryState query={q} />;',
+    'const className = "text-2xs text-xs text-[var(--size)] w-[10px] leading-[11px]";',
+    'const className = "text-[#ff0000] text-[color:var(--x)]";',
+    'const path = "/docs/text-[10px]-guide";',
+    // Hover, focus and data-state tints, a tint without a status border, a
+    // status border without a tint and mixed tokens are not callouts.
+    'const className = "border-warning/40 text-warning hover:bg-warning/10";',
+    'const className = "border-destructive/30 focus:bg-destructive/10 data-[state=open]:bg-destructive/10";',
+    'const className = "border-b bg-destructive/10 px-4 py-2";',
+    'const className = "border-running-accent/70 dark:border-running/40";',
+    'const className = "border-transparent bg-success-accent/15 text-success dark:bg-success/10";',
+    'const className = "bg-primary/10 border-primary/15";',
+    'function Item({ ref }) { return <button ref={ref} />; }',
+    'function Panel() { const cache = useRef(null); if (cache.current === null) { cache.current = new Map(); } return null; }',
+    'function Panel() { const cache = useRef(null); cache.current ??= new Map(); return null; }',
+    'function Panel() { const count = useRef(0); useEffect(() => { count.current = 1; }); const onClick = () => { count.current += 1; }; return null; }',
+    'function resetScope(scope) { scope.current = null; }',
+    'useEffect(() => { setWidth(container.current.offsetWidth); }, [items]);',
+    'useEffect(() => { setReady(true); }, []);',
+    'useEffect(() => { const timer = setTimeout(() => setValue(next), 300); return () => clearTimeout(timer); }, [next]);',
+    'useEffect(() => { toast.error(error); setOpen(false); }, [error]);',
+    'useEffect(() => { setValue(readStoredValue(key)); }, [key]);',
+    'useEffect(() => { if (!enabled) { return; } }, [enabled]);',
+    'useEffect(() => { setTimeout(flush, delay); }, [delay]);',
+    'function useRows(rows) { const seen = useRef(0); const onClick = useCallback(() => { seen.current = rows.length; }, [rows]); return onClick; }',
   ]
     .map((source, index) => ({ source, file: join(directory, `accepted-${index}.tsx`) }))
     .concat(
@@ -376,53 +522,63 @@ describe('raw palette class exceptions', () => {
   });
 });
 
-describe.each(['use-pending-prop', 'no-raw-spinner', 'no-direct-web-storage'])(
-  'factory/%s exceptions',
-  (rule) => {
-    const projectConfig = overridesSchema.parse(
-      JSON.parse(readFileSync(resolve('.oxlintrc.json'), 'utf8'))
+describe.each([
+  'use-pending-prop',
+  'no-raw-spinner',
+  'no-direct-web-storage',
+  'no-arbitrary-font-size',
+  'use-status-callout',
+  'no-render-ref-write',
+  'no-state-sync-effect',
+  'button-icon-size',
+  'button-size-variant',
+  'icon-button-tooltip',
+  'tooltip-provider-root',
+  'focus-ring',
+])('factory/%s exceptions', (rule) => {
+  const projectConfig = overridesSchema.parse(
+    JSON.parse(readFileSync(resolve('.oxlintrc.json'), 'utf8'))
+  );
+  const exceptions = projectConfig.overrides.flatMap((override) => {
+    const setting = override.rules[`factory/${rule}`];
+    return Array.isArray(setting)
+      ? Object.entries(exceptionRuleSchema.parse(setting)[1].exceptions)
+      : [];
+  });
+
+  it('gives every file a reason', () => {
+    for (const [, reason] of exceptions) {
+      expect(reason.length).toBeGreaterThan(20);
+    }
+  });
+
+  it.runIf(exceptions.length > 0)('still needs every exception', () => {
+    // Lint the listed files with the rule and no exceptions: each must still report.
+    const ruleConfig = join(directory, `${rule}.oxlintrc.json`);
+    writeFileSync(
+      ruleConfig,
+      JSON.stringify({
+        categories: { correctness: 'off' },
+        plugins: [],
+        jsPlugins: [{ name: 'factory', specifier: resolve('lint-rules/factory.mjs') }],
+        rules: { [`factory/${rule}`]: 'error' },
+      })
     );
-    const exceptions = projectConfig.overrides.flatMap((override) => {
-      const setting = override.rules[`factory/${rule}`];
-      return Array.isArray(setting)
-        ? Object.entries(exceptionRuleSchema.parse(setting)[1].exceptions)
-        : [];
+    const files = exceptions.map(([file]) => file);
+    const result = spawnSync(binary, ['--config', ruleConfig, '--format', 'json', ...files], {
+      encoding: 'utf8',
     });
-
-    it('gives every file a reason', () => {
-      for (const [, reason] of exceptions) {
-        expect(reason.length).toBeGreaterThan(20);
-      }
-    });
-
-    it.runIf(exceptions.length > 0)('still needs every exception', () => {
-      // Lint the listed files with the rule and no exceptions: each must still report.
-      const ruleConfig = join(directory, `${rule}.oxlintrc.json`);
-      writeFileSync(
-        ruleConfig,
-        JSON.stringify({
-          categories: { correctness: 'off' },
-          plugins: [],
-          jsPlugins: [{ name: 'factory', specifier: resolve('lint-rules/factory.mjs') }],
-          rules: { [`factory/${rule}`]: 'error' },
-        })
-      );
-      const files = exceptions.map(([file]) => file);
-      const result = spawnSync(binary, ['--config', ruleConfig, '--format', 'json', ...files], {
-        encoding: 'utf8',
-      });
-      expect(result.error).toBeUndefined();
-      expect(result.stderr).toBe('');
-      const reported = new Set(
-        reportSchema
-          .parse(JSON.parse(result.stdout))
-          .diagnostics.filter(({ code }) => code === `factory(${rule})`)
-          .map(({ filename }) => filename)
-      );
-      expect(files.filter((file) => !reported.has(file))).toEqual([]);
-    });
-  }
-);
+    expect(result.error).toBeUndefined();
+    expect(result.stderr).toBe('');
+    const reported = new Set(
+      reportSchema
+        .parse(JSON.parse(result.stdout))
+        .diagnostics.filter(({ code }) => code === `factory(${rule})`)
+        .map(({ filename }) => filename)
+    );
+    expect(files.filter((file) => !reported.has(file))).toEqual([]);
+  });
+});
 
 describe('web storage access', () => {
   it('is limited to the shared storage module and exempts only tests', () => {
@@ -507,6 +663,22 @@ describe('tool input casts', () => {
       .filter((override) => override.rules['factory/no-tool-input-cast'] !== undefined)
       .map((override) => [override.files, override.rules['factory/no-tool-input-cast']]);
     expect(scopes).toEqual([[['src/client/features/chat/agent-activity/**/*.{ts,tsx}'], 'error']]);
+  });
+});
+
+describe('forwardRef restriction', () => {
+  const projectConfig = z
+    .object({ rules: z.record(z.string(), z.unknown()) })
+    .and(overridesSchema)
+    .parse(JSON.parse(readFileSync(resolve('.oxlintrc.json'), 'utf8')));
+
+  it('applies everywhere except the shadcn/ui primitives', () => {
+    expect(projectConfig.rules['factory/no-forward-ref']).toBe('error');
+    expect(
+      projectConfig.overrides
+        .filter((override) => override.rules['factory/no-forward-ref'] !== undefined)
+        .map((override) => [override.files, override.rules['factory/no-forward-ref']])
+    ).toEqual([[['src/components/ui/**/*.{ts,tsx}'], 'off']]);
   });
 });
 

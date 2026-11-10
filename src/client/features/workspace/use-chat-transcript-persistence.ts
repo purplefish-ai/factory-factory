@@ -17,6 +17,7 @@ export function useTranscriptPositionPersistence({
 }) {
   const { getScrollState, createScrollStateWriter, clearScrollState } = useWorkspacePanel();
   const ready = workspaceId !== null && tabId !== null;
+  // Closing a tab after unmount must not clear another workspace's saved scroll.
   const mountedRef = useRef(false);
   useLayoutEffect(() => {
     mountedRef.current = true;

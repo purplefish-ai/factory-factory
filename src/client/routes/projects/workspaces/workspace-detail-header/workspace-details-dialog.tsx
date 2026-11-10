@@ -1,3 +1,4 @@
+import { SectionLabel } from '@/client/components/section-label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import type { WorkspaceHeaderWorkspace } from './types';
 
@@ -40,9 +41,7 @@ export function WorkspaceDetailsDialog({
 function DetailSection({ label, text }: { label: string; text: string }) {
   return (
     <div className="flex flex-col gap-1">
-      <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-        {label}
-      </span>
+      <SectionLabel>{label}</SectionLabel>
       <p className="text-sm whitespace-pre-wrap break-words">{text}</p>
     </div>
   );

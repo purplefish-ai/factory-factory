@@ -1,5 +1,5 @@
 import { ArrowClockwiseIcon } from '@phosphor-icons/react/dist/csr/ArrowClockwise';
-import { WarningCircleIcon } from '@phosphor-icons/react/dist/csr/WarningCircle';
+import { StatusCallout } from '@/client/components/status-callout';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
@@ -11,12 +11,14 @@ interface QueryErrorStateProps {
   onRetry: () => void;
   /** True while a retry is in flight. */
   isRetrying?: boolean;
+  /** Applied to the area the error replaces, e.g. `h-full` or padding. */
   className?: string;
 }
 
 /**
- * Error branch for a query that has no data to show. Use it instead of an
- * empty state so a backend failure never reads as "nothing here yet".
+ * Error branch for a query that has no data to show: a danger callout centered
+ * in the space the content would fill. Use it instead of an empty state so a
+ * backend failure never reads as "nothing here yet".
  */
 export function QueryErrorState({
   title,
@@ -27,25 +29,27 @@ export function QueryErrorState({
 }: QueryErrorStateProps) {
   const detail = error?.message.trim();
   return (
-    <div
-      role="alert"
-      className={cn('flex flex-col items-center justify-center gap-3 p-6 text-center', className)}
-    >
-      <WarningCircleIcon className="size-8 text-destructive" aria-hidden="true" />
-      <div className="max-w-md space-y-1">
-        <p className="text-sm font-medium text-foreground">{title}</p>
-        {detail ? <p className="break-words text-xs text-muted-foreground">{detail}</p> : null}
-      </div>
-      <Button
-        variant="outline"
-        size="sm"
-        onClick={onRetry}
-        pending={isRetrying}
-        pendingLabel="Retrying…"
+    <div className={cn('flex items-center justify-center p-6', className)}>
+      <StatusCallout
+        role="alert"
+        tone="danger"
+        title={title}
+        className="w-full max-w-md"
+        action={
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={onRetry}
+            pending={isRetrying}
+            pendingLabel="Retrying…"
+          >
+            <ArrowClockwiseIcon className="size-3.5" aria-hidden="true" />
+            Retry
+          </Button>
+        }
       >
-        <ArrowClockwiseIcon className="size-3.5" aria-hidden="true" />
-        Retry
-      </Button>
+        {detail || undefined}
+      </StatusCallout>
     </div>
   );
 }
@@ -61,9 +65,9 @@ interface QueryRefreshErrorProps {
 
 /**
  * Non-blocking notice for a query whose cached data is still shown after a
- * background refetch failed. It sits above the content in normal flow, so the
- * content keeps its state; place it inside a `flex-col` parent and give
- * fixed-height content `min-h-0 flex-1`.
+ * background refetch failed: a danger strip above the content. It sits in
+ * normal flow, so the content keeps its state; place it inside a `flex-col`
+ * parent and give fixed-height content `min-h-0 flex-1`.
  */
 export function QueryRefreshError({
   title = "Couldn't refresh",
@@ -74,31 +78,31 @@ export function QueryRefreshError({
 }: QueryRefreshErrorProps) {
   const detail = error.message.trim();
   return (
-    <div
+    <StatusCallout
       role="status"
       aria-live="polite"
-      className={cn(
-        'flex shrink-0 items-center gap-2 border-b bg-destructive/5 px-3 py-1 text-xs',
-        className
-      )}
-    >
-      <WarningCircleIcon className="size-3.5 shrink-0 text-destructive" aria-hidden="true" />
-      <div className="min-w-0 flex-1">
+      tone="danger"
+      variant="strip"
+      size="sm"
+      className={cn('shrink-0', className)}
+      title={
         <p>
-          <span className="font-medium text-foreground">{title}.</span>{' '}
-          <span className="text-muted-foreground">Showing the last loaded data.</span>
+          {title}. <span className="font-normal">Showing the last loaded data.</span>
         </p>
-        {detail ? <p className="break-words text-muted-foreground">{detail}</p> : null}
-      </div>
-      <Button
-        variant="ghost"
-        size="xs"
-        onClick={onRetry}
-        pending={isRetrying}
-        pendingLabel="Retrying…"
-      >
-        Retry
-      </Button>
-    </div>
+      }
+      action={
+        <Button
+          variant="ghost"
+          size="xs"
+          onClick={onRetry}
+          pending={isRetrying}
+          pendingLabel="Retrying…"
+        >
+          Retry
+        </Button>
+      }
+    >
+      {detail || undefined}
+    </StatusCallout>
   );
 }

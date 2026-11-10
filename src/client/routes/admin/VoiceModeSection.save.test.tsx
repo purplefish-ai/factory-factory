@@ -8,8 +8,8 @@ import {
   renderWithSettingsServer,
   type SettingsServer,
   stubRadixLayout,
-  waitForCheck,
 } from '@/client/lib/user-settings-queries.test-harness';
+import { waitForCheck } from '@/test-utils/react-act';
 import { VoiceModeSection } from './VoiceModeSection';
 
 const toastError = vi.hoisted(() => vi.fn());

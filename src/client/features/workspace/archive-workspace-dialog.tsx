@@ -1,3 +1,4 @@
+import { StatusCallout } from '@/client/components/status-callout';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 
 const defaultDescription =
@@ -38,10 +39,10 @@ export function ArchiveWorkspaceDialog({
       }}
     >
       {activeChildCount > 0 && (
-        <div className="rounded-md border border-warning/30 bg-warning/10 px-3 py-2 text-sm text-warning">
+        <StatusCallout tone="warning">
           This workspace has {activeChildCount} active child workspace
           {activeChildCount !== 1 ? 's' : ''}. Archiving will not automatically archive them.
-        </div>
+        </StatusCallout>
       )}
     </ConfirmDialog>
   );

@@ -2,9 +2,9 @@ import { ArrowsClockwiseIcon } from '@phosphor-icons/react/dist/csr/ArrowsClockw
 import { CaretDownIcon } from '@phosphor-icons/react/dist/csr/CaretDown';
 import { CaretRightIcon } from '@phosphor-icons/react/dist/csr/CaretRight';
 import { PlayIcon } from '@phosphor-icons/react/dist/csr/Play';
-import { WarningIcon } from '@phosphor-icons/react/dist/csr/Warning';
 import { XIcon } from '@phosphor-icons/react/dist/csr/X';
 import { useState } from 'react';
+import { StatusCallout } from '@/client/components/status-callout';
 import { Button } from '@/components/ui/button';
 import { Spinner } from '@/components/ui/spinner';
 import type { WorkspaceRetryAvailability } from '@/shared/workspace-init-retry';
@@ -42,81 +42,57 @@ export function ScriptFailedBanner({
   const { retry, retryInit } = useRetryWorkspaceInit(workspaceId, retryAvailability);
 
   return (
-    <div className="border-b bg-destructive/10 px-4 py-2">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div className="flex min-w-0 items-start gap-2 text-sm text-destructive">
-          <WarningIcon className="mt-0.5 h-3 w-3 shrink-0" />
-          <span className="min-w-0 break-words whitespace-normal">
-            Init script failed{initErrorMessage ? `: ${initErrorMessage}` : ''}
-            {retryAvailability?.status !== 'AVAILABLE' && (
-              <span className="mt-1 block text-xs">
-                {retryAvailability?.status === 'BLOCKED'
-                  ? retryAvailability.explanation
-                  : 'Checking setup retry availability…'}
-              </span>
-            )}
-          </span>
-        </div>
-        <div className="flex shrink-0 flex-wrap items-center gap-1 self-start sm:justify-end">
+    <StatusCallout
+      tone="danger"
+      variant="strip"
+      action={
+        <>
           {hasStartupScript && initOutput && (
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-6 px-2 text-xs"
-              onClick={() => setExpanded(!expanded)}
-            >
-              {expanded ? (
-                <CaretDownIcon className="h-3 w-3 mr-1" />
-              ) : (
-                <CaretRightIcon className="h-3 w-3 mr-1" />
-              )}
+            <Button variant="ghost" size="xs" onClick={() => setExpanded(!expanded)}>
+              {expanded ? <CaretDownIcon className="mr-1" /> : <CaretRightIcon className="mr-1" />}
               {expanded ? 'Hide output' : 'Show output'}
             </Button>
           )}
           <Button
             variant="outline"
-            size="sm"
-            className="h-6 px-2 text-xs"
+            size="xs"
             onClick={retry}
             pending={retryInit.isPending}
             pendingLabel="Retrying…"
             disabled={retryAvailability?.status !== 'AVAILABLE'}
           >
-            <ArrowsClockwiseIcon className="h-3 w-3" />
+            <ArrowsClockwiseIcon />
             Retry
           </Button>
           {showPlay && (
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-6 px-2 text-xs"
-              onClick={onPlay}
-              disabled={!onPlay}
-            >
-              <PlayIcon className="h-3 w-3 mr-1" />
+            <Button variant="outline" size="xs" onClick={onPlay} disabled={!onPlay}>
+              <PlayIcon className="mr-1" />
               Dispatch queued messages
             </Button>
           )}
           {showDismiss && (
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-6 w-6 p-0"
-              onClick={onDismiss}
-              aria-label="Dismiss"
-            >
-              <XIcon className="h-3 w-3" />
+            <Button variant="ghost" size="icon-xs" onClick={onDismiss} aria-label="Dismiss">
+              <XIcon />
             </Button>
           )}
-        </div>
-      </div>
+        </>
+      }
+    >
+      <p>Init script failed{initErrorMessage ? `: ${initErrorMessage}` : ''}</p>
+      {retryAvailability?.status !== 'AVAILABLE' && (
+        <p className="mt-1 text-xs">
+          {retryAvailability?.status === 'BLOCKED'
+            ? retryAvailability.explanation
+            : 'Checking setup retry availability…'}
+        </p>
+      )}
       {expanded && hasStartupScript && (
         <InitOutputPanel
           output={initOutput}
           className="mt-2 h-32 w-full rounded-md border bg-background"
         />
       )}
-    </div>
+    </StatusCallout>
   );
 }
 

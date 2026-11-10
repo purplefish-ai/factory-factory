@@ -4,6 +4,7 @@ import { POLL_INTERVAL_MS } from '@/client/lib/query-options';
 import { trpc } from '@/client/lib/trpc';
 import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Progress } from '@/components/ui/progress';
 import { Spinner } from '@/components/ui/spinner';
 import type { TokenStats } from '@/lib/chat-protocol';
 import { cn } from '@/lib/utils';
@@ -86,13 +87,13 @@ export function UsageControl({
       <PopoverTrigger asChild>
         <Button
           variant="ghost"
-          size="sm"
+          size="compact"
           aria-label={label}
           aria-busy={compacting}
-          className={cn('h-7 shrink-0 gap-1.5 px-1.5 text-xs tabular-nums', usageColor(percent))}
+          className={cn('shrink-0 tabular-nums', usageColor(percent))}
         >
           {compacting ? (
-            <Spinner aria-hidden="true" className="size-3.5" />
+            <Spinner aria-hidden="true" />
           ) : (
             <svg
               aria-hidden="true"
@@ -146,7 +147,7 @@ export function UsageControl({
                 </span>
                 <span>{Math.round(percent ?? 0)}% used</span>
               </div>
-              <UsageMeter percent={percent ?? 0} />
+              <UsageMeter percent={percent ?? 0} label="Context used" />
             </>
           ) : (
             <p className="text-muted-foreground">Context unavailable</p>
@@ -167,14 +168,13 @@ export function UsageControl({
           />
         </div>
         <div className="flex items-center justify-between gap-2 border-t pt-3">
-          <span className="min-w-0 truncate text-[11px] text-muted-foreground">
+          <span className="min-w-0 truncate text-2xs text-muted-foreground">
             {planUsage ? `Updated ${timestamp(planUsage.updatedAt)}` : 'No reading yet'}
           </span>
           <div className="flex shrink-0 items-center gap-1">
             <Button
               variant="outline"
-              size="sm"
-              className="h-6 px-2 text-xs"
+              size="xs"
               onClick={onCompact}
               disabled={!canCompact(context, onCompact) || busy || disabled}
               pending={compacting}
@@ -184,18 +184,28 @@ export function UsageControl({
             </Button>
             <Button
               variant="ghost"
-              size="icon"
+              size="icon-xs"
               aria-label="Refresh usage"
               pending={refreshing}
               onClick={onRefresh}
-              className="h-6 w-6"
             >
-              <ArrowClockwiseIcon aria-hidden="true" className="h-3.5 w-3.5" />
+              <ArrowClockwiseIcon aria-hidden="true" />
             </Button>
           </div>
         </div>
       </PopoverContent>
     </Popover>
+  );
+}
+
+/** A usage bar that takes the usage text color: muted, then warning, then danger. */
+function UsageMeter({ percent, label }: { percent: number; label: string }) {
+  return (
+    <Progress
+      value={Math.min(100, Math.max(0, percent))}
+      aria-label={label}
+      className={cn('h-1 [&>div]:bg-current', usageColor(percent))}
+    />
   );
 }
 
@@ -224,8 +234,8 @@ function PlanWindows({
                 {Math.round(window.usedPercent)}% used
               </span>
             </div>
-            <UsageMeter percent={window.usedPercent} />
-            <p className="text-[11px] text-muted-foreground">
+            <UsageMeter percent={window.usedPercent} label={`${window.label} used`} />
+            <p className="text-2xs text-muted-foreground">
               {window.resetsAt === null
                 ? 'Reset time unavailable'
                 : `Resets ${timestamp(window.resetsAt)}`}
@@ -239,17 +249,6 @@ function PlanWindows({
         </p>
       )}
     </>
-  );
-}
-
-function UsageMeter({ percent }: { percent: number }) {
-  return (
-    <div className="h-1 overflow-hidden rounded-full bg-muted">
-      <div
-        className={cn('h-full rounded-full bg-current', usageColor(percent))}
-        style={{ width: `${percent}%` }}
-      />
-    </div>
   );
 }
 

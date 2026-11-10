@@ -8,8 +8,9 @@ import { keepPreviousData } from '@tanstack/react-query';
 import { Fragment, useEffect, useState } from 'react';
 import { EmptyState } from '@/client/components/empty-state';
 import { QueryState } from '@/client/components/query-state';
+import { SectionLabel } from '@/client/components/section-label';
+import { useDebouncedValue } from '@/client/hooks/use-debounced-value';
 import { useDownloadServerLog } from '@/client/hooks/use-download-server-log';
-import { runInBackground } from '@/client/lib/background-task';
 import { formatDate, formatDateTime, toDateTimeIso } from '@/client/lib/date-time';
 import { POLL_INTERVAL_MS } from '@/client/lib/query-options';
 import { trpc } from '@/client/lib/trpc';
@@ -80,19 +81,17 @@ function DatePicker({
   const [open, setOpen] = useState(false);
   return (
     <div className="flex flex-col gap-1">
-      <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
-        {label}
-      </span>
+      <SectionLabel>{label}</SectionLabel>
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger asChild>
           <Button
             variant="outline"
             className={cn(
-              'h-9 w-full sm:w-[160px] justify-start text-left font-normal',
+              'w-full sm:w-[160px] justify-start text-left font-normal',
               !date && 'text-muted-foreground'
             )}
           >
-            <CalendarIcon className="mr-2 h-4 w-4 shrink-0" />
+            <CalendarIcon className="mr-2" />
             <span className="truncate">{date ? formatDateLabel(date) : placeholder}</span>
           </Button>
         </PopoverTrigger>
@@ -176,7 +175,6 @@ function formatPageLabel(currentPage: number, totalPages: number | null): string
 
 export default function LogsPage() {
   const [search, setSearch] = useState('');
-  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [level, setLevel] = useState<LogLevel | 'all'>('all');
   const [timeRange, setTimeRange] = useState<string>('all');
   const [relativeMinute, setRelativeMinute] = useState(() => Math.floor(Date.now() / 60_000));
@@ -192,17 +190,15 @@ export default function LogsPage() {
   }, [timeRange]);
   const [sinceDate, setSinceDate] = useState<Date | undefined>();
   const [untilDate, setUntilDate] = useState<Date | undefined>();
+  const debouncedSearch = useDebouncedValue(search, 300);
   const [offset, setOffset] = useState(0);
+  // Each new search starts from the first page.
+  const [pagedSearch, setPagedSearch] = useState(debouncedSearch);
+  if (pagedSearch !== debouncedSearch) {
+    setPagedSearch(debouncedSearch);
+    setOffset(0);
+  }
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
-
-  // Debounce search input
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setDebouncedSearch(search);
-      setOffset(0);
-    }, 300);
-    return () => clearTimeout(timer);
-  }, [search]);
 
   const handleLevelChange = (v: string) => {
     setLevel(v as LogLevel | 'all');
@@ -253,7 +249,7 @@ export default function LogsPage() {
   );
   const { data } = logsQuery;
 
-  const { download, isDownloading } = useDownloadServerLog();
+  const downloadLog = useDownloadServerLog();
 
   const currentPage = Math.floor(offset / PAGE_SIZE) + 1;
   const pagination = getPaginationState(data, offset);
@@ -287,14 +283,13 @@ export default function LogsPage() {
           <Button
             variant="outline"
             size="sm"
-            onClick={() => {
-              runInBackground(download(), "Couldn't download logs.");
-            }}
-            disabled={isDownloading}
+            onClick={() => downloadLog.mutate()}
+            pending={downloadLog.isPending}
+            pendingLabel="Downloading…"
             className="w-full shrink-0 sm:w-auto"
           >
-            <DownloadIcon className="size-4" />
-            {isDownloading ? 'Downloading…' : 'Download log file'}
+            <DownloadIcon />
+            Download log file
           </Button>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -364,7 +359,7 @@ export default function LogsPage() {
                 {(sinceDate || untilDate) && (
                   <div className="flex h-9 items-center">
                     <Button variant="ghost" size="sm" onClick={handleClearDates}>
-                      <XIcon className="w-3.5 h-3.5 mr-1" />
+                      <XIcon className="mr-1" />
                       Clear
                     </Button>
                   </div>
@@ -457,9 +452,9 @@ export default function LogsPage() {
                               <TableRow>
                                 <TableCell colSpan={4} className="bg-muted/30 p-4">
                                   <div className="space-y-2">
-                                    <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                                      Raw JSON
-                                    </div>
+                                    <SectionLabel asChild>
+                                      <div>Raw JSON</div>
+                                    </SectionLabel>
                                     <pre className="bg-background border rounded-md p-3 text-xs overflow-x-auto max-h-96 overflow-y-auto">
                                       {JSON.stringify(fullEntry, null, 2)}
                                     </pre>

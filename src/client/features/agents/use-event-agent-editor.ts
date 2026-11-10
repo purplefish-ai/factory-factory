@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import type { SavedAgentSpecification } from '@/shared/agent-management';
 import {
   parseSavedReplacement,
@@ -49,13 +49,6 @@ export function useEventAgentEditor(props: EventAgentEditorProps) {
   const sourceRequest = useRef(0);
   const busyRequest = useRef(0);
   const previewRequest = useRef(0);
-  const active = useRef(true);
-  useEffect(() => {
-    active.current = true;
-    return () => {
-      active.current = false;
-    };
-  }, []);
   const changed = () => {
     version.current += 1;
     if (!submitting.current) {
@@ -81,7 +74,7 @@ export function useEventAgentEditor(props: EventAgentEditorProps) {
       : draft
         ? savedSpecificationFromDraft(draft)
         : null;
-  const isCurrent = (captured: number) => active.current && version.current === captured;
+  const isCurrent = (captured: number) => version.current === captured;
   const showFailure = (failure: unknown, captured: number) => {
     if (isCurrent(captured)) {
       setError(

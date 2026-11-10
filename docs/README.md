@@ -18,6 +18,7 @@ context, not a new task or a substitute for current repository guidance.
 | Mixed Automations management and scheduled history | [Scheduled automations](architecture/integrations.md#scheduled-agents)                                |
 | User and project configuration                     | [Settings](admin-settings.md)                                                                         |
 | Maintain UI primitives and dependencies            | [shadcn](shadcn.md) and [Knip](knip.md)                                                               |
+| Button sizes, icon buttons and tooltips            | [Buttons and tooltips](shadcn.md#buttons-icon-buttons-and-tooltips)                                   |
 | Write and organize Storybook stories               | [Storybook](storybook.md)                                                                             |
 | Theme tokens and status colors                     | [Status colors](status-colors.md)                                                                     |
 | Terminal palette and live appearance changes       | [Terminal theme](terminal-theme.md)                                                                   |
@@ -34,7 +35,8 @@ records when the task needs an earlier decision or migration.
 Keyboard behavior is documented in [Keyboard shortcuts](keyboard-shortcuts.md).
 
 UI writing follows the [copy guide](architecture/client-copy.md); loading and
-query recovery follow [client loading](architecture/client-loading.md).
+query recovery follow [client loading](architecture/client-loading.md); state
+resets, refs and effects follow [client state](architecture/client-state.md).
 
 ## Proposals and design records
 

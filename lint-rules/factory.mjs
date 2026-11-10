@@ -38,6 +38,44 @@ function containsUnknownType(node, visitorKeys) {
 const RAW_PALETTE_CLASS =
   /(?<=^|[\s'"`:!])(?:bg|text|border(?:-[trblxyse])?|ring(?:-offset)?|inset-ring|outline|fill|stroke|from|via|to|decoration|divide|shadow|inset-shadow|text-shadow|drop-shadow|accent|caret|placeholder)-(?:red|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose|slate|gray|zinc|neutral|stone)-(?:50|[1-9]00|950)(?![\w-])/;
 
+// An arbitrary font size such as `text-[10px]`, `md:text-[0.8rem]` or
+// `text-[1.5em]`; the type scale (`text-2xs`, `text-xs`, …) replaces them.
+const ARBITRARY_FONT_SIZE_CLASS = /(?<=^|[\s'"`:!])text-\[(?:\d*\.)?\d+(?:px|r?em)\](?![\w-])/;
+
+const STATUS_TOKENS = '(destructive|warning|success|info|running|merged)(?:-accent)?';
+const STATUS_BACKGROUND_TINT = new RegExp(`^bg-${STATUS_TOKENS}/\\d+$`);
+const STATUS_BORDER = new RegExp(`^border(?:-[trblxyse])?-${STATUS_TOKENS}(?:/\\d+)?$`);
+
+/**
+ * The status token of a hand-rolled callout surface in one class string: a
+ * tinted status background (`bg-warning/10`) paired with a border of the same
+ * status token (`border-warning/30`). Only unprefixed and `dark:` classes
+ * count, so hover, focus and data-state styling never match.
+ */
+function statusCalloutToken(text) {
+  if (typeof text !== 'string') {
+    return null;
+  }
+  const backgrounds = new Set();
+  const borders = new Set();
+  for (const token of text.split(/[\s'"`]+/)) {
+    const variants = token.split(':');
+    const utility = variants.pop().replace(/^!/, '');
+    if (variants.length > 1 || (variants.length === 1 && variants[0] !== 'dark')) {
+      continue;
+    }
+    const background = STATUS_BACKGROUND_TINT.exec(utility);
+    if (background) {
+      backgrounds.add(background[1]);
+    }
+    const border = STATUS_BORDER.exec(utility);
+    if (border) {
+      borders.add(border[1]);
+    }
+  }
+  return [...backgrounds].find((token) => borders.has(token)) ?? null;
+}
+
 function reportRawPaletteClass(context, node, text) {
   const match = typeof text === 'string' ? RAW_PALETTE_CLASS.exec(text) : null;
   if (match) {
@@ -77,10 +115,15 @@ function hasButtonText(node) {
 }
 
 function hasButtonName(attribute) {
-  if (
-    !['aria-label', 'aria-labelledby', 'title'].includes(attribute.name.name) ||
-    !attribute.value
-  ) {
+  return (
+    ['aria-label', 'aria-labelledby', 'title'].includes(attribute.name.name) &&
+    hasNonEmptyValue(attribute)
+  );
+}
+
+/** A JSX attribute whose value may be a non-empty string. */
+function hasNonEmptyValue(attribute) {
+  if (!attribute.value) {
     return false;
   }
   const value =
@@ -353,6 +396,179 @@ function staticKeyName(key, computed) {
   return undefined;
 }
 
+// Components and hooks by name: `function Panel()`, `const useThing = () => {}`,
+// and the render function passed to `memo()` or `forwardRef()`.
+const COMPONENT_OR_HOOK_NAME = /^(?:use[A-Z0-9]|[A-Z])/;
+
+function functionName(node) {
+  if (node.id?.name) {
+    return node.id.name;
+  }
+  const parent = node.parent;
+  if (parent?.type === 'VariableDeclarator' && parent.id.type === 'Identifier') {
+    return parent.id.name;
+  }
+  if (
+    parent?.type === 'CallExpression' &&
+    parent.arguments[0] === node &&
+    ['memo', 'forwardRef'].includes(
+      parent.callee.type === 'Identifier' ? parent.callee.name : memberName(parent.callee)
+    )
+  ) {
+    return functionName(parent);
+  }
+  return undefined;
+}
+
+function isComponentOrHook(node) {
+  return isFunction(node) && COMPONENT_OR_HOOK_NAME.test(functionName(node) ?? '');
+}
+
+function enclosingFunction(node) {
+  let current = node.parent;
+  while (current && !isFunction(current)) {
+    current = current.parent;
+  }
+  return current;
+}
+
+/** `ref.current`, `ref.current!` or `(ref.current)` for the same `ref` text. */
+function readsCurrentOf(node, sourceCode, objectText) {
+  let current = node;
+  while (current?.type === 'TSNonNullExpression' || current?.type === 'ParenthesizedExpression') {
+    current = current.expression;
+  }
+  return (
+    current?.type === 'MemberExpression' &&
+    memberName(current) === 'current' &&
+    sourceCode.getText(current.object) === objectText
+  );
+}
+
+/** `if (ref.current === null)`, `== null`, `=== undefined` or `!ref.current`: lazy init. */
+function isLazyInitTest(test, sourceCode, objectText) {
+  if (test.type === 'UnaryExpression' && test.operator === '!') {
+    return readsCurrentOf(test.argument, sourceCode, objectText);
+  }
+  if (test.type !== 'BinaryExpression' || !['===', '=='].includes(test.operator)) {
+    return false;
+  }
+  const empty = (side) =>
+    (side.type === 'Literal' && side.value === null) || isIdentifier(side, 'undefined');
+  return (
+    (readsCurrentOf(test.left, sourceCode, objectText) && empty(test.right)) ||
+    (readsCurrentOf(test.right, sourceCode, objectText) && empty(test.left))
+  );
+}
+
+/** `ref.current ??= value`, or a write inside the consequent of a lazy-init `if`. */
+function isLazyInit(assignment, fn, sourceCode) {
+  if (assignment.operator === '??=') {
+    return true;
+  }
+  const objectText = sourceCode.getText(assignment.left.object);
+  let child = assignment;
+  for (let node = assignment.parent; node && node !== fn; node = node.parent) {
+    if (
+      node.type === 'IfStatement' &&
+      node.consequent === child &&
+      isLazyInitTest(node.test, sourceCode, objectText)
+    ) {
+      return true;
+    }
+    child = node;
+  }
+  return false;
+}
+
+// Hook callbacks that React calls while rendering, by hook name and argument.
+const RENDER_PHASE_CALLBACKS = { useMemo: 0, useState: 0, useReducer: 2 };
+
+/** The component or hook whose render runs `fn`, looking through render-phase callbacks. */
+function renderingFunction(fn) {
+  let current = fn;
+  for (;;) {
+    const call = current?.parent;
+    const name =
+      call?.type === 'CallExpression' &&
+      (call.callee.type === 'Identifier' ? call.callee.name : memberName(call.callee));
+    if (
+      !(name in RENDER_PHASE_CALLBACKS) ||
+      call.arguments[RENDER_PHASE_CALLBACKS[name]] !== current
+    ) {
+      return current;
+    }
+    current = enclosingFunction(call);
+  }
+}
+
+const EFFECT_HOOKS = new Set(['useEffect', 'useLayoutEffect']);
+// `setX(...)` state setters, but not the timer globals.
+const STATE_SETTER = /^set(?!Timeout$|Interval$|Immediate$)[A-Z]/;
+
+/**
+ * Whether an expression only combines values already available while
+ * rendering: no calls (other than updater functions passed to a setter), no
+ * ref or DOM reads through `.current`, and no `await`, `new` or `this`.
+ */
+function isRenderDerivable(node, visitorKeys) {
+  if (!node || typeof node.type !== 'string') {
+    return true;
+  }
+  if (isFunction(node)) {
+    return isRenderDerivable(node.body, visitorKeys);
+  }
+  if (
+    ['CallExpression', 'NewExpression', 'AwaitExpression', 'ThisExpression'].includes(node.type) ||
+    (node.type === 'MemberExpression' && memberName(node) === 'current')
+  ) {
+    return false;
+  }
+  return (visitorKeys[node.type] ?? []).every((key) => {
+    const child = node[key];
+    return Array.isArray(child)
+      ? child.every((value) => isRenderDerivable(value, visitorKeys))
+      : isRenderDerivable(child, visitorKeys);
+  });
+}
+
+/** A statement that only calls state setters with render-derivable values, possibly behind ifs. */
+function onlySetsState(node, visitorKeys) {
+  switch (node?.type) {
+    case 'BlockStatement':
+      return node.body.length > 0 && node.body.every((child) => onlySetsState(child, visitorKeys));
+    case 'IfStatement':
+      return (
+        isRenderDerivable(node.test, visitorKeys) &&
+        onlySetsState(node.consequent, visitorKeys) &&
+        (!node.alternate || onlySetsState(node.alternate, visitorKeys))
+      );
+    case 'ReturnStatement':
+      return node.argument === null;
+    case 'ExpressionStatement':
+      return onlySetsState(node.expression, visitorKeys);
+    case 'CallExpression':
+      return (
+        node.callee.type === 'Identifier' &&
+        STATE_SETTER.test(node.callee.name) &&
+        node.arguments.every((argument) => isRenderDerivable(argument, visitorKeys))
+      );
+    default:
+      return false;
+  }
+}
+
+/** At least one setter call, so a body of bare returns is not reported. */
+function callsSetter(node) {
+  if (node?.type === 'BlockStatement') {
+    return node.body.some(callsSetter);
+  }
+  if (node?.type === 'IfStatement') {
+    return callsSetter(node.consequent) || callsSetter(node.alternate);
+  }
+  return node?.type === 'ExpressionStatement' || node?.type === 'CallExpression';
+}
+
 function isListedFile(context, paths) {
   const filename = context.filename.replaceAll('\\', '/');
   return paths.some((path) => filename === path || filename.endsWith(`/${path}`));
@@ -435,7 +651,224 @@ function findInChildren(children, sourceCode) {
   return undefined;
 }
 
+// The controls whose `size` variant sizes their icons (src/components/ui/button.tsx).
+const SIZED_BUTTONS = new Set(['Button', 'IconButton']);
+
+// `h-4`, `w-3.5`, `md:size-8`, `h-px`: a fixed height, width or size from the
+// spacing scale. Keywords (`w-full`, `h-auto`), fractions (`w-1/2`) and
+// arbitrary values (`w-[160px]`) are layout, not control sizes, and pass.
+const FIXED_SIZE_CLASS = /(?<=^|[\s'"`:!])(?:h|w|size)-(?:\d+(?:\.\d+)?|px)(?![\w./-])/;
+
+// Hand-rolled keyboard focus styles that the `focus-ring` utility replaces:
+// `focus-visible:ring-2`, `focus-visible:outline-none`, `focus-visible:outline-ring`.
+const HAND_ROLLED_FOCUS_CLASS =
+  /(?<=^|[\s'"`:!])focus-visible:(?:ring-2|outline(?:-none|-ring|-2)?)(?![\w-])/;
+
+// `h-4`, `w-[18px]`, `md:w-3`: any height or width class on an icon.
+const ICON_DIMENSION_CLASS = /(?<=^|[\s'"`:!])[hw]-[\w.[\]/-]+/;
+
+function classNameText(opening, sourceCode) {
+  const attribute = opening.attributes.find(
+    (candidate) => candidate.type === 'JSXAttribute' && candidate.name.name === 'className'
+  );
+  return attribute?.value ? sourceCode.getText(attribute.value) : '';
+}
+
+function jsxAttribute(opening, name) {
+  return opening.attributes.find(
+    (attribute) => attribute.type === 'JSXAttribute' && attribute.name.name === name
+  );
+}
+
+/** A literal `size="icon…"` on a Button. */
+function hasIconSize(opening) {
+  const size = jsxAttribute(opening, 'size');
+  return size?.value?.type === 'Literal' && /^icon(?:-|$)/.test(size.value.value);
+}
+
+function isIconElement(opening) {
+  const name = jsxTagName(opening.name);
+  return name === 'svg' || /Icon$/.test(name) || /(?:^|\.)Icons?\./.test(name);
+}
+
+/** Icons rendered among a control's children, through conditionals, fragments and wrappers. */
+function collectIcons(node, found = []) {
+  switch (node?.type) {
+    case 'JSXElement':
+      if (SIZED_BUTTONS.has(jsxTagName(node.openingElement.name))) {
+        return found;
+      }
+      if (isIconElement(node.openingElement)) {
+        found.push(node.openingElement);
+      }
+      for (const child of node.children) {
+        collectIcons(child, found);
+      }
+      return found;
+    case 'JSXFragment':
+      for (const child of node.children) {
+        collectIcons(child, found);
+      }
+      return found;
+    case 'JSXExpressionContainer':
+      return collectIcons(node.expression, found);
+    case 'ConditionalExpression':
+      collectIcons(node.consequent, found);
+      return collectIcons(node.alternate, found);
+    case 'LogicalExpression':
+      collectIcons(node.left, found);
+      return collectIcons(node.right, found);
+    default:
+      return found;
+  }
+}
+
+/** The element an `asChild` trigger renders: its only JSX child, if any. */
+function onlyElementChild(node) {
+  const children = node.children.filter(
+    (child) =>
+      !(child.type === 'JSXText' && !child.value.trim()) &&
+      !(child.type === 'JSXExpressionContainer' && child.expression.type === 'JSXEmptyExpression')
+  );
+  return children.length === 1 && children[0].type === 'JSXElement' ? children[0] : undefined;
+}
+
 const rules = {
+  'button-icon-size': {
+    meta: { schema: EXCEPTIONS_SCHEMA },
+    create(context) {
+      if (isExceptedFile(context)) {
+        return {};
+      }
+      return {
+        JSXElement(node) {
+          const name = jsxTagName(node.openingElement.name);
+          if (!SIZED_BUTTONS.has(name)) {
+            return;
+          }
+          for (const child of node.children) {
+            for (const icon of collectIcons(child)) {
+              const match = ICON_DIMENSION_CLASS.exec(classNameText(icon, context.sourceCode));
+              if (match) {
+                context.report({
+                  node: icon,
+                  message: `Remove "${match[0]}": the ${name} size variant sizes its icons. Use a size-* class only for a deliberate exception (src/components/ui/button.tsx).`,
+                });
+              }
+            }
+          }
+        },
+      };
+    },
+  },
+  'button-size-variant': {
+    meta: { schema: EXCEPTIONS_SCHEMA },
+    create(context) {
+      if (isExceptedFile(context)) {
+        return {};
+      }
+      return {
+        JSXOpeningElement(node) {
+          const name = jsxTagName(node.name);
+          if (!SIZED_BUTTONS.has(name)) {
+            return;
+          }
+          const match = FIXED_SIZE_CLASS.exec(classNameText(node, context.sourceCode));
+          if (match) {
+            context.report({
+              node,
+              message: `Use a ${name} size variant (xs, compact, sm, default, lg, inline or icon-*) instead of "${match[0]}" in className. Layout widths such as w-full pass.`,
+            });
+          }
+        },
+      };
+    },
+  },
+  'icon-button-tooltip': {
+    meta: { schema: EXCEPTIONS_SCHEMA },
+    create(context) {
+      if (isExceptedFile(context)) {
+        return {};
+      }
+      const message =
+        'Use IconButton (src/client/components/icon-button.tsx): its label is both the accessible name and the tooltip.';
+      return {
+        JSXElement(node) {
+          const opening = node.openingElement;
+          const name = jsxTagName(opening.name);
+          if (name === 'Button' && hasIconSize(opening) && jsxAttribute(opening, 'title')) {
+            context.report({ node: opening, message });
+            return;
+          }
+          if (name !== 'TooltipTrigger' || !jsxAttribute(opening, 'asChild')) {
+            return;
+          }
+          // Follow nested `DropdownMenuTrigger asChild` and similar triggers to the rendered element.
+          let child = onlyElementChild(node);
+          while (
+            child &&
+            /Trigger$/.test(jsxTagName(child.openingElement.name)) &&
+            jsxAttribute(child.openingElement, 'asChild')
+          ) {
+            child = onlyElementChild(child);
+          }
+          if (
+            child &&
+            jsxTagName(child.openingElement.name) === 'Button' &&
+            hasIconSize(child.openingElement) &&
+            // A titled icon Button is already reported above.
+            !jsxAttribute(child.openingElement, 'title')
+          ) {
+            context.report({ node: child.openingElement, message });
+          }
+        },
+      };
+    },
+  },
+  'tooltip-provider-root': {
+    meta: { schema: EXCEPTIONS_SCHEMA },
+    create(context) {
+      if (isExceptedFile(context)) {
+        return {};
+      }
+      return {
+        JSXOpeningElement(node) {
+          if (jsxTagName(node.name) === 'TooltipProvider') {
+            context.report({
+              node,
+              message:
+                'Render tooltips under the app root TooltipProvider instead of nesting one; a nested provider without props resets the open delay to 700ms.',
+            });
+          }
+        },
+      };
+    },
+  },
+  'focus-ring': {
+    meta: { schema: EXCEPTIONS_SCHEMA },
+    create(context) {
+      if (isExceptedFile(context)) {
+        return {};
+      }
+      const report = (node, text) => {
+        const match = typeof text === 'string' ? HAND_ROLLED_FOCUS_CLASS.exec(text) : null;
+        if (match) {
+          context.report({
+            node,
+            message: `Use the focus-ring utility (src/client/globals.css) instead of "${match[0]}".`,
+          });
+        }
+      };
+      return {
+        Literal(node) {
+          report(node, node.value);
+        },
+        TemplateElement(node) {
+          report(node, node.value.cooked ?? node.value.raw);
+        },
+      };
+    },
+  },
   'query-owner': {
     meta: {
       schema: [
@@ -593,6 +1026,14 @@ const rules = {
       return {
         JSXElement(node) {
           const opening = node.openingElement;
+          if (opening.name.name === 'IconButton') {
+            // IconButton's required label is its name; it must not be empty.
+            const label = jsxAttribute(opening, 'label');
+            if (label && !hasNonEmptyValue(label)) {
+              context.report({ node: opening, message: 'Give IconButton a non-empty label.' });
+            }
+            return;
+          }
           if (!['button', 'Button'].includes(opening.name.name)) {
             return;
           }
@@ -777,6 +1218,138 @@ const rules = {
               report(property);
             }
           }
+        },
+      };
+    },
+  },
+  'no-arbitrary-font-size': {
+    meta: { schema: EXCEPTIONS_SCHEMA },
+    create(context) {
+      if (isExceptedFile(context)) {
+        return {};
+      }
+      const report = (node, text) => {
+        const match = typeof text === 'string' ? ARBITRARY_FONT_SIZE_CLASS.exec(text) : null;
+        if (match) {
+          context.report({
+            node,
+            message: `Use the type scale (text-2xs, text-xs, text-sm, …) instead of "${match[0]}" (docs/status-colors.md#small-text).`,
+          });
+        }
+      };
+      return {
+        Literal(node) {
+          report(node, node.value);
+        },
+        TemplateElement(node) {
+          report(node, node.value.cooked ?? node.value.raw);
+        },
+      };
+    },
+  },
+  'use-status-callout': {
+    meta: { schema: EXCEPTIONS_SCHEMA },
+    create(context) {
+      if (isExceptedFile(context)) {
+        return {};
+      }
+      const report = (node, text) => {
+        const token = statusCalloutToken(text);
+        if (token) {
+          context.report({
+            node,
+            message: `Use StatusCallout (src/client/components/status-callout.tsx) or StatusChip instead of pairing a ${token} background tint with a ${token} border (docs/status-colors.md#callouts-and-chips).`,
+          });
+        }
+      };
+      return {
+        Literal(node) {
+          report(node, node.value);
+        },
+        TemplateElement(node) {
+          report(node, node.value.cooked ?? node.value.raw);
+        },
+      };
+    },
+  },
+  'no-forward-ref': {
+    create(context) {
+      return {
+        CallExpression(node) {
+          const callee = node.callee;
+          if (
+            isIdentifier(callee, 'forwardRef') ||
+            (callee.type === 'MemberExpression' && memberName(callee) === 'forwardRef')
+          ) {
+            context.report({
+              node,
+              message:
+                'React 19 passes `ref` as a prop; take it from props instead of wrapping the component in forwardRef.',
+            });
+          }
+        },
+      };
+    },
+  },
+  'no-render-ref-write': {
+    meta: { schema: EXCEPTIONS_SCHEMA },
+    create(context) {
+      if (isExceptedFile(context)) {
+        return {};
+      }
+      const check = (node, target) => {
+        if (target.type !== 'MemberExpression' || memberName(target) !== 'current') {
+          return;
+        }
+        const fn = renderingFunction(enclosingFunction(node));
+        if (!isComponentOrHook(fn)) {
+          return;
+        }
+        if (node.type === 'AssignmentExpression' && isLazyInit(node, fn, context.sourceCode)) {
+          return;
+        }
+        context.report({
+          node,
+          message:
+            'Do not write a ref while rendering. Use useLatestRef or useStableCallback (src/client/hooks/use-stable-callback.ts) for the latest value, or write it in an effect or handler.',
+        });
+      };
+      return {
+        AssignmentExpression(node) {
+          check(node, node.left);
+        },
+        UpdateExpression(node) {
+          check(node, node.argument);
+        },
+      };
+    },
+  },
+  'no-state-sync-effect': {
+    meta: { schema: EXCEPTIONS_SCHEMA },
+    create(context) {
+      if (isExceptedFile(context)) {
+        return {};
+      }
+      return {
+        CallExpression(node) {
+          const name =
+            node.callee.type === 'Identifier' ? node.callee.name : memberName(node.callee);
+          const [callback, dependencies] = node.arguments;
+          if (
+            !EFFECT_HOOKS.has(name) ||
+            !isFunction(callback) ||
+            dependencies?.type !== 'ArrayExpression' ||
+            dependencies.elements.length === 0 ||
+            !callsSetter(callback.body) ||
+            !onlySetsState(callback.body, context.sourceCode.visitorKeys)
+          ) {
+            return;
+          }
+          context.report({
+            node,
+            message:
+              'This effect only sets state from values known while rendering, so the previous state shows for one commit. Derive the value, reset with `key`, or adjust state during render (docs/architecture/client-state.md).',
+          });
         },
       };
     },

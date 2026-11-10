@@ -286,11 +286,14 @@ function WorkspacePanelState({
     setRightPanelVisible(!rightPanelVisible);
   }, [rightPanelVisible, setRightPanelVisible]);
 
-  useEffect(() => {
+  // Entering the mobile layout starts with its right panel closed.
+  const [panelLayoutIsMobile, setPanelLayoutIsMobile] = useState(isMobile);
+  if (panelLayoutIsMobile !== isMobile) {
+    setPanelLayoutIsMobile(isMobile);
     if (isMobile) {
       setMobileRightPanelVisible(false);
     }
-  }, [isMobile]);
+  }
 
   const scheduleScrollPersist = useCallback(
     (record: Record<string, ScrollState>) => {

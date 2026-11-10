@@ -1,5 +1,5 @@
 import type { Icon } from '@phosphor-icons/react/dist/lib/types';
-import type { ReactNode } from 'react';
+import type { ComponentProps, ReactNode } from 'react';
 import { getStatusToneStyle, type StatusTone } from '@/client/lib/status-tones';
 import { cn } from '@/lib/utils';
 
@@ -63,31 +63,35 @@ export function StatusIcon({ tone, icon, pulse, className }: StatusIconProps) {
   );
 }
 
-interface StatusChipProps {
+interface StatusChipProps extends ComponentProps<'span'> {
   tone: StatusTone;
   children: ReactNode;
   /** Show the tone's icon (`true`) or a specific icon before the label. */
   icon?: boolean | Icon;
   size?: 'sm' | 'md';
-  className?: string;
 }
 
-/** A compact tinted label for a status, e.g. on cards and list rows. */
+/**
+ * The one tinted status label, on cards, list rows and PR panels. Counts use
+ * `Badge size="count"`; messages use `StatusCallout`.
+ */
 export function StatusChip({
   tone,
   children,
   icon = false,
   size = 'sm',
   className,
+  ...props
 }: StatusChipProps) {
   const style = getStatusToneStyle(tone);
   const ChipIcon = icon === true ? style.icon : icon || null;
   return (
     <span
+      {...props}
       data-status-tone={tone}
       className={cn(
         'inline-flex w-fit shrink-0 items-center gap-1 rounded-sm border font-medium whitespace-nowrap',
-        size === 'sm' ? 'px-1.5 py-0.5 text-[10px]' : 'px-2 py-0.5 text-xs',
+        size === 'sm' ? 'px-1.5 py-0.5 text-2xs' : 'px-2 py-0.5 text-xs',
         style.chip,
         className
       )}

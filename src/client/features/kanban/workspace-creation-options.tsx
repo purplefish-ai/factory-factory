@@ -3,6 +3,7 @@ import { SlidersHorizontalIcon } from '@phosphor-icons/react/dist/csr/SlidersHor
 import { WarningCircleIcon } from '@phosphor-icons/react/dist/csr/WarningCircle';
 import type { ReactNode } from 'react';
 import { getConfigPresentation } from '@/client/components/acp-config-presentation';
+import { IconButton } from '@/client/components/icon-button';
 import { CodexAccountPicker } from '@/client/features/codex-accounts';
 import {
   AccessModeSelector,
@@ -55,13 +56,13 @@ export function WorkspaceCreationOptions({
             <Button
               type="button"
               variant="ghost"
-              size="sm"
-              className="h-7 w-7 shrink-0 px-0"
+              size="icon-compact"
+              className="shrink-0"
               aria-label="Attach files"
               onClick={onAttach}
               disabled={disabled}
             >
-              <PaperclipIcon className="h-3.5 w-3.5" />
+              <PaperclipIcon />
             </Button>
             <WorkspaceSettings
               selection={selection}
@@ -98,27 +99,26 @@ function WorkspaceSettings({
   return (
     <Popover>
       <PopoverTrigger asChild>
-        <Button
+        <IconButton
           type="button"
-          variant="ghost"
-          size="sm"
+          label="Workspace settings"
+          tooltip={description || 'Workspace settings'}
+          size="icon-compact"
           className={cn(
-            'relative h-7 w-7 shrink-0 px-0 text-muted-foreground',
+            'relative shrink-0 text-muted-foreground',
             active && 'text-foreground',
             warning && 'text-warning',
             invalid && 'text-destructive'
           )}
-          aria-label="Workspace settings"
           aria-description={description}
           aria-invalid={invalid || undefined}
-          title={description || 'Workspace settings'}
           disabled={disabled}
         >
-          <SettingsIcon className="size-3.5" aria-hidden="true" />
+          <SettingsIcon aria-hidden="true" />
           {active && !invalid && (
             <span className="absolute right-1 top-1 size-1 rounded-full bg-primary" />
           )}
-        </Button>
+        </IconButton>
       </PopoverTrigger>
       <PopoverContent
         align="start"

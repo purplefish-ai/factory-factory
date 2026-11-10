@@ -4,6 +4,7 @@ import { act, type ReactNode } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import type { PRRecipientChoice } from '@/client/features/workspace/pr-recipient-picker';
+import { waitForCheck } from '@/test-utils/react-act';
 import { useToggleRatcheting, type ToggleRatchetingInput } from './use-toggle-ratcheting';
 
 const mocks = vi.hoisted(() => ({
@@ -116,20 +117,14 @@ it('reports every workspace with a toggle in flight, not just the latest', async
       </Providers>
     )
   );
-  // React Query batches cache notifications onto a timer.
-  const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
-  let finishFirst!: () => void;
-  await act(async () => {
-    finishFirst = startToggle({ workspaceId: 'first', enabled: true });
-    startToggle({ workspaceId: 'second', enabled: false });
-    await flush();
-  });
-  expect(pending).toEqual(['first', 'second']);
-  await act(async () => {
-    finishFirst();
-    await flush();
-  });
-  expect(pending).toEqual(['second']);
+  const finishFirst = startToggle({ workspaceId: 'first', enabled: true });
+  startToggle({ workspaceId: 'second', enabled: false });
+  // React Query delivers cache changes to subscribers on a timer; a finished
+  // mutation reaches the cache only after its callbacks' promise chain, so its
+  // timer can queue behind any single wait started here.
+  await waitForCheck(() => expect(pending).toEqual(['first', 'second']));
+  finishFirst();
+  await waitForCheck(() => expect(pending).toEqual(['second']));
 });
 it('preserves MAIN destination and the new revision when choosing a recipient', async () => {
   await act(() => root.render(<Harness />));

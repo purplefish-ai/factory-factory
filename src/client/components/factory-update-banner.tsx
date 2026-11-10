@@ -2,6 +2,7 @@ import { ArrowCircleUpIcon } from '@phosphor-icons/react/dist/csr/ArrowCircleUp'
 import { CaretDownIcon } from '@phosphor-icons/react/dist/csr/CaretDown';
 import { XIcon } from '@phosphor-icons/react/dist/csr/X';
 import { useEffect, useId, useState } from 'react';
+import { StatusChip } from '@/client/components/status-indicators';
 import { readStorageItem, removeStorageItem, writeStorageItem } from '@/client/lib/browser-storage';
 import { POLL_INTERVAL_MS, QUERY_RETRY } from '@/client/lib/query-options';
 import { trpc } from '@/client/lib/trpc';
@@ -144,27 +145,25 @@ export function FactoryUpdateBannerContent({
             <div className="min-w-0 flex-1 space-y-0.5 [overflow-wrap:anywhere]">
               <div className="flex min-h-7 flex-wrap items-center gap-x-3 gap-y-1">
                 <p className="font-medium">{notice.label} update available</p>
-                <span className="inline-flex items-center gap-1.5 font-mono text-[11px] tabular-nums">
+                <span className="inline-flex items-center gap-1.5 font-mono text-2xs tabular-nums">
                   <span className="text-muted-foreground">{notice.currentVersion}</span>
                   <span className="text-muted-foreground" aria-hidden="true">
                     →
                   </span>
-                  <span className="rounded bg-primary/10 px-1.5 py-0.5 font-semibold text-primary">
-                    {notice.latestVersion}
-                  </span>
+                  <StatusChip tone="info">{notice.latestVersion}</StatusChip>
                 </span>
                 {index === 0 && !(active || automaticUpdate) && (
                   <Button
                     variant="ghost"
-                    size="sm"
-                    className="h-7 gap-1 px-2 text-xs text-muted-foreground"
+                    size="compact"
+                    className="text-muted-foreground"
                     aria-expanded={showInstructions}
                     aria-controls={showInstructions ? instructionsId : undefined}
                     onClick={() => setShowInstructions((previous) => !previous)}
                   >
                     How to update
                     <CaretDownIcon
-                      className={`size-3 transition-transform ${showInstructions ? 'rotate-180' : ''}`}
+                      className={`transition-transform ${showInstructions ? 'rotate-180' : ''}`}
                     />
                   </Button>
                 )}
@@ -180,7 +179,7 @@ export function FactoryUpdateBannerContent({
               className="shrink-0 text-muted-foreground"
               aria-label={`Dismiss ${notice.label} update`}
             >
-              <XIcon className="size-4" />
+              <XIcon />
             </Button>
           </li>
         ))}

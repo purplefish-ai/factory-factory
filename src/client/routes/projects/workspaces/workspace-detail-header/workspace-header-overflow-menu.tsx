@@ -3,6 +3,7 @@ import { GearSixIcon } from '@phosphor-icons/react/dist/csr/GearSix';
 import { InfoIcon } from '@phosphor-icons/react/dist/csr/Info';
 import { PencilIcon } from '@phosphor-icons/react/dist/csr/Pencil';
 import { type ReactNode, useRef, useState } from 'react';
+import { IconButton } from '@/client/components/icon-button';
 import { useRenameWorkspace } from '@/client/features/workspace/use-workspace-mutations';
 import { Button } from '@/components/ui/button';
 import {
@@ -21,7 +22,6 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { ArchiveActionButton } from './archive-action-button';
 import { OpenDevAppAction } from './open-dev-app-action';
 import { OpenInIdeAction } from './open-in-ide-action';
@@ -178,22 +178,11 @@ export function WorkspaceHeaderOverflowMenu({
           }
         }}
       >
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <DropdownMenuTrigger asChild>
-              <Button
-                ref={triggerRef}
-                variant="ghost"
-                size="icon"
-                className="h-6 w-6 md:h-8 md:w-8"
-                aria-label="More actions"
-              >
-                <DotsThreeIcon className="h-3 w-3 md:h-4 md:w-4" />
-              </Button>
-            </DropdownMenuTrigger>
-          </TooltipTrigger>
-          <TooltipContent>More actions</TooltipContent>
-        </Tooltip>
+        <DropdownMenuTrigger asChild>
+          <IconButton ref={triggerRef} label="More actions" size="icon-sm">
+            <DotsThreeIcon />
+          </IconButton>
+        </DropdownMenuTrigger>
         <DropdownMenuContent
           align="end"
           className="w-60"

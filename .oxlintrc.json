@@ -86,6 +86,7 @@
     "factory/no-zod-any": "error",
     "factory/no-unsafe-json-parse-cast": "error",
     "factory/no-unsafe-resolver-cast": "error",
+    "factory/no-forward-ref": "error",
     "typescript/no-floating-promises": "error",
     "typescript/no-misused-promises": "error"
   },
@@ -172,7 +173,102 @@
           }
         ],
         "factory/named-query-options": "error",
-        "factory/query-error-handled": "error"
+        "factory/query-error-handled": "error",
+        "factory/no-arbitrary-font-size": [
+          "error",
+          {
+            "exceptions": {
+              "src/components/ui/calendar.tsx": "shadcn registry source: the weekday and week-number labels keep upstream's 0.8rem so registry diffs stay clean (docs/shadcn.md).",
+              "src/client/features/workspace/right-panel.tsx": "Pending ux-tab-bars: the right panel tab bar's 10px label is restyled by that PR."
+            }
+          }
+        ],
+        "factory/use-status-callout": [
+          "error",
+          {
+            "exceptions": {
+              "src/client/lib/status-tones.ts": "The tone map itself defines each tone's surface classes, which StatusCallout renders.",
+              "src/client/features/kanban/kanban-card.tsx": "Board cards tint and border the whole card for an error or pending request (with hover states); that is a status-carrying card, not a message callout.",
+              "src/client/components/app-sidebar.tsx": "A sidebar workspace row waiting on the user tints and borders the whole row; that is a status-carrying row, not a message callout."
+            }
+          }
+        ],
+        "factory/button-icon-size": [
+          "error",
+          {
+            "exceptions": {
+              "src/client/features/chat/session-tab-bar.tsx": "Pending ux-tab-bars: the session tab bar's scroll and new-session buttons are being rebuilt in that PR."
+            }
+          }
+        ],
+        "factory/button-size-variant": [
+          "error",
+          {
+            "exceptions": {
+              "src/client/features/chat/session-tab-bar.tsx": "Pending ux-tab-bars: the session tab bar's scroll and new-session buttons are being rebuilt in that PR."
+            }
+          }
+        ],
+        "factory/icon-button-tooltip": ["error", { "exceptions": {} }],
+        "factory/tooltip-provider-root": [
+          "error",
+          {
+            "exceptions": {
+              "src/client/components/resizable-layout.tsx": "App root: AppLayout's provider (delayDuration 0) serves every route under Root.",
+              "src/components/ui/sidebar.tsx": "shadcn SidebarProvider root: it also renders standalone in stories and tests, with the same zero delay as the app root.",
+              "src/client/components/github-link-preview.tsx": "GitHub link previews open after a deliberate 350ms delay so hovering across chat links does not flash cards; they also render in markdown outside the app layout.",
+              "src/client/routes/mobile-baseline.tsx": "Fixture route: /__mobile-baseline mounts outside Root, so the page supplies the root provider (delay 0) for the composer and other surfaces it renders.",
+              "src/client/routes/hover-actions-fixture.tsx": "Fixture route: /__mobile-baseline mounts outside Root, so the fixture supplies its own provider.",
+              "src/client/routes/mobile-agents-fixture.tsx": "Fixture route: /__mobile-baseline mounts outside Root, so the fixture supplies its own provider.",
+              "src/client/routes/transcript-scroll-fixture.tsx": "Fixture route: /__transcript-scroll mounts outside Root, so the fixture supplies its own provider.",
+              "src/client/routes/workspace-header-fixture.tsx": "Fixture route: renders the workspace header outside Root for the mobile baseline, so it supplies its own provider.",
+              "src/client/features/workspace/right-panel.tsx": "Pending ux-tab-bars: the right-panel tab bar is being rebuilt in that PR.",
+              "src/client/features/workspace/right-panel-tools.tsx": "Pending ux-tab-bars: the right-panel tool tabs are being rebuilt in that PR."
+            }
+          }
+        ]
+      }
+    },
+    {
+      "files": [
+        "src/client/**/*.{ts,tsx}",
+        "src/components/**/*.{ts,tsx}",
+        "src/hooks/**/*.{ts,tsx}"
+      ],
+      "rules": {
+        "factory/no-render-ref-write": [
+          "error",
+          {
+            "exceptions": {
+              "src/client/features/chat/use-chat-state.ts": "Chat session state moves into a chat-scoped store in a later change, which replaces these render-time snapshot refs.",
+              "src/client/features/chat/use-chat-websocket.ts": "Chat session state moves into a chat-scoped store in a later change, which replaces this render-time handler ref.",
+              "src/client/features/chat/agent-activity/tool-renderers/tool-expansion-state.ts": "Transcript rows call the stable getExpansionState while rendering, so its ref must hold this render's expansion state, not the last commit's.",
+              "src/client/hooks/use-persisted-state.ts": "useSyncExternalStore calls getSnapshot while rendering, so the codec ref must hold this render's schema and fallback; the write is idempotent."
+            }
+          }
+        ],
+        "factory/no-state-sync-effect": [
+          "error",
+          {
+            "exceptions": {
+              "src/client/features/agents/event-dashboard-story.tsx": "Story fixture: the conflict story needs a newer server revision to land one commit after the editor opens.",
+              "src/client/routes/admin/ProjectFactoryConfigCard.tsx": "The admin routes are outside this change; closing the editor when the config query fails can move to render time there.",
+              "src/client/routes/admin/project-settings-row.tsx": "The admin routes are outside this change; remembering that a row has opened can move to render time there."
+            }
+          }
+        ]
+      }
+    },
+    {
+      "files": ["src/components/ui/**/*.{ts,tsx}"],
+      "rules": {
+        "factory/no-forward-ref": "off"
+      }
+    },
+    {
+      "files": ["src/client/**/*.{ts,tsx}"],
+      "rules": {
+        "factory/focus-ring": ["error", { "exceptions": {} }]
       }
     },
     {
@@ -188,13 +284,30 @@
         "factory/query-owner": "off",
         "factory/no-raw-spinner": "off",
         "factory/no-direct-web-storage": "off",
-        "factory/named-query-options": "off"
+        "factory/named-query-options": "off",
+        "factory/no-arbitrary-font-size": "off",
+        "factory/use-status-callout": "off",
+        "factory/no-render-ref-write": "off",
+        "factory/no-state-sync-effect": "off",
+        "factory/tooltip-provider-root": "off"
+      }
+    },
+    {
+      "files": ["**/*.test-utils.tsx", "**/*.test-harness.tsx"],
+      "rules": {
+        "factory/tooltip-provider-root": "off"
       }
     },
     {
       "files": ["**/*.test.ts", "**/*.test.tsx", "**/*.stories.tsx"],
       "rules": {
         "typescript/no-non-null-assertion": "off"
+      }
+    },
+    {
+      "files": ["**/*.stories.tsx"],
+      "rules": {
+        "factory/no-state-sync-effect": "off"
       }
     },
     {

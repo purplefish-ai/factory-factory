@@ -66,6 +66,15 @@ resolve identifiers, so a local numeric constant passes. `QueryClient` defaults
 (`queries` and `mutations` objects) and tests are exempt. Regression tests
 invoke the real Oxlint binary against accepted and rejected fixtures.
 
+`no-arbitrary-font-size` rejects arbitrary font sizes such as `text-[10px]` or
+`md:text-[0.8rem]`; use the type scale's `text-2xs`, `text-xs` and up instead.
+`use-status-callout` rejects a class string pairing a tinted status background
+(`bg-destructive/5`) with a border of the same status token
+(`border-destructive/30`); render that surface with `StatusCallout` or
+`StatusChip` instead. Hover, focus and data-state tints pass
+([callouts and chips](../docs/status-colors.md#callouts-and-chips)). Both take
+an `exceptions` map with the same stale-exception test and skip tests.
+
 Oxlint's built-in `no-restricted-imports` keeps `CardHeader`, `CardTitle`,
 `CardDescription` and `CardAction` out of `src/client/routes/admin/`, so every
 settings card uses `SettingsSection` from `settings-section.tsx`, which also
@@ -97,19 +106,52 @@ guarded helpers in `src/client/lib/browser-storage.ts`, the only file in its
 `exceptions` map; a test fails if that exception is no longer needed. Tests may
 seed storage directly.
 
+`no-forward-ref` rejects `forwardRef` outside `src/components/ui/`: React 19
+passes `ref` as a prop. `no-render-ref-write` rejects assigning or incrementing
+`ref.current` directly in a component or hook body (a function named `use…` or
+starting with a capital, including one passed to `memo` or `forwardRef`), except
+lazy initialisation (`if (ref.current === null)`, `!ref.current`, `??=`).
+`no-state-sync-effect` rejects a `useEffect` or `useLayoutEffect` with
+dependencies whose body only calls `set…` functions, possibly behind `if`s, with
+values that contain no call, `.current` read, `await` or `new`. Both apply to
+`src/client`, `src/components` and `src/hooks` outside tests, with
+`no-state-sync-effect` also off in stories; their `exceptions` maps work like
+the spinner rules' ([client state](../docs/architecture/client-state.md)).
+
+Button sizing follows the `size` variant
+([buttons and tooltips](../docs/shadcn.md#buttons-icon-buttons-and-tooltips)).
+`button-icon-size` rejects `h-*`/`w-*` classes on an icon (`*Icon`, `svg`)
+anywhere inside a `Button` or `IconButton`, through conditionals, fragments and
+wrappers; the variant sizes icons and a `size-*` class is the explicit opt-out.
+`button-size-variant` rejects a fixed `h-N`, `w-N` or `size-N` (with any variant
+prefix) in a `Button` or `IconButton` `className`; keywords such as `w-full` and
+`h-auto`, arbitrary values and `min-`/`max-` widths are layout and pass.
+`icon-button-tooltip` rejects an icon-size `Button` rendered by
+`TooltipTrigger asChild` (also through nested `…Trigger asChild` elements) or
+carrying a native `title`; use `IconButton`. `tooltip-provider-root` rejects
+`<TooltipProvider>` outside the root providers, and `focus-ring` (`src/client`
+only) rejects the hand-rolled `focus-visible:ring-2` and
+`focus-visible:outline…` styles that the `focus-ring` utility replaces. Each
+takes an `exceptions` map, checked by the same still-needed test as the pending
+rules; tests are exempt from `tooltip-provider-root` so they can supply their
+own provider.
+
 ## Remaining Biome checks
 
 Biome remains a linter for CSS and checks without equivalent Oxlint coverage. It
-no longer formats files, sorts imports or runs Grit plugins. Explicit rules that
-remain are `noImplicitAnyLet`, `noAssignInExpressions`, `noBannedTypes`,
-`noExcessiveCognitiveComplexity`, `useSimplifiedLogicExpression`, `noDelete`,
-`useExhaustiveDependencies`, `useHookAtTopLevel`, `useConsistentArrayType`,
-`noConfusingVoidType`, `useAwait`, `noFloatingPromises`, `noMisusedPromises`,
-`useOptionalChain`, `noAccumulatingSpread`, `noUnusedImports`,
-`noEmptyBlockStatements` and `noDangerouslySetInnerHtml`. The existing
-recommended preset remains for other checks until their coverage has been
-compared. Rules explicitly migrated to Oxlint are disabled in Biome. The
-existing cognitive-complexity exceptions remain file-specific.
+no longer formats files, sorts imports or runs Grit plugins.
+`useExhaustiveDependencies` treats the results of `useLatestRef` and
+`useStableCallback` as stable, like `useRef`, so they stay out of dependency
+arrays. Explicit rules that remain are `noImplicitAnyLet`,
+`noAssignInExpressions`, `noBannedTypes`, `noExcessiveCognitiveComplexity`,
+`useSimplifiedLogicExpression`, `noDelete`, `useExhaustiveDependencies`,
+`useHookAtTopLevel`, `useConsistentArrayType`, `noConfusingVoidType`,
+`useAwait`, `noFloatingPromises`, `noMisusedPromises`, `useOptionalChain`,
+`noAccumulatingSpread`, `noUnusedImports`, `noEmptyBlockStatements` and
+`noDangerouslySetInnerHtml`. The existing recommended preset remains for other
+checks until their coverage has been compared. Rules explicitly migrated to
+Oxlint are disabled in Biome. The existing cognitive-complexity exceptions
+remain file-specific.
 
 Native Oxlint equivalents for hooks, promises and some style rules have
 different coverage. For example, native hook naming checks flag Storybook render

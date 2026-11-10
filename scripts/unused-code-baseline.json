@@ -185,21 +185,17 @@
       "disposition": "test-support",
       "reason": "Fake user-settings backend and Radix helpers shared by the settings hook and admin section tests; production callers are not expected."
     },
-    "src/client/routes/admin/SettingsSections.story-fixtures.tsx": {
-      "disposition": "test-support",
-      "reason": "Stateful mock settings provider and request spy used only by settings Storybook scenarios."
-    },
     "src/client/routes/admin/settings-page-layout.story-fixtures.tsx": {
       "disposition": "test-support",
       "reason": "Shared navigation providers and header portal for settings and server-logs Storybook scenarios; no production caller is expected."
     },
+    "src/client/routes/admin/settings-sections.story-fixtures.tsx": {
+      "disposition": "test-support",
+      "reason": "Stateful settings tRPC handlers and request spy shared by the settings section Storybook scenarios; no production caller is expected."
+    },
     "src/client/routes/workspace-header-pwa-preview.tsx": {
       "disposition": "test-support",
       "reason": "workspace-header-fixture.stories.tsx renders this Storybook preview; keep visual fixture support."
-    },
-    "src/components/ui/progress.tsx": {
-      "disposition": "maintained-api",
-      "reason": "Retained shadcn Progress primitive has Storybook consumers; preserve the maintained component API."
     },
     "src/lib/claude-fixtures.ts": {
       "disposition": "test-support",
@@ -232,6 +228,10 @@
     "src/test-utils/auto-stub.ts": {
       "disposition": "test-support",
       "reason": "Auto-stubbing doubles for the fake application graph and its module mocks; only tests import this helper."
+    },
+    "src/test-utils/commit-probe.ts": {
+      "disposition": "test-support",
+      "reason": "Test harness or fixture support remains explicit in this inventory; production callers are not expected."
     },
     "src/test-utils/deferred.ts": {
       "disposition": "test-support",

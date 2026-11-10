@@ -1,4 +1,5 @@
-import { useEffect, useLayoutEffect, useRef, useSyncExternalStore } from 'react';
+import { useEffect, useSyncExternalStore } from 'react';
+import { useLatestRef } from '@/client/hooks/use-stable-callback';
 import {
   formatShortcut,
   getShortcut,
@@ -26,12 +27,8 @@ export function useShortcut(
   enabled = true,
   available?: () => boolean
 ) {
-  const availabilityRef = useRef(available);
-  const handlerRef = useRef(handler);
-  useLayoutEffect(() => {
-    handlerRef.current = handler;
-    availabilityRef.current = available;
-  });
+  const availabilityRef = useLatestRef(available);
+  const handlerRef = useLatestRef(handler);
   useEffect(() => {
     if (!enabled) {
       return;

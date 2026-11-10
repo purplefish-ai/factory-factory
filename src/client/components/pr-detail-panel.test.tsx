@@ -4,6 +4,7 @@ import { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { PRWithFullDetails } from '@/shared/github-types';
+import { CommitProbe } from '@/test-utils/commit-probe';
 import { PRDetailPanel } from './pr-detail-panel';
 
 const pr: PRWithFullDetails = {
@@ -135,6 +136,37 @@ describe('PRDetailPanel keyboard shortcuts', () => {
       expect(document.activeElement).toBe(infoTab);
       await view.press(infoTab!, 'd');
       expect(view.activeTab()).toBe('Diff');
+    } finally {
+      await act(async () => view.root.unmount());
+    }
+  });
+
+  it('opens a newly selected PR on Info without fetching its diff', async () => {
+    const view = await renderPanel();
+    const other: PRWithFullDetails = { ...pr, number: 2, title: 'Other PR' };
+    const committedTabs: Array<string | null | undefined> = [];
+    try {
+      await view.press(window, 'd');
+      expect(view.activeTab()).toBe('Diff');
+      expect(view.onFetchDiff).toHaveBeenCalledOnce();
+      await act(async () =>
+        view.root.render(
+          <>
+            <PRDetailPanel
+              pr={other}
+              diff={null}
+              diffLoading={false}
+              onFetchDiff={view.onFetchDiff}
+              onOpenGitHub={vi.fn()}
+              onApprove={vi.fn()}
+            />
+            <CommitProbe onCommit={() => committedTabs.push(view.activeTab())} />
+          </>
+        )
+      );
+      expect([...new Set(committedTabs)]).toEqual(['Info']);
+      expect(view.activeTab()).toBe('Info');
+      expect(view.onFetchDiff).toHaveBeenCalledOnce();
     } finally {
       await act(async () => view.root.unmount());
     }

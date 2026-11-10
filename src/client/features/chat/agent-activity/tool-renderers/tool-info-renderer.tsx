@@ -33,7 +33,7 @@ import { ToolResultContentRenderer } from './tool-result-renderer';
 import { isWebSearchToolName, parseWebSearchToolResult } from './web-search-parser';
 
 const triggerClassName =
-  'group flex w-full min-w-0 items-center gap-2 rounded-sm py-1 text-left text-sm text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring';
+  'group flex w-full min-w-0 items-center gap-2 rounded-sm py-1 text-left text-sm text-muted-foreground transition-colors hover:text-foreground focus-ring';
 
 function iconForKind(kind: ToolActivityKind) {
   if (kind === 'mcp') {
@@ -306,7 +306,7 @@ const PairedToolCallRenderer = memo(function PairedToolCallRenderer({
             <div className="break-all font-mono text-xs text-muted-foreground">{call.name}</div>
           )}
           <div className="min-w-0">
-            <div className="mb-0.5 text-[10px] font-medium text-muted-foreground">Input</div>
+            <div className="mb-0.5 text-2xs font-medium text-muted-foreground">Input</div>
             <ToolInputRenderer
               name={call.name}
               input={call.input}
@@ -315,7 +315,7 @@ const PairedToolCallRenderer = memo(function PairedToolCallRenderer({
           </div>
           {call.result && (
             <div className="min-w-0">
-              <div className="mb-0.5 text-[10px] font-medium text-muted-foreground">Result</div>
+              <div className="mb-0.5 text-2xs font-medium text-muted-foreground">Result</div>
               <ToolResultContentRenderer
                 content={call.result.content}
                 isError={call.result.isError}

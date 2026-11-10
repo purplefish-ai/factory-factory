@@ -114,9 +114,15 @@ export function SetupTerminalModal({ open, onClose, initialProvider }: SetupTerm
               {gaveUp ? (
                 <>
                   <span>{showTerminal ? 'Connection lost.' : 'Connection failed.'}</span>
-                  <button type="button" className="underline" onClick={reconnect}>
+                  <Button
+                    type="button"
+                    variant="link"
+                    size="inline"
+                    className="text-xs text-current underline"
+                    onClick={reconnect}
+                  >
                     Retry
-                  </button>
+                  </Button>
                 </>
               ) : (
                 'Reconnecting… input is paused'

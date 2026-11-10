@@ -70,20 +70,20 @@ export function WorkspacePrMenu({
         {trigger ?? (
           <Button
             variant="ghost"
-            size="sm"
+            size={compact ? 'xs' : 'compact'}
             aria-label={`PRs (${prs.length})`}
-            className={compact ? 'h-5 gap-1 px-0 text-[11px]' : 'h-7 gap-1 px-2 text-xs'}
+            className={compact ? 'px-0 text-2xs' : undefined}
             onClick={(event) => event.stopPropagation()}
             onPointerDown={(event) => event.stopPropagation()}
             onPointerUp={(event) => event.stopPropagation()}
           >
-            <GitPullRequestIcon className="h-3 w-3" />
+            <GitPullRequestIcon />
             <span>
               {prs.length === 1 && prs[0]?.number
                 ? `#${prs[0].number}`
                 : `PRs${prs.length > 0 ? ` ${prs.length}` : ''}`}
             </span>
-            <CaretDownIcon className="h-2.5 w-2.5" />
+            <CaretDownIcon />
           </Button>
         )}
       </DropdownMenuTrigger>
@@ -151,7 +151,7 @@ function WorkspacePrMenuRow({
             {pr.title ??
               (pr.state === 'NONE' ? 'Syncing' : pr.url.split('/').slice(3, 5).join('/'))}
           </span>
-          <span className="truncate text-[10px] text-muted-foreground">
+          <span className="truncate text-2xs text-muted-foreground">
             {pr.url.split('/').slice(3, 5).join('/')} {pr.headRefName && `· ${pr.headRefName}`}
           </span>
         </span>
@@ -162,7 +162,7 @@ function WorkspacePrMenuRow({
           size="sm"
           showAllStates={pr.state !== 'MERGED' && pr.state !== 'CLOSED'}
         />
-        <CiStatusChip ciState={getPrCiState(pr)} prState={pr.state} size="sm" showTooltip={false} />
+        <CiStatusChip ciState={getPrCiState(pr)} prState={pr.state} size="sm" />
       </DropdownMenuSubTrigger>
       <DropdownMenuPortal>
         <DropdownMenuSubContent

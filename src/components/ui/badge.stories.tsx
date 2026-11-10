@@ -11,8 +11,18 @@ const meta = {
   argTypes: {
     variant: {
       control: 'select',
-      options: ['default', 'secondary', 'destructive', 'outline', 'success', 'warning', 'info'],
+      options: [
+        'default',
+        'secondary',
+        'destructive',
+        'outline',
+        'success',
+        'warning',
+        'info',
+        'danger',
+      ],
     },
+    size: { control: 'select', options: ['default', 'count'] },
   },
 } satisfies Meta<typeof Badge>;
 
@@ -77,9 +87,32 @@ export const AllVariants: Story = {
       <Badge variant="success">Success</Badge>
       <Badge variant="warning">Warning</Badge>
       <Badge variant="info">Info</Badge>
+      <Badge variant="danger">Danger</Badge>
     </div>
   ),
 };
+
+/** Counts beside navigation items, tabs and column headings. */
+export const Counts: Story = {
+  render: () => (
+    <div className="flex items-center gap-2">
+      <Badge variant="secondary" size="count">
+        4
+      </Badge>
+      <Badge variant="warning" size="count">
+        12
+      </Badge>
+      <Badge variant="danger" size="count">
+        3
+      </Badge>
+      <Badge variant="outline" size="count">
+        128
+      </Badge>
+    </div>
+  ),
+};
+
+export const CountsDark: Story = { ...Counts, globals: { theme: 'dark' } };
 
 /** Status variants are tinted: the token is the text color on a 10% tint. */
 export const AllVariantsDark: Story = {

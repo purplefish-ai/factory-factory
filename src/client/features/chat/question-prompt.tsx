@@ -1,7 +1,7 @@
 import { CaretLeftIcon } from '@phosphor-icons/react/dist/csr/CaretLeft';
 import { CaretRightIcon } from '@phosphor-icons/react/dist/csr/CaretRight';
 import { QuestionIcon } from '@phosphor-icons/react/dist/csr/Question';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { withOccurrenceKeys } from '@/client/lib/list-keys';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -151,13 +151,12 @@ function MultiQuestionLayout({
         <div className="flex flex-wrap items-center justify-end gap-1 self-stretch sm:self-end">
           <Button
             variant="ghost"
-            size="sm"
+            size="icon-sm"
             onClick={() => onIndexChange(currentIndex - 1)}
             disabled={isFirstQuestion}
-            className="h-8 w-8 p-0"
             aria-label="Previous question"
           >
-            <CaretLeftIcon className="h-4 w-4" />
+            <CaretLeftIcon />
           </Button>
 
           {isLastQuestion ? (
@@ -177,12 +176,11 @@ function MultiQuestionLayout({
           {!isLastQuestion && (
             <Button
               variant="ghost"
-              size="sm"
+              size="icon-sm"
               onClick={() => onIndexChange(currentIndex + 1)}
-              className="h-8 w-8 p-0"
               aria-label="Next question"
             >
-              <CaretRightIcon className="h-4 w-4" />
+              <CaretRightIcon />
             </Button>
           )}
         </div>
@@ -203,7 +201,7 @@ function MultiQuestionLayout({
                 key={key}
                 onClick={() => onIndexChange(idx)}
                 className={cn(
-                  'w-2 h-2 rounded-full transition-colors',
+                  'w-2 h-2 rounded-full transition-colors focus-ring',
                   idx === currentIndex
                     ? 'bg-primary'
                     : isAnswered
@@ -499,7 +497,12 @@ function MultiSelectQuestion({
  * Appears above the chat input as a compact card.
  * Paginates multiple questions to save vertical space.
  */
-export function QuestionPrompt({ question, onAnswer }: QuestionPromptProps) {
+export function QuestionPrompt(props: QuestionPromptProps) {
+  // Answers are keyed by question index, so each request starts from a fresh form.
+  return <QuestionPromptForm key={props.question?.requestId} {...props} />;
+}
+
+function QuestionPromptForm({ question, onAnswer }: QuestionPromptProps) {
   // State for answers - keyed by question index
   const [answers, setAnswers] = useState<Record<number, string | string[]>>({});
   // State for current question index (pagination)
@@ -510,16 +513,6 @@ export function QuestionPrompt({ question, onAnswer }: QuestionPromptProps) {
 
   // Current request ID for key generation
   const currentRequestId = question?.requestId;
-
-  // Reset state when question changes (new question arrives)
-  useEffect(() => {
-    if (!currentRequestId) {
-      return;
-    }
-    setAnswers({});
-    setCurrentIndex(0);
-    setOtherTexts({});
-  }, [currentRequestId]);
 
   usePromptAutoFocus(currentRequestId, containerRef, QUESTION_FIRST_FOCUSABLE_SELECTOR);
 

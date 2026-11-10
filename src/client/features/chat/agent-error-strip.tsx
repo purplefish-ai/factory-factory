@@ -54,7 +54,7 @@ export function AgentErrorStrip({
         <StatusIcon tone="danger" icon={XCircleIcon} className="mt-0.5 h-4 w-4" />
         <div role="alert" className="min-w-0 flex-1">
           <p className="font-medium">Agent error</p>
-          <p className="mt-0.5 max-h-24 overflow-y-auto rounded-sm whitespace-pre-wrap break-words text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+          <p className="mt-0.5 max-h-24 overflow-y-auto rounded-sm whitespace-pre-wrap break-words text-foreground focus-ring">
             {message}
           </p>
         </div>

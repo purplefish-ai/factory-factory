@@ -45,7 +45,7 @@ export function AgentRunHistory({ runs, projectSlug, error }: AgentRunHistoryPro
           error={error}
           onRetry={error.retry}
           isRetrying={error.isRetrying}
-          className="rounded-lg border"
+          className="p-0"
         />
       ) : null}
       {error && runs ? (

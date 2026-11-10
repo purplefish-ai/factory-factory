@@ -27,7 +27,7 @@ import { ProjectFactoryConfigCard } from './ProjectFactoryConfigCard';
 import { ProjectSettingsSection } from './ProjectSettingsSection';
 import { RatchetSettingsSection } from './RatchetSettingsSection';
 import { ServerLogsSection } from './ServerLogsSection';
-import { onRequest, SettingsStoryProvider } from './SettingsSections.story-fixtures';
+import { onRequest, SettingsStoryProvider } from './settings-sections.story-fixtures';
 import { TicketDispatchSettingsSection } from './TicketDispatchSettingsSection';
 import { WorktreeCleanupSection } from './WorktreeCleanupSection';
 
@@ -301,6 +301,26 @@ export const CustomIde: Story = {
   },
 };
 
+export const CustomIdeTesting: Story = {
+  render: () => (
+    <SettingsStoryProvider
+      settings={{ preferredIde: 'custom', customIdeCommand: 'code-insiders {workspace}' }}
+      pendingRequests={['userSettings.testCustomCommand']}
+    >
+      <IdeSettingsSection />
+    </SettingsStoryProvider>
+  ),
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await canvas.findByLabelText(/^custom command$/i);
+    await userEvent.click(canvas.getByRole('button', { name: 'Test' }));
+    const testing = await canvas.findByRole('button', { name: 'Testing…' });
+    await expect(testing).toBeDisabled();
+    await expect(testing).toHaveAttribute('aria-busy', 'true');
+    await expect(canvas.getByRole('button', { name: 'Save' })).toBeEnabled();
+  },
+};
+
 export const ChatDefaults: Story = {
   render: () => (
     <SettingsStoryProvider>
@@ -448,6 +468,40 @@ export const Backup: Story = {
       </DataImportResultsProvider>
     </SettingsStoryProvider>
   ),
+};
+
+/** Export is a mutation: the button shows its pending state until the data arrives. */
+export const BackupExporting: Story = {
+  render: () => (
+    <SettingsStoryProvider pendingRequests={['admin.exportData']}>
+      <DataImportResultsProvider>
+        <DataBackupSection />
+      </DataImportResultsProvider>
+    </SettingsStoryProvider>
+  ),
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(canvas.getByRole('button', { name: 'Export data' }));
+    const exporting = await canvas.findByRole('button', { name: 'Exporting…' });
+    await expect(exporting).toBeDisabled();
+    await expect(exporting).toHaveAttribute('aria-busy', 'true');
+  },
+};
+
+export const BackupExportFailure: Story = {
+  render: () => (
+    <SettingsStoryProvider failRequests={['admin.exportData']}>
+      <DataImportResultsProvider>
+        <DataBackupSection />
+      </DataImportResultsProvider>
+    </SettingsStoryProvider>
+  ),
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(canvas.getByRole('button', { name: 'Export data' }));
+    await within(document.body).findByText("Couldn't export backup.");
+    await expect(canvas.getByRole('button', { name: 'Export data' })).toBeEnabled();
+  },
 };
 
 export const WorktreeCleanup: Story = {
@@ -602,6 +656,21 @@ export const ServerLogs: Story = {
     link.focus();
     await userEvent.tab();
     await expect(canvas.getByRole('button', { name: /^download log file$/i })).toHaveFocus();
+  },
+};
+
+export const ServerLogsDownloading: Story = {
+  render: () => (
+    <SettingsStoryProvider pendingRequests={['admin.downloadLogFile']}>
+      <ServerLogsSection />
+    </SettingsStoryProvider>
+  ),
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(canvas.getByRole('button', { name: 'Download log file' }));
+    const downloading = await canvas.findByRole('button', { name: 'Downloading…' });
+    await expect(downloading).toBeDisabled();
+    await expect(downloading).toHaveAttribute('aria-busy', 'true');
   },
 };
 

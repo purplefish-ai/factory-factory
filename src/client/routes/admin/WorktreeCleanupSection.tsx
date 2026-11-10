@@ -72,7 +72,7 @@ export function WorktreeCleanupSection() {
               disabled={orphans.length === 0 || removeOrphans.isPending}
               onClick={() => setConfirmOpen(true)}
             >
-              <BroomIcon className="w-4 h-4 mr-2" />
+              <BroomIcon className="mr-2" />
               Remove orphaned worktrees
             </Button>
           </>

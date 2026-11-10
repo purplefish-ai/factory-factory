@@ -137,15 +137,11 @@ export function DiffViewer({ workspaceId, filePath, tabId }: DiffViewerProps) {
               {isMarkdown && (
                 <Button
                   variant="ghost"
-                  size="sm"
+                  size="compact"
                   onClick={() => setShowPreview(!showPreview)}
-                  className="h-7 gap-1.5 flex-shrink-0"
+                  className="flex-shrink-0"
                 >
-                  {showPreview ? (
-                    <FileCodeIcon className="h-3.5 w-3.5" />
-                  ) : (
-                    <EyeIcon className="h-3.5 w-3.5" />
-                  )}
+                  {showPreview ? <FileCodeIcon /> : <EyeIcon />}
                   {showPreview ? 'Diff' : 'Preview'}
                 </Button>
               )}

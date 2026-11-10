@@ -9,6 +9,7 @@ import { RobotIcon } from '@phosphor-icons/react/dist/csr/Robot';
 import { WarningIcon } from '@phosphor-icons/react/dist/csr/Warning';
 import { memo, type RefObject, useState } from 'react';
 import { Link } from 'react-router';
+import { IconButton } from '@/client/components/icon-button';
 import { UnreadMailBadge } from '@/client/features/inbox';
 import {
   ArchiveWorkspaceDialog,
@@ -22,7 +23,6 @@ import { useInlineWorkspaceRename } from '@/client/hooks/use-inline-workspace-re
 import { trpc } from '@/client/lib/trpc';
 import { isWorkspaceDoneOrMerged } from '@/client/lib/workspace-archive';
 import { getWorkspaceSelectedPR } from '@/client/lib/workspace-selected-pr';
-import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Spinner } from '@/components/ui/spinner';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
@@ -105,7 +105,7 @@ function IssueAndPullRequestRow({
   return (
     <div
       data-testid="issue-pr-row"
-      className="pointer-events-none relative z-10 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-muted-foreground min-w-0 [&_button]:pointer-events-auto [&_a]:pointer-events-auto"
+      className="pointer-events-none relative z-10 flex flex-wrap items-center gap-x-3 gap-y-1 text-2xs text-muted-foreground min-w-0 [&_button]:pointer-events-auto [&_a]:pointer-events-auto"
     >
       {issue && (
         <button
@@ -115,7 +115,7 @@ function IssueAndPullRequestRow({
             event.stopPropagation();
             window.open(issue.url, '_blank', 'noopener,noreferrer');
           }}
-          className="inline-flex items-center gap-1 text-muted-foreground hover:text-foreground"
+          className="inline-flex items-center gap-1 rounded-sm text-muted-foreground hover:text-foreground focus-ring"
         >
           <DotOutlineIcon className="h-3 w-3 shrink-0" />
           <span>{issue.label}</span>
@@ -145,7 +145,7 @@ function IssueAndPullRequestRow({
                 event.stopPropagation();
                 window.open(selectedPr.url, '_blank', 'noopener,noreferrer');
               }}
-              className="inline-flex items-center gap-1 text-muted-foreground hover:text-foreground"
+              className="inline-flex items-center gap-1 rounded-sm text-muted-foreground hover:text-foreground focus-ring"
             >
               <GitPullRequestIcon className="h-3 w-3 shrink-0" />
               <span>#{selectedPr.number}</span>
@@ -163,7 +163,7 @@ function BranchRow({ branchName }: { branchName: string | null }) {
   }
 
   return (
-    <div className="flex items-center gap-2 text-[11px] text-muted-foreground min-w-0">
+    <div className="flex items-center gap-2 text-2xs text-muted-foreground min-w-0">
       <GitBranchIcon className="h-3 w-3 shrink-0" />
       <span className="font-mono truncate">{branchName}</span>
     </div>
@@ -198,23 +198,17 @@ function CardArchiveButton({
 
   return (
     <>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <Button
-            variant="ghost"
-            size="icon"
-            className={cn(
-              'h-6 w-6 hover:bg-destructive/10 hover:text-destructive shrink-0',
-              requiresConfirmation && 'hover-reveal transition-opacity'
-            )}
-            onClick={handleClick}
-            aria-label="Archive workspace"
-          >
-            <ArchiveIcon className="h-3 w-3" />
-          </Button>
-        </TooltipTrigger>
-        <TooltipContent>Archive workspace</TooltipContent>
-      </Tooltip>
+      <IconButton
+        label="Archive workspace"
+        size="icon-xs"
+        className={cn(
+          'hover:bg-destructive/10 hover:text-destructive shrink-0',
+          requiresConfirmation && 'hover-reveal transition-opacity'
+        )}
+        onClick={handleClick}
+      >
+        <ArchiveIcon />
+      </IconButton>
       {requiresConfirmation && (
         <ArchiveWorkspaceDialog
           open={dialogOpen}
@@ -256,56 +250,45 @@ function CardTitleIcons({
   return (
     <div className="relative z-10 flex items-center gap-1.5 [@media(any-pointer:coarse)]:gap-0 shrink-0">
       {onStartEdit && !isArchived && (
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-6 w-6 shrink-0 hover-reveal transition-opacity"
-              aria-label="Rename workspace"
-              onClick={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                onStartEdit();
-              }}
-            >
-              <PencilIcon className="h-3 w-3" />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>Rename workspace</TooltipContent>
-        </Tooltip>
+        <IconButton
+          label="Rename workspace"
+          size="icon-xs"
+          className="shrink-0 hover-reveal transition-opacity"
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            onStartEdit();
+          }}
+        >
+          <PencilIcon />
+        </IconButton>
       )}
       {showQuickChat && (
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon"
-              className={cn(
-                'h-6 w-6 shrink-0 relative',
-                !workspace.pendingRequestType && 'hover-reveal transition-opacity'
-              )}
-              aria-label="Quick Chat"
-              onClick={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                onOpenQuickChat(workspace.id);
-              }}
-            >
-              <ChatIcon className="h-3 w-3" />
-              {workspace.pendingRequestType && (
-                <span className="absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full bg-warning" />
-              )}
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>Quick Chat</TooltipContent>
-        </Tooltip>
+        <IconButton
+          label="Quick Chat"
+          size="icon-xs"
+          className={cn(
+            'shrink-0 relative',
+            !workspace.pendingRequestType && 'hover-reveal transition-opacity'
+          )}
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            onOpenQuickChat(workspace.id);
+          }}
+        >
+          <ChatIcon />
+          {workspace.pendingRequestType && (
+            <span className="absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full bg-warning" />
+          )}
+        </IconButton>
       )}
       <RatchetToggleButton
         enabled={ratchetEnabled}
         state={workspace.ratchetState}
         animated={workspace.ratchetButtonAnimated ?? false}
-        className="h-5 w-5 shrink-0"
+        size="icon-xs"
+        className="shrink-0"
         pending={isTogglePending}
         disabled={isArchived || !onToggleRatcheting}
         stopPropagation
@@ -396,7 +379,7 @@ function CardFamilyMetadata({
         </div>
       ) : (
         workspace.creationSource === 'CHILD_WORKSPACE' && (
-          <p className="text-[11px] text-muted-foreground">Child workspace</p>
+          <p className="text-2xs text-muted-foreground">Child workspace</p>
         )
       )}
     </>
@@ -525,7 +508,7 @@ export const KanbanCard = memo(function KanbanCard({
               )}
               <Link
                 to={`/projects/${projectSlug}/workspaces/${workspace.id}`}
-                className="min-w-0 line-clamp-2 [overflow-wrap:anywhere] after:absolute after:inset-0 after:rounded-xl focus-visible:outline-none focus-visible:after:ring-2 focus-visible:after:ring-ring"
+                className="min-w-0 line-clamp-2 [overflow-wrap:anywhere] after:absolute after:inset-0 after:rounded-xl outline-none focus-visible:after:ring-2 focus-visible:after:ring-ring"
               >
                 {workspace.name}
               </Link>
@@ -564,7 +547,7 @@ export const KanbanCard = memo(function KanbanCard({
           )}
           <CardFamilyMetadata workspace={workspace} projectSlug={projectSlug} />
           {sessionRuntimeError && (
-            <div className="flex items-center gap-2 text-[11px] text-destructive min-w-0">
+            <div className="flex items-center gap-2 text-2xs text-destructive min-w-0">
               <WarningIcon className="h-3 w-3 shrink-0" />
               <span className="truncate">{sessionRuntimeError}</span>
             </div>

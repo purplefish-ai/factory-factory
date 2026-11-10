@@ -102,14 +102,14 @@ export function MobileToolSwitcher({
             <Button
               variant="ghost"
               size="icon"
-              className="relative size-9 rounded-none"
+              className="relative rounded-none"
               aria-label={
                 unreadCount && activeTool !== 'inbox'
                   ? `More tools, ${unreadCount} unread inbox ${unreadCount === 1 ? 'message' : 'messages'}`
                   : 'More tools'
               }
             >
-              <DotsThreeIcon className="size-4" />
+              <DotsThreeIcon />
               {activeTool !== 'inbox' && (
                 <UnreadMailBadge
                   count={unreadCount}

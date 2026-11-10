@@ -1,7 +1,7 @@
 import type { inferRouterOutputs } from '@trpc/server';
 import { memo } from 'react';
 import type { ReactNode } from 'react';
-import { getStatusBannerClassName } from '@/client/lib/status-banner-styles';
+import { StatusCallout } from '@/client/components/status-callout';
 import type { AppRouter } from '@/client/lib/trpc';
 import { MainViewContent } from './main-view-content';
 import { MainViewTabBar } from './main-view-tab-bar';
@@ -115,14 +115,9 @@ export const WorkspaceContentView = memo(function WorkspaceContentView({
                 </div>
 
                 {!hasWorktreePath && (
-                  <div
-                    className={[
-                      'border px-4 py-3 rounded-md text-sm',
-                      getStatusBannerClassName('warning'),
-                    ].join(' ')}
-                  >
+                  <StatusCallout tone="warning" className="text-left">
                     Workspace is initializing… Please wait for the worktree to be created.
-                  </div>
+                  </StatusCallout>
                 )}
               </div>
             </div>

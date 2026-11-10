@@ -46,6 +46,20 @@ describe('StatusChip', () => {
     expect(markup).not.toContain('<svg');
   });
 
+  it('uses the 2xs step at the small size and passes span attributes through', () => {
+    const markup = renderToStaticMarkup(
+      <StatusChip tone="info" role="img" aria-label="3 unread" title="3 unread" data-testid="chip">
+        3
+      </StatusChip>
+    );
+    expect(markup).toContain('text-2xs');
+    expect(markup).not.toMatch(/text-\[\d+px\]/);
+    expect(markup).toContain('role="img"');
+    expect(markup).toContain('aria-label="3 unread"');
+    expect(markup).toContain('data-testid="chip"');
+    expect(markup).toContain('data-status-tone="info"');
+  });
+
   it('can show the tone icon', () => {
     const markup = renderToStaticMarkup(
       <StatusChip tone="success" icon>

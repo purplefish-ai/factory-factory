@@ -11,8 +11,8 @@ import {
   type SettingsServer,
   type SettingsServerOptions,
   stubRadixLayout,
-  waitForCheck,
 } from '@/client/lib/user-settings-queries.test-harness';
+import { waitForCheck } from '@/test-utils/react-act';
 import { AppearanceSettingsSection } from './AppearanceSettingsSection';
 
 const mocks = vi.hoisted(() => ({ setTheme: vi.fn() }));

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router';
 import { toast } from 'sonner';
+import { useLatestRef } from '@/client/hooks/use-stable-callback';
 import { invalidateAgentProjectQueries } from '@/client/lib/agent-query-cache';
 import { runInBackground } from '@/client/lib/background-task';
 import {
@@ -49,6 +50,7 @@ function initialAgentSelection(
 
 export function useAgentsController(project: AgentProject, kind: AgentKind = 'scheduled') {
   const location = useLocation();
+  // Decides whether a finished action may navigate or must toast instead.
   const active = useRef(true);
   useEffect(() => {
     active.current = true;
@@ -61,23 +63,28 @@ export function useAgentsController(project: AgentProject, kind: AgentKind = 'sc
   const [mode, setMode] = useState<'detail' | 'create' | 'create-event' | 'edit'>(
     location.state?.createAgent === true ? 'create' : 'detail'
   );
-  const currentMode = useRef(mode);
-  currentMode.current = mode;
+  const currentMode = useLatestRef(mode);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
+  // Selecting another agent closes the editor, delete dialog and action error.
+  const [stateAgentId, setStateAgentId] = useState(id);
+  if (stateAgentId !== id) {
+    setStateAgentId(id);
+    setMode('detail');
+    setDeleteOpen(false);
+    setActionError(null);
+  }
   // Covers the whole action (mutation, cache update, navigation) and blocks a
   // second click before the mutation's pending state reaches React.
   const [pendingAction, setPendingAction] = useState<AgentAction | null>(null);
   const pendingRef = useRef(false);
-  const currentId = useRef(id);
-  currentId.current = id;
+  const currentId = useLatestRef(id);
   const utils = trpc.useUtils();
   const task = trpc.periodicTask.get.useQuery(
     { id: id ?? '' },
     { enabled: !!id && kind === 'scheduled', refetchInterval: POLL_INTERVAL_MS.activity }
   );
-  const currentProjectId = useRef(project.id);
-  currentProjectId.current = project.id;
+  const currentProjectId = useLatestRef(project.id);
   const list = trpc.periodicTask.list.useQuery(
     { projectId: project.id },
     { refetchInterval: POLL_INTERVAL_MS.activity }
@@ -109,16 +116,6 @@ export function useAgentsController(project: AgentProject, kind: AgentKind = 'sc
     (!!id &&
       (kind === 'scheduled' ? !task.data || project.id !== task.data.projectId : !event.data));
 
-  const previousId = useRef(id);
-  useEffect(() => {
-    if (previousId.current === id) {
-      return;
-    }
-    previousId.current = id;
-    setMode('detail');
-    setDeleteOpen(false);
-    setActionError(null);
-  }, [id]);
   useEffect(() => {
     if (id || mode !== 'detail') {
       return;
@@ -191,9 +188,7 @@ export function useAgentsController(project: AgentProject, kind: AgentKind = 'sc
   };
   const finishAction = () => {
     pendingRef.current = false;
-    if (active.current) {
-      setPendingAction(null);
-    }
+    setPendingAction(null);
   };
   const reportActionError = (verb: string, targetId: string, error: unknown) => {
     const message = `Couldn't ${verb} automation. ${mutationErrorMessage(error)}`;

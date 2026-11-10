@@ -351,11 +351,9 @@ function AgentNavigationBadge({
       <Badge
         data-agent-count
         aria-hidden="true"
-        variant="secondary"
-        className={cn(
-          'ml-auto h-5 min-w-5 gap-1 px-1.5 text-xs',
-          summary.failedCount > 0 && 'bg-destructive/10 text-destructive border-destructive/30'
-        )}
+        variant={summary.failedCount > 0 ? 'danger' : 'secondary'}
+        size="count"
+        className="ml-auto"
       >
         {summary.failedCount > 0 ? <WarningIcon className="h-3 w-3" /> : null}
         {summary.totalCount}
@@ -399,18 +397,10 @@ function ProjectFooterLinks({
     workspaces: showBoardCounts ? (
       <>
         <span className="ml-auto flex shrink-0 gap-1">
-          <Badge
-            aria-hidden="true"
-            variant="secondary"
-            className="h-5 min-w-5 px-1.5 text-xs tabular-nums"
-          >
+          <Badge aria-hidden="true" variant="secondary" size="count">
             {workingCount}
           </Badge>
-          <Badge
-            aria-hidden="true"
-            variant="warning"
-            className="h-5 min-w-5 px-1.5 text-xs tabular-nums"
-          >
+          <Badge aria-hidden="true" variant="warning" size="count">
             {waitingCount}
           </Badge>
         </span>
@@ -422,7 +412,7 @@ function ProjectFooterLinks({
     agents: <AgentNavigationBadge summary={summary} descriptionId={descriptionId} />,
     reviews:
       projectSlug && navData.reviewCount > 0 ? (
-        <Badge variant="warning" className="ml-auto h-5 min-w-5 px-1.5 text-xs">
+        <Badge variant="warning" size="count" className="ml-auto">
           {navData.reviewCount}
         </Badge>
       ) : null,
@@ -531,14 +521,8 @@ function SidebarInner({
       {showCloseButton && (
         <header className="flex shrink-0 items-center justify-between border-b px-4 min-h-12 pt-[env(safe-area-inset-top)]">
           <span className="text-sm font-semibold">Workspaces</span>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-9 w-9 shrink-0"
-            aria-label="Close sidebar"
-            onClick={onNavigate}
-          >
-            <XIcon className="h-5 w-5" />
+          <Button variant="ghost" size="icon" aria-label="Close sidebar" onClick={onNavigate}>
+            <XIcon />
           </Button>
         </header>
       )}

@@ -2,6 +2,7 @@ import { EnvelopeSimpleIcon } from '@phosphor-icons/react/dist/csr/EnvelopeSimpl
 import { useState } from 'react';
 import { EmptyState } from '@/client/components/empty-state';
 import { QueryState } from '@/client/components/query-state';
+import { StatusChip } from '@/client/components/status-indicators';
 import { POLL_INTERVAL_MS } from '@/client/lib/query-options';
 import { trpc } from '@/client/lib/trpc';
 import { Button } from '@/components/ui/button';
@@ -73,8 +74,7 @@ function WorkspaceInbox({ workspaceId }: { workspaceId: string }) {
         </div>
         <Button
           variant="ghost"
-          size="sm"
-          className="h-7 text-xs"
+          size="compact"
           disabled={mail.isFetching}
           onClick={() => void mail.refetch()}
         >
@@ -116,7 +116,7 @@ function WorkspaceInbox({ workspaceId }: { workspaceId: string }) {
                   <li key={item.id}>
                     <button
                       type="button"
-                      className="w-full space-y-1.5 px-3 py-3 text-left transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+                      className="w-full space-y-1.5 px-3 py-3 text-left transition-colors hover:bg-muted/50 focus-ring focus-visible:ring-inset"
                       onClick={() => setSelected(item)}
                     >
                       <span className="flex items-start justify-between gap-2">
@@ -125,11 +125,7 @@ function WorkspaceInbox({ workspaceId }: { workspaceId: string }) {
                         >
                           {item.subject || 'Workspace message'}
                         </span>
-                        {isUnread(item) && (
-                          <span className="shrink-0 rounded bg-primary/10 px-1.5 py-0.5 text-[10px] text-primary">
-                            Unread
-                          </span>
-                        )}
+                        {isUnread(item) && <StatusChip tone="info">Unread</StatusChip>}
                       </span>
                       <MailMetadata mail={item} />
                       <span className="line-clamp-2 break-words text-xs text-muted-foreground">

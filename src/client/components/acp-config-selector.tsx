@@ -14,7 +14,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 import { getConfigPresentation } from './acp-config-presentation';
 
@@ -78,7 +78,6 @@ export function AcpConfigSelector({
         : { disabled })}
       iconOnly={iconOnly}
       icon={<ConfigOptionIcon invalid={invalid} Icon={Icon} />}
-
       className={cn(
         'shrink-0',
         presentation.active && 'bg-accent text-accent-foreground',
@@ -114,54 +113,50 @@ export function AcpConfigSelector({
   };
 
   return (
-    <TooltipProvider>
-      <Tooltip open={compact ? undefined : false}>
-        {presentation.toggle ? (
-          <TooltipTrigger asChild>{trigger}</TooltipTrigger>
-        ) : (
-          <DropdownMenu>
-            <TooltipTrigger asChild>
-              <DropdownMenuTrigger asChild>{trigger}</DropdownMenuTrigger>
-            </TooltipTrigger>
-            <DropdownMenuContent align="start" className="w-64 max-w-[calc(100vw-2rem)]">
-              <DropdownMenuLabel>{presentation.label}</DropdownMenuLabel>
-              {configOption.description && (
-                <p className="px-2 pb-2 text-xs text-muted-foreground">
-                  {configOption.description}
-                </p>
+    <Tooltip open={compact ? undefined : false}>
+      {presentation.toggle ? (
+        <TooltipTrigger asChild>{trigger}</TooltipTrigger>
+      ) : (
+        <DropdownMenu>
+          <TooltipTrigger asChild>
+            <DropdownMenuTrigger asChild>{trigger}</DropdownMenuTrigger>
+          </TooltipTrigger>
+          <DropdownMenuContent align="start" className="w-64 max-w-[calc(100vw-2rem)]">
+            <DropdownMenuLabel>{presentation.label}</DropdownMenuLabel>
+            {configOption.description && (
+              <p className="px-2 pb-2 text-xs text-muted-foreground">{configOption.description}</p>
+            )}
+            <DropdownMenuRadioGroup
+              value={configOption.currentValue}
+              onValueChange={(value) => onSelect(configOption.id, value)}
+            >
+              {hasUnavailableSelection(invalid, current, configOption.currentValue) && (
+                <DropdownMenuRadioItem value={configOption.currentValue} disabled>
+                  {displayName} (unavailable)
+                </DropdownMenuRadioItem>
               )}
-              <DropdownMenuRadioGroup
-                value={configOption.currentValue}
-                onValueChange={(value) => onSelect(configOption.id, value)}
-              >
-                {hasUnavailableSelection(invalid, current, configOption.currentValue) && (
-                  <DropdownMenuRadioItem value={configOption.currentValue} disabled>
-                    {displayName} (unavailable)
-                  </DropdownMenuRadioItem>
-                )}
-                {configOption.options.map((entry, idx) =>
-                  isGroupedOption(entry) ? (
-                    <div key={entry.group}>
-                      {idx > 0 && <DropdownMenuSeparator />}
-                      <DropdownMenuLabel>{entry.group}</DropdownMenuLabel>
-                      {entry.options.map(renderOption)}
-                    </div>
-                  ) : (
-                    renderOption(entry)
-                  )
-                )}
-              </DropdownMenuRadioGroup>
-            </DropdownMenuContent>
-          </DropdownMenu>
+              {configOption.options.map((entry, idx) =>
+                isGroupedOption(entry) ? (
+                  <div key={entry.group}>
+                    {idx > 0 && <DropdownMenuSeparator />}
+                    <DropdownMenuLabel>{entry.group}</DropdownMenuLabel>
+                    {entry.options.map(renderOption)}
+                  </div>
+                ) : (
+                  renderOption(entry)
+                )
+              )}
+            </DropdownMenuRadioGroup>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      )}
+      <TooltipContent side="top" className="max-w-64">
+        <p>{label}</p>
+        {(current?.description || configOption.description) && (
+          <p className="mt-1 opacity-80">{current?.description || configOption.description}</p>
         )}
-        <TooltipContent side="top" className="max-w-64">
-          <p>{label}</p>
-          {(current?.description || configOption.description) && (
-            <p className="mt-1 opacity-80">{current?.description || configOption.description}</p>
-          )}
-        </TooltipContent>
-      </Tooltip>
-    </TooltipProvider>
+      </TooltipContent>
+    </Tooltip>
   );
 }
 
@@ -173,9 +168,9 @@ function ConfigOptionIcon({
   Icon: ReturnType<typeof getConfigPresentation>['icon'];
 }) {
   if (invalid) {
-    return <WarningCircleIcon className="size-3.5 shrink-0" aria-label="Unavailable access mode" />;
+    return <WarningCircleIcon aria-label="Unavailable access mode" />;
   }
-  return Icon ? <Icon className="size-3.5 shrink-0" aria-hidden="true" /> : null;
+  return Icon ? <Icon aria-hidden="true" /> : null;
 }
 
 function hasUnavailableSelection(

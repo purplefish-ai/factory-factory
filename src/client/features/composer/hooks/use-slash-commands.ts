@@ -42,13 +42,11 @@ export function useSlashCommands({
   const userDismissedRef = useRef(false);
   const commandsReady = !enabled || commandsLoaded || slashCommands.length > 0;
 
-  useEffect(() => {
-    if (enabled) {
-      return;
-    }
+  // Disabling the composer closes the menu and clears its filter.
+  if (!enabled && (slashMenuOpen || slashFilter)) {
     setSlashMenuOpen(false);
     setSlashFilter('');
-  }, [enabled]);
+  }
 
   // Re-evaluate slash menu when commands arrive (handles typing "/" before commands load)
   useEffect(() => {

@@ -1,9 +1,8 @@
 import { ShieldWarningIcon } from '@phosphor-icons/react/dist/csr/ShieldWarning';
+import { IconButton } from '@/client/components/icon-button';
 import { useTriggerAdversarialReview } from '@/client/features/workspace/use-workspace-mutations';
 import { getWorkspacePRReviewTarget } from '@/client/lib/workspace-selected-pr';
-import { Button } from '@/components/ui/button';
 import { DropdownMenuItem } from '@/components/ui/dropdown-menu';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import type { WorkspaceHeaderWorkspace } from './types';
 import { isWorkspaceClosed, isWorkspaceMerged } from './utils';
 
@@ -44,21 +43,15 @@ export function AdversarialReviewButton({
   }
 
   return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-6 w-6 md:h-8 md:w-8"
-          aria-label="Start adversarial review"
-          pending={trigger.isPending}
-          pendingLabel="Starting adversarial review"
-          onClick={startReview}
-        >
-          <ShieldWarningIcon className="h-3 w-3 md:h-4 md:w-4" />
-        </Button>
-      </TooltipTrigger>
-      <TooltipContent>Adversarial review</TooltipContent>
-    </Tooltip>
+    <IconButton
+      label="Start adversarial review"
+      tooltip="Adversarial review"
+      size="icon-sm"
+      pending={trigger.isPending}
+      pendingLabel="Starting adversarial review"
+      onClick={startReview}
+    >
+      <ShieldWarningIcon />
+    </IconButton>
   );
 }

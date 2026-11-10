@@ -73,7 +73,7 @@ export function KanbanColumn({
       <div className="flex h-13 shrink-0 items-center justify-between px-3 py-3 bg-muted/50 rounded-t-lg">
         <div className="flex items-center gap-2">
           <h3 className="font-semibold text-sm">{column.label}</h3>
-          <Badge variant="secondary" className="h-5 min-w-5 justify-center text-xs">
+          <Badge variant="secondary" size="count">
             {workspaces.length}
           </Badge>
         </div>
@@ -85,12 +85,11 @@ export function KanbanColumn({
             <TooltipTrigger asChild>
               <Button
                 variant="ghost"
-                size="sm"
+                size="compact"
                 onClick={onBulkArchive}
                 pending={isBulkArchiving}
-                className="h-7 px-2"
               >
-                <ArchiveIcon className="h-4 w-4" />
+                <ArchiveIcon />
                 <span className="ml-1 text-xs">Archive All</span>
               </Button>
             </TooltipTrigger>

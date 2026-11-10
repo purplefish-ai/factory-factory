@@ -23,6 +23,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from '@/components/ui/sheet';
+import { TooltipProvider } from '@/components/ui/tooltip';
 import type { ChatSettings, TokenStats } from '@/lib/chat-protocol';
 import type { ChatBarCapabilities } from '@/shared/chat-capabilities';
 import type { PRWithFullDetails } from '@/shared/github-types';
@@ -140,7 +141,16 @@ const baselineTokenStats: TokenStats = {
 
 const noop = () => undefined;
 
+/** The route mounts outside Root, so it supplies the app's root tooltip provider itself. */
 export default function MobileBaselinePage() {
+  return (
+    <TooltipProvider delayDuration={0}>
+      <MobileBaselineSurface />
+    </TooltipProvider>
+  );
+}
+
+function MobileBaselineSurface() {
   const [searchParams] = useSearchParams();
   if (searchParams.get('surface') === 'tools') {
     return <WorkspaceToolsFixture />;
@@ -204,14 +214,14 @@ function GeneralMobileBaselinePage() {
             </SelectContent>
           </Select>
           <Button variant="outline" size="sm" aria-label="List view">
-            <ListIcon className="h-4 w-4" />
+            <ListIcon />
           </Button>
           <Button variant="outline" size="sm">
-            <GitBranchIcon className="h-4 w-4 mr-2" />
+            <GitBranchIcon className="mr-2" />
             Resume branch
           </Button>
           <Button size="sm">
-            <PlusIcon className="h-4 w-4 mr-2" />
+            <PlusIcon className="mr-2" />
             New workspace
           </Button>
         </PageHeader>

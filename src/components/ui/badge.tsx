@@ -1,10 +1,17 @@
 import { Slot } from '@radix-ui/react-slot';
 import { cva, type VariantProps } from 'class-variance-authority';
 import type * as React from 'react';
+import { getStatusToneStyle } from '@/client/lib/status-tones';
 import { cn } from '@/lib/utils';
 
+// Tinted variants reuse the status tone chip classes, so a count badge and a
+// StatusChip of the same tone always match (docs/status-colors.md).
+function toneVariant(tone: 'success' | 'warning' | 'info' | 'danger') {
+  return `${getStatusToneStyle(tone).chip} [a&]:hover:underline`;
+}
+
 const badgeVariants = cva(
-  'inline-flex w-fit shrink-0 items-center justify-center gap-1 overflow-hidden rounded-md border border-transparent px-2.5 py-0.5 text-xs font-semibold whitespace-nowrap transition-[color,box-shadow] focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 aria-invalid:border-destructive aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 [&>svg]:pointer-events-none [&>svg]:size-3',
+  'inline-flex w-fit shrink-0 items-center justify-center gap-1 overflow-hidden rounded-md border border-transparent text-xs font-semibold whitespace-nowrap transition-[color,box-shadow] focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 aria-invalid:border-destructive aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 [&>svg]:pointer-events-none [&>svg]:size-3',
   {
     variants: {
       variant: {
@@ -15,18 +22,21 @@ const badgeVariants = cva(
         outline:
           'border-border text-foreground [a&]:hover:bg-accent [a&]:hover:text-accent-foreground',
         ghost: '[a&]:hover:bg-accent [a&]:hover:text-accent-foreground',
-        // Vivid accent tints use a separate contrast-safe text color.
-        // *-foreground is only for solid fills (docs/status-colors.md).
-        success:
-          'border-transparent bg-success-accent/15 text-success dark:bg-success/10 [a&]:hover:underline',
-        warning:
-          'border-transparent bg-warning-accent/15 text-warning dark:bg-warning/10 [a&]:hover:underline',
-        info: 'border-transparent bg-info-accent/15 text-info dark:bg-info/10 [a&]:hover:underline',
+        success: toneVariant('success'),
+        warning: toneVariant('warning'),
+        info: toneVariant('info'),
+        danger: toneVariant('danger'),
         link: 'text-primary underline-offset-4 [a&]:hover:underline',
+      },
+      size: {
+        default: 'px-2.5 py-0.5',
+        /** A number beside a navigation item, tab or column heading. */
+        count: 'h-5 min-w-5 px-1.5 tabular-nums',
       },
     },
     defaultVariants: {
       variant: 'default',
+      size: 'default',
     },
   }
 );
@@ -34,6 +44,7 @@ const badgeVariants = cva(
 function Badge({
   className,
   variant = 'default',
+  size = 'default',
   asChild = false,
   ...props
 }: React.ComponentProps<'span'> & VariantProps<typeof badgeVariants> & { asChild?: boolean }) {
@@ -43,7 +54,7 @@ function Badge({
     <Comp
       data-slot="badge"
       data-variant={variant}
-      className={cn(badgeVariants({ variant }), className)}
+      className={cn(badgeVariants({ variant, size }), className)}
       {...props}
     />
   );

@@ -7,10 +7,10 @@ import { toast } from 'sonner';
 import { FactoryConfigScripts } from '@/client/components/factory-config-scripts';
 import { QueryErrorState } from '@/client/components/query-error-state';
 import { QueryState } from '@/client/components/query-state';
+import { StatusChip } from '@/client/components/status-indicators';
 import { DevServerSetupPanel } from '@/client/features/workspace/dev-server-setup-panel';
 import { runInBackground } from '@/client/lib/background-task';
 import { trpc } from '@/client/lib/trpc';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { SettingsSection } from './settings-section';
 
@@ -93,25 +93,22 @@ export function ProjectFactoryConfigCard({
           <div className="flex min-w-0 flex-wrap items-center gap-2">
             {isSuccess &&
               (factoryConfig ? (
-                <Badge variant="success">
-                  <CheckCircleIcon className="w-3 h-3 mr-1" />
+                <StatusChip tone="success" icon={CheckCircleIcon} size="md">
                   Configured
-                </Badge>
+                </StatusChip>
               ) : (
-                <Badge variant="secondary" className="bg-muted">
-                  <FileCodeIcon className="w-3 h-3 mr-1" />
+                <StatusChip tone="neutral" icon={FileCodeIcon} size="md">
                   Not configured
-                </Badge>
+                </StatusChip>
               ))}
             <Button
               variant="ghost"
-              size="icon"
-              className="h-7 w-7"
+              size="icon-compact"
               aria-label="Edit factory configuration"
               disabled={!isSuccess}
               onClick={() => setEditPanelOpen(true)}
             >
-              <PencilIcon className="w-3.5 h-3.5" />
+              <PencilIcon />
             </Button>
           </div>
           <Button
@@ -121,7 +118,7 @@ export function ProjectFactoryConfigCard({
             pending={refreshConfigs.isPending}
             className="w-full gap-2 sm:w-auto"
           >
-            <ArrowsClockwiseIcon className="w-4 h-4" />
+            <ArrowsClockwiseIcon />
             Refresh Workspaces
           </Button>
         </div>

@@ -1,10 +1,11 @@
 // @vitest-environment jsdom
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { createElement, forwardRef, type ReactNode } from 'react';
+import { createElement, type ReactNode } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, type Mock, vi } from 'vitest';
 import { collectAttachments } from '@/client/features/composer';
+import { TooltipProvider } from '@/components/ui/tooltip';
 import { actFlushSync } from '@/test-utils/react-act';
 import { InlineWorkspaceForm } from './inline-workspace-form';
 import { loadWorkspaceCreationDraft } from './workspace-creation-draft-storage';
@@ -393,11 +394,7 @@ vi.mock('@/components/ui/select', () => ({
 }));
 
 vi.mock('@/components/ui/textarea', () => ({
-  Textarea: forwardRef<HTMLTextAreaElement, import('react').ComponentProps<'textarea'>>(
-    function Textarea(props, ref) {
-      return createElement('textarea', { ...props, ref });
-    }
-  ),
+  Textarea: (props: import('react').ComponentProps<'textarea'>) => createElement('textarea', props),
 }));
 
 vi.mock('@/client/features/workspace', () => ({
@@ -451,7 +448,13 @@ export function renderForm(
   };
   const render = root.render.bind(root);
   root.render = (children) =>
-    render(createElement(QueryClientProvider, { client: queryClient }, children));
+    render(
+      createElement(
+        QueryClientProvider,
+        { client: queryClient },
+        createElement(TooltipProvider, null, children)
+      )
+    );
 
   actFlushSync(() => {
     root.render(
