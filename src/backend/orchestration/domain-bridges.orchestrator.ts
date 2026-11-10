@@ -1,12 +1,10 @@
 import { createPRDeliveryPorts } from '@/backend/orchestration/pull-requests/pr-delivery-dependencies';
 import { createPRBackgroundDeliveryPort } from '@/backend/orchestration/pull-requests/pr-event-delivery-port';
 import { wakePRDelivery } from '@/backend/orchestration/pull-requests/pr-event-delivery.orchestrator';
-import { retireLegacyRatchetSessions } from '@/backend/orchestration/pull-requests/pr-monitoring-cutover.orchestrator';
 import {
   createPRObservationPorts,
   type PRMonitoringServices,
 } from '@/backend/orchestration/pull-requests/pr-monitoring-dependencies';
-import { setPRMonitoring } from '@/backend/orchestration/pull-requests/pr-monitoring.orchestrator';
 import {
   observeMonitoredPR,
   resetStablePRBackoff,
@@ -37,7 +35,6 @@ import type {
 } from '@/backend/services/github';
 import type { createLogger } from '@/backend/services/logger.service';
 import type { periodicTaskService } from '@/backend/services/periodic-task';
-import type { ratchetService } from '@/backend/services/ratchet';
 import type { startupScriptService } from '@/backend/services/run-script';
 import type {
   acpRuntimeManager,
@@ -84,7 +81,6 @@ export type BridgeServices = PRMonitoringServices & {
   periodicTaskService: typeof periodicTaskService;
   prFetchCoordinator: typeof prFetchCoordinator;
   prSnapshotService: typeof prSnapshotService;
-  ratchetService: typeof ratchetService;
   recoverStaleProvisioningWorkspace: typeof recoverStaleProvisioningWorkspace;
   reconciliationService: typeof reconciliationService;
   acpRuntimeManager: typeof acpRuntimeManager;
@@ -121,7 +117,6 @@ export function configureDomainBridges(services: BridgeServices): void {
     initializeWorkspaceWorktree,
     periodicTaskService,
     prSnapshotService,
-    ratchetService,
     recoverStaleProvisioningWorkspace,
     reconciliationService,
     sessionDataService,
@@ -148,13 +143,6 @@ export function configureDomainBridges(services: BridgeServices): void {
   const { prObservationService, sessionBackgroundDeliveryService, userSettingsService } = services;
   const observationPorts = createPRObservationPorts(services);
   const deliveryPorts = createPRDeliveryPorts(services, logger);
-  // === Ratchet domain bridges ===
-  ratchetService.configure({
-    retireLegacy: () => retireLegacyRatchetSessions(services),
-    observe: (target, signal) => observeMonitoredPR(observationPorts, target, { signal }),
-    wake: (workspaceId, isCurrent) => wakePRDelivery(workspaceId, deliveryPorts, isCurrent),
-    setMonitoring: (input) => setPRMonitoring(input, services),
-  });
   sessionBackgroundDeliveryService.configure(createPRBackgroundDeliveryPort(deliveryPorts));
   prObservationService.configure({
     findPR: (target) => workspacePrSnapshotService.find(target),

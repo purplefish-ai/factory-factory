@@ -6,7 +6,7 @@ import { observeMonitoredPR } from './pr-observation.orchestrator';
 vi.mock('@/backend/services/session', () => {
   throw new Error('Observation must not initialize session runtime');
 });
-vi.mock('@/backend/services/ratchet', () => {
+vi.mock('./ratchet.service', () => {
   throw new Error('Observation must not initialize ratchet');
 });
 vi.mock('@/backend/services/github', () => {

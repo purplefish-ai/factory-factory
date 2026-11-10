@@ -611,18 +611,6 @@
       "disposition": "maintained-api",
       "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
     },
-    "src/backend/services/ratchet/service/index.ts::types::RatchetAction": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
-    "src/backend/services/ratchet/service/index.ts::types::RatchetCheckResult": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
-    "src/backend/services/ratchet/service/index.ts::types::WorkspaceRatchetResult": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
     "src/backend/services/registry.ts::types::InfrastructureServiceName": {
       "disposition": "review-required",
       "reason": "Visibility candidate in a reachable module; trace callers and schema/type contracts before narrowing this export."

@@ -78,14 +78,13 @@ it.each([
       { workspaceId: 'w', enabled: true, eventEpoch: 1, workspace: { prs: rows } },
     ]);
     mocks.snapshot.mockResolvedValue(rows);
-    const service = new RatchetService();
-    const changed = vi.fn();
-    service.on(RATCHET_STATE_CHANGED, changed);
-    service.configure({
+    const service = new RatchetService({
       observe: vi.fn().mockResolvedValue(true),
       wake: vi.fn().mockResolvedValue(undefined),
       setMonitoring: vi.fn(),
     });
+    const changed = vi.fn();
+    service.on(RATCHET_STATE_CHANGED, changed);
 
     const result = await service.checkAllWorkspaces();
 
@@ -105,11 +104,8 @@ it('emits the collection transition while observing each association and waking 
   mocks.snapshot.mockResolvedValue(persisted(after));
   mocks.listPending.mockResolvedValue([{ id: 'failure-event' }]);
   const observed: string[] = [];
-  const service = new RatchetService();
-  const transitions: unknown[] = [];
-  service.on(RATCHET_STATE_CHANGED, (event) => transitions.push(event));
   const wake = vi.fn().mockResolvedValue(undefined);
-  service.configure({
+  const service = new RatchetService({
     observe: (target) => {
       observed.push(target.prId);
       return Promise.resolve(true);
@@ -117,6 +113,8 @@ it('emits the collection transition while observing each association and waking 
     wake,
     setMonitoring: vi.fn(),
   });
+  const transitions: unknown[] = [];
+  service.on(RATCHET_STATE_CHANGED, (event) => transitions.push(event));
 
   const result = await service.checkAllWorkspaces();
 
@@ -135,10 +133,9 @@ it('emits the collection transition while observing each association and waking 
 
 it('does not poll or wake monitoring-disabled workspaces', async () => {
   mocks.listEnabled.mockResolvedValue([]);
-  const service = new RatchetService();
   const observe = vi.fn(),
     wake = vi.fn();
-  service.configure({ observe, wake, setMonitoring: vi.fn() });
+  const service = new RatchetService({ observe, wake, setMonitoring: vi.fn() });
   expect(await service.checkWorkspaceById('disabled')).toBeNull();
   expect(await service.checkAllWorkspaces()).toEqual({
     checked: 0,

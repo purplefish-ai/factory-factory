@@ -9,7 +9,6 @@ import {
   prObservationService,
   prSnapshotService,
 } from '@/backend/services/github';
-import { ratchetService } from '@/backend/services/ratchet';
 import {
   sessionBackgroundDeliveryService,
   sessionDispatchService,
@@ -33,6 +32,7 @@ import { createPRFlowIntegrationDatabase, getPRFlowTestState } from './pr-event-
 import { createPRObservationPorts } from './pr-monitoring-dependencies';
 import { bindIssueMonitoringSession, setPRMonitoring } from './pr-monitoring.orchestrator';
 import { observeMonitoredPR } from './pr-observation.orchestrator';
+import { RatchetService } from './ratchet.service';
 
 // The application graph under test; every entry point receives it explicitly.
 const services = createPRMonitoringTestServices();
@@ -588,17 +588,13 @@ it('queues a committed failure after an empty idle wake without waiting for anot
     where: { workspaceId },
     data: { recipientSessionId: sessionId },
   });
-  const graph = { ...services };
-  const delivery = createPRDeliveryPorts(graph);
   const wake = vi.fn((id: string, isCurrent?: () => boolean) =>
     wakePRDelivery(id, delivery, isCurrent)
   );
+  const ratchetService = new RatchetService({ observe: vi.fn(), wake, setMonitoring: vi.fn() });
+  const graph = { ...services, ratchetService };
+  const delivery = createPRDeliveryPorts(graph);
   const logger = { info: vi.fn(), debug: vi.fn(), warn: vi.fn(), error: vi.fn() };
-  ratchetService.configure({
-    observe: vi.fn(),
-    wake,
-    setMonitoring: vi.fn(),
-  });
   const collector = createEventCollectorOrchestrator({
     createLogger: () => logger,
     prSnapshotService,
