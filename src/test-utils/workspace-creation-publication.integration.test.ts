@@ -5,8 +5,8 @@ import { dispatchBackgroundAction } from '@/backend/orchestration/background-act
 import {
   createEventCollectorOrchestrator,
   type EventCollectorDependencies,
-} from '@/backend/orchestration/event-collector.orchestrator';
-import { launchWorkspace } from '@/backend/orchestration/workspace-launch.orchestrator';
+} from '@/backend/orchestration/snapshots/event-collector.orchestrator';
+import { launchWorkspace } from '@/backend/orchestration/workspace-lifecycle/workspace-launch.orchestrator';
 import { jobRunner } from '@/backend/services/job-runner.service';
 import { createLogger } from '@/backend/services/logger.service';
 import { PeriodicTaskService } from '@/backend/services/periodic-task';

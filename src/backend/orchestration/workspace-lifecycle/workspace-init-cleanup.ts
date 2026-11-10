@@ -1,4 +1,5 @@
 import { toError } from '@/backend/lib/error-utils';
+import type { WorkspaceWithProject } from '@/backend/orchestration/types';
 import { createLogger } from '@/backend/services/logger.service';
 import { sessionLifecycleService } from '@/backend/services/session';
 import {
@@ -13,7 +14,6 @@ import {
   workspaceStateMachine,
 } from '@/backend/services/workspace';
 import type { WorkspaceInitGuard } from '@/shared/workspace-init-retry';
-import type { WorkspaceWithProject } from './types';
 const logger = createLogger('workspace-init-cleanup');
 export type CapturedDefaultTerminal = {
   terminalId: string;

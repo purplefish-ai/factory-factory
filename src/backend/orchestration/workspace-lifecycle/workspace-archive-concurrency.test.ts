@@ -1,12 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApplicationError } from '@/backend/lib/application-error';
+import type { WorkspaceWithProject } from '@/backend/orchestration/types';
 import {
   workspaceMaintenanceService,
   workspaceStateMachine,
   worktreeLifecycleService,
 } from '@/backend/services/workspace';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
-import type { WorkspaceWithProject } from './types';
 import {
   archiveWorkspace,
   type ArchiveWorkspaceDependencies,

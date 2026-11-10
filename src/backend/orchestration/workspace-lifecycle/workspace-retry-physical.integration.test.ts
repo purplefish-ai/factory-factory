@@ -16,15 +16,15 @@ import { mkdir, stat, access, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import {
+  boundary,
+  createEventDeliveryFixture,
+  releaseEventBoundaries,
+} from '@/backend/orchestration/testing/event-delivery.test-support';
+import {
   createIntegrationDatabase,
   destroyIntegrationDatabase,
   type IntegrationDatabase,
 } from '@/backend/testing/integration-db';
-import {
-  boundary,
-  createEventDeliveryFixture,
-  releaseEventBoundaries,
-} from './testing/event-delivery.test-support';
 let db: IntegrationDatabase;
 let h: Awaited<ReturnType<typeof createEventDeliveryFixture>>;
 let init: typeof import('./workspace-init.orchestrator');

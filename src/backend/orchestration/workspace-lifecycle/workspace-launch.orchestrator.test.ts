@@ -6,7 +6,7 @@ import {
   launchWorkspace,
   type WorkspaceLaunchPorts,
   type WorkspaceLaunchSource,
-} from '@/backend/orchestration/workspace-launch.orchestrator';
+} from '@/backend/orchestration/workspace-lifecycle/workspace-launch.orchestrator';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 
 const sources = [

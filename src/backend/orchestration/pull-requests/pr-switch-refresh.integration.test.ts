@@ -1,6 +1,7 @@
 // Install the shared mocks before loading service barrels.
 import './pr-event-flow.test-helpers';
 import { afterAll, beforeAll, expect, it, vi } from 'vitest';
+import { createPRMonitoringTestServices } from '@/backend/orchestration/testing/pr-monitoring-services.test-support';
 import { ratchetService } from '@/backend/services/ratchet';
 import { workspacePrSnapshotService } from '@/backend/services/workspace';
 import {
@@ -11,7 +12,6 @@ import { redObservation } from '@/shared/pr-monitoring.test-helpers';
 import { createPRFlowIntegrationDatabase } from './pr-event-flow.test-helpers';
 import { createPRObservationPorts } from './pr-monitoring-dependencies';
 import { observeMonitoredPR } from './pr-observation.orchestrator';
-import { createPRMonitoringTestServices } from './testing/pr-monitoring-services.test-support';
 
 let db: IntegrationDatabase;
 beforeAll(async () => {

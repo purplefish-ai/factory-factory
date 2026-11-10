@@ -1,15 +1,15 @@
 import { randomUUID } from 'node:crypto';
 import { stat } from 'node:fs/promises';
+import {
+  dispatchBackgroundAction,
+  type BackgroundAction,
+} from '@/backend/orchestration/background-action-dispatch.orchestrator';
 import { buildPREventBatch } from '@/backend/prompts/pr-event';
 import { createLogger } from '@/backend/services/logger.service';
 import { RATCHET_DISPATCH_CHANGED } from '@/backend/services/ratchet';
 import type { PRBackgroundDeliveryPort } from '@/backend/services/session';
 import { type PRDeliveryRequest } from '@/shared/pr-monitoring';
 import { prFactPayloadSchema } from '@/shared/schemas/pr-event.schema';
-import {
-  dispatchBackgroundAction,
-  type BackgroundAction,
-} from './background-action-dispatch.orchestrator';
 import { ensureDedicatedPRRecipient } from './pr-dedicated-session.orchestrator';
 import { recipientCanDispatch } from './pr-delivery-readiness';
 import { isCurrentPRRecipient } from './pr-delivery-recipient';

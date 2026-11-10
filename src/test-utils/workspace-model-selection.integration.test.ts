@@ -3,7 +3,7 @@ import {
   launchWorkspace,
   type CreatedWorkspace,
   type WorkspaceLaunchPorts,
-} from '@/backend/orchestration/workspace-launch.orchestrator';
+} from '@/backend/orchestration/workspace-lifecycle/workspace-launch.orchestrator';
 import {
   createManagerTestHarness,
   mockNewSession,

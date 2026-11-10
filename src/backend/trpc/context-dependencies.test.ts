@@ -153,12 +153,12 @@ describe('tRPC context dependencies', () => {
         findForbiddenBackendImports(`
           import runtimeDefault from '@/backend/services/session';
           import * as workspaceRuntime from '@/backend/services/workspace';
-          import '@/backend/orchestration/reconciliation.service';
+          import '@/backend/orchestration/workspace-lifecycle/reconciliation.service';
         `)
       ).toEqual([
         'src/backend/services/session#default',
         'src/backend/services/workspace#*',
-        'src/backend/orchestration/reconciliation.service#side-effect',
+        'src/backend/orchestration/workspace-lifecycle/reconciliation.service#side-effect',
       ]);
     });
 

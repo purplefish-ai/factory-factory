@@ -51,7 +51,7 @@ let sessionCommandFactories: typeof import('@/backend/services/session').session
 let sessionDataService: typeof import('@/backend/services/session').sessionDataService;
 let terminalSessionService: typeof import('@/backend/services/terminal').terminalSessionService;
 let sessionEventBus: typeof import('@/backend/services/session').sessionEventBus;
-let snapshotReconciliationService: typeof import('@/backend/orchestration/snapshot-reconciliation.orchestrator').snapshotReconciliationService;
+let snapshotReconciliationService: typeof import('@/backend/orchestration/snapshots/snapshot-reconciliation.orchestrator').snapshotReconciliationService;
 
 const terminalCreatedSchema = z.object({ type: z.literal('created'), terminalId: z.string() });
 const terminalOutputSchema = z.object({
@@ -93,8 +93,8 @@ beforeAll(async () => {
     '@/backend/services/terminal'
   ));
   ({ snapshotReconciliationService } = await vi.importActual<
-    typeof import('@/backend/orchestration/snapshot-reconciliation.orchestrator')
-  >('@/backend/orchestration/snapshot-reconciliation.orchestrator'));
+    typeof import('@/backend/orchestration/snapshots/snapshot-reconciliation.orchestrator')
+  >('@/backend/orchestration/snapshots/snapshot-reconciliation.orchestrator'));
 }, 30_000);
 
 afterEach(async () => {

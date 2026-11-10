@@ -1,4 +1,6 @@
 import { toError } from '@/backend/lib/error-utils';
+import { getWorkspaceLinearContext } from '@/backend/orchestration/linear-config.helper';
+import type { WorkspaceWithProject } from '@/backend/orchestration/types';
 import { applicationUpdateAdmission } from '@/backend/services/application-update-admission.service';
 import { githubCLIService } from '@/backend/services/github';
 import { linearStateSyncService } from '@/backend/services/linear';
@@ -28,8 +30,6 @@ import { SessionStatus } from '@/shared/core';
 import { isPRMonitoringRecipient } from '@/shared/pr-monitoring';
 import { AttachmentSchema } from '@/shared/websocket';
 import type { WorkspaceInitGuard } from '@/shared/workspace-init-retry';
-import { getWorkspaceLinearContext } from './linear-config.helper';
-import type { WorkspaceWithProject } from './types';
 import { handleWorkspaceInitFailure, type CapturedDefaultTerminal } from './workspace-init-cleanup';
 import { GitHubUsernameCache } from './workspace-init-github-username-cache';
 import {

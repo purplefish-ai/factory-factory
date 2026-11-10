@@ -131,10 +131,11 @@ vi.mock('@/backend/services/linear', () => ({
   linearStateSyncService: { markIssueCompleted: vi.fn() },
 }));
 
-vi.mock('./linear-config.helper', () => ({
+vi.mock('@/backend/orchestration/linear-config.helper', () => ({
   getWorkspaceLinearContext: vi.fn().mockResolvedValue(null),
 }));
 
+import { getWorkspaceLinearContext } from '@/backend/orchestration/linear-config.helper';
 import { prFetchCoordinator, prSnapshotService } from '@/backend/services/github';
 import { linearStateSyncService } from '@/backend/services/linear';
 import { ratchetService } from '@/backend/services/ratchet';
@@ -158,7 +159,6 @@ import {
   EventCoalescer,
   type EventCollectorOrchestrator,
 } from './event-collector.orchestrator';
-import { getWorkspaceLinearContext } from './linear-config.helper';
 
 let activeEventCollector: EventCollectorOrchestrator | null = null;
 function configureEventCollector(): void {

@@ -1,4 +1,9 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import {
+  boundary,
+  releaseEventBoundaries,
+  createEventAdmissionFixture,
+} from '@/backend/orchestration/testing/event-delivery.test-support';
 import { createLogger } from '@/backend/services/logger.service';
 import {
   createIntegrationDatabase,
@@ -6,11 +11,6 @@ import {
   type IntegrationDatabase,
 } from '@/backend/testing/integration-db';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
-import {
-  boundary,
-  releaseEventBoundaries,
-  createEventAdmissionFixture,
-} from './testing/event-delivery.test-support';
 
 let db: IntegrationDatabase;
 let h: Awaited<ReturnType<typeof createEventAdmissionFixture>>;

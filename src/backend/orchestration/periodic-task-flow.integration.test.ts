@@ -1,4 +1,8 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+  launchWorkspace,
+  type PeriodicTaskLaunchSource,
+} from '@/backend/orchestration/workspace-lifecycle/workspace-launch.orchestrator';
 import { jobRunner } from '@/backend/services/job-runner.service';
 import { createLogger } from '@/backend/services/logger.service';
 import { PeriodicTaskService, type PeriodicTaskTimerEvent } from '@/backend/services/periodic-task';
@@ -12,7 +16,6 @@ import {
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 import type { PrismaClient } from '@prisma-gen/client';
 import { dispatchBackgroundAction } from './background-action-dispatch.orchestrator';
-import { launchWorkspace, type PeriodicTaskLaunchSource } from './workspace-launch.orchestrator';
 
 const state = vi.hoisted(() => ({ prisma: undefined as PrismaClient | undefined }));
 vi.mock('@/backend/db', () => ({

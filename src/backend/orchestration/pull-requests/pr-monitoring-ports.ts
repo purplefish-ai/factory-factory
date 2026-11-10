@@ -1,3 +1,4 @@
+import type { ExistingSessionDispatchPorts } from '@/backend/orchestration/background-action-dispatch.orchestrator';
 import type { configService } from '@/backend/services/config.service';
 import type { ratchetService } from '@/backend/services/ratchet';
 import type {
@@ -14,7 +15,6 @@ import type {
   workspacePrSnapshotService,
 } from '@/backend/services/workspace';
 import type { PRTarget } from '@/shared/pr-monitoring';
-import type { ExistingSessionDispatchPorts } from './background-action-dispatch.orchestrator';
 
 export interface PRRecipientReadinessPorts {
   sessionDataService: Pick<typeof sessionDataService, 'findAgentSessionsByWorkspaceId'>;

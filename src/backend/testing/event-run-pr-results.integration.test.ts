@@ -83,8 +83,8 @@ it.each(['RUNNING', 'COMPLETED'] as const)(
     await finish();
     if (status === 'COMPLETED') {
       const { observeEventRun } = await vi.importActual<
-        typeof import('@/backend/orchestration/event-run-monitor.orchestrator')
-      >('@/backend/orchestration/event-run-monitor.orchestrator');
+        typeof import('@/backend/orchestration/agents/event-run-monitor.orchestrator')
+      >('@/backend/orchestration/agents/event-run-monitor.orchestrator');
       expect(await observeEventRun(h.claim)).toBe('SETTLED');
     }
     await db.prisma.agentRun.update({
@@ -214,8 +214,8 @@ async function settleForRace(status: 'RUNNING' | 'COMPLETED') {
   if (status === 'COMPLETED') {
     await finish();
     const { observeEventRun } = await vi.importActual<
-      typeof import('@/backend/orchestration/event-run-monitor.orchestrator')
-    >('@/backend/orchestration/event-run-monitor.orchestrator');
+      typeof import('@/backend/orchestration/agents/event-run-monitor.orchestrator')
+    >('@/backend/orchestration/agents/event-run-monitor.orchestrator');
     expect(await observeEventRun(h.claim)).toBe('SETTLED');
   }
 }
@@ -668,8 +668,8 @@ it.each(['FAILED', 'CANCELLED', 'PR_CREATED'] as const)(
     }
     await finish(status === 'PR_CREATED' ? 'COMPLETED' : status);
     const { observeEventRun } = await vi.importActual<
-      typeof import('@/backend/orchestration/event-run-monitor.orchestrator')
-    >('@/backend/orchestration/event-run-monitor.orchestrator');
+      typeof import('@/backend/orchestration/agents/event-run-monitor.orchestrator')
+    >('@/backend/orchestration/agents/event-run-monitor.orchestrator');
     expect(await observeEventRun(h.claim)).toBe('SETTLED');
     const before = await row();
     expect(before.status).toBe(status);
@@ -691,8 +691,8 @@ it.each(['FAILED', 'CANCELLED', 'PR_CREATED'] as const)(
 
 it('captures across an actual explicit retry without erasing results, provider evidence or the last resolution', async () => {
   const { createEventRunConsumer } = await vi.importActual<
-    typeof import('@/backend/orchestration/event-run-consumer.orchestrator')
-  >('@/backend/orchestration/event-run-consumer.orchestrator');
+    typeof import('@/backend/orchestration/agents/event-run-consumer.orchestrator')
+  >('@/backend/orchestration/agents/event-run-consumer.orchestrator');
   const consumer = createEventRunConsumer();
   await consumer.consumeClaim(h.claim, new AbortController().signal, true);
   await consumer.drain();

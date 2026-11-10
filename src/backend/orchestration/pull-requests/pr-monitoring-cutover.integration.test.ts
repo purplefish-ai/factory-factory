@@ -40,8 +40,8 @@ vi.mock('@/backend/services/session', () => ({
   },
 }));
 
+import { createPRMonitoringTestServices } from '@/backend/orchestration/testing/pr-monitoring-services.test-support';
 import { retireLegacyRatchetSessions } from './pr-monitoring-cutover.orchestrator';
-import { createPRMonitoringTestServices } from './testing/pr-monitoring-services.test-support';
 
 function closedSession(workspaceId: string, sessionId: string) {
   return {

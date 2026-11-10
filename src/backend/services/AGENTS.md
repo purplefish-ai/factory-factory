@@ -9,7 +9,7 @@ Root `services/*.ts` is infrastructure only, as declared in `registry.ts`.
 Enforced by dependency-cruiser and ownership checks:
 
 - External callers use capsule barrels, except
-  `orchestration/data-backup.service.ts` may import
+  `orchestration/data-backup/data-backup.service.ts` may import
   `settings/resources/data-backup.accessor.ts` directly.
 - Capsules declare each dependency once in `registry.ts`, by how they reach it:
   `dependsOn` for barrel imports (acyclic, each must be imported by non-test

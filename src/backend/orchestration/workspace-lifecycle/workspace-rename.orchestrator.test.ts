@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   createWorkspaceRename,
   type RenamedWorkspace,
-} from '@/backend/orchestration/workspace-rename.orchestrator';
+} from '@/backend/orchestration/workspace-lifecycle/workspace-rename.orchestrator';
 import { SNAPSHOT_CHANGED, WorkspaceSnapshotStore } from '@/backend/services/workspace';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 
