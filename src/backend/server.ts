@@ -27,7 +27,6 @@ import { eventLoopMonitor } from './lib/event-loop-monitor';
 import { type CloseListeners, listenHttpServer } from './lib/http-listen';
 import {
   createCorsMiddleware,
-  createJsonCompressionMiddleware,
   createPrecompressedStatic,
   createRequestLoggerMiddleware,
   type PrecompressedDocument,
@@ -248,8 +247,6 @@ export function createServer(application: Application, requestedPort?: number): 
   app.use('/proxy', createPortShareRouter(application));
   app.use(
     '/api/trpc',
-    // Queries use the streaming batch link, which this middleware leaves unbuffered.
-    createJsonCompressionMiddleware(),
     createExpressMiddleware({
       router: appRouter,
       createContext: createContext(application),

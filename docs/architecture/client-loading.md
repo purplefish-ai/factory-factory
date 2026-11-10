@@ -51,8 +51,8 @@ its assets directory: `pnpm check:client-chunks /tmp/client-build/assets`.
 ## Compression
 
 Remote clients (`tailscale serve`, `ff proxy`, the mobile web app) receive the
-client compressed; loopback and Electron get the same bytes, which costs them
-nothing. Peer addresses cannot identify remote clients because the tunnels
+static client compressed; loopback and Electron get the same bytes, which costs
+them nothing. Peer addresses cannot identify remote clients because the tunnels
 connect from loopback, so the server keys only on `Accept-Encoding`.
 
 - `vite build` runs `scripts/precompress-assets.ts`, which writes `.br`
@@ -64,13 +64,12 @@ connect from loopback, so the server keys only on `Accept-Encoding`.
   once at startup and serves one when the client accepts it, preferring Brotli,
   with the original content type and cache headers, `Content-Encoding`, and
   `Vary: Accept-Encoding`. The SPA fallback serves `index.html` the same way. No
-  compression runs at request time for static files.
-- `/api/trpc` compresses complete JSON responses of 1 KiB or more (Brotli
-  quality 4 or gzip level 1). Clients that accept neither are not buffered.
-  Queries use `httpBatchStreamLink`, whose `application/jsonl` responses are
-  never buffered or compressed, so in practice this covers mutations and
-  non-streaming callers. The port-share proxy, health routes and WebSockets are
-  not compressed.
+  compression runs at request time.
+- API responses are not compressed: tRPC queries stream `application/jsonl`
+  through `httpBatchStreamLink`, and the remaining JSON is small. The port-share
+  proxy, health routes and WebSockets are not compressed either. Possible
+  follow-ups are compressing the tRPC jsonl stream with a flush per line, and
+  WebSocket `permessage-deflate` for large session replay frames.
 
 Chunk budgets and `pnpm check:client-chunks` measure the uncompressed files;
 siblings do not match their name patterns. A cold load of the startup closure
