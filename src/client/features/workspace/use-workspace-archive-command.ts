@@ -51,6 +51,11 @@ export function useWorkspaceArchiveCommand() {
       ...affectedIds.map((id) =>
         Promise.resolve().then(() => utils.workspace.get.invalidate({ id }))
       ),
+      // The Setup logs tab stops polling once setup settles, and archive
+      // releases the log, so refresh it to show the archived state.
+      ...affectedIds.map((id) =>
+        Promise.resolve().then(() => utils.workspace.getInitStatus.invalidate({ id }))
+      ),
     ]);
     return outcomes;
   };

@@ -30,7 +30,9 @@ vi.mock('@/backend/services/terminal', () => ({
 
 const mockInitializeWorktree = vi.fn();
 const mockRecoverStaleProvisioningWorkspace = vi.fn();
+const mockReleaseArchivedBlobs = vi.fn();
 
+import { SERVICE_INTERVAL_MS } from '@/backend/services/constants';
 import { terminalSessionService } from '@/backend/services/terminal';
 // Import after mocks are set up
 import { workspaceMaintenanceService } from '@/backend/services/workspace';
@@ -41,10 +43,14 @@ describe('ReconciliationService', () => {
     vi.clearAllMocks();
     vi.useFakeTimers();
     mockRecoverStaleProvisioningWorkspace.mockReset().mockResolvedValue(true);
+    mockReleaseArchivedBlobs
+      .mockReset()
+      .mockResolvedValue({ released: 0, batches: 1, complete: true });
     reconciliationService.configure({
       workspace: {
         initializeWorktree: (...args: unknown[]) => mockInitializeWorktree(...args),
         findNeedingWorktree: () => workspaceMaintenanceService.findNeedingWorktree(),
+        releaseArchivedBlobs: (signal: AbortSignal) => mockReleaseArchivedBlobs(signal),
         recoverStaleProvisioningWorkspace: (workspaceId: string, reason: string) =>
           mockRecoverStaleProvisioningWorkspace(workspaceId, reason),
       },
@@ -528,6 +534,68 @@ describe('ReconciliationService', () => {
       await stopPromise;
 
       expect(mockInitializeWorktree).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('archived workspace blob retention', () => {
+    const interval = SERVICE_INTERVAL_MS.archivedWorkspaceBlobRetention;
+
+    beforeEach(() => {
+      mockFindMany.mockResolvedValue([]);
+      vi.spyOn(reconciliationService, 'cleanupOrphans').mockResolvedValue();
+    });
+
+    it('runs one bounded release on its own interval, not at start', async () => {
+      mockReleaseArchivedBlobs.mockResolvedValue({ released: 3, batches: 1, complete: true });
+
+      reconciliationService.startPeriodicCleanup();
+      await vi.advanceTimersByTimeAsync(interval - 1);
+      expect(mockReleaseArchivedBlobs).not.toHaveBeenCalled();
+
+      await vi.advanceTimersByTimeAsync(1);
+      expect(mockReleaseArchivedBlobs).toHaveBeenCalledOnce();
+      expect(mockReleaseArchivedBlobs.mock.calls[0]?.[0]).toBeInstanceOf(AbortSignal);
+      expect(mockLogger.info).toHaveBeenCalledWith(
+        'Released archived workspace attachments and setup logs',
+        { released: 3, batches: 1, complete: true }
+      );
+    });
+
+    it('stays quiet once nothing is left to release', async () => {
+      reconciliationService.startPeriodicCleanup();
+      await vi.advanceTimersByTimeAsync(interval * 2);
+
+      expect(mockReleaseArchivedBlobs).toHaveBeenCalledTimes(2);
+      expect(mockLogger.info).not.toHaveBeenCalledWith(
+        'Released archived workspace attachments and setup logs',
+        expect.anything()
+      );
+    });
+
+    it('aborts an in-flight release on stop and waits for it to drain', async () => {
+      const release = Promise.withResolvers<void>();
+      mockReleaseArchivedBlobs.mockImplementationOnce(async () => {
+        await release.promise;
+        return { released: 0, batches: 1, complete: false };
+      });
+
+      reconciliationService.startPeriodicCleanup();
+      await vi.advanceTimersByTimeAsync(interval);
+      const signal = mockReleaseArchivedBlobs.mock.calls[0]?.[0] as AbortSignal;
+
+      let stopped = false;
+      const stopPromise = reconciliationService.stopPeriodicCleanup().then(() => {
+        stopped = true;
+      });
+      await Promise.resolve();
+      expect(signal.aborted).toBe(true);
+      expect(stopped).toBe(false);
+
+      release.resolve();
+      await stopPromise;
+      expect(stopped).toBe(true);
+      await vi.advanceTimersByTimeAsync(interval * 2);
+      expect(mockReleaseArchivedBlobs).toHaveBeenCalledOnce();
     });
   });
 });

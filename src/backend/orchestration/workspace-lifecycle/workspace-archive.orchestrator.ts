@@ -5,6 +5,7 @@ import type { WorkspaceWithProject } from '@/backend/orchestration/types';
 import { createLogger } from '@/backend/services/logger.service';
 import type { SessionStopReason } from '@/backend/services/session';
 import {
+  archivedWorkspaceBlobRetentionService,
   workspaceActivityService,
   workspaceDataService,
   workspaceMaintenanceService,
@@ -229,6 +230,9 @@ async function completeArchive(
   }
 
   const archivedWorkspace = await workspaceStateMachine.markArchived(workspace.id);
+  // Only now, with ARCHIVED committed and terminal, drop the attachments Retry
+  // needed and all but a failed setup's log tail. Best effort; never throws.
+  await archivedWorkspaceBlobRetentionService.releaseAfterArchive(workspace.id);
   services.cleanupWorkspaceScopedCaches(workspace.id);
   services.runScriptService.evictWorkspaceBuffers(workspace.id);
 

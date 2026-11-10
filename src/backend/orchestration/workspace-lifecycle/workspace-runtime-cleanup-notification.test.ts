@@ -19,6 +19,10 @@ vi.mock('@/backend/services/workspace/resources/workspace.accessor', () => ({
   },
 }));
 
+vi.mock('@/backend/services/workspace/resources/workspace-archived-blobs.accessor', () => ({
+  workspaceArchivedBlobsAccessor: { releaseOne: vi.fn().mockResolvedValue(1) },
+}));
+
 vi.mock('./workspace-children.orchestrator', () => ({
   fireLifecycleNotification: vi.fn().mockResolvedValue(undefined),
 }));

@@ -197,6 +197,22 @@ describe('shared archive command with real QueryClient/tRPC mutations', () => {
     await run;
   });
 
+  it('refreshes the settled setup log status so the archived state shows', async () => {
+    const f = fixture();
+    const invalidate = vi.spyOn(f.queryClient, 'invalidateQueries');
+    const run = f.command().archiveWorkspace({ projectId: 'proj-1', id: 'ws-1' });
+    await vi.waitFor(() => expect(f.requests).toHaveLength(1));
+    f.requests[0]!.resolve({ id: 'ws-1' });
+    await run;
+
+    expect(invalidate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        queryKey: getQueryKey(trpc.workspace.getInitStatus, { id: 'ws-1' }, 'any'),
+      }),
+      undefined
+    );
+  });
+
   it.each(['single', 'bulk'])(
     'keeps %s pending while an older overlapping execution remains',
     async (kind) => {

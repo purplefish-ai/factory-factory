@@ -10,6 +10,9 @@ vi.mock('./workspace-children.orchestrator', () => ({
 }));
 
 vi.mock('@/backend/services/workspace', () => ({
+  archivedWorkspaceBlobRetentionService: {
+    releaseAfterArchive: vi.fn(),
+  },
   workspaceActivityService: {
     clearWorkspace: vi.fn(),
     withNotificationsSuppressed: (_workspaceId: string, operation: () => Promise<unknown>) =>
@@ -44,6 +47,7 @@ vi.mock('@/backend/services/logger.service', () => ({
 
 import { sweepWorktreeProcesses } from '@/backend/lib/worktree-process-sweep';
 import {
+  archivedWorkspaceBlobRetentionService,
   workspaceMaintenanceService,
   workspaceStateMachine,
   worktreeLifecycleService,
@@ -261,6 +265,16 @@ describe('archiveWorkspace', () => {
       expect(cleanupCallOrder!).toBeGreaterThan(archivedCallOrder!);
     });
 
+    it('releases archived-only data once ARCHIVED is persisted', async () => {
+      await archiveWorkspace(makeWorkspace(), defaultOptions);
+
+      const release = vi.mocked(archivedWorkspaceBlobRetentionService.releaseAfterArchive);
+      expect(release).toHaveBeenCalledExactlyOnceWith('ws-1');
+      expect(release.mock.invocationCallOrder[0]).toBeGreaterThan(
+        vi.mocked(workspaceStateMachine.markArchived).mock.invocationCallOrder[0]!
+      );
+    });
+
     it('returns the archived workspace', async () => {
       const archivedWs = unsafeCoerce({ id: 'ws-1', status: 'ARCHIVED' });
       vi.mocked(workspaceStateMachine.markArchived).mockResolvedValue(archivedWs as never);
@@ -396,6 +410,15 @@ describe('archiveWorkspace', () => {
 
       await expect(archiveWorkspace(workspace, defaultOptions)).rejects.toThrow();
       expect(workspaceStateMachine.markArchived).not.toHaveBeenCalled();
+      // A rolled-back archive keeps the attachments and log Retry may need.
+      expect(archivedWorkspaceBlobRetentionService.releaseAfterArchive).not.toHaveBeenCalled();
+    });
+
+    it('releases nothing when the ARCHIVED transition itself fails', async () => {
+      vi.mocked(workspaceStateMachine.markArchived).mockRejectedValue(new Error('CAS lost'));
+
+      await expect(archiveWorkspace(makeWorkspace(), defaultOptions)).rejects.toThrow('CAS lost');
+      expect(archivedWorkspaceBlobRetentionService.releaseAfterArchive).not.toHaveBeenCalled();
     });
 
     it('rolls status back when archive fails after entering ARCHIVING', async () => {
@@ -655,6 +678,7 @@ describe('recoverStaleArchivingWorkspaces', () => {
     expect(worktreeLifecycleService.cleanupWorkspaceWorktree).toHaveBeenCalledWith(workspace, {});
     expect(workspaceStateMachine.markArchived).toHaveBeenCalledWith('ws-1');
     expect(services.runScriptService.evictWorkspaceBuffers).toHaveBeenCalledWith('ws-1');
+    expect(archivedWorkspaceBlobRetentionService.releaseAfterArchive).toHaveBeenCalledWith('ws-1');
   });
 
   it('marks a stale ARCHIVING workspace as FAILED when recovery cannot complete', async () => {
