@@ -7,6 +7,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { vi } from 'vitest';
 import { createAppQueryClient } from '@/client/lib/query-client';
 import { trpc } from '@/client/lib/trpc';
+import { settle } from '@/test-utils/react-act';
 
 class StubResizeObserver {
   observe = vi.fn();
@@ -149,30 +150,6 @@ export function createSettingsServer({
 }
 
 export type SettingsServer = ReturnType<typeof createSettingsServer>;
-
-/** Lets React Query and React settle; enough for an answered request to render. */
-export async function settle(rounds = 3) {
-  for (let round = 0; round < rounds; round++) {
-    await act(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 0));
-    });
-  }
-}
-
-/** Retries `check` across bounded settle rounds instead of polling wall-clock time. */
-export async function waitForCheck(check: () => void) {
-  for (let round = 1; ; round++) {
-    await settle(1);
-    try {
-      check();
-      return;
-    } catch (error) {
-      if (round >= 20) {
-        throw error;
-      }
-    }
-  }
-}
 
 export interface RenderedSettings {
   container: HTMLDivElement;
