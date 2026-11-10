@@ -13,6 +13,7 @@ const mocks = vi.hoisted(() => ({
   list: vi.fn(),
   error: vi.fn(),
   onError: null as null | ((error: Error) => void),
+  onSuccess: null as null | ((result: unknown, input: { id: string }) => Promise<unknown>),
 }));
 vi.mock('sonner', () => ({ toast: { error: mocks.error } }));
 vi.mock('@/client/lib/trpc', () => ({
@@ -22,9 +23,21 @@ vi.mock('@/client/lib/trpc', () => ({
     }),
     workspace: {
       rename: {
-        useMutation: (options: { onError: (error: Error) => void }) => {
+        useMutation: (options: {
+          onError: (error: Error) => void;
+          onSuccess: (result: unknown, input: { id: string }) => Promise<unknown>;
+        }) => {
           mocks.onError = options.onError;
-          return { mutateAsync: mocks.rename, isPending: false };
+          mocks.onSuccess = options.onSuccess;
+          // Like React Query, mutateAsync settles after onSuccess.
+          return {
+            mutateAsync: async (input: { id: string }) => {
+              const result: unknown = await mocks.rename(input);
+              await mocks.onSuccess?.(result, input);
+              return result;
+            },
+            isPending: false,
+          };
         },
       },
     },
@@ -50,7 +63,7 @@ beforeEach(() => {
       }
     }
   );
-  mocks.rename.mockReset().mockResolvedValue({});
+  mocks.rename.mockReset().mockResolvedValue({ id: 'w', projectId: 'p' });
   mocks.get.mockReset().mockResolvedValue(undefined);
   mocks.list.mockReset().mockResolvedValue(undefined);
   mocks.error.mockClear();
@@ -303,13 +316,16 @@ it.each([false, true])(
       );
       expect(mocks.rename).toHaveBeenCalledWith({ id: 'w', name: 'New name' });
       if (fails) {
-        expect(mocks.error).toHaveBeenCalledWith("Couldn't rename workspace. Offline");
+        expect(mocks.error).toHaveBeenCalledWith("Couldn't rename workspace.", {
+          description: 'Offline',
+        });
         expect(document.querySelector('input[placeholder="Workspace name"]')).not.toBeNull();
         expect(mocks.get).not.toHaveBeenCalled();
         expect(mocks.list).not.toHaveBeenCalled();
       } else {
         expect(document.querySelector('input[placeholder="Workspace name"]')).toBeNull();
         expect(mocks.get).toHaveBeenCalledWith({ id: 'w' });
+        // The shared rename hook refreshes every project list showing the workspace.
         expect(mocks.list).toHaveBeenCalledWith({ projectId: 'p' });
       }
     } finally {

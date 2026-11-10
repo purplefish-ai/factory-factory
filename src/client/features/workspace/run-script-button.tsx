@@ -12,7 +12,6 @@ import {
   ContextMenuItem,
   ContextMenuTrigger,
 } from '@/components/ui/context-menu';
-import { Spinner } from '@/components/ui/spinner';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { DevServerSetupPanel } from './dev-server-setup-panel';
 import { useWorkspacePanel } from './workspace-panel-context';
@@ -116,7 +115,7 @@ export function RunScriptButton({ workspaceId }: RunScriptButtonProps) {
 
   const tooltipText = (() => {
     if (isLoading) {
-      return 'Processing…';
+      return startScript.isPending ? 'Starting dev server…' : 'Stopping dev server…';
     }
     if (isRunning) {
       return status.port ? `Stop dev server (port ${status.port})` : 'Stop dev server';
@@ -147,11 +146,9 @@ export function RunScriptButton({ workspaceId }: RunScriptButtonProps) {
                   className="h-6 w-6 md:h-8 md:w-8"
                   aria-label={tooltipText}
                   onClick={handleClick}
-                  disabled={isLoading}
+                  pending={isLoading}
                 >
-                  {isLoading ? (
-                    <Spinner aria-hidden="true" className="h-3 w-3 md:h-4 md:w-4" />
-                  ) : isRunning ? (
+                  {isRunning ? (
                     <SquareIcon className="h-3 w-3 text-destructive md:h-4 md:w-4" weight="fill" />
                   ) : (
                     <PlayIcon className="h-3 w-3 text-success md:h-4 md:w-4" weight="fill" />

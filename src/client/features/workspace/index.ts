@@ -20,3 +20,4 @@ export * from './workspace-pr-status';
 export * from './workspace-status-badge';
 export * from './workspace-family-navigation';
 export * from './use-workspace-archive-command';
+export * from './use-workspace-mutations';

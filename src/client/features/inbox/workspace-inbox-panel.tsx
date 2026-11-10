@@ -5,7 +5,6 @@ import { QueryState } from '@/client/components/query-state';
 import { POLL_INTERVAL_MS } from '@/client/lib/query-options';
 import { trpc } from '@/client/lib/trpc';
 import { Button } from '@/components/ui/button';
-import { Spinner } from '@/components/ui/spinner';
 import { cn } from '@/lib/utils';
 import type { WorkspaceMailSummary } from '@/shared/workspace-mail';
 import { WorkspaceMailDetail } from './workspace-mail-detail';
@@ -89,17 +88,11 @@ function WorkspaceInbox({ workspaceId }: { workspaceId: string }) {
             <Button
               variant="outline"
               size="sm"
-              disabled={retryWake.isPending}
+              pending={retryWake.isPending}
+              pendingLabel="Retrying notification…"
               onClick={() => retryWake.mutate({ workspaceId })}
             >
-              {retryWake.isPending ? (
-                <>
-                  <Spinner className="size-3" aria-hidden="true" />
-                  Retrying notification…
-                </>
-              ) : (
-                'Retry mail notification'
-              )}
+              Retry mail notification
             </Button>
             {retryWake.isError && (
               <p role="alert" className="text-destructive">
@@ -156,10 +149,11 @@ function WorkspaceInbox({ workspaceId }: { workspaceId: string }) {
                     size="sm"
                     className="w-full"
                     disabled={mail.isFetching}
+                    pending={mail.isFetchingNextPage}
+                    pendingLabel="Loading messages…"
                     onClick={() => void mail.fetchNextPage()}
                   >
-                    {mail.isFetchingNextPage && <Spinner className="size-3" aria-hidden="true" />}
-                    {mail.isFetchingNextPage ? 'Loading messages…' : 'Load older messages'}
+                    Load older messages
                   </Button>
                 </div>
               )}

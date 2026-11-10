@@ -172,6 +172,35 @@ it('refreshes stale connections after a failed operation', async () => {
   expect(document.body.textContent).not.toContain('Purplefish');
 });
 
+it('shows the spinner only on the connection being tested', async () => {
+  let finish: (value: { valid: boolean; workspaceName: string }) => void = () => undefined;
+  api.test.mockImplementation(
+    () =>
+      new Promise((resolve) => {
+        finish = resolve;
+      })
+  );
+  api.connections = [
+    { id: 'slack-1', name: 'One', workspaceId: 'T-1', hasCredentials: true, isEnabled: true },
+    { id: 'slack-2', name: 'Two', workspaceId: 'T-2', hasCredentials: true, isEnabled: true },
+  ];
+  mount();
+  const second = document.querySelectorAll<HTMLButtonElement>('button')[2];
+  expect(second?.textContent).toBe('Test connection');
+  act(() => second?.click());
+  expect(api.test).toHaveBeenCalledWith({ id: 'slack-2' });
+  expect(second?.textContent).toBe('Testing…');
+  expect(second?.getAttribute('aria-busy')).toBe('true');
+  expect(button('Test connection').disabled).toBe(true);
+  expect(button('Test connection').hasAttribute('aria-busy')).toBe(false);
+  expect(button('Connect Slack').hasAttribute('aria-busy')).toBe(false);
+  await act(async () => {
+    finish({ valid: true, workspaceName: 'Two' });
+    await Promise.resolve();
+  });
+  expect(document.querySelectorAll('[aria-busy="true"]')).toHaveLength(0);
+});
+
 it('allows rotated bot token submission', () => {
   mount();
   enterToken('xoxe.xoxb-1-test-token');

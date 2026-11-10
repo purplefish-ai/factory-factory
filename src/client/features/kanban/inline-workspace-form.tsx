@@ -328,15 +328,18 @@ export function InlineWorkspaceForm({
       });
     },
     onError: (error, input, context) => {
+      const message = `Couldn't create workspace. ${error.message}`;
       const token = context?.submission ?? submitted.current;
+      // One channel per failure: the composer's inline error (kept per project
+      // while it is unmounted) and the pending workspace route both show it.
+      // Only a create without a submission falls back to a toast.
       if (token) {
-        submission.fail(token, `Couldn't create workspace. ${error.message}`);
+        submission.fail(token, message);
+      } else {
+        toast.error(message);
       }
       if (context) {
-        setPendingWorkspace(context.optimisticWorkspaceId, {
-          status: 'failed',
-          message: `Couldn't create workspace. ${error.message}`,
-        });
+        setPendingWorkspace(context.optimisticWorkspaceId, { status: 'failed', message });
         // Drop only the optimistic row. Restoring the pre-mutation cache would
         // also revert snapshot deltas and concurrent mutations that landed
         // while the create was in flight, and this cache backs the sidebar as
@@ -347,7 +350,6 @@ export function InlineWorkspaceForm({
           (old) => removeWorkspaceFromProjectWorkspaceCache(old, context.optimisticWorkspaceId)
         );
       }
-      toast.error(`Couldn't create workspace. ${error.message}`);
     },
   });
 
@@ -362,11 +364,14 @@ export function InlineWorkspaceForm({
       completeCreation(context?.submission ?? submitted.current, onCancel);
     },
     onError: (error, _input, context) => {
+      const message = `Couldn't create automation. ${error.message}`;
       const token = context?.submission ?? submitted.current;
+      // The form stays open on failure, so its inline error is the one report.
       if (token) {
-        submission.fail(token, `Couldn't create automation. ${error.message}`);
+        submission.fail(token, message);
+      } else {
+        toast.error(message);
       }
-      toast.error(`Couldn't create automation. ${error.message}`);
     },
   });
 

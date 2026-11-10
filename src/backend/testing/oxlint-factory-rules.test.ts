@@ -27,6 +27,8 @@ const rules = [
   'no-tool-input-cast',
   'no-raw-palette-classes',
   'query-owner',
+  'use-pending-prop',
+  'no-raw-spinner',
   'named-query-options',
   'query-error-handled',
 ];
@@ -146,6 +148,23 @@ describe('Oxlint project guardrails', () => {
     ['query-owner', 'const cached = utils.userSettings.get.getData();'],
     ['query-owner', 'const saved = await utils.client.userSettings.get.query();'],
     ['query-owner', 'const key = getMutationKey(trpc.userSettings.update);'],
+    [
+      'use-pending-prop',
+      'const x = <Button disabled={saving}>{saving && <Spinner aria-hidden />}Save</Button>;',
+    ],
+    [
+      'use-pending-prop',
+      'const x = <Button size="icon" aria-label="Run">{busy ? <Spinner /> : <PlayIcon />}</Button>;',
+    ],
+    [
+      'use-pending-prop',
+      'const x = <DropdownMenuItem>{busy ? <Spinner /> : <SyncIcon />}Sync</DropdownMenuItem>;',
+    ],
+    ['use-pending-prop', 'const x = <Button><><SpinnerGapIcon />Loading</></Button>;'],
+    ['no-raw-spinner', 'const x = <SpinnerGapIcon className="h-4 w-4 animate-spin" />;'],
+    ['no-raw-spinner', 'const x = <Icon className={cn("size-3", spin && "animate-spin")} />;'],
+    ['no-raw-spinner', 'const className = "motion-safe:animate-spin";'],
+    ['no-raw-spinner', 'const className = `p-2 animate-spin`;'],
     ['named-query-options', 'trpc.project.list.useQuery(input, { refetchInterval: 10_000 });'],
     ['named-query-options', 'useQuery({ refetchInterval: open ? 30_000 : false });'],
     ['named-query-options', 'useQuery({ refetchInterval: 2 * POLL_INTERVAL_MS.activity });'],
@@ -209,6 +228,12 @@ describe('Oxlint project guardrails', () => {
     'const id = "my-text-red-500-id";',
     'const url = "/api/text-red-500";',
     'const selector = "a.text-red-500";',
+    'const x = <Button pending={saving} pendingLabel="Saving…">Save</Button>;',
+    'const x = <div>{busy && <Spinner aria-hidden />}<Button>Save</Button></div>;',
+    'const x = <DropdownMenuItem pending={busy}><SyncIcon />Sync</DropdownMenuItem>;',
+    'const x = <Spinner className="size-3" aria-hidden />;',
+    'const className = "animate-spin-slow animate-pulse";',
+    'const name = "no-animate-spin";',
     'await utils.workspace.get.invalidate({ id });',
     'await utils.workspace.listForProject.cancel(input);',
     'const cached = utils.workspace.listForProject.getData(input);',
@@ -329,6 +354,51 @@ describe('raw palette class exceptions', () => {
     expect(readFileSync(resolve(file), 'utf8')).toMatch(
       /(?<=^|[\s'"`:!])(?:bg|text|border(?:-[trblxyse])?|ring(?:-offset)?|inset-ring|outline|fill|stroke|from|via|to|decoration|divide|shadow|inset-shadow|text-shadow|drop-shadow|accent|caret|placeholder)-(?:red|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose|slate|gray|zinc|neutral|stone)-(?:50|[1-9]00|950)(?![\w-])/
     );
+  });
+});
+
+describe.each(['use-pending-prop', 'no-raw-spinner'])('factory/%s exceptions', (rule) => {
+  const projectConfig = overridesSchema.parse(
+    JSON.parse(readFileSync(resolve('.oxlintrc.json'), 'utf8'))
+  );
+  const exceptions = projectConfig.overrides.flatMap((override) => {
+    const setting = override.rules[`factory/${rule}`];
+    return Array.isArray(setting)
+      ? Object.entries(exceptionRuleSchema.parse(setting)[1].exceptions)
+      : [];
+  });
+
+  it('gives every file a reason', () => {
+    for (const [, reason] of exceptions) {
+      expect(reason.length).toBeGreaterThan(20);
+    }
+  });
+
+  it.runIf(exceptions.length > 0)('still needs every exception', () => {
+    // Lint the listed files with the rule and no exceptions: each must still report.
+    const ruleConfig = join(directory, `${rule}.oxlintrc.json`);
+    writeFileSync(
+      ruleConfig,
+      JSON.stringify({
+        categories: { correctness: 'off' },
+        plugins: [],
+        jsPlugins: [{ name: 'factory', specifier: resolve('lint-rules/factory.mjs') }],
+        rules: { [`factory/${rule}`]: 'error' },
+      })
+    );
+    const files = exceptions.map(([file]) => file);
+    const result = spawnSync(binary, ['--config', ruleConfig, '--format', 'json', ...files], {
+      encoding: 'utf8',
+    });
+    expect(result.error).toBeUndefined();
+    expect(result.stderr).toBe('');
+    const reported = new Set(
+      reportSchema
+        .parse(JSON.parse(result.stdout))
+        .diagnostics.filter(({ code }) => code === `factory(${rule})`)
+        .map(({ filename }) => filename)
+    );
+    expect(files.filter((file) => !reported.has(file))).toEqual([]);
   });
 });
 

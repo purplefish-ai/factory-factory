@@ -41,6 +41,7 @@ export function WorkspacePrMenu({
   onAdd,
   onRemove,
   onReview,
+  isReviewing,
   pending = false,
   compact = false,
   monitoring,
@@ -50,6 +51,9 @@ export function WorkspacePrMenu({
   onAdd?: () => void;
   onRemove?: (prId: string) => void;
   onReview?: (prId: string) => void;
+  /** Whether a review started from this menu is in flight for the PR. */
+  isReviewing?: (prId: string) => boolean;
+  /** Any PR action is in flight; the menu's actions wait for it. */
   pending?: boolean;
   compact?: boolean;
   monitoring?: PRMonitoringMenuProps;
@@ -99,6 +103,7 @@ export function WorkspacePrMenu({
               key={pr.id}
               pr={pr}
               pending={pending}
+              reviewing={isReviewing?.(pr.id) ?? false}
               onReview={onReview}
               onRemove={onRemove}
             />
@@ -127,11 +132,13 @@ export function WorkspacePrMenu({
 function WorkspacePrMenuRow({
   pr,
   pending,
+  reviewing,
   onReview,
   onRemove,
 }: {
   pr: WorkspacePullRequest;
   pending: boolean;
+  reviewing: boolean;
   onReview?: (prId: string) => void;
   onRemove?: (prId: string) => void;
 }) {
@@ -169,6 +176,7 @@ function WorkspacePrMenuRow({
           </DropdownMenuItem>
           {onReview && (
             <DropdownMenuItem
+              pending={reviewing}
               disabled={
                 pending || pr.state === 'NONE' || pr.state === 'MERGED' || pr.state === 'CLOSED'
               }
@@ -225,6 +233,7 @@ function ConnectedPRMonitoringMenu({
         onAdd={onAdd}
         onRemove={onRemove}
         onReview={actions.review}
+        isReviewing={actions.isReviewing}
         monitoring={createPRMonitoringMenuProps(workspaceId, monitoring, toggle, onDiscardBlocked)}
       />
     </>
@@ -291,6 +300,7 @@ export function ConnectedWorkspacePrMenu({
           onAdd={readOnly ? undefined : openAdd}
           onRemove={readOnly ? undefined : setRemoveId}
           onReview={readOnly || !reviewEnabled ? undefined : actions.review}
+          isReviewing={actions.isReviewing}
         />
       )}
       <ConfirmDialog
@@ -303,7 +313,8 @@ export function ConnectedWorkspacePrMenu({
         title="Remove PR from workspace?"
         description="The pull request stays on GitHub. This workspace will stop watching it. You can add it again."
         confirmText="Remove"
-        isPending={actions.pending}
+        pendingText="Removing…"
+        isPending={actions.removing}
         onConfirm={() => {
           runInBackground(
             (async () => {
@@ -321,8 +332,9 @@ export function ConnectedWorkspacePrMenu({
         title="Discard stuck PR update?"
         description="Its delivery record is inconsistent, so Factory Factory can't tell whether the agent received it. Discarding stops waiting on it without resending; the record is kept. Later PR changes will be delivered as usual."
         confirmText="Discard"
+        pendingText="Discarding…"
         variant="destructive"
-        isPending={actions.pending}
+        isPending={actions.discarding}
         onConfirm={() => {
           runInBackground(
             (async () => {
@@ -379,8 +391,13 @@ export function ConnectedWorkspacePrMenu({
               <Button type="button" variant="outline" onClick={() => setOpen(false)}>
                 Cancel
               </Button>
-              <Button type="submit" disabled={actions.pending || !url.trim()}>
-                {actions.pending ? 'Adding…' : 'Add PR'}
+              <Button
+                type="submit"
+                pending={actions.adding}
+                pendingLabel="Adding…"
+                disabled={actions.pending || !url.trim()}
+              >
+                Add PR
               </Button>
             </DialogFooter>
           </form>

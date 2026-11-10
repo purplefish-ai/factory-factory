@@ -12,7 +12,6 @@ import {
   SheetHeader,
   SheetTitle,
 } from '@/components/ui/sheet';
-import { Spinner } from '@/components/ui/spinner';
 import { Textarea } from '@/components/ui/textarea';
 import type { FactoryConfig } from '@/shared/schemas/factory-config.schema';
 
@@ -242,20 +241,13 @@ export function DevServerSetupPanel({
             </Button>
             <Button
               onClick={handleSave}
-              disabled={!runCommand.trim() || isPending}
+              pending={isPending}
+              pendingLabel="Saving…"
+              disabled={!runCommand.trim()}
               className="flex-1"
             >
-              {isPending ? (
-                <>
-                  <Spinner className="mr-2" aria-hidden="true" />
-                  Saving…
-                </>
-              ) : (
-                <>
-                  <FileCodeIcon className="mr-2 h-4 w-4" />
-                  {isEditing ? 'Save configuration' : 'Create configuration'}
-                </>
-              )}
+              <FileCodeIcon className="h-4 w-4" />
+              {isEditing ? 'Save configuration' : 'Create configuration'}
             </Button>
           </SheetFooter>
         </div>

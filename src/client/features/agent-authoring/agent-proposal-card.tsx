@@ -1,6 +1,5 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, useId, useRef, useState } from 'react';
-import { toast } from 'sonner';
 import type { z } from 'zod';
 import { Loading } from '@/client/components/loading';
 import { invalidateSavedAgentQueries } from '@/client/lib/agent-query-cache';
@@ -34,6 +33,9 @@ function heading(hasAgent: boolean, editing: boolean) {
 function useProposalEditor({ proposal, onCreate }: EditorProps) {
   const [draft, setDraft] = useState(() => draftFrom(proposal));
   const [created, setCreated] = useState<AgentProposal>();
+  // onCreate spans the project lookup, the mutation and the cache updates after
+  // it, so the editor owns its busy state; the ref blocks a second submit before
+  // the busy render commits.
   const [busy, setBusy] = useState(false);
   const submitting = useRef(false);
   const [error, setError] = useState<string>();
@@ -239,8 +241,8 @@ export function AgentProposalEditor(props: EditorProps) {
               <LatestProposalButton eventConflict={eventConflict} onLoad={loadLatest} />
             </div>
           ) : (
-            <Button type="submit" disabled={busy}>
-              {busy ? 'Saving…' : accepted ? 'Save changes' : 'Create automation'}
+            <Button type="submit" pending={busy} pendingLabel="Saving…">
+              {accepted ? 'Save changes' : 'Create automation'}
             </Button>
           )}
         </form>
@@ -266,12 +268,9 @@ function LatestProposalButton({
 export function AgentProposalCard({ reference }: { reference: AgentProposalReference }) {
   const input = { workspaceId: reference.workspaceId, proposalId: reference.proposalId };
   const query = trpc.automation.getProposal.useQuery(input);
-  const mutation = trpc.automation.create.useMutation({
-    onError: (error) => toast.error(error.message),
-  });
-  const update = trpc.automation.update.useMutation({
-    onError: (error) => toast.error(error.message),
-  });
+  // The editor shows save failures inline beside the draft.
+  const mutation = trpc.automation.create.useMutation({ meta: { errorToast: false } });
+  const update = trpc.automation.update.useMutation({ meta: { errorToast: false } });
   const utils = trpc.useUtils();
   const queryClient = useQueryClient();
   const { refetch } = query;

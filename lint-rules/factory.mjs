@@ -337,6 +337,83 @@ function isListedFile(context, paths) {
   return paths.some((path) => filename === path || filename.endsWith(`/${path}`));
 }
 
+// `exceptions` maps repository-relative paths to the reason each file may keep
+// the reported pattern; a test fails once a listed file no longer needs it.
+const EXCEPTIONS_SCHEMA = [
+  {
+    type: 'object',
+    properties: {
+      exceptions: {
+        type: 'object',
+        additionalProperties: { type: 'string', minLength: 1 },
+      },
+    },
+    additionalProperties: false,
+  },
+];
+
+function isExceptedFile(context) {
+  return isListedFile(context, Object.keys(context.options[0]?.exceptions ?? {}));
+}
+
+// `animate-spin` as a class, with optional variants (`motion-safe:animate-spin`).
+const ANIMATE_SPIN_CLASS = /(?<=^|[\s'"`:!])animate-spin(?![\w-])/;
+
+function hasSpinClass(text) {
+  return typeof text === 'string' && ANIMATE_SPIN_CLASS.test(text);
+}
+
+const SPINNER_ELEMENTS = new Set(['Spinner', 'SpinnerGapIcon']);
+const PENDING_CONTROLS = new Set(['Button', 'DropdownMenuItem']);
+
+function classNameSpins(attribute, sourceCode) {
+  return (
+    attribute.type === 'JSXAttribute' &&
+    attribute.name.name === 'className' &&
+    Boolean(attribute.value) &&
+    hasSpinClass(sourceCode.getText(attribute.value))
+  );
+}
+
+/** The first spinner rendered among a control's children, through conditionals and fragments. */
+function findChildSpinner(node, sourceCode) {
+  switch (node?.type) {
+    case 'JSXElement': {
+      const opening = node.openingElement;
+      if (
+        SPINNER_ELEMENTS.has(jsxTagName(opening.name)) ||
+        opening.attributes.some((attribute) => classNameSpins(attribute, sourceCode))
+      ) {
+        return node;
+      }
+      return findInChildren(node.children, sourceCode);
+    }
+    case 'JSXFragment':
+      return findInChildren(node.children, sourceCode);
+    case 'JSXExpressionContainer':
+      return findChildSpinner(node.expression, sourceCode);
+    case 'ConditionalExpression':
+      return (
+        findChildSpinner(node.consequent, sourceCode) ??
+        findChildSpinner(node.alternate, sourceCode)
+      );
+    case 'LogicalExpression':
+      return findChildSpinner(node.left, sourceCode) ?? findChildSpinner(node.right, sourceCode);
+    default:
+      return undefined;
+  }
+}
+
+function findInChildren(children, sourceCode) {
+  for (const child of children) {
+    const spinner = findChildSpinner(child, sourceCode);
+    if (spinner) {
+      return spinner;
+    }
+  }
+  return undefined;
+}
+
 const rules = {
   'query-owner': {
     meta: {
@@ -547,25 +624,59 @@ const rules = {
       };
     },
   },
-  'no-raw-palette-classes': {
-    meta: {
-      schema: [
-        {
-          type: 'object',
-          properties: {
-            exceptions: {
-              type: 'object',
-              additionalProperties: { type: 'string', minLength: 1 },
-            },
-          },
-          additionalProperties: false,
-        },
-      ],
-    },
+  'use-pending-prop': {
+    meta: { schema: EXCEPTIONS_SCHEMA },
     create(context) {
-      // `exceptions` maps repository-relative paths to the reason each file
-      // may keep fixed palette colors (see docs/status-colors.md).
-      if (isListedFile(context, Object.keys(context.options[0]?.exceptions ?? {}))) {
+      if (isExceptedFile(context)) {
+        return {};
+      }
+      return {
+        JSXElement(node) {
+          const name = jsxTagName(node.openingElement.name);
+          if (!PENDING_CONTROLS.has(name)) {
+            return;
+          }
+          const spinner = findInChildren(node.children, context.sourceCode);
+          if (spinner) {
+            context.report({
+              node: spinner,
+              message: `Pass \`pending\` to ${name} instead of rendering a spinner inside it; it disables the control and swaps its icon for the shared Spinner.`,
+            });
+          }
+        },
+      };
+    },
+  },
+  'no-raw-spinner': {
+    meta: { schema: EXCEPTIONS_SCHEMA },
+    create(context) {
+      if (isExceptedFile(context)) {
+        return {};
+      }
+      const report = (node, text) => {
+        if (hasSpinClass(text)) {
+          context.report({
+            node,
+            message:
+              'Use the shared Spinner (src/components/ui/spinner.tsx) instead of animate-spin (docs/architecture/client-loading.md).',
+          });
+        }
+      };
+      return {
+        Literal(node) {
+          report(node, node.value);
+        },
+        TemplateElement(node) {
+          report(node, node.value.cooked ?? node.value.raw);
+        },
+      };
+    },
+  },
+  'no-raw-palette-classes': {
+    meta: { schema: EXCEPTIONS_SCHEMA },
+    create(context) {
+      // Fixed palette exceptions are explained in docs/status-colors.md.
+      if (isExceptedFile(context)) {
         return {};
       }
       return {

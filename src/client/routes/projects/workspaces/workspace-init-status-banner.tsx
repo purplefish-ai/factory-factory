@@ -1,6 +1,5 @@
 import { ArrowsClockwiseIcon } from '@phosphor-icons/react/dist/csr/ArrowsClockwise';
 import { PlayIcon } from '@phosphor-icons/react/dist/csr/Play';
-import { SpinnerGapIcon } from '@phosphor-icons/react/dist/csr/SpinnerGap';
 import { WarningIcon } from '@phosphor-icons/react/dist/csr/Warning';
 import { memo } from 'react';
 import { getStatusBannerClassName } from '@/client/lib/status-banner-styles';
@@ -35,7 +34,7 @@ export const InitStatusBanner = memo(function InitStatusBanner({
         ].join(' ')}
       >
         {banner.kind === 'info' ? (
-          <SpinnerGapIcon className="h-4 w-4 mt-0.5 shrink-0 animate-spin" />
+          <Spinner aria-hidden="true" className="mt-0.5" />
         ) : (
           <WarningIcon className="h-4 w-4 mt-0.5 shrink-0" />
         )}
@@ -54,15 +53,13 @@ export const InitStatusBanner = memo(function InitStatusBanner({
                 <Button
                   size="sm"
                   variant="outline"
-                  disabled={retryPending || retryAvailability?.status !== 'AVAILABLE'}
+                  pending={retryPending}
+                  pendingLabel="Retrying…"
+                  disabled={retryAvailability?.status !== 'AVAILABLE'}
                   onClick={onRetry}
                 >
-                  {retryPending ? (
-                    <Spinner className="h-3.5 w-3.5 mr-1.5" aria-hidden="true" />
-                  ) : (
-                    <ArrowsClockwiseIcon className="h-3.5 w-3.5 mr-1.5" />
-                  )}
-                  {retryPending ? 'Retrying…' : 'Retry setup'}
+                  <ArrowsClockwiseIcon className="h-3.5 w-3.5" />
+                  Retry setup
                 </Button>
               )}
               {banner.showPlay && (

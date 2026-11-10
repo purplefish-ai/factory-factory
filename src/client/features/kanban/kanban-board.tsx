@@ -49,7 +49,7 @@ function KanbanBoardContent() {
     isFetching,
     refetch,
     toggleWorkspaceRatcheting,
-    togglingWorkspaceId,
+    togglingWorkspaceIds,
     renameWorkspace,
     archiveWorkspace,
     bulkArchiveColumn,
@@ -149,6 +149,7 @@ function KanbanBoardContent() {
       workspaceCount={archiveGitLockWorkspaceIds.length}
       onRetry={handleRetryGitLockedArchives}
       onRemoveLockAndArchive={handleRemoveGitLocksAndArchive}
+      isPending={isArchiving}
     />
   );
 
@@ -204,7 +205,7 @@ function KanbanBoardContent() {
         onWaitingSortOrderChange={setWaitingSortOrder}
         unreadMailCounts={unreadMailCounts}
         onToggleRatcheting={handleToggleRatcheting}
-        togglingWorkspaceId={togglingWorkspaceId}
+        togglingWorkspaceIds={togglingWorkspaceIds}
         onArchive={handleArchiveWorkspace}
         onBulkArchive={() => handleBulkArchive(column.id)}
         isBulkArchiving={isBulkArchiving}

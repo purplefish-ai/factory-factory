@@ -78,19 +78,12 @@ export function ScriptFailedBanner({
             size="sm"
             className="h-6 px-2 text-xs"
             onClick={retry}
-            disabled={retryInit.isPending || retryAvailability?.status !== 'AVAILABLE'}
+            pending={retryInit.isPending}
+            pendingLabel="Retrying…"
+            disabled={retryAvailability?.status !== 'AVAILABLE'}
           >
-            {retryInit.isPending ? (
-              <>
-                <Spinner aria-hidden="true" className="h-3 w-3 mr-1" />
-                Retrying…
-              </>
-            ) : (
-              <>
-                <ArrowsClockwiseIcon className="h-3 w-3 mr-1" />
-                Retry
-              </>
-            )}
+            <ArrowsClockwiseIcon className="h-3 w-3" />
+            Retry
           </Button>
           {showPlay && (
             <Button

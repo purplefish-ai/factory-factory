@@ -3,8 +3,7 @@ import { GearSixIcon } from '@phosphor-icons/react/dist/csr/GearSix';
 import { InfoIcon } from '@phosphor-icons/react/dist/csr/Info';
 import { PencilIcon } from '@phosphor-icons/react/dist/csr/Pencil';
 import { type ReactNode, useRef, useState } from 'react';
-import { toast } from 'sonner';
-import { trpc } from '@/client/lib/trpc';
+import { useRenameWorkspace } from '@/client/features/workspace/use-workspace-mutations';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -82,10 +81,7 @@ export function WorkspaceHeaderOverflowMenu({
   const [detailsOpen, setDetailsOpen] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const utils = trpc.useUtils();
-  const renameMutation = trpc.workspace.rename.useMutation({
-    onError: (error) => toast.error(`Couldn't rename workspace. ${error.message}`),
-  });
+  const renameMutation = useRenameWorkspace(workspace.projectId);
 
   const handleRenameOpen = () => {
     if (isArchived) {
@@ -108,14 +104,11 @@ export function WorkspaceHeaderOverflowMenu({
       return;
     }
     try {
+      // Resolves once the new name has been refetched, so the dialog closes onto it.
       await renameMutation.mutateAsync({ id: workspaceId, name: trimmed });
       setRenameOpen(false);
-      await Promise.all([
-        utils.workspace.get.invalidate({ id: workspaceId }),
-        utils.workspace.listForProject.invalidate({ projectId: workspace.projectId }),
-      ]);
     } catch {
-      // onError handles user feedback via toast
+      // The shared rename hook reports the failure; the dialog stays open to retry.
     }
   };
 
@@ -159,7 +152,9 @@ export function WorkspaceHeaderOverflowMenu({
             </Button>
             <Button
               onClick={() => void handleRenameSubmit()}
-              disabled={!renameValue.trim() || renameMutation.isPending}
+              pending={renameMutation.isPending}
+              pendingLabel="Renaming…"
+              disabled={!renameValue.trim()}
             >
               Rename
             </Button>

@@ -75,4 +75,33 @@ describe('ArchiveGitLockDialog', () => {
     void act(() => removeButton?.click());
     expect(onRemoveLockAndArchive).toHaveBeenCalledOnce();
   });
+
+  it('holds both recovery actions and stays open while archives are in flight', () => {
+    const onOpenChange = vi.fn();
+    const onRetry = vi.fn();
+    void act(() => {
+      root.render(
+        createElement(ArchiveGitLockDialog, {
+          open: true,
+          onOpenChange,
+          onRetry,
+          onRemoveLockAndArchive: vi.fn(),
+          workspaceCount: 2,
+          isPending: true,
+        })
+      );
+    });
+
+    const buttons = [...document.querySelectorAll('button')];
+    for (const name of ['Cancel', 'Retry', 'Remove Lock and Archive']) {
+      expect(buttons.find((button) => button.textContent === name)?.disabled).toBe(true);
+    }
+    void act(() => {
+      document
+        .querySelector('[role="alertdialog"]')
+        ?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    });
+    expect(onOpenChange).not.toHaveBeenCalled();
+    expect(onRetry).not.toHaveBeenCalled();
+  });
 });

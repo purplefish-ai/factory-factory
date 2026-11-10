@@ -2,6 +2,7 @@ import { createContext, type ReactNode, useCallback, useContext, useMemo, useSta
 import { toast } from 'sonner';
 import { useWorkspaceUnreadCounts } from '@/client/features/inbox';
 import {
+  useRenameWorkspace,
   useWorkspaceArchiveCommand,
   type WorkspaceArchiveOutcome,
 } from '@/client/features/workspace';
@@ -35,7 +36,8 @@ interface KanbanContextValue {
   syncAndRefetch: () => void;
   isSyncing: boolean;
   toggleWorkspaceRatcheting: (workspaceId: string, enabled: boolean) => Promise<void>;
-  togglingWorkspaceId: string | null;
+  /** Workspaces whose PR-updates toggle is in flight; each card shows its own. */
+  togglingWorkspaceIds: readonly string[];
   renameWorkspace: (workspaceId: string, name: string) => Promise<void>;
   archiveWorkspace: (workspaceId: string, removeGitIndexLock?: boolean) => Promise<void>;
   bulkArchiveColumn: (kanbanColumn: string) => Promise<void>;
@@ -78,7 +80,6 @@ export function KanbanProvider({
   issueProvider,
   children,
 }: KanbanProviderProps) {
-  const utils = trpc.useUtils();
   const unreadMailCounts = useWorkspaceUnreadCounts(projectId);
   const {
     data: projectWorkspaces,
@@ -100,11 +101,8 @@ export function KanbanProvider({
     onError: (error) => toast.error(`Couldn't sync PR statuses. ${error.message}`),
   });
   const toggleRatchetingMutation = useToggleRatcheting(projectId);
-  const renameMutation = trpc.workspace.rename.useMutation({
-    onError: (error) => toast.error(`Couldn't rename workspace. ${error.message}`),
-  });
+  const renameMutation = useRenameWorkspace(projectId);
   const archiveCommand = useWorkspaceArchiveCommand();
-  const [togglingWorkspaceId, setTogglingWorkspaceId] = useState<string | null>(null);
   const [archiveGitLockWorkspaceIds, setArchiveGitLockWorkspaceIds] = useState<string[]>([]);
   const [archiveIssueOperations, setArchiveIssueOperations] = useState<
     Map<symbol, Map<string, WorkspaceIssueLink>>
@@ -185,22 +183,19 @@ export function KanbanProvider({
   };
 
   const toggleWorkspaceRatcheting = async (workspaceId: string, enabled: boolean) => {
-    setTogglingWorkspaceId(workspaceId);
     try {
-      // Optimistic cache updates and settle-time invalidation live in the
-      // shared useToggleRatcheting hook.
+      // Pending state and settle-time invalidation live in the shared
+      // useToggleRatcheting hook.
       await toggleRatchetingMutation.mutateAsync({ workspaceId, enabled });
     } catch {
       // Error feedback is surfaced by useToggleRatcheting's onError toast;
       // callers fire-and-forget, so don't propagate an unhandled rejection.
-    } finally {
-      setTogglingWorkspaceId(null);
     }
   };
 
+  // Resolves once the renamed workspace has refetched (see useRenameWorkspace).
   const renameWorkspace = async (workspaceId: string, name: string) => {
     await renameMutation.mutateAsync({ id: workspaceId, name });
-    await Promise.all([refetchWorkspaces(), utils.workspace.get.invalidate({ id: workspaceId })]);
   };
 
   const archiveWorkspace = async (workspaceId: string, removeGitIndexLock = false) => {
@@ -307,7 +302,7 @@ export function KanbanProvider({
         syncAndRefetch,
         isSyncing: syncMutation.isPending,
         toggleWorkspaceRatcheting,
-        togglingWorkspaceId,
+        togglingWorkspaceIds: toggleRatchetingMutation.pendingWorkspaceIds,
         renameWorkspace,
         archiveWorkspace,
         bulkArchiveColumn,

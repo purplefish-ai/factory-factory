@@ -4,7 +4,6 @@ import { runInBackground } from '@/client/lib/background-task';
 import { QUERY_RETRY } from '@/client/lib/query-options';
 import { trpc } from '@/client/lib/trpc';
 import { Button } from '@/components/ui/button';
-import { Spinner } from '@/components/ui/spinner';
 import type { CodexAccountSummary } from '@/shared/codex-accounts';
 
 function getWarning(
@@ -145,13 +144,9 @@ export function ProviderCliWarning({
             "Couldn't check provider status."
           );
         }}
-        disabled={isRefetching}
+        pending={isRefetching}
       >
-        {isRefetching ? (
-          <Spinner className="h-3.5 w-3.5" aria-hidden="true" />
-        ) : (
-          <ArrowsClockwiseIcon className="h-3.5 w-3.5" />
-        )}
+        <ArrowsClockwiseIcon className="h-3.5 w-3.5" />
         <span className="sr-only">Recheck</span>
       </Button>
     </div>

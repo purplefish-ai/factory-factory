@@ -5,7 +5,6 @@ import {
   DropdownMenuRadioItem,
   DropdownMenuSeparator,
 } from '@/components/ui/dropdown-menu';
-import { Spinner } from '@/components/ui/spinner';
 import { canResumePRMonitoring, isPRDeliveryBlocked, PRDeliveryMode } from '@/shared/pr-monitoring';
 import { RatchetWrenchIcon } from './ratchet-wrench-icon';
 
@@ -34,12 +33,9 @@ export function PRMonitoringMenuItems({
 }: PRMonitoringMenuProps) {
   return (
     <>
-      <DropdownMenuItem disabled={pending} onSelect={() => onToggle(!enabled)}>
-        {pending ? (
-          <Spinner aria-hidden="true" className="h-4 w-4" />
-        ) : (
-          <RatchetWrenchIcon enabled={enabled} className="size-4" />
-        )}
+      <DropdownMenuItem pending={pending} onSelect={() => onToggle(!enabled)}>
+        {/* The wrench is wrapped in a span, so hide it here rather than through the item's svg rule. */}
+        {!pending && <RatchetWrenchIcon enabled={enabled} className="size-4" />}
         {enabled ? 'Turn off PR updates' : 'Turn on PR updates'}
       </DropdownMenuItem>
       {enabled && canResumePRMonitoring(pauseReason) && onResume && (

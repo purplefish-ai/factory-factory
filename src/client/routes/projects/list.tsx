@@ -15,7 +15,6 @@ import { trpc } from '@/client/lib/trpc';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
-import { Spinner } from '@/components/ui/spinner';
 import {
   Table,
   TableBody,
@@ -57,10 +56,10 @@ function ProjectActions({
             size="icon"
             aria-label={`Archive ${projectName}`}
             onClick={onArchive}
-            disabled={archivePending}
+            pending={archivePending}
             className="hover:bg-destructive/10 hover:text-destructive"
           >
-            {archivePending ? <Spinner className="size-4" /> : <ArchiveIcon className="size-4" />}
+            <ArchiveIcon className="size-4" />
           </Button>
         </TooltipTrigger>
         <TooltipContent>Archive</TooltipContent>
@@ -96,6 +95,10 @@ export default function ProjectsListPage() {
       toast.error(error.message || "Couldn't archive project.");
     },
   });
+
+  // One dialog archives one project at a time; only that row shows pending.
+  const isArchivingProject = (projectId: string) =>
+    archiveMutation.isPending && archiveMutation.variables?.id === projectId;
 
   if (isLoading) {
     return <Loading message="Loading projects…" />;
@@ -166,7 +169,7 @@ export default function ProjectsListPage() {
                     projectName={project.name}
                     startupScriptCommand={project.startupScriptCommand}
                     startupScriptPath={project.startupScriptPath}
-                    archivePending={archiveMutation.isPending}
+                    archivePending={isArchivingProject(project.id)}
                     onArchive={() => {
                       setProjectToArchive(project.id);
                       setArchiveDialogOpen(true);
@@ -224,7 +227,7 @@ export default function ProjectsListPage() {
                       projectName={project.name}
                       startupScriptCommand={project.startupScriptCommand}
                       startupScriptPath={project.startupScriptPath}
-                      archivePending={archiveMutation.isPending}
+                      archivePending={isArchivingProject(project.id)}
                       onArchive={() => {
                         setProjectToArchive(project.id);
                         setArchiveDialogOpen(true);
@@ -240,15 +243,11 @@ export default function ProjectsListPage() {
 
       <ConfirmDialog
         open={archiveDialogOpen}
-        onOpenChange={(open) => {
-          if (!open && archiveMutation.isPending) {
-            return;
-          }
-          setArchiveDialogOpen(open);
-        }}
+        onOpenChange={setArchiveDialogOpen}
         title="Archive project?"
         description="The project will be hidden from the project list. Its repository and workspaces are kept. There is no restore action in the app."
         confirmText="Archive"
+        pendingText="Archiving…"
         variant="destructive"
         onConfirm={() => {
           if (projectToArchive) {

@@ -41,6 +41,19 @@ export const Busy: Story = {
   },
 };
 
+/** A restart is in flight: Restart agent swaps its icon for a spinner and is disabled. */
+export const Restarting: Story = {
+  args: { restartPending: true },
+  play: async ({ canvasElement }) => {
+    await userEvent.click(within(canvasElement).getByRole('button', { name: 'Chat actions' }));
+    const menu = within(await within(canvasElement.ownerDocument.body).findByRole('menu'));
+    const restart = menu.getByRole('menuitem', { name: /Restart agent/ });
+    await expect(restart).toHaveAttribute('aria-disabled', 'true');
+    await expect(restart).toHaveAttribute('aria-busy', 'true');
+    await expect(restart.querySelector('[data-slot=spinner]')).not.toBeNull();
+  },
+};
+
 export const Dark: Story = { globals: { theme: 'dark' } };
 
 export const Rename: Story = {

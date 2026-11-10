@@ -236,6 +236,7 @@ function createViewProps(activeChildCount: number): WorkspaceDetailViewProps {
       handleNewChat: vi.fn(),
       handleCloseChatSession: vi.fn(),
       handleRestartSession: vi.fn(),
+      isRestartingSession: false,
       handleOpenSubagentTab: vi.fn(),
       maxSessions: 5,
       hasWorktreePath: true,

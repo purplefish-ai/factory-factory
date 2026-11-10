@@ -200,19 +200,24 @@ export function GithubUrlForm({
       {footerActions ? (
         <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end sm:gap-4">
           {footerActions}
-          <Button type="submit" disabled={isSubmitting || !parsedRepo}>
-            {isSubmitting && <Spinner className="mr-2" />}
-            {isSubmitting ? submittingLabel : submitLabel}
+          <Button
+            type="submit"
+            pending={isSubmitting}
+            pendingLabel={submittingLabel}
+            disabled={!parsedRepo}
+          >
+            {submitLabel}
           </Button>
         </div>
       ) : (
         <Button
           type="submit"
           className={submitFullWidth ? 'w-full' : undefined}
-          disabled={isSubmitting || !parsedRepo}
+          pending={isSubmitting}
+          pendingLabel={submittingLabel}
+          disabled={!parsedRepo}
         >
-          {isSubmitting && <Spinner className="mr-2" />}
-          {isSubmitting ? submittingLabel : submitLabel}
+          {submitLabel}
         </Button>
       )}
     </form>

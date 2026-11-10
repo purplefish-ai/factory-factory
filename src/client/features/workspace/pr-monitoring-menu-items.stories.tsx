@@ -38,9 +38,14 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 export const Saving: Story = {
   play: async ({ canvasElement }) => {
-    await expect(
-      within(canvasElement.ownerDocument.body).getByRole('menuitem', { name: 'Turn on PR updates' })
-    ).toHaveAttribute('aria-disabled', 'true');
+    const item = within(canvasElement.ownerDocument.body).getByRole('menuitem', {
+      name: 'Turn on PR updates',
+    });
+    await expect(item).toHaveAttribute('aria-disabled', 'true');
+    await expect(item).toHaveAttribute('aria-busy', 'true');
+    // The spinner replaces the wrench while the toggle is in flight.
+    await expect(item.querySelector('[data-slot=spinner]')).not.toBeNull();
+    await expect(item.querySelector('[data-ratchet-state]')).toBeNull();
   },
 };
 export const SavingDark: Story = { ...Saving, globals: { theme: 'dark' } };

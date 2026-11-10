@@ -20,12 +20,15 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 export function ChatActionsMenu({
   chatLabel,
   onRestartSession,
+  restartPending = false,
   disabled = false,
   onRename,
 }: {
   /** The selected chat's tab label; null when no chat is selected. */
   chatLabel: string | null;
   onRestartSession: () => void;
+  /** A restart is in flight: Restart agent shows a spinner and is disabled. */
+  restartPending?: boolean;
   disabled?: boolean;
   onRename?: () => void;
 }) {
@@ -68,6 +71,7 @@ export function ChatActionsMenu({
         )}
         <DropdownMenuItem
           disabled={disabled || chatLabel === null}
+          pending={restartPending}
           onSelect={onRestartSession}
           className="items-start"
         >

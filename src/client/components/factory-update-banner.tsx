@@ -87,18 +87,19 @@ function UpdateActions({ updates, isPending, onUpdate, onCancel, onDismiss }: Pr
   const updateLabel = status.phase === 'failed' ? 'Retry update' : 'Update';
   return (
     <div className="ml-auto flex shrink-0 items-center gap-1.5">
-      {active && <Spinner className="size-3.5" aria-hidden="true" />}
       {status.phase === 'waiting' ? (
-        <Button variant="ghost" size="sm" disabled={isPending} onClick={onCancel}>
-          Cancel update
-        </Button>
+        <>
+          <Spinner className="size-3.5" aria-hidden="true" />
+          <Button variant="ghost" size="sm" pending={isPending} onClick={onCancel}>
+            Cancel update
+          </Button>
+        </>
       ) : active ? (
-        <Button variant="ghost" size="sm" disabled>
+        <Button variant="ghost" size="sm" pending>
           {progressLabel}
         </Button>
       ) : automaticUpdate ? (
-        <Button variant="outline" size="sm" disabled={isPending} onClick={onUpdate}>
-          {isPending && <Spinner className="size-3.5" aria-hidden="true" />}
+        <Button variant="outline" size="sm" pending={isPending} onClick={onUpdate}>
           {updateLabel}
         </Button>
       ) : null}

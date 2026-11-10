@@ -8,10 +8,15 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { slackConnectInputSchema, type SlackConnectionSummary } from '@/shared/slack-connection';
 
+/** The Slack operation in flight; the row or form that started it shows the spinner. */
+export type SlackPendingOperation =
+  | { kind: 'connect' }
+  | { kind: 'test' | 'disconnect'; connectionId: string };
+
 interface SlackConnectionsViewProps {
   connections?: readonly SlackConnectionSummary[];
   loading?: boolean;
-  busy?: boolean;
+  pending?: SlackPendingOperation;
   error?: string;
   notice?: string;
   token: string;
@@ -24,6 +29,10 @@ interface SlackConnectionsViewProps {
 export function SlackConnectionsView(props: SlackConnectionsViewProps) {
   const [disconnectId, setDisconnectId] = useState<string>();
   const [disconnectError, setDisconnectError] = useState<string>();
+  const busy = props.pending !== undefined;
+  const isPending = (kind: SlackPendingOperation['kind'], connectionId?: string) =>
+    props.pending?.kind === kind &&
+    (props.pending.kind === 'connect' || props.pending.connectionId === connectionId);
   return (
     <Card>
       <CardHeader>
@@ -62,7 +71,9 @@ export function SlackConnectionsView(props: SlackConnectionsViewProps) {
                 <Button
                   variant="outline"
                   size="sm"
-                  disabled={props.busy}
+                  disabled={busy}
+                  pending={isPending('test', connection.id)}
+                  pendingLabel="Testing…"
                   onClick={() => props.onTest(connection.id)}
                 >
                   Test connection
@@ -70,7 +81,7 @@ export function SlackConnectionsView(props: SlackConnectionsViewProps) {
                 <Button
                   variant="ghost"
                   size="sm"
-                  disabled={props.busy}
+                  disabled={busy}
                   onClick={() => {
                     setDisconnectError(undefined);
                     setDisconnectId(connection.id);
@@ -98,7 +109,7 @@ export function SlackConnectionsView(props: SlackConnectionsViewProps) {
               spellCheck={false}
               placeholder="xoxb-…"
               value={props.token}
-              disabled={props.busy || props.loading}
+              disabled={busy || props.loading}
               onChange={(event) => props.onTokenChange(event.target.value)}
               aria-describedby="slack-token-help"
             />
@@ -112,10 +123,12 @@ export function SlackConnectionsView(props: SlackConnectionsViewProps) {
           <Button
             type="submit"
             disabled={
-              props.busy ||
+              busy ||
               props.loading ||
               !slackConnectInputSchema.safeParse({ botToken: props.token }).success
             }
+            pending={isPending('connect')}
+            pendingLabel="Connecting…"
           >
             Connect Slack
           </Button>
@@ -126,15 +139,16 @@ export function SlackConnectionsView(props: SlackConnectionsViewProps) {
         <ConfirmDialog
           open={!!disconnectId}
           onOpenChange={(open) => {
-            if (!(props.busy || open)) {
+            if (!open) {
               setDisconnectId(undefined);
             }
           }}
           title="Disconnect Slack?"
           description={`Remove the saved bot token from Factory Factory. This does not revoke the token or change your Slack app. You can reconnect with a valid token.${disconnectError ? ` ${disconnectError}` : ''}`}
           confirmText="Disconnect"
+          pendingText="Disconnecting…"
           variant="destructive"
-          isPending={props.busy}
+          isPending={busy}
           onConfirm={() => {
             if (disconnectId) {
               setDisconnectError(undefined);
@@ -164,10 +178,12 @@ export function SlackSettings() {
   const [token, setToken] = useState('');
   const [error, setError] = useState<string>();
   const [notice, setNotice] = useState<string>();
-  const [busy, setBusy] = useState(false);
+  // Spans the mutation and the list refresh after it, so controls stay
+  // disabled until the refreshed connections are on screen.
+  const [pending, setPending] = useState<SlackPendingOperation>();
 
-  async function perform(operation: () => Promise<string>) {
-    setBusy(true);
+  async function perform(target: SlackPendingOperation, operation: () => Promise<string>) {
+    setPending(target);
     setError(undefined);
     setNotice(undefined);
     let succeeded = false;
@@ -187,7 +203,7 @@ export function SlackSettings() {
       } catch {
         setError((current) => current ?? 'Connections could not be refreshed. Reload Settings.');
       }
-      setBusy(false);
+      setPending(undefined);
       connect.reset();
     }
     return { succeeded, ...(operationError ? { error: operationError } : {}) };
@@ -197,26 +213,26 @@ export function SlackSettings() {
     <SlackConnectionsView
       connections={connections.data}
       loading={connections.isLoading}
-      busy={busy}
+      pending={pending}
       error={error ?? connections.error?.message}
       notice={notice}
       token={token}
       onTokenChange={setToken}
       onConnect={() => {
-        void perform(async () => {
+        void perform({ kind: 'connect' }, async () => {
           const saved = await connect.mutateAsync({ botToken: token.trim() });
           setToken('');
           return `Connected to ${saved.name}.`;
         });
       }}
       onTest={(id) => {
-        void perform(async () => {
+        void perform({ kind: 'test', connectionId: id }, async () => {
           const result = await test.mutateAsync({ id });
           return `Connected to ${result.workspaceName}.`;
         });
       }}
       onDisconnect={(id) => {
-        return perform(async () => {
+        return perform({ kind: 'disconnect', connectionId: id }, async () => {
           await disconnect.mutateAsync({ id });
           return 'Slack credentials removed.';
         });

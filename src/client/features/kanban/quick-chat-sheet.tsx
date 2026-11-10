@@ -209,6 +209,7 @@ export function QuickChatSheet({ workspaceId, onClose }: QuickChatSheetProps) {
               onCloseSession={handleCloseSession}
               disabled={tabBarDisabled}
               createDisabled={Boolean(newChatUnavailableReason)}
+              createPending={isCreatingSession}
             />
           </div>
         </div>

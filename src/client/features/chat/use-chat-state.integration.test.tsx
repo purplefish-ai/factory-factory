@@ -513,7 +513,8 @@ describe('useChatState plan mode persistence', () => {
           type: 'permission_response',
           requestId: 'exit-plan',
           optionId: 'native-accept-edits',
-        })
+        }),
+        { queuePolicy: 'drop' }
       );
 
       harness.cleanup();
@@ -545,18 +546,85 @@ describe('form elicitation answer submission', () => {
         actFlushSync(() => {
           harness.chatRef.current?.answerQuestion('elicitation-question', { decision: answer });
         });
-        expect(harness.send).toHaveBeenCalledWith({
-          type: 'permission_response',
-          requestId: 'elicitation-question',
-          optionId: 'accept',
-          answers: { decision: Array.isArray(answer) ? answer : [answer.trim()] },
-        });
+        expect(harness.send).toHaveBeenCalledWith(
+          {
+            type: 'permission_response',
+            requestId: 'elicitation-question',
+            optionId: 'accept',
+            answers: { decision: Array.isArray(answer) ? answer : [answer.trim()] },
+          },
+          { queuePolicy: 'drop' }
+        );
         expect(harness.chatRef.current?.pendingRequest).toEqual({ type: 'none' });
       } finally {
         harness.cleanup();
       }
     }
   );
+});
+
+describe('refused prompt answers', () => {
+  it('keeps a question open when its answer cannot be sent', async () => {
+    const harness = renderChatState(
+      'session-A',
+      vi.fn((_message: unknown) => false)
+    );
+    await flushEffects();
+    try {
+      actFlushSync(() => {
+        harness.chatRef.current?.dispatch({
+          type: 'WS_USER_QUESTION',
+          payload: {
+            requestId: 'question-1',
+            timestamp: '2026-10-27T00:00:00Z',
+            questions: [{ id: 'decision', question: 'Proceed?', options: [] }],
+          },
+        });
+      });
+      actFlushSync(() => {
+        harness.chatRef.current?.answerQuestion('question-1', { decision: 'Yes' });
+      });
+      expect(harness.send).toHaveBeenCalledWith(
+        expect.objectContaining({ type: 'permission_response', requestId: 'question-1' }),
+        { queuePolicy: 'drop' }
+      );
+      expect(harness.chatRef.current?.pendingRequest).toMatchObject({ type: 'question' });
+    } finally {
+      harness.cleanup();
+    }
+  });
+
+  it('keeps a permission request open when its answer cannot be sent', async () => {
+    const harness = renderChatState(
+      'session-A',
+      vi.fn((_message: unknown) => false)
+    );
+    await flushEffects();
+    try {
+      actFlushSync(() => {
+        harness.chatRef.current?.dispatch({
+          type: 'WS_PERMISSION_REQUEST',
+          payload: {
+            requestId: 'permission-1',
+            toolName: 'Bash',
+            toolInput: {},
+            acpOptions: [{ optionId: 'allow', name: 'Allow', kind: 'allow_once' }],
+            timestamp: '2026-10-27T00:00:00Z',
+          },
+        });
+      });
+      actFlushSync(() => {
+        harness.chatRef.current?.approvePermission('permission-1', true);
+      });
+      expect(harness.send).toHaveBeenCalledWith(
+        expect.objectContaining({ type: 'permission_response', requestId: 'permission-1' }),
+        { queuePolicy: 'drop' }
+      );
+      expect(harness.chatRef.current?.pendingRequest).toMatchObject({ type: 'permission' });
+    } finally {
+      harness.cleanup();
+    }
+  });
 });
 
 it('keeps a failed PR update out of an empty composer', async () => {

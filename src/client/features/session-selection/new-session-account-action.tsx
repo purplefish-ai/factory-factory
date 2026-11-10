@@ -14,11 +14,18 @@ import type { CodexAccountSummary } from '@/shared/codex-accounts';
 interface ActionProps {
   onCreate: (codexAccountId?: string) => void;
   disabled?: boolean;
+  /** A new session is being created: the button shows a spinner. */
+  pending?: boolean;
 }
 interface ActionViewProps extends ActionProps {
   accounts?: readonly Pick<CodexAccountSummary, 'id' | 'label' | 'authenticated'>[];
 }
-export function NewSessionAccountActionView({ accounts, onCreate, disabled }: ActionViewProps) {
+export function NewSessionAccountActionView({
+  accounts,
+  onCreate,
+  disabled,
+  pending = false,
+}: ActionViewProps) {
   const multiple = accounts && accounts.length > 1;
   const button = (
     <Button
@@ -27,6 +34,8 @@ export function NewSessionAccountActionView({ accounts, onCreate, disabled }: Ac
       className="h-7 w-7 shrink-0 text-muted-foreground"
       aria-label="New session"
       disabled={disabled}
+      pending={pending}
+      pendingLabel="Creating session"
       onClick={multiple ? undefined : () => onCreate(undefined)}
     >
       <PlusIcon className="h-3.5 w-3.5" />

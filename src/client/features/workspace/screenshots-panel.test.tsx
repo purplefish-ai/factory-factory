@@ -62,7 +62,14 @@ vi.mock('@/components/ui/confirm-dialog', () => ({
           ),
           createElement(
             'button',
-            { type: 'button', 'data-testid': 'cancel', onClick: () => onOpenChange(false) },
+            // Like the real dialog, which disables Cancel and ignores close
+            // requests while pending (src/components/ui/pending-controls.test.tsx).
+            {
+              type: 'button',
+              'data-testid': 'cancel',
+              onClick: () => onOpenChange(false),
+              disabled: isPending,
+            },
             'Cancel'
           )
         )

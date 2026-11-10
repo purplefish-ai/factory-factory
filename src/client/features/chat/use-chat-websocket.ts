@@ -109,6 +109,8 @@ export interface UseChatWebSocketReturn {
   sendMessage: (text: string, options?: SendMessageOptions) => void;
   stopChat: () => void;
   restartSession: () => void;
+  // A restart of this session is in flight
+  isRestartingSession: boolean;
   approvePermission: (requestId: string, allow: boolean, optionId?: string) => void;
   answerQuestion: (requestId: string, answers: Record<string, string | string[]>) => void;
   updateSettings: (settings: Partial<ChatSettings>) => void;
@@ -356,7 +358,11 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
   // Wire up the send function to the transport
   sendRef.current = transport.send;
 
-  const { mutate: restartSessionMutate } = trpc.session.restartSession.useMutation({
+  const {
+    mutate: restartSessionMutate,
+    isPending: restartPending,
+    variables: restartVariables,
+  } = trpc.session.restartSession.useMutation({
     onError: (error) => toast.error(`Couldn't restart session. ${error.message}`),
   });
   const restartSession = useCallback(() => {
@@ -419,6 +425,7 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
     sendMessage: chat.sendMessage,
     stopChat: chat.stopChat,
     restartSession,
+    isRestartingSession: restartPending && restartVariables?.id === dbSessionId,
     approvePermission: chat.approvePermission,
     answerQuestion: chat.answerQuestion,
     updateSettings: chat.updateSettings,

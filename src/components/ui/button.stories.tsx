@@ -1,4 +1,7 @@
+import { FloppyDiskIcon } from '@phosphor-icons/react/dist/csr/FloppyDisk';
+import { PlayIcon } from '@phosphor-icons/react/dist/csr/Play';
 import type { Meta, StoryObj } from '@storybook/react';
+import { expect, within } from 'storybook/test';
 import { Button } from './button';
 
 const meta = {
@@ -18,6 +21,9 @@ const meta = {
       options: ['default', 'xs', 'sm', 'lg', 'icon', 'icon-xs', 'icon-sm', 'icon-lg'],
     },
     disabled: {
+      control: 'boolean',
+    },
+    pending: {
       control: 'boolean',
     },
   },
@@ -129,4 +135,67 @@ export const AllSizes: Story = {
       </Button>
     </div>
   ),
+};
+
+export const Pending: Story = {
+  args: {
+    children: 'Save',
+    pending: true,
+    pendingLabel: 'Saving…',
+  },
+  play: async ({ canvasElement }) => {
+    const button = within(canvasElement).getByRole('button', { name: 'Saving…' });
+    await expect(button).toBeDisabled();
+    await expect(button).toHaveAttribute('aria-busy', 'true');
+  },
+};
+
+/**
+ * Every size while pending: the spinner replaces the static icon and takes the
+ * button's icon size; labels stay beside it.
+ */
+export const PendingSizes: Story = {
+  render: () => (
+    <div className="flex items-center gap-4">
+      <Button size="xs" pending>
+        <FloppyDiskIcon />
+        Save
+      </Button>
+      <Button size="sm" variant="outline" pending>
+        <FloppyDiskIcon />
+        Save
+      </Button>
+      <Button pending pendingLabel="Saving…">
+        <FloppyDiskIcon />
+        Save
+      </Button>
+      <Button size="icon-xs" variant="ghost" aria-label="Start dev server" pending>
+        <PlayIcon />
+      </Button>
+      <Button
+        size="icon"
+        variant="ghost"
+        aria-label="Start dev server"
+        pending
+        pendingLabel="Starting dev server"
+      >
+        <PlayIcon />
+      </Button>
+    </div>
+  ),
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const [xs, sm] = canvas.getAllByRole('button', { name: 'Save' });
+    for (const button of [xs, sm]) {
+      const [spinner, icon] = button?.querySelectorAll('svg') ?? [];
+      await expect(spinner).toHaveAttribute('data-slot', 'spinner');
+      await expect(icon).not.toBeVisible();
+    }
+    // The spinner follows the button's icon size: 12px in xs, 16px otherwise.
+    await expect(xs?.querySelector('[data-slot=spinner]')?.getBoundingClientRect().width).toBe(12);
+    await expect(sm?.querySelector('[data-slot=spinner]')?.getBoundingClientRect().width).toBe(16);
+    const iconButton = canvas.getByRole('button', { name: 'Starting dev server' });
+    await expect(iconButton).toBeDisabled();
+    await expect(iconButton.querySelector('svg:not([data-slot=spinner])')).not.toBeVisible();
+  },
 };

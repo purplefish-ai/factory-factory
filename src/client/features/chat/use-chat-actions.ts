@@ -300,7 +300,11 @@ export function useChatActions(options: UseChatActionsOptions): UseChatActionsRe
         requestId,
         optionId: resolvedOptionId,
       };
-      send(msg);
+      // Like steering: the prompt closes only once the answer is sent, so a
+      // refused send (disconnected) leaves it open to answer again.
+      if (!send(msg, UNQUEUED_SEND)) {
+        return;
+      }
       dispatch({ type: 'PERMISSION_RESPONSE', payload: { allow } });
 
       if (allow && pendingRequest.request.toolName === 'ExitPlanMode') {
@@ -326,7 +330,9 @@ export function useChatActions(options: UseChatActionsOptions): UseChatActionsRe
         optionId,
         ...(Object.keys(normalizedAnswers).length > 0 ? { answers: normalizedAnswers } : {}),
       };
-      send(msg);
+      if (!send(msg, UNQUEUED_SEND)) {
+        return;
+      }
       dispatch({ type: 'QUESTION_RESPONSE' });
 
       if (

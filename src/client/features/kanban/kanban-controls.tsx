@@ -8,7 +8,6 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { Spinner } from '@/components/ui/spinner';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useKanban } from './kanban-context';
@@ -49,12 +48,8 @@ export function KanbanControlsView({
           <TooltipContent>Board actions</TooltipContent>
         </Tooltip>
         <DropdownMenuContent align="end">
-          <DropdownMenuItem onSelect={onRefresh} disabled={isSyncing}>
-            {isSyncing ? (
-              <Spinner className="h-4 w-4" aria-hidden="true" />
-            ) : (
-              <ArrowsClockwiseIcon className="h-4 w-4" />
-            )}
+          <DropdownMenuItem onSelect={onRefresh} pending={isSyncing}>
+            <ArrowsClockwiseIcon className="h-4 w-4" />
             {isSyncing ? 'Syncing…' : 'Sync now'}
           </DropdownMenuItem>
         </DropdownMenuContent>

@@ -118,6 +118,33 @@
             }
           }
         ],
+        "factory/use-pending-prop": [
+          "error",
+          {
+            "exceptions": {
+              "src/client/features/chat/usage-stats/provider-usage-control.tsx": "The usage popover trigger shows compaction status (including automatic compaction) and must stay openable, so it cannot be disabled by pending; its actions use pending.",
+              "src/client/features/voice/voice-mode-toggle.tsx": "While voice capture connects the toggle is the only way to stop it, so it must stay clickable; pending would disable it.",
+              "src/client/components/query-error-state.tsx": "Retry button spinner is part of the query failure rendering that PR ux-query-failure-states is changing; it moves to Button pending there.",
+              "src/client/routes/admin/ProjectFactoryConfigCard.tsx": "Admin settings section owned by PR ux-settings-sections, which moves its save button to Button pending.",
+              "src/client/routes/admin/RatchetSettingsSection.tsx": "Admin settings section owned by PR ux-settings-sections, which moves its save button to Button pending."
+            }
+          }
+        ],
+        "factory/no-raw-spinner": [
+          "error",
+          {
+            "exceptions": {
+              "src/components/ui/spinner.tsx": "The shared Spinner itself: the one component allowed to apply animate-spin to a pending indicator.",
+              "src/client/components/agent-session-status.tsx": "Agent status glyph: the running status spins its status-tone icon beside the robot; it is a status, not a pending control.",
+              "src/client/components/todo-item.tsx": "Todo status ring: an in-progress task spins its bordered status ring, a status rather than a pending control.",
+              "src/client/features/workspace/main-view-tab-bar.tsx": "Session tab status icon: a running session spins its status-tone glyph, a status rather than a pending control.",
+              "src/client/features/workspace/workspace-status-badge.tsx": "Workspace status badge: Setting up and Archiving spin their status glyph inside a labelled badge, a status rather than a pending control.",
+              "src/client/features/chat/agent-activity/message-renderers/assistant-message-renderer.tsx": "Transcript renderer owned by PR ux-render-resilience, which replaces its raw spinner with the shared Spinner.",
+              "src/client/features/chat/agent-activity/message-renderers/stream-event-renderer.tsx": "Transcript renderer owned by PR ux-render-resilience, which replaces its raw spinner with the shared Spinner.",
+              "src/client/features/chat/agent-activity/tool-renderers/tool-info-renderer.tsx": "Tool renderer owned by PR ux-render-resilience: its raw pending spinner moves to the shared Spinner there; the tool status icon spin is a status."
+            }
+          }
+        ],
         "factory/query-owner": [
           "error",
           {
@@ -157,6 +184,7 @@
       "rules": {
         "factory/no-raw-palette-classes": "off",
         "factory/query-owner": "off",
+        "factory/no-raw-spinner": "off",
         "factory/named-query-options": "off"
       }
     },

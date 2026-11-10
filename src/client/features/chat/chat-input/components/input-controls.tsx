@@ -440,15 +440,12 @@ export const RightControls = memo(function RightControls({
                   variant="ghost"
                   size="icon"
                   onClick={onStop}
-                  disabled={stopping}
+                  pending={stopping}
+                  pendingLabel="Stopping…"
                   className="h-7 w-7"
-                  aria-label={stopping ? 'Stopping…' : 'Stop agent'}
+                  aria-label="Stop agent"
                 >
-                  {stopping ? (
-                    <Spinner aria-hidden="true" className="h-4 w-4 text-muted-foreground" />
-                  ) : (
-                    <SquareIcon className="h-3 w-3" weight="fill" />
-                  )}
+                  <SquareIcon className="h-3 w-3" weight="fill" />
                 </Button>
               </span>
             </TooltipTrigger>

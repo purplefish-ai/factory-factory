@@ -2,6 +2,7 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import type { WorkspacePullRequest } from '@/shared/workspace-pr';
 import { useWorkspacePrActions } from './use-workspace-pr-actions';
 
 const mocks = vi.hoisted(() => ({
@@ -10,6 +11,7 @@ const mocks = vi.hoisted(() => ({
   status: 'already_active',
   mutate: vi.fn(),
   discard: vi.fn(),
+  reviewing: undefined as { workspaceId: string; prId?: string } | undefined,
 }));
 vi.mock('sonner', () => ({ toast: { success: mocks.success, error: vi.fn() } }));
 vi.mock('@/client/lib/trpc', () => ({
@@ -28,7 +30,8 @@ vi.mock('@/client/lib/trpc', () => ({
     adversarialReview: {
       trigger: {
         useMutation: (options: { onSuccess: (result: { status: string }) => void }) => ({
-          isPending: false,
+          isPending: mocks.reviewing !== undefined,
+          variables: mocks.reviewing,
           mutate: (input: unknown) => {
             mocks.mutate(input);
             options.onSuccess({ status: mocks.status });
@@ -42,6 +45,7 @@ let root: Root;
 beforeEach(() => {
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
   vi.clearAllMocks();
+  mocks.reviewing = undefined;
 });
 afterEach(async () => {
   await act(() => root.unmount());
@@ -53,7 +57,7 @@ function ReviewButton() {
 }
 it.each([
   ['already_active', 'Adversarial review is already running'],
-  ['started', 'Review started'],
+  ['started', 'Adversarial review started'],
 ])('reports the %s review result and refreshes sessions', async (status, message) => {
   mocks.status = status;
   const host = document.createElement('div');
@@ -92,4 +96,31 @@ it('reports whether discarding blocked PR deliveries succeeded', async () => {
     [{ workspaceId: 'workspace-1' }],
     [{ workspaceId: 'workspace-1' }],
   ]);
+});
+
+function ReviewState({ prs }: { prs: WorkspacePullRequest[] }) {
+  const actions = useWorkspacePrActions('workspace-1', 'project-1', prs);
+  return <output>{prs.filter(({ id }) => actions.isReviewing(id)).map(({ id }) => id)}</output>;
+}
+it('marks only the PR whose review is in flight as reviewing', async () => {
+  const pr = (id: string): WorkspacePullRequest => ({
+    id,
+    url: `https://github.com/team/repo/pull/${id}`,
+    number: null,
+    title: null,
+    headRefName: null,
+    baseRefName: null,
+    state: 'OPEN',
+    reviewState: null,
+    ciStatus: 'SUCCESS',
+    hasMergeConflict: false,
+    syncedAt: null,
+  });
+  const prs = [pr('pr-1'), pr('pr-2')];
+  mocks.reviewing = { workspaceId: 'workspace-1', prId: 'pr-2' };
+  const host = document.createElement('div');
+  document.body.append(host);
+  root = createRoot(host);
+  await act(() => root.render(<ReviewState prs={prs} />));
+  expect(host.textContent).toBe('pr-2');
 });

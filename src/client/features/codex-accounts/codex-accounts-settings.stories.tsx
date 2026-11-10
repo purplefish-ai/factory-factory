@@ -1,5 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react';
 import { useState } from 'react';
+import { expect, within } from 'storybook/test';
 import type { CodexAccountSummary, CodexLoginState } from '@/shared/codex-accounts';
 import { CodexAccountLoginDialog } from './codex-account-login-dialog';
 import { CodexAccountsView } from './codex-accounts-settings';
@@ -175,4 +176,66 @@ export const NativeNeedsLogin: Story = {
       />
     </div>
   ),
+};
+
+/** Saving one account's Auto setting: every control waits, the saving row shows a spinner. */
+export const SavingAutoSetting: Story = {
+  render: () => (
+    <div className="w-full max-w-2xl">
+      <CodexAccountsView
+        accounts={[example('native', 'Personal', 40), example('work', 'Work', 12)]}
+        busy
+        updatingId="work"
+        onAdd={() => undefined}
+        onLogin={() => undefined}
+        onUpdate={() => undefined}
+      />
+    </div>
+  ),
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByRole('switch', { name: 'Use Work for Auto' })).toHaveAttribute(
+      'aria-busy',
+      'true'
+    );
+    await expect(canvas.getByRole('switch', { name: 'Use Personal for Auto' })).not.toHaveAttribute(
+      'aria-busy'
+    );
+  },
+};
+
+/** Starting sign-in for one managed account shows the spinner on that row only. */
+export const StartingSignIn: Story = {
+  render: () => (
+    <div className="w-full max-w-2xl">
+      <CodexAccountsView
+        accounts={[example('work', 'Work', 12), example('team', 'Team', 30)]}
+        busy
+        signingInId="team"
+        onAdd={() => undefined}
+        onLogin={() => undefined}
+        onUpdate={() => undefined}
+      />
+    </div>
+  ),
+  play: async ({ canvasElement }) => {
+    const buttons = within(canvasElement).getAllByRole('button', { name: 'Sign in again' });
+    await expect(buttons.map((button) => button.getAttribute('aria-busy'))).toEqual([null, 'true']);
+  },
+};
+
+export const StartingLogin: Story = {
+  render: () => (
+    <CodexAccountLoginDialog
+      open
+      busy
+      onClose={() => undefined}
+      onCancel={() => undefined}
+      onSubmit={() => undefined}
+    />
+  ),
+  play: async () => {
+    const submit = await within(document.body).findByRole('button', { name: 'Starting login…' });
+    await expect(submit).toBeDisabled();
+  },
 };

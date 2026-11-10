@@ -1,6 +1,7 @@
 import { Slot } from '@radix-ui/react-slot';
 import { cva, type VariantProps } from 'class-variance-authority';
 import type * as React from 'react';
+import { Spinner } from '@/components/ui/spinner';
 import { cn } from '@/lib/utils';
 
 const buttonVariants = cva(
@@ -35,26 +36,70 @@ const buttonVariants = cva(
   }
 );
 
+type ButtonProps = React.ComponentProps<'button'> &
+  VariantProps<typeof buttonVariants> & {
+    asChild?: boolean;
+    /**
+     * The action this button started is in flight. The button is disabled and
+     * `aria-busy`, and a `Spinner` replaces its icon: icon-size buttons hide
+     * every direct child except screen-reader text; other sizes hide their
+     * direct svg icons and keep the label beside the spinner. With `asChild`
+     * only the disabled and busy state apply.
+     */
+    pending?: boolean;
+    /**
+     * Label while `pending` ("Saving…"). It replaces the children of text
+     * buttons and becomes the accessible name of icon-size buttons.
+     */
+    pendingLabel?: string;
+  };
+
+function isIconSize(size: ButtonProps['size']): boolean {
+  return size === 'icon' || size === 'icon-xs' || size === 'icon-sm' || size === 'icon-lg';
+}
+
 function Button({
   className,
   variant = 'default',
   size = 'default',
   asChild = false,
+  pending = false,
+  pendingLabel,
+  disabled,
+  children,
   ...props
-}: React.ComponentProps<'button'> &
-  VariantProps<typeof buttonVariants> & {
-    asChild?: boolean;
-  }) {
+}: ButtonProps) {
   const Comp = asChild ? Slot : 'button';
+  const iconOnly = isIconSize(size);
+  const showSpinner = pending && !asChild;
 
   return (
     <Comp
       data-slot="button"
       data-variant={variant}
       data-size={size}
-      className={cn(buttonVariants({ variant, size, className }))}
+      className={cn(
+        buttonVariants({ variant, size }),
+        showSpinner &&
+          (iconOnly
+            ? "[&>:not([data-slot='spinner'],.sr-only)]:hidden"
+            : "[&>svg:not([data-slot='spinner'])]:hidden"),
+        className
+      )}
+      disabled={pending || disabled}
+      aria-busy={pending || undefined}
       {...props}
-    />
+      {...(pending && iconOnly && pendingLabel ? { 'aria-label': pendingLabel } : {})}
+    >
+      {showSpinner ? (
+        <>
+          <Spinner aria-hidden="true" />
+          {iconOnly ? children : (pendingLabel ?? children)}
+        </>
+      ) : (
+        children
+      )}
+    </Comp>
   );
 }
 

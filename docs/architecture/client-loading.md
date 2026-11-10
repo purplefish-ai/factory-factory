@@ -87,20 +87,20 @@ Pick the loading pattern by what the user is waiting for:
 - **`Skeleton`** (`src/components/ui/skeleton.tsx`) when the content's layout is
   known: list rows, cards, thumbnails, dashboard columns. It keeps the layout
   from jumping when data arrives.
-- **`Spinner`** (`src/components/ui/spinner.tsx`) for inline or button pending:
-  a button whose action is running, a tree row that is expanding, a status line
-  next to text. Pass `aria-hidden` when nearby text already says what is
-  pending. Don't use a raw `SpinnerGapIcon` with `animate-spin`.
+- **`Spinner`** (`src/components/ui/spinner.tsx`) for inline pending: a tree row
+  that is expanding, a status line next to text, an inline editor that is
+  saving. Pass `aria-hidden` when nearby text already says what is pending.
+  Don't use a raw `SpinnerGapIcon` or `animate-spin`; `factory/no-raw-spinner`
+  rejects them outside status indicators listed in `.oxlintrc.json`.
 - **`Loading`** (`src/client/components/loading.tsx`) for a route or panel with
   no known layout. Give it a specific message ("Loading diff…");
   `size="compact"` drops the 200px minimum height for side panels.
 
 Keep inline fallbacks inline: image and link previews can appear inside Markdown
 paragraphs, so use a `Spinner` beside their existing label rather than nesting a
-`Loading` block inside a `span`. A pending action replaces its static action
-icon with `Spinner`; the idle action retains its icon. Loading labels in
-disabled select options and input placeholders do not need a second spinner when
-their surrounding control already communicates the wait.
+`Loading` block inside a `span`. Loading labels in disabled select options and
+input placeholders do not need a second spinner when their surrounding control
+already communicates the wait.
 
 Spinners inherit the surrounding text color. `Loading` places them in muted
 text, so a page-level wait reads as muted, and a button spinner matches the
@@ -170,6 +170,32 @@ expects, and shows one persistent toast with Reload. It does not cancel the
 event, so the import still rejects and the nearest boundary shows the failure.
 Unmatched URLs render `routes/not-found.tsx` inside the shell; the root route's
 `errorElement` uses the shared fallback for errors that reach the router.
+
+## Pending controls
+
+Every control that fires an RPC shows that it is in flight, the same way:
+
+- **`Button`** takes `pending` and an optional `pendingLabel` ("Saving…").
+  Pending disables the button, sets `aria-busy`, and replaces its icon with a
+  `Spinner` sized like the button's icons. Text buttons keep the label beside
+  the spinner (or show `pendingLabel`); icon-size buttons show only the spinner
+  and use `pendingLabel` as their accessible name.
+- **`DropdownMenuItem`** takes `pending`: the item is disabled and its icon
+  becomes a spinner.
+- **`ConfirmDialog`** takes `isPending` and `pendingText`. The confirm button
+  keeps its label beside the spinner, and the dialog ignores Escape and Cancel
+  until the action settles, so callers only pass the mutation's state and close
+  the dialog on success.
+
+`factory/use-pending-prop` rejects a `Spinner` (or any spinning element) inside
+`Button` or `DropdownMenuItem`. Prefer the mutation's own `isPending`; when one
+mutation serves several rows, compare `mutation.variables` or use
+`useMutationState` (see `useToggleRatcheting().pendingWorkspaceIds`) so only the
+row in flight shows pending. Keep local pending state only where it covers more
+than the mutation, such as a refetch the user must see first or a second submit
+before React commits. Report each mutation's failure through one channel: the
+fallback or options-level toast, or inline UI with
+`meta: { errorToast: false }`.
 
 ## Query and mutation failures
 

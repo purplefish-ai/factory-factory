@@ -303,7 +303,9 @@ export const PendingActions: Story = {
     );
     await userEvent.keyboard('{Escape}');
     await userEvent.click(await canvas.findByRole('button', { name: /Stop dev server/ }));
-    await expect(await canvas.findByRole('button', { name: 'Processing…' })).toBeDisabled();
+    await expect(
+      await canvas.findByRole('button', { name: 'Stopping dev server…' })
+    ).toBeDisabled();
   },
 };
 export const PendingActionsDark: Story = { ...PendingActions, globals: { theme: 'dark' } };
@@ -325,7 +327,9 @@ export const PendingActionsAfterUpdate: Story = {
     await canvas.findByRole('button', { name: /Stop dev server/ });
     await userEvent.click(canvas.getByRole('button', { name: 'Preview pending actions' }));
     await userEvent.click(canvas.getByRole('button', { name: /Stop dev server/ }));
-    await expect(await canvas.findByRole('button', { name: 'Processing…' })).toBeDisabled();
+    await expect(
+      await canvas.findByRole('button', { name: 'Stopping dev server…' })
+    ).toBeDisabled();
   },
 };
 

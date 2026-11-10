@@ -60,6 +60,9 @@ const mocks = vi.hoisted(() => ({
   bulkArchiveInputs: [] as unknown[],
   workspaceListState: undefined as ProjectWorkspaceCache | undefined,
   githubIssues: [] as GitHubIssueRaw[],
+  toggleRatchetingMutateAsync: vi.fn(),
+  pendingToggleWorkspaceIds: [] as string[],
+  renameMutateAsync: vi.fn(),
 }));
 
 vi.mock('sonner', () => ({
@@ -70,7 +73,8 @@ vi.mock('sonner', () => ({
 
 vi.mock('@/client/hooks/use-toggle-ratcheting', () => ({
   useToggleRatcheting: () => ({
-    mutateAsync: vi.fn(),
+    mutateAsync: mocks.toggleRatchetingMutateAsync,
+    pendingWorkspaceIds: mocks.pendingToggleWorkspaceIds,
   }),
 }));
 
@@ -157,7 +161,7 @@ vi.mock('@/client/lib/trpc', () => ({
         useMutation: () => ({ mutate: mocks.syncAllPRStatusesMock, isPending: false }),
       },
       rename: {
-        useMutation: () => ({ mutateAsync: vi.fn() }),
+        useMutation: () => ({ mutateAsync: mocks.renameMutateAsync }),
       },
       archive: rejectingMutation(
         () => mocks.archiveError,
@@ -245,6 +249,7 @@ beforeEach(() => {
   mocks.refetchWorkspacesMock.mockResolvedValue({ isError: false });
   mocks.workspaceListInvalidateMock.mockResolvedValue(undefined);
   mocks.githubIssues = [];
+  mocks.pendingToggleWorkspaceIds = [];
   mocks.workspaceListState = {
     workspaces: [
       {
@@ -291,6 +296,33 @@ describe('KanbanProvider PR sync', () => {
     expect(mocks.syncAllPRStatusesMock).toHaveBeenCalledExactlyOnceWith({
       projectId: 'project-1',
       force: true,
+    });
+  });
+});
+
+describe('KanbanProvider per-workspace commands', () => {
+  it('exposes every in-flight ratchet toggle so concurrent cards stay pending', async () => {
+    const kanban = renderProvider();
+    mocks.toggleRatchetingMutateAsync.mockRejectedValueOnce(new Error('offline'));
+    // Failures are reported by the shared hook; the command itself never rejects.
+    await expect(kanban.toggleWorkspaceRatcheting('workspace-1', true)).resolves.toBeUndefined();
+    expect(mocks.toggleRatchetingMutateAsync).toHaveBeenCalledWith({
+      workspaceId: 'workspace-1',
+      enabled: true,
+    });
+
+    mocks.pendingToggleWorkspaceIds = ['workspace-1', 'workspace-2'];
+    rerenderProvider();
+    expect(context?.togglingWorkspaceIds).toEqual(['workspace-1', 'workspace-2']);
+  });
+
+  it('renames through the shared mutation, which owns the refresh', async () => {
+    const kanban = renderProvider();
+    mocks.renameMutateAsync.mockResolvedValueOnce(undefined);
+    await kanban.renameWorkspace('workspace-1', 'Renamed');
+    expect(mocks.renameMutateAsync).toHaveBeenCalledExactlyOnceWith({
+      id: 'workspace-1',
+      name: 'Renamed',
     });
   });
 });

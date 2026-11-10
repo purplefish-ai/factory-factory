@@ -34,6 +34,25 @@ function launch(container: HTMLElement, label = 'Launch') {
 }
 
 describe('workspace creation submission recovery', () => {
+  it('reports a failed launch once, inline in the composer rather than also as a toast', async () => {
+    mocks.toastErrorMock.mockClear();
+    const form = renderForm();
+    try {
+      launch(form.container);
+      const input = mocks.createWorkspaceMutateMock.mock.calls[0]?.[0] as Input;
+      const mutation = options();
+      const context = await mutation.onMutate(input);
+      actFlushSync(() => mutation.onError(new Error('boom'), input, context));
+      const alerts = [...form.container.querySelectorAll('[role=alert]')].map(
+        (alert) => alert.textContent
+      );
+      expect(alerts).toContain("Couldn't create workspace. boom");
+      expect(mocks.toastErrorMock).not.toHaveBeenCalled();
+    } finally {
+      actFlushSync(() => form.root.unmount());
+    }
+  });
+
   it('selects the launch before waiting for query cancellation or the create response', async () => {
     const onLaunching = vi.fn();
     const form = renderForm(getTestProjectId(), { onLaunching });
