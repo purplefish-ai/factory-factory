@@ -435,7 +435,7 @@ class WorkspacePRAccessor {
    * that comparison, so terminal PRs still match the SQL filter and are dropped
    * here by the same predicate the watcher uses.
    */
-  async findNeedingSync(staleThresholdMinutes = 5) {
+  findNeedingSync(staleThresholdMinutes = 5) {
     const now = Date.now();
     const where: Prisma.WorkspacePRWhereInput = {
       detachedAt: null,
@@ -445,8 +445,8 @@ class WorkspacePRAccessor {
         { syncedAt: { lt: new Date(now - staleThresholdMinutes * 60_000) } },
       ],
     };
-    const [rows, withoutObservation] = await prisma.$transaction([
-      prisma.workspacePR.findMany({
+    return prisma.$transaction(async (tx) => {
+      const rows = await tx.workspacePR.findMany({
         where,
         select: {
           id: true,
@@ -458,15 +458,17 @@ class WorkspacePRAccessor {
           workspace: { select: { prMonitoring: { select: { eventEpoch: true } } } },
         },
         orderBy: { syncedAt: 'asc' },
-      }),
-      findPRIdsWithoutObservation(where),
-    ]);
-    const missing = new Set(withoutObservation.map(({ id }) => id));
-    return withObservationPresence(rows, missing)
-      .filter((pr) =>
-        shouldPollPR(pr, pr.workspace.prMonitoring?.eventEpoch ?? pr.observationEpoch, now)
-      )
-      .map((pr) => ({ id: pr.workspaceId, prId: pr.id, prUrl: pr.url }));
+      });
+      const missing = await findPRIdsWithoutObservation(
+        tx,
+        rows.map(({ id }) => id)
+      );
+      return withObservationPresence(rows, missing)
+        .filter((pr) =>
+          shouldPollPR(pr, pr.workspace.prMonitoring?.eventEpoch ?? pr.observationEpoch, now)
+        )
+        .map((pr) => ({ id: pr.workspaceId, prId: pr.id, prUrl: pr.url }));
+    });
   }
   findNeedingDiscovery(limit: number, dueAt = new Date()) {
     return workspacePrDiscoveryAccessor.findNeedingDiscovery(limit, dueAt);

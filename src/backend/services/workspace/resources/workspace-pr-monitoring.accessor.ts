@@ -275,9 +275,9 @@ class WorkspacePrMonitoringAccessor {
    * read loads no workspace columns and no PR observation; each PR carries the
    * `hasObservation` flag the polling policy reads instead.
    */
-  async listEnabled() {
-    const [rows, withoutObservation] = await prisma.$transaction([
-      prisma.workspacePRMonitoring.findMany({
+  listEnabled() {
+    return prisma.$transaction(async (tx) => {
+      const rows = await tx.workspacePRMonitoring.findMany({
         where: { enabled: true, workspace: { status: 'READY' } },
         include: {
           workspace: {
@@ -286,19 +286,18 @@ class WorkspacePrMonitoringAccessor {
             },
           },
         },
-      }),
-      findPRIdsWithoutObservation({
-        detachedAt: null,
-        workspace: { status: 'READY', prMonitoring: { enabled: true } },
-      }),
-    ]);
-    const missing = new Set(withoutObservation.map(({ id }) => id));
-    return rows.map(({ workspace, ...config }) =>
-      normalizeConfig({
-        ...config,
-        workspace: { prs: withObservationPresence(workspace.prs, missing) },
-      })
-    );
+      });
+      const missing = await findPRIdsWithoutObservation(
+        tx,
+        rows.flatMap(({ workspace }) => workspace.prs.map(({ id }) => id))
+      );
+      return rows.map(({ workspace, ...config }) =>
+        normalizeConfig({
+          ...config,
+          workspace: { prs: withObservationPresence(workspace.prs, missing) },
+        })
+      );
+    });
   }
   completeLegacyRetirement(workspaceId: string, expectedBindingRevision: number) {
     return prisma.$transaction(async (tx) => {

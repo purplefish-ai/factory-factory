@@ -238,6 +238,13 @@ it('treats SQL NULL and JSON null observations as missing without loading observ
         url: 'https://github.com/org/repo/pull/22',
         observation: { ...redObservation, prState: 'MERGED' },
       },
+      // Stored as the same four bytes long as JSON null, but present.
+      {
+        ...merged,
+        id: 'four-bytes',
+        url: 'https://github.com/org/repo/pull/23',
+        observation: true,
+      },
     ],
   });
 
@@ -252,5 +259,5 @@ it('treats SQL NULL and JSON null observations as missing without loading observ
   );
   expect(
     Object.fromEntries(config?.workspace.prs.map((pr) => [pr.id, pr.hasObservation]) ?? [])
-  ).toEqual({ 'sql-null': false, 'json-null': false, observed: true });
+  ).toEqual({ 'sql-null': false, 'json-null': false, observed: true, 'four-bytes': true });
 });
