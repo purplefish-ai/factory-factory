@@ -262,17 +262,19 @@ it('keeps the CI checks job to `pnpm check` plus the steps that only make sense 
     'pnpm check',
     'pnpm typecheck',
   ]);
-  const check = (scripts.check ?? '').split(' && ');
-  for (const command of [
+  expect((scripts.check ?? '').split(' && ')).toEqual([
     'pnpm lint',
+    'pnpm check:format',
+    'pnpm check:file-length',
+    'pnpm check:env',
     'pnpm check:imports',
+    'pnpm check:ownership',
+    'pnpm check:fk-indexes',
     'pnpm check:migrations',
     'pnpm deps:check',
     'pnpm knip',
     'pnpm check:unused-code',
-  ]) {
-    expect(check).toContain(command);
-  }
+  ]);
   expect(scripts.lint).toContain('pnpm check:lint-suppressions');
   expect(scripts.knip).toBe('knip --include files,dependencies,unlisted');
   expect(scripts['check:migrations']).toBe(

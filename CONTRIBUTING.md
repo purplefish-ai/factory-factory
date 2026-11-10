@@ -145,10 +145,10 @@ binaries into the fresh installation before tests; the active-runtime marker is
 never restored from CI cache.
 
 The [pre-commit hook](.husky/pre-commit) formats staged files and checks types,
-migration drift, relative imports, dependencies, and unused code. CI also runs
-coverage, production and Storybook builds, story tests, and generated Prisma
-drift checks. Hooks and CI supplement the verification above; report any local
-skips rather than assuming CI ran.
+migration drift, relative imports, dependencies, unused files and dependencies
+(Knip), and unused code. CI also runs coverage, production and Storybook builds,
+story tests, and generated Prisma drift checks. Hooks and CI supplement the
+verification above; report any local skips rather than assuming CI ran.
 
 CI runs the full Vitest suite across exactly two parallel shards. The sequencer
 balances files using measured test, import, setup and environment durations from
