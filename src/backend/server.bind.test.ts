@@ -106,6 +106,9 @@ describe('server bind address', () => {
 
     await expect(server.start()).resolves.toBe(`http://localhost:${port}`);
 
+    // Rotated server logs are pruned with the other startup log cleanups.
+    expect(harness.services.cleanupOldLogFiles).toHaveBeenCalledOnce();
+    expect(harness.services.sessionFileLogger.cleanupOldLogs).toHaveBeenCalledOnce();
     expect(server.getHttpServer().address()).toMatchObject({ address: '127.0.0.1', port });
     await expect(getHealthStatus('127.0.0.1', port)).resolves.toBe(200);
     if (ipv6Available) {

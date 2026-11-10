@@ -81,6 +81,12 @@ Draft persistence also has a browser storage suite:
 installed Playwright Chromium and a frontend-only Vite server; the regular
 Vitest suite does not require a browser installation.
 
+Test processes never write the real server log. When `NODE_ENV` is `test` or the
+process runs under Vitest (including children that inherit its environment), the
+logger opens `logs/server.log` only if `BASE_DIR` points inside the OS temporary
+directory; otherwise records go to the console and fatal records to stderr.
+Tests that assert file output set `BASE_DIR` to a `mkdtemp` directory.
+
 Run `pnpm test:integration` for changes to integration behavior. Subsystem notes
 may name additional focused checks for their contracts. Inspect the final diff,
 report failed or unavailable checks, and never weaken assertions or guardrails

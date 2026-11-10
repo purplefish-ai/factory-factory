@@ -1,5 +1,7 @@
 import { appendFileSync, mkdirSync, writeSync } from 'node:fs';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { createLogger } from './logger.service';
 
@@ -18,7 +20,12 @@ vi.mock('node:fs', () => ({
 beforeEach(() => {
   vi.resetAllMocks();
   fallback.write.mockImplementation((_fd, _bytes, _offset, length) => length);
+  // Test processes only get a log file under the OS temp directory. node:fs
+  // is mocked, so nothing is created there.
+  vi.stubEnv('BASE_DIR', join(tmpdir(), 'ff-fatal-fallback-test'));
 });
+
+afterEach(() => vi.unstubAllEnvs());
 
 describe('fatal log fallback', () => {
   it('keeps healthy fatal writes off stderr', () => {
