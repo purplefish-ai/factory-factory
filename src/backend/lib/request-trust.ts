@@ -219,3 +219,44 @@ export function isOriginAllowed(
     );
   });
 }
+
+/** Origin policy fields shared by every browser-facing check. */
+export interface BrowserOriginPolicy {
+  allowedOrigins: readonly string[];
+  disableCorsChecks?: boolean;
+  /** Set while the server is bound to loopback only; see `isBrowserOriginAllowed`. */
+  allowOwnLoopbackOrigin?: boolean;
+}
+
+function isOwnLoopbackOrigin(origin: string, localPort: number | undefined): boolean {
+  if (localPort === undefined) {
+    return false;
+  }
+  const parsedOrigin = parseOrigin(origin);
+  return (
+    parsedOrigin !== undefined &&
+    isCanonicalOriginUrl(origin, parsedOrigin) &&
+    parsedOrigin.protocol === 'http:' &&
+    isLoopbackHostname(parsedOrigin.hostname) &&
+    getEffectivePort(parsedOrigin) === String(localPort)
+  );
+}
+
+/**
+ * The Origin rule for the CORS middleware, tRPC procedures and WebSocket
+ * upgrades. Besides the configured origins, a loopback-bound server always
+ * accepts its own page: an `http:` loopback origin on `localPort`, the local
+ * port of the connection the request arrived on. That is the port the server
+ * actually bound, so a fallback port no launcher configured keeps working,
+ * while other ports, non-loopback hosts and non-loopback binds do not.
+ */
+export function isBrowserOriginAllowed(
+  origin: string,
+  policy: BrowserOriginPolicy,
+  localPort: number | undefined
+): boolean {
+  return (
+    isOriginAllowed(origin, policy.allowedOrigins, policy.disableCorsChecks) ||
+    (policy.allowOwnLoopbackOrigin === true && isOwnLoopbackOrigin(origin, localPort))
+  );
+}

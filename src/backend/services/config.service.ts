@@ -9,6 +9,7 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { readAppVersion } from '@/backend/lib/app-version';
 import { expandEnvVars, getDefaultBaseDir } from '@/backend/lib/env';
+import { isLoopbackBindHost } from '@/backend/lib/request-trust';
 import { ConfigEnvSchema } from './env-schemas';
 import { createLogger } from './logger.service';
 
@@ -61,6 +62,13 @@ export interface CorsConfig {
    * webpage you have open calling the local API on your behalf.
    */
   disableCorsChecks?: boolean;
+  /**
+   * True while `BACKEND_HOST` keeps the server on loopback (unset or a
+   * loopback address). The server's own `http:` loopback origin, on the port a
+   * request actually arrived on, is then allowed without being listed, so a
+   * fallback port chosen at bind time works without the launcher predicting it.
+   */
+  allowOwnLoopbackOrigin?: boolean;
 }
 
 /** Remote access through `ff tailscale`. */
@@ -232,6 +240,7 @@ function buildCorsConfig(env: ConfigEnv): CorsConfig {
       : [],
     trustProxyHeaders: env.TRUST_PROXY_HEADERS,
     disableCorsChecks: env.DISABLE_CORS_CHECKS,
+    allowOwnLoopbackOrigin: isLoopbackBindHost(env.BACKEND_HOST),
   };
 }
 
@@ -581,6 +590,7 @@ class ConfigService {
       trustedLocalCidrs: [...(this.config.cors.trustedLocalCidrs ?? [])],
       trustProxyHeaders: this.config.cors.trustProxyHeaders,
       disableCorsChecks: this.config.cors.disableCorsChecks,
+      allowOwnLoopbackOrigin: this.config.cors.allowOwnLoopbackOrigin,
     };
   }
 

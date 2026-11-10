@@ -51,20 +51,33 @@ happens in three independent places, all ultimately calling `isOriginAllowed()`:
    loopback/trusted-CIDR **and**, if an `Origin` header is present, that it pass
    `isOriginAllowed()`.
 
-All three read `configService.getCorsConfig().allowedOrigins` and delegate the
-actual matching to `isOriginAllowed()` in
-`src/backend/lib/request-trust.ts:125-166`. A bypass needs to land in that
-shared function so all three sites stay consistent — patching only the Express
-middleware would leave WebSocket and tRPC still rejecting requests.
+All three read `configService.getCorsConfig()` and delegate the actual matching
+to `isBrowserOriginAllowed()` in `src/backend/lib/request-trust.ts`, which wraps
+`isOriginAllowed()`. A bypass needs to land in that shared function so all three
+sites stay consistent — patching only the Express middleware would leave
+WebSocket and tRPC still rejecting requests.
 
 ### Allowed origins today
 
-`buildCorsConfig()` (`src/backend/services/config.service.ts:266-282`) reads
+`buildCorsConfig()` (`src/backend/services/config.service.ts`) reads
 `CORS_ALLOWED_ORIGINS` (default `http://localhost:3000` /
-`http://localhost:3001`). The `ff` CLI (`src/cli/serve-env.ts:8-29`)
-auto-computes this per-session from the actual frontend/backend port, so the
-common dev case already works without configuration — this flag is for the less
-common cases that fall outside that auto-configured origin.
+`http://localhost:3001`). The `ff` CLI (`src/cli/serve-env.ts`) auto-computes
+this per-session from the frontend/backend port it selected, so the common dev
+case already works without configuration — this flag is for the less common
+cases that fall outside that auto-configured origin.
+
+The server's own origin needs no configuration either. While `BACKEND_HOST`
+keeps the server on loopback (unset, `localhost` or a loopback address),
+`buildCorsConfig()` sets `allowOwnLoopbackOrigin`, and
+`isBrowserOriginAllowed()` then also accepts an `http:` loopback origin
+(`localhost`, `127.x.x.x`, `[::1]`) whose port is the local port of the
+connection the request arrived on — the port the server actually bound. A server
+that fell back from a taken port (`bindServerWithPortFallback`, for example the
+desktop app when 3001 is busy) therefore still accepts its own window, while
+loopback pages on other ports, any non-loopback origin, and every origin on a
+server bound beyond loopback (Docker, `--host 0.0.0.0`) follow the configured
+list only. The `Host` check against DNS rebinding already accepts loopback names
+on any port.
 
 ### Existing precedent: `TRUST_PROXY_HEADERS`
 

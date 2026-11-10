@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  isBrowserOriginAllowed,
   isHostHeaderAllowed,
   isLoopbackBindHost,
   isLoopbackRemoteAddress,
@@ -80,6 +81,59 @@ describe('request trust helpers', () => {
     it('allows any origin when disableCorsChecks is set', () => {
       expect(isOriginAllowed('https://attacker.example', [], true)).toBe(true);
       expect(isOriginAllowed('not a url', ['http://localhost:3000'], true)).toBe(true);
+    });
+  });
+
+  describe('isBrowserOriginAllowed', () => {
+    const loopbackBound = {
+      allowedOrigins: ['http://localhost:3001'],
+      allowOwnLoopbackOrigin: true,
+    };
+
+    it.each(['http://localhost:3002', 'http://127.0.0.1:3002', 'http://[::1]:3002'])(
+      'accepts its own loopback origin %s on the port the request arrived on',
+      (origin) => {
+        expect(isBrowserOriginAllowed(origin, loopbackBound, 3002)).toBe(true);
+      }
+    );
+
+    it('accepts its own loopback origin on the default HTTP port', () => {
+      expect(isBrowserOriginAllowed('http://localhost', loopbackBound, 80)).toBe(true);
+    });
+
+    it.each([
+      ['a loopback origin on another port', 'http://localhost:3003'],
+      ['a non-loopback host on the same port', 'http://attacker.example:3002'],
+      ['a LAN address on the same port', 'http://192.168.1.20:3002'],
+      ['an https origin on the same port', 'https://localhost:3002'],
+      ['an origin with a path', 'http://localhost:3002/'],
+      ['an origin with credentials', 'http://evil@localhost:3002'],
+      ['the opaque origin', 'null'],
+    ])('rejects %s', (_label, origin) => {
+      expect(isBrowserOriginAllowed(origin, loopbackBound, 3002)).toBe(false);
+    });
+
+    it('does not allow its own origin unless bound to loopback', () => {
+      const policy = { ...loopbackBound, allowOwnLoopbackOrigin: false };
+      expect(isBrowserOriginAllowed('http://localhost:3002', policy, 3002)).toBe(false);
+      expect(isBrowserOriginAllowed('http://localhost:3002', { allowedOrigins: [] }, 3002)).toBe(
+        false
+      );
+    });
+
+    it('does not allow its own origin without the connection port', () => {
+      expect(isBrowserOriginAllowed('http://localhost:3002', loopbackBound, undefined)).toBe(false);
+    });
+
+    it('keeps the configured origins and the disableCorsChecks bypass', () => {
+      expect(isBrowserOriginAllowed('http://127.0.0.1:3001', loopbackBound, 3002)).toBe(true);
+      expect(
+        isBrowserOriginAllowed(
+          'https://attacker.example',
+          { allowedOrigins: [], disableCorsChecks: true },
+          undefined
+        )
+      ).toBe(true);
     });
   });
 

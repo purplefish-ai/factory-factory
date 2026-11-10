@@ -4,6 +4,7 @@ import express from 'express';
 import request from 'supertest';
 import { describe, expect, it } from 'vitest';
 import type { AppContext } from '@/backend/app-context';
+import { isLoopbackBindHost } from '@/backend/lib/request-trust';
 import type { CorsConfig } from '@/backend/services/config.service';
 import { proxyInternals } from '@/cli/proxy';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
@@ -25,6 +26,8 @@ function createApp({ backendHost, cors }: GateOptions = {}) {
     trustedLocalCidrs: [],
     trustProxyHeaders: false,
     disableCorsChecks: false,
+    // As configService derives it from BACKEND_HOST.
+    allowOwnLoopbackOrigin: isLoopbackBindHost(backendHost),
     ...cors,
   };
   const appContext = unsafeCoerce<AppContext>({
@@ -57,6 +60,21 @@ function read(app: express.Express, headers: Headers = {}) {
 
 function write(app: express.Express, headers: Headers = {}, path = 'write') {
   return request(app).post(`/api/trpc/${path}`).send({ json: null }).set(headers);
+}
+
+/** Listens on an ephemeral loopback port, standing in for a fallback port. */
+async function listen(app: express.Express) {
+  const server = createServer(app);
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+  const address = server.address();
+  if (!address || typeof address === 'string') {
+    throw new Error('Missing server address');
+  }
+  return {
+    port: address.port,
+    client: request(`http://127.0.0.1:${address.port}`),
+    close: () => new Promise<void>((resolve) => server.close(() => resolve())),
+  };
 }
 
 describe('browser origin gate on public procedures', () => {
@@ -152,6 +170,45 @@ describe('browser origin gate per launch mode', () => {
     expect((await write(app, headers)).status).toBe(200);
     expect((await write(app, headers, 'privileged')).status).toBe(200);
     expect(state).toMatchObject({ writes: 1, privileged: 1 });
+  });
+
+  it('desktop app on a fallback port: its own origin is allowed without configuration', async () => {
+    const { app, state } = createApp();
+    const server = await listen(app);
+    try {
+      const own = { origin: `http://localhost:${server.port}`, host: `localhost:${server.port}` };
+      const send = (headers: Headers, path = 'write') =>
+        server.client.post(`/api/trpc/${path}`).send({ json: null }).set(headers);
+
+      expect((await send(own)).status).toBe(200);
+      expect((await send(own, 'privileged')).status).toBe(200);
+      // A loopback page on any other port is still a different origin.
+      const otherPort = { ...own, origin: `http://localhost:${server.port + 1}` };
+      expect((await send(otherPort)).status).toBe(403);
+      expect((await send(otherPort, 'privileged')).status).toBe(403);
+      expect(state).toMatchObject({ writes: 1, privileged: 1 });
+    } finally {
+      await server.close();
+    }
+  });
+
+  it('ff serve --host 0.0.0.0 and Docker: the own origin is not implied', async () => {
+    const { app, state } = createApp({
+      backendHost: '0.0.0.0',
+      cors: { allowedOrigins: ['http://localhost:7001'] },
+    });
+    const server = await listen(app);
+    try {
+      const response = await server.client
+        .post('/api/trpc/write')
+        .send({ json: null })
+        .set({ origin: `http://localhost:${server.port}`, host: `localhost:${server.port}` });
+
+      expect(response.status).toBe(403);
+      expect(state.writes).toBe(0);
+    } finally {
+      await server.close();
+    }
   });
 
   it('pnpm dev: Vite on 3000 proxies with changeOrigin to localhost:3001', async () => {
