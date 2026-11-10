@@ -264,10 +264,15 @@ synchronize normally after saves settle.
 
 ## Worktree cleanup
 
-Archiving or deleting a workspace removes its worktree. Worktrees can still be
-left behind by a failed cleanup or an older version. **Worktree Cleanup** in
-**System** lists `workspace-*` folders under each project's worktree directory
-that no non-archived workspace owns. Cleanup also protects configured project
+Archiving or deleting a workspace stops its sessions, run script and terminals,
+then removes its worktree. On macOS and Linux it first makes a best-effort
+attempt to stop leftover processes running inside the worktree, such as a dev
+server an agent started in the background. Processes attached to a terminal are
+left alone, and a failed attempt does not block the archive
+([details](architecture/workspace-state.md)). Worktrees can still be left behind
+by a failed cleanup or an older version. **Worktree Cleanup** in **System**
+lists `workspace-*` folders under each project's worktree directory that no
+non-archived workspace owns. Cleanup also protects configured project
 repositories, including paths reached through symlinks or inside a candidate
 folder. Standalone repositories, folders containing nested repositories
 (including bare repositories), and linked worktrees whose owning repository
@@ -305,6 +310,15 @@ Search messages or components, filter by log level or time range, and expand a
 row to inspect its raw JSON. **Download log file** saves up to the most recent
 10 MB of the server log. Navigation and filters remain available while entries
 load; if loading fails, use **Retry** to request the logs again.
+
+The page and download read only the current `logs/server.log` under `BASE_DIR`
+(default `~/factory-factory`). The backend rotates that file when it reaches 10
+MB, keeping the three previous files as `server.log.1` (newest) to
+`server.log.3`; open those directly for older history. A file already over 10 MB
+when the backend starts, such as one written before rotation existed, is moved
+to `server.log.1` unchanged before the first write. Backend startup deletes
+rotated files last modified more than seven days ago, alongside the session and
+ACP trace log cleanup.
 
 Relative log time ranges use minute boundaries and advance automatically while
 the page polls every ten seconds. Rendering or expanding a log row does not

@@ -878,6 +878,7 @@ describe('workspaceCoreRouter', () => {
     expect(sessionDomainService.forgetProviderHistoryIdentity).toHaveBeenCalledWith(
       'deleted-session'
     );
+    const deletedWorkspace = { id: 'w1', project: { slug: 'demo' } };
     expect(mockCleanupWorkspaceRuntimeResources).toHaveBeenCalledWith(
       'w1',
       expect.objectContaining({
@@ -885,15 +886,13 @@ describe('workspaceCoreRouter', () => {
         runScriptService,
         terminalService,
       }),
-      'delete'
+      'delete',
+      deletedWorkspace
     );
     expect(sessionLifecycleService.stopWorkspaceSessions).toHaveBeenCalledWith('w1');
     expect(runScriptService.stopRunScript).toHaveBeenCalledWith('w1');
     expect(runScriptService.evictWorkspaceBuffers).toHaveBeenCalledWith('w1');
-    expect(mockCleanupWorkspaceWorktree).toHaveBeenCalledWith(
-      { id: 'w1', project: { slug: 'demo' } },
-      {}
-    );
+    expect(mockCleanupWorkspaceWorktree).toHaveBeenCalledWith(deletedWorkspace, {});
     const evictionCallOrder = runScriptService.evictWorkspaceBuffers.mock.invocationCallOrder[0];
     const deleteCallOrder = mockWorkspaceDataService.delete.mock.invocationCallOrder[0];
     if (evictionCallOrder === undefined || deleteCallOrder === undefined) {

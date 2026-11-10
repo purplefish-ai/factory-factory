@@ -29,6 +29,10 @@ vi.mock('@/backend/services/workspace', () => ({
   },
 }));
 
+vi.mock('@/backend/lib/worktree-process-sweep', () => ({
+  sweepWorktreeProcesses: vi.fn(),
+}));
+
 vi.mock('@/backend/services/logger.service', () => ({
   createLogger: () => ({
     debug: vi.fn(),
@@ -38,6 +42,7 @@ vi.mock('@/backend/services/logger.service', () => ({
   }),
 }));
 
+import { sweepWorktreeProcesses } from '@/backend/lib/worktree-process-sweep';
 import {
   workspaceMaintenanceService,
   workspaceStateMachine,
@@ -118,6 +123,64 @@ describe('archiveWorkspace', () => {
     );
     vi.mocked(services.runScriptService.evictWorkspaceBuffers).mockReturnValue(undefined);
     vi.mocked(services.terminalService.destroyWorkspaceTerminals).mockReturnValue(undefined);
+    vi.mocked(sweepWorktreeProcesses).mockResolvedValue({ status: 'unsupported' });
+  });
+
+  describe('leftover worktree process sweep', () => {
+    const worktreeWorkspace = () =>
+      makeWorkspace({
+        worktreePath: '/base/workspace-ws-1',
+        project: unsafeCoerce({ id: 'proj-1', worktreeBasePath: '/base' }),
+      });
+
+    it('sweeps after owned runtime cleanup and before worktree removal', async () => {
+      await archiveWorkspace(worktreeWorkspace());
+
+      expect(sweepWorktreeProcesses).toHaveBeenCalledWith({
+        worktreePath: '/base/workspace-ws-1',
+        worktreeBasePath: '/base',
+      });
+      const [sweepOrder] = vi.mocked(sweepWorktreeProcesses).mock.invocationCallOrder;
+      const [terminalOrder] = vi.mocked(services.terminalService.destroyWorkspaceTerminals).mock
+        .invocationCallOrder;
+      const [worktreeOrder] = vi.mocked(worktreeLifecycleService.cleanupWorkspaceWorktree).mock
+        .invocationCallOrder;
+      expect(terminalOrder).toBeLessThan(sweepOrder ?? 0);
+      expect(sweepOrder).toBeLessThan(worktreeOrder ?? 0);
+    });
+
+    it('does not block the archive when the sweep fails', async () => {
+      vi.mocked(sweepWorktreeProcesses).mockRejectedValue(new Error('lsof failed'));
+
+      await expect(archiveWorkspace(worktreeWorkspace())).resolves.toMatchObject({
+        status: 'ARCHIVED',
+      });
+      expect(worktreeLifecycleService.cleanupWorkspaceWorktree).toHaveBeenCalledOnce();
+    });
+
+    it('does not sweep when owned runtime cleanup fails and the archive rolls back', async () => {
+      vi.mocked(services.sessionLifecycleService.stopWorkspaceSessions).mockRejectedValue(
+        new Error('session stop failed')
+      );
+
+      await expect(archiveWorkspace(worktreeWorkspace())).rejects.toThrow(
+        /Failed to cleanup workspace resources before archive/
+      );
+      expect(sweepWorktreeProcesses).not.toHaveBeenCalled();
+    });
+
+    it('skips the sweep without a worktree path or worktree argument', async () => {
+      await archiveWorkspace(makeWorkspace({ worktreePath: null }));
+      await cleanupWorkspaceRuntimeResources('ws-1', services, 'delete');
+
+      expect(sweepWorktreeProcesses).not.toHaveBeenCalled();
+    });
+
+    it('sweeps for delete when given the workspace worktree', async () => {
+      await cleanupWorkspaceRuntimeResources('ws-1', services, 'delete', worktreeWorkspace());
+
+      expect(sweepWorktreeProcesses).toHaveBeenCalledOnce();
+    });
   });
 
   describe('state transition validation', () => {
