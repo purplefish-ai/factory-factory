@@ -2,11 +2,12 @@ import { MicrophoneIcon } from '@phosphor-icons/react/dist/csr/Microphone';
 import { MicrophoneSlashIcon } from '@phosphor-icons/react/dist/csr/MicrophoneSlash';
 import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
+import { StatusDot } from '@/client/components/status-indicators';
 import { playSound } from '@/client/lib/sound';
+import type { StatusTone } from '@/client/lib/status-tones';
 import { trpc } from '@/client/lib/trpc';
 import { Button } from '@/components/ui/button';
 import { Spinner } from '@/components/ui/spinner';
-import { cn } from '@/lib/utils';
 import { useMicCapture } from './use-mic-capture';
 import { useVoicePlayback } from './use-voice-playback';
 
@@ -91,21 +92,20 @@ const VOICE_PHASE_LABELS: Record<VoiceBadgePhase, string> = {
   listening: 'Listening',
 };
 
+const VOICE_PHASE_TONES: Record<Exclude<VoiceBadgePhase, 'off'>, StatusTone> = {
+  connecting: 'neutral',
+  speaking: 'info',
+  thinking: 'working',
+  listening: 'success',
+};
+
 function VoiceStatusBadge({ phase }: { phase: VoiceBadgePhase }) {
   if (phase === 'off') {
     return null;
   }
   return (
     <output className="flex items-center gap-1.5 text-xs text-muted-foreground">
-      <span
-        className={cn(
-          'h-1.5 w-1.5 rounded-full',
-          phase === 'connecting' && 'animate-pulse bg-muted-foreground',
-          phase === 'speaking' && 'animate-pulse bg-info',
-          phase === 'thinking' && 'animate-pulse bg-running',
-          phase === 'listening' && 'bg-success'
-        )}
-      />
+      <StatusDot tone={VOICE_PHASE_TONES[phase]} pulse={phase !== 'listening'} size="xs" />
       {VOICE_PHASE_LABELS[phase]}
     </output>
   );
