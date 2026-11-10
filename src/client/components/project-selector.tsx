@@ -15,7 +15,7 @@ import { useIsMobile } from '@/hooks/use-mobile';
 import { cn } from '@/lib/utils';
 
 const DEFAULT_PROJECT_BUTTON_CLASS =
-  'h-7 w-auto max-w-[18rem] border-0 bg-transparent px-0.5 text-sm font-semibold text-foreground shadow-none focus:ring-0 sm:px-1';
+  'h-7 w-auto max-w-[18rem] border-0 bg-transparent px-0.5 text-sm font-semibold text-foreground shadow-none sm:px-1';
 
 function getProjectInitials(name: string): string {
   const tokens = name

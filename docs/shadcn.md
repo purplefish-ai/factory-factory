@@ -79,7 +79,8 @@ Tooltips render under one `TooltipProvider` at the app root (`AppLayout`,
 `delayDuration={0}`; the sidebar's provider uses the same delay). A nested
 provider without props would reset the open delay to Radix's 700ms default, so
 only the roots, fixture routes and the GitHub link preview (a deliberate 350ms
-delay) render one. Tests that mount a component directly wrap it in a provider.
+delay) render one; `.oxlintrc.json` lists each exception and its reason. Tests
+that mount a component directly wrap it in a provider.
 
 Raw `<button>`s are for rows, overlay hit targets and primitive internals. Their
 keyboard focus uses the `focus-ring` utility from `src/client/globals.css` (add

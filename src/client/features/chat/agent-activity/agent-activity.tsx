@@ -85,13 +85,14 @@ function QueuedMessageSteerAction({
 }) {
   return (
     <Button
+      type="button"
       variant="outline"
       size="xs"
       onClick={onSteer}
       pending={isSteering}
       pendingLabel="Steering…"
       disabled={steerDisabled}
-      className="border-primary/30 bg-background/90 text-primary shadow-sm hover:border-primary/60 hover:bg-primary/10 hover:text-primary dark:border-primary/30 dark:bg-background/90"
+      className="border-primary/30 bg-background/90 text-primary shadow-sm hover:border-primary/60 hover:bg-primary/10 hover:text-primary dark:border-primary/30 dark:bg-background/90 dark:hover:bg-primary/10"
       title="Send into the active turn now. The agent may redirect its current work."
       aria-label={isSteering ? 'Steering queued message' : 'Steer queued message'}
     >
@@ -146,7 +147,7 @@ function QueuedMessageActions({
               size="icon-xs"
               variant="outline"
               onClick={onRemove}
-              className="bg-background/90 text-muted-foreground shadow-sm hover:border-destructive/50 hover:bg-destructive/10 hover:text-destructive dark:bg-background/90"
+              className="bg-background/90 text-muted-foreground shadow-sm hover:border-destructive/50 hover:bg-destructive/10 hover:text-destructive dark:bg-background/90 dark:hover:bg-destructive/10"
             >
               <XIcon />
             </IconButton>

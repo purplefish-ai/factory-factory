@@ -287,6 +287,7 @@ function PlanApprovalPrompt({ permission, onApprove, className }: PermissionProm
           <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
             {planContent && <PlanViewToggle value={viewMode} onChange={setViewMode} />}
             <Button
+              type="button"
               variant="ghost"
               size="xs"
               onClick={() => setExpanded(!expanded)}

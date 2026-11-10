@@ -52,8 +52,8 @@ export function WorkspaceLaunchButton({
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button
-              size="compact"
-              className="rounded-l-none border-l border-primary-foreground/20 px-1.5"
+              size="icon-compact"
+              className="rounded-l-none border-l border-primary-foreground/20"
               disabled={isBusy}
               aria-label="Choose launch mode"
             >

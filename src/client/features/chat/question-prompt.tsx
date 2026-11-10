@@ -201,7 +201,7 @@ function MultiQuestionLayout({
                 key={key}
                 onClick={() => onIndexChange(idx)}
                 className={cn(
-                  'w-2 h-2 rounded-full transition-colors focus-ring focus-visible:ring-offset-2',
+                  'w-2 h-2 rounded-full transition-colors focus-ring',
                   idx === currentIndex
                     ? 'bg-primary'
                     : isAnswered

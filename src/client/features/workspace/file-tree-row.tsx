@@ -30,7 +30,7 @@ export const FileTreeRow = memo(function FileTreeRow({
       onClick={onClick}
       aria-expanded={expanded}
       title={title}
-      className="w-full flex items-center gap-1 px-2 text-sm text-left font-normal hover:bg-muted/50 rounded-sm transition-colors focus-ring"
+      className="w-full flex items-center gap-1 px-2 text-sm text-left font-normal hover:bg-muted/50 rounded-sm transition-colors focus-ring focus-visible:ring-inset"
       style={{ height: FILE_TREE_ROW_HEIGHT, paddingLeft: depth * 12 + 8 }}
     >
       {expanded === undefined ? (

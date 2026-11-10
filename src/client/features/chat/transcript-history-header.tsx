@@ -34,6 +34,7 @@ export function TranscriptHistoryHeader({ history }: { history: TranscriptHistor
         <>
           <span>{history.error || 'Could not load earlier messages.'}</span>
           <Button
+            type="button"
             variant="link"
             size="inline"
             onClick={history.loadOlder}

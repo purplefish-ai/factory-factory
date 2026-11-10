@@ -88,6 +88,7 @@ function StopSessionButton({
   return (
     <IconButton
       label="Stop session"
+      tooltip={isStopping ? 'Stopping session…' : 'Stop session'}
       size="icon-sm"
       onClick={onStop}
       pending={isStopping}

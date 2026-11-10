@@ -51,7 +51,9 @@
  * Add `focus-visible:ring-inset` where an outer ring would be clipped.
  */
 @utility focus-ring {
-  outline: none;
+  /* A transparent outline, not none, so forced-colors mode still shows focus. */
+  outline: 2px solid transparent;
+  outline-offset: 2px;
 
   &:focus-visible {
     @apply ring-2 ring-ring;

@@ -115,6 +115,7 @@ export function SetupTerminalModal({ open, onClose, initialProvider }: SetupTerm
                 <>
                   <span>{showTerminal ? 'Connection lost.' : 'Connection failed.'}</span>
                   <Button
+                    type="button"
                     variant="link"
                     size="inline"
                     className="text-xs text-current underline"

@@ -115,10 +115,15 @@ function hasButtonText(node) {
 }
 
 function hasButtonName(attribute) {
-  if (
-    !['aria-label', 'aria-labelledby', 'title'].includes(attribute.name.name) ||
-    !attribute.value
-  ) {
+  return (
+    ['aria-label', 'aria-labelledby', 'title'].includes(attribute.name.name) &&
+    hasNonEmptyValue(attribute)
+  );
+}
+
+/** A JSX attribute whose value may be a non-empty string. */
+function hasNonEmptyValue(attribute) {
+  if (!attribute.value) {
     return false;
   }
   const value =
@@ -650,9 +655,9 @@ function findInChildren(children, sourceCode) {
 const SIZED_BUTTONS = new Set(['Button', 'IconButton']);
 
 // `h-4`, `w-3.5`, `md:size-8`, `h-px`: a fixed height, width or size from the
-// spacing scale. Keywords (`w-full`, `h-auto`) and arbitrary values
-// (`w-[160px]`) are layout, not control sizes, and pass.
-const FIXED_SIZE_CLASS = /(?<=^|[\s'"`:!])(?:h|w|size)-(?:\d+(?:\.\d+)?|px)(?![\w.-])/;
+// spacing scale. Keywords (`w-full`, `h-auto`), fractions (`w-1/2`) and
+// arbitrary values (`w-[160px]`) are layout, not control sizes, and pass.
+const FIXED_SIZE_CLASS = /(?<=^|[\s'"`:!])(?:h|w|size)-(?:\d+(?:\.\d+)?|px)(?![\w./-])/;
 
 // Hand-rolled keyboard focus styles that the `focus-ring` utility replaces:
 // `focus-visible:ring-2`, `focus-visible:outline-none`, `focus-visible:outline-ring`.
@@ -810,7 +815,9 @@ const rules = {
           if (
             child &&
             jsxTagName(child.openingElement.name) === 'Button' &&
-            hasIconSize(child.openingElement)
+            hasIconSize(child.openingElement) &&
+            // A titled icon Button is already reported above.
+            !jsxAttribute(child.openingElement, 'title')
           ) {
             context.report({ node: child.openingElement, message });
           }
@@ -1019,6 +1026,14 @@ const rules = {
       return {
         JSXElement(node) {
           const opening = node.openingElement;
+          if (opening.name.name === 'IconButton') {
+            // IconButton's required label is its name; it must not be empty.
+            const label = jsxAttribute(opening, 'label');
+            if (label && !hasNonEmptyValue(label)) {
+              context.report({ node: opening, message: 'Give IconButton a non-empty label.' });
+            }
+            return;
+          }
           if (!['button', 'Button'].includes(opening.name.name)) {
             return;
           }

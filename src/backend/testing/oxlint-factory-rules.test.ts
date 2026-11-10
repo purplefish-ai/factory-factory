@@ -148,6 +148,12 @@ describe('Oxlint project guardrails', () => {
       'const x = <TooltipTrigger asChild><DropdownMenuTrigger asChild><Button size="icon-xs" aria-label="More"><DotsIcon /></Button></DropdownMenuTrigger></TooltipTrigger>;',
     ],
     ['icon-button-tooltip', 'const x = <Button size="icon-sm" title="Close"><XIcon /></Button>;'],
+    [
+      'icon-button-tooltip',
+      'const x = <TooltipTrigger asChild><Button size="icon" title="Close"><XIcon /></Button></TooltipTrigger>;',
+    ],
+    ['icon-button-name', 'const x = <IconButton label=""><XIcon /></IconButton>;'],
+    ['icon-button-name', 'const x = <IconButton label={``}><XIcon /></IconButton>;'],
     ['tooltip-provider-root', 'const x = <TooltipProvider><Tooltip /></TooltipProvider>;'],
     [
       'focus-ring',
@@ -329,6 +335,8 @@ describe('Oxlint project guardrails', () => {
     'const x = <Button size="sm"><PlayIcon />Run</Button>;',
     'const x = <Button size="sm"><PlayIcon className="size-3 shrink-0" />Run</Button>;',
     'const x = <Button className="w-full sm:w-auto">Go</Button>;',
+    'const x = <Button className="w-1/2">Go</Button>;',
+    'const x = <IconButton label={label}><XIcon /></IconButton>;',
     'const x = <Button variant="link" className="h-auto p-0">More</Button>;',
     'const x = <Button className="min-w-0 max-w-[14rem] sm:w-[160px]">Go</Button>;',
     'const x = <div className="h-6 w-6"><XIcon className="h-3 w-3" /></div>;',

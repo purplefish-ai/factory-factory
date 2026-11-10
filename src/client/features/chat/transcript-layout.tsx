@@ -142,6 +142,7 @@ export function TranscriptTail({
         <div role="status" className="flex items-center gap-2 py-1 text-sm text-muted-foreground">
           <span className="min-w-0">{props.subagentTimelineError.message}</span>
           <Button
+            type="button"
             variant="link"
             size="inline"
             onClick={props.subagentTimelineError.onRetry}
@@ -158,7 +159,7 @@ export function TranscriptTail({
           <Spinner aria-hidden="true" />
           <span className="text-sm">{getStartupLabel(props)}</span>
           {initializing && props.onViewSetupOutput && (
-            <Button variant="link" size="inline" onClick={props.onViewSetupOutput}>
+            <Button type="button" variant="link" size="inline" onClick={props.onViewSetupOutput}>
               View setup output
             </Button>
           )}

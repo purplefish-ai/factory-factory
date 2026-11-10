@@ -25,6 +25,7 @@ const meta = {
         'compact',
         'sm',
         'lg',
+        'inline',
         'icon',
         'icon-xs',
         'icon-compact',

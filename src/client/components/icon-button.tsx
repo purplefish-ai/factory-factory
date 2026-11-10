@@ -2,7 +2,10 @@ import type { ComponentProps, ReactNode } from 'react';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 
-type IconButtonProps = Omit<ComponentProps<typeof Button>, 'size' | 'aria-label' | 'title'> & {
+type IconButtonProps = Omit<
+  ComponentProps<typeof Button>,
+  'size' | 'aria-label' | 'aria-labelledby' | 'title'
+> & {
   /** The button's accessible name, also shown as its tooltip. */
   label: string;
   size?: 'icon' | 'icon-xs' | 'icon-compact' | 'icon-sm' | 'icon-lg';
@@ -16,7 +19,9 @@ type IconButtonProps = Omit<ComponentProps<typeof Button>, 'size' | 'aria-label'
  * and the tooltip, so the two cannot drift apart. It needs a `TooltipProvider`
  * above it; the app layout provides one. It forwards props and its ref to the
  * button, so it also works inside `DropdownMenuTrigger asChild` and similar
- * triggers.
+ * triggers. A disabled button receives no pointer events, so its tooltip shows
+ * only while it is enabled; a control that must explain why it is disabled
+ * wraps a `Button` in its own `Tooltip` trigger instead.
  */
 export function IconButton({
   label,
