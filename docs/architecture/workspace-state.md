@@ -202,6 +202,17 @@ Workspace terminal reconnects replace each existing tab's output with its server
 rolling buffer by terminal ID. Tab identity and selection are preserved; output
 outside the server's bounded buffer cannot be recovered.
 
+Terminal output stays out of React state. Each tab owns a `TerminalOutputStream`
+(`src/client/lib/terminal-output-stream.ts`); PTY chunks are written straight to
+the mounted xterm instance, which keeps its own scrollback. A chunk re-renders
+neither the terminal panel nor the right panel, including while the terminal is
+hidden behind Logs, and chunks past the 128 KiB cap are appended rather than
+repainting the window. The stream's rolling window is only replayed when a
+terminal mounts: on tab selection, or when the panel becomes visible again and
+refits. A reconnect buffer that extends the retained output writes only the
+missing suffix; any other replacement clears and repaints. The project setup
+terminal uses the same stream.
+
 Terminal CPU and memory usage is sampled only when the admin processes view asks
 for it, with one batched `pidusage` call; there is no background polling. If the
 batch fails (for example because a process exited), each terminal is sampled

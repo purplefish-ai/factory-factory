@@ -72,3 +72,9 @@ The addon waits three seconds for context restoration before emitting its loss
 notification. A future implementation would need an owned subscription, reliable
 disposal and fallback, and a larger workload/device comparison before default
 enablement. The existing FitAddon and terminal lifecycle remain as-is.
+
+Since this trial, the application writes each PTY chunk directly to xterm
+instead of diffing a React output string, so live output matches this harness's
+burst case: appends only, no per-chunk clear and replay. Replay happens only
+when a terminal mounts. See
+[workspace state](../architecture/workspace-state.md) for the output path.

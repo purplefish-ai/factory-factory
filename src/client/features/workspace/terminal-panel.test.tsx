@@ -5,6 +5,7 @@ import { flushSync } from 'react-dom';
 import { createRoot } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { TERMINAL_OUTPUT_MAX_CHARS, TERMINAL_TRUNCATION_MARKER } from '@/client/lib/rolling-output';
+import type { TerminalOutputStream } from '@/client/lib/terminal-output-stream';
 import { TerminalPanel, type TerminalPanelRef, type TerminalTabState } from './terminal-panel';
 
 const mocks = vi.hoisted(() => ({
@@ -16,11 +17,13 @@ const mocks = vi.hoisted(() => ({
   reconnect: vi.fn(),
   connected: true,
   gaveUp: false,
-  renderedOutput: '',
+  renderedStream: null as TerminalOutputStream | null,
+  terminalRenders: 0,
   requestedFocus: false,
   options: null as {
     onCreated?: (terminalId: string, requestId?: string, outputBuffer?: string) => void;
     onOutput?: (terminalId: string, data: string) => void;
+    onExit?: (terminalId: string, exitCode: number) => void;
     onError?: (message: string, requestId?: string) => void;
     onTerminalList?: (
       terminals: Array<{ id: string; createdAt: string; outputBuffer?: string }>
@@ -31,9 +34,16 @@ const mocks = vi.hoisted(() => ({
 vi.mock('@phosphor-icons/react/dist/csr/Terminal', () => ({ TerminalIcon: () => null }));
 
 vi.mock('@/client/components/terminal-instance', () => ({
-  TerminalInstance: ({ output, isActive }: { output: string; isActive?: boolean }) => {
+  TerminalInstance: ({
+    output,
+    isActive,
+  }: {
+    output: TerminalOutputStream;
+    isActive?: boolean;
+  }) => {
     mocks.requestedFocus = Boolean(isActive);
-    mocks.renderedOutput = output;
+    mocks.renderedStream = output;
+    mocks.terminalRenders += 1;
     return null;
   },
 }));
@@ -58,6 +68,11 @@ vi.mock('./use-terminal-websocket', () => ({
   },
 }));
 
+/** Output the mounted terminal would show: its stream's rolling window. */
+function renderedOutput(): string {
+  return mocks.renderedStream?.snapshot() ?? '';
+}
+
 describe('TerminalPanel', () => {
   beforeEach(() => {
     mocks.create.mockReset();
@@ -68,7 +83,8 @@ describe('TerminalPanel', () => {
     mocks.reconnect.mockReset();
     mocks.connected = true;
     mocks.gaveUp = false;
-    mocks.renderedOutput = '';
+    mocks.renderedStream = null;
+    mocks.terminalRenders = 0;
     mocks.requestedFocus = false;
     mocks.options = null;
   });
@@ -96,7 +112,7 @@ describe('TerminalPanel', () => {
       flushSync(() =>
         mocks.options?.onCreated?.('terminal-new', mocks.create.mock.calls[0]?.[0], '$ ready')
       );
-      await vi.waitFor(() => expect(mocks.renderedOutput).toBe('$ ready'));
+      await vi.waitFor(() => expect(renderedOutput()).toBe('$ ready'));
       expect(mocks.requestedFocus).toBe(false);
     } finally {
       root.unmount();
@@ -183,14 +199,14 @@ describe('TerminalPanel', () => {
         },
       ]);
     });
-    expect(mocks.renderedOutput).toBe('before B\r\nmissed B\r\n');
+    expect(renderedOutput()).toBe('before B\r\nmissed B\r\n');
     expect(states.at(-1)?.tabs).toEqual(before?.tabs);
     expect(states.at(-1)?.activeTabId).toBe(before?.activeTabId);
 
     flushSync(() => states.at(-1)?.onSelectTab(before?.tabs[0]?.id ?? ''));
-    expect(mocks.renderedOutput).toBe('before A\r\nmissed A\r\n');
+    expect(renderedOutput()).toBe('before A\r\nmissed A\r\n');
     flushSync(() => mocks.options?.onOutput?.('terminal-a', 'live A\r\n'));
-    expect(mocks.renderedOutput).toBe('before A\r\nmissed A\r\nlive A\r\n');
+    expect(renderedOutput()).toBe('before A\r\nmissed A\r\nlive A\r\n');
     root.unmount();
   });
 
@@ -353,9 +369,9 @@ describe('TerminalPanel', () => {
     });
     await vi.dynamicImportSettled();
 
-    expect(mocks.renderedOutput.length).toBe(TERMINAL_OUTPUT_MAX_CHARS);
-    expect(mocks.renderedOutput.startsWith(TERMINAL_TRUNCATION_MARKER)).toBe(true);
-    expect(mocks.renderedOutput.endsWith('a'.repeat(100))).toBe(true);
+    expect(renderedOutput().length).toBe(TERMINAL_OUTPUT_MAX_CHARS);
+    expect(renderedOutput().startsWith(TERMINAL_TRUNCATION_MARKER)).toBe(true);
+    expect(renderedOutput().endsWith('a'.repeat(100))).toBe(true);
 
     root.unmount();
   });
@@ -382,7 +398,7 @@ describe('TerminalPanel', () => {
     });
     await vi.dynamicImportSettled();
 
-    expect(mocks.renderedOutput).toBe('early prompt $ live output');
+    expect(renderedOutput()).toBe('early prompt $ live output');
 
     root.unmount();
   });
@@ -409,9 +425,89 @@ describe('TerminalPanel', () => {
     });
     await vi.dynamicImportSettled();
 
-    expect(mocks.renderedOutput.length).toBe(TERMINAL_OUTPUT_MAX_CHARS);
-    expect(mocks.renderedOutput.startsWith(TERMINAL_TRUNCATION_MARKER)).toBe(true);
-    expect(mocks.renderedOutput.endsWith('b'.repeat(100))).toBe(true);
+    expect(renderedOutput().length).toBe(TERMINAL_OUTPUT_MAX_CHARS);
+    expect(renderedOutput().startsWith(TERMINAL_TRUNCATION_MARKER)).toBe(true);
+    expect(renderedOutput().endsWith('b'.repeat(100))).toBe(true);
+
+    root.unmount();
+  });
+
+  it('appends live output without re-rendering the panel or notifying its parent', async () => {
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    const panelRef = createRef<TerminalPanelRef>();
+    const onStateChange = vi.fn();
+
+    flushSync(() => {
+      root.render(
+        createElement(TerminalPanel, { workspaceId: 'workspace-1', ref: panelRef, onStateChange })
+      );
+    });
+    flushSync(() => {
+      panelRef.current?.createNewTerminal();
+    });
+    flushSync(() => {
+      mocks.options?.onCreated?.('terminal-a', mocks.create.mock.calls[0]?.[0], '$ ');
+    });
+    await vi.dynamicImportSettled();
+    const stream = mocks.renderedStream;
+    const appended = vi.fn();
+    stream?.subscribe(appended);
+    const terminalRenders = mocks.terminalRenders;
+    const stateChanges = onStateChange.mock.calls.length;
+
+    flushSync(() => {
+      mocks.options?.onOutput?.('terminal-a', 'ls\r\n');
+      mocks.options?.onOutput?.('terminal-a', 'a'.repeat(TERMINAL_OUTPUT_MAX_CHARS));
+      mocks.options?.onOutput?.('terminal-a', 'past the cap\r\n');
+      mocks.options?.onExit?.('terminal-a', 0);
+    });
+
+    expect(mocks.terminalRenders).toBe(terminalRenders);
+    expect(onStateChange).toHaveBeenCalledTimes(stateChanges);
+    expect(mocks.renderedStream).toBe(stream);
+    expect(appended.mock.calls.map(([event]) => event.type)).toEqual([
+      'append',
+      'append',
+      'append',
+      'append',
+    ]);
+    expect(renderedOutput().endsWith('past the cap\r\n\r\n[Process exited with code 0]\r\n')).toBe(
+      true
+    );
+
+    root.unmount();
+  });
+
+  it('keeps output written while hidden and replays it when shown again', async () => {
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    const panelRef = createRef<TerminalPanelRef>();
+    const render = (isVisible: boolean) =>
+      flushSync(() => {
+        root.render(
+          createElement(TerminalPanel, { workspaceId: 'workspace-1', ref: panelRef, isVisible })
+        );
+      });
+
+    render(true);
+    flushSync(() => {
+      panelRef.current?.createNewTerminal();
+    });
+    flushSync(() => {
+      mocks.options?.onCreated?.('terminal-a', mocks.create.mock.calls[0]?.[0], '$ ');
+    });
+    await vi.dynamicImportSettled();
+    render(false);
+    mocks.renderedStream = null;
+
+    mocks.options?.onOutput?.('terminal-a', 'built while hidden\r\n');
+    expect(mocks.renderedStream).toBeNull();
+
+    render(true);
+    expect(renderedOutput()).toBe('$ built while hidden\r\n');
 
     root.unmount();
   });
