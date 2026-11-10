@@ -189,14 +189,14 @@ started by the command:
   when its `Origin` is exactly the tunnel's own `https://*.trycloudflare.com`
   origin; other origins (including other tunnels and `localhost` pages), and
   state-changing requests or WebSockets without an `Origin`, are refused at the
-  proxy. Accepted requests are forwarded with the backend's own loopback origin
-  and without forwarded-address headers, so the backend's allowed-origin list
-  never includes the tunnel. Wrong passwords are limited per client (5 per 5
-  minutes) and across all clients (20 per 5 minutes, at most 5,760 guesses a day
-  against about 2.2 billion possible passwords); while the global limit is
-  reached, password sign-in is paused for everyone, but signed-in browsers and
-  the direct link keep working. `--private` is still accepted and changes
-  nothing.
+  proxy. Accepted requests are forwarded without forwarded-address headers, and
+  those that carry an `Origin` get the backend's own loopback origin instead, so
+  the backend's allowed-origin list never includes the tunnel. Wrong passwords
+  are limited per client (5 per 5 minutes) and across all clients (20 per 5
+  minutes, at most 5,760 guesses a day against about 2.2 billion possible
+  passwords); while the global limit is reached, password sign-in is paused for
+  everyone, but signed-in browsers and the direct link keep working. `--private`
+  is still accepted and changes nothing.
 - **Public (`ff proxy --public`).** No password: **anyone with the URL can view
   the app, including workspace file contents**. The proxy forwards only `GET`
   and `HEAD` requests without a body and refuses every other method and every
@@ -212,9 +212,9 @@ Both tunnel modes disable inherited `TRUST_PROXY_HEADERS` and dotenv override
 settings before launching the backend. A public tunnel keeps (or adds)
 forwarded-address headers, so the backend also refuses its trusted-local
 operations. A password-protected tunnel relies on the backend accepting its own
-loopback origin, which it does unless `CORS_ALLOWED_ORIGINS` in your environment
-names a non-loopback origin; in that case its mutations and WebSockets are
-refused.
+loopback origin, which it does only while every `CORS_ALLOWED_ORIGINS` entry in
+your environment is a valid loopback origin (the default). Otherwise, including
+for a malformed or empty entry, its mutations and WebSockets are refused.
 
 The server listens on loopback only unless you pass another address with
 `ff serve --host` (for example `--host 0.0.0.0`, as the Docker image does).

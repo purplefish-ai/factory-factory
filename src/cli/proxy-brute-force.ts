@@ -17,6 +17,8 @@ export class BruteForceGuard {
     { failures: number; lockedUntilMs: number; lastSeenMs: number }
   >();
 
+  constructor(private readonly maxTrackedIps = MAX_BRUTE_FORCE_TRACKED_IPS) {}
+
   private evictStaleEntries(nowMs: number): void {
     for (const [ip, state] of this.attemptsByIp.entries()) {
       const lockExpired = state.lockedUntilMs <= nowMs;
@@ -25,14 +27,26 @@ export class BruteForceGuard {
         this.attemptsByIp.delete(ip);
       }
     }
+  }
 
-    while (this.attemptsByIp.size > MAX_BRUTE_FORCE_TRACKED_IPS) {
-      const oldest = this.attemptsByIp.keys().next().value;
-      if (!oldest) {
-        break;
-      }
-      this.attemptsByIp.delete(oldest);
+  /**
+   * Makes room to track `ip` without ever dropping an active lockout: client
+   * addresses come from headers the client controls, so evicting a locked entry
+   * would let a client clear its own lockout by flooding the tracker. The
+   * least recently seen unlocked entry goes first; when every entry is locked,
+   * the new client is not tracked and only the global limit bounds it.
+   */
+  private makeRoomFor(ip: string, nowMs: number): boolean {
+    if (this.attemptsByIp.has(ip) || this.attemptsByIp.size < this.maxTrackedIps) {
+      return true;
     }
+    for (const [candidate, state] of this.attemptsByIp) {
+      if (state.lockedUntilMs <= nowMs) {
+        this.attemptsByIp.delete(candidate);
+        return true;
+      }
+    }
+    return false;
   }
 
   isLocked(ip: string, nowMs = Date.now()): { locked: boolean; retryAfterSeconds: number } {
@@ -55,6 +69,9 @@ export class BruteForceGuard {
 
   registerFailure(ip: string, nowMs = Date.now()): { ipLocked: boolean } {
     this.evictStaleEntries(nowMs);
+    if (!this.makeRoomFor(ip, nowMs)) {
+      return { ipLocked: false };
+    }
     const current = this.attemptsByIp.get(ip) ?? { failures: 0, lockedUntilMs: 0, lastSeenMs: 0 };
     // A failure during an active lockout keeps it. Locked entries store 0 failures,
     // so an expired lockout starts a fresh count.
