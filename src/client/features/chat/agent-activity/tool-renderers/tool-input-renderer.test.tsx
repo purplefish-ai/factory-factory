@@ -10,6 +10,7 @@ describe('ToolInputRenderer with malformed agent input', () => {
   it.each([
     ['TodoWrite', { todos: 'not a list' }],
     ['TodoWrite', { todos: { length: 2 } }],
+    ['TodoWrite', { todos: null }],
     ['TodoWrite', { todos: [{ content: 'Ship it', status: 'blocked' }] }],
     ['Task', { subagent_type: 'explore', prompt: { text: 'nested' } }],
     ['Read', { file_path: 42, offset: 10 }],

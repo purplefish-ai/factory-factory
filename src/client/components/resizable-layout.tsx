@@ -9,9 +9,28 @@ import {
   useAppNavigationData,
 } from '@/client/hooks/use-app-navigation-data';
 import { useRouteSidebarState } from '@/client/hooks/use-sidebar-default-open';
-import { SidebarProvider } from '@/components/ui/sidebar';
+import { SidebarProvider, useSidebar } from '@/components/ui/sidebar';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
+
+/**
+ * The sidebar renders outside the page boundary. Its fallback takes the
+ * sidebar's place only while the sidebar (or the mobile sheet) is open.
+ */
+function SidebarBoundary({ children }: { children: ReactNode }) {
+  const { isMobile, open, openMobile } = useSidebar();
+  const visible = isMobile ? openMobile : open;
+  return (
+    <ErrorBoundary
+      variant="compact"
+      title="Couldn't show the sidebar"
+      showRetry
+      className={cn('w-(--sidebar-width) max-w-[80vw] shrink-0 border-r', !visible && 'hidden')}
+    >
+      {children}
+    </ErrorBoundary>
+  );
+}
 
 interface AppLayoutProps {
   children: ReactNode;
@@ -39,14 +58,9 @@ export function AppLayout({ children, className, banners }: AppLayoutProps) {
               {banners}
               <div className="flex flex-1 min-h-0 overflow-hidden">
                 {isFirstRun ? null : (
-                  <ErrorBoundary
-                    variant="compact"
-                    title="Couldn't show the sidebar"
-                    showRetry
-                    className="w-56 shrink-0 border-r"
-                  >
+                  <SidebarBoundary>
                     <AppSidebar navData={navData} />
-                  </ErrorBoundary>
+                  </SidebarBoundary>
                 )}
                 <main className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-background">
                   {children}

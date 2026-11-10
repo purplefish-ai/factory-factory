@@ -226,7 +226,7 @@ export const WorkspaceDetailView = memo(function WorkspaceDetailView({
       variant="compact"
       title="Couldn't show the workspace tools"
       showRetry
-      resetKey={workspaceState.workspaceId}
+      resetKey={`${workspaceState.workspaceId}:${sessionTabs.selectedDbSessionId ?? ''}`}
     >
       <RightPanel
         workspaceId={workspaceState.workspaceId}

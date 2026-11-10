@@ -245,7 +245,11 @@ function numericIntervalLiteral(node, visitorKeys) {
 function readsToolInput(node) {
   let current = node;
   while (current) {
-    if (current.type === 'ChainExpression' || current.type === 'ParenthesizedExpression') {
+    if (
+      current.type === 'ChainExpression' ||
+      current.type === 'ParenthesizedExpression' ||
+      current.type === 'TSNonNullExpression'
+    ) {
       current = current.expression;
     } else if (current.type === 'MemberExpression') {
       if (memberName(current) === 'input') {

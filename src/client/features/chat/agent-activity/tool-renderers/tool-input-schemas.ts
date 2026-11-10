@@ -19,9 +19,12 @@ export const taskToolInputSchema = z.object({
   prompt: z.string().nullish(),
 });
 
-/** A missing list is an empty task list; a malformed one falls back to raw JSON. */
+/**
+ * A missing list is an empty task list; a malformed one, including `null`,
+ * falls back to raw JSON, as `use-todo-tracker` also rejects it.
+ */
 export const todoWriteToolInputSchema = z.object({
-  todos: z.array(todoSchema).nullish(),
+  todos: z.array(todoSchema).optional(),
 });
 
 export const readToolInputSchema = z.object({

@@ -62,7 +62,7 @@ describe('app routes', () => {
   const rootRoute = router.routes.find((route) => route.path === '/');
 
   it('renders route errors with the shared fallback instead of the router default', () => {
-    expect(rootRoute?.errorElement).toBeDefined();
+    expect(rootRoute?.errorElement).toMatchObject({ type: RouteErrorFallback });
   });
 
   it.each(['/does-not-exist', '/projects/example/unknown', '/admin/logs/extra'])(

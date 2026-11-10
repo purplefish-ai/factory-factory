@@ -97,6 +97,8 @@ describe('Oxlint project guardrails', () => {
     ['no-tool-input-cast', 'const offset = input?.["offset"] as number;'],
     ['no-tool-input-cast', 'const path = call.input.file_path as string;'],
     ['no-tool-input-cast', 'const payload = input as unknown as Payload;'],
+    ['no-tool-input-cast', 'const todos = input!.todos as Todo[];'],
+    ['no-tool-input-cast', 'const path = call.input!.file_path as string;'],
     ['no-raw-palette-classes', 'const className = "flex bg-red-500";'],
     ['no-raw-palette-classes', 'export const chip = <span className="dark:text-emerald-300" />;'],
     ['no-raw-palette-classes', 'const className = `${base} hover:border-sky-500/40`;'],

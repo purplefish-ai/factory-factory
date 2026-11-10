@@ -29,7 +29,7 @@ it('offers one persistent reload toast for failed chunks and lets the import rej
   // Not cancelled, so Vite rethrows and the nearest boundary shows the failure.
   expect(first.defaultPrevented).toBe(false);
   expect(toastError).toHaveBeenCalledTimes(2);
-  expect(toastError).toHaveBeenLastCalledWith("Couldn't load part of the app", {
+  expect(toastError).toHaveBeenLastCalledWith("Couldn't load part of the app.", {
     id: CHUNK_LOAD_ERROR_TOAST_ID,
     description: 'Factory Factory may have been updated. Reload to get the latest version.',
     duration: Number.POSITIVE_INFINITY,

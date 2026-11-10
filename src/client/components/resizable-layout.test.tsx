@@ -4,11 +4,12 @@ import { createRoot } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { AppLayout } from './resizable-layout';
 
-const { navigation } = vi.hoisted(() => ({
+const { navigation, sidebar } = vi.hoisted(() => ({
   navigation: {
     projects: undefined as { slug: string }[] | undefined,
     projectsError: null as Error | null,
   },
+  sidebar: { isMobile: false, open: true, openMobile: false, crash: false },
 }));
 vi.mock('@/client/components/app-shortcuts', () => ({ AppShortcuts: () => null }));
 vi.mock('@/client/hooks/use-app-navigation-data', () => ({
@@ -23,12 +24,18 @@ vi.mock('@/client/components/app-header-context', () => ({
 }));
 vi.mock('@/components/ui/sidebar', () => ({
   SidebarProvider: ({ children }: { children: ReactNode }) => children,
+  useSidebar: () => sidebar,
 }));
 vi.mock('@/components/ui/tooltip', () => ({
   TooltipProvider: ({ children }: { children: ReactNode }) => children,
 }));
 vi.mock('@/client/components/app-sidebar', () => ({
-  AppSidebar: () => <aside>Project navigation</aside>,
+  AppSidebar: () => {
+    if (sidebar.crash) {
+      throw new Error('Sidebar exploded');
+    }
+    return <aside>Project navigation</aside>;
+  },
 }));
 vi.mock('@/client/components/app-header', () => ({
   AppHeader: ({ showSidebarToggle = true }: { showSidebarToggle?: boolean }) => (
@@ -36,7 +43,34 @@ vi.mock('@/client/components/app-header', () => ({
   ),
 }));
 beforeEach(() => vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true));
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => {
+  vi.unstubAllGlobals();
+  Object.assign(sidebar, { isMobile: false, open: true, openMobile: false, crash: false });
+});
+
+it.each([
+  [false, true, false, true],
+  [false, false, false, false],
+  [true, true, false, false],
+  [true, false, true, true],
+])(
+  'contains a sidebar crash in its place (mobile %s, open %s, sheet open %s)',
+  async (isMobile, open, openMobile, visible) => {
+    vi.stubGlobal('reportError', vi.fn());
+    Object.assign(sidebar, { isMobile, open, openMobile, crash: true });
+    navigation.projects = [{ slug: 'alpha' }];
+    navigation.projectsError = null;
+    const container = document.createElement('div');
+    const root = createRoot(container, { onCaughtError: () => undefined });
+    await act(() => root.render(<AppLayout>Project content</AppLayout>));
+    const alert = container.querySelector('[role="alert"]');
+    expect(alert?.textContent).toContain("Couldn't show the sidebar");
+    expect(alert?.classList.contains('hidden')).toBe(!visible);
+    expect(container.querySelector('main')?.textContent).toBe('Project content');
+    expect(container.querySelector('header button')).not.toBeNull();
+    await act(() => root.unmount());
+  }
+);
 it.each([
   [[], null, false],
   [undefined, null, true],
