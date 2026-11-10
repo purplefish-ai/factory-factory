@@ -132,22 +132,22 @@ Button sizing follows the `size` variant
 `button-icon-size` rejects `h-*`/`w-*` classes on an icon (`*Icon`, `svg`)
 anywhere inside a `Button` or `IconButton`, through conditionals, fragments and
 wrappers; the variant sizes icons and a `size-*` class is the explicit opt-out.
-It also rejects a positive horizontal margin (`mr-2`, `md:ml-1.5`, `me-1`) on an
-icon that is a direct flex item of the control (through conditionals, fragments
-and an `asChild` child), because the variant's `gap` already spaces icon and
-label; negative optical offsets, `ml-auto` and icons inside a wrapper element
-pass. `button-size-variant` rejects a fixed `h-N`, `w-N` or `size-N` (with any
-variant prefix) in a `Button` or `IconButton` `className`; keywords such as
-`w-full` and `h-auto`, arbitrary values and `min-`/`max-` widths are layout and
-pass. `icon-button-tooltip` rejects an icon-size `Button` rendered by
-`TooltipTrigger asChild` (also through nested `…Trigger asChild` elements) or
-carrying a native `title`; use `IconButton`. `tooltip-provider-root` rejects
-`<TooltipProvider>` outside the root providers, and `focus-ring` (`src/client`
-only) rejects the hand-rolled `focus-visible:ring-2` and
-`focus-visible:outline…` styles that the `focus-ring` utility replaces. Each
-takes an `exceptions` map, checked by the same still-needed test as the pending
-rules; tests are exempt from `tooltip-provider-root` so they can supply their
-own provider.
+It also rejects a positive horizontal margin (`mr-2`, `md:ml-1.5`, `me-1`,
+`m-1`) on an icon that is a direct flex item of the control (through
+conditionals, fragments and an `asChild` child), because the variant's `gap`
+already spaces icon and label; negative optical offsets, `ml-auto`, vertical
+margins and icons inside a wrapper element pass. `button-size-variant` rejects a
+fixed `h-N`, `w-N` or `size-N` (with any variant prefix) in a `Button` or
+`IconButton` `className`; keywords such as `w-full` and `h-auto`, arbitrary
+values and `min-`/`max-` widths are layout and pass. `icon-button-tooltip`
+rejects an icon-size `Button` rendered by `TooltipTrigger asChild` (also through
+nested `…Trigger asChild` elements) or carrying a native `title`; use
+`IconButton`. `tooltip-provider-root` rejects `<TooltipProvider>` outside the
+root providers, and `focus-ring` (`src/client` only) rejects the hand-rolled
+`focus-visible:ring-2` and `focus-visible:outline…` styles that the `focus-ring`
+utility replaces. Each takes an `exceptions` map, checked by the same
+still-needed test as the pending rules; tests are exempt from
+`tooltip-provider-root` so they can supply their own provider.
 
 ## Remaining Biome checks
 

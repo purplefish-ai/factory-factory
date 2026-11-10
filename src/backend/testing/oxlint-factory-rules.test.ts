@@ -141,6 +141,10 @@ describe('Oxlint project guardrails', () => {
     ],
     [
       'button-icon-size',
+      'const x = <Button size="sm"><DownloadIcon className="m-1" />Export</Button>;',
+    ],
+    [
+      'button-icon-size',
       'const x = <Button>Next<CaretRightIcon className="md:ml-1.5" /></Button>;',
     ],
     [
@@ -380,6 +384,7 @@ describe('Oxlint project guardrails', () => {
     'const x = <div className="h-6 w-6"><XIcon className="h-3 w-3" /></div>;',
     // Optical offsets, pushing an icon to the end and spacing inside a wrapper pass.
     'const x = <Button size="sm"><PlayIcon className="-ml-0.5" />Run</Button>;',
+    'const x = <Button size="sm"><PlayIcon className="my-0.5" />Run</Button>;',
     'const x = <Button className="w-full">Menu<CaretDownIcon className="ml-auto" /></Button>;',
     'const x = <Button><span className="flex"><XIcon className="mr-1" />Close</span></Button>;',
     'const x = <div><XIcon className="mr-2" />Close</div>;',

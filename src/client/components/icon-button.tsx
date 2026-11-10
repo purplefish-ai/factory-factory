@@ -1,4 +1,4 @@
-import type { ComponentProps, ReactNode } from 'react';
+import { type ComponentProps, type ReactNode, useId } from 'react';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 
@@ -39,11 +39,35 @@ export function IconButton({
   variant = 'ghost',
   ...props
 }: IconButtonProps) {
-  const button = <Button variant={variant} size={size} aria-label={label} {...props} />;
+  const descriptionId = useId();
+  if (!tooltipWhileDisabled) {
+    return (
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button variant={variant} size={size} aria-label={label} {...props} />
+        </TooltipTrigger>
+        <TooltipContent side={tooltipSide}>{tooltip ?? label}</TooltipContent>
+      </Tooltip>
+    );
+  }
+  // The wrapper is the tooltip trigger, so Radix describes the wrapper. The
+  // button carries the tooltip text as its own description for screen readers.
+  const describedBy = [props['aria-describedby'], descriptionId].filter(Boolean).join(' ');
   return (
     <Tooltip>
       <TooltipTrigger asChild>
-        {tooltipWhileDisabled ? <span className="inline-flex">{button}</span> : button}
+        <span className="inline-flex">
+          <Button
+            variant={variant}
+            size={size}
+            aria-label={label}
+            {...props}
+            aria-describedby={describedBy}
+          />
+          <span id={descriptionId} hidden>
+            {tooltip ?? label}
+          </span>
+        </span>
       </TooltipTrigger>
       <TooltipContent side={tooltipSide}>{tooltip ?? label}</TooltipContent>
     </Tooltip>

@@ -673,11 +673,11 @@ const HAND_ROLLED_FOCUS_CLASS =
 // `h-4`, `w-[18px]`, `md:w-3`: any height or width class on an icon.
 const ICON_DIMENSION_CLASS = /(?<=^|[\s'"`:!])[hw]-[\w.[\]/-]+/;
 
-// `mr-2`, `ml-1.5`, `md:me-1`, `mx-[3px]`: a positive horizontal margin, which
-// adds to the control's `gap`. Negative optical offsets (`-ml-1`) and `ml-auto`
-// pass.
+// `mr-2`, `ml-1.5`, `md:me-1`, `mx-[3px]`, `m-1`: a positive horizontal margin
+// (including all-sides `m-`), which adds to the control's `gap`. Negative
+// optical offsets (`-ml-1`), `ml-auto` and vertical margins (`my-1`) pass.
 const ICON_HORIZONTAL_MARGIN_CLASS =
-  /(?<=^|[\s'"`:!])m[lrxse]-(?:\d+(?:\.\d+)?|px|\[[^\]\s]+\])(?![\w./-])/;
+  /(?<=^|[\s'"`:!])m[lrxse]?-(?:\d+(?:\.\d+)?|px|\[[^\]\s]+\])(?![\w./-])/;
 
 function classNameText(opening, sourceCode) {
   const attribute = opening.attributes.find(

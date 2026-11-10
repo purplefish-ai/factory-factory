@@ -9,6 +9,7 @@ import {
   pendingPatches,
   useSavingFields,
 } from '@/client/lib/optimistic-patch';
+import { QUERY_RETRY } from '@/client/lib/query-options';
 import { type AppRouter, trpc } from '@/client/lib/trpc';
 
 /**
@@ -54,7 +55,11 @@ interface ProviderOptionsQueryOptions {
   refetchInterval?: (query: { state: { data: ProviderOptions | undefined } }) => number | false;
 }
 
-/** The provider model catalog, optionally for one Codex account. */
+/**
+ * The provider model catalog, optionally for one Codex account. Each attempt
+ * runs discovery, so a failure is not retried automatically; readers retry
+ * from their UI or their next poll.
+ */
 export function useProviderOptions(
   input?: ProviderOptionsInput,
   options?: ProviderOptionsQueryOptions
@@ -62,6 +67,7 @@ export function useProviderOptions(
   return trpc.userSettings.getProviderOptions.useQuery(input, {
     ...options,
     staleTime: PROVIDER_OPTIONS_STALE_TIME_MS,
+    retry: QUERY_RETRY.costlyRead,
   });
 }
 

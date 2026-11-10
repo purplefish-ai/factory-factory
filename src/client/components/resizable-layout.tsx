@@ -34,7 +34,8 @@ function SidebarBoundary({ children }: { children: ReactNode }) {
 
 /**
  * The header also renders outside the page boundary. Its fallback takes the
- * header's place, below the safe area, and leaves the page and sidebar running.
+ * header's place, below the safe area, as one row that wraps on narrow
+ * screens, and leaves the page and sidebar running.
  */
 export function HeaderBoundary({ children }: { children: ReactNode }) {
   return (
@@ -42,7 +43,7 @@ export function HeaderBoundary({ children }: { children: ReactNode }) {
       variant="compact"
       title="Couldn't show the header"
       showRetry
-      className="h-auto shrink-0 border-b bg-shell py-2 pt-[max(0.5rem,env(safe-area-inset-top))]"
+      className="h-auto min-h-12 shrink-0 flex-row flex-wrap gap-x-3 gap-y-1 border-b bg-shell px-3 py-1.5 pt-[max(0.375rem,env(safe-area-inset-top))] text-left"
     >
       {children}
     </ErrorBoundary>

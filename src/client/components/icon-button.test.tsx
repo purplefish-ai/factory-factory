@@ -85,3 +85,22 @@ it('keeps one wrapper for a tooltip while disabled, so pending does not remount 
   expect(container.querySelector('button')).toBe(button);
   expect(button?.disabled).toBe(true);
 });
+
+it('describes the button itself with its tooltip when the wrapper is the trigger', () => {
+  const container = render(
+    <IconButton
+      label="Stop agent"
+      tooltip="Stop agent (Esc)"
+      tooltipWhileDisabled
+      aria-describedby="hint"
+    >
+      <XIcon />
+    </IconButton>
+  );
+  const button = container.querySelector('button');
+  const [hint, descriptionId] = button?.getAttribute('aria-describedby')?.split(' ') ?? [];
+  expect(hint).toBe('hint');
+  const description = descriptionId ? document.getElementById(descriptionId) : null;
+  expect(description?.textContent).toBe('Stop agent (Esc)');
+  expect(description?.hidden).toBe(true);
+});
