@@ -6,7 +6,7 @@ import {
 import {
   deriveSessionTabRuntime,
   type WorkspaceSessionRuntimeSummary,
-} from '@/client/features/workspace/session-tab-runtime';
+} from '@/client/lib/session-tab-runtime';
 import type { SessionRuntimeState } from '@/shared/session-runtime';
 import {
   buildSessionSummariesById,

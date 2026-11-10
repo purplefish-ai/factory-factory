@@ -1,14 +1,14 @@
-import { PlusIcon } from '@phosphor-icons/react/dist/csr/Plus';
-import { memo, useCallback, useEffect, useRef, useState } from 'react';
+import { memo, type ReactNode, useCallback, useEffect, useRef, useState } from 'react';
+import { StatusDot } from '@/client/components/status-indicators';
 import { useWorkspaceUnreadCounts } from '@/client/features/inbox';
 import type { SubagentSelection } from '@/client/features/subagents';
 import { useWorkspaceDetailQuery } from '@/client/hooks/use-workspace-detail-query';
 import { useWorkspaceDrawer } from '@/client/hooks/use-workspace-drawer';
 import { readStorageItem } from '@/client/lib/browser-storage';
 import { POLL_INTERVAL_MS } from '@/client/lib/query-options';
+import type { StatusTone } from '@/client/lib/status-tones';
 import { trpc } from '@/client/lib/trpc';
-import { TabButton } from '@/components/ui/tab-button';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { TabButton, TabList } from '@/components/ui/tab-button';
 import { cn } from '@/lib/utils';
 import { DevLogsPanel } from './dev-logs-panel';
 import { RightPanelLayout } from './right-panel-layout';
@@ -29,6 +29,15 @@ type LogsBottomTab = Exclude<BottomPanelTab, 'terminal'>;
 function isLogsBottomTab(tab: BottomPanelTab): tab is LogsBottomTab {
   return tab === 'setup-logs' || tab === 'dev-logs' || tab === 'post-run-logs';
 }
+
+const LOG_SOURCES: { tab: LogsBottomTab; label: string }[] = [
+  { tab: 'setup-logs', label: 'Setup' },
+  { tab: 'dev-logs', label: 'Dev' },
+  { tab: 'post-run-logs', label: 'Post-Run' },
+];
+
+/** A log source's status dot: running (pulsing), connected or failed. */
+type LogStatus = Extract<StatusTone, 'success' | 'working' | 'danger'>;
 
 // =============================================================================
 // Main Component
@@ -181,6 +190,11 @@ export const RightPanel = memo(function RightPanel({
     devLogsStatus,
     postRunLogsStatus,
   });
+  const logStatuses: Record<LogsBottomTab, LogStatus> = {
+    'setup-logs': setupLogsStatus,
+    'dev-logs': devLogsStatus,
+    'post-run-logs': postRunLogsStatus,
+  };
 
   const topPanel = (
     <TopPanelArea
@@ -212,18 +226,20 @@ export const RightPanel = memo(function RightPanel({
           !isLogsActive && 'border-b'
         )}
       >
-        {!isMobile && (
-          <TabButton
-            label="Logs"
-            icon={<StatusDot status={logsGroupStatus} />}
-            isActive={isLogsActive}
-            onSelect={handleLogsTabChange}
-          />
-        )}
         <TerminalControls
           activeBottomTab={activeBottomTab}
           terminalTabState={terminalTabState}
           onTabChange={handleBottomTabChange}
+          leadingTabs={
+            !isMobile && (
+              <TabButton
+                label="Logs"
+                icon={<StatusDot tone={logsGroupStatus} size="xs" />}
+                isActive={isLogsActive}
+                onSelect={handleLogsTabChange}
+              />
+            )
+          }
         />
       </div>
 
@@ -237,29 +253,22 @@ export const RightPanel = memo(function RightPanel({
           <span className="text-[10px] uppercase tracking-wide text-muted-foreground/80 font-medium whitespace-nowrap">
             Log source
           </span>
-          <div className="flex items-center gap-0.5 min-w-0 rounded-md border border-border/70 bg-muted/70 p-0.5">
-            <TabButton
-              label="Setup"
-              icon={<StatusDot status={setupLogsStatus} />}
-              isActive={activeLogsTab === 'setup-logs'}
-              onSelect={() => handleLogsSubTabChange('setup-logs')}
-              className={getLogsSubTabButtonClass(activeLogsTab === 'setup-logs')}
-            />
-            <TabButton
-              label="Dev"
-              icon={<StatusDot status={devLogsStatus} />}
-              isActive={activeLogsTab === 'dev-logs'}
-              onSelect={() => handleLogsSubTabChange('dev-logs')}
-              className={getLogsSubTabButtonClass(activeLogsTab === 'dev-logs')}
-            />
-            <TabButton
-              label="Post-Run"
-              icon={<StatusDot status={postRunLogsStatus} />}
-              isActive={activeLogsTab === 'post-run-logs'}
-              onSelect={() => handleLogsSubTabChange('post-run-logs')}
-              className={getLogsSubTabButtonClass(activeLogsTab === 'post-run-logs')}
-            />
-          </div>
+          <TabList
+            aria-label="Log source"
+            className="gap-0.5 min-w-0 rounded-md border border-border/70 bg-muted/70 p-0.5"
+          >
+            {LOG_SOURCES.map(({ tab, label }) => (
+              <TabButton
+                key={tab}
+                size="sm"
+                label={label}
+                icon={<StatusDot tone={logStatuses[tab]} size="xs" />}
+                isActive={activeLogsTab === tab}
+                onSelect={() => handleLogsSubTabChange(tab)}
+                className="border-transparent"
+              />
+            ))}
+          </TabList>
         </div>
       )}
 
@@ -317,33 +326,14 @@ export const RightPanel = memo(function RightPanel({
 // Terminal Components
 // =============================================================================
 
-type StatusDotStatus = 'success' | 'pending' | 'error';
-
-interface StatusDotProps {
-  status: StatusDotStatus;
-}
-
-function StatusDot({ status }: StatusDotProps) {
-  return (
-    <span
-      className={cn(
-        'w-1.5 h-1.5 rounded-full',
-        status === 'success' && 'bg-success',
-        status === 'pending' && 'bg-running animate-pulse motion-reduce:animate-none',
-        status === 'error' && 'bg-destructive'
-      )}
-    />
-  );
-}
-
-function getSetupLogsStatus(status: string | undefined): StatusDotStatus {
+function getSetupLogsStatus(status: string | undefined): LogStatus {
   if (status === 'READY' || status === 'ARCHIVING' || status === 'ARCHIVED') {
     return 'success';
   }
   if (status === 'FAILED') {
-    return 'error';
+    return 'danger';
   }
-  return 'pending';
+  return 'working';
 }
 
 function getStreamingLogsStatus({
@@ -352,14 +342,14 @@ function getStreamingLogsStatus({
 }: {
   connected: boolean;
   hasDisconnected: boolean;
-}): StatusDotStatus {
+}): LogStatus {
   if (connected) {
     return 'success';
   }
   if (hasDisconnected) {
-    return 'error';
+    return 'danger';
   }
-  return 'pending';
+  return 'working';
 }
 
 function getLogsGroupStatus({
@@ -367,21 +357,21 @@ function getLogsGroupStatus({
   devLogsStatus,
   postRunLogsStatus,
 }: {
-  setupLogsStatus: StatusDotStatus;
-  devLogsStatus: StatusDotStatus;
-  postRunLogsStatus: StatusDotStatus;
-}): StatusDotStatus {
-  if (setupLogsStatus === 'error') {
-    return 'error';
+  setupLogsStatus: LogStatus;
+  devLogsStatus: LogStatus;
+  postRunLogsStatus: LogStatus;
+}): LogStatus {
+  if (setupLogsStatus === 'danger') {
+    return 'danger';
   }
-  if (setupLogsStatus === 'pending') {
-    return 'pending';
+  if (setupLogsStatus === 'working') {
+    return 'working';
   }
-  if (devLogsStatus === 'error' || postRunLogsStatus === 'error') {
-    return 'error';
+  if (devLogsStatus === 'danger' || postRunLogsStatus === 'danger') {
+    return 'danger';
   }
-  if (devLogsStatus === 'pending' || postRunLogsStatus === 'pending') {
-    return 'pending';
+  if (devLogsStatus === 'working' || postRunLogsStatus === 'working') {
+    return 'working';
   }
   return 'success';
 }
@@ -390,10 +380,13 @@ export function TerminalControls({
   activeBottomTab,
   terminalTabState,
   onTabChange,
+  leadingTabs,
 }: {
   activeBottomTab: BottomPanelTab;
   terminalTabState: TerminalTabState | null;
   onTabChange: (tab: BottomPanelTab) => void;
+  /** Panel tabs before the terminals, in the same tablist (the desktop Logs tab). */
+  leadingTabs?: ReactNode;
 }) {
   const hasTabs = terminalTabState !== null && terminalTabState.tabs.length > 0;
   const openTerminal = () => onTabChange('terminal');
@@ -417,41 +410,8 @@ export function TerminalControls({
           terminalTabState.onNewTab();
         }
       }}
+      leadingTabs={leadingTabs}
       className="min-w-0 flex-1"
-      renderNewButton={(handleNewTab) => <NewTerminalButton onNewTab={handleNewTab} />}
     />
-  );
-}
-
-interface NewTerminalButtonProps {
-  onNewTab: () => void;
-}
-
-function NewTerminalButton({ onNewTab }: NewTerminalButtonProps) {
-  return (
-    <TooltipProvider>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <button
-            type="button"
-            onClick={onNewTab}
-            aria-label="New terminal"
-            className="h-6 w-6 flex-shrink-0 flex items-center justify-center rounded-md transition-colors text-muted-foreground hover:bg-sidebar-accent hover:text-foreground"
-          >
-            <PlusIcon className="h-3 w-3" />
-          </button>
-        </TooltipTrigger>
-        <TooltipContent>
-          <p>New terminal</p>
-        </TooltipContent>
-      </Tooltip>
-    </TooltipProvider>
-  );
-}
-
-function getLogsSubTabButtonClass(isActive: boolean): string {
-  return cn(
-    'text-xs px-2 py-0.5 h-6 border-transparent',
-    !isActive && 'text-muted-foreground/90 hover:text-foreground'
   );
 }

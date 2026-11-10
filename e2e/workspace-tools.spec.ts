@@ -108,7 +108,7 @@ test('More tools render their fixtures and Logs reopens the last source', async 
   await expect(drawer.getByText('No child workspaces yet', { exact: true })).toBeVisible();
   await drawer.getByRole('button', { name: /more tools/i }).click();
   await page.getByRole('menuitemradio', { name: 'Logs', exact: true }).click();
-  const dev = drawer.getByRole('button', { name: 'Dev', exact: true });
+  const dev = drawer.getByRole('tab', { name: 'Dev', exact: true });
   await dev.click();
   await expect(drawer.locator('pre')).toContainText('Development server listening');
   expect((await dev.boundingBox())?.height).toBeGreaterThanOrEqual(36);

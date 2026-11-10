@@ -2,6 +2,7 @@ import { FileCodeIcon } from '@phosphor-icons/react/dist/csr/FileCode';
 import { FileMinusIcon } from '@phosphor-icons/react/dist/csr/FileMinus';
 import { FilePlusIcon } from '@phosphor-icons/react/dist/csr/FilePlus';
 import { memo } from 'react';
+import { StatusDot } from '@/client/components/status-indicators';
 import { cn } from '@/lib/utils';
 import { FileTreeRow } from './file-tree-row';
 
@@ -137,9 +138,7 @@ export const FileChangeItem = memo(function FileChangeItem({
         </>
       }
     >
-      {showIndicatorDot && (
-        <span className="h-1.5 w-1.5 rounded-full bg-info shrink-0" title={indicatorLabel} />
-      )}
+      {showIndicatorDot && <StatusDot tone="info" size="xs" label={indicatorLabel} />}
       <FileChangeStatus kind={kind} statusCode={statusCode} />
     </FileTreeRow>
   );

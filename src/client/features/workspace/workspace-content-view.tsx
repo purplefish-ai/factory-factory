@@ -2,11 +2,11 @@ import type { inferRouterOutputs } from '@trpc/server';
 import { memo } from 'react';
 import type { ReactNode } from 'react';
 import { StatusCallout } from '@/client/components/status-callout';
+import type { WorkspaceSessionRuntimeSummary } from '@/client/lib/session-tab-runtime';
 import type { AppRouter } from '@/client/lib/trpc';
 import { MainViewContent } from './main-view-content';
 import { MainViewTabBar } from './main-view-tab-bar';
 import type { SessionQueuedMessageCount } from './session-close-guard';
-import type { WorkspaceSessionRuntimeSummary } from './session-tab-runtime';
 import { useWorkspacePanel } from './workspace-panel-context';
 
 // =============================================================================

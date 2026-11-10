@@ -1,7 +1,10 @@
 import { PlusIcon } from '@phosphor-icons/react/dist/csr/Plus';
 import { TerminalIcon } from '@phosphor-icons/react/dist/csr/Terminal';
-import { XIcon } from '@phosphor-icons/react/dist/csr/X';
 import type { ReactNode } from 'react';
+import { useTablistFocus } from '@/client/hooks/use-tablist-focus';
+import { Button } from '@/components/ui/button';
+import { TabButton, TabList } from '@/components/ui/tab-button';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 
 // =============================================================================
@@ -18,9 +21,10 @@ interface TerminalTabBarProps {
   activeTabId: string | null;
   onSelectTab: (id: string) => void;
   onCloseTab?: (id: string) => void;
+  /** Shows the "New terminal" button. */
   onNewTab?: () => void;
-  showNewButton?: boolean;
-  renderNewButton?: (onNewTab: () => void) => ReactNode;
+  /** Tabs rendered before the terminals in the same tablist, e.g. the panel's Logs tab. */
+  leadingTabs?: ReactNode;
   className?: string;
 }
 
@@ -34,63 +38,42 @@ export function TerminalTabBar({
   onSelectTab,
   onCloseTab,
   onNewTab,
-  showNewButton = true,
-  renderNewButton,
+  leadingTabs,
   className,
 }: TerminalTabBarProps) {
+  const tabBarRef = useTablistFocus();
+  const hasActiveTab = tabs.some((tab) => tab.id === activeTabId);
   return (
-    <div className={cn('flex items-center gap-1 min-w-0 overflow-hidden', className)}>
-      {/* Scrollable tabs container */}
-      <div className="flex-1 flex items-center gap-1 overflow-x-auto scrollbar-hide flex-nowrap min-w-0">
-        {tabs.map((tab) => (
-          <div
-            key={tab.id}
-            className={cn(
-              'flex items-center rounded-md transition-colors group flex-shrink-0',
-              activeTabId === tab.id
-                ? 'bg-muted text-foreground'
-                : 'text-foreground hover:bg-muted/50'
-            )}
-          >
-            <button
-              type="button"
-              className="flex items-center gap-1 px-2 py-1 text-xs cursor-pointer whitespace-nowrap"
-              onClick={() => onSelectTab(tab.id)}
-            >
-              <TerminalIcon className="h-3 w-3 flex-shrink-0" />
-              <span>{tab.label}</span>
-            </button>
-            {onCloseTab && (
-              <button
-                type="button"
-                aria-label={`Close ${tab.label}`}
-                onClick={() => onCloseTab(tab.id)}
-                className={cn(
-                  'mr-1 p-0.5 rounded hover:bg-foreground/10 transition-colors',
-                  activeTabId !== tab.id && 'hover-reveal'
-                )}
-              >
-                <XIcon className="h-3 w-3" />
-              </button>
-            )}
-          </div>
-        ))}
-      </div>
+    <div ref={tabBarRef} className={cn('flex min-w-0 items-center gap-1', className)}>
+      <TabList aria-label="Terminals" className="min-w-0 flex-1 gap-0.5">
+        {leadingTabs}
+        {/* Leading tabs stay put while the terminals scroll. */}
+        <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto scrollbar-hide">
+          {tabs.map((tab, index) => (
+            <TabButton
+              key={tab.id}
+              size="sm"
+              icon={<TerminalIcon className="h-3 w-3 shrink-0" />}
+              label={tab.label}
+              isActive={tab.id === activeTabId}
+              tabStop={tab.id === activeTabId || (!(leadingTabs || hasActiveTab) && index === 0)}
+              onSelect={() => onSelectTab(tab.id)}
+              onClose={onCloseTab ? () => onCloseTab(tab.id) : undefined}
+            />
+          ))}
+        </div>
+      </TabList>
 
-      {showNewButton &&
-        onNewTab &&
-        (renderNewButton ? (
-          renderNewButton(onNewTab)
-        ) : (
-          <button
-            type="button"
-            onClick={onNewTab}
-            className="h-6 w-6 flex-shrink-0 flex items-center justify-center rounded-md transition-colors text-muted-foreground hover:bg-sidebar-accent hover:text-foreground"
-            title="New terminal"
-          >
-            <PlusIcon className="h-3 w-3" />
-          </button>
-        ))}
+      {onNewTab && (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button variant="ghost" size="icon-xs" onClick={onNewTab} aria-label="New terminal">
+              <PlusIcon />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>New terminal</TooltipContent>
+        </Tooltip>
+      )}
     </div>
   );
 }

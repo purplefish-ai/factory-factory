@@ -1,19 +1,13 @@
 import { CaretLeftIcon } from '@phosphor-icons/react/dist/csr/CaretLeft';
 import { CaretRightIcon } from '@phosphor-icons/react/dist/csr/CaretRight';
-import { CheckCircleIcon } from '@phosphor-icons/react/dist/csr/CheckCircle';
-import { CircleIcon } from '@phosphor-icons/react/dist/csr/Circle';
-import { PauseCircleIcon } from '@phosphor-icons/react/dist/csr/PauseCircle';
-import { PulseIcon } from '@phosphor-icons/react/dist/csr/Pulse';
-import { XIcon } from '@phosphor-icons/react/dist/csr/X';
-import { XCircleIcon } from '@phosphor-icons/react/dist/csr/XCircle';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { AgentSessionStatus } from '@/client/components/agent-session-status';
+import { SessionStatusIcon } from '@/client/components/session-status-icon';
 import { NewSessionAccountAction } from '@/client/features/session-selection';
 import { useTablistFocus } from '@/client/hooks/use-tablist-focus';
-import { getAriaKeyShortcuts, matchesShortcut } from '@/client/lib/keyboard-shortcuts';
-import { handleTablistKeyDown } from '@/client/lib/roving-tablist';
 import { getSessionDisplayName } from '@/client/lib/session-display-name';
+import { deriveSessionTabRuntime } from '@/client/lib/session-tab-runtime';
 import { Button } from '@/components/ui/button';
+import { TabButton, TabList } from '@/components/ui/tab-button';
 import { cn } from '@/lib/utils';
 import type { SessionStatus } from '@/shared/core';
 
@@ -47,42 +41,6 @@ interface SessionTabBarProps {
 }
 
 // =============================================================================
-// Helper Functions
-// =============================================================================
-
-function getStatusIcon(status: SessionStatus, isRunning: boolean) {
-  if (isRunning || status === 'RUNNING') {
-    return PulseIcon;
-  }
-  if (status === 'IDLE') {
-    return CircleIcon;
-  }
-  if (status === 'PAUSED') {
-    return PauseCircleIcon;
-  }
-  if (status === 'COMPLETED') {
-    return CheckCircleIcon;
-  }
-  return XCircleIcon;
-}
-
-function getStatusIconClass(status: SessionStatus, isRunning: boolean) {
-  if (isRunning || status === 'RUNNING') {
-    return 'text-running';
-  }
-  if (status === 'IDLE') {
-    return 'text-muted-foreground';
-  }
-  if (status === 'PAUSED') {
-    return 'text-muted-foreground';
-  }
-  if (status === 'COMPLETED') {
-    return 'text-success';
-  }
-  return 'text-destructive';
-}
-
-// =============================================================================
 // Sub-Components
 // =============================================================================
 
@@ -110,105 +68,21 @@ function SessionTab({
   disabled,
   readOnly,
 }: SessionTabProps) {
-  const isAgent = session.workflow === 'periodic-task';
-  const StatusIcon = getStatusIcon(session.status, isRunning);
-  const statusLabel = isRunning
-    ? 'Running'
-    : session.status[0] + session.status.slice(1).toLowerCase();
-
-  const handleClose = useCallback(
-    (e: React.MouseEvent) => {
-      e.stopPropagation();
-      onClose();
-    },
-    [onClose]
-  );
-
-  const handleKeyDown = useCallback(
-    (e: React.KeyboardEvent) => {
-      if (disabled) {
-        return;
-      }
-      if (e.key === 'Enter' || e.key === ' ') {
-        e.preventDefault();
-        onSelect();
-      } else if (!readOnly && matchesShortcut(e, 'tabs.close')) {
-        e.preventDefault();
-        onClose();
-      }
-    },
-    [disabled, onSelect, onClose, readOnly]
-  );
-
-  // The close button is the tab's sibling rather than its child (interactive
-  // controls must not nest); it stays out of the Tab order because Delete
-  // closes the focused tab.
+  // Quick chat has no runtime summaries, so the persisted status (or the
+  // running session) drives the same status map as the workspace tab bar.
+  const status = deriveSessionTabRuntime(undefined, isRunning ? 'RUNNING' : session.status);
   return (
-    <div
-      className={cn(
-        'group relative flex items-center text-sm font-medium',
-        'rounded-md transition-all whitespace-nowrap border',
-        'has-[[role=tab]:focus-visible]:ring-2 has-[[role=tab]:focus-visible]:ring-ring has-[[role=tab]:focus-visible]:ring-offset-2',
-        isActive
-          ? 'bg-background text-foreground shadow-md border-border'
-          : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground border-transparent',
-        disabled && 'pointer-events-none opacity-50'
-      )}
-    >
-      <div
-        role="tab"
-        tabIndex={tabStop && !disabled ? 0 : -1}
-        onClick={disabled ? undefined : onSelect}
-        onKeyDown={handleKeyDown}
-        title={isRunning ? 'Running' : session.status}
-        aria-selected={isActive}
-        aria-disabled={disabled}
-        aria-keyshortcuts={readOnly ? undefined : getAriaKeyShortcuts('tabs.close')}
-        className={cn(
-          'flex min-w-0 items-center gap-2 py-1.5 px-3 outline-none',
-          disabled ? 'cursor-default' : 'cursor-pointer'
-        )}
-      >
-        {/* Status indicator */}
-        {isAgent ? (
-          <AgentSessionStatus
-            label={statusLabel}
-            icon={StatusIcon}
-            color={getStatusIconClass(session.status, isRunning)}
-            pulse={isRunning || session.status === 'RUNNING'}
-          />
-        ) : (
-          <StatusIcon
-            className={cn(
-              'h-3.5 w-3.5 shrink-0',
-              getStatusIconClass(session.status, isRunning),
-              (isRunning || session.status === 'RUNNING') && 'animate-pulse'
-            )}
-          />
-        )}
-
-        <span className="truncate max-w-[120px]">{displayName}</span>
-      </div>
-
-      {/* Close button - visible on hover, hidden in readOnly mode */}
-      {!readOnly && (
-        <button
-          type="button"
-          tabIndex={-1}
-          onClick={handleClose}
-          disabled={disabled}
-          className={cn(
-            'mr-3 rounded p-0.5 transition-opacity',
-            'hover-reveal',
-            'hover:bg-muted-foreground/20',
-            disabled && 'pointer-events-none'
-          )}
-          aria-label={`Close ${displayName}`}
-        >
-          <XIcon className="h-3 w-3" />
-        </button>
-      )}
-    </div>
+    <TabButton
+      icon={<SessionStatusIcon status={status} isAgent={session.workflow === 'periodic-task'} />}
+      label={displayName}
+      title={status.label}
+      isActive={isActive}
+      tabStop={tabStop}
+      onSelect={onSelect}
+      onClose={readOnly ? undefined : onClose}
+      disabled={disabled}
+      truncate
+    />
   );
 }
 
@@ -309,14 +183,11 @@ export function SessionTabBar({
       )}
 
       {/* Scrollable tab container */}
-      <div
+      <TabList
         ref={scrollContainerRef}
-        role="tablist"
         aria-label="Chats"
-        onKeyDown={handleTablistKeyDown}
         onScroll={handleScroll}
-        className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto scrollbar-none"
-        style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+        className="min-w-0 flex-1 gap-1 overflow-x-auto scrollbar-hide"
       >
         {sortedSessions.length === 0 ? (
           <div role="presentation" className="px-3 py-1.5 text-sm text-muted-foreground">
@@ -343,7 +214,7 @@ export function SessionTabBar({
             );
           })
         )}
-      </div>
+      </TabList>
 
       {/* Right scroll arrow */}
       {showRightArrow && (
