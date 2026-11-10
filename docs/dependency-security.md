@@ -290,6 +290,14 @@ stable snapshots while retaining validated history and recovering on success.
 Remove this exact-version patch when upstream fixes the snapshot instability;
 keep the regression assertions when upgrading.
 
+The workspace cache reconciler depends on React Query internals that
+`src/client/lib/query-core-commit-contract.test.ts` pins. These are when a
+function `structuralSharing` runs, a revert when it throws `CancelledError`, and
+option ownership by the latest fetch or observer. If an upgrade fails that test,
+adapt the reconciler and the
+[workspace state note](architecture/workspace-state.md) rather than the
+assertions.
+
 The October 30, 2026 dependency refresh updates direct dependencies to their
 latest stable registry tags, including Linear SDK 100, ACP SDK 2.1, Claude ACP
 0.99.1, Codex ACP 2.5, and Electron 45.1. The Linear major removes Salesforce

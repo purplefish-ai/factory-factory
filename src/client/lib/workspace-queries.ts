@@ -23,7 +23,8 @@ import type { WorkspaceSnapshotEntry } from '@/shared/workspace-snapshot';
  * responses with the snapshot stream. A plain tRPC `useQuery`, `fetch` or
  * `setData` on one of these keys would therefore commit HTTP data without the
  * reconciler and leave it uninstalled for later refetches. Every reader here
- * installs the reconciler (see docs/architecture/workspace-state.md).
+ * installs the reconciler; `factory/workspace-query-owner` keeps callers on
+ * this module (see docs/architecture/workspace-state.md).
  */
 
 /** The parts of the vanilla tRPC client (`trpc.useUtils().client`) these reads use. */
@@ -116,8 +117,50 @@ export function mergeWorkspaceDetailSnapshot(
   queryClient: QueryClient,
   entry: WorkspaceSnapshotEntry
 ): void {
-  queryClient.setQueryData<WorkspaceDetail>(
-    getQueryKey(trpc.workspace.get, { id: entry.workspaceId }, 'query'),
-    (existing) => mergeProjectSnapshotIntoWorkspaceDetail(entry, existing)
+  queryClient.setQueryData<WorkspaceDetail>(detailFilter(entry.workspaceId).queryKey, (existing) =>
+    mergeProjectSnapshotIntoWorkspaceDetail(entry, existing)
   );
+}
+
+function detailFilter(workspaceId: string) {
+  return { queryKey: getQueryKey(trpc.workspace.get, { id: workspaceId }, 'query'), exact: true };
+}
+
+// Operations below only reuse installed options, so callers never need these keys.
+
+/** Clears one detail and cancels its request; active observers refetch persisted detail. */
+export function resetWorkspaceDetail(queryClient: QueryClient, workspaceId: string) {
+  return queryClient.resetQueries(detailFilter(workspaceId));
+}
+
+/** Marks one detail stale and refetches it when observed. */
+export function invalidateWorkspaceDetail(queryClient: QueryClient, workspaceId: string) {
+  return queryClient.invalidateQueries(detailFilter(workspaceId));
+}
+
+/** Cancels one detail request synchronously; the returned promise settles later. */
+export function cancelWorkspaceDetail(queryClient: QueryClient, workspaceId: string) {
+  return queryClient.cancelQueries(detailFilter(workspaceId));
+}
+
+/** Refetches one detail only while something observes it. */
+export function refetchActiveWorkspaceDetail(queryClient: QueryClient, workspaceId: string) {
+  return queryClient.refetchQueries({ ...detailFilter(workspaceId), type: 'active' });
+}
+
+/** Every cached detail, including ones that outlive their project list. */
+export function getCachedWorkspaceDetails(queryClient: QueryClient) {
+  return queryClient
+    .getQueriesData<WorkspaceDetail>({
+      queryKey: getQueryKey(trpc.workspace.get, undefined, 'query'),
+    })
+    .map(([, detail]) => detail);
+}
+
+/** Cancels one project's list request synchronously; the returned promise settles later. */
+export function cancelProjectWorkspaceList(queryClient: QueryClient, projectId: string) {
+  return queryClient.cancelQueries({
+    queryKey: getProjectWorkspaceCacheReconciler(queryClient, projectId).queryKey,
+    exact: true,
+  });
 }

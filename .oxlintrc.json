@@ -117,13 +117,23 @@
               "src/client/routes/workspace-header-pwa-preview.tsx": "Mock macOS window controls reproduce the operating system's red, yellow and green traffic lights."
             }
           }
+        ],
+        "factory/workspace-query-owner": [
+          "error",
+          {
+            "owners": [
+              "src/client/lib/workspace-queries.ts",
+              "src/client/lib/workspace-cache-reconciler.ts"
+            ]
+          }
         ]
       }
     },
     {
       "files": ["**/*.test.ts", "**/*.test.tsx"],
       "rules": {
-        "factory/no-raw-palette-classes": "off"
+        "factory/no-raw-palette-classes": "off",
+        "factory/workspace-query-owner": "off"
       }
     },
     {

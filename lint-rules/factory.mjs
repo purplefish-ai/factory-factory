@@ -123,7 +123,81 @@ function isButtonIcon(node) {
   );
 }
 
+// tRPC React helpers that install query options or commit data for a key.
+// Invalidation, cancellation, reset and cache reads reuse installed options.
+const WORKSPACE_QUERY_CACHE_METHODS = new Set([
+  'useQuery',
+  'useSuspenseQuery',
+  'useInfiniteQuery',
+  'useSuspenseInfiniteQuery',
+  'usePrefetchQuery',
+  'usePrefetchInfiniteQuery',
+  'queryOptions',
+  'infiniteQueryOptions',
+  'fetch',
+  'fetchInfinite',
+  'prefetch',
+  'prefetchInfinite',
+  'ensureData',
+  'setData',
+  'setInfiniteData',
+  'setQueriesData',
+]);
+
+/** `<any>.workspace.get` or `<any>.workspace.listForProject`. */
+function reconciledWorkspaceProcedure(node) {
+  const procedure = memberName(node);
+  return (procedure === 'get' || procedure === 'listForProject') &&
+    memberName(node.object) === 'workspace'
+    ? procedure
+    : undefined;
+}
+
+function isListedFile(context, paths) {
+  const filename = context.filename.replaceAll('\\', '/');
+  return paths.some((path) => filename === path || filename.endsWith(`/${path}`));
+}
+
 const rules = {
+  'workspace-query-owner': {
+    meta: {
+      schema: [
+        {
+          type: 'object',
+          properties: {
+            owners: { type: 'array', items: { type: 'string', minLength: 1 } },
+          },
+          additionalProperties: false,
+        },
+      ],
+    },
+    create(context) {
+      // React Query lets the latest fetch or observer replace a key's options,
+      // including the reconciler's commit hook (docs/architecture/workspace-state.md).
+      if (isListedFile(context, context.options[0]?.owners ?? [])) {
+        return {};
+      }
+      const report = (node, procedure) =>
+        context.report({
+          node,
+          message: `Use src/client/lib/workspace-queries.ts for workspace.${procedure}; plain tRPC reads and writes bypass the snapshot reconciler.`,
+        });
+      return {
+        MemberExpression(node) {
+          const procedure = reconciledWorkspaceProcedure(node.object);
+          if (procedure && WORKSPACE_QUERY_CACHE_METHODS.has(memberName(node))) {
+            report(node, procedure);
+          }
+        },
+        CallExpression(node) {
+          const procedure = reconciledWorkspaceProcedure(node.arguments[0]);
+          if (procedure && isIdentifier(node.callee, 'getQueryKey')) {
+            report(node, procedure);
+          }
+        },
+      };
+    },
+  },
   'icon-button-name': {
     create(context) {
       return {
@@ -199,9 +273,7 @@ const rules = {
     create(context) {
       // `exceptions` maps repository-relative paths to the reason each file
       // may keep fixed palette colors (see docs/status-colors.md).
-      const exceptions = Object.keys(context.options[0]?.exceptions ?? {});
-      const filename = context.filename.replaceAll('\\', '/');
-      if (exceptions.some((path) => filename === path || filename.endsWith(`/${path}`))) {
+      if (isListedFile(context, Object.keys(context.options[0]?.exceptions ?? {}))) {
         return {};
       }
       return {

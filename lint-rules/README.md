@@ -35,8 +35,13 @@ accepting `unknown`, and fixed Tailwind palette color classes (`bg-red-500`,
 must use theme tokens instead ([status colors](../docs/status-colors.md)). The
 palette rule's file exceptions are its `exceptions` option, a map from path to
 reason in `.oxlintrc.json`; a test fails if an exception no longer needs it.
-Regression tests invoke the real Oxlint binary against accepted and rejected
-fixtures.
+`workspace-query-owner` keeps tRPC cache helpers (`useQuery`, `fetch`, `setData`
+and similar) and `getQueryKey` for `workspace.get` and
+`workspace.listForProject` inside the files in its `owners` option, so every
+read installs the snapshot reconciler
+([workspace state](../docs/architecture/workspace-state.md)). Tests are exempt
+so they can seed caches. Regression tests invoke the real Oxlint binary against
+accepted and rejected fixtures.
 
 ## Remaining Biome checks
 
