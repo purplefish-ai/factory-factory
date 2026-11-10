@@ -160,8 +160,14 @@ accessible labels, so their meaning survives monochrome display.
 Geist and Geist Mono variable fonts are served locally, including in Storybook,
 so default text remains available offline. The assets and SIL Open Font License
 are in `public/fonts/geist`, sourced from `vercel/geist-font` commit
-`a2357c1398c81d88ff84823a2f50af3152ee8733`. Optional alternate font families
-continue to use the existing Google Fonts stylesheet.
+`a2357c1398c81d88ff84823a2f50af3152ee8733`. The optional Appearance families
+(Inter, IBM Plex Mono, Atkinson Hyperlegible Next and Mono) are also served
+locally from `public/fonts/<family>`, each with its license, using the
+Fontsource 5.3.0 builds of Google Fonts' unicode-range subsets. Their
+`@font-face` rules in `src/client/fonts.css` are fetched only when text uses
+that family, so the app loads no third-party stylesheet before first paint.
+`src/client/fonts.test.ts` fails if a preset names a web font that is not
+bundled or if `index.html` gains a cross-origin resource.
 
 Icon buttons and close controls have 36px minimum targets on devices with any
 coarse pointer. Targets participate in layout rather than extending over nearby
