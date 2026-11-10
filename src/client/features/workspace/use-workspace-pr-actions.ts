@@ -19,6 +19,10 @@ export function useWorkspacePrActions(
     onSuccess: refresh,
     onError: (error) => toast.error(error.message),
   });
+  const discard = trpc.workspace.discardBlockedPRDeliveries.useMutation({
+    onSuccess: refresh,
+    onError: (error) => toast.error(error.message),
+  });
   const review = trpc.adversarialReview.trigger.useMutation({
     onSuccess: (result) => {
       void utils.session.listSessions.invalidate({ workspaceId });
@@ -31,7 +35,7 @@ export function useWorkspacePrActions(
     onError: (error) => toast.error(error.message),
   });
   return {
-    pending: attach.isPending || detach.isPending || review.isPending,
+    pending: attach.isPending || detach.isPending || review.isPending || discard.isPending,
     add: async (url: string) => {
       try {
         await attach.mutateAsync({ id: workspaceId, prUrl: url });
@@ -42,6 +46,14 @@ export function useWorkspacePrActions(
           success: false as const,
           error: error instanceof Error ? error.message : "Couldn't add PR",
         };
+      }
+    },
+    discardBlocked: async () => {
+      try {
+        await discard.mutateAsync({ workspaceId });
+        return true;
+      } catch {
+        return false;
       }
     },
     remove: async (prId: string) => {

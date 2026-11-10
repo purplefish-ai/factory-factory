@@ -256,6 +256,20 @@ export const workspaceCoreRouter = router({
       return result;
     }),
 
+  // Discard quarantined PR deliveries; their evidence is kept and nothing is resent.
+  discardBlockedPRDeliveries: trustedLocalProcedure
+    .input(z.object({ workspaceId: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const { ratchetService } = ctx.appContext.services;
+      const result = await ratchetService.discardBlockedPRDeliveries(input.workspaceId);
+      if (result.discarded) {
+        void ratchetService
+          .wakePendingEvents(input.workspaceId)
+          .catch((error) => getLogger(ctx).warn('PR delivery wake deferred', { error }));
+      }
+      return result;
+    }),
+
   // Update workspace provider defaults (session + ratchet).
   updateProviderDefaults: publicProcedure
     .input(

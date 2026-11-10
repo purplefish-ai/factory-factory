@@ -40,7 +40,7 @@ const {
     getOrCreateSessionClient: vi.fn(),
     isSessionStopping: vi.fn(),
     getGeneration: vi.fn(),
-    isGenerationCurrent: vi.fn(),
+    hasStopSince: vi.fn(),
     isSessionRunning: vi.fn(),
     isSessionPromptInFlight: vi.fn(),
     resolveQueuedMessageSettings: (_id: string, message: QueuedMessage) => message.settings,
@@ -155,7 +155,7 @@ describe('sessionDispatchService.tryDispatchNextMessage', () => {
     mockSessionService.isSessionRunning.mockReturnValue(true);
     mockSessionService.isSessionStopping.mockReturnValue(false);
     mockSessionService.getGeneration.mockReturnValue(0);
-    mockSessionService.isGenerationCurrent.mockReturnValue(true);
+    mockSessionService.hasStopSince.mockReturnValue(false);
     mockSessionDataService.findAgentSessionById.mockResolvedValue({
       workspace: {
         status: 'READY',
@@ -313,8 +313,8 @@ describe('sessionDispatchService.tryDispatchNextMessage', () => {
     });
     let stopGeneration = 0;
     mockSessionService.getGeneration.mockImplementation(() => stopGeneration);
-    mockSessionService.isGenerationCurrent.mockImplementation(
-      (_sessionId: string, generation: number) => generation === stopGeneration
+    mockSessionService.hasStopSince.mockImplementation(
+      (_sessionId: string, generation: number) => generation !== stopGeneration
     );
     mockSessionService.getSessionClient.mockReturnValue({});
     mockSessionService.setSessionModel.mockReturnValue(modelUpdate);
@@ -387,7 +387,7 @@ describe('sessionDispatchService.tryDispatchNextMessage', () => {
         0
       );
     });
-    mockSessionService.isGenerationCurrent.mockReturnValue(false);
+    mockSessionService.hasStopSince.mockReturnValue(true);
     rejectPrompt(new Error('Connection closed'));
     await dispatch;
 

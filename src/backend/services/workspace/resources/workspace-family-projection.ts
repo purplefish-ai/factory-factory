@@ -1,6 +1,6 @@
 import type { WorkspaceParent } from '@/shared/workspace-summary';
 import type { Prisma } from '@prisma-gen/client';
-import { pendingPREventWhere } from './workspace-ratchet.accessor';
+import { blockedPRDeliveryWhere, pendingPREventWhere } from './workspace-ratchet.accessor';
 
 export const workspaceFamilyInclude = {
   parentWorkspace: {
@@ -14,6 +14,7 @@ export const workspaceFamilyInclude = {
   _count: {
     select: {
       prEvents: { where: pendingPREventWhere },
+      prDeliveries: { where: blockedPRDeliveryWhere },
       childWorkspaces: { where: { status: { not: 'ARCHIVED' } } },
     },
   },

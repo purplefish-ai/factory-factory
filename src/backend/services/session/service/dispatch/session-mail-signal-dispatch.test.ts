@@ -75,7 +75,7 @@ function harness(
   dispatcher.configureLifecycle({
     gate: {
       getGeneration: () => generation,
-      isGenerationCurrent: (_sessionId, expected) => expected === generation,
+      hasStopSince: (_sessionId, captured) => captured !== generation,
       isSessionStopping: () => false,
     },
     startup,

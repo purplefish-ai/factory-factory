@@ -197,6 +197,7 @@ function ConnectedPRMonitoringMenu({
   actions,
   onAdd,
   onRemove,
+  onDiscardBlocked,
   trigger,
 }: {
   workspaceId: string;
@@ -209,6 +210,7 @@ function ConnectedPRMonitoringMenu({
   };
   onAdd(): void;
   onRemove(id: string): void;
+  onDiscardBlocked(): void;
   trigger?: ReactElement;
 }) {
   const toggle = useToggleRatcheting(projectId);
@@ -223,7 +225,7 @@ function ConnectedPRMonitoringMenu({
         onAdd={onAdd}
         onRemove={onRemove}
         onReview={actions.review}
-        monitoring={createPRMonitoringMenuProps(workspaceId, monitoring, toggle)}
+        monitoring={createPRMonitoringMenuProps(workspaceId, monitoring, toggle, onDiscardBlocked)}
       />
     </>
   );
@@ -250,6 +252,7 @@ export function ConnectedWorkspacePrMenu({
 }) {
   const [open, setOpen] = useState(false);
   const [removeId, setRemoveId] = useState<string | null>(null);
+  const [discardOpen, setDiscardOpen] = useState(false);
   const [url, setUrl] = useState('');
   const [error, setError] = useState<string | null>(null);
   const actions = useWorkspacePrActions(workspaceId, projectId, prs);
@@ -277,6 +280,7 @@ export function ConnectedWorkspacePrMenu({
           actions={{ ...actions, review: reviewEnabled ? actions.review : undefined }}
           onAdd={openAdd}
           onRemove={setRemoveId}
+          onDiscardBlocked={() => setDiscardOpen(true)}
         />
       ) : (
         <WorkspacePrMenu
@@ -308,6 +312,25 @@ export function ConnectedWorkspacePrMenu({
               }
             })(),
             "Couldn't update pull request."
+          );
+        }}
+      />
+      <ConfirmDialog
+        open={discardOpen}
+        onOpenChange={setDiscardOpen}
+        title="Discard stuck PR update?"
+        description="Its delivery record is inconsistent, so Factory Factory can't tell whether the agent received it. Discarding stops waiting on it without resending; the record is kept. Later PR changes will be delivered as usual."
+        confirmText="Discard"
+        variant="destructive"
+        isPending={actions.pending}
+        onConfirm={() => {
+          runInBackground(
+            (async () => {
+              if (await actions.discardBlocked()) {
+                setDiscardOpen(false);
+              }
+            })(),
+            "Couldn't update PR monitoring."
           );
         }}
       />
