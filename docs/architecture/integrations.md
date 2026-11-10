@@ -49,7 +49,8 @@ Monitoring's `getPRStatusDetails` reads only PR/head/check metadata; with
 monitoring on, `getPRObservationDetails` reads the same metadata plus
 conversation comments in one `gh pr view`. Optional `getPRReviews`, review
 comments and resolved threads share the existing CLI budget but cannot block
-core observations when enrichment fails: a failed combined read falls back to
+core observations when enrichment fails: a combined read that fails for any
+reason other than an abort or connectivity failure falls back to
 `getPRStatusDetails`. Review facts then remain explicitly incomplete, preserving
 earlier feedback until a complete read or confirmed resolved IDs supersede it.
 Abort and core-fetch failures still fail the observation. `getPRFullDetails`
