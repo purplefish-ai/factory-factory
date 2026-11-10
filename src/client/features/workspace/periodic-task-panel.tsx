@@ -153,7 +153,16 @@ export function PeriodicTaskPanel({ periodicTaskId, projectId }: PeriodicTaskPan
         </Link>
       </div>
       <div className="p-3">
-        {project.error && (
+        {project.error && project.data ? (
+          <QueryRefreshError
+            title="Couldn't refresh automation project"
+            error={project.error}
+            onRetry={() => void project.refetch()}
+            isRetrying={project.isFetching}
+            className="mb-3 rounded-md border"
+          />
+        ) : null}
+        {project.error && !project.data ? (
           <ProjectLookupState
             error={project.error}
             retry={() => {
@@ -161,7 +170,7 @@ export function PeriodicTaskPanel({ periodicTaskId, projectId }: PeriodicTaskPan
             }}
             isRetrying={project.isFetching}
           />
-        )}
+        ) : null}
         {project.data ? (
           <AgentRunHistoryQuery periodicTaskId={periodicTaskId} projectSlug={project.data.slug} />
         ) : !project.error ? (

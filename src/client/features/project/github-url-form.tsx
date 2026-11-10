@@ -14,6 +14,8 @@ type AuthStatusProps = {
   isCheckingAuth: boolean;
   authError: { message: string } | null;
   onRetryAuth: () => void;
+  /** True while a Retry of a failed auth check is in flight. */
+  isRetryingAuth: boolean;
   onOpenTerminal: () => void;
 };
 
@@ -26,6 +28,7 @@ function AuthStatusSection(props: AuthStatusProps) {
           title="Couldn't refresh GitHub authentication"
           error={props.authError}
           onRetry={props.onRetryAuth}
+          isRetrying={props.isRetryingAuth}
           className="rounded-md border"
         />
       ) : null}
@@ -39,6 +42,7 @@ function AuthStatusDetail({
   isCheckingAuth,
   authError,
   onRetryAuth,
+  isRetryingAuth,
   onOpenTerminal,
 }: AuthStatusProps) {
   if (!authStatus && authError) {
@@ -47,6 +51,7 @@ function AuthStatusDetail({
         title="Couldn't check GitHub authentication"
         error={authError}
         onRetry={onRetryAuth}
+        isRetrying={isRetryingAuth}
         className="rounded-md border p-3"
       />
     );
@@ -102,6 +107,7 @@ export interface GithubUrlFormProps {
   /** The auth check failed; shown with Retry instead of hiding the section. */
   authError: { message: string } | null;
   onRetryAuth: () => void;
+  isRetryingAuth: boolean;
   onOpenTerminal: () => void;
   scriptType: ScriptType;
   setScriptType: (value: ScriptType) => void;
@@ -125,6 +131,7 @@ export function GithubUrlForm({
   isCheckingAuth,
   authError,
   onRetryAuth,
+  isRetryingAuth,
   onOpenTerminal,
   scriptType,
   setScriptType,
@@ -178,6 +185,7 @@ export function GithubUrlForm({
         isCheckingAuth={isCheckingAuth}
         authError={authError}
         onRetryAuth={onRetryAuth}
+        isRetryingAuth={isRetryingAuth}
         onOpenTerminal={onOpenTerminal}
       />
 

@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
   auth: {
     data: { authenticated: true } as { authenticated: boolean } | undefined,
     isLoading: false,
+    isFetching: false,
     error: null as { message: string } | null,
     refetch: vi.fn(async () => undefined),
   },
@@ -61,6 +62,7 @@ beforeEach(async () => {
   vi.clearAllMocks();
   mocks.auth.data = { authenticated: true };
   mocks.auth.error = null;
+  mocks.auth.isFetching = false;
   actDescriptor = Object.getOwnPropertyDescriptor(globalThis, 'IS_REACT_ACT_ENVIRONMENT');
   Object.defineProperty(globalThis, 'IS_REACT_ACT_ENVIRONMENT', {
     configurable: true,
@@ -166,6 +168,24 @@ describe('GitHub authentication check', () => {
       node.textContent?.includes("Couldn't refresh GitHub authentication")
     );
     expect(notice?.textContent).toContain('gh is not responding');
+  });
+
+  it('shows a retry in flight on the auth notice', async () => {
+    mocks.auth.error = { message: 'gh is not responding' };
+    mocks.auth.isFetching = true;
+    await act(async () =>
+      root.render(
+        <MemoryRouter>
+          <NewProjectPage />
+        </MemoryRouter>
+      )
+    );
+    const notice = [...container.querySelectorAll('[role="status"]')].find((node) =>
+      node.textContent?.includes("Couldn't refresh GitHub authentication")
+    );
+    const retry = notice?.querySelector('button');
+    expect(retry?.textContent).toBe('Retrying…');
+    expect(retry?.disabled).toBe(true);
   });
 });
 

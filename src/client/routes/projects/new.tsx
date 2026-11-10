@@ -73,6 +73,7 @@ export default function NewProjectPage() {
   const {
     data: authStatus,
     isLoading: isCheckingAuth,
+    isFetching: isFetchingAuth,
     error: authError,
     refetch: refetchAuth,
   } = trpc.project.checkGithubAuth.useQuery(undefined, {
@@ -211,6 +212,8 @@ export default function NewProjectPage() {
     authStatus,
     isCheckingAuth,
     authError,
+    // Only a failed check shows Retry, so fetching then means a retry is in flight.
+    isRetryingAuth: Boolean(authError) && isFetchingAuth,
     onRetryAuth: () => {
       runInBackground(refetchAuth(), "Couldn't check GitHub authentication.");
     },

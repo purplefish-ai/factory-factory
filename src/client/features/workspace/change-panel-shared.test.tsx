@@ -167,6 +167,22 @@ describe('ChangeTreeView', () => {
     unmount();
   });
 
+  it('shows a directory retry in flight', () => {
+    mocks.listFilesUseQuery.mockReturnValue({
+      data: undefined,
+      error: { message: 'EACCES' },
+      isFetching: true,
+      refetch: mocks.refetch,
+    });
+    const { container, unmount } = renderUntrackedDirectory();
+
+    const retry = Array.from(container.querySelectorAll('button')).find(
+      (button) => button.textContent === 'Retrying…'
+    );
+    expect(retry?.disabled).toBe(true);
+    unmount();
+  });
+
   it('keeps listed directory contents when a later read fails', () => {
     mocks.listFilesUseQuery.mockReturnValue({
       data: mocks.listed,

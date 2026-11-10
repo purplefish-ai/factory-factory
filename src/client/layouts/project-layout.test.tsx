@@ -180,10 +180,9 @@ it('preserves the actual canonical Agent editor and draft through background pro
       "Couldn't refresh project."
     )
   );
-  expect(
-    container.querySelector('[role="status"]')?.textContent?.includes('Project connection lost') ||
-      null
-  ).not.toBeNull();
+  expect(container.querySelector('[role="status"]')?.textContent).toContain(
+    'Project connection lost'
+  );
   let resolveRetry: ((value: unknown) => void) | undefined;
   projectRead.mockImplementation(
     () =>

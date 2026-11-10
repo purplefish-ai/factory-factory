@@ -192,6 +192,22 @@ it('retains cached agent details and allows retrying a failed definition refresh
   }
 });
 
+it('keeps cached project history under a notice when the project refresh fails', async () => {
+  mocks.project.error = { message: 'Owner refresh unavailable' };
+  const view = await render();
+  try {
+    expect(view.container.querySelector('[role="alert"]')).toBeNull();
+    const notice = view.container.querySelector('[role="status"]');
+    expect(notice?.textContent).toContain("Couldn't refresh automation project.");
+    expect(notice?.textContent).toContain('Owner refresh unavailable');
+    expect(mocks.historyInput).toHaveBeenCalledWith({ periodicTaskId: 'agent-1', limit: 50 });
+    await act(() => notice?.querySelector('button')?.click());
+    expect(mocks.project.refetch).toHaveBeenCalledOnce();
+  } finally {
+    await view.dispose();
+  }
+});
+
 it('uses friendly cached NOT_FOUND copy and preserves the definition retry action', async () => {
   mocks.task.error = { message: 'Periodic task not found', data: { code: 'NOT_FOUND' } };
   const view = await render();
