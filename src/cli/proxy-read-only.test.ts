@@ -64,6 +64,8 @@ async function startUpstream(): Promise<Upstream> {
                 trustedLocalCidrs: [],
                 trustProxyHeaders: false,
                 disableCorsChecks: false,
+                // As `ff proxy` launches it: the backend's own loopback origin passes.
+                allowOwnLoopbackOrigin: true,
               }),
               getBackendHost: () => '127.0.0.1',
             },
@@ -167,6 +169,69 @@ describe('public read-only tunnel proxy', () => {
       expect(upstream.calls).toEqual([]);
     }
   );
+
+  it('refuses a tunnelled mutation and upgrade carrying the backend loopback Origin', async () => {
+    const loopbackOrigin = `http://localhost:${upstream.port}`;
+    // The backend alone accepts its own loopback origin, so only the proxy stops it.
+    const direct = await request(`http://127.0.0.1:${upstream.port}`)
+      .post('/api/trpc/startSession')
+      .set('origin', loopbackOrigin)
+      .send({ json: { workspaceId: 'direct' } });
+    expect(direct.status).toBe(200);
+    upstream.calls.length = 0;
+
+    const response = await client
+      .post('/api/trpc/startSession')
+      .set({ ...TUNNEL_HEADERS, origin: loopbackOrigin })
+      .send({ json: { workspaceId: 'w1' } });
+    expect(response.status).toBe(405);
+
+    const upgrade = await rawExchange(
+      proxy.port,
+      [
+        'GET /chat HTTP/1.1',
+        `Host: localhost:${upstream.port}`,
+        'Connection: Upgrade',
+        'Upgrade: websocket',
+        'Sec-WebSocket-Version: 13',
+        'Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==',
+        `Origin: ${loopbackOrigin}`,
+        '',
+        '',
+      ].join('\r\n')
+    );
+    expect(upgrade).toMatch(/^HTTP\/1\.1 403 /);
+    expect(upstream.calls).toEqual([]);
+    expect(upstream.upgrades).toBe(0);
+  });
+
+  it('refuses CONNECT without opening an upstream connection', async () => {
+    const response = await rawExchange(
+      proxy.port,
+      `CONNECT 127.0.0.1:${upstream.port} HTTP/1.1\r\nHost: 127.0.0.1:${upstream.port}\r\n\r\n`
+    );
+    expect(response).toMatch(/^HTTP\/1\.1 403 /);
+    expect(upstream.calls).toEqual([]);
+    expect(upstream.upgrades).toBe(0);
+  });
+
+  it.each([
+    '/api/trpc/admin.exportData',
+    '/API/TRPC/admin.exportData',
+    '/api/trpc/extra/admin.exportData',
+    '/api/trpc/admin%2EexportData',
+    '/api/./trpc/admin.exportData',
+    `/api/trpc/readFile,session.listSubagents?batch=1`,
+  ])('refuses blocked queries however the path is spelled: %s', async (path) => {
+    const response = await client.get(path).set(TUNNEL_HEADERS);
+    expect(response.status).toBe(403);
+    expect(upstream.calls).toEqual([]);
+  });
+
+  it('refuses paths whose procedure segment cannot be decoded', async () => {
+    const response = await client.get('/api/trpc/readFile%E0%A4%A').set(TUNNEL_HEADERS);
+    expect(response.status).toBe(400);
+  });
 
   it('refuses an Origin-less POST mutation from the tunnel', async () => {
     const response = await client

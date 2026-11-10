@@ -20,9 +20,9 @@ export function resolveProxyMode(options: ProxyCommandOptions): ProxyMode {
 export const PUBLIC_MODE_WARNING = [
   '⚠️  Public tunnel: no password.',
   'Anyone with this URL can view this Factory Factory instance, including',
-  'workspace file contents. The tunnel is read-only: changes, agent sessions,',
-  'chat and terminals are blocked. Run `ff proxy` without --public to require',
-  'a password instead.',
+  'workspace file contents. The tunnel is read-only: changes, prompts, chat,',
+  'terminals and queries that start processes are blocked. Run `ff proxy`',
+  'without --public to require a password instead.',
 ].join('\n   ');
 
 export function registerProxyCommand(

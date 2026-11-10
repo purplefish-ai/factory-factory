@@ -12,19 +12,66 @@ import { type ListeningLocalProxy, listenLocalProxy, PROXY_LOCAL_HOST } from './
  * Methods a public tunnel forwards. tRPC (v11) only runs queries for GET and
  * answers HEAD without running anything; mutations need POST, and its method
  * override only lets POST run queries. Everything else the backend serves over
- * GET is static or a health check, so these two methods cannot change state.
+ * GET is static or a health check. Queries with side effects are refused by
+ * name below.
  */
 const READ_ONLY_METHODS = new Set(['GET', 'HEAD']);
 
 const READ_ONLY_MESSAGE =
   'This Factory Factory tunnel is public and read-only. Run `ff proxy` without --public to share full access behind a password.';
 
+/**
+ * Queries a public tunnel still refuses. Each one either starts a process
+ * (agent runtimes, provider CLIs) or reads beyond this instance's own data:
+ * any repository the host's `gh` token can see, arbitrary filesystem paths,
+ * server logs, or a full database export.
+ */
+export const PUBLIC_BLOCKED_PROCEDURES: ReadonlySet<string> = new Set([
+  // Start an agent runtime or provider CLI processes.
+  'session.listSubagents',
+  'session.readSubagentTranscript',
+  'userSettings.getProviderOptions',
+  'admin.checkCLIHealth',
+  // Read through the host's GitHub credentials for any repository.
+  'github.getIssuePreview',
+  'github.getPRPreview',
+  'prReview.getPRDetails',
+  'prReview.getDiff',
+  'search.githubIssues',
+  // Probe or read arbitrary host paths.
+  'project.validateRepoPath',
+  'project.checkFactoryConfig',
+  // Logs and a full database export.
+  'admin.getLogs',
+  'admin.downloadLogFile',
+  'admin.exportData',
+]);
+
 interface ReadOnlyRejection {
   status: number;
   allow?: string;
 }
 
-function getReadOnlyRejection(req: IncomingMessage): ReadOnlyRejection | null {
+/**
+ * The procedures a request would call, derived exactly as the tRPC Express
+ * adapter does: the last path segment, URL-decoded, split on batch commas.
+ * Applied to every path, so no mount-path spelling (case, extra segments,
+ * encoded dots) avoids it. `null` means the segment cannot be decoded.
+ */
+function getRequestedProcedures(upstreamPath: string): string[] | null {
+  const pathname = upstreamPath.split('?')[0] ?? '';
+  const lastSegment = pathname.slice(pathname.lastIndexOf('/') + 1);
+  try {
+    return decodeURIComponent(lastSegment).split(',');
+  } catch {
+    return null;
+  }
+}
+
+function getReadOnlyRejection(
+  req: IncomingMessage,
+  upstreamPath: string
+): ReadOnlyRejection | null {
   if (!READ_ONLY_METHODS.has(req.method ?? '')) {
     return { status: 405, allow: 'GET, HEAD' };
   }
@@ -41,6 +88,13 @@ function getReadOnlyRejection(req: IncomingMessage): ReadOnlyRejection | null {
     (contentLength !== undefined && contentLength !== '0')
   ) {
     return { status: 400 };
+  }
+  const procedures = getRequestedProcedures(upstreamPath);
+  if (procedures === null) {
+    return { status: 400 };
+  }
+  if (procedures.some((procedure) => PUBLIC_BLOCKED_PROCEDURES.has(procedure))) {
+    return { status: 403 };
   }
   return null;
 }
@@ -101,7 +155,8 @@ export function createReadOnlyProxy(params: {
   upstreamPort: number;
 }): Promise<ListeningLocalProxy> {
   const server = createServer((req, res) => {
-    const rejection = getReadOnlyRejection(req);
+    const upstreamPath = toUpstreamPath(req.url);
+    const rejection = getReadOnlyRejection(req, upstreamPath);
     if (rejection) {
       writeReadOnlyRejection(res, rejection);
       return;
@@ -112,7 +167,7 @@ export function createReadOnlyProxy(params: {
         req,
         res,
         upstreamPort: params.upstreamPort,
-        path: toUpstreamPath(req.url),
+        path: upstreamPath,
         headers: buildReadOnlyProxyHeaders(req),
         localHost: PROXY_LOCAL_HOST,
       });

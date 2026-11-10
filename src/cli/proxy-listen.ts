@@ -25,6 +25,7 @@ export function listenLocalProxy(server: Server): Promise<ListeningLocalProxy> {
   return new Promise((resolve, reject) => {
     server.once('error', reject);
     server.listen(0, PROXY_LOCAL_HOST, () => {
+      server.off('error', reject);
       const address = server.address();
       if (!address || typeof address === 'string') {
         reject(new Error('Could not determine proxy port'));

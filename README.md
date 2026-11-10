@@ -190,9 +190,12 @@ started by the command:
 - **Public (`ff proxy --public`).** No password: **anyone with the URL can view
   the app, including workspace file contents**. The proxy forwards only `GET`
   and `HEAD` requests without a body and refuses every other method and every
-  WebSocket upgrade, whatever headers the client sends, so nothing reached
-  through a public tunnel can change state, start agent sessions or run
-  commands. tRPC runs only queries over `GET`. `--public` cannot be combined
+  WebSocket upgrade, whatever headers or `Origin` the client sends, so nothing
+  reached through a public tunnel can change data, send prompts or open chat and
+  terminals; tRPC runs only queries over `GET`. It also refuses the queries that
+  start processes (sub-agent browsing, provider model lists, CLI health) or read
+  beyond this instance's data (GitHub previews and search through your `gh`
+  login, path probes, server logs, data export). `--public` cannot be combined
   with `--private`.
 
 Both tunnel modes disable inherited `TRUST_PROXY_HEADERS` and dotenv override
