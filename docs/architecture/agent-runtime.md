@@ -54,7 +54,9 @@ current session composer is empty. A newer draft or attachment selection is
 preserved, and clearing it later does not replay the earlier recovery.
 
 Chat drafts restored before the composer mounts are visible on its first render
-and retained when typing begins after a reload.
+and retained when typing begins after a reload. Selecting another session shows
+that session's draft and attachments from its first render; the previous
+session's are never shown in its place.
 
 Claude session history restores inline image blocks as attachments on the
 original user prompt, including image-only prompts. Harness metadata, sidechain

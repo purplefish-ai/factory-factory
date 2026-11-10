@@ -1,5 +1,5 @@
 import { WarningCircleIcon } from '@phosphor-icons/react/dist/csr/WarningCircle';
-import { type Dispatch, memo, type SetStateAction, useCallback, useState } from 'react';
+import { type Dispatch, type ReactNode, type SetStateAction, useCallback, useState } from 'react';
 import { EmptyState } from '@/client/components/empty-state';
 import { Loading } from '@/client/components/loading';
 import { QueryErrorState, QueryRefreshError } from '@/client/components/query-error-state';
@@ -18,8 +18,6 @@ import { ResizablePanel, ResizablePanelGroup } from '@/components/ui/resizable';
 import { SessionlessSetupFailure } from './sessionless-setup-failure';
 import type { useSessionManagement, useWorkspaceData } from './use-workspace-detail';
 import type { useWorkspaceInitStatus } from './use-workspace-detail-hooks';
-import { CONNECTED_CHAT_CONTENT } from './workspace-chat-slot';
-import type { ChatContentProps } from './workspace-detail-chat-content';
 import { getVisibleInitBanner } from './workspace-detail-container.utils';
 import { ArchivingOverlay, ScriptFailedBanner } from './workspace-overlays';
 import { WorkspaceSidePanel } from './workspace-side-panel';
@@ -79,8 +77,9 @@ export interface WorkspaceDetailViewProps {
   workspaceState: WorkspaceStateProps;
   header: HeaderProps;
   sessionTabs: SessionTabsProps;
-  /** Chat content itself is provided through ChatContentPropsProvider. */
-  resumeQueuedMessages: ChatContentProps['resumeQueuedMessages'];
+  /** The selected session's chat, shown in the chat tab. */
+  chat: ReactNode;
+  resumeQueuedMessages: () => void;
   rightPanelVisible: boolean;
   setRightPanelVisible: (visible: boolean) => void;
   archiveDialog: ArchiveDialogProps;
@@ -99,7 +98,7 @@ function ScriptBanner({
   workspaceInitStatus: WorkspaceStateProps['workspaceInitStatus'];
   setupWarningDismissed: boolean | null;
   dismissSetupWarning: () => void;
-  resumeQueuedMessages: ChatContentProps['resumeQueuedMessages'];
+  resumeQueuedMessages: () => void;
 }) {
   const visibleBanner = getVisibleInitBanner(
     workspaceInitStatus?.chatBanner,
@@ -124,13 +123,14 @@ function ScriptBanner({
 }
 
 /**
- * Memoized so streamed chat events, which re-render the container on every token,
- * skip the layout here. The container passes memoized prop groups.
+ * The workspace layout around the chat. Streamed chat events do not reach it:
+ * the chat reads its session from `ChatSessionProvider` (see the container).
  */
-export const WorkspaceDetailView = memo(function WorkspaceDetailView({
+export function WorkspaceDetailView({
   workspaceState,
   header,
   sessionTabs,
+  chat,
   resumeQueuedMessages,
   rightPanelVisible,
   setRightPanelVisible,
@@ -247,7 +247,7 @@ export const WorkspaceDetailView = memo(function WorkspaceDetailView({
           ) : undefined
         }
       >
-        {CONNECTED_CHAT_CONTENT}
+        {chat}
       </WorkspaceContentView>
     </div>
   );
@@ -325,4 +325,4 @@ export const WorkspaceDetailView = memo(function WorkspaceDetailView({
       />
     </div>
   );
-});
+}

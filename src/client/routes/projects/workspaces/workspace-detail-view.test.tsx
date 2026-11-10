@@ -5,8 +5,6 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SubagentSelection } from '@/client/features/subagents';
 import type { ArchiveWorkspaceDialogProps } from '@/client/features/workspace/archive-workspace-dialog';
-import { ChatContentPropsProvider } from './workspace-chat-slot';
-import type { ChatContentProps } from './workspace-detail-chat-content';
 import { WorkspaceDetailView, type WorkspaceDetailViewProps } from './workspace-detail-view';
 
 const archiveDialogMock = vi.hoisted(() =>
@@ -150,15 +148,6 @@ vi.mock('@/client/features/workspace/workspace-content-view', () => ({
   },
 }));
 
-vi.mock('./workspace-detail-chat-content', () => ({
-  ChatContent: (props: ChatContentProps) =>
-    createElement(
-      'section',
-      { 'data-testid': 'parent-chat', 'data-session': props.sessionId },
-      'Chat'
-    ),
-}));
-
 vi.mock('./use-retry-workspace-init', () => ({
   useRetryWorkspaceInit: (workspaceId: string, availability: unknown) => {
     retryWorkspace(workspaceId);
@@ -241,6 +230,7 @@ function createViewProps(activeChildCount: number): WorkspaceDetailViewProps {
       maxSessions: 5,
       hasWorktreePath: true,
     },
+    chat: createElement('section', { 'data-testid': 'parent-chat' }, 'Chat'),
     resumeQueuedMessages: vi.fn(),
     rightPanelVisible: false,
     setRightPanelVisible: vi.fn(),
@@ -253,29 +243,13 @@ function createViewProps(activeChildCount: number): WorkspaceDetailViewProps {
   };
 }
 
-const chatProps = {
-  transcriptScroll: {
-    identity: 'main',
-    active: true,
-    ready: true,
-    initialIntent: 'following',
-    initialPosition: null,
-  },
-} as unknown as ChatContentProps;
-
 function renderView(props: WorkspaceDetailViewProps): { container: HTMLDivElement; root: Root } {
   const container = document.createElement('div');
   document.body.appendChild(container);
   const root = createRoot(container);
 
   void act(() => {
-    root.render(
-      createElement(
-        ChatContentPropsProvider,
-        { value: chatProps },
-        createElement(WorkspaceDetailView, props)
-      )
-    );
+    root.render(createElement(WorkspaceDetailView, props));
   });
 
   return { container, root };
@@ -460,36 +434,6 @@ describe('WorkspaceDetailView', () => {
       });
     });
     expect(props.sessionTabs.handleOpenSubagentTab).not.toHaveBeenCalled();
-    act(() => root.unmount());
-  });
-
-  it('streams chat updates without re-rendering the workspace layout', () => {
-    const props = createViewProps(0);
-    props.rightPanelVisible = true;
-    const container = document.createElement('div');
-    document.body.appendChild(container);
-    const root = createRoot(container);
-    const renderWithChat = (sessionId: string) =>
-      act(() => {
-        root.render(
-          createElement(
-            ChatContentPropsProvider,
-            { value: { ...chatProps, sessionId } },
-            createElement(WorkspaceDetailView, props)
-          )
-        );
-      });
-
-    renderWithChat('session-1');
-    const layoutRenders = workspaceContentViewMock.mock.calls.length;
-    const panelRenders = rightPanelMock.mock.calls.length;
-    renderWithChat('session-streamed');
-
-    expect(
-      container.querySelector('[data-testid="parent-chat"]')?.getAttribute('data-session')
-    ).toBe('session-streamed');
-    expect(workspaceContentViewMock).toHaveBeenCalledTimes(layoutRenders);
-    expect(rightPanelMock).toHaveBeenCalledTimes(panelRenders);
     act(() => root.unmount());
   });
 });

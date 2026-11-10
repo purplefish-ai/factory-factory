@@ -3,10 +3,10 @@
  *
  * This hook manages:
  * - Chat state via useReducer (messages, running state, permissions, etc.)
- * - Session persistence (settings, drafts, input attachments)
+ * - Session persistence (settings here; drafts and attachments in useChatPersistence)
  * - WebSocket message handling (converts to reducer actions)
  * - Action callbacks for UI (sendMessage, stopChat, etc.)
- * - Session switching effects
+ * - Session switching (useChatPersistence while rendering, useChatSession after commit)
  *
  * Message queue is managed on the backend - frontend sends queue_message and
  * receives message_state_changed events for state transitions. On connect,
@@ -24,8 +24,8 @@
  * ```
  */
 
-import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
-import { toast } from 'sonner';
+import { useCallback, useEffect, useMemo, useReducer, useRef } from 'react';
+import { useLatestRef } from '@/client/hooks/use-stable-callback';
 import type { WebSocketSend } from '@/hooks/use-websocket-transport';
 import type {
   ChatSettings,
@@ -33,12 +33,7 @@ import type {
   QueuedMessage,
   WebSocketMessage,
 } from '@/lib/chat-protocol';
-import {
-  clearInputAttachments as clearPersistedInputAttachments,
-  loadInputAttachments,
-  persistInputAttachments,
-  persistSettings,
-} from './chat-persistence';
+import { persistSettings } from './chat-persistence';
 import { type ChatAction, type ChatState, chatReducer, createInitialChatState } from './reducer';
 import { reduceSettingsSlice } from './reducer/slices/settings';
 import { useStreamDeltaCoalescedDispatch } from './stream-delta-coalescer';
@@ -96,20 +91,6 @@ export interface UseChatStateReturn extends Omit<ChatState, 'queuedMessages'> {
   connected: boolean;
 }
 
-function showAttachmentPersistenceError(operation: 'save' | 'clear') {
-  if (operation === 'save') {
-    toast.error("Couldn't autosave attachments.", {
-      description:
-        'They are still in this composer, but may be lost if you reload or switch sessions.',
-    });
-    return;
-  }
-
-  toast.error("Couldn't clear saved attachments.", {
-    description: 'Previously saved attachments may reappear after a reload or session switch.',
-  });
-}
-
 // =============================================================================
 // Hook Implementation
 // =============================================================================
@@ -123,31 +104,29 @@ export function useChatState(options: UseChatStateOptions): UseChatStateReturn {
   const [state, reducerDispatch] = useReducer(chatReducer, undefined, createInitialChatState);
   const dispatch = useStreamDeltaCoalescedDispatch(reducerDispatch);
 
-  // Local state for input attachments (for recovery on rejection)
-  const [inputAttachments, setInputAttachmentsState] = useState<MessageAttachment[]>([]);
-  const [inputDraftGeneration, setInputDraftGeneration] = useState(0);
+  // The composer switches sessions while rendering. Its visit identifies this
+  // selection, so callbacks from an earlier visit to the same session also expire.
+  const {
+    visit: sessionContext,
+    inputDraft,
+    setInputDraft,
+    inputAttachments,
+    inputAttachmentsRef,
+    inputDraftGeneration,
+    setInputAttachments,
+    clearInput: onClearInput,
+  } = useChatPersistence(dbSessionId);
+
+  const sessionContextRef = useLatestRef(sessionContext);
 
   // Refs
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
-  // Track dbSessionId in a ref to use without stale closures
-  const dbSessionIdRef = useRef<string | null>(dbSessionId ?? null);
+  // Latest committed values for stable callbacks. Handlers may write the state
+  // they are about to commit, so a second call in the same event sees it.
+  const dbSessionIdRef = useLatestRef(dbSessionId);
+  const stateRef = useLatestRef(state);
   // Track accumulated tool input JSON per tool_use_id for streaming
   const toolInputAccumulatorRef = useRef(createToolInputAccumulatorState());
-  // Track current state in a ref for stable callbacks (avoids callback recreation on state changes)
-  const stateRef = useRef(state);
-  stateRef.current = state;
-  // Track input attachments in a ref for stable sendMessage callback
-  const inputAttachmentsRef = useRef(inputAttachments);
-  inputAttachmentsRef.current = inputAttachments;
-
-  // Use an identity token so callbacks from an earlier visit to the same session
-  // also expire when switching away and back.
-  const sessionContextRef = useRef({ dbSessionId });
-  if (sessionContextRef.current.dbSessionId !== dbSessionId) {
-    sessionContextRef.current = { dbSessionId };
-  }
-  const sessionContext = sessionContextRef.current;
-  dbSessionIdRef.current = dbSessionId;
 
   const handleDisconnected = useCallback(() => {
     if (sessionContextRef.current !== sessionContext) {
@@ -172,72 +151,16 @@ export function useChatState(options: UseChatStateOptions): UseChatStateReturn {
     wasConnectedRef.current = connected;
   }, [connected, handleDisconnected]);
 
-  // Load persisted attachments when switching sessions.
-  useEffect(() => {
-    const restored = loadInputAttachments(dbSessionId);
-    inputAttachmentsRef.current = restored;
-    setInputAttachmentsState(restored);
-  }, [dbSessionId]);
-
-  // Update attachments and keep sessionStorage in sync. Bound to the session it was
-  // rendered for, so a slow paste/drop/upload cannot land in a later session.
-  const setInputAttachments = useCallback(
-    (update: React.SetStateAction<MessageAttachment[]>) => {
-      if (sessionContextRef.current !== sessionContext) {
-        return;
-      }
-      const attachments =
-        typeof update === 'function' ? update(inputAttachmentsRef.current) : update;
-      inputAttachmentsRef.current = attachments;
-      setInputAttachmentsState(attachments);
-      if (attachments.length === 0) {
-        setInputDraftGeneration((generation) => generation + 1);
-      }
-      const persistenceResult = persistInputAttachments(dbSessionIdRef.current, attachments);
-      if (!persistenceResult.ok) {
-        showAttachmentPersistenceError(persistenceResult.operation);
-      }
-    },
-    [sessionContext]
-  );
-
-  // Clear attachments from both state and persistence.
-  const clearInputAttachments = useCallback(() => {
-    inputAttachmentsRef.current = [];
-    setInputAttachmentsState([]);
-    setInputDraftGeneration((generation) => generation + 1);
-    const persistenceResult = clearPersistedInputAttachments(dbSessionIdRef.current);
-    if (!persistenceResult.ok) {
-      showAttachmentPersistenceError(persistenceResult.operation);
-    }
-  }, []);
-
   // =============================================================================
   // Session Switching Hook
   // =============================================================================
 
-  const { loadedDraft } = useChatSession({
+  useChatSession({
     dbSessionId,
     dispatch,
     toolInputAccumulatorRef,
     sessionRuntimePhase: state.sessionRuntime.phase,
   });
-
-  // =============================================================================
-  // Persistence Hook
-  // =============================================================================
-
-  const { inputDraft, setInputDraft, clearInputDraft } = useChatPersistence({
-    dbSessionId,
-    initialDraft: loadedDraft,
-  });
-
-  // Keep clear-input callback stable so action callbacks (for example sendMessage)
-  // are not recreated on each render.
-  const onClearInput = useCallback(() => {
-    clearInputDraft();
-    clearInputAttachments();
-  }, [clearInputDraft, clearInputAttachments]);
 
   // =============================================================================
   // Transport Hook
@@ -288,7 +211,7 @@ export function useChatState(options: UseChatStateOptions): UseChatStateReturn {
         !sessionId ||
         sessionId !== dbSessionIdRef.current ||
         inputDraft.length > 0 ||
-        inputAttachmentsRef.current.length > 0
+        inputAttachments.length > 0
       ) {
         dispatch({ type: 'CLEAR_REJECTED_MESSAGE' });
         return;
@@ -302,7 +225,14 @@ export function useChatState(options: UseChatStateOptions): UseChatStateReturn {
       // Clear the rejected message state after processing
       dispatch({ type: 'CLEAR_REJECTED_MESSAGE' });
     }
-  }, [dispatch, state.lastRejectedMessage, inputDraft, setInputDraft, setInputAttachments]);
+  }, [
+    dispatch,
+    state.lastRejectedMessage,
+    inputDraft,
+    inputAttachments,
+    setInputDraft,
+    setInputAttachments,
+  ]);
 
   // =============================================================================
   // Action Callbacks Hook
@@ -341,45 +271,20 @@ export function useChatState(options: UseChatStateOptions): UseChatStateReturn {
     [state.queuedMessages]
   );
 
-  // Keep return object stable between renders unless relevant state/actions change.
-  return useMemo(
-    () => ({
-      // Spread all state from reducer
-      ...state,
-      acpConfigOptions,
-      queuedMessages,
-      // Connection state from transport
-      connected,
-      // Actions from use-chat-actions
-      ...actions,
-      // Additional state/actions
-      inputDraft,
-      setInputDraft,
-      inputAttachments,
-      inputDraftGeneration,
-      setInputAttachments,
-      // Message handler for transport (stable - no deps)
-      handleMessage,
-      handleDisconnected,
-      // Dispatch function for actions
-      dispatch,
-      // Refs for UI
-      inputRef,
-    }),
-    [
-      state,
-      acpConfigOptions,
-      queuedMessages,
-      connected,
-      actions,
-      inputDraft,
-      setInputDraft,
-      inputAttachments,
-      inputDraftGeneration,
-      setInputAttachments,
-      handleMessage,
-      handleDisconnected,
-      dispatch,
-    ]
-  );
+  return {
+    ...state,
+    acpConfigOptions,
+    queuedMessages,
+    connected,
+    ...actions,
+    inputDraft,
+    setInputDraft,
+    inputAttachments,
+    inputDraftGeneration,
+    setInputAttachments,
+    handleMessage,
+    handleDisconnected,
+    dispatch,
+    inputRef,
+  };
 }

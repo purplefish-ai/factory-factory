@@ -237,8 +237,6 @@
           "error",
           {
             "exceptions": {
-              "src/client/features/chat/use-chat-state.ts": "Chat session state moves into a chat-scoped store in a later change, which replaces these render-time snapshot refs.",
-              "src/client/features/chat/use-chat-websocket.ts": "Chat session state moves into a chat-scoped store in a later change, which replaces this render-time handler ref.",
               "src/client/features/chat/agent-activity/tool-renderers/tool-expansion-state.ts": "Transcript rows call the stable getExpansionState while rendering, so its ref must hold this render's expansion state, not the last commit's.",
               "src/client/hooks/use-persisted-state.ts": "useSyncExternalStore calls getSnapshot while rendering, so the codec ref must hold this render's schema and fallback; the write is idempotent."
             }
@@ -307,12 +305,36 @@
       }
     },
     {
+      "files": ["src/client/routes/**/*.{ts,tsx}"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "paths": [
+              {
+                "name": "@/client/features/chat",
+                "importNames": ["useChatWebSocket"],
+                "allowTypeImports": true,
+                "message": "Render the chat inside ChatSessionProvider and read it with useChatSessionState, or the layout's summary with useChatSessionSummary. A route that calls useChatWebSocket re-renders on every streamed event."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
       "files": ["src/client/routes/admin/**/*.tsx"],
       "rules": {
         "no-restricted-imports": [
           "error",
           {
             "paths": [
+              {
+                "name": "@/client/features/chat",
+                "importNames": ["useChatWebSocket"],
+                "allowTypeImports": true,
+                "message": "Render the chat inside ChatSessionProvider and read it with useChatSessionState, or the layout's summary with useChatSessionSummary. A route that calls useChatWebSocket re-renders on every streamed event."
+              },
               {
                 "name": "@/components/ui/card",
                 "importNames": ["CardHeader", "CardTitle", "CardDescription", "CardAction"],

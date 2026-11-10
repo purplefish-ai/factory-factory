@@ -27,7 +27,8 @@ act on it). Instead:
 
   React re-renders before committing, so no commit shows stale state. Examples:
   `useAgentsController`, `usePaletteKeyboardNavigation`, `useIssueLaunchDraft`
-  in the issue launch sheet and `useRightPanelTopTab`.
+  in the issue launch sheet, `useRightPanelTopTab` and the chat composer's
+  `useChatPersistence`, which loads the next session's draft and attachments.
 
 - **Derive** values that are a function of props and state instead of storing
   them.
@@ -61,14 +62,30 @@ rendering) keep a render-time write and are listed as exceptions.
 `useWebSocketTransport` still updates its callback refs in a passive effect. Its
 URL-change cleanup closes the previous socket before clearing it, so a socket
 that reports `onclose` synchronously reaches `onDisconnected` during that
-cleanup; with the passive update that is still the previous session's handler.
-An earlier update sent a chat settings rollback to the newly selected session
-(`use-chat-websocket.integration.test.tsx`). Revisit it with the chat session
-store, which owns that handler.
+cleanup; with the passive update that is still the previous session's handler,
+which ignores the call because the chat state's visit has already moved on. An
+earlier update sent a chat settings rollback to the newly selected session
+(`use-chat-websocket.integration.test.tsx`), so the passive update stays.
 
 Setting state after unmount is a no-op, so a "mounted" ref is only needed to
 skip a real side effect, such as a toast, navigation or a parent callback. Each
 remaining one says which.
+
+## Streamed state and layout
+
+A component that calls a streaming hook re-renders on every event, along with
+every child it creates. Own the stream in a provider that wraps the layout as
+`children`: an update re-renders the provider, and React skips the unchanged
+`children` element down to the context consumers. Layout that needs a little of
+the stream subscribes to a store with `useSyncExternalStore`, which re-renders
+it only when its value changes; `kanban-family-highlight.tsx` and
+`chat-session-provider.tsx` follow this shape.
+
+The workspace route mounts `ChatSessionProvider` around the layout. The chat
+reads the session with `useChatSessionState`; the route reads a summary
+(runtime, request type, queue length, connection and hydration) with
+`useChatSessionSummary`, published in a layout effect so it updates before
+paint. Route code may not import `useChatWebSocket`.
 
 ## Shared behaviours
 

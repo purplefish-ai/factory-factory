@@ -142,6 +142,14 @@ export interface ChatState {
   processStatus: ProcessStatus;
   /** Authoritative runtime snapshot for this session. */
   sessionRuntime: SessionRuntimeState;
+  /**
+   * The session whose snapshot or replay this state was hydrated from. It survives
+   * reconnects to the same session and is cleared by a session switch, so
+   * consumers can tell whether `sessionRuntime` describes the selected session.
+   */
+  hydratedSessionId: string | null;
+  /** The session whose hydration the current connection accepted; cleared on connect and disconnect. */
+  controlsHydratedSessionId: string | null;
   /** Current git branch for the session */
   gitBranch: string | null;
   /**
@@ -252,6 +260,10 @@ export type ChatAction =
   | { type: 'SESSION_SWITCH_START' }
   | { type: 'SESSION_LOADING_START' }
   | { type: 'SESSION_LOADING_END' }
+  // The current connection accepted a snapshot or replay for this session
+  | { type: 'SESSION_HYDRATED'; payload: { sessionId: string } }
+  // A connection opened or closed; targeted controls wait for its own hydration
+  | { type: 'CONNECTION_CHANGED' }
   // Track tool use message index
   | { type: 'TOOL_USE_INDEXED'; payload: { toolUseId: string; index: number } }
   // Permission/question response actions

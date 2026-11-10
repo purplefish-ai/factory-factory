@@ -1,6 +1,10 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router';
-import { getChatPendingRequestType, useChatWebSocket } from '@/client/features/chat';
+import {
+  ChatSessionProvider,
+  useChatSessionStore,
+  useChatSessionSummary,
+} from '@/client/features/chat';
 import { getLiveSessionControlId } from '@/client/features/session-controls';
 import {
   ArchiveGitLockDialog,
@@ -23,12 +27,10 @@ import {
   useWorkspaceHasChanges,
   useWorkspaceInitStatus,
 } from './use-workspace-detail-hooks';
-import { ChatContentPropsProvider } from './workspace-chat-slot';
-import type { ChatContentProps } from './workspace-detail-chat-content';
+import { WorkspaceChat } from './workspace-chat-slot';
 import {
   buildSessionSummariesById,
   getVisibleInitBanner,
-  hasUserMessageWithoutAgentMessage,
   isProviderSubagentSessionReady,
 } from './workspace-detail-container.utils';
 import { WorkspaceDetailView } from './workspace-detail-view';
@@ -50,7 +52,7 @@ export function WorkspaceDetailContainer() {
     initialDbSessionId,
     maxSessions,
   } = useWorkspaceData({ workspaceId: workspaceId });
-  // Only the error UI shows fetching, so ordinary refetches don't re-render the layout.
+  // Only the error UI shows fetching.
   const isRetryingWorkspace = Boolean(workspaceError) && isFetchingWorkspace;
 
   const {
@@ -73,6 +75,7 @@ export function WorkspaceDetailContainer() {
     }
   }, [workspaceId, workspaceInitStatus?.phase]);
 
+  // Both feed the selection effect's dependencies.
   const sessionIds = useMemo(() => sessions?.map((s) => s.id) ?? [], [sessions]);
   const activateLinkedChat = useCallback(() => selectTab('chat'), [selectTab]);
   const { selectedDbSessionId, setSelectedDbSessionId: selectSession } = useSelectedSessionId(
@@ -83,25 +86,21 @@ export function WorkspaceDetailContainer() {
     activateLinkedChat,
     navigationKey
   );
-  const setSelectedDbSessionId = useCallback(
-    (id: string | null) => {
-      selectSession(id);
-      if (searchParams.has('session')) {
-        setSearchParams(
-          (previous) => {
-            const next = new URLSearchParams(previous);
-            next.delete('session');
-            return next;
-          },
-          { replace: true }
-        );
-      }
-    },
-    [selectSession, searchParams, setSearchParams]
-  );
+  const setSelectedDbSessionId = (id: string | null) => {
+    selectSession(id);
+    if (searchParams.has('session')) {
+      setSearchParams(
+        (previous) => {
+          const next = new URLSearchParams(previous);
+          next.delete('session');
+          return next;
+        },
+        { replace: true }
+      );
+    }
+  };
   const [archiveDialogOpen, setArchiveDialogOpen] = useState(false);
   const [archiveGitLockDialogOpen, setArchiveGitLockDialogOpen] = useState(false);
-  const openArchiveGitLockDialog = useCallback(() => setArchiveGitLockDialogOpen(true), []);
   const isParentWorkspace = workspace?.creationSource !== 'CHILD_WORKSPACE';
 
   const isDoneOrMergedWorkspace = isWorkspaceDoneOrMerged(workspace);
@@ -111,105 +110,36 @@ export function WorkspaceDetailContainer() {
   );
   const activeChildCount = childWorkspaces?.length ?? 0;
 
-  const {
-    messages,
-    transcriptHistory,
-    transcriptPageBoundaries,
-    connected,
-    sessionStatus,
-    processStatus,
-    sessionRuntime,
-    runtimeSessionId,
-    controlsHydrated,
-    pendingRequest,
-    chatSettings,
-    chatCapabilities,
-    chatCapabilitiesLoaded,
-    inputDraft,
-    inputAttachments,
-    inputDraftGeneration,
-    queuedMessages,
-    removeQueuedMessage,
-    pendingSteer,
-    steerQueuedMessage,
-    resumeQueuedMessages,
-    latestThinking,
-    pendingMessages,
-    isCompacting,
-    slashCommands,
-    slashCommandsLoaded,
-    tokenStats,
-    sendMessage,
-    stopChat,
-    restartSession,
-    isRestartingSession,
-    approvePermission,
-    answerQuestion,
-    updateSettings,
-    setInputDraft,
-    setInputAttachments,
-    acpConfigOptions,
-    acpPlan,
-    setConfigOption,
-    inputRef,
-  } = useChatWebSocket({
-    dbSessionId: selectedDbSessionId,
-  });
-
-  const loadingSession = sessionStatus.phase === 'loading';
-  const isIssueAutoStartPending =
-    workspace?.creationSource === 'GITHUB_ISSUE' &&
-    selectedDbSessionId !== null &&
-    (sessionStatus.phase === 'loading' || sessionStatus.phase === 'ready') &&
-    processStatus.state === 'unknown' &&
-    hasUserMessageWithoutAgentMessage(messages);
+  // The chat session lives in ChatSessionProvider below. This component reads
+  // only its summary, so streamed events do not re-render it or the layout.
+  const chatSession = useChatSessionStore();
+  const chat = useChatSessionSummary(chatSession);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
 
   // Summaries retain request metadata like snapshots do. Their consumers apply
   // canonical lifecycle precedence; the chat footer additionally requires a running prompt.
-  const livePendingRequestType = getChatPendingRequestType(pendingRequest);
-  const sessionSummariesById = useMemo(
-    () =>
-      buildSessionSummariesById({
-        workspaceSummaries: workspace?.sessionSummaries,
-        sessions,
-        selectedSessionId: selectedDbSessionId,
-        liveRuntime: sessionRuntime,
-        livePendingRequestType,
-        runtimeSessionId,
-        chatConnected: connected,
-      }),
-    [
-      workspace?.sessionSummaries,
-      sessions,
-      selectedDbSessionId,
-      sessionRuntime,
-      livePendingRequestType,
-      runtimeSessionId,
-      connected,
-    ]
-  );
+  const sessionSummariesById = buildSessionSummariesById({
+    workspaceSummaries: workspace?.sessionSummaries,
+    sessions,
+    selectedSessionId: selectedDbSessionId,
+    liveRuntime: chat.sessionRuntime,
+    livePendingRequestType: chat.pendingRequestType,
+    runtimeSessionId: chat.runtimeSessionId,
+    chatConnected: chat.connected,
+  });
   // The reducer keeps the previous session's queue during a switch until the new
   // session hydrates, so charge the queue to the session the chat state is
   // hydrated for; before hydration it belongs to no tab.
-  const queuedMessageCount = useMemo(
-    () =>
-      runtimeSessionId === null
-        ? null
-        : { sessionId: runtimeSessionId, count: queuedMessages.length },
-    [runtimeSessionId, queuedMessages.length]
-  );
-  const workspaceRunning = useMemo(
-    () =>
-      Array.from(sessionSummariesById.values()).some((summary) => isSessionSummaryWorking(summary)),
-    [sessionSummariesById]
-  );
+  const queuedMessageCount =
+    chat.runtimeSessionId === null
+      ? null
+      : { sessionId: chat.runtimeSessionId, count: chat.queuedMessageCount };
+  const workspaceRunning = Array.from(sessionSummariesById.values()).some(isSessionSummaryWorking);
   const selectedSessionControlId = getLiveSessionControlId(
     selectedDbSessionId,
-    connected && controlsHydrated && runtimeSessionId === selectedDbSessionId,
-    sessionRuntime
+    chat.connected && chat.controlsHydrated && chat.runtimeSessionId === selectedDbSessionId,
+    chat.sessionRuntime
   );
-  const selectedSessionControlRuntimeId = sessionRuntime.work?.controlRuntimeId;
-  const selectedSessionReady = isProviderSubagentSessionReady(selectedDbSessionId);
   const hasChanges = useWorkspaceHasChanges(workspaceId, workspace, workspaceRunning, utils);
 
   const {
@@ -230,7 +160,7 @@ export function WorkspaceDetailContainer() {
     inputRef,
     selectedDbSessionId,
     setSelectedDbSessionId,
-    onArchiveGitIndexLocked: openArchiveGitLockDialog,
+    onArchiveGitIndexLocked: () => setArchiveGitLockDialogOpen(true),
   });
   useArchivedWorkspaceRedirect({
     status: workspace?.status,
@@ -238,15 +168,12 @@ export function WorkspaceDetailContainer() {
     archivePending: archiveWorkspace.isPending,
   });
 
-  const handleArchive = useCallback(
-    (removeGitIndexLock = false) => {
-      archiveWorkspace.mutate(
-        removeGitIndexLock ? { id: workspaceId, removeGitIndexLock: true } : { id: workspaceId }
-      );
-    },
-    [archiveWorkspace, workspaceId]
-  );
-  const handleArchiveRequest = useCallback(() => {
+  const handleArchive = (removeGitIndexLock = false) => {
+    archiveWorkspace.mutate(
+      removeGitIndexLock ? { id: workspaceId, removeGitIndexLock: true } : { id: workspaceId }
+    );
+  };
+  const handleArchiveRequest = () => {
     // If workspace is done/merged, skip confirmation and archive immediately.
     if (isDoneOrMergedWorkspace) {
       handleArchive();
@@ -255,39 +182,33 @@ export function WorkspaceDetailContainer() {
 
     // Otherwise show confirmation dialog
     setArchiveDialogOpen(true);
-  }, [isDoneOrMergedWorkspace, handleArchive]);
-
-  const handleBackToWorkspaces = useCallback(() => {
-    runInBackground(
-      Promise.resolve(navigate(`/projects/${slug}/workspaces`)),
-      "Couldn't open workspace list."
-    );
-  }, [navigate, slug]);
-  const handleConfirmArchive = useCallback(() => handleArchive(), [handleArchive]);
-  const handleRemoveLockAndArchive = useCallback(() => handleArchive(true), [handleArchive]);
+  };
 
   const persistence = useChatTranscriptPersistence({ workspaceId, sessionId: selectedDbSessionId });
-  const handleCloseChatSession = useCallback(
-    (sessionId: string) => {
-      persistence.clearSession(sessionId);
-      handleCloseSession(sessionId);
-    },
-    [persistence.clearSession, handleCloseSession]
-  );
   const activeMainTab = tabs.find((tab) => tab.id === activeTabId);
-  const chatVisible = !activeMainTab || activeMainTab.type === 'chat';
-  const initBanner = getVisibleInitBanner(workspaceInitStatus?.chatBanner, setupWarningDismissed);
+  const selectedSession = sessions?.find((session) => session.id === selectedDbSessionId);
 
+  // The memoized chat content and transcript rows compare these by identity, so
+  // a layout render does not re-render the transcript.
   const resolveWorkspaceChatFileLink = useCallback(
     (href: string) => resolveWorkspaceFileLink(href, workspace?.worktreePath),
     [workspace?.worktreePath]
   );
-
   const handleWorkspaceFileLink = useCallback(
     (path: string) => {
       openTab('file', path, path.split('/').pop() ?? path);
     },
     [openTab]
+  );
+  const viewSetupOutput = useCallback(() => {
+    setActiveBottomTab('setup-logs');
+    setRightPanelVisible(true);
+  }, [setActiveBottomTab, setRightPanelVisible]);
+  const runQuickActionInNewChat = useCallback(
+    (name: string, prompt: string) => {
+      runInBackground(handleQuickAction(name, prompt), "Couldn't run quick action.");
+    },
+    [handleQuickAction]
   );
 
   useAutoFocusChatInput({
@@ -295,189 +216,9 @@ export function WorkspaceDetailContainer() {
     workspace,
     selectedDbSessionId,
     activeTabId,
-    loadingSession,
+    loadingSession: chat.loadingSession,
     inputRef,
   });
-
-  const transcriptIdentity = `${workspaceId}/main/${selectedDbSessionId ?? 'none'}`;
-  const transcriptReady =
-    persistence.ready && selectedDbSessionId !== null && runtimeSessionId === selectedDbSessionId;
-  const transcriptScroll = useMemo(
-    () => ({
-      identity: transcriptIdentity,
-      active: chatVisible,
-      ready: transcriptReady,
-      initialIntent: 'following' as const,
-      initialPosition: persistence.initialPosition,
-      onPositionChange: persistence.onPositionChange,
-    }),
-    [
-      transcriptIdentity,
-      chatVisible,
-      transcriptReady,
-      persistence.initialPosition,
-      persistence.onPositionChange,
-    ]
-  );
-
-  const runQuickActionInNewChat = useCallback(
-    (name: string, prompt: string) => {
-      runInBackground(handleQuickAction(name, prompt), "Couldn't run quick action.");
-    },
-    [handleQuickAction]
-  );
-  const newChatUnavailableReason = getNewChatUnavailableReason({
-    sessions,
-    maxSessions,
-    isCreatingSession: createSession.isPending,
-    isDeletingSession: deleteSession.isPending,
-    hasWorktreePath: Boolean(workspace?.worktreePath),
-  });
-
-  // A fresh object per render is fine: ChatContent is memoized on these fields,
-  // and only the context consumer re-renders when it changes.
-  const viewSetupOutput = useCallback(() => {
-    setActiveBottomTab('setup-logs');
-    setRightPanelVisible(true);
-  }, [setActiveBottomTab, setRightPanelVisible]);
-  const chatViewModel: ChatContentProps = {
-    onViewSetupOutput: viewSetupOutput,
-    retryAvailability: workspaceInitStatus?.retryAvailability,
-    workspaceId,
-    sessionId: selectedDbSessionId,
-    codexAccountId: sessions?.find((session) => session.id === selectedDbSessionId)?.codexAccountId,
-    resolveWorkspaceFileLink: resolveWorkspaceChatFileLink,
-    onWorkspaceFileLink: handleWorkspaceFileLink,
-    onOpenSubagent: openSubagentTab,
-    parentSessionName: sessions?.find((session) => session.id === selectedDbSessionId)?.name,
-    messages,
-    history: transcriptHistory,
-    transcriptPageBoundaries,
-    sessionStatus,
-    sessionRuntime,
-    transcriptScroll,
-    pendingRequest,
-    approvePermission,
-    answerQuestion,
-    connected,
-    controlsHydrated,
-    sendMessage,
-    stopChat,
-    restartSession,
-    isRestartingSession,
-    inputRef,
-    chatSettings,
-    chatCapabilities,
-    chatCapabilitiesLoaded,
-    updateSettings,
-    inputDraft,
-    setInputDraft,
-    inputAttachments,
-    inputDraftGeneration,
-    setInputAttachments,
-    queuedMessages,
-    removeQueuedMessage,
-    pendingSteer,
-    steerQueuedMessage,
-    resumeQueuedMessages,
-    latestThinking,
-    pendingMessages,
-    isCompacting,
-    slashCommands,
-    slashCommandsLoaded,
-    tokenStats,
-    acpConfigOptions,
-    acpPlan,
-    setConfigOption,
-    autoStartPending: isIssueAutoStartPending,
-    initBanner,
-    isScriptFailed,
-    onRunQuickActionInNewChat: runQuickActionInNewChat,
-    newChatUnavailableReason,
-  };
-
-  const workspaceState = useMemo(
-    () => ({
-      workspace,
-      workspaceError,
-      isFetchingWorkspace: isRetryingWorkspace,
-      refetchWorkspace,
-      workspaceId,
-      handleBackToWorkspaces,
-      isScriptFailed,
-      workspaceInitStatus,
-      setupWarningDismissed,
-      dismissSetupWarning,
-    }),
-    [
-      workspace,
-      workspaceError,
-      isRetryingWorkspace,
-      refetchWorkspace,
-      workspaceId,
-      handleBackToWorkspaces,
-      isScriptFailed,
-      workspaceInitStatus,
-      setupWarningDismissed,
-      dismissSetupWarning,
-    ]
-  );
-  const header = useMemo(
-    () => ({
-      archivePending: archiveWorkspace.isPending,
-      handleQuickAction,
-      isCreatingSession: createSession.isPending,
-    }),
-    [archiveWorkspace.isPending, handleQuickAction, createSession.isPending]
-  );
-  const hasWorktreePath = !!workspace?.worktreePath;
-  const sessionTabs = useMemo(
-    () => ({
-      sessions,
-      selectedDbSessionId,
-      selectedSessionReady,
-      selectedSessionControlId,
-      selectedSessionControlRuntimeId,
-      sessionSummariesById,
-      queuedMessageCount,
-      isDeletingSession: deleteSession.isPending,
-      handleSelectSession,
-      handleNewChat,
-      handleCloseChatSession,
-      handleRestartSession: restartSession,
-      isRestartingSession,
-      handleOpenSubagentTab: openSubagentTab,
-      maxSessions,
-      hasWorktreePath,
-    }),
-    [
-      sessions,
-      selectedDbSessionId,
-      selectedSessionReady,
-      selectedSessionControlId,
-      selectedSessionControlRuntimeId,
-      sessionSummariesById,
-      queuedMessageCount,
-      deleteSession.isPending,
-      handleSelectSession,
-      handleNewChat,
-      handleCloseChatSession,
-      restartSession,
-      isRestartingSession,
-      openSubagentTab,
-      maxSessions,
-      hasWorktreePath,
-    ]
-  );
-  const archiveDialog = useMemo(
-    () => ({
-      open: archiveDialogOpen,
-      setOpen: setArchiveDialogOpen,
-      activeChildCount,
-      onConfirm: handleConfirmArchive,
-    }),
-    [archiveDialogOpen, activeChildCount, handleConfirmArchive]
-  );
 
   return (
     <>
@@ -496,22 +237,97 @@ export function WorkspaceDetailContainer() {
           hasChanges={hasChanges}
         />
       )}
-      <ChatContentPropsProvider value={chatViewModel}>
+      <ChatSessionProvider store={chatSession} dbSessionId={selectedDbSessionId}>
         <WorkspaceDetailView
-          workspaceState={workspaceState}
-          header={header}
-          sessionTabs={sessionTabs}
-          resumeQueuedMessages={resumeQueuedMessages}
+          workspaceState={{
+            workspace,
+            workspaceError,
+            isFetchingWorkspace: isRetryingWorkspace,
+            refetchWorkspace,
+            workspaceId,
+            handleBackToWorkspaces: () => {
+              runInBackground(
+                Promise.resolve(navigate(`/projects/${slug}/workspaces`)),
+                "Couldn't open workspace list."
+              );
+            },
+            isScriptFailed,
+            workspaceInitStatus,
+            setupWarningDismissed,
+            dismissSetupWarning,
+          }}
+          header={{
+            archivePending: archiveWorkspace.isPending,
+            handleQuickAction,
+            isCreatingSession: createSession.isPending,
+          }}
+          sessionTabs={{
+            sessions,
+            selectedDbSessionId,
+            selectedSessionReady: isProviderSubagentSessionReady(selectedDbSessionId),
+            selectedSessionControlId,
+            selectedSessionControlRuntimeId: chat.sessionRuntime.work?.controlRuntimeId,
+            sessionSummariesById,
+            queuedMessageCount,
+            isDeletingSession: deleteSession.isPending,
+            handleSelectSession,
+            handleNewChat,
+            handleCloseChatSession: (sessionId: string) => {
+              persistence.clearSession(sessionId);
+              handleCloseSession(sessionId);
+            },
+            handleRestartSession: chatSession.restartSession,
+            isRestartingSession: chat.isRestartingSession,
+            handleOpenSubagentTab: openSubagentTab,
+            maxSessions,
+            hasWorktreePath: Boolean(workspace?.worktreePath),
+          }}
+          chat={
+            <WorkspaceChat
+              workspaceId={workspaceId}
+              sessionId={selectedDbSessionId}
+              codexAccountId={selectedSession?.codexAccountId}
+              parentSessionName={selectedSession?.name}
+              issueAutoStart={workspace?.creationSource === 'GITHUB_ISSUE'}
+              active={!activeMainTab || activeMainTab.type === 'chat'}
+              position={persistence}
+              inputRef={inputRef}
+              onViewSetupOutput={viewSetupOutput}
+              retryAvailability={workspaceInitStatus?.retryAvailability}
+              resolveWorkspaceFileLink={resolveWorkspaceChatFileLink}
+              onWorkspaceFileLink={handleWorkspaceFileLink}
+              onOpenSubagent={openSubagentTab}
+              initBanner={getVisibleInitBanner(
+                workspaceInitStatus?.chatBanner,
+                setupWarningDismissed
+              )}
+              isScriptFailed={isScriptFailed}
+              onRunQuickActionInNewChat={runQuickActionInNewChat}
+              newChatUnavailableReason={getNewChatUnavailableReason({
+                sessions,
+                maxSessions,
+                isCreatingSession: createSession.isPending,
+                isDeletingSession: deleteSession.isPending,
+                hasWorktreePath: Boolean(workspace?.worktreePath),
+              })}
+            />
+          }
+          resumeQueuedMessages={chatSession.resumeQueuedMessages}
           rightPanelVisible={rightPanelVisible}
           setRightPanelVisible={setRightPanelVisible}
-          archiveDialog={archiveDialog}
+          archiveDialog={{
+            open: archiveDialogOpen,
+            setOpen: setArchiveDialogOpen,
+            activeChildCount,
+            onConfirm: () => handleArchive(),
+          }}
         />
-      </ChatContentPropsProvider>
+      </ChatSessionProvider>
       <ArchiveGitLockDialog
         open={archiveGitLockDialogOpen}
         onOpenChange={setArchiveGitLockDialogOpen}
-        onRetry={handleConfirmArchive}
-        onRemoveLockAndArchive={handleRemoveLockAndArchive}
+        onRetry={() => handleArchive()}
+        onRemoveLockAndArchive={() => handleArchive(true)}
         isPending={archiveWorkspace.isPending}
       />
     </>
