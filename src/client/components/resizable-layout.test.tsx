@@ -4,12 +4,13 @@ import { createRoot } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { AppLayout } from './resizable-layout';
 
-const { navigation, sidebar } = vi.hoisted(() => ({
+const { navigation, sidebar, header } = vi.hoisted(() => ({
   navigation: {
     projects: undefined as { slug: string }[] | undefined,
     projectsError: null as Error | null,
   },
   sidebar: { isMobile: false, open: true, openMobile: false, crash: false },
+  header: { crash: false },
 }));
 vi.mock('@/client/components/app-shortcuts', () => ({ AppShortcuts: () => null }));
 vi.mock('@/client/hooks/use-app-navigation-data', () => ({
@@ -38,14 +39,41 @@ vi.mock('@/client/components/app-sidebar', () => ({
   },
 }));
 vi.mock('@/client/components/app-header', () => ({
-  AppHeader: ({ showSidebarToggle = true }: { showSidebarToggle?: boolean }) => (
-    <header>{showSidebarToggle ? <button>Toggle sidebar</button> : null}</header>
-  ),
+  AppHeader: ({ showSidebarToggle = true }: { showSidebarToggle?: boolean }) => {
+    if (header.crash) {
+      throw new Error('Header exploded');
+    }
+    return <header>{showSidebarToggle ? <button>Toggle sidebar</button> : null}</header>;
+  },
 }));
 beforeEach(() => vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true));
 afterEach(() => {
   vi.unstubAllGlobals();
   Object.assign(sidebar, { isMobile: false, open: true, openMobile: false, crash: false });
+  header.crash = false;
+});
+
+it('contains a header crash in its place and keeps the sidebar and page', async () => {
+  vi.stubGlobal('reportError', vi.fn());
+  header.crash = true;
+  navigation.projects = [{ slug: 'alpha' }];
+  navigation.projectsError = null;
+  const container = document.createElement('div');
+  const root = createRoot(container, { onCaughtError: () => undefined });
+  await act(() =>
+    root.render(
+      <AppLayout banners={<div data-testid="notices">Setup warnings</div>}>
+        Project content
+      </AppLayout>
+    )
+  );
+  const alert = container.querySelector('[role="alert"]');
+  expect(alert?.textContent).toContain("Couldn't show the header");
+  expect(alert?.textContent).toContain('Header exploded');
+  expect(alert?.nextElementSibling?.getAttribute('data-testid')).toBe('notices');
+  expect(container.querySelector('aside')?.textContent).toBe('Project navigation');
+  expect(container.querySelector('main')?.textContent).toBe('Project content');
+  await act(() => root.unmount());
 });
 
 it.each([

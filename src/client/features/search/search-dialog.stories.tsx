@@ -169,7 +169,7 @@ export const Unavailable: Story = {
   args: { error: true, results: [], onRetry: fn(), onSelect: fn() },
   play: async ({ canvasElement, args }) => {
     const retry = within(canvasElement.ownerDocument.body).getByRole('button', {
-      name: 'Try again',
+      name: 'Retry',
     });
     retry.focus();
     await userEvent.keyboard('{Enter}');

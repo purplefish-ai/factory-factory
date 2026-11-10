@@ -109,7 +109,7 @@ function LocalResults({ query, results, loading, error, onRetry, onSelect }: Sea
             }
           }}
         >
-          Try again
+          Retry
         </Button>
       </div>
     );

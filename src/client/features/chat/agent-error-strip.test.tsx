@@ -39,6 +39,11 @@ describe('AgentErrorStrip', () => {
     expect(alert?.textContent).toContain('Agent error');
     expect(alert?.textContent).toContain(message);
     expect(alert?.querySelector('p:last-child')?.className).toContain('overflow-y-auto');
+    // The danger callout colours all of its text; foreground text misses AA on some tints.
+    const callout = container.querySelector('[data-slot="status-callout"]');
+    expect(callout?.getAttribute('data-status-tone')).toBe('danger');
+    expect(callout?.contains(alert)).toBe(true);
+    expect(callout?.querySelector('.text-foreground')).toBeNull();
     expect(button('Retry')).toBeUndefined();
     expect(button('Dismiss error')).toBeUndefined();
     flushSync(() => button('Restart agent')?.click());

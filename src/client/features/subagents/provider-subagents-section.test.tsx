@@ -448,6 +448,9 @@ describe('ProviderSubagentsSection', () => {
 
     expect(container.textContent).toContain('Keep this loaded agent');
     expect(container.textContent).toContain('Older sub-agent page failed');
+    expect(container.textContent).toContain(
+      "Couldn't load subagents. Showing the last loaded data."
+    );
     expect(container.querySelector('[aria-label="Active subagents"]')).toBeNull();
     expect(mocks.fetchNextPage).not.toHaveBeenCalled();
     const retry = [...container.querySelectorAll('button')].find(

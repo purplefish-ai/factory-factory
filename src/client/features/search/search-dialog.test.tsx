@@ -280,17 +280,17 @@ describe('SearchDialog', () => {
     const props = await render({ results: [], error: true });
     expect(document.body.textContent).toContain('Couldn’t search');
     const retry = Array.from(document.querySelectorAll('button')).find(
-      (b) => b.textContent === 'Try again'
+      (b) => b.textContent === 'Retry'
     );
     await act(() => retry?.click());
     expect(props.onRetry).toHaveBeenCalledOnce();
     expect(document.body.textContent).not.toContain('No results');
   });
 
-  it('allows Enter on Try again to activate retry instead of cmdk selection', async () => {
+  it('allows Enter on Retry to activate retry instead of cmdk selection', async () => {
     const props = await render({ results: [], error: true });
     const retry = Array.from(document.querySelectorAll('button')).find(
-      (button) => button.textContent === 'Try again'
+      (button) => button.textContent === 'Retry'
     );
     expect(retry).toBeDefined();
     retry?.focus();

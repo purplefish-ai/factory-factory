@@ -4,7 +4,7 @@ import { RobotIcon } from '@phosphor-icons/react/dist/csr/Robot';
 import { useEffect, useMemo, useState } from 'react';
 import { EmptyState } from '@/client/components/empty-state';
 import { Loading } from '@/client/components/loading';
-import { StatusCallout } from '@/client/components/status-callout';
+import { QueryErrorState, QueryRefreshError } from '@/client/components/query-error-state';
 import { SubagentIcon } from '@/client/components/subagent-icon';
 import {
   SessionTargetStopButton,
@@ -174,28 +174,17 @@ function SubagentRow({
   );
 }
 
-function ListError({ error }: { error: { message: string; onRetry: () => void } }) {
+/** A failed next page or refresh while loaded subagents stay listed. */
+function ListRefreshError({ error }: { error: { message: string; onRetry: () => void } }) {
   return (
-    <StatusCallout
-      role="alert"
-      tone="danger"
-      size="sm"
-      className="mx-3 my-3"
-      action={
-        <Button type="button" variant="outline" size="sm" onClick={error.onRetry}>
-          Retry
-        </Button>
-      }
-    >
-      {error.message}
-    </StatusCallout>
+    <QueryRefreshError title="Couldn't load subagents" error={error} onRetry={error.onRetry} />
   );
 }
 
 function EmptyReadyState({ state }: { state: Extract<SubagentListState, { kind: 'ready' }> }) {
   return (
     <div>
-      {state.error && <ListError error={state.error} />}
+      {state.error && <ListRefreshError error={state.error} />}
       <EmptyState
         size="compact"
         icon={RobotIcon}
@@ -288,7 +277,14 @@ export function SubagentList({
   }
 
   if (state.kind === 'error') {
-    return <ListError error={state} />;
+    return (
+      <QueryErrorState
+        title="Couldn't load subagents"
+        error={state}
+        onRetry={state.onRetry}
+        className="p-3"
+      />
+    );
   }
 
   if (state.subagents.length === 0) {
@@ -297,7 +293,7 @@ export function SubagentList({
 
   return (
     <div>
-      {state.error && <ListError error={state.error} />}
+      {state.error && <ListRefreshError error={state.error} />}
       {groups.active.length > 0 && (
         <ul className="divide-y divide-border/50">
           {groups.active.map((subagent) => (
