@@ -34,6 +34,7 @@ function createGraph(label: string) {
     resetDispatchState: vi.fn(),
     steerQueuedMessage: vi.fn(),
     steerWorkspaceMailSignal: vi.fn(),
+    shutdown: vi.fn(async () => undefined),
     tryDispatchNextMessage(sessionId: string) {
       this.attempts.push(sessionId);
       const message = sessionDomainService.dequeueNext(sessionId);
@@ -313,6 +314,7 @@ describe('application queue producer composition', () => {
         resetDispatchState: vi.fn(),
         steerQueuedMessage: vi.fn(),
         steerWorkspaceMailSignal: vi.fn(),
+        shutdown: vi.fn(async () => undefined),
         tryDispatchNextMessage: dispatch,
       };
       domain.storeInitialMessage('shared-load', `Initial ${label}`);

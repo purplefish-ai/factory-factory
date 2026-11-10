@@ -300,7 +300,7 @@ vi.mock('@/backend/services/session', async () => {
     sessionCommandFactories,
     sessionConfigService: {},
     sessionPermissionService: {},
-    sessionDispatchService: {},
+    sessionDispatchService: { shutdown: vi.fn().mockResolvedValue(undefined) },
     claudeModelCatalogService: { getModels: vi.fn() },
     codexModelCatalogService: { getModels: vi.fn() },
     providerUsageService: { getUsage: vi.fn() },

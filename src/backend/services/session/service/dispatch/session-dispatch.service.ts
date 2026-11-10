@@ -171,6 +171,15 @@ export class SessionDispatchService {
     this.manualDispatchResumed.delete(sessionId);
   }
 
+  /**
+   * Application shutdown: cancel pending queue retries, refuse new ones and
+   * wait for retries already dispatching. Stopping all clients does not run
+   * per-session stops, so their retry timers would otherwise keep firing.
+   */
+  shutdown(): Promise<void> {
+    return this.retry.stop();
+  }
+
   /** Keep messages queued during preparation so refresh cannot lose them. */
   tryDispatchNextMessage(dbSessionId: string, options: DispatchOptions = {}): Promise<void> {
     return applicationUpdateAdmission.run(() => this.dispatchAdmitted(dbSessionId, options));

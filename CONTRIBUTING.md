@@ -120,7 +120,11 @@ polling. Create a fresh `eventProviderCollection()` in each test fixture, add
 providers through its `add` method, and await `waitForProviders(count)` to
 retain exact-count assertions and a bounded failure when startup stalls. Fixture
 teardown tracks real background PR wakes through completion and drains newly
-spawned work before disconnecting the private database.
+spawned work before disconnecting the private database; the generic retry
+fixture also shuts down session queue retries, as application shutdown does.
+Work that outlives a test file and logs can fail CI with
+`EnvironmentTeardownError: Closing rpc while "onUserConsoleLog" was pending`;
+stop or drain its owner in teardown rather than muting the log.
 
 `pnpm check` covers linting, formatting, file lengths, environment access,
 ownership, foreign-key indexes, and dependencies. Upstream ACP adapters own
