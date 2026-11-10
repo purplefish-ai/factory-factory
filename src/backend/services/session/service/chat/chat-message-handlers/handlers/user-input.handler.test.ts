@@ -3,7 +3,7 @@ import type {
   SessionCommandPromptService,
   SessionCommandRuntimeManager,
 } from '@/backend/services/session/service/chat/session-command.types';
-import { sessionBackgroundDeliveryService } from '@/backend/services/session/service/lifecycle/session-background-delivery.service';
+import { sessionBackgroundDeliveryService } from '@/backend/services/session/service/delivery/session-background-delivery.service';
 import { ChatMessageSchema } from '@/shared/websocket';
 import { createUserInputHandler } from './user-input.handler';
 

@@ -24,10 +24,10 @@ vi.mock('@/backend/services/settings', () => ({
   },
 }));
 
-vi.mock('./session.prompt-builder', () => ({}));
+vi.mock('@/backend/services/session/service/prompt/session.prompt-builder', () => ({}));
 vi.mock('@/backend/services/workspace', () => ({ workspaceNotificationService: {} }));
 
-vi.mock('./session.repository', () => ({
+vi.mock('@/backend/services/session/service/data/session.repository', () => ({
   sessionRepository: {},
 }));
 

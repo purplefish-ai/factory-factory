@@ -2,8 +2,8 @@ import { afterEach, expect, it, vi } from 'vitest';
 import { AcpClientFactory } from '@/backend/services/session/service/acp/acp-client-factory';
 import { AcpRuntimeManager } from '@/backend/services/session/service/acp/acp-runtime-manager';
 import { createTestProcessHandle } from '@/backend/services/session/service/acp/acp-runtime-manager.test-helpers';
+import { EventSessionAuthority } from '@/backend/services/session/service/event-agent/event-session-authority';
 import type { InitialDeliveryFence } from '@/shared/event-agent-delivery';
-import { EventSessionAuthority } from './event-session-authority';
 import { createLifecycleHarness } from './session-lifecycle.test-helpers';
 
 afterEach(() => vi.restoreAllMocks());

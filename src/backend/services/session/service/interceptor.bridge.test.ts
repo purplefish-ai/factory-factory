@@ -12,7 +12,7 @@ vi.mock('@/backend/services/session/service/acp', () => ({
   },
 }));
 
-vi.mock('@/backend/services/session/service/lifecycle/session-services', () => ({
+vi.mock('@/backend/services/session/service/composition/session-services', () => ({
   sessionService: {
     sendSessionMessage: mocks.sendSessionMessage,
   },

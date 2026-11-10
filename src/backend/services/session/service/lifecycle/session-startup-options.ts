@@ -1,4 +1,4 @@
-import type { EventInitialPermit } from './event-session-authority';
+import type { EventInitialPermit } from '@/backend/services/session/service/event-agent/event-session-authority';
 export type SessionStartupModePreset = 'non_interactive' | 'plan';
 
 export type GetOrCreateSessionClientOptions = {

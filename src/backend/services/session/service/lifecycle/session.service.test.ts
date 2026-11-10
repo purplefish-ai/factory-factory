@@ -22,7 +22,7 @@ vi.mock('@/backend/services/session/resources/agent-session-launch-origin.access
   agentSessionLaunchOriginAccessor: { findBySessionId: async () => null },
 }));
 vi.mock('@/backend/services/workspace');
-vi.mock('./closed-session-persistence.service');
+vi.mock('@/backend/services/session/service/archive/closed-session-persistence.service');
 vi.mock('@/backend/services/session/service/acp', async (importOriginal) => {
   const actual = (await importOriginal()) as Record<string, unknown>;
   const RuntimeQuiescence =
@@ -71,7 +71,7 @@ vi.mock('@/backend/interceptors/registry', () => ({
     notifyToolComplete: (...args: unknown[]) => mockNotifyToolComplete(...args),
   },
 }));
-vi.mock('./session.repository', () => ({
+vi.mock('@/backend/services/session/service/data/session.repository', () => ({
   SessionRepository: class {},
   sessionRepository: {
     getSessionById: vi.fn(),
@@ -94,16 +94,16 @@ vi.mock('@/backend/services/session/service/logging/acp-trace-logger.service', (
 
 import type { AcpProcessHandle, AcpRuntimeEvent } from '@/backend/services/session/service/acp';
 import { acpRuntimeManager } from '@/backend/services/session/service/acp';
-import { workspaceDataService } from '@/backend/services/workspace';
-import { closedSessionPersistenceService } from './closed-session-persistence.service';
-import { createDeferred, mockCreatedAcpClient } from './session-lifecycle.test-helpers';
+import { closedSessionPersistenceService } from '@/backend/services/session/service/archive/closed-session-persistence.service';
 import {
   acpEventProcessor,
   sessionLifecycleService,
   sessionPromptTurnCompletionService,
   sessionService,
-} from './session-services';
-import { sessionRepository } from './session.repository';
+} from '@/backend/services/session/service/composition/session-services';
+import { sessionRepository } from '@/backend/services/session/service/data/session.repository';
+import { workspaceDataService } from '@/backend/services/workspace';
+import { createDeferred, mockCreatedAcpClient } from './session-lifecycle.test-helpers';
 
 const activeRuntime = {
   incarnationId: '11111111-1111-4111-8111-111111111111',

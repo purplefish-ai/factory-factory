@@ -2,10 +2,10 @@ import { afterEach, expect, it } from 'vitest';
 import { WorkspaceInitFenceError } from '@/backend/lib/workspace-init-fence-error';
 import { AcpSteeringNotSentError } from '@/backend/services/session/service/acp/acp-steering';
 import { PermanentAttachmentError } from '@/backend/services/session/service/chat/chat-message-handlers/attachment-processing';
+import { sessionBackgroundDeliveryService } from '@/backend/services/session/service/delivery/session-background-delivery.service';
 import { rollbackStoppedDispatchMessage } from '@/backend/services/session/service/dispatch/session-dispatch-batch';
 import { createTestSessionDispatcher } from '@/backend/services/session/service/dispatch/session-dispatch.test-helpers';
-import { EventSessionFenceError } from '@/backend/services/session/service/lifecycle/event-session-fence-error';
-import { sessionBackgroundDeliveryService } from '@/backend/services/session/service/lifecycle/session-background-delivery.service';
+import { EventSessionFenceError } from '@/backend/services/session/service/event-agent/event-session-fence-error';
 import { sessionDomainService } from '@/backend/services/session/service/session-domain.service';
 import type { QueuedMessage } from '@/shared/acp-protocol';
 

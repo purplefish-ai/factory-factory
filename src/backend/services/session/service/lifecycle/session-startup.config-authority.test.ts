@@ -1,9 +1,12 @@
 import { describe, expect, it, vi } from 'vitest';
+import {
+  gate,
+  settleConfig,
+} from '@/backend/services/session/service/config/session-config-authority.test-helpers';
+import * as permissionPolicy from '@/backend/services/session/service/config/session-permission-policy';
+import * as savedModes from '@/backend/services/session/service/config/session-saved-native-modes';
 import { ADVERSARIAL_REVIEW_WORKFLOW } from '@/shared/adversarial-review';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
-import { gate, settleConfig } from './session-config-authority.test-helpers';
-import * as permissionPolicy from './session-permission-policy';
-import * as savedModes from './session-saved-native-modes';
 import { setupStartupConfig, startupConfigOptions } from './session-startup-config.test-helpers';
 
 vi.mock('@/backend/services/workspace', () => ({

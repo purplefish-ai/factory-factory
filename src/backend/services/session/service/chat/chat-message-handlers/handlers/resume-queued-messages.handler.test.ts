@@ -1,6 +1,6 @@
 import { expect, it, vi } from 'vitest';
 import { createResumeQueuedMessagesHandler } from '@/backend/services/session/service/chat/chat-message-handlers/handlers/resume-queued-messages.handler';
-import { sessionBackgroundDeliveryService } from '@/backend/services/session/service/lifecycle/session-background-delivery.service';
+import { sessionBackgroundDeliveryService } from '@/backend/services/session/service/delivery/session-background-delivery.service';
 
 it('does not enable or dispatch queued messages when a newer stop supersedes resume', async () => {
   const sessionId = 'queued-resume-stop';
