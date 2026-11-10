@@ -2,7 +2,7 @@ import { ClockIcon } from '@phosphor-icons/react/dist/csr/Clock';
 import { SpinnerGapIcon } from '@phosphor-icons/react/dist/csr/SpinnerGap';
 import { WarningCircleIcon } from '@phosphor-icons/react/dist/csr/WarningCircle';
 import { Badge } from '@/components/ui/badge';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 import type { WorkspaceStatus } from '@/shared/core';
 
@@ -73,14 +73,12 @@ export function WorkspaceStatusBadge({
   // Show tooltip with error message for failed status
   if (status === 'FAILED' && errorMessage) {
     return (
-      <TooltipProvider>
-        <Tooltip>
-          <TooltipTrigger asChild>{badge}</TooltipTrigger>
-          <TooltipContent side="top" className="max-w-[300px]">
-            <p className="text-xs">{errorMessage}</p>
-          </TooltipContent>
-        </Tooltip>
-      </TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger asChild>{badge}</TooltipTrigger>
+        <TooltipContent side="top" className="max-w-[300px]">
+          <p className="text-xs">{errorMessage}</p>
+        </TooltipContent>
+      </Tooltip>
     );
   }
 

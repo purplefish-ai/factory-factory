@@ -521,14 +521,8 @@ function SidebarInner({
       {showCloseButton && (
         <header className="flex shrink-0 items-center justify-between border-b px-4 min-h-12 pt-[env(safe-area-inset-top)]">
           <span className="text-sm font-semibold">Workspaces</span>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-9 w-9 shrink-0"
-            aria-label="Close sidebar"
-            onClick={onNavigate}
-          >
-            <XIcon className="h-5 w-5" />
+          <Button variant="ghost" size="icon" aria-label="Close sidebar" onClick={onNavigate}>
+            <XIcon />
           </Button>
         </header>
       )}

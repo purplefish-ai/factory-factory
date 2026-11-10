@@ -1,9 +1,9 @@
 // @vitest-environment jsdom
 
-import { createElement } from 'react';
 import { flushSync } from 'react-dom';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, expect, it, vi } from 'vitest';
+import { TooltipProvider } from '@/components/ui/tooltip';
 import { ChildWorkspacesPanel } from './child-workspaces-panel';
 
 const query = vi.hoisted(() => ({
@@ -64,13 +64,21 @@ afterEach(() => {
   document.body.innerHTML = '';
 });
 
+function renderPanel(workspaceId: string) {
+  return (
+    <TooltipProvider>
+      <ChildWorkspacesPanel workspaceId={workspaceId} />
+    </TooltipProvider>
+  );
+}
+
 it('offers active projects and excludes archived child-workspace targets', () => {
   const container = document.createElement('div');
   document.body.appendChild(container);
   const root = createRoot(container);
   roots.push(root);
-  flushSync(() => root.render(createElement(ChildWorkspacesPanel, { workspaceId: 'parent-1' })));
-  const createButton = container.querySelector('button[title="New child workspace"]');
+  flushSync(() => root.render(renderPanel('parent-1')));
+  const createButton = container.querySelector('button[aria-label="New child workspace"]');
   flushSync(() => createButton?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
 
   const options = [...document.querySelectorAll('[role="option"]')].map(
@@ -86,7 +94,7 @@ it('shows a failed children query with Retry instead of a blank panel', () => {
   const container = document.createElement('div');
   const root = createRoot(container);
   roots.push(root);
-  flushSync(() => root.render(<ChildWorkspacesPanel workspaceId="parent" />));
+  flushSync(() => root.render(renderPanel('parent')));
   expect(container.querySelector('[role="alert"]')?.textContent).toContain('Offline');
   const retry = [...container.querySelectorAll('button')].find(
     (button) => button.textContent === 'Retry'
@@ -100,7 +108,7 @@ it('keeps loaded children data visible when a background refresh fails', () => {
   const container = document.createElement('div');
   const root = createRoot(container);
   roots.push(root);
-  flushSync(() => root.render(<ChildWorkspacesPanel workspaceId="parent" />));
+  flushSync(() => root.render(renderPanel('parent')));
   expect(container.querySelector('[role="alert"]')).toBeNull();
   expect(container.textContent).toContain('No child workspaces yet');
 });
@@ -110,7 +118,7 @@ it('keeps an unresolved offline child query in Loading instead of a blank panel'
   const container = document.createElement('div');
   const root = createRoot(container);
   roots.push(root);
-  flushSync(() => root.render(<ChildWorkspacesPanel workspaceId="parent" />));
+  flushSync(() => root.render(renderPanel('parent')));
   expect(container.textContent).toContain('Loading child workspaces…');
   expect(container.textContent).not.toContain('No child workspaces yet');
 });

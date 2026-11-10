@@ -206,7 +206,7 @@ function ScreenshotThumbnail({
         type="button"
         onClick={onClick}
         aria-label={`Open screenshot ${screenshot.name}`}
-        className="absolute inset-0"
+        className="absolute inset-0 rounded-md focus-ring focus-visible:ring-inset"
       >
         {isLoading ? (
           <Skeleton className="absolute inset-0 rounded-none" aria-hidden="true" />
@@ -232,7 +232,7 @@ function ScreenshotThumbnail({
           type="button"
           onClick={handleDelete}
           aria-label={`Delete screenshot ${screenshot.name}`}
-          className="h-5 w-5 flex items-center justify-center rounded-full bg-black/60 text-white hover:bg-destructive dark:hover:bg-destructive/60 transition-colors"
+          className="h-5 w-5 flex items-center justify-center rounded-full focus-ring bg-black/60 text-white hover:bg-destructive dark:hover:bg-destructive/60 transition-colors"
         >
           <XIcon className="h-3 w-3" />
         </button>

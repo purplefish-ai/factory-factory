@@ -214,12 +214,18 @@ function DeepgramApiKeyField({
           className={`font-mono text-sm ${SETTING_FIELD_WIDTH}`}
         />
       </div>
-      <Button variant="outline" onClick={onValidate} disabled={validating || !apiKey}>
-        {validating ? 'Validating…' : 'Validate'}
+      <Button
+        variant="outline"
+        onClick={onValidate}
+        pending={validating}
+        pendingLabel="Validating…"
+        disabled={!apiKey}
+      >
+        Validate
       </Button>
       {validated && (
-        <Button onClick={onSave} disabled={saving}>
-          {saving ? 'Saving…' : 'Save'}
+        <Button onClick={onSave} pending={saving} pendingLabel="Saving…">
+          Save
         </Button>
       )}
     </div>

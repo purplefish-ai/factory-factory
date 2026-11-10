@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 import { useReconcileSessionTargetStops } from '@/client/features/session-controls';
+import { Button } from '@/components/ui/button';
 import { Spinner } from '@/components/ui/spinner';
 import type { GroupedMessageItem } from '@/lib/chat-protocol';
 import {
@@ -140,13 +141,14 @@ export function TranscriptTail({
       {props.subagentTimelineError && (
         <div role="status" className="flex items-center gap-2 py-1 text-sm text-muted-foreground">
           <span className="min-w-0">{props.subagentTimelineError.message}</span>
-          <button
-            type="button"
+          <Button
+            variant="link"
+            size="inline"
             onClick={props.subagentTimelineError.onRetry}
-            className="shrink-0 rounded-sm underline underline-offset-2 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className="shrink-0"
           >
             Retry
-          </button>
+          </Button>
         </div>
       )}
       {!loadingSession && <TodoPanel todoState={todoState} />}
@@ -156,13 +158,9 @@ export function TranscriptTail({
           <Spinner aria-hidden="true" />
           <span className="text-sm">{getStartupLabel(props)}</span>
           {initializing && props.onViewSetupOutput && (
-            <button
-              type="button"
-              onClick={props.onViewSetupOutput}
-              className="rounded-sm text-sm underline underline-offset-2 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            >
+            <Button variant="link" size="inline" onClick={props.onViewSetupOutput}>
               View setup output
-            </button>
+            </Button>
           )}
         </div>
       )}

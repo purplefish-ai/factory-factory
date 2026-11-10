@@ -89,15 +89,15 @@ function SelectionRetry({
     <Button
       type="button"
       variant="ghost"
-      size="sm"
-      className="h-6 gap-1 px-2 text-xs text-muted-foreground"
+      size="xs"
+      className="text-muted-foreground"
       disabled={disabled || !onRetry}
       onClick={onRetry}
       title={reason ?? error}
       aria-description={reason}
       aria-label={`${label}: ${error}. Retry selection`}
     >
-      <ArrowClockwiseIcon className="h-3 w-3 shrink-0" />
+      <ArrowClockwiseIcon className="shrink-0" />
       <span>Retry selection</span>
     </Button>
   );
@@ -154,9 +154,7 @@ export function ProviderModelPicker({
           title={reason ?? displayName}
           className="shrink"
           indicator={
-            updating ? (
-              <Spinner role="status" aria-label="Applying model selection" className="size-3" />
-            ) : undefined
+            updating ? <Spinner role="status" aria-label="Applying model selection" /> : undefined
           }
         >
           {modelName}

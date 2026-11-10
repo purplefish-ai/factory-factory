@@ -1,6 +1,7 @@
 import { ArrowsClockwiseIcon } from '@phosphor-icons/react/dist/csr/ArrowsClockwise';
 import { DotsThreeIcon } from '@phosphor-icons/react/dist/csr/DotsThree';
 import { PlusIcon } from '@phosphor-icons/react/dist/csr/Plus';
+import { IconButton } from '@/client/components/icon-button';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -8,7 +9,6 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useKanban } from './kanban-context';
 
@@ -27,8 +27,8 @@ export function KanbanControlsView({
   onRefresh,
 }: KanbanControlsViewProps) {
   const newWorkspaceButton = (
-    <Button size="sm" className="h-9 shrink-0" onClick={onNewWorkspace}>
-      <PlusIcon className="h-4 w-4" />
+    <Button className="shrink-0" onClick={onNewWorkspace}>
+      <PlusIcon />
       New workspace
     </Button>
   );
@@ -37,16 +37,11 @@ export function KanbanControlsView({
     <>
       {isMobile && newWorkspaceButton}
       <DropdownMenu>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon" className="h-8 w-8" aria-label="Board actions">
-                <DotsThreeIcon className="h-5 w-5" />
-              </Button>
-            </DropdownMenuTrigger>
-          </TooltipTrigger>
-          <TooltipContent>Board actions</TooltipContent>
-        </Tooltip>
+        <DropdownMenuTrigger asChild>
+          <IconButton label="Board actions" size="icon-sm">
+            <DotsThreeIcon />
+          </IconButton>
+        </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
           <DropdownMenuItem onSelect={onRefresh} pending={isSyncing}>
             <ArrowsClockwiseIcon className="h-4 w-4" />

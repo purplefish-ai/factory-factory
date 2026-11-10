@@ -68,7 +68,7 @@ export const RefreshFreshCache: Story = {
     const canvas = within(canvasElement);
     await canvas.findByText('before.ts');
     await userEvent.click(canvas.getByRole('button', { name: 'Simulate file change' }));
-    await userEvent.click(canvas.getByTitle('Refresh file tree'));
+    await userEvent.click(canvas.getByRole('button', { name: 'Refresh file tree' }));
     await expect(await canvas.findByText('after.ts')).toBeVisible();
   },
 };

@@ -37,6 +37,11 @@ const rules = [
   'no-forward-ref',
   'no-render-ref-write',
   'no-state-sync-effect',
+  'button-icon-size',
+  'button-size-variant',
+  'icon-button-tooltip',
+  'tooltip-provider-root',
+  'focus-ring',
 ];
 const workspaceQueryOwner = 'owned/workspace-queries.ts';
 const userSettingsOwner = 'owned/user-settings-queries.ts';
@@ -110,6 +115,45 @@ describe('Oxlint project guardrails', () => {
       'const x = <Button size="icon"><span aria-hidden="true">Close</span></Button>;',
     ],
     ['icon-button-name', 'const x = <Button size="icon" aria-label=""><PlusIcon /></Button>;'],
+    [
+      'button-icon-size',
+      'const x = <Button size="sm"><PlayIcon className="h-3 w-3" />Run</Button>;',
+    ],
+    [
+      'button-icon-size',
+      'const x = <Button>{busy ? <XIcon className="mr-1 md:w-4" /> : null}Go</Button>;',
+    ],
+    [
+      'button-icon-size',
+      'const x = <IconButton label="Close"><span><XIcon className="h-5 w-5" /></span></IconButton>;',
+    ],
+    [
+      'button-size-variant',
+      'const x = <Button size="icon" className="h-6 w-6" aria-label="Close"><XIcon /></Button>;',
+    ],
+    [
+      'button-size-variant',
+      'const x = <Button size="sm" className={cn("md:h-8", x)}>Run</Button>;',
+    ],
+    [
+      'button-size-variant',
+      'const x = <IconButton label="Close" className="size-7"><XIcon /></IconButton>;',
+    ],
+    [
+      'icon-button-tooltip',
+      'const x = <Tooltip><TooltipTrigger asChild><Button size="icon" aria-label="Close"><XIcon /></Button></TooltipTrigger><TooltipContent>Close</TooltipContent></Tooltip>;',
+    ],
+    [
+      'icon-button-tooltip',
+      'const x = <TooltipTrigger asChild><DropdownMenuTrigger asChild><Button size="icon-xs" aria-label="More"><DotsIcon /></Button></DropdownMenuTrigger></TooltipTrigger>;',
+    ],
+    ['icon-button-tooltip', 'const x = <Button size="icon-sm" title="Close"><XIcon /></Button>;'],
+    ['tooltip-provider-root', 'const x = <TooltipProvider><Tooltip /></TooltipProvider>;'],
+    [
+      'focus-ring',
+      'const c = "rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";',
+    ],
+    ['focus-ring', 'const x = <a className="hover:underline focus-visible:outline-ring" />;'],
     ['no-await-import', 'async function load() { return await import("./module"); }'],
     ['no-native-dialogs', 'window.confirm("Continue?");'],
     ['no-native-dialogs', 'prompt("Name", "default");'],
@@ -282,6 +326,17 @@ describe('Oxlint project guardrails', () => {
     'const x = <Button size="icon"><PlusIcon /><span className="sr-only">Add workspace</span></Button>;',
     'const x = <Button><PlusIcon />Add workspace</Button>;',
     'const x = <Button aria-labelledby={labelId}><PlusIcon /></Button>;',
+    'const x = <Button size="sm"><PlayIcon />Run</Button>;',
+    'const x = <Button size="sm"><PlayIcon className="size-3 shrink-0" />Run</Button>;',
+    'const x = <Button className="w-full sm:w-auto">Go</Button>;',
+    'const x = <Button variant="link" className="h-auto p-0">More</Button>;',
+    'const x = <Button className="min-w-0 max-w-[14rem] sm:w-[160px]">Go</Button>;',
+    'const x = <div className="h-6 w-6"><XIcon className="h-3 w-3" /></div>;',
+    'const x = <IconButton label="Close" size="icon-xs"><XIcon /></IconButton>;',
+    'const x = <Tooltip><TooltipTrigger asChild><Button size="sm">Archive</Button></TooltipTrigger></Tooltip>;',
+    'const x = <Button size="sm" title="Archive every workspace">Archive</Button>;',
+    'const c = "focus-ring focus-visible:ring-inset";',
+    'const c = "focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50";',
 
     'import { example } from "./module";',
     'async function load() { return import("./module"); }',
@@ -467,6 +522,11 @@ describe.each([
   'use-status-callout',
   'no-render-ref-write',
   'no-state-sync-effect',
+  'button-icon-size',
+  'button-size-variant',
+  'icon-button-tooltip',
+  'tooltip-provider-root',
+  'focus-ring',
 ])('factory/%s exceptions', (rule) => {
   const projectConfig = overridesSchema.parse(
     JSON.parse(readFileSync(resolve('.oxlintrc.json'), 'utf8'))

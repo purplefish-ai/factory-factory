@@ -317,7 +317,7 @@ interface ActionButtonsProps {
 function ActionButtons({ pr, approving, onOpenGitHub, onApprove }: ActionButtonsProps) {
   return (
     <div className="px-4 py-2 border-t bg-muted flex gap-2 flex-shrink-0">
-      <Button variant="outline" size="sm" onClick={onOpenGitHub} className="flex-1 h-8 min-w-0">
+      <Button variant="outline" size="sm" onClick={onOpenGitHub} className="flex-1 min-w-0">
         <span className="truncate">GitHub</span>
         <span className="ml-2 flex items-center gap-1">
           <Kbd>o</Kbd>
@@ -327,7 +327,7 @@ function ActionButtons({ pr, approving, onOpenGitHub, onApprove }: ActionButtons
         size="sm"
         variant={pr.reviewDecision === 'APPROVED' ? 'secondary' : 'default'}
         onClick={onApprove}
-        className="flex-1 h-8 min-w-0"
+        className="flex-1 min-w-0"
         disabled={approving || pr.reviewDecision === 'APPROVED'}
         aria-keyshortcuts="Shift+A"
       >

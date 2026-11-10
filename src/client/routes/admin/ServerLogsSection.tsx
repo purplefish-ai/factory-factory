@@ -2,12 +2,11 @@ import { DownloadIcon } from '@phosphor-icons/react/dist/csr/Download';
 import { FileTextIcon } from '@phosphor-icons/react/dist/csr/FileText';
 import { Link as RouterLink } from 'react-router';
 import { useDownloadServerLog } from '@/client/hooks/use-download-server-log';
-import { runInBackground } from '@/client/lib/background-task';
 import { Button } from '@/components/ui/button';
 import { SettingsSection } from './settings-section';
 
 export function ServerLogsSection() {
-  const { download, isDownloading } = useDownloadServerLog();
+  const downloadLog = useDownloadServerLog();
 
   return (
     <SettingsSection
@@ -21,14 +20,13 @@ export function ServerLogsSection() {
       </Button>
       <Button
         variant="outline"
-        onClick={() => {
-          runInBackground(download(), "Couldn't download logs.");
-        }}
-        disabled={isDownloading}
+        onClick={() => downloadLog.mutate()}
+        pending={downloadLog.isPending}
+        pendingLabel="Downloading…"
         className="w-full sm:w-auto"
       >
-        <DownloadIcon className="w-4 h-4 mr-2" />
-        {isDownloading ? 'Downloading…' : 'Download log file'}
+        <DownloadIcon className="mr-2" />
+        Download log file
       </Button>
     </SettingsSection>
   );

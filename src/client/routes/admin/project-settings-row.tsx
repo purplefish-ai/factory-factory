@@ -22,7 +22,7 @@ export function ProjectSettingsRow({
     <Collapsible asChild open={open} onOpenChange={onOpenChange}>
       <li>
         <h2>
-          <CollapsibleTrigger className="group flex w-full items-center justify-between gap-3 rounded-md px-3 py-3 text-left text-sm font-medium transition-colors hover:bg-muted focus-visible:outline-ring">
+          <CollapsibleTrigger className="group flex w-full items-center justify-between gap-3 rounded-md px-3 py-3 text-left text-sm font-medium transition-colors hover:bg-muted focus-ring">
             <span className="min-w-0 break-words">{project.name}</span>
             <CaretRightIcon
               className="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-data-[state=open]:rotate-90"

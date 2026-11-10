@@ -48,53 +48,31 @@ export function ScriptFailedBanner({
       action={
         <>
           {hasStartupScript && initOutput && (
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-6 px-2 text-xs"
-              onClick={() => setExpanded(!expanded)}
-            >
-              {expanded ? (
-                <CaretDownIcon className="h-3 w-3 mr-1" />
-              ) : (
-                <CaretRightIcon className="h-3 w-3 mr-1" />
-              )}
+            <Button variant="ghost" size="xs" onClick={() => setExpanded(!expanded)}>
+              {expanded ? <CaretDownIcon className="mr-1" /> : <CaretRightIcon className="mr-1" />}
               {expanded ? 'Hide output' : 'Show output'}
             </Button>
           )}
           <Button
             variant="outline"
-            size="sm"
-            className="h-6 px-2 text-xs"
+            size="xs"
             onClick={retry}
             pending={retryInit.isPending}
             pendingLabel="Retrying…"
             disabled={retryAvailability?.status !== 'AVAILABLE'}
           >
-            <ArrowsClockwiseIcon className="h-3 w-3" />
+            <ArrowsClockwiseIcon />
             Retry
           </Button>
           {showPlay && (
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-6 px-2 text-xs"
-              onClick={onPlay}
-              disabled={!onPlay}
-            >
-              <PlayIcon className="h-3 w-3 mr-1" />
+            <Button variant="outline" size="xs" onClick={onPlay} disabled={!onPlay}>
+              <PlayIcon className="mr-1" />
               Dispatch queued messages
             </Button>
           )}
           {showDismiss && (
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-6 w-6 p-0"
-              onClick={onDismiss}
-              aria-label="Dismiss"
-            >
-              <XIcon className="h-3 w-3" />
+            <Button variant="ghost" size="icon-xs" onClick={onDismiss} aria-label="Dismiss">
+              <XIcon />
             </Button>
           )}
         </>

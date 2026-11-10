@@ -1,7 +1,6 @@
 import { AppWindowIcon } from '@phosphor-icons/react/dist/csr/AppWindow';
-import { Button } from '@/components/ui/button';
+import { IconButton } from '@/client/components/icon-button';
 import { DropdownMenuItem } from '@/components/ui/dropdown-menu';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import type { WorkspaceSessionManagement } from './types';
 
 export function OpenInIdeAction({
@@ -41,22 +40,15 @@ export function OpenInIdeAction({
   }
 
   return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-6 w-6 md:h-8 md:w-8"
-          onClick={() => openInIde.mutate({ id: workspaceId })}
-          pending={openInIde.isPending}
-          pendingLabel={`Opening in ${preferredIdeName}…`}
-          disabled={!hasWorktreePath}
-          aria-label={`Open in ${preferredIdeName}`}
-        >
-          <AppWindowIcon className="h-4 w-4" />
-        </Button>
-      </TooltipTrigger>
-      <TooltipContent>Open in {preferredIdeName}</TooltipContent>
-    </Tooltip>
+    <IconButton
+      label={`Open in ${preferredIdeName}`}
+      size="icon-sm"
+      onClick={() => openInIde.mutate({ id: workspaceId })}
+      pending={openInIde.isPending}
+      pendingLabel={`Opening in ${preferredIdeName}…`}
+      disabled={!hasWorktreePath}
+    >
+      <AppWindowIcon />
+    </IconButton>
   );
 }

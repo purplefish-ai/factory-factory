@@ -11,7 +11,6 @@ import { QueryState } from '@/client/components/query-state';
 import { SectionLabel } from '@/client/components/section-label';
 import { useDebouncedValue } from '@/client/hooks/use-debounced-value';
 import { useDownloadServerLog } from '@/client/hooks/use-download-server-log';
-import { runInBackground } from '@/client/lib/background-task';
 import { formatDate, formatDateTime, toDateTimeIso } from '@/client/lib/date-time';
 import { POLL_INTERVAL_MS } from '@/client/lib/query-options';
 import { trpc } from '@/client/lib/trpc';
@@ -88,11 +87,11 @@ function DatePicker({
           <Button
             variant="outline"
             className={cn(
-              'h-9 w-full sm:w-[160px] justify-start text-left font-normal',
+              'w-full sm:w-[160px] justify-start text-left font-normal',
               !date && 'text-muted-foreground'
             )}
           >
-            <CalendarIcon className="mr-2 h-4 w-4 shrink-0" />
+            <CalendarIcon className="mr-2" />
             <span className="truncate">{date ? formatDateLabel(date) : placeholder}</span>
           </Button>
         </PopoverTrigger>
@@ -250,7 +249,7 @@ export default function LogsPage() {
   );
   const { data } = logsQuery;
 
-  const { download, isDownloading } = useDownloadServerLog();
+  const downloadLog = useDownloadServerLog();
 
   const currentPage = Math.floor(offset / PAGE_SIZE) + 1;
   const pagination = getPaginationState(data, offset);
@@ -284,14 +283,13 @@ export default function LogsPage() {
           <Button
             variant="outline"
             size="sm"
-            onClick={() => {
-              runInBackground(download(), "Couldn't download logs.");
-            }}
-            disabled={isDownloading}
+            onClick={() => downloadLog.mutate()}
+            pending={downloadLog.isPending}
+            pendingLabel="Downloading…"
             className="w-full shrink-0 sm:w-auto"
           >
-            <DownloadIcon className="size-4" />
-            {isDownloading ? 'Downloading…' : 'Download log file'}
+            <DownloadIcon />
+            Download log file
           </Button>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -361,7 +359,7 @@ export default function LogsPage() {
                 {(sinceDate || untilDate) && (
                   <div className="flex h-9 items-center">
                     <Button variant="ghost" size="sm" onClick={handleClearDates}>
-                      <XIcon className="w-3.5 h-3.5 mr-1" />
+                      <XIcon className="mr-1" />
                       Clear
                     </Button>
                   </div>

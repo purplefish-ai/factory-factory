@@ -32,9 +32,9 @@ export function WorkspaceLaunchButton({
   return (
     <div className="flex min-w-0">
       <Button
-        size="sm"
+        size="compact"
         className={cn(
-          'h-7 min-w-0 shrink text-xs whitespace-nowrap',
+          'min-w-0 shrink whitespace-nowrap',
           !purpose && 'rounded-r-none',
           mode !== 'STANDARD' && 'bg-primary/90'
         )}
@@ -52,12 +52,12 @@ export function WorkspaceLaunchButton({
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button
-              size="sm"
-              className="h-7 rounded-l-none border-l border-primary-foreground/20 px-1.5"
+              size="compact"
+              className="rounded-l-none border-l border-primary-foreground/20 px-1.5"
               disabled={isBusy}
               aria-label="Choose launch mode"
             >
-              <CaretDownIcon className="size-3" />
+              <CaretDownIcon />
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="text-xs">

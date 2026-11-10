@@ -1,3 +1,5 @@
+import type { MouseEvent, PointerEvent } from 'react';
+import { IconButton } from '@/client/components/icon-button';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
@@ -14,6 +16,8 @@ interface RatchetToggleButtonProps {
   pending?: boolean;
   stopPropagation?: boolean;
   className?: string;
+  /** Size of the icon-only button; a labelled button is always `compact`. */
+  size?: 'icon-xs' | 'icon-compact';
   label?: string;
 }
 
@@ -34,46 +38,61 @@ export function RatchetToggleButton({
   pending = false,
   stopPropagation = false,
   className,
+  size = 'icon-compact',
   label,
 }: RatchetToggleButtonProps) {
+  const accessibleName = enabled ? 'Disable PR updates' : 'Enable PR updates';
+  const tooltip = getTooltip(enabled, state);
+  const buttonProps = {
+    type: 'button',
+    onPointerDown: (event: PointerEvent<HTMLButtonElement>) => {
+      if (stopPropagation) {
+        event.stopPropagation();
+      }
+    },
+    onClick: (event: MouseEvent<HTMLButtonElement>) => {
+      if (stopPropagation) {
+        event.preventDefault();
+        event.stopPropagation();
+      }
+      onToggle(!enabled);
+    },
+    disabled,
+    pending,
+    'aria-pressed': enabled,
+  } as const;
+
+  if (label) {
+    return (
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button
+            {...buttonProps}
+            variant="ghost"
+            size="compact"
+            aria-label={accessibleName}
+            className={cn('aria-pressed:bg-accent', className)}
+          >
+            <RatchetWrenchIcon enabled={enabled} animated={animated} />
+            <span>{label}</span>
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent side="top">{tooltip}</TooltipContent>
+      </Tooltip>
+    );
+  }
+
   return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon"
-          onPointerDown={(event) => {
-            if (stopPropagation) {
-              event.stopPropagation();
-            }
-          }}
-          onClick={(event) => {
-            if (stopPropagation) {
-              event.preventDefault();
-              event.stopPropagation();
-            }
-            onToggle(!enabled);
-          }}
-          disabled={disabled}
-          pending={pending}
-          aria-label={enabled ? 'Disable PR updates' : 'Enable PR updates'}
-          aria-pressed={enabled}
-          className={cn(
-            'h-7 w-7 p-0',
-            label && 'w-auto gap-1.5 px-2 text-xs aria-pressed:bg-accent',
-            className
-          )}
-        >
-          <RatchetWrenchIcon
-            enabled={enabled}
-            animated={animated}
-            className={label ? 'size-3.5' : 'h-full w-full'}
-          />
-          {label && <span>{label}</span>}
-        </Button>
-      </TooltipTrigger>
-      <TooltipContent side="top">{getTooltip(enabled, state)}</TooltipContent>
-    </Tooltip>
+    <IconButton
+      {...buttonProps}
+      label={accessibleName}
+      tooltip={tooltip}
+      tooltipSide="top"
+      size={size}
+      className={className}
+    >
+      {/* The wrapper fills the button so the processing ring traces its edge. */}
+      <RatchetWrenchIcon enabled={enabled} animated={animated} className="size-full" />
+    </IconButton>
   );
 }

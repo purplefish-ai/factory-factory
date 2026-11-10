@@ -41,7 +41,7 @@ export function KanbanPrStates({ prs }: { prs: readonly WorkspacePullRequest[] }
             type="button"
             aria-label={label}
             className={cn(
-              'pointer-events-auto inline-flex items-center gap-0.5 rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-ring',
+              'pointer-events-auto inline-flex items-center gap-0.5 rounded-sm focus-ring',
               getStatusToneStyle(presentation.tone).text
             )}
             onClick={(event) => {

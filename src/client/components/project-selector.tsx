@@ -136,7 +136,7 @@ export function ProjectSelectorDropdown({
             aria-label={`Open project menu: ${selectedProjectName}`}
             title={selectedProjectName}
             className={cn(
-              'flex min-w-0 items-center gap-1 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring',
+              'flex min-w-0 items-center gap-1 hover:text-foreground focus-ring',
               DEFAULT_PROJECT_BUTTON_CLASS,
               projectButtonClassName,
               triggerClassName

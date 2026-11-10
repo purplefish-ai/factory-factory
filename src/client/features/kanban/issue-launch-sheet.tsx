@@ -243,7 +243,7 @@ export function IssueLaunchSheet({
             <RatchetToggleButton
               enabled={ratchetEnabled}
               state="IDLE"
-              className="h-6 w-6"
+              size="icon-xs"
               stopPropagation={false}
               disabled={isLoadingSettings || createWorkspaceMutation.isPending}
               onToggle={handleRatchetToggle}
@@ -255,9 +255,9 @@ export function IssueLaunchSheet({
               <Label htmlFor={`issue-prompt-${issue.id}`} className="text-xs">
                 Prompt
               </Label>
-              <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" asChild>
+              <Button variant="ghost" size="compact" asChild>
                 <a href={issue.url} target="_blank" rel="noreferrer">
-                  <ArrowSquareOutIcon className="h-3.5 w-3.5" />
+                  <ArrowSquareOutIcon />
                   {issueProviderLabel}
                 </a>
               </Button>
@@ -282,7 +282,7 @@ export function IssueLaunchSheet({
             }
             className="w-full sm:w-auto"
           >
-            <PlayIcon className="h-4 w-4 mr-2" />
+            <PlayIcon className="mr-2" />
             {createWorkspaceMutation.isPending ? 'Starting…' : 'Start'}
           </Button>
         </SheetFooter>

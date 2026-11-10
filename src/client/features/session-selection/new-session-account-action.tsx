@@ -30,15 +30,15 @@ export function NewSessionAccountActionView({
   const button = (
     <Button
       variant="ghost"
-      size="icon"
-      className="h-7 w-7 shrink-0 text-muted-foreground"
+      size="icon-compact"
+      className="shrink-0 text-muted-foreground"
       aria-label="New session"
       disabled={disabled}
       pending={pending}
       pendingLabel="Creating session"
       onClick={multiple ? undefined : () => onCreate(undefined)}
     >
-      <PlusIcon className="h-3.5 w-3.5" />
+      <PlusIcon />
     </Button>
   );
   if (!multiple) {

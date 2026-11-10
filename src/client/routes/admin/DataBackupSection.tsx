@@ -1,37 +1,27 @@
 import { DownloadIcon } from '@phosphor-icons/react/dist/csr/Download';
 import { FileCodeIcon } from '@phosphor-icons/react/dist/csr/FileCode';
-import { useState } from 'react';
+import { useMutation } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { DataImportButton } from '@/client/features/data-import/data-import-button';
-import { runInBackground } from '@/client/lib/background-task';
 import { downloadFile } from '@/client/lib/download-file';
 import { trpc } from '@/client/lib/trpc';
 import { Button } from '@/components/ui/button';
 import { SettingsSection } from './settings-section';
 
 export function DataBackupSection() {
-  const [isExporting, setIsExporting] = useState(false);
   const utils = trpc.useUtils();
-
-  const handleExport = async () => {
-    setIsExporting(true);
-    try {
-      const data = await utils.admin.exportData.fetch();
-      const json = JSON.stringify(data, null, 2);
+  const exportData = useMutation({
+    mutationFn: () => utils.admin.exportData.fetch(),
+    onSuccess: (data) => {
       downloadFile({
-        data: json,
+        data: JSON.stringify(data, null, 2),
         mimeType: 'application/json',
         fileName: `factory-factory-backup-${new Date().toISOString().split('T')[0]}.json`,
       });
       toast.success('Export completed');
-    } catch (error) {
-      toast.error(
-        `Couldn't export backup. ${error instanceof Error ? error.message : 'Unknown error'}`
-      );
-    } finally {
-      setIsExporting(false);
-    }
-  };
+    },
+    meta: { errorToast: "Couldn't export backup." },
+  });
 
   return (
     <SettingsSection
@@ -41,15 +31,14 @@ export function DataBackupSection() {
     >
       <div className="flex flex-col gap-2 sm:flex-row sm:gap-4">
         <Button
-          onClick={() => {
-            runInBackground(handleExport(), "Couldn't export backup.");
-          }}
-          disabled={isExporting}
+          onClick={() => exportData.mutate()}
+          pending={exportData.isPending}
+          pendingLabel="Exporting…"
           variant="outline"
           className="w-full sm:w-auto"
         >
-          <DownloadIcon className="w-4 h-4 mr-2" />
-          {isExporting ? 'Exporting…' : 'Export data'}
+          <DownloadIcon className="mr-2" />
+          Export data
         </Button>
         <DataImportButton variant="outline" className="w-full sm:w-auto" />
       </div>

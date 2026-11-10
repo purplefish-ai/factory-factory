@@ -6,6 +6,7 @@ import { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { trpc } from '@/client/lib/trpc';
+import { TooltipProvider } from '@/components/ui/tooltip';
 import { FileBrowserPanel } from './file-browser-panel';
 
 vi.mock('./workspace-panel-context', () => ({
@@ -62,7 +63,9 @@ it('refreshes fresh root and expanded directory listings for this workspace', as
       root.render(
         <trpc.Provider client={client} queryClient={queryClient}>
           <QueryClientProvider client={queryClient}>
-            <FileBrowserPanel workspaceId="workspace-1" />
+            <TooltipProvider>
+              <FileBrowserPanel workspaceId="workspace-1" />
+            </TooltipProvider>
           </QueryClientProvider>
         </trpc.Provider>
       );
@@ -72,7 +75,7 @@ it('refreshes fresh root and expanded directory listings for this workspace', as
 
     filename = 'after.ts';
     await act(() => {
-      container.querySelector<HTMLButtonElement>('[title="Refresh file tree"]')?.click();
+      container.querySelector<HTMLButtonElement>('button[aria-label="Refresh file tree"]')?.click();
     });
     await vi.waitFor(() => expect(container.textContent?.match(/after.ts/g)).toHaveLength(2));
     expect(requests.filter((path) => path === 'workspace-1:')).toHaveLength(2);

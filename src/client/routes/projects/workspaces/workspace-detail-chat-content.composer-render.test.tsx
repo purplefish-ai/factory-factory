@@ -3,6 +3,7 @@ import { createRef } from 'react';
 import { flushSync } from 'react-dom';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { TooltipProvider } from '@/components/ui/tooltip';
 import {
   type ChatMessage,
   createEmptyTokenStats,
@@ -187,7 +188,13 @@ afterEach(() => {
 });
 
 function render(overrides: Partial<ChatContentProps> = {}) {
-  flushSync(() => root.render(<ChatContent {...baseProps} {...overrides} />));
+  flushSync(() =>
+    root.render(
+      <TooltipProvider>
+        <ChatContent {...baseProps} {...overrides} />
+      </TooltipProvider>
+    )
+  );
 }
 
 function renderCounts() {

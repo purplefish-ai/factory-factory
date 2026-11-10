@@ -46,6 +46,18 @@
   }
 }
 
+/* Keyboard focus for raw interactive elements (row buttons, inline links,
+ * summaries). `Button` and the shadcn primitives bring their own focus style.
+ * Add `focus-visible:ring-inset` where an outer ring would be clipped.
+ */
+@utility focus-ring {
+  outline: none;
+
+  &:focus-visible {
+    @apply ring-2 ring-ring;
+  }
+}
+
 :root {
   --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
   --font-mono: var(--font-geist-mono), 'IBM Plex Mono', ui-monospace, monospace;

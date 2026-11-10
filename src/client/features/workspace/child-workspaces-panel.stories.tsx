@@ -100,7 +100,7 @@ type Story = StoryObj<typeof meta>;
 export const ActiveProjectPicker: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    await userEvent.click(canvas.getByTitle('New child workspace'));
+    await userEvent.click(canvas.getByRole('button', { name: 'New child workspace' }));
     const body = within(canvasElement.ownerDocument.body);
     await userEvent.click(await body.findByRole('combobox'));
     await expect(await body.findByRole('option', { name: 'Active project' })).toBeVisible();

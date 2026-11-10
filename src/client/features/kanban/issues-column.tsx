@@ -65,7 +65,7 @@ export function IssuesColumn({
             className="shrink-0 w-full justify-start"
             onClick={requestInlineForm}
           >
-            <PlusIcon className="h-4 w-4" />
+            <PlusIcon />
             New workspace
           </Button>
         )}

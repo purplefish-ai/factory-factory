@@ -32,12 +32,12 @@ export function QueuedMessages({ messages, onRemove }: QueuedMessagesProps) {
             {!msg.id.startsWith('pr-event-') && (
               <Button
                 variant="ghost"
-                size="icon"
-                className="h-5 w-5 hover-reveal transition-opacity"
+                size="icon-xs"
+                className="hover-reveal transition-opacity"
                 onClick={() => onRemove(msg.id)}
                 aria-label="Remove queued message"
               >
-                <XIcon className="h-3 w-3" />
+                <XIcon />
               </Button>
             )}
           </div>

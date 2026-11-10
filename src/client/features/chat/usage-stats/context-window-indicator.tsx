@@ -52,11 +52,11 @@ export function ContextWindowIndicator({ tokenStats, className }: ContextWindowI
       <PopoverTrigger asChild>
         <Button
           variant="ghost"
-          size="sm"
-          className={cn('h-6 gap-1.5 px-2 text-xs', colorClass, className)}
+          size="xs"
+          className={cn(colorClass, className)}
           aria-label="View usage statistics"
         >
-          <PulseIcon className="h-3 w-3" />
+          <PulseIcon />
           <div className="flex items-center gap-1.5">
             <span>{formatTokenCount(usedTokens)}</span>
             {tokenStats.contextWindow && (

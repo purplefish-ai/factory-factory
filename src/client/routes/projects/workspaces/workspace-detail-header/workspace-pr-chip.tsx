@@ -66,14 +66,13 @@ export function WorkspacePrChip({
           <TooltipTrigger asChild>
             <Button
               variant="outline"
-              size="sm"
-              className="h-7 max-w-[16rem] gap-1 px-1.5 text-xs data-[state=open]:bg-accent @[48rem]/header:gap-1.5 @[48rem]/header:px-2"
+              size="compact"
+              className="max-w-[16rem] gap-1 px-1.5 data-[state=open]:bg-accent @[48rem]/header:gap-1.5 @[48rem]/header:px-2"
               aria-label={label}
             >
               <RatchetWrenchIcon
                 enabled={enabled}
                 animated={workspace.ratchetButtonAnimated ?? false}
-                className="size-4"
               />
               {pr && status ? (
                 <>
@@ -92,7 +91,7 @@ export function WorkspacePrChip({
               ) : (
                 <span className="text-muted-foreground">No PR</span>
               )}
-              <CaretDownIcon className="hidden size-3 shrink-0 text-muted-foreground @[48rem]/header:block" />
+              <CaretDownIcon className="hidden shrink-0 text-muted-foreground @[48rem]/header:block" />
             </Button>
           </TooltipTrigger>
         }

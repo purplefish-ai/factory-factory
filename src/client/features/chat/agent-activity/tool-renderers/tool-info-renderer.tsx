@@ -33,7 +33,7 @@ import { ToolResultContentRenderer } from './tool-result-renderer';
 import { isWebSearchToolName, parseWebSearchToolResult } from './web-search-parser';
 
 const triggerClassName =
-  'group flex w-full min-w-0 items-center gap-2 rounded-sm py-1 text-left text-sm text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring';
+  'group flex w-full min-w-0 items-center gap-2 rounded-sm py-1 text-left text-sm text-muted-foreground transition-colors hover:text-foreground focus-ring';
 
 function iconForKind(kind: ToolActivityKind) {
   if (kind === 'mcp') {

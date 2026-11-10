@@ -4,6 +4,7 @@ import { createElement } from 'react';
 import { flushSync } from 'react-dom';
 import { createRoot } from 'react-dom/client';
 import { describe, expect, it, vi } from 'vitest';
+import { TooltipProvider } from '@/components/ui/tooltip';
 import { createEmptyTokenStats } from '@/lib/chat-protocol';
 import { EMPTY_CHAT_BAR_CAPABILITIES, type ChatBarCapabilities } from '@/shared/chat-capabilities';
 import { ChatInput } from './chat-input';
@@ -109,7 +110,11 @@ it.each([
     const root = createRoot(container);
     try {
       flushSync(() =>
-        root.render(<ChatInput onSend={vi.fn()} running promptInFlight={promptInFlight} />)
+        root.render(
+          <TooltipProvider>
+            <ChatInput onSend={vi.fn()} running promptInFlight={promptInFlight} />
+          </TooltipProvider>
+        )
       );
       expect(container.querySelector(`[aria-label="${label}"]`)).not.toBeNull();
       expect(container.querySelector('[aria-label="Stop agent"]')).not.toBeNull();

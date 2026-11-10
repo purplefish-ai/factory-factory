@@ -1,4 +1,5 @@
 import type { Virtualizer } from '@tanstack/react-virtual';
+import { TooltipProvider } from '@/components/ui/tooltip';
 import type { TranscriptDisplayProps } from './transcript-display.types';
 import { useTranscriptLayout } from './transcript-layout';
 import { TranscriptRows } from './transcript-rows';
@@ -18,12 +19,15 @@ export function TranscriptRenderingFixture(props: TranscriptDisplayProps) {
       })),
     measureElement: () => undefined,
   } as unknown as Virtualizer<HTMLDivElement, HTMLDivElement>;
+  // Queued message actions render tooltips, which the app root provides.
   return (
-    <TranscriptRows
-      display={props}
-      layout={layout}
-      engine={engine}
-      totalSize={layout.keys.length * 80}
-    />
+    <TooltipProvider>
+      <TranscriptRows
+        display={props}
+        layout={layout}
+        engine={engine}
+        totalSize={layout.keys.length * 80}
+      />
+    </TooltipProvider>
   );
 }

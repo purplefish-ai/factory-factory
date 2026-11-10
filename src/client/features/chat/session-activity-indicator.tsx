@@ -87,7 +87,7 @@ export function SessionActivityIndicator({
     </span>
   );
   const subagentButtonClassName =
-    'group flex max-w-full items-center gap-2 rounded-sm text-left text-sm text-muted-foreground transition-colors enabled:cursor-pointer enabled:hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring';
+    'group flex max-w-full items-center gap-2 rounded-sm text-left text-sm text-muted-foreground transition-colors enabled:cursor-pointer enabled:hover:text-foreground focus-ring';
   return (
     <div className="space-y-3 py-4">
       {showThinking && agentWorking && (
@@ -104,7 +104,7 @@ export function SessionActivityIndicator({
           <span role="status" aria-label="Background activity" className="sr-only">
             {backgroundLabel}
           </span>
-          <CollapsibleTrigger className="group flex w-full cursor-pointer items-center gap-2 rounded-sm text-left hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+          <CollapsibleTrigger className="group flex w-full cursor-pointer items-center gap-2 rounded-sm text-left hover:text-foreground focus-ring">
             <CaretRightIcon className="h-4 w-4 shrink-0 transition-transform group-data-[state=open]:rotate-90" />
             <TerminalIcon className="h-4 w-4 shrink-0" />
             <span>{backgroundLabel}</span>

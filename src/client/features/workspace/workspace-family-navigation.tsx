@@ -2,6 +2,7 @@ import { ArrowBendUpLeftIcon } from '@phosphor-icons/react/dist/csr/ArrowBendUpL
 import { TreeStructureIcon } from '@phosphor-icons/react/dist/csr/TreeStructure';
 import { WarningCircleIcon } from '@phosphor-icons/react/dist/csr/WarningCircle';
 import { Link } from 'react-router';
+import { IconButton } from '@/client/components/icon-button';
 import { useWorkspaceDetailQuery } from '@/client/hooks/use-workspace-detail-query';
 import { POLL_INTERVAL_MS } from '@/client/lib/query-options';
 import { trpc } from '@/client/lib/trpc';
@@ -244,19 +245,30 @@ export function WorkspaceFamilyMenu({
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button
-          variant="ghost"
-          size="sm"
-          aria-label="Navigate workspace family"
-          title="Navigate parent and child workspaces"
-          className={cn(
-            'pointer-events-auto relative z-10 h-6 shrink-0 gap-1 px-1.5 text-xs text-info',
-            compact && 'h-5 text-[11px]'
-          )}
-        >
-          <TreeStructureIcon className="h-3.5 w-3.5" aria-hidden />
-          {!iconOnly && label}
-        </Button>
+        {iconOnly ? (
+          <IconButton
+            label="Navigate workspace family"
+            tooltip="Navigate parent and child workspaces"
+            size="icon-sm"
+            className="pointer-events-auto relative z-10 shrink-0 text-info"
+          >
+            <TreeStructureIcon aria-hidden />
+          </IconButton>
+        ) : (
+          <Button
+            variant="ghost"
+            size="xs"
+            aria-label="Navigate workspace family"
+            title="Navigate parent and child workspaces"
+            className={cn(
+              'pointer-events-auto relative z-10 shrink-0 px-1.5 text-info',
+              compact && 'text-[11px]'
+            )}
+          >
+            <TreeStructureIcon aria-hidden />
+            {label}
+          </Button>
+        )}
       </DropdownMenuTrigger>
       <DropdownMenuContent
         align="start"

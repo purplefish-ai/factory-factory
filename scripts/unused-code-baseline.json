@@ -189,6 +189,10 @@
       "disposition": "test-support",
       "reason": "Shared navigation providers and header portal for settings and server-logs Storybook scenarios; no production caller is expected."
     },
+    "src/client/routes/admin/settings-sections.story-fixtures.tsx": {
+      "disposition": "test-support",
+      "reason": "Stateful settings tRPC handlers and request spy shared by the settings section Storybook scenarios; no production caller is expected."
+    },
     "src/client/routes/workspace-header-pwa-preview.tsx": {
       "disposition": "test-support",
       "reason": "workspace-header-fixture.stories.tsx renders this Storybook preview; keep visual fixture support."

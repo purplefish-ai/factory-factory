@@ -1,11 +1,17 @@
 // @vitest-environment jsdom
 
-import { createElement } from 'react';
+import { type ComponentProps, createElement } from 'react';
 import { flushSync } from 'react-dom';
 import { createRoot } from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { AcpConfigOption } from '@/client/lib/acp-config';
+import { TooltipProvider } from '@/components/ui/tooltip';
 import { AcpConfigSelector } from './acp-config-selector';
+
+/** The app root provides the TooltipProvider the selector's tooltip needs. */
+function renderSelector(props: ComponentProps<typeof AcpConfigSelector>) {
+  return createElement(TooltipProvider, null, createElement(AcpConfigSelector, props));
+}
 
 const modelOption: AcpConfigOption = {
   id: 'model',
@@ -34,7 +40,7 @@ describe('AcpConfigSelector', () => {
     const root = createRoot(container);
     flushSync(() =>
       root.render(
-        createElement(AcpConfigSelector, {
+        renderSelector({
           configOption: {
             id,
             name: 'Mode',
@@ -57,7 +63,7 @@ describe('AcpConfigSelector', () => {
     const root = createRoot(container);
 
     flushSync(() => {
-      root.render(createElement(AcpConfigSelector, { configOption: modelOption, onSelect }));
+      root.render(renderSelector({ configOption: modelOption, onSelect }));
     });
 
     const trigger = Array.from(container.querySelectorAll<HTMLButtonElement>('button')).find(
@@ -102,7 +108,7 @@ it.each([['mode', 'Access', 'acceptEdits', 'Accept edits']])(
     const onSelect = vi.fn();
     flushSync(() =>
       root.render(
-        createElement(AcpConfigSelector, {
+        renderSelector({
           configOption: {
             id,
             name: label,
@@ -147,7 +153,7 @@ it('shows descriptions and selects raw values in grouped provider options', () =
   const onSelect = vi.fn();
   flushSync(() =>
     root.render(
-      createElement(AcpConfigSelector, {
+      renderSelector({
         configOption: {
           id: 'custom',
           name: 'Custom setting',
@@ -194,7 +200,7 @@ it.each([
   const root = createRoot(container);
   flushSync(() =>
     root.render(
-      createElement(AcpConfigSelector, {
+      renderSelector({
         configOption: {
           id: 'mode',
           name: 'Mode',
@@ -241,7 +247,7 @@ it.each([
   const render = (value: string, disabled = false, compact = true) =>
     flushSync(() =>
       root.render(
-        createElement(AcpConfigSelector, {
+        renderSelector({
           configOption: {
             id,
             category,
@@ -303,7 +309,7 @@ it.each([
   const render = (options: AcpConfigOption['options']) =>
     flushSync(() =>
       root.render(
-        createElement(AcpConfigSelector, {
+        renderSelector({
           configOption: { id, name: 'Setting', type: 'select', currentValue: selected, options },
           onSelect,
         })
@@ -336,7 +342,7 @@ it.each([{ options: [] }, { options: [{ group: 'Unavailable', options: [] }] }])
     const onSelect = vi.fn();
     flushSync(() =>
       root.render(
-        createElement(AcpConfigSelector, {
+        renderSelector({
           configOption: {
             id: 'ultracode',
             name: 'Ultracode',

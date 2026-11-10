@@ -134,8 +134,8 @@ export function ProviderCliWarning({
       action={
         <Button
           variant="ghost"
-          size="icon"
-          className="h-7 w-7 text-warning hover:bg-warning/10 hover:text-warning"
+          size="icon-compact"
+          className="text-warning hover:bg-warning/10 hover:text-warning"
           onClick={() => {
             runInBackground(
               utils.admin.checkCLIHealth.invalidate(),
@@ -144,7 +144,7 @@ export function ProviderCliWarning({
           }}
           pending={isRefetching}
         >
-          <ArrowsClockwiseIcon className="h-3.5 w-3.5" />
+          <ArrowsClockwiseIcon />
           <span className="sr-only">Recheck</span>
         </Button>
       }

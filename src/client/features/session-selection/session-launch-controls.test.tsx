@@ -3,6 +3,7 @@ import { createElement } from 'react';
 import { flushSync } from 'react-dom';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { TooltipProvider } from '@/components/ui/tooltip';
 import { SessionLaunchControls, type SessionLaunchControlsProps } from './session-launch-controls';
 
 const roots: Root[] = [];
@@ -37,7 +38,9 @@ function mount(overrides: Partial<SessionLaunchControlsProps> = {}) {
     planMode: { enabled: false, supported: true, loading: false, onChange: vi.fn() },
     ...overrides,
   };
-  flushSync(() => root.render(createElement(SessionLaunchControls, props)));
+  flushSync(() =>
+    root.render(createElement(TooltipProvider, null, createElement(SessionLaunchControls, props)))
+  );
   return { container, props };
 }
 function keyboardOpen(button: HTMLButtonElement | null) {

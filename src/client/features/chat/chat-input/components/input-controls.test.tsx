@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { createElement, createRef } from 'react';
+import { createRef } from 'react';
 import { flushSync } from 'react-dom';
 import { createRoot } from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -9,6 +9,7 @@ import {
   createInitialChatState,
   type AcpConfigOption,
 } from '@/client/features/chat/reducer';
+import { TooltipProvider } from '@/components/ui/tooltip';
 import { DEFAULT_CHAT_SETTINGS } from '@/lib/chat-protocol';
 import { EMPTY_CHAT_BAR_CAPABILITIES } from '@/shared/chat-capabilities';
 import { LeftControls, RightControls } from './input-controls';
@@ -29,6 +30,15 @@ afterEach(() => {
   document.body.innerHTML = '';
 });
 
+/** The app root provides the TooltipProvider these controls' tooltips need. */
+function leftControls(props: React.ComponentProps<typeof LeftControls>) {
+  return (
+    <TooltipProvider>
+      <LeftControls {...props} />
+    </TooltipProvider>
+  );
+}
+
 it.each([
   { promptInFlight: false, label: 'Send message' },
   { promptInFlight: true, label: 'Queue message' },
@@ -42,16 +52,18 @@ it.each([
   try {
     flushSync(() =>
       root.render(
-        <RightControls
-          pendingMessageCount={0}
-          running
-          promptInFlight={promptInFlight}
-          stopping={false}
-          onStop={onStop}
-          onSendClick={onSendClick}
-          disabled={false}
-          inputRef={inputRef}
-        />
+        <TooltipProvider>
+          <RightControls
+            pendingMessageCount={0}
+            running
+            promptInFlight={promptInFlight}
+            stopping={false}
+            onStop={onStop}
+            onSendClick={onSendClick}
+            disabled={false}
+            inputRef={inputRef}
+          />
+        </TooltipProvider>
       )
     );
     const send = rootElement.querySelector<HTMLButtonElement>(`[aria-label="${label}"]`);
@@ -86,7 +98,7 @@ describe('capability-driven image upload controls', () => {
       try {
         flushSync(() =>
           root.render(
-            createElement(LeftControls, {
+            leftControls({
               capabilities: {
                 ...EMPTY_CHAT_BAR_CAPABILITIES,
                 attachments: { enabled: attachments, kinds: ['image'] },
@@ -179,7 +191,7 @@ function renderSelectionControls(
     onQuickActionsOpenChange: vi.fn(),
     ...overrides,
   };
-  flushSync(() => root.render(createElement(LeftControls, props)));
+  flushSync(() => root.render(leftControls(props)));
   return { container, props, unmount: () => flushSync(() => root.unmount()) };
 }
 

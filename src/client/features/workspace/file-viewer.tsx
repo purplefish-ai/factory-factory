@@ -94,12 +94,8 @@ function FileViewerHeader({
       </div>
       <div className="flex items-center gap-2 text-xs text-muted-foreground flex-shrink-0">
         {isMarkdown && (
-          <Button variant="ghost" size="sm" onClick={onTogglePreview} className="h-7 gap-1.5">
-            {showPreview ? (
-              <FileCodeIcon className="h-3.5 w-3.5" />
-            ) : (
-              <EyeIcon className="h-3.5 w-3.5" />
-            )}
+          <Button variant="ghost" size="compact" onClick={onTogglePreview}>
+            {showPreview ? <FileCodeIcon /> : <EyeIcon />}
             {showPreview ? 'Code' : 'Preview'}
           </Button>
         )}

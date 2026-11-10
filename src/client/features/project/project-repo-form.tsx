@@ -77,7 +77,7 @@ export function ProjectRepoForm({
                 runInBackground(handleBrowse(), "Couldn't browse project directories.");
               }}
             >
-              <FolderOpenIcon className="h-4 w-4" />
+              <FolderOpenIcon />
             </Button>
           )}
         </div>

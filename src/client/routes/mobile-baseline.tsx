@@ -204,14 +204,14 @@ function GeneralMobileBaselinePage() {
             </SelectContent>
           </Select>
           <Button variant="outline" size="sm" aria-label="List view">
-            <ListIcon className="h-4 w-4" />
+            <ListIcon />
           </Button>
           <Button variant="outline" size="sm">
-            <GitBranchIcon className="h-4 w-4 mr-2" />
+            <GitBranchIcon className="mr-2" />
             Resume branch
           </Button>
           <Button size="sm">
-            <PlusIcon className="h-4 w-4 mr-2" />
+            <PlusIcon className="mr-2" />
             New workspace
           </Button>
         </PageHeader>

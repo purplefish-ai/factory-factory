@@ -255,11 +255,11 @@ export const VoiceModeToggle = memo(function VoiceModeToggle({
         onClick={handleClick}
       >
         {isConnecting ? (
-          <Spinner aria-hidden="true" className="h-4 w-4" />
+          <Spinner aria-hidden="true" />
         ) : isCapturing ? (
-          <MicrophoneIcon className={isSpeaking ? 'h-4 w-4 animate-pulse' : 'h-4 w-4'} />
+          <MicrophoneIcon className={isSpeaking ? 'animate-pulse' : undefined} />
         ) : (
-          <MicrophoneSlashIcon className="h-4 w-4" />
+          <MicrophoneSlashIcon />
         )}
         {status.label}
       </Button>

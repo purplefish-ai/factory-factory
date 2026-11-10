@@ -155,15 +155,15 @@ export function FactoryUpdateBannerContent({
                 {index === 0 && !(active || automaticUpdate) && (
                   <Button
                     variant="ghost"
-                    size="sm"
-                    className="h-7 gap-1 px-2 text-xs text-muted-foreground"
+                    size="compact"
+                    className="text-muted-foreground"
                     aria-expanded={showInstructions}
                     aria-controls={showInstructions ? instructionsId : undefined}
                     onClick={() => setShowInstructions((previous) => !previous)}
                   >
                     How to update
                     <CaretDownIcon
-                      className={`size-3 transition-transform ${showInstructions ? 'rotate-180' : ''}`}
+                      className={`transition-transform ${showInstructions ? 'rotate-180' : ''}`}
                     />
                   </Button>
                 )}
@@ -179,7 +179,7 @@ export function FactoryUpdateBannerContent({
               className="shrink-0 text-muted-foreground"
               aria-label={`Dismiss ${notice.label} update`}
             >
-              <XIcon className="size-4" />
+              <XIcon />
             </Button>
           </li>
         ))}

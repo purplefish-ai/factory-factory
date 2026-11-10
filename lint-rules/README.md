@@ -118,6 +118,24 @@ values that contain no call, `.current` read, `await` or `new`. Both apply to
 `no-state-sync-effect` also off in stories; their `exceptions` maps work like
 the spinner rules' ([client state](../docs/architecture/client-state.md)).
 
+Button sizing follows the `size` variant
+([buttons and tooltips](../docs/shadcn.md#buttons-icon-buttons-and-tooltips)).
+`button-icon-size` rejects `h-*`/`w-*` classes on an icon (`*Icon`, `svg`)
+anywhere inside a `Button` or `IconButton`, through conditionals, fragments and
+wrappers; the variant sizes icons and a `size-*` class is the explicit opt-out.
+`button-size-variant` rejects a fixed `h-N`, `w-N` or `size-N` (with any variant
+prefix) in a `Button` or `IconButton` `className`; keywords such as `w-full` and
+`h-auto`, arbitrary values and `min-`/`max-` widths are layout and pass.
+`icon-button-tooltip` rejects an icon-size `Button` rendered by
+`TooltipTrigger asChild` (also through nested `…Trigger asChild` elements) or
+carrying a native `title`; use `IconButton`. `tooltip-provider-root` rejects
+`<TooltipProvider>` outside the root providers, and `focus-ring` (`src/client`
+only) rejects the hand-rolled `focus-visible:ring-2` and
+`focus-visible:outline…` styles that the `focus-ring` utility replaces. Each
+takes an `exceptions` map, checked by the same still-needed test as the pending
+rules; tests are exempt from `tooltip-provider-root` so they can supply their
+own provider.
+
 ## Remaining Biome checks
 
 Biome remains a linter for CSS and checks without equivalent Oxlint coverage. It

@@ -7,6 +7,7 @@ import { SquareIcon } from '@phosphor-icons/react/dist/csr/Square';
 import { memo, useMemo, useState } from 'react';
 import { getConfigPresentation } from '@/client/components/acp-config-presentation';
 import { AcpConfigSelector } from '@/client/components/acp-config-selector';
+import { IconButton } from '@/client/components/icon-button';
 import { getRuntimeControlVisibility } from '@/client/features/chat/chat-input/runtime-control-visibility';
 import type { AcpConfigOption } from '@/client/features/chat/reducer';
 import { AttachmentPreview } from '@/client/features/composer';
@@ -24,7 +25,7 @@ import {
   SheetTrigger,
 } from '@/components/ui/sheet';
 import { Spinner } from '@/components/ui/spinner';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { useIsMobile } from '@/hooks/use-mobile';
 import type { ChatSettings, MessageAttachment } from '@/lib/chat-protocol';
 import {
@@ -67,28 +68,21 @@ const FileUploadButton = memo(function FileUploadButton({
 }) {
   return (
     <>
-      <TooltipProvider>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => fileInputRef.current?.click()}
-              disabled={disabled}
-              className="h-6 w-6 p-0"
-              aria-label="Upload image"
-            >
-              <ImageIcon className="h-3.5 w-3.5" />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent side="top">
-            <p className="flex items-center gap-2">
-              Upload image
-              <ShortcutKeys id="composer.attachImage" />
-            </p>
-          </TooltipContent>
-        </Tooltip>
-      </TooltipProvider>
+      <IconButton
+        label="Upload image"
+        size="icon-xs"
+        onClick={() => fileInputRef.current?.click()}
+        disabled={disabled}
+        tooltipSide="top"
+        tooltip={
+          <p className="flex items-center gap-2">
+            Upload image
+            <ShortcutKeys id="composer.attachImage" />
+          </p>
+        }
+      >
+        <ImageIcon />
+      </IconButton>
       <input
         ref={fileInputRef}
         type="file"
@@ -302,12 +296,12 @@ const MobileSettingsSheet = memo(function MobileSettingsSheet(props: RuntimeOpti
       <SheetTrigger asChild>
         <Button
           variant="ghost"
-          size="sm"
-          className="h-6 shrink-0 gap-1 px-2 text-xs text-muted-foreground hover:text-foreground"
+          size="xs"
+          className="shrink-0 text-muted-foreground hover:text-foreground"
           aria-label="Open chat options"
           data-testid="chat-options-trigger"
         >
-          <SlidersHorizontalIcon className="h-3.5 w-3.5" />
+          <SlidersHorizontalIcon />
           <span className="@max-[22rem]/composer:sr-only">Options</span>
         </Button>
       </SheetTrigger>
@@ -432,26 +426,23 @@ export const RightControls = memo(function RightControls({
         </div>
       )}
       {running && (
-        <TooltipProvider>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <span className="inline-flex">
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={onStop}
-                  pending={stopping}
-                  pendingLabel="Stopping…"
-                  className="h-7 w-7"
-                  aria-label="Stop agent"
-                >
-                  <SquareIcon className="h-3 w-3" weight="fill" />
-                </Button>
-              </span>
-            </TooltipTrigger>
-            <TooltipContent>Stop agent ({formatShortcut('composer.stop')})</TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <span className="inline-flex">
+              <Button
+                variant="ghost"
+                size="icon-compact"
+                onClick={onStop}
+                pending={stopping}
+                pendingLabel="Stopping…"
+                aria-label="Stop agent"
+              >
+                <SquareIcon weight="fill" />
+              </Button>
+            </span>
+          </TooltipTrigger>
+          <TooltipContent>Stop agent ({formatShortcut('composer.stop')})</TooltipContent>
+        </Tooltip>
       )}
       <InputGroupButton
         onClick={() => onSendClick(inputRef)}
@@ -461,7 +452,7 @@ export const RightControls = memo(function RightControls({
         variant="default"
         aria-label={promptInFlight ? 'Queue message' : 'Send message'}
       >
-        <PaperPlaneTiltIcon className="h-4 w-4" />
+        <PaperPlaneTiltIcon />
       </InputGroupButton>
     </div>
   );

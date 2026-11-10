@@ -5,7 +5,24 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { WorkspaceCreationOptions } from './workspace-creation-options';
 
-beforeEach(() => vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true));
+beforeEach(() => {
+  vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
+  // The settings tooltip reopens when focus returns to its trigger after the popover closes.
+  vi.stubGlobal(
+    'ResizeObserver',
+    class {
+      observe() {
+        // jsdom does no layout.
+      }
+      unobserve() {
+        // jsdom does no layout.
+      }
+      disconnect() {
+        // jsdom does no layout.
+      }
+    }
+  );
+});
 afterEach(() => vi.unstubAllGlobals());
 
 function Preview({

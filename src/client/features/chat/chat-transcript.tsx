@@ -108,7 +108,7 @@ function TranscriptInstance({
               onClick={jumpToLatest}
               className="pointer-events-auto rounded-full"
             >
-              <ArrowDownIcon className="h-4 w-4 mr-1" />
+              <ArrowDownIcon className="mr-1" />
               Scroll to bottom
             </Button>
           </div>

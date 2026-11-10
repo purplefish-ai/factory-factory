@@ -151,13 +151,12 @@ function MultiQuestionLayout({
         <div className="flex flex-wrap items-center justify-end gap-1 self-stretch sm:self-end">
           <Button
             variant="ghost"
-            size="sm"
+            size="icon-sm"
             onClick={() => onIndexChange(currentIndex - 1)}
             disabled={isFirstQuestion}
-            className="h-8 w-8 p-0"
             aria-label="Previous question"
           >
-            <CaretLeftIcon className="h-4 w-4" />
+            <CaretLeftIcon />
           </Button>
 
           {isLastQuestion ? (
@@ -177,12 +176,11 @@ function MultiQuestionLayout({
           {!isLastQuestion && (
             <Button
               variant="ghost"
-              size="sm"
+              size="icon-sm"
               onClick={() => onIndexChange(currentIndex + 1)}
-              className="h-8 w-8 p-0"
               aria-label="Next question"
             >
-              <CaretRightIcon className="h-4 w-4" />
+              <CaretRightIcon />
             </Button>
           )}
         </div>
@@ -203,7 +201,7 @@ function MultiQuestionLayout({
                 key={key}
                 onClick={() => onIndexChange(idx)}
                 className={cn(
-                  'w-2 h-2 rounded-full transition-colors',
+                  'w-2 h-2 rounded-full transition-colors focus-ring focus-visible:ring-offset-2',
                   idx === currentIndex
                     ? 'bg-primary'
                     : isAnswered

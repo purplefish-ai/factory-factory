@@ -49,6 +49,48 @@ current toast styling.
 - Menu inset attributes are present only when enabled. Keep semantic popover
   headings, visible tab-panel focus rings, and the existing sheet title size.
 
+## Buttons, icon buttons and tooltips
+
+`Button`'s `size` variant sets both the button's dimensions and its icon size,
+so icons inside a `Button` carry no size classes. Its
+`[&_svg:not([class*='size-'])]` selector outranks `h-*`/`w-*` utilities, so an
+`h-3 w-3` icon class would be silently ignored; only a `size-*` class opts out,
+and only a deliberate exception should use one.
+
+| Size                       | Height | Icons | Use                                               |
+| -------------------------- | ------ | ----- | ------------------------------------------------- |
+| `xs` / `icon-xs`           | 24px   | 12px  | Dense row and card actions                        |
+| `compact` / `icon-compact` | 28px   | 14px  | Toolbars, composer controls, pane headers         |
+| `sm` / `icon-sm`           | 32px   | 16px  | Header controls and secondary actions             |
+| `default` / `icon`         | 36px   | 16px  | Forms and dialogs                                 |
+| `lg` / `icon-lg`           | 40px   | 16px  | Prominent calls to action                         |
+| `inline`                   | auto   | 16px  | Text actions within a line, with `variant="link"` |
+
+`compact` is a local addition for the 28px controls the dense layouts already
+used. Layout widths (`w-full`, `sm:w-auto`, `max-w-*`) stay in `className`;
+heights and widths do not. On coarse pointers `src/client/globals.css` raises
+every button to a 36px minimum target.
+
+An icon-only button with a tooltip is `IconButton` from
+`src/client/components/icon-button.tsx`: its `label` is both the accessible name
+and the tooltip, `tooltip` takes richer content such as a shortcut, and it
+forwards props and its ref, so it works inside `DropdownMenuTrigger asChild`.
+Tooltips render under one `TooltipProvider` at the app root (`AppLayout`,
+`delayDuration={0}`; the sidebar's provider uses the same delay). A nested
+provider without props would reset the open delay to Radix's 700ms default, so
+only the roots, fixture routes and the GitHub link preview (a deliberate 350ms
+delay) render one. Tests that mount a component directly wrap it in a provider.
+
+Raw `<button>`s are for rows, overlay hit targets and primitive internals. Their
+keyboard focus uses the `focus-ring` utility from `src/client/globals.css` (add
+`focus-visible:ring-inset` where an outer ring would be clipped). Pressed
+toggles use `Toggle`.
+
+The `factory/button-icon-size`, `factory/button-size-variant`,
+`factory/icon-button-tooltip`, `factory/tooltip-provider-root` and
+`factory/focus-ring` lint rules enforce this
+([lint guardrails](../lint-rules/README.md)).
+
 ## Touch and keyboard action visibility
 
 Secondary actions use the `hover-reveal` utility from `src/client/globals.css`.

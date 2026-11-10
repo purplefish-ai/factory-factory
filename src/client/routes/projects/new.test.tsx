@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createElement, type ReactNode } from 'react';
 import { flushSync } from 'react-dom';
 import { createRoot } from 'react-dom/client';
@@ -178,6 +179,8 @@ function renderPage(options: { projects: typeof projects | undefined } = { proje
   const container = document.createElement('div');
   document.body.appendChild(container);
   const root = createRoot(container);
+  // The CLI health refresh is a TanStack mutation.
+  const queryClient = new QueryClient();
   const renderProjects = (nextProjects: typeof projects | undefined) => {
     const navigationData = {
       projects: nextProjects,
@@ -195,9 +198,13 @@ function renderPage(options: { projects: typeof projects | undefined } = { proje
     flushSync(() => {
       root.render(
         createElement(
-          AppNavigationDataProvider,
-          { value: navigationData },
-          createElement(NewProjectPage)
+          QueryClientProvider,
+          { client: queryClient },
+          createElement(
+            AppNavigationDataProvider,
+            { value: navigationData },
+            createElement(NewProjectPage)
+          )
         )
       );
     });

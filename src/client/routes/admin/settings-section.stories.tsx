@@ -43,7 +43,7 @@ function ExampleSection({
         icon={<BellIcon className="size-5" />}
         description="Choose how to hear about workspace completions."
         action={
-          <Button variant="link" className="h-auto p-0">
+          <Button variant="link" size="inline">
             Reset
           </Button>
         }

@@ -2,17 +2,16 @@ import { PencilIcon } from '@phosphor-icons/react/dist/csr/Pencil';
 import { PlayIcon } from '@phosphor-icons/react/dist/csr/Play';
 import { SquareIcon } from '@phosphor-icons/react/dist/csr/Square';
 import { useState } from 'react';
+import { IconButton } from '@/client/components/icon-button';
 import { runInBackground } from '@/client/lib/background-task';
 import { POLL_INTERVAL_MS } from '@/client/lib/query-options';
 import { trpc } from '@/client/lib/trpc';
-import { Button } from '@/components/ui/button';
 import {
   ContextMenu,
   ContextMenuContent,
   ContextMenuItem,
   ContextMenuTrigger,
 } from '@/components/ui/context-menu';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { DevServerSetupPanel } from './dev-server-setup-panel';
 import { useWorkspacePanel } from './workspace-panel-context';
 
@@ -84,20 +83,9 @@ export function RunScriptButton({ workspaceId }: RunScriptButtonProps) {
     return (
       <>
         <DevServerSetupPanel {...panelProps} />
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-6 w-6 md:h-8 md:w-8"
-              aria-label="Setup dev server"
-              onClick={() => setSetupPanelOpen(true)}
-            >
-              <PlayIcon className="h-3 w-3 text-success md:h-4 md:w-4" weight="fill" />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>Setup dev server</TooltipContent>
-        </Tooltip>
+        <IconButton label="Setup dev server" size="icon-sm" onClick={() => setSetupPanelOpen(true)}>
+          <PlayIcon className="text-success" weight="fill" />
+        </IconButton>
       </>
     );
   }
@@ -138,25 +126,18 @@ export function RunScriptButton({ workspaceId }: RunScriptButtonProps) {
       <ContextMenu>
         <ContextMenuTrigger asChild>
           <span>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-6 w-6 md:h-8 md:w-8"
-                  aria-label={tooltipText}
-                  onClick={handleClick}
-                  pending={isLoading}
-                >
-                  {isRunning ? (
-                    <SquareIcon className="h-3 w-3 text-destructive md:h-4 md:w-4" weight="fill" />
-                  ) : (
-                    <PlayIcon className="h-3 w-3 text-success md:h-4 md:w-4" weight="fill" />
-                  )}
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>{tooltipText}</TooltipContent>
-            </Tooltip>
+            <IconButton
+              label={tooltipText}
+              size="icon-sm"
+              onClick={handleClick}
+              pending={isLoading}
+            >
+              {isRunning ? (
+                <SquareIcon className="text-destructive" weight="fill" />
+              ) : (
+                <PlayIcon className="text-success" weight="fill" />
+              )}
+            </IconButton>
           </span>
         </ContextMenuTrigger>
         <ContextMenuContent>

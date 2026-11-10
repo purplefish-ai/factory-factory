@@ -130,7 +130,7 @@ function AgentRailItem({
       onClick={(event) => selectFromLink(event, agent.id, onAgentSelect)}
       aria-current={selected ? 'page' : undefined}
       className={cn(
-        'mb-1 block min-w-0 rounded-md border border-transparent p-3 outline-none transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring',
+        'mb-1 block min-w-0 rounded-md border border-transparent p-3 transition-colors hover:bg-muted focus-ring',
         selected && 'border-border bg-background shadow-sm'
       )}
     >

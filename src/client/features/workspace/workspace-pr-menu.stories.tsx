@@ -1,6 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
-import { TooltipProvider } from '@/components/ui/tooltip';
 import type { WorkspacePullRequest } from '@/shared/workspace-pr';
 import { WorkspacePrMenu } from './workspace-pr-menu';
 
@@ -25,13 +24,6 @@ const meta = {
   component: WorkspacePrMenu,
   args: { prs: [], onAdd: () => undefined, onRemove: () => undefined, onReview: () => undefined },
   parameters: { layout: 'centered' },
-  decorators: [
-    (Story) => (
-      <TooltipProvider>
-        <Story />
-      </TooltipProvider>
-    ),
-  ],
 } satisfies Meta<typeof WorkspacePrMenu>;
 export default meta;
 type Story = StoryObj<typeof meta>;
