@@ -1,7 +1,27 @@
-import type { PRTarget } from '@/shared/pr-monitoring';
+import { createHash } from 'node:crypto';
+import type { PRObservation, PRTarget } from '@/shared/pr-monitoring';
 import { shouldPollPR } from '@/shared/pr-polling';
 import type { PRObservationPorts } from './pr-observation-ports';
-type RecentObservations = Map<string, { revision: number; epoch: number; checkedAt: number }>;
+
+/** Automatic observations reuse an accepted observation for this long. */
+const RECENT_OBSERVATION_MS = 90_000;
+/** Identical consecutive reads, after the first, before a settled PR backs off. */
+export const STABLE_PR_REPEATS = 2;
+/** Automatic cadence for a settled PR whose facts stopped changing. */
+export const STABLE_PR_POLL_INTERVAL_MS = 10 * 60_000;
+
+type RecentObservation = {
+  revision: number;
+  epoch: number;
+  checkedAt: number;
+  /** Hash of the accepted facts, excluding the observation time. */
+  fingerprint: string;
+  /** Consecutive unforced reads that returned the previous facts unchanged. */
+  repeats: number;
+  /** Open with terminal CI and, when requested, complete review facts. */
+  settled: boolean;
+};
+type RecentObservations = Map<string, RecentObservation>;
 /** `fetched` records whether the observation read GitHub or kept committed facts. */
 type ObservationOutcome = { applied: boolean; fetched: boolean };
 type InFlightObservation = { promise: Promise<ObservationOutcome>; forced: boolean };
@@ -25,21 +45,50 @@ function committedFactsAreCurrent(
   eventEpoch: number
 ): boolean {
   const cached = recent.get(key);
-  if (
-    cached?.revision === row.revision &&
-    cached.epoch === eventEpoch &&
-    Date.now() - cached.checkedAt < 90_000
-  ) {
-    return true;
+  if (cached?.revision === row.revision && cached.epoch === eventEpoch) {
+    const age = Date.now() - cached.checkedAt;
+    if (age < RECENT_OBSERVATION_MS) {
+      return true;
+    }
+    if (cached.settled && cached.repeats >= STABLE_PR_REPEATS) {
+      return age < STABLE_PR_POLL_INTERVAL_MS;
+    }
   }
   return !shouldPollPR(row, eventEpoch);
 }
+function fingerprint(observation: PRObservation): string {
+  const { observedAt: _observedAt, ...facts } = observation;
+  return createHash('sha256').update(JSON.stringify(facts)).digest('hex');
+}
+function isSettled(observation: PRObservation, includeReviews: boolean): boolean {
+  return (
+    observation.prState !== 'MERGED' &&
+    observation.prState !== 'CLOSED' &&
+    (observation.ciStatus === 'SUCCESS' || observation.ciStatus === 'FAILURE') &&
+    (observation.reviewsComplete || !includeReviews)
+  );
+}
+/**
+ * Return a workspace's PRs to the normal automatic cadence. Session activity
+ * (an agent turn starting or finishing) is the usual sign that a push, and
+ * therefore new CI and review activity, may follow.
+ */
+export function resetStablePRBackoff(ports: PRObservationPorts, workspaceId: string): void {
+  const prefix = `${workspaceId}:`;
+  for (const [key, entry] of observationState(ports).recent) {
+    if (key.startsWith(prefix)) {
+      entry.repeats = 0;
+    }
+  }
+}
 /**
  * Observe one attached PR. Unforced (automatic) observations are throttled: they
- * reuse an observation accepted in the last 90 seconds and apply the background
+ * reuse an observation accepted in the last 90 seconds, apply the background
  * terminal-PR policy, so a committed MERGED (or recently checked CLOSED) PR is
- * not fetched again. `force` is reserved for explicit refreshes and delivery
- * freshness checks, which must always read GitHub.
+ * not fetched again, and stretch a settled PR whose facts stopped changing to
+ * `STABLE_PR_POLL_INTERVAL_MS`. `force` is reserved for explicit refreshes and
+ * delivery freshness checks, which must always read GitHub; a forced read also
+ * returns the PR to the normal cadence.
  */
 export async function observeMonitoredPR(
   ports: PRObservationPorts,
@@ -106,10 +155,20 @@ async function observeOnce(
     observation,
   });
   if (result.applied) {
+    const previous = recent.get(key);
+    const facts = fingerprint(observation);
+    const unchanged =
+      !options?.force &&
+      previous?.revision === row.revision &&
+      previous.epoch === config.eventEpoch &&
+      previous.fingerprint === facts;
     recent.set(key, {
       revision: row.revision + 1,
       epoch: config.eventEpoch,
       checkedAt: Date.now(),
+      fingerprint: facts,
+      repeats: unchanged ? previous.repeats + 1 : 0,
+      settled: isSettled(observation, config.enabled),
     });
     if (recent.size > 1000) {
       recent.delete(recent.keys().next().value ?? key);

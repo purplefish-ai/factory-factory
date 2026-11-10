@@ -301,7 +301,7 @@ describe('project route selection', () => {
       expect(selected.reviewCount).toBe(1);
       expect(mocks.reviewQuery).toHaveBeenLastCalledWith(
         { projectId: 'new-id' },
-        expect.objectContaining({ enabled: true, staleTime: 30_000 })
+        expect.objectContaining({ enabled: true, staleTime: 120_000, refetchInterval: 120_000 })
       );
       expect(selected.selectedProjectSlug).toBe('new');
       expect(selected.selectedProjectId).toBe('new-id');

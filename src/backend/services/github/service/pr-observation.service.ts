@@ -1,3 +1,4 @@
+import { GitHubConnectivityError } from '@/backend/lib/github-cli-error';
 import type { PRObservation, PRTarget } from '@/shared/pr-monitoring';
 import { prObservationSchema } from '@/shared/schemas/pr-event.schema';
 import type { RatchetReviewTriggerMode } from '@prisma-gen/client';
@@ -48,24 +49,13 @@ class PRObservationService {
     }
     const repository = `${match[1]}/${match[2]}`;
     const number = Number(match[3]);
-    const [details, reviewFacts] = await Promise.all([
-      githubCLIService.getPRStatusDetails(repository, number, signal),
+    const [details, reviewFacts] =
       options?.includeReviews === false
-        ? SKIPPED_REVIEW_FACTS
-        : fetchPRReviewFacts(
-            {
-              readPolicy: () => ports.readPolicy(),
-              readUsername: (abortSignal) => this.readUsername(abortSignal),
-              readDetails: (...args) => githubCLIService.getPRReviewDetails(...args),
-              readComments: (...args) => githubCLIService.getReviewComments(...args),
-              readResolvedIds: (...args) => githubCLIService.getResolvedReviewCommentIds(...args),
-            },
-            repository,
-            number,
-            association.url,
-            signal
-          ),
-    ]);
+        ? await Promise.all([
+            githubCLIService.getPRStatusDetails(repository, number, signal),
+            SKIPPED_REVIEW_FACTS,
+          ])
+        : await this.readWithReviews(ports, repository, number, association.url, signal);
     signal?.throwIfAborted();
     if (!details.headRefOid) {
       throw new Error('GitHub observation is missing head SHA');
@@ -93,6 +83,38 @@ class PRObservationService {
       ...reviewFacts,
     });
   }
+  /** One `gh pr view` returns the core facts and the conversation comments. */
+  private readWithReviews(
+    ports: ObservationPorts,
+    repository: string,
+    number: number,
+    url: string,
+    signal?: AbortSignal
+  ) {
+    const combined = githubCLIService.getPRObservationDetails(repository, number, signal);
+    return Promise.all([
+      combined.catch((error) => readCoreAfterCombinedFailure(error, repository, number, signal)),
+      fetchPRReviewFacts(
+        {
+          readPolicy: () => ports.readPolicy(),
+          readUsername: (abortSignal) => this.readUsername(abortSignal),
+          readDetails: async (...args) => {
+            const [{ updatedAt, comments }, reviews] = await Promise.all([
+              combined,
+              githubCLIService.getPRReviews(...args),
+            ]);
+            return { updatedAt, comments, reviews };
+          },
+          readComments: (...args) => githubCLIService.getReviewComments(...args),
+          readResolvedIds: (...args) => githubCLIService.getResolvedReviewCommentIds(...args),
+        },
+        repository,
+        number,
+        url,
+        signal
+      ),
+    ]);
+  }
   private async readUsername(signal?: AbortSignal): Promise<string | null> {
     if (this.username && this.username.expiresAt >= Date.now()) {
       return this.username.value;
@@ -105,6 +127,27 @@ class PRObservationService {
   }
 }
 export const prObservationService = new PRObservationService();
+
+/**
+ * Comment data must not block core facts: if the combined read fails, read the
+ * core facts alone (review facts then report incomplete). Aborts and connectivity
+ * failures would fail that read too, so they propagate unchanged.
+ */
+function readCoreAfterCombinedFailure(
+  error: unknown,
+  repository: string,
+  number: number,
+  signal?: AbortSignal
+) {
+  signal?.throwIfAborted();
+  if (
+    error instanceof GitHubConnectivityError ||
+    (error instanceof Error && error.name === 'AbortError')
+  ) {
+    throw error;
+  }
+  return githubCLIService.getPRStatusDetails(repository, number, signal);
+}
 
 function observationState(
   details: Awaited<ReturnType<typeof githubCLIService.getPRStatusDetails>>

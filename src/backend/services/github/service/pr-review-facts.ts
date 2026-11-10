@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import type { PRObservation } from '@/shared/pr-monitoring';
 import type { RatchetReviewTriggerMode } from '@prisma-gen/client';
 import type { githubCLIService } from './github-cli.service';
+import type { PRReviewDetails } from './github-cli/types';
 import {
   isIgnoredReviewAuthor,
   isOwnAdversarialReviewMarker,
@@ -11,7 +12,8 @@ import {
 interface ReviewFactsPorts {
   readPolicy(): Promise<{ reviewTriggerMode: RatchetReviewTriggerMode }>;
   readUsername(signal?: AbortSignal): Promise<string | null>;
-  readDetails: typeof githubCLIService.getPRReviewDetails;
+  /** Reviews plus the conversation comments and `updatedAt` of the core read. */
+  readDetails(repository: string, number: number, signal?: AbortSignal): Promise<PRReviewDetails>;
   readComments: typeof githubCLIService.getReviewComments;
   readResolvedIds: typeof githubCLIService.getResolvedReviewCommentIds;
 }
@@ -27,6 +29,30 @@ function hash(value: string): string {
 function timestamp(value: string | null | undefined): string | null {
   const date = value ? new Date(value) : null;
   return date && Number.isFinite(date.getTime()) ? date.toISOString() : null;
+}
+
+/**
+ * Resolution state only filters inline comments, and every resolved thread's
+ * comments are inline comments, so a PR with none (on a complete read) needs no
+ * thread lookup.
+ */
+async function readInlineComments(
+  ports: ReviewFactsPorts,
+  repository: string,
+  number: number,
+  signal: AbortSignal | undefined,
+  incomplete: () => void
+) {
+  let truncated = false;
+  const comments = await ports.readComments(repository, number, undefined, signal, () => {
+    truncated = true;
+    incomplete();
+  });
+  const resolved =
+    comments.length || truncated
+      ? await ports.readResolvedIds(repository, number, signal, incomplete)
+      : new Set<number>();
+  return { comments, resolved };
 }
 
 /** A failed enrichment cannot claim that previously observed feedback resolved. */
@@ -47,10 +73,9 @@ export async function fetchPRReviewFacts(
     const incomplete = () => {
       reviewsComplete = false;
     };
-    const [details, comments, resolved] = await Promise.all([
+    const [details, { comments, resolved }] = await Promise.all([
       ports.readDetails(repository, number, signal),
-      ports.readComments(repository, number, undefined, signal, incomplete),
-      ports.readResolvedIds(repository, number, signal, incomplete),
+      readInlineComments(ports, repository, number, signal, incomplete),
     ]);
     signal?.throwIfAborted();
     const actionableReviews = [
