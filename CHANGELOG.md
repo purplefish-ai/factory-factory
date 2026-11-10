@@ -22,6 +22,8 @@ and this project adheres to
 
 - Rename Agents to Automations across the UI, MCP tools and public APIs, and
   default automations to explicit Auto review permissions (#3090, #3092, #3096)
+- Label scheduled automation tool tabs Runs and align run history and recovery
+  report terminology (#3168)
 - Improve chat streaming and terminal responsiveness by batching chat deltas,
   keeping the composer stable, writing terminal output directly to xterm, and
   narrowing context subscriptions (#3120, #3124, #3130, #3161, #3163)
@@ -36,6 +38,10 @@ and this project adheres to
   controls and browser state persistence across the UI (#3149, #3151, #3153,
   #3155, #3156, #3157, #3158, #3160)
 - Rotate server logs by size and keep test runs out of the server log (#3122)
+- Use consistent sentence case in tool activity summaries and provider icons for
+  issue links (#3165, #3167)
+- Simplify the context compaction divider with a centered label and dotted waves
+  (#3169)
 
 ### Fixed
 
@@ -52,6 +58,8 @@ and this project adheres to
 - Display query failures explicitly and contain rendering failures to the
   affected message or panel (#3146, #3147, #3150)
 - Remove excess space below the mobile Kanban board (#3089)
+- Explain when subagent browsing or history is unavailable instead of showing a
+  blank tab (#3166)
 - Fix the startup-script background process cleanup and bootstrap process ID
   race (#3140, #3152)
 
