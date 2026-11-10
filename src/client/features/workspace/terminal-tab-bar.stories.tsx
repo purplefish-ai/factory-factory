@@ -57,7 +57,7 @@ function PanelHeader({ empty = false }: { empty?: boolean }) {
     }
   };
   return (
-    <div className="flex w-[600px] items-center gap-0.5 bg-shell p-1">
+    <div className="flex w-full max-w-[600px] items-center gap-0.5 bg-shell p-1">
       <TerminalControls
         activeBottomTab={active ? 'terminal' : 'setup-logs'}
         terminalTabState={{
@@ -133,11 +133,18 @@ export const KeyboardNavigation: Story = {
 
 export const Phone: Story = {
   globals: { theme: 'light', viewport: { value: 'phone', isRotated: false } },
-  render: () => (
-    <div className="w-full">
-      <PanelHeader />
-    </div>
-  ),
+  render: () => <PanelHeader />,
+  play: async ({ canvasElement }) => {
+    const tablist = within(canvasElement).getByRole('tablist', { name: 'Terminals' });
+    // The header shrinks to the phone width; terminals scroll inside it.
+    await expect(tablist.getBoundingClientRect().right).toBeLessThanOrEqual(
+      canvasElement.ownerDocument.documentElement.clientWidth
+    );
+    await expect(
+      canvasElement.ownerDocument.documentElement.scrollWidth -
+        canvasElement.ownerDocument.documentElement.clientWidth
+    ).toBeLessThanOrEqual(1);
+  },
 };
 
 export const EmptyPanel: Story = {

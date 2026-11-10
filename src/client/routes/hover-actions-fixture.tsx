@@ -108,6 +108,7 @@ export function HoverActionsFixture() {
               <TabButton
                 label="File"
                 isActive={false}
+                tabStop
                 onSelect={() => undefined}
                 onClose={() => undefined}
               />

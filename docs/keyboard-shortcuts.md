@@ -20,11 +20,13 @@ Tab bars have one Tab stop. Left/Right and Home/End move focus; Enter/Space
 select the focused tab. Delete (the Mac Backspace key) closes a focused tab when
 it offers a close action, with the existing confirmation when it has active work
 or queued messages. Close controls sit beside their tabs, never inside the tab
-control. Every tab bar (workspace chats and open files, quick-chat sessions,
-right-panel tools, log sources, and Logs with the terminals) renders `TabList`
-and `TabButton` from [`tab-button.tsx`](../src/components/ui/tab-button.tsx),
-which own this behavior; `factory/no-raw-tab-role` rejects `role="tab"` and
-`role="tablist"` written anywhere else
+control. Selection tab bars (workspace chats and open files, quick-chat
+sessions, desktop right-panel tools, log sources, and Logs with the terminals)
+render `TabList` and `TabButton` from
+[`tab-button.tsx`](../src/components/ui/tab-button.tsx), which own this
+behavior. Tabs that switch panels, such as the PR detail panel and the mobile
+tool switcher, use the shadcn `Tabs` (Radix). `factory/no-raw-tab-role` rejects
+`role="tab"` and `role="tablist"` written anywhere else
 ([lint guardrails](../lint-rules/README.md)).
 
 Plain keys yield to text fields, typeahead widgets and modal dialogs; `?` and

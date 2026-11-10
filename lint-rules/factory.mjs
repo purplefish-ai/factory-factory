@@ -745,8 +745,10 @@ function staticStrings(node) {
         ? [node.quasis.map((quasi) => quasi.value.cooked ?? quasi.value.raw).join('')]
         : [];
     case 'JSXExpressionContainer':
+    case 'ParenthesizedExpression':
     case 'TSAsExpression':
     case 'TSSatisfiesExpression':
+    case 'TSNonNullExpression':
       return staticStrings(node.expression);
     case 'ConditionalExpression':
       return [...staticStrings(node.consequent), ...staticStrings(node.alternate)];

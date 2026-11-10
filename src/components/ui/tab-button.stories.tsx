@@ -19,9 +19,22 @@ type Story = StoryObj<typeof meta>;
 
 /** Every variant a tab bar uses: icon, status slot, close, truncation, sm, icon-only, disabled. */
 function Gallery() {
+  // Each tablist keeps its own selection, so each always has one Tab stop.
   const [active, setActive] = useState('chat');
+  const [activeSmall, setActiveSmall] = useState('setup');
   const [files, setFiles] = useState(['button.tsx', 'a-very-long-file-name-that-truncates.tsx']);
   const tab = (id: string) => ({ isActive: active === id, onSelect: () => setActive(id) });
+  const smallTab = (id: string) => ({
+    isActive: activeSmall === id,
+    onSelect: () => setActiveSmall(id),
+  });
+  const closeFile = (file: string) => {
+    const remaining = files.filter((name) => name !== file);
+    setFiles(remaining);
+    if (active === file) {
+      setActive(remaining[0] ?? 'chat');
+    }
+  };
   return (
     <div className="flex flex-col gap-3 bg-shell p-2">
       <TabList aria-label="Default size" className="flex-wrap gap-0.5">
@@ -42,7 +55,7 @@ function Gallery() {
             key={file}
             label={file}
             icon={<FileCodeIcon className="h-3.5 w-3.5 shrink-0" />}
-            onClose={() => setFiles(files.filter((name) => name !== file))}
+            onClose={() => closeFile(file)}
             truncate
             {...tab(file)}
           />
@@ -60,20 +73,20 @@ function Gallery() {
           size="sm"
           label="Setup"
           icon={<StatusDot tone="success" size="xs" />}
-          {...tab('setup')}
+          {...smallTab('setup')}
         />
         <TabButton
           size="sm"
           label="Dev"
           icon={<StatusDot tone="working" size="xs" />}
-          {...tab('dev')}
+          {...smallTab('dev')}
         />
         <TabButton
           size="sm"
           label="Terminal 1"
           icon={<TerminalIcon className="h-3 w-3 shrink-0" />}
           onClose={() => undefined}
-          {...tab('terminal')}
+          {...smallTab('terminal')}
         />
       </TabList>
     </div>
@@ -95,7 +108,19 @@ export const Light: Story = {
     );
     await userEvent.click(canvas.getByRole('tab', { name: 'Dev' }));
     await expect(canvas.getByRole('tab', { name: 'Dev' })).toHaveAttribute('aria-selected', 'true');
-    await expect(chat).toHaveAttribute('aria-selected', 'false');
+    await expect(chat).toHaveAttribute('aria-selected', 'true');
+    // Closing the selected file selects a remaining one, so the list keeps a Tab stop.
+    await userEvent.click(canvas.getByRole('tab', { name: 'button.tsx' }));
+    await userEvent.click(canvas.getByRole('button', { name: 'Close button.tsx' }));
+    await expect(
+      canvas.getByRole('tab', { name: 'a-very-long-file-name-that-truncates.tsx' })
+    ).toHaveAttribute('aria-selected', 'true');
+    for (const list of canvas.getAllByRole('tablist')) {
+      const stops = within(list)
+        .getAllByRole('tab')
+        .filter((tab) => tab.tabIndex === 0);
+      await expect(stops).toHaveLength(1);
+    }
   },
 };
 

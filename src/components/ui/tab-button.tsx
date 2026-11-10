@@ -16,9 +16,11 @@ type TabListProps = Omit<ComponentProps<'div'>, 'role' | 'onKeyDown'> & {
 /**
  * The `role="tablist"` for `TabButton`s: ←/→ move focus between tabs and
  * Home/End jump to the ends (`lib/roving-tablist.ts`); Enter or Space selects.
- * A tablist may contain only tabs and non-interactive elements, so keep other
- * buttons and menus outside it. Pair it with `useTablistFocus` on an ancestor
- * when tabs can be closed, so focus moves to a neighbour.
+ * Keep other buttons and menus outside it. The one exception is a closable
+ * tab's own close button: it sits beside its tab with `tabIndex={-1}`, so the
+ * tablist's keyboard model stays tabs-only and Delete is the keyboard path.
+ * Pair it with `useTablistFocus` on an ancestor when tabs can be closed, so
+ * focus moves to a neighbour.
  */
 export function TabList({ className, ...props }: TabListProps) {
   return (
