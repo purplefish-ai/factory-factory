@@ -25,7 +25,6 @@ import {
   SheetTrigger,
 } from '@/components/ui/sheet';
 import { Spinner } from '@/components/ui/spinner';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { useIsMobile } from '@/hooks/use-mobile';
 import type { ChatSettings, MessageAttachment } from '@/lib/chat-protocol';
 import {
@@ -426,23 +425,17 @@ export const RightControls = memo(function RightControls({
         </div>
       )}
       {running && (
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <span className="inline-flex">
-              <Button
-                variant="ghost"
-                size="icon-compact"
-                onClick={onStop}
-                pending={stopping}
-                pendingLabel="Stopping…"
-                aria-label="Stop agent"
-              >
-                <SquareIcon weight="fill" />
-              </Button>
-            </span>
-          </TooltipTrigger>
-          <TooltipContent>Stop agent ({formatShortcut('composer.stop')})</TooltipContent>
-        </Tooltip>
+        <IconButton
+          label="Stop agent"
+          tooltip={`Stop agent (${formatShortcut('composer.stop')})`}
+          tooltipWhileDisabled
+          size="icon-compact"
+          onClick={onStop}
+          pending={stopping}
+          pendingLabel="Stopping…"
+        >
+          <SquareIcon weight="fill" />
+        </IconButton>
       )}
       <InputGroupButton
         onClick={() => onSendClick(inputRef)}

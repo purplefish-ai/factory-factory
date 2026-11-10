@@ -91,7 +91,7 @@ export function WorkspaceMailDetail({
     <section aria-label="Message" className="flex h-full min-h-0 flex-col">
       <header className="flex items-center justify-between gap-2 border-b bg-muted/30 px-2 py-2">
         <Button variant="ghost" size="sm" onClick={onBack}>
-          <ArrowLeftIcon className="mr-1 size-3.5" />
+          <ArrowLeftIcon className="size-3.5" />
           Inbox
         </Button>
         <Button

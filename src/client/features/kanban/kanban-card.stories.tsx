@@ -501,12 +501,7 @@ export const CompactControlsPhone: Story = {
   globals: { viewport: { value: 'phone', isRotated: false } },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    for (const name of [
-      'Rename workspace',
-      'Quick Chat',
-      'Disable PR updates',
-      'Archive workspace',
-    ]) {
+    for (const name of ['Rename workspace', 'Quick Chat', 'PR updates', 'Archive workspace']) {
       await expect(canvas.getByRole('button', { name })).toBeVisible();
     }
   },

@@ -64,7 +64,7 @@ export const InitStatusBanner = memo(function InitStatusBanner({
             )}
             {banner.showPlay && (
               <Button size="sm" onClick={onPlay}>
-                <PlayIcon className="mr-1.5" />
+                <PlayIcon />
                 Dispatch queued messages
               </Button>
             )}

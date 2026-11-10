@@ -75,7 +75,7 @@ export function IssueCard({ issue, projectId }: IssueCardProps) {
               Open issue ↗
             </a>
             <Button size="xs" variant="outline" className="shrink-0" onClick={handleStart}>
-              <PlayIcon className="mr-1" />
+              <PlayIcon />
               Start
             </Button>
           </div>

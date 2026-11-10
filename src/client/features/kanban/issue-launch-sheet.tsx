@@ -279,7 +279,7 @@ export function IssueLaunchSheet({
             }
             className="w-full sm:w-auto"
           >
-            <PlayIcon className="mr-2" />
+            <PlayIcon />
             {createWorkspaceMutation.isPending ? 'Starting…' : 'Start'}
           </Button>
         </SheetFooter>

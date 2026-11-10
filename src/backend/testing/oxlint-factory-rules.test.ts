@@ -136,6 +136,22 @@ describe('Oxlint project guardrails', () => {
       'const x = <IconButton label="Close"><span><XIcon className="h-5 w-5" /></span></IconButton>;',
     ],
     [
+      'button-icon-size',
+      'const x = <Button size="sm"><DownloadIcon className="mr-2" />Export</Button>;',
+    ],
+    [
+      'button-icon-size',
+      'const x = <Button>Next<CaretRightIcon className="md:ml-1.5" /></Button>;',
+    ],
+    [
+      'button-icon-size',
+      'const x = <Button>{open ? <CaretDownIcon className="me-1" /> : null}Hide</Button>;',
+    ],
+    [
+      'button-icon-size',
+      'const x = <Button asChild><Link to="/"><HouseIcon className="mr-[3px]" />Home</Link></Button>;',
+    ],
+    [
       'button-size-variant',
       'const x = <Button size="icon" className="h-6 w-6" aria-label="Close"><XIcon /></Button>;',
     ],
@@ -362,6 +378,11 @@ describe('Oxlint project guardrails', () => {
     'const x = <Button variant="link" className="h-auto p-0">More</Button>;',
     'const x = <Button className="min-w-0 max-w-[14rem] sm:w-[160px]">Go</Button>;',
     'const x = <div className="h-6 w-6"><XIcon className="h-3 w-3" /></div>;',
+    // Optical offsets, pushing an icon to the end and spacing inside a wrapper pass.
+    'const x = <Button size="sm"><PlayIcon className="-ml-0.5" />Run</Button>;',
+    'const x = <Button className="w-full">Menu<CaretDownIcon className="ml-auto" /></Button>;',
+    'const x = <Button><span className="flex"><XIcon className="mr-1" />Close</span></Button>;',
+    'const x = <div><XIcon className="mr-2" />Close</div>;',
     'const x = <IconButton label="Close" size="icon-xs"><XIcon /></IconButton>;',
     'const x = <Tooltip><TooltipTrigger asChild><Button size="sm">Archive</Button></TooltipTrigger></Tooltip>;',
     'const x = <Button size="sm" title="Archive every workspace">Archive</Button>;',

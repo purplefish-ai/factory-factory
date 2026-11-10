@@ -37,7 +37,7 @@ export function DataBackupSection() {
           variant="outline"
           className="w-full sm:w-auto"
         >
-          <DownloadIcon className="mr-2" />
+          <DownloadIcon />
           Export data
         </Button>
         <DataImportButton variant="outline" className="w-full sm:w-auto" />

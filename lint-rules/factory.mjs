@@ -673,6 +673,12 @@ const HAND_ROLLED_FOCUS_CLASS =
 // `h-4`, `w-[18px]`, `md:w-3`: any height or width class on an icon.
 const ICON_DIMENSION_CLASS = /(?<=^|[\s'"`:!])[hw]-[\w.[\]/-]+/;
 
+// `mr-2`, `ml-1.5`, `md:me-1`, `mx-[3px]`: a positive horizontal margin, which
+// adds to the control's `gap`. Negative optical offsets (`-ml-1`) and `ml-auto`
+// pass.
+const ICON_HORIZONTAL_MARGIN_CLASS =
+  /(?<=^|[\s'"`:!])m[lrxse]-(?:\d+(?:\.\d+)?|px|\[[^\]\s]+\])(?![\w./-])/;
+
 function classNameText(opening, sourceCode) {
   const attribute = opening.attributes.find(
     (candidate) => candidate.type === 'JSXAttribute' && candidate.name.name === 'className'
@@ -729,6 +735,36 @@ function collectIcons(node, found = []) {
   }
 }
 
+/**
+ * Icons that are flex items of the control: its children, through conditionals
+ * and fragments but not wrapper elements, whose own layout spaces their icons.
+ * With `asChild`, the rendered child's children.
+ */
+function collectDirectIcons(node, found = []) {
+  switch (node?.type) {
+    case 'JSXElement':
+      if (isIconElement(node.openingElement)) {
+        found.push(node.openingElement);
+      }
+      return found;
+    case 'JSXFragment':
+      for (const child of node.children) {
+        collectDirectIcons(child, found);
+      }
+      return found;
+    case 'JSXExpressionContainer':
+      return collectDirectIcons(node.expression, found);
+    case 'ConditionalExpression':
+      collectDirectIcons(node.consequent, found);
+      return collectDirectIcons(node.alternate, found);
+    case 'LogicalExpression':
+      collectDirectIcons(node.left, found);
+      return collectDirectIcons(node.right, found);
+    default:
+      return found;
+  }
+}
+
 /** The element an `asChild` trigger renders: its only JSX child, if any. */
 function onlyElementChild(node) {
   const children = node.children.filter(
@@ -778,13 +814,35 @@ const rules = {
           if (!SIZED_BUTTONS.has(name)) {
             return;
           }
+          // One report per icon: a sized icon is fixed first.
+          const reported = new Set();
           for (const child of node.children) {
             for (const icon of collectIcons(child)) {
               const match = ICON_DIMENSION_CLASS.exec(classNameText(icon, context.sourceCode));
               if (match) {
+                reported.add(icon);
                 context.report({
                   node: icon,
                   message: `Remove "${match[0]}": the ${name} size variant sizes its icons. Use a size-* class only for a deliberate exception (src/components/ui/button.tsx).`,
+                });
+              }
+            }
+          }
+          const rendered = jsxAttribute(node.openingElement, 'asChild')
+            ? onlyElementChild(node)
+            : node;
+          for (const child of rendered?.children ?? []) {
+            for (const icon of collectDirectIcons(child)) {
+              if (reported.has(icon)) {
+                continue;
+              }
+              const match = ICON_HORIZONTAL_MARGIN_CLASS.exec(
+                classNameText(icon, context.sourceCode)
+              );
+              if (match) {
+                context.report({
+                  node: icon,
+                  message: `Remove "${match[0]}": the ${name} gap already spaces its icon from the label (src/components/ui/button.tsx).`,
                 });
               }
             }

@@ -91,7 +91,7 @@ function DatePicker({
               !date && 'text-muted-foreground'
             )}
           >
-            <CalendarIcon className="mr-2" />
+            <CalendarIcon />
             <span className="truncate">{date ? formatDateLabel(date) : placeholder}</span>
           </Button>
         </PopoverTrigger>
@@ -359,7 +359,7 @@ export default function LogsPage() {
                 {(sinceDate || untilDate) && (
                   <div className="flex h-9 items-center">
                     <Button variant="ghost" size="sm" onClick={handleClearDates}>
-                      <XIcon className="mr-1" />
+                      <XIcon />
                       Clear
                     </Button>
                   </div>

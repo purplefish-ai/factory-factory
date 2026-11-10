@@ -97,7 +97,7 @@ export function RatchetSettingsSection() {
               pending={triggerRatchetCheck.isPending}
               pendingLabel="Checking…"
             >
-              <ArrowsClockwiseIcon className="mr-2" />
+              <ArrowsClockwiseIcon />
               Check all PRs now
             </Button>
           </SettingRow>

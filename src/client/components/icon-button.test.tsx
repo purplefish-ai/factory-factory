@@ -62,3 +62,26 @@ it('uses the pending label as its name while pending', () => {
   expect(button?.getAttribute('aria-label')).toBe('Running');
   expect(button?.disabled).toBe(true);
 });
+
+it('keeps one wrapper for a tooltip while disabled, so pending does not remount the button', () => {
+  const ref = createRef<HTMLButtonElement>();
+  const element = (pending: boolean) => (
+    <TooltipProvider delayDuration={0}>
+      <IconButton ref={ref} label="Stop agent" tooltipWhileDisabled pending={pending}>
+        <XIcon />
+      </IconButton>
+    </TooltipProvider>
+  );
+  const container = document.createElement('div');
+  document.body.append(container);
+  const root = createRoot(container);
+  roots.push(root);
+  act(() => root.render(element(false)));
+  const button = container.querySelector('button');
+  expect(button?.parentElement?.tagName).toBe('SPAN');
+  expect(ref.current).toBe(button);
+
+  act(() => root.render(element(true)));
+  expect(container.querySelector('button')).toBe(button);
+  expect(button?.disabled).toBe(true);
+});
