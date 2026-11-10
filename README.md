@@ -194,9 +194,9 @@ started by the command:
   reached through a public tunnel can change data, send prompts or open chat and
   terminals; tRPC runs only queries over `GET`. It also refuses the queries that
   start processes (sub-agent browsing, provider model lists, CLI health) or read
-  beyond this instance's data (GitHub previews and search through your `gh`
-  login, path probes, server logs, data export). `--public` cannot be combined
-  with `--private`.
+  beyond this instance's data (GitHub previews, PR details and diffs, and search
+  through your `gh` login, path probes, server logs, data export). `--public`
+  cannot be combined with `--private`.
 
 Both tunnel modes disable inherited `TRUST_PROXY_HEADERS` and dotenv override
 settings before launching the backend. A public tunnel keeps (or adds)
