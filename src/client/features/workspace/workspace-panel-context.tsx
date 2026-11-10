@@ -50,7 +50,12 @@ export interface WorkspacePanelState {
   activeTabId: string;
   rightPanelVisible: boolean;
   activeBottomTab: BottomPanelTab;
-  activeTopTab: TopPanelTab;
+  /**
+   * The top tab the user chose, or null before they choose one. The right
+   * panel resolves the tab it shows (resolveTopTab), which depends on the
+   * workspace's periodic task.
+   */
+  storedTopTab: TopPanelTab | null;
   mobilePanel: 'top' | 'bottom';
 }
 
@@ -210,10 +215,10 @@ function WorkspacePanelState({
   initialActiveTabId,
 }: WorkspacePanelProviderProps) {
   const isMobile = useWorkspaceDrawer();
-  const [activeTopTab, selectTopTab] = usePersistedState(
+  const [storedTopTab, selectTopTab] = usePersistedState<TopPanelTab | null>(
     `${STORAGE_KEY_TOP_TAB_PREFIX}${workspaceId}`,
     StoredTopTabSchema,
-    'changes',
+    null,
     { format: 'text' }
   );
   const [mobilePanel, setMobilePanel] = useState<'top' | 'bottom'>('top');
@@ -479,8 +484,8 @@ function WorkspacePanelState({
   );
 
   const state = useMemo<WorkspacePanelState>(
-    () => ({ tabs, activeTabId, rightPanelVisible, activeBottomTab, activeTopTab, mobilePanel }),
-    [tabs, activeTabId, rightPanelVisible, activeBottomTab, activeTopTab, mobilePanel]
+    () => ({ tabs, activeTabId, rightPanelVisible, activeBottomTab, storedTopTab, mobilePanel }),
+    [tabs, activeTabId, rightPanelVisible, activeBottomTab, storedTopTab, mobilePanel]
   );
   const actions = useMemo<WorkspacePanelActions>(
     () => ({

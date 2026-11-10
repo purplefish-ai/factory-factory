@@ -69,7 +69,6 @@ vi.mock('./use-log-stream', () => ({
     connected: false,
     hasDisconnected: false,
     output: '',
-    outputEndRef: { current: null },
   }),
 }));
 
@@ -290,6 +289,38 @@ describe('RightPanel Agents tab', () => {
     expect(terminalOutput()).toBe('ready\r\nGET / 200\r\nGET /app.js 200\r\nGET /hidden 200\r\n');
   });
 
+  it('switches terminal tabs in one commit, with the tab bar and terminal in step', async () => {
+    const commits = vi.fn();
+    void act(() =>
+      root.render(
+        <WorkspacePanelProvider workspaceId="workspace-1">
+          <Profiler id="right-panel" onRender={commits}>
+            <RightPanel workspaceId="workspace-1" />
+          </Profiler>
+        </WorkspacePanelProvider>
+      )
+    );
+    await act(async () => {
+      mocks.terminalOptions?.onTerminalList?.([
+        { id: 'first', createdAt: '', outputBuffer: 'first output' },
+        { id: 'second', createdAt: '', outputBuffer: 'second output' },
+      ]);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    const button = (label: string) =>
+      [...container.querySelectorAll('button')].find((b) => b.textContent === label)!;
+    await act(async () => button('Terminal 1').click());
+    await vi.dynamicImportSettled();
+    commits.mockClear();
+
+    await act(async () => button('Terminal 2').click());
+    expect(commits).toHaveBeenCalledTimes(1);
+    expect(button('Terminal 2').getAttribute('aria-selected')).toBe('true');
+    expect(container.querySelector('[data-testid="terminal-output"]')?.textContent).toBe(
+      'second output'
+    );
+  });
+
   it('creates Terminal 1 when the empty Terminal tab is clicked', async () => {
     render();
     act(() =>
@@ -382,22 +413,22 @@ describe('RightPanel Agents tab', () => {
     expect(container.querySelector('[data-testid="agents-panel"]')).not.toBeNull();
   });
 
-  // An unavailable periodic task is replaced; a retired tab reads as Changes
-  // and is left in storage until the user picks a tab.
-  it.each([
-    ['periodic-task', 'changes'],
-    ['auto-iteration', 'auto-iteration'],
-  ])('falls back from unavailable persisted %s tab', (tab, storedAfterwards) => {
-    localStorage.setItem('workspace-right-panel-tab-workspace-1', tab);
-    render();
-    expect(container.querySelector('[data-testid="changes-panel"]')).not.toBeNull();
-    expect(localStorage.getItem('workspace-right-panel-tab-workspace-1')).toBe(storedAfterwards);
-    expect(
-      [...container.querySelectorAll('button')]
-        .find((button) => button.textContent === 'Changes')
-        ?.getAttribute('aria-selected')
-    ).toBe('true');
-  });
+  // An unavailable periodic task and a retired tab both read as Changes and are
+  // left in storage until the user picks a tab.
+  it.each(['periodic-task', 'auto-iteration'])(
+    'falls back from unavailable persisted %s tab',
+    (tab) => {
+      localStorage.setItem('workspace-right-panel-tab-workspace-1', tab);
+      render();
+      expect(container.querySelector('[data-testid="changes-panel"]')).not.toBeNull();
+      expect(localStorage.getItem('workspace-right-panel-tab-workspace-1')).toBe(tab);
+      expect(
+        [...container.querySelectorAll('button')]
+          .find((button) => button.textContent === 'Changes')
+          ?.getAttribute('aria-selected')
+      ).toBe('true');
+    }
+  );
 
   it('opens Changes for a former auto-iteration workspace after its data loads', () => {
     localStorage.setItem('workspace-right-panel-tab-workspace-1', 'auto-iteration');
@@ -437,6 +468,21 @@ describe('RightPanel Agents tab', () => {
     expect(container.querySelector('[data-testid="periodic-task-panel"]')).not.toBeNull();
     mocks.workspaceData = { periodicTaskId: null, creationSource: 'MANUAL' };
     render();
+    expect(container.querySelector('[data-testid="changes-panel"]')).not.toBeNull();
+    expect(localStorage.getItem('workspace-right-panel-tab-workspace-1')).toBe('periodic-task');
+  });
+
+  it('opens a scheduled-automation workspace on its automation until the user picks a tab', () => {
+    mocks.workspaceData = undefined;
+    render();
+    expect(container.querySelector('[data-testid="changes-panel"]')).not.toBeNull();
+    mocks.workspaceData = { periodicTaskId: 'task-1', creationSource: 'MANUAL' };
+    render();
+    expect(container.querySelector('[data-testid="periodic-task-panel"]')).not.toBeNull();
+    expect(localStorage.getItem('workspace-right-panel-tab-workspace-1')).toBeNull();
+    act(() =>
+      [...container.querySelectorAll('button')].find((b) => b.textContent === 'Changes')?.click()
+    );
     expect(container.querySelector('[data-testid="changes-panel"]')).not.toBeNull();
     expect(localStorage.getItem('workspace-right-panel-tab-workspace-1')).toBe('changes');
   });

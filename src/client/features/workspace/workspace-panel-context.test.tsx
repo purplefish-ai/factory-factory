@@ -196,12 +196,12 @@ describe('WorkspacePanelProvider persistence', () => {
     const removeItem = vi.spyOn(Storage.prototype, 'removeItem');
     const renders: Pick<
       ReturnType<typeof useWorkspacePanel>,
-      'activeTabId' | 'activeBottomTab' | 'activeTopTab' | 'rightPanelVisible' | 'tabs'
+      'activeTabId' | 'activeBottomTab' | 'storedTopTab' | 'rightPanelVisible' | 'tabs'
     >[] = [];
     const { root } = renderPanel(
       <PanelScrollProbe
-        onPanel={({ activeTabId, activeBottomTab, activeTopTab, rightPanelVisible, tabs }) => {
-          renders.push({ activeTabId, activeBottomTab, activeTopTab, rightPanelVisible, tabs });
+        onPanel={({ activeTabId, activeBottomTab, storedTopTab, rightPanelVisible, tabs }) => {
+          renders.push({ activeTabId, activeBottomTab, storedTopTab, rightPanelVisible, tabs });
         }}
       />
     );
@@ -209,7 +209,7 @@ describe('WorkspacePanelProvider persistence', () => {
       expect(renders[0]).toEqual({
         activeTabId: fileTab.id,
         activeBottomTab: 'dev-logs',
-        activeTopTab: 'files',
+        storedTopTab: 'files',
         rightPanelVisible: false,
         tabs: [CHAT_TAB_RECORD, fileTab],
       });

@@ -2,14 +2,15 @@ import type { Meta, StoryObj } from '@storybook/react';
 import { useEffect, useState } from 'react';
 import { expect, within } from 'storybook/test';
 import { RightPanelLayout } from './right-panel-layout';
-import type { TopPanelTab } from './right-panel-state';
+import { resolveTopTab, type TopPanelTab } from './right-panel-state';
 import { useWorkspacePanel, WorkspacePanelProvider } from './workspace-panel-context';
 
 type Tool = TopPanelTab | 'terminal' | 'logs';
 
 function ToolPreview({ initialTool }: { initialTool: Tool }) {
-  const { mobilePanel, activeTopTab, activeBottomTab, setActiveTopTab, setActiveBottomTab } =
+  const { mobilePanel, storedTopTab, activeBottomTab, setActiveTopTab, setActiveBottomTab } =
     useWorkspacePanel();
+  const activeTopTab = resolveTopTab(storedTopTab, { periodicTaskId: 'periodic-task' });
   useEffect(() => {
     if (initialTool === 'terminal' || initialTool === 'logs') {
       setActiveBottomTab(initialTool === 'logs' ? 'setup-logs' : 'terminal');
@@ -22,6 +23,7 @@ function ToolPreview({ initialTool }: { initialTool: Tool }) {
       workspaceId={`mobile-tools-${initialTool}`}
       isMobile
       mobilePanel={mobilePanel}
+      activeTopTab={activeTopTab}
       periodicTaskId="periodic-task"
       onOpenLogs={() => setActiveBottomTab('setup-logs')}
       topPanel={<div className="p-4 text-sm text-muted-foreground">{activeTopTab} content</div>}

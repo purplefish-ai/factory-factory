@@ -1,11 +1,10 @@
-import { memo, type ReactNode, useCallback, useEffect, useRef, useState } from 'react';
+import { memo, type ReactNode, useCallback, useState } from 'react';
 import { SectionLabel } from '@/client/components/section-label';
 import { StatusDot } from '@/client/components/status-indicators';
 import { useWorkspaceUnreadCounts } from '@/client/features/inbox';
 import type { SubagentSelection } from '@/client/features/subagents';
 import { useWorkspaceDetailQuery } from '@/client/hooks/use-workspace-detail-query';
 import { useWorkspaceDrawer } from '@/client/hooks/use-workspace-drawer';
-import { readStorageItem } from '@/client/lib/browser-storage';
 import { POLL_INTERVAL_MS } from '@/client/lib/query-options';
 import type { StatusTone } from '@/client/lib/status-tones';
 import { trpc } from '@/client/lib/trpc';
@@ -13,12 +12,13 @@ import { TabButton, TabList } from '@/components/ui/tab-button';
 import { cn } from '@/lib/utils';
 import { DevLogsPanel } from './dev-logs-panel';
 import { RightPanelLayout } from './right-panel-layout';
-import { STORAGE_KEY_TOP_TAB_PREFIX } from './right-panel-state';
+import { resolveTopTab } from './right-panel-state';
 import { TopPanelArea } from './right-panel-tools';
 import { SetupLogsPanel } from './setup-logs-panel';
-import { TerminalPanel, type TerminalTabState } from './terminal-panel';
+import { TerminalPanel } from './terminal-panel';
 import { TerminalTabBar } from './terminal-tab-bar';
 import { useLogStream } from './use-log-stream';
+import { type TerminalTabs, useTerminalTabs } from './use-terminal-tabs';
 import { type BottomPanelTab, useWorkspacePanel } from './workspace-panel-context';
 
 // =============================================================================
@@ -36,6 +36,17 @@ const LOG_SOURCES: { tab: LogsBottomTab; label: string }[] = [
   { tab: 'dev-logs', label: 'Dev' },
   { tab: 'post-run-logs', label: 'Post-Run' },
 ];
+
+/** The log source the Logs tab opens: the one shown, or the last one shown. */
+function useLastLogsTab(activeBottomTab: BottomPanelTab): LogsBottomTab {
+  const [lastLogsTab, setLastLogsTab] = useState<LogsBottomTab>(
+    isLogsBottomTab(activeBottomTab) ? activeBottomTab : 'setup-logs'
+  );
+  if (isLogsBottomTab(activeBottomTab) && activeBottomTab !== lastLogsTab) {
+    setLastLogsTab(activeBottomTab);
+  }
+  return isLogsBottomTab(activeBottomTab) ? activeBottomTab : lastLogsTab;
+}
 
 /** A log source's status dot: running (pulsing), connected or failed. */
 type LogStatus = Extract<StatusTone, 'success' | 'working' | 'danger'>;
@@ -73,7 +84,7 @@ export const RightPanel = memo(function RightPanel({
     mobilePanel,
     activeBottomTab,
     setActiveBottomTab,
-    activeTopTab,
+    storedTopTab,
     setActiveTopTab: handleTopTabChange,
   } = useWorkspacePanel();
   const isMobile = useWorkspaceDrawer();
@@ -86,15 +97,13 @@ export const RightPanel = memo(function RightPanel({
     activeBottomTab === 'post-run-logs'
   );
 
-  // Terminal tab state lifted up from TerminalPanel for inline rendering
-  const [terminalTabState, setTerminalTabState] = useState<TerminalTabState | null>(null);
+  // The tab bar and the terminal render from one state, so they change in the
+  // same commit. WorkspacePanelProvider remounts this panel for each workspace.
+  const isTerminalVisible =
+    activeBottomTab === 'terminal' && (!isMobile || mobilePanel === 'bottom');
+  const terminal = useTerminalTabs({ workspaceId, autoCreate: isTerminalVisible });
 
-  // Track last selected logs subtab for Logs tab navigation
-  const [lastLogsTab, setLastLogsTab] = useState<LogsBottomTab>('setup-logs');
-
-  const handleTerminalStateChange = useCallback((state: TerminalTabState) => {
-    setTerminalTabState(state);
-  }, []);
+  const lastLogsTab = useLastLogsTab(activeBottomTab);
 
   const { data: workspace } = useWorkspaceDetailQuery(workspaceId);
   const unreadCounts = useWorkspaceUnreadCounts(workspace?.projectId);
@@ -121,61 +130,18 @@ export const RightPanel = memo(function RightPanel({
     }
   );
 
-  useEffect(() => {
-    if (workspace === undefined) {
-      return;
-    }
-    if (activeTopTab === 'periodic-task' && !periodicTaskId) {
-      handleTopTabChange('changes');
-    }
-  }, [workspace, activeTopTab, periodicTaskId, handleTopTabChange]);
+  const activeTopTab = resolveTopTab(storedTopTab, workspace);
 
   const handleTakeScreenshots = useCallback(() => {
     handleTopTabChange('screenshots');
     void onTakeScreenshots?.();
   }, [handleTopTabChange, onTakeScreenshots]);
 
-  // Auto-select the periodic-task tab on first load, but only when the user
-  // has no persisted tab preference for this workspace. WorkspacePanelProvider
-  // remounts this panel for each workspace.
-  const periodicTaskTabSelectedRef = useRef(false);
-  useEffect(() => {
-    if (periodicTaskId && !periodicTaskTabSelectedRef.current) {
-      periodicTaskTabSelectedRef.current = true;
-      if (readStorageItem(`${STORAGE_KEY_TOP_TAB_PREFIX}${workspaceId}`) === null) {
-        handleTopTabChange('periodic-task');
-      }
-    }
-  }, [periodicTaskId, handleTopTabChange, workspaceId]);
-
-  const handleBottomTabChange = useCallback(
-    (tab: BottomPanelTab) => {
-      setActiveBottomTab(tab);
-    },
-    [setActiveBottomTab]
-  );
-
-  useEffect(() => {
-    if (!isLogsBottomTab(activeBottomTab)) {
-      return;
-    }
-    setLastLogsTab(activeBottomTab);
-  }, [activeBottomTab]);
-
   const handleLogsTabChange = useCallback(() => {
-    handleBottomTabChange(lastLogsTab);
-  }, [handleBottomTabChange, lastLogsTab]);
-
-  const handleLogsSubTabChange = useCallback(
-    (tab: LogsBottomTab) => {
-      setLastLogsTab(tab);
-      handleBottomTabChange(tab);
-    },
-    [handleBottomTabChange]
-  );
+    setActiveBottomTab(lastLogsTab);
+  }, [setActiveBottomTab, lastLogsTab]);
 
   const isLogsActive = isLogsBottomTab(activeBottomTab);
-  const activeLogsTab = isLogsBottomTab(activeBottomTab) ? activeBottomTab : lastLogsTab;
 
   const setupLogsStatus = getSetupLogsStatus(initStatus?.status);
   const devLogsStatus = getStreamingLogsStatus({
@@ -229,8 +195,8 @@ export const RightPanel = memo(function RightPanel({
       >
         <TerminalControls
           activeBottomTab={activeBottomTab}
-          terminalTabState={terminalTabState}
-          onTabChange={handleBottomTabChange}
+          terminal={terminal}
+          onTabChange={setActiveBottomTab}
           leadingTabs={
             !isMobile && (
               <TabButton
@@ -262,8 +228,8 @@ export const RightPanel = memo(function RightPanel({
                 size="sm"
                 label={label}
                 icon={<StatusDot tone={logStatuses[tab]} size="xs" />}
-                isActive={activeLogsTab === tab}
-                onSelect={() => handleLogsSubTabChange(tab)}
+                isActive={lastLogsTab === tab}
+                onSelect={() => setActiveBottomTab(tab)}
                 className="border-transparent"
               />
             ))}
@@ -277,29 +243,21 @@ export const RightPanel = memo(function RightPanel({
           <SetupLogsPanel workspaceId={workspaceId} className="h-full" />
         )}
         {activeBottomTab === 'dev-logs' && (
-          <DevLogsPanel
-            output={devLogs.output}
-            outputEndRef={devLogs.outputEndRef}
-            className="h-full"
-          />
+          <DevLogsPanel output={devLogs.output} className="h-full" />
         )}
         {activeBottomTab === 'post-run-logs' && (
           <DevLogsPanel
             output={postRunLogs.output}
-            outputEndRef={postRunLogs.outputEndRef}
             className="h-full"
             emptyMessage="Waiting for post-run script output…"
           />
         )}
         <div hidden={activeBottomTab !== 'terminal'} className="h-full">
           <TerminalPanel
-            key={workspaceId}
-            isVisible={activeBottomTab === 'terminal' && (!isMobile || mobilePanel === 'bottom')}
+            terminal={terminal}
+            isVisible={isTerminalVisible}
             autoCreateWhenEmpty
-            workspaceId={workspaceId}
             className="h-full"
-            hideHeader
-            onStateChange={handleTerminalStateChange}
           />
         </div>
       </div>
@@ -311,6 +269,7 @@ export const RightPanel = memo(function RightPanel({
       workspaceId={workspaceId}
       isMobile={isMobile}
       mobilePanel={mobilePanel}
+      activeTopTab={activeTopTab}
       unreadCount={unreadCount}
       periodicTaskId={periodicTaskId}
       onOpenLogs={handleLogsTabChange}
@@ -377,36 +336,38 @@ function getLogsGroupStatus({
 
 export function TerminalControls({
   activeBottomTab,
-  terminalTabState,
+  terminal,
   onTabChange,
   leadingTabs,
 }: {
   activeBottomTab: BottomPanelTab;
-  terminalTabState: TerminalTabState | null;
+  terminal: Pick<TerminalTabs, 'activeTabId' | 'selectTab' | 'closeTab' | 'newTab'> & {
+    tabs: Array<{ id: string; label: string }>;
+  };
   onTabChange: (tab: BottomPanelTab) => void;
   /** Panel tabs before the terminals, in the same tablist (the desktop Logs tab). */
   leadingTabs?: ReactNode;
 }) {
-  const hasTabs = terminalTabState !== null && terminalTabState.tabs.length > 0;
+  const hasTabs = terminal.tabs.length > 0;
   const openTerminal = () => onTabChange('terminal');
   return (
     <TerminalTabBar
-      tabs={hasTabs ? terminalTabState.tabs : [{ id: 'empty', label: 'Terminal' }]}
+      tabs={hasTabs ? terminal.tabs : [{ id: 'empty', label: 'Terminal' }]}
       activeTabId={
-        activeBottomTab === 'terminal' ? (hasTabs ? terminalTabState.activeTabId : 'empty') : null
+        activeBottomTab === 'terminal' ? (hasTabs ? terminal.activeTabId : 'empty') : null
       }
       onSelectTab={(id) => {
         openTerminal();
         if (hasTabs) {
-          terminalTabState.onSelectTab(id);
+          terminal.selectTab(id);
         }
       }}
-      onCloseTab={hasTabs ? terminalTabState.onCloseTab : undefined}
+      onCloseTab={hasTabs ? terminal.closeTab : undefined}
       onNewTab={() => {
         openTerminal();
         // Opening an empty panel creates its first terminal automatically.
         if (hasTabs) {
-          terminalTabState.onNewTab();
+          terminal.newTab();
         }
       }}
       leadingTabs={leadingTabs}
