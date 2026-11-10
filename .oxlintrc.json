@@ -316,6 +316,12 @@
                 "importNames": ["useChatWebSocket"],
                 "allowTypeImports": true,
                 "message": "Render the chat inside ChatSessionProvider and read it with useChatSessionState, or the layout's summary with useChatSessionSummary. A route that calls useChatWebSocket re-renders on every streamed event."
+              },
+              {
+                "name": "@/client/features/chat/use-chat-websocket",
+                "importNames": ["useChatWebSocket"],
+                "allowTypeImports": true,
+                "message": "Render the chat inside ChatSessionProvider and read it with useChatSessionState, or the layout's summary with useChatSessionSummary. A route that calls useChatWebSocket re-renders on every streamed event."
               }
             ]
           }
@@ -331,6 +337,12 @@
             "paths": [
               {
                 "name": "@/client/features/chat",
+                "importNames": ["useChatWebSocket"],
+                "allowTypeImports": true,
+                "message": "Render the chat inside ChatSessionProvider and read it with useChatSessionState, or the layout's summary with useChatSessionSummary. A route that calls useChatWebSocket re-renders on every streamed event."
+              },
+              {
+                "name": "@/client/features/chat/use-chat-websocket",
                 "importNames": ["useChatWebSocket"],
                 "allowTypeImports": true,
                 "message": "Render the chat inside ChatSessionProvider and read it with useChatSessionState, or the layout's summary with useChatSessionSummary. A route that calls useChatWebSocket re-renders on every streamed event."

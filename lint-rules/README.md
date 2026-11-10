@@ -91,11 +91,12 @@ owns the query loading and error states. The section shell and `StatCard` are
 the only exceptions, listed in a later override; a test fails if either stops
 needing it.
 
-The same rule keeps route code from calling `useChatWebSocket`: a route renders
-the chat inside `ChatSessionProvider`, so streamed events re-render the chat and
-not the layout ([client state](../docs/architecture/client-state.md)). Type
-imports stay allowed. The admin override repeats the entry, because an override
-replaces the rule's options rather than merging them.
+The same rule keeps route code from calling `useChatWebSocket`, through the
+barrel or its module: a route renders the chat inside `ChatSessionProvider`, so
+streamed events re-render the chat and not the layout
+([client state](../docs/architecture/client-state.md)). Type imports stay
+allowed. The admin override repeats the entry, because an override replaces the
+rule's options rather than merging them.
 
 `query-error-handled` flags a query hook result (`useQuery`, `useInfiniteQuery`
 or a `use…Query` wrapper, but not suspense queries) whose destructuring or

@@ -109,7 +109,7 @@ it('re-renders only the session consumer for an update the summary does not incl
   expect(renders).toEqual({ ...before, chat: before.chat + 1 });
 });
 
-it('re-renders the summary subscriber before paint when the summary changes', async () => {
+it('re-renders the summary subscriber when the summary changes', async () => {
   expect(summary).toMatchObject({ runtimeSessionId: 'session-a', queuedMessageCount: 0 });
   const before = { ...renders };
   await act(() =>
