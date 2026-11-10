@@ -1,10 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { z } from 'zod';
-import {
-  appendToRollingOutput,
-  TERMINAL_OUTPUT_MAX_CHARS,
-  TERMINAL_TRUNCATION_MARKER,
-} from '@/client/lib/rolling-output';
+import { TerminalOutputStream } from '@/client/lib/terminal-output-stream';
 import { useWebSocketChannel } from '@/hooks/use-websocket-channel';
 import { buildWebSocketUrl } from '@/lib/websocket-config';
 
@@ -16,11 +12,6 @@ const SetupTerminalMessageSchema = z.object({
 });
 
 const RECONNECT_NOTE = '\r\n\x1b[33m[Connection lost — starting a new shell]\x1b[0m\r\n';
-
-const TERMINAL_ROLLING_OUTPUT_OPTIONS = {
-  maxChars: TERMINAL_OUTPUT_MAX_CHARS,
-  truncationMarker: TERMINAL_TRUNCATION_MARKER,
-};
 
 export interface UseSetupTerminalResult {
   /** Whether the WebSocket is currently connected. */
@@ -35,8 +26,8 @@ export interface UseSetupTerminalResult {
    * the transport reconnects.
    */
   showTerminal: boolean;
-  /** Accumulated terminal output. */
-  output: string;
+  /** Bounded terminal output, appended outside React state. */
+  output: TerminalOutputStream;
   /** Provider whose managed login currently owns the terminal. */
   authenticatingProvider: 'CLAUDE' | 'CODEX' | null;
   /** Launch the server's managed provider login in the terminal. */
@@ -56,7 +47,8 @@ export interface UseSetupTerminalResult {
  * on reconnects so users know the shell restarted.
  */
 export function useSetupTerminal(open: boolean): UseSetupTerminalResult {
-  const [output, setOutput] = useState('');
+  // Stable for the hook's lifetime; chunks append without re-rendering the modal.
+  const [output] = useState(() => new TerminalOutputStream());
   const [showTerminal, setShowTerminal] = useState(false);
   const [terminalExited, setTerminalExited] = useState(false);
   const [authenticatingProvider, setAuthenticatingProvider] = useState<'CLAUDE' | 'CODEX' | null>(
@@ -67,31 +59,30 @@ export function useSetupTerminal(open: boolean): UseSetupTerminalResult {
   const colsRef = useRef(80);
   const rowsRef = useRef(24);
 
-  const handleMessage = useCallback((message: z.infer<typeof SetupTerminalMessageSchema>) => {
-    if (
-      message.type === 'exit' &&
-      message.provider &&
-      activeLoginRef.current === message.provider
-    ) {
-      activeLoginRef.current = null;
-      setAuthenticatingProvider(null);
-      setTerminalExited(true);
-    }
-    if (message.type === 'error') {
-      activeLoginRef.current = null;
-      setAuthenticatingProvider(null);
-      if (message.message) {
-        setOutput((prev) =>
-          appendToRollingOutput(prev, `\r\n${message.message}\r\n`, TERMINAL_ROLLING_OUTPUT_OPTIONS)
-        );
+  const handleMessage = useCallback(
+    (message: z.infer<typeof SetupTerminalMessageSchema>) => {
+      if (
+        message.type === 'exit' &&
+        message.provider &&
+        activeLoginRef.current === message.provider
+      ) {
+        activeLoginRef.current = null;
+        setAuthenticatingProvider(null);
+        setTerminalExited(true);
       }
-    }
-    if (message.type === 'output' && message.data) {
-      setOutput((prev) =>
-        appendToRollingOutput(prev, message.data ?? '', TERMINAL_ROLLING_OUTPUT_OPTIONS)
-      );
-    }
-  }, []);
+      if (message.type === 'error') {
+        activeLoginRef.current = null;
+        setAuthenticatingProvider(null);
+        if (message.message) {
+          output.append(`\r\n${message.message}\r\n`);
+        }
+      }
+      if (message.type === 'output' && message.data) {
+        output.append(message.data);
+      }
+    },
+    [output]
+  );
 
   const { connected, gaveUp, send, reconnect } = useWebSocketChannel({
     url: open ? buildWebSocketUrl('/setup-terminal', {}) : null,
@@ -108,12 +99,12 @@ export function useSetupTerminal(open: boolean): UseSetupTerminalResult {
       setTerminalExited(false);
     }
     if (!open) {
-      setOutput('');
+      output.replace('');
       setShowTerminal(false);
       setTerminalExited(false);
       hasConnectedRef.current = false;
     }
-  }, [open, connected]);
+  }, [open, connected, output]);
 
   // Request a terminal on every (re)connect: the server-side PTY is
   // per-connection, so a reconnect needs a fresh create. The `open` guard
@@ -124,14 +115,12 @@ export function useSetupTerminal(open: boolean): UseSetupTerminalResult {
       return;
     }
     if (hasConnectedRef.current) {
-      setOutput((prev) =>
-        appendToRollingOutput(prev, RECONNECT_NOTE, TERMINAL_ROLLING_OUTPUT_OPTIONS)
-      );
+      output.append(RECONNECT_NOTE);
     }
     hasConnectedRef.current = true;
     setShowTerminal(true);
     send({ type: 'create', cols: colsRef.current, rows: rowsRef.current });
-  }, [open, connected, send]);
+  }, [open, connected, send, output]);
 
   useEffect(() => {
     if (open && connected && terminalExited) {
