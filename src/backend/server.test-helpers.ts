@@ -90,6 +90,9 @@ export function createTestHarness(options: TestHarnessOptions = {}) {
       recoverStaleRunningSessions: vi.fn(async () => 0),
       stopAllClients: vi.fn(async () => undefined),
     },
+    sessionDispatchService: {
+      shutdown: vi.fn(async () => undefined),
+    },
     codexAccountService: {
       shutdown: vi.fn(async () => undefined),
     },

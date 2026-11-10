@@ -1137,7 +1137,10 @@ stop’s lifecycle write and suppresses a duplicate event only after durable
 success. A failed write retries the same event identity, replacing its transient
 banner if persistence recovers. Stops that suppress their own event still
 receive shutdown history. The supervisor's closed shutdown admission remains in
-effect after gate cleanup.
+effect after gate cleanup. Bulk shutdown does not run per-session stops, which
+own queue retries, so the next shutdown step (`SessionDispatchService.shutdown`)
+cancels pending retries, refuses new ones and waits for retries already
+dispatching before the database closes.
 
 Queue execution belongs to the single `SessionDispatchService` configured in
 `session-services.ts`. Initialization, notification delivery, lifecycle queue

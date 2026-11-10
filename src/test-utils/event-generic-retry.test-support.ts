@@ -113,6 +113,11 @@ afterEach(async () => {
           await Promise.allSettled([...exitTasks]);
           await drainEventFixtureTasks();
         } while (exitTasks.size > 0);
+        // Stopping every client skips the per-session stops that clear queue
+        // retries. A mail recovery fenced during teardown arms one, and it
+        // would keep re-arming against the destroyed database after this file.
+        await h.session.sessionDispatchService.shutdown();
+        await drainEventFixtureTasks();
       }
     );
     h.session.sessionPromptTurnCompletionService.clearAll();

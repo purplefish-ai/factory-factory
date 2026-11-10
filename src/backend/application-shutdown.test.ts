@@ -25,6 +25,8 @@ describe('createShutdownPlan', () => {
     expect(names.indexOf('agent-runtime')).toBe(0);
     expect(names.indexOf('transports')).toBeLessThan(names.indexOf('sessions'));
     expect(names.indexOf('sessions')).toBeLessThan(names.indexOf('codex-accounts'));
+    // Stopping all clients can arm queue retries that per-session stops would clear.
+    expect(names.indexOf('session-dispatch')).toBe(names.indexOf('sessions') + 1);
     expect(names.indexOf('event-collector')).toBeLessThan(names.indexOf('workspace-git-state'));
     expect(names.indexOf('job-runner')).toBe(names.indexOf('database') - 1);
   });
