@@ -74,11 +74,9 @@ vi.mock('@/client/features/chat/usage-stats/provider-usage-control', () => ({
 vi.mock('@/client/features/composer', () => ({
   FileMentionPalette: () => null,
   SlashCommandPalette: () => null,
+  useFileMentions: () => ({}),
   usePasteDropHandler: () => ({}),
   useSlashCommands: () => ({}),
-}));
-vi.mock('@/client/features/chat/chat-input/hooks/use-file-mentions', () => ({
-  useFileMentions: () => ({}),
 }));
 vi.mock('@/client/features/voice', () => ({ VoiceModeToggle: probes.voiceToggle }));
 vi.mock('@/hooks/use-mobile', () => ({ useIsMobile: () => false }));
@@ -89,6 +87,7 @@ vi.mock('@/client/lib/trpc', () => ({
         useQuery: () => ({ data: [], isPending: false, isError: false, refetch: vi.fn() }),
       },
     },
+    workspace: { listAllFiles: {} },
   },
 }));
 vi.mock('./use-retry-workspace-init', () => ({

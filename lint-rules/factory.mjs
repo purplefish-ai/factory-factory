@@ -290,8 +290,14 @@ function numericIntervalLiteral(node, visitorKeys) {
   }
 }
 
-/** `input`, `input.todos`, `call.input.file_path`, `input?.["offset"]` and similar. */
-function readsToolInput(node) {
+/** Agent-supplied members: tool input, and stream event deltas and content blocks. */
+const AGENT_PAYLOAD_MEMBERS = new Set(['input', 'delta', 'content_block']);
+
+/**
+ * `input`, `input.todos`, `call.input.file_path`, `input?.["offset"]`,
+ * `event.delta`, `event.content_block` and similar.
+ */
+function readsAgentPayload(node) {
   let current = node;
   while (current) {
     if (
@@ -301,7 +307,7 @@ function readsToolInput(node) {
     ) {
       current = current.expression;
     } else if (current.type === 'MemberExpression') {
-      if (memberName(current) === 'input') {
+      if (AGENT_PAYLOAD_MEMBERS.has(memberName(current))) {
         return true;
       }
       current = current.object;
@@ -1495,16 +1501,17 @@ const rules = {
   },
   'no-tool-input-cast': {
     create(context) {
-      // Tool input is agent-supplied; renderers parse it with the schemas in
-      // tool-renderers/tool-input-schemas.ts and fall back to raw JSON.
+      // Tool input and stream payloads are agent-supplied; renderers parse tool
+      // input with the schemas in tool-renderers/tool-input-schemas.ts and fall
+      // back to raw JSON, and the reducer path skips payloads it cannot parse.
       const report = (node) => {
-        if (node.typeAnnotation.typeName?.name === 'const' || !readsToolInput(node.expression)) {
+        if (node.typeAnnotation.typeName?.name === 'const' || !readsAgentPayload(node.expression)) {
           return;
         }
         context.report({
           node,
           message:
-            'Parse agent tool input with parseToolInput and a Zod schema instead of a type assertion.',
+            'Parse agent tool input (parseToolInput) or stream payloads with a Zod schema instead of a type assertion.',
         });
       };
       return { TSAsExpression: report, TSTypeAssertion: report };

@@ -72,6 +72,13 @@ writeFileSync(
               helpers: 'all',
               reason: 'its hooks share one cache strategy',
             },
+            {
+              procedures: ['userSettings.getProviderOptions'],
+              use: userSettingsOwner,
+              owners: [userSettingsOwner],
+              helpers: 'cache',
+              reason: 'its readers share one stale time',
+            },
           ],
         },
       ],
@@ -180,6 +187,9 @@ describe('Oxlint project guardrails', () => {
     ['no-tool-input-cast', 'const payload = input as unknown as Payload;'],
     ['no-tool-input-cast', 'const todos = input!.todos as Todo[];'],
     ['no-tool-input-cast', 'const path = call.input!.file_path as string;'],
+    ['no-tool-input-cast', 'const delta = event.delta as InputJsonDelta | typeof event.delta;'],
+    ['no-tool-input-cast', 'const block = event.content_block as ToolUseContent;'],
+    ['no-tool-input-cast', 'const json = (message.event?.delta as InputJsonDelta).partial_json;'],
     ['no-raw-palette-classes', 'const className = "flex bg-red-500";'],
     ['no-raw-palette-classes', 'export const chip = <span className="dark:text-emerald-300" />;'],
     ['no-raw-palette-classes', 'const className = `${base} hover:border-sky-500/40`;'],
@@ -205,6 +215,7 @@ describe('Oxlint project guardrails', () => {
     ['query-owner', 'const cached = utils.userSettings.get.getData();'],
     ['query-owner', 'const saved = await utils.client.userSettings.get.query();'],
     ['query-owner', 'const key = getMutationKey(trpc.userSettings.update);'],
+    ['query-owner', 'const options = trpc.userSettings.getProviderOptions.useQuery();'],
     [
       'use-pending-prop',
       'const x = <Button disabled={saving}>{saving && <Spinner aria-hidden />}Save</Button>;',
@@ -367,6 +378,8 @@ describe('Oxlint project guardrails', () => {
     'const keys = ["file_path", "offset"] as const;',
     'const textarea = inputRef.current as HTMLTextAreaElement;',
     'const name = tool.name as string;',
+    'const block = ToolUseBlockIdSchema.safeParse(event.content_block);',
+    'const delta = event.delta;',
     'const description = "use client";',
     'function example() { return "use server"; }',
     'const className = "bg-success/10 text-running border-destructive/30";',
@@ -398,7 +411,8 @@ describe('Oxlint project guardrails', () => {
     'const project = trpc.project.get.useQuery({ id });',
     "const key = getQueryKey(trpc.workspace.listChildren, { id }, 'query');",
     'const value = map.get.fetch();',
-    'const options = trpc.userSettings.getProviderOptions.useQuery();',
+    'await utils.userSettings.getProviderOptions.invalidate();',
+    'const options = useProviderOptions(undefined, { enabled });',
     'const test = trpc.userSettings.testCustomCommand.useMutation();',
     'const key = getMutationKey(trpc.workspace.get);',
     'const settings = useUserSettings({ enabled });',
@@ -457,7 +471,7 @@ describe('Oxlint project guardrails', () => {
       },
       {
         source:
-          'trpc.userSettings.update.useMutation(); utils.userSettings.get.setData(undefined, saved);',
+          'trpc.userSettings.update.useMutation(); utils.userSettings.get.setData(undefined, saved); trpc.userSettings.getProviderOptions.useQuery();',
         file: join(directory, userSettingsOwner),
       }
     );
@@ -659,6 +673,12 @@ describe('query owners', () => {
         owners: ['src/client/lib/user-settings-queries.ts'],
         helpers: 'all',
       },
+      {
+        procedures: ['userSettings.getProviderOptions'],
+        use: 'src/client/lib/user-settings-queries.ts',
+        owners: ['src/client/lib/user-settings-queries.ts'],
+        helpers: 'cache',
+      },
     ]);
     for (const group of groups) {
       expect(group.owners).toContain(group.use);
@@ -674,11 +694,11 @@ describe('tool input casts', () => {
     JSON.parse(readFileSync(resolve('.oxlintrc.json'), 'utf8'))
   );
 
-  it('applies to the agent activity renderers without file exceptions', () => {
+  it('applies to the chat feature, renderers and reducer path, without file exceptions', () => {
     const scopes = projectConfig.overrides
       .filter((override) => override.rules['factory/no-tool-input-cast'] !== undefined)
       .map((override) => [override.files, override.rules['factory/no-tool-input-cast']]);
-    expect(scopes).toEqual([[['src/client/features/chat/agent-activity/**/*.{ts,tsx}'], 'error']]);
+    expect(scopes).toEqual([[['src/client/features/chat/**/*.{ts,tsx}'], 'error']]);
   });
 });
 

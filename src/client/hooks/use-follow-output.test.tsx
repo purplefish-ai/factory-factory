@@ -9,13 +9,48 @@ function Log({ lines }: { lines: string[] }) {
   return createElement('div', { ref: followRef }, createElement('pre', null, lines.join('\n')));
 }
 
-/** jsdom has no layout: size the log from its line count, 20px per line in a 100px view. */
+/** Height of one rendered line; a narrower view wraps each line onto more rows. */
+let lineHeight = 20;
+
+/** jsdom has no layout: size the log from its line count, `lineHeight` per line in a 100px view. */
 function sizeLog(element: HTMLElement) {
   Object.defineProperty(element, 'clientHeight', { configurable: true, value: 100 });
   Object.defineProperty(element, 'scrollHeight', {
     configurable: true,
-    get: () => Math.max(100, (element.textContent?.split('\n').length ?? 0) * 20),
+    get: () => Math.max(100, (element.textContent?.split('\n').length ?? 0) * lineHeight),
   });
+}
+
+/** Minimal ResizeObserver: records observed elements and reports a resize on request. */
+class FakeResizeObserver {
+  static instances: FakeResizeObserver[] = [];
+  readonly targets = new Set<Element>();
+  private readonly callback: () => void;
+
+  constructor(callback: () => void) {
+    this.callback = callback;
+    FakeResizeObserver.instances.push(this);
+  }
+
+  observe(target: Element) {
+    this.targets.add(target);
+  }
+
+  unobserve(target: Element) {
+    this.targets.delete(target);
+  }
+
+  disconnect() {
+    this.targets.clear();
+  }
+
+  static resize(target: Element) {
+    for (const instance of FakeResizeObserver.instances) {
+      if (instance.targets.has(target)) {
+        instance.callback();
+      }
+    }
+  }
 }
 
 function userScrollTo(element: HTMLElement, top: number) {
@@ -48,6 +83,8 @@ beforeEach(() => {
 afterEach(() => {
   act(() => root?.unmount());
   root = null;
+  lineHeight = 20;
+  FakeResizeObserver.instances = [];
   vi.unstubAllGlobals();
   document.body.innerHTML = '';
 });
@@ -105,5 +142,53 @@ describe('useFollowOutput', () => {
     animateTo(200);
     await render(40);
     expect(target).toBe(600);
+  });
+
+  describe('with ResizeObserver', () => {
+    beforeEach(() => {
+      vi.stubGlobal('ResizeObserver', FakeResizeObserver);
+    });
+
+    it('follows a rewrap that grows the log without changing the DOM', async () => {
+      const { log, render } = await mountLog(10);
+      await render(20);
+      expect(log.scrollTop).toBe(400);
+
+      lineHeight = 40;
+      FakeResizeObserver.resize(log.firstElementChild as Element);
+      expect(log.scrollTop).toBe(800);
+    });
+
+    it('leaves a reader who scrolled up where they are when the log rewraps', async () => {
+      const { log, render } = await mountLog(10);
+      await render(20);
+      userScrollTo(log, 120);
+
+      lineHeight = 40;
+      FakeResizeObserver.resize(log);
+      expect(log.scrollTop).toBe(120);
+    });
+
+    it('observes a child that joins the log and drops one that leaves', async () => {
+      const { log } = await mountLog(10);
+      const [observer] = FakeResizeObserver.instances;
+      const previous = log.firstElementChild as Element;
+      const next = document.createElement('pre');
+      log.replaceChild(next, previous);
+      // Mutation observer callbacks run as a microtask.
+      await Promise.resolve();
+      expect(observer?.targets.has(previous)).toBe(false);
+      expect(observer?.targets.has(next)).toBe(true);
+    });
+
+    it('stops observing sizes when the log unmounts', async () => {
+      await mountLog(10);
+      const [observer] = FakeResizeObserver.instances;
+      expect(observer?.targets.size).toBe(2);
+
+      act(() => root?.unmount());
+      root = null;
+      expect(observer?.targets.size).toBe(0);
+    });
   });
 });

@@ -31,10 +31,7 @@ export function useTriggerAdversarialReview(workspaceId: string): TriggerAdversa
   const utils = trpc.useUtils();
   return trpc.adversarialReview.trigger.useMutation({
     onSuccess: (result) => {
-      runInBackground(
-        utils.session.listSessions.invalidate({ workspaceId }),
-        "Couldn't refresh data."
-      );
+      runInBackground(utils.session.listSessions.invalidate({ workspaceId }));
       toast.success(
         result.status === 'already_active'
           ? 'Adversarial review is already running'

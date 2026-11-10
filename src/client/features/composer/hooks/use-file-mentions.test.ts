@@ -4,29 +4,34 @@ import { createElement, createRef, type RefObject } from 'react';
 import { flushSync } from 'react-dom';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { useFileMentions } from './use-file-mentions';
+import { type FileMentionFileQuery, useFileMentions } from './use-file-mentions';
 
-vi.mock('@/client/lib/trpc', () => ({
-  trpc: {
-    workspace: {
-      listAllFiles: {
-        useQuery: () => ({ data: { files: [] }, isLoading: false }),
-      },
-    },
-  },
+interface ProjectScope {
+  projectId: string;
+}
+
+const filesQuery: { error: Error | null } = { error: null };
+const useFilesQuery = vi.fn<FileMentionFileQuery<ProjectScope>['useQuery']>(() => ({
+  data: filesQuery.error ? undefined : { files: [] },
+  isLoading: false,
+  error: filesQuery.error,
 }));
+const fileQuery: FileMentionFileQuery<ProjectScope> = { useQuery: useFilesQuery };
 
 type FileMentionsResult = ReturnType<typeof useFileMentions>;
 
 interface HarnessProps {
+  scopeReady: boolean;
   inputRef: RefObject<HTMLTextAreaElement | null>;
   onChange: (value: string) => void;
   onResult: (result: FileMentionsResult) => void;
 }
 
-function Harness({ inputRef, onChange, onResult }: HarnessProps) {
+function Harness({ scopeReady, inputRef, onChange, onResult }: HarnessProps) {
   const result = useFileMentions({
-    workspaceId: 'workspace-1',
+    fileQuery,
+    scope: { projectId: 'project-1' },
+    scopeReady,
     inputRef,
     onChange,
   });
@@ -42,7 +47,7 @@ interface RenderedHook {
 
 const mountedRoots: Array<{ container: HTMLDivElement; root: Root }> = [];
 
-function renderHook(): RenderedHook {
+function renderHook({ scopeReady = true } = {}): RenderedHook {
   const container = document.createElement('div');
   const root = createRoot(container);
   const inputRef = createRef<HTMLTextAreaElement>();
@@ -54,6 +59,7 @@ function renderHook(): RenderedHook {
   flushSync(() => {
     root.render(
       createElement(Harness, {
+        scopeReady,
         inputRef,
         onChange,
         onResult: (nextResult) => {
@@ -90,10 +96,45 @@ function openMentionMenu(rendered: RenderedHook, value: string) {
 }
 
 afterEach(() => {
+  filesQuery.error = null;
+  useFilesQuery.mockClear();
   for (const { container, root } of mountedRoots.splice(0)) {
     flushSync(() => root.unmount());
     container.remove();
   }
+});
+
+describe('useFileMentions file list', () => {
+  it('fetches only while the menu is open, with the scope and the typed filter', () => {
+    const rendered = renderHook();
+    expect(useFilesQuery).toHaveBeenLastCalledWith(
+      { projectId: 'project-1', query: '', limit: 50 },
+      { enabled: false, staleTime: 30_000 }
+    );
+
+    openMentionMenu(rendered, 'see @src/ma');
+    expect(useFilesQuery).toHaveBeenLastCalledWith(
+      { projectId: 'project-1', query: 'src/ma', limit: 50 },
+      { enabled: true, staleTime: 30_000 }
+    );
+  });
+
+  it('does not fetch before the scope is ready', () => {
+    const rendered = renderHook({ scopeReady: false });
+    openMentionMenu(rendered, '@src');
+    expect(useFilesQuery).toHaveBeenLastCalledWith(
+      { projectId: 'project-1', query: 'src', limit: 50 },
+      { enabled: false, staleTime: 30_000 }
+    );
+  });
+
+  it('passes a failed file list to the palette instead of an empty one', () => {
+    filesQuery.error = new Error('Repository is unavailable');
+    const rendered = renderHook();
+    openMentionMenu(rendered, '@src');
+    expect(rendered.getResult().files).toEqual([]);
+    expect(rendered.getResult().filesError).toBe('Repository is unavailable');
+  });
 });
 
 describe('useFileMentions selection', () => {

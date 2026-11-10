@@ -2,7 +2,7 @@ import { useCallback, useState } from 'react';
 import { useLatestRef } from '@/client/hooks/use-stable-callback';
 import { QUERY_RETRY } from '@/client/lib/query-options';
 import { trpc } from '@/client/lib/trpc';
-import { useUserSettings } from '@/client/lib/user-settings-queries';
+import { useProviderOptions, useUserSettings } from '@/client/lib/user-settings-queries';
 import { resolveEffectiveSessionProvider } from '@/lib/session-provider-selection';
 import type { ChatModelOption, ChatProvider } from '@/shared/chat-capabilities';
 import type { CodexAccountSummary } from '@/shared/codex-accounts';
@@ -302,9 +302,8 @@ export function useSessionLaunchSelection(
     isLoading: modelsLoading,
     error: catalogError,
     refetch: refetchCatalog,
-  } = trpc.userSettings.getProviderOptions.useQuery(getAccountInput(selection.codexAccountId), {
+  } = useProviderOptions(getAccountInput(selection.codexAccountId), {
     enabled: scopeKey !== null,
-    staleTime: 60_000,
   });
   const account = useCodexAccountControl(scopeKey, selection);
   const error =

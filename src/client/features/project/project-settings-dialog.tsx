@@ -40,7 +40,7 @@ export function ProjectSettingsDialog({
 
   const updateProject = trpc.project.update.useMutation({
     onSuccess: () => {
-      runInBackground(invalidateProject(utils, projectId), "Couldn't refresh data.");
+      runInBackground(invalidateProject(utils, projectId));
       setOpen(false);
     },
     onError: (err) => {

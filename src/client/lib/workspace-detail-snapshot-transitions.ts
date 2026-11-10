@@ -35,7 +35,7 @@ export function createWorkspaceDetailTransitionScope(): WorkspaceDetailTransitio
         removedWorkspaceIds.add(workspaceId);
         // Reset clears old data and synchronously cancels its request before
         // active observers refetch persisted detail. No initialData is configured.
-        runInBackground(resetWorkspaceDetail(queryClient, workspaceId), "Couldn't refresh data.");
+        runInBackground(resetWorkspaceDetail(queryClient, workspaceId));
       };
       return {
         remove,
@@ -62,18 +62,12 @@ export function createWorkspaceDetailTransitionScope(): WorkspaceDetailTransitio
           const reintroduced = removedWorkspaceIds.delete(entry.workspaceId);
           if (reintroduced) {
             // Cancellation takes effect synchronously; do not await before merging.
-            runInBackground(
-              cancelWorkspaceDetail(queryClient, entry.workspaceId),
-              "Couldn't refresh data."
-            );
+            runInBackground(cancelWorkspaceDetail(queryClient, entry.workspaceId));
           }
           mergeWorkspaceDetailSnapshot(queryClient, entry);
           if (reintroduced) {
             // Reset may have cleared full detail, which a summary cannot recreate.
-            runInBackground(
-              refetchActiveWorkspaceDetail(queryClient, entry.workspaceId),
-              "Couldn't refresh data."
-            );
+            runInBackground(refetchActiveWorkspaceDetail(queryClient, entry.workspaceId));
           }
         },
       };

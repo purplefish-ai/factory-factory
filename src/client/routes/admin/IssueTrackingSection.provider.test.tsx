@@ -10,6 +10,7 @@ import { toast } from 'sonner';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { trpc } from '@/client/lib/trpc';
 import { IssueProvider } from '@/shared/core/enums';
+import { settle } from '@/test-utils/react-act';
 import { ProjectIssueTrackingCard } from './IssueTrackingSection';
 
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
@@ -121,17 +122,7 @@ async function mount(initial: IssueProvider) {
       </trpc.Provider>
     );
   });
-  await tick();
-}
-
-// Settle queued React Query and React work with zero-delay turns. A real 10ms
-// timer could fire before that work under CPU load and leave the DOM stale.
-async function tick() {
-  for (let flush = 0; flush < 5; flush++) {
-    await act(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 0));
-    });
-  }
+  await settle(5);
 }
 
 function choose(provider: IssueProvider) {
@@ -186,10 +177,10 @@ describe('issue provider selection', () => {
       const next = initial === IssueProvider.GITHUB ? IssueProvider.LINEAR : IssueProvider.GITHUB;
       choose(next);
       expectProvider(next);
-      await tick();
+      await settle(5);
       expect(saves[0]?.input).toEqual({ id: 'project-1', issueProvider: next });
       await act(async () => saves[0]!.fail());
-      await tick();
+      await settle(5);
       expectProvider(initial);
       expect(listReads).toBe(2);
       expect(toast.error).toHaveBeenCalledWith(
@@ -204,18 +195,18 @@ describe('issue provider selection', () => {
     await act(async () => {
       await queryClient.invalidateQueries();
     });
-    await tick();
+    await settle(5);
     expectProvider(IssueProvider.LINEAR);
   });
 
   it('retains the confirmed saved provider if reconciliation fails, then follows a later refetch', async () => {
     await mount(IssueProvider.GITHUB);
     choose(IssueProvider.LINEAR);
-    await tick();
+    await settle(5);
     serverProvider = IssueProvider.LINEAR;
     failLists = true;
     await act(async () => saves[0]!.succeed());
-    await tick();
+    await settle(5);
     expectProvider(IssueProvider.LINEAR);
     expect(listReads).toBe(2);
     failLists = false;
@@ -223,7 +214,7 @@ describe('issue provider selection', () => {
     await act(async () => {
       await queryClient.invalidateQueries();
     });
-    await tick();
+    await settle(5);
     expectProvider(IssueProvider.GITHUB);
   });
 
@@ -231,14 +222,14 @@ describe('issue provider selection', () => {
     await mount(IssueProvider.GITHUB);
     choose(IssueProvider.LINEAR);
     choose(IssueProvider.GITHUB);
-    await tick();
+    await settle(5);
     serverProvider = IssueProvider.LINEAR;
     await act(async () => saves[0]!.succeed());
-    await tick();
+    await settle(5);
     expectProvider(IssueProvider.GITHUB);
     failLists = true;
     await act(async () => saves[1]!.fail());
-    await tick();
+    await settle(5);
     expectProvider(IssueProvider.LINEAR);
   });
 
@@ -252,11 +243,11 @@ describe('issue provider selection', () => {
         { id: 'other-project', issueProvider: IssueProvider.GITHUB },
       ]);
       choose(IssueProvider.LINEAR);
-      await tick();
+      await settle(5);
       serverProvider = IssueProvider.LINEAR;
       failLists = true;
       await act(async () => saves[0]!.succeed());
-      await tick();
+      await settle(5);
       expect(queryClient.getQueryData(key)).toEqual([
         { id: 'project-1', issueProvider: IssueProvider.LINEAR },
         { id: 'other-project', issueProvider: IssueProvider.GITHUB },
@@ -272,14 +263,14 @@ describe('issue provider selection', () => {
   it('uses the latest server provider when rolling back during a save', async () => {
     await mount(IssueProvider.GITHUB);
     choose(IssueProvider.LINEAR);
-    await tick();
+    await settle(5);
     serverProvider = IssueProvider.LINEAR;
     await act(async () => {
       await queryClient.invalidateQueries();
     });
-    await tick();
+    await settle(5);
     await act(async () => saves[0]!.fail());
-    await tick();
+    await settle(5);
     expectProvider(IssueProvider.LINEAR);
   });
 
@@ -289,16 +280,16 @@ describe('issue provider selection', () => {
       await mount(IssueProvider.GITHUB);
       choose(IssueProvider.LINEAR);
       choose(IssueProvider.GITHUB);
-      await tick();
+      await settle(5);
       if (outcome === 'success') {
         serverProvider = IssueProvider.LINEAR;
       }
       await act(async () => (outcome === 'success' ? saves[0]!.succeed() : saves[0]!.fail()));
-      await tick();
+      await settle(5);
       expectProvider(IssueProvider.GITHUB);
       serverProvider = IssueProvider.GITHUB;
       await act(async () => saves[1]!.succeed());
-      await tick();
+      await settle(5);
       expectProvider(IssueProvider.GITHUB);
       expect(toast.error).not.toHaveBeenCalled();
     }
@@ -308,34 +299,34 @@ describe('issue provider selection', () => {
     await mount(IssueProvider.GITHUB);
     choose(IssueProvider.LINEAR);
     choose(IssueProvider.GITHUB);
-    await tick();
+    await settle(5);
     await act(async () => saves[1]!.succeed());
-    await tick();
+    await settle(5);
     expectProvider(IssueProvider.GITHUB);
     serverProvider = IssueProvider.LINEAR;
     await act(async () => saves[0]!.succeed());
-    await tick();
+    await settle(5);
     expectProvider(IssueProvider.LINEAR);
   });
 
   it('keeps a newer choice while an older save refetch completes', async () => {
     await mount(IssueProvider.GITHUB);
     choose(IssueProvider.LINEAR);
-    await tick();
+    await settle(5);
     serverProvider = IssueProvider.LINEAR;
     deferLists = true;
     await act(async () => saves[0]!.succeed());
-    await tick();
+    await settle(5);
     expectProvider(IssueProvider.LINEAR);
     choose(IssueProvider.GITHUB);
-    await tick();
+    await settle(5);
     await act(async () => lists[0]!());
-    await tick();
+    await settle(5);
     expectProvider(IssueProvider.GITHUB);
     deferLists = false;
     serverProvider = IssueProvider.GITHUB;
     await act(async () => saves[1]!.succeed());
-    await tick();
+    await settle(5);
     expectProvider(IssueProvider.GITHUB);
   });
 });

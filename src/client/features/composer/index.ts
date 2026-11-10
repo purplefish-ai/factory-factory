@@ -16,8 +16,8 @@ export type {
 export { FileMentionPalette } from './file-mention-palette';
 // Hooks
 export { collectAttachments } from '@/client/lib/attachment-file-conversion';
+export { useFileMentions } from './hooks/use-file-mentions';
 export { usePasteDropHandler } from './hooks/use-paste-drop-handler';
-export { useProjectFileMentions } from './hooks/use-project-file-mentions';
 export { useSlashCommands } from './hooks/use-slash-commands';
 export type { PaletteKeyboardHandle, PaletteKeyResult } from './palette-keyboard-navigation';
 export { usePaletteKeyboardNavigation } from './palette-keyboard-navigation';

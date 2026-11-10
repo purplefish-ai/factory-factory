@@ -17,10 +17,7 @@ export function useRetryWorkspaceInit(
   const utils = trpc.useUtils();
   const retryInit = trpc.workspace.retryInit.useMutation({
     onSettled: () => {
-      runInBackground(
-        utils.workspace.getInitStatus.invalidate({ id: workspaceId }),
-        "Couldn't refresh data."
-      );
+      runInBackground(utils.workspace.getInitStatus.invalidate({ id: workspaceId }));
     },
     onError: (error) => {
       toast.error(error.message);

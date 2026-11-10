@@ -131,6 +131,38 @@ describe('handleToolInputStreaming', () => {
     });
   });
 
+  it('skips text deltas and input deltas whose JSON fragment is not a string', () => {
+    const toolInputAccumulatorRef = { current: createToolInputAccumulatorState() };
+    handleToolInputStreaming(
+      {
+        type: 'stream_event',
+        event: {
+          type: 'content_block_start',
+          index: 0,
+          content_block: { type: 'tool_use', id: 'tool-1', name: 'search', input: {} },
+        },
+      },
+      toolInputAccumulatorRef
+    );
+    const textDelta: AgentMessage = {
+      type: 'stream_event',
+      event: { type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: '{}' } },
+    };
+    // Stream events come off the wire, so a fragment can arrive in the wrong shape.
+    const malformedDelta = {
+      type: 'stream_event',
+      event: {
+        type: 'content_block_delta',
+        index: 0,
+        delta: { type: 'input_json_delta', partial_json: 42 },
+      },
+    } as unknown as AgentMessage;
+
+    expect(handleToolInputStreaming(textDelta, toolInputAccumulatorRef)).toBeNull();
+    expect(handleToolInputStreaming(malformedDelta, toolInputAccumulatorRef)).toBeNull();
+    expect(toolInputAccumulatorRef.current.inputJsonByToolUseId.get('tool-1')).toBe('');
+  });
+
   it('cleans up accumulator entries on content_block_stop', () => {
     const toolInputAccumulatorRef = { current: createToolInputAccumulatorState() };
     const startMsg: AgentMessage = {

@@ -74,13 +74,9 @@ function healWorkspaceCachesAfterReconnect(
   projectId: string
 ): void {
   runInBackground(
-    queryClient.invalidateQueries(projectWorkspaceDetailQueryFilter(queryClient, projectId)),
-    "Couldn't refresh data."
+    queryClient.invalidateQueries(projectWorkspaceDetailQueryFilter(queryClient, projectId))
   );
-  runInBackground(
-    utils.workspace.listForProject.invalidate({ projectId }),
-    "Couldn't refresh data."
-  );
+  runInBackground(utils.workspace.listForProject.invalidate({ projectId }));
 }
 
 function seedPendingRequests(
@@ -336,15 +332,12 @@ export function useProjectSnapshotSync(projectId: string | undefined): void {
       return;
     }
     const detailFilter = projectWorkspaceDetailQueryFilter(queryClient, projectId);
-    runInBackground(queryClient.cancelQueries(detailFilter), "Couldn't refresh data.");
-    runInBackground(queryClient.invalidateQueries(detailFilter), "Couldn't refresh data.");
+    runInBackground(queryClient.cancelQueries(detailFilter));
+    runInBackground(queryClient.invalidateQueries(detailFilter));
     // Cancel synchronously before invalidating, including an uncached bootstrap
     // whose old connection result must not win over the fallback request.
-    runInBackground(cancelProjectWorkspaceList(queryClient, projectId), "Couldn't refresh data.");
-    runInBackground(
-      utils.workspace.listForProject.invalidate({ projectId }),
-      "Couldn't refresh data."
-    );
+    runInBackground(cancelProjectWorkspaceList(queryClient, projectId));
+    runInBackground(utils.workspace.listForProject.invalidate({ projectId }));
   }, [projectId, queryClient, utils]);
   useEffect(() => {
     lifecycle.disposed = false;

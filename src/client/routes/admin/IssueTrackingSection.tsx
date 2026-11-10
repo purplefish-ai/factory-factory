@@ -226,7 +226,7 @@ export function ProjectIssueTrackingCard({
   const updateProject = trpc.project.update.useMutation({
     onSuccess: () => {
       toast.success('Issue tracking settings saved');
-      runInBackground(invalidateProject(utils, projectId), "Couldn't refresh data.");
+      runInBackground(invalidateProject(utils, projectId));
     },
     onError: (error) => toast.error(`Couldn't save issue tracking settings. ${error.message}`),
   });

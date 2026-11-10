@@ -226,7 +226,7 @@ vi.mock('@/client/features/composer', () => ({
     handleDragLeave: vi.fn(),
     isDragging: false,
   }),
-  useProjectFileMentions: () => ({
+  useFileMentions: () => ({
     files: [],
     fileMentionMenuOpen: false,
     filesLoading: false,

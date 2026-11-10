@@ -1,16 +1,17 @@
 import { ShieldWarningIcon } from '@phosphor-icons/react/dist/csr/ShieldWarning';
 import { ProviderCliWarning } from '@/client/components/provider-cli-warning';
-import { trpc } from '@/client/lib/trpc';
-import { useUpdateUserSettings, useUserSettings } from '@/client/lib/user-settings-queries';
+import {
+  useProviderOptions,
+  useUpdateUserSettings,
+  useUserSettings,
+} from '@/client/lib/user-settings-queries';
 import { Switch } from '@/components/ui/switch';
 import { PROVIDER_OPTIONS, withSavedOption } from './provider-model-options';
 import { SettingRow, SettingSelect, SettingsSection } from './settings-section';
 
 export function AdversarialReviewSection() {
   const settingsQuery = useUserSettings();
-  const { data: providerOptions } = trpc.userSettings.getProviderOptions.useQuery(undefined, {
-    staleTime: 30_000,
-  });
+  const { data: providerOptions } = useProviderOptions();
   const updateSettings = useUpdateUserSettings();
 
   return (

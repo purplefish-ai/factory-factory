@@ -39,7 +39,7 @@ export function SystemSettingsSection() {
 
   const resetApiStats = trpc.admin.resetApiUsageStats.useMutation({
     onSuccess: () => {
-      runInBackground(refetch(), "Couldn't refresh data.");
+      runInBackground(refetch());
     },
     onError: (error) => {
       toast.error("Couldn't reset API usage stats.", { description: error.message });

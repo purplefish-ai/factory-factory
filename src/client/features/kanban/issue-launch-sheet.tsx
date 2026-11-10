@@ -133,10 +133,7 @@ export function IssueLaunchSheet({
     onSuccess: (workspace) => {
       seedCreatedWorkspaceDetail(queryClient, workspace);
 
-      runInBackground(
-        utils.workspace.listForProject.invalidate({ projectId }),
-        "Couldn't refresh data."
-      );
+      runInBackground(utils.workspace.listForProject.invalidate({ projectId }));
       onOpenChange(false);
       onStarted?.();
     },

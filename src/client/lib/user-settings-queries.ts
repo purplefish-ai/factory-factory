@@ -13,7 +13,7 @@ import { type AppRouter, trpc } from '@/client/lib/trpc';
 
 /**
  * The only place that reads and writes the `userSettings.get` cache and runs
- * `userSettings.update`. `factory/query-owner` keeps other files on these
+ * `userSettings.update`, and the only reader of `userSettings.getProviderOptions`. `factory/query-owner` keeps other files on these
  * hooks, so every settings control shares one cache strategy:
  *
  * - Writes run one at a time, in the order they were made (one mutation scope).
@@ -40,6 +40,29 @@ export function useUserSettings(
   options?: UserSettingsQueryOptions
 ): UseTRPCQueryResult<UserSettings, TRPCClientErrorLike<AppRouter>> {
   return trpc.userSettings.get.useQuery(undefined, options);
+}
+
+export type ProviderOptions = inferRouterOutputs<AppRouter>['userSettings']['getProviderOptions'];
+type ProviderOptionsInput = inferRouterInputs<AppRouter>['userSettings']['getProviderOptions'];
+
+/** Live model discovery starts provider processes, so every reader shares one freshness window. */
+const PROVIDER_OPTIONS_STALE_TIME_MS = 60_000;
+
+interface ProviderOptionsQueryOptions {
+  enabled?: boolean;
+  refetchOnWindowFocus?: boolean;
+  refetchInterval?: (query: { state: { data: ProviderOptions | undefined } }) => number | false;
+}
+
+/** The provider model catalog, optionally for one Codex account. */
+export function useProviderOptions(
+  input?: ProviderOptionsInput,
+  options?: ProviderOptionsQueryOptions
+): UseTRPCQueryResult<ProviderOptions, TRPCClientErrorLike<AppRouter>> {
+  return trpc.userSettings.getProviderOptions.useQuery(input, {
+    ...options,
+    staleTime: PROVIDER_OPTIONS_STALE_TIME_MS,
+  });
 }
 
 const rollback = createPatchRollback<UserSettings>();

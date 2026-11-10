@@ -1,9 +1,5 @@
-import type {
-  AgentMessage,
-  ChatMessage,
-  PendingInteractiveRequest,
-  ToolUseContent,
-} from '@/lib/chat-protocol';
+import { z } from 'zod';
+import type { AgentMessage, ChatMessage, PendingInteractiveRequest } from '@/lib/chat-protocol';
 import {
   compareTranscriptMessageOrder,
   DEFAULT_RENDERER_TRANSCRIPT_LIMIT,
@@ -164,6 +160,9 @@ export function applyRendererMessages(state: ChatState, messages: ChatMessage[])
   };
 }
 
+/** The part of a streamed tool_use block that identifies it; a block without an id matches nothing. */
+const ToolUseBlockIdSchema = z.object({ type: z.literal('tool_use'), id: z.string() });
+
 /**
  * Checks if a message is a tool_use message with the given ID.
  */
@@ -179,8 +178,8 @@ function isToolUseMessageWithId(msg: ChatMessage, toolUseId: string): boolean {
   if (event.type !== 'content_block_start' || event.content_block.type !== 'tool_use') {
     return false;
   }
-  const block = event.content_block as ToolUseContent;
-  return block.id === toolUseId;
+  const block = ToolUseBlockIdSchema.safeParse(event.content_block);
+  return block.success && block.data.id === toolUseId;
 }
 
 /** ACP thought chunks lack message_start; visible text and tool starts also end a sequence. */
