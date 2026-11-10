@@ -2,8 +2,8 @@ import { CheckCircleIcon } from '@phosphor-icons/react/dist/csr/CheckCircle';
 import { TerminalIcon } from '@phosphor-icons/react/dist/csr/Terminal';
 import { WarningIcon } from '@phosphor-icons/react/dist/csr/Warning';
 import { QueryErrorState, QueryRefreshError } from '@/client/components/query-error-state';
+import { StatusCallout } from '@/client/components/status-callout';
 import { type ScriptType, StartupScriptForm } from '@/client/features/project/startup-script-form';
-import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -52,7 +52,7 @@ function AuthStatusDetail({
         error={authError}
         onRetry={onRetryAuth}
         isRetrying={isRetryingAuth}
-        className="rounded-md border p-3"
+        className="p-0"
       />
     );
   }
@@ -148,9 +148,9 @@ export function GithubUrlForm({
   return (
     <form onSubmit={onSubmit} className="space-y-4">
       {error && (
-        <Alert variant="destructive">
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
+        <StatusCallout tone="danger" role="alert">
+          {error}
+        </StatusCallout>
       )}
 
       <div className="space-y-2">

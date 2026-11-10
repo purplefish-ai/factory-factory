@@ -1,10 +1,10 @@
 import { CaretDownIcon } from '@phosphor-icons/react/dist/csr/CaretDown';
 import { CaretRightIcon } from '@phosphor-icons/react/dist/csr/CaretRight';
 import { RobotIcon } from '@phosphor-icons/react/dist/csr/Robot';
-import { WarningCircleIcon } from '@phosphor-icons/react/dist/csr/WarningCircle';
 import { useEffect, useMemo, useState } from 'react';
 import { EmptyState } from '@/client/components/empty-state';
 import { Loading } from '@/client/components/loading';
+import { StatusCallout } from '@/client/components/status-callout';
 import { SubagentIcon } from '@/client/components/subagent-icon';
 import {
   SessionTargetStopButton,
@@ -130,7 +130,7 @@ function SubagentRow({
           <SubagentIcon index={iconIndex} />
           <div className="min-w-0 flex-1 space-y-1">
             <p className="truncate text-sm font-medium">{displayName(subagent)}</p>
-            <div className="flex min-w-0 items-center gap-1.5 text-[11px] text-muted-foreground">
+            <div className="flex min-w-0 items-center gap-1.5 text-2xs text-muted-foreground">
               <span>{statusLabel(subagent.status)}</span>
               {subagent.model && (
                 <>
@@ -174,26 +174,27 @@ function SubagentRow({
   );
 }
 
-function PaginationError({ error }: { error: { message: string; onRetry: () => void } }) {
+function ListError({ error }: { error: { message: string; onRetry: () => void } }) {
   return (
-    <div className="mx-3 my-3 rounded-md border border-destructive/30 bg-destructive/5 p-3">
-      <div className="flex items-start gap-2">
-        <WarningCircleIcon className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
-        <div className="min-w-0 space-y-2">
-          <p className="break-words text-xs text-destructive">{error.message}</p>
-          <Button type="button" variant="outline" size="sm" onClick={error.onRetry}>
-            Retry
-          </Button>
-        </div>
-      </div>
-    </div>
+    <StatusCallout
+      tone="danger"
+      size="sm"
+      className="mx-3 my-3"
+      action={
+        <Button type="button" variant="outline" size="sm" onClick={error.onRetry}>
+          Retry
+        </Button>
+      }
+    >
+      {error.message}
+    </StatusCallout>
   );
 }
 
 function EmptyReadyState({ state }: { state: Extract<SubagentListState, { kind: 'ready' }> }) {
   return (
     <div>
-      {state.error && <PaginationError error={state.error} />}
+      {state.error && <ListError error={state.error} />}
       <EmptyState
         size="compact"
         icon={RobotIcon}
@@ -286,19 +287,7 @@ export function SubagentList({
   }
 
   if (state.kind === 'error') {
-    return (
-      <div className="mx-3 my-3 rounded-md border border-destructive/30 bg-destructive/5 p-3">
-        <div className="flex items-start gap-2">
-          <WarningCircleIcon className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
-          <div className="min-w-0 space-y-2">
-            <p className="break-words text-xs text-destructive">{state.message}</p>
-            <Button type="button" variant="outline" size="sm" onClick={state.onRetry}>
-              Retry
-            </Button>
-          </div>
-        </div>
-      </div>
-    );
+    return <ListError error={state} />;
   }
 
   if (state.subagents.length === 0) {
@@ -307,7 +296,7 @@ export function SubagentList({
 
   return (
     <div>
-      {state.error && <PaginationError error={state.error} />}
+      {state.error && <ListError error={state.error} />}
       {groups.active.length > 0 && (
         <ul className="divide-y divide-border/50">
           {groups.active.map((subagent) => (

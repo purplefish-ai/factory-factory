@@ -1,3 +1,4 @@
+import { SectionLabel } from '@/client/components/section-label';
 import {
   getShortcutChords,
   getShortcutEnvironment,
@@ -57,12 +58,11 @@ export function KeyboardShortcutsDialog({
           <div className="grid gap-x-8 gap-y-6 px-6 py-5 md:grid-cols-2">
             {sections.map(({ scope, shortcuts }) => (
               <section key={scope} aria-labelledby={`shortcut-scope-${scope}`}>
-                <h3
-                  id={`shortcut-scope-${scope}`}
-                  className="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground"
-                >
-                  {SHORTCUT_SCOPE_LABELS[scope]}
-                </h3>
+                <SectionLabel asChild>
+                  <h3 id={`shortcut-scope-${scope}`} className="mb-2">
+                    {SHORTCUT_SCOPE_LABELS[scope]}
+                  </h3>
+                </SectionLabel>
                 <dl className="divide-y divide-border/60">
                   {shortcuts.map((definition) => (
                     <div

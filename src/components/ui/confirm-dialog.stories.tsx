@@ -1,5 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react';
 import { expect, fn, userEvent, within } from 'storybook/test';
+import { StatusCallout } from '@/client/components/status-callout';
 import { ConfirmDialog } from './confirm-dialog';
 
 const meta = {
@@ -50,9 +51,9 @@ export const WithDetailsAndSecondaryAction: Story = {
     confirmText: 'Remove Lock and Archive',
     secondaryAction: { label: 'Retry', onClick: fn() },
     children: (
-      <p className="rounded-md border border-warning/30 bg-warning/10 px-3 py-2 text-sm text-warning">
+      <StatusCallout tone="warning">
         Remove the lock only if no other Git operation is running.
-      </p>
+      </StatusCallout>
     ),
   },
 };

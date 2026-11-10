@@ -37,21 +37,23 @@ describe('ScriptFailedBanner', () => {
       );
     });
 
-    const layoutRow = container.querySelector('.border-b > div');
-    expect(layoutRow?.className).toContain('flex-col');
-    expect(layoutRow?.className).toContain('sm:flex-row');
+    // A danger strip callout: its message column wraps long text and its
+    // actions move under the message when the banner is narrow.
+    const banner = container.querySelector('[data-slot="status-callout"]');
+    expect(banner?.getAttribute('data-status-tone')).toBe('danger');
+    expect(banner?.className).toContain('flex-wrap');
 
-    const message = Array.from(container.querySelectorAll('span')).find((node) =>
+    const message = Array.from(container.querySelectorAll('p')).find((node) =>
       node.textContent?.startsWith('Init script failed:')
     );
-    expect(message?.className).toContain('break-words');
-    expect(message?.className).toContain('whitespace-normal');
+    const messageColumn = message?.parentElement?.parentElement;
+    expect(messageColumn?.className).toContain('break-words');
+    expect(messageColumn?.className).toContain('min-w-0');
 
-    const actionRow = Array.from(container.querySelectorAll('div')).find((node) => {
-      const className = node.className;
-      return typeof className === 'string' && className.includes('flex-wrap');
-    });
-    expect(actionRow?.className).toContain('self-start');
+    const actionRow = messageColumn?.nextElementSibling;
+    expect(actionRow?.className).toContain('flex-wrap');
+    expect(actionRow?.textContent).toContain('Show output');
+    expect(actionRow?.textContent).toContain('Retry');
 
     root.unmount();
   });

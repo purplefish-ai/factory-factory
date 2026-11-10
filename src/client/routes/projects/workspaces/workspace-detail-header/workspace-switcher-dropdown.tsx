@@ -1,6 +1,7 @@
 import { CaretUpDownIcon } from '@phosphor-icons/react/dist/csr/CaretUpDown';
 import { memo, useMemo } from 'react';
 import { useNavigate } from 'react-router';
+import { SectionLabel } from '@/client/components/section-label';
 import type { ServerWorkspace } from '@/client/components/use-workspace-list-state';
 import { WorkspaceItemContent } from '@/client/components/workspace-item-content';
 import { useProjectWorkspaceQuery } from '@/client/hooks/use-project-workspace-query';
@@ -100,7 +101,7 @@ export function WorkspaceSwitcherDropdown({
           {currentWorkspaceLabel}
         </span>
         <span className={cn('shrink-0', compact && 'hidden')} aria-hidden>
-          <span className="ml-1 hidden text-[10px] font-normal text-muted-foreground tabular-nums @[72rem]/header:block">
+          <span className="ml-1 hidden text-2xs font-normal text-muted-foreground tabular-nums @[72rem]/header:block">
             {grouped.working.length} wk · {grouped.waiting.length} wait
           </span>
         </span>
@@ -118,30 +119,24 @@ export function WorkspaceSwitcherDropdown({
         <SelectItem value={currentWorkspaceId} className="hidden" aria-hidden>
           {currentWorkspaceName}
         </SelectItem>
-        <SelectGroup>
-          <SelectLabel className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-            Working · {grouped.working.length}
-          </SelectLabel>
-          {grouped.working.map((workspace) => (
-            <WorkspaceSwitcherItem key={`working-${workspace.id}`} workspace={workspace} />
-          ))}
-        </SelectGroup>
-        <SelectGroup>
-          <SelectLabel className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-            Waiting · {grouped.waiting.length}
-          </SelectLabel>
-          {grouped.waiting.map((workspace) => (
-            <WorkspaceSwitcherItem key={`waiting-${workspace.id}`} workspace={workspace} />
-          ))}
-        </SelectGroup>
-        <SelectGroup>
-          <SelectLabel className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-            Done · {grouped.done.length}
-          </SelectLabel>
-          {grouped.done.map((workspace) => (
-            <WorkspaceSwitcherItem key={`done-${workspace.id}`} workspace={workspace} />
-          ))}
-        </SelectGroup>
+        {(
+          [
+            ['working', 'Working'],
+            ['waiting', 'Waiting'],
+            ['done', 'Done'],
+          ] as const
+        ).map(([group, label]) => (
+          <SelectGroup key={group}>
+            <SectionLabel asChild>
+              <SelectLabel className="px-2 py-1">
+                {label} · {grouped[group].length}
+              </SelectLabel>
+            </SectionLabel>
+            {grouped[group].map((workspace) => (
+              <WorkspaceSwitcherItem key={`${group}-${workspace.id}`} workspace={workspace} />
+            ))}
+          </SelectGroup>
+        ))}
       </SelectContent>
     </Select>
   );

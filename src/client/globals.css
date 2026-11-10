@@ -147,6 +147,13 @@
   --radius-2xl: calc(var(--radius) + 8px);
   --radius-3xl: calc(var(--radius) + 12px);
   --radius-4xl: calc(var(--radius) + 16px);
+  /*
+   * One step below text-xs for chips, section labels and dense metadata.
+   * 11px replaces the former ad hoc 10px and 11px sizes; a 14px line keeps
+   * single-line chips compact (docs/status-colors.md#small-text).
+   */
+  --text-2xs: 0.6875rem;
+  --text-2xs--line-height: calc(0.875 / 0.6875);
   --color-background: var(--background);
   --color-shell: var(--shell);
   --color-foreground: var(--foreground);

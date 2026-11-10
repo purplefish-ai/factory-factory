@@ -4,6 +4,7 @@ import { POLL_INTERVAL_MS, QUERY_RETRY } from '@/client/lib/query-options';
 import { trpc } from '@/client/lib/trpc';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Progress } from '@/components/ui/progress';
 import { Spinner } from '@/components/ui/spinner';
 import { Switch } from '@/components/ui/switch';
 import type { CodexAccountSummary, CodexLoginState } from '@/shared/codex-accounts';
@@ -30,12 +31,11 @@ function AccountUsage({ usage }: { usage: CodexAccountSummary['usage'] }) {
           <span>{window.label}</span>
           <span>{Math.round(window.usedPercent)}% used</span>
         </div>
-        <div className="h-1 overflow-hidden rounded bg-muted">
-          <div
-            className="h-full bg-primary"
-            style={{ width: `${Math.max(0, Math.min(100, window.usedPercent))}%` }}
-          />
-        </div>
+        <Progress
+          value={Math.max(0, Math.min(100, window.usedPercent))}
+          aria-label={`${window.label} used`}
+          className="h-1"
+        />
         <p className="text-muted-foreground">
           {window.resetsAt === null
             ? 'Reset time unavailable'

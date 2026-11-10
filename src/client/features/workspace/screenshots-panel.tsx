@@ -239,7 +239,7 @@ function ScreenshotThumbnail({
           <XIcon className="h-3 w-3" />
         </button>
       </div>
-      <div className="pointer-events-none absolute bottom-0 left-0 right-0 bg-black/60 px-1.5 py-0.5 text-[10px] text-white truncate">
+      <div className="pointer-events-none absolute bottom-0 left-0 right-0 bg-black/60 px-1.5 py-0.5 text-2xs text-white truncate">
         {screenshot.name}
       </div>
     </div>

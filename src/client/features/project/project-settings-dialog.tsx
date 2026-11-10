@@ -1,10 +1,10 @@
 import { GearIcon } from '@phosphor-icons/react/dist/csr/Gear';
 import { useEffect, useState } from 'react';
+import { StatusCallout } from '@/client/components/status-callout';
 import { type ScriptType, StartupScriptForm } from '@/client/features/project/startup-script-form';
 import { runInBackground } from '@/client/lib/background-task';
 import { invalidateProject } from '@/client/lib/project-cache';
 import { trpc } from '@/client/lib/trpc';
-import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -90,9 +90,9 @@ export function ProjectSettingsDialog({
 
         <div className="space-y-4 py-4">
           {error && (
-            <Alert variant="destructive">
-              <AlertDescription>{error}</AlertDescription>
-            </Alert>
+            <StatusCallout tone="danger" role="alert">
+              {error}
+            </StatusCallout>
           )}
 
           <div className="space-y-3">

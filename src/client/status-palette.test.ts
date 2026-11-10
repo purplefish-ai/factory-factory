@@ -82,6 +82,34 @@ describe('status palette', () => {
     }
   });
 
+  it.each(CASES)('%s %s keeps StatusCallout text legible on every tone surface', (scheme, mode) => {
+    const { color } = palette(scheme, mode);
+    for (const tone of STATUS_TONES) {
+      const style = getStatusToneStyle(tone);
+      // The surface's own fill for this mode, e.g. `bg-warning-accent/15` in
+      // light mode and `dark:bg-warning/10` in dark mode.
+      const fills = style.surface.split(' ').flatMap((token) => {
+        const [, dark, name, alpha] = /^(dark:)?bg-([\w-]+)\/(\d+)$/.exec(token) ?? [];
+        return name ? [{ dark: Boolean(dark), token: name, alpha: Number(alpha) }] : [];
+      });
+      const fill =
+        fills.find((candidate) => candidate.dark === (mode === 'dark')) ??
+        fills.find((candidate) => !candidate.dark);
+      expect(fill, `${tone} surface fill`).toBeDefined();
+      if (!fill) {
+        continue;
+      }
+      for (const surface of ['background', 'card']) {
+        const tint = mixOver(color(fill.token), color(surface), fill.alpha / 100);
+        // All callout text uses the tone color: the foreground is not AA on
+        // every tint (Solarized), so callouts never switch to it.
+        expect
+          .soft(contrastRatio(color(style.token), tint), `${tone} text on ${surface} callout`)
+          .toBeGreaterThanOrEqual(AA);
+      }
+    }
+  });
+
   it.each(CASES)('%s %s standalone status dots have non-text contrast', (scheme, mode) => {
     const { color } = palette(scheme, mode);
     for (const tone of STATUS_TONES.filter((tone) => tone !== 'neutral')) {

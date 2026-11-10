@@ -50,7 +50,7 @@ export function IssuesColumn({
       <div className="flex h-13 shrink-0 items-center justify-between px-3 py-3 bg-muted/50 rounded-t-lg">
         <div className="flex items-center gap-2">
           <h3 className="font-semibold text-sm">{column.label}</h3>
-          <Badge variant="secondary" className="h-5 min-w-5 justify-center text-xs">
+          <Badge variant="secondary" size="count">
             {issues.length}
           </Badge>
         </div>

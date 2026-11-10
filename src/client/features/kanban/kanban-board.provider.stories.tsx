@@ -567,9 +567,11 @@ export const PhoneEmptyDone: Story = {
     scroll.scrollTop = scroll.scrollHeight;
     const done = canvas.getByRole('region', { name: 'Done' });
     await expect(done.getBoundingClientRect().height).toBeLessThan(160);
+    // Only the 16px bottom padding remains below Done. The maximum scrollTop is
+    // whole pixels while card heights can sum to a half pixel, so allow < 1px.
     await expect(
       scroll.getBoundingClientRect().bottom - done.getBoundingClientRect().bottom
-    ).toBeLessThanOrEqual(16);
+    ).toBeLessThan(17);
   },
 };
 

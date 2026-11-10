@@ -75,7 +75,7 @@ function ResultRow({
           <MatchedText text={result.subtitle} query={query} />
         </span>
       </span>
-      <span className="shrink-0 text-[11px] text-muted-foreground">
+      <span className="shrink-0 text-2xs text-muted-foreground">
         {result.archived ? (
           <span className="flex items-center gap-1">
             <ArchiveIcon className="size-3" />

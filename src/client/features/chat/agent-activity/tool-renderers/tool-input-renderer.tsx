@@ -4,6 +4,7 @@ import type { ReactElement } from 'react';
 import { memo } from 'react';
 import { TodoItem } from '@/client/components/todo-item';
 import { withOccurrenceKeys } from '@/client/lib/list-keys';
+import { Progress } from '@/components/ui/progress';
 import type { ToolResultContentValue } from '@/lib/chat-protocol';
 import { calculateTodoProgress } from '@/lib/todo-utils';
 import {
@@ -104,7 +105,7 @@ const TaskToolRenderer = memo(function TaskToolRenderer({
       {description && <div className="text-xs text-muted-foreground italic">{description}</div>}
       {prompt && (
         <div className="rounded bg-muted/50 px-2 py-1.5">
-          <div className="text-[10px] font-medium text-muted-foreground mb-0.5">Task</div>
+          <div className="text-2xs font-medium text-muted-foreground mb-0.5">Task</div>
           <pre className="text-xs whitespace-pre-wrap overflow-x-auto max-h-32 overflow-y-auto">
             {prompt}
           </pre>
@@ -166,12 +167,7 @@ const TodoWriteToolRenderer = memo(function TodoWriteToolRenderer({
         </span>
         <span className="text-xs text-muted-foreground">{progressPercent}%</span>
       </div>
-      <div className="h-1.5 rounded-full bg-muted overflow-hidden">
-        <div
-          className="h-full bg-primary transition-all duration-300"
-          style={{ width: `${progressPercent}%` }}
-        />
-      </div>
+      <Progress value={progressPercent} aria-label="Task list progress" className="h-1.5" />
       <div className="space-y-1.5">
         {withOccurrenceKeys(todos, (todo) => todo.content).map(({ item: todo, key }) => (
           <TodoItem key={key} todo={todo} />
@@ -220,11 +216,11 @@ const RunToolRenderer = memo(function RunToolRenderer({
       </div>
 
       {typeof input.cwd === 'string' && input.cwd.length > 0 && (
-        <div className="text-[10px] text-muted-foreground">cwd: {input.cwd}</div>
+        <div className="text-2xs text-muted-foreground">cwd: {input.cwd}</div>
       )}
 
       {typeof input.description === 'string' && input.description.length > 0 && (
-        <div className="text-[10px] text-muted-foreground">{input.description}</div>
+        <div className="text-2xs text-muted-foreground">{input.description}</div>
       )}
 
       {invocationArgs && (
@@ -275,7 +271,7 @@ const WebSearchToolRenderer = memo(function WebSearchToolRenderer({
           {payload.query || '(query not resolved yet)'}
         </pre>
       </div>
-      <div className="text-[10px] text-muted-foreground">action: {payload.action.type}</div>
+      <div className="text-2xs text-muted-foreground">action: {payload.action.type}</div>
       {queries.length > 0 && (
         <details className="text-xs">
           <summary className="text-muted-foreground cursor-pointer hover:text-foreground">
@@ -339,13 +335,13 @@ function EditToolRenderer({ input }: { input: Record<string, unknown> }) {
       <FilePathDisplay path={parsed.file_path ?? ''} />
       <div className="grid grid-cols-2 gap-1.5">
         <div className="rounded bg-destructive/10 px-1.5 py-1 min-w-0">
-          <div className="text-[10px] font-medium text-destructive mb-0.5">Remove</div>
+          <div className="text-2xs font-medium text-destructive mb-0.5">Remove</div>
           <pre className="text-xs overflow-x-auto max-h-16 overflow-y-auto">
             {truncateContent(parsed.old_string ?? '', TOOL_INPUT_DIFF_TRUNCATE)}
           </pre>
         </div>
         <div className="rounded bg-success/10 px-1.5 py-1 min-w-0">
-          <div className="text-[10px] font-medium text-success mb-0.5">Add</div>
+          <div className="text-2xs font-medium text-success mb-0.5">Add</div>
           <pre className="text-xs overflow-x-auto max-h-16 overflow-y-auto">
             {truncateContent(parsed.new_string ?? '', TOOL_INPUT_DIFF_TRUNCATE)}
           </pre>
@@ -429,7 +425,7 @@ export const ToolInputRenderer = memo(function ToolInputRenderer({
             </pre>
           </div>
           {input.description != null && (
-            <div className="text-[10px] text-muted-foreground">{String(input.description)}</div>
+            <div className="text-2xs text-muted-foreground">{String(input.description)}</div>
           )}
         </div>
       );

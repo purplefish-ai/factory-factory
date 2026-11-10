@@ -34,7 +34,7 @@ export function SubagentIcon({ index, className }: { index: number; className?: 
       <span
         aria-hidden="true"
         className={cn(
-          'flex h-5 w-5 shrink-0 items-center justify-center rounded-full border text-[10px] font-medium tabular-nums text-muted-foreground',
+          'flex h-5 w-5 shrink-0 items-center justify-center rounded-full border text-2xs font-medium tabular-nums text-muted-foreground',
           className
         )}
       >

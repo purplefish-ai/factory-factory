@@ -1,6 +1,7 @@
 import { memo } from 'react';
 import { ChatImage, imageDataUrl } from '@/client/components/chat-image';
 import { MarkdownRenderer } from '@/client/components/markdown';
+import { SectionLabel } from '@/client/components/section-label';
 import { withOccurrenceKeys } from '@/client/lib/list-keys';
 import type { ImageItem, TextItem, ToolResultContentValue } from '@/lib/chat-protocol';
 import { cn } from '@/lib/utils';
@@ -114,9 +115,9 @@ export const ToolResultContentRenderer = memo(function ToolResultContentRenderer
     return (
       <div className="space-y-1 w-0 min-w-full">
         <div className="rounded border bg-muted/20">
-          <div className="px-2 py-1 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-            Plan
-          </div>
+          <SectionLabel asChild>
+            <div className="px-2 py-1">Plan</div>
+          </SectionLabel>
           <div className="border-t px-2 py-2 max-h-64 overflow-y-auto text-sm leading-relaxed">
             <MarkdownRenderer content={rendered} />
           </div>

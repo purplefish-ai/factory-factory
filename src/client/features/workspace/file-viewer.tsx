@@ -6,6 +6,7 @@ import { useTheme } from 'next-themes';
 import type { RefObject, UIEvent } from 'react';
 import { useRef, useState } from 'react';
 import { QueryState } from '@/client/components/query-state';
+import { StatusCallout } from '@/client/components/status-callout';
 import { ErrorBoundary } from '@/client/error-boundary';
 import type { AppRouter } from '@/client/lib/trpc';
 import { trpc } from '@/client/lib/trpc';
@@ -119,19 +120,15 @@ function FileViewerWarnings({ truncated, fileSizeLabel, isBinary }: FileViewerWa
   return (
     <>
       {truncated && (
-        <div className="flex items-center gap-2 px-4 py-2 bg-warning/10 border-b border-warning/20">
-          <WarningIcon className="h-4 w-4 text-warning" />
-          <span className="text-sm text-warning">
-            File truncated to 1MB. Actual size: {fileSizeLabel}
-          </span>
-        </div>
+        <StatusCallout tone="warning" variant="strip">
+          File truncated to 1MB. Actual size: {fileSizeLabel}
+        </StatusCallout>
       )}
 
       {isBinary && (
-        <div className="flex items-center gap-2 px-4 py-2 bg-muted/50 border-b">
-          <WarningIcon className="h-4 w-4 text-muted-foreground" />
-          <span className="text-sm text-muted-foreground">Binary file cannot be displayed</span>
-        </div>
+        <StatusCallout tone="neutral" variant="strip" icon={WarningIcon}>
+          Binary file cannot be displayed
+        </StatusCallout>
       )}
     </>
   );

@@ -2,10 +2,10 @@ import { CheckCircleIcon } from '@phosphor-icons/react/dist/csr/CheckCircle';
 import { LinkIcon } from '@phosphor-icons/react/dist/csr/Link';
 import { useRef, useState } from 'react';
 import { toast } from 'sonner';
+import { StatusChip } from '@/client/components/status-indicators';
 import { runInBackground } from '@/client/lib/background-task';
 import { invalidateProject } from '@/client/lib/project-cache';
 import { trpc } from '@/client/lib/trpc';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -291,10 +291,9 @@ export function ProjectIssueTrackingCard({
     >
       <div className="flex items-center gap-2">
         {isConfigured && (
-          <Badge variant="success">
-            <CheckCircleIcon className="w-3 h-3 mr-1" />
+          <StatusChip tone="success" icon={CheckCircleIcon} size="md">
             {isLinear ? 'Linear' : 'GitHub'}
-          </Badge>
+          </StatusChip>
         )}
       </div>
 

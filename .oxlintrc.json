@@ -172,7 +172,29 @@
           }
         ],
         "factory/named-query-options": "error",
-        "factory/query-error-handled": "error"
+        "factory/query-error-handled": "error",
+        "factory/no-arbitrary-font-size": [
+          "error",
+          {
+            "exceptions": {
+              "src/components/ui/calendar.tsx": "shadcn registry source: the weekday and week-number labels keep upstream's 0.8rem so registry diffs stay clean (docs/shadcn.md).",
+              "src/client/features/workspace/right-panel.tsx": "Pending ux-tab-bars: the right panel tab bar's 10px label is restyled by that PR.",
+              "src/client/features/workspace/workspace-pr-menu.tsx": "Pending ux-button-sizing: the compact PR trigger sets its font size in a Button className, which that PR replaces with a Button size.",
+              "src/client/features/workspace/workspace-family-navigation.tsx": "Pending ux-button-sizing: the compact family trigger sets its font size in a Button className, which that PR replaces with a Button size.",
+              "src/client/features/chat/permission-prompt.tsx": "Pending ux-button-sizing: the rendered/raw toggle is a raw button that PR converts to the shared Button."
+            }
+          }
+        ],
+        "factory/use-status-callout": [
+          "error",
+          {
+            "exceptions": {
+              "src/client/lib/status-tones.ts": "The tone map itself defines each tone's surface classes, which StatusCallout renders.",
+              "src/client/features/kanban/kanban-card.tsx": "Board cards tint and border the whole card for an error or pending request (with hover states); that is a status-carrying card, not a message callout.",
+              "src/client/components/app-sidebar.tsx": "A sidebar workspace row waiting on the user tints and borders the whole row; that is a status-carrying row, not a message callout."
+            }
+          }
+        ]
       }
     },
     {
@@ -188,7 +210,9 @@
         "factory/query-owner": "off",
         "factory/no-raw-spinner": "off",
         "factory/no-direct-web-storage": "off",
-        "factory/named-query-options": "off"
+        "factory/named-query-options": "off",
+        "factory/no-arbitrary-font-size": "off",
+        "factory/use-status-callout": "off"
       }
     },
     {

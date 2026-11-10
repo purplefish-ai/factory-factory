@@ -143,7 +143,7 @@ function AgentRailItem({
           {agent.prompt}
         </p>
       )}
-      <div className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-muted-foreground">
+      <div className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 text-2xs text-muted-foreground">
         <span
           className={cn(
             'size-1.5 rounded-full',
