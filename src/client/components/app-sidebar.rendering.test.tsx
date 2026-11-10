@@ -216,12 +216,25 @@ it('shows a failed workspace list as an error with Retry, not as empty groups', 
     serverWorkspaces: undefined,
     serverWorkspacesError: { message: 'Failed to fetch', isRetrying: false, retry },
   });
-  const alert = container.querySelector('[role="alert"]');
-  expect(alert?.textContent).toContain("Couldn't load workspaces");
-  expect(container.textContent).not.toContain('No active workspaces');
-  act(() => alert?.querySelector('button')?.click());
-  expect(retry).toHaveBeenCalledOnce();
-  await unmount();
+  try {
+    const alert = container.querySelector('[role="alert"]');
+    expect(alert?.textContent).toContain("Couldn't load workspaces");
+    expect(container.textContent).not.toContain('No active workspaces');
+    act(() => alert?.querySelector('button')?.click());
+    expect(retry).toHaveBeenCalledOnce();
+  } finally {
+    await unmount();
+  }
+});
+
+it('shows an unresolved workspace list as loading, not as empty groups', async () => {
+  const { container, unmount } = await renderSidebar({ ...navData, serverWorkspaces: undefined });
+  try {
+    expect(container.textContent).toContain('Loading workspaces…');
+    expect(container.textContent).not.toContain('No active workspaces');
+  } finally {
+    await unmount();
+  }
 });
 
 it('keeps cached workspace rows when a refresh fails', async () => {
@@ -229,8 +242,11 @@ it('keeps cached workspace rows when a refresh fails', async () => {
     ...navData,
     serverWorkspacesError: { message: 'Failed to fetch', isRetrying: false, retry: vi.fn() },
   });
-  expect(rowRenders).toHaveBeenCalledTimes(3);
-  expect(container.querySelector('[role="alert"]')).toBeNull();
-  expect(container.textContent).toContain("Couldn't refresh workspaces");
-  await unmount();
+  try {
+    expect(rowRenders).toHaveBeenCalledTimes(3);
+    expect(container.querySelector('[role="alert"]')).toBeNull();
+    expect(container.textContent).toContain("Couldn't refresh workspaces");
+  } finally {
+    await unmount();
+  }
 });

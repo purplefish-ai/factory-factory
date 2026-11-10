@@ -43,6 +43,13 @@ function WorkspaceInbox({ workspaceId }: { workspaceId: string }) {
     ).values(),
   ];
   const unread = items.filter(isUnread).length;
+  // Retry repeats the failed action: an older page, or the list itself.
+  const mailQuery = {
+    data: mail.data,
+    error: mail.error,
+    isFetching: mail.isFetching,
+    refetch: () => (mail.isFetchNextPageError ? mail.fetchNextPage() : mail.refetch()),
+  };
 
   if (selected) {
     return (
@@ -102,7 +109,7 @@ function WorkspaceInbox({ workspaceId }: { workspaceId: string }) {
           </div>
         )}
         <QueryState
-          query={mail}
+          query={mailQuery}
           errorTitle="Couldn't load inbox"
           loadingMessage="Loading inbox…"
           size="compact"

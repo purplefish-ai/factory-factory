@@ -177,8 +177,8 @@ message and a Retry that calls `refetch`. Keep showing cached data when only a
 background refetch fails, and never gate content on `isError`, which stays true
 while cached data is on screen. The `factory/query-error-handled` lint rule
 flags a `use…Query` result that reads `isLoading`, `isPending` or
-`isInitialLoading` without `error`, `isError` or `status`
-([lint guardrails](../../lint-rules/README.md)).
+`isInitialLoading` without `error`, `isError`, `status`, `isLoadingError` or
+`isRefetchError` ([lint guardrails](../../lint-rules/README.md)).
 
 `createAppQueryClient` (`src/client/lib/query-client.ts`) installs a
 `MutationCache.onError` fallback so that no mutation fails silently. The cache

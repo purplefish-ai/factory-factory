@@ -155,7 +155,9 @@ it('shows run-history failures and retries instead of presenting empty history',
     expect(view.container.querySelector('[role="status"]')?.textContent).toContain(
       "Couldn't refresh run history"
     );
-    expect(view.container.querySelector('[title="History unavailable"]')).not.toBeNull();
+    expect(view.container.querySelector('[role="status"]')?.textContent).toContain(
+      'History unavailable'
+    );
     expect(view.container.textContent).not.toContain('No runs yet');
     await act(() =>
       [...view.container.querySelectorAll('button')]
@@ -175,7 +177,7 @@ it('retains cached agent details and allows retrying a failed definition refresh
     expect(view.container.textContent).toContain('Review changes');
     const notice = view.container.querySelector('[role="status"]');
     expect(notice?.textContent).toContain("Couldn't refresh automation.");
-    expect(notice?.querySelector('[title="Definition refresh unavailable"]')).not.toBeNull();
+    expect(notice?.textContent).toContain('Definition refresh unavailable');
     const retry = [...view.container.querySelectorAll('button')].find(
       (button) => button.textContent === 'Retry'
     );
@@ -196,9 +198,7 @@ it('uses friendly cached NOT_FOUND copy and preserves the definition retry actio
   try {
     const notice = view.container.querySelector('[role="status"]');
     expect(notice?.textContent).toContain('Automation not found.');
-    expect(
-      notice?.querySelector('[title="Its existing workspaces remain available."]')
-    ).not.toBeNull();
+    expect(notice?.textContent).toContain('Its existing workspaces remain available.');
     expect(view.container.innerHTML).not.toContain('Periodic task not found');
     await act(() =>
       [...view.container.querySelectorAll('button')]

@@ -37,9 +37,11 @@ function managementPath(slug: string | undefined, id?: string): string {
 function ProjectLookupState({
   error,
   retry,
+  isRetrying,
 }: {
   error: { message: string } | null;
   retry: () => void;
+  isRetrying: boolean;
 }) {
   if (!error) {
     return <Loading size="compact" message="Loading automation project…" />;
@@ -49,37 +51,45 @@ function ProjectLookupState({
       title="Couldn't load automation project"
       error={error}
       onRetry={retry}
+      isRetrying={isRetrying}
       className="p-2"
     />
   );
 }
 
+type RetryableQuery<TError> = { error: TError | null; isFetching: boolean; refetch: () => unknown };
+
 function MissingAgentState({
-  taskError,
-  retryTask,
+  task,
   ownerSlug,
   hasKnownOwner,
-  ownerError,
-  retryOwner,
+  owner,
 }: {
-  taskError: AgentReadError | null;
-  retryTask: () => void;
+  task: RetryableQuery<AgentReadError>;
   ownerSlug?: string;
   hasKnownOwner: boolean;
-  ownerError: { message: string } | null;
-  retryOwner: () => void;
+  owner: RetryableQuery<{ message: string }>;
 }) {
   return (
     <div className="space-y-3 p-4 text-sm">
-      {taskError ? (
+      {task.error ? (
         <>
-          <QueryErrorState {...agentReadError(taskError)} onRetry={retryTask} className="p-2" />
+          <QueryErrorState
+            {...agentReadError(task.error)}
+            onRetry={() => void task.refetch()}
+            isRetrying={task.isFetching}
+            className="p-2"
+          />
           {ownerSlug || !hasKnownOwner ? (
             <Link to={managementPath(ownerSlug)} className="block text-primary underline">
               Manage automations
             </Link>
           ) : (
-            <ProjectLookupState error={ownerError} retry={retryOwner} />
+            <ProjectLookupState
+              error={owner.error}
+              retry={() => void owner.refetch()}
+              isRetrying={owner.isFetching}
+            />
           )}
         </>
       ) : (
@@ -103,16 +113,10 @@ export function PeriodicTaskPanel({ periodicTaskId, projectId }: PeriodicTaskPan
   if (!task.data) {
     return (
       <MissingAgentState
-        taskError={task.error}
-        retryTask={() => {
-          void task.refetch();
-        }}
+        task={task}
         ownerSlug={project.data?.slug}
         hasKnownOwner={!!ownerProjectId}
-        ownerError={project.error}
-        retryOwner={() => {
-          void project.refetch();
-        }}
+        owner={project}
       />
     );
   }
@@ -155,6 +159,7 @@ export function PeriodicTaskPanel({ periodicTaskId, projectId }: PeriodicTaskPan
             retry={() => {
               void project.refetch();
             }}
+            isRetrying={project.isFetching}
           />
         )}
         {project.data ? (

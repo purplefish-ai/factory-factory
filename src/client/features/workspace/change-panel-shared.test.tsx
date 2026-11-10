@@ -18,6 +18,7 @@ const mocks = vi.hoisted(() => {
       (): {
         data: typeof listed | undefined;
         error: { message: string } | null;
+        isFetching?: boolean;
         refetch: typeof refetch;
       } => ({ data: listed, error: null, refetch })
     ),

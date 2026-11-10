@@ -5,13 +5,13 @@ import { OnboardingCliHealth } from './onboarding-cli-health';
 vi.mock('@/client/hooks/use-cli-health-refresh', () => ({
   useCLIHealthRefresh: () => ({ refresh: vi.fn(), isRefreshing: false }),
 }));
-const query = vi.hoisted(() => ({ failed: false }));
+const query = vi.hoisted(() => ({ failed: false, refreshFailed: false }));
 vi.mock('@/client/lib/trpc', () => ({
   trpc: {
     admin: {
       checkCLIHealth: {
         useQuery: () => ({
-          error: query.failed ? { message: 'Backend unavailable' } : null,
+          error: query.failed || query.refreshFailed ? { message: 'Backend unavailable' } : null,
           data: query.failed
             ? undefined
             : {
@@ -41,6 +41,19 @@ it('shows a failed health check as an error with Retry', () => {
     expect(markup).not.toContain('Checking CLI prerequisites');
   } finally {
     query.failed = false;
+  }
+});
+
+it('keeps cached prerequisites under a notice when a recheck fails', () => {
+  query.refreshFailed = true;
+  try {
+    const markup = renderToStaticMarkup(<OnboardingCliHealth onOpenTerminal={() => undefined} />);
+    expect(markup).toContain('Couldn&#x27;t refresh CLI prerequisites');
+    expect(markup).toContain('Backend unavailable');
+    expect(markup).toContain('CLI Prerequisites');
+    expect(markup).not.toContain('role="alert"');
+  } finally {
+    query.refreshFailed = false;
   }
 });
 

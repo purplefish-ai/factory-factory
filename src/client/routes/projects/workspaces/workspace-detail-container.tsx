@@ -50,6 +50,8 @@ export function WorkspaceDetailContainer() {
     initialDbSessionId,
     maxSessions,
   } = useWorkspaceData({ workspaceId: workspaceId });
+  // Only the error UI shows fetching, so ordinary refetches don't re-render the layout.
+  const isRetryingWorkspace = Boolean(workspaceError) && isFetchingWorkspace;
 
   const {
     rightPanelVisible,
@@ -396,7 +398,7 @@ export function WorkspaceDetailContainer() {
     () => ({
       workspace,
       workspaceError,
-      isFetchingWorkspace,
+      isFetchingWorkspace: isRetryingWorkspace,
       refetchWorkspace,
       workspaceId,
       handleBackToWorkspaces,
@@ -408,7 +410,7 @@ export function WorkspaceDetailContainer() {
     [
       workspace,
       workspaceError,
-      isFetchingWorkspace,
+      isRetryingWorkspace,
       refetchWorkspace,
       workspaceId,
       handleBackToWorkspaces,

@@ -13,7 +13,6 @@ import type { AgentRun } from './types';
 export interface AgentRunHistoryProps {
   runs?: AgentRun[];
   projectSlug: string;
-  isLoading?: boolean;
   /** A failed history read; cached runs stay listed below its notice. */
   error?: { message: string; retry: () => void; isRetrying?: boolean } | null;
 }
@@ -33,7 +32,7 @@ const MISSING_WORKSPACE_LABELS: Record<AgentRun['status'], string> = {
   SKIPPED: 'Workspace unavailable',
 };
 
-export function AgentRunHistory({ runs, projectSlug, isLoading, error }: AgentRunHistoryProps) {
+export function AgentRunHistory({ runs, projectSlug, error }: AgentRunHistoryProps) {
   return (
     <section aria-label="Run history" className="min-w-0 space-y-4">
       <div>
@@ -58,14 +57,15 @@ export function AgentRunHistory({ runs, projectSlug, isLoading, error }: AgentRu
           className="rounded-lg border"
         />
       ) : null}
-      {isLoading && !runs && (
+      {/* Unresolved, including a paused offline read, until runs or an error arrive. */}
+      {!(runs || error) && (
         <div role="status" className="space-y-2">
           <span className="sr-only">Loading run history…</span>
           <Skeleton className="h-28 rounded-lg" />
           <Skeleton className="h-28 rounded-lg" />
         </div>
       )}
-      {!(error || isLoading) && runs?.length === 0 && (
+      {!error && runs?.length === 0 && (
         <EmptyState
           title="No runs yet"
           description="Future runs will appear here."
@@ -143,7 +143,6 @@ export function AgentRunHistoryQuery({
     <AgentRunHistory
       projectSlug={projectSlug}
       runs={history.data}
-      isLoading={history.isLoading}
       error={
         history.error
           ? {

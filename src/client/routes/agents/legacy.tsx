@@ -64,7 +64,8 @@ function LegacyAgentDetail({ id }: { id: string }) {
 }
 function LegacyAgentsIndex() {
   const navigation = useAppNavigationDataContext();
-  if (navigation.projectsError) {
+  // Cached projects still resolve the redirect when only a refresh failed.
+  if (navigation.projectsError && !navigation.projects) {
     return (
       <QueryErrorState
         title="Couldn't load projects"

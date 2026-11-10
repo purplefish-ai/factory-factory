@@ -314,6 +314,15 @@ function readQueryFields(context, declarator) {
       if (parent === declarator) {
         continue;
       }
+      // `const { isLoading } = query` and `const alias = query` read through another binding.
+      if (parent.type === 'VariableDeclarator' && parent.init === reference.identifier) {
+        const aliased = readQueryFields(context, parent);
+        if (!aliased) {
+          return undefined;
+        }
+        fields.push(...aliased);
+        continue;
+      }
       if (parent.type !== 'MemberExpression' || parent.object !== reference.identifier) {
         return undefined;
       }

@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import { EmptyState } from '@/client/components/empty-state';
 import { Loading } from '@/client/components/loading';
-import { QueryErrorState } from '@/client/components/query-error-state';
+import { QueryErrorState, QueryRefreshError } from '@/client/components/query-error-state';
 import { type SessionData, SessionTabBar } from '@/client/features/chat';
 import { getNewChatUnavailableReason } from '@/client/features/workspace';
 import { trpc } from '@/client/lib/trpc';
@@ -81,8 +81,19 @@ function QuickChatLimitError({
     refetch: () => unknown;
   };
 }) {
-  if (!query.error || query.data !== undefined) {
+  if (!query.error) {
     return null;
+  }
+  // A cached limit still applies, so a failed refetch only adds a notice.
+  if (query.data !== undefined) {
+    return (
+      <QueryRefreshError
+        title="Couldn't refresh the chat limit"
+        error={query.error}
+        onRetry={() => void query.refetch()}
+        isRetrying={query.isFetching}
+      />
+    );
   }
   return (
     <QueryErrorState

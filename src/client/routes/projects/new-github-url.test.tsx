@@ -151,6 +151,22 @@ describe('GitHub authentication check', () => {
     await act(async () => alert?.querySelector('button')?.click());
     expect(mocks.auth.refetch).toHaveBeenCalledOnce();
   });
+
+  it('keeps the cached status and adds a notice when a recheck fails', async () => {
+    mocks.auth.error = { message: 'gh is not responding' };
+    await act(async () =>
+      root.render(
+        <MemoryRouter>
+          <NewProjectPage />
+        </MemoryRouter>
+      )
+    );
+    expect(container.textContent).toContain('Authenticated');
+    const notice = [...container.querySelectorAll('[role="status"]')].find((node) =>
+      node.textContent?.includes("Couldn't refresh GitHub authentication")
+    );
+    expect(notice?.textContent).toContain('gh is not responding');
+  });
 });
 
 describe('New Project GitHub URL validation', () => {

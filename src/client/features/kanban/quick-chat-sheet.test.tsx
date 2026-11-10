@@ -337,6 +337,10 @@ it('keeps applying a cached chat limit when only its refetch failed', async () =
       expect.objectContaining({ newChatUnavailableReason: null })
     );
     expect(document.querySelector('[role="alert"]')).toBeNull();
+    const notice = document.querySelector('[role="status"]');
+    expect(notice?.textContent).toContain("Couldn't refresh the chat limit");
+    await act(() => notice?.querySelector('button')?.click());
+    expect(mocks.retryLimit).toHaveBeenCalledOnce();
   } finally {
     await act(() => root.unmount());
     container.remove();

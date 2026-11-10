@@ -169,6 +169,10 @@ describe('Oxlint project guardrails', () => {
       'const mail = trpc.workspace.listMail.useInfiniteQuery(input); show(mail.isLoading, mail.data);',
     ],
     ['query-error-handled', 'const q = trpc.a.b.useQuery(); const busy = q?.isPending;'],
+    [
+      'query-error-handled',
+      'const query = useFooQuery(); const { data, isLoading } = query; show(data, isLoading);',
+    ],
   ];
   const rejectedFixtures = rejectedSources.map(([rule, source], index) => ({
     rule,
@@ -236,6 +240,7 @@ describe('Oxlint project guardrails', () => {
     'const { isLoading, ...query } = trpc.project.list.useQuery();',
     'const { isPending } = trpc.project.create.useMutation();',
     'const q = trpc.a.b.useQuery(); if (q.isLoading) { show(q.error); }',
+    'const query = useFooQuery(); const { isLoading, error } = query; show(isLoading, error);',
     'const q = trpc.a.b.useQuery(); const busy = q.isLoading; const el = <QueryState query={q} />;',
   ]
     .map((source, index) => ({ source, file: join(directory, `accepted-${index}.tsx`) }))

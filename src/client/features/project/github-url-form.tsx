@@ -1,7 +1,7 @@
 import { CheckCircleIcon } from '@phosphor-icons/react/dist/csr/CheckCircle';
 import { TerminalIcon } from '@phosphor-icons/react/dist/csr/Terminal';
 import { WarningIcon } from '@phosphor-icons/react/dist/csr/Warning';
-import { QueryErrorState } from '@/client/components/query-error-state';
+import { QueryErrorState, QueryRefreshError } from '@/client/components/query-error-state';
 import { type ScriptType, StartupScriptForm } from '@/client/features/project/startup-script-form';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
@@ -9,19 +9,38 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Spinner } from '@/components/ui/spinner';
 
-function AuthStatusSection({
-  authStatus,
-  isCheckingAuth,
-  authError,
-  onRetryAuth,
-  onOpenTerminal,
-}: {
+type AuthStatusProps = {
   authStatus: { authenticated: boolean; user?: string; error?: string } | undefined;
   isCheckingAuth: boolean;
   authError: { message: string } | null;
   onRetryAuth: () => void;
   onOpenTerminal: () => void;
-}) {
+};
+
+/** A failed recheck keeps the cached status under a notice. */
+function AuthStatusSection(props: AuthStatusProps) {
+  return (
+    <>
+      {props.authError && props.authStatus ? (
+        <QueryRefreshError
+          title="Couldn't refresh GitHub authentication"
+          error={props.authError}
+          onRetry={props.onRetryAuth}
+          className="rounded-md border"
+        />
+      ) : null}
+      <AuthStatusDetail {...props} />
+    </>
+  );
+}
+
+function AuthStatusDetail({
+  authStatus,
+  isCheckingAuth,
+  authError,
+  onRetryAuth,
+  onOpenTerminal,
+}: AuthStatusProps) {
   if (!authStatus && authError) {
     return (
       <QueryErrorState

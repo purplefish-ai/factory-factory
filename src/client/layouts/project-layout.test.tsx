@@ -181,7 +181,8 @@ it('preserves the actual canonical Agent editor and draft through background pro
     )
   );
   expect(
-    container.querySelector('[role="status"] [title="Project connection lost"]')
+    container.querySelector('[role="status"]')?.textContent?.includes('Project connection lost') ||
+      null
   ).not.toBeNull();
   let resolveRetry: ((value: unknown) => void) | undefined;
   projectRead.mockImplementation(

@@ -234,8 +234,9 @@ function WorkspaceGroups({
   done: ServerWorkspace[];
 }) {
   const error = navData.serverWorkspacesError;
-  if (error && navData.serverWorkspaces === undefined) {
-    return (
+  // Without a selected project the list is not requested, so its groups stay empty.
+  if (navData.serverWorkspaces === undefined && navData.selectedProjectId) {
+    return error ? (
       <QueryErrorState
         title="Couldn't load workspaces"
         error={error}
@@ -243,6 +244,8 @@ function WorkspaceGroups({
         isRetrying={error.isRetrying}
         className="p-2"
       />
+    ) : (
+      <Loading size="compact" message="Loading workspaces…" />
     );
   }
   const groupProps = {

@@ -6,11 +6,16 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { useProjectFileMentions } from './use-project-file-mentions';
 
+const filesQuery = vi.hoisted(() => ({ error: null as Error | null }));
 vi.mock('@/client/lib/trpc', () => ({
   trpc: {
     project: {
       listAllFiles: {
-        useQuery: () => ({ data: { files: [] }, isLoading: false }),
+        useQuery: () => ({
+          data: filesQuery.error ? undefined : { files: [] },
+          isLoading: false,
+          error: filesQuery.error,
+        }),
       },
     },
   },
@@ -90,10 +95,21 @@ function openMentionMenu(rendered: RenderedHook, value: string) {
 }
 
 afterEach(() => {
+  filesQuery.error = null;
   for (const { container, root } of mountedRoots.splice(0)) {
     flushSync(() => root.unmount());
     container.remove();
   }
+});
+
+describe('useProjectFileMentions file list', () => {
+  it('passes a failed file list to the palette instead of an empty one', () => {
+    filesQuery.error = new Error('Repository is unavailable');
+    const rendered = renderHook();
+    openMentionMenu(rendered, '@src');
+    expect(rendered.getResult().files).toEqual([]);
+    expect(rendered.getResult().filesError).toBe('Repository is unavailable');
+  });
 });
 
 describe('useProjectFileMentions selection', () => {

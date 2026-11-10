@@ -3,7 +3,7 @@ import { CheckCircleIcon } from '@phosphor-icons/react/dist/csr/CheckCircle';
 import { CircleDashedIcon } from '@phosphor-icons/react/dist/csr/CircleDashed';
 import { TerminalIcon } from '@phosphor-icons/react/dist/csr/Terminal';
 import { WarningIcon } from '@phosphor-icons/react/dist/csr/Warning';
-import { QueryErrorState } from '@/client/components/query-error-state';
+import { QueryErrorState, QueryRefreshError } from '@/client/components/query-error-state';
 import { useCLIHealthRefresh } from '@/client/hooks/use-cli-health-refresh';
 import { trpc } from '@/client/lib/trpc';
 import { Button } from '@/components/ui/button';
@@ -118,6 +118,15 @@ export function OnboardingCliHealth({ onOpenTerminal }: OnboardingCliHealthProps
 
   return (
     <div className="space-y-3">
+      {error ? (
+        <QueryRefreshError
+          title="Couldn't refresh CLI prerequisites"
+          error={error}
+          onRetry={() => void refresh()}
+          isRetrying={isRefreshing || isRefetching}
+          className="rounded-md border"
+        />
+      ) : null}
       <div className="flex items-center justify-between">
         <p className="text-sm font-medium text-muted-foreground">CLI Prerequisites</p>
         <Button

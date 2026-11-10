@@ -317,11 +317,12 @@ function UntrackedDirContents({
         variant="ghost"
         size="xs"
         className="ml-auto"
+        disabled={query.isFetching}
         onClick={() => {
           void query.refetch();
         }}
       >
-        Retry
+        {query.isFetching ? 'Retrying…' : 'Retry'}
       </Button>
     </div>
   ) : null;

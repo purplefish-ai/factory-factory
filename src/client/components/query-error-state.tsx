@@ -82,10 +82,13 @@ export function QueryRefreshError({
       )}
     >
       <WarningCircleIcon className="size-3.5 shrink-0 text-destructive" aria-hidden="true" />
-      <p className="min-w-0 flex-1 truncate" title={detail || undefined}>
-        <span className="font-medium text-foreground">{title}.</span>{' '}
-        <span className="text-muted-foreground">Showing the last loaded data.</span>
-      </p>
+      <div className="min-w-0 flex-1">
+        <p>
+          <span className="font-medium text-foreground">{title}.</span>{' '}
+          <span className="text-muted-foreground">Showing the last loaded data.</span>
+        </p>
+        {detail ? <p className="break-words text-muted-foreground">{detail}</p> : null}
+      </div>
       <Button variant="ghost" size="xs" onClick={onRetry} disabled={isRetrying}>
         {isRetrying ? <Spinner className="size-3" aria-hidden="true" /> : null}
         {isRetrying ? 'Retrying…' : 'Retry'}

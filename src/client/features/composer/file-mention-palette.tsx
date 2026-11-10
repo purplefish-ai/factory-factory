@@ -110,10 +110,11 @@ function usePlacement(
 }
 
 function FileListStatus({ isLoading, error }: { isLoading: boolean; error: string | null }) {
-  if (error) {
+  // An empty message is still a failure, never "No files found".
+  if (error !== null) {
     return (
       <span role="alert" className="text-xs text-destructive">
-        Couldn't load files. {error}
+        Couldn't load files.{error ? ` ${error}` : ''}
       </span>
     );
   }
