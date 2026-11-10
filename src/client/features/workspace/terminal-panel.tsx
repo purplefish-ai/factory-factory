@@ -11,6 +11,7 @@ import {
   useRef,
   useState,
 } from 'react';
+import { EmptyState } from '@/client/components/empty-state';
 import { Loading } from '@/client/components/loading';
 import { ErrorBoundary } from '@/client/error-boundary';
 import {
@@ -19,6 +20,7 @@ import {
   TERMINAL_TRUNCATION_MARKER,
 } from '@/client/lib/rolling-output';
 import { TerminalOutputStream } from '@/client/lib/terminal-output-stream';
+import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { TerminalDisconnectBanner } from './terminal-disconnect-banner';
 import { TerminalTabBar } from './terminal-tab-bar';
@@ -439,27 +441,22 @@ export const TerminalPanel = forwardRef<TerminalPanelRef, TerminalPanelProps>(
     // Empty state
     if (tabs.length === 0) {
       return (
-        <div
-          className={cn(
-            'h-full flex flex-col items-center justify-center text-center p-4 bg-background',
-            className
-          )}
-        >
-          <TerminalIcon className="h-10 w-10 text-muted-foreground mb-3" />
-          <p className="text-sm font-medium text-foreground">No terminal open</p>
-          <p className="text-xs text-foreground mt-1">
-            {connected ? 'Click + to open a new terminal' : gaveUp ? 'Disconnected' : 'Connecting…'}
-          </p>
-          {gaveUp && (
-            <button
-              type="button"
-              onClick={reconnect}
-              className="mt-2 px-2 py-1 text-xs rounded border border-border text-foreground hover:bg-muted"
-            >
-              Reconnect
-            </button>
-          )}
-        </div>
+        <EmptyState
+          size="compact"
+          icon={TerminalIcon}
+          title="No terminal open"
+          description={
+            connected ? 'Click + to open a new terminal' : gaveUp ? 'Disconnected' : 'Connecting…'
+          }
+          action={
+            gaveUp ? (
+              <Button variant="outline" size="sm" onClick={reconnect}>
+                Reconnect
+              </Button>
+            ) : null
+          }
+          className={cn('h-full bg-background', className)}
+        />
       );
     }
 

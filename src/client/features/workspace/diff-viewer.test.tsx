@@ -243,4 +243,5 @@ it('keeps a cached diff visible after a failed background refresh', async () => 
   await render();
   expect(container.querySelector('[role="alert"]')).toBeNull();
   expect(container.textContent).toContain('const value0 = true;');
+  expect(container.textContent).toContain("Couldn't refresh");
 });

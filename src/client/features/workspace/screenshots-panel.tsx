@@ -1,4 +1,5 @@
 import { CameraIcon } from '@phosphor-icons/react/dist/csr/Camera';
+import { WarningCircleIcon } from '@phosphor-icons/react/dist/csr/WarningCircle';
 import { XIcon } from '@phosphor-icons/react/dist/csr/X';
 import { useCallback, useEffect, useState } from 'react';
 import { toast } from 'sonner';
@@ -74,7 +75,7 @@ export function ScreenshotsPanel({
   }, [deleteDialogOpen, deleteMutation.isPending, deleteTargetListed]);
 
   return (
-    <>
+    <div className="flex h-full min-h-0 flex-col">
       <QueryState
         query={screenshotsQuery}
         errorTitle="Couldn't load screenshots"
@@ -90,7 +91,7 @@ export function ScreenshotsPanel({
         }
       >
         {(data) => (
-          <ScrollArea className="h-full">
+          <ScrollArea className="min-h-0 flex-1">
             <div className="p-2 grid grid-cols-2 gap-2">
               {data.screenshots.map((screenshot) => (
                 <ScreenshotThumbnail
@@ -126,7 +127,7 @@ export function ScreenshotsPanel({
           }
         }}
       />
-    </>
+    </div>
   );
 }
 
@@ -191,7 +192,7 @@ function ScreenshotThumbnail({
   onClick,
   onDelete,
 }: ScreenshotThumbnailProps) {
-  const { data, isLoading } = trpc.workspace.readScreenshot.useQuery(
+  const { data, error, isLoading } = trpc.workspace.readScreenshot.useQuery(
     { workspaceId, path: screenshot.path },
     { staleTime: 60_000 }
   );
@@ -220,6 +221,15 @@ function ScreenshotThumbnail({
             alt={screenshot.name}
             className="absolute inset-0 w-full h-full object-cover"
           />
+        ) : error ? (
+          // Opening the screenshot shows the full error with Retry.
+          <span
+            className="absolute inset-0 flex flex-col items-center justify-center gap-1 p-2 text-xs text-muted-foreground"
+            title={error.message}
+          >
+            <WarningCircleIcon className="size-4 text-destructive" aria-hidden="true" />
+            Couldn't load preview
+          </span>
         ) : null}
       </button>
       <div className="absolute top-1 right-1 hover-reveal transition-opacity">

@@ -40,8 +40,18 @@ export function WorkspaceDetailContainer() {
   const { key: navigationKey } = useLocation();
   const utils = trpc.useUtils();
 
-  const { workspace, workspaceLoading, sessions, initialDbSessionId, maxSessions } =
-    useWorkspaceData({ workspaceId: workspaceId });
+  const {
+    workspace,
+    workspaceLoading,
+    workspaceError,
+    isFetchingWorkspace,
+    refetchWorkspace,
+    sessions,
+    initialDbSessionId,
+    maxSessions,
+  } = useWorkspaceData({ workspaceId: workspaceId });
+  // Only the error UI shows fetching, so ordinary refetches don't re-render the layout.
+  const isRetryingWorkspace = Boolean(workspaceError) && isFetchingWorkspace;
 
   const {
     rightPanelVisible,
@@ -386,8 +396,10 @@ export function WorkspaceDetailContainer() {
 
   const workspaceState = useMemo(
     () => ({
-      workspaceLoading,
       workspace,
+      workspaceError,
+      isFetchingWorkspace: isRetryingWorkspace,
+      refetchWorkspace,
       workspaceId,
       handleBackToWorkspaces,
       isScriptFailed,
@@ -396,8 +408,10 @@ export function WorkspaceDetailContainer() {
       dismissSetupWarning,
     }),
     [
-      workspaceLoading,
       workspace,
+      workspaceError,
+      isRetryingWorkspace,
+      refetchWorkspace,
       workspaceId,
       handleBackToWorkspaces,
       isScriptFailed,

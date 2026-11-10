@@ -1,7 +1,8 @@
 import type { Meta, StoryObj } from '@storybook/react';
+import { useQueryClient } from '@tanstack/react-query';
 import { ThemeProvider } from 'next-themes';
 import type { CSSProperties } from 'react';
-import { expect, within } from 'storybook/test';
+import { expect, userEvent, within } from 'storybook/test';
 import { STORY_TRPC_PENDING } from '@/client/lib/storybook-trpc';
 import { FileCode } from './file-code';
 import { FileViewer } from './file-viewer';
@@ -125,6 +126,65 @@ export const LoadError: Story = {
     await expect(await canvas.findByText("Couldn't load file")).toBeVisible();
     await expect(canvas.getByText(/ENOENT: no such file or directory/)).toBeVisible();
     await expect(canvas.getByRole('button', { name: 'Retry' })).toBeVisible();
+  },
+};
+
+const refreshFixture = { failing: false };
+
+function FailNextRefresh() {
+  const queryClient = useQueryClient();
+  return (
+    <button
+      type="button"
+      onClick={() => {
+        refreshFixture.failing = true;
+        void queryClient.refetchQueries();
+      }}
+    >
+      Fail next refresh
+    </button>
+  );
+}
+
+/** A failed refresh keeps the file under a notice, inside the panel's height. */
+export const RefreshError: Story = {
+  beforeEach: () => {
+    refreshFixture.failing = false;
+  },
+  parameters: {
+    trpc: {
+      handlers: {
+        'workspace.readFile': () => {
+          if (refreshFixture.failing) {
+            throw new Error('Worktree is busy');
+          }
+          return readFileResult(73);
+        },
+      },
+    },
+  },
+  decorators: [
+    (Story) => (
+      <>
+        <FailNextRefresh />
+        <Story />
+      </>
+    ),
+  ],
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await canvas.findByText('example.ts');
+    await userEvent.click(canvas.getByRole('button', { name: 'Fail next refresh' }));
+    const notice = await canvas.findByRole('status');
+    await expect(notice).toHaveTextContent('Worktree is busy');
+    await expect(canvas.getByText('example.ts')).toBeVisible();
+    // The loaded file shares the panel with the notice instead of overflowing it.
+    const panel = notice.closest('.h-80');
+    const viewer = notice.parentElement;
+    if (!(panel && viewer)) {
+      throw new Error('Missing file viewer panel');
+    }
+    await expect(viewer.scrollHeight).toBeLessThanOrEqual(panel.clientHeight);
   },
 };
 

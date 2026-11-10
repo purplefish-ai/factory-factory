@@ -229,9 +229,9 @@ export function CLIHealthBanner() {
   const [dismissedFingerprint, setDismissedFingerprint] = useState(() =>
     readDismissedCLIHealthWarningFingerprint()
   );
+  // A passive warning: with no health result (loading or failed) there is nothing to warn about.
   const {
     data: health,
-    isLoading,
     refetch,
     isRefetching,
   } = trpc.admin.checkCLIHealth.useQuery(
@@ -255,7 +255,7 @@ export function CLIHealthBanner() {
     }
   }, [dismissedFingerprint, health, issues.length]);
 
-  if (isLoading || !health) {
+  if (!health) {
     return null;
   }
 

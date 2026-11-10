@@ -107,6 +107,9 @@ vi.mock('./use-workspace-detail', () => ({
   useWorkspaceData: () => ({
     workspace: { id: mocks.workspaceId, creationSource: 'MANUAL', worktreePath: '/workspace' },
     workspaceLoading: false,
+    workspaceError: null,
+    isFetchingWorkspace: false,
+    refetchWorkspace: vi.fn(),
     sessions: ['session-a', 'session-b'].map((id) => ({
       id,
       name: id,

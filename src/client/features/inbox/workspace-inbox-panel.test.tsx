@@ -470,6 +470,45 @@ describe('WorkspaceInboxPanel', () => {
       direction: 'forward',
     });
   });
+  it('keeps loaded summaries and retries the failed older page', async () => {
+    let olderFails = true;
+    respond = (path, input) => {
+      if (path !== 'workspace.listMail') {
+        return {};
+      }
+      const next =
+        typeof input === 'object' &&
+        input !== null &&
+        'cursor' in input &&
+        input.cursor !== undefined;
+      if (next && olderFails) {
+        throw new Error('Offline');
+      }
+      return {
+        items: next
+          ? [{ ...summary, id: 'mail-older', subject: 'Older question', revision: 1 }]
+          : [summary],
+        revision: 3,
+        nextCursor: next ? null : 3,
+      };
+    };
+    render();
+    await waitForText('Review ready');
+    await click('Load older messages');
+    await waitForText("Couldn't refresh");
+    expect(container.textContent).toContain('Review ready');
+    olderFails = false;
+    const listRequests = requests.filter((item) => item.path === 'workspace.listMail').length;
+    await click('Retry');
+    await waitForText('Older question');
+    // Retry fetched only the older page, not the already-loaded first page again.
+    const retried = requests
+      .filter((item) => item.path === 'workspace.listMail')
+      .slice(listRequests);
+    expect(retried.map((item) => item.input)).toEqual([
+      { workspaceId: 'recipient', cursor: 3, limit: 20, direction: 'forward' },
+    ]);
+  });
   it('shows read errors with a retry without acknowledging the message', async () => {
     let fail = true;
     respond = (path) => {
@@ -490,7 +529,7 @@ describe('WorkspaceInboxPanel', () => {
     await waitForText("Couldn't read message");
     expect(container.querySelector<HTMLButtonElement>('[data-mail-ack]')?.disabled).toBe(true);
     fail = false;
-    await click('Try again');
+    await click('Retry');
     await waitForText('Recovered report');
     expect(requests.some((item) => item.path === 'workspace.ackMail')).toBe(false);
   });
@@ -502,7 +541,7 @@ describe('WorkspaceInboxPanel', () => {
     expect(container.textContent).toContain('Loading inbox');
     await waitForText("Couldn't load inbox");
     respond = () => ({ items: [], revision: 0, nextCursor: null });
-    await click('Try again');
+    await click('Retry');
     await waitForText('No messages yet');
   });
 });

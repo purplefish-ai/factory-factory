@@ -101,7 +101,7 @@ describe.each([
   });
 
   it('shows the selectable source when loading fails', async () => {
-    query.mockReturnValue({ isError: true, isPending: false });
+    query.mockReturnValue({ isError: true, isPending: false, error: new Error('ENOENT') });
     const container = await render('![Missing](/private/tmp/missing.png)');
     expect(container.querySelector('img')).toBeNull();
     expect(container.textContent).toContain('Image unavailable');

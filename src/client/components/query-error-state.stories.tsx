@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react';
 import { expect, fn, userEvent, within } from 'storybook/test';
 import { Card, CardContent } from '@/components/ui/card';
-import { QueryErrorState } from './query-error-state';
+import { QueryErrorState, QueryRefreshError } from './query-error-state';
 
 const meta = {
   title: 'Shared/QueryErrorState',
@@ -70,4 +70,38 @@ export const InSettingsCard: Story = {
       </Card>
     ),
   ],
+};
+
+/** Cached data stays on screen; the notice above it offers Retry. */
+export const RefreshNotice: Story = {
+  render: (args) => (
+    <div className="flex h-40 flex-col rounded-lg border bg-card">
+      <QueryRefreshError
+        title="Couldn't refresh workspaces"
+        error={{ message: 'Failed to fetch' }}
+        onRetry={args.onRetry}
+        isRetrying={args.isRetrying}
+      />
+      <p className="min-h-0 flex-1 p-3 text-sm">Previously loaded content</p>
+    </div>
+  ),
+  play: async ({ args, canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByRole('status')).toHaveTextContent("Couldn't refresh workspaces.");
+    await expect(canvas.getByText('Previously loaded content')).toBeVisible();
+    await userEvent.click(canvas.getByRole('button', { name: 'Retry' }));
+    await expect(args.onRetry).toHaveBeenCalledOnce();
+  },
+};
+
+export const RefreshNoticeRetrying: Story = {
+  ...RefreshNotice,
+  args: { isRetrying: true },
+  play: undefined,
+};
+
+export const RefreshNoticeDark: Story = {
+  ...RefreshNotice,
+  globals: { theme: 'dark' },
+  play: undefined,
 };

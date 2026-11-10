@@ -284,7 +284,7 @@ describe('SubagentList', () => {
 
   it.each<[string, SubagentListState, string]>([
     ['loading', { kind: 'loading' }, 'Loading subagents…'],
-    ['empty', { kind: 'ready', subagents: [] }, 'No subagents for this session.'],
+    ['empty', { kind: 'ready', subagents: [] }, 'No subagents for this session'],
   ])('renders the %s state', (_name, state, expectedText) => {
     render({ state, onSelect: vi.fn() });
     expect(container.textContent).toContain(expectedText);

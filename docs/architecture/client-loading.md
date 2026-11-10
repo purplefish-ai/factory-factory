@@ -126,13 +126,23 @@ panels and lists.
 of a query: `Loading` (or a `loading` override such as a skeleton) while there
 is no data, `QueryErrorState` with Retry when the query failed without data,
 `empty` when `isEmpty(data)` is true, and `children(data)` otherwise. Cached
-data still renders when only a background refetch fails. Render this wrapper
-only when the request is enabled; a disabled query belongs in the caller's
-conditional UI. Without data or an error, the request is unresolved, including
-when paused offline. `empty` may deliberately be `null`; supply an `EmptyState`
-alongside `isEmpty` when the user needs an empty message or next action. Write
-branches by hand when a panel combines several queries, as
-`CombinedChangesPanel` does.
+data still renders when only a background refetch fails, under a
+`QueryRefreshError` notice with Retry; the content keeps its place in the tree,
+so scroll position, focus and open forms survive the notice. The notice sits in
+normal flow above the content: put `QueryState` in a `flex-col` parent and give
+fixed-height content `min-h-0 flex-1`; inside a card, pass
+`refreshErrorClassName="rounded-md border"`, as `SettingsSection` does. Pass
+`notFound` to show a not-found state for a tRPC `NOT_FOUND` error, even over
+cached data; any other error is a failure, never "not found". Render this
+wrapper only when the request is enabled; a disabled query belongs in the
+caller's conditional UI. Without data or an error, the request is unresolved,
+including when paused offline. `empty` may deliberately be `null`; supply an
+`EmptyState` alongside `isEmpty` when the user needs an empty message or next
+action. Write branches by hand when a panel combines several queries, as
+`CombinedChangesPanel` does, or when the states must fit a menu or tree row;
+gate the error on missing data (`error && !data`) and use the same
+`QueryErrorState` and `QueryRefreshError` components where they fit. Retry
+buttons say "Retry".
 
 Render errors are caught by `ErrorBoundary` (`src/client/error-boundary.tsx`);
 do not add another boundary class. The app root and the routed page area each
@@ -166,7 +176,11 @@ Unmatched URLs render `routes/not-found.tsx` inside the shell; the root route's
 A failed query must not render its empty state. When a query has an error and no
 cached data, render `QueryErrorState` (`src/client/components/`) with the error
 message and a Retry that calls `refetch`. Keep showing cached data when only a
-background refetch fails.
+background refetch fails, and never gate content on `isError`, which stays true
+while cached data is on screen. The `factory/query-error-handled` lint rule
+flags a `use…Query` result that reads `isLoading`, `isPending` or
+`isInitialLoading` without `error`, `isError`, `status`, `isLoadingError` or
+`isRefetchError` ([lint guardrails](../../lint-rules/README.md)).
 
 `createAppQueryClient` (`src/client/lib/query-client.ts`) installs a
 `MutationCache.onError` fallback so that no mutation fails silently. The cache

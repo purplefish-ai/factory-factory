@@ -185,7 +185,7 @@ export const StaleBody: Story = {
     viewport.scrollTop = 80;
     canvas.getByRole('button', { name: 'Refetch fixture' }).click();
     await expect(await canvas.findByRole('status')).toHaveTextContent(
-      'Latest transcript read failed. Showing previously loaded history.'
+      "Couldn't refresh. Showing the last loaded data."
     );
     await expect(canvas.getByRole('status')).toBeVisible();
     await expect(document.activeElement).toBe(control);
@@ -201,7 +201,7 @@ export const StaleEmpty: Story = {
     await canvas.findByText('No messages in this session');
     canvas.getByRole('button', { name: 'Refetch fixture' }).click();
     await expect(await canvas.findByRole('status')).toHaveTextContent(
-      'Latest transcript read failed. Showing previously loaded history.'
+      "Couldn't refresh. Showing the last loaded data."
     );
     await expect(canvas.getByRole('status')).toBeVisible();
     await expect(canvas.getByText('No messages in this session')).toBeVisible();

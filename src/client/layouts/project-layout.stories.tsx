@@ -56,7 +56,8 @@ export const ConnectionFailure: Story = {
   },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    await expect(await canvas.findByRole('button', { name: 'Retry project' })).toBeVisible();
+    await expect(await canvas.findByRole('alert')).toHaveTextContent("Couldn't load project");
+    await expect(canvas.getByRole('button', { name: 'Retry' })).toBeVisible();
     await expect(canvas.queryByText('Project not found')).not.toBeInTheDocument();
   },
 };

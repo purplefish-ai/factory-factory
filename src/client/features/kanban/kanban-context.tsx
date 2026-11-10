@@ -28,8 +28,9 @@ interface KanbanContextValue {
   isFetchingIssues: boolean;
   refetchIssues: () => void;
   isLoading: boolean;
-  isError: boolean;
+  /** The workspace list's error; cached workspaces stay listed beside it. */
   error: { message: string } | null;
+  isFetching: boolean;
   refetch: () => void;
   syncAndRefetch: () => void;
   isSyncing: boolean;
@@ -82,8 +83,8 @@ export function KanbanProvider({
   const {
     data: projectWorkspaces,
     isLoading: isLoadingWorkspaces,
-    isError: isErrorWorkspaces,
     error: errorWorkspaces,
+    isFetching: isFetchingWorkspaces,
     refetch: refetchWorkspaces,
   } = useProjectWorkspaceQuery(projectId);
 
@@ -300,8 +301,8 @@ export function KanbanProvider({
           void refetchIssues();
         },
         isLoading: isLoadingWorkspaces,
-        isError: isErrorWorkspaces,
         error: errorWorkspaces ? { message: errorWorkspaces.message } : null,
+        isFetching: isFetchingWorkspaces,
         refetch,
         syncAndRefetch,
         isSyncing: syncMutation.isPending,

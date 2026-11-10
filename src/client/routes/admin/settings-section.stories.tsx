@@ -116,6 +116,33 @@ export const LoadError: Story = {
   },
 };
 
+/** A failed background refresh keeps the cached controls under a notice. */
+export const RefreshError: Story = {
+  args: { data: { sound: true, voice: 'aria' }, error: 'Database is locked' },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByRole('switch')).toBeVisible();
+    await expect(canvas.queryByRole('alert')).not.toBeInTheDocument();
+    const notice = canvas.getByRole('status');
+    await expect(notice).toHaveTextContent("Couldn't refresh.");
+    await expect(notice).toHaveTextContent('Database is locked');
+    await userEvent.click(within(notice).getByRole('button', { name: 'Retry' }));
+    await expect(refetch).toHaveBeenCalledOnce();
+  },
+};
+
+export const RefreshErrorPhone: Story = {
+  ...RefreshError,
+  globals: { viewport: { value: 'phone', isRotated: false } },
+  play: undefined,
+};
+
+export const RefreshErrorDark: Story = {
+  ...RefreshError,
+  globals: { theme: 'dark' },
+  play: undefined,
+};
+
 export const Saving: Story = {
   args: { data: { sound: true, voice: 'aria' }, saving: true },
   play: async ({ canvasElement }) => {

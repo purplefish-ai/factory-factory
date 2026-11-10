@@ -4,7 +4,8 @@ import { ClockIcon } from '@phosphor-icons/react/dist/csr/Clock';
 import { RobotIcon } from '@phosphor-icons/react/dist/csr/Robot';
 import { formatDistanceToNow } from 'date-fns';
 import { useState } from 'react';
-import { Loading } from '@/client/components/loading';
+import { EmptyState } from '@/client/components/empty-state';
+import { QueryState } from '@/client/components/query-state';
 import { getSessionDisplayName } from '@/client/lib/session-display-name';
 import { trpc } from '@/client/lib/trpc';
 import { Button } from '@/components/ui/button';
@@ -33,15 +34,10 @@ export function ClosedSessionsDropdown({
 }: ClosedSessionsDropdownProps) {
   const [open, setOpen] = useState(false);
 
-  const { data: closedSessions, isLoading } = trpc.closedSessions.list.useQuery({
-    workspaceId,
-    limit: 20,
-  });
+  const closedSessions = trpc.closedSessions.list.useQuery({ workspaceId, limit: 20 });
 
-  const hasClosedSessions = closedSessions && closedSessions.length > 0;
-
-  // Don't render the button if there are no closed sessions
-  if (!(isLoading || hasClosedSessions)) {
+  // Hide the button only when the list loaded empty; a failed load stays reachable.
+  if (closedSessions.data?.length === 0 && !closedSessions.error) {
     return null;
   }
 
@@ -72,53 +68,61 @@ export function ClosedSessionsDropdown({
         <DropdownMenuLabel>Closed Sessions</DropdownMenuLabel>
         <DropdownMenuSeparator />
 
-        {isLoading && <Loading size="compact" message="Loading closed sessions…" />}
-
-        {!(isLoading || hasClosedSessions) && (
-          <div className="py-6 px-2 text-center text-sm text-muted-foreground">
-            No closed sessions yet. Ratchet sessions will appear here after they complete.
-          </div>
-        )}
-
-        {!isLoading && hasClosedSessions && (
-          <ScrollArea className="max-h-96">
-            {closedSessions.map((session) => (
-              <DropdownMenuItem
-                key={session.id}
-                onClick={() => {
-                  onSelectClosedSession(session.id);
-                  setOpen(false);
-                }}
-                className="flex items-start gap-2 px-3 py-2 cursor-pointer"
-              >
-                {session.workflow === 'periodic-task' ? (
-                  <RobotIcon
-                    aria-label="Agent session"
-                    className="h-4 w-4 shrink-0 mt-0.5 text-muted-foreground"
-                  />
-                ) : (
-                  <ChatIcon className="h-4 w-4 shrink-0 mt-0.5 text-muted-foreground" />
-                )}
-                <div className="flex-1 min-w-0">
-                  <div className="text-sm font-medium truncate">
-                    {getSessionDisplayName(session, `${session.workflow} session`)}
+        <QueryState
+          query={closedSessions}
+          errorTitle="Couldn't load closed sessions"
+          loadingMessage="Loading closed sessions…"
+          size="compact"
+          className="p-3"
+          isEmpty={(sessions) => sessions.length === 0}
+          empty={
+            <EmptyState
+              size="compact"
+              title="No closed sessions yet"
+              description="Ratchet sessions will appear here after they complete."
+            />
+          }
+        >
+          {(sessions) => (
+            <ScrollArea className="max-h-96">
+              {sessions.map((session) => (
+                <DropdownMenuItem
+                  key={session.id}
+                  onClick={() => {
+                    onSelectClosedSession(session.id);
+                    setOpen(false);
+                  }}
+                  className="flex items-start gap-2 px-3 py-2 cursor-pointer"
+                >
+                  {session.workflow === 'periodic-task' ? (
+                    <RobotIcon
+                      aria-label="Agent session"
+                      className="h-4 w-4 shrink-0 mt-0.5 text-muted-foreground"
+                    />
+                  ) : (
+                    <ChatIcon className="h-4 w-4 shrink-0 mt-0.5 text-muted-foreground" />
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-medium truncate">
+                      {getSessionDisplayName(session, `${session.workflow} session`)}
+                    </div>
+                    <div className="flex items-center gap-1.5 mt-0.5 text-xs text-muted-foreground">
+                      <ClockIcon className="h-3 w-3 shrink-0" />
+                      <span>
+                        {formatDistanceToNow(new Date(session.completedAt), { addSuffix: true })}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-1.5 mt-0.5 text-xs text-muted-foreground">
+                      <span className="capitalize">{session.provider.toLowerCase()}</span>
+                      <span>•</span>
+                      <span>{session.model}</span>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-1.5 mt-0.5 text-xs text-muted-foreground">
-                    <ClockIcon className="h-3 w-3 shrink-0" />
-                    <span>
-                      {formatDistanceToNow(new Date(session.completedAt), { addSuffix: true })}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-1.5 mt-0.5 text-xs text-muted-foreground">
-                    <span className="capitalize">{session.provider.toLowerCase()}</span>
-                    <span>•</span>
-                    <span>{session.model}</span>
-                  </div>
-                </div>
-              </DropdownMenuItem>
-            ))}
-          </ScrollArea>
-        )}
+                </DropdownMenuItem>
+              ))}
+            </ScrollArea>
+          )}
+        </QueryState>
       </DropdownMenuContent>
     </DropdownMenu>
   );

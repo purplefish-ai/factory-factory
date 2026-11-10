@@ -63,7 +63,7 @@ async function render(workspaceId: string, visible = true) {
     workspaceState: {
       workspaceId,
       workspace: { id: workspaceId },
-      workspaceLoading: false,
+      workspaceError: null,
       isScriptFailed: false,
       setupWarningDismissed: false,
     },

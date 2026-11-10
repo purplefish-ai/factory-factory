@@ -28,6 +28,7 @@ const rules = [
   'no-raw-palette-classes',
   'query-owner',
   'named-query-options',
+  'query-error-handled',
 ];
 const workspaceQueryOwner = 'owned/workspace-queries.ts';
 const userSettingsOwner = 'owned/user-settings-queries.ts';
@@ -160,6 +161,18 @@ describe('Oxlint project guardrails', () => {
     ['named-query-options', 'useQuery({ staleTime: 60_000, retry: false });'],
     ['named-query-options', 'useQuery({ retry: 1, retryDelay: 1000 });'],
     ['named-query-options', 'const previewOptions = { retry: true } as const;'],
+    ['query-error-handled', 'const { data, isLoading } = trpc.project.list.useQuery();'],
+    ['query-error-handled', 'const { data, isPending } = useQuery(options);'],
+    ['query-error-handled', 'const { data, isLoading: loading } = useWorkspaceDetailQuery(id);'],
+    [
+      'query-error-handled',
+      'const mail = trpc.workspace.listMail.useInfiniteQuery(input); show(mail.isLoading, mail.data);',
+    ],
+    ['query-error-handled', 'const q = trpc.a.b.useQuery(); const busy = q?.isPending;'],
+    [
+      'query-error-handled',
+      'const query = useFooQuery(); const { data, isLoading } = query; show(data, isLoading);',
+    ],
   ];
   const rejectedFixtures = rejectedSources.map(([rule, source], index) => ({
     rule,
@@ -218,6 +231,17 @@ describe('Oxlint project guardrails', () => {
     'new QueryClient({ defaultOptions: { queries: { retry: false, refetchOnWindowFocus: false } } });',
     'const defaults = { queries: { retry: 0 }, mutations: { retry: false } };',
     'const step = { file: "a.ts", old_string: "retry: false" };',
+    'const { data, isLoading, error } = trpc.project.list.useQuery();',
+    'const { data, isPending, isError } = useQuery(options);',
+    'const { data, isLoading, status } = useProjectWorkspaceQuery(id);',
+    'const { data } = trpc.project.list.useQuery();',
+    'const { data, isFetching, refetch } = trpc.project.list.useQuery();',
+    'const { data, isLoading } = trpc.project.list.useSuspenseQuery();',
+    'const { isLoading, ...query } = trpc.project.list.useQuery();',
+    'const { isPending } = trpc.project.create.useMutation();',
+    'const q = trpc.a.b.useQuery(); if (q.isLoading) { show(q.error); }',
+    'const query = useFooQuery(); const { isLoading, error } = query; show(isLoading, error);',
+    'const q = trpc.a.b.useQuery(); const busy = q.isLoading; const el = <QueryState query={q} />;',
   ]
     .map((source, index) => ({ source, file: join(directory, `accepted-${index}.tsx`) }))
     .concat(
@@ -273,7 +297,7 @@ describe('Oxlint project guardrails', () => {
   });
 });
 
-const paletteRuleSchema = z.tuple([
+const exceptionRuleSchema = z.tuple([
   z.literal('error'),
   z.object({ exceptions: z.record(z.string(), z.string().min(1)) }),
 ]);
@@ -289,7 +313,7 @@ describe('raw palette class exceptions', () => {
   );
   const exceptions = projectConfig.overrides.flatMap((override) => {
     const rule = override.rules['factory/no-raw-palette-classes'];
-    return Array.isArray(rule) ? Object.entries(paletteRuleSchema.parse(rule)[1].exceptions) : [];
+    return Array.isArray(rule) ? Object.entries(exceptionRuleSchema.parse(rule)[1].exceptions) : [];
   });
 
   it('keeps the allowlist small, with a reason for every file', () => {
