@@ -84,8 +84,11 @@ Vitest suite does not require a browser installation.
 Test processes never write the real server log. When `NODE_ENV` is `test` or the
 process runs under Vitest (including children that inherit its environment), the
 logger opens `logs/server.log` only if `BASE_DIR` points inside the OS temporary
-directory; otherwise records go to the console and fatal records to stderr.
-Tests that assert file output set `BASE_DIR` to a `mkdtemp` directory.
+directory. Without a file, development and test logging still prints to the
+console, production-mode logging (for example a child that sets
+`NODE_ENV=production`) keeps only errors on stderr, and fatal records use the
+stderr fallback. Tests that assert file output set `BASE_DIR` to a `mkdtemp`
+directory.
 
 Run `pnpm test:integration` for changes to integration behavior. Subsystem notes
 may name additional focused checks for their contracts. Inspect the final diff,

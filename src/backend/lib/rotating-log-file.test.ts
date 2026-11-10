@@ -1,4 +1,4 @@
-import { fstatSync, renameSync } from 'node:fs';
+import { fstatSync, mkdirSync, renameSync } from 'node:fs';
 import { mkdtemp, readdir, readFile, rm, utimes, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -10,12 +10,20 @@ vi.mock('node:fs', async (importOriginal) => {
   return {
     ...actual,
     fstatSync: vi.fn(actual.fstatSync),
+    mkdirSync: vi.fn(actual.mkdirSync),
     renameSync: vi.fn(actual.renameSync),
   };
 });
 
 let dir: string;
 let path: string;
+const openLogs: RotatingLogFile[] = [];
+
+function createLog(maxBytes: number, maxRotatedFiles: number): RotatingLogFile {
+  const log = new RotatingLogFile({ path, maxBytes, maxRotatedFiles });
+  openLogs.push(log);
+  return log;
+}
 
 beforeEach(async () => {
   dir = await mkdtemp(join(tmpdir(), 'ff-rotating-log-'));
@@ -24,6 +32,7 @@ beforeEach(async () => {
 
 afterEach(async () => {
   vi.mocked(renameSync).mockClear();
+  await Promise.all(openLogs.splice(0).map((log) => log.close()));
   await rm(dir, { recursive: true, force: true });
 });
 
@@ -38,7 +47,7 @@ async function settledContent(file: string, expected: string): Promise<void> {
 
 describe('RotatingLogFile', () => {
   it('rotates at the size limit and keeps only the configured number of old files', async () => {
-    const log = new RotatingLogFile({ path, maxBytes: 30, maxRotatedFiles: 2 });
+    const log = createLog(30, 2);
 
     for (let index = 0; index < 13; index++) {
       log.write(line(index));
@@ -52,7 +61,7 @@ describe('RotatingLogFile', () => {
   });
 
   it('tracks size in-process instead of stating the file for every write', () => {
-    const log = new RotatingLogFile({ path, maxBytes: 1024 * 1024, maxRotatedFiles: 3 });
+    const log = createLog(1024 * 1024, 3);
     vi.mocked(fstatSync).mockClear();
 
     for (let index = 0; index < 200; index++) {
@@ -64,7 +73,7 @@ describe('RotatingLogFile', () => {
 
   it('continues an existing file below the limit and counts its bytes', async () => {
     await writeFile(path, line(0) + line(1));
-    const log = new RotatingLogFile({ path, maxBytes: 30, maxRotatedFiles: 2 });
+    const log = createLog(30, 2);
 
     log.write(line(2));
     log.write(line(3));
@@ -77,7 +86,7 @@ describe('RotatingLogFile', () => {
     const oversized = 'x'.repeat(500);
     await writeFile(path, oversized);
     await writeFile(`${path}.1`, 'older');
-    const log = new RotatingLogFile({ path, maxBytes: 100, maxRotatedFiles: 2 });
+    const log = createLog(100, 2);
 
     log.write(line(0));
 
@@ -87,7 +96,7 @@ describe('RotatingLogFile', () => {
   });
 
   it('keeps appending when rotation fails and retries only after another full file', async () => {
-    const log = new RotatingLogFile({ path, maxBytes: 20, maxRotatedFiles: 2 });
+    const log = createLog(20, 2);
     vi.mocked(renameSync).mockImplementationOnce(() => {
       throw Object.assign(new Error('busy'), { code: 'EBUSY' });
     });
@@ -105,6 +114,26 @@ describe('RotatingLogFile', () => {
     ]);
     await settledContent(`${path}.1`, line(0) + line(1) + line(2) + line(3));
     await settledContent(path, line(4));
+  });
+
+  it('drops lines and backs off while the file cannot be opened', async () => {
+    const blocker = join(dir, 'blocker');
+    await writeFile(blocker, 'not a directory');
+    path = join(blocker, 'server.log');
+    const log = createLog(1024, 2);
+    const now = vi.spyOn(Date, 'now').mockReturnValue(1_000_000);
+    vi.mocked(mkdirSync).mockClear();
+
+    log.write(line(0));
+    log.write(line(1));
+    expect(mkdirSync).toHaveBeenCalledOnce();
+
+    await rm(blocker);
+    now.mockReturnValue(1_000_000 + 5000);
+    log.write(line(2));
+
+    expect(mkdirSync).toHaveBeenCalledTimes(2);
+    await settledContent(path, line(2));
   });
 });
 

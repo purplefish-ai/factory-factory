@@ -19,6 +19,10 @@ interface RotatingLogFileOptions {
   maxRotatedFiles: number;
 }
 
+// After a failed open, drop lines for this long before trying again, so an
+// unwritable log location does not cost a mkdir and open on every log call.
+const OPEN_RETRY_DELAY_MS = 5000;
+
 function isMissingFileError(error: unknown): boolean {
   return error instanceof Error && 'code' in error && error.code === 'ENOENT';
 }
@@ -40,6 +44,8 @@ function rotatedPath(path: string, index: number): string {
  * it is opened is rotated before writing.
  *
  * Sink failures are never reported through a logger; the caller owns fallback.
+ * While the file cannot be opened, lines are dropped and opening is retried at
+ * most every OPEN_RETRY_DELAY_MS.
  */
 export class RotatingLogFile {
   readonly path: string;
@@ -47,6 +53,7 @@ export class RotatingLogFile {
   private readonly maxRotatedFiles: number;
   private stream: WriteStream | null = null;
   private size = 0;
+  private nextOpenAttemptMs = 0;
 
   constructor(options: RotatingLogFileOptions) {
     this.path = options.path;
@@ -55,7 +62,7 @@ export class RotatingLogFile {
   }
 
   write(line: string): void {
-    const stream = this.stream ?? this.open();
+    const stream = this.stream ?? this.openUnlessBackingOff();
     if (!stream) {
       return;
     }
@@ -64,6 +71,27 @@ export class RotatingLogFile {
     if (this.size >= this.maxBytes) {
       this.rotate();
     }
+  }
+
+  /** End the current stream once its buffered writes are flushed. */
+  async close(): Promise<void> {
+    const stream = this.stream;
+    this.stream = null;
+    if (stream && !stream.destroyed) {
+      await new Promise<void>((resolve) => stream.end(resolve));
+    }
+  }
+
+  private openUnlessBackingOff(): WriteStream | null {
+    const now = Date.now();
+    if (now < this.nextOpenAttemptMs) {
+      return null;
+    }
+    const stream = this.open();
+    if (!stream) {
+      this.nextOpenAttemptMs = now + OPEN_RETRY_DELAY_MS;
+    }
+    return stream;
   }
 
   private open(): WriteStream | null {
