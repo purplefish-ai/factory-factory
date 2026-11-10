@@ -1,6 +1,7 @@
 // Install the shared mocks before loading service barrels.
 import './pr-event-flow.test-helpers';
 import { afterAll, beforeAll, beforeEach, expect, it, vi } from 'vitest';
+import { createPRMonitoringTestServices } from '@/backend/orchestration/testing/pr-monitoring-services.test-support';
 import { ratchetService } from '@/backend/services/ratchet';
 import { sessionBackgroundDeliveryService } from '@/backend/services/session';
 import {
@@ -16,7 +17,6 @@ import { createPRDeliveryPorts } from './pr-delivery-dependencies';
 import { createPRBackgroundDeliveryPort } from './pr-event-delivery-port';
 import { preparePRDelivery, wakePRDelivery } from './pr-event-delivery.orchestrator';
 import { createPRFlowIntegrationDatabase } from './pr-event-flow.test-helpers';
-import { createPRMonitoringTestServices } from './testing/pr-monitoring-services.test-support';
 
 const deliveryPorts = createPRDeliveryPorts(createPRMonitoringTestServices());
 const prBackgroundDeliveryPort = createPRBackgroundDeliveryPort(deliveryPorts);

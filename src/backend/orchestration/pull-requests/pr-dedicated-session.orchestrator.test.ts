@@ -1,6 +1,6 @@
 import { beforeEach, expect, it, vi } from 'vitest';
-import { ensureDedicatedPRRecipient } from '@/backend/orchestration/pr-dedicated-session.orchestrator';
-import type { PRDedicatedSessionPorts } from '@/backend/orchestration/pr-monitoring-ports';
+import { ensureDedicatedPRRecipient } from '@/backend/orchestration/pull-requests/pr-dedicated-session.orchestrator';
+import type { PRDedicatedSessionPorts } from '@/backend/orchestration/pull-requests/pr-monitoring-ports';
 import type { AgentSessionRecord } from '@/backend/services/session';
 
 const target = { workspaceId: 'w', prId: 'a', bindingRevision: 4 };

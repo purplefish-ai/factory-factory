@@ -1,5 +1,6 @@
 import { ApplicationError } from '@/backend/lib/application-error';
 import { toError } from '@/backend/lib/error-utils';
+import type { WorkspaceWithProject } from '@/backend/orchestration/types';
 import { createLogger } from '@/backend/services/logger.service';
 import type { SessionStopReason } from '@/backend/services/session';
 import {
@@ -10,7 +11,6 @@ import {
   workspaceStateMachine,
   worktreeLifecycleService,
 } from '@/backend/services/workspace';
-import type { WorkspaceWithProject } from './types';
 import { fireLifecycleNotification } from './workspace-children.orchestrator';
 
 const logger = createLogger('workspace-archive-orchestrator');

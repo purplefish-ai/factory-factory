@@ -1,5 +1,19 @@
 import { afterAll, afterEach, beforeAll, beforeEach, expect, it, vi } from 'vitest';
 import { isProcessRunning } from '@/backend/lib/process-liveness';
+import { createPRDeliveryPorts } from '@/backend/orchestration/pull-requests/pr-delivery-dependencies';
+import { recoverPRDeliveries } from '@/backend/orchestration/pull-requests/pr-delivery-recovery';
+import {
+  preparePRDelivery,
+  wakePRDelivery,
+} from '@/backend/orchestration/pull-requests/pr-event-delivery.orchestrator';
+import type { PRDeliveryPorts } from '@/backend/orchestration/pull-requests/pr-monitoring-ports';
+import { createPRMonitoringTestServices } from '@/backend/orchestration/testing/pr-monitoring-services.test-support';
+import { reconciliationService } from '@/backend/orchestration/workspace-lifecycle/reconciliation.service';
+import {
+  recoverStaleArchivingWorkspaces,
+  type ArchiveWorkspaceDependencies,
+} from '@/backend/orchestration/workspace-lifecycle/workspace-archive.orchestrator';
+import * as workspaceChildren from '@/backend/orchestration/workspace-lifecycle/workspace-children.orchestrator';
 import { runScriptStateMachine } from '@/backend/services/run-script';
 import {
   sessionDataService,
@@ -25,17 +39,6 @@ import { redObservation } from '@/shared/pr-monitoring.test-helpers';
 import { exportDataSchema } from '@/shared/schemas/export-data.schema';
 import type { PrismaClient } from '@prisma-gen/client';
 import { dataBackupService } from './data-backup.service';
-import { createPRDeliveryPorts } from './pr-delivery-dependencies';
-import { recoverPRDeliveries } from './pr-delivery-recovery';
-import { preparePRDelivery, wakePRDelivery } from './pr-event-delivery.orchestrator';
-import type { PRDeliveryPorts } from './pr-monitoring-ports';
-import { reconciliationService } from './reconciliation.service';
-import { createPRMonitoringTestServices } from './testing/pr-monitoring-services.test-support';
-import {
-  recoverStaleArchivingWorkspaces,
-  type ArchiveWorkspaceDependencies,
-} from './workspace-archive.orchestrator';
-import * as workspaceChildren from './workspace-children.orchestrator';
 
 const baseDeliveryPorts = createPRDeliveryPorts(createPRMonitoringTestServices());
 

@@ -1,5 +1,5 @@
+import type { ExistingSessionDispatchPorts } from '@/backend/orchestration/background-action-dispatch.orchestrator';
 import { createLogger } from '@/backend/services/logger.service';
-import type { ExistingSessionDispatchPorts } from './background-action-dispatch.orchestrator';
 import { createPRObservationPorts, type PRMonitoringServices } from './pr-monitoring-dependencies';
 import type { PRDeliveryPorts } from './pr-monitoring-ports';
 import { observeMonitoredPR } from './pr-observation.orchestrator';

@@ -1,11 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { bindIssueMonitoringSession } from '@/backend/orchestration/pull-requests/pr-monitoring.orchestrator';
+import { clearWorkspaceInitOrchestratorStateForTests } from '@/backend/orchestration/workspace-lifecycle/workspace-init.orchestrator';
 import { createLifecycleTestSession } from '@/backend/services/session/service/lifecycle/session-lifecycle.test-helpers';
 import { userSettingsService } from '@/backend/services/settings';
 import { SessionStatus } from '@/shared/core';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 import { createDefaultApplicationDependencies } from './app-context';
-import { bindIssueMonitoringSession } from './orchestration/pr-monitoring.orchestrator';
-import { clearWorkspaceInitOrchestratorStateForTests } from './orchestration/workspace-init.orchestrator';
 import {
   SessionConfigService,
   SessionDomainService,
@@ -17,10 +17,15 @@ import {
 import { WorkspaceCreationService } from './services/workspace';
 
 // Only monitoring persistence is irrelevant to these producer/dispatcher contracts.
-vi.mock('./orchestration/pr-monitoring.orchestrator', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('./orchestration/pr-monitoring.orchestrator')>()),
-  bindIssueMonitoringSession: vi.fn(),
-}));
+vi.mock(
+  '@/backend/orchestration/pull-requests/pr-monitoring.orchestrator',
+  async (importOriginal) => ({
+    ...(await importOriginal<
+      typeof import('@/backend/orchestration/pull-requests/pr-monitoring.orchestrator')
+    >()),
+    bindIssueMonitoringSession: vi.fn(),
+  })
+);
 
 function createGraph(label: string) {
   const { services } = createDefaultApplicationDependencies();

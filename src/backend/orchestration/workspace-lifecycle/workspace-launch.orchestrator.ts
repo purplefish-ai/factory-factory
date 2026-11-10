@@ -4,7 +4,7 @@ import {
   getProviderUnavailableMessage,
   type ProviderCliHealthStatus,
 } from '@/backend/lib/provider-cli-availability';
-import type { initializeWorkspaceWorktree } from '@/backend/orchestration/workspace-init.orchestrator';
+import type { initializeWorkspaceWorktree } from '@/backend/orchestration/workspace-lifecycle/workspace-init.orchestrator';
 import { applicationUpdateAdmission } from '@/backend/services/application-update-admission.service';
 import type { createLogger } from '@/backend/services/logger.service';
 import type {

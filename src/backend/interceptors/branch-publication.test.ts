@@ -1,5 +1,5 @@
 import { beforeEach, expect, it, vi } from 'vitest';
-import { subscribeWorkspaceBranchPublication } from '@/backend/orchestration/workspace-branch-publication.orchestrator';
+import { subscribeWorkspaceBranchPublication } from '@/backend/orchestration/snapshots/workspace-branch-publication.orchestrator';
 import {
   workspaceDataService,
   projectManagementService,

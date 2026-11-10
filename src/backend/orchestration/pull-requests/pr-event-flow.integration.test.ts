@@ -2,6 +2,8 @@
 import './pr-event-flow.test-helpers';
 import { EventEmitter } from 'node:events';
 import { afterAll, beforeAll, beforeEach, expect, it, vi } from 'vitest';
+import { createEventCollectorOrchestrator } from '@/backend/orchestration/snapshots/event-collector.orchestrator';
+import { createPRMonitoringTestServices } from '@/backend/orchestration/testing/pr-monitoring-services.test-support';
 import {
   PR_SNAPSHOT_UPDATED,
   prObservationService,
@@ -23,7 +25,6 @@ import {
 } from '@/backend/testing/integration-db';
 import { redObservation } from '@/shared/pr-monitoring.test-helpers';
 import type { Prisma } from '@prisma-gen/client';
-import { createEventCollectorOrchestrator } from './event-collector.orchestrator';
 import { createPRDeliveryPorts } from './pr-delivery-dependencies';
 import { recoverPRDeliveries } from './pr-delivery-recovery';
 import { createPRBackgroundDeliveryPort } from './pr-event-delivery-port';
@@ -32,7 +33,6 @@ import { createPRFlowIntegrationDatabase, getPRFlowTestState } from './pr-event-
 import { createPRObservationPorts } from './pr-monitoring-dependencies';
 import { bindIssueMonitoringSession, setPRMonitoring } from './pr-monitoring.orchestrator';
 import { observeMonitoredPR } from './pr-observation.orchestrator';
-import { createPRMonitoringTestServices } from './testing/pr-monitoring-services.test-support';
 
 // The application graph under test; every entry point receives it explicitly.
 const services = createPRMonitoringTestServices();

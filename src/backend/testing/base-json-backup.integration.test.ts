@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, beforeEach, expect, it, vi } from 'vitest';
 import { ZodError } from 'zod';
-import { dataBackupService } from '@/backend/orchestration/data-backup.service';
+import { dataBackupService } from '@/backend/orchestration/data-backup/data-backup.service';
 import { expectBackupWriterUnopened } from '@/backend/services/settings/resources/backup-writer.test-support';
 import { adminRouter } from '@/backend/trpc/admin.trpc';
 import type { Context } from '@/backend/trpc/trpc';

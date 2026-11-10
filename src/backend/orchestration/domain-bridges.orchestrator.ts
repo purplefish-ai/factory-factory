@@ -1,3 +1,24 @@
+import { createPRDeliveryPorts } from '@/backend/orchestration/pull-requests/pr-delivery-dependencies';
+import { createPRBackgroundDeliveryPort } from '@/backend/orchestration/pull-requests/pr-event-delivery-port';
+import { wakePRDelivery } from '@/backend/orchestration/pull-requests/pr-event-delivery.orchestrator';
+import { retireLegacyRatchetSessions } from '@/backend/orchestration/pull-requests/pr-monitoring-cutover.orchestrator';
+import {
+  createPRObservationPorts,
+  type PRMonitoringServices,
+} from '@/backend/orchestration/pull-requests/pr-monitoring-dependencies';
+import { setPRMonitoring } from '@/backend/orchestration/pull-requests/pr-monitoring.orchestrator';
+import { observeMonitoredPR } from '@/backend/orchestration/pull-requests/pr-observation.orchestrator';
+import { listVisibleReviewRequests } from '@/backend/orchestration/pull-requests/review-requests.orchestrator';
+import type { reconciliationService } from '@/backend/orchestration/workspace-lifecycle/reconciliation.service';
+import { captureWorkspaceRunResults } from '@/backend/orchestration/workspace-lifecycle/workspace-deletion.orchestrator';
+import type {
+  initializeWorkspaceWorktree,
+  recoverStaleProvisioningWorkspace,
+} from '@/backend/orchestration/workspace-lifecycle/workspace-init.orchestrator';
+import type {
+  PeriodicTaskLaunchSource,
+  WorkspaceLauncher,
+} from '@/backend/orchestration/workspace-lifecycle/workspace-launch.orchestrator';
 /**
  * Domain Bridge Wiring
  *
@@ -42,21 +63,6 @@ import {
 } from '@/backend/services/workspace';
 import { deriveWorkspaceSidebarStatus } from '@/shared/core';
 import { dispatchBackgroundAction } from './background-action-dispatch.orchestrator';
-import { createPRDeliveryPorts } from './pr-delivery-dependencies';
-import { createPRBackgroundDeliveryPort } from './pr-event-delivery-port';
-import { wakePRDelivery } from './pr-event-delivery.orchestrator';
-import { retireLegacyRatchetSessions } from './pr-monitoring-cutover.orchestrator';
-import { createPRObservationPorts, type PRMonitoringServices } from './pr-monitoring-dependencies';
-import { setPRMonitoring } from './pr-monitoring.orchestrator';
-import { observeMonitoredPR } from './pr-observation.orchestrator';
-import type { reconciliationService } from './reconciliation.service';
-import { listVisibleReviewRequests } from './review-requests.orchestrator';
-import { captureWorkspaceRunResults } from './workspace-deletion.orchestrator';
-import type {
-  initializeWorkspaceWorktree,
-  recoverStaleProvisioningWorkspace,
-} from './workspace-init.orchestrator';
-import type { PeriodicTaskLaunchSource, WorkspaceLauncher } from './workspace-launch.orchestrator';
 export type BridgeServices = PRMonitoringServices & {
   workspaceMetadata?: {
     schedule(sessionId: string, initialOnly?: boolean): Promise<void>;

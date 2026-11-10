@@ -20,7 +20,7 @@ let db: IntegrationDatabase;
 let h: Awaited<ReturnType<typeof createEventDeliveryFixture>>;
 let provider: ReturnType<typeof fakeEventProvider>;
 let launch: Promise<unknown>;
-let observe: typeof import('@/backend/orchestration/event-run-monitor.orchestrator').observeEventRun;
+let observe: typeof import('@/backend/orchestration/agents/event-run-monitor.orchestrator').observeEventRun;
 beforeEach(async () => {
   db = await createIntegrationDatabase();
   h = await createEventDeliveryFixture(db, 'CLAUDE', false, true);
@@ -63,11 +63,11 @@ beforeEach(async () => {
   );
   vi.spyOn(github.githubCLIService, 'getAuthenticatedUsername').mockResolvedValue('fixture');
   const launcher = await vi.importActual<
-    typeof import('@/backend/orchestration/event-run-launch.orchestrator')
-  >('@/backend/orchestration/event-run-launch.orchestrator');
+    typeof import('@/backend/orchestration/agents/event-run-launch.orchestrator')
+  >('@/backend/orchestration/agents/event-run-launch.orchestrator');
   ({ observeEventRun: observe } = await vi.importActual<
-    typeof import('@/backend/orchestration/event-run-monitor.orchestrator')
-  >('@/backend/orchestration/event-run-monitor.orchestrator'));
+    typeof import('@/backend/orchestration/agents/event-run-monitor.orchestrator')
+  >('@/backend/orchestration/agents/event-run-monitor.orchestrator'));
   launch = launcher.launchEventRun(h.claim, new AbortController().signal);
   await waitForEventFixture(
     providerCreated.promise.then(() => provider.called),
@@ -251,11 +251,11 @@ it.each(['archive', 'delete'] as const)(
       .spyOn(h.session.acpRuntimeManager, 'stopAndQuiesce')
       .mockRejectedValue(new Error('Unconfirmed child cleanup'));
     const archives = await vi.importActual<
-      typeof import('@/backend/orchestration/workspace-archive.orchestrator')
-    >('@/backend/orchestration/workspace-archive.orchestrator');
+      typeof import('@/backend/orchestration/workspace-lifecycle/workspace-archive.orchestrator')
+    >('@/backend/orchestration/workspace-lifecycle/workspace-archive.orchestrator');
     const children = await vi.importActual<
-      typeof import('@/backend/orchestration/workspace-children.orchestrator')
-    >('@/backend/orchestration/workspace-children.orchestrator');
+      typeof import('@/backend/orchestration/workspace-lifecycle/workspace-children.orchestrator')
+    >('@/backend/orchestration/workspace-lifecycle/workspace-children.orchestrator');
     vi.spyOn(children, 'fireLifecycleNotification').mockResolvedValue();
     vi.spyOn(h.workspace.worktreeLifecycleService, 'cleanupWorkspaceWorktree').mockResolvedValue();
     const services = {
@@ -421,8 +421,8 @@ it('keeps a Codex event turn running past four hours without advertising a deadl
     async (_options, create) => create('event-test-account')
   );
   const launcher = await vi.importActual<
-    typeof import('@/backend/orchestration/event-run-launch.orchestrator')
-  >('@/backend/orchestration/event-run-launch.orchestrator');
+    typeof import('@/backend/orchestration/agents/event-run-launch.orchestrator')
+  >('@/backend/orchestration/agents/event-run-launch.orchestrator');
   launch = launcher.launchEventRun(h.claim, new AbortController().signal);
   await vi.waitFor(() => expect(provider.handle.provider).toBe('CODEX'));
   await provider.called;
@@ -546,8 +546,8 @@ it.each([false, true])(
       data: { leaseExpiresAt: new Date(0) },
     });
     const { createEventRunConsumer } = await vi.importActual<
-      typeof import('@/backend/orchestration/event-run-consumer.orchestrator')
-    >('@/backend/orchestration/event-run-consumer.orchestrator');
+      typeof import('@/backend/orchestration/agents/event-run-consumer.orchestrator')
+    >('@/backend/orchestration/agents/event-run-consumer.orchestrator');
     const consumer = createEventRunConsumer();
     await consumer.maintain(new AbortController().signal);
     await consumer.drain();
@@ -790,8 +790,8 @@ it('never upgrades unknown historical coverage when an event workspace is reused
 it('preserves complete child history when backup import skips an existing event workspace', async () => {
   await finish();
   const { dataBackupService } = await vi.importActual<
-    typeof import('@/backend/orchestration/data-backup.service')
-  >('@/backend/orchestration/data-backup.service');
+    typeof import('@/backend/orchestration/data-backup/data-backup.service')
+  >('@/backend/orchestration/data-backup/data-backup.service');
   const backup = await dataBackupService.exportData('fixture');
   expect(
     await db.prisma.workspaceLaunchOrigin.findUnique({ where: { runId: h.claim.runId } })
@@ -807,8 +807,8 @@ it('preserves complete child history when backup import skips an existing event 
 it('skips an existing parent and its file descendants without fabricating child ownership', async () => {
   await finish();
   const { dataBackupService } = await vi.importActual<
-    typeof import('@/backend/orchestration/data-backup.service')
-  >('@/backend/orchestration/data-backup.service');
+    typeof import('@/backend/orchestration/data-backup/data-backup.service')
+  >('@/backend/orchestration/data-backup/data-backup.service');
   const backup = await dataBackupService.exportData('fixture');
   const parent = backup.data.workspaces.find((w) => w.id === h.claim.reservedWorkspaceId)!;
   backup.data.workspaces = [

@@ -5,7 +5,7 @@ import {
   createEventCollectorOrchestrator,
   type EventCollectorDependencies,
   type EventCollectorOrchestrator,
-} from '@/backend/orchestration/event-collector.orchestrator';
+} from '@/backend/orchestration/snapshots/event-collector.orchestrator';
 import { PR_SNAPSHOT_UPDATED, type PRSnapshotUpdatedEvent } from '@/backend/services/github';
 import { RATCHET_DISPATCH_CHANGED } from '@/backend/services/ratchet';
 import {

@@ -21,6 +21,8 @@ import {
   buildWorkspaceSessionSummaries,
   hasWorkingSessionSummary,
 } from '@/backend/lib/session-summaries';
+import type { getWorkspaceLinearContext } from '@/backend/orchestration/linear-config.helper';
+import type { fireLifecycleNotification } from '@/backend/orchestration/workspace-lifecycle/workspace-children.orchestrator';
 import { SERVICE_LIMITS } from '@/backend/services/constants';
 import {
   PR_DETACHED,
@@ -68,12 +70,10 @@ import {
 } from '@/backend/services/workspace';
 import { isOpenPrState, type PRState } from '@/shared/core';
 import { projectWorkspaceSnapshotMetadata } from '@/shared/workspace-snapshot';
-import type { getWorkspaceLinearContext } from './linear-config.helper';
 import { LinearMergeCompletion } from './linear-merge-completion.orchestrator';
 import { shouldRefreshRatchetForPrSwitch } from './pr-event-projection';
 import { RatchetProjectionWorker } from './ratchet-projection.worker';
 import { subscribeWorkspaceBranchPublication } from './workspace-branch-publication.orchestrator';
-import type { fireLifecycleNotification } from './workspace-children.orchestrator';
 
 // ---------------------------------------------------------------------------
 // Types

@@ -1,4 +1,4 @@
-import type { PRDedicatedSessionPorts } from '@/backend/orchestration/pr-monitoring-ports';
+import type { PRDedicatedSessionPorts } from '@/backend/orchestration/pull-requests/pr-monitoring-ports';
 import { createLogger } from '@/backend/services/logger.service';
 import { SessionStartupCancelledError, type AgentSessionRecord } from '@/backend/services/session';
 import { PR_DEDICATED_WORKFLOW, type PRTarget } from '@/shared/pr-monitoring';

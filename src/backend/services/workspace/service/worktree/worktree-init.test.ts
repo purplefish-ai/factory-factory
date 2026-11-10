@@ -130,7 +130,7 @@ vi.mock('@/backend/services/run-script', () => ({
 }));
 
 // Import orchestrator after mocks
-import { initializeWorkspaceWorktree } from '@/backend/orchestration/workspace-init.orchestrator';
+import { initializeWorkspaceWorktree } from '@/backend/orchestration/workspace-lifecycle/workspace-init.orchestrator';
 
 describe('initializeWorkspaceWorktree orchestrator', () => {
   beforeEach(() => {

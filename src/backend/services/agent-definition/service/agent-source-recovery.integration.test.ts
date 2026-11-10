@@ -249,8 +249,8 @@ it('uses the application graph GitHub reads and page limit lazily', async () => 
     ...feed,
   ];
   const { createAgentRuntime } = await vi.importActual<
-    typeof import('@/backend/orchestration/agent-runtime.orchestrator')
-  >('@/backend/orchestration/agent-runtime.orchestrator');
+    typeof import('@/backend/orchestration/agents/agent-runtime.orchestrator')
+  >('@/backend/orchestration/agents/agent-runtime.orchestrator');
   const { jobRunner } = await vi.importActual<
     typeof import('@/backend/services/job-runner.service')
   >('@/backend/services/job-runner.service');

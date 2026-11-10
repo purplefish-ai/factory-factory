@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
-import { validateAgentExecution } from '@/backend/orchestration/agent-native-validation';
+import { validateAgentExecution } from '@/backend/orchestration/agents/agent-native-validation';
 import * as acpModelSelection from '@/backend/services/session/service/acp/acp-model-selection';
 import { createMockChildProcess } from '@/backend/services/session/service/acp/acp-runtime-manager.test-helpers';
 import { createSessionProviderResolverService } from '@/backend/services/session/service/data/session-provider-resolver.service';

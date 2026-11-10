@@ -21,7 +21,7 @@ import {
 export let db: IntegrationDatabase;
 export let h: Awaited<ReturnType<typeof createEventDeliveryFixture>>;
 export let consumer: ReturnType<
-  typeof import('@/backend/orchestration/event-run-consumer.orchestrator').createEventRunConsumer
+  typeof import('@/backend/orchestration/agents/event-run-consumer.orchestrator').createEventRunConsumer
 >;
 export let providers: ReturnType<typeof fakeEventProvider>[];
 const exitTasks = new Set<Promise<void>>();
@@ -83,15 +83,15 @@ beforeEach(async () => {
   // Production bridges fire PR wakes without awaiting them on session idle.
   // Preserve those real operations, but own their lifetime through DB teardown.
   const delivery = await vi.importActual<
-    typeof import('@/backend/orchestration/pr-event-delivery.orchestrator')
-  >('@/backend/orchestration/pr-event-delivery.orchestrator');
+    typeof import('@/backend/orchestration/pull-requests/pr-event-delivery.orchestrator')
+  >('@/backend/orchestration/pull-requests/pr-event-delivery.orchestrator');
   const wake = delivery.wakePRDelivery;
   vi.spyOn(delivery, 'wakePRDelivery').mockImplementation((...args) =>
     trackEventFixtureTask(wake(...args))
   );
   const { createEventRunConsumer } = await vi.importActual<
-    typeof import('@/backend/orchestration/event-run-consumer.orchestrator')
-  >('@/backend/orchestration/event-run-consumer.orchestrator');
+    typeof import('@/backend/orchestration/agents/event-run-consumer.orchestrator')
+  >('@/backend/orchestration/agents/event-run-consumer.orchestrator');
   consumer = createEventRunConsumer();
 }, 30_000);
 afterEach(async () => {
@@ -209,8 +209,8 @@ export async function readyRetryPRFixture() {
   });
   await h.session.sessionLifecycleService.startSession(other.id, { initialPrompt: '' });
   const { captureWorkspaceRetryGuard } = await vi.importActual<
-    typeof import('@/backend/orchestration/workspace-retry-authority')
-  >('@/backend/orchestration/workspace-retry-authority');
+    typeof import('@/backend/orchestration/workspace-lifecycle/workspace-retry-authority')
+  >('@/backend/orchestration/workspace-lifecycle/workspace-retry-authority');
   const workspace = await h.workspace.workspaceDataService.findByIdWithProject(
     h.claim.reservedWorkspaceId
   );
@@ -247,11 +247,11 @@ export async function readyRetryPRFixture() {
     ).toMatchObject({ applied: true });
   }
   const { createPRBackgroundDeliveryPort } = await vi.importActual<
-    typeof import('@/backend/orchestration/pr-event-delivery-port')
-  >('@/backend/orchestration/pr-event-delivery-port');
+    typeof import('@/backend/orchestration/pull-requests/pr-event-delivery-port')
+  >('@/backend/orchestration/pull-requests/pr-event-delivery-port');
   const { createPRDeliveryPorts } = await vi.importActual<
-    typeof import('@/backend/orchestration/pr-delivery-dependencies')
-  >('@/backend/orchestration/pr-delivery-dependencies');
+    typeof import('@/backend/orchestration/pull-requests/pr-delivery-dependencies')
+  >('@/backend/orchestration/pull-requests/pr-delivery-dependencies');
   const { createPRMonitoringTestServices } = await vi.importActual<
     typeof import('@/backend/orchestration/testing/pr-monitoring-services.test-support')
   >('@/backend/orchestration/testing/pr-monitoring-services.test-support');

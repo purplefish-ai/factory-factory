@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, beforeEach, expect, it, vi } from 'vitest';
-import { dataBackupService } from '@/backend/orchestration/data-backup.service';
+import { dataBackupService } from '@/backend/orchestration/data-backup/data-backup.service';
 import * as runtime from '@/backend/services/agent-definition';
 import * as recovery from '@/backend/services/agent-definition/resources/agent-definition-recovery';
 import { createLedgerFixture } from '@/backend/services/agent-definition/resources/testing/agent-ledger.test-support';

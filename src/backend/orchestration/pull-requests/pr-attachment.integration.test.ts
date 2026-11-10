@@ -1,5 +1,10 @@
 import { EventEmitter } from 'node:events';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+  createEventCollectorOrchestrator,
+  type EventCollectorDependencies,
+} from '@/backend/orchestration/snapshots/event-collector.orchestrator';
+import { fireLifecycleNotification } from '@/backend/orchestration/workspace-lifecycle/workspace-children.orchestrator';
 import { PR_SNAPSHOT_UPDATED, PR_URL_ATTACHED, prSnapshotService } from '@/backend/services/github';
 import {
   workspaceDataService,
@@ -15,13 +20,8 @@ import type { PRObservation } from '@/shared/pr-monitoring';
 import { redObservation } from '@/shared/pr-monitoring.test-helpers';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 import type { PrismaClient } from '@prisma-gen/client';
-import {
-  createEventCollectorOrchestrator,
-  type EventCollectorDependencies,
-} from './event-collector.orchestrator';
 import type { PRObservationPorts } from './pr-observation-ports';
 import { observeMonitoredPR } from './pr-observation.orchestrator';
-import { fireLifecycleNotification } from './workspace-children.orchestrator';
 
 const testDatabase = vi.hoisted(() => ({ prisma: undefined as PrismaClient | undefined }));
 vi.mock('@/backend/db', () => ({

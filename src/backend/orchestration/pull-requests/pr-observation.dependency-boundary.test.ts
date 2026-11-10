@@ -8,9 +8,10 @@ async function checkBoundary(producer: string, ports = 'export interface Ports {
   const root = mkdtempSync(join(tmpdir(), 'pr-observation-boundary-'));
   const files = {
     'tsconfig.json': JSON.stringify({ compilerOptions: { module: 'ESNext' } }),
-    'src/backend/orchestration/pr-observation.orchestrator.ts': producer,
-    'src/backend/orchestration/pr-observation-ports.ts': ports,
-    'src/backend/orchestration/pr-delivery-dependencies.ts': 'export const service = true;',
+    'src/backend/orchestration/pull-requests/pr-observation.orchestrator.ts': producer,
+    'src/backend/orchestration/pull-requests/pr-observation-ports.ts': ports,
+    'src/backend/orchestration/pull-requests/pr-delivery-dependencies.ts':
+      'export const service = true;',
     'src/backend/services/github/index.ts':
       'export const service = true; export interface Contract {}',
     'src/backend/services/session/index.ts': 'export const service = true;',
@@ -32,15 +33,15 @@ async function checkBoundary(producer: string, ports = 'export interface Ports {
 it('allows observation to depend on its narrow ports and shared contracts', async () => {
   const result = await checkBoundary(
     "import type { Ports } from './pr-observation-ports'; export type Input = Ports;",
-    "import type { Observation } from '../../shared/observation'; export type Ports = Observation;"
+    "import type { Observation } from '../../../shared/observation'; export type Ports = Observation;"
   );
   expect(result.exitCode, String(result.output)).toBe(0);
 });
 
 it.each([
-  '../services/github',
-  '../services/session',
-  '../services/ratchet',
+  '../../services/github',
+  '../../services/session',
+  '../../services/ratchet',
   './pr-delivery-dependencies',
 ])('rejects producer runtime imports from %s', async (dependency) => {
   const result = await checkBoundary(
@@ -53,7 +54,7 @@ it.each([
 it('rejects broad service contracts in observation ports even for type-only imports', async () => {
   const result = await checkBoundary(
     "import type { Ports } from './pr-observation-ports'; export type Input = Ports;",
-    "import type { Contract } from '../services/github'; export type Ports = Contract;"
+    "import type { Contract } from '../../services/github'; export type Ports = Contract;"
   );
   expect(result.exitCode).toBe(1);
   expect(result.output).toContain('pr-observation-ports-are-application-independent');

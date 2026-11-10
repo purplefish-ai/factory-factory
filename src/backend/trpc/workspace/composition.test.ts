@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createDefaultApplicationDependencies } from '@/backend/app-context';
-import type { CreatedWorkspace } from '@/backend/orchestration/workspace-launch.orchestrator';
+import type { CreatedWorkspace } from '@/backend/orchestration/workspace-lifecycle/workspace-launch.orchestrator';
 import { createFakeApplicationGraph } from '@/test-utils/application-graph';
 
 const mockListForProject = vi.hoisted(() => vi.fn());

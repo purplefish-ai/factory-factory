@@ -12,15 +12,15 @@ vi.mock('node:child_process', async (importOriginal) => ({
   spawn: scriptProcess.spawn,
 }));
 import {
+  boundary,
+  createEventDeliveryFixture,
+  releaseEventBoundaries,
+} from '@/backend/orchestration/testing/event-delivery.test-support';
+import {
   createIntegrationDatabase,
   destroyIntegrationDatabase,
   type IntegrationDatabase,
 } from '@/backend/testing/integration-db';
-import {
-  boundary,
-  createEventDeliveryFixture,
-  releaseEventBoundaries,
-} from './testing/event-delivery.test-support';
 
 let db: IntegrationDatabase;
 let h: Awaited<ReturnType<typeof createEventDeliveryFixture>>;
@@ -108,8 +108,9 @@ it('requires positive canonical absence after owned removal resolves', async () 
   expect(proof).toHaveBeenCalledWith(worktreePath, expect.any(Object), await realpath(db.tempDir));
 });
 it('initializes the reserved event workspace without default session startup or legacy auto-init', async () => {
-  const linearContext =
-    await vi.importActual<typeof import('./linear-config.helper')>('./linear-config.helper');
+  const linearContext = await vi.importActual<
+    typeof import('@/backend/orchestration/linear-config.helper')
+  >('@/backend/orchestration/linear-config.helper');
   const linearLookup = vi.spyOn(linearContext, 'getWorkspaceLinearContext').mockResolvedValue({
     apiKey: 'fixture-only',
     linearIssueId: 'fixture-issue',

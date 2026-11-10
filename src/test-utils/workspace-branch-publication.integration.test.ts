@@ -4,7 +4,7 @@ import { afterEach, expect, it, vi } from 'vitest';
 import {
   createEventCollectorOrchestrator,
   type EventCollectorDependencies,
-} from '@/backend/orchestration/event-collector.orchestrator';
+} from '@/backend/orchestration/snapshots/event-collector.orchestrator';
 import {
   SNAPSHOT_CHANGED,
   WORKSPACE_STATE_CHANGED,

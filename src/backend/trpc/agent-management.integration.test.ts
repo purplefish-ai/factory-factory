@@ -7,8 +7,8 @@ import {
   destroyIntegrationDatabase,
   type IntegrationDatabase,
 } from '@/backend/testing/integration-db';
-let createAgentManagement: typeof import('@/backend/orchestration/agent-management.orchestrator').createAgentManagement;
-let createAgentAuthoring: typeof import('@/backend/orchestration/agent-authoring.orchestrator').createAgentAuthoring;
+let createAgentManagement: typeof import('@/backend/orchestration/agents/agent-management.orchestrator').createAgentManagement;
+let createAgentAuthoring: typeof import('@/backend/orchestration/agents/agent-authoring.orchestrator').createAgentAuthoring;
 let createContext: typeof import('./trpc').createContext;
 let agentRouter: typeof import('./agent.trpc').agentRouter;
 
@@ -67,11 +67,11 @@ beforeAll(async () => {
   ({ agentRouter } = await vi.importActual<typeof import('./agent.trpc')>('./agent.trpc'));
   ({ createContext } = await vi.importActual<typeof import('./trpc')>('./trpc'));
   ({ createAgentManagement } = await vi.importActual<
-    typeof import('@/backend/orchestration/agent-management.orchestrator')
-  >('@/backend/orchestration/agent-management.orchestrator'));
+    typeof import('@/backend/orchestration/agents/agent-management.orchestrator')
+  >('@/backend/orchestration/agents/agent-management.orchestrator'));
   ({ createAgentAuthoring } = await vi.importActual<
-    typeof import('@/backend/orchestration/agent-authoring.orchestrator')
-  >('@/backend/orchestration/agent-authoring.orchestrator'));
+    typeof import('@/backend/orchestration/agents/agent-authoring.orchestrator')
+  >('@/backend/orchestration/agents/agent-authoring.orchestrator'));
   runtime = await vi.importActual<typeof import('@/backend/services/agent-definition')>(
     '@/backend/services/agent-definition'
   );
@@ -324,8 +324,8 @@ it('reads retained workspace origins through the public owner before linkage and
     run: { id: runId },
   });
   const { captureWorkspaceRunResults } = await vi.importActual<
-    typeof import('@/backend/orchestration/workspace-deletion.orchestrator')
-  >('@/backend/orchestration/workspace-deletion.orchestrator');
+    typeof import('@/backend/orchestration/workspace-lifecycle/workspace-deletion.orchestrator')
+  >('@/backend/orchestration/workspace-lifecycle/workspace-deletion.orchestrator');
   workspace.workspaceDataService.configureDeletionCapture(captureWorkspaceRunResults);
   await workspace.workspaceDataService.delete(workspaceId);
   expect(await caller.workspaceOrigin({ projectId, workspaceId })).toMatchObject({

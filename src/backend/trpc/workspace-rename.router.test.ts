@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { AppContext } from '@/backend/app-context';
-import type { RenamedWorkspace } from '@/backend/orchestration/workspace-rename.orchestrator';
+import type { RenamedWorkspace } from '@/backend/orchestration/workspace-lifecycle/workspace-rename.orchestrator';
 import { createFakeApplicationGraph } from '@/test-utils/application-graph';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 import { workspaceCoreRouter } from './workspace.trpc';

@@ -1,5 +1,9 @@
 import { stat } from 'node:fs/promises';
 import { toError } from '@/backend/lib/error-utils';
+import {
+  enqueueWorkspaceInitializationTask,
+  resolveWorkspaceWorktree,
+} from '@/backend/orchestration/workspace-lifecycle/workspace-init.orchestrator';
 import { SERVICE_TIMEOUT_MS } from '@/backend/services/constants';
 import {
   FactoryConfigService,
@@ -16,10 +20,6 @@ import {
   type EventWorkspaceClaim,
 } from '@/backend/services/workspace';
 import { classifyEventPreparationFailure } from '@/shared/event-agent-preparation';
-import {
-  enqueueWorkspaceInitializationTask,
-  resolveWorkspaceWorktree,
-} from './workspace-init.orchestrator';
 
 export type EventWorkspaceInitializationResult =
   | { status: 'READY'; workspaceId: string; sessionId: string; warning?: string }

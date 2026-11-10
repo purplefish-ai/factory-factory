@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApplicationError } from '@/backend/lib/application-error';
-import { initializeWorkspaceWorktree } from '@/backend/orchestration/workspace-init.orchestrator';
-import { launchWorkspace } from '@/backend/orchestration/workspace-launch.orchestrator';
+import { initializeWorkspaceWorktree } from '@/backend/orchestration/workspace-lifecycle/workspace-init.orchestrator';
+import { launchWorkspace } from '@/backend/orchestration/workspace-lifecycle/workspace-launch.orchestrator';
 import { sessionDataService, sessionProviderResolverService } from '@/backend/services/session';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 

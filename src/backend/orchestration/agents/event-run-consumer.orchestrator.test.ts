@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { deferred } from '@/backend/orchestration/testing/event-delivery.test-support';
 import type { EventLaunchClaim } from '@/backend/services/agent-definition';
 import { configService } from '@/backend/services/config.service';
 import { createEventRunConsumer } from './event-run-consumer.orchestrator';
-import { deferred } from './testing/event-delivery.test-support';
 
 const ports = vi.hoisted(() => ({
   read: vi.fn(),

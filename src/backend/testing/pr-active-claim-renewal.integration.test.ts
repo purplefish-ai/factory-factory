@@ -20,11 +20,11 @@ it.each([
     const { createDefaultApplicationDependencies } =
       await vi.importActual<typeof import('@/backend/app-context')>('@/backend/app-context');
     const { createPRBackgroundDeliveryPort } = await vi.importActual<
-      typeof import('@/backend/orchestration/pr-event-delivery-port')
-    >('@/backend/orchestration/pr-event-delivery-port');
+      typeof import('@/backend/orchestration/pull-requests/pr-event-delivery-port')
+    >('@/backend/orchestration/pull-requests/pr-event-delivery-port');
     const { createPRDeliveryPorts } = await vi.importActual<
-      typeof import('@/backend/orchestration/pr-delivery-dependencies')
-    >('@/backend/orchestration/pr-delivery-dependencies');
+      typeof import('@/backend/orchestration/pull-requests/pr-delivery-dependencies')
+    >('@/backend/orchestration/pull-requests/pr-delivery-dependencies');
     const findReceipt = vi.fn(async () => receipt);
     const graph = createDefaultApplicationDependencies();
     const dispatch = vi
