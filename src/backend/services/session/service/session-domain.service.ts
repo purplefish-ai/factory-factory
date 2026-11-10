@@ -677,6 +677,8 @@ export class SessionDomainService extends EventEmitter {
     } else if (hasPendingInitialMessage) {
       this.publishedInitialMessages.delete(sessionId);
     }
+    // Lets retained provider-history projections start their expiry.
+    this.emit('session_cleared', sessionId);
     if (options?.permanentlyDeleted) {
       this.forgetProviderHistoryIdentity(sessionId);
     }
