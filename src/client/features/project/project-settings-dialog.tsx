@@ -1,5 +1,6 @@
 import { GearIcon } from '@phosphor-icons/react/dist/csr/Gear';
 import { useEffect, useState } from 'react';
+import { IconButton } from '@/client/components/icon-button';
 import { StatusCallout } from '@/client/components/status-callout';
 import { type ScriptType, StartupScriptForm } from '@/client/features/project/startup-script-form';
 import { runInBackground } from '@/client/lib/background-task';
@@ -16,7 +17,6 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 
 interface ProjectSettingsDialogProps {
   projectId: string;
@@ -72,16 +72,11 @@ export function ProjectSettingsDialog({
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <DialogTrigger asChild>
-            <Button variant="ghost" size="icon" aria-label="Project settings">
-              <GearIcon className="h-4 w-4" />
-            </Button>
-          </DialogTrigger>
-        </TooltipTrigger>
-        <TooltipContent>Settings</TooltipContent>
-      </Tooltip>
+      <DialogTrigger asChild>
+        <IconButton label="Project settings">
+          <GearIcon />
+        </IconButton>
+      </DialogTrigger>
       <DialogContent className="px-3 py-4 sm:max-w-[500px] sm:p-4">
         <DialogHeader>
           <DialogTitle>Project settings</DialogTitle>

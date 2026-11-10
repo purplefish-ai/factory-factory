@@ -49,10 +49,12 @@ export function TicketDispatchSettingsSection() {
             </SettingField>
             <div className="flex gap-2">
               <Button
-                disabled={update.isPending || !value.trim() || value === saved}
+                pending={update.isPending}
+                pendingLabel="Saving…"
+                disabled={!value.trim() || value === saved}
                 onClick={() => save(value.trim())}
               >
-                {update.isPending ? 'Saving…' : 'Save prompt'}
+                Save prompt
               </Button>
               <Button
                 variant="outline"

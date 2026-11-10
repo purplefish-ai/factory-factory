@@ -98,7 +98,7 @@ export function ChatImage({
       <button
         type="button"
         aria-label={`Open ${alt} at full size`}
-        className="max-w-full cursor-zoom-in rounded focus-visible:outline focus-visible:outline-ring"
+        className="max-w-full cursor-zoom-in rounded focus-ring"
         onClick={(event) => {
           event.preventDefault();
           event.stopPropagation();

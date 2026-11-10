@@ -135,7 +135,7 @@ export function MobileBoardSections({
               }
             }}
             className={cn(
-              'flex h-10 min-w-0 items-center justify-center gap-1 border-b-2 px-1 text-xs font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring',
+              'flex h-10 min-w-0 items-center justify-center gap-1 border-b-2 px-1 text-xs font-medium focus-ring focus-visible:ring-inset',
               visible && activeId === column.id
                 ? 'border-primary text-foreground'
                 : 'border-transparent text-muted-foreground',
@@ -164,7 +164,7 @@ export function MobileBoardSections({
                 sectionRefs.current.delete(column.id);
               }
             }}
-            className="shrink-0 outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className="shrink-0 focus-ring"
           >
             {content}
           </section>

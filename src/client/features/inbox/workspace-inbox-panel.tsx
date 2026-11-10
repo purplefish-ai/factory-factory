@@ -74,8 +74,7 @@ function WorkspaceInbox({ workspaceId }: { workspaceId: string }) {
         </div>
         <Button
           variant="ghost"
-          size="sm"
-          className="h-7 text-xs"
+          size="compact"
           disabled={mail.isFetching}
           onClick={() => void mail.refetch()}
         >
@@ -117,7 +116,7 @@ function WorkspaceInbox({ workspaceId }: { workspaceId: string }) {
                   <li key={item.id}>
                     <button
                       type="button"
-                      className="w-full space-y-1.5 px-3 py-3 text-left transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+                      className="w-full space-y-1.5 px-3 py-3 text-left transition-colors hover:bg-muted/50 focus-ring focus-visible:ring-inset"
                       onClick={() => setSelected(item)}
                     >
                       <span className="flex items-start justify-between gap-2">

@@ -139,9 +139,11 @@ function LinearConfigFields({
           onClick={() => {
             runInBackground(handleValidate(), "Couldn't update issue tracking.");
           }}
-          disabled={validateAndList.isPending || !apiKey}
+          pending={validateAndList.isPending}
+          pendingLabel="Validating…"
+          disabled={!apiKey}
         >
-          {validateAndList.isPending ? 'Validating…' : 'Validate'}
+          Validate
         </Button>
       </div>
 
@@ -172,10 +174,12 @@ function LinearConfigFields({
             onClick={() => {
               runInBackground(handleSave(), "Couldn't update issue tracking.");
             }}
-            disabled={!selectedTeamId || isSaving}
+            pending={isSaving}
+            pendingLabel="Saving…"
+            disabled={!selectedTeamId}
             className="self-end"
           >
-            {isSaving ? 'Saving…' : 'Save'}
+            Save
           </Button>
         </>
       )}

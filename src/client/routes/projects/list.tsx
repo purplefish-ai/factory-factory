@@ -6,6 +6,7 @@ import { Link } from 'react-router';
 import { toast } from 'sonner';
 import { useAppHeader } from '@/client/components/app-header-context';
 import { EmptyState } from '@/client/components/empty-state';
+import { IconButton } from '@/client/components/icon-button';
 import { Loading } from '@/client/components/loading';
 import { QueryErrorState } from '@/client/components/query-error-state';
 import { ProjectSettingsDialog } from '@/client/features/project/project-settings-dialog';
@@ -23,7 +24,6 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { useIsMobile } from '@/hooks/use-mobile';
 
 function ProjectActions({
@@ -49,21 +49,15 @@ function ProjectActions({
         currentStartupScriptCommand={startupScriptCommand}
         currentStartupScriptPath={startupScriptPath}
       />
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <Button
-            variant="ghost"
-            size="icon"
-            aria-label={`Archive ${projectName}`}
-            onClick={onArchive}
-            pending={archivePending}
-            className="hover:bg-destructive/10 hover:text-destructive"
-          >
-            <ArchiveIcon className="size-4" />
-          </Button>
-        </TooltipTrigger>
-        <TooltipContent>Archive</TooltipContent>
-      </Tooltip>
+      <IconButton
+        label={`Archive ${projectName}`}
+        tooltip="Archive"
+        onClick={onArchive}
+        pending={archivePending}
+        className="hover:bg-destructive/10 hover:text-destructive"
+      >
+        <ArchiveIcon />
+      </IconButton>
     </div>
   );
 }
@@ -113,7 +107,7 @@ export default function ProjectsListPage() {
         </div>
         <Button asChild size={isMobile ? 'sm' : 'default'}>
           <Link to="/projects/new">
-            <PlusIcon className="size-5" />
+            <PlusIcon />
             New Project
           </Link>
         </Button>
@@ -153,7 +147,7 @@ export default function ProjectsListPage() {
                   <div className="min-w-0 space-y-1">
                     <Link
                       to={`/projects/${project.slug}/workspaces`}
-                      className="block min-w-0 rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                      className="block min-w-0 rounded-sm focus-ring focus-visible:ring-offset-2"
                     >
                       <div className="font-medium text-foreground truncate hover:text-primary">
                         {project.name}

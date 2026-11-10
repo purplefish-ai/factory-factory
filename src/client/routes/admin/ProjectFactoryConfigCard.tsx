@@ -103,13 +103,12 @@ export function ProjectFactoryConfigCard({
               ))}
             <Button
               variant="ghost"
-              size="icon"
-              className="h-7 w-7"
+              size="icon-compact"
               aria-label="Edit factory configuration"
               disabled={!isSuccess}
               onClick={() => setEditPanelOpen(true)}
             >
-              <PencilIcon className="w-3.5 h-3.5" />
+              <PencilIcon />
             </Button>
           </div>
           <Button
@@ -119,7 +118,7 @@ export function ProjectFactoryConfigCard({
             pending={refreshConfigs.isPending}
             className="w-full gap-2 sm:w-auto"
           >
-            <ArrowsClockwiseIcon className="w-4 h-4" />
+            <ArrowsClockwiseIcon />
             Refresh Workspaces
           </Button>
         </div>

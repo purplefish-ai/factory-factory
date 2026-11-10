@@ -91,7 +91,7 @@ function ErrorLifecycleRow({
       {expanded ? (
         <p
           id={detailsId}
-          className="max-h-80 overflow-y-auto rounded-sm whitespace-pre-wrap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="max-h-80 overflow-y-auto rounded-sm whitespace-pre-wrap focus-ring"
         >
           {text}
         </p>

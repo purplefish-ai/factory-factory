@@ -20,19 +20,15 @@ export function ComposerMenuTrigger({
     <Button
       type="button"
       variant="ghost"
-      size="sm"
-      className={cn(
-        'h-6 min-w-0 max-w-[14rem] gap-1 px-2 text-xs text-muted-foreground hover:text-foreground',
-        iconOnly && 'size-6 shrink-0 p-0',
-        className
-      )}
+      size={iconOnly ? 'icon-xs' : 'xs'}
+      className={cn('min-w-0 max-w-[14rem] text-muted-foreground hover:text-foreground', className)}
       {...props}
     >
       {icon}
       {!iconOnly && (
         <>
           <span className="truncate">{children}</span>
-          {indicator ?? <CaretDownIcon className="size-3 shrink-0" />}
+          {indicator ?? <CaretDownIcon className="shrink-0" />}
         </>
       )}
     </Button>

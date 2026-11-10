@@ -5,6 +5,7 @@ import { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { trpc } from '@/client/lib/trpc';
+import { TooltipProvider } from '@/components/ui/tooltip';
 import { ChatInput } from './chat-input';
 
 beforeEach(() => {
@@ -32,12 +33,14 @@ describe('ChatInput drafts', () => {
         root.render(
           <QueryClientProvider client={queryClient}>
             <trpc.Provider client={client} queryClient={queryClient}>
-              <ChatInput
-                value={draft}
-                onChange={onChange}
-                onSend={onSend}
-                placeholder={placeholder}
-              />
+              <TooltipProvider>
+                <ChatInput
+                  value={draft}
+                  onChange={onChange}
+                  onSend={onSend}
+                  placeholder={placeholder}
+                />
+              </TooltipProvider>
             </trpc.Provider>
           </QueryClientProvider>
         )

@@ -106,7 +106,7 @@ const preview: Preview = {
           React.createElement(
             StoryTrpcProvider,
             { key: context.id, handlers: storyTrpcHandlersFrom(context.parameters) },
-            React.createElement(TooltipProvider, null, React.createElement(Story)),
+            React.createElement(TooltipProvider, { delayDuration: 0 }, React.createElement(Story)),
             // The app's toaster, following the toolbar theme. Stories that
             // render their own Toaster opt out with `parameters.toaster: false`.
             // Docs pages render every story at once, and one Toaster per story

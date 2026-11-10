@@ -22,7 +22,7 @@ vi.mock('@/client/hooks/use-project-header-navigation', () => ({
   }),
 }));
 vi.mock('@/client/hooks/use-download-server-log', () => ({
-  useDownloadServerLog: () => ({ download: vi.fn(), isDownloading: false }),
+  useDownloadServerLog: () => ({ mutate: vi.fn(), isPending: false }),
 }));
 vi.mock('@/components/ui/select', () => ({
   Select: ({

@@ -588,8 +588,8 @@ export function InlineWorkspaceForm({
         >
           <Button
             variant="ghost"
-            size="sm"
-            className="h-7 text-xs whitespace-nowrap"
+            size="compact"
+            className="whitespace-nowrap"
             onClick={() => {
               runInBackground(recovery.discardDraft(), "Couldn't clear canceled task.");
               onCancel();

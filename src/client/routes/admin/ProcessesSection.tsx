@@ -7,11 +7,11 @@ import { useCallback, useState } from 'react';
 import { Link } from 'react-router';
 import { toast } from 'sonner';
 import { EmptyState } from '@/client/components/empty-state';
+import { IconButton } from '@/client/components/icon-button';
 import { runInBackground } from '@/client/lib/background-task';
 import type { AppRouter } from '@/client/lib/trpc';
 import { trpc } from '@/client/lib/trpc';
 import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
   Table,
@@ -86,16 +86,17 @@ function StopSessionButton({
   onStop: () => void;
 }) {
   return (
-    <Button
-      variant="ghost"
-      size="sm"
+    <IconButton
+      label="Stop session"
+      tooltip={isStopping ? 'Stopping session…' : 'Stop session'}
+      size="icon-sm"
       onClick={onStop}
       pending={isStopping}
+      pendingLabel="Stopping session…"
       disabled={disabled}
-      title={isStopping ? 'Stopping session…' : 'Stop session'}
     >
-      <XCircleIcon className="w-4 h-4" />
-    </Button>
+      <XCircleIcon />
+    </IconButton>
   );
 }
 

@@ -338,7 +338,7 @@ export const Notifications: Story = {
 export const CompactControls: Story = {
   render: () => (
     <div className="space-y-4 p-4">
-      <Button size="sm" className="h-7 w-7 px-0" aria-label="Attach file">
+      <Button size="icon-compact" aria-label="Attach file">
         <PlusIcon />
       </Button>
       <Select defaultValue="claude">

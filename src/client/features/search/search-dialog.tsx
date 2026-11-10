@@ -13,6 +13,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog';
+import { Toggle } from '@/components/ui/toggle';
 import { filterCommands, getCommandValue, SearchCommands } from './search-commands';
 import { SearchResults, type SearchResultsProps } from './search-results';
 
@@ -147,24 +148,23 @@ export function SearchDialog({
         <DialogClose asChild>
           <Button
             variant="ghost"
-            size="icon"
+            size="icon-sm"
             aria-label="Close search"
-            className="absolute right-2 top-2.5 size-8 text-muted-foreground"
+            className="absolute right-2 top-2.5 text-muted-foreground"
           >
-            <XIcon className="size-4" />
+            <XIcon />
           </Button>
         </DialogClose>
         <div className="flex items-center justify-between border-t px-3 py-2">
-          <button
-            type="button"
-            aria-pressed={includeArchived}
-            onClick={() => onIncludeArchivedChange(!includeArchived)}
-            className="flex min-h-8 items-center gap-1.5 rounded px-1 text-xs text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring aria-pressed:text-foreground"
+          <Toggle
+            size="sm"
+            pressed={includeArchived}
+            onPressedChange={onIncludeArchivedChange}
+            className="gap-1.5 text-xs text-muted-foreground hover:text-foreground data-[state=on]:text-foreground"
           >
             <ArchiveIcon className="size-3.5" />
             Include archived
-            {includeArchived && <span className="size-1.5 rounded-full bg-primary" />}
-          </button>
+          </Toggle>
           <span
             className="hidden items-center gap-3 text-2xs text-muted-foreground sm:flex"
             aria-hidden="true"

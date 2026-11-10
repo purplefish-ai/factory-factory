@@ -119,16 +119,23 @@ export function IdeSettingsSection() {
                     className="font-mono text-sm flex-1"
                     disabled={updateSettings.isPending}
                   />
-                  <Button type="submit" disabled={updateSettings.isPending || !command.trim()}>
-                    {updateSettings.isPending ? 'Saving…' : 'Save'}
+                  <Button
+                    type="submit"
+                    pending={updateSettings.isPending}
+                    pendingLabel="Saving…"
+                    disabled={!command.trim()}
+                  >
+                    Save
                   </Button>
                   <Button
                     type="button"
                     variant="outline"
                     onClick={handleTestCommand}
-                    disabled={testCommand.isPending || !command.trim()}
+                    pending={testCommand.isPending}
+                    pendingLabel="Testing…"
+                    disabled={!command.trim()}
                   >
-                    {testCommand.isPending ? 'Testing…' : 'Test'}
+                    Test
                   </Button>
                 </form>
               </SettingField>

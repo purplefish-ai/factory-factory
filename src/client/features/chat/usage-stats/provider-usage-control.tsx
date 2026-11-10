@@ -87,13 +87,13 @@ export function UsageControl({
       <PopoverTrigger asChild>
         <Button
           variant="ghost"
-          size="sm"
+          size="compact"
           aria-label={label}
           aria-busy={compacting}
-          className={cn('h-7 shrink-0 gap-1.5 px-1.5 text-xs tabular-nums', usageColor(percent))}
+          className={cn('shrink-0 tabular-nums', usageColor(percent))}
         >
           {compacting ? (
-            <Spinner aria-hidden="true" className="size-3.5" />
+            <Spinner aria-hidden="true" />
           ) : (
             <svg
               aria-hidden="true"
@@ -174,8 +174,7 @@ export function UsageControl({
           <div className="flex shrink-0 items-center gap-1">
             <Button
               variant="outline"
-              size="sm"
-              className="h-6 px-2 text-xs"
+              size="xs"
               onClick={onCompact}
               disabled={!canCompact(context, onCompact) || busy || disabled}
               pending={compacting}
@@ -185,13 +184,12 @@ export function UsageControl({
             </Button>
             <Button
               variant="ghost"
-              size="icon"
+              size="icon-xs"
               aria-label="Refresh usage"
               pending={refreshing}
               onClick={onRefresh}
-              className="h-6 w-6"
             >
-              <ArrowClockwiseIcon aria-hidden="true" className="h-3.5 w-3.5" />
+              <ArrowClockwiseIcon aria-hidden="true" />
             </Button>
           </div>
         </div>

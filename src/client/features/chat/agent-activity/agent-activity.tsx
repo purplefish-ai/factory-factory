@@ -1,8 +1,10 @@
 import { SteeringWheelIcon } from '@phosphor-icons/react/dist/csr/SteeringWheel';
 import { XIcon } from '@phosphor-icons/react/dist/csr/X';
 import { memo } from 'react';
+import { IconButton } from '@/client/components/icon-button';
 import { ErrorBoundary } from '@/client/error-boundary';
 import { AttachmentPreview } from '@/client/features/composer';
+import { Button } from '@/components/ui/button';
 import type { ChatMessage, GroupedMessageItem } from '@/lib/chat-protocol';
 import { isToolSequence } from '@/lib/chat-protocol';
 import { cn } from '@/lib/utils';
@@ -82,23 +84,21 @@ function QueuedMessageSteerAction({
   steerDisabled?: boolean;
 }) {
   return (
-    <button
-      onClick={onSteer}
-      disabled={steerDisabled}
-      aria-busy={isSteering}
-      className={cn(
-        'inline-flex h-6 items-center justify-center gap-1 rounded-md px-1.5 text-xs font-medium',
-        'bg-background/90 text-primary hover:bg-primary/10 disabled:opacity-50 disabled:cursor-wait',
-        'border border-primary/30 hover:border-primary/60 shadow-sm',
-        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring'
-      )}
-      title="Send into the active turn now. The agent may redirect its current work."
+    <Button
       type="button"
+      variant="outline"
+      size="xs"
+      onClick={onSteer}
+      pending={isSteering}
+      pendingLabel="Steering…"
+      disabled={steerDisabled}
+      className="border-primary/30 bg-background/90 text-primary shadow-sm hover:border-primary/60 hover:bg-primary/10 hover:text-primary dark:border-primary/30 dark:bg-background/90 dark:hover:bg-primary/10"
+      title="Send into the active turn now. The agent may redirect its current work."
       aria-label={isSteering ? 'Steering queued message' : 'Steer queued message'}
     >
-      <SteeringWheelIcon className="h-3.5 w-3.5" />
-      {isSteering ? 'Steering…' : 'Steer'}
-    </button>
+      <SteeringWheelIcon />
+      Steer
+    </Button>
   );
 }
 
@@ -142,21 +142,15 @@ function QueuedMessageActions({
           )}
           {/* Cancel button for queued messages */}
           {isQueued && onRemove && (
-            <button
+            <IconButton
+              label="Cancel queued message"
+              size="icon-xs"
+              variant="outline"
               onClick={onRemove}
-              className={cn(
-                'inline-flex size-6 items-center justify-center rounded-md',
-                'bg-background/90 hover:bg-destructive/10',
-                'border border-border hover:border-destructive/50',
-                'shadow-sm',
-                'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring'
-              )}
-              title="Cancel queued message"
-              type="button"
-              aria-label="Cancel queued message"
+              className="bg-background/90 text-muted-foreground shadow-sm hover:border-destructive/50 hover:bg-destructive/10 hover:text-destructive dark:bg-background/90 dark:hover:bg-destructive/10"
             >
-              <XIcon className="h-3.5 w-3.5 text-muted-foreground hover:text-destructive" />
-            </button>
+              <XIcon />
+            </IconButton>
           )}
         </div>
       </div>

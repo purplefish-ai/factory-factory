@@ -72,7 +72,7 @@ export function ThinkingFooter({
               disabled={!active}
               tabIndex={active ? 0 : -1}
               aria-label="Show thinking preview"
-              className="block h-full w-full min-w-0 rounded-sm text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              className="block h-full w-full min-w-0 rounded-sm text-left focus-ring"
             >
               <LoadingIndicator latestReasoning={latestParagraph} singleLine plainText />
             </button>

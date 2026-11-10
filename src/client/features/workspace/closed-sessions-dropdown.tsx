@@ -48,15 +48,14 @@ export function ClosedSessionsDropdown({
           <DropdownMenuTrigger asChild>
             <Button
               variant="ghost"
-              size="sm"
+              size="compact"
               disabled={disabled}
               className={cn(
-                'h-7 px-2 text-xs gap-1.5',
                 'text-muted-foreground hover:text-foreground',
                 'border border-input bg-background hover:bg-sidebar-accent'
               )}
             >
-              <ArchiveIcon className="h-3.5 w-3.5" />
+              <ArchiveIcon />
               <span>Closed</span>
             </Button>
           </DropdownMenuTrigger>

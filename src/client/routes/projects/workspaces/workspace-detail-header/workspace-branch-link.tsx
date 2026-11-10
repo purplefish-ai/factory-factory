@@ -1,9 +1,8 @@
 import { GithubLogoIcon } from '@phosphor-icons/react/dist/csr/GithubLogo';
+import { IconButton } from '@/client/components/icon-button';
 import { trpc } from '@/client/lib/trpc';
 import { encodeGitHubTreeRef } from '@/client/routes/projects/workspaces/github-branch-url';
-import { Button } from '@/components/ui/button';
 import { DropdownMenuItem } from '@/components/ui/dropdown-menu';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import type { WorkspaceHeaderWorkspace } from './types';
 
 export function WorkspaceBranchLink({
@@ -39,20 +38,10 @@ export function WorkspaceBranchLink({
   }
 
   return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <Button asChild variant="ghost" size="icon" className="h-8 w-8">
-          <a
-            href={branchUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            aria-label="Open branch on GitHub"
-          >
-            <GithubLogoIcon className="h-4 w-4" />
-          </a>
-        </Button>
-      </TooltipTrigger>
-      <TooltipContent>Open branch on GitHub</TooltipContent>
-    </Tooltip>
+    <IconButton asChild label="Open branch on GitHub" size="icon-sm">
+      <a href={branchUrl} target="_blank" rel="noopener noreferrer">
+        <GithubLogoIcon />
+      </a>
+    </IconButton>
   );
 }

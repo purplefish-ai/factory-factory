@@ -1,8 +1,9 @@
-import { act } from 'react';
+import { act, type ReactNode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 // @vitest-environment jsdom
 import { useReconcileSessionTargetStops } from '@/client/features/session-controls';
+import { TooltipProvider } from '@/components/ui/tooltip';
 import { SubagentList } from './subagent-list';
 import type { SubagentListItem } from './types';
 
@@ -13,6 +14,10 @@ vi.mock('@/client/lib/trpc', () => ({
 }));
 let container: HTMLDivElement;
 let root: ReturnType<typeof createRoot>;
+/** Renders under the TooltipProvider the app root provides. */
+function show(node: ReactNode) {
+  root.render(<TooltipProvider>{node}</TooltipProvider>);
+}
 const onSelect = vi.fn();
 function item(id: string, control = true): SubagentListItem {
   return {
@@ -30,7 +35,7 @@ function item(id: string, control = true): SubagentListItem {
 const rows = [item('selected'), item('sibling'), item('unsupported', false)];
 async function render(controlSessionId: string | undefined, subagents = rows) {
   await act(() =>
-    root.render(
+    show(
       <SubagentList
         controlSessionId={controlSessionId}
         controlRuntimeId="runtime"
@@ -57,7 +62,7 @@ function ClearPendingStops() {
   return null;
 }
 afterEach(async () => {
-  await act(() => root.render(<ClearPendingStops />));
+  await act(() => show(<ClearPendingStops />));
   await act(() => root.unmount());
   container.remove();
   vi.useRealTimers();
@@ -90,7 +95,7 @@ it('removes controls on completion and on disconnected cached rows', async () =>
 it('retains pending child interruption when the Subagents list remounts', async () => {
   await render('parent');
   await act(() => stops()[0]!.click());
-  await act(() => root.render(null));
+  await act(() => show(null));
   await render('parent');
   expect(stops()[0]?.disabled).toBe(true);
   await act(() => stops()[0]!.click());

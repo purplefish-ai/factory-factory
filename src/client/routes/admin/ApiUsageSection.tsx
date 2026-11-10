@@ -32,9 +32,9 @@ export function ApiUsageSection({ apiUsage, onReset, isResetting }: ApiUsageSect
       action={
         <Button
           variant="link"
+          size="inline"
           onClick={() => setConfirmOpen(true)}
           disabled={isResetting}
-          className="h-auto p-0"
         >
           Reset Stats
         </Button>

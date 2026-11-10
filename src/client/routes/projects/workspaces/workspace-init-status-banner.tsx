@@ -58,13 +58,13 @@ export const InitStatusBanner = memo(function InitStatusBanner({
                 disabled={retryAvailability?.status !== 'AVAILABLE'}
                 onClick={onRetry}
               >
-                <ArrowsClockwiseIcon className="h-3.5 w-3.5" />
+                <ArrowsClockwiseIcon />
                 Retry setup
               </Button>
             )}
             {banner.showPlay && (
               <Button size="sm" onClick={onPlay}>
-                <PlayIcon className="h-3.5 w-3.5 mr-1.5" />
+                <PlayIcon className="mr-1.5" />
                 Dispatch queued messages
               </Button>
             )}

@@ -1,30 +1,24 @@
-import { useCallback, useState } from 'react';
+import { useMutation } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { downloadFile } from '@/client/lib/download-file';
 import { trpc } from '@/client/lib/trpc';
 
+/**
+ * Downloads the server log file. A mutation rather than a query: the click
+ * starts it, and its `isPending` drives the button's pending state.
+ */
 export function useDownloadServerLog() {
-  const [isDownloading, setIsDownloading] = useState(false);
   const utils = trpc.useUtils();
-
-  const download = useCallback(async () => {
-    setIsDownloading(true);
-    try {
-      const content = await utils.admin.downloadLogFile.fetch();
+  return useMutation({
+    mutationFn: () => utils.admin.downloadLogFile.fetch(),
+    onSuccess: (content) => {
       downloadFile({
         data: content,
         mimeType: 'text/plain',
         fileName: `server-${new Date().toISOString().split('T')[0]}.log`,
       });
       toast.success('Log file downloaded');
-    } catch (error) {
-      toast.error(
-        `Couldn't download log file. ${error instanceof Error ? error.message : 'Unknown error'}`
-      );
-    } finally {
-      setIsDownloading(false);
-    }
-  }, [utils]);
-
-  return { download, isDownloading };
+    },
+    meta: { errorToast: "Couldn't download log file." },
+  });
 }

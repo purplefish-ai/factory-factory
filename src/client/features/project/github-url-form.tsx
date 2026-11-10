@@ -90,7 +90,7 @@ function AuthStatusDetail({
         <span>Not authenticated — private repos will fail to clone</span>
       </div>
       <Button type="button" variant="outline" size="sm" onClick={onOpenTerminal}>
-        <TerminalIcon className="mr-2 h-4 w-4" />
+        <TerminalIcon className="mr-2" />
         Open Terminal to Login
       </Button>
     </div>

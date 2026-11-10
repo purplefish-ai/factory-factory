@@ -132,12 +132,12 @@ export function OnboardingCliHealth({ onOpenTerminal }: OnboardingCliHealthProps
         <Button
           type="button"
           variant="ghost"
-          size="sm"
-          className="h-7 px-2 text-xs text-muted-foreground"
+          size="compact"
+          className="text-muted-foreground"
           onClick={() => void refresh()}
           pending={isRefetching || isRefreshing}
         >
-          <ArrowsClockwiseIcon className="mr-1 h-3 w-3" />
+          <ArrowsClockwiseIcon className="mr-1" />
           Recheck
         </Button>
       </div>
@@ -154,7 +154,7 @@ export function OnboardingCliHealth({ onOpenTerminal }: OnboardingCliHealthProps
 
       {hasIssues && (
         <Button type="button" variant="outline" size="sm" onClick={onOpenTerminal}>
-          <TerminalIcon className="mr-2 h-4 w-4" />
+          <TerminalIcon className="mr-2" />
           Open terminal to log in
         </Button>
       )}

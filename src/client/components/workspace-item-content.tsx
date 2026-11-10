@@ -52,7 +52,7 @@ function PrLink({ prNumber, onOpenPr }: { prNumber: number; onOpenPr?: () => voi
     return (
       <button
         type="button"
-        className="flex items-center gap-0.5 hover:text-foreground"
+        className="flex items-center gap-0.5 rounded-sm hover:text-foreground focus-ring"
         onPointerUp={(event) => {
           event.stopPropagation();
         }}
@@ -164,7 +164,7 @@ export function WorkspaceItemContent({
           {onOpenIssue ? (
             <button
               type="button"
-              className="inline-flex items-center gap-1 text-2xs text-muted-foreground hover:text-foreground underline-offset-2 hover:underline"
+              className="inline-flex items-center gap-1 rounded-sm text-2xs text-muted-foreground hover:text-foreground underline-offset-2 hover:underline focus-ring"
               onPointerUp={(event) => {
                 event.stopPropagation();
               }}

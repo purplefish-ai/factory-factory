@@ -1,8 +1,9 @@
-import { act } from 'react';
+import { act, type ReactNode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 // @vitest-environment jsdom
 import { useReconcileSessionTargetStops } from '@/client/features/session-controls';
+import { TooltipProvider } from '@/components/ui/tooltip';
 import { SessionActivityIndicator } from './session-activity-indicator';
 import { TranscriptTail } from './transcript-layout';
 
@@ -14,6 +15,10 @@ vi.mock('sonner', () => ({ toast: { error: mocks.error } }));
 
 let container: HTMLDivElement;
 let root: ReturnType<typeof createRoot>;
+/** Renders under the TooltipProvider the app root provides. */
+function show(node: ReactNode) {
+  root.render(<TooltipProvider>{node}</TooltipProvider>);
+}
 const work = {
   controlRuntimeId: 'runtime',
   promptInFlight: false,
@@ -37,7 +42,7 @@ const work = {
 };
 async function render(connected = true, currentWork = work) {
   await act(() =>
-    root.render(
+    show(
       <SessionActivityIndicator
         work={currentWork}
         controlSessionId={connected ? 'parent' : undefined}
@@ -67,7 +72,7 @@ function ClearPendingStops() {
   return null;
 }
 afterEach(async () => {
-  await act(() => root.render(<ClearPendingStops />));
+  await act(() => show(<ClearPendingStops />));
   await act(() => root.unmount());
   container.remove();
   vi.useRealTimers();
@@ -190,14 +195,14 @@ it('cleans pending when the last idle background task completes and TranscriptTa
   };
   const remaining = { ...work, backgroundTasks: [work.backgroundTasks[0]!] };
   await act(() =>
-    root.render(<TranscriptTail props={{ ...props, work: remaining }} hasVisibleMessages={false} />)
+    show(<TranscriptTail props={{ ...props, work: remaining }} hasVisibleMessages={false} />)
   );
   await act(() =>
     container.querySelector<HTMLButtonElement>('button[aria-expanded="false"]')!.click()
   );
   await act(() => buttons()[0]!.click());
   await act(() =>
-    root.render(
+    show(
       <TranscriptTail
         props={{ ...props, work: { ...remaining, backgroundTasks: [] } }}
         hasVisibleMessages={false}
@@ -220,15 +225,15 @@ it('retains a pending stop while authoritative work is unavailable', async () =>
   };
   const remaining = { ...work, backgroundTasks: [work.backgroundTasks[0]!] };
   await act(() =>
-    root.render(<TranscriptTail props={{ ...props, work: remaining }} hasVisibleMessages={false} />)
+    show(<TranscriptTail props={{ ...props, work: remaining }} hasVisibleMessages={false} />)
   );
   await act(() =>
     container.querySelector<HTMLButtonElement>('button[aria-expanded="false"]')!.click()
   );
   await act(() => buttons()[0]!.click());
-  await act(() => root.render(<TranscriptTail props={props} hasVisibleMessages={false} />));
+  await act(() => show(<TranscriptTail props={props} hasVisibleMessages={false} />));
   await act(() =>
-    root.render(<TranscriptTail props={{ ...props, work: remaining }} hasVisibleMessages={false} />)
+    show(<TranscriptTail props={{ ...props, work: remaining }} hasVisibleMessages={false} />)
   );
   await act(() =>
     container.querySelector<HTMLButtonElement>('button[aria-expanded="false"]')!.click()

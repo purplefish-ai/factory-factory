@@ -122,7 +122,7 @@ function SubagentRow({
         aria-pressed={selected}
         onClick={() => onSelect(subagent)}
         className={cn(
-          'min-w-0 flex-1 cursor-pointer px-3 py-2.5 text-left transition-colors hover:bg-muted/50',
+          'min-w-0 flex-1 cursor-pointer px-3 py-2.5 text-left transition-colors hover:bg-muted/50 focus-ring focus-visible:ring-inset',
           selected && 'bg-muted'
         )}
       >
@@ -320,7 +320,7 @@ export function SubagentList({
             type="button"
             aria-expanded={completedExpanded}
             onClick={() => setCompletedExpanded(!completedExpanded)}
-            className="flex w-full cursor-pointer items-center gap-1.5 px-3 py-2 text-left text-xs font-medium text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
+            className="flex w-full cursor-pointer items-center gap-1.5 px-3 py-2 text-left text-xs font-medium text-muted-foreground transition-colors focus-ring focus-visible:ring-inset hover:bg-muted/50 hover:text-foreground"
           >
             {completedExpanded ? (
               <CaretDownIcon className="h-3.5 w-3.5" />

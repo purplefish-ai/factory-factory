@@ -16,7 +16,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Spinner } from '@/components/ui/spinner';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 import type { ChatReasoningOption } from '@/shared/chat-capabilities';
 import { ProviderModelPicker, type ProviderModelPickerProps } from './provider-model-picker';
@@ -117,15 +117,12 @@ function ThinkingLevelSelector({
           title={description}
           aria-busy={control.loading}
           aria-invalid={control.invalid}
-          icon={<BrainIcon className="size-3.5 shrink-0" aria-hidden="true" />}
+          icon={<BrainIcon aria-hidden="true" />}
           indicator={
             control.invalid ? (
               <>
-                <WarningCircleIcon
-                  className="size-3 shrink-0"
-                  aria-label="Unavailable thinking level"
-                />
-                <CaretDownIcon className="size-3 shrink-0" />
+                <WarningCircleIcon className="shrink-0" aria-label="Unavailable thinking level" />
+                <CaretDownIcon className="shrink-0" />
               </>
             ) : undefined
           }
@@ -212,26 +209,24 @@ export function PlanningSelector({
   const description = disabled ? disabledReason : getPlanDescription(control);
   const stateLabel = control.enabled ? 'On' : 'Off';
   return (
-    <TooltipProvider>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <ComposerMenuTrigger
-            iconOnly={!showLabel}
-            indicator={false}
-            icon={<MapTrifoldIcon className="size-3.5 shrink-0" aria-hidden="true" />}
-            className={cn('shrink-0', control.enabled && 'bg-accent text-accent-foreground')}
-            disabled={disabled || unavailable}
-            aria-label={`Planning: ${stateLabel}`}
-            aria-description={description}
-            aria-pressed={control.enabled}
-            onClick={() => control.onChange(!control.enabled)}
-          >
-            {stateLabel}
-          </ComposerMenuTrigger>
-        </TooltipTrigger>
-        <TooltipContent side="top">{description}</TooltipContent>
-      </Tooltip>
-    </TooltipProvider>
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <ComposerMenuTrigger
+          iconOnly={!showLabel}
+          indicator={false}
+          icon={<MapTrifoldIcon aria-hidden="true" />}
+          className={cn('shrink-0', control.enabled && 'bg-accent text-accent-foreground')}
+          disabled={disabled || unavailable}
+          aria-label={`Planning: ${stateLabel}`}
+          aria-description={description}
+          aria-pressed={control.enabled}
+          onClick={() => control.onChange(!control.enabled)}
+        >
+          {stateLabel}
+        </ComposerMenuTrigger>
+      </TooltipTrigger>
+      <TooltipContent side="top">{description}</TooltipContent>
+    </Tooltip>
   );
 }
 

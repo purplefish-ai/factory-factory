@@ -16,6 +16,7 @@ import {
 } from '@/client/features/chat/use-chat-websocket';
 import { getLiveSessionControlId } from '@/client/features/session-controls';
 import { createTrpcClient, trpc } from '@/client/lib/trpc';
+import { TooltipProvider } from '@/components/ui/tooltip';
 import { type ChatBarCapabilities, EMPTY_CHAT_BAR_CAPABILITIES } from '@/shared/chat-capabilities';
 import { SessionActivityIndicator } from './session-activity-indicator';
 
@@ -165,7 +166,9 @@ async function mount(initialCapabilities = capabilities) {
     root.render(
       <QueryClientProvider client={queryClient}>
         <trpc.Provider client={client} queryClient={queryClient}>
-          <Harness chatRef={chatRef} sessionId={sessionId} />
+          <TooltipProvider>
+            <Harness chatRef={chatRef} sessionId={sessionId} />
+          </TooltipProvider>
         </trpc.Provider>
       </QueryClientProvider>
     );

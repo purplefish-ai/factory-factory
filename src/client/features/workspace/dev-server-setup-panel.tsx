@@ -254,7 +254,7 @@ export function DevServerSetupPanel({
               disabled={!runCommand.trim()}
               className="flex-1"
             >
-              <FileCodeIcon className="h-4 w-4" />
+              <FileCodeIcon />
               {isEditing ? 'Save configuration' : 'Create configuration'}
             </Button>
           </SheetFooter>

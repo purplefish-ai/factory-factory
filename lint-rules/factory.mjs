@@ -115,10 +115,15 @@ function hasButtonText(node) {
 }
 
 function hasButtonName(attribute) {
-  if (
-    !['aria-label', 'aria-labelledby', 'title'].includes(attribute.name.name) ||
-    !attribute.value
-  ) {
+  return (
+    ['aria-label', 'aria-labelledby', 'title'].includes(attribute.name.name) &&
+    hasNonEmptyValue(attribute)
+  );
+}
+
+/** A JSX attribute whose value may be a non-empty string. */
+function hasNonEmptyValue(attribute) {
+  if (!attribute.value) {
     return false;
   }
   const value =
@@ -646,7 +651,224 @@ function findInChildren(children, sourceCode) {
   return undefined;
 }
 
+// The controls whose `size` variant sizes their icons (src/components/ui/button.tsx).
+const SIZED_BUTTONS = new Set(['Button', 'IconButton']);
+
+// `h-4`, `w-3.5`, `md:size-8`, `h-px`: a fixed height, width or size from the
+// spacing scale. Keywords (`w-full`, `h-auto`), fractions (`w-1/2`) and
+// arbitrary values (`w-[160px]`) are layout, not control sizes, and pass.
+const FIXED_SIZE_CLASS = /(?<=^|[\s'"`:!])(?:h|w|size)-(?:\d+(?:\.\d+)?|px)(?![\w./-])/;
+
+// Hand-rolled keyboard focus styles that the `focus-ring` utility replaces:
+// `focus-visible:ring-2`, `focus-visible:outline-none`, `focus-visible:outline-ring`.
+const HAND_ROLLED_FOCUS_CLASS =
+  /(?<=^|[\s'"`:!])focus-visible:(?:ring-2|outline(?:-none|-ring|-2)?)(?![\w-])/;
+
+// `h-4`, `w-[18px]`, `md:w-3`: any height or width class on an icon.
+const ICON_DIMENSION_CLASS = /(?<=^|[\s'"`:!])[hw]-[\w.[\]/-]+/;
+
+function classNameText(opening, sourceCode) {
+  const attribute = opening.attributes.find(
+    (candidate) => candidate.type === 'JSXAttribute' && candidate.name.name === 'className'
+  );
+  return attribute?.value ? sourceCode.getText(attribute.value) : '';
+}
+
+function jsxAttribute(opening, name) {
+  return opening.attributes.find(
+    (attribute) => attribute.type === 'JSXAttribute' && attribute.name.name === name
+  );
+}
+
+/** A literal `size="icon…"` on a Button. */
+function hasIconSize(opening) {
+  const size = jsxAttribute(opening, 'size');
+  return size?.value?.type === 'Literal' && /^icon(?:-|$)/.test(size.value.value);
+}
+
+function isIconElement(opening) {
+  const name = jsxTagName(opening.name);
+  return name === 'svg' || /Icon$/.test(name) || /(?:^|\.)Icons?\./.test(name);
+}
+
+/** Icons rendered among a control's children, through conditionals, fragments and wrappers. */
+function collectIcons(node, found = []) {
+  switch (node?.type) {
+    case 'JSXElement':
+      if (SIZED_BUTTONS.has(jsxTagName(node.openingElement.name))) {
+        return found;
+      }
+      if (isIconElement(node.openingElement)) {
+        found.push(node.openingElement);
+      }
+      for (const child of node.children) {
+        collectIcons(child, found);
+      }
+      return found;
+    case 'JSXFragment':
+      for (const child of node.children) {
+        collectIcons(child, found);
+      }
+      return found;
+    case 'JSXExpressionContainer':
+      return collectIcons(node.expression, found);
+    case 'ConditionalExpression':
+      collectIcons(node.consequent, found);
+      return collectIcons(node.alternate, found);
+    case 'LogicalExpression':
+      collectIcons(node.left, found);
+      return collectIcons(node.right, found);
+    default:
+      return found;
+  }
+}
+
+/** The element an `asChild` trigger renders: its only JSX child, if any. */
+function onlyElementChild(node) {
+  const children = node.children.filter(
+    (child) =>
+      !(child.type === 'JSXText' && !child.value.trim()) &&
+      !(child.type === 'JSXExpressionContainer' && child.expression.type === 'JSXEmptyExpression')
+  );
+  return children.length === 1 && children[0].type === 'JSXElement' ? children[0] : undefined;
+}
+
 const rules = {
+  'button-icon-size': {
+    meta: { schema: EXCEPTIONS_SCHEMA },
+    create(context) {
+      if (isExceptedFile(context)) {
+        return {};
+      }
+      return {
+        JSXElement(node) {
+          const name = jsxTagName(node.openingElement.name);
+          if (!SIZED_BUTTONS.has(name)) {
+            return;
+          }
+          for (const child of node.children) {
+            for (const icon of collectIcons(child)) {
+              const match = ICON_DIMENSION_CLASS.exec(classNameText(icon, context.sourceCode));
+              if (match) {
+                context.report({
+                  node: icon,
+                  message: `Remove "${match[0]}": the ${name} size variant sizes its icons. Use a size-* class only for a deliberate exception (src/components/ui/button.tsx).`,
+                });
+              }
+            }
+          }
+        },
+      };
+    },
+  },
+  'button-size-variant': {
+    meta: { schema: EXCEPTIONS_SCHEMA },
+    create(context) {
+      if (isExceptedFile(context)) {
+        return {};
+      }
+      return {
+        JSXOpeningElement(node) {
+          const name = jsxTagName(node.name);
+          if (!SIZED_BUTTONS.has(name)) {
+            return;
+          }
+          const match = FIXED_SIZE_CLASS.exec(classNameText(node, context.sourceCode));
+          if (match) {
+            context.report({
+              node,
+              message: `Use a ${name} size variant (xs, compact, sm, default, lg, inline or icon-*) instead of "${match[0]}" in className. Layout widths such as w-full pass.`,
+            });
+          }
+        },
+      };
+    },
+  },
+  'icon-button-tooltip': {
+    meta: { schema: EXCEPTIONS_SCHEMA },
+    create(context) {
+      if (isExceptedFile(context)) {
+        return {};
+      }
+      const message =
+        'Use IconButton (src/client/components/icon-button.tsx): its label is both the accessible name and the tooltip.';
+      return {
+        JSXElement(node) {
+          const opening = node.openingElement;
+          const name = jsxTagName(opening.name);
+          if (name === 'Button' && hasIconSize(opening) && jsxAttribute(opening, 'title')) {
+            context.report({ node: opening, message });
+            return;
+          }
+          if (name !== 'TooltipTrigger' || !jsxAttribute(opening, 'asChild')) {
+            return;
+          }
+          // Follow nested `DropdownMenuTrigger asChild` and similar triggers to the rendered element.
+          let child = onlyElementChild(node);
+          while (
+            child &&
+            /Trigger$/.test(jsxTagName(child.openingElement.name)) &&
+            jsxAttribute(child.openingElement, 'asChild')
+          ) {
+            child = onlyElementChild(child);
+          }
+          if (
+            child &&
+            jsxTagName(child.openingElement.name) === 'Button' &&
+            hasIconSize(child.openingElement) &&
+            // A titled icon Button is already reported above.
+            !jsxAttribute(child.openingElement, 'title')
+          ) {
+            context.report({ node: child.openingElement, message });
+          }
+        },
+      };
+    },
+  },
+  'tooltip-provider-root': {
+    meta: { schema: EXCEPTIONS_SCHEMA },
+    create(context) {
+      if (isExceptedFile(context)) {
+        return {};
+      }
+      return {
+        JSXOpeningElement(node) {
+          if (jsxTagName(node.name) === 'TooltipProvider') {
+            context.report({
+              node,
+              message:
+                'Render tooltips under the app root TooltipProvider instead of nesting one; a nested provider without props resets the open delay to 700ms.',
+            });
+          }
+        },
+      };
+    },
+  },
+  'focus-ring': {
+    meta: { schema: EXCEPTIONS_SCHEMA },
+    create(context) {
+      if (isExceptedFile(context)) {
+        return {};
+      }
+      const report = (node, text) => {
+        const match = typeof text === 'string' ? HAND_ROLLED_FOCUS_CLASS.exec(text) : null;
+        if (match) {
+          context.report({
+            node,
+            message: `Use the focus-ring utility (src/client/globals.css) instead of "${match[0]}".`,
+          });
+        }
+      };
+      return {
+        Literal(node) {
+          report(node, node.value);
+        },
+        TemplateElement(node) {
+          report(node, node.value.cooked ?? node.value.raw);
+        },
+      };
+    },
+  },
   'query-owner': {
     meta: {
       schema: [
@@ -804,6 +1026,14 @@ const rules = {
       return {
         JSXElement(node) {
           const opening = node.openingElement;
+          if (opening.name.name === 'IconButton') {
+            // IconButton's required label is its name; it must not be empty.
+            const label = jsxAttribute(opening, 'label');
+            if (label && !hasNonEmptyValue(label)) {
+              context.report({ node: opening, message: 'Give IconButton a non-empty label.' });
+            }
+            return;
+          }
           if (!['button', 'Button'].includes(opening.name.name)) {
             return;
           }

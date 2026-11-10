@@ -70,14 +70,13 @@ export function WorkspacePrAction({
         <span className="inline-flex">
           <Button
             variant="ghost"
-            size="sm"
-            className="h-6 gap-1 text-xs px-2"
+            size="xs"
             disabled={disabled}
             pending={isCreatingSession}
             onClick={createPr}
             title={description}
           >
-            <GitPullRequestIcon className="h-3 w-3" />
+            <GitPullRequestIcon />
             {label}
           </Button>
         </span>

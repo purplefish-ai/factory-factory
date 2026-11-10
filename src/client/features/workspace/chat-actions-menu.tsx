@@ -2,7 +2,7 @@ import { ArrowsClockwiseIcon } from '@phosphor-icons/react/dist/csr/ArrowsClockw
 import { DotsThreeVerticalIcon } from '@phosphor-icons/react/dist/csr/DotsThreeVertical';
 import { PencilIcon } from '@phosphor-icons/react/dist/csr/Pencil';
 import { useRef } from 'react';
-import { Button } from '@/components/ui/button';
+import { IconButton } from '@/client/components/icon-button';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -10,7 +10,6 @@ import {
   DropdownMenuLabel,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 
 /**
  * Actions for the selected chat, pinned to the right of the chat tab bar.
@@ -35,24 +34,18 @@ export function ChatActionsMenu({
   const renameRequested = useRef(false);
   return (
     <DropdownMenu>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <DropdownMenuTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-7 w-7"
-              aria-label="Chat actions"
-              // Selecting Restart closes the menu, so the trigger carries the spinner.
-              pending={restartPending}
-              pendingLabel="Restarting agent"
-            >
-              <DotsThreeVerticalIcon className="h-4 w-4" />
-            </Button>
-          </DropdownMenuTrigger>
-        </TooltipTrigger>
-        <TooltipContent side="bottom">Chat actions</TooltipContent>
-      </Tooltip>
+      <DropdownMenuTrigger asChild>
+        <IconButton
+          label="Chat actions"
+          size="icon-compact"
+          tooltipSide="bottom"
+          // Selecting Restart closes the menu, so the trigger carries the spinner.
+          pending={restartPending}
+          pendingLabel="Restarting agent"
+        >
+          <DotsThreeVerticalIcon />
+        </IconButton>
+      </DropdownMenuTrigger>
       <DropdownMenuContent
         align="end"
         className="w-64"

@@ -179,10 +179,7 @@
           {
             "exceptions": {
               "src/components/ui/calendar.tsx": "shadcn registry source: the weekday and week-number labels keep upstream's 0.8rem so registry diffs stay clean (docs/shadcn.md).",
-              "src/client/features/workspace/right-panel.tsx": "Pending ux-tab-bars: the right panel tab bar's 10px label is restyled by that PR.",
-              "src/client/features/workspace/workspace-pr-menu.tsx": "Pending ux-button-sizing: the compact PR trigger sets its font size in a Button className, which that PR replaces with a Button size.",
-              "src/client/features/workspace/workspace-family-navigation.tsx": "Pending ux-button-sizing: the compact family trigger sets its font size in a Button className, which that PR replaces with a Button size.",
-              "src/client/features/chat/permission-prompt.tsx": "Pending ux-button-sizing: the rendered/raw toggle is a raw button that PR converts to the shared Button."
+              "src/client/features/workspace/right-panel.tsx": "Pending ux-tab-bars: the right panel tab bar's 10px label is restyled by that PR."
             }
           }
         ],
@@ -193,6 +190,40 @@
               "src/client/lib/status-tones.ts": "The tone map itself defines each tone's surface classes, which StatusCallout renders.",
               "src/client/features/kanban/kanban-card.tsx": "Board cards tint and border the whole card for an error or pending request (with hover states); that is a status-carrying card, not a message callout.",
               "src/client/components/app-sidebar.tsx": "A sidebar workspace row waiting on the user tints and borders the whole row; that is a status-carrying row, not a message callout."
+            }
+          }
+        ],
+        "factory/button-icon-size": [
+          "error",
+          {
+            "exceptions": {
+              "src/client/features/chat/session-tab-bar.tsx": "Pending ux-tab-bars: the session tab bar's scroll and new-session buttons are being rebuilt in that PR."
+            }
+          }
+        ],
+        "factory/button-size-variant": [
+          "error",
+          {
+            "exceptions": {
+              "src/client/features/chat/session-tab-bar.tsx": "Pending ux-tab-bars: the session tab bar's scroll and new-session buttons are being rebuilt in that PR."
+            }
+          }
+        ],
+        "factory/icon-button-tooltip": ["error", { "exceptions": {} }],
+        "factory/tooltip-provider-root": [
+          "error",
+          {
+            "exceptions": {
+              "src/client/components/resizable-layout.tsx": "App root: AppLayout's provider (delayDuration 0) serves every route under Root.",
+              "src/components/ui/sidebar.tsx": "shadcn SidebarProvider root: it also renders standalone in stories and tests, with the same zero delay as the app root.",
+              "src/client/components/github-link-preview.tsx": "GitHub link previews open after a deliberate 350ms delay so hovering across chat links does not flash cards; they also render in markdown outside the app layout.",
+              "src/client/routes/mobile-baseline.tsx": "Fixture route: /__mobile-baseline mounts outside Root, so the page supplies the root provider (delay 0) for the composer and other surfaces it renders.",
+              "src/client/routes/hover-actions-fixture.tsx": "Fixture route: /__mobile-baseline mounts outside Root, so the fixture supplies its own provider.",
+              "src/client/routes/mobile-agents-fixture.tsx": "Fixture route: /__mobile-baseline mounts outside Root, so the fixture supplies its own provider.",
+              "src/client/routes/transcript-scroll-fixture.tsx": "Fixture route: /__transcript-scroll mounts outside Root, so the fixture supplies its own provider.",
+              "src/client/routes/workspace-header-fixture.tsx": "Fixture route: renders the workspace header outside Root for the mobile baseline, so it supplies its own provider.",
+              "src/client/features/workspace/right-panel.tsx": "Pending ux-tab-bars: the right-panel tab bar is being rebuilt in that PR.",
+              "src/client/features/workspace/right-panel-tools.tsx": "Pending ux-tab-bars: the right-panel tool tabs are being rebuilt in that PR."
             }
           }
         ]
@@ -235,6 +266,12 @@
       }
     },
     {
+      "files": ["src/client/**/*.{ts,tsx}"],
+      "rules": {
+        "factory/focus-ring": ["error", { "exceptions": {} }]
+      }
+    },
+    {
       "files": ["src/client/features/chat/agent-activity/**/*.{ts,tsx}"],
       "rules": {
         "factory/no-tool-input-cast": "error"
@@ -251,7 +288,14 @@
         "factory/no-arbitrary-font-size": "off",
         "factory/use-status-callout": "off",
         "factory/no-render-ref-write": "off",
-        "factory/no-state-sync-effect": "off"
+        "factory/no-state-sync-effect": "off",
+        "factory/tooltip-provider-root": "off"
+      }
+    },
+    {
+      "files": ["**/*.test-utils.tsx", "**/*.test-harness.tsx"],
+      "rules": {
+        "factory/tooltip-provider-root": "off"
       }
     },
     {

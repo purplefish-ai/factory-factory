@@ -14,7 +14,7 @@ export function InboxNotificationRenderer({
   const [open, setOpen] = useState(false);
   return (
     <details className="group min-w-0 py-1" onToggle={(event) => setOpen(event.currentTarget.open)}>
-      <summary className="flex cursor-pointer list-none items-center gap-2 rounded-sm text-xs text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring [&::-webkit-details-marker]:hidden">
+      <summary className="flex cursor-pointer list-none items-center gap-2 rounded-sm text-xs text-muted-foreground hover:text-foreground focus-ring [&::-webkit-details-marker]:hidden">
         <EnvelopeSimpleIcon className="size-3.5 shrink-0" aria-hidden="true" />
         <span className="min-w-0 break-words">
           {notification.kind === 'mail' ? 'Workspace mail' : notification.title}

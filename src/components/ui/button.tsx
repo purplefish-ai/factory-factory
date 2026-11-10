@@ -4,6 +4,12 @@ import type * as React from 'react';
 import { Spinner } from '@/components/ui/spinner';
 import { cn } from '@/lib/utils';
 
+/**
+ * The size variant sets the button's height and its icons' size, so icons
+ * inside a Button carry no size classes of their own: 16px icons from `sm` up,
+ * 14px in the 28px `compact` sizes and 12px in the 24px `xs` sizes. A `size-*`
+ * class on an icon opts out where a site truly needs another size.
+ */
 const buttonVariants = cva(
   "inline-flex shrink-0 items-center justify-center gap-2 rounded-md text-sm font-medium whitespace-nowrap transition-all outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
   {
@@ -21,10 +27,14 @@ const buttonVariants = cva(
       size: {
         default: 'h-9 px-4 py-2',
         xs: "h-6 gap-1 rounded-md px-2 text-xs [&_svg:not([class*='size-'])]:size-3",
+        compact: "h-7 gap-1.5 rounded-md px-2 text-xs [&_svg:not([class*='size-'])]:size-3.5",
         sm: 'h-8 gap-1.5 rounded-md px-3 text-xs',
         lg: 'h-10 rounded-md px-8',
+        // Text actions inside a line of text, usually with `variant="link"`.
+        inline: 'h-auto gap-1 rounded-sm p-0',
         icon: 'size-9',
         'icon-xs': "size-6 rounded-md [&_svg:not([class*='size-'])]:size-3",
+        'icon-compact': "size-7 rounded-md [&_svg:not([class*='size-'])]:size-3.5",
         'icon-sm': 'size-8',
         'icon-lg': 'size-10',
       },
@@ -56,7 +66,7 @@ type ButtonProps = React.ComponentProps<'button'> &
   };
 
 function isIconSize(size: ButtonProps['size']): boolean {
-  return size === 'icon' || size === 'icon-xs' || size === 'icon-sm' || size === 'icon-lg';
+  return typeof size === 'string' && size.startsWith('icon');
 }
 
 function Button({

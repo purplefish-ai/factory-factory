@@ -5,6 +5,7 @@ import { createElement, type ReactNode } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, type Mock, vi } from 'vitest';
 import { collectAttachments } from '@/client/features/composer';
+import { TooltipProvider } from '@/components/ui/tooltip';
 import { actFlushSync } from '@/test-utils/react-act';
 import { InlineWorkspaceForm } from './inline-workspace-form';
 import { loadWorkspaceCreationDraft } from './workspace-creation-draft-storage';
@@ -447,7 +448,13 @@ export function renderForm(
   };
   const render = root.render.bind(root);
   root.render = (children) =>
-    render(createElement(QueryClientProvider, { client: queryClient }, children));
+    render(
+      createElement(
+        QueryClientProvider,
+        { client: queryClient },
+        createElement(TooltipProvider, null, children)
+      )
+    );
 
   actFlushSync(() => {
     root.render(

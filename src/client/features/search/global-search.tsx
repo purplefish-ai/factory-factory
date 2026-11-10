@@ -35,9 +35,9 @@ function searchTrigger() {
       size="sm"
       aria-label="Search"
       aria-keyshortcuts={getAriaKeyShortcuts('app.search')}
-      className="h-8 shrink-0 gap-2 px-2 text-muted-foreground"
+      className="px-2 text-muted-foreground"
     >
-      <MagnifyingGlassIcon className="size-4" />
+      <MagnifyingGlassIcon />
       <span className="hidden @[72rem]/header:inline">Search</span>
       <kbd className="hidden rounded border px-1 text-2xs font-normal @[72rem]/header:inline">
         {formatShortcut('app.search')}

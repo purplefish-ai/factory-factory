@@ -8,7 +8,7 @@ import { expect, it, vi } from 'vitest';
 import { ServerLogsSection } from './ServerLogsSection';
 
 vi.mock('@/client/hooks/use-download-server-log', () => ({
-  useDownloadServerLog: () => ({ download: vi.fn(), isDownloading: false }),
+  useDownloadServerLog: () => ({ mutate: vi.fn(), isPending: false }),
 }));
 
 it('renders the logs action as one link without nested interactive controls', () => {

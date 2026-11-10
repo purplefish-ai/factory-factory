@@ -1,4 +1,5 @@
 import { StatusCallout } from '@/client/components/status-callout';
+import { Button } from '@/components/ui/button';
 
 interface TerminalDisconnectBannerProps {
   /** The transport stopped retrying; offer a manual reconnect. */
@@ -17,13 +18,15 @@ export function TerminalDisconnectBanner({ gaveUp, onReconnect }: TerminalDiscon
         size="sm"
         action={
           gaveUp && (
-            <button
+            <Button
               type="button"
+              variant="ghost"
+              size="xs"
               onClick={onReconnect}
-              className="shrink-0 rounded border border-warning/40 px-2 py-0.5 text-xs text-warning hover:bg-warning/10"
+              className="shrink-0 border border-warning/40 font-normal text-warning hover:bg-warning/10 hover:text-warning dark:hover:bg-warning/10"
             >
               Reconnect
-            </button>
+            </Button>
           )
         }
       >
