@@ -196,6 +196,19 @@ function returnedExpressions(node, visitorKeys, found = []) {
   return found;
 }
 
+const COMPARISON_OPERATORS = new Set([
+  '==',
+  '!=',
+  '===',
+  '!==',
+  '<',
+  '<=',
+  '>',
+  '>=',
+  'in',
+  'instanceof',
+]);
+
 /** A numeric literal that the interval can evaluate to, through branches and callbacks. */
 function numericIntervalLiteral(node, visitorKeys) {
   const find = (child) => numericIntervalLiteral(child, visitorKeys);
@@ -205,8 +218,12 @@ function numericIntervalLiteral(node, visitorKeys) {
     case 'ConditionalExpression':
       return find(node.consequent) ?? find(node.alternate);
     case 'LogicalExpression':
-    case 'BinaryExpression':
       return find(node.left) ?? find(node.right);
+    case 'BinaryExpression':
+      // A comparison yields a boolean; its operands are never the interval.
+      return COMPARISON_OPERATORS.has(node.operator)
+        ? undefined
+        : (find(node.left) ?? find(node.right));
     case 'UnaryExpression':
       return find(node.argument);
     case 'ParenthesizedExpression':

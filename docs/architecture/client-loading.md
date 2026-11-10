@@ -142,10 +142,11 @@ title.
 
 The app `QueryClient` sets the query defaults once: no refetch on window focus,
 and `shouldRetryQuery` as the retry policy. A tRPC error with a 4xx status (not
-found, forbidden, invalid input) fails on the first attempt, so not-found and
-error UI appear at once; network failures, 5xx and non-tRPC errors retry twice
-with backoff (1 s, then 2 s). Don't restate either default at a call site. When
-a query must not retry, use a named reason from `QUERY_RETRY`
+found, forbidden, invalid input) fails on the first attempt, so a query without
+cached data shows its not-found or error UI at once (cached data keeps rendering
+as above); network failures, 5xx and non-tRPC errors retry twice with backoff (1
+s, then 2 s). Don't restate either default at a call site. When a query must not
+retry, use a named reason from `QUERY_RETRY`
 (`src/client/lib/query-options.ts`): `costlyRead` for reads that spawn `gh` or a
 provider process or call an external service, `permanentServerError` for
 procedures that report permanent failures as server errors, and `nextPoll` for a
@@ -157,4 +158,7 @@ s), `capture` (3 s), `localStatus` (5 s), `activity` (10 s), `workspaceContext`
 (15 s), `background` (30 s), `external` (60 s) and `releaseCheck` (1 h).
 `factory/named-query-options` rejects numeric `refetchInterval` values,
 `refetchOnWindowFocus: false` and literal `retry` values outside `QueryClient`
-defaults.
+defaults. It checks the literal written at the option, not what an identifier
+resolves to, so define any other interval as a tier rather than a local
+constant. `REVIEW_REQUESTS_POLL_MS` is the deliberate exception: it matches the
+server's review-request cache lifetime.

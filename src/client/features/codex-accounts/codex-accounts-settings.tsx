@@ -127,7 +127,10 @@ export function CodexAccountsView({
 
 export function CodexAccountsSettings() {
   const utils = trpc.useUtils();
-  const accounts = trpc.codexAccounts.list.useQuery(undefined, { staleTime: 30_000 });
+  const accounts = trpc.codexAccounts.list.useQuery(undefined, {
+    staleTime: 30_000,
+    retry: QUERY_RETRY.costlyRead,
+  });
   const [open, setOpen] = useState(false);
   const [login, setLogin] = useState<CodexLoginState>();
   const [error, setError] = useState<string>();

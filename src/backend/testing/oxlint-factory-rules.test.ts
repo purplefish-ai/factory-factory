@@ -171,6 +171,7 @@ describe('Oxlint project guardrails', () => {
     'useQuery({ refetchInterval: open ? POLL_INTERVAL_MS.background : false });',
     'useQuery({ refetchInterval: (query) => (query.state.data.length > 0 ? POLL_INTERVAL_MS.external : false) });',
     'useQuery({ refetchInterval(query) { const n = items.filter((x) => x > 0).length; return n === 0 ? false : POLL_INTERVAL_MS.progress; } });',
+    'useQuery({ refetchInterval: (query) => query.state.data.length > 0 && POLL_INTERVAL_MS.activity });',
     'useQuery({ refetchInterval: REVIEW_REQUESTS_POLL_MS, refetchOnWindowFocus: true });',
     'useQuery({ retry: QUERY_RETRY.costlyRead });',
     'useQuery({ retry: (count, error) => count < 1 });',

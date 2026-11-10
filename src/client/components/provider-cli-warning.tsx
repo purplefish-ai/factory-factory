@@ -1,6 +1,7 @@
 import { ArrowsClockwiseIcon } from '@phosphor-icons/react/dist/csr/ArrowsClockwise';
 import { WarningIcon } from '@phosphor-icons/react/dist/csr/Warning';
 import { runInBackground } from '@/client/lib/background-task';
+import { QUERY_RETRY } from '@/client/lib/query-options';
 import { trpc } from '@/client/lib/trpc';
 import { Button } from '@/components/ui/button';
 import { Spinner } from '@/components/ui/spinner';
@@ -105,6 +106,7 @@ export function ProviderCliWarning({
   const { data: accounts } = trpc.codexAccounts.list.useQuery(undefined, {
     enabled: provider === 'CODEX' && (!!codexAccountId || health?.codex.isAuthenticated === false),
     staleTime: 30_000,
+    retry: QUERY_RETRY.costlyRead,
   });
   const hasUsableCodexAccount =
     accounts?.some(

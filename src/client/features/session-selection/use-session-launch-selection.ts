@@ -261,6 +261,7 @@ function useCodexAccountControl(
   const { data: accounts } = trpc.codexAccounts.list.useQuery(undefined, {
     enabled: selection.provider === 'CODEX' && scopeKey !== null,
     staleTime: 30_000,
+    retry: QUERY_RETRY.costlyRead,
   });
   return getCodexAccountControl(
     selection.provider,
