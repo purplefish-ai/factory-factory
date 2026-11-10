@@ -5,6 +5,11 @@ import { join } from 'node:path';
 import { afterEach, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 
+// Publish the worker pid by rename: a reader of a plain write can see the
+// created but still empty file, and Number('') is 0, which names the test's own
+// process group to process.kill.
+const PUBLISH_WORKER_PID = `writeFileSync(new URL('./worker.pid.tmp', import.meta.url), String(process.pid));
+renameSync(new URL('./worker.pid.tmp', import.meta.url), new URL('./worker.pid', import.meta.url));`;
 const directories: string[] = [];
 function fixture(minimum: string) {
   const root = mkdtempSync(join(tmpdir(), 'ff-bootstrap-'));
@@ -68,9 +73,9 @@ it.skipIf(process.platform === 'win32').each([false, true])(
     const pidFile = join(root, 'worker.pid');
     writeFileSync(
       worker,
-      `import { writeFileSync } from 'node:fs';
+      `import { renameSync, writeFileSync } from 'node:fs';
        if (process.argv.includes('--stubborn')) process.on('SIGTERM', () => {});
-       writeFileSync(new URL('./worker.pid', import.meta.url), String(process.pid));
+       ${PUBLISH_WORKER_PID}
        setInterval(() => {}, 1000);`
     );
     writeFileSync(
@@ -159,12 +164,12 @@ it.skipIf(process.platform === 'win32')(
     writeFileSync(
       join(root, 'worker.mjs'),
       `
-    import { writeFileSync } from 'node:fs';
+    import { renameSync, writeFileSync } from 'node:fs';
     process.on('SIGINT', () => setTimeout(() => {
       writeFileSync(new URL('./graceful', import.meta.url), 'done');
       process.exit(0);
     }, 200));
-    writeFileSync(new URL('./worker.pid', import.meta.url), String(process.pid));
+    ${PUBLISH_WORKER_PID}
     setInterval(() => {}, 1000);
   `
     );
