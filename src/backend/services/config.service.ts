@@ -9,6 +9,7 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { readAppVersion } from '@/backend/lib/app-version';
 import { expandEnvVars, getDefaultBaseDir } from '@/backend/lib/env';
+import { shouldAllowOwnLoopbackOrigin } from '@/backend/lib/request-trust';
 import { ConfigEnvSchema } from './env-schemas';
 import { createLogger } from './logger.service';
 
@@ -61,6 +62,15 @@ export interface CorsConfig {
    * webpage you have open calling the local API on your behalf.
    */
   disableCorsChecks?: boolean;
+  /**
+   * True while `BACKEND_HOST` keeps the server on loopback (unset or a
+   * loopback address) and every allowed origin is a loopback origin. The
+   * server's own `http:` loopback origin, on the port a request actually
+   * arrived on, is then allowed without being listed, so a fallback port chosen
+   * at bind time works without the launcher predicting it. Servers configured
+   * with a public origin (reverse proxy, `ff tailscale`) keep the list as is.
+   */
+  allowOwnLoopbackOrigin?: boolean;
 }
 
 /** Remote access through `ff tailscale`. */
@@ -222,8 +232,10 @@ function buildCorsConfig(env: ConfigEnv): CorsConfig {
   const trustedCidrsEnv = env.TRUSTED_LOCAL_CIDRS;
   const defaultOrigins = ['http://localhost:3000', 'http://localhost:3001'];
 
+  const allowedOrigins = originsEnv ? originsEnv.split(',').map((o) => o.trim()) : defaultOrigins;
+
   return {
-    allowedOrigins: originsEnv ? originsEnv.split(',').map((o) => o.trim()) : defaultOrigins,
+    allowedOrigins,
     trustedLocalCidrs: trustedCidrsEnv
       ? trustedCidrsEnv
           .split(',')
@@ -232,6 +244,7 @@ function buildCorsConfig(env: ConfigEnv): CorsConfig {
       : [],
     trustProxyHeaders: env.TRUST_PROXY_HEADERS,
     disableCorsChecks: env.DISABLE_CORS_CHECKS,
+    allowOwnLoopbackOrigin: shouldAllowOwnLoopbackOrigin(env.BACKEND_HOST, allowedOrigins),
   };
 }
 
@@ -581,6 +594,7 @@ class ConfigService {
       trustedLocalCidrs: [...(this.config.cors.trustedLocalCidrs ?? [])],
       trustProxyHeaders: this.config.cors.trustProxyHeaders,
       disableCorsChecks: this.config.cors.disableCorsChecks,
+      allowOwnLoopbackOrigin: this.config.cors.allowOwnLoopbackOrigin,
     };
   }
 

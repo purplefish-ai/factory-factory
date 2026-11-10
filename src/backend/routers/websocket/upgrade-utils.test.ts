@@ -155,6 +155,52 @@ describe('validateWebSocketOrigin', () => {
   });
 });
 
+describe('validateWebSocketOrigin on the server own origin', () => {
+  function validateOwnOrigin(origin: string, allowOwnLoopbackOrigin: boolean) {
+    const socket = createSocket();
+    const isValid = validateWebSocketOrigin({
+      // The connection arrived on fallback port 3002; only 3001 is configured.
+      request: { headers: { origin }, socket: { localPort: 3002 } } as unknown as IncomingMessage,
+      socket,
+      configService: {
+        getCorsConfig: () => ({
+          allowedOrigins: ['http://localhost:3001'],
+          allowOwnLoopbackOrigin,
+        }),
+      },
+      logger: createLogger(),
+      connectionName: 'chat WebSocket',
+    });
+    return { isValid, socket };
+  }
+
+  it.each(['http://localhost:3002', 'http://127.0.0.1:3002', 'http://[::1]:3002'])(
+    'allows %s, a loopback origin on the port the upgrade arrived on',
+    (origin) => {
+      const { isValid, socket } = validateOwnOrigin(origin, true);
+
+      expect(isValid).toBe(true);
+      expect(socket.write).not.toHaveBeenCalled();
+    }
+  );
+
+  it.each(['http://localhost:3003', 'http://attacker.example:3002', 'https://localhost:3002'])(
+    'rejects %s',
+    (origin) => {
+      const { isValid, socket } = validateOwnOrigin(origin, true);
+
+      expect(isValid).toBe(false);
+      expect(socket.write).toHaveBeenCalledWith(expect.stringContaining('Unauthorized origin'));
+    }
+  );
+
+  it('rejects the own origin when the server is not bound to loopback', () => {
+    const { isValid } = validateOwnOrigin('http://localhost:3002', false);
+
+    expect(isValid).toBe(false);
+  });
+});
+
 describe('validateTrustedLocalWebSocketRequest', () => {
   it('rejects untrusted remote addresses', () => {
     const socket = createSocket();
