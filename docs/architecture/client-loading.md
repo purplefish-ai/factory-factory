@@ -130,17 +130,19 @@ data still renders when only a background refetch fails, under a
 `QueryRefreshError` notice with Retry; the content keeps its place in the tree,
 so scroll position, focus and open forms survive the notice. The notice sits in
 normal flow above the content: put `QueryState` in a `flex-col` parent and give
-fixed-height content `min-h-0 flex-1`. Pass `notFound` to show a not-found state
-for a tRPC `NOT_FOUND` error, even over cached data; any other error is a
-failure, never "not found". Render this wrapper only when the request is
-enabled; a disabled query belongs in the caller's conditional UI. Without data
-or an error, the request is unresolved, including when paused offline. `empty`
-may deliberately be `null`; supply an `EmptyState` alongside `isEmpty` when the
-user needs an empty message or next action. Write branches by hand when a panel
-combines several queries, as `CombinedChangesPanel` does, or when the states
-must fit a menu or tree row; gate the error on missing data (`error && !data`)
-and use the same `QueryErrorState` and `QueryRefreshError` components where they
-fit. Retry buttons say "Retry".
+fixed-height content `min-h-0 flex-1`; inside a card, pass
+`refreshErrorClassName="rounded-md border"`, as `SettingsSection` does. Pass
+`notFound` to show a not-found state for a tRPC `NOT_FOUND` error, even over
+cached data; any other error is a failure, never "not found". Render this
+wrapper only when the request is enabled; a disabled query belongs in the
+caller's conditional UI. Without data or an error, the request is unresolved,
+including when paused offline. `empty` may deliberately be `null`; supply an
+`EmptyState` alongside `isEmpty` when the user needs an empty message or next
+action. Write branches by hand when a panel combines several queries, as
+`CombinedChangesPanel` does, or when the states must fit a menu or tree row;
+gate the error on missing data (`error && !data`) and use the same
+`QueryErrorState` and `QueryRefreshError` components where they fit. Retry
+buttons say "Retry".
 
 Render errors are caught by `ErrorBoundary` (`src/client/error-boundary.tsx`);
 do not add another boundary class. The app root and the routed page area each

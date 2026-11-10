@@ -469,26 +469,7 @@ const rules = {
     },
   },
   'query-error-handled': {
-    meta: {
-      schema: [
-        {
-          type: 'object',
-          properties: {
-            exceptions: {
-              type: 'object',
-              additionalProperties: { type: 'string', minLength: 1 },
-            },
-          },
-          additionalProperties: false,
-        },
-      ],
-    },
     create(context) {
-      // `exceptions` maps repository-relative paths to the reason, or the
-      // pull request that will fix them, for files not yet migrated.
-      if (isListedFile(context, Object.keys(context.options[0]?.exceptions ?? {}))) {
-        return {};
-      }
       return {
         VariableDeclarator(node) {
           if (!isQueryHookCall(node.init)) {

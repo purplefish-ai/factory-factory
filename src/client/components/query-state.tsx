@@ -34,6 +34,8 @@ interface QueryStateProps<TData> {
   size?: 'default' | 'compact';
   /** Applied to the default loading and error states. */
   className?: string;
+  /** Applied to the refresh notice, e.g. `rounded-md border` inside a card. */
+  refreshErrorClassName?: string;
 }
 
 /** True for a tRPC error with the `NOT_FOUND` code. */
@@ -56,6 +58,7 @@ export function QueryState<TData>({
   loadingMessage,
   size = 'default',
   className,
+  refreshErrorClassName,
 }: QueryStateProps<TData>) {
   const { data, error } = query;
   const retry = () => {
@@ -71,7 +74,12 @@ export function QueryState<TData>({
     return (
       <>
         {error ? (
-          <QueryRefreshError error={error} onRetry={retry} isRetrying={query.isFetching} />
+          <QueryRefreshError
+            error={error}
+            onRetry={retry}
+            isRetrying={query.isFetching}
+            className={refreshErrorClassName}
+          />
         ) : null}
         {isEmpty?.(data) ? empty : children(data)}
       </>

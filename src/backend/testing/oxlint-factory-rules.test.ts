@@ -332,43 +332,6 @@ describe('raw palette class exceptions', () => {
   });
 });
 
-describe('query error exceptions', () => {
-  const projectConfig = overridesSchema.parse(
-    JSON.parse(readFileSync(resolve('.oxlintrc.json'), 'utf8'))
-  );
-  const exceptions = projectConfig.overrides.flatMap((override) => {
-    const rule = override.rules['factory/query-error-handled'];
-    return Array.isArray(rule) ? Object.entries(exceptionRuleSchema.parse(rule)[1].exceptions) : [];
-  });
-  let diagnostics: z.infer<typeof reportSchema>['diagnostics'] = [];
-  beforeAll(() => {
-    // The fixture config enables the rule without exceptions.
-    const result = spawnSync(
-      binary,
-      ['--config', config, '--format', 'json', ...exceptions.map(([file]) => resolve(file))],
-      { cwd: directory, encoding: 'utf8' }
-    );
-    expect(result.error).toBeUndefined();
-    diagnostics = reportSchema.parse(JSON.parse(result.stdout)).diagnostics;
-  });
-
-  it('gives every file a reason or the pull request that migrates it', () => {
-    expect(exceptions.length).toBeGreaterThan(0);
-    for (const [, reason] of exceptions) {
-      expect(reason.length).toBeGreaterThan(20);
-    }
-  });
-
-  it.each(exceptions.map(([file]) => file))('%s still needs its exception', (file) => {
-    expect(
-      diagnostics.some(
-        ({ filename, code }) =>
-          code === 'factory(query-error-handled)' && resolve(directory, filename) === resolve(file)
-      )
-    ).toBe(true);
-  });
-});
-
 describe('query owners', () => {
   const projectConfig = overridesSchema.parse(
     JSON.parse(readFileSync(resolve('.oxlintrc.json'), 'utf8'))

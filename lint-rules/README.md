@@ -74,9 +74,8 @@ request cannot read as loading or empty
 ([client loading](../docs/architecture/client-loading.md)). A result passed on
 whole, such as `<QueryState query={query}>`, or destructured with a rest element
 is left to its consumer; reads through a local alias are followed. The rule
-checks that an error field is read, not how it is rendered. Its `exceptions`
-option lists files owned by other pull requests, and a test fails once a listed
-file no longer needs it.
+checks that an error field is read, not how it is rendered. It has no
+exceptions.
 
 ## Remaining Biome checks
 
