@@ -1,5 +1,6 @@
 import { WarningIcon } from '@phosphor-icons/react/dist/csr/Warning';
 import { Link } from 'react-router';
+import { POLL_INTERVAL_MS } from '@/client/lib/query-options';
 import { trpc } from '@/client/lib/trpc';
 import { resolveClaudeModelAlias } from '@/shared/acp-protocol/model-selection';
 import type { ChatModelOption, ChatProvider } from '@/shared/chat-capabilities';
@@ -80,7 +81,7 @@ export function ModelCatalogWarning() {
     refetchOnWindowFocus: true,
     // Live discovery starts provider processes; poll only while there is a warning to resolve.
     refetchInterval: (query) =>
-      getMissingModels(settings, query.state.data).length > 0 ? 60_000 : false,
+      getMissingModels(settings, query.state.data).length > 0 ? POLL_INTERVAL_MS.external : false,
   });
   return <ModelCatalogWarningContent models={getMissingModels(settings, catalog)} />;
 }

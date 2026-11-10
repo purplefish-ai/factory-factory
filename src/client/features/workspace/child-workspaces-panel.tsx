@@ -8,6 +8,7 @@ import { EmptyState } from '@/client/components/empty-state';
 import { Loading } from '@/client/components/loading';
 import { QueryErrorState } from '@/client/components/query-error-state';
 import { StatusIcon } from '@/client/components/status-indicators';
+import { POLL_INTERVAL_MS } from '@/client/lib/query-options';
 import type { StatusTone } from '@/client/lib/status-tones';
 import { trpc } from '@/client/lib/trpc';
 import { Badge } from '@/components/ui/badge';
@@ -197,7 +198,7 @@ export function ChildWorkspacesPanel({ workspaceId, embedded = false }: ChildWor
     isFetching,
   } = trpc.workspace.listChildren.useQuery(
     { parentWorkspaceId: workspaceId },
-    { refetchInterval: 15_000 }
+    { refetchInterval: POLL_INTERVAL_MS.workspaceContext }
   );
 
   return (

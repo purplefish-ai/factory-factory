@@ -8,6 +8,7 @@ import {
   getProjectSectionPath,
   type AgentKind,
 } from '@/client/lib/project-navigation';
+import { POLL_INTERVAL_MS } from '@/client/lib/query-options';
 import { trpc } from '@/client/lib/trpc';
 import type { AgentFormValues, AgentProject, AgentListItem, EventAgentSummary } from './types';
 
@@ -62,25 +63,24 @@ export function useAgentsController(project: AgentProject, kind: AgentKind = 'sc
   const utils = trpc.useUtils();
   const task = trpc.periodicTask.get.useQuery(
     { id: id ?? '' },
-    { enabled: !!id && kind === 'scheduled', refetchInterval: 10_000, retry: false }
+    { enabled: !!id && kind === 'scheduled', refetchInterval: POLL_INTERVAL_MS.activity }
   );
   const currentProjectId = useRef(project.id);
   currentProjectId.current = project.id;
   const list = trpc.periodicTask.list.useQuery(
     { projectId: project.id },
-    { refetchInterval: 10_000 }
+    { refetchInterval: POLL_INTERVAL_MS.activity }
   );
   const events = trpc.automation.list.useInfiniteQuery(
     { projectId: project.id },
     {
       getNextPageParam: (page) => page.nextCursor ?? undefined,
-      refetchInterval: 10_000,
-      retry: false,
+      refetchInterval: POLL_INTERVAL_MS.activity,
     }
   );
   const event = trpc.automation.get.useQuery(
     { projectId: project.id, agentId: id ?? '' },
-    { enabled: !!id && kind === 'event', refetchInterval: 10_000, retry: false }
+    { enabled: !!id && kind === 'event', refetchInterval: POLL_INTERVAL_MS.activity }
   );
   const [savedEvent, setSavedEvent] = useState(false);
   const create = trpc.periodicTask.create.useMutation({

@@ -9,6 +9,7 @@ import {
   getAriaKeyShortcuts,
   type ShortcutId,
 } from '@/client/lib/keyboard-shortcuts';
+import { QUERY_RETRY } from '@/client/lib/query-options';
 import { trpc } from '@/client/lib/trpc';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog';
@@ -92,8 +93,6 @@ export function GlobalSearch() {
     {
       enabled: open,
       staleTime: 10_000,
-      retry: false,
-      refetchOnWindowFocus: false,
     }
   );
   const querySettled = query.trim() === debouncedQuery;
@@ -101,7 +100,7 @@ export function GlobalSearch() {
   const issuesEnabled = open && querySettled && Boolean(issueQuery);
   const issues = trpc.search.githubIssues.useQuery(
     { query: issueQuery },
-    { enabled: issuesEnabled, staleTime: 60_000, retry: false, refetchOnWindowFocus: false }
+    { enabled: issuesEnabled, staleTime: 60_000, retry: QUERY_RETRY.costlyRead }
   );
   const searchGitHub = useCallback(() => setSubmittedIssueQuery(debouncedQuery), [debouncedQuery]);
   const select = (result: SearchResult) => {

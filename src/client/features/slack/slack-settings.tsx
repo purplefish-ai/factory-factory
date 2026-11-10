@@ -157,7 +157,7 @@ export function SlackConnectionsView(props: SlackConnectionsViewProps) {
 }
 
 export function SlackSettings() {
-  const connections = trpc.slack.list.useQuery(undefined, { retry: false });
+  const connections = trpc.slack.list.useQuery();
   const connect = trpc.slack.connect.useMutation({ gcTime: 0, meta: { errorToast: false } });
   const test = trpc.slack.test.useMutation({ meta: { errorToast: false } });
   const disconnect = trpc.slack.disconnect.useMutation({ meta: { errorToast: false } });

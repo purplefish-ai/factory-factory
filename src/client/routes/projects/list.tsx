@@ -10,6 +10,7 @@ import { Loading } from '@/client/components/loading';
 import { QueryErrorState } from '@/client/components/query-error-state';
 import { ProjectSettingsDialog } from '@/client/features/project/project-settings-dialog';
 import { runInBackground } from '@/client/lib/background-task';
+import { POLL_INTERVAL_MS } from '@/client/lib/query-options';
 import { trpc } from '@/client/lib/trpc';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -81,7 +82,10 @@ export default function ProjectsListPage() {
     error,
     isFetching,
     refetch,
-  } = trpc.project.list.useQuery({ isArchived: false }, { refetchInterval: 10_000 });
+  } = trpc.project.list.useQuery(
+    { isArchived: false },
+    { refetchInterval: POLL_INTERVAL_MS.activity }
+  );
 
   const archiveMutation = trpc.project.archive.useMutation({
     onSuccess: () => {

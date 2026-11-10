@@ -32,8 +32,6 @@ function getFrontendPortLabel(location: Location): string {
 
 export function AppInfoSection() {
   const { data: serverInfo, isLoading } = trpc.admin.getServerInfo.useQuery(undefined, {
-    retry: 1,
-    retryDelay: 1000,
     meta: { suppressErrors: true },
   });
   const frontendPort = getFrontendPortLabel(window.location);

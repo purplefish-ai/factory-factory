@@ -1,4 +1,5 @@
 import { PlusIcon } from '@phosphor-icons/react/dist/csr/Plus';
+import { QUERY_RETRY } from '@/client/lib/query-options';
 import { trpc } from '@/client/lib/trpc';
 import { Button } from '@/components/ui/button';
 import {
@@ -54,7 +55,10 @@ export function NewSessionAccountActionView({ accounts, onCreate, disabled }: Ac
   );
 }
 function CodexNewSessionAction(props: ActionProps) {
-  const accounts = trpc.codexAccounts.list.useQuery(undefined, { staleTime: 30_000, retry: false });
+  const accounts = trpc.codexAccounts.list.useQuery(undefined, {
+    staleTime: 30_000,
+    retry: QUERY_RETRY.costlyRead,
+  });
   return <NewSessionAccountActionView {...props} accounts={accounts.data} />;
 }
 export function NewSessionAccountAction({

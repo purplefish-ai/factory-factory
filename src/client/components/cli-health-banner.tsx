@@ -237,7 +237,6 @@ export function CLIHealthBanner() {
     { forceRefresh: false },
     {
       // Check on mount, but don't poll - user can manually refresh
-      refetchOnWindowFocus: false,
       refetchOnReconnect: false,
       staleTime: 60_000, // Consider stale after 1 minute
     }

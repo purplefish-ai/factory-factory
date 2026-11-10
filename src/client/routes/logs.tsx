@@ -11,6 +11,7 @@ import { QueryErrorState } from '@/client/components/query-error-state';
 import { useDownloadServerLog } from '@/client/hooks/use-download-server-log';
 import { runInBackground } from '@/client/lib/background-task';
 import { formatDate, formatDateTime, toDateTimeIso } from '@/client/lib/date-time';
+import { POLL_INTERVAL_MS } from '@/client/lib/query-options';
 import { trpc } from '@/client/lib/trpc';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -277,7 +278,7 @@ export default function LogsPage() {
       limit: PAGE_SIZE,
       offset,
     },
-    { refetchInterval: 10_000, placeholderData: keepPreviousData }
+    { refetchInterval: POLL_INTERVAL_MS.activity, placeholderData: keepPreviousData }
   );
 
   const { download, isDownloading } = useDownloadServerLog();

@@ -1,13 +1,13 @@
 import { formatDistanceToNowStrict } from 'date-fns';
 import type { ComponentPropsWithoutRef, ReactElement, ReactNode } from 'react';
+import { QUERY_RETRY } from '@/client/lib/query-options';
 import { Spinner } from '@/components/ui/spinner';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 
 export const githubPreviewQueryOptions = {
   staleTime: 60_000,
-  retry: false,
-  refetchOnWindowFocus: false,
+  retry: QUERY_RETRY.costlyRead,
 } as const;
 
 function formatCreatedAt(createdAt: string) {

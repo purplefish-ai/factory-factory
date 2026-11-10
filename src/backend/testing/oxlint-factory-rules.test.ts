@@ -26,6 +26,7 @@ const rules = [
   'no-unsafe-resolver-cast',
   'no-raw-palette-classes',
   'workspace-query-owner',
+  'named-query-options',
 ];
 const workspaceQueryOwner = 'owned/workspace-queries.ts';
 writeFileSync(
@@ -112,6 +113,21 @@ describe('Oxlint project guardrails', () => {
     ['workspace-query-owner', 'const fetchDetail = utils.workspace.get.fetch;'],
     ['workspace-query-owner', "const key = getQueryKey(trpc.workspace.get, { id }, 'query');"],
     ['workspace-query-owner', 'const key = getQueryKey(trpc.workspace.listForProject);'],
+    ['named-query-options', 'trpc.project.list.useQuery(input, { refetchInterval: 10_000 });'],
+    ['named-query-options', 'useQuery({ refetchInterval: open ? 30_000 : false });'],
+    ['named-query-options', 'useQuery({ refetchInterval: 2 * POLL_INTERVAL_MS.activity });'],
+    [
+      'named-query-options',
+      'useQuery({ refetchInterval: (query) => (query.state.data ? false : 1000) });',
+    ],
+    [
+      'named-query-options',
+      'useQuery({ refetchInterval(query) { if (query.state.data) { return false; } return 5000; } });',
+    ],
+    ['named-query-options', 'useQuery({ enabled, refetchOnWindowFocus: false });'],
+    ['named-query-options', 'useQuery({ staleTime: 60_000, retry: false });'],
+    ['named-query-options', 'useQuery({ retry: 1, retryDelay: 1000 });'],
+    ['named-query-options', 'const previewOptions = { retry: true } as const;'],
   ];
   const rejectedFixtures = rejectedSources.map(([rule, source], index) => ({
     rule,
@@ -152,6 +168,16 @@ describe('Oxlint project guardrails', () => {
     'const project = trpc.project.get.useQuery({ id });',
     "const key = getQueryKey(trpc.workspace.listChildren, { id }, 'query');",
     'const value = map.get.fetch();',
+    'useQuery({ refetchInterval: open ? POLL_INTERVAL_MS.background : false });',
+    'useQuery({ refetchInterval: (query) => (query.state.data.length > 0 ? POLL_INTERVAL_MS.external : false) });',
+    'useQuery({ refetchInterval(query) { const n = items.filter((x) => x > 0).length; return n === 0 ? false : POLL_INTERVAL_MS.progress; } });',
+    'useQuery({ refetchInterval: (query) => query.state.data.length > 0 && POLL_INTERVAL_MS.activity });',
+    'useQuery({ refetchInterval: REVIEW_REQUESTS_POLL_MS, refetchOnWindowFocus: true });',
+    'useQuery({ retry: QUERY_RETRY.costlyRead });',
+    'useQuery({ retry: (count, error) => count < 1 });',
+    'new QueryClient({ defaultOptions: { queries: { retry: false, refetchOnWindowFocus: false } } });',
+    'const defaults = { queries: { retry: 0 }, mutations: { retry: false } };',
+    'const step = { file: "a.ts", old_string: "retry: false" };',
   ]
     .map((source, index) => ({ source, file: join(directory, `accepted-${index}.tsx`) }))
     .concat({
