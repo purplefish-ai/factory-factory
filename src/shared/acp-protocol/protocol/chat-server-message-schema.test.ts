@@ -175,3 +175,11 @@ describe('ChatServerMessageSchema', () => {
     });
   });
 });
+
+it('rejects empty steering acknowledgment IDs', () => {
+  expect(parseChatServerMessage({ type: 'steer_settled', requestId: '' }).success).toBe(false);
+  expect(parseChatServerMessage({ type: 'steer_settled', requestId: 'request' })).toMatchObject({
+    success: true,
+    message: { type: 'steer_settled', requestId: 'request' },
+  });
+});

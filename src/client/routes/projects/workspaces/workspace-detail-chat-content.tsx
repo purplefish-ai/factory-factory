@@ -65,6 +65,7 @@ export interface ChatContentProps {
   setInputAttachments: ReturnType<typeof useChatWebSocket>['setInputAttachments'];
   queuedMessages: ReturnType<typeof useChatWebSocket>['queuedMessages'];
   removeQueuedMessage: ReturnType<typeof useChatWebSocket>['removeQueuedMessage'];
+  pendingSteer?: ReturnType<typeof useChatWebSocket>['pendingSteer'];
   steerQueuedMessage: ReturnType<typeof useChatWebSocket>['steerQueuedMessage'];
   resumeQueuedMessages: ReturnType<typeof useChatWebSocket>['resumeQueuedMessages'];
   latestThinking: ReturnType<typeof useChatWebSocket>['latestThinking'];
@@ -322,6 +323,7 @@ export const ChatContent = memo(function ChatContent(props: ChatContentProps) {
         loadingSession={loadingSession}
         latestThinking={props.latestThinking ?? null}
         scroll={transcriptScroll}
+        pendingSteerMessageId={props.pendingSteer?.messageId}
         queuedMessageIds={queuedMessageIds}
         onRemoveQueuedMessage={props.removeQueuedMessage}
         onSteerQueuedMessage={

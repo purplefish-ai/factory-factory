@@ -38,6 +38,8 @@ function TranscriptMessage({
       item={item}
       onOpenSubagent={display.onOpenSubagent}
       isQueued={queued}
+      isSteering={display.pendingSteerMessageId === item.id}
+      steerDisabled={display.pendingSteerMessageId !== undefined}
       toolExpansionToken={
         display.workspaceId && isToolSequence(item)
           ? [

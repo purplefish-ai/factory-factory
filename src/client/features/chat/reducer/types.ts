@@ -181,6 +181,7 @@ export interface ChatState {
    * Replaces separate pendingMessageIds Set and pendingMessageContent Map.
    */
   pendingMessages: Map<string, PendingMessageContent>;
+  pendingSteer?: { messageId: string; requestId: string } | null;
   /** Last rejected message for recovery (allows restoring to input) */
   lastRejectedMessage: RejectedMessageInfo | null;
   /** Whether context compaction is in progress */
@@ -262,6 +263,8 @@ export type ChatAction =
         sessionId?: string | null;
       };
     }
+  | { type: 'STEER_REQUESTED'; messageId: string; requestId: string }
+  | { type: 'STEER_SETTLED'; requestId: string }
   | { type: 'CLEAR_REJECTED_MESSAGE' }
   // Settings action
   | { type: 'UPDATE_SETTINGS'; payload: Partial<ChatSettings>; requestId?: string }

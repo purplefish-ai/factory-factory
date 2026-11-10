@@ -115,6 +115,7 @@ export interface UseChatWebSocketReturn {
   setInputDraft: (draft: string) => void;
   setInputAttachments: ReturnType<typeof useChatState>['setInputAttachments'];
   removeQueuedMessage: (id: string) => void;
+  pendingSteer: ReturnType<typeof useChatState>['pendingSteer'];
   steerQueuedMessage: (id: string) => void;
   resumeQueuedMessages: () => void;
   // ACP config option action
@@ -424,6 +425,7 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
     setInputDraft: chat.setInputDraft,
     setInputAttachments: chat.setInputAttachments,
     removeQueuedMessage: chat.removeQueuedMessage,
+    pendingSteer: chat.pendingSteer,
     steerQueuedMessage: chat.steerQueuedMessage,
     resumeQueuedMessages: chat.resumeQueuedMessages,
     setConfigOption: chat.setConfigOption,

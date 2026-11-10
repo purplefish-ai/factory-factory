@@ -369,10 +369,20 @@ export function useChatActions(options: UseChatActionsOptions): UseChatActionsRe
 
   const steerQueuedMessage = useCallback(
     (id: string) => {
-      send({ type: 'steer_queued_message', messageId: id }, UNQUEUED_SEND);
+      if (stateRef.current.pendingSteer) {
+        return;
+      }
+      const requestId = crypto.randomUUID();
+      const pendingSteer = { messageId: id, requestId };
+      stateRef.current = { ...stateRef.current, pendingSteer };
+      dispatch({ type: 'STEER_REQUESTED', ...pendingSteer });
+      if (!send({ type: 'steer_queued_message', messageId: id, requestId }, UNQUEUED_SEND)) {
+        stateRef.current = { ...stateRef.current, pendingSteer: null };
+        dispatch({ type: 'STEER_SETTLED', requestId });
+      }
       // Keep the message queued until the server confirms native delivery.
     },
-    [send]
+    [send, dispatch, stateRef]
   );
 
   const resumeQueuedMessages = useCallback(() => {

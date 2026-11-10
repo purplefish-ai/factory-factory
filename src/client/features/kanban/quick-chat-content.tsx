@@ -92,6 +92,7 @@ export function QuickChatContent({
         latestThinking={chatState.latestThinking}
         scroll={scroll}
         isCompacting={chatState.isCompacting}
+        pendingSteerMessageId={chatState.pendingSteer?.messageId}
         queuedMessageIds={queuedMessageIds}
         onRemoveQueuedMessage={chatState.removeQueuedMessage}
         onSteerQueuedMessage={

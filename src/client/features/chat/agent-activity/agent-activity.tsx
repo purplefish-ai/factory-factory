@@ -45,6 +45,8 @@ export interface MessageItemProps {
   /** Callback to cancel/remove this queued message */
   onRemove?: () => void;
   onSteer?: () => void;
+  isSteering?: boolean;
+  steerDisabled?: boolean;
   resolveWorkspaceFileLink?: (href: string) => string | null;
   onWorkspaceFileLink?: (path: string) => void;
   onOpenSubagent?: (subagentId: string) => void;
@@ -69,22 +71,32 @@ function PRUpdateMessageItem({
   );
 }
 
-function QueuedMessageSteerAction({ onSteer }: { onSteer: () => void }) {
+function QueuedMessageSteerAction({
+  onSteer,
+  isSteering,
+  steerDisabled,
+}: {
+  onSteer: () => void;
+  isSteering?: boolean;
+  steerDisabled?: boolean;
+}) {
   return (
     <button
       onClick={onSteer}
+      disabled={steerDisabled}
+      aria-busy={isSteering}
       className={cn(
         'inline-flex h-6 items-center justify-center gap-1 rounded-md px-1.5 text-xs font-medium',
-        'bg-background/90 text-primary hover:bg-primary/10',
+        'bg-background/90 text-primary hover:bg-primary/10 disabled:opacity-50 disabled:cursor-wait',
         'border border-primary/30 hover:border-primary/60 shadow-sm',
         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring'
       )}
       title="Send into the active turn now. The agent may redirect its current work."
       type="button"
-      aria-label="Steer queued message"
+      aria-label={isSteering ? 'Steering queued message' : 'Steer queued message'}
     >
       <SteeringWheelIcon className="h-3.5 w-3.5" />
-      Steer
+      {isSteering ? 'Steering…' : 'Steer'}
     </button>
   );
 }
@@ -94,7 +106,12 @@ function QueuedMessageActions({
   isQueued,
   onRemove,
   onSteer,
-}: Pick<MessageItemProps, 'message' | 'isQueued' | 'onRemove' | 'onSteer'>) {
+  isSteering,
+  steerDisabled,
+}: Pick<
+  MessageItemProps,
+  'message' | 'isQueued' | 'onRemove' | 'onSteer' | 'isSteering' | 'steerDisabled'
+>) {
   const steer =
     isQueued &&
     onSteer &&
@@ -115,7 +132,13 @@ function QueuedMessageActions({
     >
       <div className="min-h-0 overflow-hidden">
         <div className="flex h-[max(2.25rem,calc(var(--touch-target-size,0px)+4px))] items-center justify-end gap-1 mb-1 px-0.5">
-          {steer && <QueuedMessageSteerAction onSteer={steer} />}
+          {steer && (
+            <QueuedMessageSteerAction
+              onSteer={steer}
+              isSteering={isSteering}
+              steerDisabled={steerDisabled}
+            />
+          )}
           {/* Cancel button for queued messages */}
           {isQueued && onRemove && (
             <button
@@ -145,6 +168,8 @@ export const MessageItem = memo(function MessageItem({
   isQueued,
   onRemove,
   onSteer,
+  isSteering,
+  steerDisabled,
   resolveWorkspaceFileLink,
   onWorkspaceFileLink,
   onOpenSubagent,
@@ -175,6 +200,8 @@ export const MessageItem = memo(function MessageItem({
             isQueued={isQueued}
             onRemove={onRemove}
             onSteer={onSteer}
+            isSteering={isSteering}
+            steerDisabled={steerDisabled}
           />
           {/* Message content - opacity applied here to fade queued messages without affecting buttons */}
           <div
@@ -229,6 +256,8 @@ export interface GroupedMessageItemRendererProps {
   /** Callback to cancel/remove this queued message */
   onRemove?: () => void;
   onSteer?: () => void;
+  isSteering?: boolean;
+  steerDisabled?: boolean;
   resolveWorkspaceFileLink?: (href: string) => string | null;
   onWorkspaceFileLink?: (path: string) => void;
   onOpenSubagent?: (subagentId: string) => void;
@@ -248,6 +277,8 @@ export const GroupedMessageItemRenderer = memo(function GroupedMessageItemRender
   isQueued,
   onRemove,
   onSteer,
+  isSteering,
+  steerDisabled,
   resolveWorkspaceFileLink,
   onWorkspaceFileLink,
   onOpenSubagent,
@@ -291,6 +322,8 @@ export const GroupedMessageItemRenderer = memo(function GroupedMessageItemRender
       isQueued={isQueued}
       onRemove={onRemove}
       onSteer={onSteer}
+      isSteering={isSteering}
+      steerDisabled={steerDisabled}
       resolveWorkspaceFileLink={resolveWorkspaceFileLink}
       onWorkspaceFileLink={onWorkspaceFileLink}
     />
