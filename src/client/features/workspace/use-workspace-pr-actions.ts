@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { toast } from 'sonner';
 import { trpc } from '@/client/lib/trpc';
 import { getWorkspacePRAssociationId } from '@/client/lib/workspace-selected-pr';
@@ -25,6 +26,9 @@ export function useWorkspacePrActions(
     onError: (error) => toast.error(error.message),
   });
   const review = useTriggerAdversarialReview(workspaceId);
+  // The displayed PR being reviewed: legacy PRs send no prId, so the mutation's
+  // variables cannot tell them apart.
+  const [reviewingPrId, setReviewingPrId] = useState<string | null>(null);
   const reviewTarget = (prId: string) => {
     const pr = prs?.find((candidate) => candidate.id === prId);
     return pr ? getWorkspacePRAssociationId(pr) : prId;
@@ -35,8 +39,7 @@ export function useWorkspacePrActions(
     removing: detach.isPending,
     discarding: discard.isPending,
     /** Whether the review in flight is for this PR. */
-    isReviewing: (prId: string) =>
-      review.isPending && review.variables?.prId === (reviewTarget(prId) ?? undefined),
+    isReviewing: (prId: string) => review.isPending && reviewingPrId === prId,
     add: async (url: string) => {
       try {
         await attach.mutateAsync({ id: workspaceId, prUrl: url });
@@ -67,6 +70,7 @@ export function useWorkspacePrActions(
     },
     review: (prId: string) => {
       const associationId = reviewTarget(prId);
+      setReviewingPrId(prId);
       review.mutate({ workspaceId, ...(associationId !== null ? { prId: associationId } : {}) });
     },
   };

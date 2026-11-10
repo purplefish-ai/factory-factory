@@ -11,7 +11,7 @@ const mocks = vi.hoisted(() => ({
   status: 'already_active',
   mutate: vi.fn(),
   discard: vi.fn(),
-  reviewing: undefined as { workspaceId: string; prId?: string } | undefined,
+  reviewPending: false,
 }));
 vi.mock('sonner', () => ({ toast: { success: mocks.success, error: vi.fn() } }));
 vi.mock('@/client/lib/trpc', () => ({
@@ -30,8 +30,7 @@ vi.mock('@/client/lib/trpc', () => ({
     adversarialReview: {
       trigger: {
         useMutation: (options: { onSuccess: (result: { status: string }) => void }) => ({
-          isPending: mocks.reviewing !== undefined,
-          variables: mocks.reviewing,
+          isPending: mocks.reviewPending,
           mutate: (input: unknown) => {
             mocks.mutate(input);
             options.onSuccess({ status: mocks.status });
@@ -45,7 +44,7 @@ let root: Root;
 beforeEach(() => {
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
   vi.clearAllMocks();
-  mocks.reviewing = undefined;
+  mocks.reviewPending = false;
 });
 afterEach(async () => {
   await act(() => root.unmount());
@@ -100,11 +99,18 @@ it('reports whether discarding blocked PR deliveries succeeded', async () => {
 
 function ReviewState({ prs }: { prs: WorkspacePullRequest[] }) {
   const actions = useWorkspacePrActions('workspace-1', 'project-1', prs);
-  return <output>{prs.filter(({ id }) => actions.isReviewing(id)).map(({ id }) => id)}</output>;
+  return (
+    <>
+      <button onClick={() => actions.review('legacy-2')}>Review</button>
+      <output>{prs.filter(({ id }) => actions.isReviewing(id)).map(({ id }) => id)}</output>
+    </>
+  );
 }
-it('marks only the PR whose review is in flight as reviewing', async () => {
+it('marks only the PR whose review is in flight as reviewing, legacy PRs included', async () => {
+  // Legacy PRs send no prId, so the request alone cannot say which row it is for.
   const pr = (id: string): WorkspacePullRequest => ({
     id,
+    identitySource: 'legacy-snapshot',
     url: `https://github.com/team/repo/pull/${id}`,
     number: null,
     title: null,
@@ -116,11 +122,14 @@ it('marks only the PR whose review is in flight as reviewing', async () => {
     hasMergeConflict: false,
     syncedAt: null,
   });
-  const prs = [pr('pr-1'), pr('pr-2')];
-  mocks.reviewing = { workspaceId: 'workspace-1', prId: 'pr-2' };
+  const prs = [pr('legacy-1'), pr('legacy-2')];
+  mocks.reviewPending = true;
   const host = document.createElement('div');
   document.body.append(host);
   root = createRoot(host);
   await act(() => root.render(<ReviewState prs={prs} />));
-  expect(host.textContent).toBe('pr-2');
+  expect(host.querySelector('output')?.textContent).toBe('');
+  await act(() => host.querySelector('button')!.click());
+  expect(mocks.mutate).toHaveBeenCalledWith({ workspaceId: 'workspace-1' });
+  expect(host.querySelector('output')?.textContent).toBe('legacy-2');
 });

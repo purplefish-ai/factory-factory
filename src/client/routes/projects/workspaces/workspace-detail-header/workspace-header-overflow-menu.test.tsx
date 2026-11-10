@@ -9,6 +9,7 @@ import { WorkspaceHeaderOverflowMenu } from './workspace-header-overflow-menu';
 
 const mocks = vi.hoisted(() => ({
   rename: vi.fn(),
+  pending: false,
   get: vi.fn(),
   list: vi.fn(),
   error: vi.fn(),
@@ -32,11 +33,18 @@ vi.mock('@/client/lib/trpc', () => ({
           // Like React Query, mutateAsync settles after onSuccess.
           return {
             mutateAsync: async (input: { id: string }) => {
-              const result: unknown = await mocks.rename(input);
+              let result: unknown;
+              try {
+                result = await mocks.rename(input);
+              } catch (error) {
+                // Like React Query, options-level onError runs before the rejection.
+                mocks.onError?.(error instanceof Error ? error : new Error(String(error)));
+                throw error;
+              }
               await mocks.onSuccess?.(result, input);
               return result;
             },
-            isPending: false,
+            isPending: mocks.pending,
           };
         },
       },
@@ -64,6 +72,7 @@ beforeEach(() => {
     }
   );
   mocks.rename.mockReset().mockResolvedValue({ id: 'w', projectId: 'p' });
+  mocks.pending = false;
   mocks.get.mockReset().mockResolvedValue(undefined);
   mocks.list.mockReset().mockResolvedValue(undefined);
   mocks.error.mockClear();
@@ -259,11 +268,7 @@ it.each([false, true])(
     document.body.append(container);
     const root = createRoot(container);
     if (fails) {
-      mocks.rename.mockImplementation(() => {
-        const error = new Error('Offline');
-        mocks.onError?.(error);
-        return Promise.reject(error);
-      });
+      mocks.rename.mockRejectedValue(new Error('Offline'));
     }
     try {
       await act(() =>
@@ -319,13 +324,14 @@ it.each([false, true])(
         expect(mocks.error).toHaveBeenCalledWith("Couldn't rename workspace.", {
           description: 'Offline',
         });
+        expect(mocks.error).toHaveBeenCalledTimes(1);
         expect(document.querySelector('input[placeholder="Workspace name"]')).not.toBeNull();
         expect(mocks.get).not.toHaveBeenCalled();
         expect(mocks.list).not.toHaveBeenCalled();
       } else {
         expect(document.querySelector('input[placeholder="Workspace name"]')).toBeNull();
         expect(mocks.get).toHaveBeenCalledWith({ id: 'w' });
-        // The shared rename hook refreshes every project list showing the workspace.
+        // The shared rename hook refreshes the workspace's project list.
         expect(mocks.list).toHaveBeenCalledWith({ projectId: 'p' });
       }
     } finally {
@@ -334,3 +340,63 @@ it.each([false, true])(
     }
   }
 );
+
+it('keeps the rename dialog open while a rename is in flight', async () => {
+  vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+    callback(0);
+    return 0;
+  });
+  mocks.pending = true;
+  const container = document.createElement('div');
+  document.body.append(container);
+  const root = createRoot(container);
+  try {
+    await act(() =>
+      root.render(
+        <TooltipProvider>
+          <WorkspaceHeaderOverflowMenu
+            workspace={
+              {
+                id: 'w',
+                projectId: 'p',
+                name: 'Workspace',
+                status: 'READY',
+              } as WorkspaceHeaderWorkspace
+            }
+            workspaceId="w"
+            availableIdes={[]}
+            preferredIde="vscode"
+            openInIde={{ mutate: vi.fn(), isPending: false }}
+            archivePending={false}
+            onArchiveRequest={vi.fn()}
+            isArchived={false}
+          />
+        </TooltipProvider>
+      )
+    );
+    await act(() => {
+      container
+        .querySelector('[aria-label="More actions"]')!
+        .dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    });
+    await act(() => {
+      [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')]
+        .find((item) => item.textContent === 'Rename workspace')!
+        .click();
+    });
+    const input = await vi.waitFor(() => {
+      const field = document.querySelector<HTMLInputElement>('input[placeholder="Workspace name"]');
+      expect(field).not.toBeNull();
+      return field!;
+    });
+    expect(within(document.body).getByRole('button', { name: 'Cancel' })).toHaveProperty(
+      'disabled',
+      true
+    );
+    await act(async () => userEvent.type(input, '{Escape}'));
+    expect(document.querySelector('input[placeholder="Workspace name"]')).not.toBeNull();
+  } finally {
+    await act(() => root.unmount());
+    container.remove();
+  }
+});

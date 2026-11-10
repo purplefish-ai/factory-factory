@@ -640,7 +640,7 @@ const rules = {
           if (spinner) {
             context.report({
               node: spinner,
-              message: `Pass \`pending\` to ${name} instead of rendering a spinner inside it; it disables the control and swaps its icon for the shared Spinner.`,
+              message: `Pass \`pending\` to ${name} instead of rendering a spinner inside it; pending disables the control and shows the shared Spinner in place of its icon.`,
             });
           }
         },
@@ -653,21 +653,26 @@ const rules = {
       if (isExceptedFile(context)) {
         return {};
       }
+      const message =
+        'Use the shared Spinner (src/components/ui/spinner.tsx) instead of SpinnerGapIcon or animate-spin (docs/architecture/client-loading.md).';
       const report = (node, text) => {
         if (hasSpinClass(text)) {
-          context.report({
-            node,
-            message:
-              'Use the shared Spinner (src/components/ui/spinner.tsx) instead of animate-spin (docs/architecture/client-loading.md).',
-          });
+          context.report({ node, message });
         }
       };
       return {
+        // Class strings are also built in variables, `cn()` arguments and
+        // status config objects, so every string is checked, not only JSX.
         Literal(node) {
           report(node, node.value);
         },
         TemplateElement(node) {
           report(node, node.value.cooked ?? node.value.raw);
+        },
+        JSXOpeningElement(node) {
+          if (jsxTagName(node.name) === 'SpinnerGapIcon') {
+            context.report({ node, message });
+          }
         },
       };
     },

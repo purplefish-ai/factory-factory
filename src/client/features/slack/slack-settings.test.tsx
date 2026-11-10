@@ -218,6 +218,10 @@ it('keeps a failed disconnect open with its error', async () => {
   expect(document.querySelector('[role="alertdialog"]')?.textContent).toContain(
     'Could not disconnect'
   );
+  // Reported once, in the dialog, not also in the page alert behind it.
+  expect(document.querySelector('[role="alert"]')?.textContent ?? '').not.toContain(
+    'Could not disconnect'
+  );
   expect(confirmButton().disabled).toBe(false);
 });
 

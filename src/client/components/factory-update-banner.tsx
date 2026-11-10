@@ -89,7 +89,7 @@ function UpdateActions({ updates, isPending, onUpdate, onCancel, onDismiss }: Pr
     <div className="ml-auto flex shrink-0 items-center gap-1.5">
       {status.phase === 'waiting' ? (
         <>
-          <Spinner className="size-3.5" aria-hidden="true" />
+          {!isPending && <Spinner className="size-3.5" aria-hidden="true" />}
           <Button variant="ghost" size="sm" pending={isPending} onClick={onCancel}>
             Cancel update
           </Button>

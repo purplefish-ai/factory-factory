@@ -230,6 +230,14 @@ export function InlineWorkspaceForm({
   }, [initialPrompt]);
   const submission = useWorkspaceCreationSubmission(draftId);
   const submitted = useRef<WorkspaceCreationSubmission | null>(null);
+  // Mutation callbacks outlive the form; a failure after it closes needs a toast.
+  const mounted = useRef(false);
+  useLayoutEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
   const completeCreation = (
     token: WorkspaceCreationSubmission | null | undefined,
     onComplete: () => void
@@ -366,10 +374,12 @@ export function InlineWorkspaceForm({
     onError: (error, _input, context) => {
       const message = `Couldn't create automation. ${error.message}`;
       const token = context?.submission ?? submitted.current;
-      // The form stays open on failure, so its inline error is the one report.
+      // The open form shows the failure inline; once it has closed (the user
+      // navigated away), a toast reports it instead.
       if (token) {
         submission.fail(token, message);
-      } else {
+      }
+      if (!(token && mounted.current)) {
         toast.error(message);
       }
     },

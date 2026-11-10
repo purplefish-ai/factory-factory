@@ -82,6 +82,12 @@ export interface UseChatActionsReturn {
 /** For settings rolled back when `send` returns false: never queue them for replay. */
 const UNQUEUED_SEND: WebSocketSendOptions = { queuePolicy: 'drop' };
 
+/** Shown in the transcript when a prompt answer could not be sent; the prompt stays open. */
+const UNSENT_ANSWER_ERROR: ChatAction = {
+  type: 'WS_ERROR',
+  payload: { message: 'Your answer was not sent. Reconnect and answer again.' },
+};
+
 function generateMessageId(): string {
   return `msg-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 }
@@ -303,6 +309,7 @@ export function useChatActions(options: UseChatActionsOptions): UseChatActionsRe
       // Like steering: the prompt closes only once the answer is sent, so a
       // refused send (disconnected) leaves it open to answer again.
       if (!send(msg, UNQUEUED_SEND)) {
+        dispatch(UNSENT_ANSWER_ERROR);
         return;
       }
       dispatch({ type: 'PERMISSION_RESPONSE', payload: { allow } });
@@ -331,6 +338,7 @@ export function useChatActions(options: UseChatActionsOptions): UseChatActionsRe
         ...(Object.keys(normalizedAnswers).length > 0 ? { answers: normalizedAnswers } : {}),
       };
       if (!send(msg, UNQUEUED_SEND)) {
+        dispatch(UNSENT_ANSWER_ERROR);
         return;
       }
       dispatch({ type: 'QUESTION_RESPONSE' });

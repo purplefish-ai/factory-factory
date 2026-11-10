@@ -112,6 +112,13 @@ export function WorkspaceHeaderOverflowMenu({
     }
   };
 
+  // Like ConfirmDialog, the rename dialog stays open while the rename runs.
+  const closeRename = () => {
+    if (!renameMutation.isPending) {
+      setRenameOpen(false);
+    }
+  };
+
   return (
     <>
       <WorkspaceDetailsDialog
@@ -125,7 +132,10 @@ export function WorkspaceHeaderOverflowMenu({
         open={providerSettingsOpen}
         onOpenChange={setProviderSettingsOpen}
       />
-      <Dialog open={renameOpen && !isArchived} onOpenChange={setRenameOpen}>
+      <Dialog
+        open={renameOpen && !isArchived}
+        onOpenChange={(open) => (open ? setRenameOpen(true) : closeRename())}
+      >
         <DialogContent className="sm:max-w-sm" aria-describedby={undefined}>
           <DialogHeader>
             <DialogTitle>Rename workspace</DialogTitle>
@@ -141,13 +151,13 @@ export function WorkspaceHeaderOverflowMenu({
                   void handleRenameSubmit();
                 }
               } else if (e.key === 'Escape') {
-                setRenameOpen(false);
+                closeRename();
               }
             }}
             placeholder="Workspace name"
           />
           <DialogFooter>
-            <Button variant="outline" onClick={() => setRenameOpen(false)}>
+            <Button variant="outline" onClick={closeRename} disabled={renameMutation.isPending}>
               Cancel
             </Button>
             <Button

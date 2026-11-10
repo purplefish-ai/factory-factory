@@ -237,5 +237,6 @@ export const StartingLogin: Story = {
   play: async () => {
     const submit = await within(document.body).findByRole('button', { name: 'Starting login…' });
     await expect(submit).toBeDisabled();
+    await expect(submit).toHaveAttribute('aria-busy', 'true');
   },
 };

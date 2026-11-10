@@ -108,6 +108,31 @@ describe('Button pending', () => {
     expect(button().textContent).toBe('Add workspace');
   });
 
+  it('stays busy even when the caller passes aria-busy', async () => {
+    await render(
+      <Button pending aria-busy={false}>
+        Save
+      </Button>
+    );
+    expect(button().getAttribute('aria-busy')).toBe('true');
+  });
+
+  it('marks an asChild link busy and cancels its activation', async () => {
+    const onClick = vi.fn();
+    await render(
+      <Button asChild pending onClick={onClick}>
+        <a href="#next">Open</a>
+      </Button>
+    );
+    const link = container.querySelector('a');
+    expect(link?.getAttribute('aria-busy')).toBe('true');
+    expect(link?.getAttribute('aria-disabled')).toBe('true');
+    const click = new MouseEvent('click', { bubbles: true, cancelable: true });
+    await act(() => link?.dispatchEvent(click));
+    expect(click.defaultPrevented).toBe(true);
+    expect(onClick).not.toHaveBeenCalled();
+  });
+
   it('keeps an explicitly disabled button disabled when idle', async () => {
     await render(<Button disabled>Save</Button>);
     expect(button().disabled).toBe(true);
@@ -168,9 +193,11 @@ describe('ConfirmDialog', () => {
   }
 
   function pressEscape() {
-    document.body
-      .querySelector('[role=alertdialog]')
-      ?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    const dialog = document.body.querySelector('[role=alertdialog]');
+    if (!dialog) {
+      throw new Error('No dialog open');
+    }
+    dialog.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
   }
 
   it('runs onConfirm without closing, and closes on Escape when idle', async () => {

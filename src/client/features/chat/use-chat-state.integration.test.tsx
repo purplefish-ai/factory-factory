@@ -589,6 +589,10 @@ describe('refused prompt answers', () => {
         { queuePolicy: 'drop' }
       );
       expect(harness.chatRef.current?.pendingRequest).toMatchObject({ type: 'question' });
+      expect(harness.chatRef.current?.messages.at(-1)?.message).toMatchObject({
+        type: 'error',
+        error: 'Your answer was not sent. Reconnect and answer again.',
+      });
     } finally {
       harness.cleanup();
     }
@@ -621,6 +625,10 @@ describe('refused prompt answers', () => {
         { queuePolicy: 'drop' }
       );
       expect(harness.chatRef.current?.pendingRequest).toMatchObject({ type: 'permission' });
+      expect(harness.chatRef.current?.messages.at(-1)?.message).toMatchObject({
+        type: 'error',
+        error: 'Your answer was not sent. Reconnect and answer again.',
+      });
     } finally {
       harness.cleanup();
     }

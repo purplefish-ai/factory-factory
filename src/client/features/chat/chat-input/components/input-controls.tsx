@@ -427,7 +427,7 @@ export const RightControls = memo(function RightControls({
       {children}
       {pendingMessageCount > 0 && (
         <div className="flex items-center gap-1 text-xs text-muted-foreground">
-          <Spinner aria-hidden="true" className="h-3 w-3" />
+          <Spinner aria-hidden="true" className="size-3" />
           <span className="@max-[22rem]/composer:sr-only">Sending…</span>
         </div>
       )}

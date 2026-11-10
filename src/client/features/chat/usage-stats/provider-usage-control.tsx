@@ -92,7 +92,7 @@ export function UsageControl({
           className={cn('h-7 shrink-0 gap-1.5 px-1.5 text-xs tabular-nums', usageColor(percent))}
         >
           {compacting ? (
-            <Spinner aria-hidden="true" className="h-3.5 w-3.5" />
+            <Spinner aria-hidden="true" className="size-3.5" />
           ) : (
             <svg
               aria-hidden="true"

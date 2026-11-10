@@ -3,6 +3,7 @@ import { trpc } from '@/client/lib/trpc';
 import { Input } from '@/components/ui/input';
 import { Popover, PopoverAnchor, PopoverContent } from '@/components/ui/popover';
 import { Spinner } from '@/components/ui/spinner';
+import { cn } from '@/lib/utils';
 
 /** Edits a chat name beside the tabs, preserving their selection semantics. */
 export function SessionNameEditor({
@@ -92,7 +93,7 @@ export function SessionNameEditor({
                 onDone();
               }
             }}
-            className="h-7 w-40 text-sm"
+            className={cn('h-7 w-40 text-sm', saving && 'pr-7')}
           />
           {saving && (
             <Spinner

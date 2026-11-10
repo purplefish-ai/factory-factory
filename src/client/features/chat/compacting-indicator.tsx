@@ -38,7 +38,7 @@ export const CompactingIndicator = memo(function CompactingIndicator({
       )}
     >
       <div className="flex items-center gap-2">
-        <Spinner aria-hidden="true" className="h-3 w-3 text-muted-foreground" />
+        <Spinner aria-hidden="true" className="size-3 text-muted-foreground" />
         <span className="text-xs font-medium text-muted-foreground">Compacting context…</span>
       </div>
     </div>

@@ -245,8 +245,19 @@ describe('ProjectsListPage archive confirmation', () => {
 
   it('prevents the archive dialog from being dismissed while pending', () => {
     const { container, root } = renderPage();
+    const pressEscape = () =>
+      flushSync(() => {
+        archiveDialog()?.dispatchEvent(
+          new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })
+        );
+      });
+    // Control: when idle, the same Escape closes the dialog.
     openArchiveDialog(container);
+    expect(archiveDialog()).not.toBeNull();
+    pressEscape();
+    expect(archiveDialog()).toBeNull();
 
+    openArchiveDialog(container);
     setArchivePending(root, 'project-1');
 
     flushSync(() => {

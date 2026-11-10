@@ -183,9 +183,10 @@ Every control that fires an RPC shows that it is in flight, the same way:
 - **`DropdownMenuItem`** takes `pending`: the item is disabled and its icon
   becomes a spinner.
 - **`ConfirmDialog`** takes `isPending` and `pendingText`. The confirm button
-  keeps its label beside the spinner, and the dialog ignores Escape and Cancel
-  until the action settles, so callers only pass the mutation's state and close
-  the dialog on success.
+  shows a spinner beside its label (`pendingText` when given, otherwise the
+  confirm label), and the dialog ignores Escape and Cancel until the action
+  settles, so callers only pass the mutation's state and close the dialog on
+  success.
 
 `factory/use-pending-prop` rejects a `Spinner` (or any spinning element) inside
 `Button` or `DropdownMenuItem`. Prefer the mutation's own `isPending`; when one

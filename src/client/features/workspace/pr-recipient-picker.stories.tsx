@@ -25,7 +25,8 @@ export const Pending: Story = {
     const confirm = await within(document.body).findByRole('button', {
       name: 'Enabling PR updates…',
     });
-    await expect(confirm).toBeDisabled();
+    // No conversation is selected yet, so disabled alone would not prove pending.
     await expect(confirm).toHaveAttribute('aria-busy', 'true');
+    await expect(confirm.querySelector('[data-slot=spinner]')).not.toBeNull();
   },
 };

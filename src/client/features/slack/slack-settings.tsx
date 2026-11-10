@@ -193,7 +193,10 @@ export function SlackSettings() {
       succeeded = true;
     } catch (error) {
       operationError = error instanceof Error ? error.message : "Couldn't update Slack connection.";
-      setError(operationError);
+      // The disconnect dialog shows its own failure; others use the page alert.
+      if (target.kind !== 'disconnect') {
+        setError(operationError);
+      }
     } finally {
       try {
         const refreshed = await connections.refetch();

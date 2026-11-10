@@ -44,7 +44,8 @@ type ButtonProps = React.ComponentProps<'button'> &
      * `aria-busy`, and a `Spinner` replaces its icon: icon-size buttons hide
      * every direct child except screen-reader text; other sizes hide their
      * direct svg icons and keep the label beside the spinner. With `asChild`
-     * only the disabled and busy state apply.
+     * (a link, say) there is no spinner: the child is marked busy and
+     * `aria-disabled`, and its clicks are cancelled.
      */
     pending?: boolean;
     /**
@@ -67,6 +68,7 @@ function Button({
   pendingLabel,
   disabled,
   children,
+  onClick,
   ...props
 }: ButtonProps) {
   const Comp = asChild ? Slot : 'button';
@@ -87,9 +89,13 @@ function Button({
         className
       )}
       disabled={pending || disabled}
-      aria-busy={pending || undefined}
       {...props}
+      aria-busy={pending || props['aria-busy']}
+      {...(pending && asChild ? { 'aria-disabled': true } : {})}
       {...(pending && iconOnly && pendingLabel ? { 'aria-label': pendingLabel } : {})}
+      onClick={
+        pending ? (event: React.MouseEvent<HTMLButtonElement>) => event.preventDefault() : onClick
+      }
     >
       {showSpinner ? (
         <>
