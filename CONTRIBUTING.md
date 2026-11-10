@@ -122,8 +122,13 @@ retain exact-count assertions and a bounded failure when startup stalls. Fixture
 teardown tracks real background PR wakes through completion and drains newly
 spawned work before disconnecting the private database.
 
-`pnpm check` covers linting, formatting, file lengths, environment access,
-ownership, foreign-key indexes, and dependencies. Upstream ACP adapters own
+`pnpm check` covers linting (including the inline suppression policy),
+formatting, file lengths, environment access, ambiguous relative imports,
+ownership, foreign-key indexes, migration drift, dependency rules, unused files
+and dependencies (Knip), and unused code. CI's checks job runs the same
+`pnpm check`, plus `pnpm typecheck` and the generated Prisma client drift check,
+which needs a clean checkout after `pnpm db:generate`; add new local checks to
+the `check` script rather than as separate CI steps. Upstream ACP adapters own
 their provider protocol schemas; test ACP client contracts when upgrading either
 adapter. After reducing oversized legacy files, run
 `pnpm check:file-length:update` to lower their exact ceilings; it never allows
@@ -140,10 +145,10 @@ binaries into the fresh installation before tests; the active-runtime marker is
 never restored from CI cache.
 
 The [pre-commit hook](.husky/pre-commit) formats staged files and checks types,
-migration drift, dependencies, and unused code. CI also runs coverage,
-production and Storybook builds, story tests, and generated Prisma drift checks.
-Hooks and CI supplement the verification above; report any local skips rather
-than assuming CI ran.
+migration drift, relative imports, dependencies, and unused code. CI also runs
+coverage, production and Storybook builds, story tests, and generated Prisma
+drift checks. Hooks and CI supplement the verification above; report any local
+skips rather than assuming CI ran.
 
 CI runs the full Vitest suite across exactly two parallel shards. The sequencer
 balances files using measured test, import, setup and environment durations from

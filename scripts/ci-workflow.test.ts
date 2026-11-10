@@ -247,3 +247,35 @@ it('installs only the minimal frozen coverage toolchain in the merge gate', () =
   expect(steps.some((step) => step.run?.includes('pnpm install'))).toBe(false);
   expect(steps.some((step) => step.name === 'Install dependencies')).toBe(false);
 });
+
+it('keeps the CI checks job to `pnpm check` plus the steps that only make sense in CI', () => {
+  const scripts = z
+    .object({ scripts: z.record(z.string(), z.string()) })
+    .parse(JSON.parse(readFileSync('package.json', 'utf8'))).scripts;
+  const runs = (ci.jobs.checks?.steps ?? []).flatMap((step) => (step.run ? [step.run] : []));
+  // Local verification runs `pnpm check` and `pnpm typecheck`. The generated
+  // client drift check needs a clean checkout, so it stays CI-only.
+  expect(runs).toEqual([
+    'pnpm install --frozen-lockfile',
+    'pnpm db:generate',
+    'pnpm check:prisma-generated',
+    'pnpm check',
+    'pnpm typecheck',
+  ]);
+  const check = (scripts.check ?? '').split(' && ');
+  for (const command of [
+    'pnpm lint',
+    'pnpm check:imports',
+    'pnpm check:migrations',
+    'pnpm deps:check',
+    'pnpm knip',
+    'pnpm check:unused-code',
+  ]) {
+    expect(check).toContain(command);
+  }
+  expect(scripts.lint).toContain('pnpm check:lint-suppressions');
+  expect(scripts.knip).toBe('knip --include files,dependencies,unlisted');
+  expect(scripts['check:migrations']).toBe(
+    'prisma migrate diff --from-schema prisma/schema.prisma --to-migrations prisma/migrations --exit-code'
+  );
+});
