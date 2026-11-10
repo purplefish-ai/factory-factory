@@ -300,7 +300,7 @@ describe('browser origin gate per launch mode', () => {
     expect(state).toMatchObject({ writes: 1, privileged: 1 });
   });
 
-  it('ff proxy: the auth proxy rewrites Host; tunnel browser origins are not allowed', async () => {
+  it('ff proxy: the auth proxy forwards its own tunnel origin as the backend origin', async () => {
     const { app, state } = createApp({ backendHost: '127.0.0.1' });
     const upstream = createServer(app);
     await new Promise<void>((resolve) => upstream.listen(0, '127.0.0.1', resolve));
@@ -313,6 +313,7 @@ describe('browser origin gate per launch mode', () => {
       password: 'ABC123',
       magicToken: 'test-auth-token',
     });
+    authProxy.setTunnelUrl('https://quiet-river.trycloudflare.com');
     try {
       const proxy = request(`http://127.0.0.1:${authProxy.port}`);
       const tunnelHeaders = { host: 'quiet-river.trycloudflare.com' };
@@ -320,12 +321,28 @@ describe('browser origin gate per launch mode', () => {
       const query = await proxy.get('/api/trpc/read?token=test-auth-token').set(tunnelHeaders);
       expect(query.status).toBe(200);
 
-      const browserMutation = await proxy
-        .post('/api/trpc/write?token=test-auth-token')
-        .send({ json: null })
-        .set({ ...tunnelHeaders, origin: 'https://quiet-river.trycloudflare.com' });
-      expect(browserMutation.status).toBe(403);
-      expect(state).toMatchObject({ reads: 1, writes: 0 });
+      // The backend never allows the tunnel origin; the proxy checks it and
+      // forwards the request with the backend's own loopback origin.
+      for (const path of ['write', 'privileged']) {
+        const browserMutation = await proxy
+          .post(`/api/trpc/${path}?token=test-auth-token`)
+          .send({ json: null })
+          .set({ ...tunnelHeaders, origin: 'https://quiet-river.trycloudflare.com' });
+        expect(browserMutation.status).toBe(200);
+      }
+
+      for (const origin of [
+        'https://other-tunnel.trycloudflare.com',
+        `http://localhost:${address.port}`,
+        'null',
+      ]) {
+        const rejected = await proxy
+          .post('/api/trpc/write?token=test-auth-token')
+          .send({ json: null })
+          .set({ ...tunnelHeaders, origin });
+        expect(rejected.status).toBe(403);
+      }
+      expect(state).toMatchObject({ reads: 1, writes: 1, privileged: 1 });
     } finally {
       await authProxy.close();
       await new Promise<void>((resolve) => upstream.close(() => resolve()));
