@@ -40,11 +40,11 @@ vi.mock('@/client/lib/trpc', () => ({
     },
   },
 }));
-// Saving cues read the mutation cache, which this trpc mock does not provide.
+// Saving cues read the mutation cache, which this trpc mock does not provide;
+// VoiceModeSection.save.test.tsx covers them against a real client.
 vi.mock('@trpc/react-query', () => ({ getMutationKey: () => ['voice', 'updateConfig'] }));
-vi.mock('@/client/lib/optimistic-patch', () => ({
-  createPatchRollback: () => ({ remember: vi.fn(), restore: vi.fn() }),
-  pendingPatches: () => [],
+vi.mock('@/client/lib/optimistic-patch', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/client/lib/optimistic-patch')>()),
   useSavingFields: () => () => false,
 }));
 vi.mock('@/components/ui/slider', () => ({

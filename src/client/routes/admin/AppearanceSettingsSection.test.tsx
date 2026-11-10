@@ -299,6 +299,23 @@ describe('AppearanceSettingsSection', () => {
     expect(container.querySelector('#appearance-font-sans-custom')).toBeNull();
   });
 
+  it('starts a new Custom choice empty after the saved custom font is reset', async () => {
+    const container = await render({ settings: { appearanceFontSans: 'Fira Sans' } });
+    expect(container.querySelector<HTMLInputElement>('#appearance-font-sans-custom')?.value).toBe(
+      'Fira Sans'
+    );
+
+    click(buttonNamed(container, 'Reset appearance'));
+    await waitForCheck(() =>
+      expect(container.querySelector('#appearance-font-sans-custom')).toBeNull()
+    );
+
+    await chooseOption(container, 'appearance-font-sans', 'Custom…');
+    expect(container.querySelector<HTMLInputElement>('#appearance-font-sans-custom')?.value).toBe(
+      ''
+    );
+  });
+
   it('keeps the font size thumb mounted while a keyboard step saves', async () => {
     const container = await render();
     const slider = container.querySelector<HTMLElement>('#appearance-font-scale [role="slider"]');

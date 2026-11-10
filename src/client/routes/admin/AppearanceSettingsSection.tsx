@@ -328,7 +328,7 @@ export function AppearanceSettingsSection() {
   const schemeColors = useRenderedSchemeColors(resolvedTheme === 'dark');
   const update = (patch: UserSettingsPatch) => updateSettings.mutate(patch);
   const saving = (field: keyof UserSettingsPatch) => updateSettings.isSaving(field);
-  // Reset appearance also discards font choices that were never saved.
+  // A saved Reset appearance also discards font choices and drafts that were never saved.
   const [resets, setResets] = useState(0);
 
   return (
@@ -424,10 +424,13 @@ export function AppearanceSettingsSection() {
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => {
-                  setResets((count) => count + 1);
-                  update(RESET_ALL);
-                }}
+                onClick={() =>
+                  // Remount once the reset is saved, so the fonts' drafts start
+                  // from the reset values.
+                  updateSettings.mutate(RESET_ALL, {
+                    onSuccess: () => setResets((count) => count + 1),
+                  })
+                }
                 disabled={isDefaultAppearance(appearance)}
               >
                 Reset appearance
