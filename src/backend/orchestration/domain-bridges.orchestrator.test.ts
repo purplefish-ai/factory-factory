@@ -133,6 +133,11 @@ vi.mock('./workspace-init.orchestrator', () => ({
   recoverStaleProvisioningWorkspace: vi.fn(),
 }));
 
+vi.mock('./pr-observation.orchestrator', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('./pr-observation.orchestrator')>()),
+  resetStablePRBackoff: vi.fn(),
+}));
+
 import {
   githubCLIService,
   prFetchCoordinator,
@@ -168,6 +173,7 @@ import {
 } from '@/backend/services/workspace';
 import * as backgroundDispatch from './background-action-dispatch.orchestrator';
 import { type BridgeServices, configureDomainBridges } from './domain-bridges.orchestrator';
+import { resetStablePRBackoff } from './pr-observation.orchestrator';
 import { reconciliationService } from './reconciliation.service';
 import { createPRMonitoringTestServices } from './testing/pr-monitoring-services.test-support';
 import {
@@ -762,6 +768,34 @@ describe('configureDomainBridges', () => {
       expect(workspaceActivityService.markSessionIdle).toHaveBeenCalledWith('ws1', 's1', 12);
       expect(prServices.workspacePRMonitoringService.get).toHaveBeenCalledWith('ws1');
     });
+
+    it.each([
+      ['chatEventForwarder', chatEventForwarderService.configure],
+      ['sessionService', sessionService.configure],
+    ] as const)(
+      '%s session transitions return the workspace PRs to the normal observation cadence',
+      (_name, configure) => {
+        configureDomainBridges(createBridgeServices());
+        const bridge = getBridge(configure as (arg: unknown) => void) as {
+          workspace: {
+            markSessionRunning(workspaceId: string, sessionId: string): number;
+            markSessionIdle(workspaceId: string, sessionId: string, generation?: number): void;
+          };
+        };
+        vi.mocked(resetStablePRBackoff).mockClear();
+        vi.mocked(workspaceActivityService.markSessionRunning).mockReturnValueOnce(5);
+
+        expect(bridge.workspace.markSessionRunning('ws1', 's1')).toBe(5);
+        bridge.workspace.markSessionIdle('ws2', 's1', 12);
+        expect(vi.mocked(resetStablePRBackoff).mock.calls.map((call) => call[1])).toEqual([
+          'ws1',
+          'ws2',
+        ]);
+        // Every entry point resets the same observation cache scope.
+        const [running, idle] = vi.mocked(resetStablePRBackoff).mock.calls;
+        expect(running?.[0].cacheScope).toBe(idle?.[0].cacheScope);
+      }
+    );
 
     it('session lifecycle message queue bridge delegates pending dispatch to the dispatcher', async () => {
       configureDomainBridges(createBridgeServices());
