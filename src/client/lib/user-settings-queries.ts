@@ -1,10 +1,14 @@
-import { type QueryClient, useMutationState } from '@tanstack/react-query';
 import type { TRPCClientErrorLike } from '@trpc/client';
 import { getMutationKey } from '@trpc/react-query';
 import type { UseTRPCQueryResult } from '@trpc/react-query/shared';
 import type { inferRouterInputs, inferRouterOutputs } from '@trpc/server';
 import { toast } from 'sonner';
 import { runInBackground } from '@/client/lib/background-task';
+import {
+  createPatchRollback,
+  pendingPatches,
+  useSavingFields,
+} from '@/client/lib/optimistic-patch';
 import { type AppRouter, trpc } from '@/client/lib/trpc';
 
 /**
@@ -14,8 +18,9 @@ import { type AppRouter, trpc } from '@/client/lib/trpc';
  *
  * - Writes run one at a time, in the order they were made (one mutation scope).
  * - Each write patches the cache before the request, so a control shows its
- *   new value immediately; a failure restores the fields it patched unless a
- *   newer pending write owns them, and shows one error toast.
+ *   new value immediately; a failure restores the fields it patched (a newer
+ *   pending write of the same field inherits the value to restore) and shows
+ *   one error toast.
  * - When the last pending write settles, the saved settings are committed and
  *   refetched, so the page converges on the server's values.
  */
@@ -37,37 +42,10 @@ export function useUserSettings(
   return trpc.userSettings.get.useQuery(undefined, options);
 }
 
-function updateMutationKey() {
-  return getMutationKey(trpc.userSettings.update);
-}
+const rollback = createPatchRollback<UserSettings>();
 
-/** Variables of every settings write that has not settled, including this one. */
-function pendingPatches(client: QueryClient): unknown[] {
-  return client
-    .getMutationCache()
-    .findAll({ mutationKey: updateMutationKey(), status: 'pending' })
-    .map((mutation) => mutation.state.variables);
-}
-
-function patchesKey(patch: unknown, key: string): boolean {
-  return typeof patch === 'object' && patch !== null && key in patch;
-}
-
-/** Restores the fields `patch` changed, except those a newer pending write also changes. */
-function restorePatchedFields<T extends object>(
-  current: T,
-  previous: T,
-  patch: Partial<T>,
-  others: unknown[]
-): T {
-  const next = { ...current };
-  for (const key in patch) {
-    if (!others.some((other) => patchesKey(other, key))) {
-      next[key] = previous[key];
-    }
-  }
-  return next;
-}
+/** Settings other caches derive from, refreshed after each saved write that changes them. */
+const IDE_FIELDS = ['preferredIde', 'customIdeCommand'] as const;
 
 /**
  * Saves a partial settings update. Controls bound to `useUserSettings` data
@@ -76,31 +54,35 @@ function restorePatchedFields<T extends object>(
  */
 export function useUpdateUserSettings() {
   const utils = trpc.useUtils();
+  const mutationKey = getMutationKey(trpc.userSettings.update);
   const mutation = trpc.userSettings.update.useMutation({
     scope: { id: 'user-settings' },
     onMutate: async (patch) => {
       // An older read must not overwrite the optimistic value when it lands.
       await utils.userSettings.get.cancel();
       const previous = utils.userSettings.get.getData();
+      if (previous) {
+        rollback.remember(patch, previous);
+      }
       utils.userSettings.get.setData(undefined, (current) =>
         current ? { ...current, ...patch } : current
       );
-      return { previous };
     },
-    onError: (error, patch, saved, { client }) => {
-      const previous = saved?.previous;
-      if (previous) {
-        const others = pendingPatches(client).filter((other) => other !== patch);
-        utils.userSettings.get.setData(undefined, (current) =>
-          current ? restorePatchedFields(current, previous, patch, others) : current
-        );
-      }
+    onError: (error, patch, _context, { client }) => {
+      utils.userSettings.get.setData(undefined, (current) =>
+        current ? rollback.restore(current, patch, pendingPatches(client, mutationKey)) : current
+      );
       toast.error(SAVE_SETTINGS_ERROR, { id: SAVE_SETTINGS_ERROR, description: error.message });
     },
-    onSettled: (settings, _error, _patch, _saved, { client }) => {
+    onSuccess: (_settings, patch) => {
+      if (IDE_FIELDS.some((field) => patch[field] !== undefined)) {
+        runInBackground(utils.workspace.getAvailableIdes.invalidate(), "Couldn't refresh IDEs.");
+      }
+    },
+    onSettled: (settings, _error, _patch, _context, { client }) => {
       // Earlier results would hide newer optimistic values; the last write
       // returns every saved field.
-      if (client.isMutating({ mutationKey: updateMutationKey() }) > 1) {
+      if (client.isMutating({ mutationKey }) > 1) {
         return;
       }
       if (settings) {
@@ -109,11 +91,6 @@ export function useUpdateUserSettings() {
       runInBackground(utils.userSettings.get.invalidate(), "Couldn't refresh settings.");
     },
   });
-  const saving = useMutationState({
-    filters: { mutationKey: updateMutationKey(), status: 'pending' },
-    select: (pending) => pending.state.variables,
-  });
-  const isSaving = (field: keyof UserSettingsPatch) =>
-    saving.some((patch) => patchesKey(patch, field));
+  const isSaving: (field: keyof UserSettingsPatch) => boolean = useSavingFields(mutationKey);
   return { ...mutation, isSaving };
 }

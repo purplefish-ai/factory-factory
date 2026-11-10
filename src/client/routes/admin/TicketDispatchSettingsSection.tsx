@@ -57,10 +57,7 @@ export function TicketDispatchSettingsSection() {
               <Button
                 variant="outline"
                 disabled={update.isPending || settings.ticketDispatchPrompt == null}
-                onClick={() => {
-                  setDraft(null);
-                  save(null);
-                }}
+                onClick={() => save(null)}
               >
                 Reset to default
               </Button>

@@ -10,16 +10,22 @@ export const PROVIDER_DEFAULT_EFFORT = '__provider_default__';
 
 type CatalogOption = { value: string; label: string };
 
-/** Catalog options, plus the saved value when the catalog no longer lists it. */
+/**
+ * Catalog options, plus the saved value when the catalog no longer lists it.
+ * `missingLabel` names a saved value the loaded catalog lacks; while the
+ * catalog is loading (or failed to load) the raw value is shown instead.
+ */
 export function withSavedOption(
   options: readonly CatalogOption[] | undefined,
   saved: string,
-  savedLabel = saved
+  missingLabel = saved
 ): SettingOption<string>[] {
-  const catalog = options ?? [];
-  return catalog.some((option) => option.value === saved)
-    ? [...catalog]
-    : [{ value: saved, label: savedLabel }, ...catalog];
+  if (!options) {
+    return [{ value: saved, label: saved }];
+  }
+  return options.some((option) => option.value === saved)
+    ? [...options]
+    : [{ value: saved, label: missingLabel }, ...options];
 }
 
 export function effortOptions(options: readonly CatalogOption[] | undefined, saved: string | null) {

@@ -14,7 +14,10 @@ class StubResizeObserver {
   disconnect = vi.fn();
 }
 
-/** jsdom lacks the layout APIs Radix Select and Slider call; undo with `vi.unstubAllGlobals`. */
+/**
+ * jsdom lacks the layout APIs Radix Select and Slider call. `vi.unstubAllGlobals`
+ * undoes the globals; the `scrollIntoView` no-op stays for the rest of the file.
+ */
 export function stubRadixLayout() {
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
   vi.stubGlobal('ResizeObserver', StubResizeObserver);

@@ -122,10 +122,12 @@ export function NotificationSettingsSection() {
             label="Play completion sound"
             htmlFor="sound-toggle"
             description="Play a sound when a workspace finishes."
+            descriptionId="sound-toggle-description"
             saving={updateSettings.isSaving('playSoundOnComplete')}
           >
             <Switch
               id="sound-toggle"
+              aria-describedby="sound-toggle-description"
               checked={settings.playSoundOnComplete}
               onCheckedChange={(checked) => updateSettings.mutate({ playSoundOnComplete: checked })}
             />

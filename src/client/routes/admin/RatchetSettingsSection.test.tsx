@@ -25,6 +25,7 @@ async function render(options: Parameters<typeof createSettingsServer>[0] = {}) 
     ...options,
     handlers: {
       'admin.triggerRatchetCheck': () => ({ checked: 1, stateChanges: 0, actionsTriggered: 0 }),
+      ...options.handlers,
     },
   });
   view = await renderWithSettingsServer(createElement(RatchetSettingsSection), server);

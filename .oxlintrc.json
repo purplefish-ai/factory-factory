@@ -124,6 +124,7 @@
             "groups": [
               {
                 "procedures": ["workspace.get", "workspace.listForProject"],
+                "use": "src/client/lib/workspace-queries.ts",
                 "owners": [
                   "src/client/lib/workspace-queries.ts",
                   "src/client/lib/workspace-cache-reconciler.ts"
@@ -133,6 +134,7 @@
               },
               {
                 "procedures": ["userSettings.get", "userSettings.update"],
+                "use": "src/client/lib/user-settings-queries.ts",
                 "owners": ["src/client/lib/user-settings-queries.ts"],
                 "helpers": "all",
                 "reason": "its hooks share one optimistic cache strategy and error toast for every settings control"

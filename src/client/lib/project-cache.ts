@@ -2,7 +2,10 @@ import type { trpc } from '@/client/lib/trpc';
 
 type TrpcUtils = ReturnType<typeof trpc.useUtils>;
 
-/** Refetches every cached read of one project after it changes: the list, by id and by slug. */
+/**
+ * Invalidates every cached read of one project after it changes: the list,
+ * by id and by slug. Active queries refetch; inactive ones refetch when next used.
+ */
 export function invalidateProject(utils: TrpcUtils, projectId: string): Promise<unknown> {
   return Promise.all([
     utils.project.list.invalidate(),

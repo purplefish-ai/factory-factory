@@ -405,6 +405,25 @@ export const LoadingAppearance: Story = {
   ),
 };
 
+export const FailedNotificationSettings: Story = {
+  beforeEach: () => mockNotificationPermission('default'),
+  render: () => (
+    <SettingsStoryProvider failRequests={['userSettings.get']}>
+      <NotificationSettingsSection />
+    </SettingsStoryProvider>
+  ),
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(await canvas.findByRole('alert')).toHaveTextContent(
+      "Couldn't load notification settings"
+    );
+    await expect(canvas.getByRole('switch', { name: 'Desktop notifications' })).toBeEnabled();
+    await expect(
+      canvas.queryByRole('switch', { name: 'Play completion sound' })
+    ).not.toBeInTheDocument();
+  },
+};
+
 export const LoadingNotifications: Story = {
   render: () => (
     <SettingsStoryProvider loading>

@@ -149,6 +149,20 @@ describe('useUpdateUserSettings', () => {
     expect(text('saving-model')).toBe('true');
   });
 
+  it('restores the last saved value when queued changes to one field all fail', async () => {
+    await act(() => {
+      save({ defaultClaudeModel: 'opus' });
+      save({ defaultClaudeModel: 'fable' });
+    });
+    await waitForCheck(() => expect(saves()).toHaveLength(1));
+    await act(async () => saves()[0]?.reject('Save rejected'));
+    await waitForCheck(() => expect(saves()).toHaveLength(2));
+    expect(text('model')).toBe('fable');
+
+    await act(async () => saves()[1]?.reject('Save rejected'));
+    await waitForCheck(() => expect(text('model')).toBe('sonnet'));
+  });
+
   it('keeps a rolled-back value when a cancelled refetch lands late', async () => {
     await act(async () => save({ defaultClaudeModel: 'opus' }));
     await waitForCheck(() => expect(saves()).toHaveLength(1));

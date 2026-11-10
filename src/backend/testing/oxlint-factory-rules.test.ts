@@ -45,12 +45,14 @@ writeFileSync(
           groups: [
             {
               procedures: ['workspace.get', 'workspace.listForProject'],
+              use: workspaceQueryOwner,
               owners: [workspaceQueryOwner],
               helpers: 'cache',
               reason: 'plain reads bypass the reconciler',
             },
             {
               procedures: ['userSettings.get', 'userSettings.update'],
+              use: userSettingsOwner,
               owners: [userSettingsOwner],
               helpers: 'all',
               reason: 'its hooks share one cache strategy',
@@ -312,6 +314,7 @@ describe('query owners', () => {
   );
   const groupSchema = z.object({
     procedures: z.array(z.string()),
+    use: z.string(),
     owners: z.array(z.string()),
     helpers: z.enum(['cache', 'all']),
     reason: z.string().min(20),
@@ -326,10 +329,11 @@ describe('query owners', () => {
 
   it('names one owner module for each guarded procedure group', () => {
     expect(
-      groups.map(({ procedures, owners, helpers }) => ({ procedures, owners, helpers }))
+      groups.map(({ procedures, use, owners, helpers }) => ({ procedures, use, owners, helpers }))
     ).toEqual([
       {
         procedures: ['workspace.get', 'workspace.listForProject'],
+        use: 'src/client/lib/workspace-queries.ts',
         owners: [
           'src/client/lib/workspace-queries.ts',
           'src/client/lib/workspace-cache-reconciler.ts',
@@ -338,10 +342,14 @@ describe('query owners', () => {
       },
       {
         procedures: ['userSettings.get', 'userSettings.update'],
+        use: 'src/client/lib/user-settings-queries.ts',
         owners: ['src/client/lib/user-settings-queries.ts'],
         helpers: 'all',
       },
     ]);
+    for (const group of groups) {
+      expect(group.owners).toContain(group.use);
+    }
     for (const owner of groups.flatMap((group) => group.owners)) {
       expect(existsSync(resolve(owner))).toBe(true);
     }
@@ -384,5 +392,44 @@ describe('settings section card exceptions', () => {
     expect(readFileSync(resolve(file), 'utf8')).toMatch(
       /\b(?:CardHeader|CardTitle|CardDescription|CardAction)\b[^;]*from '@\/components\/ui\/card'/
     );
+  });
+});
+
+describe('settings section card restriction', () => {
+  const restriction = overridesSchema
+    .parse(JSON.parse(readFileSync(resolve('.oxlintrc.json'), 'utf8')))
+    .overrides.find((override) => override.files.includes('src/client/routes/admin/**/*.tsx'))
+    ?.rules['no-restricted-imports'];
+  const fixtures = {
+    rejected: "import { CardHeader, CardTitle } from '@/components/ui/card';",
+    accepted: "import { Card, CardContent } from '@/components/ui/card';",
+  };
+
+  it('rejects card header parts and allows the card body with the project options', () => {
+    expect(restriction).toBeDefined();
+    const ruleDirectory = mkdtempSync(join(directory, 'card-'));
+    const ruleConfig = join(ruleDirectory, '.oxlintrc.json');
+    writeFileSync(
+      ruleConfig,
+      JSON.stringify({
+        categories: { correctness: 'off' },
+        plugins: [],
+        rules: { 'no-restricted-imports': restriction },
+      })
+    );
+    const files = Object.entries(fixtures).map(([name, source]) => {
+      const file = join(ruleDirectory, `${name}.tsx`);
+      writeFileSync(file, source);
+      return file;
+    });
+    const result = spawnSync(binary, ['--config', ruleConfig, '--format', 'json', ...files], {
+      cwd: ruleDirectory,
+      encoding: 'utf8',
+    });
+    const diagnostics = reportSchema.parse(JSON.parse(result.stdout)).diagnostics;
+    expect(diagnostics.map(({ filename, code }) => [filename, code])).toEqual([
+      ['rejected.tsx', 'eslint(no-restricted-imports)'],
+      ['rejected.tsx', 'eslint(no-restricted-imports)'],
+    ]);
   });
 });

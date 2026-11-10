@@ -76,6 +76,15 @@ describe('ChatProviderDefaultsSection', () => {
     );
   });
 
+  it('shows the raw saved model while the catalog loads', async () => {
+    const savedModel = 'claude-sonnet-4-5-20250929';
+    const container = await render({
+      settings: { defaultClaudeModel: savedModel },
+      hold: ['userSettings.getProviderOptions'],
+    });
+    expect(container.querySelector('#default-claude-model')?.textContent).toBe(savedModel);
+  });
+
   it('identifies a saved Claude model absent from the catalog', async () => {
     const savedModel = 'claude-sonnet-4-5-20250929';
     const container = await render({ settings: { defaultClaudeModel: savedModel } });

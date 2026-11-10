@@ -36,6 +36,7 @@ import {
   SettingHelp,
   SettingSelect,
   SettingsSection,
+  useSliderDraft,
 } from './settings-section';
 
 /** Used until the page's painted colors can be read, and in environments without canvas. */
@@ -162,9 +163,7 @@ interface FontScaleFieldProps {
 }
 
 function FontScaleField({ value, saving, onCommit }: FontScaleFieldProps) {
-  // Set while dragging; the parent remounts this field by key when the saved value changes.
-  const [draft, setDraft] = useState<number | null>(null);
-  const shown = draft ?? value;
+  const { shown, onValueChange, onValueCommit } = useSliderDraft(value, onCommit);
 
   return (
     <SettingField
@@ -181,12 +180,8 @@ function FontScaleField({ value, saving, onCommit }: FontScaleFieldProps) {
           aria-valuetext={`${shown}%`}
           className={SETTING_FIELD_WIDTH}
           value={[shown]}
-          onValueChange={([next]) => setDraft(next ?? null)}
-          onValueCommit={([next]) => {
-            if (next !== undefined && next !== value) {
-              onCommit(next);
-            }
-          }}
+          onValueChange={onValueChange}
+          onValueCommit={onValueCommit}
           min={FONT_SCALE_MIN}
           max={FONT_SCALE_MAX}
           step={FONT_SCALE_STEP}
@@ -225,9 +220,11 @@ function FontFamilyField({
   onCommit,
 }: FontFamilyFieldProps) {
   const savedOptionId = fontOptionIdForValue(options, value);
-  // Custom is chosen before its font is saved; presets save as soon as they are picked.
-  const [choosingCustom, setChoosingCustom] = useState(false);
-  const selectedId = choosingCustom ? CUSTOM_FONT_OPTION_ID : savedOptionId;
+  // Custom is chosen before its font is saved; presets save as soon as they are
+  // picked. The choice lapses once the saved font changes (a save or reset);
+  // a failed save restores the font, so the form returns with its draft.
+  const [customChosenAt, setCustomChosenAt] = useState<{ value: string | null } | null>(null);
+  const selectedId = customChosenAt?.value === value ? CUSTOM_FONT_OPTION_ID : savedOptionId;
   // A failed save keeps the typed font for another try.
   const [customDraft, setCustomDraft] = useState(
     savedOptionId === CUSTOM_FONT_OPTION_ID ? (value ?? '') : ''
@@ -235,7 +232,7 @@ function FontFamilyField({
   const [customError, setCustomError] = useState<string | null>(null);
 
   const handleSelect = (nextId: string) => {
-    setChoosingCustom(nextId === CUSTOM_FONT_OPTION_ID);
+    setCustomChosenAt(nextId === CUSTOM_FONT_OPTION_ID ? { value } : null);
     setCustomError(null);
     const option = options.find((candidate) => candidate.id === nextId);
     if (option && option.value !== value) {
@@ -331,6 +328,8 @@ export function AppearanceSettingsSection() {
   const schemeColors = useRenderedSchemeColors(resolvedTheme === 'dark');
   const update = (patch: UserSettingsPatch) => updateSettings.mutate(patch);
   const saving = (field: keyof UserSettingsPatch) => updateSettings.isSaving(field);
+  // Reset appearance also discards font choices that were never saved.
+  const [resets, setResets] = useState(0);
 
   return (
     <SettingsSection
@@ -393,13 +392,13 @@ export function AppearanceSettingsSection() {
 
             <div className="space-y-4 border-t pt-4">
               <FontScaleField
-                key={appearance.fontScale}
                 value={appearance.fontScale}
                 saving={saving('appearanceFontScale')}
                 onCommit={(fontScale) => update({ appearanceFontScale: fontScale })}
               />
               <div className="grid gap-4 sm:grid-cols-2">
                 <FontFamilyField
+                  key={`sans-${resets}`}
                   id="appearance-font-sans"
                   label="Interface font"
                   helpText="Used for navigation, chat, and settings."
@@ -409,6 +408,7 @@ export function AppearanceSettingsSection() {
                   onCommit={(fontSans) => update({ appearanceFontSans: fontSans })}
                 />
                 <FontFamilyField
+                  key={`mono-${resets}`}
                   id="appearance-font-mono"
                   label="Monospace font"
                   helpText="Used for code, diffs, and terminals."
@@ -424,7 +424,10 @@ export function AppearanceSettingsSection() {
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => update(RESET_ALL)}
+                onClick={() => {
+                  setResets((count) => count + 1);
+                  update(RESET_ALL);
+                }}
                 disabled={isDefaultAppearance(appearance)}
               >
                 Reset appearance

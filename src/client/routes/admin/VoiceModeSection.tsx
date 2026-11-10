@@ -1,9 +1,15 @@
 import { CheckCircleIcon } from '@phosphor-icons/react/dist/csr/CheckCircle';
 import { MicrophoneIcon } from '@phosphor-icons/react/dist/csr/Microphone';
-import type { inferRouterInputs } from '@trpc/server';
+import { getMutationKey } from '@trpc/react-query';
+import type { inferRouterInputs, inferRouterOutputs } from '@trpc/server';
 import { useState } from 'react';
 import { toast } from 'sonner';
 import { runInBackground } from '@/client/lib/background-task';
+import {
+  createPatchRollback,
+  pendingPatches,
+  useSavingFields,
+} from '@/client/lib/optimistic-patch';
 import { type AppRouter, trpc } from '@/client/lib/trpc';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -31,9 +37,13 @@ import {
   SettingRow,
   SettingSelect,
   SettingsSection,
+  useSliderDraft,
 } from './settings-section';
 
 type VoiceConfigPatch = inferRouterInputs<AppRouter>['voice']['updateConfig'];
+type VoiceConfig = inferRouterOutputs<AppRouter>['voice']['getConfig'];
+
+const voiceRollback = createPatchRollback<VoiceConfig>();
 
 const VOICE_OPTIONS = DEEPGRAM_FLUX_ENGLISH_VOICES.map((voice) => ({
   value: voice.model,
@@ -54,10 +64,7 @@ interface VoiceSliderProps {
   onCommit: (value: number) => void;
 }
 
-/**
- * A saved slider: shows its value while dragging and saves on release.
- * Callers key it by `value`, so a saved or rolled-back value replaces the draft.
- */
+/** A saved slider: shows its value while dragging and saves on release. */
 function VoiceSlider({
   id,
   label,
@@ -71,8 +78,7 @@ function VoiceSlider({
   saving,
   onCommit,
 }: VoiceSliderProps) {
-  const [draft, setDraft] = useState<number | null>(null);
-  const shown = draft ?? value;
+  const { shown, onValueChange, onValueCommit } = useSliderDraft(value, onCommit);
   return (
     <SettingField
       label={label}
@@ -87,12 +93,8 @@ function VoiceSlider({
         id={id}
         className={SETTING_FIELD_WIDTH}
         value={[shown]}
-        onValueChange={([next]) => setDraft(next ?? null)}
-        onValueCommit={([next]) => {
-          if (next !== undefined && next !== value) {
-            onCommit(next);
-          }
-        }}
+        onValueChange={onValueChange}
+        onValueCommit={onValueCommit}
         min={min}
         max={max}
         step={step}
@@ -132,29 +134,40 @@ function useValidateApiKeyMutation(apiKey: string, setValidatedKey: (key: string
 /** Saves voice settings one at a time, showing each change before the server confirms it. */
 function useUpdateVoiceConfig() {
   const utils = trpc.useUtils();
+  const mutationKey = getMutationKey(trpc.voice.updateConfig);
   const mutation = trpc.voice.updateConfig.useMutation({
     scope: { id: 'voice-config' },
-    onMutate: async ({ apiKey: _apiKey, ...patch }) => {
+    onMutate: async (patch) => {
       await utils.voice.getConfig.cancel();
       const previous = utils.voice.getConfig.getData();
-      utils.voice.getConfig.setData(undefined, (current) =>
-        current ? { ...current, ...patch } : current
-      );
-      return { previous };
-    },
-    onError: (error, _patch, saved) => {
-      if (saved?.previous) {
-        utils.voice.getConfig.setData(undefined, saved.previous);
+      if (previous) {
+        voiceRollback.remember(patch, previous);
       }
+      const { apiKey: _apiKey, ...visible } = patch;
+      utils.voice.getConfig.setData(undefined, (current) =>
+        current ? { ...current, ...visible } : current
+      );
+    },
+    onError: (error, patch, _context, { client }) => {
+      utils.voice.getConfig.setData(undefined, (current) =>
+        current
+          ? voiceRollback.restore(current, patch, pendingPatches(client, mutationKey))
+          : current
+      );
       toast.error("Couldn't save voice settings.", { description: error.message });
     },
-    onSuccess: (result) => utils.voice.getConfig.setData(undefined, result),
-    onSettled: () => {
+    onSettled: (config, _error, _patch, _context, { client }) => {
+      // Earlier results would hide newer optimistic values.
+      if (client.isMutating({ mutationKey }) > 1) {
+        return;
+      }
+      if (config) {
+        utils.voice.getConfig.setData(undefined, config);
+      }
       runInBackground(utils.voice.getConfig.invalidate(), "Couldn't refresh voice settings.");
     },
   });
-  const isSaving = (field: keyof VoiceConfigPatch) =>
-    mutation.isPending && mutation.variables?.[field] !== undefined;
+  const isSaving: (field: keyof VoiceConfigPatch) => boolean = useSavingFields(mutationKey);
   return { ...mutation, isSaving };
 }
 
@@ -315,7 +328,6 @@ export function VoiceModeSection() {
             <VoiceSlider
               id="voice-speed"
               label="Speed"
-              key={config.ttsSpeed}
               value={config.ttsSpeed}
               min={DEEPGRAM_TTS_SPEED_MIN}
               max={DEEPGRAM_TTS_SPEED_MAX}
@@ -330,7 +342,6 @@ export function VoiceModeSection() {
               id="voice-utterance-end"
               label="Stop-speaking sensitivity"
               helpText="How long a pause before voice mode decides you've finished talking."
-              key={config.utteranceEndMs}
               value={config.utteranceEndMs}
               min={VOICE_UTTERANCE_END_MS_MIN}
               max={VOICE_UTTERANCE_END_MS_MAX}
@@ -347,7 +358,6 @@ export function VoiceModeSection() {
               id="voice-barge-in"
               label="Barge-in sensitivity"
               helpText="How quickly voice mode notices you've started talking over its spoken reply and stops to listen."
-              key={config.bargeInSustainedMs}
               value={config.bargeInSustainedMs}
               min={VOICE_BARGE_IN_SUSTAINED_MS_MIN}
               max={VOICE_BARGE_IN_SUSTAINED_MS_MAX}

@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import { toast } from 'sonner';
-import { runInBackground } from '@/client/lib/background-task';
 import { trpc } from '@/client/lib/trpc';
 import {
   type UserSettingsPatch,
@@ -20,7 +19,6 @@ type IdeOption = (typeof IDE_OPTIONS)[number]['value'];
 
 export function IdeSettingsSection() {
   const settingsQuery = useUserSettings();
-  const utils = trpc.useUtils();
   const updateSettings = useUpdateUserSettings();
   // Custom is chosen before its command is saved; until then the saved IDE stays in effect.
   const [isConfiguringCustomIde, setIsConfiguringCustomIde] = useState(false);
@@ -46,7 +44,6 @@ export function IdeSettingsSection() {
         ) {
           setCommandDraft(null);
         }
-        runInBackground(utils.workspace.getAvailableIdes.invalidate(), "Couldn't refresh IDEs.");
       },
     });
 

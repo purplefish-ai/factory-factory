@@ -1,4 +1,4 @@
-import type { ComponentProps, ReactNode } from 'react';
+import { type ComponentProps, type ReactNode, useRef, useState } from 'react';
 import { QueryState, type QueryStateQuery } from '@/client/components/query-state';
 import {
   Card,
@@ -147,6 +147,8 @@ interface SettingFieldProps extends SettingLabelProps {
   /** Shown at the end of the label line, e.g. a slider's current value. */
   labelAccessory?: ReactNode;
   description?: ReactNode;
+  /** Id for the help text, so the control can reference it with `aria-describedby`. */
+  descriptionId?: string;
   /** The control, usually a `Select`, `Input` or `Slider`. */
   children: ReactNode;
   className?: string;
@@ -156,6 +158,7 @@ interface SettingFieldProps extends SettingLabelProps {
 export function SettingField({
   labelAccessory,
   description,
+  descriptionId,
   children,
   className,
   ...label
@@ -167,7 +170,7 @@ export function SettingField({
         {labelAccessory}
       </div>
       {children}
-      {description ? <SettingHelp>{description}</SettingHelp> : null}
+      {description ? <SettingHelp id={descriptionId}>{description}</SettingHelp> : null}
     </div>
   );
 }
@@ -197,8 +200,9 @@ export function SettingSelect<T extends string>({
   triggerClassName,
   ...field
 }: SettingSelectProps<T>) {
+  const descriptionId = `${id}-description`;
   return (
-    <SettingField htmlFor={id} {...field}>
+    <SettingField htmlFor={id} descriptionId={descriptionId} {...field}>
       <Select
         value={value}
         onValueChange={(next) => {
@@ -209,7 +213,11 @@ export function SettingSelect<T extends string>({
         }}
         disabled={disabled}
       >
-        <SelectTrigger id={id} className={triggerClassName}>
+        <SelectTrigger
+          id={id}
+          className={triggerClassName}
+          aria-describedby={field.description ? descriptionId : undefined}
+        >
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
@@ -222,4 +230,32 @@ export function SettingSelect<T extends string>({
       </Select>
     </SettingField>
   );
+}
+
+/**
+ * Slider handlers that show the dragged value and save on release. The draft
+ * clears at commit, so a saved, rolled-back or refetched value shows again.
+ * Radix reports a keyboard step's commit before its change; a change that
+ * repeats the value just committed is ignored so it can't revive the draft.
+ */
+export function useSliderDraft(value: number, onCommit: (value: number) => void) {
+  const [draft, setDraft] = useState<number | null>(null);
+  const committed = useRef<number | null>(null);
+  return {
+    shown: draft ?? value,
+    onValueChange: ([next]: number[]) => {
+      const repeatsCommit = committed.current !== null && committed.current === next;
+      committed.current = null;
+      if (!repeatsCommit) {
+        setDraft(next ?? null);
+      }
+    },
+    onValueCommit: ([next]: number[]) => {
+      committed.current = next ?? null;
+      setDraft(null);
+      if (next !== undefined && next !== value) {
+        onCommit(next);
+      }
+    },
+  };
 }

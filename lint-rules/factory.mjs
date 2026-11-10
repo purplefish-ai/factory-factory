@@ -286,7 +286,13 @@ const rules = {
               items: {
                 type: 'object',
                 properties: {
-                  procedures: { type: 'array', items: { type: 'string', minLength: 1 } },
+                  procedures: {
+                    type: 'array',
+                    items: { type: 'string', minLength: 1 },
+                    minItems: 1,
+                  },
+                  // The module callers should use; other owners may be its helpers.
+                  use: { type: 'string', minLength: 1 },
                   owners: {
                     type: 'array',
                     items: { type: 'string', minLength: 1 },
@@ -297,7 +303,7 @@ const rules = {
                   helpers: { enum: ['cache', 'all'] },
                   reason: { type: 'string', minLength: 1 },
                 },
-                required: ['procedures', 'owners', 'helpers', 'reason'],
+                required: ['procedures', 'use', 'owners', 'helpers', 'reason'],
                 additionalProperties: false,
               },
             },
@@ -328,7 +334,7 @@ const rules = {
       const report = (node, { group, procedure }) =>
         context.report({
           node,
-          message: `Use ${group.owners[0]} for ${procedure}; ${group.reason}.`,
+          message: `Use ${group.use} for ${procedure}; ${group.reason}.`,
         });
       return {
         MemberExpression(node) {

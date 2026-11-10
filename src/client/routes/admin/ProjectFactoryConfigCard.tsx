@@ -5,6 +5,7 @@ import { PencilIcon } from '@phosphor-icons/react/dist/csr/Pencil';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { FactoryConfigScripts } from '@/client/components/factory-config-scripts';
+import { QueryErrorState } from '@/client/components/query-error-state';
 import { QueryState } from '@/client/components/query-state';
 import { DevServerSetupPanel } from '@/client/features/workspace/dev-server-setup-panel';
 import { runInBackground } from '@/client/lib/background-task';
@@ -130,6 +131,15 @@ export function ProjectFactoryConfigCard({
           </Button>
         </div>
 
+        {configQuery.isError && configQuery.data !== undefined ? (
+          // Cached scripts stay visible, but editing waits for a fresh read.
+          <QueryErrorState
+            title="Couldn't refresh configuration"
+            error={configQuery.error}
+            onRetry={() => void configQuery.refetch()}
+            isRetrying={configQuery.isFetching}
+          />
+        ) : null}
         <QueryState
           query={configQuery}
           errorTitle="Couldn't load configuration"

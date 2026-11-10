@@ -220,10 +220,11 @@ Read and write user settings only through `useUserSettings` and
 `factory/query-owner` lint rule rejects other `userSettings.get` and
 `userSettings.update` hooks and cache helpers. Writes run in order and patch the
 cache before the request, so a switch or select shows its new value at once. A
-failure restores the fields it changed (unless a newer pending write owns them)
-and shows one "Couldn't save settings." toast; when the last pending write
-settles, the saved settings are committed and refetched. `isSaving(field)` is
-true while a write of that field is pending.
+failure restores the fields it changed and shows one "Couldn't save settings."
+toast; a newer pending write of the same field keeps its value and inherits the
+one to restore if it fails too; when the last pending write settles, the saved
+settings are committed and refetched. `isSaving(field)` is true while a write of
+that field is pending.
 
 Admin settings cards use `SettingsSection`
 (`src/client/routes/admin/settings-section.tsx`). Given a `query`, it renders a

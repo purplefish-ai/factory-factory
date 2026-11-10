@@ -286,6 +286,31 @@ describe('AppearanceSettingsSection', () => {
     expect(container.textContent).not.toContain('105%');
   });
 
+  it('closes an unsaved Custom choice when every preference is reset', async () => {
+    const container = await render({ settings: { appearanceColorScheme: 'solarized' } });
+    await chooseOption(container, 'appearance-font-sans', 'Custom…');
+    expect(container.querySelector('#appearance-font-sans-custom')).not.toBeNull();
+
+    click(buttonNamed(container, 'Reset appearance'));
+
+    await waitForCheck(() =>
+      expect(container.querySelector('#appearance-font-sans')?.textContent).toContain('default')
+    );
+    expect(container.querySelector('#appearance-font-sans-custom')).toBeNull();
+  });
+
+  it('keeps the font size thumb mounted while a keyboard step saves', async () => {
+    const container = await render();
+    const slider = container.querySelector<HTMLElement>('#appearance-font-scale [role="slider"]');
+    await act(() => {
+      slider?.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
+    });
+    await waitForCheck(() => expect(updates()).toEqual([{ appearanceFontScale: 105 }]));
+    await waitForCheck(() => expect(container.querySelector('[aria-label="Saving"]')).toBeNull());
+    expect(container.querySelector('#appearance-font-scale [role="slider"]')).toBe(slider);
+    expect(slider?.getAttribute('aria-valuetext')).toBe('105%');
+  });
+
   it('shows a saved custom font as Custom with its value', async () => {
     const container = await render({ settings: { appearanceFontMono: 'Fira Code' } });
     expect(container.querySelector('#appearance-font-mono')?.textContent).toContain('Custom');

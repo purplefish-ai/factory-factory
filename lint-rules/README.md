@@ -39,15 +39,15 @@ color classes (`bg-red-500`, `dark:text-emerald-300`) in `src/client`,
 are its `exceptions` option, a map from path to reason in `.oxlintrc.json`; a
 test fails if an exception no longer needs it. `query-owner` keeps tRPC hooks
 and cache helpers for named procedures inside owner modules. Each entry in its
-`groups` option lists procedures, their `owners`, the reason, and which helpers
-it covers: `cache` covers helpers that install options or write data
-(`useQuery`, `fetch`, `setData` and similar) plus `getQueryKey`, and `all`
-covers every hook, cache helper and key helper, including `useMutation`.
-`workspace.get` and `workspace.listForProject` use `cache`, so every read
-installs the snapshot reconciler
-([workspace state](../docs/architecture/workspace-state.md)). `userSettings.get`
-and `userSettings.update` use `all`: settings are read and written only through
-`useUserSettings` and `useUpdateUserSettings` in
+`groups` option lists procedures, the module callers should `use`, its `owners`
+(that module and its helpers), the reason, and which helpers it covers: `cache`
+covers helpers that install options or write data (`useQuery`, `fetch`,
+`setData` and similar) plus `getQueryKey`, and `all` covers every hook, cache
+helper and key helper, including `useMutation`. `workspace.get` and
+`workspace.listForProject` use `cache`, so every read installs the snapshot
+reconciler ([workspace state](../docs/architecture/workspace-state.md)).
+`userSettings.get` and `userSettings.update` use `all`: settings are read and
+written only through `useUserSettings` and `useUpdateUserSettings` in
 `src/client/lib/user-settings-queries.ts`, which own the optimistic cache
 strategy and error toast. Tests are exempt so they can seed caches.
 `named-query-options` keeps query options in one place
