@@ -43,12 +43,12 @@ tab, or a hidden tab, where browsers throttle the window timer.
 Composition with fake timers and zero render cost (25 ms deltas, worst case of
 12 runs over two seconds, with and without three other events a second):
 
-| Pipeline                                         | Worst, deltas only | Worst, with events | Reducer commits per second |
-| ------------------------------------------------ | -----------------: | -----------------: | -------------------------: |
-| Before: per-delta dispatch, 100 ms snapshot hook |             100 ms |             100 ms |                         40 |
-| 100 ms window and the snapshot hook              |             101 ms |             175 ms |                         10 |
-| 50 ms window and the snapshot hook               |             150 ms |             150 ms |                         20 |
-| 100 ms window, renderer unthrottled (current)    |             100 ms |             100 ms |                         10 |
+| Pipeline                                         | Worst, deltas only | Worst, with events | Delta commits per second |
+| ------------------------------------------------ | -----------------: | -----------------: | -----------------------: |
+| Before: per-delta dispatch, 100 ms snapshot hook |             100 ms |             100 ms |                       40 |
+| 100 ms window and the snapshot hook              |             101 ms |             175 ms |                       10 |
+| 50 ms window and the snapshot hook               |             150 ms |             150 ms |                       20 |
+| 100 ms window, renderer unthrottled (current)    |             100 ms |             100 ms |                       10 |
 
 The snapshot hook timed its interval from its own last commit, so a window flush
 that landed just after its timer, or an early flush caused by another event,
@@ -134,8 +134,8 @@ The adapter uses 120 ms word fades with zero stagger. Streamdown's backlog
 budget is soft: a nonzero stagger can still schedule seconds of animation for a
 large burst. Zero stagger avoids that queue. Reduced-motion preferences disable
 the animation, and completed messages remove the animation spans. The production
-transcript uses this adapter with text committed every 100 ms by the chat
-state's coalescing window.
+transcript uses this adapter with streamed text that the chat state coalesces
+into windows of at most 100 ms.
 
 The optional `renderContent` boundary on the Markdown primitive lets the
 comparison reuse our existing file links, GitHub previews, image validation,

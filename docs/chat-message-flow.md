@@ -313,14 +313,15 @@ window, measured from the last time deltas were dispatched. A delta that arrives
 a full window after that while nothing is buffered, such as a reply's first
 token, is dispatched immediately. Other deltas are buffered and dispatched in
 one action when the window closes, as a `STREAM_DELTA_BATCH` when more than one
-is pending, so no delta waits longer than 100 ms. The window is a timer, so
-hidden tabs drain the buffer too, at whatever rate the browser throttles timers
-to. Any other action, including session switches, disconnects and local sends,
-first dispatches the buffer, and unmounting dispatches it too. The reducer
-applies a batch's actions in order, so it reaches exactly the state that
-dispatching each message would have committed. The streaming Markdown renders
-each commit directly, so the window is the only clock between receipt and
-render; see [streaming Markdown](performance/streaming-markdown.md).
+is pending. In a foreground tab no delta waits longer than 100 ms; hidden tabs
+may exceed that, because the window is a timer and browsers throttle timers in
+hidden tabs. They still drain the buffer, at whatever rate the browser allows.
+Any other action, including session switches, disconnects and local sends, first
+dispatches the buffer, and unmounting dispatches it too. The reducer applies a
+batch's actions in order, so it reaches exactly the state that dispatching each
+message would have committed. The streaming Markdown renders each commit
+directly, so the window is the only clock between receipt and render; see
+[streaming Markdown](performance/streaming-markdown.md).
 
 | Wire event                                             | Reducer action or handling                             |
 | ------------------------------------------------------ | ------------------------------------------------------ |
