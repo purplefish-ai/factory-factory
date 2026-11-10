@@ -62,6 +62,7 @@ interface SessionTabsProps {
   handleNewChat: ReturnType<typeof useSessionManagement>['handleNewChat'];
   handleCloseChatSession: ReturnType<typeof useSessionManagement>['handleCloseSession'];
   handleRestartSession: () => void;
+  isRestartingSession: boolean;
   handleOpenSubagentTab: (selection: SubagentSelection) => void;
   maxSessions: ReturnType<typeof useWorkspaceData>['maxSessions'];
   hasWorktreePath: boolean;
@@ -232,6 +233,7 @@ export const WorkspaceDetailView = memo(function WorkspaceDetailView({
         onCreateSession={sessionTabs.handleNewChat}
         onCloseSession={sessionTabs.handleCloseChatSession}
         onRestartSession={sessionTabs.handleRestartSession}
+        isRestartingSession={sessionTabs.isRestartingSession}
         maxSessions={sessionTabs.maxSessions}
         hasWorktreePath={sessionTabs.hasWorktreePath}
         emptyState={

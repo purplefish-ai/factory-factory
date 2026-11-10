@@ -8,14 +8,15 @@ type MonitoringMenuState = Pick<PRMonitoringProjection, 'enabled'> &
 export function createPRMonitoringMenuProps(
   workspaceId: string,
   monitoring: MonitoringMenuState,
-  toggle: Pick<UseToggleRatchetingReturn, 'mutate' | 'isPending'>,
+  toggle: Pick<UseToggleRatchetingReturn, 'mutate' | 'pendingWorkspaceIds'>,
   onDiscardBlocked?: () => void
 ): PRMonitoringMenuProps {
   const deliveryMode = monitoring.deliveryMode ?? PRDeliveryMode.MAIN;
   return {
     enabled: monitoring.enabled,
     deliveryMode,
-    pending: toggle.isPending,
+    // Toggles from any surface (card wrench, header, menu) mark this workspace.
+    pending: toggle.pendingWorkspaceIds.includes(workspaceId),
     pauseReason: monitoring.pauseReason,
     ...(onDiscardBlocked && { onDiscardBlocked }),
     onToggle: (enabled) => toggle.mutate({ workspaceId, enabled }),

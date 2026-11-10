@@ -142,6 +142,7 @@ function ScheduledAgentSelection({ controller }: { controller: Controller }) {
           onToggle={controller.toggle}
           onDelete={controller.openDelete}
           pending={controller.pending}
+          toggling={controller.pendingAction === 'toggle'}
           error={controller.actionError}
         >
           <AgentRunHistoryQuery periodicTaskId={task.data.id} projectSlug={project.slug} />
@@ -170,7 +171,7 @@ function AgentsPageSession({
   renderEventCreation: EventCreationRenderer;
 }) {
   const controller = useAgentsController(routeProject, kind);
-  const { id, list, project, mode, pending, actionError } = controller;
+  const { id, list, project, mode, pendingAction, actionError } = controller;
   return (
     <>
       <AgentsDashboardShell
@@ -192,7 +193,7 @@ function AgentsPageSession({
             <Button
               variant="outline"
               size="sm"
-              disabled={controller.events.isFetchingNextPage}
+              pending={controller.events.isFetchingNextPage}
               onClick={() => void controller.events.fetchNextPage()}
             >
               Load more event-triggered automations
@@ -223,17 +224,14 @@ function AgentsPageSession({
       </AgentsDashboardShell>
       <ConfirmDialog
         open={controller.deleteOpen}
-        onOpenChange={(open) => {
-          if (!pending) {
-            controller.setDeleteOpen(open);
-          }
-        }}
+        onOpenChange={controller.setDeleteOpen}
         title="Delete automation?"
         description={`The automation definition and run history will be permanently deleted. Generated workspaces and chats are kept. This cannot be undone.${actionError ? ` ${actionError}` : ''}`}
         confirmText="Delete"
+        pendingText="Deleting…"
         variant="destructive"
         onConfirm={controller.deleteAgent}
-        isPending={pending}
+        isPending={pendingAction === 'delete'}
       />
     </>
   );

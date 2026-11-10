@@ -8,7 +8,6 @@ import { useCLIHealthRefresh } from '@/client/hooks/use-cli-health-refresh';
 import { runInBackground } from '@/client/lib/background-task';
 import { trpc } from '@/client/lib/trpc';
 import { Button } from '@/components/ui/button';
-import { Spinner } from '@/components/ui/spinner';
 
 const SetupTerminalModal = lazy(() =>
   import('@/client/features/project').then((m) => ({ default: m.SetupTerminalModal }))
@@ -193,14 +192,10 @@ export function CLIHealthBannerContent({
               variant="ghost"
               size="sm"
               onClick={onRecheck}
-              disabled={isBusy}
+              pending={isBusy}
               className="text-muted-foreground"
             >
-              {isRefetching ? (
-                <Spinner className="size-3.5" aria-hidden="true" />
-              ) : (
-                <ArrowsClockwiseIcon className="size-3.5" />
-              )}
+              <ArrowsClockwiseIcon className="size-3.5" />
               Recheck
             </Button>
           )}

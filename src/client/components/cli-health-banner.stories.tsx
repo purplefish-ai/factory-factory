@@ -94,6 +94,11 @@ export const MissingTools: Story = {
 
 export const Rechecking: Story = {
   args: { ...SignInRequired.args, isRefetching: true },
+  play: async ({ canvasElement }) => {
+    const recheck = within(canvasElement).getByRole('button', { name: 'Recheck' });
+    await expect(recheck).toBeDisabled();
+    await expect(recheck).toHaveAttribute('aria-busy', 'true');
+  },
 };
 
 export const Healthy: Story = {

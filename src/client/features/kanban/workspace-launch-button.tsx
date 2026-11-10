@@ -7,7 +7,6 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { Spinner } from '@/components/ui/spinner';
 import { cn } from '@/lib/utils';
 
 type LaunchMode = 'STANDARD' | 'PERIODIC_TASK';
@@ -40,11 +39,11 @@ export function WorkspaceLaunchButton({
           mode !== 'STANDARD' && 'bg-primary/90'
         )}
         onClick={onLaunch}
+        pending={isCreating}
         disabled={disabled}
         title={reason}
         aria-description={reason}
       >
-        {isCreating ? <Spinner className="size-3" aria-hidden="true" /> : null}
         <span className="truncate">
           {mode === 'PERIODIC_TASK' ? 'Create automation' : 'Launch'}
         </span>

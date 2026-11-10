@@ -16,6 +16,7 @@ const mocks = vi.hoisted(() => ({
     | undefined,
   archiveMutate: vi.fn(),
   archivePending: false,
+  archiveVariables: undefined as { id: string } | undefined,
   refetch: vi.fn<(options?: RefetchOptions) => Promise<unknown>>(),
   toastError: vi.fn(),
   listError: null as Error | null,
@@ -87,6 +88,9 @@ vi.mock('@/client/lib/trpc', () => ({
             get isPending() {
               return mocks.archivePending;
             },
+            get variables() {
+              return mocks.archiveVariables;
+            },
           };
         },
       },
@@ -96,57 +100,6 @@ vi.mock('@/client/lib/trpc', () => ({
 
 vi.mock('@/components/ui/badge', () => ({
   Badge: ({ children }: { children: ReactNode }) => createElement('span', null, children),
-}));
-
-vi.mock('@/components/ui/button', () => ({
-  Button: ({
-    asChild: _asChild,
-    children,
-    ...props
-  }: React.ButtonHTMLAttributes<HTMLButtonElement> & { asChild?: boolean }) =>
-    createElement('button', props, children),
-}));
-
-vi.mock('@/components/ui/confirm-dialog', () => ({
-  ConfirmDialog: ({
-    open,
-    onOpenChange,
-    onConfirm,
-    isPending,
-  }: {
-    open: boolean;
-    onOpenChange: (open: boolean) => void;
-    onConfirm: () => void;
-    isPending?: boolean;
-  }) =>
-    open
-      ? createElement(
-          'div',
-          { role: 'dialog' },
-          createElement(
-            'button',
-            {
-              type: 'button',
-              onClick: onConfirm,
-              disabled: isPending,
-            },
-            isPending ? 'Archiving' : 'Archive'
-          ),
-          createElement(
-            'button',
-            {
-              type: 'button',
-              'data-testid': 'dismiss-dialog',
-              onClick: () => onOpenChange(false),
-            },
-            'Dismiss'
-          )
-        )
-      : null,
-}));
-
-vi.mock('@/components/ui/spinner', () => ({
-  Spinner: () => createElement('span', { 'aria-label': 'Loading' }),
 }));
 
 vi.mock('@/components/ui/table', () => ({
@@ -194,10 +147,32 @@ function openArchiveDialog(container: HTMLDivElement): void {
   click(container.querySelector('[data-testid="archive-icon"]')?.closest('button') ?? null);
 }
 
+// The real ConfirmDialog renders into a portal on document.body.
+function archiveDialog(): HTMLElement | null {
+  return document.body.querySelector('[role="alertdialog"]');
+}
+
+function dialogButton(label: string): HTMLButtonElement | null {
+  return (
+    Array.from(archiveDialog()?.querySelectorAll('button') ?? []).find(
+      (button) => button.textContent === label
+    ) ?? null
+  );
+}
+
+function setArchivePending(root: Root, projectId: string): void {
+  mocks.archivePending = true;
+  mocks.archiveVariables = { id: projectId };
+  flushSync(() => {
+    root.render(createElement(ProjectsListPage));
+  });
+}
+
 beforeEach(() => {
   mocks.archiveMutationOptions = undefined;
   mocks.archiveMutate.mockReset();
   mocks.archivePending = false;
+  mocks.archiveVariables = undefined;
   mocks.refetch.mockReset();
   mocks.toastError.mockReset();
   mocks.listError = null;
@@ -237,26 +212,23 @@ describe('ProjectsListPage archive confirmation', () => {
     const { container, root } = renderPage();
     openArchiveDialog(container);
 
-    click(container.querySelector('[role="dialog"] button'));
+    click(dialogButton('Archive'));
 
     expect(mocks.archiveMutate).toHaveBeenCalledWith({ id: 'project-1' });
-    expect(container.querySelector('[role="dialog"]')).not.toBeNull();
+    expect(archiveDialog()).not.toBeNull();
 
-    mocks.archivePending = true;
-    flushSync(() => {
-      root.render(createElement(ProjectsListPage));
-    });
+    setArchivePending(root, 'project-1');
 
-    const pendingButton = container.querySelector<HTMLButtonElement>('[role="dialog"] button');
+    const pendingButton = dialogButton('Archiving…');
     expect(pendingButton?.disabled).toBe(true);
-    expect(pendingButton?.textContent).toBe('Archiving');
+    expect(pendingButton?.getAttribute('aria-busy')).toBe('true');
 
     flushSync(() => {
       mocks.archiveMutationOptions?.onError?.(new Error('Archive failed'));
     });
 
     expect(mocks.toastError).toHaveBeenCalledWith('Archive failed');
-    expect(container.querySelector('[role="dialog"]')).not.toBeNull();
+    expect(archiveDialog()).not.toBeNull();
 
     root.unmount();
   });
@@ -273,16 +245,29 @@ describe('ProjectsListPage archive confirmation', () => {
 
   it('prevents the archive dialog from being dismissed while pending', () => {
     const { container, root } = renderPage();
+    const pressEscape = () =>
+      flushSync(() => {
+        archiveDialog()?.dispatchEvent(
+          new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })
+        );
+      });
+    // Control: when idle, the same Escape closes the dialog.
     openArchiveDialog(container);
+    expect(archiveDialog()).not.toBeNull();
+    pressEscape();
+    expect(archiveDialog()).toBeNull();
 
-    mocks.archivePending = true;
+    openArchiveDialog(container);
+    setArchivePending(root, 'project-1');
+
     flushSync(() => {
-      root.render(createElement(ProjectsListPage));
+      archiveDialog()?.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })
+      );
     });
 
-    click(container.querySelector('[data-testid="dismiss-dialog"]'));
-
-    expect(container.querySelector('[role="dialog"]')).not.toBeNull();
+    expect(archiveDialog()).not.toBeNull();
+    expect(dialogButton('Cancel')?.disabled).toBe(true);
 
     root.unmount();
   });
@@ -290,13 +275,32 @@ describe('ProjectsListPage archive confirmation', () => {
   it('closes the dialog and refreshes projects only after archive success', () => {
     const { container, root } = renderPage();
     openArchiveDialog(container);
+    expect(archiveDialog()).not.toBeNull();
 
     flushSync(() => {
       mocks.archiveMutationOptions?.onSuccess?.();
     });
 
-    expect(container.querySelector('[role="dialog"]')).toBeNull();
+    expect(archiveDialog()).toBeNull();
     expect(mocks.refetch).toHaveBeenCalledOnce();
+
+    root.unmount();
+  });
+});
+
+describe('ProjectsListPage archive row state', () => {
+  it('shows pending only on the row being archived', () => {
+    mocks.listData = [ALPHA_PROJECT, { ...ALPHA_PROJECT, id: 'project-2', name: 'Beta' }];
+    const { container, root } = renderPage();
+
+    setArchivePending(root, 'project-2');
+
+    const rowButton = (name: string) =>
+      container.querySelector<HTMLButtonElement>(`button[aria-label="Archive ${name}"]`);
+    expect(rowButton('Beta')?.getAttribute('aria-busy')).toBe('true');
+    expect(rowButton('Beta')?.disabled).toBe(true);
+    expect(rowButton('Alpha')?.hasAttribute('aria-busy')).toBe(false);
+    expect(rowButton('Alpha')?.disabled).toBe(false);
 
     root.unmount();
   });

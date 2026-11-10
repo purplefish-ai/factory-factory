@@ -135,13 +135,9 @@ export function OnboardingCliHealth({ onOpenTerminal }: OnboardingCliHealthProps
           size="sm"
           className="h-7 px-2 text-xs text-muted-foreground"
           onClick={() => void refresh()}
-          disabled={isRefetching || isRefreshing}
+          pending={isRefetching || isRefreshing}
         >
-          {isRefetching || isRefreshing ? (
-            <Spinner className="mr-1 h-3 w-3" aria-hidden="true" />
-          ) : (
-            <ArrowsClockwiseIcon className="mr-1 h-3 w-3" />
-          )}
+          <ArrowsClockwiseIcon className="mr-1 h-3 w-3" />
           Recheck
         </Button>
       </div>

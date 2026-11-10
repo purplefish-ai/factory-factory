@@ -1,7 +1,6 @@
 import { ArrowClockwiseIcon } from '@phosphor-icons/react/dist/csr/ArrowClockwise';
 import { WarningCircleIcon } from '@phosphor-icons/react/dist/csr/WarningCircle';
 import { Button } from '@/components/ui/button';
-import { Spinner } from '@/components/ui/spinner';
 import { cn } from '@/lib/utils';
 
 interface QueryErrorStateProps {
@@ -37,13 +36,15 @@ export function QueryErrorState({
         <p className="text-sm font-medium text-foreground">{title}</p>
         {detail ? <p className="break-words text-xs text-muted-foreground">{detail}</p> : null}
       </div>
-      <Button variant="outline" size="sm" onClick={onRetry} disabled={isRetrying}>
-        {isRetrying ? (
-          <Spinner className="size-3.5" aria-hidden="true" />
-        ) : (
-          <ArrowClockwiseIcon className="size-3.5" aria-hidden="true" />
-        )}
-        {isRetrying ? 'Retrying…' : 'Retry'}
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={onRetry}
+        pending={isRetrying}
+        pendingLabel="Retrying…"
+      >
+        <ArrowClockwiseIcon className="size-3.5" aria-hidden="true" />
+        Retry
       </Button>
     </div>
   );
@@ -89,9 +90,14 @@ export function QueryRefreshError({
         </p>
         {detail ? <p className="break-words text-muted-foreground">{detail}</p> : null}
       </div>
-      <Button variant="ghost" size="xs" onClick={onRetry} disabled={isRetrying}>
-        {isRetrying ? <Spinner className="size-3" aria-hidden="true" /> : null}
-        {isRetrying ? 'Retrying…' : 'Retry'}
+      <Button
+        variant="ghost"
+        size="xs"
+        onClick={onRetry}
+        pending={isRetrying}
+        pendingLabel="Retrying…"
+      >
+        Retry
       </Button>
     </div>
   );

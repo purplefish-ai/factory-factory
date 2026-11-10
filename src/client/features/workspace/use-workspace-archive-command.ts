@@ -19,6 +19,9 @@ export function useWorkspaceArchiveCommand() {
   const single = trpc.workspace.archive.useMutation({ meta: { errorToast: false } });
   const bulk = trpc.workspace.bulkArchive.useMutation({ meta: { errorToast: false } });
 
+  // Not the mutations' isPending: an observer tracks only its latest call, while
+  // several archives can run at once, and an archive stays in progress from the
+  // list cancel before the request until the caches are repaired after it.
   const [active, setActive] = useState({ single: 0, bulk: 0 });
 
   const executeArchive = async (

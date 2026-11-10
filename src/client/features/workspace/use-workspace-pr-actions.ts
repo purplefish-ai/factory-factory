@@ -1,7 +1,9 @@
+import { useState } from 'react';
 import { toast } from 'sonner';
 import { trpc } from '@/client/lib/trpc';
 import { getWorkspacePRAssociationId } from '@/client/lib/workspace-selected-pr';
 import type { WorkspacePullRequest } from '@/shared/workspace-pr';
+import { useTriggerAdversarialReview } from './use-workspace-mutations';
 export function useWorkspacePrActions(
   workspaceId: string,
   projectId?: string,
@@ -23,19 +25,21 @@ export function useWorkspacePrActions(
     onSuccess: refresh,
     onError: (error) => toast.error(error.message),
   });
-  const review = trpc.adversarialReview.trigger.useMutation({
-    onSuccess: (result) => {
-      void utils.session.listSessions.invalidate({ workspaceId });
-      toast.success(
-        result.status === 'already_active'
-          ? 'Adversarial review is already running'
-          : 'Review started'
-      );
-    },
-    onError: (error) => toast.error(error.message),
-  });
+  const review = useTriggerAdversarialReview(workspaceId);
+  // The displayed PR being reviewed: legacy PRs send no prId, so the mutation's
+  // variables cannot tell them apart.
+  const [reviewingPrId, setReviewingPrId] = useState<string | null>(null);
+  const reviewTarget = (prId: string) => {
+    const pr = prs?.find((candidate) => candidate.id === prId);
+    return pr ? getWorkspacePRAssociationId(pr) : prId;
+  };
   return {
     pending: attach.isPending || detach.isPending || review.isPending || discard.isPending,
+    adding: attach.isPending,
+    removing: detach.isPending,
+    discarding: discard.isPending,
+    /** Whether the review in flight is for this PR. */
+    isReviewing: (prId: string) => review.isPending && reviewingPrId === prId,
     add: async (url: string) => {
       try {
         await attach.mutateAsync({ id: workspaceId, prUrl: url });
@@ -65,8 +69,8 @@ export function useWorkspacePrActions(
       }
     },
     review: (prId: string) => {
-      const pr = prs?.find((candidate) => candidate.id === prId);
-      const associationId = pr ? getWorkspacePRAssociationId(pr) : prId;
+      const associationId = reviewTarget(prId);
+      setReviewingPrId(prId);
       review.mutate({ workspaceId, ...(associationId !== null ? { prId: associationId } : {}) });
     },
   };

@@ -13,7 +13,16 @@ import { trpc } from '@/client/lib/trpc';
 import type { AgentFormValues, AgentProject, AgentListItem, EventAgentSummary } from './types';
 
 function mutationErrorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : "Couldn't update automation. Please try again.";
+  return error instanceof Error ? error.message : 'Please try again.';
+}
+
+type AgentAction = 'toggle' | 'delete';
+
+function actionVerb(operation: AgentAction, enabled: boolean): string {
+  if (operation === 'delete') {
+    return 'delete';
+  }
+  return enabled ? 'pause' : 'resume';
 }
 
 function initialAgentSelection(
@@ -56,7 +65,9 @@ export function useAgentsController(project: AgentProject, kind: AgentKind = 'sc
   currentMode.current = mode;
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
-  const [pending, setPending] = useState(false);
+  // Covers the whole action (mutation, cache update, navigation) and blocks a
+  // second click before the mutation's pending state reaches React.
+  const [pendingAction, setPendingAction] = useState<AgentAction | null>(null);
   const pendingRef = useRef(false);
   const currentId = useRef(id);
   currentId.current = id;
@@ -83,23 +94,15 @@ export function useAgentsController(project: AgentProject, kind: AgentKind = 'sc
     { enabled: !!id && kind === 'event', refetchInterval: POLL_INTERVAL_MS.activity }
   );
   const [savedEvent, setSavedEvent] = useState(false);
-  const create = trpc.periodicTask.create.useMutation({
-    onError: (error) => toast.error(`Couldn't create automation. ${error.message}`),
-  });
-  const update = trpc.periodicTask.update.useMutation({
-    onError: (error) => toast.error(`Couldn't update automation. ${error.message}`),
-  });
-  const toggle = trpc.periodicTask.toggleEnabled.useMutation({
-    onError: (error, variables) =>
-      toast.error(
-        `Couldn't ${variables.enabled ? 'resume' : 'pause'} automation. ${error.message}`
-      ),
-  });
-  const remove = trpc.periodicTask.delete.useMutation({
-    onError: (error) => toast.error(`Couldn't delete automation. ${error.message}`),
-  });
+  // Failures show inline: the form keeps its draft beside the error, and the
+  // detail view and delete dialog show action errors. A toast reports only a
+  // failure whose editor or agent is no longer on screen.
+  const create = trpc.periodicTask.create.useMutation({ meta: { errorToast: false } });
+  const update = trpc.periodicTask.update.useMutation({ meta: { errorToast: false } });
+  const toggle = trpc.periodicTask.toggleEnabled.useMutation({ meta: { errorToast: false } });
+  const remove = trpc.periodicTask.delete.useMutation({ meta: { errorToast: false } });
   const createDisabled =
-    pending ||
+    pendingAction !== null ||
     create.isPending ||
     update.isPending ||
     !!project.isArchived ||
@@ -151,16 +154,29 @@ export function useAgentsController(project: AgentProject, kind: AgentKind = 'sc
       "Couldn't refresh automations."
     );
   };
+  const isCurrentEditor = (editMode: 'create' | 'edit') =>
+    active.current &&
+    currentId.current === id &&
+    currentProjectId.current === project.id &&
+    currentMode.current === editMode;
   const save = async (values: AgentFormValues) => {
+    const editMode = mode === 'create' ? 'create' : 'edit';
+    try {
+      await saveValues(values);
+    } catch (error) {
+      if (!isCurrentEditor(editMode)) {
+        toast.error(
+          `Couldn't ${editMode === 'create' ? 'create' : 'update'} automation. ${mutationErrorMessage(error)}`
+        );
+      }
+      throw error;
+    }
+  };
+  const saveValues = async (values: AgentFormValues) => {
     if (mode === 'create') {
       const created = await create.mutateAsync({ projectId: project.id, ...values });
       invalidate(project.id, created.id);
-      if (
-        active.current &&
-        currentId.current === id &&
-        currentProjectId.current === project.id &&
-        currentMode.current === 'create'
-      ) {
+      if (isCurrentEditor('create')) {
         void navigate(getProjectAgentPath(project.slug, created.id), {
           replace: location.state?.createAgent === true,
         });
@@ -168,12 +184,7 @@ export function useAgentsController(project: AgentProject, kind: AgentKind = 'sc
     } else if (kind === 'scheduled' && id && task.data?.projectId === project.id) {
       await update.mutateAsync({ id, ...values });
       invalidate(task.data.projectId, id);
-      if (
-        active.current &&
-        currentId.current === id &&
-        currentProjectId.current === project.id &&
-        currentMode.current === 'edit'
-      ) {
+      if (isCurrentEditor('edit')) {
         setMode('detail');
       }
     }
@@ -181,10 +192,18 @@ export function useAgentsController(project: AgentProject, kind: AgentKind = 'sc
   const finishAction = () => {
     pendingRef.current = false;
     if (active.current) {
-      setPending(false);
+      setPendingAction(null);
     }
   };
-  const performAction = async (operation: 'toggle' | 'delete') => {
+  const reportActionError = (verb: string, targetId: string, error: unknown) => {
+    const message = `Couldn't ${verb} automation. ${mutationErrorMessage(error)}`;
+    if (active.current && currentId.current === targetId) {
+      setActionError(message);
+    } else {
+      toast.error(message);
+    }
+  };
+  const performAction = async (operation: AgentAction) => {
     if (
       kind !== 'scheduled' ||
       project.isArchived ||
@@ -197,7 +216,7 @@ export function useAgentsController(project: AgentProject, kind: AgentKind = 'sc
     const target = task.data;
     const targetId = id;
     pendingRef.current = true;
-    setPending(true);
+    setPendingAction(operation);
     setActionError(null);
     try {
       if (operation === 'toggle') {
@@ -217,10 +236,7 @@ export function useAgentsController(project: AgentProject, kind: AgentKind = 'sc
         void navigate(getProjectSectionPath(project.slug, 'agents'));
       }
     } catch (error) {
-      if (!active.current || currentId.current !== targetId) {
-        return;
-      }
-      setActionError(mutationErrorMessage(error));
+      reportActionError(actionVerb(operation, target.isEnabled), targetId, error);
     } finally {
       finishAction();
     }
@@ -264,7 +280,8 @@ export function useAgentsController(project: AgentProject, kind: AgentKind = 'sc
     deleteOpen,
     setDeleteOpen,
     actionError,
-    pending: pending || create.isPending || update.isPending,
+    pending: pendingAction !== null || create.isPending || update.isPending,
+    pendingAction,
     save,
     createDisabled,
     openDelete: () => {

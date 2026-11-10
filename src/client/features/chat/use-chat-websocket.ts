@@ -1,3 +1,5 @@
+import { useMutationState } from '@tanstack/react-query';
+import { getMutationKey } from '@trpc/react-query';
 import { useCallback, useEffect, useRef } from 'react';
 import { toast } from 'sonner';
 import { trpc } from '@/client/lib/trpc';
@@ -109,6 +111,8 @@ export interface UseChatWebSocketReturn {
   sendMessage: (text: string, options?: SendMessageOptions) => void;
   stopChat: () => void;
   restartSession: () => void;
+  // A restart of this session is in flight
+  isRestartingSession: boolean;
   approvePermission: (requestId: string, allow: boolean, optionId?: string) => void;
   answerQuestion: (requestId: string, answers: Record<string, string | string[]>) => void;
   updateSettings: (settings: Partial<ChatSettings>) => void;
@@ -136,6 +140,15 @@ export interface UseChatWebSocketReturn {
  * 2. Uses useChatState for all chat state and actions
  * 3. Wires them together with the appropriate callbacks
  */
+function restartedSessionId(variables: unknown): string | undefined {
+  return typeof variables === 'object' &&
+    variables !== null &&
+    'id' in variables &&
+    typeof variables.id === 'string'
+    ? variables.id
+    : undefined;
+}
+
 export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSocketReturn {
   const { dbSessionId } = options;
 
@@ -359,6 +372,13 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
   const { mutate: restartSessionMutate } = trpc.session.restartSession.useMutation({
     onError: (error) => toast.error(`Couldn't restart session. ${error.message}`),
   });
+  // Every in-flight restart, not just this observer's latest, so restarting a
+  // second session cannot clear the first one's pending state early.
+  const restartingSessionIds = useMutationState({
+    filters: { mutationKey: getMutationKey(trpc.session.restartSession), status: 'pending' },
+    select: (mutation) => restartedSessionId(mutation.state.variables),
+  });
+  const isRestartingSession = dbSessionId !== null && restartingSessionIds.includes(dbSessionId);
   const restartSession = useCallback(() => {
     if (!dbSessionId) {
       return;
@@ -419,6 +439,7 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
     sendMessage: chat.sendMessage,
     stopChat: chat.stopChat,
     restartSession,
+    isRestartingSession,
     approvePermission: chat.approvePermission,
     answerQuestion: chat.answerQuestion,
     updateSettings: chat.updateSettings,

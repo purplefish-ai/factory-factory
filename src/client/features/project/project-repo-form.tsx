@@ -6,7 +6,6 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Spinner } from '@/components/ui/spinner';
 
 export interface ProjectRepoFormProps {
   error: string;
@@ -102,19 +101,18 @@ export function ProjectRepoForm({
       {footerActions ? (
         <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end sm:gap-4">
           {footerActions}
-          <Button type="submit" disabled={isSubmitting}>
-            {isSubmitting && <Spinner className="mr-2" />}
-            {isSubmitting ? submittingLabel : submitLabel}
+          <Button type="submit" pending={isSubmitting} pendingLabel={submittingLabel}>
+            {submitLabel}
           </Button>
         </div>
       ) : (
         <Button
           type="submit"
           className={submitFullWidth ? 'w-full' : undefined}
-          disabled={isSubmitting}
+          pending={isSubmitting}
+          pendingLabel={submittingLabel}
         >
-          {isSubmitting && <Spinner className="mr-2" />}
-          {isSubmitting ? submittingLabel : submitLabel}
+          {submitLabel}
         </Button>
       )}
     </form>

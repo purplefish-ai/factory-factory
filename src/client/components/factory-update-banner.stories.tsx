@@ -125,7 +125,14 @@ export const ManualInstallation: Story = {
     ).not.toBeInTheDocument();
   },
 };
-export const RequestPending: Story = { args: { isPending: true } };
+export const RequestPending: Story = {
+  args: { isPending: true },
+  play: async ({ canvasElement }) => {
+    const update = within(canvasElement).getByRole('button', { name: /^Update$/ });
+    await expect(update).toBeDisabled();
+    await expect(update).toHaveAttribute('aria-busy', 'true');
+  },
+};
 export const NoUpdates: Story = { args: { updates: { ...updates, notices: [] } } };
 export const SimultaneousUpdatesDark: Story = { globals: { theme: 'dark' } };
 export const Phone: Story = { globals: { viewport: { value: 'phone', isRotated: false } } };

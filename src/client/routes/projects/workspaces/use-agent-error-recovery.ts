@@ -29,6 +29,7 @@ interface AgentErrorRecoveryInput {
   hasPendingMessages: boolean;
   sendMessage: ReturnType<typeof useChatWebSocket>['sendMessage'];
   restartSession?: () => void;
+  isRestartingSession?: boolean;
 }
 
 /**
@@ -49,6 +50,7 @@ export function useAgentErrorRecovery({
   hasPendingMessages,
   sendMessage,
   restartSession,
+  isRestartingSession = false,
 }: AgentErrorRecoveryInput): AgentErrorStripProps | null {
   const message =
     sessionRuntime.phase === 'error' ? getSessionRuntimeErrorMessage(sessionRuntime) : null;
@@ -82,6 +84,7 @@ export function useAgentErrorRecovery({
     onRetry: lastUserMessage ? retry : undefined,
     retryDisabled: !connected || hasPendingMessages,
     onRestart: restartSession,
+    restartPending: isRestartingSession,
     onDismiss: dismiss,
   };
 }

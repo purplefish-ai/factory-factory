@@ -23,6 +23,8 @@ export function AgentForm({ initialValues, onSave, onCancel }: AgentFormProps) {
   const [prompt, setPrompt] = useState(baseline?.prompt ?? '');
   const [cadence, setCadence] = useState<AgentCadence>(baseline?.cadence ?? 'DAILY');
   const [scheduledTime, setScheduledTime] = useState(baseline?.scheduledTime ?? '');
+  // onSave spans the mutation and the navigation after it; the ref blocks a
+  // second submit before the pending render commits.
   const [pending, setPending] = useState(false);
   const pendingRef = useRef(false);
   const [error, setError] = useState<string | null>(null);
@@ -125,8 +127,8 @@ export function AgentForm({ initialValues, onSave, onCancel }: AgentFormProps) {
         <Button type="button" variant="outline" onClick={onCancel} disabled={pending}>
           Cancel
         </Button>
-        <Button type="submit" disabled={pending}>
-          {pending ? 'Saving…' : baseline ? 'Save changes' : 'Create automation'}
+        <Button type="submit" pending={pending} pendingLabel="Saving…">
+          {baseline ? 'Save changes' : 'Create automation'}
         </Button>
       </div>
     </form>

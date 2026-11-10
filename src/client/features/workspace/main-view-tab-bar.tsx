@@ -294,6 +294,10 @@ interface MainViewTabBarProps {
   onCloseSession?: (sessionId: string) => void;
   onSelectClosedSession?: (sessionId: string) => void;
   onRestartSession?: () => void;
+  /** A restart of the selected chat is in flight. */
+  isRestartingSession?: boolean;
+  /** A new chat is being created: "+" shows a spinner. */
+  isCreatingSession?: boolean;
   disabled?: boolean;
   /** Maximum sessions allowed per workspace */
   maxSessions?: number;
@@ -311,6 +315,8 @@ export function MainViewTabBar({
   onCloseSession,
   onSelectClosedSession,
   onRestartSession,
+  isRestartingSession = false,
+  isCreatingSession = false,
   disabled,
   maxSessions,
 }: MainViewTabBarProps) {
@@ -494,6 +500,7 @@ export function MainViewTabBar({
                   provider={sessions?.[0]?.provider}
                   onCreate={onCreateSession}
                   disabled={isButtonDisabled}
+                  pending={isCreatingSession}
                 />
               </span>
             </TooltipTrigger>
@@ -511,6 +518,7 @@ export function MainViewTabBar({
             chatLabel={currentSessionLabel}
             onRename={() => setRenamingSessionId(currentSessionId ?? null)}
             onRestartSession={onRestartSession}
+            restartPending={isRestartingSession}
             disabled={disabled}
           />
         </div>

@@ -119,7 +119,7 @@ vi.mock('./kanban-context', () => ({
     isFetching: false,
     refetch: mocks.refetch,
     toggleWorkspaceRatcheting: vi.fn(),
-    togglingWorkspaceId: null,
+    togglingWorkspaceIds: [],
     renameWorkspace: vi.fn(),
     // The real context recreates its commands on every render.
     archiveWorkspace: (workspaceId: string) => mocks.archiveWorkspace(workspaceId),

@@ -16,6 +16,8 @@ export interface AgentErrorStripProps {
   onRetry?: () => void;
   /** Stops and restarts the agent, resuming its conversation. */
   onRestart?: () => void;
+  /** A restart is in flight: Restart agent shows a spinner and is disabled. */
+  restartPending?: boolean;
   onDismiss?: () => void;
   /** Disables Retry, e.g. while the chat connection is down. */
   retryDisabled?: boolean;
@@ -30,6 +32,7 @@ export function AgentErrorStrip({
   message,
   onRetry,
   onRestart,
+  restartPending = false,
   onDismiss,
   retryDisabled = false,
   className,
@@ -88,6 +91,8 @@ export function AgentErrorStrip({
             size="sm"
             variant="outline"
             title="Stop and restart the agent, resuming from where it left off"
+            pending={restartPending}
+            pendingLabel="Restarting…"
             onClick={onRestart}
           >
             <ArrowsClockwiseIcon aria-hidden="true" />

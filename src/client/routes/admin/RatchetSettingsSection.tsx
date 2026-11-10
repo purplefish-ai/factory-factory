@@ -4,7 +4,6 @@ import { RatchetWrenchIcon } from '@/client/features/workspace';
 import { trpc } from '@/client/lib/trpc';
 import { useUpdateUserSettings, useUserSettings } from '@/client/lib/user-settings-queries';
 import { Button } from '@/components/ui/button';
-import { Spinner } from '@/components/ui/spinner';
 import { Switch } from '@/components/ui/switch';
 import { SettingRow, SettingSelect, SettingsSection } from './settings-section';
 
@@ -95,19 +94,11 @@ export function RatchetSettingsSection() {
               variant="outline"
               size="sm"
               onClick={() => triggerRatchetCheck.mutate()}
-              disabled={triggerRatchetCheck.isPending}
+              pending={triggerRatchetCheck.isPending}
+              pendingLabel="Checking…"
             >
-              {triggerRatchetCheck.isPending ? (
-                <>
-                  <Spinner className="w-4 h-4 mr-2" aria-hidden="true" />
-                  Checking…
-                </>
-              ) : (
-                <>
-                  <ArrowsClockwiseIcon className="w-4 h-4 mr-2" />
-                  Check all PRs now
-                </>
-              )}
+              <ArrowsClockwiseIcon className="w-4 h-4 mr-2" />
+              Check all PRs now
             </Button>
           </SettingRow>
         </>

@@ -31,6 +31,14 @@ export const OnIdle: Story = {
   },
 };
 
+export const Pending: Story = {
+  args: {
+    enabled: false,
+    state: 'IDLE',
+    pending: true,
+  },
+};
+
 export const OnProcessing: Story = {
   args: {
     enabled: true,

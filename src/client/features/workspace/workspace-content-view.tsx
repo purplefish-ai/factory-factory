@@ -29,6 +29,8 @@ export interface WorkspaceContentViewProps {
   onCreateSession: (codexAccountId?: string) => void;
   onCloseSession: (sessionId: string) => void;
   onRestartSession?: () => void;
+  /** A restart of the selected chat is in flight. */
+  isRestartingSession?: boolean;
   children: ReactNode;
   /** Route-owned recovery content for workspaces without a session. */
   emptyState?: ReactNode;
@@ -61,6 +63,7 @@ export const WorkspaceContentView = memo(function WorkspaceContentView({
   onCreateSession,
   onCloseSession,
   onRestartSession,
+  isRestartingSession = false,
   children,
   emptyState,
   maxSessions,
@@ -84,6 +87,8 @@ export const WorkspaceContentView = memo(function WorkspaceContentView({
           onCreateSession={onCreateSession}
           onCloseSession={onCloseSession}
           onRestartSession={onRestartSession}
+          isRestartingSession={isRestartingSession}
+          isCreatingSession={isCreatingSession}
           onSelectClosedSession={(sessionId) => {
             // Use a generic label - the tab will show the archive icon
             openTab('closed-session', sessionId, 'History');

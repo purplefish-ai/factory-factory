@@ -11,7 +11,7 @@ it('keeps monitoring toggles independent from the rendered mode and guards expli
       bindingRevision: 7,
       pauseReason: 'SESSION_FAILED',
     },
-    { mutate, isPending: true }
+    { mutate, pendingWorkspaceIds: ['w'] }
   );
   expect(menu).toMatchObject({
     enabled: false,
@@ -47,14 +47,17 @@ it('keeps monitoring toggles independent from the rendered mode and guards expli
 });
 it('defaults legacy menu projections to MAIN', () => {
   expect(
-    createPRMonitoringMenuProps('w', { enabled: false }, { mutate: vi.fn(), isPending: false })
-      .deliveryMode
+    createPRMonitoringMenuProps(
+      'w',
+      { enabled: false },
+      { mutate: vi.fn(), pendingWorkspaceIds: [] }
+    ).deliveryMode
   ).toBe('MAIN');
 });
 
 it('passes the blocked delivery discard action through only when supplied', () => {
   const discard = vi.fn();
-  const toggle = { mutate: vi.fn(), isPending: false };
+  const toggle = { mutate: vi.fn(), pendingWorkspaceIds: [] };
   const menu = createPRMonitoringMenuProps(
     'w',
     { enabled: true, pauseReason: 'DELIVERY_BLOCKED' },
@@ -67,4 +70,10 @@ it('passes the blocked delivery discard action through only when supplied', () =
   expect(createPRMonitoringMenuProps('w', { enabled: true }, toggle)).not.toHaveProperty(
     'onDiscardBlocked'
   );
+});
+
+it('marks only the workspace whose toggle is in flight as pending', () => {
+  const toggle = { mutate: vi.fn(), pendingWorkspaceIds: ['other'] };
+  expect(createPRMonitoringMenuProps('w', { enabled: true }, toggle).pending).toBe(false);
+  expect(createPRMonitoringMenuProps('other', { enabled: true }, toggle).pending).toBe(true);
 });

@@ -1,15 +1,5 @@
 import { memo } from 'react';
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog';
-import { Button, buttonVariants } from '@/components/ui/button';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 
 export interface ArchiveGitLockDialogProps {
   open: boolean;
@@ -17,6 +7,7 @@ export interface ArchiveGitLockDialogProps {
   onRetry: () => void;
   onRemoveLockAndArchive: () => void;
   workspaceCount?: number;
+  /** Archives are still in flight; recovery waits until they settle. */
   isPending?: boolean;
 }
 
@@ -30,45 +21,24 @@ export const ArchiveGitLockDialog = memo(function ArchiveGitLockDialog({
 }: ArchiveGitLockDialogProps) {
   const plural = workspaceCount !== 1;
 
+  // Archiving is optimistic: the dialog closes and the board or the archive
+  // overlay shows progress. A repeated lock failure reopens it.
   const runAndClose = (action: () => void) => {
     onOpenChange(false);
     action();
   };
 
   return (
-    <AlertDialog open={open} onOpenChange={onOpenChange}>
-      <AlertDialogContent>
-        <AlertDialogHeader>
-          <AlertDialogTitle>Git is locked</AlertDialogTitle>
-          <AlertDialogDescription>
-            Another Git operation may be running, or an earlier operation may have stopped
-            unexpectedly. Retry without changing the lock, or remove the lock and archive
-            {plural ? ` the ${workspaceCount} affected workspaces` : ' this workspace'}. Remove the
-            lock only if you are sure no other Git operation is running.
-          </AlertDialogDescription>
-        </AlertDialogHeader>
-        <AlertDialogFooter>
-          <AlertDialogCancel disabled={isPending}>Cancel</AlertDialogCancel>
-          <Button
-            type="button"
-            variant="outline"
-            disabled={isPending}
-            onClick={() => runAndClose(onRetry)}
-          >
-            Retry
-          </Button>
-          <AlertDialogAction
-            disabled={isPending}
-            className={buttonVariants({ variant: 'destructive' })}
-            onClick={(event) => {
-              event.preventDefault();
-              runAndClose(onRemoveLockAndArchive);
-            }}
-          >
-            Remove Lock and Archive
-          </AlertDialogAction>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
+    <ConfirmDialog
+      open={open}
+      onOpenChange={onOpenChange}
+      title="Git is locked"
+      description={`Another Git operation may be running, or an earlier operation may have stopped unexpectedly. Retry without changing the lock, or remove the lock and archive ${plural ? `the ${workspaceCount} affected workspaces` : 'this workspace'}. Remove the lock only if you are sure no other Git operation is running.`}
+      confirmText="Remove Lock and Archive"
+      variant="destructive"
+      onConfirm={() => runAndClose(onRemoveLockAndArchive)}
+      secondaryAction={{ label: 'Retry', onClick: () => runAndClose(onRetry) }}
+      isPending={isPending}
+    />
   );
 });

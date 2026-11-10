@@ -111,14 +111,11 @@ export function ScreenshotsPanel({
       </QueryState>
       <ConfirmDialog
         open={deleteDialogOpen}
-        onOpenChange={(open) => {
-          if (!(open || deleteMutation.isPending)) {
-            setDeleteDialogOpen(false);
-          }
-        }}
+        onOpenChange={setDeleteDialogOpen}
         title="Delete screenshot?"
         description={`"${deleteTarget?.name ?? ''}" will be permanently deleted from this workspace. This can't be undone.`}
         confirmText="Delete"
+        pendingText="Deleting…"
         variant="destructive"
         isPending={deleteMutation.isPending}
         onConfirm={() => {

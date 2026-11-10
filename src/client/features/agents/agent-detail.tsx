@@ -11,7 +11,10 @@ export interface AgentDetailProps {
   onEdit: () => void;
   onToggle: () => void;
   onDelete: () => void;
+  /** Any action on this agent is in flight; its controls are disabled. */
   pending?: boolean;
+  /** The pause or resume request is in flight. */
+  toggling?: boolean;
   error?: string | null;
   children?: ReactNode;
 }
@@ -21,6 +24,7 @@ export function AgentDetail({
   onToggle,
   onDelete,
   pending,
+  toggling = false,
   error,
   children,
 }: AgentDetailProps) {
@@ -37,7 +41,14 @@ export function AgentDetail({
           <Button variant="outline" size="sm" onClick={onEdit} disabled={pending}>
             Edit automation
           </Button>
-          <Button variant="outline" size="sm" onClick={onToggle} disabled={pending}>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={onToggle}
+            disabled={pending}
+            pending={toggling}
+            pendingLabel={agent.isEnabled ? 'Pausing…' : 'Resuming…'}
+          >
             {agent.isEnabled ? 'Pause' : 'Resume'}
           </Button>
           <Button

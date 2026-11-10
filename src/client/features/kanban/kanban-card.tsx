@@ -7,7 +7,7 @@ import { PencilIcon } from '@phosphor-icons/react/dist/csr/Pencil';
 import { PlayIcon } from '@phosphor-icons/react/dist/csr/Play';
 import { RobotIcon } from '@phosphor-icons/react/dist/csr/Robot';
 import { WarningIcon } from '@phosphor-icons/react/dist/csr/Warning';
-import { memo, useState } from 'react';
+import { memo, type RefObject, useState } from 'react';
 import { Link } from 'react-router';
 import { UnreadMailBadge } from '@/client/features/inbox';
 import {
@@ -24,6 +24,7 @@ import { isWorkspaceDoneOrMerged } from '@/client/lib/workspace-archive';
 import { getWorkspaceSelectedPR } from '@/client/lib/workspace-selected-pr';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Spinner } from '@/components/ui/spinner';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 import type { WorkspaceStatus } from '@/shared/core';
@@ -305,7 +306,8 @@ function CardTitleIcons({
         state={workspace.ratchetState}
         animated={workspace.ratchetButtonAnimated ?? false}
         className="h-5 w-5 shrink-0"
-        disabled={isTogglePending || isArchived || !onToggleRatcheting}
+        pending={isTogglePending}
+        disabled={isArchived || !onToggleRatcheting}
         stopPropagation
         onToggle={(enabled) => {
           onToggleRatcheting?.(workspace.id, enabled);
@@ -401,6 +403,55 @@ function CardFamilyMetadata({
   );
 }
 
+/** The card title while renaming; a spinner beside it shows the save is in flight. */
+function InlineNameEditor({
+  inputRef,
+  value,
+  isSaving,
+  onChange,
+  onSave,
+  onCancel,
+}: {
+  inputRef: RefObject<HTMLInputElement | null>;
+  value: string;
+  isSaving: boolean;
+  onChange: (value: string) => void;
+  onSave: () => Promise<void>;
+  onCancel: () => void;
+}) {
+  return (
+    <>
+      <input
+        ref={inputRef}
+        readOnly={isSaving}
+        aria-busy={isSaving}
+        aria-label="Workspace name"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' && !e.nativeEvent.isComposing) {
+            e.preventDefault();
+            e.currentTarget.blur();
+          } else if (e.key === 'Escape') {
+            e.preventDefault();
+            onCancel();
+          }
+          e.stopPropagation();
+        }}
+        onBlur={() => void onSave()}
+        onClick={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+        }}
+        className="relative z-10 flex-1 min-w-0 text-sm font-medium leading-tight bg-transparent border-b border-primary outline-none"
+      />
+      {isSaving && (
+        <Spinner aria-label="Saving workspace name" className="size-3.5 text-muted-foreground" />
+      )}
+    </>
+  );
+}
+
 export const KanbanCard = memo(function KanbanCard({
   workspace,
   projectSlug,
@@ -455,29 +506,13 @@ export const KanbanCard = memo(function KanbanCard({
       <CardHeader className="pb-2">
         <div className="flex min-w-0 items-start justify-between gap-2">
           {isEditing ? (
-            <input
-              ref={inputRef}
-              readOnly={isSaving}
-              aria-busy={isSaving}
-              aria-label="Workspace name"
+            <InlineNameEditor
+              inputRef={inputRef}
               value={editValue}
-              onChange={(e) => setEditValue(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && !e.nativeEvent.isComposing) {
-                  e.preventDefault();
-                  e.currentTarget.blur();
-                } else if (e.key === 'Escape') {
-                  e.preventDefault();
-                  handleCancelRename();
-                }
-                e.stopPropagation();
-              }}
-              onBlur={() => void handleSaveRename()}
-              onClick={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-              }}
-              className="relative z-10 flex-1 min-w-0 text-sm font-medium leading-tight bg-transparent border-b border-primary outline-none"
+              isSaving={isSaving}
+              onChange={setEditValue}
+              onSave={handleSaveRename}
+              onCancel={handleCancelRename}
             />
           ) : (
             <CardTitle className="flex flex-1 items-start gap-1.5 min-w-0 text-sm font-medium leading-tight">

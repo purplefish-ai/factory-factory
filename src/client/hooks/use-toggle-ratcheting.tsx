@@ -1,3 +1,5 @@
+import { useMutationState } from '@tanstack/react-query';
+import { getMutationKey } from '@trpc/react-query';
 import { type ReactNode, useState } from 'react';
 import { toast } from 'sonner';
 import {
@@ -19,7 +21,21 @@ export interface UseToggleRatchetingReturn {
   mutate(input: ToggleRatchetingInput): void;
   mutateAsync(input: ToggleRatchetingInput): Promise<unknown>;
   isPending: boolean;
+  /**
+   * Workspaces with a toggle in flight from any caller, so each card or menu
+   * shows its own pending state while other workspaces toggle independently.
+   */
+  pendingWorkspaceIds: readonly string[];
   recipientPicker: ReactNode;
+}
+
+function pendingWorkspaceId(variables: unknown): string | undefined {
+  return typeof variables === 'object' &&
+    variables !== null &&
+    'workspaceId' in variables &&
+    typeof variables.workspaceId === 'string'
+    ? variables.workspaceId
+    : undefined;
 }
 export function useToggleRatcheting(projectId?: string): UseToggleRatchetingReturn {
   const utils = trpc.useUtils();
@@ -65,10 +81,15 @@ export function useToggleRatcheting(projectId?: string): UseToggleRatchetingRetu
       }
     },
   });
+  const pendingWorkspaceIds = useMutationState({
+    filters: { mutationKey: getMutationKey(trpc.workspace.toggleRatcheting), status: 'pending' },
+    select: (pending) => pendingWorkspaceId(pending.state.variables),
+  }).filter((id) => id !== undefined);
   return {
     mutate: mutation.mutate,
     mutateAsync: mutation.mutateAsync,
     isPending: mutation.isPending,
+    pendingWorkspaceIds,
     recipientPicker: selection ? (
       <PRRecipientPicker
         candidates={selection.candidates}

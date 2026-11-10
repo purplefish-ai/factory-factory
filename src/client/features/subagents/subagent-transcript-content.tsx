@@ -4,7 +4,6 @@ import { EmptyState } from '@/client/components/empty-state';
 import { Loading } from '@/client/components/loading';
 import { ChatTranscript, type TranscriptScrollOptions } from '@/client/features/chat';
 import { Button } from '@/components/ui/button';
-import { Spinner } from '@/components/ui/spinner';
 import type { ChatMessage } from '@/lib/chat-protocol';
 import { groupAdjacentToolCalls } from '@/lib/chat-protocol';
 import type { SubagentSelection } from './types';
@@ -130,17 +129,11 @@ function ReadyState({
                   type="button"
                   variant="outline"
                   size="sm"
-                  disabled={state.loadingOlder}
+                  pending={state.loadingOlder}
+                  pendingLabel="Loading older…"
                   onClick={state.onLoadOlder}
                 >
-                  {state.loadingOlder ? (
-                    <>
-                      <Spinner className="size-3" aria-hidden="true" />
-                      Loading older…
-                    </>
-                  ) : (
-                    'Load older'
-                  )}
+                  Load older
                 </Button>
               </div>
             )}

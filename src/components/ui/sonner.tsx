@@ -1,10 +1,10 @@
 import { CheckCircleIcon } from '@phosphor-icons/react/dist/csr/CheckCircle';
 import { InfoIcon } from '@phosphor-icons/react/dist/csr/Info';
-import { SpinnerGapIcon } from '@phosphor-icons/react/dist/csr/SpinnerGap';
 import { WarningIcon } from '@phosphor-icons/react/dist/csr/Warning';
 import { XCircleIcon } from '@phosphor-icons/react/dist/csr/XCircle';
 import { useTheme } from 'next-themes';
 import { type ExternalToast, Toaster as Sonner, type ToasterProps, toast } from 'sonner';
+import { Spinner } from '@/components/ui/spinner';
 
 /**
  * Error toasts stay up longer than sonner's 4 s default and get a close button,
@@ -52,7 +52,7 @@ const Toaster = ({ ...props }: ToasterProps) => {
         info: <InfoIcon className="size-4" />,
         warning: <WarningIcon className="size-4" />,
         error: <XCircleIcon className="size-4" />,
-        loading: <SpinnerGapIcon className="size-4 animate-spin" />,
+        loading: <Spinner aria-hidden="true" />,
       }}
       // Sonner's description color is fixed per sonner theme; use the app token
       // so the server detail stays readable on the popover background.

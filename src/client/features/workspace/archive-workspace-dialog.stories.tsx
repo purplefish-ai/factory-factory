@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react';
-import { expect, fn, within } from 'storybook/test';
+import { expect, fn, userEvent, waitFor, within } from 'storybook/test';
 import { ArchiveWorkspaceDialog } from './archive-workspace-dialog';
 
 const meta = {
@@ -36,5 +36,16 @@ export const Phone: Story = { globals: { viewport: { value: 'phone', isRotated: 
 export const WithActiveChildren: Story = {
   args: {
     activeChildCount: 2,
+  },
+  play: async ({ args }) => {
+    const dialog = await within(document.body).findByRole('alertdialog');
+    await expect(dialog).toHaveTextContent('This workspace has 2 active child workspaces.');
+    const archive = within(dialog).getByRole('button', { name: 'Archive' });
+    // Radix lifts the body's pointer lock once the modal has mounted.
+    await waitFor(() => expect(getComputedStyle(archive).pointerEvents).not.toBe('none'));
+    await userEvent.click(archive);
+    // Archiving is optimistic: confirming closes the dialog at once.
+    await expect(args.onConfirm).toHaveBeenCalledOnce();
+    await expect(args.onOpenChange).toHaveBeenCalledWith(false);
   },
 };

@@ -53,6 +53,7 @@ export interface ChatContentProps {
   sendMessage: ReturnType<typeof useChatWebSocket>['sendMessage'];
   stopChat: ReturnType<typeof useChatWebSocket>['stopChat'];
   restartSession?: ReturnType<typeof useChatWebSocket>['restartSession'];
+  isRestartingSession?: boolean;
   inputRef: ReturnType<typeof useChatWebSocket>['inputRef'];
   chatSettings: ReturnType<typeof useChatWebSocket>['chatSettings'];
   chatCapabilities: ReturnType<typeof useChatWebSocket>['chatCapabilities'];
@@ -268,6 +269,7 @@ export const ChatContent = memo(function ChatContent(props: ChatContentProps) {
     hasPendingMessages: props.pendingMessages.size > 0,
     sendMessage,
     restartSession: props.restartSession,
+    isRestartingSession: props.isRestartingSession,
   });
   const visibleInitBanner = getVisibleInitBanner(props.initBanner, props.isScriptFailed);
   const { retryAvailability, resumeQueuedMessages } = props;

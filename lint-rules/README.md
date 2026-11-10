@@ -37,17 +37,24 @@ color classes (`bg-red-500`, `dark:text-emerald-300`) in `src/client`,
 `src/components` and `src/lib`, which must use theme tokens instead
 ([status colors](../docs/status-colors.md)). The palette rule's file exceptions
 are its `exceptions` option, a map from path to reason in `.oxlintrc.json`; a
-test fails if an exception no longer needs it. `query-owner` keeps tRPC hooks
-and cache helpers for named procedures inside owner modules. Each entry in its
-`groups` option lists procedures, the module callers should `use`, its `owners`
-(that module and its helpers), the reason, and which helpers it covers: `cache`
-covers helpers that install options or write data (`useQuery`, `fetch`,
-`setData` and similar) plus `getQueryKey`, and `all` covers every hook, cache
-helper and key helper, including `useMutation`. `workspace.get` and
-`workspace.listForProject` use `cache`, so every read installs the snapshot
-reconciler ([workspace state](../docs/architecture/workspace-state.md)).
-`userSettings.get` and `userSettings.update` use `all`: settings are read and
-written only through `useUserSettings` and `useUpdateUserSettings` in
+test fails if an exception no longer needs it. `use-pending-prop` rejects a
+`Spinner`, `SpinnerGapIcon` or `animate-spin` element inside `Button` or
+`DropdownMenuItem`, which take `pending` instead, and `no-raw-spinner` rejects a
+bare `SpinnerGapIcon` and `animate-spin` outside the shared `Spinner`
+([pending controls](../docs/architecture/client-loading.md#pending-controls)).
+Each takes its own `exceptions` map in the same shape; their test lints each
+listed file with the rule and no exceptions and fails once a file stops
+reporting. `query-owner` keeps tRPC hooks and cache helpers for named procedures
+inside owner modules. Each entry in its `groups` option lists procedures, the
+module callers should `use`, its `owners` (that module and its helpers), the
+reason, and which helpers it covers: `cache` covers helpers that install options
+or write data (`useQuery`, `fetch`, `setData` and similar) plus `getQueryKey`,
+and `all` covers every hook, cache helper and key helper, including
+`useMutation`. `workspace.get` and `workspace.listForProject` use `cache`, so
+every read installs the snapshot reconciler
+([workspace state](../docs/architecture/workspace-state.md)). `userSettings.get`
+and `userSettings.update` use `all`: settings are read and written only through
+`useUserSettings` and `useUpdateUserSettings` in
 `src/client/lib/user-settings-queries.ts`, which own the optimistic cache
 strategy and error toast. Tests are exempt so they can seed caches.
 `named-query-options` keeps query options in one place
