@@ -131,9 +131,12 @@ describe('agentSessionAccessor', () => {
         workspaceId: 'workspace-1',
         status: { in: [SessionStatus.RUNNING, SessionStatus.IDLE] },
         NOT: {
-          workflow: 'adversarial_review',
-          status: SessionStatus.IDLE,
-          providerSessionId: { not: null },
+          AND: [
+            { workflow: 'adversarial_review' },
+            { status: SessionStatus.IDLE },
+            { providerSessionId: { not: null } },
+            { providerSessionId: { not: '' } },
+          ],
         },
       },
     });
@@ -187,9 +190,12 @@ describe('agentSessionAccessor', () => {
         workspaceId: 'workspace-1',
         status: { in: [SessionStatus.RUNNING, SessionStatus.IDLE] },
         NOT: {
-          workflow: 'adversarial_review',
-          status: SessionStatus.IDLE,
-          providerSessionId: { not: null },
+          AND: [
+            { workflow: 'adversarial_review' },
+            { status: SessionStatus.IDLE },
+            { providerSessionId: { not: null } },
+            { providerSessionId: { not: '' } },
+          ],
         },
       },
     });

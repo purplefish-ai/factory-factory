@@ -14,6 +14,26 @@ export type AgentSessionRecordWithWorkspace = Prisma.AgentSessionGetPayload<{
 
 const ACTIVE_AGENT_SESSION_STATUSES: SessionStatus[] = [SessionStatus.RUNNING, SessionStatus.IDLE];
 
+/**
+ * Sessions that use a workspace session slot. Finished adversarial reviews keep
+ * their transcript but no slot; this mirrors isFinishedAdversarialReview, where
+ * an empty provider session ID means the review never started.
+ */
+export function workspaceSessionSlotWhere(workspaceId: string): Prisma.AgentSessionWhereInput {
+  return {
+    workspaceId,
+    status: { in: ACTIVE_AGENT_SESSION_STATUSES },
+    NOT: {
+      AND: [
+        { workflow: ADVERSARIAL_REVIEW_WORKFLOW },
+        { status: SessionStatus.IDLE },
+        { providerSessionId: { not: null } },
+        { providerSessionId: { not: '' } },
+      ],
+    },
+  };
+}
+
 export interface AgentSessionFilters {
   status?: SessionStatus;
   provider?: SessionProvider;
@@ -345,17 +365,7 @@ class PrismaAgentSessionAccessor implements AgentSessionAccessor {
     data: CreateLimitedAgentSessionInput
   ): Promise<LimitedAgentSessionCreation> {
     const activeSessionCount = await prisma.agentSession.count({
-      where: {
-        workspaceId: data.workspaceId,
-        status: { in: ACTIVE_AGENT_SESSION_STATUSES },
-        // Finished adversarial reviews keep their transcript but no slot; see
-        // isFinishedAdversarialReview.
-        NOT: {
-          workflow: ADVERSARIAL_REVIEW_WORKFLOW,
-          status: SessionStatus.IDLE,
-          providerSessionId: { not: null },
-        },
-      },
+      where: workspaceSessionSlotWhere(data.workspaceId),
     });
 
     if (activeSessionCount >= data.maxSessions) {

@@ -86,6 +86,49 @@ it('enforces the shared workspace limit across independent PRs and human acquisi
   expect(results.filter((result) => result.outcome === 'limit_reached')).toHaveLength(2);
   expect(await db.prisma.agentSession.count()).toBe(1);
 });
+it('does not count finished adversarial reviews toward the shared workspace limit', async () => {
+  const review = (id: string, status: 'IDLE' | 'RUNNING', providerSessionId: string | null) =>
+    db.prisma.agentSession.create({
+      data: {
+        id,
+        workspaceId: 'w',
+        workflow: 'adversarial_review',
+        provider: 'CODEX',
+        model: 'default',
+        status,
+        providerSessionId,
+      },
+    });
+  await review('finished-1', 'IDLE', 'provider-1');
+  await review('finished-2', 'IDLE', 'provider-2');
+
+  await expect(
+    prDedicatedSessionAccessor.acquire({ ...input, maxSessions: 1 })
+  ).resolves.toMatchObject({ outcome: 'created' });
+
+  // Not yet started (no or empty provider ID) and running reviews still hold slots.
+  await review('unstarted', 'IDLE', '');
+  await review('running', 'RUNNING', 'provider-3');
+  await expect(
+    agentSessionAccessor.createWithinWorkspaceLimit({
+      workspaceId: 'w',
+      workflow: 'followup',
+      provider: 'CLAUDE',
+      model: 'sonnet',
+      maxSessions: 3,
+    })
+  ).resolves.toEqual({ outcome: 'limit_reached' });
+  await expect(
+    agentSessionAccessor.createWithinWorkspaceLimit({
+      workspaceId: 'w',
+      workflow: 'followup',
+      provider: 'CLAUDE',
+      model: 'sonnet',
+      maxSessions: 4,
+    })
+  ).resolves.toMatchObject({ outcome: 'created' });
+});
+
 it('reuses a cold saved identity despite different defaults and a full cap', async () => {
   const first = await prDedicatedSessionAccessor.acquire(input);
   if (first.outcome !== 'created') {
