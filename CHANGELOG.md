@@ -11,7 +11,7 @@ and this project adheres to
 ### Fixed
 
 - Show the workspace name in the workspace header so renames appear immediately;
-  the branch moves to the header's hover text
+  the branch moves to the header's hover text (#3171)
 
 ## [0.5.9] - 2026-11-10
 
