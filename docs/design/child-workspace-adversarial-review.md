@@ -90,9 +90,9 @@ Not reliably. Here is what exists now:
   reason / failed). PRs that are ineligible or fail do not abort the batch.
 - Send one completion message per PR to the parent's inbox.
 - Handle many children and PRs: a configurable global limit on reviews running
-  at once, no idle reviewer processes while queued, and at most one review
-  session per child at a time so a child with several PRs doesn't fill up its
-  session limit.
+  at once, no idle reviewer processes while queued, at most one running review
+  per child, and no session slots held by finished reviews, so a child with
+  several PRs doesn't fill up its session limit.
 - Let the parent, both user and agent, see each child's live status in the
   Subagents pane, with the child's own agent activity kept separate from review
   activity on each of its PRs.
@@ -438,9 +438,15 @@ Rules:
   single-button reviews count toward it too.
 - **One running review per child.** A child's PRs are reviewed one after
   another, never in parallel. A child with three PRs therefore uses one session
-  slot at a time, not three. This also keeps reviewers from competing over the
-  same worktree's git state in section 5. Jobs for other children move ahead
-  while a child's earlier PR is running.
+  slot at a time, not three. This also depends on finished reviews releasing
+  their slot: a finished review stays `IDLE` for its transcript, and without
+  #3095 it would keep counting toward `MAX_SESSIONS_PER_WORKSPACE`, so a child
+  with one chat and five open PRs would skip its fifth PR and block new chats.
+  #3095 excludes finished reviews (`IDLE` with a provider session) from the
+  limit, while a review created but not yet started still counts. This also
+  keeps reviewers from competing over the same worktree's git state in
+  section 5. Jobs for other children move ahead while a child's earlier PR is
+  running.
 - **The reviewer starts at dequeue time.** When a job is dequeued, the
   orchestrator creates the session with
   `createAgentSessionWithinWorkspaceLimit`, starts it in plan mode, and runs the
@@ -450,7 +456,8 @@ Rules:
   `MAX_SESSIONS_PER_WORKSPACE` (default 5) when its turn comes, the job is
   dropped as `skipped: session_limit`, and if `notifyParent` is set the parent
   is told by mail. The job is not retried automatically, because a user who has
-  filled the child's sessions is actively working there.
+  filled the child's sessions is actively working there. Finished reviews don't
+  count, so only the child's chats and running sessions can fill it.
 - **Idempotency covers the queue.** `already_active` means there is either an
   active `adversarial_review` session for that `(workspaceId, prId)`, which is
   the check that exists today, or a queued job for it. Re-running a batch never
@@ -458,10 +465,10 @@ Rules:
   already queued, the flag is merged into the existing job.
 - **Queue order.** First in, first out, skipping any job whose child already has
   a review running.
-- **Visibility.** A review that is waiting does not appear as a session, so a
-  child's session list only ever shows reviews that are actually running. The
-  queue's state is exposed for the Subagents pane through
-  `getAdversarialReviewStatus` (section 7).
+- **Visibility.** A review that is waiting does not appear as a session. A
+  child's session list shows running reviews and finished ones, which keep their
+  transcripts, but never queued ones. The queue's state is exposed for the
+  Subagents pane through `getAdversarialReviewStatus` (section 7).
 
 **Admin setting.** Add `adversarialReviewConcurrency Int @default(3)` to
 `UserSettings`, edited in `AdversarialReviewSection.tsx` (range 1–10). It needs
