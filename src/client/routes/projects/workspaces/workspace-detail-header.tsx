@@ -17,7 +17,6 @@ import { trpc } from '@/client/lib/trpc';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useWorkspaceProjectNavigation } from './use-workspace-project-navigation';
 import {
-  getWorkspaceHeaderLabel,
   ToggleRightPanelButton,
   WorkspaceHeaderOverflowMenu,
   type WorkspaceHeaderProps,
@@ -111,12 +110,8 @@ export function WorkspaceDetailHeaderSlot({
               projectId={workspace.projectId}
               currentWorkspaceId={workspaceId}
               compact={hasFamily}
-              currentWorkspaceLabel={
-                workspace.parentWorkspace
-                  ? workspace.name
-                  : getWorkspaceHeaderLabel(workspace.branchName, workspace.name, isMobile)
-              }
               currentWorkspaceName={workspace.name}
+              currentBranchName={workspace.branchName}
             />
           </div>
           {hasFamily && !isMobile && (

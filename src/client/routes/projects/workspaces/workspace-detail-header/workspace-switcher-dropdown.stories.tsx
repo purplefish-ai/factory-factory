@@ -36,14 +36,14 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-export const LongBranchOnSmallerDisplay: Story = {
+export const LongNameOnSmallerDisplay: Story = {
   args: {
     projectSlug: 'factory-factory',
     projectId: 'project-1',
     currentWorkspaceId: 'workspace-1',
-    currentWorkspaceLabel:
+    currentWorkspaceName: 'Prevent the top bar from overlapping fixed controls on smaller displays',
+    currentBranchName:
       'martin-purplefish/smaller-displays-top-bar-starts-overlapping-fixed-controls',
-    currentWorkspaceName: 'Prevent top-bar overlap',
   },
 };
 
@@ -53,8 +53,8 @@ export const KanbanGroups: Story = {
     projectSlug: 'factory-factory',
     projectId: 'project-1',
     currentWorkspaceId: 'waiting-idle',
-    currentWorkspaceLabel: 'feature/ready-for-next-prompt',
     currentWorkspaceName: 'Ready for next prompt',
+    currentBranchName: 'feature/ready-for-next-prompt',
   },
   decorators: [
     function WorkspaceGroups(Story) {

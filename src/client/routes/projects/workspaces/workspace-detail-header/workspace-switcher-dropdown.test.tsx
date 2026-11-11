@@ -114,8 +114,8 @@ describe('WorkspaceSwitcherDropdown', () => {
           projectSlug="factory-factory"
           projectId="project-1"
           currentWorkspaceId="idle"
-          currentWorkspaceLabel="feature/idle"
           currentWorkspaceName="Workspace"
+          currentBranchName="feature/idle"
         />
       );
     });
@@ -133,7 +133,41 @@ describe('WorkspaceSwitcherDropdown', () => {
     );
   });
 
-  it('keeps a long branch label shrinkable and clipped at desktop widths', () => {
+  it('labels the trigger with the workspace name and shows the branch on hover', () => {
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    root = createRoot(container);
+    const render = (name: string, branch: string | null) =>
+      flushSync(() => {
+        root?.render(
+          <WorkspaceSwitcherDropdown
+            projectSlug="factory-factory"
+            projectId="project-1"
+            currentWorkspaceId="workspace-1"
+            currentWorkspaceName={name}
+            currentBranchName={branch}
+          />
+        );
+      });
+    const label = () => container.querySelector('.workspace-switcher-label')?.textContent;
+    const title = () =>
+      container.querySelector('#workspace-detail-workspace-select')?.getAttribute('title');
+
+    render('Original name', 'feature/original');
+    expect(label()).toBe('Original name');
+    expect(title()).toBe('feature/original');
+
+    // A rename changes the name but never the branch.
+    render('Renamed workspace', 'feature/original');
+    expect(label()).toBe('Renamed workspace');
+    expect(title()).toBe('feature/original');
+
+    render('No branch yet', null);
+    expect(label()).toBe('No branch yet');
+    expect(title()).toBe('No branch yet');
+  });
+
+  it('keeps a long workspace name shrinkable and clipped at desktop widths', () => {
     const container = document.createElement('div');
     document.body.appendChild(container);
     root = createRoot(container);
@@ -144,8 +178,8 @@ describe('WorkspaceSwitcherDropdown', () => {
           projectSlug="factory-factory"
           projectId="project-1"
           currentWorkspaceId="workspace-1"
-          currentWorkspaceLabel="feature/a-very-long-branch-name-that-must-not-overlap-actions"
-          currentWorkspaceName="Workspace"
+          currentWorkspaceName="A very long workspace name that must not overlap the header actions"
+          currentBranchName="feature/long-name"
         />
       );
     });
