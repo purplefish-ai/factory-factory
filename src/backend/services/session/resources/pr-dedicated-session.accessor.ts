@@ -1,5 +1,8 @@
 import { prisma } from '@/backend/db';
-import { agentSessionAccessor } from '@/backend/services/session/resources/agent-session.accessor';
+import {
+  agentSessionAccessor,
+  workspaceSessionSlotWhere,
+} from '@/backend/services/session/resources/agent-session.accessor';
 import { PR_DEDICATED_WORKFLOW, type PRTarget } from '@/shared/pr-monitoring';
 import type { AgentSession, Prisma, SessionProvider, Workspace } from '@prisma-gen/client';
 
@@ -129,7 +132,7 @@ class PRDedicatedSessionAccessor {
       return { outcome: 'missing' };
     }
     const count = await tx.agentSession.count({
-      where: { workspaceId: input.workspaceId, status: { in: ['RUNNING', 'IDLE'] } },
+      where: workspaceSessionSlotWhere(input.workspaceId),
     });
     if (input.isCurrent?.() === false) {
       return { outcome: 'unavailable' };

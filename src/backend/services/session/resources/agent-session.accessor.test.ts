@@ -130,6 +130,14 @@ describe('agentSessionAccessor', () => {
       where: {
         workspaceId: 'workspace-1',
         status: { in: [SessionStatus.RUNNING, SessionStatus.IDLE] },
+        NOT: {
+          AND: [
+            { workflow: 'adversarial_review' },
+            { status: SessionStatus.IDLE },
+            { providerSessionId: { not: null } },
+            { providerSessionId: { not: '' } },
+          ],
+        },
       },
     });
     expect(mockCreate).toHaveBeenCalledWith({
@@ -181,6 +189,14 @@ describe('agentSessionAccessor', () => {
       where: {
         workspaceId: 'workspace-1',
         status: { in: [SessionStatus.RUNNING, SessionStatus.IDLE] },
+        NOT: {
+          AND: [
+            { workflow: 'adversarial_review' },
+            { status: SessionStatus.IDLE },
+            { providerSessionId: { not: null } },
+            { providerSessionId: { not: '' } },
+          ],
+        },
       },
     });
     expect(mockCreate).toHaveBeenCalled();

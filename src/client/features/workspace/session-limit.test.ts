@@ -23,6 +23,35 @@ describe('workspace session limit', () => {
     expect(getActiveWorkspaceSessionCount(sessions)).toBe(2);
   });
 
+  it('does not count finished adversarial reviews toward the limit', () => {
+    const review = (status: SessionStatus, providerSessionId: string | null) => ({
+      status,
+      workflow: 'adversarial_review',
+      providerSessionId,
+    });
+
+    expect(
+      getActiveWorkspaceSessionCount([
+        session(SessionStatus.IDLE),
+        review(SessionStatus.IDLE, 'provider-1'),
+        review(SessionStatus.IDLE, 'provider-2'),
+      ])
+    ).toBe(1);
+    // A running review, or one created but not yet started, still holds a slot.
+    expect(
+      getActiveWorkspaceSessionCount([
+        review(SessionStatus.RUNNING, 'provider-3'),
+        review(SessionStatus.IDLE, null),
+      ])
+    ).toBe(2);
+    // Other idle chats with a provider session still count.
+    expect(
+      getActiveWorkspaceSessionCount([
+        { status: SessionStatus.IDLE, workflow: 'followup', providerSessionId: 'provider-4' },
+      ])
+    ).toBe(1);
+  });
+
   it('does not block new sessions when only completed or failed sessions exceed the limit', () => {
     const sessions = [
       session(SessionStatus.COMPLETED),

@@ -1,7 +1,10 @@
+import { isFinishedAdversarialReview } from '@/shared/adversarial-review';
 import { type SessionStatus as DbSessionStatus, SessionStatus } from '@/shared/core';
 
 interface WorkspaceSessionLimitSession {
   status: DbSessionStatus;
+  workflow?: string | null;
+  providerSessionId?: string | null;
 }
 
 const ACTIVE_SESSION_STATUSES = new Set<DbSessionStatus>([
@@ -10,7 +13,12 @@ const ACTIVE_SESSION_STATUSES = new Set<DbSessionStatus>([
 ]);
 
 export function getActiveWorkspaceSessionCount(sessions?: WorkspaceSessionLimitSession[]): number {
-  return sessions?.filter((session) => ACTIVE_SESSION_STATUSES.has(session.status)).length ?? 0;
+  return (
+    sessions?.filter(
+      (session) =>
+        ACTIVE_SESSION_STATUSES.has(session.status) && !isFinishedAdversarialReview(session)
+    ).length ?? 0
+  );
 }
 
 export function isWorkspaceSessionLimitReached(

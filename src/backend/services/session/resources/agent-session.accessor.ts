@@ -1,4 +1,5 @@
 import { prisma } from '@/backend/db';
+import { ADVERSARIAL_REVIEW_WORKFLOW } from '@/shared/adversarial-review';
 import { SessionStatus } from '@/shared/core';
 import { eventSessionCreationSchema, type EventSessionCreation } from '@/shared/event-agent-launch';
 import { type AgentSession, Prisma, type SessionProvider } from '@prisma-gen/client';
@@ -29,6 +30,27 @@ export type AgentSessionRecordWithWorkspace = Prisma.AgentSessionGetPayload<{
 export type AgentSessionSummaryRecord = Omit<AgentSession, 'providerMetadata'>;
 
 const ACTIVE_AGENT_SESSION_STATUSES: SessionStatus[] = [SessionStatus.RUNNING, SessionStatus.IDLE];
+
+/**
+ * Sessions that use a workspace session slot. Finished adversarial reviews keep
+ * their transcript but no slot; this mirrors isFinishedAdversarialReview, where
+ * an empty provider session ID means the review never started. The limit is
+ * checked only at creation, so resuming a finished review can briefly exceed it.
+ */
+export function workspaceSessionSlotWhere(workspaceId: string): Prisma.AgentSessionWhereInput {
+  return {
+    workspaceId,
+    status: { in: ACTIVE_AGENT_SESSION_STATUSES },
+    NOT: {
+      AND: [
+        { workflow: ADVERSARIAL_REVIEW_WORKFLOW },
+        { status: SessionStatus.IDLE },
+        { providerSessionId: { not: null } },
+        { providerSessionId: { not: '' } },
+      ],
+    },
+  };
+}
 
 export interface AgentSessionFilters {
   status?: SessionStatus;
@@ -362,10 +384,7 @@ class PrismaAgentSessionAccessor implements AgentSessionAccessor {
     data: CreateLimitedAgentSessionInput
   ): Promise<LimitedAgentSessionCreation> {
     const activeSessionCount = await prisma.agentSession.count({
-      where: {
-        workspaceId: data.workspaceId,
-        status: { in: ACTIVE_AGENT_SESSION_STATUSES },
-      },
+      where: workspaceSessionSlotWhere(data.workspaceId),
     });
 
     if (activeSessionCount >= data.maxSessions) {
