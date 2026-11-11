@@ -117,6 +117,32 @@ beside the chip; below that it is in More actions. It starts a new chat with the
 `create-pr` quick action. Loading or failed action catalogs retain loading or
 retry feedback.
 
+An adversarial review of an attached PR reads that PR's own code, even when the
+worktree has a different branch checked out. One
+`git --no-optional-locks status --porcelain=v2 --branch` snapshot supplies the
+worktree's branch, HEAD and local changes without refreshing the index or taking
+`index.lock`. When `origin` is the PR's repository and the worktree branch
+matches the PR head branch and contains the PR head commit, the checkout is the
+PR. The reviewer reads the working tree only if it is exactly at the PR head
+with no staged, unstaged or untracked changes. It is told to switch to
+`git show` if HEAD moves or changes appear during the review. With local commits
+or changes, it reads the PR head with `git show` instead. Otherwise, for a PR in
+the `origin` repository, the review first fetches `refs/pull/<n>/head` into a
+private `refs/factory-factory/review/<prId>` ref, without touching the working
+tree, index, branches or `FETCH_HEAD`. The reviewer reads the PR head with
+`git show` and is told not to run checks against the working tree. The ref is
+deleted when the turn ends. A worktree Git can't inspect, a worktree without a
+GitHub `origin`, a PR from another repository, or a head commit that can't be
+fetched or found locally falls back to a diff-only review, based on the diff and
+description, that says its file context was limited. The diff is read between
+two head lookups and retried if a push lands in between, so the diff, the commit
+the reviewer reads and the comment anchors all describe the same commit. Review
+sessions cannot gain permissions: a denied request can end the turn with no
+findings, so the prompt tells the reviewer never to ask and to report what it
+couldn't check. Repository files, including `AGENTS.md`, are presented to the
+reviewer as data that cannot override its instructions
+(`src/backend/orchestration/adversarial-review-checkout-context.ts`).
+
 ## PR event delivery destinations
 
 PR updates do not grant merge authorization. Their maintenance instructions

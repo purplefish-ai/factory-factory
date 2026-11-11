@@ -56,12 +56,13 @@ it('loads the adversarial review template from the unpacked Electron backend lay
         '--input-type=module',
         '-e',
         `import { buildAdversarialReviewDispatchPrompt } from ${JSON.stringify(moduleUrl)};
-       console.log(buildAdversarialReviewDispatchPrompt({ prUrl: 'https://github.com/example/repo/pull/42', prNumber: 42, prDescription: 'description', prDiff: 'diff', existingReviewCommentsSummary: 'none' }));`,
+       console.log(buildAdversarialReviewDispatchPrompt({ prUrl: 'https://github.com/example/repo/pull/42', prNumber: 42, prDescription: 'description', prDiff: 'diff', existingReviewCommentsSummary: 'none', checkoutContext: { kind: 'checked_out', headSha: '${'a'.repeat(40)}', localHeadSha: '${'a'.repeat(40)}', hasLocalChanges: false } }));`,
       ],
       { encoding: 'utf8' }
     );
     expect(output).toContain('https://github.com/example/repo/pull/42');
     expect(output).toContain('description');
+    expect(output).toContain('## Code context');
     expect(output).not.toMatch(/\{\{[A-Z_]+\}\}/);
   } finally {
     rmSync(resources, { recursive: true, force: true });

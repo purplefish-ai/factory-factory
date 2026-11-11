@@ -11,6 +11,7 @@ import {
   workspaceGitStateService,
 } from '@/backend/services/workspace-git-state.service';
 import type { WorkspaceInitGuard } from '@/shared/workspace-init-retry';
+import { parseGitHubRemoteUrl } from './project-repository-inspector';
 
 const logger = createLogger('git-ops');
 
@@ -23,6 +24,57 @@ interface ProjectPaths {
 
 interface CommitIfNeededOptions {
   removeGitIndexLock?: boolean;
+}
+
+/**
+ * What a worktree has checked out. Fields are null when Git exits non-zero or
+ * can't answer; the call rejects if Git cannot be spawned at all.
+ */
+export interface WorktreeCheckoutIdentity {
+  /** Current branch, or null when HEAD is detached. */
+  branch: string | null;
+  headSha: string | null;
+  /** Staged, unstaged or untracked changes in the working tree. */
+  hasLocalChanges: boolean | null;
+  /** GitHub repository of the `origin` remote. */
+  origin: { owner: string; repo: string } | null;
+}
+
+/** Private namespace for refs the app fetches without touching branches. */
+export const APP_PRIVATE_REF_PREFIX = 'refs/factory-factory/';
+const COMMIT_SHA_PATTERN = /^[0-9a-f]{40}(?:[0-9a-f]{24})?$/;
+
+function assertAppPrivateRef(ref: string): void {
+  if (!(ref.startsWith(APP_PRIVATE_REF_PREFIX) && /^[A-Za-z0-9/_-]+$/.test(ref))) {
+    throw new ApplicationError('INTERNAL_ERROR', `Refusing to write non-private ref: ${ref}`);
+  }
+}
+
+/** Parse `git status --porcelain=v2 --branch` output. */
+function parsePorcelainV2Status(
+  stdout: string
+): Pick<WorktreeCheckoutIdentity, 'branch' | 'headSha' | 'hasLocalChanges'> {
+  let branch: string | null = null;
+  let headSha: string | null = null;
+  let hasLocalChanges = false;
+  for (const line of stdout.split('\n')) {
+    if (line.startsWith('# branch.oid ')) {
+      const oid = line.slice('# branch.oid '.length).trim();
+      headSha = COMMIT_SHA_PATTERN.test(oid) ? oid : null;
+    } else if (line.startsWith('# branch.head ')) {
+      const head = line.slice('# branch.head '.length).trim();
+      branch = head && head !== '(detached)' ? head : null;
+    } else if (line.length > 0 && !line.startsWith('#')) {
+      hasLocalChanges = true;
+    }
+  }
+  return { branch, headSha, hasLocalChanges };
+}
+
+function assertCommitSha(sha: string): void {
+  if (!COMMIT_SHA_PATTERN.test(sha)) {
+    throw new ApplicationError('INTERNAL_ERROR', `Invalid commit SHA: ${sha}`);
+  }
 }
 
 class GitOpsService {
@@ -375,6 +427,89 @@ class GitOpsService {
         path.resolve(worktree.path).startsWith(basePrefix) &&
         path.resolve(worktree.path) !== repoPath
     );
+  }
+
+  async getCheckoutIdentity(worktreePath: string): Promise<WorktreeCheckoutIdentity> {
+    // One `git status` reads branch, HEAD and changes from a single snapshot, so
+    // a concurrent branch switch can't mix values from two different states.
+    // --no-optional-locks keeps it from refreshing the index (and taking
+    // index.lock) under an agent working in the same worktree.
+    const [status, origin] = await Promise.all([
+      gitCommand(
+        ['--no-optional-locks', 'status', '--porcelain=v2', '--branch', '--untracked-files=normal'],
+        worktreePath
+      ),
+      gitCommand(['remote', 'get-url', 'origin'], worktreePath),
+    ]);
+    return {
+      ...(status.code === 0
+        ? parsePorcelainV2Status(status.stdout)
+        : { branch: null, headSha: null, hasLocalChanges: null }),
+      origin: origin.code === 0 ? parseGitHubRemoteUrl(origin.stdout.trim()) : null,
+    };
+  }
+
+  /** True when `ancestor` is `descendant` or reachable from it; false if either is missing. */
+  async isAncestorCommit(
+    worktreePath: string,
+    ancestor: string,
+    descendant: string
+  ): Promise<boolean> {
+    assertCommitSha(ancestor);
+    assertCommitSha(descendant);
+    const result = await gitCommand(
+      ['merge-base', '--is-ancestor', ancestor, descendant],
+      worktreePath
+    );
+    return result.code === 0;
+  }
+
+  async hasCommit(worktreePath: string, sha: string): Promise<boolean> {
+    assertCommitSha(sha);
+    const result = await gitCommand(['cat-file', '-e', `${sha}^{commit}`], worktreePath);
+    return result.code === 0;
+  }
+
+  /**
+   * Fetch a pull request's head from `origin` into an app-private ref. Leaves
+   * the working tree, index, branches and FETCH_HEAD alone, so an agent working
+   * in the same worktree is unaffected. `refs/pull/<n>/head` also covers PRs
+   * opened from forks.
+   */
+  async fetchPullRequestHead(worktreePath: string, prNumber: number, ref: string): Promise<void> {
+    assertAppPrivateRef(ref);
+    if (!(Number.isInteger(prNumber) && prNumber > 0)) {
+      throw new ApplicationError('INTERNAL_ERROR', `Invalid pull request number: ${prNumber}`);
+    }
+    const result = await gitCommand(
+      [
+        'fetch',
+        '--no-tags',
+        '--no-write-fetch-head',
+        'origin',
+        `+refs/pull/${prNumber}/head:${ref}`,
+      ],
+      worktreePath
+    );
+    if (result.code !== 0) {
+      throw new ApplicationError(
+        'INTERNAL_ERROR',
+        `Failed to fetch pull request head: ${(result.stderr || result.stdout).trim()}`,
+        { cause: result }
+      );
+    }
+  }
+
+  async deletePrivateRef(worktreePath: string, ref: string): Promise<void> {
+    assertAppPrivateRef(ref);
+    const result = await gitCommand(['update-ref', '-d', ref], worktreePath);
+    if (result.code !== 0) {
+      throw new ApplicationError(
+        'INTERNAL_ERROR',
+        `Failed to delete ref ${ref}: ${(result.stderr || result.stdout).trim()}`,
+        { cause: result }
+      );
+    }
   }
 }
 
