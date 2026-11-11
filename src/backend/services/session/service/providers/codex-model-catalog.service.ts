@@ -50,6 +50,7 @@ export class CodexModelCatalogService {
   }
   private async getAutoModels(accountIds: string[]): Promise<CodexModelCatalog> {
     const results = await Promise.allSettled(accountIds.map((id) => this.getModels(id)));
+    this.assertRunning();
     const available = results
       .filter((result) => result.status === 'fulfilled')
       .map((result) => result.value);

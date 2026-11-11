@@ -108,7 +108,8 @@ export function createShutdownPlan(
     // account context; cancelling an in-flight login waits until it settles.
     {
       name: 'codex-accounts',
-      after: ['session-launch-options', 'claude-model-catalog', 'codex-model-catalog'],
+      // Launcher and Codex catalog discovery still read account context.
+      after: ['session-launch-options', 'codex-model-catalog'],
       stop: () => services.codexAccountService.shutdown(),
     },
     { name: 'terminals', stop: () => services.terminalService.cleanup() },
@@ -136,7 +137,12 @@ export function createShutdownPlan(
     // running when the database disconnects.
     {
       name: 'job-runner',
-      after: ['pr-event-poll', 'periodic-task-poll', 'reconciliation-cleanup'],
+      after: [
+        'pr-event-poll',
+        'periodic-task-poll',
+        'reconciliation-cleanup',
+        'claude-model-catalog',
+      ],
       stop: () => lifecycle.jobs.stopAll(),
     },
     { name: 'database', stop: () => lifecycle.database.$disconnect() },

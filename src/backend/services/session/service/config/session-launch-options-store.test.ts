@@ -106,7 +106,7 @@ describe('durable launcher options', () => {
     expect(await store.load()).toEqual(entries);
   });
 
-  it('rejects write failures asynchronously', async () => {
+  it('rejects snapshots above the entry bound asynchronously', async () => {
     const { store } = await fixture();
     const invalid = Array.from({ length: 33 }, () => entries[0]!);
     let writing: Promise<void> | undefined;

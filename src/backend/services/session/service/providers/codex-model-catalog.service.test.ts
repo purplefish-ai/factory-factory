@@ -33,6 +33,24 @@ describe('CodexModelCatalogService', () => {
     await expect(service.getModels('other')).rejects.toThrow('stopped');
   });
 
+  it('preserves the shutdown cause when Auto account catalogs are cancelled', async () => {
+    const fetchModels = vi.fn(
+      (_id?: string, signal?: AbortSignal) =>
+        new Promise<ReturnType<typeof catalog>>((_resolve, reject) => {
+          signal?.addEventListener('abort', () => reject(signal.reason), { once: true });
+        })
+    );
+    const service = new CodexModelCatalogService({
+      fetchModels,
+      listAccountIds: async () => ['saved'],
+    });
+    const reading = service.getModels();
+    const rejected = expect(reading).rejects.toThrow('Model catalog discovery stopped');
+    await vi.waitFor(() => expect(fetchModels).toHaveBeenCalledOnce());
+    await service.stop();
+    await rejected;
+  });
+
   it('isolates concurrent and cached catalogs by saved account', async () => {
     const fetchModels = vi.fn(async () => catalog());
     const service = new CodexModelCatalogService({ fetchModels });
