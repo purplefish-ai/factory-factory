@@ -1,5 +1,6 @@
+import { join } from 'node:path';
 import type { SessionConfigOption } from '@agentclientprotocol/sdk/unstable';
-import { codexAccountService } from '@/backend/services/codex-accounts';
+import { configService } from '@/backend/services/config.service';
 import type { AgentSessionRecord } from '@/backend/services/session/resources/agent-session.accessor';
 import type { AcpProcessHandle, AcpRuntimeManager } from '@/backend/services/session/service/acp';
 import type { SessionCallerGuard } from '@/backend/services/session/service/bridges';
@@ -24,6 +25,7 @@ import type { PersistAcpConfigSnapshotParams } from './session-config-snapshot-p
 import { SessionConfigWriter } from './session-config-writer';
 import { SessionInactiveConfigOptions } from './session-inactive-config-options';
 import { fetchAccountSessionLaunchOptions } from './session-launch-options-provider';
+import { LaunchOptionsStore } from './session-launch-options-store';
 import { SessionLaunchOptionsService } from './session-launch-options.service';
 import { SessionStartupConfiguration } from './session-startup-configuration';
 import type { CompleteStartupConfigurationParams } from './session-startup-configuration-finalizer';
@@ -36,7 +38,8 @@ export type SessionConfigServiceDependencies = {
   runtimeManager: AcpRuntimeManager;
   codexModelCatalogService: Pick<CodexModelCatalogService, 'getModels'>;
   sessionDomainService?: SessionDomainService;
-  launchOptionsService?: Pick<SessionLaunchOptionsService, 'getOptions'>;
+  launchOptionsService?: Pick<SessionLaunchOptionsService, 'getOptions'> &
+    Partial<Pick<SessionLaunchOptionsService, 'warm' | 'stop'>>;
 };
 
 type SessionStartupModePreset = 'non_interactive' | 'plan';
@@ -53,21 +56,31 @@ export class SessionConfigService {
   readonly startup: SessionStartupConfiguration;
   readonly mutations: SessionConfigMutations;
 
+  private readonly stopOptions: () => Promise<void>;
+
+  stopLaunchOptions(): Promise<void> {
+    return this.stopOptions();
+  }
+
+  private readonly warmOptions: () => Promise<void>;
+
+  warmLaunchOptions(): Promise<void> {
+    return this.warmOptions();
+  }
+
   constructor(options: SessionConfigServiceDependencies) {
     const { repository, runtimeManager, codexModelCatalogService } = options;
     const launchOptionsService =
       options.launchOptionsService ??
       new SessionLaunchOptionsService({
         fetchOptions: fetchAccountSessionLaunchOptions,
-        resolveAccountId: async (input) =>
-          (
-            await codexAccountService.getPreviewRuntimeContext({
-              accountId: input.codexAccountId,
-              model: input.model,
-            })
-          ).accountId,
+        store: new LaunchOptionsStore(
+          join(configService.getBaseDir(), 'cache', 'session-launch-options.json')
+        ),
         getSettings: () => userSettingsService.get(),
       });
+    this.stopOptions = () => launchOptionsService.stop?.() ?? Promise.resolve();
+    this.warmOptions = () => launchOptionsService.warm?.() ?? Promise.resolve();
     this.writer = new SessionConfigWriter(
       runtimeManager,
       repository,

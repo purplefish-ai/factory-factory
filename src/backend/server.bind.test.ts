@@ -1,6 +1,7 @@
 import { request as httpRequest } from 'node:http';
 import { createServer as createNetServer, type Server as NetServer } from 'node:net';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { deferred } from '@/test-utils/deferred';
 
 vi.mock('@/backend/routers/websocket', () => ({
   createChatUpgradeHandler: vi.fn(() => vi.fn()),
@@ -98,6 +99,22 @@ async function isIpv6LoopbackAvailable(): Promise<boolean> {
 const ipv6Available = await isIpv6LoopbackAvailable();
 
 describe('server bind address', () => {
+  it('warms launcher capabilities without waiting for provider discovery', async () => {
+    const harness = createTestHarness();
+    const warming = deferred<undefined>();
+    harness.services.sessionConfigService.warmLaunchOptions.mockImplementation(
+      () => warming.promise
+    );
+    const server = createServer(harness.application, 0);
+    servers.push(server);
+    try {
+      await server.start();
+      expect(harness.services.sessionConfigService.warmLaunchOptions).toHaveBeenCalledOnce();
+    } finally {
+      warming.resolve(undefined);
+    }
+  });
+
   it('binds loopback only and advertises localhost when BACKEND_HOST is unset', async () => {
     const port = await findFreePort();
     const harness = createTestHarness({ backendHost: undefined });

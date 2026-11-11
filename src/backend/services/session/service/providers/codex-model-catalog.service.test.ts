@@ -78,7 +78,7 @@ describe('CodexModelCatalogService', () => {
     expect(fetchModels).toHaveBeenCalledOnce();
   });
 
-  it('keeps successful discovery for 30 seconds from completion', async () => {
+  it('serves successful discovery while refreshing after five minutes', async () => {
     vi.useFakeTimers();
     const pending = createDeferred<ReturnType<typeof catalog>>();
     const fetchModels = vi.fn(() => pending.promise);
@@ -88,11 +88,13 @@ describe('CodexModelCatalogService', () => {
     pending.resolve(catalog());
     await first;
 
-    await vi.advanceTimersByTimeAsync(29_999);
+    await vi.advanceTimersByTimeAsync(5 * 60_000 - 1);
     await expect(service.getModels()).resolves.toEqual(catalog());
     expect(fetchModels).toHaveBeenCalledOnce();
     fetchModels.mockResolvedValue([{ ...catalog()[0]!, id: 'new-model' }]);
     await vi.advanceTimersByTimeAsync(1);
+    await expect(service.getModels()).resolves.toEqual(catalog());
+    await vi.advanceTimersByTimeAsync(0);
     await expect(service.getModels()).resolves.toMatchObject([{ id: 'new-model' }]);
     expect(fetchModels).toHaveBeenCalledTimes(2);
   });
@@ -147,16 +149,21 @@ describe('CodexModelCatalogService', () => {
     await expect(service.getModels()).resolves.toEqual(catalog());
   });
 
-  it('rejects an expired refresh failure and retries without serving stale models', async () => {
+  it('keeps stale models after refresh failure and backs off before retrying', async () => {
     vi.useFakeTimers();
     const fetchModels = vi.fn().mockResolvedValue(catalog());
     const service = new CodexModelCatalogService({ fetchModels });
     await service.getModels();
-    await vi.advanceTimersByTimeAsync(30_000);
+    await vi.advanceTimersByTimeAsync(5 * 60_000);
     fetchModels.mockRejectedValueOnce(new Error('Refresh unavailable'));
-
-    await expect(service.getModels()).rejects.toThrow('Refresh unavailable');
+    await expect(service.getModels()).resolves.toEqual(catalog());
+    await vi.advanceTimersByTimeAsync(0);
+    await expect(service.getModels()).resolves.toEqual(catalog());
+    expect(fetchModels).toHaveBeenCalledTimes(2);
     fetchModels.mockResolvedValue([{ ...catalog()[0]!, id: 'new-model' }]);
+    await vi.advanceTimersByTimeAsync(30_000);
+    await expect(service.getModels()).resolves.toEqual(catalog());
+    await vi.advanceTimersByTimeAsync(0);
     await expect(service.getModels()).resolves.toMatchObject([{ id: 'new-model' }]);
     expect(fetchModels).toHaveBeenCalledTimes(3);
   });

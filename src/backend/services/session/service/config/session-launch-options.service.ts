@@ -1,7 +1,9 @@
 import { resolveSessionModelForProvider } from '@/backend/lib/session-model';
 import { createLogger } from '@/backend/services/logger.service';
+import { withTimeout } from '@/backend/services/session/service/acp/acp-runtime-spawn';
 import { timeLaunchDiscovery } from '@/backend/services/session/service/acp/launch-discovery-timing';
 import type { SessionLaunchOptions } from '@/shared/session-launch';
+import type { LaunchOptionsPersistence, StoredLaunchOptions } from './session-launch-options-store';
 type Input = { provider: 'CLAUDE' | 'CODEX'; model?: string; codexAccountId?: string };
 type Defaults = {
   defaultClaudeModel?: string;
@@ -10,46 +12,100 @@ type Defaults = {
   defaultCodexReasoningEffort?: string | null;
 };
 const CACHE_FRESH_MS = 5 * 60_000;
-const CACHE_MAX_AGE_MS = 30 * 60_000;
 const REFRESH_RETRY_MS = 30_000;
 const MAX_CACHE_ENTRIES = 32;
 const MAX_PENDING_DISCOVERIES = 8;
 const logger = createLogger('session-launch-options');
 type Discovery = { result: Promise<SessionLaunchOptions>; drained: Promise<void> };
 type PendingDiscovery = Discovery & { succeeded: boolean };
-type CachedOptions = { value: SessionLaunchOptions; capturedAt: number; refreshAfter: number };
+type CachedOptions = StoredLaunchOptions & { refreshAfter: number };
 export class SessionLaunchOptionsService {
   private readonly cache = new Map<string, CachedOptions>();
   private readonly pending = new Map<string, PendingDiscovery>();
+  private restored: Promise<void> | undefined;
+  private readonly cancellation = new AbortController();
+  private writing: Promise<void> = Promise.resolve();
   constructor(
     private readonly deps: {
-      fetchOptions(input: Input): Promise<Discovery>;
+      fetchOptions(input: Input, signal?: AbortSignal): Promise<Discovery>;
       getSettings(): Promise<Defaults>;
       resolveAccountId?(input: Input): Promise<string>;
+      store?: LaunchOptionsPersistence;
     }
   ) {}
   getOptions(input: Input): Promise<SessionLaunchOptions> {
     return timeLaunchDiscovery('request', input, () => this.resolveOptions(input));
   }
+  async stop(): Promise<void> {
+    this.cancellation.abort(new Error('Launch discovery stopped'));
+    await withTimeout({
+      promise: Promise.all([...this.pending.values()].map((entry) => entry.drained)).then(
+        () => this.writing
+      ),
+      timeoutMs: 7000,
+      description: 'launch discovery shutdown',
+    });
+  }
+  private assertRunning(): void {
+    this.cancellation.signal.throwIfAborted();
+  }
+  async warm(): Promise<void> {
+    await this.restore();
+    await Promise.allSettled(
+      (['CLAUDE', 'CODEX'] as const).map((provider) => this.getOptions({ provider }))
+    );
+  }
+  private restore(): Promise<void> {
+    this.restored ??= Promise.resolve().then(async () => {
+      try {
+        for (const entry of (await this.deps.store?.load()) ?? []) {
+          this.cacheOptions(this.key(entry.input), {
+            ...entry,
+            // Every restart refreshes restored metadata, including after runtime upgrades.
+            capturedAt: Math.min(entry.capturedAt, Date.now() - CACHE_FRESH_MS),
+            refreshAfter: 0,
+          });
+        }
+      } catch {
+        logger.warn('Launch options cache restore failed');
+      }
+    });
+    return this.restored;
+  }
+  private key(input: Input): string {
+    return JSON.stringify([
+      input.provider,
+      input.model,
+      input.provider === 'CODEX' ? (input.codexAccountId ?? 'auto') : null,
+    ]);
+  }
+  private persist(): void {
+    if (!this.deps.store) {
+      return;
+    }
+    const entries = Array.from(this.cache.values(), ({ input, value, capturedAt }) => ({
+      input,
+      value,
+      capturedAt,
+    }));
+    this.writing = this.writing
+      .then(() => this.deps.store?.save(entries))
+      .catch(() => {
+        logger.warn('Launch options cache save failed');
+      });
+  }
   private async resolveOptions(input: Input): Promise<SessionLaunchOptions> {
+    this.assertRunning();
+    await this.restore();
+    this.assertRunning();
     const defaults = await timeLaunchDiscovery('settings', input, () => this.deps.getSettings());
+    this.assertRunning();
     const model = resolveSessionModelForProvider(
       input.model,
       input.provider,
       input.provider === 'CLAUDE' ? defaults.defaultClaudeModel : defaults.defaultCodexModel
     );
-    if (input.provider === 'CODEX' && this.deps.resolveAccountId) {
-      const resolveAccountId = this.deps.resolveAccountId;
-      const codexAccountId = await timeLaunchDiscovery('account resolution', input, () =>
-        resolveAccountId({ ...input, model })
-      );
-      input = { ...input, codexAccountId };
-    }
-    const key = JSON.stringify([
-      input.provider,
-      model,
-      input.provider === 'CODEX' ? (input.codexAccountId ?? 'auto') : null,
-    ]);
+    const key = this.key({ ...input, model });
     const native = await timeLaunchDiscovery('options', { ...input, model }, () =>
       this.getNativeOptions(key, { ...input, model })
     );
@@ -63,11 +119,6 @@ export class SessionLaunchOptionsService {
     return native;
   }
   private async getNativeOptions(key: string, input: Input): Promise<SessionLaunchOptions> {
-    for (const [entry, cached] of this.cache) {
-      if (Date.now() - cached.capturedAt >= CACHE_MAX_AGE_MS) {
-        this.cache.delete(entry);
-      }
-    }
     const cached = this.cache.get(key);
     if (cached) {
       const ageMs = Date.now() - cached.capturedAt;
@@ -80,7 +131,7 @@ export class SessionLaunchOptionsService {
         cached.refreshAfter = Date.now() + REFRESH_RETRY_MS;
         void this.discover(key, input).result.catch(() => {
           cached.refreshAfter = Date.now() + REFRESH_RETRY_MS;
-          if (!this.cache.has(key) && Date.now() - cached.capturedAt < CACHE_MAX_AGE_MS) {
+          if (!this.cache.has(key)) {
             this.cacheOptions(key, cached);
           }
           logger.warn('Launch options background refresh failed', { ...input });
@@ -91,7 +142,7 @@ export class SessionLaunchOptionsService {
     }
     let pending = this.pending.get(key);
     if (pending?.succeeded) {
-      // The cached success expired/was evicted while its native lifetime stayed charged.
+      // The cached success was evicted while its native lifetime stayed charged.
       throw new Error('Launch discovery is busy; retry shortly');
     }
     if (!pending) {
@@ -113,7 +164,15 @@ export class SessionLaunchOptionsService {
     this.cache.set(key, cached);
   }
   private discover(key: string, input: Input): PendingDiscovery {
-    const started = Promise.resolve().then(() => this.deps.fetchOptions(input));
+    const started = Promise.resolve().then(async () => {
+      this.assertRunning();
+      if (input.provider === 'CODEX' && this.deps.resolveAccountId) {
+        const codexAccountId = await this.deps.resolveAccountId(input);
+        this.assertRunning();
+        return this.deps.fetchOptions({ ...input, codexAccountId }, this.cancellation.signal);
+      }
+      return this.deps.fetchOptions(input, this.cancellation.signal);
+    });
     const entry: PendingDiscovery = {
       succeeded: false,
       drained: started.then(
@@ -131,11 +190,14 @@ export class SessionLaunchOptionsService {
       result: started
         .then((discovery) => discovery.result)
         .then((value) => {
+          this.assertRunning();
           this.cacheOptions(key, {
+            input,
             value: structuredClone(value),
             capturedAt: Date.now(),
             refreshAfter: 0,
           });
+          this.persist();
           entry.succeeded = true;
           return value;
         }),

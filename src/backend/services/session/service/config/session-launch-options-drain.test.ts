@@ -263,6 +263,13 @@ describe('native launch admission through actual child drain', () => {
       )
     ).toMatchObject({ status: 'UNSUPPORTED' });
     account = 'account-b';
+    await peers[0]!.drain();
+    // Auto keeps its last confirmed preview until the background refresh window.
+    expect(await validateAgentExecution({ version: 1 }, ports)).toMatchObject({
+      status: 'VALIDATED',
+    });
+    expect(peers).toHaveLength(1);
+    await vi.advanceTimersByTimeAsync(5 * 60_000);
     const otherAccount = validateAgentExecution({ version: 1 }, ports);
     await vi.advanceTimersByTimeAsync(5001);
     expect(await otherAccount).toMatchObject({ status: 'VALIDATED' });
@@ -331,7 +338,7 @@ describe('native launch admission through actual child drain', () => {
     );
   });
 
-  it('expires a successful same-key result without releasing its still-live native charge', async () => {
+  it('retains a successful same-key result without releasing its still-live native charge', async () => {
     nextOptions = {};
     const options = service();
     const result = settled(options.getOptions(request('model-0')));
@@ -345,7 +352,7 @@ describe('native launch admission through actual child drain', () => {
     const expired = settled(options.getOptions(request('model-0')));
     await vi.advanceTimersByTimeAsync(1);
     expect(peers).toHaveLength(1);
-    expect(await expired).toMatchObject({ message: expect.stringContaining('busy') });
+    expect(await expired).toMatchObject({ model: 'model-0' });
     await peers[0]!.drain();
     const refreshed = settled(options.getOptions(request('model-0')));
     await vi.advanceTimersByTimeAsync(5001);
@@ -401,7 +408,7 @@ describe('native launch admission through actual child drain', () => {
     expect(peers).toHaveLength(2);
   });
 
-  it('isolates effective accounts, models and providers and reapplies fresh defaults to cloned results', async () => {
+  it('isolates explicit accounts, Auto previews, models and providers and reapplies fresh defaults to cloned results', async () => {
     nextOptions = {};
     const options = service();
     const calls = [
@@ -421,11 +428,12 @@ describe('native launch admission through actual child drain', () => {
       { provider: 'CLAUDE', model: 'model-0' },
       { provider: 'CODEX', model: 'model-0' },
     ]);
-    expect(peers).toHaveLength(4);
+    expect(peers).toHaveLength(5);
     expect(mocks.spawn.mock.calls.map((args) => args[2].env.CODEX_HOME)).toEqual([
       undefined,
       '/fake/account-a',
       '/fake/account-b',
+      '/fake/account-a',
       '/fake/account-a',
     ]);
     const first = await options.getOptions(request('model-0'));

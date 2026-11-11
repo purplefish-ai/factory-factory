@@ -96,6 +96,7 @@ type ProbeInput = {
   provider: 'CLAUDE' | 'CODEX';
   model?: string;
   env?: NodeJS.ProcessEnv;
+  signal?: AbortSignal;
 };
 /** Bounded discovery result, with a separately retained native child/pipe lifetime. */
 export function fetchSessionLaunchOptionsFromAcp(input: ProbeInput) {
@@ -117,10 +118,12 @@ async function probeLaunchOptions(
   input: ProbeInput,
   retainLifetime: (drained: Promise<void>) => void
 ): Promise<NativeSessionLaunchOptions> {
+  input.signal?.throwIfAborted();
   const command = resolveProviderAcpSpawnCommand(input.provider);
   const cwd = tmpdir();
   const child = spawn(command.command, command.args, {
     cwd,
+    ...(input.signal ? { signal: input.signal } : {}),
     stdio: ['pipe', 'pipe', 'pipe'],
     env: {
       ...(input.env ?? getCurrentProcessEnv()),

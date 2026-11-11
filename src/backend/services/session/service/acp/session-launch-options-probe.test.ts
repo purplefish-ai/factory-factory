@@ -169,6 +169,25 @@ describe('native launch capability discovery', () => {
     expect(child.kill).toHaveBeenCalledWith('SIGTERM');
     expect(mocks.close).toHaveBeenCalledOnce();
   });
+  it('passes cancellation to the disposable child and rejects pre-aborted probes', async () => {
+    const child = createMockChildProcess();
+    exitChildAfterSigterm(child);
+    mocks.spawn.mockReturnValue(child);
+    const cancellation = new AbortController();
+    await fetchSessionLaunchOptionsFromAcp({ provider: 'CLAUDE', signal: cancellation.signal });
+    expect(mocks.spawn).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.any(Array),
+      expect.objectContaining({ signal: cancellation.signal })
+    );
+    mocks.spawn.mockClear();
+    cancellation.abort(new Error('stopped'));
+    await expect(
+      fetchSessionLaunchOptionsFromAcp({ provider: 'CLAUDE', signal: cancellation.signal })
+    ).rejects.toThrow('stopped');
+    expect(mocks.spawn).not.toHaveBeenCalled();
+  });
+
   it('rejects tool permissions and interactive elicitation during disposable discovery', async () => {
     const child = createMockChildProcess();
     exitChildAfterSigterm(child);

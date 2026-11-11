@@ -23,7 +23,7 @@ describe('ClaudeModelCatalogService', () => {
     expect(fetchModels).toHaveBeenCalledOnce();
   });
 
-  it('keeps successful discovery for 30 seconds from completion', async () => {
+  it('serves successful discovery while refreshing after five minutes', async () => {
     vi.useFakeTimers();
     const pending = createDeferred<ReturnType<typeof catalog>>();
     const fetchModels = vi.fn(() => pending.promise);
@@ -33,11 +33,13 @@ describe('ClaudeModelCatalogService', () => {
     pending.resolve(catalog());
     await first;
 
-    await vi.advanceTimersByTimeAsync(29_999);
+    await vi.advanceTimersByTimeAsync(5 * 60_000 - 1);
     await expect(service.getModels()).resolves.toEqual(catalog());
     expect(fetchModels).toHaveBeenCalledOnce();
     fetchModels.mockResolvedValue([{ ...catalog()[0]!, id: 'new-model' }]);
     await vi.advanceTimersByTimeAsync(1);
+    await expect(service.getModels()).resolves.toEqual(catalog());
+    await vi.advanceTimersByTimeAsync(0);
     await expect(service.getModels()).resolves.toMatchObject([{ id: 'new-model' }]);
     expect(fetchModels).toHaveBeenCalledTimes(2);
   });

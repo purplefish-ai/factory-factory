@@ -302,7 +302,10 @@ vi.mock('@/backend/services/session', async () => {
         }) satisfies Pick<SessionLoadService, 'prepareLoad' | 'captureReplay' | 'completeLoad'>
     ),
     sessionCommandFactories,
-    sessionConfigService: {},
+    sessionConfigService: {
+      warmLaunchOptions: vi.fn().mockResolvedValue(undefined),
+      stopLaunchOptions: vi.fn().mockResolvedValue(undefined),
+    },
     sessionPermissionService: {},
     sessionDispatchService: { shutdown: vi.fn().mockResolvedValue(undefined) },
     claudeModelCatalogService: { getModels: vi.fn() },

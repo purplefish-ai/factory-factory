@@ -21,6 +21,7 @@ export type ShutdownGraph = {
     readonly periodicTaskService: { stop(): Promise<void> };
     readonly agentRuntime?: { stop(): Promise<void> };
     readonly workspaceMetadata?: { stop(): Promise<void> };
+    readonly sessionConfigService?: { stopLaunchOptions(): Promise<void> };
     readonly sessionLifecycleService: { stopAllClients(timeoutMs?: number): Promise<void> };
     readonly sessionDispatchService: { shutdown(): Promise<void> };
     readonly codexAccountService: { shutdown(): Promise<void> };
@@ -79,6 +80,10 @@ export function createShutdownPlan(
     { name: 'snapshot-reconciliation', stop: () => lifecycle.snapshotReconciliation.stop() },
     { name: 'pr-event-poll', stop: () => services.ratchetService.stop() },
     { name: 'periodic-task-poll', stop: () => services.periodicTaskService.stop() },
+    {
+      name: 'session-launch-options',
+      stop: () => services.sessionConfigService?.stopLaunchOptions(),
+    },
   ];
   const steps: ShutdownStep[] = [
     // Agent intake closes admission and drains committed launches before
@@ -97,7 +102,11 @@ export function createShutdownPlan(
     { name: 'session-dispatch', stop: () => services.sessionDispatchService.shutdown() },
     // Session teardown retains its final observation drain, which still reads
     // account context; cancelling an in-flight login waits until it settles.
-    { name: 'codex-accounts', stop: () => services.codexAccountService.shutdown() },
+    {
+      name: 'codex-accounts',
+      after: ['session-launch-options'],
+      stop: () => services.codexAccountService.shutdown(),
+    },
     { name: 'terminals', stop: () => services.terminalService.cleanup() },
     { name: 'run-scripts', stop: () => services.runScriptService.cleanup() },
     { name: 'port-shares', stop: () => services.portShareService.cleanup() },
