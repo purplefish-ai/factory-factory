@@ -32,18 +32,22 @@ Reported behavior after renaming a workspace:
 Expected behavior: every surface that identifies a workspace by name shows the
 new name as soon as the rename completes.
 
-## How a rename flows today
+## How a rename flowed before the fix
 
-| Step                 | Code                                                                            | Behavior                                                                              |
-| -------------------- | ------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
-| Header dialog        | `workspace-header-overflow-menu.tsx:90,108`                                     | Seeds the field from `workspace.name`; submits the rename                             |
-| Kanban inline editor | `kanban-card.tsx:472`, `use-inline-workspace-rename.ts`                         | Seeds the field from `workspace.name`; submits the rename                             |
-| RPC                  | `workspace.trpc.ts:174`                                                         | Validates and calls the serialized rename use case                                    |
-| Persistence          | `workspace-metadata.accessor.ts:64` (`renameAndPin`)                            | Writes `Workspace.name` only; `branchName` is untouched                               |
-| Publication          | `workspace-rename.orchestrator.ts:21`, `publishAcceptedName`                    | Emits `snapshot_changed` with source `mutation:workspace_rename`                      |
-| Client caches        | `use-project-snapshot-sync.ts`, `workspace-cache-reconciler.ts`                 | Applies the entry to `workspace.listForProject` and `workspace.get`                   |
-| Kanban and sidebar   | `kanban-card.tsx:514`, `workspace-item-content.tsx:113`                         | Render `workspace.name`                                                               |
-| Workspace header     | `workspace-detail-header.tsx:114-117`, `workspace-detail-header/utils.ts:29-48` | Renders `getWorkspaceHeaderLabel(branchName, name, isMobile)`, which prefers `branch` |
+Line references are from `30b3adbc`, before this fix. The last row shows the
+header after the fix.
+
+| Step                          | Code                                                                            | Behavior                                                                                                 |
+| ----------------------------- | ------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| Header dialog                 | `workspace-header-overflow-menu.tsx:90,108`                                     | Seeds the field from `workspace.name`; submits the rename                                                |
+| Kanban inline editor          | `kanban-card.tsx:472`, `use-inline-workspace-rename.ts`                         | Seeds the field from `workspace.name`; submits the rename                                                |
+| RPC                           | `workspace.trpc.ts:174`                                                         | Validates and calls the serialized rename use case                                                       |
+| Persistence                   | `workspace-metadata.accessor.ts:64` (`renameAndPin`)                            | Writes `Workspace.name` only; `branchName` is untouched                                                  |
+| Publication                   | `workspace-rename.orchestrator.ts:21`, `publishAcceptedName`                    | Emits `snapshot_changed` with source `mutation:workspace_rename`                                         |
+| Client caches                 | `use-project-snapshot-sync.ts`, `workspace-cache-reconciler.ts`                 | Applies the entry to `workspace.listForProject` and `workspace.get`                                      |
+| Kanban and sidebar            | `kanban-card.tsx:514`, `workspace-item-content.tsx:113`                         | Render `workspace.name`                                                                                  |
+| Workspace header (before fix) | `workspace-detail-header.tsx:114-117`, `workspace-detail-header/utils.ts:29-48` | Rendered `getWorkspaceHeaderLabel(branchName, name, isMobile)` (since removed), which preferred `branch` |
+| Workspace header (after fix)  | `workspace-detail-header.tsx`, `workspace-switcher-dropdown.tsx`                | Renders `workspace.name`; the branch is the trigger's hover text                                         |
 
 ## Investigation
 
@@ -71,18 +75,19 @@ catch it.
 
 ## Root cause: workspace header
 
-`getWorkspaceHeaderLabel` returns the workspace name only when `branchName` is
-empty. Nearly every workspace has a branch, so the rename is invisible there.
-Only child workspaces bypass it (`workspace-detail-header.tsx:115-116`).
+Before the fix, `getWorkspaceHeaderLabel` (now removed) returned the workspace
+name only when `branchName` was empty. Nearly every workspace has a branch, so
+the rename was invisible there. Only child workspaces bypassed it
+(`workspace-detail-header.tsx:115-116` at `30b3adbc`).
 
-Two pieces of the codebase already assume the header shows the name:
+Two pieces of the codebase already assumed the header shows the name:
 
 - `docs/workspaces.md` describes "family navigation beside the workspace name"
   in the workspace header.
 - The header dialog's comment says the dialog stays open so it "closes onto" the
   new name (`workspace-header-overflow-menu.tsx:107`).
 
-## Proposed fix: workspace header
+## Fix: workspace header (implemented)
 
 Show `workspace.name` as the header label on every viewport, and keep the branch
 reachable from the same control.
