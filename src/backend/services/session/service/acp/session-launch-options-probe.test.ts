@@ -1,5 +1,6 @@
 import type { SessionConfigOption } from '@agentclientprotocol/sdk/unstable';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { deferred } from '@/test-utils/deferred';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 import type { AcpClientCallbacks } from './acp-connection';
 import {
@@ -169,6 +170,31 @@ describe('native launch capability discovery', () => {
     expect(child.kill).toHaveBeenCalledWith('SIGTERM');
     expect(mocks.close).toHaveBeenCalledOnce();
   });
+  it('preserves the shutdown reason when Node emits AbortError after spawn', async () => {
+    const child = createMockChildProcess();
+    exitChildAfterSigterm(child);
+    mocks.spawn.mockReturnValue(child);
+    const initializing = deferred<void>();
+    mocks.initialize.mockReturnValue(initializing.promise);
+    const cancellation = new AbortController();
+    const reason = new Error('Launch discovery stopped');
+    const probe = startProbe({ provider: 'CLAUDE', signal: cancellation.signal });
+    const rejected = expect(probe.result).rejects.toBe(reason);
+    cancellation.abort(reason);
+    child.emit(
+      'error',
+      Object.assign(new Error('The operation was aborted', { cause: reason }), {
+        name: 'AbortError',
+      })
+    );
+    try {
+      await rejected;
+      await probe.drained;
+    } finally {
+      initializing.resolve();
+    }
+  });
+
   it('passes cancellation to the disposable child and rejects pre-aborted probes', async () => {
     const child = createMockChildProcess();
     exitChildAfterSigterm(child);

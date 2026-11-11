@@ -351,7 +351,12 @@ runtime, without starting an inference turn. Claude model discovery uses an
 ephemeral ACP session with tools disabled. Both catalog services coalesce
 requests and keep successful results fresh for five minutes. Later reads return
 the last success immediately while one background refresh runs; refresh failures
-retain those results and retry after a 30-second cooldown.
+retain those results and retry after a 30-second cooldown. Catalog refresh
+failures emit a sanitized warning once per attempt. Shutdown fences both catalog
+services, aborts their disposable children, and waits up to seven seconds for
+active work and physical child/pipe closure before account teardown. Caller
+timeouts remain independent of physical drain; undrained processes retain their
+cache's discovery admission rather than spawning retries.
 
 Session startup validates that the workspace working directory exists and is a
 directory before spawning an adapter. Missing worktrees report the affected path
@@ -486,6 +491,7 @@ selection remains editable.
 Successful launcher options are persisted atomically to
 `BASE_DIR/cache/session-launch-options.json`. A versioned Zod schema validates
 restored metadata; missing, corrupt, or incompatible snapshots start cold.
+Saving skips an unsupported entry without discarding other valid models.
 Persistence errors do not block the launcher. Startup restores all retained
 entries and warms the saved default model for each provider without delaying
 server readiness. Restored entries refresh on their next use, including the

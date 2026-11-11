@@ -21,6 +21,8 @@ export type ShutdownGraph = {
     readonly periodicTaskService: { stop(): Promise<void> };
     readonly agentRuntime?: { stop(): Promise<void> };
     readonly workspaceMetadata?: { stop(): Promise<void> };
+    readonly claudeModelCatalogService?: { stop(): Promise<void> };
+    readonly codexModelCatalogService?: { stop(): Promise<void> };
     readonly sessionConfigService?: { stopLaunchOptions(): Promise<void> };
     readonly sessionLifecycleService: { stopAllClients(timeoutMs?: number): Promise<void> };
     readonly sessionDispatchService: { shutdown(): Promise<void> };
@@ -71,6 +73,8 @@ export function createShutdownPlan(
   hooks: ServerShutdownHooks = {}
 ): ShutdownPlan {
   const jobs: ShutdownJob[] = [
+    { name: 'claude-model-catalog', stop: () => services.claudeModelCatalogService?.stop() },
+    { name: 'codex-model-catalog', stop: () => services.codexModelCatalogService?.stop() },
     { name: 'application-update-idle', stop: () => services.applicationUpdateService?.stop() },
     {
       name: 'reconciliation-cleanup',
@@ -104,7 +108,7 @@ export function createShutdownPlan(
     // account context; cancelling an in-flight login waits until it settles.
     {
       name: 'codex-accounts',
-      after: ['session-launch-options'],
+      after: ['session-launch-options', 'claude-model-catalog', 'codex-model-catalog'],
       stop: () => services.codexAccountService.shutdown(),
     },
     { name: 'terminals', stop: () => services.terminalService.cleanup() },

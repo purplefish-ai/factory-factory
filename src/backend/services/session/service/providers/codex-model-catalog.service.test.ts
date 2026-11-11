@@ -17,6 +17,22 @@ function catalog() {
 }
 
 describe('CodexModelCatalogService', () => {
+  it('does not create another catalog after shutdown interrupts account resolution', async () => {
+    const account = createDeferred<string>();
+    const fetchModels = vi.fn(async () => catalog());
+    const service = new CodexModelCatalogService({
+      fetchModels,
+      resolveAccountId: () => account.promise,
+    });
+    const reading = service.getModels('saved');
+    const rejected = expect(reading).rejects.toThrow('stopped');
+    await service.stop();
+    account.resolve('saved');
+    await rejected;
+    expect(fetchModels).not.toHaveBeenCalled();
+    await expect(service.getModels('other')).rejects.toThrow('stopped');
+  });
+
   it('isolates concurrent and cached catalogs by saved account', async () => {
     const fetchModels = vi.fn(async () => catalog());
     const service = new CodexModelCatalogService({ fetchModels });
@@ -24,8 +40,8 @@ describe('CodexModelCatalogService', () => {
     await service.getModels('a');
     await service.getModels('b');
     expect(fetchModels).toHaveBeenCalledTimes(2);
-    expect(fetchModels).toHaveBeenCalledWith('a');
-    expect(fetchModels).toHaveBeenCalledWith('b');
+    expect(fetchModels).toHaveBeenCalledWith('a', expect.any(AbortSignal), expect.any(Function));
+    expect(fetchModels).toHaveBeenCalledWith('b', expect.any(AbortSignal), expect.any(Function));
   });
   it('discovers Auto models across accounts and reuses their isolated caches', async () => {
     const fetchModels = vi.fn(async (id?: string) => [{ ...catalog()[0]!, id: `model-${id}` }]);
@@ -39,7 +55,10 @@ describe('CodexModelCatalogService', () => {
     ]);
     await service.getModels();
     await service.getModels('b');
-    expect(fetchModels.mock.calls).toEqual([['a'], ['b']]);
+    expect(fetchModels.mock.calls).toEqual([
+      ['a', expect.any(AbortSignal), expect.any(Function)],
+      ['b', expect.any(AbortSignal), expect.any(Function)],
+    ]);
   });
   it('keeps available Auto catalogs when another account probe fails', async () => {
     const fetchModels = vi.fn((id?: string) => {

@@ -65,8 +65,14 @@ export class LaunchOptionsStore implements LaunchOptionsPersistence {
     }
   }
 
-  save(entries: StoredLaunchOptions[]): Promise<void> {
-    const data = JSON.stringify(snapshotSchema.parse({ version: 1, entries }));
+  async save(entries: StoredLaunchOptions[]): Promise<void> {
+    // One unsupported provider response must not prevent other models from
+    // surviving restart. Never truncate a model's advertised choices.
+    const supported = entries.flatMap((entry) => {
+      const parsed = entrySchema.safeParse(entry);
+      return parsed.success ? [parsed.data] : [];
+    });
+    const data = JSON.stringify(snapshotSchema.parse({ version: 1, entries: supported }));
     const write = this.writing
       .catch(() => undefined)
       .then(async () => {
@@ -80,6 +86,6 @@ export class LaunchOptionsStore implements LaunchOptionsPersistence {
         }
       });
     this.writing = write;
-    return write;
+    await write;
   }
 }

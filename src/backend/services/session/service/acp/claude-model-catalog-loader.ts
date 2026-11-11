@@ -37,11 +37,16 @@ function createCatalogClient(): AcpClientCallbacks {
   };
 }
 
-export async function fetchClaudeModelCatalogFromAcp(): Promise<ClaudeModelCatalogEntry[]> {
+export async function fetchClaudeModelCatalogFromAcp(
+  signal?: AbortSignal,
+  retainLifetime?: (drained: Promise<void>) => void
+): Promise<ClaudeModelCatalogEntry[]> {
+  signal?.throwIfAborted();
   const cwd = tmpdir();
   const command = resolveProviderAcpSpawnCommand('CLAUDE');
   const child = spawn(command.command, command.args, {
     cwd,
+    ...(signal ? { signal } : {}),
     stdio: ['pipe', 'pipe', 'pipe'],
     env: {
       ...getCurrentProcessEnv(),
@@ -50,14 +55,26 @@ export async function fetchClaudeModelCatalogFromAcp(): Promise<ClaudeModelCatal
     },
     detached: false,
   });
+  const childClosed = new Promise<void>((resolve) => child.once('close', () => resolve()));
+  retainLifetime?.(childClosed);
   let providerSessionId: string | null = null;
   let spawnErrorListener: ((error: unknown) => void) | null = null;
   const spawnError = new Promise<never>((_resolve, reject) => {
     spawnErrorListener = (error: unknown) =>
-      reject(createAcpSpawnError(command.commandLabel, error));
-    child.once('error', spawnErrorListener);
+      reject(
+        error instanceof Error && error.name === 'AbortError' && signal?.aborted
+          ? signal.reason
+          : createAcpSpawnError(command.commandLabel, error)
+      );
+    child.on('error', spawnErrorListener);
   });
 
+  void spawnError.catch(() => undefined);
+  void childClosed.then(() => {
+    if (spawnErrorListener) {
+      child.removeListener('error', spawnErrorListener);
+    }
+  });
   child.stderr?.on('data', (chunk: Buffer) => {
     appLogger.debug('Claude ACP catalog stderr', { data: chunk.toString() });
   });
@@ -70,6 +87,7 @@ export async function fetchClaudeModelCatalogFromAcp(): Promise<ClaudeModelCatal
   const input = Readable.toWeb(child.stdout) as ReadableStream<Uint8Array>;
   const output = Writable.toWeb(child.stdin) as WritableStream<Uint8Array>;
   const connection = createAcpConnection(createCatalogClient(), ndJsonStream(output, input));
+  retainLifetime?.(Promise.all([childClosed, connection.closed]).then(() => undefined));
   const runOperation = async <T>(promise: Promise<T>, description: string): Promise<T> =>
     await Promise.race([
       withTimeout({
@@ -134,7 +152,7 @@ export async function fetchClaudeModelCatalogFromAcp(): Promise<ClaudeModelCatal
     }));
   } finally {
     try {
-      if (providerSessionId) {
+      if (providerSessionId && !signal?.aborted) {
         try {
           await runOperation(
             connection.extMethod('session/close', { sessionId: providerSessionId }),
@@ -148,9 +166,7 @@ export async function fetchClaudeModelCatalogFromAcp(): Promise<ClaudeModelCatal
       try {
         await terminateCatalogProcess(child);
       } finally {
-        if (spawnErrorListener) {
-          child.removeListener('error', spawnErrorListener);
-        }
+        connection.close();
       }
     }
   }

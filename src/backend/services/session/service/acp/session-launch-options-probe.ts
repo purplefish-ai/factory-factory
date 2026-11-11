@@ -139,7 +139,12 @@ async function probeLaunchOptions(
   retainLifetime(childClosed);
   let spawnListener: ((error: Error) => void) | undefined;
   const failed = new Promise<never>((_resolve, reject) => {
-    spawnListener = (error) => reject(createAcpSpawnError(command.commandLabel, error));
+    spawnListener = (error) =>
+      reject(
+        error.name === 'AbortError' && input.signal?.aborted
+          ? input.signal.reason
+          : createAcpSpawnError(command.commandLabel, error)
+      );
     child.on('error', spawnListener);
   });
   void childClosed.then(() => {

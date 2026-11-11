@@ -1,11 +1,25 @@
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, rename, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { deferred } from '@/test-utils/deferred';
+
+vi.mock('node:fs/promises', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:fs/promises')>();
+  return {
+    ...actual,
+    mkdir: vi.fn(actual.mkdir),
+    writeFile: vi.fn(actual.writeFile),
+    rename: vi.fn(actual.rename),
+  };
+});
 import { LaunchOptionsStore } from './session-launch-options-store';
 
 const roots: string[] = [];
 afterEach(async () => {
+  vi.mocked(mkdir).mockReset();
+  vi.mocked(writeFile).mockReset();
+  vi.mocked(rename).mockReset();
   await Promise.all(roots.map((root) => rm(root, { recursive: true, force: true })));
 });
 async function fixture() {
@@ -45,10 +59,60 @@ describe('durable launcher options', () => {
       expect(await store.load()).toEqual([]);
     }
   });
-  it('serializes writes so the newest snapshot wins', async () => {
-    const { store, path } = await fixture();
-    await Promise.all([store.save(entries), store.save([])]);
-    expect(await store.load()).toEqual([]);
-    expect(JSON.parse(await readFile(path, 'utf8'))).toEqual({ version: 1, entries: [] });
+  it('serializes writes even when the first rename is blocked', async () => {
+    const { store } = await fixture();
+    const entered = deferred<void>();
+    const release = deferred<void>();
+    vi.mocked(mkdir).mockResolvedValue(undefined);
+    vi.mocked(writeFile).mockResolvedValue(undefined);
+    vi.mocked(rename)
+      .mockResolvedValue(undefined)
+      .mockImplementationOnce(async () => {
+        entered.resolve();
+        await release.promise;
+      });
+    const first = store.save(entries);
+    await entered.promise;
+    const second = store.save([]);
+    try {
+      // Filesystem operations are resolved mocks: a complete event-loop turn
+      // drains every runnable continuation, without relying on disk timing.
+      await new Promise((resolve) => setImmediate(resolve));
+      expect(rename).toHaveBeenCalledTimes(1);
+      expect(writeFile).toHaveBeenCalledTimes(1);
+    } finally {
+      release.resolve();
+      await Promise.all([first, second]);
+    }
+    expect(rename).toHaveBeenCalledTimes(2);
+    expect(vi.mocked(writeFile).mock.calls[1]?.[1]).toBe(
+      JSON.stringify({ version: 1, entries: [] })
+    );
+  });
+
+  it('keeps valid entries when another entry exceeds the option bound', async () => {
+    const { store } = await fixture();
+    const valid = entries[0]!;
+    const oversized = {
+      ...valid,
+      value: {
+        ...valid.value,
+        reasoning: {
+          options: Array.from({ length: 129 }, (_, i) => ({ value: String(i), label: String(i) })),
+        },
+      },
+    };
+    await store.save([oversized, valid]);
+    expect(await store.load()).toEqual(entries);
+  });
+
+  it('rejects write failures asynchronously', async () => {
+    const { store } = await fixture();
+    const invalid = Array.from({ length: 33 }, () => entries[0]!);
+    let writing: Promise<void> | undefined;
+    expect(() => {
+      writing = store.save(invalid);
+    }).not.toThrow();
+    await expect(writing).rejects.toThrow();
   });
 });

@@ -2,6 +2,7 @@ import { EventEmitter } from 'node:events';
 import { tmpdir } from 'node:os';
 import { PassThrough } from 'node:stream';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { deferred } from '@/test-utils/deferred';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 import { fetchClaudeModelCatalogFromAcp } from './claude-model-catalog-loader';
 
@@ -50,6 +51,8 @@ vi.mock('./acp-connection', () => ({
       initialize: mocks.initialize,
       newSession: mocks.newSession,
       extMethod: mocks.extMethod,
+      close: vi.fn(),
+      closed: Promise.resolve(),
     };
   },
 }));
@@ -122,11 +125,87 @@ describe('fetchClaudeModelCatalogFromAcp', () => {
         queueMicrotask(() => {
           child.signalCode = signal;
           child.emit('exit', null, signal);
+          child.stdin.destroy();
+          child.stdout.destroy();
+          child.stderr.destroy();
+          child.emit('close', null, signal);
         });
         return true;
       }),
     });
     mocks.spawn.mockReturnValue(unsafeCoerce(child));
+  });
+
+  it('cancels the caller while retaining physical drain until child close', async () => {
+    const initializing = deferred<void>();
+    mocks.initialize.mockReturnValue(initializing.promise);
+    const cancellation = new AbortController();
+    const reason = new Error('Model catalog discovery stopped');
+    const lifetimes: Promise<void>[] = [];
+    const reading = fetchClaudeModelCatalogFromAcp(cancellation.signal, (drained) =>
+      lifetimes.push(drained)
+    );
+    const rejected = expect(reading).rejects.toBe(reason);
+    const child = mocks.spawn.mock.results[0]!.value;
+    child.kill.mockImplementation(() => {
+      child.signalCode = 'SIGTERM';
+      child.emit('exit', null, 'SIGTERM');
+      return true;
+    });
+    expect(mocks.spawn.mock.calls[0]?.[2].signal).toBe(cancellation.signal);
+    cancellation.abort(reason);
+    child.emit(
+      'error',
+      Object.assign(new Error('aborted', { cause: reason }), { name: 'AbortError' })
+    );
+    let drained = false;
+    const draining = Promise.all(lifetimes).then(() => {
+      drained = true;
+    });
+    try {
+      await rejected;
+      expect(drained).toBe(false);
+      child.emit('close', null, 'SIGTERM');
+      await draining;
+    } finally {
+      initializing.resolve();
+      child.emit('close', null, 'SIGTERM');
+    }
+  });
+
+  it('bounds timed-out callers even when an exited child retains open pipes', async () => {
+    vi.useFakeTimers();
+    const initializing = deferred<void>();
+    mocks.initialize.mockReturnValue(initializing.promise);
+    const lifetimes: Promise<void>[] = [];
+    const reading = fetchClaudeModelCatalogFromAcp(undefined, (drained) => lifetimes.push(drained));
+    let failure: unknown;
+    void reading.catch((error: unknown) => {
+      failure = error;
+    });
+    const child = mocks.spawn.mock.results[0]!.value;
+    child.kill.mockImplementation(() => {
+      child.signalCode = 'SIGTERM';
+      child.emit('exit', null, 'SIGTERM');
+      return true;
+    });
+    let drained = false;
+    const draining = Promise.all(lifetimes).then(() => {
+      drained = true;
+    });
+    try {
+      await vi.advanceTimersByTimeAsync(30_001);
+      expect(failure).toMatchObject({ message: expect.stringContaining('timed out') });
+      expect(drained).toBe(false);
+      expect(child.listenerCount('error')).toBeGreaterThan(0);
+      expect(() => child.emit('error', new Error('late cancellation'))).not.toThrow();
+    } finally {
+      child.emit('close', null, 'SIGTERM');
+      initializing.resolve();
+      await reading.catch(() => undefined);
+      await draining;
+      vi.useRealTimers();
+    }
   });
 
   it('uses the managed-policy-aware ACP executable for an ephemeral catalog session', async () => {
@@ -245,6 +324,7 @@ describe('fetchClaudeModelCatalogFromAcp', () => {
       expect(mocks.spawn.mock.results[0]?.value.kill).not.toHaveBeenCalledWith('SIGKILL');
 
       await vi.advanceTimersByTimeAsync(5000);
+      child.emit('close', null, 'SIGKILL');
       await expect(catalogPromise).resolves.toHaveLength(3);
       expect(mocks.spawn.mock.results[0]?.value.kill).toHaveBeenCalledWith('SIGKILL');
       expect(errorListenerCounts).toEqual([1, 1]);
