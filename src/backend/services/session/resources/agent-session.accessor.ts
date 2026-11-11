@@ -1,4 +1,5 @@
 import { prisma } from '@/backend/db';
+import { ADVERSARIAL_REVIEW_WORKFLOW } from '@/shared/adversarial-review';
 import { SessionStatus } from '@/shared/core';
 import { eventSessionCreationSchema, type EventSessionCreation } from '@/shared/event-agent-launch';
 import { type AgentSession, Prisma, type SessionProvider } from '@prisma-gen/client';
@@ -347,6 +348,13 @@ class PrismaAgentSessionAccessor implements AgentSessionAccessor {
       where: {
         workspaceId: data.workspaceId,
         status: { in: ACTIVE_AGENT_SESSION_STATUSES },
+        // Finished adversarial reviews keep their transcript but no slot; see
+        // isFinishedAdversarialReview.
+        NOT: {
+          workflow: ADVERSARIAL_REVIEW_WORKFLOW,
+          status: SessionStatus.IDLE,
+          providerSessionId: { not: null },
+        },
       },
     });
 
