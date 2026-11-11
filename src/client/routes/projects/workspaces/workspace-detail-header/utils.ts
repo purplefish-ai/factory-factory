@@ -26,27 +26,6 @@ export function groupWorkspaceSwitcherItems(workspaces: ServerWorkspace[]): Work
   return { working, waiting, done };
 }
 
-export function getWorkspaceHeaderLabel(
-  branchName: string | null | undefined,
-  workspaceName: string,
-  isMobile: boolean
-): string {
-  if (!branchName) {
-    return workspaceName;
-  }
-
-  if (!isMobile) {
-    return branchName;
-  }
-
-  const slashIndex = branchName.indexOf('/');
-  if (slashIndex === -1 || slashIndex === branchName.length - 1) {
-    return branchName;
-  }
-
-  return branchName.slice(slashIndex + 1);
-}
-
 export function isWorkspaceMerged(
   workspace: Pick<WorkspaceHeaderWorkspace, 'prState' | 'ratchetState' | 'sidebarStatus'>
 ): boolean {

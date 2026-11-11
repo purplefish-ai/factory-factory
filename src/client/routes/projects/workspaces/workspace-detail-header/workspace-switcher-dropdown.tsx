@@ -59,15 +59,16 @@ export function WorkspaceSwitcherDropdown({
   projectSlug,
   projectId,
   currentWorkspaceId,
-  currentWorkspaceLabel,
   currentWorkspaceName,
+  currentBranchName,
   compact = false,
 }: {
   projectSlug: string;
   projectId: string;
   currentWorkspaceId: string;
-  currentWorkspaceLabel: string;
   currentWorkspaceName: string;
+  /** Shown on hover; the label is always the (renamable) workspace name. */
+  currentBranchName?: string | null;
   compact?: boolean;
 }) {
   const navigate = useNavigate();
@@ -90,7 +91,7 @@ export function WorkspaceSwitcherDropdown({
     <Select value={currentWorkspaceId} onValueChange={handleValueChange}>
       <SelectTrigger
         id="workspace-detail-workspace-select"
-        title={currentWorkspaceName}
+        title={currentBranchName || currentWorkspaceName}
         aria-label={`Open workspace menu (${queueSummaryLabel})`}
         className={cn(
           'h-7 min-w-0 w-auto max-w-full border-0 bg-transparent dark:bg-transparent px-0.5 text-xs font-normal text-muted-foreground shadow-none focus:ring-0 hover:[&>.workspace-switcher-label]:underline focus-visible:[&>.workspace-switcher-label]:underline md:max-w-[24rem] md:px-1 md:text-sm [&>svg:last-of-type]:hidden',
@@ -98,7 +99,7 @@ export function WorkspaceSwitcherDropdown({
         )}
       >
         <span className="workspace-switcher-label flex-1 min-w-0 truncate text-foreground font-semibold">
-          {currentWorkspaceLabel}
+          {currentWorkspaceName}
         </span>
         <span className={cn('shrink-0', compact && 'hidden')} aria-hidden>
           <span className="ml-1 hidden text-2xs font-normal text-muted-foreground tabular-nums @[72rem]/header:block">

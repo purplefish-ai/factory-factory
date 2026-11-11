@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import {
-  getWorkspaceHeaderLabel,
   groupWorkspaceSwitcherItems,
   hasVisiblePullRequest,
   isWorkspaceClosed,
@@ -59,28 +58,6 @@ describe('groupWorkspaceSwitcherItems', () => {
     ]);
     expect(grouped.working.map((workspace) => workspace.id)).toEqual(['working']);
     expect(grouped.done.map((workspace) => workspace.id)).toEqual(['done']);
-  });
-});
-
-describe('getWorkspaceHeaderLabel', () => {
-  it('uses workspace name when branch is missing', () => {
-    expect(getWorkspaceHeaderLabel(null, 'Workspace Name', false)).toBe('Workspace Name');
-  });
-
-  it('uses full branch on desktop', () => {
-    expect(getWorkspaceHeaderLabel('feature/branch-name', 'Workspace Name', false)).toBe(
-      'feature/branch-name'
-    );
-  });
-
-  it('uses suffix on mobile when branch contains a slash', () => {
-    expect(getWorkspaceHeaderLabel('feature/branch-name', 'Workspace Name', true)).toBe(
-      'branch-name'
-    );
-  });
-
-  it('keeps branch on mobile when branch has no slash', () => {
-    expect(getWorkspaceHeaderLabel('branch-name', 'Workspace Name', true)).toBe('branch-name');
   });
 });
 
