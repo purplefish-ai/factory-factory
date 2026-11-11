@@ -1,5 +1,8 @@
-import { useCallback, useLayoutEffect, useRef, useState } from 'react';
+import { useCallback, useState } from 'react';
+import { useLatestRef } from '@/client/hooks/use-stable-callback';
+import { QUERY_RETRY } from '@/client/lib/query-options';
 import { trpc } from '@/client/lib/trpc';
+import { useProviderOptions, useUserSettings } from '@/client/lib/user-settings-queries';
 import { resolveEffectiveSessionProvider } from '@/lib/session-provider-selection';
 import type { ChatModelOption, ChatProvider } from '@/shared/chat-capabilities';
 import type { CodexAccountSummary } from '@/shared/codex-accounts';
@@ -50,10 +53,7 @@ export function useSessionLaunchSelectionState(
     ...restoration.snapshot,
     restoredSnapshot: restoration.snapshot,
   }));
-  const committedInputs = useRef({ scopeKey, defaults, restoration });
-  useLayoutEffect(() => {
-    committedInputs.current = { scopeKey, defaults, restoration };
-  }, [scopeKey, defaults, restoration]);
+  const committedInputs = useLatestRef({ scopeKey, defaults, restoration });
   const reset = useCallback(() => {
     const current = committedInputs.current;
     const snapshot = { defaults: current.defaults, drafts: {} };
@@ -90,8 +90,8 @@ export function useSessionLaunchSelectionState(
     provider === 'CODEX'
       ? state.defaults?.defaultCodexReasoningEffort
       : state.defaults?.defaultClaudeReasoningEffort;
-  const latestState = useRef(state);
-  latestState.current = state;
+  // Updates write ahead so a second update in the same event builds on the first.
+  const latestState = useLatestRef(state);
   const commit = (next: LaunchSelectionState) => {
     const snapshot: SessionLaunchSelectionSnapshot = {
       provider: next.provider,
@@ -224,7 +224,7 @@ function useNativeLaunchOptions(
       model,
       ...(provider === 'CODEX' && codexAccountId ? { codexAccountId } : {}),
     },
-    { enabled: enabled && provider !== null, staleTime: 30_000, retry: false }
+    { enabled: enabled && provider !== null, staleTime: 30_000, retry: QUERY_RETRY.costlyRead }
   );
   // The query is keyed by input; confirmed native IDs may differ from requested aliases.
   const native = query.data?.provider === provider ? query.data : undefined;
@@ -260,7 +260,7 @@ function useCodexAccountControl(
   const { data: accounts } = trpc.codexAccounts.list.useQuery(undefined, {
     enabled: selection.provider === 'CODEX' && scopeKey !== null,
     staleTime: 30_000,
-    retry: false,
+    retry: QUERY_RETRY.costlyRead,
   });
   return getCodexAccountControl(
     selection.provider,
@@ -283,11 +283,7 @@ export function useSessionLaunchSelection(
     onChange?: (snapshot: SessionLaunchSelectionSnapshot) => void;
   } = {}
 ): SessionLaunchSelection {
-  const {
-    data: settings,
-    error: settingsError,
-    refetch: refetchSettings,
-  } = trpc.userSettings.get.useQuery();
+  const { data: settings, error: settingsError, refetch: refetchSettings } = useUserSettings();
   const selection = useSessionLaunchSelectionState(
     scopeKey,
     settings && options.ready !== false
@@ -301,13 +297,14 @@ export function useSessionLaunchSelection(
       : undefined,
     options
   );
-  const { data: catalog, isLoading: modelsLoading } = trpc.userSettings.getProviderOptions.useQuery(
-    getAccountInput(selection.codexAccountId),
-    {
-      enabled: scopeKey !== null,
-      staleTime: 60_000,
-    }
-  );
+  const {
+    data: catalog,
+    isLoading: modelsLoading,
+    error: catalogError,
+    refetch: refetchCatalog,
+  } = useProviderOptions(getAccountInput(selection.codexAccountId), {
+    enabled: scopeKey !== null,
+  });
   const account = useCodexAccountControl(scopeKey, selection);
   const error =
     options.error ?? (!settings && settingsError ? "Couldn't load chat defaults" : undefined);
@@ -365,6 +362,11 @@ export function useSessionLaunchSelection(
     error,
     onRetry: retry,
     modelsLoading,
+    // Cached models stay usable when only a refetch failed.
+    modelsError: catalog ? undefined : catalogError?.message,
+    onRetryModels: () => {
+      void refetchCatalog();
+    },
     onProviderChange: selection.onProviderChange,
     onModelChange: selection.onModelChange,
     label: 'New conversation provider and model',

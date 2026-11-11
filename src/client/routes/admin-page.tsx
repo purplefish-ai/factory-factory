@@ -1,11 +1,8 @@
 import { FolderIcon } from '@phosphor-icons/react/dist/csr/Folder';
 import { Link, Navigate, useParams, useSearchParams } from 'react-router';
-import { Loading } from '@/client/components/loading';
-import { QueryErrorState } from '@/client/components/query-error-state';
 import { CodexAccountsSettings } from '@/client/features/codex-accounts';
 import { SlackSettings } from '@/client/features/slack';
 import { trpc } from '@/client/lib/trpc';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import {
   AdversarialReviewSection,
   AppearanceSettingsSection,
@@ -20,57 +17,44 @@ import {
 } from './admin/index';
 import { ProjectSettingsRow } from './admin/project-settings-row';
 import { SettingsPageLayout } from './admin/settings-page-layout';
+import { SettingsSection } from './admin/settings-section';
 import { SystemSettingsSection } from './admin/SystemSettingsSection';
 
 function ProjectSettingsAccordion() {
   const [searchParams, setSearchParams] = useSearchParams();
   const expandedProject = searchParams.get('project');
   const query = trpc.project.list.useQuery();
-  if (!query.data) {
-    return query.error ? (
-      <QueryErrorState
-        title="Couldn't load projects"
-        error={query.error}
-        onRetry={() => void query.refetch()}
-        isRetrying={query.isFetching}
-      />
-    ) : (
-      <Loading size="compact" message="Loading projects…" />
+  const setExpanded = (slug: string, open: boolean) => {
+    setSearchParams(
+      (previous) => {
+        const next = new URLSearchParams(previous);
+        if (open) {
+          next.set('project', slug);
+        } else {
+          next.delete('project');
+        }
+        return next;
+      },
+      { replace: true }
     );
-  }
+  };
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <FolderIcon className="h-5 w-5" />
-          Project settings
-        </CardTitle>
-        <CardDescription>
-          Expand a project to configure its scripts and issue tracking.
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        {query.data.length ? (
+    <SettingsSection
+      title="Project settings"
+      icon={<FolderIcon className="h-5 w-5" />}
+      description="Expand a project to configure its scripts and issue tracking."
+      query={query}
+      errorTitle="Couldn't load projects"
+    >
+      {(projects) =>
+        projects.length ? (
           <ul className="divide-y rounded-md border">
-            {query.data.map((project) => (
+            {projects.map((project) => (
               <ProjectSettingsRow
                 key={project.id}
                 project={project}
                 open={expandedProject === project.slug}
-                onOpenChange={(open) => {
-                  setSearchParams(
-                    (previous) => {
-                      const next = new URLSearchParams(previous);
-                      if (open) {
-                        next.set('project', project.slug);
-                      } else {
-                        next.delete('project');
-                      }
-                      return next;
-                    },
-                    { replace: true }
-                  );
-                }}
+                onOpenChange={(open) => setExpanded(project.slug, open)}
               />
             ))}
           </ul>
@@ -81,9 +65,9 @@ function ProjectSettingsAccordion() {
               Add a project
             </Link>
           </p>
-        )}
-      </CardContent>
-    </Card>
+        )
+      }
+    </SettingsSection>
   );
 }
 

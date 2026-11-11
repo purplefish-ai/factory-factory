@@ -1,13 +1,13 @@
 import type { inferRouterOutputs } from '@trpc/server';
 import { memo } from 'react';
 import type { ReactNode } from 'react';
-import { getStatusBannerClassName } from '@/client/lib/status-banner-styles';
+import { StatusCallout } from '@/client/components/status-callout';
+import type { WorkspaceSessionRuntimeSummary } from '@/client/lib/session-tab-runtime';
 import type { AppRouter } from '@/client/lib/trpc';
 import { MainViewContent } from './main-view-content';
 import { MainViewTabBar } from './main-view-tab-bar';
 import type { SessionQueuedMessageCount } from './session-close-guard';
-import type { WorkspaceSessionRuntimeSummary } from './session-tab-runtime';
-import { useWorkspacePanel } from './workspace-panel-context';
+import { useWorkspacePanelActions } from './workspace-panel-context';
 
 // =============================================================================
 // Types
@@ -29,6 +29,8 @@ export interface WorkspaceContentViewProps {
   onCreateSession: (codexAccountId?: string) => void;
   onCloseSession: (sessionId: string) => void;
   onRestartSession?: () => void;
+  /** A restart of the selected chat is in flight. */
+  isRestartingSession?: boolean;
   children: ReactNode;
   /** Route-owned recovery content for workspaces without a session. */
   emptyState?: ReactNode;
@@ -61,13 +63,14 @@ export const WorkspaceContentView = memo(function WorkspaceContentView({
   onCreateSession,
   onCloseSession,
   onRestartSession,
+  isRestartingSession = false,
   children,
   emptyState,
   maxSessions,
   hasWorktreePath,
 }: WorkspaceContentViewProps) {
   const hasNoSessions = sessions && sessions.length === 0;
-  const { openTab } = useWorkspacePanel();
+  const { openTab } = useWorkspacePanelActions();
 
   // Always show tab bar (with "+" button), but render empty state content when no sessions exist
   return (
@@ -84,6 +87,8 @@ export const WorkspaceContentView = memo(function WorkspaceContentView({
           onCreateSession={onCreateSession}
           onCloseSession={onCloseSession}
           onRestartSession={onRestartSession}
+          isRestartingSession={isRestartingSession}
+          isCreatingSession={isCreatingSession}
           onSelectClosedSession={(sessionId) => {
             // Use a generic label - the tab will show the archive icon
             openTab('closed-session', sessionId, 'History');
@@ -110,14 +115,9 @@ export const WorkspaceContentView = memo(function WorkspaceContentView({
                 </div>
 
                 {!hasWorktreePath && (
-                  <div
-                    className={[
-                      'border px-4 py-3 rounded-md text-sm',
-                      getStatusBannerClassName('warning'),
-                    ].join(' ')}
-                  >
+                  <StatusCallout tone="warning" className="text-left">
                     Workspace is initializing… Please wait for the worktree to be created.
-                  </div>
+                  </StatusCallout>
                 )}
               </div>
             </div>

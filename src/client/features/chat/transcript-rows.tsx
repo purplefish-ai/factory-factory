@@ -38,6 +38,8 @@ function TranscriptMessage({
       item={item}
       onOpenSubagent={display.onOpenSubagent}
       isQueued={queued}
+      isSteering={display.pendingSteerMessageId === item.id}
+      steerDisabled={display.pendingSteerMessageId !== undefined}
       toolExpansionToken={
         display.workspaceId && isToolSequence(item)
           ? [
@@ -58,12 +60,6 @@ function TranscriptMessage({
           ? () => display.onRemoveQueuedMessage?.(item.id)
           : undefined
       }
-      userMessageUuid={
-        'source' in item && item.source === 'user'
-          ? display.getUuidForMessageId?.(item.id)
-          : undefined
-      }
-      onRewindToMessage={display.onRewindToMessage}
       resolveWorkspaceFileLink={display.resolveWorkspaceFileLink}
       onWorkspaceFileLink={display.onWorkspaceFileLink}
       getToolExpansionState={display.workspaceId ? getExpansionState : undefined}

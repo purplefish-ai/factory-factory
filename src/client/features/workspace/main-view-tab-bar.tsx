@@ -4,16 +4,19 @@ import { FileCodeIcon } from '@phosphor-icons/react/dist/csr/FileCode';
 import { GitDiffIcon } from '@phosphor-icons/react/dist/csr/GitDiff';
 import { RobotIcon } from '@phosphor-icons/react/dist/csr/Robot';
 import { useEffect, useState } from 'react';
-import { AgentSessionStatus } from '@/client/components/agent-session-status';
+import { SessionStatusIcon } from '@/client/components/session-status-icon';
 import { SubagentIcon } from '@/client/components/subagent-icon';
 import { NewSessionAccountAction } from '@/client/features/session-selection';
 import { useShortcut } from '@/client/features/shortcuts';
 import { type SubagentSelection, useLiveSubagent } from '@/client/features/subagents';
 import { useTablistFocus } from '@/client/hooks/use-tablist-focus';
-import { handleTablistKeyDown } from '@/client/lib/roving-tablist';
 import { getSessionDisplayName } from '@/client/lib/session-display-name';
+import {
+  deriveSessionTabRuntime,
+  type WorkspaceSessionRuntimeSummary,
+} from '@/client/lib/session-tab-runtime';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
-import { TabButton } from '@/components/ui/tab-button';
+import { TabButton, TabList } from '@/components/ui/tab-button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 import type { SessionStatus as DbSessionStatus } from '@/shared/core';
@@ -28,10 +31,6 @@ import {
 } from './session-close-guard';
 import { isWorkspaceSessionLimitReached } from './session-limit';
 import { SessionNameEditor } from './session-name-editor';
-import {
-  deriveSessionTabRuntime,
-  type WorkspaceSessionRuntimeSummary,
-} from './session-tab-runtime';
 import type { MainViewTab } from './workspace-panel-context';
 import { useWorkspacePanel } from './workspace-panel-context';
 
@@ -77,21 +76,25 @@ function selectedChatLabel(
 }
 
 // =============================================================================
-// Status Dot Component
+// Session Status Component
 // =============================================================================
 
-interface StatusDotProps {
+interface SessionTabStatusProps {
   sessionSummary?: WorkspaceSessionRuntimeSummary;
   isCIFix?: boolean;
   isAgent?: boolean;
   persistedStatus?: DbSessionStatus;
 }
 
-function StatusDot({ sessionSummary, isCIFix, isAgent, persistedStatus }: StatusDotProps) {
+function SessionTabStatus({
+  sessionSummary,
+  isCIFix,
+  isAgent,
+  persistedStatus,
+}: SessionTabStatusProps) {
   const status = deriveSessionTabRuntime(sessionSummary, persistedStatus);
-  const StatusIcon = status.icon;
 
-  // CI fix sessions show wrench icon instead of dot, unless they need the user
+  // CI fix sessions show wrench icon instead of the status icon, unless they need the user
   if (isCIFix && !status.awaitingInput) {
     return (
       <Tooltip>
@@ -120,26 +123,7 @@ function StatusDot({ sessionSummary, isCIFix, isAgent, persistedStatus }: Status
     <Tooltip>
       <TooltipTrigger asChild>
         <span className="flex items-center justify-center">
-          {isAgent ? (
-            <AgentSessionStatus
-              label={status.label}
-              icon={StatusIcon}
-              color={status.color}
-              pulse={status.pulse}
-              spin={status.spin}
-            />
-          ) : (
-            <StatusIcon
-              role="img"
-              aria-label={status.label}
-              className={cn(
-                'h-3.5 w-3.5 shrink-0',
-                status.color,
-                status.pulse && 'animate-pulse',
-                status.spin && 'animate-spin'
-              )}
-            />
-          )}
+          <SessionStatusIcon status={status} isAgent={isAgent} />
         </span>
       </TooltipTrigger>
       <TooltipContent side="bottom" className="text-xs">
@@ -260,7 +244,7 @@ function SessionTabItem({
   return (
     <TabButton
       icon={
-        <StatusDot
+        <SessionTabStatus
           sessionSummary={sessionSummary}
           isCIFix={isCIFix}
           isAgent={isAgent}
@@ -294,6 +278,10 @@ interface MainViewTabBarProps {
   onCloseSession?: (sessionId: string) => void;
   onSelectClosedSession?: (sessionId: string) => void;
   onRestartSession?: () => void;
+  /** A restart of the selected chat is in flight. */
+  isRestartingSession?: boolean;
+  /** A new chat is being created: "+" shows a spinner. */
+  isCreatingSession?: boolean;
   disabled?: boolean;
   /** Maximum sessions allowed per workspace */
   maxSessions?: number;
@@ -311,6 +299,8 @@ export function MainViewTabBar({
   onCloseSession,
   onSelectClosedSession,
   onRestartSession,
+  isRestartingSession = false,
+  isCreatingSession = false,
   disabled,
   maxSessions,
 }: MainViewTabBarProps) {
@@ -385,18 +375,10 @@ export function MainViewTabBar({
       {/* Scrollable tab area. Chats and open files are separate tablists, each
           one Tab stop with arrow-key navigation; the menus between them are
           ordinary buttons, which a tablist may not contain. */}
-      <div
-        className="flex min-w-0 flex-1 items-center gap-0.5 overflow-x-auto p-1"
-        style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
-      >
+      <div className="flex min-w-0 flex-1 items-center gap-0.5 overflow-x-auto scrollbar-hide p-1">
         {/* Session tabs (Chat 1, Chat 2, etc.) */}
         {sessions && sessions.length > 0 && (
-          <div
-            role="tablist"
-            aria-label="Chats"
-            onKeyDown={handleTablistKeyDown}
-            className="flex shrink-0 items-center gap-0.5"
-          >
+          <TabList aria-label="Chats" className="shrink-0 gap-0.5">
             {sessions.map((session, index) => {
               const isSelected = session.id === currentSessionId;
               const baseLabel = getSessionDisplayName(session, `Chat ${index + 1}`);
@@ -417,7 +399,7 @@ export function MainViewTabBar({
                 />
               );
             })}
-          </div>
+          </TabList>
         )}
 
         {onSelectClosedSession && (
@@ -435,12 +417,7 @@ export function MainViewTabBar({
 
         {/* File/diff tabs */}
         {nonChatTabs.length > 0 && (
-          <div
-            role="tablist"
-            aria-label="Open tabs"
-            onKeyDown={handleTablistKeyDown}
-            className="flex shrink-0 items-center gap-0.5"
-          >
+          <TabList aria-label="Open tabs" className="shrink-0 gap-0.5">
             {nonChatTabs.map((tab, index) => {
               const isActive = tab.id === activeTabId;
               const tabStop = isActive || (!hasActiveFileTab && index === 0);
@@ -466,7 +443,7 @@ export function MainViewTabBar({
                 />
               );
             })}
-          </div>
+          </TabList>
         )}
       </div>
 
@@ -494,6 +471,7 @@ export function MainViewTabBar({
                   provider={sessions?.[0]?.provider}
                   onCreate={onCreateSession}
                   disabled={isButtonDisabled}
+                  pending={isCreatingSession}
                 />
               </span>
             </TooltipTrigger>
@@ -511,6 +489,7 @@ export function MainViewTabBar({
             chatLabel={currentSessionLabel}
             onRename={() => setRenamingSessionId(currentSessionId ?? null)}
             onRestartSession={onRestartSession}
+            restartPending={isRestartingSession}
             disabled={disabled}
           />
         </div>

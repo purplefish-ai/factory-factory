@@ -76,8 +76,8 @@ export function fakeEventProvider(
       'mode',
       'mode',
       options.provider === 'CLAUDE'
-        ? ['default', 'bypassPermissions', 'plan']
-        : ['read-only', 'workspace-write', 'agent-full-access']
+        ? ['default', 'auto', 'bypassPermissions', 'plan']
+        : ['read-only', 'workspace-write', 'agent', 'agent-full-access']
     ),
     choices('reasoning_effort', 'thought_level', ['low', 'high']),
     choices('collaboration_mode', 'collaboration_mode', ['default', 'plan']),

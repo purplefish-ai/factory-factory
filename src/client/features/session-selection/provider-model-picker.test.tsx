@@ -158,6 +158,16 @@ describe('ProviderModelPicker', () => {
     flushSync(() => findProvider(menu, 'Claude').click());
     expect(onProviderChange).toHaveBeenCalledWith('CLAUDE', 'sonnet');
   });
+  it('says the model catalog failed instead of listing no models, and retries it', () => {
+    const onRetryModels = vi.fn();
+    const { trigger } = mount({ models: [], modelsError: 'Catalog unavailable', onRetryModels });
+    const menu = open(trigger);
+    expect(menu.querySelector('[role="alert"]')?.textContent).toBe(
+      "Couldn't load models. Catalog unavailable"
+    );
+    flushSync(() => findProvider(menu, 'Retry').click());
+    expect(onRetryModels).toHaveBeenCalledOnce();
+  });
 });
 
 it('shows a compact retry action when selection defaults cannot load', () => {

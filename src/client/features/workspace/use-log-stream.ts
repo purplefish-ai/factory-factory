@@ -31,7 +31,6 @@ export interface UseLogStreamResult {
   connected: boolean;
   hasDisconnected: boolean;
   output: string;
-  outputEndRef: React.RefObject<HTMLDivElement | null>;
 }
 
 interface LogStreamBuffer {
@@ -73,7 +72,6 @@ export function useLogStream(
 ): UseLogStreamResult {
   const [output, setOutput] = useState<string>('');
   const [hasDisconnected, setHasDisconnected] = useState(false);
-  const outputEndRef = useRef<HTMLDivElement | null>(null);
   const visibleRef = useRef(isVisible);
   const pendingFlushRef = useRef<PendingOutputFlush | null>(null);
   const streamKey = `${endpoint}:${workspaceId}`;
@@ -195,19 +193,6 @@ export function useLogStream(
     [cancelPendingFlush]
   );
 
-  useEffect(() => {
-    if (!(isVisible && output)) {
-      return;
-    }
-
-    const animationFrameId = requestAnimationFrame(() => {
-      outputEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-    });
-    return () => {
-      cancelAnimationFrame(animationFrameId);
-    };
-  }, [isVisible, output]);
-
   const { connected } = useWebSocketChannel({
     url,
     schema: LogStreamMessageSchema,
@@ -217,5 +202,5 @@ export function useLogStream(
     queuePolicy: 'drop',
   });
 
-  return { connected, hasDisconnected, output, outputEndRef };
+  return { connected, hasDisconnected, output };
 }

@@ -3,7 +3,7 @@ import { afterEach, expect, it, vi } from 'vitest';
 import type { WebSocket } from 'ws';
 import type { ApplicationServices } from '@/backend/app-context';
 import { SessionEventBus } from '@/backend/services/session';
-import type { WebSocketMessage } from '@/shared/acp-protocol';
+import type { SessionDeltaEvent, WebSocketMessage } from '@/shared/acp-protocol';
 import { SessionReplayAssembler } from '@/shared/acp-protocol/protocol/replay-framing';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 import {
@@ -96,11 +96,11 @@ it('streams main replay chunks within backlog, then delivers dependent deltas an
   const test = setup();
   const replay = batch();
   for (const frame of frameSessionReplay(replay)) {
-    test.bus.publishToSession('s1', frame);
+    test.bus.publishToSession('s1', frame.payload, frame.json);
   }
   test.registry.expectReplay(test.viewer.socket(), 'load-1');
   for (const frame of frameSessionReplay(replay)) {
-    test.bus.publishToSession('s1', frame);
+    test.bus.publishToSession('s1', frame.payload, frame.json);
   }
   test.bus.publishToSession('s1', delta);
   expect(test.viewer.close).not.toHaveBeenCalled();
@@ -121,7 +121,7 @@ it('streams main replay chunks within backlog, then delivers dependent deltas an
 it('rejects a chunked replay over the configured budget with its correlated error and fences deltas', () => {
   const test = setup(1024 * 1024);
   for (const frame of frameSessionReplay(batch())) {
-    test.bus.publishToSession('s1', frame);
+    test.bus.publishToSession('s1', frame.payload, frame.json);
   }
   test.bus.publishToSession('s1', delta);
   expect(test.viewer.frames).toHaveLength(1);
@@ -137,14 +137,13 @@ it('excludes foreign and duplicate correlated baselines from an active replay ba
   const test = setup();
   const replay = batch();
   for (const frame of frameSessionReplay(replay)) {
-    test.bus.publishToSession('s1', frame);
+    test.bus.publishToSession('s1', frame.payload, frame.json);
   }
   for (let index = 0; index < 12; index++) {
     test.bus.publishToSession('s1', {
       type: 'session_replay_batch',
       loadRequestId: index % 2 ? 'another-viewer' : 'load-1',
-      permissionMode: 'metadata'.repeat(20_000),
-      replayEvents: [],
+      replayEvents: [{ type: 'task_notification', message: 'metadata'.repeat(20_000) }],
     });
   }
   test.bus.publishToSession('s1', delta);
@@ -166,9 +165,12 @@ it.each([false, true])(
     const test = setup(overBudget ? 1024 * 1024 : undefined);
     const replay = { ...batch(), permissionMode: 'metadata'.repeat(20_000) };
     const frames = [...frameSessionReplay(replay)];
-    expect(frames[0]).toMatchObject({ type: 'session_replay_chunk', chunk: expect.any(String) });
+    expect(frames[0]?.payload).toMatchObject({
+      type: 'session_replay_chunk',
+      chunk: expect.any(String),
+    });
     for (const frame of frames) {
-      test.bus.publishToSession('s1', frame);
+      test.bus.publishToSession('s1', frame.payload, frame.json);
     }
     test.bus.publishToSession('s1', delta);
     for (let guard = 0; test.viewer.writes.length && guard < 100; guard++) {
@@ -217,7 +219,7 @@ it.each([
       test.bus.publishToSession('s1', batch());
     } else {
       for (const frame of frameSessionReplay(batch())) {
-        test.bus.publishToSession('s1', frame);
+        test.bus.publishToSession('s1', frame.payload, frame.json);
       }
     }
     test.registry.expectReplay(test.viewer.socket(), 'load-1');
@@ -225,7 +227,9 @@ it.each([
       expect(test.registry.broadcastToSession('s1', batch())).toBe(0);
     } else {
       for (const frame of frameSessionReplay(batch())) {
-        expect(test.registry.broadcastToSession('s1', frame)).toBe(0);
+        expect(test.registry.broadcastToSession('s1', frame.payload, undefined, frame.json)).toBe(
+          0
+        );
       }
     }
     expect(test.log).not.toHaveBeenCalled();
@@ -240,7 +244,7 @@ it('retires a stalled replay when dependent backlog exceeds the budget and termi
   try {
     const test = setup();
     for (const frame of frameSessionReplay(batch())) {
-      test.bus.publishToSession('s1', frame);
+      test.bus.publishToSession('s1', frame.payload, frame.json);
     }
     const update: WebSocketMessage = {
       type: 'session_delta',
@@ -271,8 +275,8 @@ it('fails closed on a mismatched replay sequence instead of allowing deltas afte
   try {
     const test = setup();
     const frames = [...frameSessionReplay(batch())];
-    test.bus.publishToSession('s1', frames[0]!);
-    const next = frames[1];
+    test.bus.publishToSession('s1', frames[0]!.payload, frames[0]!.json);
+    const next = frames[1]?.payload;
     if (next?.type !== 'session_replay_chunk') {
       throw new Error('Expected chunks');
     }
@@ -286,4 +290,45 @@ it('fails closed on a mismatched replay sequence instead of allowing deltas afte
   } finally {
     vi.useRealTimers();
   }
+});
+
+it('delivers framed replay JSON verbatim, serializing each event once end to end', async () => {
+  const test = setup();
+  let serializations = 0;
+  const replayEvents = Array.from({ length: 300 }, (_, order) => ({
+    toJSON: () => {
+      serializations++;
+      return { type: 'task_notification', message: `event ${order} ${'é'.repeat(1000)}` };
+    },
+  }));
+  // Counting events stand in for the events their toJSON returns.
+  const frames = [
+    ...frameSessionReplay({
+      type: 'session_replay_batch',
+      loadRequestId: 'load-1',
+      replayEvents: unsafeCoerce<SessionDeltaEvent[]>(replayEvents),
+    }),
+  ];
+  expect(frames.length).toBeGreaterThan(1);
+  for (const frame of frames) {
+    test.bus.publishToSession('s1', frame.payload, frame.json);
+  }
+  for (let guard = 0; test.viewer.writes.length && guard < 100; guard++) {
+    await test.viewer.flush();
+  }
+  expect(test.viewer.frames).toEqual(frames.map((frame) => frame.json));
+  expect(serializations).toBe(replayEvents.length);
+});
+
+it('sends a published serialization as-is and serializes other payloads itself', () => {
+  const test = setup();
+  const replay: WebSocketMessage = {
+    type: 'session_replay_batch',
+    loadRequestId: 'load-1',
+    replayEvents: [],
+  };
+  const serialized = JSON.stringify(replay, null, 1);
+  test.bus.publishToSession('s1', replay, serialized);
+  test.bus.publishToSession('s1', delta);
+  expect(test.viewer.frames).toEqual([serialized, JSON.stringify(delta)]);
 });

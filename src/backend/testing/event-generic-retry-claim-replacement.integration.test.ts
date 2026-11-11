@@ -135,7 +135,10 @@ it.each([
       await dispatch;
       expect(fail).toHaveBeenCalledExactlyOnceWith(
         captured,
-        expect.objectContaining({ name: 'WorkspaceInitFenceError' })
+        expect.objectContaining({
+          reason: 'failed',
+          error: expect.objectContaining({ name: 'WorkspaceInitFenceError' }),
+        })
       );
       expect(
         h.session.sessionBackgroundDeliveryService.isDeliveryActive(replacement.delivery.deliveryId)
@@ -197,9 +200,12 @@ it.each([false, true])(
         )
       ).toMatchObject({ deliveryId: prepared.delivery.deliveryId, attempt: 4 });
     }
-    expect(await port.fail(prepared.delivery, new Error('Captured transport failed'))).toEqual({
-      paused: !replaced,
-    });
+    expect(
+      await port.fail(prepared.delivery, {
+        reason: 'failed',
+        error: new Error('Captured transport failed'),
+      })
+    ).toEqual({ paused: !replaced });
     expect(
       await db.prisma.workspacePRMonitoring.findUnique({ where: { workspaceId: workspace.id } })
     ).toMatchObject({ deliveryPauseReason: replaced ? null : 'DELIVERY_FAILED' });

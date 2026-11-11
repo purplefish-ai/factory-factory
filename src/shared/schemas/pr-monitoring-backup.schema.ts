@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import {
   prDeliveryModeSchema,
+  prEventStateSchema,
   prMonitoringEventPayloadSchema,
   prObservationSchema,
 } from './pr-event.schema';
@@ -24,7 +25,7 @@ export const prEventBackupSchema = z
     kind: z.string(),
     deduplicationKey: z.string().min(1),
     payload: prMonitoringEventPayloadSchema,
-    state: z.enum(['PENDING', 'DISPATCHING', 'DELIVERED', 'SUPERSEDED', 'CANCELLED']),
+    state: prEventStateSchema,
     attempts: z.number().int().nonnegative(),
     deliveryId: z.string().min(1).nullable(),
     deliverySessionId: z.string().min(1).nullable(),

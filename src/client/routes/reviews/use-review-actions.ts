@@ -28,6 +28,7 @@ export function useReviewActions({
 }) {
   const utils = trpc.useUtils();
   const [diffErrors, setDiffErrors] = useState<Map<string, string>>(new Map());
+  // Toasts outlive the dashboard; a request that settles after it closes stays quiet.
   const mounted = useRef(true);
   useEffect(() => {
     mounted.current = true;
@@ -38,7 +39,7 @@ export function useReviewActions({
 
   const { mutate: submitApproval, isPending: approving } = trpc.prReview.submitReview.useMutation({
     onSuccess: (_data, variables) => {
-      runInBackground(utils.prReview.listReviewRequests.invalidate(), "Couldn't refresh data.");
+      runInBackground(utils.prReview.listReviewRequests.invalidate());
       if (!mounted.current) {
         return;
       }
@@ -79,23 +80,19 @@ export function useReviewActions({
         repo: selectedPR.repository.nameWithOwner,
         number: selectedPR.number,
       });
-      if (mounted.current) {
-        setDiffs((prev) => new Map(prev).set(selectedKey, result.diff));
-      }
+      setDiffs((prev) => new Map(prev).set(selectedKey, result.diff));
     } catch (error) {
+      const message = getDiffFailureMessage(error);
+      setDiffErrors((prev) => new Map(prev).set(selectedKey, message));
       if (mounted.current) {
-        const message = getDiffFailureMessage(error);
-        setDiffErrors((prev) => new Map(prev).set(selectedKey, message));
         toast.error("Couldn't load diff.");
       }
     } finally {
-      if (mounted.current) {
-        setPendingDiffs((prev) => {
-          const next = new Set(prev);
-          next.delete(selectedKey);
-          return next;
-        });
-      }
+      setPendingDiffs((prev) => {
+        const next = new Set(prev);
+        next.delete(selectedKey);
+        return next;
+      });
     }
   }, [selectedPR, selectedKey, diffs, setPendingDiffs, setDiffs, utils.client.prReview.getDiff]);
 

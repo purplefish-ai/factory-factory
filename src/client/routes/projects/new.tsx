@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router';
 import { HeaderLeftStartSlot, useAppHeader } from '@/client/components/app-header-context';
 import { Logo } from '@/client/components/logo';
@@ -13,6 +13,7 @@ import {
 import { SetupTerminalModal } from '@/client/features/project/setup-terminal-modal';
 import type { ScriptType } from '@/client/features/project/startup-script-form';
 import { useCLIHealthRefresh } from '@/client/hooks/use-cli-health-refresh';
+import { useDebouncedValue } from '@/client/hooks/use-debounced-value';
 import { useProjectHeaderNavigation } from '@/client/hooks/use-project-header-navigation';
 import { runInBackground } from '@/client/lib/background-task';
 import { trpc } from '@/client/lib/trpc';
@@ -44,7 +45,6 @@ export default function NewProjectPage() {
   const [error, setError] = useState('');
   const [startupScript, setStartupScript] = useState('');
   const [scriptType, setScriptType] = useState<ScriptType>('command');
-  const [debouncedRepoPath, setDebouncedRepoPath] = useState('');
 
   // GitHub URL state
   const [githubUrl, setGithubUrl] = useState('');
@@ -64,6 +64,7 @@ export default function NewProjectPage() {
   }, [githubUrl]);
 
   // Check for factory-factory.json (local path)
+  const debouncedRepoPath = useDebouncedValue(repoPath.trim(), 500);
   const { data: factoryConfig } = trpc.project.checkFactoryConfig.useQuery(
     { repoPath: debouncedRepoPath },
     { enabled: debouncedRepoPath.length > 0 }
@@ -73,18 +74,12 @@ export default function NewProjectPage() {
   const {
     data: authStatus,
     isLoading: isCheckingAuth,
+    isFetching: isFetchingAuth,
+    error: authError,
     refetch: refetchAuth,
   } = trpc.project.checkGithubAuth.useQuery(undefined, {
     enabled: source === 'github',
   });
-
-  // Debounce repo path changes for API calls
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setDebouncedRepoPath(repoPath.trim());
-    }, 500);
-    return () => clearTimeout(timer);
-  }, [repoPath]);
 
   const handleBrowse = async () => {
     if (!window.electronAPI?.showOpenDialog) {
@@ -117,7 +112,7 @@ export default function NewProjectPage() {
   // Local path creation
   const createProject = trpc.project.create.useMutation({
     onSuccess: (project) => {
-      runInBackground(utils.project.list.invalidate(), "Couldn't refresh data.");
+      runInBackground(utils.project.list.invalidate());
       void navigate(`/projects/${project.slug}`);
     },
     onError: (err) => setError(err.message),
@@ -126,7 +121,7 @@ export default function NewProjectPage() {
   // GitHub URL creation
   const createFromGithub = trpc.project.createFromGithub.useMutation({
     onSuccess: (project) => {
-      runInBackground(utils.project.list.invalidate(), "Couldn't refresh data.");
+      runInBackground(utils.project.list.invalidate());
       void navigate(`/projects/${project.slug}`);
     },
     onError: (err) => setGithubError(err.message),
@@ -178,7 +173,7 @@ export default function NewProjectPage() {
   const handleTerminalClose = useCallback(() => {
     setTerminalOpen(false);
     // Re-check auth after terminal closes
-    runInBackground(refetchAuth(), "Couldn't refresh data.");
+    runInBackground(refetchAuth());
     void refreshCLIHealth();
   }, [refetchAuth, refreshCLIHealth]);
 
@@ -209,6 +204,12 @@ export default function NewProjectPage() {
     parsedRepo,
     authStatus,
     isCheckingAuth,
+    authError,
+    // Only a failed check shows Retry, so fetching then means a retry is in flight.
+    isRetryingAuth: Boolean(authError) && isFetchingAuth,
+    onRetryAuth: () => {
+      runInBackground(refetchAuth(), "Couldn't check GitHub authentication.");
+    },
     onOpenTerminal: () => setTerminalOpen(true),
     scriptType: githubScriptType,
     setScriptType: setGithubScriptType,

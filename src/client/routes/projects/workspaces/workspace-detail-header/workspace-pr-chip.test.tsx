@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
@@ -28,6 +29,8 @@ vi.mock('@/client/lib/trpc', () => ({
     adversarialReview: { trigger: { useMutation: () => ({ mutate: vi.fn(), isPending: false }) } },
     workspace: {
       toggleRatcheting: {
+        // useToggleRatcheting reads every caller's pending toggles by mutation key.
+        _def: () => ({ path: ['workspace', 'toggleRatcheting'] }),
         useMutation: (options: NonNullable<typeof mocks.options>) => {
           mocks.options = options;
           return { mutate: mocks.mutate, mutateAsync: mocks.mutate, isPending: false };
@@ -35,6 +38,9 @@ vi.mock('@/client/lib/trpc', () => ({
       },
       attachPR: { useMutation: () => ({ mutateAsync: vi.fn(), isPending: false }) },
       detachPR: { useMutation: () => ({ mutateAsync: vi.fn(), isPending: false }) },
+      discardBlockedPRDeliveries: {
+        useMutation: () => ({ isPending: false, mutateAsync: vi.fn() }),
+      },
     },
   },
 }));
@@ -95,9 +101,11 @@ async function renderToggle(overrides: Partial<WorkspaceHeaderWorkspace> = {}) {
   };
   await act(() =>
     root.render(
-      <TooltipProvider>
-        <WorkspacePrChip workspace={workspace as WorkspaceHeaderWorkspace} workspaceId="w" />
-      </TooltipProvider>
+      <QueryClientProvider client={new QueryClient()}>
+        <TooltipProvider>
+          <WorkspacePrChip workspace={workspace as WorkspaceHeaderWorkspace} workspaceId="w" />
+        </TooltipProvider>
+      </QueryClientProvider>
     )
   );
   const trigger = document.querySelector('[aria-label^="Pull requests and updates"]');

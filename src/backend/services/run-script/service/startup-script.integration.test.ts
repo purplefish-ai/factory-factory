@@ -41,7 +41,9 @@ it('completes provisioning while a background descendant still holds output pipe
       {
         // Keep a real inherited stdout pipe open until the test releases it
         // after provisioning. Check the file after installing the watcher too,
-        // so a slow descendant cannot miss the release signal.
+        // so a slow descendant cannot miss the release signal. Stat-watch the
+        // release file: on macOS fs.watch uses FSEvents, which can deliver a
+        // directory event seconds late under load, past the wait below.
         startupScriptCommand: `(exec node -e '
           const fs = require("node:fs");
           let wrote = false;
@@ -53,7 +55,7 @@ it('completes provisioning while a background descendant still holds output pipe
               fs.writeFileSync("background-wrote", "alive");
             });
           };
-          fs.watch(".", writeWhenReleased);
+          fs.watchFile("release-background", { interval: 20 }, writeWhenReleased);
           writeWhenReleased();
         ') & printf "descendant:%s\\n" "$!"; echo complete`,
         startupScriptTimeout: 10,

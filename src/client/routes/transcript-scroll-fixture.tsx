@@ -65,8 +65,6 @@ function TranscriptFixtureContent({ workspaceId }: { workspaceId: string }) {
       ...previous,
       [session]: { ...previous[session], requests: updateRequests(previous[session].requests) },
     }));
-  const currentHistoryStatus = useRef(historyStatus);
-  currentHistoryStatus.current = historyStatus;
   const composer = new URLSearchParams(location.search).get('composer') === '1';
   const persistence = useChatTranscriptPersistence({ workspaceId, sessionId: session });
   const update = (change: (messages: GroupedMessageItem[]) => GroupedMessageItem[]) =>

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { act, createElement } from 'react';
+import { act, createElement, memo } from 'react';
 import { createRoot } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SubagentSelection } from '@/client/features/subagents';
@@ -8,6 +8,8 @@ import { actFlushSync } from '@/test-utils/react-act';
 import {
   type MainViewTab,
   useWorkspacePanel,
+  useWorkspacePanelActions,
+  useWorkspacePanelScroll,
   WorkspacePanelProvider,
 } from './workspace-panel-context';
 
@@ -27,6 +29,7 @@ Object.defineProperty(globalThis, 'IS_REACT_ACT_ENVIRONMENT', {
 const WORKSPACE_ID = 'workspace-1';
 const TABS_STORAGE_KEY = `workspace-panel-tabs-${WORKSPACE_ID}`;
 const ACTIVE_TAB_STORAGE_KEY = `workspace-panel-active-tab-${WORKSPACE_ID}`;
+const CHAT_TAB_RECORD: MainViewTab = { id: 'chat', type: 'chat', label: 'Chat' };
 
 function PanelScrollProbe({
   onPanel,
@@ -172,6 +175,119 @@ afterEach(() => {
 });
 
 describe('WorkspacePanelProvider persistence', () => {
+  it('renders stored panel state on its first render without writing storage', () => {
+    const fileTab: MainViewTab = {
+      id: 'file-src/a.ts',
+      type: 'file',
+      path: 'src/a.ts',
+      label: 'a.ts',
+    };
+    const stored = {
+      [TABS_STORAGE_KEY]: JSON.stringify([CHAT_TAB_RECORD, fileTab]),
+      [ACTIVE_TAB_STORAGE_KEY]: fileTab.id,
+      [`workspace-panel-bottom-tab-${WORKSPACE_ID}`]: 'dev-logs',
+      [`workspace-panel-right-visible-${WORKSPACE_ID}`]: 'false',
+      [`workspace-right-panel-tab-${WORKSPACE_ID}`]: 'files',
+    };
+    for (const [key, value] of Object.entries(stored)) {
+      localStorage.setItem(key, value);
+    }
+    const setItem = vi.spyOn(Storage.prototype, 'setItem');
+    const removeItem = vi.spyOn(Storage.prototype, 'removeItem');
+    const renders: Pick<
+      ReturnType<typeof useWorkspacePanel>,
+      'activeTabId' | 'activeBottomTab' | 'storedTopTab' | 'rightPanelVisible' | 'tabs'
+    >[] = [];
+    const { root } = renderPanel(
+      <PanelScrollProbe
+        onPanel={({ activeTabId, activeBottomTab, storedTopTab, rightPanelVisible, tabs }) => {
+          renders.push({ activeTabId, activeBottomTab, storedTopTab, rightPanelVisible, tabs });
+        }}
+      />
+    );
+    try {
+      expect(renders[0]).toEqual({
+        activeTabId: fileTab.id,
+        activeBottomTab: 'dev-logs',
+        storedTopTab: 'files',
+        rightPanelVisible: false,
+        tabs: [CHAT_TAB_RECORD, fileTab],
+      });
+      expect(setItem).not.toHaveBeenCalled();
+      expect(removeItem).not.toHaveBeenCalled();
+      for (const [key, value] of Object.entries(stored)) {
+        expect(localStorage.getItem(key)).toBe(value);
+      }
+    } finally {
+      setItem.mockRestore();
+      removeItem.mockRestore();
+      actFlushSync(() => root.unmount());
+    }
+  });
+
+  it('opens a linked chat without rewriting the stored tab until the user selects one', async () => {
+    const fileTab: MainViewTab = {
+      id: 'file-src/a.ts',
+      type: 'file',
+      path: 'src/a.ts',
+      label: 'a.ts',
+    };
+    localStorage.setItem(TABS_STORAGE_KEY, JSON.stringify([CHAT_TAB_RECORD, fileTab]));
+    localStorage.setItem(ACTIVE_TAB_STORAGE_KEY, fileTab.id);
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    actFlushSync(() => {
+      root.render(
+        <WorkspacePanelProvider workspaceId={WORKSPACE_ID} initialActiveTabId="chat">
+          <WorkspacePanelActionsProbe />
+        </WorkspacePanelProvider>
+      );
+    });
+    expect(readProbe(container).activeTabId).toBe('chat');
+    expect(localStorage.getItem(ACTIVE_TAB_STORAGE_KEY)).toBe(fileTab.id);
+    await clickButton(container, 'Select chat');
+    expect(localStorage.getItem(ACTIVE_TAB_STORAGE_KEY)).toBe('chat');
+    actFlushSync(() => root.unmount());
+  });
+
+  it('reads the legacy bottom tab key until a tab is chosen', async () => {
+    localStorage.setItem(`workspace-right-panel-bottom-tab-${WORKSPACE_ID}`, 'dev-logs');
+    let panel: ReturnType<typeof useWorkspacePanel> | undefined;
+    const { root } = renderPanel(
+      <PanelScrollProbe
+        onPanel={(value) => {
+          panel = value;
+        }}
+      />
+    );
+    expect(panel!.activeBottomTab).toBe('dev-logs');
+    await act(() => panel!.setActiveBottomTab('setup-logs'));
+    expect(panel!.activeBottomTab).toBe('setup-logs');
+    expect(localStorage.getItem(`workspace-panel-bottom-tab-${WORKSPACE_ID}`)).toBe('setup-logs');
+    actFlushSync(() => root.unmount());
+  });
+
+  it('keeps the mobile drawer closed and out of storage', async () => {
+    viewport.mobile = true;
+    localStorage.setItem(`workspace-panel-right-visible-${WORKSPACE_ID}`, 'true');
+    let panel: ReturnType<typeof useWorkspacePanel> | undefined;
+    const { root } = renderPanel(
+      <PanelScrollProbe
+        onPanel={(value) => {
+          panel = value;
+        }}
+      />
+    );
+    expect(panel!.rightPanelVisible).toBe(false);
+    await act(() => panel!.setRightPanelVisible(true));
+    expect(panel!.rightPanelVisible).toBe(true);
+    await act(() => panel!.openTab('file', 'src/a.ts'));
+    expect(panel!.rightPanelVisible).toBe(false);
+    expect(localStorage.getItem(`workspace-panel-right-visible-${WORKSPACE_ID}`)).toBe('true');
+    actFlushSync(() => root.unmount());
+  });
+
   it('dismisses the drawer when opening a file or diff in the main view', async () => {
     viewport.mobile = true;
     let state: ReturnType<typeof useWorkspacePanel> | undefined;
@@ -377,16 +493,15 @@ describe('WorkspacePanelProvider persistence', () => {
       label: 'Security review',
       subagentSelection: runningSelection,
     };
-    localStorage.setItem(
-      TABS_STORAGE_KEY,
-      JSON.stringify([{ id: 'chat', type: 'chat', label: 'Chat' }, validTab])
-    );
+    const storedTabs = JSON.stringify([{ id: 'chat', type: 'chat', label: 'Chat' }, validTab]);
+    localStorage.setItem(TABS_STORAGE_KEY, storedTabs);
     localStorage.setItem(ACTIVE_TAB_STORAGE_KEY, validTab.id);
     const validRender = renderPanel(<WorkspacePanelProbe />);
     await vi.waitFor(() => expect(readProbe(validRender.container).activeTabId).toBe(validTab.id));
     const restored = readProbe(validRender.container).tabs.find((tab) => tab.id === validTab.id);
+    // The live control is dropped on read; restoring alone does not rewrite storage.
     expect(restored?.subagentSelection?.subagent.stopControl).toBeUndefined();
-    expect(localStorage.getItem(TABS_STORAGE_KEY)).not.toContain('live-control');
+    expect(localStorage.getItem(TABS_STORAGE_KEY)).toBe(storedTabs);
     actFlushSync(() => validRender.root.unmount());
 
     localStorage.setItem(
@@ -443,4 +558,59 @@ it('revokes only the cleared tab writer and preserves other viewer records', asy
   });
   await act(() => root.unmount());
   vi.useRealTimers();
+});
+
+const renderCounts = { actions: 0, scroll: 0 };
+const actionIdentities = {
+  openTab: new Set<unknown>(),
+  closeTab: new Set<unknown>(),
+  toggle: new Set<unknown>(),
+};
+const ActionsConsumer = memo(function ActionsConsumer() {
+  renderCounts.actions += 1;
+  useWorkspacePanelActions();
+  return null;
+});
+const ScrollConsumer = memo(function ScrollConsumer() {
+  renderCounts.scroll += 1;
+  useWorkspacePanelScroll();
+  return null;
+});
+function StateAndActionsProbe() {
+  const { openTab, closeTab, toggleRightPanel } = useWorkspacePanel();
+  actionIdentities.openTab.add(openTab);
+  actionIdentities.closeTab.add(closeTab);
+  actionIdentities.toggle.add(toggleRightPanel);
+  return (
+    <button type="button" onClick={toggleRightPanel}>
+      Toggle panel
+    </button>
+  );
+}
+
+it('keeps actions stable and leaves action and scroll consumers alone on tab and panel changes', async () => {
+  renderCounts.actions = 0;
+  renderCounts.scroll = 0;
+  for (const identities of Object.values(actionIdentities)) {
+    identities.clear();
+  }
+  const { container, root } = renderPanel(
+    <>
+      <WorkspacePanelActionsProbe />
+      <StateAndActionsProbe />
+      <ActionsConsumer />
+      <ScrollConsumer />
+    </>
+  );
+  await clickButton(container, 'Open screenshot');
+  await clickButton(container, 'Select chat');
+  await clickButton(container, 'Toggle panel');
+  await clickButton(container, 'Open running');
+  await clickButton(container, 'Close active');
+  expect(readProbe(container).activeTabId).toBe('screenshot-/tmp/capture.png');
+  expect(renderCounts).toEqual({ actions: 1, scroll: 1 });
+  expect([...Object.values(actionIdentities)].map((identities) => identities.size)).toEqual([
+    1, 1, 1,
+  ]);
+  await act(() => root.unmount());
 });

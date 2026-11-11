@@ -1,8 +1,10 @@
 // @vitest-environment jsdom
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { getMutationKey } from '@trpc/react-query';
 import { act, createRef } from 'react';
 import { createRoot } from 'react-dom/client';
+import { toast } from 'sonner';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { LeftControls } from '@/client/features/chat/chat-input/components/input-controls';
@@ -14,6 +16,7 @@ import {
 } from '@/client/features/chat/use-chat-websocket';
 import { getLiveSessionControlId } from '@/client/features/session-controls';
 import { createTrpcClient, trpc } from '@/client/lib/trpc';
+import { TooltipProvider } from '@/components/ui/tooltip';
 import { type ChatBarCapabilities, EMPTY_CHAT_BAR_CAPABILITIES } from '@/shared/chat-capabilities';
 import { SessionActivityIndicator } from './session-activity-indicator';
 
@@ -163,7 +166,9 @@ async function mount(initialCapabilities = capabilities) {
     root.render(
       <QueryClientProvider client={queryClient}>
         <trpc.Provider client={client} queryClient={queryClient}>
-          <Harness chatRef={chatRef} sessionId={sessionId} />
+          <TooltipProvider>
+            <Harness chatRef={chatRef} sessionId={sessionId} />
+          </TooltipProvider>
         </trpc.Provider>
       </QueryClientProvider>
     );
@@ -179,6 +184,7 @@ async function mount(initialCapabilities = capabilities) {
   return {
     container,
     socket,
+    queryClient,
     switchSession: async (sessionId: string) => {
       await act(() => render(sessionId));
     },
@@ -585,4 +591,120 @@ it('hydrates only a complete correlated replay and discards a partial replay acr
   expect(harness.chat.messages).toMatchObject([
     { id: 'framed-user', text, timestamp: '2026-10-18T12:00:00Z', order: 7 },
   ]);
+});
+
+it('reports a restart as pending only for the session being restarted', async () => {
+  const harness = await mount();
+  const startRestart = (id: string) =>
+    act(async () => {
+      harness.queryClient.getMutationCache().build(
+        harness.queryClient,
+        { mutationKey: getMutationKey(trpc.session.restartSession) },
+        {
+          context: undefined,
+          data: undefined,
+          error: null,
+          failureCount: 0,
+          failureReason: null,
+          isPaused: false,
+          status: 'pending',
+          variables: { id },
+          submittedAt: 0,
+        }
+      );
+      // The mutation cache notifies subscribers on the next tick.
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+  expect(harness.chat.isRestartingSession).toBe(false);
+  await startRestart('websocket-config');
+  expect(harness.chat.isRestartingSession).toBe(true);
+  // A second session's restart neither clears nor borrows the first one's state.
+  await startRestart('other-session');
+  expect(harness.chat.isRestartingSession).toBe(true);
+  await harness.switchSession('idle-session');
+  expect(harness.chat.isRestartingSession).toBe(false);
+  await harness.switchSession('other-session');
+  expect(harness.chat.isRestartingSession).toBe(true);
+});
+
+describe('invalid chat frames', () => {
+  function loadRequestIdOf(socket: BrowserSocket) {
+    return socket.sent
+      .map((message) => outboundSchema.parse(JSON.parse(message)))
+      .findLast((message) => message.type === 'load_session')?.loadRequestId;
+  }
+
+  it('drops an invalid frame with a logged and visible diagnostic', async () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const toastError = vi.spyOn(toast, 'error');
+    try {
+      const harness = await mount();
+      await harness.hydrate(harness.socket, [modelOption]);
+      await act(() => harness.socket.receive({ type: 'permission_request', toolName: 'Bash' }));
+
+      expect(harness.chat.pendingRequest).toEqual({ type: 'none' });
+      expect(consoleError).toHaveBeenCalledWith(
+        '[chat] Dropped an invalid WebSocket frame',
+        expect.objectContaining({ type: 'permission_request' })
+      );
+      expect(toastError).toHaveBeenCalledOnce();
+    } finally {
+      consoleError.mockRestore();
+      toastError.mockRestore();
+    }
+  });
+
+  it('does not treat an invalid replay envelope as the pending load', async () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    try {
+      const harness = await mount();
+      await act(() =>
+        harness.socket.receive({
+          type: 'session_replay_batch',
+          loadRequestId: loadRequestIdOf(harness.socket),
+          replayEvents: 'not events',
+        })
+      );
+
+      expect(harness.chat.controlsHydrated).toBe(false);
+      expect(consoleError).toHaveBeenCalledOnce();
+    } finally {
+      consoleError.mockRestore();
+    }
+  });
+
+  it('replays the valid events of a batch and reports the dropped ones', async () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    try {
+      const harness = await mount();
+      await act(() =>
+        harness.socket.receive({
+          type: 'session_replay_batch',
+          loadRequestId: loadRequestIdOf(harness.socket),
+          replayEvents: [
+            {
+              type: 'message_state_changed',
+              id: 'kept',
+              newState: 'ACCEPTED',
+              userMessage: { text: 'kept', timestamp: '2026-11-09T00:00:00Z', order: 1 },
+            },
+            { type: 'message_state_changed', id: 'dropped', newState: 'LOST' },
+            { type: 'message_state_changed', id: 'kept', newState: 'COMMITTED' },
+          ],
+        })
+      );
+
+      expect(harness.chat.controlsHydrated).toBe(true);
+      expect(harness.chat.messages).toMatchObject([{ id: 'kept', text: 'kept' }]);
+      expect(consoleError).toHaveBeenCalledWith(
+        '[chat] Dropped invalid elements from a WebSocket frame',
+        expect.objectContaining({
+          type: 'session_replay_batch',
+          dropped: [expect.objectContaining({ path: 'replayEvents.1' })],
+        })
+      );
+    } finally {
+      consoleError.mockRestore();
+    }
+  });
 });

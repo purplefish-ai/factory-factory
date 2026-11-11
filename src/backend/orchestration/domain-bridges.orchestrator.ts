@@ -1,3 +1,33 @@
+import { createPRDeliveryPorts } from '@/backend/orchestration/pull-requests/pr-delivery-dependencies';
+import { createPRBackgroundDeliveryPort } from '@/backend/orchestration/pull-requests/pr-event-delivery-port';
+import { wakePRDelivery } from '@/backend/orchestration/pull-requests/pr-event-delivery.orchestrator';
+import {
+  createPRObservationPorts,
+  type PRMonitoringServices,
+} from '@/backend/orchestration/pull-requests/pr-monitoring-dependencies';
+import {
+  observeMonitoredPR,
+  resetStablePRBackoff,
+} from '@/backend/orchestration/pull-requests/pr-observation.orchestrator';
+import { listVisibleReviewRequests } from '@/backend/orchestration/pull-requests/review-requests.orchestrator';
+import type { reconciliationService } from '@/backend/orchestration/workspace-lifecycle/reconciliation.service';
+import { captureWorkspaceRunResults } from '@/backend/orchestration/workspace-lifecycle/workspace-deletion.orchestrator';
+import type {
+  initializeWorkspaceWorktree,
+  recoverStaleProvisioningWorkspace,
+} from '@/backend/orchestration/workspace-lifecycle/workspace-init.orchestrator';
+import type {
+  PeriodicTaskLaunchSource,
+  WorkspaceLauncher,
+} from '@/backend/orchestration/workspace-lifecycle/workspace-launch.orchestrator';
+/**
+ * Domain Bridge Wiring
+ *
+ * Configures the cross-domain bridges of one application graph from the
+ * services object supplied by the composition root (`app-context.ts`). Must run
+ * before those domain services are used. Domain services never import each
+ * other; they receive capabilities via these bridges.
+ */
 import type {
   githubCLIService,
   prFetchCoordinator,
@@ -5,16 +35,6 @@ import type {
 } from '@/backend/services/github';
 import type { createLogger } from '@/backend/services/logger.service';
 import type { periodicTaskService } from '@/backend/services/periodic-task';
-import type { ratchetService } from '@/backend/services/ratchet';
-/**
- * Domain Bridge Wiring
- *
- * Single entry point that configures all cross-domain bridges at application startup.
- * Must be called BEFORE any domain service is used.
- *
- * Import graph: orchestration -> all 6 domain barrels
- * Domain services never import each other; they receive capabilities via bridges.
- */
 import type { startupScriptService } from '@/backend/services/run-script';
 import type {
   acpRuntimeManager,
@@ -43,21 +63,6 @@ import {
 } from '@/backend/services/workspace';
 import { deriveWorkspaceSidebarStatus } from '@/shared/core';
 import { dispatchBackgroundAction } from './background-action-dispatch.orchestrator';
-import { createPRDeliveryPorts } from './pr-delivery-dependencies';
-import { createPRBackgroundDeliveryPort } from './pr-event-delivery-port';
-import { wakePRDelivery } from './pr-event-delivery.orchestrator';
-import { retireLegacyRatchetSessions } from './pr-monitoring-cutover.orchestrator';
-import { createPRObservationPorts, type PRMonitoringServices } from './pr-monitoring-dependencies';
-import { setPRMonitoring } from './pr-monitoring.orchestrator';
-import { observeMonitoredPR } from './pr-observation.orchestrator';
-import type { reconciliationService } from './reconciliation.service';
-import { listVisibleReviewRequests } from './review-requests.orchestrator';
-import { captureWorkspaceRunResults } from './workspace-deletion.orchestrator';
-import type {
-  initializeWorkspaceWorktree,
-  recoverStaleProvisioningWorkspace,
-} from './workspace-init.orchestrator';
-import type { PeriodicTaskLaunchSource, WorkspaceLauncher } from './workspace-launch.orchestrator';
 export type BridgeServices = PRMonitoringServices & {
   workspaceMetadata?: {
     schedule(sessionId: string, initialOnly?: boolean): Promise<void>;
@@ -76,7 +81,6 @@ export type BridgeServices = PRMonitoringServices & {
   periodicTaskService: typeof periodicTaskService;
   prFetchCoordinator: typeof prFetchCoordinator;
   prSnapshotService: typeof prSnapshotService;
-  ratchetService: typeof ratchetService;
   recoverStaleProvisioningWorkspace: typeof recoverStaleProvisioningWorkspace;
   reconciliationService: typeof reconciliationService;
   acpRuntimeManager: typeof acpRuntimeManager;
@@ -113,7 +117,6 @@ export function configureDomainBridges(services: BridgeServices): void {
     initializeWorkspaceWorktree,
     periodicTaskService,
     prSnapshotService,
-    ratchetService,
     recoverStaleProvisioningWorkspace,
     reconciliationService,
     sessionDataService,
@@ -140,13 +143,6 @@ export function configureDomainBridges(services: BridgeServices): void {
   const { prObservationService, sessionBackgroundDeliveryService, userSettingsService } = services;
   const observationPorts = createPRObservationPorts(services);
   const deliveryPorts = createPRDeliveryPorts(services, logger);
-  // === Ratchet domain bridges ===
-  ratchetService.configure({
-    retireLegacy: () => retireLegacyRatchetSessions(services),
-    observe: (target, signal) => observeMonitoredPR(observationPorts, target, { signal }),
-    wake: (workspaceId, isCurrent) => wakePRDelivery(workspaceId, deliveryPorts, isCurrent),
-    setMonitoring: (input) => setPRMonitoring(input, services),
-  });
   sessionBackgroundDeliveryService.configure(createPRBackgroundDeliveryPort(deliveryPorts));
   prObservationService.configure({
     findPR: (target) => workspacePrSnapshotService.find(target),
@@ -158,6 +154,7 @@ export function configureDomainBridges(services: BridgeServices): void {
     workspace: {
       initializeWorktree: (id, options) => initializeWorkspaceWorktree(id, options),
       findNeedingWorktree: () => workspaceMaintenanceService.findNeedingWorktree(),
+      releaseArchivedBlobs: (signal) => workspaceMaintenanceService.releaseArchivedBlobs(signal),
       recoverStaleProvisioningWorkspace: (id, reason) =>
         recoverStaleProvisioningWorkspace(id, reason),
     },
@@ -196,7 +193,13 @@ export function configureDomainBridges(services: BridgeServices): void {
   });
 
   // === Session domain bridges ===
+  // A turn starting or finishing may push, so its PRs leave the stable-PR backoff.
+  const markSessionRunning = (workspaceId: string, sessionId: string) => {
+    resetStablePRBackoff(observationPorts, workspaceId);
+    return workspaceActivityService.markSessionRunning(workspaceId, sessionId);
+  };
   const markSessionIdle = (workspaceId: string, sessionId: string, generation?: number) => {
+    resetStablePRBackoff(observationPorts, workspaceId);
     workspaceActivityService.markSessionIdle(workspaceId, sessionId, generation);
     void wakePRDelivery(workspaceId, deliveryPorts).catch((error) => {
       logger.warn('PR delivery wake deferred after session became idle', { workspaceId, error });
@@ -204,21 +207,15 @@ export function configureDomainBridges(services: BridgeServices): void {
   };
   chatEventForwarderService.configure({
     workspace: {
-      markSessionRunning: (wsId, sId) => workspaceActivityService.markSessionRunning(wsId, sId),
+      markSessionRunning,
       markSessionIdle,
       on: (event, handler) => workspaceActivityService.on(event, handler),
     },
   });
 
   const sessionWorkspaceBridge = {
-    markSessionRunning: (wsId: string, sId: string) =>
-      workspaceActivityService.markSessionRunning(wsId, sId),
+    markSessionRunning,
     markSessionIdle,
-    recordRatchetSessionEnd: (
-      _workspaceId: string,
-      _sessionId: string,
-      _outcome: 'COMPLETED' | 'DIED'
-    ) => Promise.resolve(),
     resetPRDiscoveryBackoff: (workspaceId: string) =>
       workspaceDataService.resetPRDiscoveryBackoff(workspaceId),
   };

@@ -48,6 +48,17 @@ describe('SubagentList', () => {
     void act(() => root.render(createElement(SubagentList, props)));
   }
 
+  it('shows the reported model when available and updates it live', () => {
+    const props = { onSelect: vi.fn() };
+    render({ ...props, state: { kind: 'ready', subagents: [subagent({ id: 'child' })] } });
+    expect(container.querySelector('[title^="Model:"]')).toBeNull();
+    render({
+      ...props,
+      state: { kind: 'ready', subagents: [subagent({ id: 'child', model: 'child-model' })] },
+    });
+    expect(container.querySelector('[title^="Model:"]')?.textContent).toBe('child-model');
+  });
+
   it('remembers completed expansion per session after remounting', () => {
     const props = {
       state: { kind: 'ready' as const, subagents: [subagent({ id: 'done', status: 'completed' })] },
@@ -273,7 +284,7 @@ describe('SubagentList', () => {
 
   it.each<[string, SubagentListState, string]>([
     ['loading', { kind: 'loading' }, 'Loading subagents…'],
-    ['empty', { kind: 'ready', subagents: [] }, 'No subagents for this session.'],
+    ['empty', { kind: 'ready', subagents: [] }, 'No subagents for this session'],
   ])('renders the %s state', (_name, state, expectedText) => {
     render({ state, onSelect: vi.fn() });
     expect(container.textContent).toContain(expectedText);
@@ -287,6 +298,9 @@ describe('SubagentList', () => {
     });
 
     expect(container.textContent).toContain('Provider unavailable');
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain(
+      "Couldn't load subagents"
+    );
     const retry = [...container.querySelectorAll('button')].find(
       (button) => button.textContent === 'Retry'
     );
@@ -294,8 +308,13 @@ describe('SubagentList', () => {
     expect(onRetry).toHaveBeenCalledOnce();
   });
 
-  it('renders nothing for unsupported providers', () => {
+  it('explains when subagent history is unavailable', () => {
     render({ state: { kind: 'unsupported' }, onSelect: vi.fn() });
-    expect(container.innerHTML).toBe('');
+    expect(container.textContent).toContain('Subagents unavailable');
+    expect(container.textContent).toContain(
+      'Subagent browsing is not currently available for this session.'
+    );
+    expect(container.textContent).not.toContain('provider');
+    expect(container.textContent).toContain('History may be unavailable after the session stops.');
   });
 });

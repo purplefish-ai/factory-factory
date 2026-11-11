@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react';
 import { useState } from 'react';
-import { expect, fn, within } from 'storybook/test';
+import { expect, fn, userEvent, within } from 'storybook/test';
 import type { WorkspacePullRequest } from '@/shared/workspace-pr';
 import { deriveWorkspacePRSummary } from '@/shared/workspace-pr-summary';
 import { baseWorkspace } from './kanban-card.story-fixtures';
@@ -387,6 +387,34 @@ export const SlowRename: Story = {
       />
     );
   },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(canvas.getByRole('button', { name: 'Rename workspace' }));
+    const input = canvas.getByRole('textbox', { name: 'Workspace name' });
+    await userEvent.clear(input);
+    await userEvent.type(input, 'Renamed workspace{Enter}');
+    // The spinner beside the read-only name shows the save is in flight.
+    await expect(
+      await canvas.findByRole('status', { name: 'Saving workspace name' })
+    ).toBeVisible();
+    await expect(input).toHaveAttribute('readonly');
+  },
+};
+
+/** A PR-updates toggle in flight: the wrench is busy and shows the shared spinner. */
+export const RatchetTogglePending: Story = {
+  args: {
+    workspace: baseWorkspace,
+    projectSlug: 'my-project',
+    onToggleRatcheting: fn(),
+    isTogglePending: true,
+  },
+  play: async ({ canvasElement }) => {
+    const toggle = within(canvasElement).getByRole('button', { name: /PR updates/ });
+    await expect(toggle).toBeDisabled();
+    await expect(toggle).toHaveAttribute('aria-busy', 'true');
+    await expect(toggle.querySelector('[data-slot=spinner]')).toBeVisible();
+  },
 };
 
 export const AgentWorkspace: Story = {
@@ -473,12 +501,7 @@ export const CompactControlsPhone: Story = {
   globals: { viewport: { value: 'phone', isRotated: false } },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    for (const name of [
-      'Rename workspace',
-      'Quick Chat',
-      'Disable PR updates',
-      'Archive workspace',
-    ]) {
+    for (const name of ['Rename workspace', 'Quick Chat', 'PR updates', 'Archive workspace']) {
       await expect(canvas.getByRole('button', { name })).toBeVisible();
     }
   },

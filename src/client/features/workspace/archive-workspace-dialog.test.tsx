@@ -44,11 +44,12 @@ describe('ArchiveWorkspaceDialog', () => {
 
   it('always allows archive confirmation and does not expose a commit choice', () => {
     const onConfirm = vi.fn();
+    const onOpenChange = vi.fn();
     void act(() => {
       root.render(
         createElement(ArchiveWorkspaceDialog, {
           open: true,
-          onOpenChange: vi.fn(),
+          onOpenChange,
           onConfirm,
         })
       );
@@ -63,5 +64,24 @@ describe('ArchiveWorkspaceDialog', () => {
 
     void act(() => archiveButton?.click());
     expect(onConfirm).toHaveBeenCalledWith();
+    // Archiving is optimistic, so confirming closes the dialog at once.
+    expect(onOpenChange).toHaveBeenCalledWith(false);
+  });
+
+  it('warns about active child workspaces inside the dialog', () => {
+    void act(() => {
+      root.render(
+        createElement(ArchiveWorkspaceDialog, {
+          open: true,
+          onOpenChange: vi.fn(),
+          onConfirm: vi.fn(),
+          activeChildCount: 2,
+        })
+      );
+    });
+
+    expect(document.querySelector('[role="alertdialog"]')?.textContent).toContain(
+      'This workspace has 2 active child workspaces.'
+    );
   });
 });

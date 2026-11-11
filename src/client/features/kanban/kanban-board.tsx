@@ -1,7 +1,7 @@
-import { ArrowsClockwiseIcon } from '@phosphor-icons/react/dist/csr/ArrowsClockwise';
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
+import { EmptyState } from '@/client/components/empty-state';
+import { QueryErrorState, QueryRefreshError } from '@/client/components/query-error-state';
 import { ArchiveGitLockDialog, ArchiveWorkspaceDialog } from '@/client/features/workspace';
-import { useStableCallback } from '@/client/hooks/use-stable-callback';
 import { runInBackground } from '@/client/lib/background-task';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -44,11 +44,11 @@ function KanbanBoardContent() {
     workspaces,
     issues,
     isLoading,
-    isError,
     error,
+    isFetching,
     refetch,
     toggleWorkspaceRatcheting,
-    togglingWorkspaceId,
+    togglingWorkspaceIds,
     renameWorkspace,
     archiveWorkspace,
     bulkArchiveColumn,
@@ -65,26 +65,29 @@ function KanbanBoardContent() {
     closeQuickChat,
   } = useKanban();
 
-  // Context commands are recreated on every render. Stable wrappers let the
-  // memoized cards skip re-rendering when another workspace changes.
-  const handleToggleRatcheting = useStableCallback((workspaceId: string, enabled: boolean) => {
-    runInBackground(toggleWorkspaceRatcheting(workspaceId, enabled), "Couldn't update workspace.");
-  });
-  const handleArchiveWorkspace = useStableCallback((workspaceId: string) => {
-    runInBackground(archiveWorkspace(workspaceId), "Couldn't archive workspace.");
-  });
-  const handleRenameWorkspace = useStableCallback(renameWorkspace);
-  const handleGitLockOpenChange = useStableCallback((open: boolean) => {
-    if (!open) {
-      dismissArchiveGitLock();
-    }
-  });
-  const handleRetryGitLockedArchives = useStableCallback(() => {
-    void retryGitLockedArchives(false);
-  });
-  const handleRemoveGitLocksAndArchive = useStableCallback(() => {
-    void retryGitLockedArchives(true);
-  });
+  // Cards take a fire-and-forget archive; the command itself resolves for the git-lock retry.
+  const handleArchiveWorkspace = useCallback(
+    (workspaceId: string) =>
+      runInBackground(archiveWorkspace(workspaceId), "Couldn't archive workspace."),
+    [archiveWorkspace]
+  );
+  // The lock dialog is memoized; these follow the provider's stable commands.
+  const handleLockOpenChange = useCallback(
+    (open: boolean) => {
+      if (!open) {
+        dismissArchiveGitLock();
+      }
+    },
+    [dismissArchiveGitLock]
+  );
+  const handleLockRetry = useCallback(
+    () => void retryGitLockedArchives(false),
+    [retryGitLockedArchives]
+  );
+  const handleLockRemoveAndArchive = useCallback(
+    () => void retryGitLockedArchives(true),
+    [retryGitLockedArchives]
+  );
 
   const isMobile = useIsMobile();
   const columns = useMemo(() => getKanbanColumns(issueProvider), [issueProvider]);
@@ -144,10 +147,11 @@ function KanbanBoardContent() {
   const archiveGitLockDialog = (
     <ArchiveGitLockDialog
       open={archiveGitLockWorkspaceIds.length > 0}
-      onOpenChange={handleGitLockOpenChange}
+      onOpenChange={handleLockOpenChange}
       workspaceCount={archiveGitLockWorkspaceIds.length}
-      onRetry={handleRetryGitLockedArchives}
-      onRemoveLockAndArchive={handleRemoveGitLocksAndArchive}
+      onRetry={handleLockRetry}
+      onRemoveLockAndArchive={handleLockRemoveAndArchive}
+      isPending={isArchiving}
     />
   );
 
@@ -167,17 +171,16 @@ function KanbanBoardContent() {
     );
   }
 
-  if (isError) {
+  // A failed refresh keeps the cached board, so open forms and scroll survive.
+  if (error && !workspaces) {
     return (
-      <div className="flex flex-col items-center justify-center py-12 text-center">
-        <p className="text-destructive mb-4">
-          Couldn't load workspaces. {error?.message ?? 'Unknown error'}
-        </p>
-        <Button variant="outline" onClick={() => refetch()}>
-          <ArrowsClockwiseIcon className="h-4 w-4 mr-2" />
-          Retry
-        </Button>
-      </div>
+      <QueryErrorState
+        title="Couldn't load workspaces"
+        error={error}
+        onRetry={refetch}
+        isRetrying={isFetching}
+        className="py-12"
+      />
     );
   }
 
@@ -203,13 +206,13 @@ function KanbanBoardContent() {
         waitingSortOrder={waitingSortOrder}
         onWaitingSortOrderChange={setWaitingSortOrder}
         unreadMailCounts={unreadMailCounts}
-        onToggleRatcheting={handleToggleRatcheting}
-        togglingWorkspaceId={togglingWorkspaceId}
+        onToggleRatcheting={toggleWorkspaceRatcheting}
+        togglingWorkspaceIds={togglingWorkspaceIds}
         onArchive={handleArchiveWorkspace}
         onBulkArchive={() => handleBulkArchive(column.id)}
         isBulkArchiving={isBulkArchiving}
         onOpenQuickChat={openQuickChat}
-        onRename={handleRenameWorkspace}
+        onRename={renameWorkspace}
       />
     );
   const columnArchiveCount = bulkArchiveColumnId
@@ -218,6 +221,15 @@ function KanbanBoardContent() {
     : 0;
   return (
     <div className="flex flex-col h-full min-h-0 gap-3">
+      {error ? (
+        <QueryRefreshError
+          title="Couldn't refresh workspaces"
+          error={error}
+          onRetry={refetch}
+          isRetrying={isFetching}
+          className="rounded-md border"
+        />
+      ) : null}
       {workspaces?.length === 0 && !showInlineForm && !isArchiving && (
         <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border p-4">
           <div>
@@ -235,7 +247,7 @@ function KanbanBoardContent() {
       {search &&
         Object.values(workspacesByColumn).every((rows) => rows.length === 0) &&
         visibleIssues.length === 0 && (
-          <p className="text-sm text-muted-foreground">No matching issues or workspaces</p>
+          <EmptyState size="compact" title="No matching issues or workspaces" />
         )}
       {isMobile ? (
         <MobileBoardSections

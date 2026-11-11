@@ -31,7 +31,7 @@ vi.mock('@/client/hooks/use-project-issues', () => ({
   useProjectIssues: () => ({ issues: [], isLoading: false, refetch: vi.fn() }),
 }));
 vi.mock('@/client/hooks/use-toggle-ratcheting', () => ({
-  useToggleRatcheting: () => ({ mutateAsync: vi.fn() }),
+  useToggleRatcheting: () => ({ mutate: vi.fn(), pendingWorkspaceIds: [] }),
 }));
 vi.mock('@/hooks/use-mobile', () => ({
   MOBILE_BREAKPOINT: 768,
@@ -48,8 +48,11 @@ vi.mock('@/client/components/project-header', () => ({
 }));
 vi.mock('@/client/features/kanban', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/client/features/kanban')>();
+  const { useKanban } = await vi.importActual<
+    typeof import('@/client/features/kanban/kanban-context')
+  >('@/client/features/kanban/kanban-context');
   function Probe() {
-    mocks.context = actual.useKanban();
+    mocks.context = useKanban();
     return <div>Project: {mocks.context.projectId}</div>;
   }
   return {
@@ -136,7 +139,18 @@ vi.mock('@/client/lib/trpc', () => ({
         }),
       },
       syncAllPRStatuses: { useMutation: () => ({ mutate: vi.fn(), isPending: false }) },
-      rename: { useMutation: () => ({ mutateAsync: mocks.rename }) },
+      // Runs the shared hook's success handler, which owns the post-rename refresh.
+      rename: {
+        useMutation: (options: {
+          onSuccess?: (result: unknown, input: unknown) => Promise<unknown> | undefined;
+        }) => ({
+          mutateAsync: async (input: unknown) => {
+            const result: unknown = await mocks.rename(input);
+            await options.onSuccess?.(result, input);
+            return result;
+          },
+        }),
+      },
       archive: { useMutation: () => ({ mutateAsync: mocks.archive }) },
       bulkArchive: { useMutation: () => ({ mutateAsync: mocks.bulkArchive, isPending: false }) },
     },
@@ -251,7 +265,7 @@ describe('WorkspacesBoardView project lifetime', () => {
   ] as const)(
     'keeps delayed rename %s owned by its origin while %s is selected',
     async (outcome, selectedProject) => {
-      const request = deferred<void>();
+      const request = deferred<{ id: string; projectId: string }>();
       mocks.rename.mockReturnValueOnce(request.promise);
       await render('a');
       let save!: Promise<void>;
@@ -268,7 +282,7 @@ describe('WorkspacesBoardView project lifetime', () => {
       const current = mocks.context!;
       await act(async () => {
         if (outcome === 'success') {
-          request.resolve();
+          request.resolve({ id: 'a-1', projectId: 'a' });
         } else {
           request.reject(new Error('Mock rename failure'));
         }
@@ -279,13 +293,13 @@ describe('WorkspacesBoardView project lifetime', () => {
       expect(current.projectId).toBe(selectedProject);
       expect(current.quickChatWorkspaceId).toBe(`${selectedProject}-2`);
       expect(current.archiveGitLockWorkspaceIds).toEqual([]);
-      expect(mocks.refetch).not.toHaveBeenCalledWith('b');
-      expect(mocks.listInvalidate).not.toHaveBeenCalled();
+      // The refresh targets the renamed workspace's own project, whichever is selected.
+      expect(mocks.refetch).not.toHaveBeenCalled();
       if (outcome === 'success') {
-        expect(mocks.refetch).toHaveBeenCalledExactlyOnceWith('a');
+        expect(mocks.listInvalidate).toHaveBeenCalledExactlyOnceWith({ projectId: 'a' });
         expect(mocks.invalidate).toHaveBeenCalledExactlyOnceWith({ id: 'a-1' });
       } else {
-        expect(mocks.refetch).not.toHaveBeenCalled();
+        expect(mocks.listInvalidate).not.toHaveBeenCalled();
         expect(mocks.invalidate).not.toHaveBeenCalled();
       }
     }

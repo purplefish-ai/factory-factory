@@ -16,7 +16,7 @@ export class AgentProposalService {
   async get(workspaceId: string, proposalId: string) {
     const row = await agentProposalAccessor.get(workspaceId, proposalId);
     if (!row) {
-      throw new ApplicationError('NOT_FOUND', 'Agent proposal not found in this workspace.');
+      throw new ApplicationError('NOT_FOUND', 'Automation proposal not found in this workspace.');
     }
     return publicProposal(row);
   }

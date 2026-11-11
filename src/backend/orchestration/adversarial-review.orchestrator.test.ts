@@ -168,6 +168,29 @@ describe('triggerAdversarialReview', () => {
     expect(sessionDataService.createAgentSessionWithinWorkspaceLimit).not.toHaveBeenCalled();
   });
 
+  it('starts a new review when an earlier review of the PR has finished', async () => {
+    mockOpenPrWorkspace();
+    vi.mocked(sessionDataService.findAgentSessionsByWorkspaceId).mockResolvedValue([
+      {
+        id: 'finished-session',
+        workspacePrId: 'pr-1',
+        workflow: 'adversarial_review',
+        status: 'IDLE',
+        provider: 'CODEX',
+        createdAt: new Date(),
+      } as never,
+    ]);
+    vi.mocked(sessionDataService.createAgentSessionWithinWorkspaceLimit).mockResolvedValue({
+      outcome: 'created',
+      session: { id: 'new-session' },
+    } as never);
+
+    await expect(triggerAdversarialReview(WORKSPACE_ID)).resolves.toEqual({
+      status: 'started',
+      sessionId: 'new-session',
+    });
+  });
+
   it('refuses to start a reviewer when the workspace session limit is reached', async () => {
     mockOpenPrWorkspace();
     vi.mocked(sessionDataService.createAgentSessionWithinWorkspaceLimit).mockResolvedValue({

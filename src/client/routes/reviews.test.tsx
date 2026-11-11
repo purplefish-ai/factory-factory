@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { act, createElement, forwardRef, type ReactNode } from 'react';
+import { act, createElement, type ReactNode, type Ref } from 'react';
 import { createRoot } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { PRWithFullDetails } from '@/shared/github-types';
@@ -95,20 +95,26 @@ vi.mock('@/client/components/pr-detail-panel', () => ({
 }));
 
 vi.mock('@/client/components/pr-inbox-item', () => {
-  const InboxItem = forwardRef<HTMLButtonElement, { onSelect: () => void; pr: PRWithFullDetails }>(
-    function InboxItem({ onSelect, pr }, ref) {
-      return createElement(
-        'button',
-        {
-          ref,
-          'data-testid': `pr-${pr.number}`,
-          onClick: onSelect,
-          type: 'button',
-        },
-        `${pr.number}:${pr.reviewDecision ?? 'NONE'}`
-      );
-    }
-  );
+  function InboxItem({
+    onSelect,
+    pr,
+    ref,
+  }: {
+    onSelect: () => void;
+    pr: PRWithFullDetails;
+    ref?: Ref<HTMLButtonElement>;
+  }) {
+    return createElement(
+      'button',
+      {
+        ref,
+        'data-testid': `pr-${pr.number}`,
+        onClick: onSelect,
+        type: 'button',
+      },
+      `${pr.number}:${pr.reviewDecision ?? 'NONE'}`
+    );
+  }
 
   return {
     PRInboxItem: InboxItem,
@@ -288,7 +294,7 @@ describe('project reviews', () => {
     expect(view.container.querySelector('nav')?.textContent).toBe('Alpha');
     expect(listReviewRequestsMock).toHaveBeenCalledWith(
       { projectId: 'alpha-id' },
-      expect.objectContaining({ staleTime: 30_000, enabled: true })
+      expect.objectContaining({ staleTime: 120_000, refetchInterval: 120_000, enabled: true })
     );
     view.unmount();
   });

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { AgentMessage, ChatMessage, WebSocketMessage } from '@/lib/chat-protocol';
+import type { AgentMessage, ChatMessage, SessionDeltaEvent } from '@/lib/chat-protocol';
 import {
   getToolUseIdFromEvent,
   isStreamEventMessage,
@@ -7,7 +7,6 @@ import {
 } from '@/lib/chat-protocol';
 import { chatReducer, createInitialChatState } from './index';
 import {
-  getRendererTranscriptIds,
   getRendererTrimSlack,
   resolveRendererTranscript,
   runRendererTranscriptBatch,
@@ -84,9 +83,6 @@ function expectMatchesRescan(resolved: ReturnType<typeof resolveRendererTranscri
   const expected = expectedIndexes(resolved.retained);
   expect(resolved.indexes.toolUseIdToIndex).toEqual(expected.toolUseIdToIndex);
   expect(resolved.indexes.agentMessageOrderToIndex).toEqual(expected.agentMessageOrderToIndex);
-  expect(getRendererTranscriptIds(resolved.retained, resolved.indexes)).toEqual(
-    new Set(resolved.retained.map((message) => message.id))
-  );
 }
 
 describe('resolveRendererTranscript', () => {
@@ -242,8 +238,8 @@ describe('renderer window hysteresis', () => {
 });
 
 describe('session replay lookups', () => {
-  function replayEvents(groups: number): WebSocketMessage[] {
-    return Array.from({ length: groups }, (_, group): WebSocketMessage[] => {
+  function replayEvents(groups: number): SessionDeltaEvent[] {
+    return Array.from({ length: groups }, (_, group): SessionDeltaEvent[] => {
       const base = group * 4;
       const id = `user-${group}`;
       return [
@@ -266,7 +262,7 @@ describe('session replay lookups', () => {
           messageId: `a${group}`,
           order: base + 2,
         },
-      ] as WebSocketMessage[];
+      ] as SessionDeltaEvent[];
     }).flat();
   }
 

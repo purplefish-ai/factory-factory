@@ -4,6 +4,7 @@ import { createElement } from 'react';
 import { flushSync } from 'react-dom';
 import { createRoot } from 'react-dom/client';
 import { describe, expect, it, vi } from 'vitest';
+import { TooltipProvider } from '@/components/ui/tooltip';
 import { createEmptyTokenStats } from '@/lib/chat-protocol';
 import { EMPTY_CHAT_BAR_CAPABILITIES, type ChatBarCapabilities } from '@/shared/chat-capabilities';
 import { ChatInput } from './chat-input';
@@ -11,6 +12,7 @@ import { ChatInput } from './chat-input';
 const mocks = vi.hoisted(() => ({
   fileSelect: vi.fn(async () => undefined),
   callbacks: [] as unknown[],
+  quickActionOpeners: [] as unknown[],
 }));
 
 vi.mock('@/client/lib/trpc', () => ({
@@ -18,19 +20,23 @@ vi.mock('@/client/lib/trpc', () => ({
     codexAccounts: {
       list: { useQuery: () => ({ data: [{ id: 'work', label: 'Work' }] }) },
     },
+    workspace: { listAllFiles: {} },
   },
 }));
 
 vi.mock('@/client/features/composer', () => ({
   FileMentionPalette: () => null,
   SlashCommandPalette: () => null,
+  useFileMentions: () => ({}),
   usePasteDropHandler: () => ({}),
   useSlashCommands: () => ({}),
 }));
-vi.mock('./hooks/use-file-mentions', () => ({ useFileMentions: () => ({}) }));
 vi.mock('./hooks/use-textarea-resize', () => ({ useTextareaResize: () => undefined }));
 vi.mock('./hooks/use-chat-input-actions', () => ({
-  useChatInputActions: () => ({ handleFileSelect: mocks.fileSelect }),
+  useChatInputActions: ({ onOpenQuickActions }: { onOpenQuickActions?: () => void }) => {
+    mocks.quickActionOpeners.push(onOpenQuickActions);
+    return { handleFileSelect: mocks.fileSelect };
+  },
 }));
 vi.mock('./components/input-controls', async (importOriginal) => ({
   ...(await importOriginal<typeof import('./components/input-controls')>()),
@@ -62,6 +68,37 @@ describe('ChatInput file controls', () => {
       flushSync(() => root.unmount());
     }
   });
+
+  it('keeps the quick-actions opener stable so keyboard shortcuts are not rebuilt', () => {
+    mocks.quickActionOpeners.length = 0;
+    const container = document.createElement('div');
+    const root = createRoot(container);
+    const onSend = vi.fn();
+    try {
+      flushSync(() => root.render(createElement(ChatInput, { onSend, placeholder: 'First' })));
+      flushSync(() => root.render(createElement(ChatInput, { onSend, placeholder: 'Second' })));
+      expect(mocks.quickActionOpeners).toHaveLength(2);
+      expect(mocks.quickActionOpeners[0]).toBeTypeOf('function');
+      expect(mocks.quickActionOpeners[1]).toBe(mocks.quickActionOpeners[0]);
+    } finally {
+      flushSync(() => root.unmount());
+    }
+  });
+});
+
+it.each([false, true])('keeps the message field named while connecting (%s)', (disabled) => {
+  const container = document.createElement('div');
+  const root = createRoot(container);
+  try {
+    flushSync(() => root.render(<ChatInput onSend={vi.fn()} disabled={disabled} />));
+    const textarea = container.querySelector('textarea');
+    expect(textarea?.getAttribute('aria-label')).toBe('Message');
+    expect(textarea?.getAttribute('placeholder')).toBe(
+      disabled ? 'Connecting…' : 'Type a message…'
+    );
+  } finally {
+    flushSync(() => root.unmount());
+  }
 });
 
 it.each([
@@ -74,7 +111,11 @@ it.each([
     const root = createRoot(container);
     try {
       flushSync(() =>
-        root.render(<ChatInput onSend={vi.fn()} running promptInFlight={promptInFlight} />)
+        root.render(
+          <TooltipProvider>
+            <ChatInput onSend={vi.fn()} running promptInFlight={promptInFlight} />
+          </TooltipProvider>
+        )
       );
       expect(container.querySelector(`[aria-label="${label}"]`)).not.toBeNull();
       expect(container.querySelector('[aria-label="Stop agent"]')).not.toBeNull();

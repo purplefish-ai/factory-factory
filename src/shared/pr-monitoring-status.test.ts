@@ -1,4 +1,5 @@
 import { expect, it } from 'vitest';
+import { PR_DELIVERY_BLOCKED_PAUSE_REASON } from './pr-monitoring';
 import {
   deriveWorkspaceStatusReason,
   type WorkspaceStatusReasonInput,
@@ -81,4 +82,20 @@ it('does not require a main recipient when dedicated updates are queued', () => 
       },
     })
   ).toMatchObject({ code: 'PR_UPDATE_QUEUED', tone: 'waiting' });
+});
+
+it('reports a blocked delivery as needing attention rather than a resumable pause', () => {
+  expect(
+    deriveWorkspaceStatusReason({
+      ...base,
+      prMonitoring: {
+        deliveryMode: 'MAIN',
+        enabled: true,
+        recipientSessionId: 'main',
+        bindingRevision: 1,
+        pauseReason: PR_DELIVERY_BLOCKED_PAUSE_REASON,
+        pendingEventCount: 2,
+      },
+    })
+  ).toMatchObject({ code: 'PR_DELIVERY_ERROR', tone: 'danger', needsUser: true });
 });

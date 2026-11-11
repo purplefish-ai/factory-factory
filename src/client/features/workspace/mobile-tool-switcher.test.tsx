@@ -5,15 +5,17 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import mobileToolsStory from './mobile-tool-switcher.stories';
 import { RightPanelLayout } from './right-panel-layout';
+import { resolveTopTab } from './right-panel-state';
 import { useWorkspacePanel, WorkspacePanelProvider } from './workspace-panel-context';
 
 function Tools() {
-  const { mobilePanel, setActiveBottomTab } = useWorkspacePanel();
+  const { mobilePanel, storedTopTab, setActiveBottomTab } = useWorkspacePanel();
   return (
     <RightPanelLayout
       workspaceId="mobile-switcher-test"
       isMobile
       mobilePanel={mobilePanel}
+      activeTopTab={resolveTopTab(storedTopTab, undefined)}
       periodicTaskId={null}
       onOpenLogs={() => setActiveBottomTab('dev-logs')}
       topPanel={<input aria-label="Tool draft" defaultValue="Preserved draft" />}

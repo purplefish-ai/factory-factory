@@ -1,5 +1,8 @@
-import { useCallback, useEffect, useRef } from 'react';
+import { useMutationState } from '@tanstack/react-query';
+import { getMutationKey } from '@trpc/react-query';
+import { useCallback, useEffect, useInsertionEffect, useRef } from 'react';
 import { toast } from 'sonner';
+import { useLatestRef } from '@/client/hooks/use-stable-callback';
 import { trpc } from '@/client/lib/trpc';
 import { useWebSocketTransport, type WebSocketSend } from '@/hooks/use-websocket-transport';
 import type {
@@ -8,19 +11,19 @@ import type {
   CommandInfo,
   MessageAttachment,
   QueuedMessage,
-  SessionInfo,
   TokenStats,
+  WebSocketMessage,
 } from '@/lib/chat-protocol';
 import { buildWebSocketUrl } from '@/lib/websocket-config';
 import { SessionReplayAssembler } from '@/shared/acp-protocol/protocol/replay-framing';
 import type { ChatBarCapabilities } from '@/shared/chat-capabilities';
 import type { SessionRuntimeState } from '@/shared/session-runtime';
+import { readChatFrame, reportInvalidReplayFrame } from './chat-frame-diagnostics';
 import type {
   AcpConfigOption,
   AcpPlanState,
   PendingMessageContent,
   PendingRequest,
-  RewindPreviewState,
   SessionStatus,
   ToolProgressInfo,
 } from './reducer';
@@ -29,7 +32,7 @@ import { useChatState } from './use-chat-state';
 import {
   evaluateHydrationBatch,
   evaluateLoadSessionRetry,
-  parseHydrationBatch,
+  getHydrationBatch,
   parseHydrationLoadError,
   scheduleConnectLoadingStart,
 } from './use-chat-websocket-hydration';
@@ -64,15 +67,15 @@ export interface UseChatWebSocketReturn {
   sessionRuntime: SessionRuntimeState;
   /**
    * The dbSessionId the current reducer state was hydrated for, or null
-   * before the first hydration. Stays on the previous session during a
-   * session switch until the new session's hydration batch arrives, so
-   * consumers can tell whether sessionRuntime describes dbSessionId yet.
+   * before the first hydration. On the render that selects another session it
+   * still names the previous one; the switch then clears it until the new
+   * session's hydration arrives, so consumers can tell whether sessionRuntime
+   * describes dbSessionId yet.
    */
   runtimeSessionId: string | null;
   /** Current transport has accepted its own hydration, distinct from retained browsing state. */
   controlsHydrated: boolean;
   gitBranch: string | null;
-  availableSessions: SessionInfo[];
   // Pending interactive request (permission or user question)
   pendingRequest: PendingRequest;
   // Chat settings
@@ -94,16 +97,12 @@ export interface UseChatWebSocketReturn {
   isCompacting: boolean;
   // Task notifications from SDK
   taskNotifications: { id: string; message: string; timestamp: string }[];
-  // Current permission mode from SDK status updates
-  permissionMode: string | null;
   // Slash commands from CLI initialize response
   slashCommands: CommandInfo[];
   // Whether slash commands have finished loading for this session
   slashCommandsLoaded: boolean;
   // Accumulated token usage stats for the session
   tokenStats: TokenStats;
-  // Rewind preview state (for confirmation dialog)
-  rewindPreview: RewindPreviewState | null;
   // ACP agent plan state for structured task list rendering
   acpPlan: AcpPlanState | null;
   // ACP agent-provided config options for config selector UI
@@ -114,22 +113,19 @@ export interface UseChatWebSocketReturn {
   sendMessage: (text: string, options?: SendMessageOptions) => void;
   stopChat: () => void;
   restartSession: () => void;
+  // A restart of this session is in flight
+  isRestartingSession: boolean;
   approvePermission: (requestId: string, allow: boolean, optionId?: string) => void;
   answerQuestion: (requestId: string, answers: Record<string, string | string[]>) => void;
   updateSettings: (settings: Partial<ChatSettings>) => void;
   setInputDraft: (draft: string) => void;
   setInputAttachments: ReturnType<typeof useChatState>['setInputAttachments'];
   removeQueuedMessage: (id: string) => void;
+  pendingSteer: ReturnType<typeof useChatState>['pendingSteer'];
   steerQueuedMessage: (id: string) => void;
   resumeQueuedMessages: () => void;
   // ACP config option action
   setConfigOption: (configId: string, value: string) => void;
-  // Rewind files actions
-  startRewindPreview: (userMessageUuid: string) => void;
-  confirmRewind: () => void;
-  cancelRewind: () => void;
-  /** Get the SDK-assigned UUID for a user message by its stable message ID */
-  getUuidForMessageId: (messageId: string) => string | undefined;
   // Refs
   inputRef: React.RefObject<HTMLTextAreaElement | null>;
 }
@@ -146,6 +142,15 @@ export interface UseChatWebSocketReturn {
  * 2. Uses useChatState for all chat state and actions
  * 3. Wires them together with the appropriate callbacks
  */
+function restartedSessionId(variables: unknown): string | undefined {
+  return typeof variables === 'object' &&
+    variables !== null &&
+    'id' in variables &&
+    typeof variables.id === 'string'
+    ? variables.id
+    : undefined;
+}
+
 export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSocketReturn {
   const { dbSessionId } = options;
 
@@ -167,32 +172,15 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
   // - useWebSocketTransport provides `send`, but needs `handleMessage` from chat state
   // Solution: Create a ref that starts as a no-op, pass a callback that uses the ref
   // to useChatState, then wire up the ref to transport.send after transport is created.
-  // This works because:
-  // 1. sendRef.current is updated synchronously after useWebSocketTransport returns
-  // 2. The callback wrapper ((msg) => sendRef.current(msg)) always uses the latest ref value
-  const replayAssembler = useRef(new SessionReplayAssembler());
+  // The ref is wired in an insertion effect, before any layout or passive effect
+  // (including the transport's connect) can send.
+  const replayAssembler = useRef(new SessionReplayAssembler(reportInvalidReplayFrame));
   const sendRef = useRef<WebSocketSend>(() => false);
   const currentLoadRequestIdRef = useRef<string | null>(null);
   const exhaustedLoadRequestIdRef = useRef<string | null>(null);
   const currentLoadGenerationRef = useRef(0);
   const loadTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const cancelConnectLoadingRef = useRef<(() => void) | null>(null);
-  const controlHydratedSessionIdRef = useRef<string | null>(null);
-  const hydratedSessionIdRef = useRef<string | null>(null);
-
-  // Drop the hydration marker when the selected session moves away from the
-  // hydrated one. Without this, switching A -> B -> back to A before B
-  // hydrates would leave the marker claiming A is hydrated while the reducer
-  // state was reset by the switches, and consumers of runtimeSessionId would
-  // treat the reset runtime as authoritative for A. Same-session reconnects
-  // keep the marker so hydrated state isn't spuriously reported as loading.
-  useEffect(() => {
-    replayAssembler.current.reset();
-    if (hydratedSessionIdRef.current !== null && hydratedSessionIdRef.current !== dbSessionId) {
-      hydratedSessionIdRef.current = null;
-      controlHydratedSessionIdRef.current = null;
-    }
-  }, [dbSessionId]);
 
   const clearLoadTimeout = useCallback(() => {
     if (loadTimeoutRef.current) {
@@ -211,6 +199,12 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
     send: useCallback<WebSocketSend>((message, options) => sendRef.current(message, options), []),
     connected: false, // Transport lifecycle is forwarded through handleDisconnected below.
   });
+  // The hydration markers are reducer state: SESSION_HYDRATED records one, and a
+  // session switch (SESSION_SWITCH_START) clears both, so switching A -> B -> A
+  // before B hydrates cannot treat the reset runtime as A's. Same-session
+  // reconnects keep hydratedSessionId so hydrated state is not reported as loading.
+  // Connect handlers read it through this ref, which admission also updates.
+  const hydratedSessionIdRef = useLatestRef(chat.hydratedSessionId);
 
   const scheduleLoadRetry = useCallback(
     (loadGeneration: number, loadRequestId: string, retryAttempt = 1) => {
@@ -243,7 +237,7 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
   );
 
   const handleLoadError = useCallback(
-    (data: unknown): boolean => {
+    (data: WebSocketMessage): boolean => {
       const loadError = parseHydrationLoadError(data);
       if (loadError) {
         if (loadError.loadRequestId !== currentLoadRequestIdRef.current) {
@@ -262,48 +256,59 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
     [chat.handleMessage, chat.dispatch, clearLoadTimeout, clearConnectLoadingTimeout]
   );
 
-  // Handle incoming messages - delegate to chat state
+  /** Records hydration for snapshots and replay batches; false drops a stale one. */
+  const admitHydrationBatch = useCallback(
+    (data: WebSocketMessage): boolean => {
+      const batch = getHydrationBatch(data);
+      if (!batch) {
+        return true;
+      }
+      const decision = evaluateHydrationBatch(
+        batch,
+        currentLoadRequestIdRef.current,
+        exhaustedLoadRequestIdRef.current
+      );
+      if (decision === 'drop') {
+        // A hydration response with a loadRequestId can arrive late (for example
+        // from a prior reconnect attempt). Ignore it so stale replay batches
+        // do not overwrite newer in-memory state.
+        return false;
+      }
+      if (dbSessionId) {
+        hydratedSessionIdRef.current = dbSessionId;
+        chat.dispatch({ type: 'SESSION_HYDRATED', payload: { sessionId: dbSessionId } });
+      }
+      if (decision === 'match') {
+        currentLoadRequestIdRef.current = null;
+        exhaustedLoadRequestIdRef.current = null;
+        clearLoadTimeout();
+        clearConnectLoadingTimeout();
+      } else {
+        exhaustedLoadRequestIdRef.current = null;
+      }
+      return true;
+    },
+    [chat.dispatch, clearConnectLoadingTimeout, clearLoadTimeout, dbSessionId]
+  );
+
+  // Handle incoming messages: validate each reassembled frame once, then delegate
   const handleMessage = useCallback(
     (raw: unknown) => {
-      const data = replayAssembler.current.accept(raw);
-      if (data === null || handleLoadError(data)) {
+      const data = readChatFrame(replayAssembler.current.accept(raw));
+      if (data === null || handleLoadError(data) || !admitHydrationBatch(data)) {
         return;
-      }
-      const batch = parseHydrationBatch(data);
-      if (batch) {
-        const decision = evaluateHydrationBatch(
-          batch,
-          currentLoadRequestIdRef.current,
-          exhaustedLoadRequestIdRef.current
-        );
-        if (decision === 'drop') {
-          // A hydration response with a loadRequestId can arrive late (for example
-          // from a prior reconnect attempt). Ignore it so stale replay batches
-          // do not overwrite newer in-memory state.
-          return;
-        }
-        if (dbSessionId) {
-          hydratedSessionIdRef.current = dbSessionId;
-          controlHydratedSessionIdRef.current = dbSessionId;
-        }
-        if (decision === 'match') {
-          currentLoadRequestIdRef.current = null;
-          exhaustedLoadRequestIdRef.current = null;
-          clearLoadTimeout();
-          clearConnectLoadingTimeout();
-        } else {
-          exhaustedLoadRequestIdRef.current = null;
-        }
       }
       chat.handleMessage(data);
     },
-    [chat.handleMessage, clearConnectLoadingTimeout, clearLoadTimeout, dbSessionId, handleLoadError]
+    [admitHydrationBatch, chat.handleMessage, handleLoadError]
   );
 
-  // Handle connection established - request session data and available sessions
+  // Handle connection established - request session data and available sessions.
+  // The transport drops frames from a replaced socket, so resetting a partial
+  // replay here also keeps one from carrying over to another session.
   const handleConnected = useCallback(() => {
     replayAssembler.current.reset();
-    controlHydratedSessionIdRef.current = null;
+    chat.dispatch({ type: 'CONNECTION_CHANGED' });
     const hasHydratedSession = dbSessionId !== null && hydratedSessionIdRef.current === dbSessionId;
     clearConnectLoadingTimeout();
     cancelConnectLoadingRef.current = scheduleConnectLoadingStart({
@@ -324,7 +329,7 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
   // Handle disconnection - clear loading state to avoid stuck spinner
   const handleDisconnected = useCallback(() => {
     replayAssembler.current.reset();
-    controlHydratedSessionIdRef.current = null;
+    chat.dispatch({ type: 'CONNECTION_CHANGED' });
     chat.handleDisconnected();
     currentLoadRequestIdRef.current = null;
     exhaustedLoadRequestIdRef.current = null;
@@ -355,11 +360,20 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
   });
 
   // Wire up the send function to the transport
-  sendRef.current = transport.send;
+  useInsertionEffect(() => {
+    sendRef.current = transport.send;
+  }, [transport.send]);
 
   const { mutate: restartSessionMutate } = trpc.session.restartSession.useMutation({
     onError: (error) => toast.error(`Couldn't restart session. ${error.message}`),
   });
+  // Every in-flight restart, not just this observer's latest, so restarting a
+  // second session cannot clear the first one's pending state early.
+  const restartingSessionIds = useMutationState({
+    filters: { mutationKey: getMutationKey(trpc.session.restartSession), status: 'pending' },
+    select: (mutation) => restartedSessionId(mutation.state.variables),
+  });
+  const isRestartingSession = dbSessionId !== null && restartingSessionIds.includes(dbSessionId);
   const restartSession = useCallback(() => {
     if (!dbSessionId) {
       return;
@@ -367,13 +381,12 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
     restartSessionMutate({ id: dbSessionId });
   }, [dbSessionId, restartSessionMutate]);
 
+  const controlsHydrated =
+    transport.connected && dbSessionId !== null && chat.controlsHydratedSessionId === dbSessionId;
   const utils = trpc.useUtils();
   const transcriptHistory = useTranscriptHistory({
     sessionId: dbSessionId,
-    enabled:
-      transport.connected &&
-      controlHydratedSessionIdRef.current === dbSessionId &&
-      chat.sessionStatus.phase !== 'loading',
+    enabled: controlsHydrated && chat.sessionStatus.phase !== 'loading',
     messages: chat.messages,
     history: chat.transcriptHistory,
     dispatch: chat.dispatch,
@@ -389,16 +402,12 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
     transcriptHistory,
     transcriptPageBoundaries: chat.transcriptPageBoundaries,
     connected: transport.connected,
-    runtimeSessionId: hydratedSessionIdRef.current,
-    controlsHydrated:
-      transport.connected &&
-      controlHydratedSessionIdRef.current === dbSessionId &&
-      dbSessionId !== null,
+    runtimeSessionId: chat.hydratedSessionId,
+    controlsHydrated,
     sessionStatus: chat.sessionStatus,
     processStatus: chat.processStatus,
     sessionRuntime: chat.sessionRuntime,
     gitBranch: chat.gitBranch,
-    availableSessions: chat.availableSessions,
     pendingRequest: chat.pendingRequest,
     chatSettings: chat.chatSettings,
     chatCapabilities: chat.chatCapabilities,
@@ -411,11 +420,9 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
     pendingMessages: chat.pendingMessages,
     isCompacting: chat.isCompacting,
     taskNotifications: chat.taskNotifications,
-    permissionMode: chat.permissionMode,
     slashCommands: chat.slashCommands,
     slashCommandsLoaded: chat.slashCommandsLoaded,
     tokenStats: chat.tokenStats,
-    rewindPreview: chat.rewindPreview,
     acpPlan: chat.acpPlan,
     acpConfigOptions: chat.acpConfigOptions,
     toolProgress: chat.toolProgress,
@@ -423,20 +430,17 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
     sendMessage: chat.sendMessage,
     stopChat: chat.stopChat,
     restartSession,
+    isRestartingSession,
     approvePermission: chat.approvePermission,
     answerQuestion: chat.answerQuestion,
     updateSettings: chat.updateSettings,
     setInputDraft: chat.setInputDraft,
     setInputAttachments: chat.setInputAttachments,
     removeQueuedMessage: chat.removeQueuedMessage,
+    pendingSteer: chat.pendingSteer,
     steerQueuedMessage: chat.steerQueuedMessage,
     resumeQueuedMessages: chat.resumeQueuedMessages,
     setConfigOption: chat.setConfigOption,
-    // Rewind files actions
-    startRewindPreview: chat.startRewindPreview,
-    confirmRewind: chat.confirmRewind,
-    cancelRewind: chat.cancelRewind,
-    getUuidForMessageId: chat.getUuidForMessageId,
     // Refs from chat
     inputRef: chat.inputRef,
   };

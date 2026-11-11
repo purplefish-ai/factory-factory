@@ -7,11 +7,11 @@ import type {
 import { AcpRuntimeConfigController } from '@/backend/services/session/service/acp/acp-runtime-config-controller';
 import { createTestProcessHandle } from '@/backend/services/session/service/acp/acp-runtime-manager.test-helpers';
 import type { AcpSessionCreationOutcome } from '@/backend/services/session/service/acp/acp-session-creation-outcome';
+import { configOptions } from '@/backend/services/session/service/config/session-config-authority.test-helpers';
+import { SessionConfigService } from '@/backend/services/session/service/config/session.config.service';
+import { SessionRepository } from '@/backend/services/session/service/data/session.repository';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
-import { configOptions } from './session-config-authority.test-helpers';
 import { createLifecycleHarness } from './session-lifecycle.test-helpers';
-import { SessionConfigService } from './session.config.service';
-import { SessionRepository } from './session.repository';
 
 export function startupConfigOptions(
   model = 'first',

@@ -1,26 +1,24 @@
 import { z } from 'zod';
+import type { WebSocketMessage } from '@/lib/chat-protocol';
 
-export type HydrationBatch = { loadRequestId?: string; type?: string };
+export type HydrationBatch = Extract<
+  WebSocketMessage,
+  { type: 'session_replay_batch' | 'session_snapshot' }
+>;
 export type HydrationBatchDecision = 'pass' | 'drop' | 'match';
 export type LoadSessionRetryDecision = 'retry' | 'stale' | 'exhausted';
 export const CONNECT_LOADING_DEBOUNCE_MS = 300;
 export const LOAD_SESSION_MAX_RETRY_ATTEMPTS = 3;
 
-export function parseHydrationBatch(data: unknown): HydrationBatch | null {
-  if (typeof data !== 'object' || data === null || !('type' in data)) {
-    return null;
-  }
-
-  const maybeType = (data as { type?: string }).type;
-  if (maybeType !== 'session_replay_batch' && maybeType !== 'session_snapshot') {
-    return null;
-  }
-
-  return data as HydrationBatch;
+/** Snapshots and replay batches carry hydration; other validated frames return null. */
+export function getHydrationBatch(message: WebSocketMessage): HydrationBatch | null {
+  return message.type === 'session_replay_batch' || message.type === 'session_snapshot'
+    ? message
+    : null;
 }
 
 export function evaluateHydrationBatch(
-  batch: HydrationBatch,
+  batch: Pick<HydrationBatch, 'loadRequestId'>,
   pendingLoadRequestId: string | null,
   acceptedLoadRequestId: string | null = null
 ): HydrationBatchDecision {

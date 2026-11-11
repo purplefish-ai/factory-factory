@@ -1,6 +1,15 @@
 import type { WebSocket } from 'ws';
 import type { z } from 'zod';
 import { WS_READY_STATE } from '@/backend/constants/websocket';
+import type { WebSocketMessage } from '@/shared/acp-protocol';
+
+/**
+ * Serialize a server-to-client `/chat` frame. The parameter type keeps direct
+ * sends on the contract the client validates with `ChatServerMessageSchema`.
+ */
+export function serializeChatFrame(frame: WebSocketMessage): string {
+  return JSON.stringify(frame);
+}
 
 export function toMessageString(data: unknown): string {
   if (typeof data === 'string') {

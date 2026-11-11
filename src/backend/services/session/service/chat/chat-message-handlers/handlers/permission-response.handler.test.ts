@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { SessionPermissionService } from '@/backend/services/session/service/lifecycle/session.permission.service';
+import { SessionPermissionService } from '@/backend/services/session/service/events/session.permission.service';
 import { SessionDomainService } from '@/backend/services/session/service/session-domain.service';
 import { createPermissionResponseHandler } from './permission-response.handler';
 

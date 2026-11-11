@@ -40,12 +40,12 @@ const {
     getOrCreateSessionClient: vi.fn(),
     isSessionStopping: vi.fn(),
     getGeneration: vi.fn(),
-    isGenerationCurrent: vi.fn(),
+    hasStopSince: vi.fn(),
     isSessionRunning: vi.fn(),
     isSessionPromptInFlight: vi.fn(),
     resolveQueuedMessageSettings: (_id: string, message: QueuedMessage) => message.settings,
-    configureQueuedMessage: vi.fn((id: string, message: QueuedMessage, supportsThinking: boolean) =>
-      configureTestQueuedMessage(mockSessionService, id, message, supportsThinking)
+    configureQueuedMessage: vi.fn((id: string, message: QueuedMessage) =>
+      configureTestQueuedMessage(mockSessionService, id, message)
     ),
     setSessionModel: vi.fn(),
     setSessionReasoningEffort: vi.fn(),
@@ -80,7 +80,7 @@ vi.mock('@/backend/services/session/service/acp', () => ({
   acpRuntimeManager: mockSessionService,
 }));
 
-vi.mock('@/backend/services/session/service/lifecycle/session-core-services', () => ({
+vi.mock('@/backend/services/session/service/composition/session-core-services', () => ({
   sessionConfigService: mockSessionService,
   sessionLifecycleService: mockSessionService,
   sessionPermissionService: {},
@@ -94,12 +94,7 @@ vi.mock('@/backend/services/session/service/data/session-data.service', () => ({
 const sessionDispatchService = createTestSessionDispatcher();
 
 function createIdleClient() {
-  return {
-    isCompactingActive: vi.fn().mockReturnValue(false),
-    startCompaction: vi.fn(),
-    endCompaction: vi.fn(),
-    setMaxThinkingTokens: vi.fn().mockResolvedValue(undefined),
-  };
+  return { sessionId: 's1' };
 }
 
 describe('sessionDispatchService.tryDispatchNextMessage', () => {
@@ -160,7 +155,7 @@ describe('sessionDispatchService.tryDispatchNextMessage', () => {
     mockSessionService.isSessionRunning.mockReturnValue(true);
     mockSessionService.isSessionStopping.mockReturnValue(false);
     mockSessionService.getGeneration.mockReturnValue(0);
-    mockSessionService.isGenerationCurrent.mockReturnValue(true);
+    mockSessionService.hasStopSince.mockReturnValue(false);
     mockSessionDataService.findAgentSessionById.mockResolvedValue({
       workspace: {
         status: 'READY',
@@ -318,8 +313,8 @@ describe('sessionDispatchService.tryDispatchNextMessage', () => {
     });
     let stopGeneration = 0;
     mockSessionService.getGeneration.mockImplementation(() => stopGeneration);
-    mockSessionService.isGenerationCurrent.mockImplementation(
-      (_sessionId: string, generation: number) => generation === stopGeneration
+    mockSessionService.hasStopSince.mockImplementation(
+      (_sessionId: string, generation: number) => generation !== stopGeneration
     );
     mockSessionService.getSessionClient.mockReturnValue({});
     mockSessionService.setSessionModel.mockReturnValue(modelUpdate);
@@ -392,7 +387,7 @@ describe('sessionDispatchService.tryDispatchNextMessage', () => {
         0
       );
     });
-    mockSessionService.isGenerationCurrent.mockReturnValue(false);
+    mockSessionService.hasStopSince.mockReturnValue(true);
     rejectPrompt(new Error('Connection closed'));
     await dispatch;
 
@@ -667,7 +662,7 @@ describe('sessionDispatchService.tryDispatchNextMessage', () => {
     }
   });
 
-  it('skips thinking budget updates for non-Claude clients', async () => {
+  it('does not apply a thinking budget while configuring a dispatched message', async () => {
     const codexMessage: QueuedMessage = {
       ...queuedMessage,
       settings: {

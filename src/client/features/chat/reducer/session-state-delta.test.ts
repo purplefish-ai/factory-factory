@@ -6,7 +6,8 @@ import type {
   SessionRuntimeState,
   WebSocketMessage,
 } from '@/lib/chat-protocol';
-import { isWebSocketMessage, MessageState, QUEUED_MESSAGE_ORDER_BASE } from '@/lib/chat-protocol';
+import { MessageState, QUEUED_MESSAGE_ORDER_BASE } from '@/lib/chat-protocol';
+import { parseChatServerMessage } from '@/shared/acp-protocol/protocol/chat-server-message-schema';
 import {
   type ChatState,
   chatReducer,
@@ -94,10 +95,11 @@ function snapshotOf(backend: BackendState): WebSocketMessage {
 /** Feed a wire frame through the same validation and action mapping the transport uses. */
 function receive(state: ChatState, frame: WebSocketMessage): ChatState {
   const wire: unknown = JSON.parse(JSON.stringify({ type: 'session_delta', data: frame }));
-  if (!isWebSocketMessage(wire) || wire.type !== 'session_delta') {
+  const parsed = parseChatServerMessage(wire);
+  if (!parsed.success || parsed.message.type !== 'session_delta') {
     throw new Error('Delta frame failed transport validation');
   }
-  const action = createActionFromWebSocketMessage(wire.data);
+  const action = createActionFromWebSocketMessage(parsed.message.data);
   expect(action).not.toBeNull();
   return action ? chatReducer(state, action) : state;
 }
@@ -328,20 +330,21 @@ describe('targeted session-state deltas', () => {
   });
 
   it('rejects malformed deltas at the transport boundary', () => {
+    const accepts = (data: unknown) => parseChatServerMessage(data).success;
     expect(
-      isWebSocketMessage({
+      accepts({
         type: 'session_delta',
         data: { type: 'queue_updated', queuedMessages: [{ id: 'q1' }] },
       })
     ).toBe(false);
     expect(
-      isWebSocketMessage({
+      accepts({
         type: 'session_delta',
         data: { type: 'pending_request_updated' },
       })
     ).toBe(false);
     expect(
-      isWebSocketMessage({
+      accepts({
         type: 'session_delta',
         data: {
           type: 'transcript_message_committed',

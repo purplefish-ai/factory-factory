@@ -1,4 +1,5 @@
 import { lazy, Suspense, useEffect, useRef } from 'react';
+import { ErrorBoundary } from '@/client/error-boundary';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -87,14 +88,20 @@ export function SetupTerminalModal({ open, onClose, initialProvider }: SetupTerm
         </div>
         <div className="relative flex-1 min-h-0 rounded-md overflow-hidden border bg-[#18181b]">
           {showTerminal && (
-            <Suspense fallback={null}>
-              <TerminalInstance
-                onData={handleData}
-                onResize={handleResize}
-                output={output}
-                isActive={open}
-              />
-            </Suspense>
+            <ErrorBoundary
+              variant="compact"
+              title="Couldn't load the terminal"
+              className="bg-background"
+            >
+              <Suspense fallback={null}>
+                <TerminalInstance
+                  onData={handleData}
+                  onResize={handleResize}
+                  output={output}
+                  isActive={open}
+                />
+              </Suspense>
+            </ErrorBoundary>
           )}
           {!connected && (showTerminal || gaveUp) && (
             <output
@@ -107,9 +114,15 @@ export function SetupTerminalModal({ open, onClose, initialProvider }: SetupTerm
               {gaveUp ? (
                 <>
                   <span>{showTerminal ? 'Connection lost.' : 'Connection failed.'}</span>
-                  <button type="button" className="underline" onClick={reconnect}>
+                  <Button
+                    type="button"
+                    variant="link"
+                    size="inline"
+                    className="text-xs text-current underline"
+                    onClick={reconnect}
+                  >
                     Retry
-                  </button>
+                  </Button>
                 </>
               ) : (
                 'Reconnecting… input is paused'

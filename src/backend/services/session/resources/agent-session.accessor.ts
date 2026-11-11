@@ -1,4 +1,5 @@
 import { prisma } from '@/backend/db';
+import { ADVERSARIAL_REVIEW_WORKFLOW } from '@/shared/adversarial-review';
 import { SessionStatus } from '@/shared/core';
 import { eventSessionCreationSchema, type EventSessionCreation } from '@/shared/event-agent-launch';
 import { type AgentSession, Prisma, type SessionProvider } from '@prisma-gen/client';
@@ -7,11 +8,49 @@ import { findEventSessionForCreation } from './event-session-creation';
 
 export type AgentSessionRecord = AgentSession;
 
+/**
+ * The workspace columns session reads need. A full workspace row carries the
+ * startup log and `creationMetadata` (base64 initial attachments), and
+ * `findById` runs on every dispatch and session load.
+ */
+const sessionWorkspaceSelect = {
+  status: true,
+  worktreePath: true,
+  initErrorMessage: true,
+} satisfies Prisma.WorkspaceSelect;
+
 export type AgentSessionRecordWithWorkspace = Prisma.AgentSessionGetPayload<{
-  include: { workspace: true };
+  include: { workspace: { select: typeof sessionWorkspaceSelect } };
 }>;
 
+/**
+ * A session without `providerMetadata` (provider config snapshots), for list
+ * reads that never use it. Reads that need it go through `findById`.
+ */
+export type AgentSessionSummaryRecord = Omit<AgentSession, 'providerMetadata'>;
+
 const ACTIVE_AGENT_SESSION_STATUSES: SessionStatus[] = [SessionStatus.RUNNING, SessionStatus.IDLE];
+
+/**
+ * Sessions that use a workspace session slot. Finished adversarial reviews keep
+ * their transcript but no slot; this mirrors isFinishedAdversarialReview, where
+ * an empty provider session ID means the review never started. The limit is
+ * checked only at creation, so resuming a finished review can briefly exceed it.
+ */
+export function workspaceSessionSlotWhere(workspaceId: string): Prisma.AgentSessionWhereInput {
+  return {
+    workspaceId,
+    status: { in: ACTIVE_AGENT_SESSION_STATUSES },
+    NOT: {
+      AND: [
+        { workflow: ADVERSARIAL_REVIEW_WORKFLOW },
+        { status: SessionStatus.IDLE },
+        { providerSessionId: { not: null } },
+        { providerSessionId: { not: '' } },
+      ],
+    },
+  };
+}
 
 export interface AgentSessionFilters {
   status?: SessionStatus;
@@ -113,7 +152,7 @@ export interface AgentSessionAccessor {
   findByWorkspaceId(
     workspaceId: string,
     filters?: AgentSessionFilters
-  ): Promise<AgentSessionRecord[]>;
+  ): Promise<AgentSessionSummaryRecord[]>;
   update(id: string, data: UpdateAgentSessionInput): Promise<AgentSessionRecord>;
   updateIfStatus(
     id: string,
@@ -181,7 +220,7 @@ class PrismaAgentSessionAccessor implements AgentSessionAccessor {
   findById(id: string): Promise<AgentSessionRecordWithWorkspace | null> {
     return prisma.agentSession.findUnique({
       where: { id },
-      include: { workspace: true },
+      include: { workspace: { select: sessionWorkspaceSelect } },
     });
   }
 
@@ -215,7 +254,7 @@ class PrismaAgentSessionAccessor implements AgentSessionAccessor {
   findByWorkspaceId(
     workspaceId: string,
     filters?: AgentSessionFilters
-  ): Promise<AgentSessionRecord[]> {
+  ): Promise<AgentSessionSummaryRecord[]> {
     const where: Prisma.AgentSessionWhereInput = { workspaceId };
 
     if (filters?.status) {
@@ -228,6 +267,7 @@ class PrismaAgentSessionAccessor implements AgentSessionAccessor {
 
     return prisma.agentSession.findMany({
       where,
+      omit: { providerMetadata: true },
       take: filters?.limit,
       orderBy: { createdAt: 'asc' },
     });
@@ -344,10 +384,7 @@ class PrismaAgentSessionAccessor implements AgentSessionAccessor {
     data: CreateLimitedAgentSessionInput
   ): Promise<LimitedAgentSessionCreation> {
     const activeSessionCount = await prisma.agentSession.count({
-      where: {
-        workspaceId: data.workspaceId,
-        status: { in: ACTIVE_AGENT_SESSION_STATUSES },
-      },
+      where: workspaceSessionSlotWhere(data.workspaceId),
     });
 
     if (activeSessionCount >= data.maxSessions) {

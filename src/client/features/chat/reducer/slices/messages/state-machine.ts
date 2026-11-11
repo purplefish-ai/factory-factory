@@ -120,33 +120,12 @@ function handleAcceptedState(
     },
   });
 
-  const newLocalUserMessageIds = new Set(state.localUserMessageIds);
-  // Replay hydration reuses ACCEPTED transitions to reconstruct UI state. Those
-  // messages are historical and must not be treated as locally-sent in this tab.
-  if (state.sessionStatus.phase !== 'loading') {
-    newLocalUserMessageIds.add(id);
-  }
-
-  let newMessageIdToUuid = state.messageIdToUuid;
-  let newPendingUuids = state.pendingUserMessageUuids;
-  if (state.pendingUserMessageUuids.length > 0) {
-    const [uuid, ...remainingUuids] = state.pendingUserMessageUuids;
-    newPendingUuids = remainingUuids;
-    if (uuid) {
-      newMessageIdToUuid = new Map(state.messageIdToUuid);
-      newMessageIdToUuid.set(id, uuid);
-    }
-  }
-
   return applyRendererMessages(
     {
       ...state,
       queuedMessages: newQueuedMessages,
       pendingMessages: newPendingMessages,
       latestThinking: null,
-      messageIdToUuid: newMessageIdToUuid,
-      pendingUserMessageUuids: newPendingUuids,
-      localUserMessageIds: newLocalUserMessageIds,
     },
     insertMessageByOrder(state.messages, newMessage)
   );

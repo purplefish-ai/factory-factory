@@ -18,7 +18,7 @@ export function PrStateBadge({ prState, size = 'sm', showAllStates = false }: Pr
     return null;
   }
   return (
-    <StatusChip tone={presentation.tone} size={size} className="rounded-md">
+    <StatusChip tone={presentation.tone} size={size}>
       {presentation.label}
     </StatusChip>
   );

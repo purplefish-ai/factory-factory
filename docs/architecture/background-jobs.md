@@ -12,14 +12,23 @@ shutdown stops this job before draining agent runtimes.
 Recurring backend work is declared to `jobRunner`
 (`src/backend/services/job-runner.service.ts`), which owns the loop lifecycle
 for the poll loops: the snapshot reconciliation safety net, the PR
-sync/discovery poll, the periodic reconciliation cleanup, PR monitoring, PR
-event ledger retention, the periodic-task poll, GitHub agent source intake,
-event evaluation/admission, and workspace metadata updates. Each owning service
-or orchestrator registers its job and exposes thin `start()`/`stop()` delegates.
-GitHub agent intake registers through `createAgentRuntime()` in the
-agent-runtime orchestrator; its poll service owns neither registration nor
-lifecycle methods. These delegates are the injection seam `server.ts` and
-`server.upgrade.test.ts` use.
+sync/discovery poll, the periodic reconciliation cleanup, archived workspace
+data retention, PR monitoring, PR event ledger retention, the periodic-task
+poll, GitHub agent source intake, event evaluation/admission, and workspace
+metadata updates. Each owning service or orchestrator registers its job and
+exposes thin `start()`/`stop()` delegates. GitHub agent intake registers through
+`createAgentRuntime()` in the agent-runtime orchestrator; its poll service owns
+neither registration nor lifecycle methods. These delegates are the injection
+seam `server.ts` and `server.upgrade.test.ts` use.
+
+Both PR pollers live in `src/backend/orchestration/pull-requests/`:
+`scheduler.service.ts` owns `pr-poll` (PR sync and discovery), and
+`ratchet.service.ts` owns `pr-event-poll` (PR monitoring) and
+`pr-event-retention`. The composition root builds one `RatchetService` per
+application graph through `createRatchetService()`, which supplies its
+observation, delivery-wake, cutover and monitoring-change operations. Shutdown
+labels these drains `pr-poll` and `pr-event-poll` after their jobs, and their
+cadences are `SERVICE_INTERVAL_MS.prPoll` and `prEventPoll`.
 
 ## Pacing
 
@@ -31,11 +40,11 @@ next start to `interval + d`.
 
 Two per-job options carry behaviour the loops depended on:
 
-- `runImmediately` — the ratchet, periodic tasks and snapshot reconciliation
-  poll once on start; PR sync and reconciliation cleanup wait out the first
+- `runImmediately` — `pr-event-poll`, periodic tasks and snapshot reconciliation
+  poll once on start; `pr-poll` and reconciliation cleanup wait out the first
   interval.
-- `computeDelay` — consulted after every run, which is how the ratchet stretches
-  its interval under GitHub rate limiting.
+- `computeDelay` — consulted after every run, which is how `pr-event-poll`
+  stretches its interval under GitHub rate limiting.
 
 Every cadence lives in `SERVICE_INTERVAL_MS`
 (`src/backend/services/constants.ts`). Snapshot reconciliation's used to be a
@@ -62,19 +71,30 @@ in rejected timestamp groups and unhydrated defaults do not count. Git stats
 continue streaming while the job remains in flight, so `stop()` still waits for
 every Git task to settle.
 
-Server cleanup calls every `server.ts`-owned job's `stop()` (reconciliation
-cleanup, PR sync, snapshot reconciliation, ratchet and PR event retention,
-periodic tasks) as soon as it begins, so no job starts new work during teardown
-and their in-flight runs drain concurrently with session/process teardown and
-with each other: shutdown waits for the slowest drain, not the sum. The drains
-are awaited only after sessions, run scripts and the rate limiter have stopped,
-and all of them before the database disconnects. Two edges are kept by awaiting
-in order: the event collector stops after the PR sync drains, and the Git state
-service stops after snapshot reconciliation drains. A failed `stop()` is logged
-with its job name and does not block the other drains or the disconnect. Startup
-re-checks for cleanup after each await before starting more jobs, since a start
-issued after its stop would revive the job; a startup interrupted that way
-rejects once cleanup finishes.
+Teardown is one ordered plan, `createShutdownPlan` in
+`src/backend/application-shutdown.ts`. Server shutdown and `disposeApplication`
+(used when no server took ownership of the graph) both run it, so a component
+stopped on one path is stopped on the other; the server adds only its transport
+and timer work through hooks at fixed points.
+
+The plan calls six jobs' `stop()` (application update idle, reconciliation
+cleanup, `pr-poll`, snapshot reconciliation, `pr-event-poll` with PR event
+retention, periodic tasks) as soon as it begins, so none starts new work during
+teardown and their in-flight runs drain concurrently with session/process
+teardown and with each other: shutdown waits for the slowest drain, not the sum.
+Agent runtime and workspace metadata jobs stop at their own ordered steps
+instead: agent runtime first, workspace metadata before transports and sessions
+close. The drains are awaited only after sessions, Codex logins, run scripts and
+the rate limiter have stopped, and all of them before the database disconnects.
+Two edges are kept by awaiting in order: the event collector stops after
+`pr-poll` drains, and the Git state service stops after snapshot reconciliation
+drains. `jobRunner.stopAll()` then runs as a backstop, so a registered job
+without an owner in the plan is still stopped before the disconnect. A failed
+job `stop()` is logged with its job name and does not block the other drains or
+the disconnect. A failed step is logged with its step name; the later steps
+still run, and shutdown then rejects. Startup re-checks for cleanup after each
+await before starting more jobs, since a start issued after its stop would
+revive the job; a startup interrupted that way rejects once cleanup finishes.
 
 There is deliberately no "run this job now" API. The two loops with a
 cancellable sleep only ever cancelled it from their own `stop()`, so
@@ -90,15 +110,32 @@ more fatal records or restart cleanup. Its terminal error is appended
 synchronously to `logs/server.log`, without a console echo, so an immediate
 failure exit retains the original cause when the filesystem is available. If the
 file append fails, a synchronous fallback to file descriptor 2 attempts to
-preserve the same record. Short writes continue from the next byte; an error or
-zero progress stops the fallback without recursive logging. Ordinary console
-logging disables a stdout/stderr sink after a write failure; sink failures are
-never logged back through that sink.
+preserve the same record. Test processes without a log file (see
+[Verification](../../CONTRIBUTING.md#verification)) use the same fallback. Short
+writes continue from the next byte; an error or zero progress stops the fallback
+without recursive logging. Ordinary console logging disables a stdout/stderr
+sink after a write failure; sink failures are never logged back through that
+sink.
 
 Fatal cleanup has a 30-second deadline, after which the standalone backend exits
 with status 1. This bounds failed-process cleanup without changing normal job
 `stop()` drains. Electron's separate backend stop/kill budget still applies to
 the desktop utility process; this deadline does not extend it.
+
+## Archived workspace data
+
+The `archived-workspace-blob-retention` job is registered beside
+`reconciliation-cleanup` and starts and stops with it, so the shutdown plan's
+reconciliation step drains both. It waits ten minutes, then releases ARCHIVED
+workspaces that still carry `initialAttachments` or more setup log than they
+keep (see [workspace state](workspace-state.md)). A run handles at most 50
+batches of 10 rows, in id order. Each batch is a short id SELECT followed by a
+short UPDATE of those ids that re-checks ARCHIVED; the run yields between
+batches and stops before the next one on abort. A backlog of about 1,400 rows
+drains in three runs, about half an hour after startup. Once nothing is left, a
+run is one read-only query over the archived rows that selects nothing. Archive
+releases new workspaces itself, so the job only finds rows archived before that
+existed, missed releases, and imported backups.
 
 ## Timer dispatch ownership
 
@@ -150,7 +187,8 @@ cadence to renew sixty-second leases and recover bounded pages even while
 evaluation is stalled. Shutdown closes admission, drains committed handoffs,
 aborts and joins owned setup, and interrupts initial provider work before
 session and database teardown. Session teardown retains the final observation
-drain. Application disposal also drains sessions before account dependencies.
+drain, and the shared shutdown plan drains sessions before cancelling Codex
+logins.
 
 That same launch-maintenance owner observes initial outcomes and tracked work,
 retaining leases after the initial response until settlement. Expired

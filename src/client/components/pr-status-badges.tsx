@@ -184,7 +184,7 @@ export function CIChecksSection({ checks, defaultExpanded = true }: CIChecksSect
       <button
         type="button"
         onClick={() => setExpanded(!expanded)}
-        className="w-full px-3 py-1.5 flex items-center gap-2 text-left hover:bg-muted/30 transition-colors"
+        className="w-full px-3 py-1.5 flex items-center gap-2 text-left hover:bg-muted/30 transition-colors focus-ring focus-visible:ring-inset"
       >
         <span className="text-xs text-muted-foreground font-medium">CI CHECKS</span>
         <span className="flex items-center gap-1.5 text-xs">

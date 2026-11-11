@@ -77,10 +77,14 @@ afterEach(async () => {
 });
 
 describe('useChatTranscriptPersistence', () => {
-  it('waits for reactive workspace readiness and emits committed snapshots under the existing v1 keys', async () => {
+  it('restores on the first render and emits committed snapshots under the existing v1 keys', async () => {
     seed('a', { 'chat-one:chat': { top: 9, left: 1, stickToBottom: true } });
     await render();
-    expect(renders[0]).toEqual({ workspaceId: 'a', ready: false, position: null });
+    expect(renders[0]).toEqual({
+      workspaceId: 'a',
+      ready: true,
+      position: { intent: 'following', top: 9, left: 1 },
+    });
     expect(current.ready).toBe(true);
     expect(current.initialPosition).toEqual({ intent: 'following', top: 9, left: 1 });
     act(() => current.onPositionChange(reading));
@@ -136,25 +140,18 @@ describe('useChatTranscriptPersistence', () => {
     expect(current.initialPosition).toEqual(reading);
   });
 
-  it('flushes A before reading B and rejects stale A callbacks after B loads or A returns', async () => {
+  it('flushes A when switching to B and rejects stale A callbacks after B loads or A returns', async () => {
     seed('b', { 'chat-one:chat': { top: 900, left: 0, chatPosition: following } });
     await render();
     const oldA = current.onPositionChange;
     act(() => oldA(reading));
-    const getItem = Storage.prototype.getItem;
-    let aAtBLoad: unknown;
-    vi.spyOn(Storage.prototype, 'getItem').mockImplementation(function (this: Storage, key) {
-      if (key === 'workspace-panel-scroll-b') {
-        aAtBLoad = JSON.parse(getItem.call(this, 'workspace-panel-scroll-a') ?? '{}');
-      }
-      return getItem.call(this, key);
-    });
     await render('b');
-    expect(aAtBLoad).toMatchObject({ states: { 'chat-one:chat': { chatPosition: reading } } });
+    // A's pending snapshot is written without waiting for its debounce.
+    expect(stored('a')['chat-one:chat'].chatPosition).toEqual(reading);
     expect(renders.find((value) => value.workspaceId === 'b')).toEqual({
       workspaceId: 'b',
-      ready: false,
-      position: null,
+      ready: true,
+      position: following,
     });
     expect(current.initialPosition).toEqual(following);
     act(() => {
@@ -295,9 +292,10 @@ describe('useChatTranscriptPersistence', () => {
   });
 });
 
-it('provider exposes reactive loaded workspace identity and scopes generic viewer callbacks', async () => {
+it('provider reads scroll state on its first render and scopes generic viewer callbacks', async () => {
+  seed('a', { 'file:markdown': { top: 5, left: 0 } });
   let panel: ReturnType<typeof useWorkspacePanel> | undefined;
-  const loaded: (string | null)[] = [];
+  const firstReads: (number | undefined)[] = [];
   const draw = async (workspaceId: string) =>
     act(() =>
       root.render(
@@ -305,18 +303,18 @@ it('provider exposes reactive loaded workspace identity and scopes generic viewe
           <PanelProbe
             onPanel={(value) => {
               panel = value;
-              loaded.push(value.scrollLoadedWorkspaceId);
+              firstReads.push(value.getScrollState('file', 'markdown')?.top);
             }}
           />
         </WorkspacePanelProvider>
       )
     );
   await draw('a');
-  expect(loaded).toEqual(expect.arrayContaining([null, 'a']));
+  expect(firstReads[0]).toBe(5);
   const old = panel!;
   act(() => old.setScrollState('file', 'markdown', { top: 17, left: 0 }));
   await draw('b');
-  expect(panel!.scrollLoadedWorkspaceId).toBe('b');
+  expect(panel!.getScrollState('file', 'markdown')).toBeNull();
   expect(old.getScrollState('file', 'markdown')).toBeNull();
   act(() => {
     old.setScrollState('file', 'markdown', { top: 99, left: 0 });

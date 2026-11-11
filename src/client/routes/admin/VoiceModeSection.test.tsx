@@ -12,8 +12,17 @@ vi.mock('@/client/lib/trpc', () => ({
     voice: {
       getConfig: {
         useQuery: () => ({
-          data: { enabled: true, hasApiKey: true, ttsSpeed: 1, ttsModel: 'flux-haley-en' },
-          isLoading: false,
+          data: {
+            enabled: true,
+            hasApiKey: true,
+            ttsSpeed: 1,
+            ttsModel: 'flux-haley-en',
+            utteranceEndMs: 1000,
+            bargeInSustainedMs: 16,
+          },
+          error: null,
+          isFetching: false,
+          refetch: vi.fn(),
         }),
       },
       updateConfig: { useMutation: () => ({ mutate: mocks.mutate, isPending: false }) },
@@ -30,6 +39,13 @@ vi.mock('@/client/lib/trpc', () => ({
       },
     },
   },
+}));
+// Saving cues read the mutation cache, which this trpc mock does not provide;
+// VoiceModeSection.save.test.tsx covers them against a real client.
+vi.mock('@trpc/react-query', () => ({ getMutationKey: () => ['voice', 'updateConfig'] }));
+vi.mock('@/client/lib/optimistic-patch', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/client/lib/optimistic-patch')>()),
+  useSavingFields: () => () => false,
 }));
 vi.mock('@/components/ui/slider', () => ({
   Slider: ({

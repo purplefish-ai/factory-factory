@@ -131,6 +131,7 @@ describe('WorkspaceCreationService', () => {
     const mockUserSettings: UserSettings = {
       id: '1',
       userId: 'default',
+      turnLimitMinutes: null,
       preferredIde: 'cursor',
       customIdeCommand: '',
       playSoundOnComplete: true,
@@ -148,6 +149,7 @@ describe('WorkspaceCreationService', () => {
       defaultClaudeReasoningEffort: null,
       defaultCodexReasoningEffort: null,
       defaultWorkspacePermissions: 'STRICT',
+      automationPermissions: 'RELAXED',
       reviewerSessionProvider: 'CODEX',
       reviewerClaudeModel: null,
       reviewerCodexModel: null,
@@ -288,6 +290,7 @@ describe('WorkspaceCreationService', () => {
         const disabledSettings: UserSettings = {
           id: '1',
           userId: 'default',
+          turnLimitMinutes: null,
           preferredIde: 'cursor',
           customIdeCommand: '',
           playSoundOnComplete: true,
@@ -305,6 +308,7 @@ describe('WorkspaceCreationService', () => {
           defaultClaudeReasoningEffort: null,
           defaultCodexReasoningEffort: null,
           defaultWorkspacePermissions: 'STRICT',
+          automationPermissions: 'RELAXED',
           reviewerSessionProvider: 'CODEX',
           reviewerClaudeModel: null,
           reviewerCodexModel: null,

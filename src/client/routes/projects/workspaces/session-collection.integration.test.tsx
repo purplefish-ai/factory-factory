@@ -14,6 +14,7 @@ import { useQuickChat } from '@/client/features/kanban/use-quick-chat';
 import { trpc } from '@/client/lib/trpc';
 import { useSessionManagement } from '@/client/routes/projects/workspaces/use-workspace-detail';
 import { useSelectedSessionId } from '@/client/routes/projects/workspaces/use-workspace-detail-hooks';
+import { waitForCheck } from '@/test-utils/react-act';
 
 vi.mock('@/client/features/chat/use-chat-websocket', () => ({ useChatWebSocket: () => ({}) }));
 vi.mock('sonner', () => ({ toast: { error: vi.fn() } }));
@@ -43,25 +44,6 @@ afterEach(() => {
   vi.clearAllMocks();
   vi.unstubAllGlobals();
 });
-
-// Flush React Query's scheduled notifications and deferred textarea focus in
-// act. Refetches can schedule another task, so drain until the assertion settles.
-async function expectAfterUpdates(assertion: () => void): Promise<void> {
-  const deadline = performance.now() + 1000;
-  while (true) {
-    await act(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 0));
-    });
-    try {
-      assertion();
-      return;
-    } catch (error) {
-      if (performance.now() >= deadline) {
-        throw error;
-      }
-    }
-  }
-}
 
 function runCommand<T>(command: () => T): T {
   let result!: T;
@@ -285,16 +267,16 @@ describe.each<Surface>(['full', 'quick'])('%s chat session collection', (surface
     'keeps a late %s completion in its originating workspace',
     async (kind) => {
       const view = renderSurface(surface);
-      await expectAfterUpdates(() => expect(view.get().selected).toBe('a1'));
+      await waitForCheck(() => expect(view.get().selected).toBe('a1'));
       const operation = kind === 'chat' ? view.get().newChat() : view.get().quickAction();
-      await expectAfterUpdates(() => expect(view.pending).toHaveLength(1));
+      await waitForCheck(() => expect(view.pending).toHaveLength(1));
       view.render('b');
-      await expectAfterUpdates(() => expect(view.get().selected).toBe('b1'));
+      await waitForCheck(() => expect(view.get().selected).toBe('b1'));
       view.pending[0]?.resolve({ id: 'created-a' });
       await act(async () => {
         await operation;
       });
-      await expectAfterUpdates(() =>
+      await waitForCheck(() =>
         expect(
           view.queryClient.getQueryState(
             getQueryKey(trpc.session.listSessions, { workspaceId: 'a' }, 'query')
@@ -313,12 +295,12 @@ describe.each<Surface>(['full', 'quick'])('%s chat session collection', (surface
     'selects a completed %s in the committed workspace during an interrupted workspace transition',
     async (kind) => {
       const view = renderSurface(surface);
-      await expectAfterUpdates(() => expect(view.get().selected).toBe('a1'));
+      await waitForCheck(() => expect(view.get().selected).toBe('a1'));
       const operation = kind === 'chat' ? view.get().newChat() : view.get().quickAction();
-      await expectAfterUpdates(() => expect(view.get().pending).toBe(true));
+      await waitForCheck(() => expect(view.get().pending).toBe(true));
       const attempted = vi.fn();
       view.transitionToSuspended('b', attempted);
-      await expectAfterUpdates(() => expect(attempted).toHaveBeenCalled());
+      await waitForCheck(() => expect(attempted).toHaveBeenCalled());
       expect(view.committedWorkspace()).toBe('a');
       expect(document.querySelector('[data-testid="pending-workspace"]')).toBeNull();
 
@@ -326,7 +308,7 @@ describe.each<Surface>(['full', 'quick'])('%s chat session collection', (surface
       await act(async () => {
         await operation;
       });
-      await expectAfterUpdates(() => expect(view.get().selected).toBe('created-a'));
+      await waitForCheck(() => expect(view.get().selected).toBe('created-a'));
       expect(view.committedWorkspace()).toBe('a');
       expect(localStorage.getItem('workspace-selected-session-a')).toBe(
         surface === 'full' ? 'created-a' : null
@@ -347,9 +329,9 @@ describe.each<Surface>(['full', 'quick'])('%s chat session collection', (surface
     'preserves defaults, naming, prompt scheduling and loading for a %s',
     async (kind) => {
       const view = renderSurface(surface);
-      await expectAfterUpdates(() => expect(view.get().selected).toBe('a1'));
+      await waitForCheck(() => expect(view.get().selected).toBe('a1'));
       const operation = kind === 'chat' ? view.get().newChat() : view.get().quickAction();
-      await expectAfterUpdates(() => expect(view.get().pending).toBe(true));
+      await waitForCheck(() => expect(view.get().pending).toBe(true));
       expect(view.requests.filter((r) => r.path === 'session.createAndStartSession')).toEqual([
         {
           path: 'session.createAndStartSession',
@@ -367,13 +349,13 @@ describe.each<Surface>(['full', 'quick'])('%s chat session collection', (surface
       await act(async () => {
         await operation;
       });
-      await expectAfterUpdates(() => expect(view.get().selected).toBe('created-a'));
-      await expectAfterUpdates(() => expect(view.get().pending).toBe(false));
+      await waitForCheck(() => expect(view.get().selected).toBe('created-a'));
+      await waitForCheck(() => expect(view.get().pending).toBe(false));
       expect(localStorage.getItem('workspace-selected-session-a')).toBe(
         surface === 'full' ? 'created-a' : null
       );
       if (surface === 'full' && kind === 'chat') {
-        await expectAfterUpdates(() => expect(document.activeElement?.tagName).toBe('TEXTAREA'));
+        await waitForCheck(() => expect(document.activeElement?.tagName).toBe('TEXTAREA'));
       } else {
         expect(document.activeElement?.tagName).not.toBe('TEXTAREA');
       }
@@ -384,14 +366,14 @@ describe.each<Surface>(['full', 'quick'])('%s chat session collection', (surface
     'reports a failed %s once without changing selection or retrying creation',
     async (kind) => {
       const view = renderSurface(surface);
-      await expectAfterUpdates(() => expect(view.get().selected).toBe('a1'));
+      await waitForCheck(() => expect(view.get().selected).toBe('a1'));
       const operation = kind === 'chat' ? view.get().newChat() : view.get().quickAction();
-      await expectAfterUpdates(() => expect(view.pending).toHaveLength(1));
+      await waitForCheck(() => expect(view.pending).toHaveLength(1));
       view.pending[0]?.reject(new Error('Provider unavailable'));
       await act(async () => {
         await operation;
       });
-      await expectAfterUpdates(() =>
+      await waitForCheck(() =>
         expect(toast.error).toHaveBeenCalledExactlyOnceWith('Provider unavailable')
       );
       expect(view.get().selected).toBe('a1');
@@ -408,37 +390,37 @@ describe.each<Surface>(['full', 'quick'])('%s chat session collection', (surface
   it('keeps the surface-specific pending selection fallback while the roster is delayed', async () => {
     const clock = vi.spyOn(Date, 'now').mockReturnValue(1000);
     const view = renderSurface(surface);
-    await expectAfterUpdates(() => expect(view.get().selected).toBe('a1'));
+    await waitForCheck(() => expect(view.get().selected).toBe('a1'));
     view.get().newChat();
-    await expectAfterUpdates(() => expect(view.pending).toHaveLength(1));
+    await waitForCheck(() => expect(view.pending).toHaveLength(1));
     view.pending[0]?.resolve({ id: 'created-a' });
-    await expectAfterUpdates(() => expect(view.get().selected).toBe('created-a'));
+    await waitForCheck(() => expect(view.get().selected).toBe('created-a'));
     clock.mockReturnValue(7000);
     view.render('a');
-    await expectAfterUpdates(() =>
+    await waitForCheck(() =>
       expect(view.get().selected).toBe(surface === 'full' ? 'a1' : 'created-a')
     );
     if (surface === 'quick') {
       view.setRoster('a', [{ id: 'created-a', name: 'Chat 8' }]);
-      await expectAfterUpdates(() =>
+      await waitForCheck(() =>
         expect(view.cache('a')).toEqual([{ id: 'created-a', name: 'Chat 8' }])
       );
       view.render('a');
       // Once confirmed by the roster, the pending exception no longer applies.
       view.setRoster('a', [{ id: 'a1', name: 'Chat 2' }]);
-      await expectAfterUpdates(() => expect(view.get().selected).toBe('a1'));
+      await waitForCheck(() => expect(view.get().selected).toBe('a1'));
     }
   });
 
   it('issues one request per rapid command while the roster stays stale', async () => {
     const view = renderSurface(surface);
-    await expectAfterUpdates(() => expect(view.get().selected).toBe('a1'));
+    await waitForCheck(() => expect(view.get().selected).toBe('a1'));
     view.get().newChat();
     view.get().newChat();
-    await expectAfterUpdates(() => expect(view.pending).toHaveLength(2));
+    await waitForCheck(() => expect(view.pending).toHaveLength(2));
     view.pending[0]?.resolve({ id: 'first' });
     view.pending[1]?.resolve({ id: 'second' });
-    await expectAfterUpdates(() => expect(view.get().selected).toBe('second'));
+    await waitForCheck(() => expect(view.get().selected).toBe('second'));
     expect(view.requests.filter((r) => r.path === 'session.createAndStartSession')).toHaveLength(2);
   });
 
@@ -446,7 +428,7 @@ describe.each<Surface>(['full', 'quick'])('%s chat session collection', (surface
     "starts a %s with the workspace's first provider and model, without thinking or Plan",
     async (kind) => {
       const view = renderSurface(surface);
-      await expectAfterUpdates(() => expect(view.get().selected).toBe('a1'));
+      await waitForCheck(() => expect(view.get().selected).toBe('a1'));
       flushSync(() =>
         view.setRoster('a', [
           { id: 'a1', name: 'Chat 2', provider: 'CODEX', model: 'gpt-sol' },
@@ -458,7 +440,7 @@ describe.each<Surface>(['full', 'quick'])('%s chat session collection', (surface
         await new Promise((resolve) => setTimeout(resolve, 0));
       });
       const operation = kind === 'chat' ? view.get().newChat() : view.get().quickAction();
-      await expectAfterUpdates(() => expect(view.pending).toHaveLength(1));
+      await waitForCheck(() => expect(view.pending).toHaveLength(1));
       const input = view.requests.find((r) => r.path === 'session.createAndStartSession')?.input;
       expect(input).toMatchObject({ workspaceId: 'a', provider: 'CODEX', model: 'gpt-sol' });
       expect(input).not.toHaveProperty('reasoningEffort');
@@ -472,36 +454,36 @@ describe.each<Surface>(['full', 'quick'])('%s chat session collection', (surface
 
   it('keeps selection when another tab closes and ignores unknown tabs', async () => {
     const view = renderSurface(surface);
-    await expectAfterUpdates(() => expect(view.get().selected).toBe('a1'));
+    await waitForCheck(() => expect(view.get().selected).toBe('a1'));
     await view.get().close('unknown');
     await view.get().close('a2');
-    await expectAfterUpdates(() => expect(view.pending).toHaveLength(1));
+    await waitForCheck(() => expect(view.pending).toHaveLength(1));
     expect(view.get().selected).toBe('a1');
     view.rosters.set('a', [{ id: 'a1', name: 'Chat 2' }]);
     view.pending[0]?.resolve({ success: true });
-    await expectAfterUpdates(() => expect(view.queryClient.isMutating()).toBe(0));
-    await expectAfterUpdates(() => expect(view.queryClient.isFetching()).toBe(0));
+    await waitForCheck(() => expect(view.queryClient.isMutating()).toBe(0));
+    await waitForCheck(() => expect(view.queryClient.isFetching()).toBe(0));
     expect(
       view.requests.filter(
         (request) =>
           request.path === 'session.listSessions' && readWorkspaceId(request.input) === 'a'
       )
     ).toHaveLength(2);
-    await expectAfterUpdates(() => expect(view.cache('a')).toEqual([{ id: 'a1', name: 'Chat 2' }]));
+    await waitForCheck(() => expect(view.cache('a')).toEqual([{ id: 'a1', name: 'Chat 2' }]));
     view.render('a');
     expect(toast.error).not.toHaveBeenCalled();
     await view.get().close('a1');
-    await expectAfterUpdates(() => expect(view.get().selected).toBeNull());
+    await waitForCheck(() => expect(view.get().selected).toBeNull());
     expect(view.requests.filter((r) => r.path === 'session.deleteSession')).toHaveLength(2);
   });
 
   it('selects the previous tab when the selected last tab closes', async () => {
     const view = renderSurface(surface);
-    await expectAfterUpdates(() => expect(view.get().selected).toBe('a1'));
+    await waitForCheck(() => expect(view.get().selected).toBe('a1'));
     flushSync(() => view.get().select('a2'));
     await view.get().close('a2');
-    await expectAfterUpdates(() => expect(view.get().selected).toBe('a1'));
-    await expectAfterUpdates(() => expect(view.pending).toHaveLength(1));
+    await waitForCheck(() => expect(view.get().selected).toBe('a1'));
+    await waitForCheck(() => expect(view.pending).toHaveLength(1));
     expect(view.requests.filter((request) => request.path === 'session.deleteSession')).toEqual([
       { path: 'session.deleteSession', input: { id: 'a2' } },
     ]);
@@ -514,22 +496,20 @@ describe.each<Surface>(['full', 'quick'])('%s chat session collection', (surface
     'reports deletion failure and rolls back the originating cache after navigation: $notification',
     async ({ message, notification }) => {
       const view = renderSurface(surface);
-      await expectAfterUpdates(() => expect(view.get().selected).toBe('a1'));
+      await waitForCheck(() => expect(view.get().selected).toBe('a1'));
       await view.get().close('a1');
-      await expectAfterUpdates(() =>
-        expect(view.cache('a')).toEqual([{ id: 'a2', name: 'Chat 7' }])
-      );
+      await waitForCheck(() => expect(view.cache('a')).toEqual([{ id: 'a2', name: 'Chat 7' }]));
       expect(view.get().selected).toBe('a2');
       view.render('b');
-      await expectAfterUpdates(() => expect(view.get().selected).toBe('b1'));
+      await waitForCheck(() => expect(view.get().selected).toBe('b1'));
       view.pending[0]?.reject(new Error(message));
-      await expectAfterUpdates(() =>
+      await waitForCheck(() =>
         expect(view.cache('a')).toEqual([
           { id: 'a1', name: 'Chat 2' },
           { id: 'a2', name: 'Chat 7' },
         ])
       );
-      await expectAfterUpdates(() =>
+      await waitForCheck(() =>
         expect(
           view.queryClient.getQueryState(
             getQueryKey(trpc.session.listSessions, { workspaceId: 'a' }, 'query')

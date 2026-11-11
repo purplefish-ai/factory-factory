@@ -1,4 +1,4 @@
-import { useCallback } from 'react';
+import { useCallback, useMemo } from 'react';
 import { useLocation, useNavigate } from 'react-router';
 import {
   getProjectSlugFromPath,
@@ -50,29 +50,38 @@ export function useProjectHeaderNavigation() {
     void navigate(getProjectSectionPath(currentProjectSlug, 'workspaces'));
   }, [currentProjectSlug, navigate, selectProjectSlug]);
 
+  const handleProjectMenuOpen = useCallback(() => {
+    if (!projectsError) {
+      // Query errors appear through the existing retry item, including failed refreshes.
+      void Promise.resolve(refetchProjects?.({ includeBoardCounts: true })).catch(() => undefined);
+    }
+  }, [projectsError, refetchProjects]);
+
+  // The selected project's counts come from its live workspace list.
+  const projectsWithLiveCounts = useMemo(
+    () =>
+      projects?.map((project) =>
+        project.slug === workspaceProjectSlug && serverWorkspaces !== undefined
+          ? {
+              ...project,
+              boardCounts: {
+                working: serverWorkspaces.filter(
+                  (workspace) => workspace.kanbanColumn === 'WORKING'
+                ).length,
+                waiting: serverWorkspaces.filter(
+                  (workspace) => workspace.kanbanColumn === 'WAITING'
+                ).length,
+              },
+            }
+          : project
+      ),
+    [projects, serverWorkspaces, workspaceProjectSlug]
+  );
+
   return {
     selectedProjectSlug: currentProjectSlug,
-    projects: projects?.map((project) =>
-      project.slug === workspaceProjectSlug && serverWorkspaces !== undefined
-        ? {
-            ...project,
-            boardCounts: {
-              working: serverWorkspaces.filter((workspace) => workspace.kanbanColumn === 'WORKING')
-                .length,
-              waiting: serverWorkspaces.filter((workspace) => workspace.kanbanColumn === 'WAITING')
-                .length,
-            },
-          }
-        : project
-    ),
-    handleProjectMenuOpen: () => {
-      if (!projectsError) {
-        // Query errors appear through the existing retry item, including failed refreshes.
-        void Promise.resolve(refetchProjects?.({ includeBoardCounts: true })).catch(
-          () => undefined
-        );
-      }
-    },
+    projects: projectsWithLiveCounts,
+    handleProjectMenuOpen,
     projectsError,
     refetchProjects,
     handleProjectChange,

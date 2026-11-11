@@ -8,11 +8,12 @@ import {
   filterIssuesForCurrentWorkspaceState,
   type WorkspaceIssueLink,
 } from '@/client/lib/project-issue-visibility';
+import { POLL_INTERVAL_MS } from '@/client/lib/query-options';
 import { trpc } from '@/client/lib/trpc';
 import { IssueProvider } from '@/shared/core';
 
 const PROJECT_ISSUES_QUERY_TIMING = {
-  refetchInterval: 60_000,
+  refetchInterval: POLL_INTERVAL_MS.external,
   staleTime: 30_000,
 } as const;
 

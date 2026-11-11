@@ -1,3 +1,4 @@
+import { ArchiveIcon } from '@phosphor-icons/react/dist/csr/Archive';
 import type { Meta, StoryObj } from '@storybook/react';
 import { expect, within } from 'storybook/test';
 import { Button } from './button';
@@ -11,20 +12,17 @@ function SpinnerGallery() {
         <span>Loading…</span>
       </div>
       <div className="flex flex-wrap items-center gap-2">
-        <Button disabled>
-          <Spinner aria-hidden="true" />
-          Saving…
+        <Button pending pendingLabel="Saving…">
+          Save
         </Button>
-        <Button variant="destructive" disabled>
-          <Spinner aria-hidden="true" />
-          Deleting…
+        <Button variant="destructive" pending pendingLabel="Deleting…">
+          Delete
         </Button>
-        <Button variant="outline" disabled>
-          <Spinner aria-hidden="true" />
-          Retrying…
+        <Button variant="outline" pending pendingLabel="Retrying…">
+          Retry
         </Button>
-        <Button variant="outline" size="icon" disabled aria-label="Archiving">
-          <Spinner aria-hidden="true" />
+        <Button variant="outline" size="icon" pending aria-label="Archiving">
+          <ArchiveIcon />
         </Button>
       </div>
       <Spinner className="size-6 text-muted-foreground" />

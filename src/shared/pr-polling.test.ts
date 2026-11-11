@@ -1,8 +1,8 @@
 import { expect, it } from 'vitest';
-import { CLOSED_PR_POLL_INTERVAL_MS, shouldPollPR } from './pr-polling';
+import { CLOSED_PR_POLL_INTERVAL_MS, hasPRObservation, shouldPollPR } from './pr-polling';
 
 const now = Date.parse('2026-11-02T12:00:00.000Z');
-const initialized = { observation: {}, observationEpoch: 1, syncedAt: new Date(now) };
+const initialized = { hasObservation: true, observationEpoch: 1, syncedAt: new Date(now) };
 it.each(['NONE', 'DRAFT', 'OPEN', 'CHANGES_REQUESTED', 'APPROVED'])(
   'preserves ordinary polling for %s PRs',
   (state) => expect(shouldPollPR({ ...initialized, state }, 1, now)).toBe(true)
@@ -14,7 +14,8 @@ it('stops initialized merged observations regardless of age', () => {
 });
 it.each(['MERGED', 'CLOSED'])(
   'initializes legacy %s snapshots before applying terminal policy',
-  (state) => expect(shouldPollPR({ ...initialized, state, observation: null }, 1, now)).toBe(true)
+  (state) =>
+    expect(shouldPollPR({ ...initialized, state, hasObservation: false }, 1, now)).toBe(true)
 );
 it('makes closed observations eligible at thirty minutes, and immediately after reopening', () => {
   const closed = { ...initialized, state: 'CLOSED' };
@@ -26,4 +27,10 @@ it('makes closed observations eligible at thirty minutes, and immediately after 
 
 it.each(['MERGED', 'CLOSED'])('initializes %s facts again for a new monitoring epoch', (state) => {
   expect(shouldPollPR({ ...initialized, state }, 2, now)).toBe(true);
+});
+
+it('treats only a null or missing stored observation as absent', () => {
+  expect(hasPRObservation(null)).toBe(false);
+  expect(hasPRObservation(undefined)).toBe(false);
+  expect(hasPRObservation({})).toBe(true);
 });

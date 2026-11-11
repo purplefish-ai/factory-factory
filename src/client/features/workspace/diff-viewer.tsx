@@ -4,8 +4,7 @@ import { useTheme } from 'next-themes';
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { oneDark, oneLight } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { EmptyState } from '@/client/components/empty-state';
-import { Loading } from '@/client/components/loading';
-import { QueryErrorState } from '@/client/components/query-error-state';
+import { QueryState } from '@/client/components/query-state';
 import { trpc } from '@/client/lib/trpc';
 import { Button } from '@/components/ui/button';
 import { MarkdownRenderer } from '@/components/ui/markdown';
@@ -16,7 +15,7 @@ import { DiffLines } from './diff-lines';
 import type { ScrollState } from './scroll-state';
 import { useDiffHighlighting } from './use-diff-highlighting';
 import { usePersistentScroll } from './use-persistent-scroll';
-import { useWorkspacePanel } from './workspace-panel-context';
+import { useWorkspacePanelScroll } from './workspace-panel-context';
 
 // =============================================================================
 // Types
@@ -38,47 +37,28 @@ interface MarkdownPreviewProps {
 }
 
 function MarkdownPreview({ workspaceId, filePath }: MarkdownPreviewProps) {
-  const {
-    data: fileData,
-    isLoading: isLoadingFile,
-    error: fileError,
-    isFetching: isFetchingFile,
-    refetch: refetchFile,
-  } = trpc.workspace.readFile.useQuery({
-    workspaceId,
-    path: filePath,
-  });
-
-  if (isLoadingFile) {
-    return <Loading message="Loading preview…" />;
-  }
-
-  if (fileError && !fileData) {
-    return (
-      <QueryErrorState
-        title="Couldn't load file"
-        error={fileError}
-        onRetry={() => {
-          void refetchFile();
-        }}
-        isRetrying={isFetchingFile}
-        className="h-full"
-      />
-    );
-  }
-
-  if (fileData?.isBinary) {
-    return (
-      <div className="flex items-center justify-center h-full p-8">
-        <p className="text-muted-foreground">Binary file cannot be previewed</p>
-      </div>
-    );
-  }
-
+  const file = trpc.workspace.readFile.useQuery({ workspaceId, path: filePath });
   return (
-    <div className="p-4">
-      <MarkdownRenderer content={fileData?.content ?? ''} />
-    </div>
+    <QueryState
+      query={file}
+      errorTitle="Couldn't load file"
+      loadingMessage="Loading preview…"
+      className="h-full"
+      isEmpty={(data) => data.isBinary}
+      empty={
+        <EmptyState
+          icon={FileCodeIcon}
+          title="Binary file cannot be previewed"
+          className="h-full"
+        />
+      }
+    >
+      {(data) => (
+        <div className="p-4">
+          <MarkdownRenderer content={data.content} />
+        </div>
+      )}
+    </QueryState>
   );
 }
 
@@ -88,15 +68,13 @@ function MarkdownPreview({ workspaceId, filePath }: MarkdownPreviewProps) {
 
 export function DiffViewer({ workspaceId, filePath, tabId }: DiffViewerProps) {
   const { resolvedTheme } = useTheme();
-  const { getScrollState, setScrollState } = useWorkspacePanel();
+  const { getScrollState, setScrollState } = useWorkspacePanelScroll();
   const saveDiffScrollState = useCallback(
     (state: ScrollState) => setScrollState(tabId, 'code', state),
     [setScrollState, tabId]
   );
-  const { data, isLoading, error, isFetching, refetch } = trpc.workspace.getFileDiff.useQuery({
-    workspaceId,
-    filePath,
-  });
+  const diffQuery = trpc.workspace.getFileDiff.useQuery({ workspaceId, filePath });
+  const { data } = diffQuery;
 
   // Check if file is markdown
   const isMarkdown = filePath.endsWith('.md') || filePath.endsWith('.markdown');
@@ -131,81 +109,68 @@ export function DiffViewer({ workspaceId, filePath, tabId }: DiffViewerProps) {
     restoreDeps: [showPreview, filePath, data?.diff?.length],
   });
 
-  if (isLoading || !(data || error)) {
-    return <Loading message="Loading diff…" />;
-  }
-
-  if (error && !data) {
-    return (
-      <QueryErrorState
-        title="Couldn't load diff"
-        error={error}
-        onRetry={() => {
-          void refetch();
-        }}
-        isRetrying={isFetching}
-        className="h-full"
-      />
-    );
-  }
-
-  if (!data?.diff || parsedDiff.length === 0) {
-    return (
-      <EmptyState
-        icon={FileCodeIcon}
-        title="No changes"
-        description={filePath}
-        className="h-full"
-      />
-    );
-  }
-
   return (
-    <div className="h-full flex flex-col">
-      {/* Header */}
-      <div className="flex items-center justify-between gap-2 px-4 py-2 border-b bg-muted/30">
-        <div className="flex items-center gap-2 min-w-0">
-          <FileCodeIcon className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-          <span className="text-sm font-mono text-foreground truncate">{filePath}</span>
-        </div>
-        {isMarkdown && (
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => setShowPreview(!showPreview)}
-            className="h-7 gap-1.5 flex-shrink-0"
-          >
-            {showPreview ? (
-              <FileCodeIcon className="h-3.5 w-3.5" />
-            ) : (
-              <EyeIcon className="h-3.5 w-3.5" />
-            )}
-            {showPreview ? 'Diff' : 'Preview'}
-          </Button>
-        )}
-      </div>
-
-      {/* Content */}
-      {isMarkdown && showPreview ? (
-        <ScrollArea
-          className="flex-1"
-          onScroll={handleMarkdownScroll}
-          viewportRef={markdownViewportRef}
-        >
-          <MarkdownPreview workspaceId={workspaceId} filePath={filePath} />
-        </ScrollArea>
-      ) : (
-        <ScrollArea className="flex-1" viewportRef={diffViewportRef}>
-          <DiffLines
-            lines={parsedDiff}
-            lineNumberWidth={lineNumberWidth}
-            tokenMap={tokenMap}
-            scrollContainerRef={diffViewportRef}
-            scrollState={getScrollState(tabId, 'code')}
-            onScrollStateChange={saveDiffScrollState}
+    <div className="flex h-full flex-col">
+      <QueryState
+        query={diffQuery}
+        errorTitle="Couldn't load diff"
+        loadingMessage="Loading diff…"
+        className="h-full"
+        isEmpty={(loaded) => !loaded.diff || parsedDiff.length === 0}
+        empty={
+          <EmptyState
+            icon={FileCodeIcon}
+            title="No changes"
+            description={filePath}
+            className="h-full"
           />
-        </ScrollArea>
-      )}
+        }
+      >
+        {() => (
+          <div className="flex min-h-0 flex-1 flex-col">
+            {/* Header */}
+            <div className="flex items-center justify-between gap-2 px-4 py-2 border-b bg-muted/30">
+              <div className="flex items-center gap-2 min-w-0">
+                <FileCodeIcon className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                <span className="text-sm font-mono text-foreground truncate">{filePath}</span>
+              </div>
+              {isMarkdown && (
+                <Button
+                  variant="ghost"
+                  size="compact"
+                  onClick={() => setShowPreview(!showPreview)}
+                  className="flex-shrink-0"
+                >
+                  {showPreview ? <FileCodeIcon /> : <EyeIcon />}
+                  {showPreview ? 'Diff' : 'Preview'}
+                </Button>
+              )}
+            </div>
+
+            {/* Content */}
+            {isMarkdown && showPreview ? (
+              <ScrollArea
+                className="flex-1"
+                onScroll={handleMarkdownScroll}
+                viewportRef={markdownViewportRef}
+              >
+                <MarkdownPreview workspaceId={workspaceId} filePath={filePath} />
+              </ScrollArea>
+            ) : (
+              <ScrollArea className="flex-1" viewportRef={diffViewportRef}>
+                <DiffLines
+                  lines={parsedDiff}
+                  lineNumberWidth={lineNumberWidth}
+                  tokenMap={tokenMap}
+                  scrollContainerRef={diffViewportRef}
+                  scrollState={getScrollState(tabId, 'code')}
+                  onScrollStateChange={saveDiffScrollState}
+                />
+              </ScrollArea>
+            )}
+          </div>
+        )}
+      </QueryState>
     </div>
   );
 }

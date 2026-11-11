@@ -11,11 +11,12 @@ import { useProjectHeaderNavigation } from './use-project-header-navigation';
 const selectProjectSlug = vi.hoisted(() => vi.fn());
 const navState = vi.hoisted(() => ({
   workspaces: undefined as WorkspaceSummary<Date>[] | undefined,
+  projects: [{ id: 'alpha', slug: 'alpha', name: 'Alpha' }],
 }));
 vi.mock('@/client/hooks/use-app-navigation-data', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/client/hooks/use-app-navigation-data')>()),
   useAppNavigationDataContext: () => ({
-    projects: [{ id: 'alpha', slug: 'alpha', name: 'Alpha' }],
+    projects: navState.projects,
     selectedProjectSlug: 'alpha',
     selectProjectSlug,
     serverWorkspaces: navState.workspaces,
@@ -214,3 +215,30 @@ it.each([
     }
   }
 );
+
+const headerResults: ReturnType<typeof useProjectHeaderNavigation>[] = [];
+function HeaderResult({ pass }: { pass: number }) {
+  headerResults.push(useProjectHeaderNavigation());
+  return <output>{pass}</output>;
+}
+it('keeps the project list and handlers while the navigation data is unchanged', async () => {
+  headerResults.length = 0;
+  const root = createRoot(document.createElement('div'));
+  const tree = (pass: number) => (
+    <MemoryRouter initialEntries={['/projects/alpha/workspaces']}>
+      <HeaderResult pass={pass} />
+    </MemoryRouter>
+  );
+  try {
+    await act(() => root.render(tree(1)));
+    await act(() => root.render(tree(2)));
+    const [first, last] = [headerResults[0], headerResults.at(-1)];
+    expect(headerResults.length).toBeGreaterThan(1);
+    expect(last?.projects).toBe(first?.projects);
+    expect(last?.handleProjectMenuOpen).toBe(first?.handleProjectMenuOpen);
+    expect(last?.handleProjectChange).toBe(first?.handleProjectChange);
+    expect(last?.handleCurrentProjectSelect).toBe(first?.handleCurrentProjectSelect);
+  } finally {
+    await act(() => root.unmount());
+  }
+});

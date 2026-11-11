@@ -2,6 +2,7 @@
 import { act, type ComponentProps } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { TooltipProvider } from '@/components/ui/tooltip';
 import {
   type QuickActionOption,
   QuickActionsDropdownView,
@@ -53,12 +54,14 @@ async function openMenu(props: Partial<Props> = {}) {
   const onRunInThisChat = vi.fn();
   await act(() =>
     root.render(
-      <QuickActionsDropdownView
-        actions={ACTIONS}
-        status="ready"
-        onRunInThisChat={onRunInThisChat}
-        {...props}
-      />
+      <TooltipProvider>
+        <QuickActionsDropdownView
+          actions={ACTIONS}
+          status="ready"
+          onRunInThisChat={onRunInThisChat}
+          {...props}
+        />
+      </TooltipProvider>
     )
   );
   const trigger = container.querySelector<HTMLButtonElement>('[aria-label="Quick actions"]')!;
@@ -101,13 +104,15 @@ describe('quick actions menu', () => {
     await act(() => radio('Run in new chat').click());
     await act(() =>
       root.render(
-        <QuickActionsDropdownView
-          actions={ACTIONS}
-          status="ready"
-          onRunInNewChat={onRunInNewChat}
-          onRunInThisChat={onRunInThisChat}
-          newChatUnavailableReason="Maximum sessions reached"
-        />
+        <TooltipProvider>
+          <QuickActionsDropdownView
+            actions={ACTIONS}
+            status="ready"
+            onRunInNewChat={onRunInNewChat}
+            onRunInThisChat={onRunInThisChat}
+            newChatUnavailableReason="Maximum sessions reached"
+          />
+        </TooltipProvider>
       )
     );
     expect(radio('Run in new chat').getAttribute('aria-checked')).toBe('true');
@@ -122,12 +127,14 @@ describe('quick actions menu', () => {
     await openMenu({ onRunInThisChat });
     await act(() =>
       root.render(
-        <QuickActionsDropdownView
-          actions={ACTIONS}
-          status="ready"
-          onRunInThisChat={onRunInThisChat}
-          thisChatDisabled
-        />
+        <TooltipProvider>
+          <QuickActionsDropdownView
+            actions={ACTIONS}
+            status="ready"
+            onRunInThisChat={onRunInThisChat}
+            thisChatDisabled
+          />
+        </TooltipProvider>
       )
     );
     expect(item('Review').getAttribute('aria-disabled')).toBe('true');

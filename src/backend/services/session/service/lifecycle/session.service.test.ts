@@ -1,13 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { sessionDomainService } from '@/backend/services/session/service/session-domain.service';
 import { sessionEventBus } from '@/backend/services/session/service/session-event-bus';
+import { userSettingsService } from '@/backend/services/settings';
 import type { ChatMessage } from '@/shared/acp-protocol';
 import { SessionStatus } from '@/shared/core';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 
 const mockNotifyToolStart = vi.fn();
 const mockNotifyToolComplete = vi.fn();
-const mockRecordRatchetSessionEnd = vi.fn();
 const mockAcpTraceLoggerCloseSession = vi.fn();
 vi.mock('@/backend/services/logger.service', () => ({
   createLogger: () => ({
@@ -23,7 +23,7 @@ vi.mock('@/backend/services/session/resources/agent-session-launch-origin.access
   agentSessionLaunchOriginAccessor: { findBySessionId: async () => null },
 }));
 vi.mock('@/backend/services/workspace');
-vi.mock('./closed-session-persistence.service');
+vi.mock('@/backend/services/session/service/archive/closed-session-persistence.service');
 vi.mock('@/backend/services/session/service/acp', async (importOriginal) => {
   const actual = (await importOriginal()) as Record<string, unknown>;
   const RuntimeQuiescence =
@@ -72,7 +72,7 @@ vi.mock('@/backend/interceptors/registry', () => ({
     notifyToolComplete: (...args: unknown[]) => mockNotifyToolComplete(...args),
   },
 }));
-vi.mock('./session.repository', () => ({
+vi.mock('@/backend/services/session/service/data/session.repository', () => ({
   SessionRepository: class {},
   sessionRepository: {
     getSessionById: vi.fn(),
@@ -95,35 +95,30 @@ vi.mock('@/backend/services/session/service/logging/acp-trace-logger.service', (
 
 import type { AcpProcessHandle, AcpRuntimeEvent } from '@/backend/services/session/service/acp';
 import { acpRuntimeManager } from '@/backend/services/session/service/acp';
-import { workspaceDataService } from '@/backend/services/workspace';
-import { closedSessionPersistenceService } from './closed-session-persistence.service';
-import { createDeferred, mockCreatedAcpClient } from './session-lifecycle.test-helpers';
+import { closedSessionPersistenceService } from '@/backend/services/session/service/archive/closed-session-persistence.service';
 import {
   acpEventProcessor,
   sessionLifecycleService,
   sessionPromptTurnCompletionService,
   sessionService,
-} from './session-services';
-import { sessionRepository } from './session.repository';
+} from '@/backend/services/session/service/composition/session-services';
+import { sessionRepository } from '@/backend/services/session/service/data/session.repository';
+import { workspaceDataService } from '@/backend/services/workspace';
+import {
+  activeRuntime,
+  createDeferred,
+  mockCreatedAcpClient,
+  mockActivePromptClient,
+} from './session-lifecycle.test-helpers';
 
-const activeRuntime = {
-  incarnationId: '11111111-1111-4111-8111-111111111111',
-  purpose: 'active',
-  managed: false,
-} as const;
 const getAcpProcessorState = () => acpEventProcessor;
-function mockActivePromptClient() {
-  vi.mocked(acpRuntimeManager.getClient).mockReturnValue(
-    unsafeCoerce({ supportsImages: () => true })
-  );
-}
 describe('SessionService', () => {
   const sessionId = 'session-fixture-isolation';
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.spyOn(userSettingsService, 'get').mockResolvedValue({ turnLimitMinutes: null } as never);
     mockNotifyToolStart.mockReset();
     mockNotifyToolComplete.mockReset();
-    mockRecordRatchetSessionEnd.mockReset();
     mockAcpTraceLoggerCloseSession.mockReset();
     const acpProcessor = getAcpProcessorState();
     acpProcessor.pendingAcpToolCalls.clear();
@@ -134,7 +129,6 @@ describe('SessionService', () => {
     const workspaceBridge = {
       markSessionRunning: vi.fn(),
       markSessionIdle: vi.fn(),
-      recordRatchetSessionEnd: mockRecordRatchetSessionEnd,
       resetPRDiscoveryBackoff: vi.fn(async () => true),
     };
     sessionService.configure({ workspace: workspaceBridge });
@@ -833,7 +827,7 @@ describe('SessionService', () => {
   });
 
   it('rejects queued ACP prompts during manual stop', async () => {
-    mockActivePromptClient();
+    mockActivePromptClient(acpRuntimeManager);
     const firstPrompt = createDeferred<{ stopReason: string }>();
     vi.mocked(acpRuntimeManager.isStopInProgress).mockReturnValue(false);
     vi.mocked(acpRuntimeManager.sendPrompt).mockReturnValueOnce(firstPrompt.promise as never);
@@ -857,7 +851,7 @@ describe('SessionService', () => {
   });
 
   it('does not queue restarted prompts behind an unresolved stopped prompt', async () => {
-    mockActivePromptClient();
+    mockActivePromptClient(acpRuntimeManager);
     const firstPrompt = createDeferred<{ stopReason: string }>();
     vi.mocked(acpRuntimeManager.isStopInProgress).mockReturnValue(false);
     vi.mocked(acpRuntimeManager.sendPrompt)
@@ -883,14 +877,13 @@ describe('SessionService', () => {
   });
 
   it('marks prompt turns idle with the activity generation that started them', async () => {
-    mockActivePromptClient();
+    mockActivePromptClient(acpRuntimeManager);
     const markSessionRunning = vi.fn().mockReturnValueOnce(101).mockReturnValueOnce(102);
     const markSessionIdle = vi.fn();
     sessionService.configure({
       workspace: {
         markSessionRunning,
         markSessionIdle,
-        recordRatchetSessionEnd: mockRecordRatchetSessionEnd,
         resetPRDiscoveryBackoff: vi.fn(async () => true),
       },
     });
@@ -962,7 +955,7 @@ describe('SessionService', () => {
     vi.mocked(sessionRepository.updateSession).mockResolvedValue(session);
     mockCreatedAcpClient(acpRuntimeManager, acpHandle);
     await sessionLifecycleService.getOrCreateSessionClient('session-runtime-exit');
-    mockActivePromptClient();
+    mockActivePromptClient(acpRuntimeManager);
 
     const acpHandlers = vi.mocked(acpRuntimeManager.getOrCreateClient).mock.calls[0]![2];
 
@@ -1084,7 +1077,7 @@ describe('SessionService', () => {
   });
 
   it('drops active ACP prompt serialization during manual stop', async () => {
-    mockActivePromptClient();
+    mockActivePromptClient(acpRuntimeManager);
     const firstPrompt = createDeferred<{ stopReason: string }>();
     const thirdPrompt = createDeferred<{ stopReason: string }>();
     vi.mocked(acpRuntimeManager.isStopInProgress).mockReturnValue(false);
@@ -1146,7 +1139,7 @@ describe('SessionService', () => {
   });
 
   it('clears the active prompt attempt after managed stop with a connected viewer', async () => {
-    mockActivePromptClient();
+    mockActivePromptClient(acpRuntimeManager);
     const sessionId = 'session-stopped-with-active-prompt';
     const prompt = createDeferred<{ stopReason: string }>();
     vi.mocked(acpRuntimeManager.sendPrompt).mockReturnValue(prompt.promise as never);
@@ -1178,7 +1171,6 @@ describe('SessionService', () => {
       workspace: {
         markSessionRunning: vi.fn(),
         markSessionIdle,
-        recordRatchetSessionEnd: mockRecordRatchetSessionEnd,
         resetPRDiscoveryBackoff: vi.fn(async () => true),
       },
     });
@@ -1220,7 +1212,6 @@ describe('SessionService', () => {
       [SessionStatus.RUNNING]
     );
     expect(clearQueuedWorkSpy).toHaveBeenCalledWith('session-1', { emitSnapshot: true });
-    expect(mockRecordRatchetSessionEnd).not.toHaveBeenCalled();
     expect(sessionRepository.deleteSession).not.toHaveBeenCalled();
   });
 
@@ -1302,7 +1293,6 @@ describe('SessionService', () => {
       workspace: {
         markSessionRunning: vi.fn(),
         markSessionIdle,
-        recordRatchetSessionEnd: mockRecordRatchetSessionEnd,
         resetPRDiscoveryBackoff: vi.fn(async () => true),
       },
     });
@@ -1395,11 +1385,6 @@ describe('SessionService', () => {
     try {
       await sessionLifecycleService.stopSession('session-1');
 
-      expect(mockRecordRatchetSessionEnd).toHaveBeenCalledWith(
-        'workspace-1',
-        'session-1',
-        'COMPLETED'
-      );
       expect(closedSessionPersistenceService.persistClosedSession).toHaveBeenCalledWith({
         sessionId: 'session-1',
         workspaceId: 'workspace-1',
@@ -1486,11 +1471,6 @@ describe('SessionService', () => {
       cleanupTransientRatchetSession: false,
     });
 
-    expect(mockRecordRatchetSessionEnd).toHaveBeenCalledWith(
-      'workspace-1',
-      'session-3',
-      'COMPLETED'
-    );
     expect(closedSessionPersistenceService.persistClosedSession).not.toHaveBeenCalled();
     expect(sessionRepository.deleteSession).not.toHaveBeenCalled();
   });
@@ -1888,7 +1868,7 @@ describe('SessionService', () => {
   });
 
   it('finalizes orphaned ACP tool calls when prompt ends without terminal updates', async () => {
-    mockActivePromptClient();
+    mockActivePromptClient(acpRuntimeManager);
     const pendingToolCalls = getAcpProcessorState().pendingAcpToolCalls as Map<
       string,
       Map<
@@ -1954,7 +1934,7 @@ describe('SessionService', () => {
   });
 
   it('does not synthesize tool call completion when no ACP tool calls are pending', async () => {
-    mockActivePromptClient();
+    mockActivePromptClient(acpRuntimeManager);
     vi.mocked(acpRuntimeManager.sendPrompt).mockResolvedValue({ stopReason: 'end_turn' } as never);
     const appendClaudeEventSpy = vi.spyOn(sessionDomainService, 'appendClaudeEvent');
 
@@ -1964,7 +1944,7 @@ describe('SessionService', () => {
   });
 
   it('closes assistant text streaming when an ACP prompt completes', async () => {
-    mockActivePromptClient();
+    mockActivePromptClient(acpRuntimeManager);
     vi.mocked(acpRuntimeManager.sendPrompt).mockResolvedValue({ stopReason: 'end_turn' } as never);
     const finishPromptTurnSpy = vi.spyOn(getAcpProcessorState(), 'finishPromptTurn');
 
@@ -1974,7 +1954,7 @@ describe('SessionService', () => {
   });
 
   it('closes assistant text streaming when an ACP prompt fails', async () => {
-    mockActivePromptClient();
+    mockActivePromptClient(acpRuntimeManager);
     vi.mocked(acpRuntimeManager.sendPrompt).mockRejectedValue(new Error('prompt failed'));
     const finishPromptTurnSpy = vi.spyOn(getAcpProcessorState(), 'finishPromptTurn');
 
@@ -2031,7 +2011,7 @@ describe('SessionService', () => {
   });
 
   it('schedules prompt-turn completion callbacks after ACP prompt settles', async () => {
-    mockActivePromptClient();
+    mockActivePromptClient(acpRuntimeManager);
     vi.useFakeTimers();
     try {
       const onPromptTurnComplete = vi.fn().mockResolvedValue(undefined);
@@ -2051,7 +2031,7 @@ describe('SessionService', () => {
   });
 
   it('does not schedule prompt-turn completion callbacks after provider busy errors', async () => {
-    mockActivePromptClient();
+    mockActivePromptClient(acpRuntimeManager);
     vi.useFakeTimers();
     try {
       const onPromptTurnComplete = vi.fn().mockResolvedValue(undefined);
@@ -2074,7 +2054,7 @@ describe('SessionService', () => {
   });
 
   it('schedules prompt-turn completion callbacks after non-busy prompt errors', async () => {
-    mockActivePromptClient();
+    mockActivePromptClient(acpRuntimeManager);
     vi.useFakeTimers();
     try {
       const onPromptTurnComplete = vi.fn().mockResolvedValue(undefined);
@@ -2094,7 +2074,7 @@ describe('SessionService', () => {
   });
 
   it('cancels scheduled prompt-turn completion callback when session stops first', async () => {
-    mockActivePromptClient();
+    mockActivePromptClient(acpRuntimeManager);
     vi.useFakeTimers();
     try {
       const onPromptTurnComplete = vi.fn().mockResolvedValue(undefined);
@@ -2116,7 +2096,7 @@ describe('SessionService', () => {
   });
 
   it('does not dispatch prompt-turn completion when a prompt settles during stop', async () => {
-    mockActivePromptClient();
+    mockActivePromptClient(acpRuntimeManager);
     vi.useFakeTimers();
     try {
       const prompt = createDeferred<{ stopReason: string }>();
@@ -2149,7 +2129,7 @@ describe('SessionService', () => {
   });
 
   it('preserves stopped runtime when an in-flight prompt times out after stop completes', async () => {
-    mockActivePromptClient();
+    mockActivePromptClient(acpRuntimeManager);
     vi.useFakeTimers();
     const sessionId = 'session-prompt-timeout-after-stop';
     sessionEventBus.registerViewerCountProvider((viewedSessionId) =>
@@ -2172,7 +2152,7 @@ describe('SessionService', () => {
         expect(acpRuntimeManager.sendPrompt).toHaveBeenCalledWith(
           sessionId,
           [{ type: 'text', text: 'hello' }],
-          14_400_000
+          undefined
         );
       });
 
@@ -2208,7 +2188,7 @@ describe('SessionService', () => {
   });
 
   it('does not finalize a restarted prompt when a stopped prompt later times out', async () => {
-    mockActivePromptClient();
+    mockActivePromptClient(acpRuntimeManager);
     const sessionId = 'session-restarted-before-old-prompt-timeout';
     const stoppedPrompt = createDeferred<{ stopReason: string }>();
     const restartedPrompt = createDeferred<{ stopReason: string }>();
@@ -2263,7 +2243,7 @@ describe('SessionService', () => {
   });
 
   it('swallows prompt-turn completion callback failures', async () => {
-    mockActivePromptClient();
+    mockActivePromptClient(acpRuntimeManager);
     vi.useFakeTimers();
     try {
       const onPromptTurnComplete = vi.fn().mockRejectedValue(new Error('dispatch failed'));

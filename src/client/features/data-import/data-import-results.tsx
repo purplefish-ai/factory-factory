@@ -1,5 +1,12 @@
 import type { inferRouterOutputs } from '@trpc/server';
-import { createContext, type ReactElement, type ReactNode, useContext, useState } from 'react';
+import {
+  createContext,
+  type ReactElement,
+  type ReactNode,
+  useContext,
+  useMemo,
+  useState,
+} from 'react';
 import { downloadFile } from '@/client/lib/download-file';
 import type { AppRouter } from '@/client/lib/trpc';
 import {
@@ -40,10 +47,14 @@ export function DataImportResultsProvider({
   const history = active?.recovery.periodicHistory;
   const definitions = active?.recovery.automationDefinitions;
   const links = active?.recovery.periodicWorkspaceLinks;
+  const value = useMemo(
+    () => ({
+      publishImportResult: (result: ImportResult) => setPending((queue) => [...queue, result]),
+    }),
+    []
+  );
   return (
-    <ImportResultsContext.Provider
-      value={{ publishImportResult: (result) => setPending((queue) => [...queue, result]) }}
-    >
+    <ImportResultsContext.Provider value={value}>
       {children}
       {active && runtime && (
         <AlertDialog open>
@@ -95,8 +106,8 @@ export function DataImportResultsProvider({
                   </p>
                   <p>
                     {active.recovery.manifest?.profile === 'base-json-slack-connections-1'
-                      ? 'Only definition bodies and execution preferences are restored. Connection bindings, event configuration and automation history are excluded. Slack connection metadata is reported separately.'
-                      : 'Only definition bodies and execution preferences are restored. Connections, event configuration and automation history are excluded.'}
+                      ? 'Only definition bodies and run preferences are restored. Connection bindings, event configuration and event-triggered run history are excluded. Slack connection metadata is reported separately.'
+                      : 'Only definition bodies and run preferences are restored. Connections, event configuration and event-triggered run history are excluded.'}
                   </p>
                   <p>
                     Inspect recovered bodies and author new complete event configuration where
@@ -110,9 +121,9 @@ export function DataImportResultsProvider({
                 </section>
               )}
               {history && (
-                <section aria-label="Periodic execution history recovery">
+                <section aria-label="Scheduled run history recovery">
                   <p>
-                    Periodic executions: {history.imported} imported, {history.skipped} skipped
+                    Scheduled runs: {history.imported} imported, {history.skipped} skipped
                   </p>
                   <p>
                     RUNNING in entire source section: {history.sourceRunning}; restored FAILED as
@@ -120,11 +131,11 @@ export function DataImportResultsProvider({
                     {history.restoredSettled}
                   </p>
                   <p>
-                    Provider outcome is unknown for historical RUNNING executions. Imported
-                    executions will not be resumed.
+                    Provider outcome is unknown for historical RUNNING runs. Imported runs will not
+                    be resumed.
                   </p>
                   <p>
-                    Skips by reason: existing execution ID: {history.reasons.EXISTING_IDENTITY}
+                    Skips by reason: existing run ID: {history.reasons.EXISTING_IDENTITY}
                     {'; '}
                     occupied workspace: {history.reasons.CONFLICTING_IDENTITY_OR_PARENT}
                     {'; '} dependency not created by this import:{' '}
@@ -133,32 +144,34 @@ export function DataImportResultsProvider({
                 </section>
               )}
               {periodic && (
-                <section aria-label="Periodic configuration recovery">
+                <section aria-label="Scheduled automation configuration recovery">
                   <p>
-                    Periodic configurations: {periodic.imported} imported, {periodic.skipped}{' '}
-                    skipped
+                    Scheduled automation configurations: {periodic.imported} imported,{' '}
+                    {periodic.skipped} skipped
                   </p>
                   <p>
                     Enabled in entire source section: {periodic.sourceEnabled}; restored disabled:{' '}
                     {periodic.restoredDisabled}
                   </p>
                   <p>
-                    Skips by reason: existing task ID: {periodic.reasons.EXISTING_IDENTITY}; project
-                    not created by this import: {periodic.reasons.INCOMPLETE_DEPENDENCY}.
+                    Skips by reason: existing automation ID: {periodic.reasons.EXISTING_IDENTITY}
+                    {'; '}project not created by this import:{' '}
+                    {periodic.reasons.INCOMPLETE_DEPENDENCY}.
                   </p>
                 </section>
               )}
               {links && (
-                <section aria-label="Periodic workspace link recovery">
+                <section aria-label="Scheduled automation workspace link recovery">
                   <p>
-                    Periodic workspace links: {links.imported} imported, {links.skipped} skipped
+                    Scheduled automation workspace links: {links.imported} imported, {links.skipped}{' '}
+                    skipped
                   </p>
                   <p>
                     Only links present in the backup are counted; these counts overlap workspace
                     totals.
                   </p>
                   <p>
-                    Skips by reason: workspace or task not created by this import:{' '}
+                    Skips by reason: workspace or automation not created by this import:{' '}
                     {links.reasons.INCOMPLETE_DEPENDENCY}.
                   </p>
                 </section>

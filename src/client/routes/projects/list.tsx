@@ -6,15 +6,16 @@ import { Link } from 'react-router';
 import { toast } from 'sonner';
 import { useAppHeader } from '@/client/components/app-header-context';
 import { EmptyState } from '@/client/components/empty-state';
+import { IconButton } from '@/client/components/icon-button';
 import { Loading } from '@/client/components/loading';
 import { QueryErrorState } from '@/client/components/query-error-state';
 import { ProjectSettingsDialog } from '@/client/features/project/project-settings-dialog';
 import { runInBackground } from '@/client/lib/background-task';
+import { POLL_INTERVAL_MS } from '@/client/lib/query-options';
 import { trpc } from '@/client/lib/trpc';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
-import { Spinner } from '@/components/ui/spinner';
 import {
   Table,
   TableBody,
@@ -23,7 +24,6 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { useIsMobile } from '@/hooks/use-mobile';
 
 function ProjectActions({
@@ -49,21 +49,15 @@ function ProjectActions({
         currentStartupScriptCommand={startupScriptCommand}
         currentStartupScriptPath={startupScriptPath}
       />
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <Button
-            variant="ghost"
-            size="icon"
-            aria-label={`Archive ${projectName}`}
-            onClick={onArchive}
-            disabled={archivePending}
-            className="hover:bg-destructive/10 hover:text-destructive"
-          >
-            {archivePending ? <Spinner className="size-4" /> : <ArchiveIcon className="size-4" />}
-          </Button>
-        </TooltipTrigger>
-        <TooltipContent>Archive</TooltipContent>
-      </Tooltip>
+      <IconButton
+        label={`Archive ${projectName}`}
+        tooltip="Archive"
+        onClick={onArchive}
+        pending={archivePending}
+        className="hover:bg-destructive/10 hover:text-destructive"
+      >
+        <ArchiveIcon />
+      </IconButton>
     </div>
   );
 }
@@ -81,17 +75,24 @@ export default function ProjectsListPage() {
     error,
     isFetching,
     refetch,
-  } = trpc.project.list.useQuery({ isArchived: false }, { refetchInterval: 10_000 });
+  } = trpc.project.list.useQuery(
+    { isArchived: false },
+    { refetchInterval: POLL_INTERVAL_MS.activity }
+  );
 
   const archiveMutation = trpc.project.archive.useMutation({
     onSuccess: () => {
       setArchiveDialogOpen(false);
-      runInBackground(refetch({ throwOnError: true }), "Couldn't refresh data.");
+      runInBackground(refetch({ throwOnError: true }));
     },
     onError: (error) => {
       toast.error(error.message || "Couldn't archive project.");
     },
   });
+
+  // One dialog archives one project at a time; only that row shows pending.
+  const isArchivingProject = (projectId: string) =>
+    archiveMutation.isPending && archiveMutation.variables?.id === projectId;
 
   if (isLoading) {
     return <Loading message="Loading projects…" />;
@@ -106,7 +107,7 @@ export default function ProjectsListPage() {
         </div>
         <Button asChild size={isMobile ? 'sm' : 'default'}>
           <Link to="/projects/new">
-            <PlusIcon className="size-5" />
+            <PlusIcon />
             New Project
           </Link>
         </Button>
@@ -146,7 +147,7 @@ export default function ProjectsListPage() {
                   <div className="min-w-0 space-y-1">
                     <Link
                       to={`/projects/${project.slug}/workspaces`}
-                      className="block min-w-0 rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                      className="block min-w-0 rounded-sm focus-ring focus-visible:ring-offset-2"
                     >
                       <div className="font-medium text-foreground truncate hover:text-primary">
                         {project.name}
@@ -162,7 +163,7 @@ export default function ProjectsListPage() {
                     projectName={project.name}
                     startupScriptCommand={project.startupScriptCommand}
                     startupScriptPath={project.startupScriptPath}
-                    archivePending={archiveMutation.isPending}
+                    archivePending={isArchivingProject(project.id)}
                     onArchive={() => {
                       setProjectToArchive(project.id);
                       setArchiveDialogOpen(true);
@@ -220,7 +221,7 @@ export default function ProjectsListPage() {
                       projectName={project.name}
                       startupScriptCommand={project.startupScriptCommand}
                       startupScriptPath={project.startupScriptPath}
-                      archivePending={archiveMutation.isPending}
+                      archivePending={isArchivingProject(project.id)}
                       onArchive={() => {
                         setProjectToArchive(project.id);
                         setArchiveDialogOpen(true);
@@ -236,15 +237,11 @@ export default function ProjectsListPage() {
 
       <ConfirmDialog
         open={archiveDialogOpen}
-        onOpenChange={(open) => {
-          if (!open && archiveMutation.isPending) {
-            return;
-          }
-          setArchiveDialogOpen(open);
-        }}
+        onOpenChange={setArchiveDialogOpen}
         title="Archive project?"
         description="The project will be hidden from the project list. Its repository and workspaces are kept. There is no restore action in the app."
         confirmText="Archive"
+        pendingText="Archiving…"
         variant="destructive"
         onConfirm={() => {
           if (projectToArchive) {

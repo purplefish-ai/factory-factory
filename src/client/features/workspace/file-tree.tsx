@@ -3,6 +3,7 @@ import { FileCodeIcon } from '@phosphor-icons/react/dist/csr/FileCode';
 import { FolderIcon } from '@phosphor-icons/react/dist/csr/Folder';
 import { memo, useCallback } from 'react';
 import { EmptyState } from '@/client/components/empty-state';
+import { POLL_INTERVAL_MS } from '@/client/lib/query-options';
 import { trpc } from '@/client/lib/trpc';
 import { Button } from '@/components/ui/button';
 import { Spinner } from '@/components/ui/spinner';
@@ -83,17 +84,12 @@ const DirectoryNode = memo(function DirectoryNode({
   depth,
   onFileSelect,
 }: DirectoryNodeProps) {
-  const { isExpanded: checkExpanded, toggleExpanded } = useFileTreeExpansion();
-  const isExpanded = checkExpanded(entry.path);
-
-  const toggleExpand = useCallback(() => {
-    toggleExpanded(entry.path);
-  }, [toggleExpanded, entry.path]);
+  const { expanded: isExpanded, toggle } = useFileTreeExpansion(entry.path);
 
   return (
     <div>
       <FileTreeRow
-        onClick={toggleExpand}
+        onClick={toggle}
         depth={depth}
         expanded={isExpanded}
         icon={<FolderIcon className="h-4 w-4 text-brand" />}
@@ -145,11 +141,9 @@ export function FileTree({ workspaceId, path = '', depth = 0, onFileSelect }: Fi
     },
     {
       // Refetch periodically at root level only; subdirectories rarely change
-      refetchInterval: depth === 0 ? 30_000 : false,
+      refetchInterval: depth === 0 ? POLL_INTERVAL_MS.background : false,
       // Keep data fresh for 20s to avoid refetching on window focus or navigation
       staleTime: 20_000,
-      // Disable refetch on window focus - too aggressive for file trees
-      refetchOnWindowFocus: false,
     }
   );
 

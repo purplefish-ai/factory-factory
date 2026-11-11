@@ -2,7 +2,7 @@
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { getQueryKey } from '@trpc/react-query';
-import { type ReactNode } from 'react';
+import { memo, type ReactNode } from 'react';
 import { flushSync } from 'react-dom';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -10,7 +10,7 @@ import type { GitHubIssueRaw } from '@/client/lib/issue-normalization';
 import { projectSnapshotToWorkspace } from '@/client/lib/snapshot-to-workspace';
 import { trpc } from '@/client/lib/trpc';
 import { makeCompleteWorkspaceSnapshotEntry } from '@/test-utils/workspace-snapshot';
-import { KanbanProvider, useKanban } from './kanban-context';
+import { KanbanProvider, useKanban, useKanbanActions } from './kanban-context';
 
 interface ArchiveError {
   data?: { code?: string | null; applicationErrorKind?: string | null };
@@ -60,6 +60,9 @@ const mocks = vi.hoisted(() => ({
   bulkArchiveInputs: [] as unknown[],
   workspaceListState: undefined as ProjectWorkspaceCache | undefined,
   githubIssues: [] as GitHubIssueRaw[],
+  toggleRatchetingMutate: vi.fn(),
+  pendingToggleWorkspaceIds: [] as string[],
+  renameMutateAsync: vi.fn(),
 }));
 
 vi.mock('sonner', () => ({
@@ -70,7 +73,8 @@ vi.mock('sonner', () => ({
 
 vi.mock('@/client/hooks/use-toggle-ratcheting', () => ({
   useToggleRatcheting: () => ({
-    mutateAsync: vi.fn(),
+    mutate: mocks.toggleRatchetingMutate,
+    pendingWorkspaceIds: mocks.pendingToggleWorkspaceIds,
   }),
 }));
 
@@ -157,7 +161,7 @@ vi.mock('@/client/lib/trpc', () => ({
         useMutation: () => ({ mutate: mocks.syncAllPRStatusesMock, isPending: false }),
       },
       rename: {
-        useMutation: () => ({ mutateAsync: vi.fn() }),
+        useMutation: () => ({ mutateAsync: mocks.renameMutateAsync }),
       },
       archive: rejectingMutation(
         () => mocks.archiveError,
@@ -245,6 +249,7 @@ beforeEach(() => {
   mocks.refetchWorkspacesMock.mockResolvedValue({ isError: false });
   mocks.workspaceListInvalidateMock.mockResolvedValue(undefined);
   mocks.githubIssues = [];
+  mocks.pendingToggleWorkspaceIds = [];
   mocks.workspaceListState = {
     workspaces: [
       {
@@ -291,6 +296,32 @@ describe('KanbanProvider PR sync', () => {
     expect(mocks.syncAllPRStatusesMock).toHaveBeenCalledExactlyOnceWith({
       projectId: 'project-1',
       force: true,
+    });
+  });
+});
+
+describe('KanbanProvider per-workspace commands', () => {
+  it('exposes every in-flight ratchet toggle so concurrent cards stay pending', () => {
+    const kanban = renderProvider();
+    // Failures are reported by the shared hook, so the command only starts the mutation.
+    kanban.toggleWorkspaceRatcheting('workspace-1', true);
+    expect(mocks.toggleRatchetingMutate).toHaveBeenCalledWith({
+      workspaceId: 'workspace-1',
+      enabled: true,
+    });
+
+    mocks.pendingToggleWorkspaceIds = ['workspace-1', 'workspace-2'];
+    rerenderProvider();
+    expect(context?.togglingWorkspaceIds).toEqual(['workspace-1', 'workspace-2']);
+  });
+
+  it('renames through the shared mutation, which owns the refresh', async () => {
+    const kanban = renderProvider();
+    mocks.renameMutateAsync.mockResolvedValueOnce(undefined);
+    await kanban.renameWorkspace('workspace-1', 'Renamed');
+    expect(mocks.renameMutateAsync).toHaveBeenCalledExactlyOnceWith({
+      id: 'workspace-1',
+      name: 'Renamed',
     });
   });
 });
@@ -561,5 +592,31 @@ describe('KanbanProvider archive failure handling', () => {
     expect(mocks.toastErrorMock).not.toHaveBeenCalled();
     expect(context?.archiveGitLockWorkspaceIds).toEqual(['workspace-1']);
     expect(mocks.bulkArchiveInputs).toEqual([{ projectId: 'project-1', kanbanColumn: 'WAITING' }]);
+  });
+});
+
+let commandRenders = 0;
+const CommandsOnly = memo(function CommandsOnly() {
+  commandRenders += 1;
+  useKanbanActions();
+  return null;
+});
+
+describe('KanbanProvider render stability', () => {
+  it('keeps commands stable so command-only consumers skip board state changes', () => {
+    commandRenders = 0;
+    const children = (
+      <>
+        <Probe />
+        <CommandsOnly />
+      </>
+    );
+    const first = renderProvider(children);
+    flushSync(() => first.requestInlineForm());
+    flushSync(() => first.openQuickChat('workspace-1'));
+    flushSync(() => root?.render(providerElement(children)));
+    expect(context?.showInlineForm).toBe(true);
+    expect(context?.quickChatWorkspaceId).toBe('workspace-1');
+    expect(commandRenders).toBe(1);
   });
 });

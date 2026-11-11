@@ -157,7 +157,7 @@ it('remounts draft seeds when Controls switch between ordinary and event purpose
     await waitFor(() => expect(container.querySelector('textarea')?.value).toBe(''));
     await render('event-agent');
     await waitFor(() =>
-      expect(container.querySelector('textarea')?.value).toContain('propose_agent')
+      expect(container.querySelector('textarea')?.value).toContain('propose_automation')
     );
     await render();
     await waitFor(() => expect(container.querySelector('textarea')?.value).toBe(''));

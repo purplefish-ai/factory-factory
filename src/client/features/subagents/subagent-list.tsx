@@ -1,9 +1,10 @@
 import { CaretDownIcon } from '@phosphor-icons/react/dist/csr/CaretDown';
 import { CaretRightIcon } from '@phosphor-icons/react/dist/csr/CaretRight';
 import { RobotIcon } from '@phosphor-icons/react/dist/csr/Robot';
-import { WarningCircleIcon } from '@phosphor-icons/react/dist/csr/WarningCircle';
 import { useEffect, useMemo, useState } from 'react';
+import { EmptyState } from '@/client/components/empty-state';
 import { Loading } from '@/client/components/loading';
+import { QueryErrorState, QueryRefreshError } from '@/client/components/query-error-state';
 import { SubagentIcon } from '@/client/components/subagent-icon';
 import {
   SessionTargetStopButton,
@@ -12,7 +13,6 @@ import {
 import { useRememberedDisclosure } from '@/client/hooks/use-remembered-disclosure';
 import { getSubagentIconIndices } from '@/client/lib/subagent-icon-indices';
 import { Button } from '@/components/ui/button';
-import { Spinner } from '@/components/ui/spinner';
 import { cn } from '@/lib/utils';
 import { isActiveSubagent } from './subagent-status';
 import type { SubagentListItem } from './types';
@@ -122,7 +122,7 @@ function SubagentRow({
         aria-pressed={selected}
         onClick={() => onSelect(subagent)}
         className={cn(
-          'min-w-0 flex-1 cursor-pointer px-3 py-2.5 text-left transition-colors hover:bg-muted/50',
+          'min-w-0 flex-1 cursor-pointer px-3 py-2.5 text-left transition-colors hover:bg-muted/50 focus-ring focus-visible:ring-inset',
           selected && 'bg-muted'
         )}
       >
@@ -130,8 +130,16 @@ function SubagentRow({
           <SubagentIcon index={iconIndex} />
           <div className="min-w-0 flex-1 space-y-1">
             <p className="truncate text-sm font-medium">{displayName(subagent)}</p>
-            <div className="flex min-w-0 items-center gap-1.5 text-[11px] text-muted-foreground">
+            <div className="flex min-w-0 items-center gap-1.5 text-2xs text-muted-foreground">
               <span>{statusLabel(subagent.status)}</span>
+              {subagent.model && (
+                <>
+                  <span aria-hidden="true">·</span>
+                  <span title={`Model: ${subagent.model}`} className="truncate">
+                    {subagent.model}
+                  </span>
+                </>
+              )}
               {elapsed && (
                 <>
                   <span aria-hidden="true">·</span>
@@ -166,50 +174,36 @@ function SubagentRow({
   );
 }
 
-function PaginationError({ error }: { error: { message: string; onRetry: () => void } }) {
+/** A failed next page or refresh while loaded subagents stay listed. */
+function ListRefreshError({ error }: { error: { message: string; onRetry: () => void } }) {
   return (
-    <div className="mx-3 my-3 rounded-md border border-destructive/30 bg-destructive/5 p-3">
-      <div className="flex items-start gap-2">
-        <WarningCircleIcon className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
-        <div className="min-w-0 space-y-2">
-          <p className="break-words text-xs text-destructive">{error.message}</p>
-          <Button type="button" variant="outline" size="sm" onClick={error.onRetry}>
-            Retry
-          </Button>
-        </div>
-      </div>
-    </div>
+    <QueryRefreshError title="Couldn't load subagents" error={error} onRetry={error.onRetry} />
   );
 }
 
 function EmptyReadyState({ state }: { state: Extract<SubagentListState, { kind: 'ready' }> }) {
   return (
     <div>
-      {state.error && <PaginationError error={state.error} />}
-      <div className="flex flex-col items-center justify-center gap-3 px-4 py-8 text-center">
-        <div className="flex flex-col items-center gap-2">
-          <RobotIcon className="h-7 w-7 text-muted-foreground/40" />
-          <p className="text-sm text-muted-foreground">No subagents for this session.</p>
-        </div>
-        {state.hasMore && state.onLoadMore && !state.error && (
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            disabled={state.loadingMore}
-            onClick={state.onLoadMore}
-          >
-            {state.loadingMore ? (
-              <>
-                <Spinner className="size-3" aria-hidden="true" />
-                Loading more…
-              </>
-            ) : (
-              'Load more'
-            )}
-          </Button>
-        )}
-      </div>
+      {state.error && <ListRefreshError error={state.error} />}
+      <EmptyState
+        size="compact"
+        icon={RobotIcon}
+        title="No subagents for this session"
+        action={
+          state.hasMore && state.onLoadMore && !state.error ? (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              pending={state.loadingMore}
+              pendingLabel="Loading more…"
+              onClick={state.onLoadMore}
+            >
+              Load more
+            </Button>
+          ) : null
+        }
+      />
     </div>
   );
 }
@@ -275,7 +269,14 @@ export function SubagentList({
   }, [groups.active.length]);
 
   if (state.kind === 'unsupported') {
-    return null;
+    return (
+      <EmptyState
+        size="compact"
+        icon={RobotIcon}
+        title="Subagents unavailable"
+        description="Subagent browsing is not currently available for this session. History may be unavailable after the session stops."
+      />
+    );
   }
 
   if (state.kind === 'loading') {
@@ -284,17 +285,12 @@ export function SubagentList({
 
   if (state.kind === 'error') {
     return (
-      <div className="mx-3 my-3 rounded-md border border-destructive/30 bg-destructive/5 p-3">
-        <div className="flex items-start gap-2">
-          <WarningCircleIcon className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
-          <div className="min-w-0 space-y-2">
-            <p className="break-words text-xs text-destructive">{state.message}</p>
-            <Button type="button" variant="outline" size="sm" onClick={state.onRetry}>
-              Retry
-            </Button>
-          </div>
-        </div>
-      </div>
+      <QueryErrorState
+        title="Couldn't load subagents"
+        error={state}
+        onRetry={state.onRetry}
+        className="p-3"
+      />
     );
   }
 
@@ -304,7 +300,7 @@ export function SubagentList({
 
   return (
     <div>
-      {state.error && <PaginationError error={state.error} />}
+      {state.error && <ListRefreshError error={state.error} />}
       {groups.active.length > 0 && (
         <ul className="divide-y divide-border/50">
           {groups.active.map((subagent) => (
@@ -327,7 +323,7 @@ export function SubagentList({
             type="button"
             aria-expanded={completedExpanded}
             onClick={() => setCompletedExpanded(!completedExpanded)}
-            className="flex w-full cursor-pointer items-center gap-1.5 px-3 py-2 text-left text-xs font-medium text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
+            className="flex w-full cursor-pointer items-center gap-1.5 px-3 py-2 text-left text-xs font-medium text-muted-foreground transition-colors focus-ring focus-visible:ring-inset hover:bg-muted/50 hover:text-foreground"
           >
             {completedExpanded ? (
               <CaretDownIcon className="h-3.5 w-3.5" />
@@ -359,17 +355,11 @@ export function SubagentList({
             type="button"
             variant="outline"
             size="sm"
-            disabled={state.loadingMore}
+            pending={state.loadingMore}
+            pendingLabel="Loading more…"
             onClick={state.onLoadMore}
           >
-            {state.loadingMore ? (
-              <>
-                <Spinner className="size-3" aria-hidden="true" />
-                Loading more…
-              </>
-            ) : (
-              'Load more'
-            )}
+            Load more
           </Button>
         </div>
       )}

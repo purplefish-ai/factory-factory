@@ -366,4 +366,32 @@ describe('file-mention-palette regression coverage', () => {
 
     cleanup();
   });
+
+  it('shows a failed file list as an error, not as "No files found"', () => {
+    const anchorEl = document.createElement('div');
+    document.body.appendChild(anchorEl);
+
+    const cleanup = renderInDom((root) => {
+      actFlushSync(() => {
+        root.render(
+          createElement(FileMentionPalette, {
+            files: [],
+            isOpen: true,
+            error: 'Worktree is missing',
+            onClose: vi.fn(),
+            onSelect: vi.fn(),
+            filter: 'src',
+            anchorRef: { current: anchorEl },
+          })
+        );
+      });
+
+      expect(document.body.querySelector('[role="alert"]')?.textContent).toBe(
+        "Couldn't load files. Worktree is missing"
+      );
+      expect(document.body.textContent).not.toContain('No files found');
+    });
+
+    cleanup();
+  });
 });

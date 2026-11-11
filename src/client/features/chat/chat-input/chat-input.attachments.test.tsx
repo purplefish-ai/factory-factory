@@ -5,6 +5,7 @@ import { act, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { trpc } from '@/client/lib/trpc';
+import { TooltipProvider } from '@/components/ui/tooltip';
 import type { MessageAttachment } from '@/lib/chat-protocol';
 import { ChatInput } from './chat-input';
 
@@ -78,7 +79,9 @@ async function renderHost() {
     root.render(
       <QueryClientProvider client={queryClient}>
         <trpc.Provider client={client} queryClient={queryClient}>
-          <Host />
+          <TooltipProvider>
+            <Host />
+          </TooltipProvider>
         </trpc.Provider>
       </QueryClientProvider>
     )

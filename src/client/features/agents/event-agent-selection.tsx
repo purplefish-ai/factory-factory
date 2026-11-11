@@ -34,9 +34,9 @@ function RetainedPageSession({ agent }: { agent: EventAgent }) {
   const [records, setRecords] = useState<EventAgent['retainedTriggers']>([]);
   const [next, setNext] = useState(agent.retainedNextCursor);
   const utils = trpc.useUtils();
-  const page = trpc.agent.get.useQuery(
+  const page = trpc.automation.get.useQuery(
     { projectId: agent.projectId, agentId: agent.id, retainedCursor: cursor },
-    { enabled: !!cursor, retry: false }
+    { enabled: !!cursor }
   );
   const stale =
     !!cursor && !!page.data && page.data.managementRevision !== agent.managementRevision;
@@ -79,7 +79,10 @@ function RetainedPageSession({ agent }: { agent: EventAgent }) {
           <Button
             variant="outline"
             onClick={() =>
-              void utils.agent.get.invalidate({ projectId: agent.projectId, agentId: agent.id })
+              void utils.automation.get.invalidate({
+                projectId: agent.projectId,
+                agentId: agent.id,
+              })
             }
           >
             Refresh automation

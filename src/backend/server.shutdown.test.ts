@@ -23,8 +23,29 @@ vi.mock('@trpc/server/adapters/express', () => ({
   createExpressMiddleware: vi.fn(() => (_req: unknown, _res: unknown, next: () => void) => next()),
 }));
 
-import { createServer } from './server';
+import { createServer, disposeApplication } from './server';
 import { createTestHarness as createBaseTestHarness } from './server.test-helpers';
+
+/** Paths of every mock in the graph that has been called, sorted. */
+function calledMocks(application: Application): string[] {
+  const called: string[] = [];
+  const visit = (value: unknown, path: string) => {
+    if (vi.isMockFunction(value)) {
+      if (value.mock.calls.length > 0) {
+        called.push(path);
+      }
+      return;
+    }
+    if (value !== null && typeof value === 'object') {
+      for (const [key, child] of Object.entries(value)) {
+        visit(child, `${path}.${key}`);
+      }
+    }
+  };
+  visit(application.services, 'services');
+  visit(application.lifecycle, 'lifecycle');
+  return called.sort();
+}
 
 function createTestHarness() {
   const harness = createBaseTestHarness();
@@ -135,12 +156,12 @@ describe('server background job shutdown', () => {
       expect(stop).toHaveBeenCalledOnce();
     }
     expect(harness.logger.error).toHaveBeenCalledWith('Failed to stop background job', failure, {
-      job: 'pr-sync',
+      job: 'pr-poll',
     });
     expect(harness.logger.error).toHaveBeenCalledWith(
       'Failed to stop background job',
       expect.objectContaining({ message: 'ratchet stop threw' }),
-      { job: 'ratchet' }
+      { job: 'pr-event-poll' }
     );
     expect(harness.lifecycle.eventCollector.stop).toHaveBeenCalledOnce();
     expect(harness.services.workspaceGitStateService.stop).toHaveBeenCalledOnce();
@@ -168,6 +189,75 @@ describe('server background job shutdown', () => {
     first?.resolve(undefined);
     await stopping;
     expect(harness.lifecycle.database.$disconnect).toHaveBeenCalledOnce();
+  });
+
+  it('cancels Codex logins after sessions stop and backstops every job before disconnecting', async () => {
+    const harness = createTestHarness();
+    const server = createTestServer(harness.application);
+
+    await server.stop();
+
+    const order = (fn: { mock: { invocationCallOrder: number[] } }) =>
+      fn.mock.invocationCallOrder[0] ?? 0;
+    const { services, lifecycle } = harness;
+    expect(services.codexAccountService.shutdown).toHaveBeenCalledOnce();
+    expect(order(services.sessionLifecycleService.stopAllClients)).toBeLessThan(
+      order(services.codexAccountService.shutdown)
+    );
+    expect(lifecycle.jobs.stopAll).toHaveBeenCalledOnce();
+    expect(order(services.workspaceGitStateService.stop)).toBeLessThan(
+      order(lifecycle.jobs.stopAll)
+    );
+    expect(order(lifecycle.jobs.stopAll)).toBeLessThan(order(lifecycle.database.$disconnect));
+  });
+
+  it('logs a failing step, still disconnects the database, then rejects', async () => {
+    const harness = createTestHarness();
+    const failure = new Error('session stop failed');
+    harness.services.sessionLifecycleService.stopAllClients.mockRejectedValueOnce(failure);
+    // Not tracked for afterEach: its stop rejects by design.
+    const server = createServer(harness.application, 0);
+
+    await expect(server.stop()).rejects.toMatchObject({ errors: [failure] });
+
+    expect(harness.logger.error).toHaveBeenCalledWith(
+      'Failed to stop application component',
+      failure,
+      { step: 'sessions' }
+    );
+    expect(harness.services.codexAccountService.shutdown).toHaveBeenCalledOnce();
+    expect(harness.lifecycle.database.$disconnect).toHaveBeenCalledOnce();
+    expect(harness.logger.info).not.toHaveBeenCalledWith('Graceful cleanup completed');
+  });
+
+  it('stops exactly the same application components as disposeApplication', async () => {
+    const withOptionalServices = () => {
+      const harness = createTestHarness();
+      Object.assign(harness.services, {
+        workspaceMetadata: { stop: vi.fn(async () => undefined) },
+      });
+      return harness;
+    };
+    const serverHarness = withOptionalServices();
+    const server = createTestServer(serverHarness.application);
+    // Construction registers interceptors; only teardown calls are compared.
+    vi.clearAllMocks();
+    await server.stop();
+
+    const disposedHarness = withOptionalServices();
+    await disposeApplication(disposedHarness.application);
+
+    const serverStops = calledMocks(serverHarness.application);
+    expect(serverStops).toEqual(calledMocks(disposedHarness.application));
+    expect(serverStops).toEqual(
+      expect.arrayContaining([
+        'services.applicationUpdateService.stop',
+        'services.workspaceMetadata.stop',
+        'services.codexAccountService.shutdown',
+        'lifecycle.jobs.stopAll',
+        'lifecycle.database.$disconnect',
+      ])
+    );
   });
 
   it('keeps Git state and the event collector live until their upstream drains settle', async () => {

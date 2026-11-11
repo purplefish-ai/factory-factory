@@ -2,7 +2,6 @@ import { CaretRightIcon } from '@phosphor-icons/react/dist/csr/CaretRight';
 import { MagnifyingGlassIcon } from '@phosphor-icons/react/dist/csr/MagnifyingGlass';
 import { PencilSimpleIcon } from '@phosphor-icons/react/dist/csr/PencilSimple';
 import { PlugIcon } from '@phosphor-icons/react/dist/csr/Plug';
-import { SpinnerGapIcon } from '@phosphor-icons/react/dist/csr/SpinnerGap';
 import { StackSimpleIcon } from '@phosphor-icons/react/dist/csr/StackSimple';
 import { TerminalIcon } from '@phosphor-icons/react/dist/csr/Terminal';
 import { WarningCircleIcon } from '@phosphor-icons/react/dist/csr/WarningCircle';
@@ -11,6 +10,7 @@ import { StatusIcon } from '@/client/components/status-indicators';
 import { AgentProposalCard, extractAgentProposal } from '@/client/features/agent-authoring';
 import { getStatusToneStyle } from '@/client/lib/status-tones';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { Spinner } from '@/components/ui/spinner';
 import type { AgentMessage, PairedToolCall, ToolSequence } from '@/lib/chat-protocol';
 import {
   extractToolInfo,
@@ -33,7 +33,7 @@ import { ToolResultContentRenderer } from './tool-result-renderer';
 import { isWebSearchToolName, parseWebSearchToolResult } from './web-search-parser';
 
 const triggerClassName =
-  'group flex w-full min-w-0 items-center gap-2 rounded-sm py-1 text-left text-sm text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring';
+  'group flex w-full min-w-0 items-center gap-2 rounded-sm py-1 text-left text-sm text-muted-foreground transition-colors hover:text-foreground focus-ring';
 
 function iconForKind(kind: ToolActivityKind) {
   if (kind === 'mcp') {
@@ -68,20 +68,12 @@ function ActivityIcon({
   pending?: boolean;
   error?: boolean;
 }) {
-  const Icon = error
-    ? WarningCircleIcon
-    : pending
-      ? SpinnerGapIcon
-      : iconForKind(getToolActivityKind(name));
+  if (pending && !error) {
+    return <Spinner aria-hidden="true" />;
+  }
+  const Icon = error ? WarningCircleIcon : iconForKind(getToolActivityKind(name));
   return (
-    <Icon
-      aria-hidden="true"
-      className={cn(
-        'h-4 w-4 shrink-0',
-        pending && !error && 'animate-spin',
-        error && 'text-destructive'
-      )}
-    />
+    <Icon aria-hidden="true" className={cn('h-4 w-4 shrink-0', error && 'text-destructive')} />
   );
 }
 
@@ -198,7 +190,7 @@ export const ToolSequenceGroup = memo(function ToolSequenceGroup({
         <CollapsibleTrigger asChild>
           <button type="button" className={triggerClassName}>
             {pending ? (
-              <SpinnerGapIcon aria-hidden="true" className="h-4 w-4 shrink-0 animate-spin" />
+              <Spinner aria-hidden="true" />
             ) : failureSummary ? (
               <StatusIcon tone="danger" icon={WarningCircleIcon} className="h-4 w-4" />
             ) : (
@@ -314,7 +306,7 @@ const PairedToolCallRenderer = memo(function PairedToolCallRenderer({
             <div className="break-all font-mono text-xs text-muted-foreground">{call.name}</div>
           )}
           <div className="min-w-0">
-            <div className="mb-0.5 text-[10px] font-medium text-muted-foreground">Input</div>
+            <div className="mb-0.5 text-2xs font-medium text-muted-foreground">Input</div>
             <ToolInputRenderer
               name={call.name}
               input={call.input}
@@ -323,7 +315,7 @@ const PairedToolCallRenderer = memo(function PairedToolCallRenderer({
           </div>
           {call.result && (
             <div className="min-w-0">
-              <div className="mb-0.5 text-[10px] font-medium text-muted-foreground">Result</div>
+              <div className="mb-0.5 text-2xs font-medium text-muted-foreground">Result</div>
               <ToolResultContentRenderer
                 content={call.result.content}
                 isError={call.result.isError}

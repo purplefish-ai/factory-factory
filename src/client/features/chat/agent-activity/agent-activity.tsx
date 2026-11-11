@@ -1,8 +1,10 @@
-import { ArrowCounterClockwiseIcon } from '@phosphor-icons/react/dist/csr/ArrowCounterClockwise';
 import { SteeringWheelIcon } from '@phosphor-icons/react/dist/csr/SteeringWheel';
 import { XIcon } from '@phosphor-icons/react/dist/csr/X';
 import { memo } from 'react';
+import { IconButton } from '@/client/components/icon-button';
+import { ErrorBoundary } from '@/client/error-boundary';
 import { AttachmentPreview } from '@/client/features/composer';
+import { Button } from '@/components/ui/button';
 import type { ChatMessage, GroupedMessageItem } from '@/lib/chat-protocol';
 import { isToolSequence } from '@/lib/chat-protocol';
 import { cn } from '@/lib/utils';
@@ -46,10 +48,8 @@ export interface MessageItemProps {
   /** Callback to cancel/remove this queued message */
   onRemove?: () => void;
   onSteer?: () => void;
-  /** SDK-assigned UUID for this user message (enables rewind functionality) */
-  userMessageUuid?: string;
-  /** Callback to initiate rewind to before this message */
-  onRewindToMessage?: (uuid: string) => void;
+  isSteering?: boolean;
+  steerDisabled?: boolean;
   resolveWorkspaceFileLink?: (href: string) => string | null;
   onWorkspaceFileLink?: (path: string) => void;
   onOpenSubagent?: (subagentId: string) => void;
@@ -74,23 +74,31 @@ function PRUpdateMessageItem({
   );
 }
 
-function QueuedMessageSteerAction({ onSteer }: { onSteer: () => void }) {
+function QueuedMessageSteerAction({
+  onSteer,
+  isSteering,
+  steerDisabled,
+}: {
+  onSteer: () => void;
+  isSteering?: boolean;
+  steerDisabled?: boolean;
+}) {
   return (
-    <button
-      onClick={onSteer}
-      className={cn(
-        'inline-flex h-6 items-center justify-center gap-1 rounded-md px-1.5 text-xs font-medium',
-        'bg-background/90 text-primary hover:bg-primary/10',
-        'border border-primary/30 hover:border-primary/60 shadow-sm',
-        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring'
-      )}
-      title="Send into the active turn now. The agent may redirect its current work."
+    <Button
       type="button"
-      aria-label="Steer queued message"
+      variant="outline"
+      size="xs"
+      onClick={onSteer}
+      pending={isSteering}
+      pendingLabel="Steering…"
+      disabled={steerDisabled}
+      className="border-primary/30 bg-background/90 text-primary shadow-sm hover:border-primary/60 hover:bg-primary/10 hover:text-primary dark:border-primary/30 dark:bg-background/90 dark:hover:bg-primary/10"
+      title="Send into the active turn now. The agent may redirect its current work."
+      aria-label={isSteering ? 'Steering queued message' : 'Steer queued message'}
     >
-      <SteeringWheelIcon className="h-3.5 w-3.5" />
+      <SteeringWheelIcon />
       Steer
-    </button>
+    </Button>
   );
 }
 
@@ -99,7 +107,12 @@ function QueuedMessageActions({
   isQueued,
   onRemove,
   onSteer,
-}: Pick<MessageItemProps, 'message' | 'isQueued' | 'onRemove' | 'onSteer'>) {
+  isSteering,
+  steerDisabled,
+}: Pick<
+  MessageItemProps,
+  'message' | 'isQueued' | 'onRemove' | 'onSteer' | 'isSteering' | 'steerDisabled'
+>) {
   const steer =
     isQueued &&
     onSteer &&
@@ -120,24 +133,24 @@ function QueuedMessageActions({
     >
       <div className="min-h-0 overflow-hidden">
         <div className="flex h-[max(2.25rem,calc(var(--touch-target-size,0px)+4px))] items-center justify-end gap-1 mb-1 px-0.5">
-          {steer && <QueuedMessageSteerAction onSteer={steer} />}
+          {steer && (
+            <QueuedMessageSteerAction
+              onSteer={steer}
+              isSteering={isSteering}
+              steerDisabled={steerDisabled}
+            />
+          )}
           {/* Cancel button for queued messages */}
           {isQueued && onRemove && (
-            <button
+            <IconButton
+              label="Cancel queued message"
+              size="icon-xs"
+              variant="outline"
               onClick={onRemove}
-              className={cn(
-                'inline-flex size-6 items-center justify-center rounded-md',
-                'bg-background/90 hover:bg-destructive/10',
-                'border border-border hover:border-destructive/50',
-                'shadow-sm',
-                'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring'
-              )}
-              title="Cancel queued message"
-              type="button"
-              aria-label="Cancel queued message"
+              className="bg-background/90 text-muted-foreground shadow-sm hover:border-destructive/50 hover:bg-destructive/10 hover:text-destructive dark:bg-background/90 dark:hover:bg-destructive/10"
             >
-              <XIcon className="h-3.5 w-3.5 text-muted-foreground hover:text-destructive" />
-            </button>
+              <XIcon />
+            </IconButton>
           )}
         </div>
       </div>
@@ -150,8 +163,8 @@ export const MessageItem = memo(function MessageItem({
   isQueued,
   onRemove,
   onSteer,
-  userMessageUuid,
-  onRewindToMessage,
+  isSteering,
+  steerDisabled,
   resolveWorkspaceFileLink,
   onWorkspaceFileLink,
   onOpenSubagent,
@@ -177,32 +190,13 @@ export const MessageItem = memo(function MessageItem({
       <MessageWrapper>
         {/* Keep queued actions readable outside the faded message content. */}
         <div className="group relative w-full max-w-full">
-          <div className="absolute -top-1 -right-1 hover-reveal z-10">
-            {/* Rewind button for messages with tracked UUIDs */}
-            {!isQueued && userMessageUuid && onRewindToMessage && (
-              <button
-                onClick={() => onRewindToMessage(userMessageUuid)}
-                onMouseDown={(e) => e.preventDefault()}
-                className={cn(
-                  'p-1.5 rounded-md',
-                  'bg-background/90 hover:bg-warning/10',
-                  'border border-border hover:border-warning/50',
-                  'shadow-sm',
-                  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring'
-                )}
-                title="Rewind files to before this message"
-                type="button"
-                aria-label="Rewind files to before this message"
-              >
-                <ArrowCounterClockwiseIcon className="h-3.5 w-3.5 text-muted-foreground hover:text-warning" />
-              </button>
-            )}
-          </div>
           <QueuedMessageActions
             message={message}
             isQueued={isQueued}
             onRemove={onRemove}
             onSteer={onSteer}
+            isSteering={isSteering}
+            steerDisabled={steerDisabled}
           />
           {/* Message content - opacity applied here to fade queued messages without affecting buttons */}
           <div
@@ -257,10 +251,8 @@ export interface GroupedMessageItemRendererProps {
   /** Callback to cancel/remove this queued message */
   onRemove?: () => void;
   onSteer?: () => void;
-  /** SDK-assigned UUID for user messages (enables rewind functionality) */
-  userMessageUuid?: string;
-  /** Callback to initiate rewind to before this message */
-  onRewindToMessage?: (uuid: string) => void;
+  isSteering?: boolean;
+  steerDisabled?: boolean;
   resolveWorkspaceFileLink?: (href: string) => string | null;
   onWorkspaceFileLink?: (path: string) => void;
   onOpenSubagent?: (subagentId: string) => void;
@@ -273,21 +265,38 @@ export interface GroupedMessageItemRendererProps {
 }
 
 /**
- * Renders either a regular message or a tool sequence group.
+ * Renders either a regular message or a tool sequence group. A row that fails
+ * to render shows a compact error in its place; replaying the same transcript
+ * would otherwise crash the whole page again. The boundary retries when the
+ * row's item changes, e.g. as a streamed message grows.
  */
-export const GroupedMessageItemRenderer = memo(function GroupedMessageItemRenderer({
+export const GroupedMessageItemRenderer = memo(function GroupedMessageItemRenderer(
+  props: GroupedMessageItemRendererProps
+) {
+  return (
+    <ErrorBoundary
+      variant="compact"
+      title="Couldn't render this message"
+      resetKey={props.item}
+      className="h-auto py-3"
+    >
+      <GroupedMessageItemContent {...props} />
+    </ErrorBoundary>
+  );
+});
+
+function GroupedMessageItemContent({
   item,
   isQueued,
   onRemove,
   onSteer,
-  userMessageUuid,
-  onRewindToMessage,
+  isSteering,
+  steerDisabled,
   resolveWorkspaceFileLink,
   onWorkspaceFileLink,
   onOpenSubagent,
   getToolExpansionState,
   setToolExpansionState,
-  toolExpansionToken: _toolExpansionToken,
 }: GroupedMessageItemRendererProps) {
   if (isToolSequence(item)) {
     const sequenceDefaultOpen = false;
@@ -325,10 +334,10 @@ export const GroupedMessageItemRenderer = memo(function GroupedMessageItemRender
       isQueued={isQueued}
       onRemove={onRemove}
       onSteer={onSteer}
-      userMessageUuid={userMessageUuid}
-      onRewindToMessage={onRewindToMessage}
+      isSteering={isSteering}
+      steerDisabled={steerDisabled}
       resolveWorkspaceFileLink={resolveWorkspaceFileLink}
       onWorkspaceFileLink={onWorkspaceFileLink}
     />
   );
-});
+}

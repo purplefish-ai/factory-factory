@@ -138,7 +138,7 @@ it.each(['loading', 'NOT_FOUND', 'network'])('shows explicit %s agent state', as
         view.container.querySelector('a[href="/projects/archived-owner/agents"]')
       ).not.toBeNull();
       const retry = [...view.container.querySelectorAll('button')].find(
-        (button) => button.textContent === 'Retry automation'
+        (button) => button.textContent === 'Retry'
       );
       await act(() => retry?.click());
       expect(mocks.task.refetch).toHaveBeenCalledOnce();
@@ -152,11 +152,16 @@ it('shows run-history failures and retries instead of presenting empty history',
   mocks.history.data = [];
   const view = await render();
   try {
-    expect(view.container.textContent).toContain('History unavailable');
+    expect(view.container.querySelector('[role="status"]')?.textContent).toContain(
+      "Couldn't refresh run history"
+    );
+    expect(view.container.querySelector('[role="status"]')?.textContent).toContain(
+      'History unavailable'
+    );
     expect(view.container.textContent).not.toContain('No runs yet');
     await act(() =>
       [...view.container.querySelectorAll('button')]
-        .find((button) => button.textContent === 'Retry run history')
+        .find((button) => button.textContent === 'Retry')
         ?.click()
     );
     expect(mocks.history.refetch).toHaveBeenCalledOnce();
@@ -170,11 +175,11 @@ it('retains cached agent details and allows retrying a failed definition refresh
   const view = await render();
   try {
     expect(view.container.textContent).toContain('Review changes');
-    expect(view.container.textContent).toContain(
-      "Couldn't refresh automation. Definition refresh unavailable"
-    );
+    const notice = view.container.querySelector('[role="status"]');
+    expect(notice?.textContent).toContain("Couldn't refresh automation.");
+    expect(notice?.textContent).toContain('Definition refresh unavailable');
     const retry = [...view.container.querySelectorAll('button')].find(
-      (button) => button.textContent === 'Retry automation'
+      (button) => button.textContent === 'Retry'
     );
     expect(retry).toBeDefined();
     await act(() => retry?.click());
@@ -187,17 +192,33 @@ it('retains cached agent details and allows retrying a failed definition refresh
   }
 });
 
+it('keeps cached project history under a notice when the project refresh fails', async () => {
+  mocks.project.error = { message: 'Owner refresh unavailable' };
+  const view = await render();
+  try {
+    expect(view.container.querySelector('[role="alert"]')).toBeNull();
+    const notice = view.container.querySelector('[role="status"]');
+    expect(notice?.textContent).toContain("Couldn't refresh automation project.");
+    expect(notice?.textContent).toContain('Owner refresh unavailable');
+    expect(mocks.historyInput).toHaveBeenCalledWith({ periodicTaskId: 'agent-1', limit: 50 });
+    await act(() => notice?.querySelector('button')?.click());
+    expect(mocks.project.refetch).toHaveBeenCalledOnce();
+  } finally {
+    await view.dispose();
+  }
+});
+
 it('uses friendly cached NOT_FOUND copy and preserves the definition retry action', async () => {
   mocks.task.error = { message: 'Periodic task not found', data: { code: 'NOT_FOUND' } };
   const view = await render();
   try {
-    expect(view.container.querySelector('[role="alert"]')?.textContent).toContain(
-      'Automation not found. Its existing workspaces remain available.'
-    );
-    expect(view.container.textContent).not.toContain('Periodic task not found');
+    const notice = view.container.querySelector('[role="status"]');
+    expect(notice?.textContent).toContain('Automation not found.');
+    expect(notice?.textContent).toContain('Its existing workspaces remain available.');
+    expect(view.container.innerHTML).not.toContain('Periodic task not found');
     await act(() =>
       [...view.container.querySelectorAll('button')]
-        .find((button) => button.textContent === 'Retry automation')
+        .find((button) => button.textContent === 'Retry')
         ?.click()
     );
     expect(mocks.task.refetch).toHaveBeenCalledOnce();
@@ -220,11 +241,10 @@ it.each(['loading', 'error'])(
         state === 'error' ? 'Owner unavailable' : 'Loading automation project'
       );
       if (state === 'error') {
-        await act(() =>
-          [...view.container.querySelectorAll('button')]
-            .find((button) => button.textContent === 'Retry project')
-            ?.click()
+        const projectAlert = [...view.container.querySelectorAll('[role="alert"]')].find((alert) =>
+          alert.textContent?.includes("Couldn't load automation project")
         );
+        await act(() => projectAlert?.querySelector('button')?.click());
         expect(mocks.project.refetch).toHaveBeenCalledOnce();
       }
     } finally {

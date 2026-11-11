@@ -11,7 +11,7 @@ vi.mock('node:child_process', async (original) => ({
   ...(await original<typeof import('node:child_process')>()),
   spawn: vi.fn(),
 }));
-vi.mock('@/backend/migrate', () => ({ runMigrations: vi.fn() }));
+vi.mock('@/backend/migrate-with-backup', () => ({ runMigrationsWithBackup: vi.fn() }));
 vi.mock('./server-startup', () => ({ startFactoryFactoryServer: vi.fn() }));
 vi.mock('./tailscale-client', () => ({ discoverTailscale: vi.fn(), parsePort: Number }));
 vi.mock('./runtime-utils', () => ({

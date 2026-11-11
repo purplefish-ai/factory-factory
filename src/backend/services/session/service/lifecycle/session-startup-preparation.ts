@@ -1,13 +1,13 @@
 import type { AgentSessionRecord } from '@/backend/services/session/resources/agent-session.accessor';
 import type { AcpProcessHandle, PermissionPreset } from '@/backend/services/session/service/acp';
+import { SessionStartupTargetError } from '@/backend/services/session/service/config/session-permission-policy';
+import { restorePRResumeConfig } from '@/backend/services/session/service/config/session-pr-resume-config';
+import type { SessionConfigService } from '@/backend/services/session/service/config/session.config.service';
+import { captureSessionStartupIntent } from '@/backend/services/session/service/data/session-startup-intent';
+import type { SessionRepository } from '@/backend/services/session/service/data/session.repository';
+import { pinEventExecution } from '@/backend/services/session/service/event-agent/event-session-startup';
 import { ADVERSARIAL_REVIEW_WORKFLOW } from '@/shared/adversarial-review';
 import type { EventAgentExecution } from '@/shared/event-agent-launch';
-import { pinEventExecution } from './event-session-startup';
-import { SessionStartupTargetError } from './session-permission-policy';
-import { restorePRResumeConfig } from './session-pr-resume-config';
-import { captureSessionStartupIntent } from './session-startup-intent';
-import type { SessionConfigService } from './session.config.service';
-import type { SessionRepository } from './session.repository';
 
 export type SessionStartupPreparationOptions = {
   eventExecution?: EventAgentExecution;

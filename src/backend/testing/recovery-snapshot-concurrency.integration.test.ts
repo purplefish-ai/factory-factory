@@ -30,7 +30,7 @@ vi.mock('@/backend/services/codex-accounts', async (importOriginal) => {
     },
   };
 });
-import { dataBackupService } from '@/backend/orchestration/data-backup.service';
+import { dataBackupService } from '@/backend/orchestration/data-backup/data-backup.service';
 
 function deferred() {
   let resolve!: () => void;

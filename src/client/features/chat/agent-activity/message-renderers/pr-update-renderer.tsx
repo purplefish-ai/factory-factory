@@ -30,7 +30,7 @@ export function PRUpdateRenderer({
     <div className="min-w-0 py-1">
       {hasDetails ? (
         <details className="group">
-          <summary className="flex cursor-pointer list-none items-center gap-2 rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring [&::-webkit-details-marker]:hidden">
+          <summary className="flex cursor-pointer list-none items-center gap-2 rounded-sm focus-ring [&::-webkit-details-marker]:hidden">
             {heading}
             <CaretRightIcon
               className="h-3 w-3 shrink-0 text-muted-foreground transition-transform group-open:rotate-90"

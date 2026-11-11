@@ -28,8 +28,9 @@ existing names, shown in parentheses where they differ.
   **Automations** section. A **scheduled automation** (`PeriodicTask`) runs on a
   cadence; an **event-triggered automation** stores event triggers in a paused
   definition. Event listening and automatic event runs are not yet available.
-  Each scheduled execution is a **run**, carried out by an agent. Labels name
-  the kind, as in a workspace's **Scheduled automation** tool tab.
+  Each execution is a **run**, carried out by an agent. Use **Runs** for tool
+  tabs and **Run history** for history headings, regardless of trigger kind. Use
+  **Scheduled** and **Event-triggered** to describe or configure triggers.
 - **Subagent** (`subagent`): a helper that the provider starts inside a chat. It
   works in the chat's workspace and appears in the workspace's **Subagents**
   tool tab and as a transcript tab. UI text spells it "subagent".
@@ -188,7 +189,8 @@ evaluates `READY`, Ratchet-enabled workspaces with PRs, refreshes their Ratchet
 state from live GitHub data, and dispatches fixer sessions when the decision
 policy requires one.
 
-The PR scheduler in `src/backend/orchestration/scheduler.service.ts` uses
+The PR scheduler in
+`src/backend/orchestration/pull-requests/scheduler.service.ts` uses
 `SERVICE_INTERVAL_MS.schedulerPrSync` to sync stale PR snapshots and discover
 new PRs every three minutes. Page-load `syncPRStatus` calls and these periodic
 syncs converge cached PR state; see
@@ -328,10 +330,10 @@ What that replaced:
   graph"; it was documentation, and it is gone along with its 89-line test.
 - **A compare-and-swap on `state`**, which existed to keep the `fromState` on
   `RATCHET_STATE_CHANGED` accurate. No consumer of that event reads `fromState`
-  or `toState` — the handler enqueues `prCiStatus` and asks for an authoritative
-  re-projection. The CAS on `enabled` survives, because "was ratcheting disabled
-  while this check ran" is a real question; the state half is gone, and with it
-  the `superseded` branch in `finishRatchetCheck`.
+  or `toState` — the handler only asks for an authoritative re-projection. The
+  CAS on `enabled` survives, because "was ratcheting disabled while this check
+  ran" is a real question; the state half is gone, and with it the `superseded`
+  branch in `finishRatchetCheck`.
 - **Two settling writes.** Disabling a workspace, and `markPrClosed` with its
   three-attempt CAS retry loop, both existed to force `state` to `IDLE`. A
   disabled workspace and a closed PR both derive to `IDLE`, so the toggle and
@@ -511,6 +513,7 @@ Key tests are located at:
   `src/client/features/workspace/ratchet-state.test.ts`;
 - snapshot propagation and reconciliation:
   `src/backend/services/workspace/service/snapshot/workspace-snapshot-store.service.test.ts`
-  and `src/backend/orchestration/snapshot-reconciliation.orchestrator.test.ts`;
+  and
+  `src/backend/orchestration/snapshots/snapshot-reconciliation.orchestrator.test.ts`;
 - live event propagation:
-  `src/backend/orchestration/event-collector.orchestrator.test.ts`.
+  `src/backend/orchestration/snapshots/event-collector.orchestrator.test.ts`.

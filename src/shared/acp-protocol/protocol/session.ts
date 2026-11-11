@@ -2,16 +2,6 @@ import type { AgentContentItem, ToolResultContentValue } from './content';
 import type { MessageAttachment } from './queued';
 
 /**
- * Session info from ACP session listing.
- */
-export interface SessionInfo {
-  providerSessionId: string;
-  createdAt: string;
-  modifiedAt: string;
-  sizeBytes: number;
-}
-
-/**
  * Base fields for messages parsed from agent session history.
  */
 interface HistoryMessageBase {

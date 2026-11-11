@@ -8,6 +8,14 @@ import {
   parseGitStatusOutput,
   parseNumstatOutput,
 } from '@/backend/lib/git-helpers';
+import {
+  classifySharedGitEvent,
+  isRefIndependentUpstreamFailure,
+  normalizeRefName,
+  refChangeAffects,
+  revisionRefCandidates,
+  type SharedGitEvent,
+} from '@/backend/lib/git-shared-refs';
 import { type ExecResult, gitCommand } from '@/backend/lib/shell';
 import { decodeGitPath } from '@/shared/git-path';
 
@@ -72,8 +80,26 @@ interface WorkspaceGitStateServiceOptions {
   platform?: NodeJS.Platform;
 }
 
+/**
+ * Normalized full names of the shared refs a snapshot read, or null when they
+ * are unknown and every shared ref change must invalidate the snapshot.
+ */
+type RefDependencies = ReadonlySet<string> | null;
+
 interface CacheEntry {
   snapshot: WorkspaceGitStateSnapshot;
+  refDependencies: RefDependencies;
+}
+
+interface CalculatedSnapshot {
+  snapshot: WorkspaceGitStateSnapshot;
+  refDependencies: RefDependencies;
+}
+
+interface UpstreamCalculation {
+  section: WorkspaceGitStateSnapshot['upstream'];
+  /** Revisions the lookup and diff named; null when they are unknown. */
+  revisions: string[] | null;
 }
 
 interface SnapshotCalculation {
@@ -90,6 +116,8 @@ interface WatcherRecord {
   handles: WatchHandle[];
   setup: Promise<void>;
   sharedDirectory?: string;
+  /** The linked worktree's private Git directory, set with `sharedDirectory`. */
+  gitDirectory?: string;
   debounceTimer?: ReturnType<typeof setTimeout>;
 }
 
@@ -97,11 +125,14 @@ interface SharedWatcherRecord {
   handle: WatchHandle;
   dependents: Set<string>;
   debounceTimer?: ReturnType<typeof setTimeout>;
+  /** Refs changed since the last flush; ignored when `pendingAll` is set. */
+  pendingRefs: Set<string>;
+  pendingAll: boolean;
 }
 
 interface WatchRoots {
   local: string[];
-  shared?: string;
+  shared?: { commonDirectory: string; gitDirectory: string };
 }
 
 // Bound individual snapshots as well as bursts across many workspaces.
@@ -150,31 +181,6 @@ function shouldIgnoreWorktreeWatchEvent(filename: string | null): boolean {
 
   const [topLevelDirectory] = filename.split(/[\\/]+/);
   return IGNORED_WORKTREE_WATCH_DIRECTORIES.has(topLevelDirectory ?? '');
-}
-
-function shouldInvalidateForSharedGitEvent(filename: string | null): boolean {
-  if (!filename) {
-    return true;
-  }
-
-  const normalized = filename.replaceAll('\\', '/').replace(/^\.\//, '');
-  // Worktree metadata is covered by its private watcher. Object and reflog
-  // writes are high-volume side effects of ref changes, which arrive through
-  // the remaining shared metadata paths.
-  return !(
-    normalized === 'HEAD' ||
-    normalized.startsWith('HEAD.') ||
-    normalized === 'index' ||
-    normalized.startsWith('index.') ||
-    normalized === 'config.worktree' ||
-    normalized.startsWith('config.worktree.') ||
-    normalized === 'worktrees' ||
-    normalized.startsWith('worktrees/') ||
-    normalized === 'objects' ||
-    normalized.startsWith('objects/') ||
-    normalized === 'logs' ||
-    normalized.startsWith('logs/')
-  );
 }
 
 function parseNameStatus(
@@ -283,12 +289,12 @@ export class WorkspaceGitStateService {
       return existing.refresh.promise;
     }
 
-    const run = watcher.setup.then(() => this.calculate(normalizedInput));
+    const run = watcher.setup.then(() => this.calculate(normalizedInput, watcher));
     const outcome = run
       .then((started) => started.promise)
-      .then((snapshot) => {
+      .then(({ snapshot, refDependencies }) => {
         if ((this.generations.get(key) ?? 0) === generation) {
-          this.cache.set(key, { snapshot });
+          this.cache.set(key, { snapshot, refDependencies });
         }
         return snapshot;
       });
@@ -479,7 +485,8 @@ export class WorkspaceGitStateService {
       });
     }
     if (roots.shared && record.mode === 'healthy' && this.watchers.get(worktreePath) === record) {
-      this.attachSharedWatcher(roots.shared, record);
+      this.attachSharedWatcher(roots.shared.commonDirectory, record);
+      record.gitDirectory = roots.shared.gitDirectory;
     }
   }
 
@@ -507,7 +514,10 @@ export class WorkspaceGitStateService {
       const commonDirContents = await this.readFile(path.join(gitDir, 'commondir'));
       const commonDir = commonDirContents.trim();
       if (commonDir) {
-        return { local: [...new Set(local)], shared: path.resolve(gitDir, commonDir) };
+        return {
+          local: [...new Set(local)],
+          shared: { commonDirectory: path.resolve(gitDir, commonDir), gitDirectory: gitDir },
+        };
       }
     } catch (error) {
       if (!hasErrorCode(error, 'ENOENT')) {
@@ -526,12 +536,13 @@ export class WorkspaceGitStateService {
         commonDirectory,
         { recursive: this.recursiveWatch },
         (_eventType, filename) => {
-          if (shouldInvalidateForSharedGitEvent(filename)) {
-            this.scheduleSharedInvalidation(commonDirectory, created);
+          const event = classifySharedGitEvent(filename);
+          if (event.kind !== 'ignore') {
+            this.scheduleSharedInvalidation(commonDirectory, created, event);
           }
         }
       );
-      created = { handle, dependents: new Set() };
+      created = { handle, dependents: new Set(), pendingRefs: new Set(), pendingAll: false };
       shared = created;
       this.sharedWatchers.set(commonDirectory, shared);
       handle.on('error', () => {
@@ -558,21 +569,64 @@ export class WorkspaceGitStateService {
     }, WATCH_DEBOUNCE_MS);
   }
 
-  private scheduleSharedInvalidation(commonDirectory: string, record: SharedWatcherRecord): void {
+  private scheduleSharedInvalidation(
+    commonDirectory: string,
+    record: SharedWatcherRecord,
+    event: Exclude<SharedGitEvent, { kind: 'ignore' }>
+  ): void {
     if (this.sharedWatchers.get(commonDirectory) !== record) {
       return;
+    }
+    if (event.kind === 'all') {
+      record.pendingAll = true;
+    } else {
+      record.pendingRefs.add(event.ref);
     }
     if (record.debounceTimer) {
       clearTimeout(record.debounceTimer);
     }
     record.debounceTimer = setTimeout(() => {
       record.debounceTimer = undefined;
-      if (this.sharedWatchers.get(commonDirectory) === record) {
+      const { pendingAll, pendingRefs } = record;
+      record.pendingAll = false;
+      record.pendingRefs = new Set();
+      if (this.sharedWatchers.get(commonDirectory) !== record) {
+        return;
+      }
+      if (pendingAll) {
         for (const worktreePath of record.dependents) {
           this.invalidate(worktreePath);
         }
+        return;
       }
+      this.invalidateForChangedRefs(record.dependents, pendingRefs);
     }, WATCH_DEBOUNCE_MS);
+  }
+
+  /**
+   * Invalidate dependents' snapshots that read any changed ref. A key without
+   * a cached snapshot may have a calculation running whose refs are not known
+   * yet, so it is always fenced.
+   */
+  private invalidateForChangedRefs(
+    worktreePaths: ReadonlySet<string>,
+    changedRefs: ReadonlySet<string>
+  ): void {
+    this.invalidateMatching((key) => {
+      if (!worktreePaths.has(key.slice(0, key.indexOf('\0')))) {
+        return false;
+      }
+      const dependencies = this.cache.get(key)?.refDependencies;
+      if (!dependencies) {
+        return true;
+      }
+      for (const changedRef of changedRefs) {
+        if (refChangeAffects(changedRef, dependencies)) {
+          return true;
+        }
+      }
+      return false;
+    });
   }
 
   private activateFallback(record: WatcherRecord): void {
@@ -594,6 +648,7 @@ export class WorkspaceGitStateService {
   private detachSharedWatcher(record: WatcherRecord): void {
     const commonDirectory = record.sharedDirectory;
     record.sharedDirectory = undefined;
+    record.gitDirectory = undefined;
     if (!commonDirectory) {
       return;
     }
@@ -646,8 +701,11 @@ export class WorkspaceGitStateService {
     this.activateFallback(record);
   }
 
-  private calculate(input: WorkspaceGitStateInput): {
-    promise: Promise<WorkspaceGitStateSnapshot>;
+  private calculate(
+    input: WorkspaceGitStateInput,
+    watcher: WatcherRecord
+  ): {
+    promise: Promise<CalculatedSnapshot>;
     drained: Promise<void>;
   } {
     const limitGit = pLimit(SNAPSHOT_GIT_CONCURRENCY);
@@ -657,26 +715,39 @@ export class WorkspaceGitStateService {
       commands.push(command);
       return command;
     };
+    // The revisions each command named, recorded as the commands are issued.
+    const baseRevisions: string[] = [];
+    const baseSection = this.calculateBase(input, runGit, baseRevisions);
+    const upstreamCalculation = this.calculateUpstream(input.worktreePath, runGit);
     const sections = [
       runGit(
         ['--no-optional-locks', 'status', '--porcelain', '--untracked-files=all'],
         input.worktreePath
       ),
-      this.calculateBase(input, runGit),
-      this.calculateUpstream(input.worktreePath, runGit),
+      baseSection,
+      upstreamCalculation,
+      Promise.all([baseSection, upstreamCalculation]).then(
+        ([, { revisions }]) =>
+          revisions ? this.readRefDependencies(watcher, [...baseRevisions, ...revisions]) : null,
+        () => null
+      ),
     ] as const;
-    const promise = Promise.all(sections).then(([statusResult, base, upstream]) => {
-      const statusFiles = statusResult.code === 0 ? parseGitStatusOutput(statusResult.stdout) : [];
-      const status: WorkspaceGitStateSnapshot['status'] = {
-        files: statusFiles,
-        hasUncommitted: statusFiles.length > 0,
-      };
-      if (statusResult.code !== 0) {
-        status.error = commandError(statusResult);
+    const promise = Promise.all(sections).then(
+      ([statusResult, base, { section: upstream }, refDependencies]) => {
+        const statusFiles =
+          statusResult.code === 0 ? parseGitStatusOutput(statusResult.stdout) : [];
+        const status: WorkspaceGitStateSnapshot['status'] = {
+          files: statusFiles,
+          hasUncommitted: statusFiles.length > 0,
+        };
+        if (statusResult.code !== 0) {
+          status.error = commandError(statusResult);
+        }
+        base.stats.hasUncommitted = status.hasUncommitted;
+        const snapshot = { ...input, computedAt: this.now(), status, base, upstream };
+        return { snapshot, refDependencies };
       }
-      base.stats.hasUncommitted = status.hasUncommitted;
-      return { ...input, computedAt: this.now(), status, base, upstream };
-    });
+    );
     // Report errors immediately, but keep ownership until every section and
     // its started commands settle. A failed base diff can outlive its section.
     const drained = Promise.allSettled(sections)
@@ -685,11 +756,61 @@ export class WorkspaceGitStateService {
     return { promise, drained };
   }
 
+  /**
+   * The normalized shared refs a snapshot read: the branch its private HEAD
+   * names, plus every full ref the named revisions could resolve to. Null
+   * when that set cannot be established, including when a candidate is a
+   * loose symbolic ref whose target could change without an event at its
+   * own path. Packed refs are never symbolic.
+   */
+  private async readRefDependencies(
+    watcher: WatcherRecord,
+    revisions: string[]
+  ): Promise<RefDependencies> {
+    const { gitDirectory, sharedDirectory } = watcher;
+    if (!(gitDirectory && sharedDirectory)) {
+      return null;
+    }
+    try {
+      const refs = revisions.flatMap(revisionRefCandidates);
+      const head = (await this.readFile(path.join(gitDirectory, 'HEAD'))).trim();
+      const headRef = head.match(/^ref:\s*(refs\/\S+)$/)?.[1];
+      if (headRef) {
+        refs.push(headRef);
+      } else if (!/^[0-9a-f]{40,64}$/i.test(head)) {
+        return null;
+      }
+      // Ref names never contain backslashes; split on both separators so no
+      // candidate can escape the common directory on Windows either.
+      if (refs.some((ref) => ref.split(/[\\/]/).some((part) => part === '' || part === '..'))) {
+        return null;
+      }
+      const symbolic = await Promise.all(
+        refs.map((ref) => this.isLooseSymbolicRef(sharedDirectory, ref))
+      );
+      return symbolic.some(Boolean) ? null : new Set(refs.map(normalizeRefName));
+    } catch {
+      return null;
+    }
+  }
+
+  private async isLooseSymbolicRef(commonDirectory: string, ref: string): Promise<boolean> {
+    try {
+      return (await this.readFile(path.join(commonDirectory, ref))).startsWith('ref:');
+    } catch (error) {
+      if (['ENOENT', 'ENOTDIR', 'EISDIR'].some((code) => hasErrorCode(error, code))) {
+        return false;
+      }
+      throw error;
+    }
+  }
+
   private async calculateBase(
     input: WorkspaceGitStateInput,
-    runGit: RunGit
+    runGit: RunGit,
+    revisions?: string[]
   ): Promise<WorkspaceGitStateSnapshot['base'] & { stats: WorkspaceGitStats }> {
-    const mergeBase = await this.findMergeBase(input, runGit);
+    const mergeBase = await this.findMergeBase(input, runGit, revisions);
     const diffArgs = mergeBase ? ['diff', '--numstat', mergeBase] : ['diff', '--numstat'];
     const diffs = [
       runGit(diffArgs, input.worktreePath),
@@ -750,9 +871,11 @@ export class WorkspaceGitStateService {
 
   private async findMergeBase(
     input: WorkspaceGitStateInput,
-    runGit: RunGit = this.runGit
+    runGit: RunGit = this.runGit,
+    revisions?: string[]
   ): Promise<string | null> {
     for (const candidate of [`origin/${input.defaultBranch}`, input.defaultBranch]) {
+      revisions?.push(candidate);
       const result = await runGit(['merge-base', 'HEAD', candidate], input.worktreePath);
       if (result.code === 0 && result.stdout.trim()) {
         return result.stdout.trim();
@@ -764,33 +887,39 @@ export class WorkspaceGitStateService {
   private async calculateUpstream(
     worktreePath: string,
     runGit: RunGit
-  ): Promise<WorkspaceGitStateSnapshot['upstream']> {
+  ): Promise<UpstreamCalculation> {
     const upstreamResult = await runGit(
       ['rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{upstream}'],
       worktreePath
     );
     const ref = upstreamResult.code === 0 ? upstreamResult.stdout.trim() : '';
     if (!ref) {
-      return { ref: null, hasUpstream: false, files: [] };
+      const refIndependent =
+        upstreamResult.code !== 0 && isRefIndependentUpstreamFailure(upstreamResult.stderr);
+      return {
+        section: { ref: null, hasUpstream: false, files: [] },
+        revisions: refIndependent ? [] : null,
+      };
     }
 
     const diffResult = await runGit(['diff', '--name-only', `${ref}...HEAD`], worktreePath);
     if (diffResult.code !== 0) {
       return {
-        ref,
-        hasUpstream: true,
-        files: [],
-        error: commandError(diffResult),
+        section: { ref, hasUpstream: true, files: [], error: commandError(diffResult) },
+        revisions: [ref],
       };
     }
 
     return {
-      ref,
-      hasUpstream: true,
-      files: diffResult.stdout
-        .split('\n')
-        .filter((line) => line.length > 0)
-        .map(decodeGitPath),
+      section: {
+        ref,
+        hasUpstream: true,
+        files: diffResult.stdout
+          .split('\n')
+          .filter((line) => line.length > 0)
+          .map(decodeGitPath),
+      },
+      revisions: [ref],
     };
   }
 }

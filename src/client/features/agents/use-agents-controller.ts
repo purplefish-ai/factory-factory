@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router';
 import { toast } from 'sonner';
+import { useLatestRef } from '@/client/hooks/use-stable-callback';
 import { invalidateAgentProjectQueries } from '@/client/lib/agent-query-cache';
 import { runInBackground } from '@/client/lib/background-task';
 import {
@@ -8,11 +9,21 @@ import {
   getProjectSectionPath,
   type AgentKind,
 } from '@/client/lib/project-navigation';
+import { POLL_INTERVAL_MS } from '@/client/lib/query-options';
 import { trpc } from '@/client/lib/trpc';
 import type { AgentFormValues, AgentProject, AgentListItem, EventAgentSummary } from './types';
 
 function mutationErrorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : "Couldn't update automation. Please try again.";
+  return error instanceof Error ? error.message : 'Please try again.';
+}
+
+type AgentAction = 'toggle' | 'delete';
+
+function actionVerb(operation: AgentAction, enabled: boolean): string {
+  if (operation === 'delete') {
+    return 'delete';
+  }
+  return enabled ? 'pause' : 'resume';
 }
 
 function initialAgentSelection(
@@ -39,6 +50,7 @@ function initialAgentSelection(
 
 export function useAgentsController(project: AgentProject, kind: AgentKind = 'scheduled') {
   const location = useLocation();
+  // Decides whether a finished action may navigate or must toast instead.
   const active = useRef(true);
   useEffect(() => {
     active.current = true;
@@ -51,71 +63,59 @@ export function useAgentsController(project: AgentProject, kind: AgentKind = 'sc
   const [mode, setMode] = useState<'detail' | 'create' | 'create-event' | 'edit'>(
     location.state?.createAgent === true ? 'create' : 'detail'
   );
-  const currentMode = useRef(mode);
-  currentMode.current = mode;
+  const currentMode = useLatestRef(mode);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
-  const [pending, setPending] = useState(false);
+  // Selecting another agent closes the editor, delete dialog and action error.
+  const [stateAgentId, setStateAgentId] = useState(id);
+  if (stateAgentId !== id) {
+    setStateAgentId(id);
+    setMode('detail');
+    setDeleteOpen(false);
+    setActionError(null);
+  }
+  // Covers the whole action (mutation, cache update, navigation) and blocks a
+  // second click before the mutation's pending state reaches React.
+  const [pendingAction, setPendingAction] = useState<AgentAction | null>(null);
   const pendingRef = useRef(false);
-  const currentId = useRef(id);
-  currentId.current = id;
+  const currentId = useLatestRef(id);
   const utils = trpc.useUtils();
   const task = trpc.periodicTask.get.useQuery(
     { id: id ?? '' },
-    { enabled: !!id && kind === 'scheduled', refetchInterval: 10_000, retry: false }
+    { enabled: !!id && kind === 'scheduled', refetchInterval: POLL_INTERVAL_MS.activity }
   );
-  const currentProjectId = useRef(project.id);
-  currentProjectId.current = project.id;
+  const currentProjectId = useLatestRef(project.id);
   const list = trpc.periodicTask.list.useQuery(
     { projectId: project.id },
-    { refetchInterval: 10_000 }
+    { refetchInterval: POLL_INTERVAL_MS.activity }
   );
-  const events = trpc.agent.list.useInfiniteQuery(
+  const events = trpc.automation.list.useInfiniteQuery(
     { projectId: project.id },
     {
       getNextPageParam: (page) => page.nextCursor ?? undefined,
-      refetchInterval: 10_000,
-      retry: false,
+      refetchInterval: POLL_INTERVAL_MS.activity,
     }
   );
-  const event = trpc.agent.get.useQuery(
+  const event = trpc.automation.get.useQuery(
     { projectId: project.id, agentId: id ?? '' },
-    { enabled: !!id && kind === 'event', refetchInterval: 10_000, retry: false }
+    { enabled: !!id && kind === 'event', refetchInterval: POLL_INTERVAL_MS.activity }
   );
   const [savedEvent, setSavedEvent] = useState(false);
-  const create = trpc.periodicTask.create.useMutation({
-    onError: (error) => toast.error(`Couldn't create automation. ${error.message}`),
-  });
-  const update = trpc.periodicTask.update.useMutation({
-    onError: (error) => toast.error(`Couldn't update automation. ${error.message}`),
-  });
-  const toggle = trpc.periodicTask.toggleEnabled.useMutation({
-    onError: (error, variables) =>
-      toast.error(
-        `Couldn't ${variables.enabled ? 'resume' : 'pause'} automation. ${error.message}`
-      ),
-  });
-  const remove = trpc.periodicTask.delete.useMutation({
-    onError: (error) => toast.error(`Couldn't delete automation. ${error.message}`),
-  });
+  // Failures show inline: the form keeps its draft beside the error, and the
+  // detail view and delete dialog show action errors. A toast reports only a
+  // failure whose editor or agent is no longer on screen.
+  const create = trpc.periodicTask.create.useMutation({ meta: { errorToast: false } });
+  const update = trpc.periodicTask.update.useMutation({ meta: { errorToast: false } });
+  const toggle = trpc.periodicTask.toggleEnabled.useMutation({ meta: { errorToast: false } });
+  const remove = trpc.periodicTask.delete.useMutation({ meta: { errorToast: false } });
   const createDisabled =
-    pending ||
+    pendingAction !== null ||
     create.isPending ||
     update.isPending ||
     !!project.isArchived ||
     (!!id &&
       (kind === 'scheduled' ? !task.data || project.id !== task.data.projectId : !event.data));
 
-  const previousId = useRef(id);
-  useEffect(() => {
-    if (previousId.current === id) {
-      return;
-    }
-    previousId.current = id;
-    setMode('detail');
-    setDeleteOpen(false);
-    setActionError(null);
-  }, [id]);
   useEffect(() => {
     if (id || mode !== 'detail') {
       return;
@@ -151,16 +151,29 @@ export function useAgentsController(project: AgentProject, kind: AgentKind = 'sc
       "Couldn't refresh automations."
     );
   };
+  const isCurrentEditor = (editMode: 'create' | 'edit') =>
+    active.current &&
+    currentId.current === id &&
+    currentProjectId.current === project.id &&
+    currentMode.current === editMode;
   const save = async (values: AgentFormValues) => {
+    const editMode = mode === 'create' ? 'create' : 'edit';
+    try {
+      await saveValues(values);
+    } catch (error) {
+      if (!isCurrentEditor(editMode)) {
+        toast.error(
+          `Couldn't ${editMode === 'create' ? 'create' : 'update'} automation. ${mutationErrorMessage(error)}`
+        );
+      }
+      throw error;
+    }
+  };
+  const saveValues = async (values: AgentFormValues) => {
     if (mode === 'create') {
       const created = await create.mutateAsync({ projectId: project.id, ...values });
       invalidate(project.id, created.id);
-      if (
-        active.current &&
-        currentId.current === id &&
-        currentProjectId.current === project.id &&
-        currentMode.current === 'create'
-      ) {
+      if (isCurrentEditor('create')) {
         void navigate(getProjectAgentPath(project.slug, created.id), {
           replace: location.state?.createAgent === true,
         });
@@ -168,23 +181,24 @@ export function useAgentsController(project: AgentProject, kind: AgentKind = 'sc
     } else if (kind === 'scheduled' && id && task.data?.projectId === project.id) {
       await update.mutateAsync({ id, ...values });
       invalidate(task.data.projectId, id);
-      if (
-        active.current &&
-        currentId.current === id &&
-        currentProjectId.current === project.id &&
-        currentMode.current === 'edit'
-      ) {
+      if (isCurrentEditor('edit')) {
         setMode('detail');
       }
     }
   };
   const finishAction = () => {
     pendingRef.current = false;
-    if (active.current) {
-      setPending(false);
+    setPendingAction(null);
+  };
+  const reportActionError = (verb: string, targetId: string, error: unknown) => {
+    const message = `Couldn't ${verb} automation. ${mutationErrorMessage(error)}`;
+    if (active.current && currentId.current === targetId) {
+      setActionError(message);
+    } else {
+      toast.error(message);
     }
   };
-  const performAction = async (operation: 'toggle' | 'delete') => {
+  const performAction = async (operation: AgentAction) => {
     if (
       kind !== 'scheduled' ||
       project.isArchived ||
@@ -197,7 +211,7 @@ export function useAgentsController(project: AgentProject, kind: AgentKind = 'sc
     const target = task.data;
     const targetId = id;
     pendingRef.current = true;
-    setPending(true);
+    setPendingAction(operation);
     setActionError(null);
     try {
       if (operation === 'toggle') {
@@ -217,10 +231,7 @@ export function useAgentsController(project: AgentProject, kind: AgentKind = 'sc
         void navigate(getProjectSectionPath(project.slug, 'agents'));
       }
     } catch (error) {
-      if (!active.current || currentId.current !== targetId) {
-        return;
-      }
-      setActionError(mutationErrorMessage(error));
+      reportActionError(actionVerb(operation, target.isEnabled), targetId, error);
     } finally {
       finishAction();
     }
@@ -264,7 +275,8 @@ export function useAgentsController(project: AgentProject, kind: AgentKind = 'sc
     deleteOpen,
     setDeleteOpen,
     actionError,
-    pending: pending || create.isPending || update.isPending,
+    pending: pendingAction !== null || create.isPending || update.isPending,
+    pendingAction,
     save,
     createDisabled,
     openDelete: () => {

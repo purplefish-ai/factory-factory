@@ -1,11 +1,12 @@
 import type { QueryClient } from '@tanstack/react-query';
-import { getQueryKey } from '@trpc/react-query';
 import { runInBackground } from '@/client/lib/background-task';
 import {
-  type WorkspaceDetail,
-  mergeProjectSnapshotIntoWorkspaceDetail,
-} from '@/client/lib/snapshot-to-workspace';
-import { trpc } from '@/client/lib/trpc';
+  cancelWorkspaceDetail,
+  getCachedWorkspaceDetails,
+  mergeWorkspaceDetailSnapshot,
+  refetchActiveWorkspaceDetail,
+  resetWorkspaceDetail,
+} from '@/client/lib/workspace-queries';
 import type { WorkspaceSnapshotEntry } from '@/shared/workspace-snapshot';
 
 export interface ProjectWorkspaceDetailTransitions {
@@ -34,13 +35,7 @@ export function createWorkspaceDetailTransitionScope(): WorkspaceDetailTransitio
         removedWorkspaceIds.add(workspaceId);
         // Reset clears old data and synchronously cancels its request before
         // active observers refetch persisted detail. No initialData is configured.
-        runInBackground(
-          queryClient.resetQueries({
-            queryKey: getQueryKey(trpc.workspace.get, { id: workspaceId }, 'query'),
-            exact: true,
-          }),
-          "Couldn't refresh data."
-        );
+        runInBackground(resetWorkspaceDetail(queryClient, workspaceId));
       };
       return {
         remove,
@@ -48,9 +43,7 @@ export function createWorkspaceDetailTransitionScope(): WorkspaceDetailTransitio
           const liveWorkspaceIds = new Set(entries.map((entry) => entry.workspaceId));
           const removalCandidates = new Set(previousWorkspaceIds);
           // A detail can outlive an empty/evicted project list across navigation.
-          for (const [, detail] of queryClient.getQueriesData<WorkspaceDetail>({
-            queryKey: getQueryKey(trpc.workspace.get, undefined, 'query'),
-          })) {
+          for (const detail of getCachedWorkspaceDetails(queryClient)) {
             if (
               detail?.projectId === projectId &&
               detail.status !== 'ARCHIVING' &&
@@ -67,23 +60,14 @@ export function createWorkspaceDetailTransitionScope(): WorkspaceDetailTransitio
         },
         mergeLive(entry) {
           const reintroduced = removedWorkspaceIds.delete(entry.workspaceId);
-          const filter = {
-            queryKey: getQueryKey(trpc.workspace.get, { id: entry.workspaceId }, 'query'),
-            exact: true,
-          };
           if (reintroduced) {
             // Cancellation takes effect synchronously; do not await before merging.
-            runInBackground(queryClient.cancelQueries(filter), "Couldn't refresh data.");
+            runInBackground(cancelWorkspaceDetail(queryClient, entry.workspaceId));
           }
-          queryClient.setQueryData<WorkspaceDetail>(filter.queryKey, (prev) =>
-            mergeProjectSnapshotIntoWorkspaceDetail(entry, prev)
-          );
+          mergeWorkspaceDetailSnapshot(queryClient, entry);
           if (reintroduced) {
             // Reset may have cleared full detail, which a summary cannot recreate.
-            runInBackground(
-              queryClient.refetchQueries({ ...filter, type: 'active' }),
-              "Couldn't refresh data."
-            );
+            runInBackground(refetchActiveWorkspaceDetail(queryClient, entry.workspaceId));
           }
         },
       };

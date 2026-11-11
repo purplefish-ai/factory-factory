@@ -443,6 +443,8 @@ model WorkspacePREvent {
   @@unique([prId, deduplicationKey])
   @@unique([workspaceId, deduplicationKey])
   @@index([workspaceId, state, createdAt])
+  // Serves the cross-workspace pr-event-retention prune.
+  @@index([state, createdAt])
   @@index([deliveryId])
   @@index([batchId])
 }
@@ -619,6 +621,7 @@ model ClosedSession {
 }
 
 model UserSettings {
+  turnLimitMinutes      Int?     // null means unlimited; applies to new turns
   id                    String   @id @default(cuid())
   userId                String   @default("default") @unique  // Single user for now, expandable later
 
@@ -650,6 +653,8 @@ model UserSettings {
   defaultClaudeReasoningEffort String?
   defaultCodexReasoningEffort  String?
   defaultWorkspacePermissions SessionPermissionPreset @default(STRICT) // Default execution-mode preset for non-ratchet sessions
+
+  automationPermissions SessionPermissionPreset @default(RELAXED) // Permission preset for scheduled and event automations
 
   // Adversarial Review Settings (on-demand review of the open PR by a different provider/model)
   reviewerSessionProvider   SessionProvider @default(CODEX) // Provider used for adversarial review sessions

@@ -5,8 +5,7 @@ import {
   DropdownMenuRadioItem,
   DropdownMenuSeparator,
 } from '@/components/ui/dropdown-menu';
-import { Spinner } from '@/components/ui/spinner';
-import { canResumePRMonitoring, PRDeliveryMode } from '@/shared/pr-monitoring';
+import { canResumePRMonitoring, isPRDeliveryBlocked, PRDeliveryMode } from '@/shared/pr-monitoring';
 import { RatchetWrenchIcon } from './ratchet-wrench-icon';
 
 export interface PRMonitoringMenuProps {
@@ -15,6 +14,8 @@ export interface PRMonitoringMenuProps {
   pending: boolean;
   pauseReason?: string | null;
   onResume?(): void;
+  /** Opens a confirmation; discarding a blocked delivery never resends it. */
+  onDiscardBlocked?(): void;
   onToggle(enabled: boolean): void;
   onDeliveryMode(mode: PRDeliveryMode): void;
   onChangeRecipient(): void;
@@ -25,24 +26,35 @@ export function PRMonitoringMenuItems({
   pending,
   pauseReason,
   onResume,
+  onDiscardBlocked,
   onToggle,
   onDeliveryMode,
   onChangeRecipient,
 }: PRMonitoringMenuProps) {
   return (
     <>
-      <DropdownMenuItem disabled={pending} onSelect={() => onToggle(!enabled)}>
-        {pending ? (
-          <Spinner aria-hidden="true" className="h-4 w-4" />
-        ) : (
-          <RatchetWrenchIcon enabled={enabled} className="size-4" />
-        )}
+      <DropdownMenuItem pending={pending} onSelect={() => onToggle(!enabled)}>
+        {/* The wrench is wrapped in a span, so hide it here rather than through the item's svg rule. */}
+        {!pending && <RatchetWrenchIcon enabled={enabled} className="size-4" />}
         {enabled ? 'Turn off PR updates' : 'Turn on PR updates'}
       </DropdownMenuItem>
       {enabled && canResumePRMonitoring(pauseReason) && onResume && (
         <DropdownMenuItem disabled={pending} onSelect={onResume}>
           Resume PR updates
         </DropdownMenuItem>
+      )}
+      {enabled && isPRDeliveryBlocked(pauseReason) && (
+        <>
+          <p role="status" className="px-2 py-1.5 text-xs text-destructive">
+            PR updates are stopped: an earlier update's delivery record is inconsistent, so it can't
+            be safely retried or confirmed.
+          </p>
+          {onDiscardBlocked && (
+            <DropdownMenuItem disabled={pending} onSelect={onDiscardBlocked}>
+              Discard stuck PR update…
+            </DropdownMenuItem>
+          )}
+        </>
       )}
       <DropdownMenuLabel className="text-xs text-muted-foreground">
         PR update destination

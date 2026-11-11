@@ -6,7 +6,6 @@ import {
   getChatPendingRequestType,
   PermissionPrompt,
   QuestionPrompt,
-  RewindConfirmationDialog,
   useGroupedChatMessages,
   useTranscriptSend,
   ChatTranscript,
@@ -54,6 +53,7 @@ export interface ChatContentProps {
   sendMessage: ReturnType<typeof useChatWebSocket>['sendMessage'];
   stopChat: ReturnType<typeof useChatWebSocket>['stopChat'];
   restartSession?: ReturnType<typeof useChatWebSocket>['restartSession'];
+  isRestartingSession?: boolean;
   inputRef: ReturnType<typeof useChatWebSocket>['inputRef'];
   chatSettings: ReturnType<typeof useChatWebSocket>['chatSettings'];
   chatCapabilities: ReturnType<typeof useChatWebSocket>['chatCapabilities'];
@@ -66,6 +66,7 @@ export interface ChatContentProps {
   setInputAttachments: ReturnType<typeof useChatWebSocket>['setInputAttachments'];
   queuedMessages: ReturnType<typeof useChatWebSocket>['queuedMessages'];
   removeQueuedMessage: ReturnType<typeof useChatWebSocket>['removeQueuedMessage'];
+  pendingSteer?: ReturnType<typeof useChatWebSocket>['pendingSteer'];
   steerQueuedMessage: ReturnType<typeof useChatWebSocket>['steerQueuedMessage'];
   resumeQueuedMessages: ReturnType<typeof useChatWebSocket>['resumeQueuedMessages'];
   latestThinking: ReturnType<typeof useChatWebSocket>['latestThinking'];
@@ -74,11 +75,6 @@ export interface ChatContentProps {
   slashCommands: CommandInfo[];
   slashCommandsLoaded: ReturnType<typeof useChatWebSocket>['slashCommandsLoaded'];
   tokenStats: TokenStats;
-  rewindPreview: ReturnType<typeof useChatWebSocket>['rewindPreview'];
-  startRewindPreview: ReturnType<typeof useChatWebSocket>['startRewindPreview'];
-  confirmRewind: ReturnType<typeof useChatWebSocket>['confirmRewind'];
-  cancelRewind: ReturnType<typeof useChatWebSocket>['cancelRewind'];
-  getUuidForMessageId: ReturnType<typeof useChatWebSocket>['getUuidForMessageId'];
   acpConfigOptions: ReturnType<typeof useChatWebSocket>['acpConfigOptions'];
   setConfigOption: ReturnType<typeof useChatWebSocket>['setConfigOption'];
   autoStartPending?: boolean;
@@ -234,7 +230,7 @@ export const ChatContent = memo(function ChatContent(props: ChatContentProps) {
   const stopping = props.sessionStatus.phase === 'stopping';
   const displayStartingState = shouldShowStartingState(props.sessionStatus.phase, autoStartPending);
   const loadingSession = props.sessionStatus.phase === 'loading';
-  const rewindEnabled = props.chatCapabilities.rewind.enabled;
+  const inputDisabled = !props.connected || loadingSession;
 
   const permissionRequestId =
     props.pendingRequest.type === 'permission' ? props.pendingRequest.request.requestId : null;
@@ -273,6 +269,7 @@ export const ChatContent = memo(function ChatContent(props: ChatContentProps) {
     hasPendingMessages: props.pendingMessages.size > 0,
     sendMessage,
     restartSession: props.restartSession,
+    isRestartingSession: props.isRestartingSession,
   });
   const visibleInitBanner = getVisibleInitBanner(props.initBanner, props.isScriptFailed);
   const { retryAvailability, resumeQueuedMessages } = props;
@@ -285,6 +282,19 @@ export const ChatContent = memo(function ChatContent(props: ChatContentProps) {
         onPlay: resumeQueuedMessages,
       }),
     [visibleInitBanner, retryAvailability, retryInit.isPending, retry, resumeQueuedMessages]
+  );
+
+  // A stable element keeps the memoized composer from re-rendering on every streamed chunk.
+  const voiceToggle = useMemo(
+    () => (
+      <VoiceModeToggle
+        sessionId={props.sessionId}
+        onFinalTranscript={sendMessage}
+        running={running}
+        disabled={inputDisabled}
+      />
+    ),
+    [props.sessionId, sendMessage, running, inputDisabled]
   );
 
   return (
@@ -315,6 +325,7 @@ export const ChatContent = memo(function ChatContent(props: ChatContentProps) {
         loadingSession={loadingSession}
         latestThinking={props.latestThinking ?? null}
         scroll={transcriptScroll}
+        pendingSteerMessageId={props.pendingSteer?.messageId}
         queuedMessageIds={queuedMessageIds}
         onRemoveQueuedMessage={props.removeQueuedMessage}
         onSteerQueuedMessage={
@@ -323,8 +334,6 @@ export const ChatContent = memo(function ChatContent(props: ChatContentProps) {
             : undefined
         }
         isCompacting={props.isCompacting}
-        getUuidForMessageId={props.getUuidForMessageId}
-        onRewindToMessage={rewindEnabled ? props.startRewindPreview : undefined}
         resolveWorkspaceFileLink={props.resolveWorkspaceFileLink}
         onWorkspaceFileLink={props.onWorkspaceFileLink}
         initBanner={props.initBanner}
@@ -349,19 +358,12 @@ export const ChatContent = memo(function ChatContent(props: ChatContentProps) {
 
         <div className="flex min-h-0 shrink items-stretch gap-2">
           <ChatInput
-            leadingControls={
-              <VoiceModeToggle
-                sessionId={props.sessionId}
-                onFinalTranscript={sendMessage}
-                running={running}
-                disabled={!props.connected || loadingSession}
-              />
-            }
+            leadingControls={voiceToggle}
             className="mx-auto w-full max-w-4xl flex-1 min-w-0"
             onSend={sendMessage}
             onCompact={handleCompact}
             onStop={props.stopChat}
-            disabled={!props.connected || loadingSession}
+            disabled={inputDisabled}
             running={running}
             promptInFlight={promptInFlight}
             stopping={stopping}
@@ -389,12 +391,6 @@ export const ChatContent = memo(function ChatContent(props: ChatContentProps) {
           />
         </div>
       </div>
-
-      <RewindConfirmationDialog
-        rewindPreview={props.rewindPreview}
-        onConfirm={props.confirmRewind}
-        onCancel={props.cancelRewind}
-      />
     </div>
   );
 });

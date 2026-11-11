@@ -2,17 +2,17 @@ import { ArrowsClockwiseIcon } from '@phosphor-icons/react/dist/csr/ArrowsClockw
 import { CheckCircleIcon } from '@phosphor-icons/react/dist/csr/CheckCircle';
 import { FileCodeIcon } from '@phosphor-icons/react/dist/csr/FileCode';
 import { PencilIcon } from '@phosphor-icons/react/dist/csr/Pencil';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { toast } from 'sonner';
 import { FactoryConfigScripts } from '@/client/components/factory-config-scripts';
-import { Loading } from '@/client/components/loading';
+import { QueryErrorState } from '@/client/components/query-error-state';
+import { QueryState } from '@/client/components/query-state';
+import { StatusChip } from '@/client/components/status-indicators';
 import { DevServerSetupPanel } from '@/client/features/workspace/dev-server-setup-panel';
 import { runInBackground } from '@/client/lib/background-task';
 import { trpc } from '@/client/lib/trpc';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Spinner } from '@/components/ui/spinner';
+import { SettingsSection } from './settings-section';
 
 export function ProjectFactoryConfigCard({
   projectId,
@@ -23,27 +23,18 @@ export function ProjectFactoryConfigCard({
 }) {
   const [editPanelOpen, setEditPanelOpen] = useState(false);
   const utils = trpc.useUtils();
-  const {
-    data: factoryConfig,
-    isPending,
-    isSuccess,
-    isError,
-    error: configError,
-    refetch,
-  } = trpc.workspace.getFactoryConfig.useQuery({ projectId });
+  const configQuery = trpc.workspace.getFactoryConfig.useQuery({ projectId });
+  const { data: factoryConfig, isSuccess } = configQuery;
 
-  useEffect(() => {
-    if (!isSuccess) {
-      setEditPanelOpen(false);
-    }
-  }, [isSuccess]);
+  // Editing waits for a fresh read: close the editor in the same render the
+  // config stops being current, so a recovered read does not reopen it.
+  if (editPanelOpen && !isSuccess) {
+    setEditPanelOpen(false);
+  }
 
   const saveConfig = trpc.project.saveFactoryConfig.useMutation({
     onSuccess: () => {
-      runInBackground(
-        utils.workspace.getFactoryConfig.invalidate({ projectId }),
-        "Couldn't refresh data."
-      );
+      runInBackground(utils.workspace.getFactoryConfig.invalidate({ projectId }));
       setEditPanelOpen(false);
     },
     onError: (error) => {
@@ -71,7 +62,7 @@ export function ProjectFactoryConfigCard({
   };
 
   return (
-    <Card>
+    <>
       {isSuccess && (
         <DevServerSetupPanel
           open={editPanelOpen}
@@ -86,83 +77,75 @@ export function ProjectFactoryConfigCard({
           error={saveConfig.error}
         />
       )}
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <FileCodeIcon className="h-5 w-5" />
-          Factory configuration
-        </CardTitle>
-        <CardDescription className="[overflow-wrap:anywhere]">
-          Workspace setup and run scripts for {projectName} (factory-factory.json)
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
+      <SettingsSection
+        title="Factory configuration"
+        icon={<FileCodeIcon className="h-5 w-5" />}
+        description={
+          <span className="[overflow-wrap:anywhere]">
+            Workspace setup and run scripts for {projectName} (factory-factory.json)
+          </span>
+        }
+      >
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex min-w-0 flex-wrap items-center gap-2">
             {isSuccess &&
               (factoryConfig ? (
-                <Badge variant="success">
-                  <CheckCircleIcon className="w-3 h-3 mr-1" />
+                <StatusChip tone="success" icon={CheckCircleIcon} size="md">
                   Configured
-                </Badge>
+                </StatusChip>
               ) : (
-                <Badge variant="secondary" className="bg-muted">
-                  <FileCodeIcon className="w-3 h-3 mr-1" />
+                <StatusChip tone="neutral" icon={FileCodeIcon} size="md">
                   Not configured
-                </Badge>
+                </StatusChip>
               ))}
             <Button
               variant="ghost"
-              size="icon"
-              className="h-7 w-7"
+              size="icon-compact"
               aria-label="Edit factory configuration"
               disabled={!isSuccess}
               onClick={() => setEditPanelOpen(true)}
             >
-              <PencilIcon className="w-3.5 h-3.5" />
+              <PencilIcon />
             </Button>
           </div>
           <Button
             variant="outline"
             size="sm"
             onClick={handleRefresh}
-            disabled={refreshConfigs.isPending}
+            pending={refreshConfigs.isPending}
             className="w-full gap-2 sm:w-auto"
           >
-            {refreshConfigs.isPending ? (
-              <Spinner className="w-4 h-4" aria-hidden="true" />
-            ) : (
-              <ArrowsClockwiseIcon className="w-4 h-4" />
-            )}
+            <ArrowsClockwiseIcon />
             Refresh Workspaces
           </Button>
         </div>
 
-        <div>
-          {isPending && <Loading size="compact" message="Loading configuration…" />}
-          {isError && (
-            <div role="alert" className="space-y-3">
-              <p className="text-sm text-destructive">
-                Couldn't load configuration. {configError.message}
-              </p>
-              <Button variant="outline" size="sm" onClick={() => void refetch()}>
-                Retry
-              </Button>
-            </div>
-          )}
-          {isSuccess &&
-            (factoryConfig ? (
-              <div className="space-y-4">
-                <FactoryConfigScripts factoryConfig={factoryConfig} variant="card" />
-              </div>
+        {configQuery.isError && configQuery.data !== undefined ? (
+          // Cached scripts stay visible, but editing waits for a fresh read.
+          <QueryErrorState
+            title="Couldn't refresh configuration"
+            error={configQuery.error}
+            onRetry={() => void configQuery.refetch()}
+            isRetrying={configQuery.isFetching}
+          />
+        ) : null}
+        <QueryState
+          query={configQuery}
+          errorTitle="Couldn't load configuration"
+          loadingMessage="Loading configuration…"
+          size="compact"
+        >
+          {(config) =>
+            config ? (
+              <FactoryConfigScripts factoryConfig={config} variant="card" />
             ) : (
-              <div className="space-y-3">
-                <p className="text-sm text-muted-foreground">
-                  No factory-factory.json found in this repository. Click the edit button above to
-                  configure workspace setup and run scripts.
-                </p>
-              </div>
-            ))}
-        </div>
+              <p className="text-sm text-muted-foreground">
+                No factory-factory.json found in this repository. Click the edit button above to
+                configure workspace setup and run scripts.
+              </p>
+            )
+          }
+        </QueryState>
         <div className="space-y-1 border-t pt-4 text-xs text-muted-foreground">
           <p>
             <strong>Port allocation:</strong> Use{' '}
@@ -173,7 +156,7 @@ export function ProjectFactoryConfigCard({
             <strong>Location:</strong> factory-factory.json in repository root
           </p>
         </div>
-      </CardContent>
-    </Card>
+      </SettingsSection>
+    </>
   );
 }

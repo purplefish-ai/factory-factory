@@ -3,9 +3,10 @@ import { useNavigate } from 'react-router';
 import { toast } from 'sonner';
 import { useSessionCollectionCommands } from '@/client/features/chat';
 import { useWorkspaceArchiveCommand } from '@/client/features/workspace';
-import { useStableCallback } from '@/client/hooks/use-stable-callback';
+import { useLatestRef, useStableCallback } from '@/client/hooks/use-stable-callback';
 import { useWorkspaceDetailQuery } from '@/client/hooks/use-workspace-detail-query';
 import { runInBackground } from '@/client/lib/background-task';
+import { POLL_INTERVAL_MS } from '@/client/lib/query-options';
 import { trpc } from '@/client/lib/trpc';
 import { isArchiveGitIndexLockedError } from '@/client/lib/workspace-archive';
 import { useWorkspaceIdeActions } from '@/client/routes/projects/workspaces/use-workspace-ide-actions';
@@ -41,11 +42,17 @@ interface UseWorkspaceDataOptions {
 export function useWorkspaceData({ workspaceId }: UseWorkspaceDataOptions) {
   const utils = trpc.useUtils();
 
-  const { data: workspace, isLoading: workspaceLoading } = useWorkspaceDetailQuery(workspaceId);
+  const {
+    data: workspace,
+    isLoading: workspaceLoading,
+    error: workspaceError,
+    isFetching: isFetchingWorkspace,
+    refetch: refetchWorkspace,
+  } = useWorkspaceDetailQuery(workspaceId);
 
   // Expose invalidate function for external triggers (e.g., when session stops running)
   const invalidateWorkspace = useCallback(() => {
-    runInBackground(utils.workspace.get.invalidate({ id: workspaceId }), "Couldn't refresh data.");
+    runInBackground(utils.workspace.get.invalidate({ id: workspaceId }));
   }, [utils, workspaceId]);
 
   // Sync PR status from GitHub on page load (if workspace has a PR)
@@ -55,10 +62,7 @@ export function useWorkspaceData({ workspaceId }: UseWorkspaceDataOptions) {
     meta: { errorToast: "Couldn't sync pull request status." },
     onSuccess: () => {
       // Refresh workspace data after PR sync
-      runInBackground(
-        utils.workspace.get.invalidate({ id: workspaceId }),
-        "Couldn't refresh data."
-      );
+      runInBackground(utils.workspace.get.invalidate({ id: workspaceId }));
     },
   });
 
@@ -72,12 +76,11 @@ export function useWorkspaceData({ workspaceId }: UseWorkspaceDataOptions) {
     }
   }, [workspace?.prs.length, workspaceId, syncPRStatus]);
 
-  const { data: sessions, isLoading: sessionsLoading } = trpc.session.listSessions.useQuery(
+  const { data: sessions } = trpc.session.listSessions.useQuery(
     { workspaceId },
     {
-      refetchInterval: 10_000, // Poll every 10s instead of 5s
+      refetchInterval: POLL_INTERVAL_MS.activity,
       staleTime: 0, // Always refetch on invalidate - critical for session creation UX
-      refetchOnWindowFocus: false,
     }
   );
 
@@ -90,8 +93,10 @@ export function useWorkspaceData({ workspaceId }: UseWorkspaceDataOptions) {
   return {
     workspace,
     workspaceLoading,
+    workspaceError,
+    isFetchingWorkspace,
+    refetchWorkspace,
     sessions,
-    sessionsLoading,
     initialDbSessionId,
     maxSessions,
     invalidateWorkspace,
@@ -166,27 +171,28 @@ export function useSessionManagement({
   const navigate = useNavigate();
   const utils = trpc.useUtils();
 
-  const activeWorkspaceRef = useRef(workspaceId);
-  useLayoutEffect(() => {
-    activeWorkspaceRef.current = workspaceId;
-  }, [workspaceId]);
-  const { createSession, deleteSession, createChat, createQuickActionAsync } =
-    useSessionCollectionCommands({
-      workspaceId,
-      sessions,
-      onCreated: (session, originatingWorkspaceId, kind) => {
-        if (activeWorkspaceRef.current !== originatingWorkspaceId) {
-          return;
-        }
-        setSelectedDbSessionId(session.id);
-        if (kind === 'chat') {
-          setTimeout(() => inputRef.current?.focus(), 0);
-        }
-      },
-    });
-  // The commands close over per-render mutation results; keep their identity
-  // stable so memoized tab bars and headers do not re-render on every chat event.
-  const handleNewChat = useStableCallback(createChat);
+  // The hook does not rely on its caller remounting per workspace.
+  const activeWorkspaceRef = useLatestRef(workspaceId);
+  const {
+    createSession,
+    deleteSession,
+    createChat: handleNewChat,
+    createQuickActionAsync,
+  } = useSessionCollectionCommands({
+    workspaceId,
+    sessions,
+    onCreated: (session, originatingWorkspaceId, kind) => {
+      if (activeWorkspaceRef.current !== originatingWorkspaceId) {
+        return;
+      }
+      setSelectedDbSessionId(session.id);
+      if (kind === 'chat') {
+        setTimeout(() => inputRef.current?.focus(), 0);
+      }
+    },
+  });
+  // The command closes over per-render mutation results. The memoized composer
+  // and right panel receive it, so keep its identity stable.
   const handleQuickAction = useStableCallback(createQuickActionAsync);
 
   const archiveLifetime = useRef<symbol | null>(null);
@@ -232,7 +238,7 @@ export function useSessionManagement({
   });
   const archiveWorkspace = useMemo<UseSessionManagementReturn['archiveWorkspace']>(
     () => ({ isPending: archiveCommand.isArchiving, mutate: archiveMutate }),
-    [archiveCommand.isArchiving, archiveMutate]
+    [archiveCommand.isArchiving]
   );
   const { openInIde, availableIdes, preferredIde } = useWorkspaceIdeActions();
 

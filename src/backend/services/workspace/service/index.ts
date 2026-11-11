@@ -9,6 +9,7 @@ export type {
   WorkspaceSessionBridge,
 } from './bridges';
 export { workspaceActivityService } from './lifecycle/activity.service';
+export { archivedWorkspaceBlobRetentionService } from './lifecycle/archived-workspace-blob-retention.service';
 export { WorkspaceCreationService } from './lifecycle/creation.service';
 export type { AcceptedWorkspaceBranch } from './lifecycle/accepted-branch';
 export { workspaceDataService } from './lifecycle/data.service';

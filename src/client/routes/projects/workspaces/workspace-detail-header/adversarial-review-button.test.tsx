@@ -109,11 +109,15 @@ describe.each([false, true])('AdversarialReviewButton (menu=%s)', (renderAsMenuI
     expect(mutation.mutate).toHaveBeenCalledExactlyOnceWith({ workspaceId: 'workspace-1' });
   });
 
-  it('disables the action while a review trigger is pending', () => {
+  it('disables the action and shows a spinner while a review trigger is pending', () => {
     mutation.isPending = true;
     render(workspace());
-    const action = getAction();
+    const action = renderAsMenuItem
+      ? getAction()
+      : document.querySelector<HTMLElement>('button[aria-label="Starting adversarial review"]');
     expect(action).not.toBeNull();
+    expect(action?.getAttribute('aria-busy')).toBe('true');
+    expect(action?.querySelector('[data-slot="spinner"]')).not.toBeNull();
     if (renderAsMenuItem) {
       expect(action?.getAttribute('aria-disabled')).toBe('true');
     } else {

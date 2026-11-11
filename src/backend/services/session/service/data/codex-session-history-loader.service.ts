@@ -11,6 +11,12 @@ import { summarizeZodIssues } from '@/backend/services/session/service/zod-issue
 import type { HistoryMessage, MessageAttachment } from '@/shared/acp-protocol';
 import { normalizeCodexFunctionOutput } from './codex-tool-result';
 import { buildHistoryImageAttachments, parseImageDataUrl } from './history-image-attachment';
+import {
+  type HistoryFileReuse,
+  type HistoryLoadResult,
+  loadHistoryFile,
+  type ReusedHistoryFile,
+} from './session-history-file';
 import { readNonEmptyJsonlLines } from './session-history-jsonl-reader';
 
 const logger = createLogger('codex-session-history-loader');
@@ -94,11 +100,7 @@ type SessionFileSelection = {
 
 const sessionFileLookupCache = new Map<string, SessionFileLookupCacheEntry>();
 
-export type CodexSessionHistoryLoadResult =
-  | { status: 'loaded'; history: HistoryMessage[]; filePath: string }
-  | { status: 'not_found' }
-  | { status: 'skipped'; reason: 'missing_provider_session_id' | 'invalid_provider_session_id' }
-  | { status: 'error'; reason: 'read_failed'; filePath: string };
+export type CodexSessionHistoryLoadResult = HistoryLoadResult;
 
 function getOptionalEnvPath(name: 'CODEX_HOME' | 'CODEX_SESSIONS_DIR'): string | undefined {
   const value = getCurrentProcessEnv()[name]?.trim();
@@ -844,7 +846,7 @@ async function resolveSessionFilePath(
 }
 
 class CodexSessionHistoryLoaderService {
-  async loadSessionHistory(params: {
+  async loadSessionHistory<T = never>(params: {
     providerSessionId: string | null | undefined;
     workingDir: string;
     codexAccountId?: string | null;
@@ -852,7 +854,8 @@ class CodexSessionHistoryLoaderService {
     /** Byte-filter rollout lines; turn grouping sees only matching lines. */
     onlyLinesContaining?: string;
     isCurrent?: () => boolean;
-  }): Promise<CodexSessionHistoryLoadResult> {
+    reuse?: HistoryFileReuse<T>;
+  }): Promise<CodexSessionHistoryLoadResult | ReusedHistoryFile<T>> {
     const providerSessionId = params.providerSessionId;
     if (!providerSessionId) {
       return { status: 'skipped', reason: 'missing_provider_session_id' };
@@ -879,16 +882,11 @@ class CodexSessionHistoryLoaderService {
       return { status: 'not_found' };
     }
 
-    const { history, hadReadError } = await this.readHistoryFromFile(
+    return await loadHistoryFile({
       filePath,
-      params.onlyLinesContaining,
-      params.isCurrent
-    );
-    if (hadReadError) {
-      return { status: 'error', reason: 'read_failed', filePath };
-    }
-
-    return { status: 'loaded', history, filePath };
+      reuse: params.reuse,
+      read: () => this.readHistoryFromFile(filePath, params.onlyLinesContaining, params.isCurrent),
+    });
   }
 
   private async readHistoryFromFile(

@@ -1,6 +1,7 @@
 import { ArrowLeftIcon } from '@phosphor-icons/react/dist/csr/ArrowLeft';
 import { useEffect, useState } from 'react';
 import { Loading } from '@/client/components/loading';
+import { QueryErrorState } from '@/client/components/query-error-state';
 import { trpc } from '@/client/lib/trpc';
 import { Button } from '@/components/ui/button';
 import type { WorkspaceMailSummary } from '@/shared/workspace-mail';
@@ -90,7 +91,7 @@ export function WorkspaceMailDetail({
     <section aria-label="Message" className="flex h-full min-h-0 flex-col">
       <header className="flex items-center justify-between gap-2 border-b bg-muted/30 px-2 py-2">
         <Button variant="ghost" size="sm" onClick={onBack}>
-          <ArrowLeftIcon className="mr-1 size-3.5" />
+          <ArrowLeftIcon className="size-3.5" />
           Inbox
         </Button>
         <Button
@@ -165,16 +166,13 @@ export function WorkspaceMailDetail({
           <Loading size="compact" message="Loading message…" className="mt-3 h-auto" />
         )}
         {readError && (
-          <div role="alert" className="mt-3 space-y-2 text-sm">
-            <p>Couldn't read message. {readError}</p>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => readMore(observedRevision === null ? 0 : (nextOffset ?? 0))}
-            >
-              Try again
-            </Button>
-          </div>
+          <QueryErrorState
+            title="Couldn't read message"
+            error={{ message: readError }}
+            onRetry={() => readMore(observedRevision === null ? 0 : (nextOffset ?? 0))}
+            isRetrying={read.isPending}
+            className="mt-3 p-3"
+          />
         )}
         {nextOffset !== null && !readError && (
           <Button

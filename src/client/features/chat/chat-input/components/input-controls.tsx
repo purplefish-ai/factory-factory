@@ -4,9 +4,10 @@ import { MapTrifoldIcon } from '@phosphor-icons/react/dist/csr/MapTrifold';
 import { PaperPlaneTiltIcon } from '@phosphor-icons/react/dist/csr/PaperPlaneTilt';
 import { SlidersHorizontalIcon } from '@phosphor-icons/react/dist/csr/SlidersHorizontal';
 import { SquareIcon } from '@phosphor-icons/react/dist/csr/Square';
-import { memo, useState } from 'react';
+import { memo, useMemo, useState } from 'react';
 import { getConfigPresentation } from '@/client/components/acp-config-presentation';
 import { AcpConfigSelector } from '@/client/components/acp-config-selector';
+import { IconButton } from '@/client/components/icon-button';
 import { getRuntimeControlVisibility } from '@/client/features/chat/chat-input/runtime-control-visibility';
 import type { AcpConfigOption } from '@/client/features/chat/reducer';
 import { AttachmentPreview } from '@/client/features/composer';
@@ -24,7 +25,6 @@ import {
   SheetTrigger,
 } from '@/components/ui/sheet';
 import { Spinner } from '@/components/ui/spinner';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { useIsMobile } from '@/hooks/use-mobile';
 import type { ChatSettings, MessageAttachment } from '@/lib/chat-protocol';
 import {
@@ -67,28 +67,21 @@ const FileUploadButton = memo(function FileUploadButton({
 }) {
   return (
     <>
-      <TooltipProvider>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => fileInputRef.current?.click()}
-              disabled={disabled}
-              className="h-6 w-6 p-0"
-              aria-label="Upload image"
-            >
-              <ImageIcon className="h-3.5 w-3.5" />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent side="top">
-            <p className="flex items-center gap-2">
-              Upload image
-              <ShortcutKeys id="composer.attachImage" />
-            </p>
-          </TooltipContent>
-        </Tooltip>
-      </TooltipProvider>
+      <IconButton
+        label="Upload image"
+        size="icon-xs"
+        onClick={() => fileInputRef.current?.click()}
+        disabled={disabled}
+        tooltipSide="top"
+        tooltip={
+          <p className="flex items-center gap-2">
+            Upload image
+            <ShortcutKeys id="composer.attachImage" />
+          </p>
+        }
+      >
+        <ImageIcon />
+      </IconButton>
       <input
         ref={fileInputRef}
         type="file"
@@ -126,7 +119,17 @@ export interface LeftControlsProps {
   onSetConfigOption?: (configId: string, value: string) => void;
 }
 
-function getRuntimeControls(props: LeftControlsProps) {
+type RuntimeControlsInput = Pick<
+  LeftControlsProps,
+  | 'capabilities'
+  | 'capabilitiesLoaded'
+  | 'settings'
+  | 'acpConfigOptions'
+  | 'onSetConfigOption'
+  | 'onModelChange'
+>;
+
+function getRuntimeControls(props: RuntimeControlsInput) {
   const { capabilities, settings, onSetConfigOption } = props;
   const { modelOption, nativeOptions, showReasoning, showThinking, showPlanning } =
     getRuntimeControlVisibility(props);
@@ -161,17 +164,54 @@ function getRuntimeControls(props: LeftControlsProps) {
 
 type RuntimeControls = ReturnType<typeof getRuntimeControls>;
 
-const RuntimeOptions = memo(function RuntimeOptions({
-  props,
-  controls,
-  mobile = false,
-}: {
-  props: LeftControlsProps;
+/** Recomputes the controls only when their inputs change, so memoized children can skip renders. */
+function useRuntimeControls({
+  capabilities,
+  capabilitiesLoaded,
+  settings,
+  acpConfigOptions,
+  onSetConfigOption,
+  onModelChange,
+}: RuntimeControlsInput): RuntimeControls {
+  return useMemo(
+    () =>
+      getRuntimeControls({
+        capabilities,
+        capabilitiesLoaded,
+        settings,
+        acpConfigOptions,
+        onSetConfigOption,
+        onModelChange,
+      }),
+    [capabilities, capabilitiesLoaded, settings, acpConfigOptions, onSetConfigOption, onModelChange]
+  );
+}
+
+/** Passed as individual props so the memoized options skip renders that change none of them. */
+interface RuntimeOptionsProps extends Pick<
+  LeftControlsProps,
+  | 'capabilities'
+  | 'settings'
+  | 'onSetConfigOption'
+  | 'onReasoningChange'
+  | 'onThinkingChange'
+  | 'onPlanModeChange'
+> {
   controls: RuntimeControls;
-  mobile?: boolean;
-}) {
-  const { capabilities, settings, onSetConfigOption } = props;
-  const disabled = props.disabled || props.stopping;
+  disabled?: boolean;
+}
+
+const RuntimeOptions = memo(function RuntimeOptions({
+  controls,
+  capabilities,
+  settings,
+  onSetConfigOption,
+  onReasoningChange,
+  onThinkingChange,
+  onPlanModeChange,
+  disabled,
+  mobile = false,
+}: RuntimeOptionsProps & { mobile?: boolean }) {
   const row = (label: string, control: React.ReactNode) =>
     mobile ? (
       <div className="flex items-center justify-between gap-2 rounded-md border p-2">
@@ -203,7 +243,7 @@ const RuntimeOptions = memo(function RuntimeOptions({
           <ModelSelector
             selectedModel={settings?.reasoningEffort ?? capabilities?.reasoning.selected ?? ''}
             options={capabilities?.reasoning.options ?? []}
-            onChange={props.onReasoningChange}
+            onChange={onReasoningChange}
             disabled={disabled}
           />
         )}
@@ -212,7 +252,7 @@ const RuntimeOptions = memo(function RuntimeOptions({
           'Extended thinking',
           <SettingsToggle
             pressed={settings?.thinkingEnabled ?? false}
-            onPressedChange={props.onThinkingChange}
+            onPressedChange={onThinkingChange}
             disabled={disabled}
             icon={BrainIcon}
             label="Extended thinking mode"
@@ -225,7 +265,7 @@ const RuntimeOptions = memo(function RuntimeOptions({
           'Planning mode',
           <SettingsToggle
             pressed={settings?.planModeEnabled ?? false}
-            onPressedChange={props.onPlanModeChange}
+            onPressedChange={onPlanModeChange}
             disabled={disabled}
             icon={MapTrifoldIcon}
             label="Planning mode"
@@ -237,13 +277,8 @@ const RuntimeOptions = memo(function RuntimeOptions({
   );
 });
 
-const MobileSettingsSheet = memo(function MobileSettingsSheet({
-  props,
-  controls,
-}: {
-  props: LeftControlsProps;
-  controls: RuntimeControls;
-}) {
+const MobileSettingsSheet = memo(function MobileSettingsSheet(props: RuntimeOptionsProps) {
+  const { controls } = props;
   const [open, setOpen] = useState(false);
   if (
     !(
@@ -260,12 +295,12 @@ const MobileSettingsSheet = memo(function MobileSettingsSheet({
       <SheetTrigger asChild>
         <Button
           variant="ghost"
-          size="sm"
-          className="h-6 shrink-0 gap-1 px-2 text-xs text-muted-foreground hover:text-foreground"
+          size="xs"
+          className="shrink-0 text-muted-foreground hover:text-foreground"
           aria-label="Open chat options"
           data-testid="chat-options-trigger"
         >
-          <SlidersHorizontalIcon className="h-3.5 w-3.5" />
+          <SlidersHorizontalIcon />
           <span className="@max-[22rem]/composer:sr-only">Options</span>
         </Button>
       </SheetTrigger>
@@ -279,7 +314,7 @@ const MobileSettingsSheet = memo(function MobileSettingsSheet({
           <SheetDescription>Settings apply to the next turn.</SheetDescription>
         </SheetHeader>
         <div className="space-y-3 py-4">
-          <RuntimeOptions props={props} controls={controls} mobile />
+          <RuntimeOptions {...props} mobile />
         </div>
       </SheetContent>
     </Sheet>
@@ -304,8 +339,18 @@ function getModelDisabledReason(props: LeftControlsProps, controls: RuntimeContr
 
 export const LeftControls = memo(function LeftControls(props: LeftControlsProps) {
   const isMobile = useIsMobile();
-  const controls = getRuntimeControls(props);
+  const controls = useRuntimeControls(props);
   const disabledReason = getModelDisabledReason(props, controls);
+  const runtimeOptions: RuntimeOptionsProps = {
+    controls,
+    capabilities: props.capabilities,
+    settings: props.settings,
+    onSetConfigOption: props.onSetConfigOption,
+    onReasoningChange: props.onReasoningChange,
+    onThinkingChange: props.onThinkingChange,
+    onPlanModeChange: props.onPlanModeChange,
+    disabled: props.disabled || props.stopping,
+  };
   const showAttachments =
     props.capabilities?.attachments.enabled === true &&
     props.capabilities.attachments.kinds.includes('image');
@@ -323,10 +368,10 @@ export const LeftControls = memo(function LeftControls(props: LeftControlsProps)
         disabledReason={disabledReason}
       />
       {isMobile ? (
-        <MobileSettingsSheet props={props} controls={controls} />
+        <MobileSettingsSheet {...runtimeOptions} />
       ) : (
         <div className="flex min-w-0 items-center gap-1 overflow-x-auto scrollbar-hide">
-          <RuntimeOptions props={props} controls={controls} />
+          <RuntimeOptions {...runtimeOptions} />
         </div>
       )}
       {showAttachments && (
@@ -375,34 +420,22 @@ export const RightControls = memo(function RightControls({
       {children}
       {pendingMessageCount > 0 && (
         <div className="flex items-center gap-1 text-xs text-muted-foreground">
-          <Spinner aria-hidden="true" className="h-3 w-3" />
+          <Spinner aria-hidden="true" className="size-3" />
           <span className="@max-[22rem]/composer:sr-only">Sending…</span>
         </div>
       )}
       {running && (
-        <TooltipProvider>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <span className="inline-flex">
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={onStop}
-                  disabled={stopping}
-                  className="h-7 w-7"
-                  aria-label={stopping ? 'Stopping…' : 'Stop agent'}
-                >
-                  {stopping ? (
-                    <Spinner aria-hidden="true" className="h-4 w-4 text-muted-foreground" />
-                  ) : (
-                    <SquareIcon className="h-3 w-3" weight="fill" />
-                  )}
-                </Button>
-              </span>
-            </TooltipTrigger>
-            <TooltipContent>Stop agent ({formatShortcut('composer.stop')})</TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
+        <IconButton
+          label="Stop agent"
+          tooltip={`Stop agent (${formatShortcut('composer.stop')})`}
+          tooltipWhileDisabled
+          size="icon-compact"
+          onClick={onStop}
+          pending={stopping}
+          pendingLabel="Stopping…"
+        >
+          <SquareIcon weight="fill" />
+        </IconButton>
       )}
       <InputGroupButton
         onClick={() => onSendClick(inputRef)}
@@ -412,7 +445,7 @@ export const RightControls = memo(function RightControls({
         variant="default"
         aria-label={promptInFlight ? 'Queue message' : 'Send message'}
       >
-        <PaperPlaneTiltIcon className="h-4 w-4" />
+        <PaperPlaneTiltIcon />
       </InputGroupButton>
     </div>
   );

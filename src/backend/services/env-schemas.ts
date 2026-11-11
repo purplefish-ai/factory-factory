@@ -60,6 +60,9 @@ export const LoggerEnvSchema = z.object({
   SERVICE_NAME: z.preprocess(toTrimmedString, z.string().min(1)).catch('factoryfactory'),
   NODE_ENV: z.preprocess(toLowerString, NodeEnvSchema).catch('development'),
   BASE_DIR: z.preprocess(toTrimmedString, z.string()).optional().catch(undefined),
+  // Set by Vitest in its own process and workers, and inherited by children
+  // they spawn, even when a test overrides NODE_ENV.
+  VITEST: z.preprocess(toTrimmedString, z.string()).optional().catch(undefined),
 });
 
 export const ConfigEnvSchema = z.object({

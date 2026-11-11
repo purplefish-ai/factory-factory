@@ -17,7 +17,7 @@ function ConversationFocus({ summary }: { summary: ServerWorkspace['conversation
   }
   return (
     <p
-      className="pl-[calc(0.5rem+8px)] truncate text-[11px] text-muted-foreground"
+      className="pl-[calc(0.5rem+8px)] truncate text-2xs text-muted-foreground"
       title={`${summary.summary}\nSummary updated ${new Date(summary.generatedAt).toLocaleString()}`}
     >
       {summary.sidebarSummary}
@@ -52,7 +52,7 @@ function PrLink({ prNumber, onOpenPr }: { prNumber: number; onOpenPr?: () => voi
     return (
       <button
         type="button"
-        className="flex items-center gap-0.5 hover:text-foreground"
+        className="flex items-center gap-0.5 rounded-sm hover:text-foreground focus-ring"
         onPointerUp={(event) => {
           event.stopPropagation();
         }}
@@ -115,7 +115,7 @@ export function WorkspaceItemContent({
       </div>
       <ConversationFocus summary={workspace.conversationSummary} />
       {hasMetaRow && (
-        <div className="grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-x-2 pl-[calc(0.5rem+8px)] text-[11px] text-muted-foreground min-w-0">
+        <div className="grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-x-2 pl-[calc(0.5rem+8px)] text-2xs text-muted-foreground min-w-0">
           <span className="flex items-center gap-1 min-w-0 truncate">
             {showBranch && (
               <>
@@ -155,7 +155,7 @@ export function WorkspaceItemContent({
         </div>
       )}
       {statusReason && (
-        <div className="pl-[calc(0.5rem+8px)] text-[11px] text-muted-foreground truncate">
+        <div className="pl-[calc(0.5rem+8px)] text-2xs text-muted-foreground truncate">
           {statusReason.label}
         </div>
       )}
@@ -164,7 +164,7 @@ export function WorkspaceItemContent({
           {onOpenIssue ? (
             <button
               type="button"
-              className="inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground underline-offset-2 hover:underline"
+              className="inline-flex items-center gap-1 rounded-sm text-2xs text-muted-foreground hover:text-foreground underline-offset-2 hover:underline focus-ring"
               onPointerUp={(event) => {
                 event.stopPropagation();
               }}
@@ -178,7 +178,7 @@ export function WorkspaceItemContent({
               {issueLabel}
             </button>
           ) : (
-            <span className="inline-flex items-center gap-1 text-[11px] text-muted-foreground">
+            <span className="inline-flex items-center gap-1 text-2xs text-muted-foreground">
               <DotOutlineIcon className="h-2.5 w-2.5" />
               {issueLabel}
             </span>

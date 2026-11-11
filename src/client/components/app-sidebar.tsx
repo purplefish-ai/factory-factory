@@ -10,7 +10,6 @@ import { XIcon } from '@phosphor-icons/react/dist/csr/X';
 import {
   lazy,
   memo,
-  type PointerEvent as ReactPointerEvent,
   type ReactNode,
   Suspense,
   useEffect,
@@ -22,6 +21,7 @@ import {
 import { Link, useLocation, useNavigate } from 'react-router';
 import { Loading } from '@/client/components/loading';
 import { ProjectIssuesState } from '@/client/components/project-issues-state';
+import { QueryErrorState, QueryRefreshError } from '@/client/components/query-error-state';
 import type { ServerWorkspace } from '@/client/components/use-workspace-list-state';
 import { ErrorBoundary } from '@/client/error-boundary';
 import { WorkspaceCreationImageDropZone } from '@/client/features/kanban/workspace-creation-image-drop-zone';
@@ -61,13 +61,9 @@ import {
 } from '@/components/ui/sidebar';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
-import {
-  clampSidebarWidth,
-  getPersistedSidebarWidth,
-  persistSidebarWidth,
-} from './app-sidebar-resize';
 import { Logo } from './logo';
 import { ThemeToggle } from './theme-toggle';
+import { useSidebarResize } from './use-sidebar-resize';
 import { WorkspaceItemContent } from './workspace-item-content';
 import { groupWorkspacesForSidebar } from './workspace-sidebar-grouping';
 
@@ -220,6 +216,70 @@ function WorkspaceGroup({
   );
 }
 
+/** A failed list load must not read as three empty groups. */
+function WorkspaceGroups({
+  navData,
+  working,
+  waiting,
+  done,
+}: {
+  navData: NavigationData;
+  working: ServerWorkspace[];
+  waiting: ServerWorkspace[];
+  done: ServerWorkspace[];
+}) {
+  const error = navData.serverWorkspacesError;
+  // Without a selected project the list is not requested, so its groups stay empty.
+  if (navData.serverWorkspaces === undefined && navData.selectedProjectId) {
+    return error ? (
+      <QueryErrorState
+        title="Couldn't load workspaces"
+        error={error}
+        onRetry={error.retry}
+        isRetrying={error.isRetrying}
+        className="p-2"
+      />
+    ) : (
+      <Loading size="compact" message="Loading workspaces…" />
+    );
+  }
+  const groupProps = {
+    projectSlug: navData.selectedProjectSlug,
+    currentWorkspaceId: navData.currentWorkspaceId,
+    unreadMailCounts: navData.unreadMailCounts,
+  };
+  return (
+    <>
+      {error ? (
+        <QueryRefreshError
+          title="Couldn't refresh workspaces"
+          error={error}
+          onRetry={error.retry}
+          isRetrying={error.isRetrying}
+        />
+      ) : null}
+      <WorkspaceGroup
+        label="Working"
+        workspaces={working}
+        emptyText="No active workspaces"
+        {...groupProps}
+      />
+      <WorkspaceGroup
+        label="Waiting"
+        workspaces={waiting}
+        emptyText="No waiting workspaces"
+        {...groupProps}
+      />
+      <WorkspaceGroup
+        label="Done"
+        workspaces={done}
+        emptyText="No completed workspaces"
+        {...groupProps}
+      />
+    </>
+  );
+}
+
 function IssueGroup({
   issues,
   status,
@@ -284,11 +344,9 @@ function AgentNavigationBadge({
       <Badge
         data-agent-count
         aria-hidden="true"
-        variant="secondary"
-        className={cn(
-          'ml-auto h-5 min-w-5 gap-1 px-1.5 text-xs',
-          summary.failedCount > 0 && 'bg-destructive/10 text-destructive border-destructive/30'
-        )}
+        variant={summary.failedCount > 0 ? 'danger' : 'secondary'}
+        size="count"
+        className="ml-auto"
       >
         {summary.failedCount > 0 ? <WarningIcon className="h-3 w-3" /> : null}
         {summary.totalCount}
@@ -332,18 +390,10 @@ function ProjectFooterLinks({
     workspaces: showBoardCounts ? (
       <>
         <span className="ml-auto flex shrink-0 gap-1">
-          <Badge
-            aria-hidden="true"
-            variant="secondary"
-            className="h-5 min-w-5 px-1.5 text-xs tabular-nums"
-          >
+          <Badge aria-hidden="true" variant="secondary" size="count">
             {workingCount}
           </Badge>
-          <Badge
-            aria-hidden="true"
-            variant="warning"
-            className="h-5 min-w-5 px-1.5 text-xs tabular-nums"
-          >
+          <Badge aria-hidden="true" variant="warning" size="count">
             {waitingCount}
           </Badge>
         </span>
@@ -355,7 +405,7 @@ function ProjectFooterLinks({
     agents: <AgentNavigationBadge summary={summary} descriptionId={descriptionId} />,
     reviews:
       projectSlug && navData.reviewCount > 0 ? (
-        <Badge variant="warning" className="ml-auto h-5 min-w-5 px-1.5 text-xs">
+        <Badge variant="warning" size="count" className="ml-auto">
           {navData.reviewCount}
         </Badge>
       ) : null,
@@ -464,14 +514,8 @@ function SidebarInner({
       {showCloseButton && (
         <header className="flex shrink-0 items-center justify-between border-b px-4 min-h-12 pt-[env(safe-area-inset-top)]">
           <span className="text-sm font-semibold">Workspaces</span>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-9 w-9 shrink-0"
-            aria-label="Close sidebar"
-            onClick={onNavigate}
-          >
-            <XIcon className="h-5 w-5" />
+          <Button variant="ghost" size="icon" aria-label="Close sidebar" onClick={onNavigate}>
+            <XIcon />
           </Button>
         </header>
       )}
@@ -528,30 +572,7 @@ function SidebarInner({
           </SidebarGroupContent>
         </SidebarGroup>
 
-        <WorkspaceGroup
-          label="Working"
-          workspaces={working}
-          projectSlug={navData.selectedProjectSlug}
-          currentWorkspaceId={navData.currentWorkspaceId}
-          unreadMailCounts={navData.unreadMailCounts}
-          emptyText="No active workspaces"
-        />
-        <WorkspaceGroup
-          label="Waiting"
-          workspaces={waiting}
-          projectSlug={navData.selectedProjectSlug}
-          currentWorkspaceId={navData.currentWorkspaceId}
-          unreadMailCounts={navData.unreadMailCounts}
-          emptyText="No waiting workspaces"
-        />
-        <WorkspaceGroup
-          label="Done"
-          workspaces={done}
-          projectSlug={navData.selectedProjectSlug}
-          currentWorkspaceId={navData.currentWorkspaceId}
-          unreadMailCounts={navData.unreadMailCounts}
-          emptyText="No completed workspaces"
-        />
+        <WorkspaceGroups navData={navData} working={working} waiting={waiting} done={done} />
         <IssueGroup
           issues={issues}
           status={issuesStatus}
@@ -622,46 +643,30 @@ function SidebarInner({
 // Main sidebar component
 // =============================================================================
 
-export function AppSidebar({ navData }: { navData: NavigationData }) {
+// Memoized: the layout re-renders for route and query changes, and the
+// navigation data keeps its identity when none of it changed.
+export const AppSidebar = memo(function AppSidebar({ navData }: { navData: NavigationData }) {
   const { pathname } = useLocation();
   const prevPathnameRef = useRef(pathname);
-  const prevSelectedProjectIdRef = useRef(navData.selectedProjectId);
-  const resizeCleanupRef = useRef<(() => void) | null>(null);
   const { open, openMobile, setOpenMobile, isMobile } = useSidebar();
-  const [showNewWorkspaceForm, setShowNewWorkspaceForm] = useState(false);
-  const [isResizingSidebar, setIsResizingSidebar] = useState(false);
-  const [sidebarWidth, setSidebarWidth] = useState<number>(getPersistedSidebarWidth);
+  const { width: sidebarWidth, isResizing, onResizePointerDown } = useSidebarResize(open);
 
-  // Auto-close mobile sidebar on route navigation
+  // The new workspace form belongs to the selected project.
+  const [formProjectId, setFormProjectId] = useState(navData.selectedProjectId);
+  const [showNewWorkspaceForm, setShowNewWorkspaceForm] = useState(false);
+  if (formProjectId !== navData.selectedProjectId) {
+    setFormProjectId(navData.selectedProjectId);
+    setShowNewWorkspaceForm(false);
+  }
+
+  // Auto-close the mobile sheet on route navigation. The sheet's state belongs
+  // to SidebarProvider, so this cannot happen while rendering.
   useEffect(() => {
     if (pathname !== prevPathnameRef.current) {
       setOpenMobile(false);
     }
     prevPathnameRef.current = pathname;
   }, [pathname, setOpenMobile]);
-
-  useEffect(() => {
-    if (prevSelectedProjectIdRef.current !== navData.selectedProjectId) {
-      prevSelectedProjectIdRef.current = navData.selectedProjectId;
-      setShowNewWorkspaceForm(false);
-    }
-  }, [navData.selectedProjectId]);
-
-  useEffect(() => {
-    persistSidebarWidth(sidebarWidth);
-  }, [sidebarWidth]);
-
-  useEffect(() => {
-    if (!open && resizeCleanupRef.current) {
-      resizeCleanupRef.current();
-    }
-  }, [open]);
-
-  useEffect(() => {
-    return () => {
-      resizeCleanupRef.current?.();
-    };
-  }, []);
 
   // Fetch issues for the Todo section
   const {
@@ -678,59 +683,6 @@ export function AppSidebar({ navData }: { navData: NavigationData }) {
   const { waiting, working, done } = useMemo(() => {
     return groupWorkspacesForSidebar(navData.serverWorkspaces ?? []);
   }, [navData.serverWorkspaces]);
-
-  const handleResizePointerDown = (event: ReactPointerEvent<HTMLButtonElement>) => {
-    if (event.button !== 0 || !open) {
-      return;
-    }
-
-    event.preventDefault();
-    resizeCleanupRef.current?.();
-
-    const pointerId = event.pointerId;
-    const startX = event.clientX;
-    const startWidth = sidebarWidth;
-    const handleElement = event.currentTarget;
-    const controller = new AbortController();
-    const previousCursor = document.body.style.cursor;
-    const previousUserSelect = document.body.style.userSelect;
-
-    const cleanup = () => {
-      controller.abort();
-      setIsResizingSidebar(false);
-      document.body.style.cursor = previousCursor;
-      document.body.style.userSelect = previousUserSelect;
-      resizeCleanupRef.current = null;
-      if (handleElement.hasPointerCapture(pointerId)) {
-        handleElement.releasePointerCapture(pointerId);
-      }
-    };
-
-    resizeCleanupRef.current = cleanup;
-    setIsResizingSidebar(true);
-    document.body.style.cursor = 'col-resize';
-    document.body.style.userSelect = 'none';
-    handleElement.setPointerCapture(pointerId);
-
-    const handlePointerMove = (moveEvent: PointerEvent) => {
-      if (moveEvent.pointerId !== pointerId) {
-        return;
-      }
-      const deltaX = moveEvent.clientX - startX;
-      setSidebarWidth(clampSidebarWidth(startWidth + deltaX));
-    };
-
-    const handlePointerEnd = (endEvent: PointerEvent) => {
-      if (endEvent.pointerId !== pointerId) {
-        return;
-      }
-      cleanup();
-    };
-
-    window.addEventListener('pointermove', handlePointerMove, { signal: controller.signal });
-    window.addEventListener('pointerup', handlePointerEnd, { signal: controller.signal });
-    window.addEventListener('pointercancel', handlePointerEnd, { signal: controller.signal });
-  };
 
   const sharedProps = {
     navData,
@@ -780,7 +732,7 @@ export function AppSidebar({ navData }: { navData: NavigationData }) {
     <div
       className={cn(
         'shrink-0 overflow-hidden transition-[width] duration-150 ease-out motion-reduce:transition-none',
-        isResizingSidebar && 'duration-0'
+        isResizing && 'duration-0'
       )}
       style={{ width: open ? `${sidebarWidth}px` : '0px' }}
     >
@@ -794,10 +746,10 @@ export function AppSidebar({ navData }: { navData: NavigationData }) {
             type="button"
             aria-label="Resize sidebar"
             className="absolute inset-y-0 right-0 z-30 w-3 cursor-col-resize touch-none bg-transparent hover:bg-sidebar-border/40"
-            onPointerDown={handleResizePointerDown}
+            onPointerDown={onResizePointerDown}
           />
         )}
       </div>
     </div>
   );
-}
+});

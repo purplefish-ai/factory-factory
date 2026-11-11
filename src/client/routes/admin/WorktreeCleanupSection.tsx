@@ -4,9 +4,8 @@ import { toast } from 'sonner';
 import { runInBackground } from '@/client/lib/background-task';
 import { trpc } from '@/client/lib/trpc';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
-import { Skeleton } from '@/components/ui/skeleton';
+import { SettingsSection } from './settings-section';
 
 function pluralizeWorktrees(count: number): string {
   return `${count} orphaned worktree${count === 1 ? '' : 's'}`;
@@ -15,14 +14,7 @@ function pluralizeWorktrees(count: number): string {
 export function WorktreeCleanupSection() {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const utils = trpc.useUtils();
-  const {
-    data: orphans,
-    isLoading,
-    isError,
-    error,
-    refetch,
-    isRefetching,
-  } = trpc.admin.listOrphanedWorktrees.useQuery();
+  const orphansQuery = trpc.admin.listOrphanedWorktrees.useQuery();
 
   const removeOrphans = trpc.admin.removeOrphanedWorktrees.useMutation({
     onSuccess: ({ removed, failed }) => {
@@ -46,46 +38,27 @@ export function WorktreeCleanupSection() {
     },
   });
 
-  const count = orphans?.length ?? 0;
+  const count = orphansQuery.data?.length ?? 0;
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <BroomIcon className="w-5 h-5" />
-          Worktree cleanup
-        </CardTitle>
-        <CardDescription>
-          Remove worktree folders left behind by archived, deleted, or failed workspaces
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        {isLoading ? (
-          <Skeleton className="h-10 w-full" />
-        ) : isError ? (
-          <div className="space-y-2">
-            <p role="alert" className="text-sm text-destructive">
-              Couldn't scan for orphaned worktrees. {error.message}
-            </p>
-            <Button
-              variant="outline"
-              className="w-full sm:w-auto"
-              disabled={isRefetching}
-              onClick={() => runInBackground(refetch(), "Couldn't scan for orphaned worktrees.")}
-            >
-              Retry
-            </Button>
-          </div>
-        ) : (
+    <>
+      <SettingsSection
+        title="Worktree cleanup"
+        icon={<BroomIcon className="w-5 h-5" />}
+        description="Remove worktree folders left behind by archived, deleted, or failed workspaces"
+        query={orphansQuery}
+        errorTitle="Couldn't scan for orphaned worktrees"
+      >
+        {(orphans) => (
           <>
             <p className="text-sm text-muted-foreground">
-              {count === 0
+              {orphans.length === 0
                 ? 'No orphaned worktrees found.'
-                : `Found ${pluralizeWorktrees(count)} not used by any active workspace.`}
+                : `Found ${pluralizeWorktrees(orphans.length)} not used by any active workspace.`}
             </p>
-            {count > 0 && (
+            {orphans.length > 0 && (
               <ul className="max-h-40 overflow-y-auto rounded-md border bg-muted/50 p-2 font-mono text-xs">
-                {orphans?.map((orphan) => (
+                {orphans.map((orphan) => (
                   <li key={orphan.path} className="truncate" title={orphan.path}>
                     <span className="text-muted-foreground">{orphan.projectName}:</span>{' '}
                     {orphan.path}
@@ -96,15 +69,15 @@ export function WorktreeCleanupSection() {
             <Button
               variant="outline"
               className="w-full sm:w-auto"
-              disabled={count === 0 || removeOrphans.isPending}
+              disabled={orphans.length === 0 || removeOrphans.isPending}
               onClick={() => setConfirmOpen(true)}
             >
-              <BroomIcon className="w-4 h-4 mr-2" />
+              <BroomIcon />
               Remove orphaned worktrees
             </Button>
           </>
         )}
-      </CardContent>
+      </SettingsSection>
       <ConfirmDialog
         open={confirmOpen}
         onOpenChange={setConfirmOpen}
@@ -115,6 +88,6 @@ export function WorktreeCleanupSection() {
         isPending={removeOrphans.isPending}
         onConfirm={() => removeOrphans.mutate()}
       />
-    </Card>
+    </>
   );
 }

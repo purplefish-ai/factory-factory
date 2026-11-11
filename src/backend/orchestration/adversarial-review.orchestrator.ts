@@ -167,12 +167,14 @@ async function findActiveAdversarialReviewSession(
   prId: string
 ): Promise<{ id: string } | null> {
   const sessions = await sessionDataService.findAgentSessionsByWorkspaceId(workspaceId);
+  // Only RUNNING has a live reviewer: stopping a session persists IDLE, so a
+  // finished review is IDLE too. Creation races are covered by the trigger lock.
   return (
     sessions.find(
       (session) =>
         session.workflow === ADVERSARIAL_REVIEW_WORKFLOW &&
         session.workspacePrId === prId &&
-        (session.status === SessionStatus.RUNNING || session.status === SessionStatus.IDLE)
+        session.status === SessionStatus.RUNNING
     ) ?? null
   );
 }

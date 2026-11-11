@@ -2,13 +2,15 @@ import { FolderIcon } from '@phosphor-icons/react/dist/csr/Folder';
 import { WarningCircleIcon } from '@phosphor-icons/react/dist/csr/WarningCircle';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { memo, useCallback, useMemo, useRef, useState } from 'react';
+import { SectionLabel } from '@/client/components/section-label';
 import { trpc } from '@/client/lib/trpc';
+import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Spinner } from '@/components/ui/spinner';
 import { cn } from '@/lib/utils';
 import { FileChangeItem, type FileChangeKind, FileChangeStatus } from './file-change-item';
 import { FILE_TREE_ROW_HEIGHT, FileTreeRow } from './file-tree-row';
-import { useWorkspacePanel } from './workspace-panel-context';
+import { useWorkspacePanelActions } from './workspace-panel-context';
 
 export interface ChangeListEntry {
   path: string;
@@ -71,9 +73,11 @@ export const ChangeSections = memo(function ChangeSections({
 
         return (
           <div key={section.key}>
-            <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider px-3 mb-1">
-              {section.title} ({section.entries.length})
-            </h3>
+            <SectionLabel asChild>
+              <h3 className="px-3 mb-1">
+                {section.title} ({section.entries.length})
+              </h3>
+            </SectionLabel>
             <ChangeList entries={section.entries} onFileClick={onFileClick} />
           </div>
         );
@@ -148,7 +152,7 @@ export const VirtualizedChangeList = memo(function VirtualizedChangeList({
 });
 
 export function useOpenDiffTab() {
-  const { openTab } = useWorkspacePanel();
+  const { openTab } = useWorkspacePanelActions();
   return useCallback(
     (path: string) => {
       openTab('diff', path, `Diff: ${path.split('/').pop()}`);
@@ -300,41 +304,50 @@ function UntrackedDirContents({
   depth: number;
   onFileClick: (path: string) => void;
 }) {
-  const { data, isLoading, isError } = trpc.workspace.listFiles.useQuery(
+  const query = trpc.workspace.listFiles.useQuery(
     { workspaceId, path: dirPath },
-    { staleTime: 20_000, refetchOnWindowFocus: false }
+    { staleTime: 20_000 }
   );
-
-  if (isLoading) {
-    return (
-      <div
-        className="flex items-center gap-1 px-2 text-sm text-muted-foreground"
-        style={{ height: FILE_TREE_ROW_HEIGHT, paddingLeft: depth * 12 + 8 }}
+  const rowStyle = { height: FILE_TREE_ROW_HEIGHT, paddingLeft: depth * 12 + 8 };
+  // Listed entries stay when a later read fails; the row above them offers Retry.
+  const errorRow = query.error ? (
+    <div className="flex items-center gap-1 px-2 text-sm text-destructive" style={rowStyle}>
+      <WarningCircleIcon className="h-4 w-4 shrink-0" aria-hidden="true" />
+      <span className="min-w-0 truncate" title={query.error.message}>
+        {query.data ? "Couldn't refresh directory contents" : "Couldn't load directory contents"}
+      </span>
+      <Button
+        variant="ghost"
+        size="xs"
+        className="ml-auto"
+        disabled={query.isFetching}
+        onClick={() => {
+          void query.refetch();
+        }}
       >
-        <Spinner aria-hidden="true" />
-        <span>Loading…</span>
-      </div>
+        {query.isFetching ? 'Retrying…' : 'Retry'}
+      </Button>
+    </div>
+  ) : null;
+
+  if (!query.data) {
+    return (
+      errorRow ?? (
+        <div
+          className="flex items-center gap-1 px-2 text-sm text-muted-foreground"
+          style={rowStyle}
+        >
+          <Spinner aria-hidden="true" />
+          <span>Loading…</span>
+        </div>
+      )
     );
   }
 
-  if (isError) {
-    return (
-      <div
-        className="flex items-center gap-1 px-2 text-sm text-destructive"
-        style={{ height: FILE_TREE_ROW_HEIGHT, paddingLeft: depth * 12 + 8 }}
-      >
-        <WarningCircleIcon className="h-4 w-4 shrink-0" />
-        <span className="truncate" title="Couldn't load directory contents">
-          Couldn't load directory contents
-        </span>
-      </div>
-    );
-  }
-
-  const entries = data?.entries ?? [];
   return (
     <>
-      {entries.map((entry) =>
+      {errorRow}
+      {query.data.entries.map((entry) =>
         entry.type === 'directory' ? (
           <UntrackedSubDir
             key={entry.path}

@@ -1,5 +1,28 @@
 import { z } from 'zod';
+import {
+  type PRDeliveryState,
+  prDeliveryStateSchema,
+  prEventStateSchema,
+} from '@/shared/schemas/pr-event.schema';
 import type { Prisma, WorkspacePRDelivery, WorkspacePREvent } from '@prisma-gen/client';
+
+export const PR_DELIVERY_STATE = prDeliveryStateSchema.enum;
+export const PR_EVENT_STATE = prEventStateSchema.enum;
+
+/** Quarantined evidence: never projected onto members, settled, retried or flattened. */
+export function isQuarantinedDeliveryState(state: PRDeliveryState): boolean {
+  return state === PR_DELIVERY_STATE.BLOCKED || state === PR_DELIVERY_STATE.DISMISSED;
+}
+
+/** Typed membership test for a persisted (string) state column. */
+export function hasState<T extends string>(state: string, states: readonly T[]): state is T {
+  return (states as readonly string[]).includes(state);
+}
+
+/** Parse persisted delivery state; an unknown value fails closed instead of reading as live. */
+export function parseDeliveryState(delivery: Pick<WorkspacePRDelivery, 'state'>): PRDeliveryState {
+  return prDeliveryStateSchema.parse(delivery.state);
+}
 
 const prDeliveryMembershipSchema = z.array(z.string().min(1)).min(1);
 /** Validate the complete explicit membership before export or any lifecycle transition. */
@@ -34,16 +57,27 @@ export function projectDeliveryEvent(
   event: WorkspacePREvent,
   delivery?: WorkspacePRDelivery
 ): WorkspacePREvent {
+  prEventStateSchema.parse(event.state);
   if (!delivery) {
     return event;
   }
-  if (delivery.state === 'BLOCKED') {
-    return { ...event, state: 'DISPATCHING' };
+  const state = parseDeliveryState(delivery);
+  // Blocked evidence keeps holding the workspace; dismissed evidence is retained
+  // verbatim but is no longer live, so neither overlays its frozen fields. A
+  // dismissed member keeps settled raw states (a DELIVERED fact stays delivered
+  // history); only its unsettled PENDING/DISPATCHING state reads as CANCELLED.
+  if (state === PR_DELIVERY_STATE.BLOCKED) {
+    return { ...event, state: PR_EVENT_STATE.DISPATCHING };
+  }
+  if (state === PR_DELIVERY_STATE.DISMISSED) {
+    return hasState(event.state, [PR_EVENT_STATE.PENDING, PR_EVENT_STATE.DISPATCHING])
+      ? { ...event, state: PR_EVENT_STATE.CANCELLED }
+      : event;
   }
   return {
     ...event,
     deliveryId: delivery.id,
-    state: delivery.state,
+    state,
     attempts: delivery.attempts,
     deliverySessionId: delivery.sessionId,
     deliveryProvider: delivery.provider,
@@ -98,13 +132,19 @@ export function exportDeliveryEvents(
     if (!members) {
       throw new Error('Cannot export incomplete PR delivery membership');
     }
-    if (delivery.state === 'BLOCKED' && members.some((event) => event.deliveryId !== delivery.id)) {
+    if (
+      isQuarantinedDeliveryState(parseDeliveryState(delivery)) &&
+      members.some((event) => event.deliveryId !== delivery.id)
+    ) {
       throw new Error('Cannot flatten blocked normalized PR delivery evidence');
     }
   }
   const byId = new Map(deliveries.map((delivery) => [delivery.id, delivery]));
+  // Quarantined evidence exports verbatim; a dismissal is local and is not exported.
   return events.map((event) => {
     const delivery = byId.get(event.batchId ?? event.deliveryId ?? '');
-    return delivery?.state === 'BLOCKED' ? event : projectDeliveryEvent(event, delivery);
+    return delivery && isQuarantinedDeliveryState(parseDeliveryState(delivery))
+      ? event
+      : projectDeliveryEvent(event, delivery);
   });
 }

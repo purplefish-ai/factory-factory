@@ -5,6 +5,7 @@ import { FolderSimpleIcon } from '@phosphor-icons/react/dist/csr/FolderSimple';
 import { GithubLogoIcon } from '@phosphor-icons/react/dist/csr/GithubLogo';
 import { StackSimpleIcon } from '@phosphor-icons/react/dist/csr/StackSimple';
 import type { ReactNode } from 'react';
+import { StatusDot } from '@/client/components/status-indicators';
 import { Button } from '@/components/ui/button';
 import { CommandGroup, CommandItem } from '@/components/ui/command';
 import type { SearchResult } from '@/shared/search';
@@ -75,7 +76,7 @@ function ResultRow({
           <MatchedText text={result.subtitle} query={query} />
         </span>
       </span>
-      <span className="shrink-0 text-[11px] text-muted-foreground">
+      <span className="shrink-0 text-2xs text-muted-foreground">
         {result.archived ? (
           <span className="flex items-center gap-1">
             <ArchiveIcon className="size-3" />
@@ -109,7 +110,7 @@ function LocalResults({ query, results, loading, error, onRetry, onSelect }: Sea
             }
           }}
         >
-          Try again
+          Retry
         </Button>
       </div>
     );
@@ -120,7 +121,7 @@ function LocalResults({ query, results, loading, error, onRetry, onSelect }: Sea
         role="status"
         className="flex min-h-32 items-center justify-center gap-2 text-sm text-muted-foreground"
       >
-        <span className="size-1.5 animate-pulse rounded-full bg-current motion-reduce:animate-none" />
+        <StatusDot tone="neutral" pulse size="xs" />
         Searching…
       </div>
     );

@@ -2,10 +2,12 @@
 import { act, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { stubRadixLayout } from '@/client/lib/user-settings-queries.test-harness';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { WorkspaceCreationOptions } from './workspace-creation-options';
 
-beforeEach(() => vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true));
+// The settings tooltip reopens when focus returns to its trigger after the popover closes.
+beforeEach(() => stubRadixLayout());
 afterEach(() => vi.unstubAllGlobals());
 
 function Preview({
@@ -117,14 +119,15 @@ it('keeps model and thinking visible while retaining secondary choices across se
     expect(button('Planning: Off').textContent).toBe('Off');
     await choose(button('Codex account: Auto'), 'Work');
     await act(() => button('Planning: Off').click());
-    await act(() => button('Enable PR updates').click());
+    expect(button('PR updates').getAttribute('aria-pressed')).toBe('false');
+    await act(() => button('PR updates').click());
     await act(() => button('Workspace settings').click());
     expect(document.body.querySelector('[role="dialog"]')).toBeNull();
     await act(() => button('Workspace settings').click());
     button('Codex account: Work');
     expect(button('Planning: On').getAttribute('aria-pressed')).toBe('true');
     expect(button('Planning: On').textContent).toBe('On');
-    expect(button('Disable PR updates').getAttribute('aria-pressed')).toBe('true');
+    expect(button('PR updates').getAttribute('aria-pressed')).toBe('true');
   } finally {
     await act(() => root.unmount());
     container.remove();

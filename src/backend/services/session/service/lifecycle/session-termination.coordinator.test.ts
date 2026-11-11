@@ -1,8 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SessionLifecycleEventRecord } from '@/backend/services/session/resources/session-lifecycle-event.accessor';
 import { AcpRuntimeQuiescence } from '@/backend/services/session/service/acp/acp-runtime-quiescence';
+import { sessionBackgroundDeliveryService } from '@/backend/services/session/service/delivery/session-background-delivery.service';
 import { acpTraceLogger } from '@/backend/services/session/service/logging/acp-trace-logger.service';
-import { sessionBackgroundDeliveryService } from './session-background-delivery.service';
 import { createDeferred, createTerminationHarness } from './session-lifecycle.test-helpers';
 import { SessionTerminationCoordinator } from './session-termination.coordinator';
 
@@ -52,13 +52,13 @@ function createShutdownHarness(
     retryService: base.retryService,
     runtimeManager,
     sessionDomainService: base.sessionDomainService,
-    sessionPermissionService: base.sessionPermissionService,
     acpEventProcessor: base.acpEventProcessor,
     promptTurnCompletionService,
     lifecycleEventService: base.lifecycleEventService,
     lifecycleGate: base.lifecycleGate,
     workflowFinalizer: base.workflowFinalizer,
     getRuntimeSnapshot: base.getRuntimeSnapshot,
+    scope: base.scope,
   });
   coordinator.configure({ workspace: base.workspaceBridge });
 
@@ -598,6 +598,7 @@ describe('SessionTerminationCoordinator races', () => {
     const closeTrace = vi.spyOn(acpTraceLogger, 'closeSession').mockImplementation(() => {
       effects.push('close-trace');
     });
+    harness.scope.register('dispatch', { completeStop: () => effects.push('complete-stop') });
     const originalReserveStop = harness.lifecycleGate.reserveStop.bind(harness.lifecycleGate);
     vi.spyOn(harness.lifecycleGate, 'reserveStop').mockImplementation((...args) => {
       effects.push('reserve-stop');
@@ -643,6 +644,7 @@ describe('SessionTerminationCoordinator races', () => {
       'clear-queued-work',
       'clear-inactive',
       'close-trace',
+      'complete-stop',
       'release-stop',
     ]);
     expect(harness.lifecycleGate.isStopReserved('session-1')).toBe(false);

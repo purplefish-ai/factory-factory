@@ -2,11 +2,12 @@ import { MicrophoneIcon } from '@phosphor-icons/react/dist/csr/Microphone';
 import { MicrophoneSlashIcon } from '@phosphor-icons/react/dist/csr/MicrophoneSlash';
 import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
+import { StatusDot } from '@/client/components/status-indicators';
 import { playSound } from '@/client/lib/sound';
+import type { StatusTone } from '@/client/lib/status-tones';
 import { trpc } from '@/client/lib/trpc';
 import { Button } from '@/components/ui/button';
 import { Spinner } from '@/components/ui/spinner';
-import { cn } from '@/lib/utils';
 import { useMicCapture } from './use-mic-capture';
 import { useVoicePlayback } from './use-voice-playback';
 
@@ -91,21 +92,20 @@ const VOICE_PHASE_LABELS: Record<VoiceBadgePhase, string> = {
   listening: 'Listening',
 };
 
+const VOICE_PHASE_TONES: Record<Exclude<VoiceBadgePhase, 'off'>, StatusTone> = {
+  connecting: 'neutral',
+  speaking: 'info',
+  thinking: 'working',
+  listening: 'success',
+};
+
 function VoiceStatusBadge({ phase }: { phase: VoiceBadgePhase }) {
   if (phase === 'off') {
     return null;
   }
   return (
     <output className="flex items-center gap-1.5 text-xs text-muted-foreground">
-      <span
-        className={cn(
-          'h-1.5 w-1.5 rounded-full',
-          phase === 'connecting' && 'animate-pulse bg-muted-foreground',
-          phase === 'speaking' && 'animate-pulse bg-info',
-          phase === 'thinking' && 'animate-pulse bg-running',
-          phase === 'listening' && 'bg-success'
-        )}
-      />
+      <StatusDot tone={VOICE_PHASE_TONES[phase]} pulse={phase !== 'listening'} size="xs" />
       {VOICE_PHASE_LABELS[phase]}
     </output>
   );
@@ -142,6 +142,13 @@ export const VoiceModeToggle = memo(function VoiceModeToggle({
     [onFinalTranscript]
   );
 
+  const handleCaptureError = useCallback((message: string) => {
+    toast.error(message);
+    // Capture failed to start or dropped mid-session after we optimistically
+    // flipped this on — make sure playback doesn't stay "enabled" without capture.
+    setVoiceModeOn(false);
+  }, []);
+
   const { isCapturing, isConnecting, error, start, stop } = useMicCapture({
     onFinalTranscript: handleFinalTranscript,
     running,
@@ -150,6 +157,7 @@ export const VoiceModeToggle = memo(function VoiceModeToggle({
     onSpeechEnded: endBargeIn,
     utteranceEndMs: config?.utteranceEndMs,
     bargeInSustainedMs: config?.bargeInSustainedMs,
+    onError: handleCaptureError,
   });
 
   useEffect(() => {
@@ -196,15 +204,6 @@ export const VoiceModeToggle = memo(function VoiceModeToggle({
       window.dispatchEvent(new CustomEvent('voice-mode-changed', { detail: { active: false } }));
     };
   }, [isCapturing]);
-
-  useEffect(() => {
-    if (error) {
-      toast.error(error);
-      // start() failed after we optimistically flipped this on — make sure
-      // playback doesn't stay "enabled" for a capture session that never started.
-      setVoiceModeOn(false);
-    }
-  }, [error]);
 
   // An admin can disable voice mode or remove its API key while a workspace
   // is open. Without this, the toggle just disappears (the early return
@@ -256,11 +255,11 @@ export const VoiceModeToggle = memo(function VoiceModeToggle({
         onClick={handleClick}
       >
         {isConnecting ? (
-          <Spinner aria-hidden="true" className="h-4 w-4" />
+          <Spinner aria-hidden="true" />
         ) : isCapturing ? (
-          <MicrophoneIcon className={isSpeaking ? 'h-4 w-4 animate-pulse' : 'h-4 w-4'} />
+          <MicrophoneIcon className={isSpeaking ? 'animate-pulse' : undefined} />
         ) : (
-          <MicrophoneSlashIcon className="h-4 w-4" />
+          <MicrophoneSlashIcon />
         )}
         {status.label}
       </Button>

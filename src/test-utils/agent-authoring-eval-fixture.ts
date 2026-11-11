@@ -3,7 +3,7 @@ import { createServer } from 'node:http';
 import { createExpressMiddleware } from '@trpc/server/adapters/express';
 import express from 'express';
 import { vi } from 'vitest';
-import { createAgentAuthoring } from '@/backend/orchestration/agent-authoring.orchestrator';
+import { createAgentAuthoring } from '@/backend/orchestration/agents/agent-authoring.orchestrator';
 import {
   createIntegrationDatabase,
   destroyIntegrationDatabase,
@@ -98,7 +98,7 @@ export async function createAgentAuthoringEvalFixture() {
   app.use(
     '/api/trpc',
     createExpressMiddleware({
-      router: router({ agent: agentRouter }),
+      router: router({ automation: agentRouter }),
       createContext: () =>
         ({
           appContext: {

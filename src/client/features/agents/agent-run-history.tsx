@@ -1,19 +1,20 @@
 import { ArrowSquareOutIcon } from '@phosphor-icons/react/dist/csr/ArrowSquareOut';
 import { Link } from 'react-router';
+import { EmptyState } from '@/client/components/empty-state';
+import { QueryErrorState, QueryRefreshError } from '@/client/components/query-error-state';
 import { formatDateTime, toDateTimeIso } from '@/client/lib/date-time';
 import { getProjectSectionPath } from '@/client/lib/project-navigation';
+import { POLL_INTERVAL_MS } from '@/client/lib/query-options';
 import { trpc } from '@/client/lib/trpc';
 import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import type { AgentRun } from './types';
 
 export interface AgentRunHistoryProps {
   runs?: AgentRun[];
   projectSlug: string;
-  isLoading?: boolean;
-  error?: string | null;
-  onRetry?: () => void;
+  /** A failed history read; cached runs stay listed below its notice. */
+  error?: { message: string; retry: () => void; isRetrying?: boolean } | null;
 }
 const STATUS_LABELS: Record<AgentRun['status'], string> = {
   RUNNING: 'Running',
@@ -31,40 +32,45 @@ const MISSING_WORKSPACE_LABELS: Record<AgentRun['status'], string> = {
   SKIPPED: 'Workspace unavailable',
 };
 
-export function AgentRunHistory({
-  runs,
-  projectSlug,
-  isLoading,
-  error,
-  onRetry,
-}: AgentRunHistoryProps) {
+export function AgentRunHistory({ runs, projectSlug, error }: AgentRunHistoryProps) {
   return (
     <section aria-label="Run history" className="min-w-0 space-y-4">
       <div>
         <h3 className="text-sm font-semibold">Run history</h3>
         <p className="mt-1 text-xs text-muted-foreground">Up to 50 recent runs</p>
       </div>
-      {error && (
-        <div role="alert" className="space-y-2 text-sm">
-          <p className="text-destructive">Couldn't load run history. {error}</p>
-          {onRetry && (
-            <Button size="sm" variant="outline" onClick={onRetry}>
-              Retry run history
-            </Button>
-          )}
-        </div>
-      )}
-      {isLoading && !runs && (
+      {error && !runs ? (
+        <QueryErrorState
+          title="Couldn't load run history"
+          error={error}
+          onRetry={error.retry}
+          isRetrying={error.isRetrying}
+          className="p-0"
+        />
+      ) : null}
+      {error && runs ? (
+        <QueryRefreshError
+          title="Couldn't refresh run history"
+          error={error}
+          onRetry={error.retry}
+          isRetrying={error.isRetrying}
+          className="rounded-lg border"
+        />
+      ) : null}
+      {/* Unresolved, including a paused offline read, until runs or an error arrive. */}
+      {!(runs || error) && (
         <div role="status" className="space-y-2">
           <span className="sr-only">Loading run history…</span>
           <Skeleton className="h-28 rounded-lg" />
           <Skeleton className="h-28 rounded-lg" />
         </div>
       )}
-      {!(error || isLoading) && runs?.length === 0 && (
-        <p className="rounded-lg border border-dashed p-6 text-sm text-muted-foreground">
-          No runs yet. Future runs will appear here.
-        </p>
+      {!error && runs?.length === 0 && (
+        <EmptyState
+          title="No runs yet"
+          description="Future runs will appear here."
+          className="rounded-lg border border-dashed"
+        />
       )}
       {runs && runs.length > 0 && (
         <div className="divide-y rounded-lg border">
@@ -131,17 +137,23 @@ export function AgentRunHistoryQuery({
 }) {
   const history = trpc.periodicTask.listExecutions.useQuery(
     { periodicTaskId, limit: 50 },
-    { refetchInterval: 10_000 }
+    { refetchInterval: POLL_INTERVAL_MS.activity }
   );
   return (
     <AgentRunHistory
       projectSlug={projectSlug}
       runs={history.data}
-      isLoading={history.isLoading}
-      error={history.error?.message}
-      onRetry={() => {
-        void history.refetch();
-      }}
+      error={
+        history.error
+          ? {
+              message: history.error.message,
+              isRetrying: history.isFetching,
+              retry: () => {
+                void history.refetch();
+              },
+            }
+          : null
+      }
     />
   );
 }

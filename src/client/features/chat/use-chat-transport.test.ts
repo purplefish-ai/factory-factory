@@ -5,7 +5,8 @@ import { flushSync } from 'react-dom';
 import { createRoot } from 'react-dom/client';
 import { describe, expect, it, vi } from 'vitest';
 import { subscribeToSubagentChanges } from '@/client/lib/subagent-events';
-import { type AgentMessage, isWebSocketMessage } from '@/lib/chat-protocol';
+import type { AgentMessage, WebSocketMessage } from '@/lib/chat-protocol';
+import { parseChatServerMessage } from '@/shared/acp-protocol/protocol/chat-server-message-schema';
 import type { ChatAction } from './reducer';
 import { createToolInputAccumulatorState, handleToolInputStreaming } from './streaming-utils';
 import { useChatTransport } from './use-chat-transport';
@@ -15,7 +16,7 @@ function TransportHarness({
   result,
 }: {
   dispatch: (action: ChatAction) => void;
-  result: { handleMessage?: (data: unknown) => void };
+  result: { handleMessage?: (message: WebSocketMessage) => void };
 }) {
   result.handleMessage = useChatTransport({
     dispatch,
@@ -28,7 +29,7 @@ function TransportHarness({
 function renderTransport(dispatch: (action: ChatAction) => void) {
   const container = document.createElement('div');
   const root = createRoot(container);
-  const result: { handleMessage?: (data: unknown) => void } = {};
+  const result: { handleMessage?: (message: WebSocketMessage) => void } = {};
 
   flushSync(() => root.render(createElement(TransportHarness, { dispatch, result })));
   if (!result.handleMessage) {
@@ -69,14 +70,9 @@ describe('sub-agent invalidation transport', () => {
     transport.cleanup();
   });
 
-  it('does not deliver a malformed wrapped invalidation', () => {
-    const listener = vi.fn();
-    const unsubscribe = subscribeToSubagentChanges(listener);
-    const dispatch = vi.fn<(action: ChatAction) => void>();
-    const transport = renderTransport(dispatch);
-
-    try {
-      transport.handleMessage({
+  it('rejects a malformed wrapped invalidation before it reaches the transport', () => {
+    expect(
+      parseChatServerMessage({
         type: 'session_delta',
         data: {
           type: 'subagents_changed',
@@ -84,14 +80,8 @@ describe('sub-agent invalidation transport', () => {
           subagentId: 'child-1',
           change: 'deleted',
         },
-      });
-
-      expect(listener).not.toHaveBeenCalled();
-      expect(dispatch).not.toHaveBeenCalled();
-    } finally {
-      unsubscribe();
-      transport.cleanup();
-    }
+      }).success
+    ).toBe(false);
   });
 });
 
@@ -141,6 +131,38 @@ describe('handleToolInputStreaming', () => {
     });
   });
 
+  it('skips text deltas and input deltas whose JSON fragment is not a string', () => {
+    const toolInputAccumulatorRef = { current: createToolInputAccumulatorState() };
+    handleToolInputStreaming(
+      {
+        type: 'stream_event',
+        event: {
+          type: 'content_block_start',
+          index: 0,
+          content_block: { type: 'tool_use', id: 'tool-1', name: 'search', input: {} },
+        },
+      },
+      toolInputAccumulatorRef
+    );
+    const textDelta: AgentMessage = {
+      type: 'stream_event',
+      event: { type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: '{}' } },
+    };
+    // Stream events come off the wire, so a fragment can arrive in the wrong shape.
+    const malformedDelta = {
+      type: 'stream_event',
+      event: {
+        type: 'content_block_delta',
+        index: 0,
+        delta: { type: 'input_json_delta', partial_json: 42 },
+      },
+    } as unknown as AgentMessage;
+
+    expect(handleToolInputStreaming(textDelta, toolInputAccumulatorRef)).toBeNull();
+    expect(handleToolInputStreaming(malformedDelta, toolInputAccumulatorRef)).toBeNull();
+    expect(toolInputAccumulatorRef.current.inputJsonByToolUseId.get('tool-1')).toBe('');
+  });
+
   it('cleans up accumulator entries on content_block_stop', () => {
     const toolInputAccumulatorRef = { current: createToolInputAccumulatorState() };
     const startMsg: AgentMessage = {
@@ -176,20 +198,40 @@ describe('handleToolInputStreaming', () => {
   });
 });
 
-describe('isWebSocketMessage', () => {
+describe('parseChatServerMessage', () => {
+  const accepts = (data: unknown) => parseChatServerMessage(data).success;
+
   it('rejects unknown websocket message types', () => {
-    expect(isWebSocketMessage({ type: 'not_real' })).toBe(false);
+    expect(accepts({ type: 'not_real' })).toBe(false);
   });
 
   it('rejects session_delta payloads without nested websocket event', () => {
-    expect(isWebSocketMessage({ type: 'session_delta', data: { foo: 'bar' } })).toBe(false);
-    expect(isWebSocketMessage({ type: 'session_delta', data: null })).toBe(false);
+    expect(accepts({ type: 'session_delta', data: { foo: 'bar' } })).toBe(false);
+    expect(accepts({ type: 'session_delta', data: null })).toBe(false);
   });
 
   it('accepts valid session_delta payloads', () => {
-    expect(isWebSocketMessage({ type: 'session_delta', data: { type: 'status_update' } })).toBe(
-      true
-    );
+    expect(
+      accepts({
+        type: 'session_delta',
+        data: { type: 'task_notification', message: 'Indexing' },
+      })
+    ).toBe(true);
+  });
+
+  it.each([
+    'system_init',
+    'hook_started',
+    'hook_response',
+    'tool_use_summary',
+    'status_update',
+    'agent_metadata',
+    'user_message_uuid',
+    'message_used_as_response',
+    'sessions',
+  ])('rejects the retired %s message type', (type) => {
+    expect(accepts({ type })).toBe(false);
+    expect(accepts({ type: 'session_delta', data: { type } })).toBe(false);
   });
 
   it('accepts direct and nested assistant text delta payloads', () => {
@@ -201,13 +243,13 @@ describe('isWebSocketMessage', () => {
       text: ' world',
     };
 
-    expect(isWebSocketMessage(delta)).toBe(true);
-    expect(isWebSocketMessage({ type: 'session_delta', data: delta })).toBe(true);
+    expect(accepts(delta)).toBe(true);
+    expect(accepts({ type: 'session_delta', data: delta })).toBe(true);
   });
 
   it('rejects malformed assistant text delta payloads', () => {
     expect(
-      isWebSocketMessage({
+      accepts({
         type: 'assistant_text_delta',
         messageId: '',
         order: 7,
@@ -216,7 +258,7 @@ describe('isWebSocketMessage', () => {
       })
     ).toBe(false);
     expect(
-      isWebSocketMessage({
+      accepts({
         type: 'assistant_text_delta',
         messageId: 'session-1-7',
         order: -1,
@@ -225,7 +267,7 @@ describe('isWebSocketMessage', () => {
       })
     ).toBe(false);
     expect(
-      isWebSocketMessage({
+      accepts({
         type: 'assistant_text_delta',
         messageId: 'session-1-7',
         order: 7,
@@ -234,7 +276,7 @@ describe('isWebSocketMessage', () => {
       })
     ).toBe(false);
     expect(
-      isWebSocketMessage({
+      accepts({
         type: 'assistant_text_delta',
         messageId: 'session-1-7',
         order: 7,
@@ -244,20 +286,14 @@ describe('isWebSocketMessage', () => {
   });
 
   it('rejects non-delta nested payload types inside session_delta', () => {
-    expect(isWebSocketMessage({ type: 'session_delta', data: { type: 'session_snapshot' } })).toBe(
-      false
-    );
-    expect(
-      isWebSocketMessage({ type: 'session_delta', data: { type: 'session_replay_batch' } })
-    ).toBe(false);
-    expect(isWebSocketMessage({ type: 'session_delta', data: { type: 'session_delta' } })).toBe(
-      false
-    );
+    expect(accepts({ type: 'session_delta', data: { type: 'session_snapshot' } })).toBe(false);
+    expect(accepts({ type: 'session_delta', data: { type: 'session_replay_batch' } })).toBe(false);
+    expect(accepts({ type: 'session_delta', data: { type: 'session_delta' } })).toBe(false);
   });
 
   it('rejects agent_message without a nested Claude payload', () => {
-    expect(isWebSocketMessage({ type: 'agent_message' })).toBe(false);
-    expect(isWebSocketMessage({ type: 'agent_message', data: null })).toBe(false);
-    expect(isWebSocketMessage({ type: 'agent_message', data: { type: 'not_real' } })).toBe(false);
+    expect(accepts({ type: 'agent_message' })).toBe(false);
+    expect(accepts({ type: 'agent_message', data: null })).toBe(false);
+    expect(accepts({ type: 'agent_message', data: { type: 'not_real' } })).toBe(false);
   });
 });

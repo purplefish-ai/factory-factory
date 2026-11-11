@@ -59,3 +59,34 @@ it.each([true, false])(
     }
   }
 );
+
+it('shows a spinner on the PR action while a chat is being created', async () => {
+  mocks.pending = false;
+  mocks.error = true;
+  const container = document.createElement('div');
+  document.body.append(container);
+  const root = createRoot(container);
+  try {
+    await act(() =>
+      root.render(
+        <TooltipProvider>
+          <WorkspacePrAction
+            workspace={{ prs: [], branchName: 'feature' } as unknown as WorkspaceHeaderWorkspace}
+            hasChanges
+            running={false}
+            isCreatingSession
+            handleQuickAction={vi.fn()}
+          />
+        </TooltipProvider>
+      )
+    );
+    const button = container.querySelector('button')!;
+    expect(button.disabled).toBe(true);
+    expect(button.getAttribute('aria-busy')).toBe('true');
+    expect(button.querySelector('[data-slot=spinner]')).not.toBeNull();
+  } finally {
+    await act(() => root.unmount());
+    container.remove();
+    vi.unstubAllGlobals();
+  }
+});

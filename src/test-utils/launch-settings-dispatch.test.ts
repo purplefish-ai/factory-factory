@@ -5,9 +5,9 @@ import type {
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AcpRuntimeConfigController } from '@/backend/services/session/service/acp/acp-runtime-config-controller';
 import { createTestProcessHandle } from '@/backend/services/session/service/acp/acp-runtime-manager.test-helpers';
+import { SessionConfigService } from '@/backend/services/session/service/config/session.config.service';
 import { sessionDataService } from '@/backend/services/session/service/data/session-data.service';
 import { SessionDispatchService } from '@/backend/services/session/service/dispatch/session-dispatch.service';
-import { SessionConfigService } from '@/backend/services/session/service/lifecycle/session.config.service';
 import { sessionDomainService } from '@/backend/services/session/service/session-domain.service';
 import { userSettingsService } from '@/backend/services/settings';
 import type { QueuedMessage } from '@/shared/acp-protocol';
@@ -131,7 +131,7 @@ function setup(provider: ChatProvider) {
   dispatcher.configureLifecycle({
     gate: {
       getGeneration: () => 0,
-      isGenerationCurrent: () => true,
+      hasStopSince: () => false,
       isSessionStopping: () => false,
     },
     startup: { getSessionClient: () => handle, getOrCreateSessionClient: async () => handle },

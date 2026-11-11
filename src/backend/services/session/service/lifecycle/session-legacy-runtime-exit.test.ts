@@ -1,11 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { sessionDomainService } from '@/backend/services/session/service/session-domain.service';
+import { userSettingsService } from '@/backend/services/settings';
 import { SessionStatus } from '@/shared/core';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 
 const mockNotifyToolStart = vi.fn();
 const mockNotifyToolComplete = vi.fn();
-const mockRecordRatchetSessionEnd = vi.fn();
 const mockAcpTraceLoggerCloseSession = vi.fn();
 vi.mock('@/backend/services/logger.service', () => ({
   createLogger: () => ({
@@ -20,7 +20,7 @@ vi.mock('@/backend/services/session/resources/agent-session-launch-origin.access
   agentSessionLaunchOriginAccessor: { findBySessionId: async () => null },
 }));
 vi.mock('@/backend/services/workspace');
-vi.mock('./closed-session-persistence.service');
+vi.mock('@/backend/services/session/service/archive/closed-session-persistence.service');
 vi.mock('@/backend/services/session/service/acp', async (importOriginal) => {
   const actual = (await importOriginal()) as Record<string, unknown>;
   const RuntimeQuiescence =
@@ -72,7 +72,7 @@ vi.mock('@/backend/interceptors/registry', () => ({
     notifyToolComplete: (...args: unknown[]) => mockNotifyToolComplete(...args),
   },
 }));
-vi.mock('./session.repository', () => ({
+vi.mock('@/backend/services/session/service/data/session.repository', () => ({
   SessionRepository: class {},
   sessionRepository: {
     getSessionById: vi.fn(),
@@ -95,16 +95,16 @@ vi.mock('@/backend/services/session/service/logging/acp-trace-logger.service', (
 
 import type { AcpProcessHandle } from '@/backend/services/session/service/acp';
 import { acpRuntimeManager } from '@/backend/services/session/service/acp';
-import { workspaceDataService } from '@/backend/services/workspace';
-import { closedSessionPersistenceService } from './closed-session-persistence.service';
-import { mockCreatedAcpClient } from './session-lifecycle.test-helpers';
+import { closedSessionPersistenceService } from '@/backend/services/session/service/archive/closed-session-persistence.service';
 import {
   acpEventProcessor,
   sessionLifecycleService,
   sessionPromptTurnCompletionService,
   sessionService,
-} from './session-services';
-import { sessionRepository } from './session.repository';
+} from '@/backend/services/session/service/composition/session-services';
+import { sessionRepository } from '@/backend/services/session/service/data/session.repository';
+import { workspaceDataService } from '@/backend/services/workspace';
+import { mockCreatedAcpClient } from './session-lifecycle.test-helpers';
 
 const activeRuntime = {
   incarnationId: '11111111-1111-4111-8111-111111111111',
@@ -115,9 +115,9 @@ const getAcpProcessorState = () => acpEventProcessor;
 describe('retained legacy runtime exit', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.spyOn(userSettingsService, 'get').mockResolvedValue({ turnLimitMinutes: null } as never);
     mockNotifyToolStart.mockReset();
     mockNotifyToolComplete.mockReset();
-    mockRecordRatchetSessionEnd.mockReset();
     mockAcpTraceLoggerCloseSession.mockReset();
     const acpProcessor = getAcpProcessorState();
     acpProcessor.pendingAcpToolCalls.clear();
@@ -127,7 +127,6 @@ describe('retained legacy runtime exit', () => {
     const workspaceBridge = {
       markSessionRunning: vi.fn(),
       markSessionIdle: vi.fn(),
-      recordRatchetSessionEnd: mockRecordRatchetSessionEnd,
       resetPRDiscoveryBackoff: vi.fn(async () => true),
     };
     sessionService.configure({ workspace: workspaceBridge });
@@ -204,11 +203,6 @@ describe('retained legacy runtime exit', () => {
     expect(sessionRepository.updateSession).toHaveBeenCalledWith('session-1', {
       status: SessionStatus.COMPLETED,
     });
-    expect(mockRecordRatchetSessionEnd).toHaveBeenCalledWith(
-      'workspace-1',
-      'session-1',
-      'COMPLETED'
-    );
     expect(sessionRepository.deleteSession).toHaveBeenCalledWith('session-1');
     expect(clearSessionSpy).toHaveBeenCalledWith('session-1', { permanentlyDeleted: true });
     const destructiveClearCallIndex = clearSessionSpy.mock.calls.findIndex(

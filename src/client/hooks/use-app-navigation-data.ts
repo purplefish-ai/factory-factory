@@ -6,6 +6,7 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useMemo,
   useRef,
   useState,
 } from 'react';
@@ -19,6 +20,7 @@ import {
 } from '@/client/hooks/use-project-review-requests';
 import { useProjectSnapshotSync } from '@/client/hooks/use-project-snapshot-sync';
 import { useProjectWorkspaceQuery } from '@/client/hooks/use-project-workspace-query';
+import { useStableCallback } from '@/client/hooks/use-stable-callback';
 import { useWorkspaceAttention } from '@/client/hooks/use-workspace-attention';
 import { readSelectedProjectSlug, writeSelectedProjectSlug } from '@/client/lib/project-selection';
 import { trpc } from '@/client/lib/trpc';
@@ -177,7 +179,12 @@ export function useAppNavigationData() {
     }
   }, [reviewProject, utils]);
 
-  const { data: projectState } = useProjectWorkspaceQuery(selectedProjectId);
+  const {
+    data: projectState,
+    error: workspacesError,
+    isFetching: isFetchingWorkspaces,
+    refetch: refetchWorkspaces,
+  } = useProjectWorkspaceQuery(selectedProjectId);
 
   // Sync PR statuses from GitHub once when project changes
   usePRStatusSync(selectedProjectId);
@@ -205,33 +212,79 @@ export function useAppNavigationData() {
     }
   }, [currentWorkspaceId, needsAttention, clearAttention]);
 
-  return {
-    ...(unreadMailCounts.data ? { unreadMailCounts: unreadMailCounts.data } : {}),
-    projects: projects?.map((project) => {
-      const boardCounts = boardCountsError
-        ? undefined
-        : projectsWithBoardCounts?.find((candidate) => candidate.id === project.id)?.boardCounts;
-      return { ...project, ...(boardCounts ? { boardCounts } : {}) };
-    }),
-    projectsError,
-    refetchProjects: async (options?: RefetchOptions & { includeBoardCounts?: boolean }) => {
+  const projectsWithCounts = useMemo(
+    () =>
+      projects?.map((project) => {
+        const boardCounts = boardCountsError
+          ? undefined
+          : projectsWithBoardCounts?.find((candidate) => candidate.id === project.id)?.boardCounts;
+        return { ...project, ...(boardCounts ? { boardCounts } : {}) };
+      }),
+    [projects, projectsWithBoardCounts, boardCountsError]
+  );
+  const refetchProjects = useStableCallback(
+    async (options?: RefetchOptions & { includeBoardCounts?: boolean }) => {
       const [result] = await Promise.all([
         refetchProjectList(options),
         options?.includeBoardCounts ? refetchBoardCounts() : Promise.resolve(),
       ]);
       return result;
-    },
-    selectedProjectSlug,
-    selectProjectSlug,
-    selectedProjectId,
-    issueProvider,
-    serverWorkspaces,
-    reviewCount,
-    agentsSummary,
-    needsAttention,
-    clearAttention,
-    currentWorkspaceId,
-  };
+    }
+  );
+  const retryWorkspaces = useStableCallback(() => {
+    void refetchWorkspaces();
+  });
+  const workspacesErrorMessage = workspacesError?.message;
+  const isRetryingWorkspaces = workspacesErrorMessage !== undefined && isFetchingWorkspaces;
+  const unreadMailCountsData = unreadMailCounts.data;
+
+  // The layout re-renders for route and query changes that leave this data
+  // alone; one value per change keeps the sidebar and headers from following.
+  return useMemo(
+    () => ({
+      ...(unreadMailCountsData ? { unreadMailCounts: unreadMailCountsData } : {}),
+      projects: projectsWithCounts,
+      projectsError,
+      refetchProjects,
+      selectedProjectSlug,
+      selectProjectSlug,
+      selectedProjectId,
+      issueProvider,
+      serverWorkspaces,
+      // Present only after a failed load, so the sidebar can tell it from an empty list.
+      ...(workspacesErrorMessage === undefined
+        ? {}
+        : {
+            serverWorkspacesError: {
+              message: workspacesErrorMessage,
+              isRetrying: isRetryingWorkspaces,
+              retry: retryWorkspaces,
+            },
+          }),
+      reviewCount,
+      agentsSummary,
+      needsAttention,
+      clearAttention,
+      currentWorkspaceId,
+    }),
+    [
+      unreadMailCountsData,
+      projectsWithCounts,
+      projectsError,
+      selectedProjectSlug,
+      selectProjectSlug,
+      selectedProjectId,
+      issueProvider,
+      serverWorkspaces,
+      workspacesErrorMessage,
+      isRetryingWorkspaces,
+      reviewCount,
+      agentsSummary,
+      needsAttention,
+      clearAttention,
+      currentWorkspaceId,
+    ]
+  );
 }
 
 export type AppNavigationData = ReturnType<typeof useAppNavigationData>;

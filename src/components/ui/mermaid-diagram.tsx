@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { StatusCallout } from '@/client/components/status-callout';
 import { renderThemedMermaid } from '@/client/lib/mermaid-renderer';
 
 // Component to render Mermaid diagrams
@@ -49,12 +50,9 @@ export default function MermaidDiagram({ chart }: { chart: string }) {
     <>
       <div ref={ref} className="my-4" hidden={Boolean(error)} />
       {error && (
-        <div className="my-4 p-3 bg-destructive/10 border border-destructive/20 rounded-md">
-          <div className="text-destructive text-sm font-medium mb-2">Error rendering diagram:</div>
-          <pre className="text-destructive text-xs overflow-x-auto whitespace-pre-wrap">
-            {error}
-          </pre>
-        </div>
+        <StatusCallout tone="danger" title="Error rendering diagram" className="my-4">
+          <pre className="mt-1 overflow-x-auto whitespace-pre-wrap text-xs">{error}</pre>
+        </StatusCallout>
       )}
     </>
   );

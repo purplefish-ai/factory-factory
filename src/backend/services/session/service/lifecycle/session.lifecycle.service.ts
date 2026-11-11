@@ -1,8 +1,9 @@
-import type { AcpRuntimeManager } from '@/backend/services/session/service/acp';
+import type { AcpProcessHandle, AcpRuntimeManager } from '@/backend/services/session/service/acp';
 import type {
   SessionLifecycleMessageQueueBridge,
   SessionLifecycleWorkspaceBridge,
 } from '@/backend/services/session/service/bridges';
+import { getAcpWorkState } from '@/backend/services/session/service/events/session-work-state';
 import type { SessionDomainService } from '@/backend/services/session/service/session-domain.service';
 import type { WorkspaceStatus } from '@/shared/core';
 import {
@@ -17,7 +18,6 @@ import type {
   StartSessionOptions,
 } from './session-startup.coordinator';
 import type { SessionStopReason, StopSessionOptions } from './session-termination.coordinator';
-import { getAcpWorkState } from './session-work-state';
 
 export type {
   GetOrCreateSessionClientOptions,
@@ -97,7 +97,7 @@ export class SessionLifecycleService {
   async getOrCreateSessionClient(
     sessionId: string,
     options?: GetOrCreateSessionClientOptions
-  ): Promise<unknown> {
+  ): Promise<AcpProcessHandle> {
     this.assertConfigured();
     return await this.dependencies.startupCoordinator.getOrCreateSessionClient(sessionId, options);
   }
@@ -107,7 +107,7 @@ export class SessionLifecycleService {
     return await this.dependencies.startupCoordinator.ensureSubagentBrowseSession(sessionId);
   }
 
-  getSessionClient(sessionId: string): unknown | undefined {
+  getSessionClient(sessionId: string): AcpProcessHandle | undefined {
     return this.dependencies.runtimeManager.getClient(sessionId);
   }
 

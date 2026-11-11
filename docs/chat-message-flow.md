@@ -70,9 +70,10 @@ orchestrator calls retain an explicit default dispatcher binding.
 stores transcript changes, and emits session deltas. Streaming text accumulates
 under a stable message order so the client updates the existing message. Runtime
 and permission events update session state through their respective handlers.
-The client renders the streaming message's Markdown from a throttled snapshot.
-When the text splits safely into top-level blocks, only the growing tail block
-re-parses; see [streaming Markdown](performance/streaming-markdown.md).
+The client commits streaming deltas once per 100 ms window and renders the
+streaming message's Markdown from each commit. When the text splits safely into
+top-level blocks, only the growing tail block re-parses; see
+[streaming Markdown](performance/streaming-markdown.md).
 
 `SessionEventBus` is the transport-free outbound surface. `SessionPublisher`
 wraps incremental events in `session_delta`; `ChatConnectionRegistry` owns
@@ -197,16 +198,19 @@ rejected state. Increase the configured limit within its supported range,
 restart the backend, and explicitly reconnect to retry; snapshots remain
 available over HTTP. A successfully accepted baseline releases that guard.
 
-Replay retains the responsive history loading and 128 KiB wire chunks. Chunk
-envelopes carry the bounded load correlation ID, including the byte-fragment
-fallback for unusually large replay metadata. The configured budget also bounds
-the logical replay; the existing 128 MiB replay assembly ceiling remains an
-absolute upper bound. A viewer queues one bounded replay sequence, writes one
-chunk at a time as local write callbacks finish, and holds at most 1 MiB of
-dependent updates until the complete baseline is written. Serialized replay
-storage is bounded by twice its declared source size plus 1 KiB per bounded
-chunk for base64/envelope overhead. Independent command replies and
-notifications remain available. A retry of the same pending load reuses its
+Replay retains the responsive history loading and 128 KiB wire chunks. Framing
+serializes each replay event once, assembles event-frame JSON from those strings
+and publishes each frame with its JSON; the transport sends that JSON instead of
+serializing the frame again. Framing and publication remain one synchronous
+pass. Chunk envelopes carry the bounded load correlation ID, including the
+byte-fragment fallback for unusually large replay metadata. The configured
+budget also bounds the logical replay; the existing 128 MiB replay assembly
+ceiling remains an absolute upper bound. A viewer queues one bounded replay
+sequence, writes one chunk at a time as local write callbacks finish, and holds
+at most 1 MiB of dependent updates until the complete baseline is written.
+Serialized replay storage is bounded by twice its declared source size plus 1
+KiB per bounded chunk for base64/envelope overhead. Independent command replies
+and notifications remain available. A retry of the same pending load reuses its
 sequence; a newer distinct request explicitly supersedes and settles the older
 request with a correlated 409 error. Neither coalesced retries nor failed writes
 create OUT_TO_CLIENT records. These records describe successful local socket
@@ -230,10 +234,14 @@ not built, since a viewer that arrives later hydrates through `load_session`;
 load replies are always sent.
 
 Provider history comes from the Claude or Codex history loader selected by the
-session's provider and identity. Codex tool-history backfill defers transcript
-renumbering while a session is starting, running, or stopping, including turns
-that begin during the history read. This preserves the message orders used by
-live text deltas. A later idle load can recover the missing tools.
+session's provider and identity. Concurrent loads, retries and an overlapping
+startup share one read, and reopening an idle session can reuse its cached
+projection while the history file is unchanged and the entry is retained; see
+[agent runtime](architecture/agent-runtime.md). Codex tool-history backfill
+defers transcript renumbering while a session is starting, running, or stopping,
+including turns that begin during the history read. This preserves the message
+orders used by live text deltas. A later idle load can recover the missing
+tools.
 
 In-memory pending requests can survive a viewer reconnect while the session
 exists; they are not a durable permission request that can be resumed after a
@@ -259,8 +267,9 @@ replaces that state rather than patching it, and applying the delta matches what
 a snapshot would show for those fields. Ordering relies on the same per-viewer
 FIFO delivery as every other delta: the domain mutates the store and publishes
 synchronously, and a viewer that is loading receives these deltas after its
-replay. `src/shared/acp-protocol/protocol/session-state-delta-schema.ts`
-validates them at the client transport boundary; the committed entry uses
+replay. Their schemas live in
+`src/shared/acp-protocol/protocol/session-state-delta-schema.ts` and are part of
+the chat frame schema described below; the committed entry uses
 `ArchivedChatMessageSchema`.
 
 Full snapshots remain for explicit `emitSessionSnapshot` calls, process exit,
@@ -271,9 +280,52 @@ for a session nobody is viewing are still skipped.
 
 ## Frontend updates
 
+`useChatWebSocket` validates every server frame once, after reassembling replay
+chunks, with `parseChatServerMessage` from
+`src/shared/acp-protocol/protocol/chat-server-message-schema.ts`. That
+`ChatServerMessageSchema` is a Zod discriminated union over every type in the
+`WebSocketMessage` protocol type, and its output satisfies that type. Backend
+senders are typed against `WebSocketMessage`; direct requester replies go
+through `serializeChatFrame`. `agent_message` events must carry their transcript
+`order`. `session_lifecycle` rows in `agent_message` events and snapshot
+transcripts need an event id, copy and a parseable timestamp.
+
+An invalid frame is dropped before hydration bookkeeping or the reducer sees it.
+The client logs the Zod issues to the console and shows one deduplicated error
+toast. Snapshots, deltas and live events are all-or-nothing. A replay batch is
+the one exception: each invalid replay event is dropped and reported
+individually, so one malformed historical event cannot make a session
+unloadable. Malformed or oversized replay chunks are reported the same way;
+chunks stranded by a reconnect or a superseding load are dropped silently.
+
+Every snapshot and replay array is parsed in full; there is no cheaper envelope
+check. Parsing a replay of 1,000 agent messages (about 1 MB of JSON) took about
+3 ms in Node, with or without Zod's JIT; `JSON.parse` of the same frame took
+about 1.6 ms.
+
 `useChatTransport` unwraps `session_delta` before passing its inner event to
-`createActionFromWebSocketMessage`. The reducer handles snapshots and replay
-batches as well as live events; replay uses the same event-to-action mapping.
+`createActionFromWebSocketMessage`. Action creators map validated fields without
+re-checking their shape. The reducer handles snapshots and replay batches as
+well as live events; replay uses the same event-to-action mapping.
+
+`useChatState` routes every reducer dispatch through a stream-delta coalescer
+(`stream-delta-coalescer.ts`), so a streaming reply reaches the reducer about
+ten times a second rather than once per 25 ms WebSocket message. Assistant text
+deltas, `content_block_delta` agent messages (text, thinking and tool-input
+JSON) and `TOOL_INPUT_UPDATE` actions count as deltas and share one 100 ms
+window, measured from the last time deltas were dispatched. A delta that arrives
+a full window after that while nothing is buffered, such as a reply's first
+token, is dispatched immediately. Other deltas are buffered and dispatched in
+one action when the window closes, as a `STREAM_DELTA_BATCH` when more than one
+is pending. In a foreground tab no delta waits longer than 100 ms; hidden tabs
+may exceed that, because the window is a timer and browsers throttle timers in
+hidden tabs. They still drain the buffer, at whatever rate the browser allows.
+Any other action, including session switches, disconnects and local sends, first
+dispatches the buffer, and unmounting dispatches it too. The reducer applies a
+batch's actions in order, so it reaches exactly the state that dispatching each
+message would have committed. The streaming Markdown renders each commit
+directly, so the window is the only clock between receipt and render; see
+[streaming Markdown](performance/streaming-markdown.md).
 
 | Wire event                                             | Reducer action or handling                             |
 | ------------------------------------------------------ | ------------------------------------------------------ |
@@ -308,6 +360,14 @@ sub-agent list, sub-agent callbacks and list state are memoized from the data
 they show. Inside the transcript, the virtualizer's `getItemKey` and
 `rangeExtractor` change only when the row key values change, because a new
 `getItemKey` rebuilds every row measurement.
+
+The reverse holds while a session streams: each transcript update re-renders
+`ChatContent`, and the memoized `ChatInput` skips it only while its props keep
+their identity. Pass `leadingControls` as a memoized element, not inline JSX.
+Inside the composer, the usage control passed to `RightControls`, the runtime
+controls given to `RuntimeOptions`, and the model and reasoning change handlers
+are memoized from their inputs, so an unrelated composer render does not
+re-render the controls row.
 
 The renderer keeps a recent transcript window of
 `DEFAULT_RENDERER_TRANSCRIPT_LIMIT` messages. Snapshots and replay arrive
@@ -480,15 +540,15 @@ cannot provide the archive's lossless tool-record or model-name boundary.
 
 ## Sources of truth
 
-| Concern                                               | Source                                                                                                                                                                                                             |
-| ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Queue, transcript, runtime snapshot, pending requests | [SessionDomainService](../src/backend/services/session/service/session-domain.service.ts) and its `store/` collaborators                                                                                           |
-| Provider event translation                            | [AcpEventProcessor](../src/backend/services/session/service/lifecycle/acp-event-processor.ts)                                                                                                                      |
-| History hydration and replay                          | [SessionLoadService](../src/backend/services/session/service/chat/session-load.service.ts) and [provider history hydrator](../src/backend/services/session/service/lifecycle/session-provider-history-hydrator.ts) |
-| Outbound event envelopes                              | [SessionPublisher](../src/backend/services/session/service/store/session-publisher.ts)                                                                                                                             |
-| WebSocket subscriptions and delivery                  | [ChatConnectionRegistry](../src/backend/routers/websocket/chat-connection-registry.ts)                                                                                                                             |
-| Client transport and event reduction                  | [useChatTransport](../src/client/features/chat/use-chat-transport.ts) and [chat reducer](../src/client/features/chat/reducer/index.ts)                                                                             |
-| Persisted provider identity and lifecycle history     | `AgentSession` and `SessionLifecycleEvent` in [Prisma schema](../prisma/schema.prisma)                                                                                                                             |
+| Concern                                               | Source                                                                                                                                                                                                                  |
+| ----------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Queue, transcript, runtime snapshot, pending requests | [SessionDomainService](../src/backend/services/session/service/session-domain.service.ts) and its `store/` collaborators                                                                                                |
+| Provider event translation                            | [AcpEventProcessor](../src/backend/services/session/service/events/acp-event-processor.ts)                                                                                                                              |
+| History hydration and replay                          | [SessionLoadService](../src/backend/services/session/service/chat/session-load.service.ts) and [provider history hydrator](../src/backend/services/session/service/data/session-provider-history-hydrator.ts)           |
+| Outbound event envelopes                              | [SessionPublisher](../src/backend/services/session/service/store/session-publisher.ts)                                                                                                                                  |
+| WebSocket subscriptions and delivery                  | [ChatConnectionRegistry](../src/backend/routers/websocket/chat-connection-registry.ts)                                                                                                                                  |
+| Client transport and event reduction                  | [useChatTransport](../src/client/features/chat/use-chat-transport.ts), [stream-delta coalescer](../src/client/features/chat/stream-delta-coalescer.ts) and [chat reducer](../src/client/features/chat/reducer/index.ts) |
+| Persisted provider identity and lifecycle history     | `AgentSession` and `SessionLifecycleEvent` in [Prisma schema](../prisma/schema.prisma)                                                                                                                                  |
 
 Focused history and recovery coverage remains in `load-session.handler.test.ts`
 and `load-session.handler.recovery.test.ts`.
@@ -499,5 +559,7 @@ ordering and recovery contracts rather than inferring guarantees from a diagram.
 ## Message text selection
 
 User and assistant messages use native text selection for copying on mobile and
-desktop. Message rows have no copy buttons; rewind and queued-message actions
-remain available.
+desktop. Message rows have no copy buttons; queued-message actions remain
+available. The ACP runtime does not support rewinding files, so message rows
+offer no rewind action; `capabilities.rewind` stays on the wire and is always
+disabled.

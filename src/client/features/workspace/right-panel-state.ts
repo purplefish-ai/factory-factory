@@ -1,3 +1,5 @@
+import { z } from 'zod';
+
 export const STORAGE_KEY_TOP_TAB_PREFIX = 'workspace-right-panel-tab-';
 
 export type TopPanelTab =
@@ -7,10 +9,6 @@ export type TopPanelTab =
   | 'periodic-task'
   | 'agents'
   | 'inbox';
-
-export interface PersistedTopPanelState {
-  topTab: TopPanelTab;
-}
 
 export function parseStoredTopTab(value: string | null): TopPanelTab | null {
   if (
@@ -37,33 +35,28 @@ export function parseStoredTopTab(value: string | null): TopPanelTab | null {
   return null;
 }
 
-export function loadPersistedTopPanelState(
-  storage: Pick<Storage, 'getItem' | 'setItem'> | null | undefined,
-  workspaceId: string
-): PersistedTopPanelState {
-  const defaultState: PersistedTopPanelState = { topTab: 'changes' };
-  if (!storage) {
-    return defaultState;
-  }
+/** A stored top tab, mapping retired tabs onto their replacements. */
+export const StoredTopTabSchema = z
+  .string()
+  .transform(parseStoredTopTab)
+  .pipe(z.enum(['changes', 'files', 'screenshots', 'periodic-task', 'agents', 'inbox']));
 
-  const key = `${STORAGE_KEY_TOP_TAB_PREFIX}${workspaceId}`;
-  let storedTop: string | null;
-  try {
-    storedTop = storage.getItem(key);
-  } catch {
-    return defaultState;
+/**
+ * The top tab to show. Without a stored choice a scheduled-automation
+ * workspace opens its automation and others open Changes. A stored
+ * periodic-task choice falls back to Changes once the workspace has loaded
+ * without one; the stored choice is kept until the user picks a tab.
+ */
+export function resolveTopTab(
+  stored: TopPanelTab | null,
+  workspace: { periodicTaskId?: string | null } | undefined
+): TopPanelTab {
+  const periodicTaskId = workspace?.periodicTaskId ?? null;
+  if (stored === null) {
+    return periodicTaskId ? 'periodic-task' : 'changes';
   }
-
-  const topTab = parseStoredTopTab(storedTop);
-  if (!topTab) {
-    return defaultState;
+  if (stored === 'periodic-task' && workspace !== undefined && !periodicTaskId) {
+    return 'changes';
   }
-  if (storedTop !== topTab) {
-    try {
-      storage.setItem(key, topTab);
-    } catch {
-      // A parsed preference is still usable when a best-effort migration write fails.
-    }
-  }
-  return { topTab };
+  return stored;
 }

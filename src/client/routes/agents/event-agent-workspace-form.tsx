@@ -6,8 +6,8 @@ import { InlineWorkspaceForm } from '@/client/features/kanban/inline-workspace-f
 import { useWorkspaceCreationDraft } from '@/client/features/kanban/use-workspace-creation-draft';
 import { useWorkspaceCreationSubmission } from '@/client/features/kanban/use-workspace-creation-submission';
 import { getWorkspaceCreationDraftSnapshot } from '@/client/features/kanban/workspace-creation-draft-storage';
+import { useProjectWorkspaceQuery } from '@/client/hooks/use-project-workspace-query';
 import { runInBackground } from '@/client/lib/background-task';
-import { trpc } from '@/client/lib/trpc';
 import { Button } from '@/components/ui/button';
 
 /** Route composition keeps workspace creation out of the agents/kanban feature cycle. */
@@ -26,7 +26,8 @@ export function EventAgentWorkspaceForm({
   const draft = useWorkspaceCreationDraft(draftId);
   const [isCanceling, setIsCanceling] = useState(false);
   const cancelRevision = useRef<string | undefined>(undefined);
-  const workspaces = trpc.workspace.listForProject.useQuery({ projectId });
+  // Keep the app-default freshness: names are re-read when the form remounts.
+  const workspaces = useProjectWorkspaceQuery(projectId, { staleTime: 5000 });
   const cancelFallback = () => {
     if (submission.isPending || draft.isRestoring || isCanceling) {
       return;

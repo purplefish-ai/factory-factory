@@ -1,6 +1,10 @@
 import { ArrowBendUpLeftIcon } from '@phosphor-icons/react/dist/csr/ArrowBendUpLeft';
 import { TreeStructureIcon } from '@phosphor-icons/react/dist/csr/TreeStructure';
+import { WarningCircleIcon } from '@phosphor-icons/react/dist/csr/WarningCircle';
 import { Link } from 'react-router';
+import { IconButton } from '@/client/components/icon-button';
+import { useWorkspaceDetailQuery } from '@/client/hooks/use-workspace-detail-query';
+import { POLL_INTERVAL_MS } from '@/client/lib/query-options';
 import { trpc } from '@/client/lib/trpc';
 import { Button } from '@/components/ui/button';
 import {
@@ -42,7 +46,7 @@ export function WorkspaceParentLink({
       title={`${parent.projectName} / ${parent.name}`}
       className={cn(
         'pointer-events-auto relative z-10 inline-flex min-w-0 items-center gap-1 text-info hover:underline focus-visible:underline',
-        breadcrumb ? 'max-w-[25%] text-[11px] md:text-xs' : 'max-w-full text-[11px]'
+        breadcrumb ? 'max-w-[25%] text-2xs md:text-xs' : 'max-w-full text-2xs'
       )}
     >
       <ArrowBendUpLeftIcon className="h-3 w-3 shrink-0" aria-hidden />
@@ -94,15 +98,41 @@ function FamilyMember({
             {workspace.name}
             {workspace.id === currentId && <span className="sr-only"> (current workspace)</span>}
           </span>
-          <span className="block truncate text-[11px] text-muted-foreground">
+          <span className="block truncate text-2xs text-muted-foreground">
             {parent ? 'Parent workspace' : 'Child workspace'}
             {projectName && ` · ${projectName}`}
           </span>
         </span>
-        <span className="shrink-0 text-[11px] text-muted-foreground">
-          {familyStatus(workspace)}
-        </span>
+        <span className="shrink-0 text-2xs text-muted-foreground">{familyStatus(workspace)}</span>
       </Link>
+    </DropdownMenuItem>
+  );
+}
+
+function FamilyLoading({ label }: { label: string }) {
+  return (
+    <p
+      className="inline-flex items-center gap-2 px-2 py-1 text-xs text-muted-foreground"
+      role="status"
+    >
+      <Spinner className="size-3" aria-hidden="true" />
+      {label}
+    </p>
+  );
+}
+
+/** A menu row that retries a failed family query without closing the menu. */
+function FamilyRetryItem({ label, query }: { label: string; query: { refetch: () => unknown } }) {
+  return (
+    <DropdownMenuItem
+      className="text-xs"
+      onSelect={(event) => {
+        event.preventDefault();
+        void query.refetch();
+      }}
+    >
+      <WarningCircleIcon className="size-3.5 text-destructive" aria-hidden="true" />
+      {label}. Retry
     </DropdownMenuItem>
   );
 }
@@ -118,35 +148,23 @@ function FamilyChildren({
 }) {
   const children = trpc.workspace.listChildren.useQuery(
     { parentWorkspaceId: rootId },
-    { refetchInterval: 15_000 }
+    { refetchInterval: POLL_INTERVAL_MS.workspaceContext }
   );
-  if (children.isPending) {
-    return (
-      <p
-        className="inline-flex items-center gap-2 px-2 py-1 text-xs text-muted-foreground"
-        role="status"
-      >
-        <Spinner className="size-3" aria-hidden="true" />
-        Loading children…
-      </p>
-    );
-  }
-  if (children.isError) {
-    return (
-      <DropdownMenuItem
-        onSelect={(event) => {
-          event.preventDefault();
-          void children.refetch();
-        }}
-      >
-        Couldn't load children. Retry
-      </DropdownMenuItem>
+  // The list polls, so a failed poll keeps the children already shown.
+  if (!children.data) {
+    return children.error ? (
+      <FamilyRetryItem label="Couldn't load children" query={children} />
+    ) : (
+      <FamilyLoading label="Loading children…" />
     );
   }
   const includeCurrent =
     workspace.parentWorkspace && !children.data.some((child) => child.id === workspace.id);
   return (
     <>
+      {children.error ? (
+        <FamilyRetryItem label="Couldn't refresh children" query={children} />
+      ) : null}
       {children.data.map((child) => (
         <FamilyMember
           key={child.id}
@@ -175,10 +193,12 @@ function FamilyMenuContent({
 }) {
   const parent = workspace.parentWorkspace;
   const rootId = parent?.id ?? workspace.id;
-  const root = trpc.workspace.get.useQuery(
-    { id: rootId },
-    { enabled: Boolean(parent), refetchInterval: 15_000 }
-  );
+  // A parent in another project has no live stream, so the menu keeps polling it.
+  const root = useWorkspaceDetailQuery(rootId, {
+    enabled: Boolean(parent),
+    refetchInterval: POLL_INTERVAL_MS.workspaceContext,
+    staleTime: 5000,
+  });
   const rootWorkspace = parent ? root.data : workspace;
   return (
     <>
@@ -192,24 +212,12 @@ function FamilyMenuContent({
           parent
         />
       )}
-      {parent && root.isPending && (
-        <p
-          className="inline-flex items-center gap-2 px-2 py-1 text-xs text-muted-foreground"
-          role="status"
-        >
-          <Spinner className="size-3" aria-hidden="true" />
-          Loading parent…
-        </p>
-      )}
-      {parent && root.isError && (
-        <DropdownMenuItem
-          onSelect={(event) => {
-            event.preventDefault();
-            void root.refetch();
-          }}
-        >
-          Couldn't load parent. Retry
-        </DropdownMenuItem>
+      {parent && !root.data && !root.error && <FamilyLoading label="Loading parent…" />}
+      {parent && root.error && (
+        <FamilyRetryItem
+          label={root.data ? "Couldn't refresh parent" : "Couldn't load parent"}
+          query={root}
+        />
       )}
       <DropdownMenuSeparator />
       <FamilyChildren workspace={workspace} projectSlug={projectSlug} rootId={rootId} />
@@ -237,19 +245,30 @@ export function WorkspaceFamilyMenu({
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button
-          variant="ghost"
-          size="sm"
-          aria-label="Navigate workspace family"
-          title="Navigate parent and child workspaces"
-          className={cn(
-            'pointer-events-auto relative z-10 h-6 shrink-0 gap-1 px-1.5 text-xs text-info',
-            compact && 'h-5 text-[11px]'
-          )}
-        >
-          <TreeStructureIcon className="h-3.5 w-3.5" aria-hidden />
-          {!iconOnly && label}
-        </Button>
+        {iconOnly ? (
+          <IconButton
+            label="Navigate workspace family"
+            tooltip="Navigate parent and child workspaces"
+            size="icon-sm"
+            className="pointer-events-auto relative z-10 shrink-0 text-info"
+          >
+            <TreeStructureIcon aria-hidden />
+          </IconButton>
+        ) : (
+          <Button
+            variant="ghost"
+            size="xs"
+            aria-label="Navigate workspace family"
+            title="Navigate parent and child workspaces"
+            className={cn(
+              'pointer-events-auto relative z-10 shrink-0 px-1.5 text-info',
+              compact && 'text-2xs'
+            )}
+          >
+            <TreeStructureIcon aria-hidden />
+            {label}
+          </Button>
+        )}
       </DropdownMenuTrigger>
       <DropdownMenuContent
         align="start"

@@ -1,10 +1,12 @@
 // @vitest-environment jsdom
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { createElement, type ReactNode } from 'react';
+import { createElement, Fragment, type ReactNode } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { NormalizedIssue } from '@/client/lib/issue-normalization';
+import { buildIssueStartPrompt } from '@/shared/issue-start-prompt';
+import { CommitProbe } from '@/test-utils/commit-probe';
 import { actFlushSync } from '@/test-utils/react-act';
 import { IssueLaunchSheet } from './issue-launch-sheet';
 
@@ -150,7 +152,13 @@ vi.mock('@/components/ui/textarea', () => ({
 }));
 
 vi.mock('@/client/features/workspace', () => ({
-  RatchetToggleButton: () => null,
+  RatchetToggleButton: ({
+    enabled,
+    onToggle,
+  }: {
+    enabled: boolean;
+    onToggle: (enabled: boolean) => void;
+  }) => createElement('button', { type: 'button', onClick: () => onToggle(!enabled) }, 'Ratchet'),
 }));
 
 const issue: NormalizedIssue = {
@@ -246,6 +254,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  localStorage.clear();
   document.body.innerHTML = '';
   vi.clearAllMocks();
 });
@@ -398,6 +407,53 @@ describe('IssueLaunchSheet', () => {
     container.remove();
   });
 
+  it('shows the prompt for a new issue or preview in its first commit, keeping edits', () => {
+    const { container, root } = renderSheet();
+    const committed: Array<string | undefined> = [];
+    const onCommit = () => committed.push(container.querySelector('textarea')?.value);
+    /** The distinct prompts shown by the commits of one render. */
+    const rerender = (sheetIssue: NormalizedIssue) => {
+      const before = committed.length;
+      actFlushSync(() =>
+        root.render(
+          createElement(
+            Fragment,
+            null,
+            createElement(IssueLaunchSheet, {
+              projectId: 'project-1',
+              issue: sheetIssue,
+              open: true,
+              onOpenChange: vi.fn(),
+            }),
+            createElement(CommitProbe, { onCommit })
+          )
+        )
+      );
+      return [...new Set(committed.slice(before))];
+    };
+    const otherIssue: NormalizedIssue = {
+      ...issue,
+      id: 'github-43',
+      url: 'https://github.com/acme/repo/issues/43',
+      githubIssueNumber: 43,
+    };
+
+    changeTextarea(container, 'My own prompt');
+    expect(rerender(otherIssue)).toEqual([buildIssueStartPrompt({ url: otherIssue.url })]);
+
+    mocks.userSettings = { ...mocks.userSettings, ticketDispatchPrompt: 'Be brief.' };
+    expect(rerender(otherIssue)).toEqual([
+      buildIssueStartPrompt({ url: otherIssue.url, prompt: 'Be brief.' }),
+    ]);
+
+    changeTextarea(container, 'Edited again');
+    mocks.userSettings = { ...mocks.userSettings, ticketDispatchPrompt: 'Be thorough.' };
+    expect(rerender(otherIssue)).toEqual(['Edited again']);
+
+    actFlushSync(() => root.unmount());
+    container.remove();
+  });
+
   it('does not reset a user-selected provider after settings refetch', () => {
     const { container, root } = renderSheet();
 
@@ -430,5 +486,41 @@ describe('IssueLaunchSheet', () => {
 
     actFlushSync(() => root.unmount());
     container.remove();
+  });
+
+  describe('ratchet preference', () => {
+    const preferenceKey = 'kanban:issue-ratchet:project-1:github-42';
+    const startRatchet = () =>
+      mocks.createWorkspaceMutateMock.mock.calls.at(-1)?.[0]?.ratchetEnabled as unknown;
+
+    it('falls back to the admin default without a stored choice', () => {
+      mocks.userSettings = { ...mocks.userSettings, ratchetEnabled: true };
+      const { container, root } = renderSheet();
+      clickButton(container, 'Start');
+      expect(startRatchet()).toBe(true);
+      expect(localStorage.getItem(preferenceKey)).toBeNull();
+      actFlushSync(() => root.unmount());
+    });
+
+    it.each([
+      ['true', false, true],
+      ['false', true, false],
+    ])('uses a stored %s over the admin default', (stored, adminDefault, expected) => {
+      localStorage.setItem(preferenceKey, stored);
+      mocks.userSettings = { ...mocks.userSettings, ratchetEnabled: adminDefault };
+      const { container, root } = renderSheet();
+      clickButton(container, 'Start');
+      expect(startRatchet()).toBe(expected);
+      actFlushSync(() => root.unmount());
+    });
+
+    it('stores the toggled choice for this issue', () => {
+      const { container, root } = renderSheet();
+      clickButton(container, 'Ratchet');
+      expect(localStorage.getItem(preferenceKey)).toBe('true');
+      clickButton(container, 'Start');
+      expect(startRatchet()).toBe(true);
+      actFlushSync(() => root.unmount());
+    });
   });
 });

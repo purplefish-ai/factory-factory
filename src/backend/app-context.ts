@@ -1,62 +1,65 @@
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
-import { createAgentAuthoring } from '@/backend/orchestration/agent-authoring.orchestrator';
-import { createAgentRuntime } from '@/backend/orchestration/agent-runtime.orchestrator';
-import { prisma } from './db';
-import { registerInterceptors, startInterceptors, stopInterceptors } from './interceptors';
-import { triggerAdversarialReview } from './orchestration/adversarial-review.orchestrator';
-import { createAgentManagement } from './orchestration/agent-management.orchestrator';
-import {
-  ApplicationUpdateService,
-  createProcessUpdateSupervisor,
-} from './orchestration/application-update.service';
-import { cliHealthService } from './orchestration/cli-health.service';
-import { dataBackupService } from './orchestration/data-backup.service';
-import {
-  type BridgeServices,
-  configureDomainBridges,
-} from './orchestration/domain-bridges.orchestrator';
+import { createAgentAuthoring } from '@/backend/orchestration/agents/agent-authoring.orchestrator';
+import { createAgentManagement } from '@/backend/orchestration/agents/agent-management.orchestrator';
+import { createAgentRuntime } from '@/backend/orchestration/agents/agent-runtime.orchestrator';
+import { dataBackupService } from '@/backend/orchestration/data-backup/data-backup.service';
+import { bindIssueMonitoringSession } from '@/backend/orchestration/pull-requests/pr-monitoring.orchestrator';
+import { createRatchetService } from '@/backend/orchestration/pull-requests/ratchet-dependencies';
+import { listVisibleReviewRequests } from '@/backend/orchestration/pull-requests/review-requests.orchestrator';
+import { schedulerService } from '@/backend/orchestration/pull-requests/scheduler.service';
 import {
   createEventCollectorOrchestrator,
   type EventCollectorOrchestrator,
-} from './orchestration/event-collector.orchestrator';
-import { searchGitHubIssues } from './orchestration/github-issue-search.orchestrator';
-import { getWorkspaceLinearContext } from './orchestration/linear-config.helper';
-import { updateProjectSettings } from './orchestration/project-settings.orchestrator';
-import { reconciliationService } from './orchestration/reconciliation.service';
-import { listVisibleReviewRequests } from './orchestration/review-requests.orchestrator';
-import { schedulerService } from './orchestration/scheduler.service';
-import { SnapshotReconciliationService } from './orchestration/snapshot-reconciliation.orchestrator';
+} from '@/backend/orchestration/snapshots/event-collector.orchestrator';
+import { SnapshotReconciliationService } from '@/backend/orchestration/snapshots/snapshot-reconciliation.orchestrator';
+import { reconciliationService } from '@/backend/orchestration/workspace-lifecycle/reconciliation.service';
 import {
   archiveWorkspace,
   cleanupWorkspaceRuntimeResources,
   recoverStaleArchivingWorkspaces,
-} from './orchestration/workspace-archive.orchestrator';
+} from '@/backend/orchestration/workspace-lifecycle/workspace-archive.orchestrator';
 import {
   createChildWorkspace,
   fireLifecycleNotification,
   persistChildNotification,
   persistParentNotification,
-} from './orchestration/workspace-children.orchestrator';
-import { createWorkspaceFollowUp } from './orchestration/workspace-follow-up.orchestrator';
-import { executeStartupScriptPipeline } from './orchestration/workspace-init-script-pipeline';
+} from '@/backend/orchestration/workspace-lifecycle/workspace-children.orchestrator';
+import { createWorkspaceFollowUp } from '@/backend/orchestration/workspace-lifecycle/workspace-follow-up.orchestrator';
+import { executeStartupScriptPipeline } from '@/backend/orchestration/workspace-lifecycle/workspace-init-script-pipeline';
 import {
   initializeWorkspaceWorktree,
   enqueueWorkspaceInitializationTask,
   recoverStaleProvisioningWorkspace,
   retryQueuedDispatchAfterWorkspaceReady,
-} from './orchestration/workspace-init.orchestrator';
-import { launchWorkspace } from './orchestration/workspace-launch.orchestrator';
-import { WorkspaceMetadataOrchestrator } from './orchestration/workspace-metadata.orchestrator';
+} from '@/backend/orchestration/workspace-lifecycle/workspace-init.orchestrator';
+import { launchWorkspace } from '@/backend/orchestration/workspace-lifecycle/workspace-launch.orchestrator';
+import { WorkspaceMetadataOrchestrator } from '@/backend/orchestration/workspace-lifecycle/workspace-metadata.orchestrator';
 import {
   deliverWorkspaceNotification,
   recoverWorkspaceMail,
-} from './orchestration/workspace-notification-delivery.orchestrator';
-import { createWorkspaceRename } from './orchestration/workspace-rename.orchestrator';
+} from '@/backend/orchestration/workspace-lifecycle/workspace-notification-delivery.orchestrator';
+import { createWorkspaceRename } from '@/backend/orchestration/workspace-lifecycle/workspace-rename.orchestrator';
 import {
   captureWorkspaceRetryGuard,
   readWorkspaceRetryAvailability,
-} from './orchestration/workspace-retry-authority';
+} from '@/backend/orchestration/workspace-lifecycle/workspace-retry-authority';
+import { createShutdownPlan, runShutdownPlan } from './application-shutdown';
+import { prisma } from './db';
+import { registerInterceptors, startInterceptors, stopInterceptors } from './interceptors';
+import { triggerAdversarialReview } from './orchestration/adversarial-review.orchestrator';
+import {
+  ApplicationUpdateService,
+  createProcessUpdateSupervisor,
+} from './orchestration/application-update.service';
+import { cliHealthService } from './orchestration/cli-health.service';
+import {
+  type BridgeServices,
+  configureDomainBridges,
+} from './orchestration/domain-bridges.orchestrator';
+import { searchGitHubIssues } from './orchestration/github-issue-search.orchestrator';
+import { getWorkspaceLinearContext } from './orchestration/linear-config.helper';
+import { updateProjectSettings } from './orchestration/project-settings.orchestrator';
 import { getQuickAction, listQuickActions } from './prompts/quick-actions';
 import { agentManagementService, type AgentManagementService } from './services/agent-definition';
 import { agentProposalService, slackConnectionService } from './services/agent-definition';
@@ -75,11 +78,10 @@ import {
 } from './services/github';
 import { jobRunner } from './services/job-runner.service';
 import { linearClientService, linearStateSyncService } from './services/linear';
-import { createLogger, getLogFilePath } from './services/logger.service';
+import { cleanupOldLogFiles, createLogger, getLogFilePath } from './services/logger.service';
 import { periodicTaskService } from './services/periodic-task';
 import { type PortShareService, portShareService } from './services/port-share';
 import { findAvailablePort } from './services/port.service';
-import { ratchetService } from './services/ratchet';
 import { rateLimiter } from './services/rate-limiter.service';
 import {
   createRunScriptService,
@@ -160,13 +162,16 @@ export type ApplicationServices = BridgeServices & {
   agentAuthoring: ReturnType<typeof createAgentAuthoring>;
   agentManagement: ReturnType<typeof createAgentManagement>;
   agentManagementService: AgentManagementService;
-  listVisibleReviewRequests: (repository?: string) => ReturnType<typeof listVisibleReviewRequests>;
+  listVisibleReviewRequests: (
+    repository?: string,
+    options?: { forceRefresh?: boolean }
+  ) => ReturnType<typeof listVisibleReviewRequests>;
   sessionDispatchService: Pick<
     typeof sessionDispatchService,
     | 'configure'
     | 'tryDispatchNextMessage'
     | 'setManualDispatchResume'
-    | 'resetDispatchState'
+    | 'shutdown'
     | 'steerQueuedMessage'
     | 'steerWorkspaceMailSignal'
   >;
@@ -199,6 +204,7 @@ export type ApplicationServices = BridgeServices & {
   gitCloneService: typeof gitCloneService;
   gitOpsService: typeof gitOpsService;
   getLogFilePath: typeof getLogFilePath;
+  cleanupOldLogFiles: typeof cleanupOldLogFiles;
   getQuickAction: typeof getQuickAction;
   getWorkspaceLinearContext: typeof getWorkspaceLinearContext;
   settingsHealthService: typeof settingsHealthService;
@@ -264,6 +270,7 @@ export type AppConfig = ReturnType<typeof configService.getSystemConfig>;
 
 export type ApplicationLifecycle = {
   database: typeof prisma;
+  jobs: Pick<typeof jobRunner, 'stopAll'>;
   interceptors: {
     register: typeof registerInterceptors;
     start: typeof startInterceptors;
@@ -286,9 +293,17 @@ export type Application = {
   readonly config: AppConfig;
 };
 
-const defaultRunScriptService = createRunScriptService({
-  registerShutdownHandlers: true,
-});
+let processRunScriptService: RunScriptService | null = null;
+
+/**
+ * The run-script service registers process signal and exit handlers, so a
+ * process has one, shared by every graph it composes. It is created on first
+ * composition rather than when this module is imported.
+ */
+function getProcessRunScriptService(): RunScriptService {
+  processRunScriptService ??= createRunScriptService({ registerShutdownHandlers: true });
+  return processRunScriptService;
+}
 
 export function createDefaultApplicationDependencies(): ApplicationDependencies {
   let eventCollector: EventCollectorOrchestrator | null = null;
@@ -317,10 +332,18 @@ export function createDefaultApplicationDependencies(): ApplicationDependencies 
       ) ||
       services.agentRuntime.hasWork(),
   });
+  // Workspace startup binds the issue conversation inside this graph's PR
+  // monitoring scope, read at call time so tests can replace the dispatcher.
+  const workspaceDispatch = () => ({
+    sessionDispatch: services.sessionDispatchService,
+    bindMonitoringSession: (workspaceId: string, sessionId: string) =>
+      bindIssueMonitoringSession(workspaceId, sessionId, services),
+  });
   const services: ApplicationServices = {
     applicationUpdateAdmission,
     applicationUpdateService,
-    listVisibleReviewRequests: (repository) => listVisibleReviewRequests(services, repository),
+    listVisibleReviewRequests: (repository, options) =>
+      listVisibleReviewRequests(services, repository, options),
     acpRuntimeManager,
     acpTraceLogger,
     chatEventForwarderService,
@@ -393,6 +416,7 @@ export function createDefaultApplicationDependencies(): ApplicationDependencies 
     gitCloneService,
     gitOpsService,
     getLogFilePath,
+    cleanupOldLogFiles,
     getQuickAction,
     getWorkspaceLinearContext,
     settingsHealthService,
@@ -400,9 +424,7 @@ export function createDefaultApplicationDependencies(): ApplicationDependencies 
     captureWorkspaceRetryGuard,
     readWorkspaceRetryAvailability,
     initializeWorkspaceWorktree: (workspaceId, options) =>
-      initializeWorkspaceWorktree(workspaceId, options, {
-        sessionDispatch: services.sessionDispatchService,
-      }),
+      initializeWorkspaceWorktree(workspaceId, options, workspaceDispatch()),
     getWorkspaceInitPolicy,
     githubCLIService,
     linearClientService,
@@ -424,12 +446,12 @@ export function createDefaultApplicationDependencies(): ApplicationDependencies 
     prFetchCoordinator,
     prSnapshotService,
     prObservationService,
-    ratchetService,
+    ratchetService: createRatchetService(() => services),
     rateLimiter,
     recoverStaleProvisioningWorkspace,
     runScriptConfigPersistenceService,
     reconciliationService,
-    runScriptService: defaultRunScriptService,
+    runScriptService: getProcessRunScriptService(),
     runScriptStateMachine,
     schedulerService,
     serverInstanceService,
@@ -547,9 +569,7 @@ export function createDefaultApplicationDependencies(): ApplicationDependencies 
       retryQueuedDispatchAfterWorkspaceReady(
         workspaceId,
         startedSessionId,
-        {
-          sessionDispatch: services.sessionDispatchService,
-        },
+        workspaceDispatch(),
         ...(guard ? ([guard] as const) : [])
       ),
   };
@@ -561,7 +581,7 @@ export function createDefaultApplicationDependencies(): ApplicationDependencies 
         return session ? { ...session, codexAccountId: session.codexAccountId ?? null } : null;
       },
       history: (id) => sessionInterceptorBridge.getSessionConversationHistory(id, ''),
-      findWorkspace: (id) => services.workspaceDataService.findById(id),
+      findWorkspace: (id) => services.workspaceDataService.findMetadataContext(id),
       reserve: (id, requestId) => services.workspaceDataService.reserveMetadata(id, requestId),
       accept: (input) => services.workspaceDataService.acceptMetadata(input),
       generate: generateWorkspaceMetadata,
@@ -586,6 +606,7 @@ export function createDefaultApplicationDependencies(): ApplicationDependencies 
     services,
     lifecycle: {
       database: prisma,
+      jobs: jobRunner,
       interceptors: {
         register: registerInterceptors,
         start: startInterceptors,
@@ -630,28 +651,20 @@ export function createApplication(
   });
 }
 
+/**
+ * Tear down an application no server took ownership of. Runs the same ordered
+ * plan as server shutdown, without the server's transport hooks, and rejects
+ * with every failure once all steps have been attempted.
+ */
 export async function disposeApplication(application: Application): Promise<void> {
-  // Preserve dependency order while retaining failures from every independent cleanup attempt.
   const failures: unknown[] = [];
-  const cleanup = [
-    () => application.services.applicationUpdateService?.stop(),
-    () => application.services.agentRuntime?.stop(),
-    () => application.services.workspaceMetadata?.stop(),
-    () => application.services.sessionLifecycleService.stopAllClients(),
-    () => application.services.codexAccountService.shutdown(),
-    () => application.lifecycle.eventCollector.stop(),
-    () => application.lifecycle.snapshotReconciliation.stop(),
-    () => application.services.workspaceGitStateService.stop(),
-  ];
-  for (const dispose of cleanup) {
-    try {
-      await dispose();
-    } catch (error) {
-      failures.push(error);
-    }
-  }
+  const failed: string[] = [];
+  await runShutdownPlan(createShutdownPlan(application), ({ kind, name, error }) => {
+    failures.push(error);
+    failed.push(`${kind} ${name}`);
+  });
   if (failures.length) {
-    throw new AggregateError(failures, 'Application disposal failed');
+    throw new AggregateError(failures, `Application disposal failed: ${failed.join(', ')}`);
   }
 }
 

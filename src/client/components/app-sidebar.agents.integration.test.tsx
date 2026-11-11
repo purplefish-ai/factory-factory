@@ -62,7 +62,7 @@ async function respond(path: string, input: unknown) {
     const { slug } = z.object({ slug: z.string() }).parse(input);
     return [alpha, beta].find((project) => project.slug === slug) ?? null;
   }
-  if (path === 'agent.navigationSummary') {
+  if (path === 'automation.navigationSummary') {
     if (failEventSummary) {
       throw new Error('Event offline');
     }
@@ -255,7 +255,7 @@ it('combines both authoritative kinds and keeps the prior combined value when on
   failEventSummary = true;
   summaries.alpha = { totalCount: 30, failedCount: 0 };
   await act(() =>
-    queryClient.invalidateQueries({ queryKey: getQueryKey(trpc.agent.navigationSummary) })
+    queryClient.invalidateQueries({ queryKey: getQueryKey(trpc.automation.navigationSummary) })
   );
   await act(() =>
     queryClient.invalidateQueries({ queryKey: getQueryKey(trpc.periodicTask.navigationSummary) })
@@ -264,7 +264,7 @@ it('combines both authoritative kinds and keeps the prior combined value when on
   failEventSummary = false;
   eventSummaries.alpha = { totalCount: 5, failedCount: 0 };
   await act(() =>
-    queryClient.invalidateQueries({ queryKey: getQueryKey(trpc.agent.navigationSummary) })
+    queryClient.invalidateQueries({ queryKey: getQueryKey(trpc.automation.navigationSummary) })
   );
   await waitForReact(() => expect(description()).toBe('35 automations'));
 });
@@ -278,7 +278,7 @@ it.each(['scheduled', 'event'])(
     }
     await render();
     await waitForReact(() =>
-      expect(requests.some((request) => request.path === 'agent.navigationSummary')).toBe(true)
+      expect(requests.some((request) => request.path === 'automation.navigationSummary')).toBe(true)
     );
     expect(description()).toBeNull();
   }
@@ -288,7 +288,7 @@ it('waits for initial event data despite a successful scheduled count', async ()
   eventSummaries.alpha = event.promise;
   await render();
   await waitForReact(() =>
-    expect(requests.some((request) => request.path === 'agent.navigationSummary')).toBe(true)
+    expect(requests.some((request) => request.path === 'automation.navigationSummary')).toBe(true)
   );
   expect(description()).toBeNull();
   await act(() => event.resolve({ totalCount: 2, failedCount: 0 }));
@@ -308,7 +308,7 @@ it('keeps the combined snapshot when scheduled refresh fails and event refresh s
   );
   eventSummaries.alpha = { totalCount: 40, failedCount: 8 };
   await act(() =>
-    queryClient.invalidateQueries({ queryKey: getQueryKey(trpc.agent.navigationSummary) })
+    queryClient.invalidateQueries({ queryKey: getQueryKey(trpc.automation.navigationSummary) })
   );
   expect(description()).toBe('5 automations, 1 with a failed last completed run');
 });
@@ -319,7 +319,7 @@ it('does not accept a late old-project event summary into a new owner', async ()
   eventSummaries.alpha = lateEvent.promise;
   await act(() => {
     void queryClient.invalidateQueries({
-      queryKey: getQueryKey(trpc.agent.navigationSummary, { projectId: 'alpha' }, 'query'),
+      queryKey: getQueryKey(trpc.automation.navigationSummary, { projectId: 'alpha' }, 'query'),
     });
   });
   await switchProject();

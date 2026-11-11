@@ -25,10 +25,7 @@ export function SubagentLifecycleRenderer({
       type="button"
       title="Open subagent tab"
       onClick={() => onOpenSubagent(subagentId)}
-      className={cn(
-        className,
-        'rounded-sm transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring'
-      )}
+      className={cn(className, 'rounded-sm transition-colors hover:text-foreground focus-ring')}
     >
       {content}
     </button>

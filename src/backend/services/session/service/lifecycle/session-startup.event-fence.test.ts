@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest';
-import { EventSessionAuthority } from './event-session-authority';
+import { EventSessionAuthority } from '@/backend/services/session/service/event-agent/event-session-authority';
 import { createLifecycleHarness } from './session-lifecycle.test-helpers';
 const execution = {
   version: 1 as const,

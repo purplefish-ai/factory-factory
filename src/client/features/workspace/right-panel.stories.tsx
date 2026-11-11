@@ -1,14 +1,15 @@
 import type { Meta, StoryObj } from '@storybook/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { TRPCClientError } from '@trpc/client';
-import { getQueryKey } from '@trpc/react-query';
 import { observable } from '@trpc/server/observable';
 import { useRef, useState } from 'react';
 import { expect, fn, userEvent, within } from 'storybook/test';
 import { ChatTranscript } from '@/client/features/chat';
 import type { SubagentSelection } from '@/client/features/subagents';
 import { runInBackground } from '@/client/lib/background-task';
+import { readStorageItem, removeStorageItem, writeStorageItem } from '@/client/lib/browser-storage';
 import { trpc } from '@/client/lib/trpc';
+import { invalidateWorkspaceDetail } from '@/client/lib/workspace-queries';
 import { Button } from '@/components/ui/button';
 import { MainViewTabBar } from './main-view-tab-bar';
 import { RightPanel } from './right-panel';
@@ -113,9 +114,7 @@ function RightPanelStory({
                 onClick={() => {
                   taskPresent.current = false;
                   runInBackground(
-                    queryClient.invalidateQueries({
-                      queryKey: getQueryKey(trpc.workspace.get, { id: workspaceId }, 'query'),
-                    }),
+                    invalidateWorkspaceDetail(queryClient, workspaceId),
                     'Could not refresh workspace'
                   );
                 }}
@@ -214,10 +213,10 @@ const meta = {
       [`workspace-panel-tabs-${workspaceId}`, '[]'],
       [`workspace-panel-active-tab-${workspaceId}`, 'chat'],
     ];
-    const previous = entries.map(([key]) => [key, localStorage.getItem(key ?? '')]);
+    const previous = entries.map(([key]) => [key, readStorageItem(key ?? '')]);
     for (const [key, value] of entries) {
       if (key && value) {
-        localStorage.setItem(key, value);
+        writeStorageItem(key, value);
       }
     }
     return () => {
@@ -229,9 +228,9 @@ const meta = {
           continue;
         }
         if (value == null) {
-          localStorage.removeItem(key);
+          removeStorageItem(key);
         } else {
-          localStorage.setItem(key, value);
+          writeStorageItem(key, value);
         }
       }
     };
@@ -239,25 +238,38 @@ const meta = {
 } satisfies Meta<typeof RightPanelStory>;
 export default meta;
 type Story = StoryObj<typeof meta>;
+/** Stored panel layout renders as saved, and mounting does not rewrite it. */
+export const RestoresStoredLayout: Story = {
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(await canvas.findByText('Log source')).toBeVisible();
+    await expect(readStorageItem(`workspace-panel-bottom-tab-${workspaceId}`)).toBe('setup-logs');
+    await expect(readStorageItem(`workspace-panel-tabs-${workspaceId}`)).toBe('[]');
+    await expect(readStorageItem(`workspace-panel-right-visible-${workspaceId}`)).toBe('false');
+  },
+};
+
 export const LegacyIterationPreference: Story = {
   beforeEach: () => {
-    localStorage.setItem(`workspace-right-panel-tab-${workspaceId}`, 'auto-iteration');
+    writeStorageItem(`workspace-right-panel-tab-${workspaceId}`, 'auto-iteration');
   },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await expect(await canvas.findByText('No changes')).toBeVisible();
-    await expect(canvas.queryByRole('button', { name: 'Iterations' })).not.toBeInTheDocument();
-    await expect(localStorage.getItem(`workspace-right-panel-tab-${workspaceId}`)).toBe('changes');
+    await expect(canvas.queryByRole('tab', { name: 'Iterations' })).not.toBeInTheDocument();
+    // Reading a retired preference does not rewrite it; the next selection does.
+    await expect(readStorageItem(`workspace-right-panel-tab-${workspaceId}`)).toBe(
+      'auto-iteration'
+    );
   },
 };
 export const DeletedTaskPreference: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await expect(await canvas.findByText('No changes')).toBeVisible();
-    await expect(
-      canvas.queryByRole('button', { name: 'Scheduled automation' })
-    ).not.toBeInTheDocument();
-    await expect(localStorage.getItem(`workspace-right-panel-tab-${workspaceId}`)).toBe('changes');
+    await expect(canvas.queryByRole('tab', { name: 'Runs' })).not.toBeInTheDocument();
+    // Changes is shown; the stored choice stays until the user picks a tab.
+    await expect(readStorageItem(`workspace-right-panel-tab-${workspaceId}`)).toBe('periodic-task');
   },
 };
 export const DeleteWhileOpen: Story = {
@@ -267,13 +279,14 @@ export const DeleteWhileOpen: Story = {
     await canvas.findByText('Scheduled cleanup');
     await userEvent.click(canvas.getByRole('button', { name: 'Delete automation' }));
     await expect(await canvas.findByText('No changes')).toBeVisible();
-    await expect(localStorage.getItem(`workspace-right-panel-tab-${workspaceId}`)).toBe('changes');
+    // Changes is shown; the stored choice stays until the user picks a tab.
+    await expect(readStorageItem(`workspace-right-panel-tab-${workspaceId}`)).toBe('periodic-task');
   },
 };
 
 /**
  * Tool tab labels follow the glossary in docs/workspaces.md: the scheduled-automation
- * origin panel is "Scheduled automation" (not the chat's coding agent), and the
+ * origin panel is "Runs" (not the chat's coding agent), and the
  * subagent/child-workspace panel is "Subagents" (not chat sessions). With no
  * chat selected, that panel shows only Child workspaces.
  */
@@ -282,10 +295,17 @@ export const ToolTabLabels: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await canvas.findByText('Scheduled cleanup');
-    await expect(canvas.getByRole('button', { name: 'Scheduled automation' })).toBeVisible();
-    await expect(canvas.queryByRole('button', { name: 'Agent' })).not.toBeInTheDocument();
-    await expect(canvas.queryByRole('button', { name: 'Sessions' })).not.toBeInTheDocument();
-    await userEvent.click(canvas.getByRole('button', { name: 'Subagents' }));
+    await expect(canvas.getByRole('tab', { name: 'Runs' })).toBeVisible();
+    await expect(canvas.queryByRole('tab', { name: 'Agent' })).not.toBeInTheDocument();
+    await expect(canvas.queryByRole('tab', { name: 'Sessions' })).not.toBeInTheDocument();
+    await userEvent.click(canvas.getByRole('tab', { name: 'Subagents' }));
+    await expect(canvas.getByRole('tab', { name: 'Subagents' })).toHaveAttribute(
+      'aria-selected',
+      'true'
+    );
+    // The icon-only Screenshots tab is part of the same tablist.
+    const tools = canvas.getByRole('tablist', { name: 'Workspace tools' });
+    await expect(within(tools).getByRole('tab', { name: 'Screenshots' })).toBeVisible();
     await expect(await canvas.findByText('Child workspaces')).toBeVisible();
     await expect(await canvas.findByText('No child workspaces yet')).toBeVisible();
   },
@@ -312,10 +332,8 @@ export const OpenSubagentFromActivity: Story = {
     const canvas = within(canvasElement);
     await userEvent.click(canvas.getByRole('button', { name: '1 subagent running' }));
     await expect(canvas.getByRole('tab', { name: /Review code/, selected: true })).toBeVisible();
-    await expect(canvas.queryByRole('button', { name: 'Subagents' })).not.toBeInTheDocument();
-    await expect(localStorage.getItem(`workspace-panel-right-visible-${workspaceId}`)).toBe(
-      'false'
-    );
+    await expect(canvas.queryByRole('tab', { name: 'Subagents' })).not.toBeInTheDocument();
+    await expect(readStorageItem(`workspace-panel-right-visible-${workspaceId}`)).toBe('false');
   },
 };
 

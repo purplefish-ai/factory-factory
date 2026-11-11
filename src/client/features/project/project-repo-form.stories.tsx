@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react';
 import type { ComponentProps, FormEvent } from 'react';
 import { useState } from 'react';
-import { fn } from 'storybook/test';
+import { expect, fn, within } from 'storybook/test';
 import { Button } from '@/components/ui/button';
 import { ProjectRepoForm } from './project-repo-form';
 
@@ -85,5 +85,16 @@ export const WithValidationError: Story = {
 export const WithFooterActions: Story = {
   args: {
     footerActions: <Button variant="secondary">Cancel</Button>,
+  },
+};
+
+export const Submitting: Story = {
+  args: {
+    isSubmitting: true,
+  },
+  play: async ({ canvasElement }) => {
+    const submit = within(canvasElement).getByRole('button', { name: 'Adding…' });
+    await expect(submit).toBeDisabled();
+    await expect(submit).toHaveAttribute('aria-busy', 'true');
   },
 };

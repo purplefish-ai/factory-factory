@@ -1,8 +1,6 @@
 import { AppWindowIcon } from '@phosphor-icons/react/dist/csr/AppWindow';
-import { Button } from '@/components/ui/button';
+import { IconButton } from '@/client/components/icon-button';
 import { DropdownMenuItem } from '@/components/ui/dropdown-menu';
-import { Spinner } from '@/components/ui/spinner';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import type { WorkspaceSessionManagement } from './types';
 
 export function OpenInIdeAction({
@@ -25,7 +23,6 @@ export function OpenInIdeAction({
   }
 
   const preferredIdeName = availableIdes.find((ide) => ide.id === preferredIde)?.name ?? 'IDE';
-  const disabled = openInIde.isPending || !hasWorktreePath;
 
   if (renderAsMenuItem) {
     return (
@@ -33,39 +30,25 @@ export function OpenInIdeAction({
         onSelect={() => {
           openInIde.mutate({ id: workspaceId });
         }}
-        disabled={disabled}
+        pending={openInIde.isPending}
+        disabled={!hasWorktreePath}
       >
-        {openInIde.isPending ? (
-          <Spinner aria-hidden="true" className="h-4 w-4" />
-        ) : (
-          <AppWindowIcon className="h-4 w-4" />
-        )}
+        <AppWindowIcon className="h-4 w-4" />
         Open in {preferredIdeName}
       </DropdownMenuItem>
     );
   }
 
   return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-6 w-6 md:h-8 md:w-8"
-          onClick={() => openInIde.mutate({ id: workspaceId })}
-          disabled={disabled}
-          aria-label={
-            openInIde.isPending ? `Opening in ${preferredIdeName}…` : `Open in ${preferredIdeName}`
-          }
-        >
-          {openInIde.isPending ? (
-            <Spinner aria-hidden="true" className="h-4 w-4" />
-          ) : (
-            <AppWindowIcon className="h-4 w-4" />
-          )}
-        </Button>
-      </TooltipTrigger>
-      <TooltipContent>Open in {preferredIdeName}</TooltipContent>
-    </Tooltip>
+    <IconButton
+      label={`Open in ${preferredIdeName}`}
+      size="icon-sm"
+      onClick={() => openInIde.mutate({ id: workspaceId })}
+      pending={openInIde.isPending}
+      pendingLabel={`Opening in ${preferredIdeName}…`}
+      disabled={!hasWorktreePath}
+    >
+      <AppWindowIcon />
+    </IconButton>
   );
 }

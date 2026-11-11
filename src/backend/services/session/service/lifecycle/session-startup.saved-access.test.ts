@@ -1,8 +1,8 @@
 import { expect, it, vi } from 'vitest';
+import { configOptions } from '@/backend/services/session/service/config/session-config-authority.test-helpers';
+import { SessionConfigService } from '@/backend/services/session/service/config/session.config.service';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
-import { configOptions } from './session-config-authority.test-helpers';
 import { createDeferred, createLifecycleHarness } from './session-lifecycle.test-helpers';
-import { SessionConfigService } from './session.config.service';
 
 vi.mock('@/backend/services/workspace', () => ({
   workspaceDataService: { findById: vi.fn() },

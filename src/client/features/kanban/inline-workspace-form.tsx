@@ -12,8 +12,8 @@ import {
   collectAttachments,
   FileMentionPalette,
   SlashCommandPalette,
+  useFileMentions,
   usePasteDropHandler,
-  useProjectFileMentions,
   useSlashCommands,
 } from '@/client/features/composer';
 import { invalidateAgentProjectQueries } from '@/client/lib/agent-query-cache';
@@ -21,10 +21,12 @@ import { runInBackground } from '@/client/lib/background-task';
 import { setPendingWorkspace } from '@/client/lib/pending-workspace';
 import type { AppRouter } from '@/client/lib/trpc';
 import { trpc } from '@/client/lib/trpc';
+import { useUserSettings } from '@/client/lib/user-settings-queries';
 import {
   seedCreatedWorkspaceDetail,
   removeWorkspaceFromProjectWorkspaceCache,
 } from '@/client/lib/workspace-cache-helpers';
+import { setProjectWorkspaceList } from '@/client/lib/workspace-queries';
 import { createOptimisticWorkspaceSummary } from '@/client/lib/workspace-summary';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -156,7 +158,7 @@ function PeriodicTaskConfigPanel({
         onScheduledTimeChange={setScheduledTime}
         disabled={isCreating}
       />
-      <p className="text-[10px] text-muted-foreground">
+      <p className="text-2xs text-muted-foreground">
         Creates a new workspace on this schedule. The first run starts immediately.
         {isLongCadence && scheduledTime ? ' Subsequent runs will use the time above.' : ''}
       </p>
@@ -168,7 +170,7 @@ function workspaceDraftContext(projectId: string, purpose?: 'event-agent') {
   return {
     draftId: purpose ? `event-agent:${projectId}` : projectId,
     seedPrompt: purpose
-      ? 'Help me create an event-triggered automation for this project. Ask which event should trigger it and what it should do. Use list_agent_sources to discover available sources, then propose_agent to prepare a configuration for my review. Keep the definition and triggers paused; do not enable listening or automatic runs.'
+      ? 'Help me create an event-triggered automation for this project. Ask which event should trigger it and what it should do. Use list_automation_sources to discover available sources, then propose_automation to prepare a configuration for my review. Keep the definition and triggers paused; do not enable listening or automatic runs.'
       : '',
   };
 }
@@ -183,7 +185,7 @@ export function InlineWorkspaceForm({
 }: InlineWorkspaceFormProps) {
   const utils = trpc.useUtils();
   const queryClient = useQueryClient();
-  const { data: userSettings, isLoading: isLoadingSettings } = trpc.userSettings.get.useQuery();
+  const { data: userSettings, isLoading: isLoadingSettings } = useUserSettings();
 
   const instructionsId = useId();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -228,6 +230,14 @@ export function InlineWorkspaceForm({
   }, [initialPrompt]);
   const submission = useWorkspaceCreationSubmission(draftId);
   const submitted = useRef<WorkspaceCreationSubmission | null>(null);
+  // Mutation callbacks outlive the form; a failure after it closes needs a toast.
+  const mounted = useRef(false);
+  useLayoutEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
   const completeCreation = (
     token: WorkspaceCreationSubmission | null | undefined,
     onComplete: () => void
@@ -246,8 +256,10 @@ export function InlineWorkspaceForm({
     );
   };
 
-  const fileMentions = useProjectFileMentions({
-    projectId,
+  const fileMentions = useFileMentions({
+    fileQuery: trpc.project.listAllFiles,
+    scope: { projectId },
+    scopeReady: !!projectId,
     inputRef: textareaRef,
     onChange: setInitialPrompt,
   });
@@ -283,7 +295,7 @@ export function InlineWorkspaceForm({
 
       await utils.workspace.listForProject.cancel({ projectId: input.projectId });
 
-      utils.workspace.listForProject.setData({ projectId: input.projectId }, (old) =>
+      setProjectWorkspaceList(queryClient, input.projectId, (old) =>
         withOptimisticWorkspaceFirst(old, optimisticWorkspace, [optimisticWorkspaceId])
       );
 
@@ -298,7 +310,7 @@ export function InlineWorkspaceForm({
         createdAt: workspace.createdAt,
       });
 
-      utils.workspace.listForProject.setData({ projectId: workspace.projectId }, (old) =>
+      setProjectWorkspaceList(queryClient, workspace.projectId, (old) =>
         withOptimisticWorkspaceFirst(
           old,
           old?.workspaces.find((row) => row.id === workspace.id) ?? optimisticWorkspace,
@@ -314,8 +326,7 @@ export function InlineWorkspaceForm({
         });
       }
       runInBackground(
-        utils.workspace.listForProject.invalidate({ projectId: workspace.projectId }),
-        "Couldn't refresh data."
+        utils.workspace.listForProject.invalidate({ projectId: workspace.projectId })
       );
       completeCreation(context?.submission ?? submitted.current, () => {
         // The selected pending route owns navigation after an immediate launch.
@@ -326,25 +337,28 @@ export function InlineWorkspaceForm({
       });
     },
     onError: (error, input, context) => {
+      const message = `Couldn't create workspace. ${error.message}`;
       const token = context?.submission ?? submitted.current;
+      // One channel per failure: the composer's inline error (kept per project
+      // while it is unmounted) and the pending workspace route both show it.
+      // Only a create without a submission falls back to a toast.
       if (token) {
-        submission.fail(token, `Couldn't create workspace. ${error.message}`);
+        submission.fail(token, message);
+      } else {
+        toast.error(message);
       }
       if (context) {
-        setPendingWorkspace(context.optimisticWorkspaceId, {
-          status: 'failed',
-          message: `Couldn't create workspace. ${error.message}`,
-        });
+        setPendingWorkspace(context.optimisticWorkspaceId, { status: 'failed', message });
         // Drop only the optimistic row. Restoring the pre-mutation cache would
         // also revert snapshot deltas and concurrent mutations that landed
         // while the create was in flight, and this cache backs the sidebar as
         // well as the board.
-        utils.workspace.listForProject.setData(
-          { projectId: input?.projectId ?? token?.projectId ?? projectId },
+        setProjectWorkspaceList(
+          queryClient,
+          input?.projectId ?? token?.projectId ?? projectId,
           (old) => removeWorkspaceFromProjectWorkspaceCache(old, context.optimisticWorkspaceId)
         );
       }
-      toast.error(`Couldn't create workspace. ${error.message}`);
     },
   });
 
@@ -352,18 +366,20 @@ export function InlineWorkspaceForm({
     onMutate: () => ({ submission: submitted.current }),
     onSuccess: (task, _input, context) => {
       toast.success(`Automation "${task.name}" created`);
-      runInBackground(
-        invalidateAgentProjectQueries(utils, task.projectId),
-        "Couldn't refresh data."
-      );
+      runInBackground(invalidateAgentProjectQueries(utils, task.projectId));
       completeCreation(context?.submission ?? submitted.current, onCancel);
     },
     onError: (error, _input, context) => {
+      const message = `Couldn't create automation. ${error.message}`;
       const token = context?.submission ?? submitted.current;
+      // The open form shows the failure inline; once it has closed (the user
+      // navigated away), a toast reports it instead.
       if (token) {
-        submission.fail(token, `Couldn't create automation. ${error.message}`);
+        submission.fail(token, message);
       }
-      toast.error(`Couldn't create automation. ${error.message}`);
+      if (!(token && mounted.current)) {
+        toast.error(message);
+      }
     },
   });
 
@@ -503,6 +519,7 @@ export function InlineWorkspaceForm({
             files={fileMentions.files}
             isOpen={fileMentions.fileMentionMenuOpen}
             isLoading={fileMentions.filesLoading}
+            error={fileMentions.filesError}
             onClose={fileMentions.handleFileMentionMenuClose}
             onSelect={fileMentions.handleFileMentionSelect}
             filter={fileMentions.fileMentionFilter}
@@ -569,8 +586,8 @@ export function InlineWorkspaceForm({
         >
           <Button
             variant="ghost"
-            size="sm"
-            className="h-7 text-xs whitespace-nowrap"
+            size="compact"
+            className="whitespace-nowrap"
             onClick={() => {
               runInBackground(recovery.discardDraft(), "Couldn't clear canceled task.");
               onCancel();

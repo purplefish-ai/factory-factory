@@ -60,10 +60,14 @@ leaves the picker; sliders save when you finish the interaction.
 - **Font size** scales the root font size from 75% to 175%. All text and spacing
   defined in `rem` follows it, including the terminal, independently of browser
   zoom.
-- **Interface font** and **Monospace font** offer a few bundled stacks,
-  including Atkinson Hyperlegible, plus **Custom** for any font installed on the
-  device. A custom value is a CSS `font-family` list and may contain only
-  letters, numbers, spaces, quotes, commas, periods, underscores, and hyphens.
+- **Interface font** and **Monospace font** offer a few preset stacks plus
+  **Custom** for any font installed on the device. Geist, Inter, IBM Plex Mono,
+  and the Atkinson Hyperlegible faces ship with the app (`public/fonts/`, each
+  with its SIL Open Font License), so they work offline and never delay first
+  paint; the browser downloads a face only once text uses it. Monaco and the
+  system stacks use fonts already on the device. A custom value is a CSS
+  `font-family` list and may contain only letters, numbers, spaces, quotes,
+  commas, periods, underscores, and hyphens.
 
 **Reset appearance** returns every saved appearance preference to its default;
 it does not change Mode. The last applied appearance is cached in the browser so
@@ -131,6 +135,12 @@ capabilities, null semantics and warnings. Import requires all 37 canonical
 model classifications and the profile's exact global exclusions; unknown
 capabilities or sections reject before opening the writer. Versions 4–7 retain
 their legacy behavior and report no versioned coverage declaration.
+
+Archived workspaces no longer keep their original attachments or a successful
+setup log, so their exports normally omit them. Rows not yet cleaned up still
+export both, and archived rows imported from an older backup lose them on a
+later cleanup run (see
+[workspace state](architecture/workspace-state.md#backup-export)).
 
 The current-session result and its exact JSON download include partial-coverage
 warnings and, for v8, the file's manifest. Four numeric primary counters and the
@@ -246,6 +256,16 @@ preserves the saved custom command for later use.
 
 ## Chat defaults
 
+**Turn limit** sets the maximum duration of each Claude or Codex turn. It starts
+at **Unlimited**, including after upgrading from the old fixed Claude four-hour
+limit. Choose 30 minutes, 1, 2, 4, 8 or 24 hours to stop long turns. Changes
+apply when the next turn starts; event automations retain the limit selected
+when their run launches. Historical events without a saved limit are unlimited.
+A timeout message names the selected duration. The settings menu offers common
+presets; the settings API and backup format also accept custom limits from 1 to
+10,080 whole minutes (one week), or `null` for Unlimited. Saved custom limits
+remain visible in the menu.
+
 An app-wide warning appears when a saved default Claude or Codex model is
 missing from its live catalog. **Review chat defaults** opens Settings so you
 can choose a current model. The warning clears after the default changes or the
@@ -264,10 +284,15 @@ synchronize normally after saves settle.
 
 ## Worktree cleanup
 
-Archiving or deleting a workspace removes its worktree. Worktrees can still be
-left behind by a failed cleanup or an older version. **Worktree Cleanup** in
-**System** lists `workspace-*` folders under each project's worktree directory
-that no non-archived workspace owns. Cleanup also protects configured project
+Archiving or deleting a workspace stops its sessions, run script and terminals,
+then removes its worktree. On macOS and Linux it first makes a best-effort
+attempt to stop leftover processes running inside the worktree, such as a dev
+server an agent started in the background. Processes attached to a terminal are
+left alone, and a failed attempt does not block the archive
+([details](architecture/workspace-state.md)). Worktrees can still be left behind
+by a failed cleanup or an older version. **Worktree Cleanup** in **System**
+lists `workspace-*` folders under each project's worktree directory that no
+non-archived workspace owns. Cleanup also protects configured project
 repositories, including paths reached through symlinks or inside a candidate
 folder. Standalone repositories, folders containing nested repositories
 (including bare repositories), and linked worktrees whose owning repository
@@ -305,6 +330,15 @@ Search messages or components, filter by log level or time range, and expand a
 row to inspect its raw JSON. **Download log file** saves up to the most recent
 10 MB of the server log. Navigation and filters remain available while entries
 load; if loading fails, use **Retry** to request the logs again.
+
+The page and download read only the current `logs/server.log` under `BASE_DIR`
+(default `~/factory-factory`). The backend rotates that file when it reaches 10
+MB, keeping the three previous files as `server.log.1` (newest) to
+`server.log.3`; open those directly for older history. A file already over 10 MB
+when the backend starts, such as one written before rotation existed, is moved
+to `server.log.1` unchanged before the first write. Backend startup deletes
+rotated files last modified more than seven days ago, alongside the session and
+ACP trace log cleanup.
 
 Relative log time ranges use minute boundaries and advance automatically while
 the page polls every ten seconds. Rendering or expanding a log row does not

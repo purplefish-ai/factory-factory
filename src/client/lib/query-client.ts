@@ -1,5 +1,7 @@
 import { type Mutation, MutationCache, QueryClient } from '@tanstack/react-query';
+import { TRPCClientError } from '@trpc/client';
 import { toast } from 'sonner';
+import { z } from 'zod';
 import { withErrorToastDefaults } from '@/components/ui/sonner';
 
 /**
@@ -61,6 +63,38 @@ export function handleMutationError(
   toast.error(title, withErrorToastDefaults(description ? { description } : undefined));
 }
 
+/**
+ * Retries after the first failure. Two retries with TanStack's exponential
+ * backoff (1 s, then 2 s) ride out a backend restart or a dropped connection
+ * while still showing the error within about three seconds.
+ */
+export const MAX_QUERY_RETRIES = 2;
+
+const trpcErrorDataSchema = z.object({ httpStatus: z.number().int() });
+
+/** The HTTP status the server attached to a tRPC error, if any. */
+function trpcHttpStatus(error: unknown): number | undefined {
+  if (!(error instanceof TRPCClientError)) {
+    return undefined;
+  }
+  const data = trpcErrorDataSchema.safeParse(error.data);
+  return data.success ? data.data.httpStatus : undefined;
+}
+
+/**
+ * Default query retry policy. A 4xx answer (not found, forbidden, invalid
+ * input, precondition failed) will not change on retry, so it surfaces at
+ * once. Network failures, server errors and non-tRPC errors retry up to
+ * `MAX_QUERY_RETRIES` times.
+ */
+export function shouldRetryQuery(failureCount: number, error: unknown): boolean {
+  const status = trpcHttpStatus(error);
+  if (status !== undefined && status >= 400 && status < 500) {
+    return false;
+  }
+  return failureCount < MAX_QUERY_RETRIES;
+}
+
 export function createAppQueryClient(): QueryClient {
   return new QueryClient({
     mutationCache: new MutationCache({
@@ -72,6 +106,7 @@ export function createAppQueryClient(): QueryClient {
       queries: {
         staleTime: 5 * 1000, // 5 seconds
         refetchOnWindowFocus: false,
+        retry: shouldRetryQuery,
       },
     },
   });

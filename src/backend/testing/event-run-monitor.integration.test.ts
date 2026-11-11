@@ -20,10 +20,17 @@ let db: IntegrationDatabase;
 let h: Awaited<ReturnType<typeof createEventDeliveryFixture>>;
 let provider: ReturnType<typeof fakeEventProvider>;
 let launch: Promise<unknown>;
-let observe: typeof import('@/backend/orchestration/event-run-monitor.orchestrator').observeEventRun;
-beforeEach(async () => {
+let observe: typeof import('@/backend/orchestration/agents/event-run-monitor.orchestrator').observeEventRun;
+beforeEach(async (context) => {
   db = await createIntegrationDatabase();
   h = await createEventDeliveryFixture(db, 'CLAUDE', false, true);
+  if (context.task.name.includes('configured four-hour')) {
+    await db.prisma.userSettings.upsert({
+      where: { userId: 'default' },
+      create: { userId: 'default', turnLimitMinutes: 240 },
+      update: { turnLimitMinutes: 240 },
+    });
+  }
   vi.spyOn(process, 'kill').mockImplementation(() => {
     throw new Error('No host signals');
   });
@@ -63,11 +70,11 @@ beforeEach(async () => {
   );
   vi.spyOn(github.githubCLIService, 'getAuthenticatedUsername').mockResolvedValue('fixture');
   const launcher = await vi.importActual<
-    typeof import('@/backend/orchestration/event-run-launch.orchestrator')
-  >('@/backend/orchestration/event-run-launch.orchestrator');
+    typeof import('@/backend/orchestration/agents/event-run-launch.orchestrator')
+  >('@/backend/orchestration/agents/event-run-launch.orchestrator');
   ({ observeEventRun: observe } = await vi.importActual<
-    typeof import('@/backend/orchestration/event-run-monitor.orchestrator')
-  >('@/backend/orchestration/event-run-monitor.orchestrator'));
+    typeof import('@/backend/orchestration/agents/event-run-monitor.orchestrator')
+  >('@/backend/orchestration/agents/event-run-monitor.orchestrator'));
   launch = launcher.launchEventRun(h.claim, new AbortController().signal);
   await waitForEventFixture(
     providerCreated.promise.then(() => provider.called),
@@ -251,11 +258,11 @@ it.each(['archive', 'delete'] as const)(
       .spyOn(h.session.acpRuntimeManager, 'stopAndQuiesce')
       .mockRejectedValue(new Error('Unconfirmed child cleanup'));
     const archives = await vi.importActual<
-      typeof import('@/backend/orchestration/workspace-archive.orchestrator')
-    >('@/backend/orchestration/workspace-archive.orchestrator');
+      typeof import('@/backend/orchestration/workspace-lifecycle/workspace-archive.orchestrator')
+    >('@/backend/orchestration/workspace-lifecycle/workspace-archive.orchestrator');
     const children = await vi.importActual<
-      typeof import('@/backend/orchestration/workspace-children.orchestrator')
-    >('@/backend/orchestration/workspace-children.orchestrator');
+      typeof import('@/backend/orchestration/workspace-lifecycle/workspace-children.orchestrator')
+    >('@/backend/orchestration/workspace-lifecycle/workspace-children.orchestrator');
     vi.spyOn(children, 'fireLifecycleNotification').mockResolvedValue();
     vi.spyOn(h.workspace.worktreeLifecycleService, 'cleanupWorkspaceWorktree').mockResolvedValue();
     const services = {
@@ -384,7 +391,12 @@ it('unions PR results while held and preserves success despite a later ordinary 
   });
 });
 
-it('settles the original four-hour send timeout only after strict owned stop', async () => {
+it('settles the configured four-hour send timeout only after strict owned stop', async () => {
+  // Updating the global default must not erase this run's frozen deadline.
+  await db.prisma.userSettings.update({
+    where: { userId: 'default' },
+    data: { turnLimitMinutes: null },
+  });
   const groups = await vi.importActual<
     typeof import('@/backend/services/session/service/acp/acp-owned-group')
   >('@/backend/services/session/service/acp/acp-owned-group');
@@ -394,12 +406,37 @@ it('settles the original four-hour send timeout only after strict owned stop', a
     where: { runId: h.claim.runId },
     data: { sendingAt: new Date(Date.now() - 4 * 60 * 60 * 1000 - 1) },
   });
+  const management = new h.owner.AgentManagementService();
+  const run = await row();
+  const history = await management.runs({
+    projectId: h.workspaceSource.projectId,
+    agentId: run.agentDefinitionId,
+  });
+  expect(history.items.find((item) => item.id === run.id)?.turnDeadlineAt).toBe(
+    new Date(
+      (
+        await db.prisma.agentInitialDelivery.findUniqueOrThrow({
+          where: { runId: run.id },
+        })
+      ).sendingAt!.getTime() +
+        4 * 60 * 60 * 1000
+    ).toISOString()
+  );
   expect(await observe(h.claim)).toBe('SETTLED');
   expect(await row()).toMatchObject({ status: 'FAILED', launchPhase: 'FINISHED' });
   expect((await h.read()).evidence?.stop).toMatchObject({
     cause: 'TIMEOUT',
     status: 'LOCAL_RUNTIME_GROUP_STOPPED',
   });
+});
+
+it('keeps a default Claude event running beyond four hours', async () => {
+  await db.prisma.agentInitialDelivery.update({
+    where: { runId: h.claim.runId },
+    data: { sendingAt: new Date(Date.now() - 5 * 60 * 60 * 1000) },
+  });
+  expect(await observe(h.claim)).toBe('HELD');
+  expect((await h.read()).evidence?.stop).toBeUndefined();
 });
 
 it('keeps a Codex event turn running past four hours without advertising a deadline', async () => {
@@ -421,8 +458,8 @@ it('keeps a Codex event turn running past four hours without advertising a deadl
     async (_options, create) => create('event-test-account')
   );
   const launcher = await vi.importActual<
-    typeof import('@/backend/orchestration/event-run-launch.orchestrator')
-  >('@/backend/orchestration/event-run-launch.orchestrator');
+    typeof import('@/backend/orchestration/agents/event-run-launch.orchestrator')
+  >('@/backend/orchestration/agents/event-run-launch.orchestrator');
   launch = launcher.launchEventRun(h.claim, new AbortController().signal);
   await vi.waitFor(() => expect(provider.handle.provider).toBe('CODEX'));
   await provider.called;
@@ -546,8 +583,8 @@ it.each([false, true])(
       data: { leaseExpiresAt: new Date(0) },
     });
     const { createEventRunConsumer } = await vi.importActual<
-      typeof import('@/backend/orchestration/event-run-consumer.orchestrator')
-    >('@/backend/orchestration/event-run-consumer.orchestrator');
+      typeof import('@/backend/orchestration/agents/event-run-consumer.orchestrator')
+    >('@/backend/orchestration/agents/event-run-consumer.orchestrator');
     const consumer = createEventRunConsumer();
     await consumer.maintain(new AbortController().signal);
     await consumer.drain();
@@ -655,8 +692,8 @@ it.each(['lifecycle', 'retained stop source'] as const)(
       typeof import('@/backend/services/agent-definition/resources/agent-run-settlement-writes')
     >('@/backend/services/agent-definition/resources/agent-run-settlement-writes');
     const { sessionLifecycleGate } = await vi.importActual<
-      typeof import('@/backend/services/session/service/lifecycle/session-core-services')
-    >('@/backend/services/session/service/lifecycle/session-core-services');
+      typeof import('@/backend/services/session/service/composition/session-core-services')
+    >('@/backend/services/session/service/composition/session-core-services');
     const gate = boundary();
     const write = writes.writeRunSettlement;
     vi.spyOn(writes, 'writeRunSettlement').mockImplementation(async (...args) => {
@@ -790,8 +827,8 @@ it('never upgrades unknown historical coverage when an event workspace is reused
 it('preserves complete child history when backup import skips an existing event workspace', async () => {
   await finish();
   const { dataBackupService } = await vi.importActual<
-    typeof import('@/backend/orchestration/data-backup.service')
-  >('@/backend/orchestration/data-backup.service');
+    typeof import('@/backend/orchestration/data-backup/data-backup.service')
+  >('@/backend/orchestration/data-backup/data-backup.service');
   const backup = await dataBackupService.exportData('fixture');
   expect(
     await db.prisma.workspaceLaunchOrigin.findUnique({ where: { runId: h.claim.runId } })
@@ -807,8 +844,8 @@ it('preserves complete child history when backup import skips an existing event 
 it('skips an existing parent and its file descendants without fabricating child ownership', async () => {
   await finish();
   const { dataBackupService } = await vi.importActual<
-    typeof import('@/backend/orchestration/data-backup.service')
-  >('@/backend/orchestration/data-backup.service');
+    typeof import('@/backend/orchestration/data-backup/data-backup.service')
+  >('@/backend/orchestration/data-backup/data-backup.service');
   const backup = await dataBackupService.exportData('fixture');
   const parent = backup.data.workspaces.find((w) => w.id === h.claim.reservedWorkspaceId)!;
   backup.data.workspaces = [

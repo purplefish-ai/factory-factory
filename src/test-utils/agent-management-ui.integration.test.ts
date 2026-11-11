@@ -22,17 +22,19 @@ let queryClient: QueryClient;
 let runtime: typeof import('@/backend/services/agent-definition');
 let workspace: typeof import('@/backend/services/workspace');
 let router: typeof import('@/backend/trpc/agent.trpc');
-let orchestration: typeof import('@/backend/orchestration/agent-management.orchestrator');
+let orchestration: typeof import('@/backend/orchestration/agents/agent-management.orchestrator');
 beforeAll(async () => {
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
   db = await createIntegrationDatabase();
   runtime = await vi.importActual('@/backend/services/agent-definition');
   workspace = await vi.importActual('@/backend/services/workspace');
   router = await vi.importActual('@/backend/trpc/agent.trpc');
-  orchestration = await vi.importActual('@/backend/orchestration/agent-management.orchestrator');
+  orchestration = await vi.importActual(
+    '@/backend/orchestration/agents/agent-management.orchestrator'
+  );
   const { captureWorkspaceRunResults } = await vi.importActual<
-    typeof import('@/backend/orchestration/workspace-deletion.orchestrator')
-  >('@/backend/orchestration/workspace-deletion.orchestrator');
+    typeof import('@/backend/orchestration/workspace-lifecycle/workspace-deletion.orchestrator')
+  >('@/backend/orchestration/workspace-lifecycle/workspace-deletion.orchestrator');
   workspace.workspaceDataService.configureDeletionCapture(captureWorkspaceRunResults);
 }, 30_000);
 afterAll(async () => {
@@ -189,10 +191,10 @@ it('edits the exact saved set through the mixed page after real proposal removal
   ]);
   const respond = (path: string, input: unknown) => {
     calls.push(path);
-    if (path === 'agent.list') {
+    if (path === 'automation.list') {
       return caller.list({ projectId: project.id });
     }
-    if (path === 'agent.get') {
+    if (path === 'automation.get') {
       return caller.get(
         z
           .object({
@@ -203,10 +205,10 @@ it('edits the exact saved set through the mixed page after real proposal removal
           .parse(input)
       );
     }
-    if (path === 'agent.navigationSummary') {
+    if (path === 'automation.navigationSummary') {
       return caller.navigationSummary({ projectId: project.id });
     }
-    if (path === 'agent.updateSaved') {
+    if (path === 'automation.updateSaved') {
       writes.push(input);
       return caller.updateSaved(
         z
@@ -339,7 +341,7 @@ it('edits the exact saved set through the mixed page after real proposal removal
       new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })
     )
   );
-  await act(() => queryClient.invalidateQueries({ queryKey: [['agent', 'get']] }));
+  await act(() => queryClient.invalidateQueries({ queryKey: [['automation', 'get']] }));
   await waitForReact(() => expect(container.textContent).toContain('Exact membership is unknown'));
   await act(() => button('Edit automation').click());
   expect(container.querySelector('form')).toBeNull();

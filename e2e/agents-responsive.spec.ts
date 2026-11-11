@@ -184,7 +184,7 @@ for (const width of [320, 390, 1280]) {
     await expect(page.locator('main')).toContainText('paused');
     await expect(page.locator('main')).toContainText('not yet available');
     const prompt = page.locator('main textarea');
-    await expect(prompt).toHaveValue(/propose_agent/);
+    await expect(prompt).toHaveValue(/propose_automation/);
     await prompt.fill('Propose my event-triggered automation');
     await page.setViewportSize({ width: 1700, height: 900 });
     await page.setViewportSize({ width, height: 900 });

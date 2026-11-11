@@ -108,7 +108,7 @@ export function CodexAccountLoginDialog({
         )}
         <DialogFooter>
           {pending ? (
-            <Button variant="outline" disabled={busy} onClick={onCancel}>
+            <Button variant="outline" pending={busy} pendingLabel="Cancelling…" onClick={onCancel}>
               Cancel login
             </Button>
           ) : (
@@ -117,8 +117,14 @@ export function CodexAccountLoginDialog({
             </Button>
           )}
           {!login && (
-            <Button type="submit" form="codex-account-login" disabled={busy || !label.trim()}>
-              {busy ? 'Starting login…' : 'Continue to login'}
+            <Button
+              type="submit"
+              form="codex-account-login"
+              disabled={!label.trim()}
+              pending={busy}
+              pendingLabel="Starting login…"
+            >
+              Continue to login
             </Button>
           )}
         </DialogFooter>

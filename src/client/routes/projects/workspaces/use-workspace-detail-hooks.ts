@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { runInBackground } from '@/client/lib/background-task';
+import { readStorageItem, removeStorageItem, writeStorageItem } from '@/client/lib/browser-storage';
+import { POLL_INTERVAL_MS } from '@/client/lib/query-options';
 import { trpc } from '@/client/lib/trpc';
 import {
   forgetSetupWarningDismissed,
@@ -59,20 +61,20 @@ export function useWorkspaceInitStatus(
         const status = query.state.data?.status;
         const availability = query.state.data?.retryAvailability;
         if (query.state.status === 'error' || !availability) {
-          return 1000;
+          return POLL_INTERVAL_MS.progress;
         }
         if (
           availability?.status === 'BLOCKED' &&
           !['NOT_RETRYABLE', 'RETRY_LIMIT'].includes(availability.reason)
         ) {
-          return 1000;
+          return POLL_INTERVAL_MS.progress;
         }
         return status === 'READY' ||
           status === 'FAILED' ||
           status === 'ARCHIVING' ||
           status === 'ARCHIVED'
           ? false
-          : 1000;
+          : POLL_INTERVAL_MS.progress;
       },
     }
   );
@@ -103,10 +105,7 @@ export function useWorkspaceInitStatus(
     // Invalidate workspace data when worktree becomes available so worktreePath,
     // agentSessions, etc. refresh immediately and the chat UI can connect.
     if (hasWorktreePath && !prevHasWorktreePathRef.current) {
-      runInBackground(
-        utils.workspace.get.invalidate({ id: workspaceId }),
-        "Couldn't refresh data."
-      );
+      runInBackground(utils.workspace.get.invalidate({ id: workspaceId }));
     }
     prevHasWorktreePathRef.current = hasWorktreePath;
 
@@ -115,10 +114,7 @@ export function useWorkspaceInitStatus(
       const isStaleOnFirstLoad = prevStatus === undefined && !workspace?.worktreePath;
 
       if (isTransitionToReady || isStaleOnFirstLoad) {
-        runInBackground(
-          utils.workspace.get.invalidate({ id: workspaceId }),
-          "Couldn't refresh data."
-        );
+        runInBackground(utils.workspace.get.invalidate({ id: workspaceId }));
       }
     }
 
@@ -253,7 +249,7 @@ export function useSelectedSessionId(
   });
 
   const [selectedDbSessionId, setSelectedDbSessionIdRaw] = useState<string | null>(() => {
-    const stored = localStorage.getItem(storageKey);
+    const stored = readStorageItem(storageKey);
     return requestedSessionId ?? stored ?? initialDbSessionId;
   });
 
@@ -268,7 +264,7 @@ export function useSelectedSessionId(
     ) {
       consumedLinkRef.current = linkIdentity;
       pendingSelectionRef.current = { id: null, setAtMs: null };
-      localStorage.setItem(storageKey, requestedSessionId);
+      writeStorageItem(storageKey, requestedSessionId);
       setSelectedDbSessionIdRaw(requestedSessionId);
       onLinkedSession?.();
       return;
@@ -278,7 +274,7 @@ export function useSelectedSessionId(
       pendingSelectionRef.current = { id: null, setAtMs: null };
     }
 
-    const persistedSessionId = localStorage.getItem(storageKey);
+    const persistedSessionId = readStorageItem(storageKey);
     const resolved = resolveSelectedSessionId({
       currentSelectedDbSessionId: selectedDbSessionId,
       persistedSessionId,
@@ -305,9 +301,9 @@ export function useSelectedSessionId(
       pendingSelectionRef.current = { id, setAtMs: id ? Date.now() : null };
       setSelectedDbSessionIdRaw(id);
       if (id) {
-        localStorage.setItem(storageKey, id);
+        writeStorageItem(storageKey, id);
       } else {
-        localStorage.removeItem(storageKey);
+        removeStorageItem(storageKey);
       }
     },
     [storageKey]

@@ -41,7 +41,7 @@ export function KanbanPrStates({ prs }: { prs: readonly WorkspacePullRequest[] }
             type="button"
             aria-label={label}
             className={cn(
-              'pointer-events-auto inline-flex items-center gap-0.5 rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-ring',
+              'pointer-events-auto inline-flex items-center gap-0.5 rounded-sm focus-ring',
               getStatusToneStyle(presentation.tone).text
             )}
             onClick={(event) => {
@@ -50,7 +50,7 @@ export function KanbanPrStates({ prs }: { prs: readonly WorkspacePullRequest[] }
             }}
           >
             <StateIcon aria-hidden="true" className="h-3.5 w-3.5" />
-            {group.length > 1 && <span className="text-[10px] font-medium">{group.length}</span>}
+            {group.length > 1 && <span className="text-2xs font-medium">{group.length}</span>}
           </button>
         </TooltipTrigger>
         <TooltipContent className="max-w-xs break-words">{label}</TooltipContent>

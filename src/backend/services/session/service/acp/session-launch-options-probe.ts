@@ -21,6 +21,7 @@ import {
   withTimeout,
 } from './acp-runtime-spawn';
 import { requireSessionConfigOptions } from './acp-session-config-options';
+import { timeLaunchDiscovery } from './launch-discovery-timing';
 
 /** Native observations crossing the ACP boundary; application defaults are applied by lifecycle. */
 export type NativeSessionLaunchOptions = {
@@ -154,7 +155,9 @@ async function probeLaunchOptions(
   const rejectCallback = (): Promise<never> =>
     Promise.reject(new Error('Launch discovery cannot service provider callbacks'));
   const run = <T>(promise: Promise<T>, description: string, timeoutMs = TIMEOUT_MS) =>
-    Promise.race([withTimeout({ promise, timeoutMs, description }), failed]);
+    timeLaunchDiscovery(description, { provider: input.provider, model: input.model }, () =>
+      Promise.race([withTimeout({ promise, timeoutMs, description }), failed])
+    );
   let sessionId: string | undefined;
   let connection: ReturnType<typeof createAcpConnection> | undefined;
   try {
@@ -232,7 +235,11 @@ async function probeLaunchOptions(
       }
     } finally {
       try {
-        await terminateCatalogProcess(child);
+        await timeLaunchDiscovery(
+          'launch discovery process cleanup',
+          { provider: input.provider, model: input.model },
+          () => terminateCatalogProcess(child)
+        );
       } finally {
         connection?.close();
       }

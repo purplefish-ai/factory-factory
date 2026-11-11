@@ -13,7 +13,7 @@
  * - NODE_ENV: Environment (development/production)
  */
 
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync } from 'node:fs';
 import type { Server as HttpServer } from 'node:http';
 import { createServer as createHttpServer } from 'node:http';
 import { join } from 'node:path';
@@ -21,12 +21,18 @@ import { createExpressMiddleware } from '@trpc/server/adapters/express';
 import express from 'express';
 import { WebSocketServer } from 'ws';
 import type { Application } from './app-context';
+import { createShutdownPlan, runShutdownPlan } from './application-shutdown';
 import { toError } from './lib/error-utils';
 import { eventLoopMonitor } from './lib/event-loop-monitor';
+import { type CloseListeners, listenHttpServer } from './lib/http-listen';
 import {
   createCorsMiddleware,
+  createPrecompressedStatic,
   createRequestLoggerMiddleware,
+  type PrecompressedDocument,
+  readPrecompressedDocument,
   securityMiddleware,
+  sendPrecompressedHtml,
 } from './middleware';
 import { createHealthRouter } from './routers/health.router';
 import { createPortShareRouter } from './routers/port-share.router';
@@ -61,6 +67,7 @@ export function createServer(application: Application, requestedPort?: number): 
   const { lifecycle, services } = application;
   const {
     acpTraceLogger,
+    cleanupOldLogFiles,
     configService,
     createLogger,
     periodicTaskService,
@@ -68,21 +75,12 @@ export function createServer(application: Application, requestedPort?: number): 
     ratchetService,
     rateLimiter,
     reconciliationService,
-    runScriptService,
     runScriptStateMachine,
     schedulerService,
     sessionFileLogger,
     sessionLifecycleService,
-    terminalService,
-    workspaceGitStateService,
   } = services;
-  const {
-    database,
-    eventCollector,
-    interceptors,
-    recoverStaleArchivingWorkspaces,
-    snapshotReconciliation,
-  } = lifecycle;
+  const { interceptors, recoverStaleArchivingWorkspaces, snapshotReconciliation } = lifecycle;
 
   const logger = createLogger('server');
   const REQUESTED_PORT = requestedPort ?? configService.getBackendPort();
@@ -122,28 +120,16 @@ export function createServer(application: Application, requestedPort?: number): 
   const isAddressInUseError = (error: unknown): error is NodeJS.ErrnoException =>
     error instanceof Error && (error as NodeJS.ErrnoException).code === 'EADDRINUSE';
 
-  const listenOnPort = (port: number): Promise<void> =>
-    new Promise((resolve, reject) => {
-      const onError = (error: Error) => {
-        server.off('listening', onListening);
-        reject(error);
-      };
-      const onListening = () => {
-        server.off('error', onError);
-        resolve();
-      };
+  // Closes the `::1` listener when BACKEND_HOST is unset (see listenHttpServer).
+  let closeExtraListeners: CloseListeners = () => Promise.resolve();
 
-      server.once('error', onError);
-      server.once('listening', onListening);
-
-      try {
-        server.listen(port, REQUESTED_HOST);
-      } catch (error) {
-        server.off('error', onError);
-        server.off('listening', onListening);
-        reject(error);
-      }
+  const listenOnPort = async (port: number): Promise<void> => {
+    closeExtraListeners = await listenHttpServer(server, port, REQUESTED_HOST, {
+      onIpv6Unavailable: (errorCode) => {
+        logger.info('IPv6 loopback unavailable; listening on 127.0.0.1 only', { errorCode });
+      },
     });
+  };
 
   const bindServerWithPortFallback = async (): Promise<void> => {
     let lastAddressInUseError: NodeJS.ErrnoException | undefined;
@@ -183,19 +169,22 @@ export function createServer(application: Application, requestedPort?: number): 
   };
 
   const closeBoundServer = async (): Promise<void> => {
-    if (!server.listening) {
-      return;
-    }
-
-    await new Promise<void>((resolve, reject) => {
-      server.close((error) => {
-        if (error) {
-          reject(error);
-          return;
-        }
-        resolve();
-      });
-    });
+    // Close both listeners together: `server.close()` also ends idle
+    // connections accepted on `::1`, which the companion close waits for.
+    await Promise.all([
+      closeExtraListeners(),
+      server.listening
+        ? new Promise<void>((resolve, reject) => {
+            server.close((error) => {
+              if (error) {
+                reject(error);
+                return;
+              }
+              resolve();
+            });
+          })
+        : undefined,
+    ]);
   };
 
   const closeWebSocketServer = async (): Promise<void> => {
@@ -272,10 +261,10 @@ export function createServer(application: Application, requestedPort?: number): 
   if (frontendStaticPath && existsSync(frontendStaticPath)) {
     logger.info('Serving static files from', { path: frontendStaticPath });
     const indexHtmlPath = join(frontendStaticPath, 'index.html');
-    let indexHtml: string | null = null;
+    let indexHtml: PrecompressedDocument | null = null;
     const loadStaticIndexHtml = (message: string) => {
       try {
-        indexHtml = readFileSync(indexHtmlPath, 'utf8');
+        indexHtml = readPrecompressedDocument(indexHtmlPath);
         if (indexHtmlReloadInterval !== null) {
           clearInterval(indexHtmlReloadInterval);
           indexHtmlReloadInterval = null;
@@ -295,10 +284,11 @@ export function createServer(application: Application, requestedPort?: number): 
       indexHtmlReloadInterval.unref?.();
     }
 
-    // Serve hashed assets (JS, CSS in /assets/) with long cache - they have content hashes
+    // Serve hashed assets (JS, CSS in /assets/) with long cache - they have content hashes.
+    // Both static handlers prefer the build's .br/.gz siblings when the client accepts them.
     app.use(
       '/assets',
-      express.static(join(frontendStaticPath, 'assets'), {
+      createPrecompressedStatic(join(frontendStaticPath, 'assets'), {
         maxAge: '1y',
         immutable: true,
         etag: false, // Not needed with immutable content-hashed files
@@ -307,7 +297,7 @@ export function createServer(application: Application, requestedPort?: number): 
 
     // Serve other static files (favicon, images, etc.) with moderate cache
     app.use(
-      express.static(frontendStaticPath, {
+      createPrecompressedStatic(frontendStaticPath, {
         maxAge: '1d',
         etag: true,
         index: false, // Don't serve index.html from here - handle it separately below
@@ -348,7 +338,7 @@ export function createServer(application: Application, requestedPort?: number): 
         res.status(503).send('Service temporarily unavailable. Please refresh the page.');
         return;
       }
-      res.type('html').send(indexHtml);
+      sendPrecompressedHtml(req, res, indexHtml);
     });
   }
 
@@ -397,8 +387,6 @@ export function createServer(application: Application, requestedPort?: number): 
   // ============================================================================
   // Cleanup Logic
   // ============================================================================
-  const SHUTDOWN_TIMEOUT_MS = 5000;
-
   const runStartupTask = async (errorMessage: string, task: () => Promise<void>): Promise<void> => {
     try {
       await task();
@@ -457,23 +445,6 @@ export function createServer(application: Application, requestedPort?: number): 
     assertStartupNotInterrupted();
   };
 
-  /**
-   * Signal one background job to stop now and return its drain. The drain
-   * never rejects: a failed stop is logged so it cannot keep the other jobs,
-   * or the database disconnect, from proceeding.
-   */
-  const beginJobStop = (job: string, stop: () => Promise<void>): Promise<void> => {
-    let drain: Promise<void>;
-    try {
-      drain = stop();
-    } catch (error) {
-      drain = Promise.reject(error);
-    }
-    return drain.catch((error: unknown) => {
-      logger.error('Failed to stop background job', toError(error), { job });
-    });
-  };
-
   const performCleanup = (): Promise<void> => {
     if (cleanupPromise !== null) {
       return cleanupPromise;
@@ -485,73 +456,48 @@ export function createServer(application: Application, requestedPort?: number): 
       eventLoopMonitorStarted = false;
       eventLoopMonitor.stop();
     }
-    cleanupPromise = (async () => {
-      logger.info('Starting graceful cleanup');
-      // Abort every background job now so none starts new work during
-      // teardown, and let their in-flight runs drain concurrently with it and
-      // with each other: shutdown then waits for the slowest drain rather than
-      // the sum of them. Drains are awaited only after sessions and processes
-      // are torn down: reconciliation's includes startup workspace
-      // initialization, whose in-flight startup script cannot be cancelled and
-      // may outlast the stop budget, and new agent sessions fail fast once
-      // clients are stopped.
-      const jobDrains = {
-        applicationUpdates: beginJobStop(
-          'application-update-idle',
-          () => services.applicationUpdateService?.stop() ?? Promise.resolve()
-        ),
-        reconciliation: beginJobStop('reconciliation-cleanup', () =>
-          reconciliationService.stopPeriodicCleanup()
-        ),
-        prSync: beginJobStop('pr-sync', () => schedulerService.stop()),
-        snapshotReconciliation: beginJobStop('snapshot-reconciliation', () =>
-          snapshotReconciliation.stop()
-        ),
-        ratchet: beginJobStop('ratchet', () => ratchetService.stop()),
-        periodicTasks: beginJobStop('periodic-task-poll', () => periodicTaskService.stop()),
-      };
-      await services.agentRuntime?.stop();
-      // Archive recovery still uses sessions, run scripts, caches and the database.
-      await archiveRecoveryPromise;
-
-      clearInterval(heartbeatInterval);
-      if (indexHtmlReloadInterval !== null) {
-        clearInterval(indexHtmlReloadInterval);
-        indexHtmlReloadInterval = null;
+    logger.info('Starting graceful cleanup');
+    // The shared plan signals every background job now so none starts new
+    // work during teardown, and lets their in-flight runs drain concurrently
+    // with it and with each other: shutdown then waits for the slowest drain
+    // rather than the sum of them. Drains are awaited only after sessions and
+    // processes are torn down: reconciliation's includes startup workspace
+    // initialization, whose in-flight startup script cannot be cancelled and
+    // may outlast the stop budget, and new agent sessions fail fast once
+    // clients are stopped. A failed drain is logged and blocks neither the
+    // other drains nor the disconnect. A failed step is logged, the remaining
+    // steps still run, and cleanup then rejects.
+    const stepFailures: unknown[] = [];
+    const plan = createShutdownPlan(application, {
+      settleServerWork: async () => {
+        // Archive recovery still uses sessions, run scripts, caches and the database.
+        await archiveRecoveryPromise;
+        clearInterval(heartbeatInterval);
+        if (indexHtmlReloadInterval !== null) {
+          clearInterval(indexHtmlReloadInterval);
+          indexHtmlReloadInterval = null;
+        }
+      },
+      closeTransports: async () => {
+        await closeWebSocketServer();
+        disposeChatTransportForApplication(application);
+        disposeSnapshotsHandlerState(application);
+        await closeBoundServer();
+      },
+    });
+    cleanupPromise = runShutdownPlan(plan, ({ kind, name, error }) => {
+      if (kind === 'job') {
+        logger.error('Failed to stop background job', toError(error), { job: name });
+        return;
       }
-      await interceptors.stop();
-      await services.workspaceMetadata?.stop();
-
-      await closeWebSocketServer();
-      disposeChatTransportForApplication(application);
-      disposeSnapshotsHandlerState(application);
-      await closeBoundServer();
-
-      // Stop all ACP clients through the session lifecycle owner.
-      await sessionLifecycleService.stopAllClients(SHUTDOWN_TIMEOUT_MS);
-
-      terminalService.cleanup();
-      await runScriptService.cleanup();
-      await portShareService.cleanup();
-      sessionFileLogger.cleanup();
-      acpTraceLogger.cleanup();
-      await rateLimiter.stop();
-
-      // Every drain is already under way, so awaiting them one at a time costs
-      // only the slowest; the order below just keeps the edges that matter.
-      // The event collector keeps projecting until the PR sync has settled.
-      await jobDrains.applicationUpdates;
-      await jobDrains.prSync;
-      eventCollector.stop();
-      // Snapshot reconciliation's Git-stats pass must settle before the Git
-      // state service drops its watchers and cache.
-      await jobDrains.snapshotReconciliation;
-      workspaceGitStateService.stop();
-      await Promise.all([jobDrains.ratchet, jobDrains.periodicTasks, jobDrains.reconciliation]);
-      await database.$disconnect();
-
+      logger.error('Failed to stop application component', toError(error), { step: name });
+      stepFailures.push(error);
+    }).then(() => {
+      if (stepFailures.length > 0) {
+        throw new AggregateError(stepFailures, 'Graceful cleanup failed');
+      }
       logger.info('Graceful cleanup completed');
-    })();
+    });
 
     return cleanupPromise;
   };
@@ -635,6 +581,12 @@ export function createServer(application: Application, requestedPort?: number): 
 
         sessionFileLogger.cleanupOldLogs();
         acpTraceLogger.cleanupOldLogs();
+        await runStartupTask('Failed to clean up old server logs', async () => {
+          const deletedCount = await cleanupOldLogFiles();
+          if (deletedCount > 0) {
+            logger.info('Cleaned up old server log files', { deletedCount });
+          }
+        });
         await startRuntimeWork();
         startupComplete = true;
 

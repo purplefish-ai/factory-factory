@@ -1,8 +1,10 @@
 // @vitest-environment jsdom
-import { act } from 'react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { act, type ReactNode } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import type { PRRecipientChoice } from '@/client/features/workspace/pr-recipient-picker';
+import { waitForCheck } from '@/test-utils/react-act';
 import { useToggleRatcheting, type ToggleRatchetingInput } from './use-toggle-ratcheting';
 
 const mocks = vi.hoisted(() => ({
@@ -32,6 +34,7 @@ vi.mock('@/client/lib/trpc', () => ({
     }),
     workspace: {
       toggleRatcheting: {
+        _def: () => ({ path: ['workspace', 'toggleRatcheting'] }),
         useMutation: (options: NonNullable<typeof mocks.options>) => {
           mocks.options = options;
           return { mutate: mocks.mutate, mutateAsync: mocks.mutate, isPending: false };
@@ -58,7 +61,9 @@ vi.mock('@/client/features/workspace/pr-recipient-picker', () => ({
   ),
 }));
 let root: Root;
+let queryClient: QueryClient;
 beforeEach(() => {
+  queryClient = new QueryClient();
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
   vi.clearAllMocks();
   const host = document.createElement('div');
@@ -67,12 +72,60 @@ beforeEach(() => {
 });
 afterEach(async () => {
   await act(() => root.unmount());
+  queryClient.clear();
   document.body.innerHTML = '';
 });
-function Harness() {
-  const toggle = useToggleRatcheting('p');
-  return toggle.recipientPicker;
+function Providers({ children }: { children: ReactNode }) {
+  return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
 }
+function RecipientPicker() {
+  return useToggleRatcheting('p').recipientPicker;
+}
+function Harness() {
+  return (
+    <Providers>
+      <RecipientPicker />
+    </Providers>
+  );
+}
+
+/** Starts a toggle request that stays in flight until the returned resolver runs. */
+function startToggle(input: ToggleRatchetingInput): () => void {
+  let finish!: () => void;
+  const mutation = queryClient.getMutationCache().build(queryClient, {
+    mutationKey: [['workspace', 'toggleRatcheting']],
+    mutationFn: () =>
+      new Promise<void>((resolve) => {
+        finish = resolve;
+      }),
+  });
+  void mutation.execute(input);
+  return () => finish();
+}
+
+let pending: readonly string[] = [];
+function PendingProbe() {
+  pending = useToggleRatcheting('p').pendingWorkspaceIds;
+  return null;
+}
+
+it('reports every workspace with a toggle in flight, not just the latest', async () => {
+  await act(() =>
+    root.render(
+      <Providers>
+        <PendingProbe />
+      </Providers>
+    )
+  );
+  const finishFirst = startToggle({ workspaceId: 'first', enabled: true });
+  startToggle({ workspaceId: 'second', enabled: false });
+  // React Query delivers cache changes to subscribers on a timer; a finished
+  // mutation reaches the cache only after its callbacks' promise chain, so its
+  // timer can queue behind any single wait started here.
+  await waitForCheck(() => expect(pending).toEqual(['first', 'second']));
+  finishFirst();
+  await waitForCheck(() => expect(pending).toEqual(['second']));
+});
 it('preserves MAIN destination and the new revision when choosing a recipient', async () => {
   await act(() => root.render(<Harness />));
   await act(() =>

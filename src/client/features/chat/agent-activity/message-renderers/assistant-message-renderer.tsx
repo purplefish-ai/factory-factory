@@ -1,7 +1,7 @@
-import { SpinnerGapIcon } from '@phosphor-icons/react/dist/csr/SpinnerGap';
 import { memo } from 'react';
 import { ToolInfoRenderer } from '@/client/features/chat/agent-activity/tool-renderers';
 import { formatThinkingText } from '@/client/features/chat/thinking-preview';
+import { Spinner } from '@/components/ui/spinner';
 import type { AgentMessage } from '@/lib/chat-protocol';
 import {
   extractTextFromMessage,
@@ -216,7 +216,7 @@ export const LoadingIndicator = memo(function LoadingIndicator({
   const loadingText = getLoadingText(latestReasoning, plainText);
   return (
     <div className={cn('flex items-start gap-2 text-muted-foreground', className)}>
-      <SpinnerGapIcon className="h-4 w-4 motion-safe:animate-spin shrink-0 mt-0.5" />
+      <Spinner aria-hidden="true" className="mt-0.5" />
       <span
         className={cn(
           'min-w-0 flex-1 text-sm leading-normal',

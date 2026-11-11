@@ -1,14 +1,14 @@
-import { SpinnerGapIcon } from '@phosphor-icons/react/dist/csr/SpinnerGap';
-import { WarningIcon } from '@phosphor-icons/react/dist/csr/Warning';
+import { BrainIcon } from '@phosphor-icons/react/dist/csr/Brain';
 import { memo } from 'react';
 import { MarkdownRenderer } from '@/client/components/markdown';
+import { StatusCallout } from '@/client/components/status-callout';
 import { CompactBoundaryIndicator } from '@/client/features/chat/compact-boundary-indicator';
+import { Spinner } from '@/components/ui/spinner';
 import type { AgentMessage, AgentStreamEvent, ContentBlockDelta } from '@/lib/chat-protocol';
 import { isTextContent, isThinkingContent } from '@/lib/chat-protocol';
 import { cn } from '@/lib/utils';
 import { useIsTextStreaming } from './streaming-text-context';
 import { useIsThinkingInProgress } from './thinking-completion-context';
-import { useStreamingTextSnapshot } from './use-streaming-text-snapshot';
 
 // =============================================================================
 // Stream Event Renderer
@@ -111,7 +111,7 @@ export const StreamDeltaRenderer = memo(function StreamDeltaRenderer({
 
 export interface TextRendererProps {
   text: string;
-  /** The ID of the ChatMessage containing this text (for streaming throttling) */
+  /** The ID of the ChatMessage containing this text (to detect the streaming reply) */
   messageId?: string;
   resolveWorkspaceFileLink?: (href: string) => string | null;
   onWorkspaceFileLink?: (path: string) => void;
@@ -119,7 +119,8 @@ export interface TextRendererProps {
 
 /**
  * Renders text content with full markdown support. While the message is
- * streaming, Markdown renders from a throttled snapshot split into blocks.
+ * streaming, Markdown renders with word fades. The chat state's stream-delta
+ * coalescer paces streaming text updates, so each update renders directly.
  */
 export const TextRenderer = memo(function TextRenderer({
   text,
@@ -128,10 +129,9 @@ export const TextRenderer = memo(function TextRenderer({
   onWorkspaceFileLink,
 }: TextRendererProps) {
   const streaming = useIsTextStreaming(messageId);
-  const content = useStreamingTextSnapshot(text, streaming);
   return (
     <MarkdownRenderer
-      content={content}
+      content={text}
       streaming={streaming}
       resolveWorkspaceFileLink={resolveWorkspaceFileLink}
       onWorkspaceFileLink={onWorkspaceFileLink}
@@ -176,7 +176,11 @@ export const ThinkingRenderer = memo(function ThinkingRenderer({
       )}
     >
       <div className="flex items-center gap-1 text-xs text-muted-foreground mb-1">
-        <SpinnerGapIcon className={cn('h-3 w-3', isInProgress && 'animate-spin')} />
+        {isInProgress ? (
+          <Spinner aria-hidden="true" className="size-3" />
+        ) : (
+          <BrainIcon aria-hidden="true" className="h-3 w-3" />
+        )}
         <span>Thinking</span>
       </div>
       <MarkdownRenderer
@@ -208,15 +212,9 @@ export const ErrorRenderer = memo(function ErrorRenderer({
   const errorText = message.error || 'An unknown error occurred';
 
   return (
-    <div
-      className={cn(
-        'flex items-start gap-2 rounded-md border border-destructive/50 bg-destructive/10 p-3',
-        className
-      )}
-    >
-      <WarningIcon className="h-4 w-4 text-destructive shrink-0 mt-0.5" />
-      <div className="text-sm text-destructive">{errorText}</div>
-    </div>
+    <StatusCallout tone="danger" className={className}>
+      {errorText}
+    </StatusCallout>
   );
 });
 
@@ -259,8 +257,7 @@ export const SystemMessageRenderer = memo(function SystemMessageRenderer({
 
     case 'hook_started':
     case 'hook_response':
-      // Hook events are stored in state but don't need visual rendering here
-      // Future hook UI (#449) can use the activeHooks state from reducer
+      // Provider transcripts can contain hook system messages; they have no visual rendering.
       return null;
 
     default:

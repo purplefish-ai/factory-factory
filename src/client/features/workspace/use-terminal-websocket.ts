@@ -45,6 +45,8 @@ type TerminalMessage = z.infer<typeof TerminalMessageSchema>;
 
 interface UseTerminalWebSocketOptions {
   workspaceId: string;
+  /** Open the socket; false leaves it closed. Defaults to true. */
+  enabled?: boolean;
   onOutput?: (terminalId: string, data: string) => void;
   onCreated?: (terminalId: string, requestId?: string, outputBuffer?: string) => void;
   onExit?: (terminalId: string, exitCode: number) => void;
@@ -118,13 +120,14 @@ function handleTerminalMessage(message: TerminalMessage, callbacks: MessageHandl
 
 export function useTerminalWebSocket({
   workspaceId,
+  enabled = true,
   onOutput,
   onCreated,
   onExit,
   onError,
   onTerminalList,
 }: UseTerminalWebSocketOptions): UseTerminalWebSocketReturn {
-  const url = buildWebSocketUrl('/terminal', { workspaceId });
+  const url = enabled ? buildWebSocketUrl('/terminal', { workspaceId }) : null;
 
   const handleMessage = useCallback(
     (message: TerminalMessage) => {

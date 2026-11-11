@@ -5,6 +5,10 @@ import type {
   AcpRuntimeEventHandlers,
   AcpRuntimeExitEvent,
 } from '@/backend/services/session/service/acp';
+import type { SessionRepository } from '@/backend/services/session/service/data/session.repository';
+import { sessionBackgroundDeliveryService } from '@/backend/services/session/service/delivery/session-background-delivery.service';
+import type { EventSessionAuthority } from '@/backend/services/session/service/event-agent/event-session-authority';
+import type { AcpEventProcessor } from '@/backend/services/session/service/events/acp-event-processor';
 import { acpTraceLogger } from '@/backend/services/session/service/logging/acp-trace-logger.service';
 import type { SessionDomainService } from '@/backend/services/session/service/session-domain.service';
 import {
@@ -12,16 +16,11 @@ import {
   SessionLifecycleEventReason,
   SessionStatus,
 } from '@/shared/core';
-import type { AcpEventProcessor } from './acp-event-processor';
-import type { EventSessionAuthority } from './event-session-authority';
-import { sessionBackgroundDeliveryService } from './session-background-delivery.service';
 import type { SessionLifecycleEventService } from './session-lifecycle-event.service';
 import type { SessionLifecycleGate } from './session-lifecycle-gate';
 import type { SessionProviderIdentityService } from './session-provider-identity.service';
+import type { SessionScope } from './session-scope';
 import type { SessionWorkflowFinalizer } from './session-workflow-finalizer';
-import type { SessionPermissionService } from './session.permission.service';
-import type { SessionPromptTurnCompletionService } from './session.prompt-turn-completion.service';
-import type { SessionRepository } from './session.repository';
 
 const logger = createLogger('session');
 
@@ -30,7 +29,6 @@ type RuntimeExitCoordinatorDependencies = {
   providerIdentityService: Pick<SessionProviderIdentityService, 'reconcile'>;
   repository: Pick<SessionRepository, 'getSessionById' | 'updateSession'>;
   sessionDomainService: Pick<SessionDomainService, 'markError' | 'markProcessExit'>;
-  sessionPermissionService: Pick<SessionPermissionService, 'cancelPendingRequests'>;
   acpEventProcessor: Pick<
     AcpEventProcessor,
     | 'createRuntimeEventHandler'
@@ -40,14 +38,14 @@ type RuntimeExitCoordinatorDependencies = {
     | 'clearPendingToolCalls'
     | 'handleAcpLog'
   >;
-  promptTurnCompletionService: Pick<SessionPromptTurnCompletionService, 'clearSession'>;
   lifecycleEventService: Pick<SessionLifecycleEventService, 'record'>;
   lifecycleGate: Pick<
     SessionLifecycleGate,
     'isSessionStopping' | 'isStopReserved' | 'isBulkShutdownReserved' | 'releaseShutdown'
   >;
   workflowFinalizer: Pick<SessionWorkflowFinalizer, 'finalizeRuntimeExit' | 'clearInactiveSession'>;
-  onSessionExit?: (sessionId: string) => void;
+  /** Owns per-session disposers; runtime exit runs the teardown and settle stages. */
+  scope: Pick<SessionScope, 'beginTeardown' | 'settle'>;
 };
 
 function getPersistedStatusForExitCode(exitCode: number | null): SessionStatus {
@@ -204,8 +202,6 @@ export class SessionRuntimeExitCoordinator {
       await this.dependencies.workflowFinalizer.finalizeRuntimeExit({
         session,
         sessionId: event.sessionId,
-        exitCode: event.exitCode,
-        deliberate,
       });
     } catch (error) {
       logger.warn('Failed to process ACP session exit', {
@@ -216,18 +212,9 @@ export class SessionRuntimeExitCoordinator {
   }
 
   private prepareRuntimeExit(sessionId: string, exitCode: number | null): void {
-    this.dependencies.promptTurnCompletionService.clearSession(sessionId);
-    try {
-      this.dependencies.onSessionExit?.(sessionId);
-    } catch (error) {
-      logger.warn('Failed handling ACP session exit callback', {
-        sessionId,
-        error: error instanceof Error ? error.message : String(error),
-      });
-    }
+    this.dependencies.scope.beginTeardown(sessionId, 'exit');
     this.finalizeOrphanedToolCalls(sessionId);
-    this.dependencies.acpEventProcessor.clearSessionState(sessionId);
-    this.dependencies.sessionPermissionService.cancelPendingRequests(sessionId);
+    this.dependencies.scope.settle(sessionId, 'exit');
     acpTraceLogger.log(sessionId, 'runtime_exit', { exitCode });
   }
 

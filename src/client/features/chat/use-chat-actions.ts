@@ -8,7 +8,6 @@
  * - Answering questions
  * - Updating settings
  * - Removing queued messages
- * - Rewind files operations
  */
 
 import { useCallback } from 'react';
@@ -52,8 +51,6 @@ export interface UseChatActionsOptions {
   dbSessionIdRef: React.MutableRefObject<string | null>;
   /** Input attachments ref for sendMessage */
   inputAttachmentsRef: React.MutableRefObject<MessageAttachment[]>;
-  /** Rewind timeout ref for cleanup */
-  rewindTimeoutRef: React.MutableRefObject<ReturnType<typeof setTimeout> | null>;
   /** Callback to clear input draft and attachments */
   onClearInput: () => void;
 }
@@ -76,10 +73,6 @@ export interface UseChatActionsReturn {
   steerQueuedMessage: (id: string) => void;
   resumeQueuedMessages: () => void;
   setConfigOption: (configId: string, value: string) => void;
-  startRewindPreview: (userMessageUuid: string) => void;
-  confirmRewind: () => void;
-  cancelRewind: () => void;
-  getUuidForMessageId: (messageId: string) => string | undefined;
 }
 
 // =============================================================================
@@ -88,6 +81,12 @@ export interface UseChatActionsReturn {
 
 /** For settings rolled back when `send` returns false: never queue them for replay. */
 const UNQUEUED_SEND: WebSocketSendOptions = { queuePolicy: 'drop' };
+
+/** Shown in the transcript when a prompt answer could not be sent; the prompt stays open. */
+const UNSENT_ANSWER_ERROR: ChatAction = {
+  type: 'WS_ERROR',
+  payload: { message: 'Your answer was not sent. Reconnect and answer again.' },
+};
 
 function generateMessageId(): string {
   return `msg-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
@@ -200,15 +199,7 @@ function isAllowOptionId(optionId: string, options: AcpPermissionOption[] | unde
  * All callbacks are stable and use refs internally to avoid recreation on state changes.
  */
 export function useChatActions(options: UseChatActionsOptions): UseChatActionsReturn {
-  const {
-    send,
-    dispatch,
-    stateRef,
-    dbSessionIdRef,
-    inputAttachmentsRef,
-    rewindTimeoutRef,
-    onClearInput,
-  } = options;
+  const { send, dispatch, stateRef, dbSessionIdRef, inputAttachmentsRef, onClearInput } = options;
 
   // Keep sequential actions (for example selecting a model then immediately sending)
   // on the same settings even before React commits the reducer render.
@@ -315,7 +306,12 @@ export function useChatActions(options: UseChatActionsOptions): UseChatActionsRe
         requestId,
         optionId: resolvedOptionId,
       };
-      send(msg);
+      // Like steering: the prompt closes only once the answer is sent, so a
+      // refused send (disconnected) leaves it open to answer again.
+      if (!send(msg, UNQUEUED_SEND)) {
+        dispatch(UNSENT_ANSWER_ERROR);
+        return;
+      }
       dispatch({ type: 'PERMISSION_RESPONSE', payload: { allow } });
 
       if (allow && pendingRequest.request.toolName === 'ExitPlanMode') {
@@ -341,7 +337,10 @@ export function useChatActions(options: UseChatActionsOptions): UseChatActionsRe
         optionId,
         ...(Object.keys(normalizedAnswers).length > 0 ? { answers: normalizedAnswers } : {}),
       };
-      send(msg);
+      if (!send(msg, UNQUEUED_SEND)) {
+        dispatch(UNSENT_ANSWER_ERROR);
+        return;
+      }
       dispatch({ type: 'QUESTION_RESPONSE' });
 
       if (
@@ -384,10 +383,20 @@ export function useChatActions(options: UseChatActionsOptions): UseChatActionsRe
 
   const steerQueuedMessage = useCallback(
     (id: string) => {
-      send({ type: 'steer_queued_message', messageId: id }, UNQUEUED_SEND);
+      if (stateRef.current.pendingSteer) {
+        return;
+      }
+      const requestId = crypto.randomUUID();
+      const pendingSteer = { messageId: id, requestId };
+      stateRef.current = { ...stateRef.current, pendingSteer };
+      dispatch({ type: 'STEER_REQUESTED', ...pendingSteer });
+      if (!send({ type: 'steer_queued_message', messageId: id, requestId }, UNQUEUED_SEND)) {
+        stateRef.current = { ...stateRef.current, pendingSteer: null };
+        dispatch({ type: 'STEER_SETTLED', requestId });
+      }
       // Keep the message queued until the server confirms native delivery.
     },
-    [send]
+    [send, dispatch, stateRef]
   );
 
   const resumeQueuedMessages = useCallback(() => {
@@ -420,81 +429,6 @@ export function useChatActions(options: UseChatActionsOptions): UseChatActionsRe
     [send, applySettings, rejectUnsentModelRequest, stateRef, dispatch]
   );
 
-  // Rewind files actions
-  const startRewindPreview = useCallback(
-    (userMessageUuid: string) => {
-      if (!stateRef.current.chatCapabilities.rewind.enabled) {
-        return;
-      }
-
-      // Clear any existing timeout
-      if (rewindTimeoutRef.current) {
-        clearTimeout(rewindTimeoutRef.current);
-        rewindTimeoutRef.current = null;
-      }
-
-      // Generate unique nonce for this request (handles retry race conditions)
-      const requestNonce = `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
-
-      // Start preview state first - this ensures the reducer can handle error states
-      dispatch({
-        type: 'REWIND_PREVIEW_START',
-        payload: { userMessageId: userMessageUuid, requestNonce },
-      });
-
-      dispatch({
-        type: 'REWIND_PREVIEW_ERROR',
-        payload: { error: 'Rewind is not supported in ACP runtime.', requestNonce },
-      });
-    },
-    [dispatch, stateRef, rewindTimeoutRef]
-  );
-
-  const confirmRewind = useCallback(() => {
-    if (!stateRef.current.chatCapabilities.rewind.enabled) {
-      return;
-    }
-
-    // Clear any existing timeout
-    if (rewindTimeoutRef.current) {
-      clearTimeout(rewindTimeoutRef.current);
-      rewindTimeoutRef.current = null;
-    }
-
-    const rewindPreview = stateRef.current.rewindPreview;
-    if (!rewindPreview) {
-      return;
-    }
-
-    // Mark as executing (keep dialog open with loading state for actual rewind)
-    dispatch({ type: 'REWIND_EXECUTING' });
-
-    dispatch({
-      type: 'REWIND_PREVIEW_ERROR',
-      payload: {
-        error: 'Rewind is not supported in ACP runtime.',
-        requestNonce: rewindPreview.requestNonce,
-      },
-    });
-  }, [dispatch, stateRef, rewindTimeoutRef]);
-
-  const cancelRewind = useCallback(() => {
-    // Clear the timeout when canceling
-    if (rewindTimeoutRef.current) {
-      clearTimeout(rewindTimeoutRef.current);
-      rewindTimeoutRef.current = null;
-    }
-    dispatch({ type: 'REWIND_CANCEL' });
-  }, [dispatch, rewindTimeoutRef]);
-
-  const getUuidForMessageId = useCallback(
-    (messageId: string): string | undefined => {
-      // Look up UUID by message ID (stable identifier)
-      return stateRef.current.messageIdToUuid.get(messageId);
-    },
-    [stateRef]
-  );
-
   return {
     sendMessage,
     stopChat,
@@ -505,9 +439,5 @@ export function useChatActions(options: UseChatActionsOptions): UseChatActionsRe
     steerQueuedMessage,
     resumeQueuedMessages,
     setConfigOption,
-    startRewindPreview,
-    confirmRewind,
-    cancelRewind,
-    getUuidForMessageId,
   };
 }

@@ -1,8 +1,8 @@
 import { TRPCError } from '@trpc/server';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { ZodError } from 'zod';
-import { discoverProjectAgentSources } from '@/backend/orchestration/agent-sources.orchestrator';
-import { dataBackupService } from '@/backend/orchestration/data-backup.service';
+import { discoverProjectAgentSources } from '@/backend/orchestration/agents/agent-sources.orchestrator';
+import { dataBackupService } from '@/backend/orchestration/data-backup/data-backup.service';
 import * as slackRecovery from '@/backend/services/agent-definition';
 import { SlackConnectionService } from '@/backend/services/agent-definition';
 import { configService } from '@/backend/services/config.service';

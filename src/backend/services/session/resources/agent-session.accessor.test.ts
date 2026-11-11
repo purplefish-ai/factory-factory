@@ -130,6 +130,14 @@ describe('agentSessionAccessor', () => {
       where: {
         workspaceId: 'workspace-1',
         status: { in: [SessionStatus.RUNNING, SessionStatus.IDLE] },
+        NOT: {
+          AND: [
+            { workflow: 'adversarial_review' },
+            { status: SessionStatus.IDLE },
+            { providerSessionId: { not: null } },
+            { providerSessionId: { not: '' } },
+          ],
+        },
       },
     });
     expect(mockCreate).toHaveBeenCalledWith({
@@ -181,19 +189,29 @@ describe('agentSessionAccessor', () => {
       where: {
         workspaceId: 'workspace-1',
         status: { in: [SessionStatus.RUNNING, SessionStatus.IDLE] },
+        NOT: {
+          AND: [
+            { workflow: 'adversarial_review' },
+            { status: SessionStatus.IDLE },
+            { providerSessionId: { not: null } },
+            { providerSessionId: { not: '' } },
+          ],
+        },
       },
     });
     expect(mockCreate).toHaveBeenCalled();
   });
 
-  it('findById includes workspace relation', async () => {
+  it('findById joins only the workspace fields session reads use', async () => {
     mockFindUnique.mockResolvedValue({ id: 'session-1' });
 
     await agentSessionAccessor.findById('session-1');
 
     expect(mockFindUnique).toHaveBeenCalledWith({
       where: { id: 'session-1' },
-      include: { workspace: true },
+      include: {
+        workspace: { select: { status: true, worktreePath: true, initErrorMessage: true } },
+      },
     });
   });
 
@@ -215,7 +233,7 @@ describe('agentSessionAccessor', () => {
     });
   });
 
-  it('findByWorkspaceId applies optional filters and ordering', async () => {
+  it('findByWorkspaceId applies optional filters and ordering without provider metadata', async () => {
     mockFindMany.mockResolvedValue([{ id: 'session-1' }]);
 
     await agentSessionAccessor.findByWorkspaceId('workspace-1', {
@@ -230,6 +248,7 @@ describe('agentSessionAccessor', () => {
         status: SessionStatus.RUNNING,
         provider: 'CODEX',
       },
+      omit: { providerMetadata: true },
       take: 3,
       orderBy: { createdAt: 'asc' },
     });

@@ -33,6 +33,7 @@ describe('chat message routing at the transport boundary', () => {
   );
 
   it.each([
+    { type: 'steer_queued_message', messageId: 'message', requestId: 'steer-request' },
     { type: 'set_model', model: 'chosen', requestId: 'model-request' },
     { type: 'set_config_option', configId: 'model', value: 'chosen', requestId: 'config-request' },
   ] satisfies ChatMessageInput[])(

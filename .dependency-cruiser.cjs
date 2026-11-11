@@ -6,7 +6,9 @@ module.exports = {
       severity: 'error',
       comment:
         'Observation receives capabilities from composition and must not load application services or delivery.',
-      from: { path: '^src/backend/orchestration/pr-observation\\.orchestrator\\.ts$' },
+      from: {
+        path: '^src/backend/orchestration/pull-requests/pr-observation\\.orchestrator\\.ts$',
+      },
       to: { path: '^src/backend/', dependencyTypesNot: ['type-only'] },
     },
     {
@@ -14,7 +16,7 @@ module.exports = {
       severity: 'error',
       comment:
         'Observation ports describe narrow contracts without importing application service types.',
-      from: { path: '^src/backend/orchestration/pr-observation-ports\\.ts$' },
+      from: { path: '^src/backend/orchestration/pull-requests/pr-observation-ports\\.ts$' },
       to: { path: '^src/backend/' },
     },
     {
@@ -104,9 +106,15 @@ module.exports = {
     {
       name: 'no-importing-backend-orchestration-barrel',
       severity: 'error',
-      comment: 'Import concrete orchestration modules directly, not orchestration/index.',
+      comment:
+        'Import concrete orchestration modules directly, not orchestration/index or a subsystem index.',
       from: { path: '^src/' },
-      to: { path: '^src/backend/orchestration/index\\.ts$' },
+      to: {
+        path: [
+          '^src/backend/orchestration/index\\.ts$',
+          '^src/backend/orchestration/[^/]+/index\\.ts$',
+        ],
+      },
     },
     {
       name: 'no-lib-importing-app-layers',
@@ -154,7 +162,7 @@ module.exports = {
       comment: 'Orchestration must import service barrels only.',
       from: {
         path: '^src/backend/orchestration/',
-        pathNot: '^src/backend/orchestration/data-backup\\.service\\.ts$',
+        pathNot: '^src/backend/orchestration/data-backup/data-backup\\.service\\.ts$',
       },
       to: { path: '^src/backend/services/[^/]+/(?!index\\.ts$).+' },
     },
@@ -162,7 +170,7 @@ module.exports = {
       name: 'data-backup-orchestration-imports-only-data-backup-accessor',
       severity: 'error',
       comment: 'The backup orchestrator has one exact persistence exception.',
-      from: { path: '^src/backend/orchestration/data-backup\\.service\\.ts$' },
+      from: { path: '^src/backend/orchestration/data-backup/data-backup\\.service\\.ts$' },
       to: {
         path: '^src/backend/services/[^/]+/(?!index\\.ts$).+',
         pathNot: '^src/backend/services/settings/resources/data-backup\\.accessor\\.ts$',
@@ -175,7 +183,7 @@ module.exports = {
       from: {
         path: '^src/backend',
         pathNot:
-          '^src/backend/services/[^/]+/(index\\.ts|service/|resources/)|^src/backend/.*\\.test\\.ts$|^src/backend/orchestration/data-backup\\.service\\.ts$',
+          '^src/backend/services/[^/]+/(index\\.ts|service/|resources/)|^src/backend/.*\\.test\\.ts$|^src/backend/orchestration/data-backup/data-backup\\.service\\.ts$',
       },
       to: { path: '^src/backend/services/[^/]+/resources/' },
     },
@@ -214,7 +222,7 @@ module.exports = {
       from: {
         path: '^src/backend',
         pathNot:
-          '^src/backend/services/([^/]+)/|^src/backend/.*\\.test\\.ts$|^src/backend/orchestration/data-backup\\.service\\.ts$',
+          '^src/backend/services/([^/]+)/|^src/backend/.*\\.test\\.ts$|^src/backend/orchestration/data-backup/data-backup\\.service\\.ts$',
       },
       to: { path: '^src/backend/services/[^/]+/(?!index\\.ts$).+' },
     },
@@ -287,18 +295,6 @@ module.exports = {
           '^src/backend/services/session/(service/|resources/)|^src/backend/services/settings/resources/user-settings\\.accessor\\.ts$|^src/backend/lib/session-model\\.ts$|^src/shared/schemas/agent-definition\\.schema\\.ts$|^src/.*\\.test\\.(ts|tsx)$',
       },
       to: { path: '^src/(backend/lib|shared)/session-model\\.ts$' },
-    },
-    {
-      name: 'session-runtime-import-boundary',
-      severity: 'error',
-      comment:
-        'Session runtime managers are internal lifecycle infrastructure and may only be imported by session acp/lifecycle entry points.',
-      from: {
-        path: '^src/backend/services/session/service/',
-        pathNot:
-          '^src/backend/services/session/service/(acp/|runtime/|lifecycle/)|^src/backend/services/session/(index\\.ts|service/index\\.ts)$|^src/backend/.*\\.test\\.ts$',
-      },
-      to: { path: '^src/backend/services/session/service/runtime/' },
     },
     {
       name: 'acp-no-external-imports',

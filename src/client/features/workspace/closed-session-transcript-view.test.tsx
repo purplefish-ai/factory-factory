@@ -90,7 +90,7 @@ const rawPre = (container: Element) =>
     (node) => node.textContent
   );
 
-const staleNotice = 'Latest transcript read failed. Showing previously loaded history.';
+const staleNotice = "Couldn't refresh. Showing the last loaded data.";
 const failureKinds = ['network', 'server', 'malformed', 'schema'] as const;
 function readFailure(kind: (typeof failureKinds)[number]): {
   wire?: unknown;
@@ -278,7 +278,9 @@ describe('compatible archive view with real query selection, projection and rich
           clock.mockRestore();
         }
         await vi.waitFor(() =>
-          expect(fixture.container.querySelector('[role="status"]')?.textContent).toBe(staleNotice)
+          expect(fixture.container.querySelector('[role="status"] p')?.textContent).toBe(
+            staleNotice
+          )
         );
         expect(fixture.container.querySelectorAll('[role="status"]')).toHaveLength(1);
         expect(fixture.container.querySelector('[role="status"]')?.getAttribute('aria-live')).toBe(
@@ -311,7 +313,7 @@ describe('compatible archive view with real query selection, projection and rich
     failRead(fixture, kind);
     await fixture.queryClient.refetchQueries();
     await vi.waitFor(() =>
-      expect(fixture.container.querySelector('[role="status"]')?.textContent).toBe(staleNotice)
+      expect(fixture.container.querySelector('[role="status"] p')?.textContent).toBe(staleNotice)
     );
     expect(fixture.container.textContent).toContain('No messages in this session');
     fixture.response.error = undefined;
@@ -343,7 +345,7 @@ describe('compatible archive view with real query selection, projection and rich
     failRead(fixture, 'network');
     await fixture.queryClient.refetchQueries();
     await vi.waitFor(() =>
-      expect(fixture.container.querySelector('[role="status"]')?.textContent).toBe(staleNotice)
+      expect(fixture.container.querySelector('[role="status"] p')?.textContent).toBe(staleNotice)
     );
     fixture.response.error = undefined;
     fixture.response.wire = JSON.stringify({ messages: [user('new session')] });
@@ -359,35 +361,53 @@ describe('compatible archive view with real query selection, projection and rich
     ).toBe(previousWire);
   });
 
-  it('preserves its viewport, focused control and scroll on failure, and auto-scrolls valid recovery', async () => {
-    const fixture = renderWire(
-      JSON.stringify({ messages: [user('history'), agent('call', [tool('A')])] })
-    );
-    await vi.waitFor(() => expect(fixture.container.querySelector('button')).not.toBeNull());
-    const viewport = fixture.container.querySelector<HTMLDivElement>(
-      '[data-radix-scroll-area-viewport]'
-    );
-    const control = fixture.container.querySelector<HTMLButtonElement>('button');
-    if (!(viewport && control)) {
-      throw new Error('Expected actual history viewport and control');
+  it.each([
+    ['keeps the reader’s place through', 180],
+    ['follows', 1400],
+  ])(
+    'preserves its viewport, focus and scroll on failure, and %s valid recovery',
+    async (_, end) => {
+      const fixture = renderWire(
+        JSON.stringify({ messages: [user('history'), agent('call', [tool('A')])] })
+      );
+      await vi.waitFor(() => expect(fixture.container.querySelector('button')).not.toBeNull());
+      const viewport = fixture.container.querySelector<HTMLDivElement>(
+        '[data-radix-scroll-area-viewport]'
+      );
+      const control = fixture.container.querySelector<HTMLButtonElement>('button');
+      if (!(viewport && control)) {
+        throw new Error('Expected actual history viewport and control');
+      }
+      Object.defineProperty(viewport, 'scrollHeight', { configurable: true, value: 1000 });
+      const userScrollTo = (top: number) => {
+        viewport.scrollTop = top;
+        viewport.dispatchEvent(new Event('scroll'));
+      };
+      // The reader scrolls up from the end, or stays at the end of a longer transcript.
+      userScrollTo(1000);
+      if (end === 180) {
+        userScrollTo(180);
+      }
+      const scrollTop = viewport.scrollTop;
+      control.focus();
+      expect(document.activeElement).toBe(control);
+      failRead(fixture, 'network');
+      await fixture.queryClient.refetchQueries();
+      await vi.waitFor(() =>
+        expect(fixture.container.querySelector('[role="status"] p')?.textContent).toBe(staleNotice)
+      );
+      expect(fixture.container.querySelector('[data-radix-scroll-area-viewport]')).toBe(viewport);
+      expect(fixture.container.querySelector('[data-radix-scroll-area-viewport] button')).toBe(
+        control
+      );
+      expect(document.activeElement).toBe(control);
+      expect(viewport.scrollTop).toBe(scrollTop);
+      Object.defineProperty(viewport, 'scrollHeight', { configurable: true, value: 1400 });
+      fixture.response.error = undefined;
+      fixture.response.wire = JSON.stringify({ messages: [user('valid recovery')] });
+      await fixture.queryClient.refetchQueries();
+      await vi.waitFor(() => expect(fixture.container.textContent).toContain('valid recovery'));
+      await vi.waitFor(() => expect(viewport.scrollTop).toBe(end));
     }
-    Object.defineProperty(viewport, 'scrollHeight', { configurable: true, value: 1000 });
-    viewport.scrollTop = 180;
-    control.focus();
-    expect(document.activeElement).toBe(control);
-    failRead(fixture, 'network');
-    await fixture.queryClient.refetchQueries();
-    await vi.waitFor(() =>
-      expect(fixture.container.querySelector('[role="status"]')?.textContent).toBe(staleNotice)
-    );
-    expect(fixture.container.querySelector('[data-radix-scroll-area-viewport]')).toBe(viewport);
-    expect(fixture.container.querySelector('button')).toBe(control);
-    expect(document.activeElement).toBe(control);
-    expect(viewport.scrollTop).toBe(180);
-    fixture.response.error = undefined;
-    fixture.response.wire = JSON.stringify({ messages: [user('valid recovery')] });
-    await fixture.queryClient.refetchQueries();
-    await vi.waitFor(() => expect(fixture.container.textContent).toContain('valid recovery'));
-    await vi.waitFor(() => expect(viewport.scrollTop).toBe(1000));
-  });
+  );
 });

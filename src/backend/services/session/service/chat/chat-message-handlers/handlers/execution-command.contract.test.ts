@@ -12,10 +12,10 @@ import { createStartHandler } from './start.handler';
 import { createStopHandler } from './stop.handler';
 import { createUserInputHandler } from './user-input.handler';
 
-vi.mock('@/backend/services/session/service/lifecycle/session-core-services', () => {
+vi.mock('@/backend/services/session/service/composition/session-core-services', () => {
   throw new Error('Execution commands must use injected lifecycle capabilities');
 });
-vi.mock('@/backend/services/session/service/lifecycle/session-background-delivery.service', () => {
+vi.mock('@/backend/services/session/service/delivery/session-background-delivery.service', () => {
   throw new Error('Execution commands must use injected background delivery capabilities');
 });
 
@@ -113,7 +113,7 @@ it('completes direct input while both provider turn and background resume are pe
   }
 });
 
-it('keeps stop, pending cleanup, dispatcher reset and retry in their original order', async () => {
+it('keeps stop, pending cleanup and retry in their original order', async () => {
   const stop = pending();
   const calls: string[] = [];
   const stopSession = vi.fn(() => {
@@ -125,9 +125,6 @@ it('keeps stop, pending cleanup, dispatcher reset and retry in their original or
     clearPendingRequest: vi.fn(() => {
       calls.push('pending');
     }),
-    resetDispatchState: vi.fn(() => {
-      calls.push('reset');
-    }),
     tryDispatchNextMessage: vi.fn(() => {
       calls.push('dispatch');
       return Promise.resolve();
@@ -137,7 +134,7 @@ it('keeps stop, pending cleanup, dispatcher reset and retry in their original or
   expect(calls).toEqual(['stop']);
   stop.resolve();
   await expect(result).resolves.toEqual({ replies: [] });
-  expect(calls).toEqual(['stop', 'pending', 'reset', 'dispatch']);
+  expect(calls).toEqual(['stop', 'pending', 'dispatch']);
   expect(stopSession).toHaveBeenCalledWith('plain-session', { reason: 'USER_STOP' });
 });
 

@@ -184,13 +184,16 @@ Unified diff parsing removes the terminating stdout newline before splitting
 lines, preserving real blank context lines without fabricating a final row or
 line number in the workspace viewer or PR panel.
 
-The compact terminal tabs stay visible beside Logs. Switching to Logs keeps the
-terminal connection, tab identity and selection alive, while hiding terminal
-content. An empty Terminal tab opens Terminal 1 on click, after the server
-terminal list loads; closing the last terminal while viewing it recreates
-Terminal 1. Closing it from Logs leaves the empty Terminal tab until selected.
-The server always sends the initial terminal list, including an empty list for
-workspaces with no running terminals, so first-terminal creation can proceed.
+The compact terminal tabs stay visible beside Logs. On desktop they share one
+tablist with it, so the arrow keys move between Logs and the terminals; on
+phones Logs is reached from the drawer's tool switcher instead, and the bar
+holds only the terminals. Switching to Logs keeps the terminal connection, tab
+identity and selection alive, while hiding terminal content. An empty Terminal
+tab opens Terminal 1 on click, after the server terminal list loads; closing the
+last terminal while viewing it recreates Terminal 1. Closing it from Logs leaves
+the empty Terminal tab until selected. The server always sends the initial
+terminal list, including an empty list for workspaces with no running terminals,
+so first-terminal creation can proceed.
 
 Workspace terminals never automatically take keyboard focus when created,
 restored, or selected. Click inside the terminal to type, so asynchronous
@@ -201,6 +204,19 @@ desktop.
 Workspace terminal reconnects replace each existing tab's output with its server
 rolling buffer by terminal ID. Tab identity and selection are preserved; output
 outside the server's bounded buffer cannot be recovered.
+
+Terminal output stays out of React state. Each tab owns a `TerminalOutputStream`
+(`src/client/lib/terminal-output-stream.ts`); PTY chunks are written straight to
+the mounted xterm instance, which keeps its own scrollback. A chunk re-renders
+neither the terminal panel nor the right panel, including while the terminal is
+hidden behind Logs, and chunks past the retained window's cap (128 Ki UTF-16
+code units, not bytes) are appended rather than repainting it. The retained
+window is replayed when a terminal mounts (on tab selection, or when the panel
+becomes visible again and refits) or switches streams. A reconnect buffer that
+extends the retained output writes only the missing suffix; any other
+replacement clears and repaints, with the clear sent through xterm's write queue
+so earlier chunks cannot land on top of it. The project setup terminal uses the
+same stream.
 
 Terminal CPU and memory usage is sampled only when the admin processes view asks
 for it, with one batched `pidusage` call; there is no background polling. If the
@@ -233,10 +249,11 @@ selects separate child and periodic-task policies, described in
 [integrations](integrations.md#periodic-tasks).
 
 Setup failures retain the workspace and its original instructions and
-attachments. The board shows **Setup failed** in Waiting, and the workspace
-exposes **Retry setup** even when no chat session exists. Retrying uses the same
-workspace. A creation response preserves an existing live summary rather than
-replacing a newer setup failure with a synthetic Setting up state.
+attachments until it is archived. The board shows **Setup failed** in Waiting,
+and the workspace exposes **Retry setup** even when no chat session exists.
+Retrying uses the same workspace. A creation response preserves an existing live
+summary rather than replacing a newer setup failure with a synthetic Setting up
+state.
 
 ## Accepted workspace names
 
@@ -362,6 +379,23 @@ snapshot. The snapshot has a 120-second transaction budget and a 5-second busy
 wait. Account exports include identity metadata only, excluding credentials and
 homes.
 
+Export copies `creationMetadata` and `initOutput` as stored. Archive normally
+removes `initialAttachments` and all but a failed setup's log tail (see the
+archive flow under the Kanban model), so an ARCHIVED workspace usually exports
+without them. A row whose release failed, or that predates it and the
+`archived-workspace-blob-retention` job has not reached yet, still exports both.
+Imports still accept older backups whose archived rows carry them; the job
+releases those rows after import.
+
+Backup export and import map columns by hand.
+`src/backend/orchestration/data-backup/data-backup-columns.test.ts` lists every
+Prisma scalar column of each model the recovery manifest covers. Each column is
+either declared exported, under a key the current export schema must have
+(possibly a flattened name), or excluded with a reason. A new column fails that
+test until it is classified. Reasons starting with `Gap:` are known omissions,
+such as `WorkspaceRunScript.postRunCommand`. The test checks the format, not the
+hand-written mapping that fills it.
+
 ## Backup import
 
 Backup imports require the same trusted local client boundary as project
@@ -464,6 +498,36 @@ removed rows or overwrite newer live fields or a supplied stream review count.
 The reconciler consumes each HTTP response's identity tag once, so explicit
 optimistic mutation writes retain their existing behavior.
 
+`src/client/lib/workspace-queries.ts` is the only place that builds options,
+fetches or writes for `workspace.get` and `workspace.listForProject`. React
+Query lets the latest fetch or observer of a key replace that key's options,
+including the commit hook, so a plain tRPC `useQuery`, `fetch` or `setData` on
+either key would commit untagged HTTP data over live fields and leave later
+invalidation refetches unreconciled. Readers use `useProjectWorkspaceQuery`
+(observer-only `staleTime`), `useWorkspaceDetailQuery` (observer-only `enabled`,
+`refetchInterval` and `staleTime`), `fetchWorkspaceDetail` or
+`ensureWorkspaceDetail`; optimistic list rows, creation seeds and stream detail
+merges use the module's writers. Invalidation, cancellation and cache reads keep
+using tRPC utilities because they reuse the options already installed.
+Operations that would otherwise need a raw QueryClient key are module functions
+instead: `resetWorkspaceDetail`, `invalidateWorkspaceDetail`,
+`cancelWorkspaceDetail`, `refetchActiveWorkspaceDetail`,
+`getCachedWorkspaceDetails` and `cancelProjectWorkspaceList`. Query options
+still carry their key for `useQuery`; never pass it to a raw QueryClient fetch
+or write.
+
+The `factory/query-owner` lint rule rejects tRPC `useQuery`, `fetch`,
+`ensureData`, `prefetch`, `setData` and related helpers, plus `getQueryKey`, for
+either procedure outside the module and the reconciler (the `owners` of its
+workspace group in `.oxlintrc.json`); tests are exempt. The reconciler relies on
+three React Query behaviours. First, it calls a function `structuralSharing`
+synchronously at the commit. Second, a thrown `CancelledError({ revert: true })`
+commits nothing and sets no error state: a refetch resolves with the previous
+data, while an initial fetch rejects and stays `pending`. Third, the latest
+fetch or observer of a key installs the options that later option-less refetches
+and writes use. `query-core-commit-contract.test.ts` pins each case so a React
+Query upgrade fails loudly instead of disabling reconciliation.
+
 Reconciliation ownership is scoped to the QueryClient, project, and connection
 lifetime. Disconnecting or leaving a project retires that token, cancels its
 pending list and detail HTTP requests, and invalidates them for HTTP fallback.
@@ -517,6 +581,38 @@ recovery. Requests that lose the conditional state transition re-read the
 workspace and retry once if it has rolled back to an archivable state. Other
 invalid transitions and cleanup failures remain errors.
 
+Archive and delete stop the workspace's sessions, run script and terminals
+first; any failure there aborts the operation. After they succeed and before the
+worktree is removed, a best-effort sweep terminates leftover processes such as a
+dev server an agent detached from a background shell. A process matches only if
+it belongs to the server's user, has no controlling terminal, is not the server,
+one of its ancestors or PID 0/1, and has its working directory or executable on
+a path boundary inside the worktree. Both the configured and realpath-resolved
+worktree paths are checked, and each must be strictly inside the matching
+project worktree base. Command-line arguments are never matched, so a process
+that only names the worktree in its arguments, such as an editor opened on it,
+is left alone. Matches receive SIGTERM. After three seconds the processes are
+listed again, and survivors that still match with the same start time receive
+SIGKILL; a PID reused in the meantime is not killed. Each listing is bounded to
+four seconds. macOS uses `ps` and `lsof`, Linux reads `/proc`, and other
+platforms skip the sweep. A sweep failure is logged and never blocks the archive
+or delete; a sweep that fails partway may already have stopped some processes
+and left others running. Workspaces archived before this sweep existed keep
+their leftover processes until they exit or are stopped by hand.
+
+Once a workspace is durably ARCHIVED, archive releases data that only Retry
+setup needed. `initialAttachments` is removed from `creationMetadata`; the
+initial prompt and every other key stay, and SQL NULL stays NULL. `initOutput`
+keeps a 4,096-character tail, marked as truncated, when `initErrorMessage` is
+set (a failed or warned setup) and is cleared otherwise. The rewrite runs in SQL
+and re-checks ARCHIVED, so an ARCHIVING workspace, which can roll back, keeps
+everything; it leaves `updatedAt` alone. A failed release is logged and does not
+affect the archive. The `archived-workspace-blob-retention` job
+([background jobs](background-jobs.md#archived-workspace-data)) releases rows
+archived before this existed, rows a failed release missed and archived rows
+restored from older backups ([backup export](#backup-export)). The Setup logs
+tab says the log is not kept for an archived workspace, and labels a kept tail.
+
 Startup archive recovery runs in the background after essential session and
 workspace state repairs. Slow Git worktree cleanup does not delay HTTP/WebSocket
 readiness or the CLI startup signal; affected workspaces remain ARCHIVING until
@@ -569,13 +665,34 @@ do not erase deliberately reopened archived detail. Initialization retains
 `getInitStatus` polling and readiness/worktree-path invalidations; those repairs
 hydrate omitted metadata through the shared detail options.
 
-`workspace.get` reads `findDetailById`, not the server's full `findById`. It
-leaves out `initOutput` (served by `getInitStatus`), agent-session
-`providerMetadata`, and `creationMetadata`. Base64 `initialAttachments` stay
-stored in `creationMetadata` after init; only the detail response drops them,
-exposing `initialPrompt` for the details dialog instead. Polled git, file and
-init-status reads use the narrow `findWorktreeContext`/`findInitStatus` selects
-instead of full rows.
+SQLite reads run synchronously on the main event loop, so hot workspace reads
+leave out the large columns: `initOutput`, `creationMetadata` (base64
+`initialAttachments` stay stored there until archive), agent-session
+`providerMetadata`, and the PR `observation`. `findById`, the project list
+(`findByProjectIdWithSessions`) and the 60-second snapshot reconciliation read
+(`findAllNonArchivedWithSessionsAndProject`) omit them, and their return types
+do too. Callers that need a blob use a named finder: `findInitStatus` for the
+startup log, `findInitialMessageContext` for the first-message prompt and
+attachments, `findMetadataContext` for auto-generated name provenance, and the
+session and PR capsules' own reads for provider metadata and observations.
+
+Polled and per-message reads follow the same rule. Project reads
+(`project.getById`/`getBySlug`, and the 30- and 60-second review and issue
+polls) load the project row without workspaces. Session reads join only the
+workspace's `status`, `worktreePath` and `initErrorMessage`; terminal session
+reads join the workspace without its blobs. Workspace session lists
+(`session.listSessions`, the event collector) leave out `providerMetadata`;
+`findAgentSessionById` still returns it. The child-workspace panel, the PR
+watcher's monitoring list and both PR scheduler candidate reads select no blob
+columns. The Prisma client has no client-level default `omit`:
+`Prisma.TransactionClient` does not carry one, so functions that take a
+transaction client, the backup export among them, would be typed as returning
+columns that were never loaded. Narrow each read with `select` or `omit`
+instead.
+
+`workspace.get` reads `findDetailById`, which adds the `initialPrompt` for the
+details dialog to that narrow row. Polled git, file and init-status reads use
+the narrow `findWorktreeContext`/`findInitStatus` selects instead of full rows.
 
 `WorkspaceSummarySchema` defines the required board/sidebar fields independently
 of backend and client code. The HTTP list projector and snapshot summaries share
@@ -688,22 +805,38 @@ entirely.
 Each cache entry watches its worktree and private Git directory, while linked
 worktrees share one reference-counted watcher for the repo's common `.git`
 directory. Worktree files and private metadata such as `HEAD`, `index`, and
-`config.worktree` invalidate only their owning worktree. Common metadata changes
-invalidate every dependent entry, including shared config, refs, info attributes
-and excludes, and reftable state. Object and reflog writes are ignored because
-the associated ref event performs the invalidation. If the shared watcher fails,
-all of its dependents switch to the five-minute fallback expiry; removing the
-last dependent closes it. On Linux all of these watches are nonrecursive, so
-installation never traverses dependency trees, Git objects, logs or other
-worktrees. Linux snapshots expire after five seconds even with healthy watches;
-existing snapshot readers refresh nested working-tree edits and ref changes that
-shallow watches cannot see. Watch failures retain that five-second limit on
-Linux. Other platforms retain recursive watching and the five-minute failure
-fallback. Worktree removal closes its watchers before Git or filesystem deletion
-and suspends watcher installation until that operation settles. Concurrent
-snapshot reads cannot reinstall watches during deletion. On success or failure,
-it retires any snapshots calculated during deletion; the next read may recreate
-watchers lazily if the worktree survives.
+`config.worktree` invalidate only their owning worktree. Loose branch,
+remote-tracking and tag refs (and their `.lock` files) invalidate only snapshots
+that read them: the branch named by the worktree's private `HEAD`, and every
+full ref Git could resolve the merge-base revisions it tried
+(`origin/<defaultBranch>`, then `<defaultBranch>`) or its upstream to. A commit
+or push in one worktree therefore recomputes that worktree, while moving the
+default branch still recomputes everyone. A snapshot's refs are treated as
+unknown, so any ref change invalidates it, while its calculation is running,
+when `HEAD` cannot be read, when one of those refs is a loose symbolic ref, and
+when the upstream lookup fails for any reason other than "no upstream
+configured" or a detached `HEAD` (a configured upstream whose tracking ref is
+missing could reappear). Ref names are compared case-insensitively after NFC
+normalization, so canonically equivalent Unicode names match, and a directory
+event covers every ref beneath it. Every other common metadata change still
+invalidates every dependent entry, including `packed-refs`, other ref namespaces
+such as `refs/replace`, shared config, info attributes and excludes, reftable
+state, and events without a filename. Object and reflog writes are ignored
+because the associated ref event performs the invalidation, and so is
+`packed-refs.lock`: Git takes and releases it around ordinary loose ref updates,
+while an actual rewrite also reports `packed-refs.new` and `packed-refs`. If the
+shared watcher fails, all of its dependents switch to the five-minute fallback
+expiry; removing the last dependent closes it. On Linux all of these watches are
+nonrecursive, so installation never traverses dependency trees, Git objects,
+logs or other worktrees. Linux snapshots expire after five seconds even with
+healthy watches; existing snapshot readers refresh nested working-tree edits and
+ref changes that shallow watches cannot see. Watch failures retain that
+five-second limit on Linux. Other platforms retain recursive watching and the
+five-minute failure fallback. Worktree removal closes its watchers before Git or
+filesystem deletion and suspends watcher installation until that operation
+settles. Concurrent snapshot reads cannot reinstall watches during deletion. On
+success or failure, it retires any snapshots calculated during deletion; the
+next read may recreate watchers lazily if the worktree survives.
 
 Git snapshots keep one running calculation per worktree/default-branch pair.
 Invalidation clears the cached result and fences the running generation without
@@ -813,13 +946,13 @@ merges. See [PR update delivery and recovery](pull-requests.md).
 Below 1024 CSS pixels, workspace tools open in a right-side drawer with a strip
 of the session still visible. A compact 36px strip uses the shared underline
 tabs for Changes, Files, and Terminal. The overflow menu keeps sub-agents,
-screenshots, Inbox, and logs available, plus the scheduled automation when one
-launched the workspace. It marks the current selection and shows the selected
-tool as an additional underlined tab. The tab strip scrolls on narrow screens
-while the overflow button stays visible. The selected tool survives closing and
-reopening the drawer in the workspace. Selecting a file, diff, or screenshot
-closes the drawer to reveal the main view. Wider screens retain the resizable
-desktop split.
+screenshots, Inbox, and logs available, plus Runs for a scheduled automation
+when one launched the workspace. It marks the current selection and shows the
+selected tool as an additional underlined tab. The tab strip scrolls on narrow
+screens while the overflow button stays visible. The selected tool survives
+closing and reopening the drawer in the workspace. Selecting a file, diff, or
+screenshot closes the drawer to reveal the main view. Wider screens retain the
+resizable desktop split.
 
 Terminal selection on compact or touch screens never automatically focuses its
 input. Tap inside the terminal to type. The drawer tracks the visual viewport so

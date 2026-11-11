@@ -17,6 +17,10 @@ before migrations, and keeps the previous package until the replacement reports
 full startup readiness over IPC. Interrupted recovery runs before migrations and
 relaunches the restored CLI. The supervisor retains durable update status
 outside the replaced package, including errors after the backend has stopped.
+Its restorable snapshot is separate from the bounded `db-backups/` copy every
+launch and `ff db:migrate` take before pending migrations (see the README's
+database upgrades section); both use one SQLite online-backup helper,
+`src/backend/lib/sqlite-snapshot.ts`.
 
 Automatic installation supports writable global npm installations on macOS and
 Linux launched through supervised `ff serve`. Eligibility is fixed at startup;
@@ -50,7 +54,9 @@ current session composer is empty. A newer draft or attachment selection is
 preserved, and clearing it later does not replay the earlier recovery.
 
 Chat drafts restored before the composer mounts are visible on its first render
-and retained when typing begins after a reload.
+and retained when typing begins after a reload. Selecting another session shows
+that session's draft and attachments from its first render; the previous
+session's are never shown in its place.
 
 Claude session history restores inline image blocks as attachments on the
 original user prompt, including image-only prompts. Harness metadata, sidechain
@@ -89,6 +95,28 @@ available to other consumers. Stopping the session invalidates its shared
 hydration generation before publication; a later startup starts fresh hydration
 instead of joining the superseded preparation.
 
+Passive loads, startup and workflow finalization share one provider history read
+and projection per session, provider identity, worktree and Codex account
+(`data/provider-history-transcript-loader.ts`). Each caller applies the result
+through its own domain and fences. The read stops only when every caller is
+stale and is never cached then; a caller that is still current starts afresh. A
+caller never joins a read with a stale caller, since a stop, reset or rollover
+after the read began may have changed the file.
+
+Completed projections stay in `ProviderHistoryTranscriptCache`
+(`data/provider-history-transcript-cache.ts`), so reopening an idle session
+whose store was cleared can skip the read. Entries are keyed by session,
+provider, provider session ID and file path, and serve only the exact file
+identity (path, size, modification time and inode) observed before and after the
+read; a changed file is reread and replaces its entry. The cache holds only file
+projections, never store state, so clearing a store keeps its preservation rules
+and later loads merge retained local entries as before. Each store receives its
+own copies of the transcript entries, since stores may reassign an entry's
+fields in place. It keeps at most 16 entries and 128 MiB estimated from file
+sizes, evicting the least recently used first. An entry used by a live store
+does not expire; `session_cleared` starts a five-minute TTL and permanent
+deletion drops the session's entries through `SessionScope`.
+
 Cold resumes overlap history hydration with adapter spawning and ACP
 initialization. Provider session loading/creation waits for the history barrier,
 which restores timestamps and establishes replay suppression before provider
@@ -103,13 +131,16 @@ normal JSON event frames, with base64 fragments for an oversized event. When
 batch metadata itself cannot fit in a JSON event frame, the entire batch uses
 base64 fragments instead. The client rejects direct replay batches above 128
 KiB; every complete wire envelope stays within that bound, including large tool
-results and images. The client reconstructs the exact batch atomically before
-applying the existing load-request guard; incomplete, malformed, or out-of-order
-chunks cannot publish a partial transcript. Assembly expires after 30 seconds
-and resets on disconnect, session change, or unmount. The transport rejects
-batches above 128 MiB explicitly. Framing bounds each message, rather than
-reducing total replay bytes or adding pagination; the existing renderer
-transcript window and full backend transcript retention still apply.
+results and images. The server serializes each event once and sends frames built
+from that JSON; the client measures each received event once for both the frame
+bound and the declared replay length. The client reconstructs the exact batch
+atomically before applying the existing load-request guard; incomplete,
+malformed, or out-of-order chunks cannot publish a partial transcript. Assembly
+expires after 30 seconds and resets on disconnect, session change, or unmount.
+The transport rejects batches above 128 MiB explicitly. Framing bounds each
+message, rather than reducing total replay bytes or adding pagination; the
+existing renderer transcript window and full backend transcript retention still
+apply.
 
 Main and quick-chat transcripts initially load the newest 1,000 entries. Near
 the top of the loaded transcript, the client automatically requests older pages
@@ -443,9 +474,12 @@ session configured with the selected provider/model; the provider-wide model
 catalog is not used as a thinking capability list. Discovery submits no prompt,
 rejects permission/tool callbacks, and closes its processes. Its endpoint
 requires the trusted-local boundary used for local execution. Successful native
-results are cached for 30 seconds per provider/model, with bounded cache and
-concurrent discovery counts. Failed discovery offers Retry; creation waits for
-confirmed options while model selection remains editable.
+results stay fresh for five minutes per provider/model/effective Codex account,
+then remain usable up to a 30-minute maximum age during a request-triggered
+background refresh. Failed refreshes retain a valid last success and retry after
+30 seconds. Cache size and concurrent discovery counts remain bounded. Cold or
+expired discovery failures offer Retry; creation waits for available options
+while model selection remains editable.
 
 Native discovery retains one of its eight admission slots until the disposable
 child emits `close`, including closure of its stdio pipes, and its ACP
@@ -453,9 +487,9 @@ connection is logically closed. Operation/session-close timeouts and TERM/KILL
 requests bound caller results but do not release that native lifetime. SDK
 logical closure alone does not prove child drain. A lifetime that never closes
 remains charged; retries share its bounded failure, or report discovery busy
-when its successful cache entry expires after 30 seconds or is evicted. The
-success timestamp is not refreshed while cleanup remains charged. This tracks
-the owned child and pipes, without claiming containment of every SDK
+when its successful cache entry reaches its 30-minute maximum age or is evicted.
+The success timestamp is not refreshed while cleanup remains charged. This
+tracks the owned child and pipes, without claiming containment of every SDK
 continuation or external descendant.
 
 Each launch draft snapshots its saved provider defaults and retains explicit
@@ -590,6 +624,12 @@ requires explicit consent; it never opens a URL automatically. Cancellation
 resolves pending permissions and elicitations as cancelled and dismisses their
 prompts.
 
+Subagent lists and transcript headers display the child model reported through
+native `config_option_update` model options. The model stays hidden until the
+provider reports it (Claude reports after the first response); it is never
+inferred from the parent. Child updates refresh the label, and stale Codex
+generation updates cannot overwrite a resumed child's model.
+
 Native subagent/session updates are captured before SDK validation because the
 subagent contract is still a draft. Children retain separate transcripts and
 permissions remain routed through the owning parent. Child tool calls also reach
@@ -682,21 +722,24 @@ the active turn's configuration. Slash commands and automatic notifications
 remain queued. Concurrent steering of a different message reports a busy error;
 repeated clicks on the same pending message coalesce. If there is no active
 turn, a stale click on a later message is rejected instead of dispatching an
-earlier queue entry. Failed steering leaves the message queued. A steering
-acknowledgment has a 10-second deadline. On timeout, the client terminates that
-runtime before releasing queue ownership and withholds immediate automatic
-resend. Input may have been consumed before the missing acknowledgment, so a
-later explicit retry may repeat prior effects. The host requests
-`idleBehavior: "promptRequired"`, so a completion race falls back to ordinary
-prompt dispatch instead of creating an untracked adapter-owned turn. Accepted
-input is removed from the queue even if stopping advances the generation while
-the request settles, preventing a delivered steer from being replayed on resume.
-Queue-to-transcript handoffs publish the consumed input together with its
-committed transcript entries: each `transcript_message_committed` delta carries
-the entry and the remaining queue, so steering and batched sends never expose a
-partial state between removal and commit. The chat keeps each message row
-mounted and briefly collapses its queued controls when dispatched, respecting
-reduced-motion preferences.
+earlier queue entry. Failed steering leaves the message queued. The client
+immediately disables steering controls and shows “Steering…” for the selected
+message. A requester-only `steer_settled` acknowledgment or correlated error
+releases this pending state; disconnection and session changes also clear it. A
+steering acknowledgment has a 10-second deadline. On timeout, the client
+terminates that runtime before releasing queue ownership and withholds immediate
+automatic resend. Input may have been consumed before the missing
+acknowledgment, so a later explicit retry may repeat prior effects. The host
+requests `idleBehavior: "promptRequired"`, so a completion race falls back to
+ordinary prompt dispatch instead of creating an untracked adapter-owned turn.
+Accepted input is removed from the queue even if stopping advances the
+generation while the request settles, preventing a delivered steer from being
+replayed on resume. Queue-to-transcript handoffs publish the consumed input
+together with its committed transcript entries: each
+`transcript_message_committed` delta carries the entry and the remaining queue,
+so steering and batched sends never expose a partial state between removal and
+commit. The chat keeps each message row mounted and briefly collapses its queued
+controls when dispatched, respecting reduced-motion preferences.
 
 Codex uses native `turn/steer` without cancelling the current turn. Claude's
 native steering may pre-empt generation or background a foreground tool; neither
@@ -709,12 +752,11 @@ available for active agent work without implying that the next message must
 wait.
 
 Startup and required configuration must complete before submission. Workspace
-initialization/manual-resume policy, compaction, per-session dispatch
-serialization and stop/generation fences still apply. The prompt slot is
-rechecked after auto-start; another caller may have acquired it while startup
-was awaited. A stopped runtime can auto-resume through the existing launch
-policy; being stopped is not permission to bypass setup or a failed exact
-resume.
+initialization/manual-resume policy, per-session dispatch serialization and
+stop/generation fences still apply. The prompt slot is rechecked after
+auto-start; another caller may have acquired it while startup was awaited. A
+stopped runtime can auto-resume through the existing launch policy; being
+stopped is not permission to bypass setup or a failed exact resume.
 
 Automatic PR updates additionally wait for pending interactive requests, an
 in-flight prompt in another conversation in the same workspace, valid recipient
@@ -732,9 +774,9 @@ Factory Factory versions; native configuration for other servers is retained.
 Session stop history is durable: `SessionLifecycleEvent` rows are append-only,
 deduplicated by session/attempt key, and rendered as structured chat rows after
 reconnect or restart. Provider history keeps its transcript order; each card
-follows the last provider message timestamped at or before it. Codex turns have
-no elapsed-time deadline; normal Claude turns retain a four-hour deadline.
-Startup/stop incarnation fences protect runtime replacement and shutdown.
+follows the last provider message timestamped at or before it. Claude and Codex
+turns use the configurable Turn limit, defaulting to unlimited. Startup/stop
+incarnation fences protect runtime replacement and shutdown.
 
 Provider protocol schemas are maintained by upstream adapters. Keep focused ACP
 client contract tests when upgrading either dependency, including saved-session
@@ -791,6 +833,24 @@ existing sessions or prevent an explicit manual selection.
 Auto model discovery combines catalogs from enabled, authenticated accounts so
 models exclusive to one account remain selectable. A failed named-account
 catalog read advertises no fallback models from other accounts.
+
+Launcher thinking, planning and access options come from a disposable ACP
+session. Successful observations stay fresh for five minutes, then remain usable
+for up to 30 minutes while a request triggers one background refresh. Failed
+refreshes retain the last success and retry after a 30-second cooldown. Cache
+keys include the provider, requested model and effective Codex account; fresh
+saved effort defaults are applied to cloned results. Account validation still
+precedes cache access. Cold and expired entries await discovery when admission
+is available, or return a busy error when saturated. Process admission remains
+charged until both the native child and protocol pipes close. Cache refreshes
+respect the same admission limit and do not run on a timer.
+
+The `session-launch-options` logger records stage durations for settings,
+account resolution, options lookup and the overall request. Native probes also
+record initialization, session creation, model selection and cleanup durations,
+including failures, so slow account checks can be distinguished from adapter
+startup. Timing and background-refresh warnings omit raw provider errors and
+subprocess diagnostics.
 
 Session creation persists `AgentSession.codexAccountId`. All human, child,
 periodic, reviewer and dedicated-PR creation goes through the same session-data
@@ -1104,14 +1164,17 @@ stop’s lifecycle write and suppresses a duplicate event only after durable
 success. A failed write retries the same event identity, replacing its transient
 banner if persistence recovers. Stops that suppress their own event still
 receive shutdown history. The supervisor's closed shutdown admission remains in
-effect after gate cleanup.
+effect after gate cleanup. Bulk shutdown does not run per-session stops, which
+own queue retries, so the next shutdown step (`SessionDispatchService.shutdown`)
+cancels pending retries, refuses new ones and waits for retries already
+dispatching before the database closes.
 
 Queue execution belongs to the single `SessionDispatchService` configured in
 `session-services.ts`. Initialization, notification delivery, lifecycle queue
 recovery, and prompt completion use its dispatch capability directly. The chat
-registry's dispatch, reset, and manual-resume callbacks reach that same instance
-through the transport-owned chat router. Lifecycle generation, delivery claim,
-and transcript-commit ownership remain with their existing services.
+registry's dispatch and manual-resume callbacks reach that same instance through
+the transport-owned chat router. Lifecycle generation, delivery claim, and
+transcript-commit ownership remain with their existing services.
 
 At the next turn boundary, dispatch combines queued human messages and workspace
 notifications in FIFO order into one provider prompt. A ready PR update batch
@@ -1127,22 +1190,109 @@ notification and PR acknowledgements; acknowledgement failures do not roll back
 human messages. Provider history retains the combined human text and restores
 trailing PR content as a compact update row.
 
+The session capsule's `service/` directory is grouped by sub-domain. Imports
+point up this table: code imports from its own row or earlier rows, never later
+ones. The barrel `index.ts` and `interceptor.bridge.ts` sit below every row. Two
+older edges remain: `store/` and `voice/` publish through the root
+`session-event-bus`, and `dispatch/` reuses the chat attachment helpers.
+
+| Directory                                                | Owns                                                                                                                                 |
+| -------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `acp/`, `store/`, `logging/`, `metadata/`, `voice/`      | ACP runtime; in-memory session store; trace logs; workspace metadata generation; voice narration                                     |
+| `providers/`, `archive/`                                 | Account-wide model catalogs and plan usage; closed-session transcripts                                                               |
+| root (`session-domain.service.ts`, `bridges.ts`, others) | Domain state, bridge interfaces, resume fence, provider error messages                                                               |
+| `data/`                                                  | `SessionRepository`, stored launch settings and startup intent, provider history loading and hydration                               |
+| `config/`                                                | `SessionConfigService`, config commit authority and mutation queue, permission presets, launch options, startup configuration        |
+| `event-agent/`                                           | `EventSessionAuthority`, event fences, event startup guards                                                                          |
+| `delivery/`                                              | Notification and PR background delivery, PR receipts and discovery                                                                   |
+| `events/`                                                | `AcpEventProcessor`, permission requests, sub-agent events, work state                                                               |
+| `lifecycle/`                                             | Gate, scope, startup, termination and runtime-exit coordinators, workflow finalizer, context, lifecycle events, the lifecycle facade |
+| `prompt/`                                                | `SessionService` prompt sends, child-workspace prompt context                                                                        |
+| `dispatch/`                                              | Queue dispatch                                                                                                                       |
+| `chat/`                                                  | Chat commands, session load                                                                                                          |
+| `composition/`                                           | Composition root (`session-core-services.ts`, `session-services.ts`)                                                                 |
+
+`SessionConfigService` is a facade over four owners. `SessionConfigWriter`
+accepts, persists and publishes native configuration writes, and every other
+owner writes through it. `SessionConfigReader` projects live or stored
+configuration. `SessionStartupConfiguration` applies launch intent to a new
+runtime. `SessionConfigMutations` applies live and stopped-session edits.
+
 Startup, termination, runtime exit, notifications, context, and workflow
 finalization each have one coordinator or service.
 
-| Responsibility        | Owner                                | Reconciliation point                                      |
-| --------------------- | ------------------------------------ | --------------------------------------------------------- |
-| Startup               | `SessionStartupCoordinator`          | Persisted `RUNNING` state                                 |
-| Termination           | `SessionTerminationCoordinator`      | Persisted idle/stopped state                              |
-| Runtime exit          | `SessionRuntimeExitCoordinator`      | Terminal status and unexpected-exit lifecycle history     |
-| Notifications         | `SessionNotificationDeliveryService` | Transcript plus delivered evidence                        |
-| Context               | `SessionContextService`              | Operational precondition; no durable-state reconciliation |
-| Workflow finalization | `SessionWorkflowFinalizer`           | Idempotent workflow completion                            |
+| Responsibility        | Owner                                              | Reconciliation point                                      |
+| --------------------- | -------------------------------------------------- | --------------------------------------------------------- |
+| Startup               | `SessionStartupCoordinator` (`lifecycle/`)         | Persisted `RUNNING` state                                 |
+| Termination           | `SessionTerminationCoordinator` (`lifecycle/`)     | Persisted idle/stopped state                              |
+| Runtime exit          | `SessionRuntimeExitCoordinator` (`lifecycle/`)     | Terminal status and unexpected-exit lifecycle history     |
+| Notifications         | `SessionNotificationDeliveryService` (`delivery/`) | Transcript plus delivered evidence                        |
+| Context               | `SessionContextService` (`lifecycle/`)             | Operational precondition; no durable-state reconciliation |
+| Workflow finalization | `SessionWorkflowFinalizer` (`lifecycle/`)          | Idempotent workflow completion                            |
+
+`SessionScope` (`lifecycle/session-scope.ts`) owns the lifetime of per-session
+in-memory state. Collaborators register disposers in the composition root, and
+the coordinators run the scope's stages instead of listing collaborators:
+
+| Stage           | Run by                                   | Disposers                                                                                                                                                                        |
+| --------------- | ---------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `beginTeardown` | Stop and runtime exit, first             | Prompt-turn completion, queued ACP prompts                                                                                                                                       |
+| `quiesce`       | Stop, before the runtime stops           | Streaming and replay state, pending permissions                                                                                                                                  |
+| `settle`        | Stop and exit, after orphan finalization | ACP event state; permissions on exit                                                                                                                                             |
+| `completeStop`  | Every stop, before the reservation ends  | Dispatch claim, steering, retries, mail claims                                                                                                                                   |
+| `forget`        | `session_permanently_deleted`            | Configuration, observed-empty, queued PR delivery tokens, cached provider history, session store and initial message, transient archive marker, dispatch state and manual resume |
+
+Stages run disposers in registration order and log, rather than propagate, a
+disposer failure. Every stop caller (WebSocket, tRPC, admin, orchestration)
+therefore resets dispatch state while the stop reservation still blocks new
+dispatch. Every durable deletion reaches `forget`: session deletion through the
+session data service or repository, and workspace deletion, which forgets each
+cascaded session after the rows are gone. New per-session state should register
+a disposer instead of adding a call to a coordinator.
 
 When changing lifecycle behavior, keep these boundaries intact: coordinators and
 services own their named responsibility and reconciliation evidence where
 applicable; context supplies operational inputs. The lifecycle facade delegates
 public operations and the session composition root wires the owners.
+
+### Fencing primitives
+
+Per-session work captures a token and re-checks it after each await. Pick the
+narrowest fence that matches what the work must yield to. Paths are relative to
+`src/backend/services/session/service/` unless they start with `src/`.
+
+| Fence                                                         | Owner                                                              | Fences                                                                                                  |
+| ------------------------------------------------------------- | ------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------- |
+| Lifecycle generation (`getGeneration`, `isGenerationCurrent`) | `SessionLifecycleGate` (`lifecycle/session-lifecycle-gate.ts`)     | Prompts, initial sends and event-owned work vs. stop, shutdown or an unestablished startup lease ending |
+| Stop-only fence (`hasStopSince`)                              | `SessionLifecycleGate`                                             | Queue dispatch, steering and mail retries vs. explicit stop or shutdown only                            |
+| Stop and shutdown reservations (`isSessionStopping`)          | `SessionLifecycleGate`                                             | Concurrent stops; startup and dispatch while a stop or runtime stop is in flight                        |
+| Startup lease (`establishStartup`, `assertStartupAllowed`)    | `SessionLifecycleGate`                                             | Startup continuations after a stop                                                                      |
+| Supervisor stop generation                                    | `AcpRuntimeSupervisor` (`acp/acp-runtime-supervisor.ts`)           | In-flight client creation vs. any runtime stop, including ungated ones                                  |
+| Runtime incarnation and current handle                        | `AcpRuntimeSupervisor`                                             | Events, exits and prompt timeouts from a replaced process                                               |
+| Observed-stop ownership (`canStopTarget`)                     | `AcpObservedStop` (`acp/acp-observed-stop.ts`)                     | Physical stop or cleanup of a replaced handle or provider source                                        |
+| Prompt readiness and configured handle                        | `AcpPromptReadiness`, `acp/acp-configured-handle.ts`               | Prompts and config writes before configuration completes or after replacement                           |
+| `SessionCallerGuard` (`check`, `assertCurrent`)               | Caller (`bridges.ts`; built by orchestration retry authority)      | Dispatch, config and prompts vs. loss of the caller's authority                                         |
+| Event authority, `EventSessionFenceError`                     | `EventSessionAuthority` (`event-agent/event-session-authority.ts`) | Event-initial delivery and late durable writes vs. cancel, close or ownership change                    |
+| `WorkspaceInitFenceError`                                     | `src/backend/lib/workspace-init-fence-error.ts`                    | Dispatch vs. workspace initialization policy (message stays queued)                                     |
+| Event-owned work windows                                      | `EventOwnedWork` (`lifecycle/event-owned-work.ts`)                 | Work proofs vs. a later prompt, pending request, or stop and restart                                    |
+| Dispatch claim token                                          | `SessionDispatchClaim` (`dispatch/session-dispatch-claim.ts`)      | Concurrent dispatch per session; stale releases                                                         |
+| Notification dispatch claim and mail wake claim               | `SessionNotificationDeliveryService`                               | Duplicate or quarantined notification sends; stale wake settles                                         |
+| PR delivery tokens (`validate`)                               | `SessionBackgroundDeliveryService`                                 | Queued PR updates from an old binding revision                                                          |
+| Resume fence                                                  | `sessionResumeFences` (`session-resume-fence.ts`)                  | User resume and input submission vs. user stop or runtime failure                                       |
+| Config commit token and mutation queue                        | `SessionConfigCommitAuthority`, `SessionConfigMutationQueue`       | Superseded config commits; config edits across runtime replacement                                      |
+| Store guard (`captureStoreGuard`)                             | `SessionDomainService`, `store/session-store-registry.ts`          | Dispatch and steering writes into an evicted or replaced store                                          |
+| Provider history fence                                        | `SessionDomainService`, `lifecycle/session-startup-history.ts`     | History replay after store replacement, suspension or provider change                                   |
+| Application update admission                                  | `src/backend/services/application-update-admission.service.ts`     | New dispatch and starts once an application update closes admission                                     |
+| Workspace activity generation                                 | Workspace activity service (`markSessionRunning`)                  | A stale idle mark clearing a newer run                                                                  |
+
+Dispatch uses the stop-only fence because a startup lease that ends without
+establishing a runtime (a failed start, or `ensureSubagentBrowseSession`
+returning `false` for a session without native sub-agent browsing) deletes the
+lifecycle generation. A dispatch that captured it would otherwise return with
+its message still queued and no retry. The supervisor keeps its own stop
+generation: it also advances for runtime stops that never reserve through the
+gate (failed-startup cleanup, observed and targeted stops), and ACP internals
+cannot import the lifecycle gate.
 
 ## Task lists
 
@@ -1228,7 +1378,11 @@ hides the control without resuming automatic following.
 
 They are distinct from workspace-scoped child workspaces, and are recovered from
 the provider when a parent session is reloaded rather than persisted by Factory
-Factory.
+Factory. Stopped Codex sessions can restore a browse-only runtime to read native
+history without sending a prompt. Other stopped providers may not expose that
+history. When browsing is unavailable, the Subagents panel explains the
+limitation instead of rendering a blank tab; this is distinct from a supported
+session with no subagents.
 
 ## Child workspaces
 
@@ -1237,9 +1391,10 @@ exposed to the agent (`spawn_child_workspace`, `send_message_to_child`,
 `archive_child_workspace`, `list_projects`). Children report back via
 `send_message_to_parent`.
 
-Child-workspace MCP requests connect to localhost when the backend binds to an
-IPv4 or IPv6 wildcard, including equivalent compressed IPv6 spellings. Explicit
-bind addresses remain the connection destination.
+Child-workspace MCP requests connect to localhost when `BACKEND_HOST` is unset
+(the backend then binds `127.0.0.1`, plus `::1` where IPv6 is available) or is
+an IPv4 or IPv6 wildcard, including equivalent compressed IPv6 spellings.
+Explicit bind addresses remain the connection destination.
 
 Messages are persisted as workspace inbox mail. Their bodies are never injected
 automatically into an agent conversation. Agents receive a coalesced, body-free
@@ -1314,7 +1469,8 @@ existing owners.
 UI: `ChildWorkspacesPanel` in the right panel, a child badge on kanban cards,
 and an archive warning when a parent has active children.
 
-- Orchestration: `src/backend/orchestration/workspace-children.orchestrator.ts`
+- Orchestration:
+  `src/backend/orchestration/workspace-lifecycle/workspace-children.orchestrator.ts`
 - MCP entrypoint: `src/backend/mcp/workspace-mcp-server.ts`
 - Session MCP spawn configuration:
   `src/backend/services/session/service/acp/child-workspace-mcp-server.ts`
@@ -1332,6 +1488,15 @@ limit, the chat list still loading, or a chat being created or closed).
 Composers without a workspace chat collection offer only "Run in this chat". The
 workspace header's **Create PR** runs the `create-pr` action in a new chat.
 
+The active chat limit (`MAX_SESSIONS_PER_WORKSPACE`) counts `RUNNING` and `IDLE`
+sessions, except finished adversarial reviews: an `adversarial_review` session
+that is `IDLE` and has started a provider session keeps its transcript but no
+slot. A review created but not yet started still counts. Only a `RUNNING` review
+blocks another review of the same PR, so a finished review can be run again. The
+limit is checked when a session is created, not when it resumes, so continuing
+the conversation in a finished review can briefly put the workspace over the
+limit until that turn ends.
+
 `prompts/` is copied into `dist/` on build and packaged alongside the unpacked
 Electron backend, so a new prompt file ships without a code change.
 
@@ -1341,9 +1506,10 @@ The desktop app runs the backend in an Electron utility process, not in Electron
 main, so synchronous SQLite work, agent streams and terminals cannot freeze the
 window or menus. `electron/main/server-manager.ts` forks
 `src/backend/electron-utility-entry.ts` and passes the database, migrations,
-frontend and log paths through the child environment. The child runs migrations,
-starts the server, and posts `ready` with its URL or `error` over
-`process.parentPort`; startup that takes longer than two minutes is killed.
+frontend and log paths through the child environment. The child backs up the
+database when migrations are pending, runs them, starts the server, and posts
+`ready` with its URL or `error` over `process.parentPort`; startup that takes
+longer than two minutes is killed.
 
 Electron main opens the window as soon as the app is ready, showing a
 self-contained loading page (`electron/main/loading-page.ts`, a `data:` URL with
@@ -1560,10 +1726,11 @@ unknown; importing a matching workspace revokes that coverage even when the
 workspace already exists. Backfilling surviving children retains holds but does
 not certify an empty history. A terminal failure/cancellation, unexpected exit,
 timeout or workspace removal also needs correlated strict runtime-stop evidence.
-Claude event runs use the durable send timestamp for their four-hour turn
-deadline. Codex event runs have no turn deadline, including in run history.
-SHUTDOWN uncertainty remains reserved for recovery and does not fall through to
-timeout.
+Event runs freeze the global turn limit at launch and use the durable send
+timestamp for their deadline. Both providers default to unlimited, including
+historical runs without a saved limit; run history advertises no deadline in
+that case. Ordinary turns read the setting when each prompt starts. SHUTDOWN
+uncertainty remains reserved for recovery and does not fall through to timeout.
 
 The owner transaction persists the work proof and terminal result together,
 checking worker, send attempt and current source. Settlement linearizes at its
@@ -1696,15 +1863,15 @@ immediate-delivery or polling-time guarantee.
 
 ### Exact-context operator recovery transport
 
-The trusted-local `agent.recoveryTarget` query accepts project, agent and run
-IDs. Its owner reads membership and the current run/delivery tuple together,
+The trusted-local `automation.recoveryTarget` query accepts project, agent and
+run IDs. Its owner reads membership and the current run/delivery tuple together,
 returning an exact claim/current-send context or a bounded unavailable reason.
 It performs no provider discovery, stop, adoption or mutation. History and
 workspace origins intentionally omit current send identity and cannot authorize
 recovery.
 
-`agent.inspectRun` accepts that full context plus agent ID;
-`agent.resolveAmbiguousRun` adds RESOLVE, ABANDON or RETRY. Both verify the
+`automation.inspectRun` accepts that full context plus agent ID;
+`automation.resolveAmbiguousRun` adds RESOLVE, ABANDON or RETRY. Both verify the
 project/agent/run membership before reaching the application's existing recovery
 consumer. They preserve the submitted claim and attempt, including the original
 initial message and the current message/send attempt. A later action revalidates

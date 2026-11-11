@@ -49,7 +49,7 @@ vi.mock('@/client/components/appearance-provider', () => ({
 }));
 vi.mock('@/client/lib/providers', () => ({
   TRPCProvider: ({ children }: { children: ReactNode }) => children,
-  useProjects: () => ({ projects: [{}], isLoading: false }),
+  useProjects: () => ({ projects: [{}] }),
 }));
 vi.mock('@/client/components/resizable-layout', () => ({
   AppLayout: ({ children }: { children: ReactNode }) => <main>{children}</main>,

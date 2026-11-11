@@ -34,22 +34,22 @@ describe('chat router with complete fake application graphs', () => {
         )
       ).toEqual({ replies: [] });
     }
-    expect(first.services.sessionEventBus.publishToSession).toHaveBeenCalledExactlyOnceWith(
-      'same-session',
-      {
+    for (const [graph, loadRequestId, sessionRuntime] of [
+      [first, 'first-load', stopped],
+      [second, 'second-load', active],
+    ] as const) {
+      const replay = {
         type: 'session_replay_batch',
-        loadRequestId: 'first-load',
-        replayEvents: [{ type: 'session_runtime_snapshot', sessionRuntime: stopped }],
-      }
-    );
-    expect(second.services.sessionEventBus.publishToSession).toHaveBeenCalledExactlyOnceWith(
-      'same-session',
-      {
-        type: 'session_replay_batch',
-        loadRequestId: 'second-load',
-        replayEvents: [{ type: 'session_runtime_snapshot', sessionRuntime: active }],
-      }
-    );
+        replayEvents: [{ type: 'session_runtime_snapshot', sessionRuntime }],
+        loadRequestId,
+      };
+      // Replay frames carry the JSON they were framed with.
+      expect(graph.services.sessionEventBus.publishToSession).toHaveBeenCalledExactlyOnceWith(
+        'same-session',
+        replay,
+        JSON.stringify(replay)
+      );
+    }
     expect(first.services.sessionLoadService.completeLoad).toHaveBeenCalledWith(
       expect.objectContaining({ sessionId: 'same-session', loadRequestId: 'first-load' })
     );
@@ -80,8 +80,12 @@ describe('chat router with complete fake application graphs', () => {
             },
           },
         ],
-      }
+      },
+      expect.any(String)
     );
+    const [, payload, serialized] = vi.mocked(graph.services.sessionEventBus.publishToSession).mock
+      .calls[0]!;
+    expect(JSON.parse(serialized!)).toEqual(payload);
   });
 
   it('lets callers configure a load failure on one graph without affecting another graph', async () => {

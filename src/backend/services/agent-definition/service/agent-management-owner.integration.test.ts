@@ -71,8 +71,8 @@ beforeAll(async () => {
     '@/backend/services/workspace'
   );
   const { captureWorkspaceRunResults } = await vi.importActual<
-    typeof import('@/backend/orchestration/workspace-deletion.orchestrator')
-  >('@/backend/orchestration/workspace-deletion.orchestrator');
+    typeof import('@/backend/orchestration/workspace-lifecycle/workspace-deletion.orchestrator')
+  >('@/backend/orchestration/workspace-lifecycle/workspace-deletion.orchestrator');
   workspace.workspaceDataService.configureDeletionCapture(captureWorkspaceRunResults);
 }, 30_000);
 afterAll(async () => {

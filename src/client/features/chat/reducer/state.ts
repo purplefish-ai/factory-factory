@@ -16,20 +16,14 @@ function createBaseResetState(): Pick<
   | 'latestThinkingOrder'
   | 'latestThinkingDeltaOrder'
   | 'pendingMessages'
+  | 'pendingSteer'
   | 'lastRejectedMessage'
   | 'isCompacting'
   | 'toolProgress'
-  | 'sessionInitData'
-  | 'permissionMode'
   | 'hasCompactBoundary'
-  | 'activeHooks'
   | 'taskNotifications'
   | 'tokenStats'
   | 'countedResultOrders'
-  | 'pendingUserMessageUuids'
-  | 'messageIdToUuid'
-  | 'localUserMessageIds'
-  | 'rewindPreview'
   | 'acpPlan'
   | 'acpConfigOptions'
 > {
@@ -49,20 +43,14 @@ function createBaseResetState(): Pick<
     latestThinkingOrder: null,
     latestThinkingDeltaOrder: null,
     pendingMessages: new Map(),
+    pendingSteer: null,
     lastRejectedMessage: null,
     isCompacting: false,
     toolProgress: new Map(),
-    sessionInitData: null,
-    permissionMode: null,
     hasCompactBoundary: false,
-    activeHooks: new Map(),
     taskNotifications: [],
     tokenStats: createEmptyTokenStats(),
     countedResultOrders: new Set(),
-    pendingUserMessageUuids: [],
-    messageIdToUuid: new Map(),
-    localUserMessageIds: new Set(),
-    rewindPreview: null,
     acpPlan: null,
     acpConfigOptions: null,
   };
@@ -88,26 +76,22 @@ function createSessionSwitchResetState(): Pick<
   | 'latestThinkingOrder'
   | 'latestThinkingDeltaOrder'
   | 'pendingMessages'
+  | 'pendingSteer'
   | 'lastRejectedMessage'
   | 'queuedMessages'
   | 'sessionStatus'
   | 'isCompacting'
   | 'toolProgress'
-  | 'sessionInitData'
-  | 'permissionMode'
   | 'hasCompactBoundary'
-  | 'activeHooks'
   | 'taskNotifications'
   | 'slashCommands'
   | 'slashCommandsLoaded'
   | 'tokenStats'
   | 'countedResultOrders'
-  | 'pendingUserMessageUuids'
-  | 'messageIdToUuid'
-  | 'localUserMessageIds'
-  | 'rewindPreview'
   | 'processStatus'
   | 'sessionRuntime'
+  | 'hydratedSessionId'
+  | 'controlsHydratedSessionId'
   | 'chatCapabilities'
   | 'chatCapabilitiesLoaded'
   | 'modelSelectionSource'
@@ -126,6 +110,8 @@ function createSessionSwitchResetState(): Pick<
       ...createInitialSessionRuntimeState(),
       phase: 'loading', // Override to 'loading' for session switch
     },
+    hydratedSessionId: null,
+    controlsHydratedSessionId: null,
     slashCommands: [], // Clear for new session - populated on session load from cache/disk scan
     slashCommandsLoaded: false,
     chatCapabilities: EMPTY_CHAT_BAR_CAPABILITIES,
@@ -146,8 +132,9 @@ export function createInitialChatState(overrides?: Partial<ChatState>): ChatStat
     sessionStatus: { phase: 'loading' },
     processStatus: { state: 'unknown' },
     sessionRuntime: createInitialSessionRuntimeState(),
+    hydratedSessionId: null,
+    controlsHydratedSessionId: null,
     gitBranch: null,
-    availableSessions: [],
     pendingRequest: { type: 'none' },
     chatSettings: DEFAULT_CHAT_SETTINGS,
     chatCapabilities: EMPTY_CHAT_BAR_CAPABILITIES,
@@ -163,22 +150,16 @@ export function createInitialChatState(overrides?: Partial<ChatState>): ChatStat
     latestThinkingOrder: null,
     latestThinkingDeltaOrder: null,
     pendingMessages: new Map(),
+    pendingSteer: null,
     lastRejectedMessage: null,
     isCompacting: false,
     toolProgress: new Map(),
-    sessionInitData: null,
-    permissionMode: null,
     hasCompactBoundary: false,
-    activeHooks: new Map(),
     taskNotifications: [],
     slashCommands: [],
     slashCommandsLoaded: false,
     tokenStats: createEmptyTokenStats(),
     countedResultOrders: new Set(),
-    pendingUserMessageUuids: [],
-    messageIdToUuid: new Map(),
-    localUserMessageIds: new Set(),
-    rewindPreview: null,
     acpPlan: null,
     acpConfigOptions: null,
     ...overrides,

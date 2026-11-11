@@ -7,7 +7,7 @@ import { Root } from './root';
 
 vi.mock('@/client/lib/providers', () => ({
   TRPCProvider: ({ children }: { children: ReactNode }) => children,
-  useProjects: () => ({ projects: [], isLoading: false }),
+  useProjects: () => ({ projects: [] }),
 }));
 vi.mock('@/client/components/theme-provider', () => ({
   ThemeProvider: ({ children }: { children: ReactNode }) => children,

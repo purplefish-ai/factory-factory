@@ -1,16 +1,18 @@
 import { CameraIcon } from '@phosphor-icons/react/dist/csr/Camera';
+import { WarningCircleIcon } from '@phosphor-icons/react/dist/csr/WarningCircle';
 import { XIcon } from '@phosphor-icons/react/dist/csr/X';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import { toast } from 'sonner';
 import { EmptyState } from '@/client/components/empty-state';
 import { QueryState } from '@/client/components/query-state';
+import { POLL_INTERVAL_MS } from '@/client/lib/query-options';
 import { trpc } from '@/client/lib/trpc';
 import { Button } from '@/components/ui/button';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Spinner } from '@/components/ui/spinner';
-import { useWorkspacePanel } from './workspace-panel-context';
+import { useWorkspacePanelActions } from './workspace-panel-context';
 
 // =============================================================================
 // Types
@@ -33,7 +35,7 @@ export function ScreenshotsPanel({
   isTakingScreenshots,
   onTakeScreenshots,
 }: ScreenshotsPanelProps) {
-  const { openTab } = useWorkspacePanel();
+  const { openTab } = useWorkspacePanelActions();
   const utils = trpc.useUtils();
 
   // Deleting unlinks the file from the worktree, so it is confirmed first. The
@@ -55,7 +57,7 @@ export function ScreenshotsPanel({
   const screenshotsQuery = trpc.workspace.listScreenshots.useQuery(
     { workspaceId },
     {
-      refetchInterval: isTakingScreenshots ? 3000 : 10_000,
+      refetchInterval: isTakingScreenshots ? POLL_INTERVAL_MS.capture : POLL_INTERVAL_MS.activity,
       staleTime: isTakingScreenshots ? 1000 : 5000,
     }
   );
@@ -66,14 +68,12 @@ export function ScreenshotsPanel({
 
   // Close the confirmation if its screenshot leaves the list (deleted elsewhere,
   // or the list emptied/failed), so it cannot reopen later with a stale target.
-  useEffect(() => {
-    if (deleteDialogOpen && !deleteMutation.isPending && !deleteTargetListed) {
-      setDeleteDialogOpen(false);
-    }
-  }, [deleteDialogOpen, deleteMutation.isPending, deleteTargetListed]);
+  if (deleteDialogOpen && !deleteMutation.isPending && !deleteTargetListed) {
+    setDeleteDialogOpen(false);
+  }
 
   return (
-    <>
+    <div className="flex h-full min-h-0 flex-col">
       <QueryState
         query={screenshotsQuery}
         errorTitle="Couldn't load screenshots"
@@ -89,7 +89,7 @@ export function ScreenshotsPanel({
         }
       >
         {(data) => (
-          <ScrollArea className="h-full">
+          <ScrollArea className="min-h-0 flex-1">
             <div className="p-2 grid grid-cols-2 gap-2">
               {data.screenshots.map((screenshot) => (
                 <ScreenshotThumbnail
@@ -109,14 +109,11 @@ export function ScreenshotsPanel({
       </QueryState>
       <ConfirmDialog
         open={deleteDialogOpen}
-        onOpenChange={(open) => {
-          if (!(open || deleteMutation.isPending)) {
-            setDeleteDialogOpen(false);
-          }
-        }}
+        onOpenChange={setDeleteDialogOpen}
         title="Delete screenshot?"
         description={`"${deleteTarget?.name ?? ''}" will be permanently deleted from this workspace. This can't be undone.`}
         confirmText="Delete"
+        pendingText="Deleting…"
         variant="destructive"
         isPending={deleteMutation.isPending}
         onConfirm={() => {
@@ -125,7 +122,7 @@ export function ScreenshotsPanel({
           }
         }}
       />
-    </>
+    </div>
   );
 }
 
@@ -190,7 +187,7 @@ function ScreenshotThumbnail({
   onClick,
   onDelete,
 }: ScreenshotThumbnailProps) {
-  const { data, isLoading } = trpc.workspace.readScreenshot.useQuery(
+  const { data, error, isLoading } = trpc.workspace.readScreenshot.useQuery(
     { workspaceId, path: screenshot.path },
     { staleTime: 60_000 }
   );
@@ -209,7 +206,7 @@ function ScreenshotThumbnail({
         type="button"
         onClick={onClick}
         aria-label={`Open screenshot ${screenshot.name}`}
-        className="absolute inset-0"
+        className="absolute inset-0 rounded-md focus-ring focus-visible:ring-inset"
       >
         {isLoading ? (
           <Skeleton className="absolute inset-0 rounded-none" aria-hidden="true" />
@@ -219,6 +216,15 @@ function ScreenshotThumbnail({
             alt={screenshot.name}
             className="absolute inset-0 w-full h-full object-cover"
           />
+        ) : error ? (
+          // Opening the screenshot shows the full error with Retry.
+          <span
+            className="absolute inset-0 flex flex-col items-center justify-center gap-1 p-2 text-xs text-muted-foreground"
+            title={error.message}
+          >
+            <WarningCircleIcon className="size-4 text-destructive" aria-hidden="true" />
+            Couldn't load preview
+          </span>
         ) : null}
       </button>
       <div className="absolute top-1 right-1 hover-reveal transition-opacity">
@@ -226,12 +232,12 @@ function ScreenshotThumbnail({
           type="button"
           onClick={handleDelete}
           aria-label={`Delete screenshot ${screenshot.name}`}
-          className="h-5 w-5 flex items-center justify-center rounded-full bg-black/60 text-white hover:bg-destructive dark:hover:bg-destructive/60 transition-colors"
+          className="h-5 w-5 flex items-center justify-center rounded-full focus-ring bg-black/60 text-white hover:bg-destructive dark:hover:bg-destructive/60 transition-colors"
         >
           <XIcon className="h-3 w-3" />
         </button>
       </div>
-      <div className="pointer-events-none absolute bottom-0 left-0 right-0 bg-black/60 px-1.5 py-0.5 text-[10px] text-white truncate">
+      <div className="pointer-events-none absolute bottom-0 left-0 right-0 bg-black/60 px-1.5 py-0.5 text-2xs text-white truncate">
         {screenshot.name}
       </div>
     </div>

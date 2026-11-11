@@ -1,9 +1,11 @@
 import { GearIcon } from '@phosphor-icons/react/dist/csr/Gear';
 import { useEffect, useState } from 'react';
+import { IconButton } from '@/client/components/icon-button';
+import { StatusCallout } from '@/client/components/status-callout';
 import { type ScriptType, StartupScriptForm } from '@/client/features/project/startup-script-form';
 import { runInBackground } from '@/client/lib/background-task';
+import { invalidateProject } from '@/client/lib/project-cache';
 import { trpc } from '@/client/lib/trpc';
-import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -15,8 +17,6 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
-import { Spinner } from '@/components/ui/spinner';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 
 interface ProjectSettingsDialogProps {
   projectId: string;
@@ -40,11 +40,7 @@ export function ProjectSettingsDialog({
 
   const updateProject = trpc.project.update.useMutation({
     onSuccess: () => {
-      runInBackground(utils.project.list.invalidate(), "Couldn't refresh data.");
-      runInBackground(
-        utils.project.getById.invalidate({ id: projectId }),
-        "Couldn't refresh data."
-      );
+      runInBackground(invalidateProject(utils, projectId));
       setOpen(false);
     },
     onError: (err) => {
@@ -76,16 +72,11 @@ export function ProjectSettingsDialog({
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <DialogTrigger asChild>
-            <Button variant="ghost" size="icon" aria-label="Project settings">
-              <GearIcon className="h-4 w-4" />
-            </Button>
-          </DialogTrigger>
-        </TooltipTrigger>
-        <TooltipContent>Settings</TooltipContent>
-      </Tooltip>
+      <DialogTrigger asChild>
+        <IconButton label="Project settings">
+          <GearIcon />
+        </IconButton>
+      </DialogTrigger>
       <DialogContent className="px-3 py-4 sm:max-w-[500px] sm:p-4">
         <DialogHeader>
           <DialogTitle>Project settings</DialogTitle>
@@ -94,9 +85,9 @@ export function ProjectSettingsDialog({
 
         <div className="space-y-4 py-4">
           {error && (
-            <Alert variant="destructive">
-              <AlertDescription>{error}</AlertDescription>
-            </Alert>
+            <StatusCallout tone="danger" role="alert">
+              {error}
+            </StatusCallout>
           )}
 
           <div className="space-y-3">
@@ -126,8 +117,7 @@ export function ProjectSettingsDialog({
           <Button variant="outline" onClick={() => setOpen(false)}>
             Cancel
           </Button>
-          <Button onClick={handleSave} disabled={updateProject.isPending}>
-            {updateProject.isPending && <Spinner className="mr-2" />}
+          <Button onClick={handleSave} pending={updateProject.isPending} pendingLabel="Saving…">
             Save Changes
           </Button>
         </DialogFooter>

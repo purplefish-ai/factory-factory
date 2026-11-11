@@ -74,24 +74,12 @@ jobs:
       - name: Check generated Prisma client is committed
         run: pnpm check:prisma-generated
 
-      - name: Check Prisma migrations are committed
-        run: |
-          pnpm exec prisma migrate diff \
-            --from-schema prisma/schema.prisma \
-            --to-migrations prisma/migrations \
-            --exit-code
-
-      - name: Run verification and staged unused-code checks
+      # The same command contributors run locally: lint (including the inline
+      # suppression policy), format, file lengths, environment access, relative
+      # imports, ownership, FK indexes, migration drift, dependencies, Knip and
+      # unused code. Add new local checks to the package script, not here.
+      - name: Run verification checks
         run: pnpm check
-
-      - name: Check ambiguous relative imports
-        run: pnpm check:imports
-
-      - name: Enforce inline lint suppression policy
-        run: pnpm check:lint-suppressions
-
-      - name: Run Knip (unused files & dependencies)
-        run: pnpm knip --include files,dependencies,unlisted
 
       - name: Run TypeScript check
         run: pnpm typecheck
@@ -125,6 +113,45 @@ jobs:
 
       - name: Build
         run: pnpm build
+
+  minimum-node:
+    name: Minimum Node runtime
+    needs: changes
+    if: needs.changes.outputs.app == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      DATABASE_URL: 'file:./test.db'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0: native pnpm 12 support
+
+      - name: Setup minimum Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: '.node-minimum'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Generate Prisma client
+        run: pnpm db:generate
+
+      - name: Run tests
+        run: pnpm test
+
+      - name: Build
+        run: pnpm build
+
+      - name: Smoke test minimum runtime
+        run: |
+          node dist/src/cli/bootstrap.mjs serve --help
+          node dist/src/cli/bootstrap.mjs db:migrate --database-path "$RUNNER_TEMP/minimum-node.db"
+          node scripts/check-installed-native-runtime.mjs "$PWD"
 
   storybook:
     name: Storybook Build work
@@ -375,7 +402,7 @@ jobs:
   require-build:
     name: Build
     if: always()
-    needs: [changes, build]
+    needs: [changes, build, minimum-node]
     runs-on: ubuntu-latest
     permissions: {}
     steps:
@@ -384,6 +411,18 @@ jobs:
           SELECTION_RESULT: ${{ needs.changes.result }}
           SELECTED: ${{ needs.changes.outputs.app }}
           WORK_RESULT: ${{ needs.build.result }}
+        run: |
+          test "$SELECTION_RESULT" = success
+          case "$SELECTED:$WORK_RESULT" in
+            true:success|false:skipped) ;;
+            *) echo "Unexpected CI result: selected=$SELECTED result=$WORK_RESULT"; exit 1 ;;
+          esac
+
+      - name: Require minimum runtime compatibility
+        env:
+          SELECTION_RESULT: ${{ needs.changes.result }}
+          SELECTED: ${{ needs.changes.outputs.app }}
+          WORK_RESULT: ${{ needs.minimum-node.result }}
         run: |
           test "$SELECTION_RESULT" = success
           case "$SELECTED:$WORK_RESULT" in

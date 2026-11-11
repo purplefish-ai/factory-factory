@@ -2,6 +2,7 @@ import { SidebarSimpleIcon } from '@phosphor-icons/react/dist/csr/SidebarSimple'
 import { Slot } from '@radix-ui/react-slot';
 import { cva, type VariantProps } from 'class-variance-authority';
 import * as React from 'react';
+import { readStorageItem, writeStorageItem } from '@/client/lib/browser-storage';
 import { registerShortcutHandler } from '@/client/lib/shortcut-registry';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -24,18 +25,8 @@ const SIDEBAR_WIDTH = '18rem';
 const SIDEBAR_WIDTH_ICON = '3rem';
 
 function getPersistedSidebarState(): boolean | null {
-  try {
-    const savedState = localStorage.getItem(SIDEBAR_COOKIE_NAME);
-    if (savedState === 'true') {
-      return true;
-    }
-    if (savedState === 'false') {
-      return false;
-    }
-  } catch {
-    // Ignore storage access issues and fall back to default state.
-  }
-  return null;
+  const savedState = readStorageItem(SIDEBAR_COOKIE_NAME);
+  return savedState === 'true' || savedState === 'false' ? savedState === 'true' : null;
 }
 
 type SidebarContextProps = {
@@ -104,11 +95,7 @@ const SidebarProvider = React.forwardRef<
             expires: Date.now() + SIDEBAR_COOKIE_MAX_AGE * 1000,
           });
         }
-        try {
-          localStorage.setItem(SIDEBAR_COOKIE_NAME, String(openState));
-        } catch {
-          // Ignore storage access issues.
-        }
+        writeStorageItem(SIDEBAR_COOKIE_NAME, String(openState));
       },
       [setOpenProp, open]
     );
@@ -283,8 +270,8 @@ const SidebarTrigger = React.forwardRef<
       ref={ref}
       data-sidebar="trigger"
       variant="ghost"
-      size="icon"
-      className={cn('h-7 w-7', className)}
+      size="icon-compact"
+      className={className}
       onClick={(event) => {
         onClick?.(event);
         toggleSidebar();

@@ -2,7 +2,13 @@ import type { ToolResultContentValue } from '@/lib/chat-protocol';
 import { agentProposalReferenceSchema, type AgentProposalReference } from '@/shared/agent-proposal';
 
 const proposalTools = new Set(
-  ['propose_agent', 'get_agent_proposal'].flatMap((name) => [
+  [
+    'propose_automation',
+    'get_automation_proposal',
+    // Saved chat history can still contain the old tool names.
+    'propose_agent',
+    'get_agent_proposal',
+  ].flatMap((name) => [
     name,
     `mcp__factory-factory-child-workspace__${name}`,
     `mcp.factory-factory-child-workspace.${name}`,

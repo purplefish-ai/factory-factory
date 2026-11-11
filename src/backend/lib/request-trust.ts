@@ -90,6 +90,61 @@ function isLoopbackHostname(hostname: string): boolean {
   return isIP(normalized) === 4 && normalized.startsWith('127.');
 }
 
+/**
+ * Whether a configured bind host keeps the server on loopback. An unset host
+ * binds loopback only (see `listenHttpServer`).
+ */
+export function isLoopbackBindHost(bindHost: string | undefined): boolean {
+  if (bindHost === undefined) {
+    return true;
+  }
+  const unbracketed =
+    bindHost.startsWith('[') && bindHost.endsWith(']') ? bindHost.slice(1, -1) : bindHost;
+  if (isLoopbackHostname(unbracketed) || isLoopbackRemoteAddress(unbracketed)) {
+    return true;
+  }
+  // Compare the compressed form so spellings such as `0:0::1` count too. Zoned
+  // addresses (`fe80::1%en0`) are not URL hosts and are never loopback.
+  const urlHost = `http://[${unbracketed}]`;
+  return isIP(unbracketed) === 6 && URL.canParse(urlHost) && new URL(urlHost).hostname === '[::1]';
+}
+
+function parseHostHeaderHostname(hostHeader: string): string | undefined {
+  const candidate = `http://${hostHeader}`;
+  if (!URL.canParse(candidate)) {
+    return undefined;
+  }
+  const url = new URL(candidate);
+  const isBareHost =
+    url.username === '' &&
+    url.password === '' &&
+    url.pathname === '/' &&
+    url.search === '' &&
+    url.hash === '' &&
+    !hostHeader.includes('/');
+  return isBareHost ? url.hostname : undefined;
+}
+
+/**
+ * DNS-rebinding guard for a loopback-bound server. A page whose own hostname
+ * was rebound to 127.0.0.1 sends that hostname as `Host`, so only loopback
+ * names and the hostnames of configured allowed origins (for example a
+ * Tailscale or reverse-proxy origin that forwards its `Host`) are accepted.
+ */
+export function isHostHeaderAllowed(
+  hostHeader: string,
+  allowedOrigins: readonly string[]
+): boolean {
+  const hostname = parseHostHeaderHostname(hostHeader);
+  if (hostname === undefined) {
+    return false;
+  }
+  if (isLoopbackHostname(hostname)) {
+    return true;
+  }
+  return allowedOrigins.some((allowedOrigin) => parseOrigin(allowedOrigin)?.hostname === hostname);
+}
+
 function parseOrigin(origin: string): URL | undefined {
   try {
     return new URL(origin);
@@ -122,6 +177,16 @@ function getEffectivePort(url: URL): string {
   return url.protocol === 'https:' ? '443' : '80';
 }
 
+/** Parses `origin` if it is a canonical origin on a loopback hostname. */
+function parseLoopbackOrigin(origin: string): URL | undefined {
+  const parsedOrigin = parseOrigin(origin);
+  return parsedOrigin &&
+    isCanonicalOriginUrl(origin, parsedOrigin) &&
+    isLoopbackHostname(parsedOrigin.hostname)
+    ? parsedOrigin
+    : undefined;
+}
+
 export function isOriginAllowed(
   origin: string,
   allowedOrigins: readonly string[],
@@ -135,32 +200,76 @@ export function isOriginAllowed(
     return true;
   }
 
-  const parsedOrigin = parseOrigin(origin);
-  if (
-    !(
-      parsedOrigin &&
-      isCanonicalOriginUrl(origin, parsedOrigin) &&
-      isLoopbackHostname(parsedOrigin.hostname)
-    )
-  ) {
+  const parsedOrigin = parseLoopbackOrigin(origin);
+  if (!parsedOrigin) {
     return false;
   }
 
   return allowedOrigins.some((allowedOrigin) => {
-    const parsedAllowedOrigin = parseOrigin(allowedOrigin);
-    if (
-      !(
-        parsedAllowedOrigin &&
-        isCanonicalOriginUrl(allowedOrigin, parsedAllowedOrigin) &&
-        isLoopbackHostname(parsedAllowedOrigin.hostname)
-      )
-    ) {
-      return false;
-    }
-
+    const parsedAllowedOrigin = parseLoopbackOrigin(allowedOrigin);
     return (
+      parsedAllowedOrigin !== undefined &&
       parsedOrigin.protocol === parsedAllowedOrigin.protocol &&
       getEffectivePort(parsedOrigin) === getEffectivePort(parsedAllowedOrigin)
     );
   });
+}
+
+/**
+ * Whether the server's own loopback origin is implied (see
+ * `isBrowserOriginAllowed`). It is only for servers used locally: bound to
+ * loopback, with every configured origin a loopback one. A configured public
+ * origin (a reverse proxy, `ff tailscale`) means remote browsers reach this
+ * listener through a proxy, where the connection's port is the upstream port
+ * and a page on the remote user's own `localhost` at that port would match;
+ * those servers keep exactly the configured list.
+ */
+export function shouldAllowOwnLoopbackOrigin(
+  bindHost: string | undefined,
+  allowedOrigins: readonly string[]
+): boolean {
+  return (
+    isLoopbackBindHost(bindHost) &&
+    allowedOrigins.every((origin) => parseLoopbackOrigin(origin) !== undefined)
+  );
+}
+
+/** Origin policy fields shared by every browser-facing check. */
+export interface BrowserOriginPolicy {
+  allowedOrigins: readonly string[];
+  disableCorsChecks?: boolean;
+  /** From `shouldAllowOwnLoopbackOrigin`; see `isBrowserOriginAllowed`. */
+  allowOwnLoopbackOrigin?: boolean;
+}
+
+function isOwnLoopbackOrigin(origin: string, localPort: number | undefined): boolean {
+  if (localPort === undefined) {
+    return false;
+  }
+  const parsedOrigin = parseLoopbackOrigin(origin);
+  return (
+    parsedOrigin !== undefined &&
+    parsedOrigin.protocol === 'http:' &&
+    getEffectivePort(parsedOrigin) === String(localPort)
+  );
+}
+
+/**
+ * The Origin rule for the CORS middleware, tRPC procedures and WebSocket
+ * upgrades. Besides the configured origins, a locally used server (see
+ * `shouldAllowOwnLoopbackOrigin`) accepts its own page: an `http:` loopback
+ * origin on `localPort`, the local port of the connection the request arrived
+ * on. That is the port the server actually bound, so a fallback port no
+ * launcher configured keeps working, while other ports and non-loopback hosts
+ * do not.
+ */
+export function isBrowserOriginAllowed(
+  origin: string,
+  policy: BrowserOriginPolicy,
+  localPort: number | undefined
+): boolean {
+  return (
+    isOriginAllowed(origin, policy.allowedOrigins, policy.disableCorsChecks) ||
+    (policy.allowOwnLoopbackOrigin === true && isOwnLoopbackOrigin(origin, localPort))
+  );
 }

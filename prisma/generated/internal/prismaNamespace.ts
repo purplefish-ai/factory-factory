@@ -3505,6 +3505,7 @@ export type ClosedSessionScalarFieldEnum = (typeof ClosedSessionScalarFieldEnum)
 
 
 export const UserSettingsScalarFieldEnum = {
+  turnLimitMinutes: 'turnLimitMinutes',
   id: 'id',
   userId: 'userId',
   preferredIde: 'preferredIde',
@@ -3524,6 +3525,7 @@ export const UserSettingsScalarFieldEnum = {
   defaultClaudeReasoningEffort: 'defaultClaudeReasoningEffort',
   defaultCodexReasoningEffort: 'defaultCodexReasoningEffort',
   defaultWorkspacePermissions: 'defaultWorkspacePermissions',
+  automationPermissions: 'automationPermissions',
   reviewerSessionProvider: 'reviewerSessionProvider',
   reviewerClaudeModel: 'reviewerClaudeModel',
   reviewerCodexModel: 'reviewerCodexModel',

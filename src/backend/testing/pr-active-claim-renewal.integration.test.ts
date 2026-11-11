@@ -20,19 +20,21 @@ it.each([
     const { createDefaultApplicationDependencies } =
       await vi.importActual<typeof import('@/backend/app-context')>('@/backend/app-context');
     const { createPRBackgroundDeliveryPort } = await vi.importActual<
-      typeof import('@/backend/orchestration/pr-event-delivery-port')
-    >('@/backend/orchestration/pr-event-delivery-port');
-    const { defaultPRDeliveryPorts } = await vi.importActual<
-      typeof import('@/backend/orchestration/pr-delivery-dependencies')
-    >('@/backend/orchestration/pr-delivery-dependencies');
+      typeof import('@/backend/orchestration/pull-requests/pr-event-delivery-port')
+    >('@/backend/orchestration/pull-requests/pr-event-delivery-port');
+    const { createPRDeliveryPorts } = await vi.importActual<
+      typeof import('@/backend/orchestration/pull-requests/pr-delivery-dependencies')
+    >('@/backend/orchestration/pull-requests/pr-delivery-dependencies');
     const findReceipt = vi.fn(async () => receipt);
     const graph = createDefaultApplicationDependencies();
     const dispatch = vi
       .spyOn(h.session.sessionDispatchService, 'tryDispatchNextMessage')
       .mockResolvedValue();
-    graph.lifecycle.wireDomainBridges({ ...graph.services, findPRDeliveryReceipt: findReceipt });
+    // The PR event poll reads its graph lazily, so the receipt override belongs on that graph.
+    graph.services.findPRDeliveryReceipt = findReceipt;
+    graph.lifecycle.wireDomainBridges(graph.services);
     const port = createPRBackgroundDeliveryPort({
-      ...defaultPRDeliveryPorts,
+      ...createPRDeliveryPorts(graph.services),
       findPRDeliveryReceipt: findReceipt,
       refreshObservation: async () => true,
     });
@@ -145,9 +147,9 @@ it.each([
       attempt: 1,
       bindingRevision: current.bindingRevision,
     });
-    expect(await port.fail(ready.delivery, new Error('Late old failure'))).toEqual({
-      paused: false,
-    });
+    expect(
+      await port.fail(ready.delivery, { reason: 'failed', error: new Error('Late old failure') })
+    ).toEqual({ paused: false });
     expect(await owner.validate(next)).toBe(true);
     for (const row of await rows()) {
       expect(row).toMatchObject({

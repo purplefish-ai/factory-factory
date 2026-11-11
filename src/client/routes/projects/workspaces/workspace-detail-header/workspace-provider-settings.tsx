@@ -2,6 +2,7 @@ import { memo, useEffect, useState } from 'react';
 import { ProviderCliWarning } from '@/client/components/provider-cli-warning';
 import { runInBackground } from '@/client/lib/background-task';
 import { trpc } from '@/client/lib/trpc';
+import { useUserSettings } from '@/client/lib/user-settings-queries';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -42,19 +43,15 @@ export const WorkspaceProviderSettings = memo(function WorkspaceProviderSettings
   const [defaultProvider, setDefaultProvider] = useState<NewSessionProviderSelection>(
     resolveProviderSelection(workspace.defaultSessionProvider)
   );
-  const { data: userSettings } = trpc.userSettings.get.useQuery();
+  const { data: userSettings } = useUserSettings();
   const utils = trpc.useUtils();
 
   const updateProviderDefaults = trpc.workspace.updateProviderDefaults.useMutation({
     meta: { errorToast: "Couldn't save provider settings." },
     onSuccess: () => {
+      runInBackground(utils.workspace.get.invalidate({ id: workspaceId }));
       runInBackground(
-        utils.workspace.get.invalidate({ id: workspaceId }),
-        "Couldn't refresh data."
-      );
-      runInBackground(
-        utils.workspace.listForProject.invalidate({ projectId: workspace.projectId }),
-        "Couldn't refresh data."
+        utils.workspace.listForProject.invalidate({ projectId: workspace.projectId })
       );
       setDialogOpen(false);
     },

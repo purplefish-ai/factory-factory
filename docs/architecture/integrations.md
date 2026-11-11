@@ -45,13 +45,16 @@ Full PR metadata reads use a 10 MiB stdout buffer, like bulk diff and review
 comment reads, to accommodate paginated reviews, comments, and status checks.
 Responses above that limit still fail rather than returning truncated metadata.
 
-Monitoring's `getPRStatusDetails` reads only PR/head/check metadata. Optional
-`getPRReviewDetails`, review comments and resolved threads share the existing
-CLI budget but cannot block core observations when enrichment fails. Review
-facts then remain explicitly incomplete, preserving earlier feedback until a
-complete read or confirmed resolved IDs supersede it. Abort and core-fetch
-failures still fail the observation. `getPRFullDetails` retains its full
-detail-view contract. No extra polling loop is introduced.
+Monitoring's `getPRStatusDetails` reads only PR/head/check metadata; with
+monitoring on, `getPRObservationDetails` reads the same metadata plus
+conversation comments in one `gh pr view`. Optional `getPRReviews`, review
+comments and resolved threads share the existing CLI budget but cannot block
+core observations when enrichment fails: a combined read that fails for any
+reason other than an abort or connectivity failure falls back to
+`getPRStatusDetails`. Review facts then remain explicitly incomplete, preserving
+earlier feedback until a complete read or confirmed resolved IDs supersede it.
+Abort and core-fetch failures still fail the observation. `getPRFullDetails`
+retains its full detail-view contract. No extra polling loop is introduced.
 
 Check-run conclusions preserve `STARTUP_FAILURE` through PR-detail mapping, so
 both PR sync and Ratchet classify startup failures as failing CI, including when
@@ -102,9 +105,9 @@ with the same number in different repositories. Failed or incomplete transitions
 retry on later polls, and a seeded merged snapshot is attempted after startup.
 The adjacent `linear-merge-completion.orchestrator.ts` owns this attempt
 protocol, with one owner per running collector lifetime. The collector retains
-subscriptions and admits association-aware effects only for accepted PR
-invalidations. Removing a workspace or stopping the collector clears completion
-tracking; already admitted Linear work may still complete after cleanup.
+subscriptions and admits completion effects only for accepted PR invalidations.
+Removing a workspace or stopping the collector clears completion tracking;
+already admitted Linear work may still complete after cleanup.
 
 Project settings updates enter through trusted-local tRPC input validation, then
 `updateProjectSettings` coordinates repository validation, the final startup
@@ -135,6 +138,12 @@ changes, or newer validation have superseded the submission.
 <a id="scheduled-agents"></a>
 
 ## Scheduled automations
+
+Settings > General settings > Chat defaults > Automation permissions controls
+scheduled and event automation runs independently of workspace permissions. It
+defaults to Auto review for existing and new installations. Standard and Full
+access remain explicit options. Changes apply to future runs; frozen event
+launches retain their recorded access mode.
 
 Schema-8 backups with the `base-json-periodic-config-1` profile include complete
 periodic task scalar configuration and timestamps. Import preserves due slots,
@@ -168,6 +177,11 @@ specific time of day in the user's browser timezone (`scheduledTime` HH:MM +
 IANA `timezone` fields). Daily and weekly periodic tasks with a scheduled time
 advance calendar dates in the task timezone, preserving the scheduled day across
 daylight saving changes.
+
+Creating, editing and enabling a task schedules workspace launches, so those
+`periodicTask` mutations require a trusted local client, like
+`workspace.create`. Listing, reading and deleting tasks stay available to remote
+clients.
 
 Each execution runs the configured prompt, monitors the workspace until the
 agent finishes, and advances the schedule. Concurrent runs are skipped. The
@@ -253,8 +267,13 @@ replay or exactly-once guarantee. Timer events use no second run store, PR
 ledger entry, session queue delivery or receipt protocol.
 
 The UI calls saved instructions and triggers **automations**, each execution a
-**run**, and the AI carrying out the work an **agent**. Existing `/agents` URLs,
-API names, and stored identifiers retain their names for compatibility.
+**run**, and the AI carrying out the work an **agent**. Existing `/agents` URLs
+and stored identifiers retain their names for compatibility. Event automation
+procedures use the `automation` tRPC namespace. The naming convention is
+**Runs** for tool tabs and **Run history** for history headings, independent of
+trigger kind. Currently only scheduled automations expose these views;
+event-triggered automations have no run history panel yet. **Scheduled** and
+**Event-triggered** describe the trigger or the creation choice.
 
 The mixed Automations page at `/projects/:slug/agents` groups definitions under
 **Scheduled** and **Event-triggered** headings. Event pagination stays in its
@@ -330,19 +349,19 @@ workspaces and conversations remain available. Failed requests show an error and
 preserve form drafts. The management page polls task/history data without
 replacing unsaved edits.
 
-Both the management page and the workspace's **Scheduled automation** origin
-panel use the shared run history query, showing up to 50 recent runs with
-status, start time, workspace/PR links and errors. Workspace links use the
-automation owner's slug and remain available for non-null IDs, including
-archived workspaces. A running run without a workspace ID says no workspace yet;
-a terminal run without one says workspace unavailable. The origin panel links
-back to automation management.
+Both the management page and the workspace's **Runs** origin panel use the
+shared run history query, showing up to 50 recent runs with status, start time,
+workspace/PR links and errors. Workspace links use the automation owner's slug
+and remain available for non-null IDs, including archived workspaces. A running
+run without a workspace ID says no workspace yet; a terminal run without one
+says workspace unavailable. The origin panel links back to automation
+management.
 
 The workspace's provider subagent/child-workspace tab is **Subagents**. Stored
-panel keys remain `agents` for Subagents and `periodic-task` for Scheduled
-automation. Once workspace data loads, an unavailable origin tab falls back to
-Changes, as does a retired auto-iteration preference. Deleting a definition
-therefore cannot leave that panel blank.
+panel keys remain `agents` for Subagents and `periodic-task` for Runs. Once
+workspace data loads, an unavailable origin tab falls back to Changes, as does a
+retired auto-iteration preference. Deleting a definition therefore cannot leave
+that panel blank.
 
 Service capsule: `src/backend/services/periodic-task/`.
 
@@ -354,20 +373,20 @@ inferred. Earlier profiles retain their original field coverage. Link result
 counts cover nonnull source links and overlap the primary workspace counts;
 unavailable dependencies are skipped atomically with their workspace group.
 
-## Event-triggered agent data model
+## Event-triggered automation data model
 
-The agent-centered persistence foundation lives in `AgentDefinition`,
+The automation persistence foundation lives in `AgentDefinition`,
 `AgentConnection`, `AgentTrigger`, `AgentRun`, and `AgentProposal`, owned by the
 `agent-definition` capsule. It is additive: existing `PeriodicTask` definitions,
 executions, polling, and UI remain authoritative for scheduled automations. No
 definitions are copied into the new tables. Migrating the scheduler is a
 separate change.
 
-- A project owns agent definitions. Each definition stores task instructions,
-  versioned execution configuration, and an enabled flag. Definitions have no
-  mandatory schedule and default to paused. Explicit model or reasoning-effort
-  settings require a provider; model compatibility uses the same shared
-  normalization as interactive session launch.
+- A project owns automation definitions. Each definition stores task
+  instructions, versioned execution configuration, and an enabled flag.
+  Definitions have no mandatory schedule and default to paused. Explicit model
+  or reasoning-effort settings require a provider; model compatibility uses the
+  same shared normalization as interactive session launch.
 - Connections identify reusable Slack workspaces or GitHub installations, unique
   by provider and external ID. Optional credentials belong in
   `credentialsEncrypted`, using the existing encryption service; never put
@@ -376,10 +395,10 @@ separate change.
 - A definition owns any number of independently enabled triggers. Schedule,
   Slack-message, and GitHub-issue triggers retain the user's natural-language
   `description` alongside resolved, versioned `config`. Optional
-  `filterInstructions` are separate from the agent's task instructions. Triggers
-  default to paused. Future admission must check the definition, trigger,
-  connection, and project state.
-- Runs have an agent-scoped unique `idempotencyKey`, optional trigger and
+  `filterInstructions` are separate from the automation's task instructions.
+  Triggers default to paused. Future admission must check the definition,
+  trigger, connection, and project state.
+- Runs have an automation-scoped unique `idempotencyKey`, optional trigger and
   workspace links, status, lifecycle timestamps, error text, and frozen
   definition/trigger snapshots. Their input is normalized source context rather
   than arbitrary provider JSON. A null trigger supports manual runs. One
@@ -398,13 +417,14 @@ project. Provider event adapters must resolve channel/repository IDs within that
 installation before matching.
 
 Database constraints prevent duplicate installation identities, duplicate run
-keys within an agent, and runs referencing another agent's trigger. A connection
-with configured triggers cannot be deleted. A trigger with run history must be
-paused rather than deleted. Deleting a definition cascades its triggers and run
-history but retains its workspaces. Deleting a workspace clears its run link
-without deleting run history. Editing definitions or triggers does not rewrite
-stored snapshots; launch writers keep them frozen. Opt-in terminal context
-expiry is the sole maintenance exception, using a validated expired state.
+keys within an automation, and runs referencing another automation's trigger. A
+connection with configured triggers cannot be deleted. A trigger with run
+history must be paused rather than deleted. Deleting a definition cascades its
+triggers and run history but retains its workspaces. Deleting a workspace clears
+its run link without deleting run history. Editing definitions or triggers does
+not rewrite stored snapshots; launch writers keep them frozen. Opt-in terminal
+context expiry is the sole maintenance exception, using a validated expired
+state.
 
 The agent-definition capsule also owns the durable event runtime foundation:
 `AgentSourceState`, `AgentEvent`, `AgentEvaluation` and `AgentInitialDelivery`.
@@ -615,19 +635,19 @@ supported backup is the database file together with `encryption.key`.
 
 ### Project-owned saved management
 
-Trusted-local `agent.list`, `get`, `updateSaved`, `evaluations`, `runs`, and
-`navigationSummary` procedures manage project-owned event definitions even after
-the authoring workspace/proposal is deleted. Inputs carry project ownership;
-foreign IDs are not found. History uses bounded timestamp/ID keyset pages (50 by
-default, at most 100), with independent evaluation and run pages. Navigation
-counts every definition and its latest terminal event-run outcome independently
-of those pages. Archived projects remain readable; writes and discovery require
-an active project. Scheduled-agent APIs and routes retain their existing
-behavior.
+Trusted-local `automation.list`, `get`, `updateSaved`, `evaluations`, `runs`,
+and `navigationSummary` procedures manage project-owned event definitions even
+after the authoring workspace/proposal is deleted. Inputs carry project
+ownership; foreign IDs are not found. History uses bounded timestamp/ID keyset
+pages (50 by default, at most 100), with independent evaluation and run pages.
+Navigation counts every definition and its latest terminal event-run outcome
+independently of those pages. Archived projects remain readable; writes and
+discovery require an active project. Scheduled automation APIs and routes retain
+their existing behavior.
 
-`agent.list` accepts the optional `direction: "forward"` metadata added by tRPC
-infinite queries and removes it before domain validation. Pagination remains
-forward-only; unrelated input fields are still rejected.
+`automation.list` accepts the optional `direction: "forward"` metadata added by
+tRPC infinite queries and removes it before domain validation. Pagination
+remains forward-only; unrelated input fields are still rejected.
 
 `managementRevision` is the shared optimistic save token. Both saved replacement
 and accepted-proposal edits increment it once, including a rename/no-op. Saved
@@ -724,8 +744,8 @@ discovery/proposal authoring/read tools.
 
 ### Conversational creation
 
-Workspace sessions expose `list_agent_sources`, `propose_agent`, and
-`get_agent_proposal` through their existing MCP server. The workspace agent
+Workspace sessions expose `list_automation_sources`, `propose_automation`, and
+`get_automation_proposal` through their existing MCP server. The workspace agent
 interprets the user's request, discovers resource IDs, and proposes a structured
 configuration. Slack discovery lists bot-member public/private channels with
 pagination. GitHub discovery resolves the current project's repository and
@@ -736,12 +756,13 @@ Actor-specific ID restrictions are rejected until actor discovery is supported.
 
 `AgentProposal` persists the specification, verified display names, workspace,
 revision, and optional created definition. Tool results carry a proposal
-reference; chat loads its current state and renders an editable card outside the
-collapsed activity group. Users can edit instructions, filters, event settings,
-and execution settings. **Create automation** atomically creates a paused
-definition and its paused triggers. The card explicitly says that listening and
-automatic runs are not yet available. Creation does not start legacy periodic
-tasks.
+reference with type `automation_proposal`; chat loads its current state and
+renders an editable card outside the collapsed activity group. Saved chats with
+legacy tool names and the `agent_proposal` discriminator still render their
+proposal cards. Users can edit instructions, filters, event settings, and
+execution settings. **Create automation** atomically creates a paused definition
+and its paused triggers. The card explicitly says that listening and automatic
+runs are not yet available. Creation does not start legacy periodic tasks.
 
 Conversational edits use optimistic revision checks and cannot silently replace
 a newer proposal. A widget that receives a newer revision refreshes its data;

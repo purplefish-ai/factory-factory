@@ -2,11 +2,11 @@ import { CheckCircleIcon } from '@phosphor-icons/react/dist/csr/CheckCircle';
 import { LinkIcon } from '@phosphor-icons/react/dist/csr/Link';
 import { useRef, useState } from 'react';
 import { toast } from 'sonner';
+import { StatusChip } from '@/client/components/status-indicators';
 import { runInBackground } from '@/client/lib/background-task';
+import { invalidateProject } from '@/client/lib/project-cache';
 import { trpc } from '@/client/lib/trpc';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
@@ -22,6 +22,7 @@ import type {
   PublicIssueTrackerConfig,
   PublicLinearConfig,
 } from '@/shared/schemas/issue-tracker-config.schema';
+import { SETTING_FIELD_WIDTH, SettingsSection } from './settings-section';
 
 function LinearConfigFields({
   projectId,
@@ -130,7 +131,7 @@ function LinearConfigFields({
             value={apiKey}
             onChange={(e) => handleApiKeyChange(e.target.value)}
             placeholder={hasStoredKey ? '••••••••••••••••••••' : 'lin_api_...'}
-            className="w-full font-mono text-sm sm:w-[280px]"
+            className={`font-mono text-sm ${SETTING_FIELD_WIDTH}`}
           />
         </div>
         <Button
@@ -138,9 +139,11 @@ function LinearConfigFields({
           onClick={() => {
             runInBackground(handleValidate(), "Couldn't update issue tracking.");
           }}
-          disabled={validateAndList.isPending || !apiKey}
+          pending={validateAndList.isPending}
+          pendingLabel="Validating…"
+          disabled={!apiKey}
         >
-          {validateAndList.isPending ? 'Validating…' : 'Validate'}
+          Validate
         </Button>
       </div>
 
@@ -171,10 +174,12 @@ function LinearConfigFields({
             onClick={() => {
               runInBackground(handleSave(), "Couldn't update issue tracking.");
             }}
-            disabled={!selectedTeamId || isSaving}
+            pending={isSaving}
+            pendingLabel="Saving…"
+            disabled={!selectedTeamId}
             className="self-end"
           >
-            {isSaving ? 'Saving…' : 'Save'}
+            Save
           </Button>
         </>
       )}
@@ -221,7 +226,7 @@ export function ProjectIssueTrackingCard({
   const updateProject = trpc.project.update.useMutation({
     onSuccess: () => {
       toast.success('Issue tracking settings saved');
-      runInBackground(utils.project.list.invalidate(), "Couldn't refresh data.");
+      runInBackground(invalidateProject(utils, projectId));
     },
     onError: (error) => toast.error(`Couldn't save issue tracking settings. ${error.message}`),
   });
@@ -232,7 +237,7 @@ export function ProjectIssueTrackingCard({
       return;
     }
     const generation = providerGeneration.current;
-    await utils.project.list.invalidate();
+    await invalidateProject(utils, projectId);
     // A new choice made during the refetch still owns the optimistic display.
     if (generation === providerGeneration.current && pendingProviderSaves.current === 0) {
       setOptimisticProvider(null);
@@ -279,56 +284,52 @@ export function ProjectIssueTrackingCard({
   const isConfigured = !isLinear || issueTrackerConfig?.linear != null;
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <LinkIcon className="h-5 w-5" />
-          Issue tracking
-        </CardTitle>
-        <CardDescription className="[overflow-wrap:anywhere]">
+    <SettingsSection
+      title="Issue tracking"
+      icon={<LinkIcon className="h-5 w-5" />}
+      description={
+        <span className="[overflow-wrap:anywhere]">
           Configure GitHub Issues or Linear for {projectName}
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <div className="flex items-center gap-2">
-          {isConfigured && (
-            <Badge variant="success">
-              <CheckCircleIcon className="w-3 h-3 mr-1" />
-              {isLinear ? 'Linear' : 'GitHub'}
-            </Badge>
-          )}
+        </span>
+      }
+    >
+      <div className="flex items-center gap-2">
+        {isConfigured && (
+          <StatusChip tone="success" icon={CheckCircleIcon} size="md">
+            {isLinear ? 'Linear' : 'GitHub'}
+          </StatusChip>
+        )}
+      </div>
+
+      <div className="flex flex-wrap items-end gap-3">
+        <div className="min-w-0 space-y-1.5">
+          <Label htmlFor={`issue-provider-${projectId}`}>Issue provider</Label>
+          <Select
+            value={provider}
+            onValueChange={(value) => {
+              runInBackground(handleProviderChange(value), "Couldn't update issue tracking.");
+            }}
+            disabled={updateProvider.isPending || updateProject.isPending}
+          >
+            <SelectTrigger id={`issue-provider-${projectId}`} className="w-full sm:w-[180px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={IssueProvider.GITHUB}>GitHub Issues</SelectItem>
+              <SelectItem value={IssueProvider.LINEAR}>Linear Issues</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
 
-        <div className="flex flex-wrap items-end gap-3">
-          <div className="min-w-0 space-y-1.5">
-            <Label htmlFor={`issue-provider-${projectId}`}>Issue provider</Label>
-            <Select
-              value={provider}
-              onValueChange={(value) => {
-                runInBackground(handleProviderChange(value), "Couldn't update issue tracking.");
-              }}
-              disabled={updateProvider.isPending || updateProject.isPending}
-            >
-              <SelectTrigger id={`issue-provider-${projectId}`} className="w-full sm:w-[180px]">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={IssueProvider.GITHUB}>GitHub Issues</SelectItem>
-                <SelectItem value={IssueProvider.LINEAR}>Linear Issues</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          {isLinear && (
-            <LinearConfigFields
-              projectId={projectId}
-              linearConfig={issueTrackerConfig?.linear ?? null}
-              onSave={handleLinearSave}
-              isSaving={updateProject.isPending}
-            />
-          )}
-        </div>
-      </CardContent>
-    </Card>
+        {isLinear && (
+          <LinearConfigFields
+            projectId={projectId}
+            linearConfig={issueTrackerConfig?.linear ?? null}
+            onSave={handleLinearSave}
+            isSaving={updateProject.isPending}
+          />
+        )}
+      </div>
+    </SettingsSection>
   );
 }

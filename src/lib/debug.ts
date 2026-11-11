@@ -2,7 +2,8 @@
  * Debug utility for frontend logging.
  *
  * Provides a centralized way to log debug information in development.
- * All logging is disabled unless explicitly enabled via the DEBUG flag.
+ * Debug logging is disabled unless explicitly enabled via the DEBUG flag;
+ * `logProtocolError` is the exception and always reports protocol faults.
  */
 
 type LogFn = (...args: unknown[]) => void;
@@ -44,4 +45,12 @@ export function createDebugLogger(enabled: boolean): DebugLogger {
     group: (label: string) => console.group(label),
     groupEnd: () => console.groupEnd(),
   };
+}
+
+/**
+ * Report a protocol fault that the UI recovered from. Unlike debug logging,
+ * this always reaches the browser console so dropped data stays diagnosable.
+ */
+export function logProtocolError(message: string, details: Record<string, unknown>): void {
+  console.error(message, details);
 }

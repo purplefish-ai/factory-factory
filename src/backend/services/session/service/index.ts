@@ -17,7 +17,7 @@ export type {
   AcpSubagentsChangedEvent,
   ClaudeModelCatalogEntry,
 } from './acp';
-export { AcpClientHandler, AcpProcessHandle, AcpRuntimeManager, acpRuntimeManager } from './acp';
+export { AcpProcessHandle, AcpRuntimeManager, acpRuntimeManager } from './acp';
 // Bridge interfaces for orchestration layer wiring
 export type { SessionInitPolicyBridge, SessionWorkspaceBridge } from './bridges';
 // Chat services
@@ -57,11 +57,10 @@ export {
 } from './data/session-provider-resolver.service';
 export type { SessionInterceptorBridge } from './interceptor.bridge';
 export { sessionInterceptorBridge } from './interceptor.bridge';
-export { ClaudeModelCatalogService } from './lifecycle/claude-model-catalog.service';
-export type { ClosedSessionTranscript } from './lifecycle/closed-session-persistence.service';
-export type { ArchivedProviderIdentity } from './lifecycle/closed-session-reader';
-export { CodexModelCatalogService } from './lifecycle/codex-model-catalog.service';
-export { SessionConfigService } from './lifecycle/session.config.service';
+export type { ClosedSessionTranscript } from './archive/closed-session-persistence.service';
+export type { ArchivedProviderIdentity } from './archive/closed-session-reader';
+export { CodexModelCatalogService } from './providers/codex-model-catalog.service';
+export { SessionConfigService } from './config/session.config.service';
 export {
   type GetOrCreateSessionClientOptions,
   type LifecycleBridges,
@@ -71,16 +70,15 @@ export {
   type StopSessionOptions,
 } from './lifecycle/session.lifecycle.service';
 export { SessionStartupCancelledError } from './lifecycle/session-lifecycle-gate';
-export { SessionPermissionService } from './lifecycle/session.permission.service';
-export { buildChildWorkspaceContext } from './lifecycle/session.prompt-builder';
-export { sessionRepository } from './lifecycle/session.repository';
-export { SessionService } from './lifecycle/session.service';
+export { buildChildWorkspaceContext } from './prompt/session.prompt-builder';
+export { sessionRepository } from './data/session.repository';
 export {
   type PRBackgroundDeliveryPort,
   sessionBackgroundDeliveryService,
-} from './lifecycle/session-background-delivery.service';
-export { findPRDeliveryReceipt } from './lifecycle/session-pr-receipt';
-export type { SessionPromptService } from './lifecycle/session-services';
+} from './delivery/session-background-delivery.service';
+export type { PRDeliveryFailureReason } from './delivery/pr-delivery-failure';
+export { findPRDeliveryReceipt } from './delivery/session-pr-receipt';
+export type { SessionPromptService } from './composition/session-services';
 export {
   acpEventProcessor,
   createSessionLoadService,
@@ -96,7 +94,7 @@ export {
   sessionPromptTurnCompletionService,
   sessionRetryService,
   sessionService,
-} from './lifecycle/session-services';
+} from './composition/session-services';
 export { AcpTraceLogger, acpTraceLogger } from './logging/acp-trace-logger.service';
 // Session file logging
 export { SessionFileLogger, sessionFileLogger } from './logging/session-file-logger.service';

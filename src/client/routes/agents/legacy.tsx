@@ -1,5 +1,8 @@
 import { Navigate, useLocation, useParams } from 'react-router';
+import { EmptyState } from '@/client/components/empty-state';
 import { Loading } from '@/client/components/loading';
+import { QueryErrorState } from '@/client/components/query-error-state';
+import { isNotFoundError } from '@/client/components/query-state';
 import { useAppNavigationDataContext } from '@/client/hooks/use-app-navigation-data';
 import {
   getAgentRouteKind,
@@ -8,46 +11,48 @@ import {
 } from '@/client/lib/project-navigation';
 import { resolveSelectedProjectSlug } from '@/client/lib/project-selection';
 import { trpc } from '@/client/lib/trpc';
-import { Button } from '@/components/ui/button';
 
 function LegacyAgentDetail({ id }: { id: string }) {
   const navigation = useAppNavigationDataContext();
-  const task = trpc.periodicTask.get.useQuery({ id }, { retry: false });
+  const task = trpc.periodicTask.get.useQuery({ id });
   const listedOwner = navigation.projects?.find((project) => project.id === task.data?.projectId);
   const owner = trpc.project.getById.useQuery(
     { id: task.data?.projectId ?? '' },
-    { enabled: !!task.data && !listedOwner, retry: false }
+    { enabled: !!task.data && !listedOwner }
   );
+  if (isNotFoundError(task.error)) {
+    return (
+      <EmptyState
+        title="Automation not found"
+        description="This automation is no longer available."
+        className="h-full"
+      />
+    );
+  }
   if (task.error) {
     return (
-      <div role="alert" className="space-y-3 p-6">
-        <p>
-          {task.error.data?.code === 'NOT_FOUND'
-            ? 'Automation not found. This automation is no longer available.'
-            : `Couldn't load automation. ${task.error.message}`}
-        </p>
-        <Button
-          onClick={() => {
-            void task.refetch();
-          }}
-        >
-          Retry automation
-        </Button>
-      </div>
+      <QueryErrorState
+        title="Couldn't load automation"
+        error={task.error}
+        onRetry={() => {
+          void task.refetch();
+        }}
+        isRetrying={task.isFetching}
+        className="h-full"
+      />
     );
   }
   if (owner.error && !listedOwner) {
     return (
-      <div role="alert" className="space-y-3 p-6">
-        <p>Couldn't load automation project. {owner.error.message}</p>
-        <Button
-          onClick={() => {
-            void owner.refetch();
-          }}
-        >
-          Retry project
-        </Button>
-      </div>
+      <QueryErrorState
+        title="Couldn't load automation project"
+        error={owner.error}
+        onRetry={() => {
+          void owner.refetch();
+        }}
+        isRetrying={owner.isFetching}
+        className="h-full"
+      />
     );
   }
   const project = listedOwner ?? owner.data;
@@ -59,18 +64,17 @@ function LegacyAgentDetail({ id }: { id: string }) {
 }
 function LegacyAgentsIndex() {
   const navigation = useAppNavigationDataContext();
-  if (navigation.projectsError) {
+  // Cached projects still resolve the redirect when only a refresh failed.
+  if (navigation.projectsError && !navigation.projects) {
     return (
-      <div role="alert" className="space-y-3 p-6">
-        <p>Couldn't load projects. {navigation.projectsError.message}</p>
-        <Button
-          onClick={() => {
-            void navigation.refetchProjects();
-          }}
-        >
-          Retry projects
-        </Button>
-      </div>
+      <QueryErrorState
+        title="Couldn't load projects"
+        error={navigation.projectsError}
+        onRetry={() => {
+          void navigation.refetchProjects();
+        }}
+        className="h-full"
+      />
     );
   }
   if (!navigation.projects) {

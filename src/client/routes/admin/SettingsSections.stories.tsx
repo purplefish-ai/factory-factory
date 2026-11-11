@@ -1,9 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { TRPCClientError } from '@trpc/client';
-import { observable } from '@trpc/server/observable';
 import { ThemeProvider } from 'next-themes';
-import { type ReactNode, useState } from 'react';
+import type { ReactNode } from 'react';
+import { toast } from 'sonner';
 import { expect, fn, userEvent, waitFor, within } from 'storybook/test';
 import { AppearanceProvider } from '@/client/components/appearance-provider';
 import { ProviderCliWarning } from '@/client/components/provider-cli-warning';
@@ -14,10 +12,9 @@ import {
   COLOR_SCHEME_ATTRIBUTE,
 } from '@/client/lib/appearance';
 import { BROWSER_NOTIFICATIONS_KEY } from '@/client/lib/browser-notifications';
-import { trpc } from '@/client/lib/trpc';
+import { readStorageItem, removeStorageItem, writeStorageItem } from '@/client/lib/browser-storage';
 import { DEFAULT_APPEARANCE } from '@/shared/appearance';
 import { DEFAULT_TICKET_DISPATCH_PROMPT } from '@/shared/issue-start-prompt';
-import type { FactoryConfig } from '@/shared/schemas/factory-config.schema';
 import { AppearanceSettingsSection } from './AppearanceSettingsSection';
 import { AppInfoSection } from './AppInfoSection';
 import { ChatProviderDefaultsSection } from './ChatProviderDefaultsSection';
@@ -30,172 +27,9 @@ import { ProjectFactoryConfigCard } from './ProjectFactoryConfigCard';
 import { ProjectSettingsSection } from './ProjectSettingsSection';
 import { RatchetSettingsSection } from './RatchetSettingsSection';
 import { ServerLogsSection } from './ServerLogsSection';
+import { onRequest, SettingsStoryProvider } from './settings-sections.story-fixtures';
 import { TicketDispatchSettingsSection } from './TicketDispatchSettingsSection';
 import { WorktreeCleanupSection } from './WorktreeCleanupSection';
-
-const onRequest = fn<(path: string, input: unknown) => void>();
-const defaultSettings = {
-  playSoundOnComplete: true,
-  childWorkspacesEnabled: true,
-  ticketDispatchPrompt: null as string | null,
-  preferredIde: 'cursor',
-  customIdeCommand: null as string | null,
-  defaultSessionProvider: 'CLAUDE',
-  defaultClaudeModel: 'sonnet',
-  defaultCodexModel: 'default',
-  defaultClaudeReasoningEffort: null,
-  defaultCodexReasoningEffort: null,
-  defaultWorkspacePermissions: 'STRICT',
-  ratchetEnabled: false,
-  ratchetReplyToPrComments: true,
-  ratchetReviewTriggerMode: 'CHANGES_REQUESTED',
-  appearanceColorScheme: 'factory',
-  appearanceBackgroundColor: null as string | null,
-  appearanceForegroundColor: null as string | null,
-  appearanceFontScale: 100,
-  appearanceFontSans: null as string | null,
-  appearanceFontMono: null as string | null,
-};
-
-// A local transport keeps these interactive examples independent of a running backend.
-function SettingsStoryProvider({
-  children,
-  settings: initialSettings = {},
-  loading = false,
-  refreshDelayMs = 0,
-  failRequests = [],
-  factoryConfig = null,
-}: {
-  children: ReactNode;
-  settings?: Partial<typeof defaultSettings>;
-  loading?: boolean;
-  refreshDelayMs?: number;
-  failRequests?: string[];
-  factoryConfig?: FactoryConfig | null;
-}) {
-  const [queryClient] = useState(
-    () => new QueryClient({ defaultOptions: { queries: { retry: false } } })
-  );
-  const [client] = useState(() => {
-    let settings = { ...defaultSettings, ...initialSettings };
-    let orphanedWorktrees = [
-      {
-        projectId: 'project-1',
-        projectName: 'factory-factory',
-        path: '/Users/me/factory-factory/worktrees/factory-factory/workspace-abc123',
-      },
-      {
-        projectId: 'project-1',
-        projectName: 'factory-factory',
-        path: '/Users/me/factory-factory/worktrees/factory-factory/workspace-def456',
-      },
-    ];
-    const responses: Record<string, (input: unknown) => unknown> = {
-      'codexAccounts.list': () => [],
-      'userSettings.get': () => settings,
-      'userSettings.update': (input) => {
-        settings = { ...settings, ...(typeof input === 'object' ? input : {}) };
-        return settings;
-      },
-      'userSettings.testCustomCommand': () => ({ success: true }),
-      'userSettings.getProviderOptions': () => ({
-        CLAUDE: {
-          source: 'cli',
-          models: [
-            { value: 'default', label: 'Default — Opus 4.8 (1M)' },
-            { value: 'claude-fable-5[1m]', label: 'Fable 5' },
-            { value: 'sonnet', label: 'Sonnet 5' },
-          ],
-          efforts: [{ value: 'medium', label: 'Medium' }],
-        },
-        CODEX: {
-          source: 'fallback',
-          models: [
-            { value: 'default', label: 'Default' },
-            { value: 'gpt-test', label: 'Test Codex Model' },
-          ],
-          efforts: [{ value: 'medium', label: 'Medium' }],
-        },
-      }),
-      'admin.checkCLIHealth': (input) => {
-        const fresh =
-          typeof input === 'object' &&
-          input !== null &&
-          'forceRefresh' in input &&
-          input.forceRefresh === true;
-        return {
-          claude: { isInstalled: true, isAuthenticated: fresh },
-          codex: { isInstalled: true, isAuthenticated: fresh },
-          github: { isInstalled: true, isAuthenticated: fresh },
-          allHealthy: fresh,
-        };
-      },
-      'admin.downloadLogFile': () => 'Sample server log',
-      'admin.getServerInfo': () => ({ backendPort: 3001 }),
-      'admin.triggerRatchetCheck': () => ({ checked: 3, stateChanges: 1, actionsTriggered: 1 }),
-      'workspace.getFactoryConfig': () => factoryConfig,
-      'workspace.refreshFactoryConfigs': () => ({ updatedCount: 2, errors: [] }),
-      'admin.listOrphanedWorktrees': () => orphanedWorktrees,
-      'admin.removeOrphanedWorktrees': () => {
-        const removed = orphanedWorktrees.map((orphan) => orphan.path);
-        orphanedWorktrees = [];
-        return { removed, failed: [] };
-      },
-      'admin.exportData': () => ({
-        meta: { exportedAt: '2026-09-08T12:00:00Z', version: '0.4.7', schemaVersion: 4 },
-        data: {
-          projects: [],
-          workspaces: [],
-          agentSessions: [],
-          terminalSessions: [],
-          userSettings: null,
-        },
-      }),
-    };
-    const dispatchResponse = (path: string, send: () => void) => {
-      if (path === 'userSettings.get' && refreshDelayMs > 0) {
-        const timer = setTimeout(send, refreshDelayMs);
-        return () => clearTimeout(timer);
-      }
-      send();
-      return;
-    };
-    return trpc.createClient({
-      links: [
-        () =>
-          ({ op }) =>
-            observable((observer) => {
-              onRequest(op.path, op.input);
-              if (loading) {
-                return;
-              }
-              if (failRequests.includes(op.path)) {
-                observer.error(new TRPCClientError(`Request rejected: ${op.path}`));
-                return;
-              }
-              const respond = responses[op.path];
-              if (!respond) {
-                observer.error(new TRPCClientError(`No story fixture for ${op.path}`));
-                return;
-              }
-              const send = () => {
-                observer.next({ result: { data: respond(op.input) } });
-                observer.complete();
-              };
-              return dispatchResponse(op.path, send);
-            }),
-      ],
-    });
-  });
-  return (
-    <trpc.Provider client={client} queryClient={queryClient}>
-      <QueryClientProvider client={queryClient}>
-        {/* Toasts render in the app Toaster that .storybook/preview.ts mounts. */}
-        <div className="mx-auto w-full max-w-3xl">{children}</div>
-      </QueryClientProvider>
-    </trpc.Provider>
-  );
-}
 
 const meta = {
   title: 'Settings/SettingsSections',
@@ -203,6 +37,9 @@ const meta = {
   tags: ['autodocs'],
   beforeEach: () => {
     onRequest.mockClear();
+    // Settings save failures share one toast id; start each story without an
+    // earlier story's toast so a new failure shows a fresh toast.
+    toast.dismiss();
   },
 } satisfies Meta;
 export default meta;
@@ -214,8 +51,8 @@ function mockNotificationPermission(
   enabled = false
 ) {
   const descriptor = Object.getOwnPropertyDescriptor(window, 'Notification');
-  const preference = localStorage.getItem(BROWSER_NOTIFICATIONS_KEY);
-  localStorage.setItem(BROWSER_NOTIFICATIONS_KEY, JSON.stringify(enabled));
+  const preference = readStorageItem(BROWSER_NOTIFICATIONS_KEY);
+  writeStorageItem(BROWSER_NOTIFICATIONS_KEY, JSON.stringify(enabled));
   const api = {
     permission,
     requestPermission: () => onPermissionRequest(),
@@ -236,9 +73,9 @@ function mockNotificationPermission(
       Reflect.deleteProperty(window, 'Notification');
     }
     if (preference === null) {
-      localStorage.removeItem(BROWSER_NOTIFICATIONS_KEY);
+      removeStorageItem(BROWSER_NOTIFICATIONS_KEY);
     } else {
-      localStorage.setItem(BROWSER_NOTIFICATIONS_KEY, preference);
+      writeStorageItem(BROWSER_NOTIFICATIONS_KEY, preference);
     }
   };
 }
@@ -344,7 +181,7 @@ export const Appearance: Story = {
   // Solarized restyles the story as it would the app. Restore the page after.
   beforeEach: () => () => {
     applyAppearance(DEFAULT_APPEARANCE);
-    localStorage.removeItem(APPEARANCE_STORAGE_KEY);
+    removeStorageItem(APPEARANCE_STORAGE_KEY);
   },
   render: () => (
     <AppearanceStoryProvider>
@@ -417,6 +254,25 @@ export const LoadingAppearance: Story = {
   ),
 };
 
+export const FailedNotificationSettings: Story = {
+  beforeEach: () => mockNotificationPermission('default'),
+  render: () => (
+    <SettingsStoryProvider failRequests={['userSettings.get']}>
+      <NotificationSettingsSection />
+    </SettingsStoryProvider>
+  ),
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(await canvas.findByRole('alert')).toHaveTextContent(
+      "Couldn't load notification settings"
+    );
+    await expect(canvas.getByRole('switch', { name: 'Desktop notifications' })).toBeEnabled();
+    await expect(
+      canvas.queryByRole('switch', { name: 'Play completion sound' })
+    ).not.toBeInTheDocument();
+  },
+};
+
 export const LoadingNotifications: Story = {
   render: () => (
     <SettingsStoryProvider loading>
@@ -445,6 +301,26 @@ export const CustomIde: Story = {
   },
 };
 
+export const CustomIdeTesting: Story = {
+  render: () => (
+    <SettingsStoryProvider
+      settings={{ preferredIde: 'custom', customIdeCommand: 'code-insiders {workspace}' }}
+      pendingRequests={['userSettings.testCustomCommand']}
+    >
+      <IdeSettingsSection />
+    </SettingsStoryProvider>
+  ),
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await canvas.findByLabelText(/^custom command$/i);
+    await userEvent.click(canvas.getByRole('button', { name: 'Test' }));
+    const testing = await canvas.findByRole('button', { name: 'Testing…' });
+    await expect(testing).toBeDisabled();
+    await expect(testing).toHaveAttribute('aria-busy', 'true');
+    await expect(canvas.getByRole('button', { name: 'Save' })).toBeEnabled();
+  },
+};
+
 export const ChatDefaults: Story = {
   render: () => (
     <SettingsStoryProvider>
@@ -464,12 +340,67 @@ export const ChatDefaults: Story = {
   },
 };
 
+export const TurnLimit: Story = {
+  render: () => (
+    <SettingsStoryProvider settings={{ turnLimitMinutes: 240 }}>
+      <ChatProviderDefaultsSection />
+    </SettingsStoryProvider>
+  ),
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const select = await canvas.findByLabelText('Turn limit');
+    await expect(select).toHaveTextContent('4 hours');
+    await userEvent.click(select);
+    await userEvent.click(await within(document.body).findByRole('option', { name: 'Unlimited' }));
+    await waitFor(() =>
+      expect(onRequest).toHaveBeenCalledWith('userSettings.update', {
+        turnLimitMinutes: null,
+      })
+    );
+  },
+};
+
+export const CustomTurnLimit: Story = {
+  render: () => (
+    <SettingsStoryProvider settings={{ turnLimitMinutes: 1 }}>
+      <ChatProviderDefaultsSection />
+    </SettingsStoryProvider>
+  ),
+  play: async ({ canvasElement }) => {
+    await expect(await within(canvasElement).findByLabelText('Turn limit')).toHaveTextContent(
+      '1 minute'
+    );
+  },
+};
+
 export const NativePermissionDefaults: Story = {
   render: () => (
     <SettingsStoryProvider settings={{ defaultWorkspacePermissions: 'RELAXED' }}>
       <ChatProviderDefaultsSection />
     </SettingsStoryProvider>
   ),
+};
+
+export const AutomationPermissionDefaults: Story = {
+  render: () => (
+    <SettingsStoryProvider
+      settings={{ defaultWorkspacePermissions: 'YOLO', automationPermissions: 'RELAXED' }}
+    >
+      <ChatProviderDefaultsSection />
+    </SettingsStoryProvider>
+  ),
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const permissions = await canvas.findByLabelText('Automation permissions');
+    await expect(permissions).toHaveTextContent('Auto review');
+    await userEvent.click(permissions);
+    await userEvent.click(await within(document.body).findByRole('option', { name: 'Standard' }));
+    await waitFor(() =>
+      expect(onRequest).toHaveBeenCalledWith('userSettings.update', {
+        automationPermissions: 'STRICT',
+      })
+    );
+  },
 };
 
 export const ChatDefaultsSlowRefresh: Story = {
@@ -537,6 +468,40 @@ export const Backup: Story = {
       </DataImportResultsProvider>
     </SettingsStoryProvider>
   ),
+};
+
+/** Export is a mutation: the button shows its pending state until the data arrives. */
+export const BackupExporting: Story = {
+  render: () => (
+    <SettingsStoryProvider pendingRequests={['admin.exportData']}>
+      <DataImportResultsProvider>
+        <DataBackupSection />
+      </DataImportResultsProvider>
+    </SettingsStoryProvider>
+  ),
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(canvas.getByRole('button', { name: 'Export data' }));
+    const exporting = await canvas.findByRole('button', { name: 'Exporting…' });
+    await expect(exporting).toBeDisabled();
+    await expect(exporting).toHaveAttribute('aria-busy', 'true');
+  },
+};
+
+export const BackupExportFailure: Story = {
+  render: () => (
+    <SettingsStoryProvider failRequests={['admin.exportData']}>
+      <DataImportResultsProvider>
+        <DataBackupSection />
+      </DataImportResultsProvider>
+    </SettingsStoryProvider>
+  ),
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(canvas.getByRole('button', { name: 'Export data' }));
+    await within(document.body).findByText("Couldn't export backup.");
+    await expect(canvas.getByRole('button', { name: 'Export data' })).toBeEnabled();
+  },
 };
 
 export const WorktreeCleanup: Story = {
@@ -619,9 +584,8 @@ export const RejectedChatModel: Story = {
       })
     );
     await waitFor(() => expect(model).toHaveTextContent('Sonnet 5'));
-    await within(document.body).findByText(
-      "Couldn't update chat defaults. Request rejected: userSettings.update"
-    );
+    await within(document.body).findByText("Couldn't save settings.");
+    await within(document.body).findByText('Request rejected: userSettings.update');
   },
 };
 
@@ -692,6 +656,21 @@ export const ServerLogs: Story = {
     link.focus();
     await userEvent.tab();
     await expect(canvas.getByRole('button', { name: /^download log file$/i })).toHaveFocus();
+  },
+};
+
+export const ServerLogsDownloading: Story = {
+  render: () => (
+    <SettingsStoryProvider pendingRequests={['admin.downloadLogFile']}>
+      <ServerLogsSection />
+    </SettingsStoryProvider>
+  ),
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(canvas.getByRole('button', { name: 'Download log file' }));
+    const downloading = await canvas.findByRole('button', { name: 'Downloading…' });
+    await expect(downloading).toBeDisabled();
+    await expect(downloading).toHaveAttribute('aria-busy', 'true');
   },
 };
 
@@ -789,9 +768,7 @@ export const RejectedChildWorkspaces: Story = {
         childWorkspacesEnabled: false,
       })
     );
-    await within(canvasElement.ownerDocument.body).findByText(
-      "Couldn't update settings. Request rejected: userSettings.update"
-    );
+    await within(canvasElement.ownerDocument.body).findByText("Couldn't save settings.");
     await expect(toggle).toBeChecked();
   },
 };
@@ -804,7 +781,7 @@ export const FailedChildWorkspaceSettings: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await expect(await canvas.findByRole('alert')).toHaveTextContent(
-      "Couldn't load child workspace settings."
+      "Couldn't load child workspace settings"
     );
     await expect(canvas.queryByRole('switch')).not.toBeInTheDocument();
   },
@@ -904,14 +881,47 @@ export const CustomFontSaveFailure: Story = {
         appearanceFontSans: 'OpenDyslexic, sans-serif',
       })
     );
-    await expect(
-      await within(document.body).findByText(/Couldn't update appearance/)
-    ).toBeVisible();
+    const toastTitle = await within(document.body).findByText("Couldn't save settings.");
+    // The toast fades in after it mounts.
+    await waitFor(() => expect(toastTitle).toBeVisible());
     await waitFor(() =>
       expect(canvas.getByRole('button', { name: 'Save interface font' })).toBeEnabled()
     );
     await expect(canvas.getByRole('textbox', { name: 'Interface font family' })).toHaveValue(
       'OpenDyslexic, sans-serif'
     );
+  },
+};
+
+export const FailedRatchetSettings: Story = {
+  render: () => (
+    <SettingsStoryProvider failRequests={['userSettings.get']}>
+      <RatchetSettingsSection />
+    </SettingsStoryProvider>
+  ),
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(await canvas.findByRole('alert')).toHaveTextContent(
+      "Couldn't load PR update settings"
+    );
+    await expect(canvas.getByRole('button', { name: 'Retry' })).toBeEnabled();
+    await expect(canvas.queryByRole('switch')).not.toBeInTheDocument();
+    await expect(canvas.queryByRole('combobox')).not.toBeInTheDocument();
+  },
+};
+
+export const SavingChildWorkspaces: Story = {
+  render: () => (
+    <SettingsStoryProvider pendingRequests={['userSettings.update']}>
+      <ChildWorkspaceSettingsSection />
+    </SettingsStoryProvider>
+  ),
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const toggle = await canvas.findByRole('switch', { name: 'Enable child workspaces' });
+    await userEvent.click(toggle);
+    await expect(toggle).not.toBeChecked();
+    await expect(toggle).toBeEnabled();
+    await expect(await canvas.findByRole('status', { name: 'Saving' })).toBeVisible();
   },
 };

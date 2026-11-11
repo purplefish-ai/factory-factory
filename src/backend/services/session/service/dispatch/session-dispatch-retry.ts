@@ -43,6 +43,8 @@ function mergeRetryOptions(
 export class SessionDispatchRetry {
   private readonly timers = new Map<string, PendingDispatchRetry>();
   private readonly attempts = new Map<string, number>();
+  private readonly running = new Set<Promise<void>>();
+  private stopped = false;
 
   constructor(
     private readonly dispatch: (sessionId: string, options?: DispatchOptions) => Promise<void>
@@ -57,6 +59,9 @@ export class SessionDispatchRetry {
   }
 
   schedule(sessionId: string, options?: DispatchOptions, minimumDelayMs = 0): void {
+    if (this.stopped) {
+      return;
+    }
     const existing = this.timers.get(sessionId);
     const retainedOptions = mergeRetryOptions(existing?.options, options);
     if (existing) {
@@ -76,9 +81,11 @@ export class SessionDispatchRetry {
     const pending: PendingDispatchRetry = {
       timer: setTimeout(() => {
         this.timers.delete(sessionId);
-        void this.dispatch(sessionId, pending.options).catch((error) => {
+        const run = this.dispatch(sessionId, pending.options).catch((error) => {
           logger.debug('Deferred queue retry rejected by current authority', { sessionId, error });
         });
+        this.running.add(run);
+        void run.finally(() => this.running.delete(run));
       }, delayMs),
       retryAt: Date.now() + delayMs,
       options: retainedOptions,
@@ -93,5 +100,20 @@ export class SessionDispatchRetry {
     }
     this.timers.delete(sessionId);
     this.attempts.delete(sessionId);
+  }
+
+  /**
+   * Cancel every pending retry, refuse new ones and wait for retries already
+   * dispatching. A failing retry re-arms itself, so without this a timer can
+   * outlive shutdown and reach a disconnected database.
+   */
+  async stop(): Promise<void> {
+    this.stopped = true;
+    for (const sessionId of [...this.timers.keys()]) {
+      this.clear(sessionId);
+    }
+    while (this.running.size > 0) {
+      await Promise.all(this.running);
+    }
   }
 }

@@ -46,7 +46,7 @@ vi.mock('@/backend/services/session/service/data/codex-session-history-loader.se
   },
 }));
 
-vi.mock('@/backend/services/session/service/lifecycle/session-core-services', () => ({
+vi.mock('@/backend/services/session/service/composition/session-core-services', () => ({
   sessionLifecycleService: {
     getRuntimeSnapshot: mocks.getRuntimeSnapshot,
   },
@@ -99,6 +99,7 @@ const expectedHistoryRead = (providerSessionId: string) => ({
   providerSessionId,
   workingDir: '/tmp/worktree',
   isCurrent: expect.any(Function),
+  reuse: expect.any(Function),
 });
 
 describe('load application history hydration', () => {
@@ -1062,7 +1063,7 @@ describe('load application history hydration', () => {
     expect(mocks.markHistoryHydrated).toHaveBeenCalledWith('session-codex-no-dup', 'none');
   });
 
-  it('BUG: concurrent load_session calls can corrupt historyHydrationSource from jsonl to none', async () => {
+  it('shares one history read across concurrent load_session calls without corrupting jsonl to none', async () => {
     const existingTranscript = [
       {
         id: 'existing-user',
@@ -1151,20 +1152,12 @@ describe('load application history hydration', () => {
     let resolveFirstLoad:
       | ((value: Awaited<ReturnType<typeof mocks.loadCodexSessionHistory>>) => void)
       | undefined;
-    let resolveSecondLoad:
-      | ((value: Awaited<ReturnType<typeof mocks.loadCodexSessionHistory>>) => void)
-      | undefined;
     const firstLoad = new Promise<Awaited<ReturnType<typeof mocks.loadCodexSessionHistory>>>(
       (resolve) => {
         resolveFirstLoad = resolve;
       }
     );
-    const secondLoad = new Promise<Awaited<ReturnType<typeof mocks.loadCodexSessionHistory>>>(
-      (resolve) => {
-        resolveSecondLoad = resolve;
-      }
-    );
-    mocks.loadCodexSessionHistory.mockReturnValueOnce(firstLoad).mockReturnValueOnce(secondLoad);
+    mocks.loadCodexSessionHistory.mockReturnValueOnce(firstLoad);
 
     const handler = createLoadSessionTestHandler({
       tryDispatchNextMessage: mocks.tryDispatchNextMessage,
@@ -1180,16 +1173,17 @@ describe('load application history hydration', () => {
     });
 
     await vi.waitFor(() => {
-      expect(mocks.loadCodexSessionHistory).toHaveBeenCalledTimes(2);
+      expect(mocks.findById).toHaveBeenCalledTimes(2);
+      expect(mocks.loadCodexSessionHistory).toHaveBeenCalledTimes(1);
     });
+    // Both loads have reached hydration; the second joined the first read.
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(mocks.loadCodexSessionHistory).toHaveBeenCalledTimes(1);
 
     resolveFirstLoad?.(loadedHistory);
-    await firstHandle;
-    expect(historyHydrationSource).toBe('jsonl');
+    await Promise.all([firstHandle, secondHandle]);
 
-    resolveSecondLoad?.(loadedHistory);
-    await secondHandle;
-
+    expect(mocks.loadCodexSessionHistory).toHaveBeenCalledTimes(1);
     expect(mocks.replaceTranscript).toHaveBeenCalledTimes(1);
     expect(mocks.markHistoryHydrated).not.toHaveBeenCalledWith('session-codex-concurrent', 'none');
     expect(historyHydrationSource).toBe('jsonl');

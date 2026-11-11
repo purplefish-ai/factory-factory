@@ -1,8 +1,9 @@
 // @vitest-environment jsdom
 
-import { act, createElement, type ReactNode } from 'react';
+import { act, createElement, Profiler, type ReactNode, useEffect, useRef } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { TerminalOutputStream } from '@/client/lib/terminal-output-stream';
 import { RightPanel } from './right-panel';
 import { useWorkspacePanel, WorkspacePanelProvider } from './workspace-panel-context';
 
@@ -10,6 +11,8 @@ const mocks = vi.hoisted(() => ({
   agentsProps: vi.fn(),
   mobile: false,
   terminalOptions: null as null | {
+    enabled?: boolean;
+    onOutput?: (terminalId: string, data: string) => void;
     onCreated?: (id: string, requestId?: string, output?: string) => void;
     onTerminalList?: (
       terminals: Array<{ id: string; createdAt: string; outputBuffer?: string }>
@@ -53,18 +56,6 @@ vi.mock('@/components/ui/resizable', () => ({
     createElement('div', null, children),
 }));
 
-vi.mock('@/components/ui/tab-button', () => ({
-  TabButton: ({
-    label,
-    isActive,
-    onSelect,
-  }: {
-    label: string;
-    isActive: boolean;
-    onSelect: () => void;
-  }) => createElement('button', { 'aria-pressed': isActive, onClick: onSelect }, label),
-}));
-
 vi.mock('@/components/ui/tooltip', () => ({
   Tooltip: ({ children }: { children: ReactNode }) => createElement('div', null, children),
   TooltipContent: ({ children }: { children: ReactNode }) => createElement('div', null, children),
@@ -79,7 +70,6 @@ vi.mock('./use-log-stream', () => ({
     connected: false,
     hasDisconnected: false,
     output: '',
-    outputEndRef: { current: null },
   }),
 }));
 
@@ -128,8 +118,22 @@ vi.mock('./screenshots-panel', () => ({ ScreenshotsPanel: () => null }));
 vi.mock('./setup-logs-panel', () => ({ SetupLogsPanel: () => null }));
 
 vi.mock('@/client/components/terminal-instance', () => ({
-  TerminalInstance: ({ output }: { output: string }) =>
-    createElement('pre', { 'data-testid': 'terminal-output' }, output),
+  // Stands in for xterm: replays the snapshot, then writes chunks to the DOM.
+  TerminalInstance: function MockTerminalInstance({ output }: { output: TerminalOutputStream }) {
+    const ref = useRef<HTMLPreElement>(null);
+    useEffect(() => {
+      const pre = ref.current;
+      if (!pre) {
+        return;
+      }
+      pre.textContent = output.snapshot();
+      return output.subscribe((event) => {
+        pre.textContent =
+          event.type === 'append' ? `${pre.textContent}${event.data}` : event.output;
+      });
+    }, [output]);
+    return createElement('pre', { 'data-testid': 'terminal-output', ref });
+  },
 }));
 vi.mock('./use-terminal-websocket', () => ({
   useTerminalWebSocket: (options: typeof mocks.terminalOptions) => {
@@ -243,6 +247,81 @@ describe('RightPanel Agents tab', () => {
     expect(mocks.createTerminal).not.toHaveBeenCalled();
   });
 
+  it('writes terminal chunks without re-rendering the right panel, even while hidden', async () => {
+    const commits = vi.fn();
+    void act(() =>
+      root.render(
+        <WorkspacePanelProvider workspaceId="workspace-1">
+          <Profiler id="right-panel" onRender={commits}>
+            <RightPanel workspaceId="workspace-1" />
+          </Profiler>
+        </WorkspacePanelProvider>
+      )
+    );
+    await act(async () => {
+      mocks.terminalOptions?.onTerminalList?.([
+        { id: 'dev-server', createdAt: '', outputBuffer: 'ready\r\n' },
+      ]);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    const button = (label: string) =>
+      [...container.querySelectorAll('button')].find((b) => b.textContent === label)!;
+    await act(async () => button('Terminal 1').click());
+    await vi.dynamicImportSettled();
+    const terminalOutput = () =>
+      container.querySelector('[data-testid="terminal-output"]')?.textContent;
+    expect(terminalOutput()).toBe('ready\r\n');
+    commits.mockClear();
+
+    act(() => {
+      mocks.terminalOptions?.onOutput?.('dev-server', 'GET / 200\r\n');
+      mocks.terminalOptions?.onOutput?.('dev-server', 'GET /app.js 200\r\n');
+    });
+    expect(terminalOutput()).toBe('ready\r\nGET / 200\r\nGET /app.js 200\r\n');
+    expect(commits).not.toHaveBeenCalled();
+
+    // A dev server keeps writing while the user reads logs.
+    act(() => button('Logs').click());
+    commits.mockClear();
+    act(() => mocks.terminalOptions?.onOutput?.('dev-server', 'GET /hidden 200\r\n'));
+    expect(commits).not.toHaveBeenCalled();
+
+    await act(async () => button('Terminal 1').click());
+    expect(terminalOutput()).toBe('ready\r\nGET / 200\r\nGET /app.js 200\r\nGET /hidden 200\r\n');
+  });
+
+  it('switches terminal tabs in one commit, with the tab bar and terminal in step', async () => {
+    const commits = vi.fn();
+    void act(() =>
+      root.render(
+        <WorkspacePanelProvider workspaceId="workspace-1">
+          <Profiler id="right-panel" onRender={commits}>
+            <RightPanel workspaceId="workspace-1" />
+          </Profiler>
+        </WorkspacePanelProvider>
+      )
+    );
+    await act(async () => {
+      mocks.terminalOptions?.onTerminalList?.([
+        { id: 'first', createdAt: '', outputBuffer: 'first output' },
+        { id: 'second', createdAt: '', outputBuffer: 'second output' },
+      ]);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    const button = (label: string) =>
+      [...container.querySelectorAll('button')].find((b) => b.textContent === label)!;
+    await act(async () => button('Terminal 1').click());
+    await vi.dynamicImportSettled();
+    commits.mockClear();
+
+    await act(async () => button('Terminal 2').click());
+    expect(commits).toHaveBeenCalledTimes(1);
+    expect(button('Terminal 2').getAttribute('aria-selected')).toBe('true');
+    expect(container.querySelector('[data-testid="terminal-output"]')?.textContent).toBe(
+      'second output'
+    );
+  });
+
   it('creates Terminal 1 when the empty Terminal tab is clicked', async () => {
     render();
     act(() =>
@@ -317,6 +396,27 @@ describe('RightPanel Agents tab', () => {
     ).toBe('true');
   });
 
+  it('opens the mobile terminal socket only once the terminal pane is shown', () => {
+    mocks.mobile = true;
+    render();
+    expect(mocks.terminalOptions?.enabled).toBe(false);
+    const terminalTab = [...container.querySelectorAll('button')].find(
+      (b) => b.textContent === 'Terminal'
+    );
+    void act(() =>
+      terminalTab?.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0 }))
+    );
+    expect(mocks.terminalOptions?.enabled).toBe(true);
+    const changesTab = [...container.querySelectorAll('button')].find(
+      (b) => b.textContent === 'Changes'
+    );
+    void act(() =>
+      changesTab?.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0 }))
+    );
+    // Once opened, the terminal stays connected like the mounted pane did.
+    expect(mocks.terminalOptions?.enabled).toBe(true);
+  });
+
   it('selects Agents from outside the panel and preserves it when the panel remounts', () => {
     void act(() =>
       root.render(
@@ -335,17 +435,19 @@ describe('RightPanel Agents tab', () => {
     expect(container.querySelector('[data-testid="agents-panel"]')).not.toBeNull();
   });
 
+  // An unavailable periodic task and a retired tab both read as Changes and are
+  // left in storage until the user picks a tab.
   it.each(['periodic-task', 'auto-iteration'])(
     'falls back from unavailable persisted %s tab',
     (tab) => {
       localStorage.setItem('workspace-right-panel-tab-workspace-1', tab);
       render();
       expect(container.querySelector('[data-testid="changes-panel"]')).not.toBeNull();
-      expect(localStorage.getItem('workspace-right-panel-tab-workspace-1')).toBe('changes');
+      expect(localStorage.getItem('workspace-right-panel-tab-workspace-1')).toBe(tab);
       expect(
         [...container.querySelectorAll('button')]
           .find((button) => button.textContent === 'Changes')
-          ?.getAttribute('aria-pressed')
+          ?.getAttribute('aria-selected')
       ).toBe('true');
     }
   );
@@ -363,7 +465,7 @@ describe('RightPanel Agents tab', () => {
     render();
     expect(container.querySelector('[data-testid="changes-panel"]')).not.toBeNull();
     expect(container.textContent).not.toContain('Iterations');
-    expect(localStorage.getItem('workspace-right-panel-tab-workspace-1')).toBe('changes');
+    expect(localStorage.getItem('workspace-right-panel-tab-workspace-1')).toBe('auto-iteration');
   });
 
   it('waits for workspace capabilities before rejecting a periodic-task preference', () => {
@@ -375,9 +477,9 @@ describe('RightPanel Agents tab', () => {
     render();
     expect(container.querySelector('[data-testid="periodic-task-panel"]')).not.toBeNull();
     expect(localStorage.getItem('workspace-right-panel-tab-workspace-1')).toBe('periodic-task');
-    // "Agent" alone read as the chat's coding agent; name the Agents-section concept.
+    // The workspace tool describes runs, independently of the automation trigger.
     expect([...container.querySelectorAll('button')].map((button) => button.textContent)).toContain(
-      'Scheduled automation'
+      'Runs'
     );
   });
 
@@ -388,6 +490,21 @@ describe('RightPanel Agents tab', () => {
     expect(container.querySelector('[data-testid="periodic-task-panel"]')).not.toBeNull();
     mocks.workspaceData = { periodicTaskId: null, creationSource: 'MANUAL' };
     render();
+    expect(container.querySelector('[data-testid="changes-panel"]')).not.toBeNull();
+    expect(localStorage.getItem('workspace-right-panel-tab-workspace-1')).toBe('periodic-task');
+  });
+
+  it('opens a scheduled-automation workspace on its automation until the user picks a tab', () => {
+    mocks.workspaceData = undefined;
+    render();
+    expect(container.querySelector('[data-testid="changes-panel"]')).not.toBeNull();
+    mocks.workspaceData = { periodicTaskId: 'task-1', creationSource: 'MANUAL' };
+    render();
+    expect(container.querySelector('[data-testid="periodic-task-panel"]')).not.toBeNull();
+    expect(localStorage.getItem('workspace-right-panel-tab-workspace-1')).toBeNull();
+    act(() =>
+      [...container.querySelectorAll('button')].find((b) => b.textContent === 'Changes')?.click()
+    );
     expect(container.querySelector('[data-testid="changes-panel"]')).not.toBeNull();
     expect(localStorage.getItem('workspace-right-panel-tab-workspace-1')).toBe('changes');
   });

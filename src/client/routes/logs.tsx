@@ -5,12 +5,14 @@ import { DownloadIcon } from '@phosphor-icons/react/dist/csr/Download';
 import { MagnifyingGlassIcon } from '@phosphor-icons/react/dist/csr/MagnifyingGlass';
 import { XIcon } from '@phosphor-icons/react/dist/csr/X';
 import { keepPreviousData } from '@tanstack/react-query';
-import { Fragment, type ReactNode, useEffect, useState } from 'react';
-import { Loading } from '@/client/components/loading';
-import { QueryErrorState } from '@/client/components/query-error-state';
+import { Fragment, useEffect, useState } from 'react';
+import { EmptyState } from '@/client/components/empty-state';
+import { QueryState } from '@/client/components/query-state';
+import { SectionLabel } from '@/client/components/section-label';
+import { useDebouncedValue } from '@/client/hooks/use-debounced-value';
 import { useDownloadServerLog } from '@/client/hooks/use-download-server-log';
-import { runInBackground } from '@/client/lib/background-task';
 import { formatDate, formatDateTime, toDateTimeIso } from '@/client/lib/date-time';
+import { POLL_INTERVAL_MS } from '@/client/lib/query-options';
 import { trpc } from '@/client/lib/trpc';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -79,19 +81,17 @@ function DatePicker({
   const [open, setOpen] = useState(false);
   return (
     <div className="flex flex-col gap-1">
-      <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
-        {label}
-      </span>
+      <SectionLabel>{label}</SectionLabel>
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger asChild>
           <Button
             variant="outline"
             className={cn(
-              'h-9 w-full sm:w-[160px] justify-start text-left font-normal',
+              'w-full sm:w-[160px] justify-start text-left font-normal',
               !date && 'text-muted-foreground'
             )}
           >
-            <CalendarIcon className="mr-2 h-4 w-4 shrink-0" />
+            <CalendarIcon />
             <span className="truncate">{date ? formatDateLabel(date) : placeholder}</span>
           </Button>
         </PopoverTrigger>
@@ -173,38 +173,8 @@ function formatPageLabel(currentPage: number, totalPages: number | null): string
   return `Page ${currentPage} of ${totalPages}`;
 }
 
-function LogsResults({
-  hasData,
-  error,
-  onRetry,
-  isRetrying,
-  children,
-}: {
-  hasData: boolean;
-  error: { message: string } | null;
-  onRetry: () => void;
-  isRetrying: boolean;
-  children: ReactNode;
-}) {
-  if (!(hasData || error)) {
-    return <Loading size="compact" message="Loading logs…" />;
-  }
-  if (!hasData && error) {
-    return (
-      <QueryErrorState
-        title="Couldn't load logs"
-        error={error}
-        onRetry={onRetry}
-        isRetrying={isRetrying}
-      />
-    );
-  }
-  return children;
-}
-
 export default function LogsPage() {
   const [search, setSearch] = useState('');
-  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [level, setLevel] = useState<LogLevel | 'all'>('all');
   const [timeRange, setTimeRange] = useState<string>('all');
   const [relativeMinute, setRelativeMinute] = useState(() => Math.floor(Date.now() / 60_000));
@@ -220,17 +190,15 @@ export default function LogsPage() {
   }, [timeRange]);
   const [sinceDate, setSinceDate] = useState<Date | undefined>();
   const [untilDate, setUntilDate] = useState<Date | undefined>();
+  const debouncedSearch = useDebouncedValue(search, 300);
   const [offset, setOffset] = useState(0);
+  // Each new search starts from the first page.
+  const [pagedSearch, setPagedSearch] = useState(debouncedSearch);
+  if (pagedSearch !== debouncedSearch) {
+    setPagedSearch(debouncedSearch);
+    setOffset(0);
+  }
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
-
-  // Debounce search input
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setDebouncedSearch(search);
-      setOffset(0);
-    }, 300);
-    return () => clearTimeout(timer);
-  }, [search]);
 
   const handleLevelChange = (v: string) => {
     setLevel(v as LogLevel | 'all');
@@ -268,7 +236,7 @@ export default function LogsPage() {
 
   const { since, until } = computeTimeRange(timeRange, sinceDate, untilDate, relativeMinute);
 
-  const { data, error, refetch, isFetching } = trpc.admin.getLogs.useQuery(
+  const logsQuery = trpc.admin.getLogs.useQuery(
     {
       search: debouncedSearch || undefined,
       level: level === 'all' ? undefined : level,
@@ -277,10 +245,11 @@ export default function LogsPage() {
       limit: PAGE_SIZE,
       offset,
     },
-    { refetchInterval: 10_000, placeholderData: keepPreviousData }
+    { refetchInterval: POLL_INTERVAL_MS.activity, placeholderData: keepPreviousData }
   );
+  const { data } = logsQuery;
 
-  const { download, isDownloading } = useDownloadServerLog();
+  const downloadLog = useDownloadServerLog();
 
   const currentPage = Math.floor(offset / PAGE_SIZE) + 1;
   const pagination = getPaginationState(data, offset);
@@ -314,14 +283,13 @@ export default function LogsPage() {
           <Button
             variant="outline"
             size="sm"
-            onClick={() => {
-              runInBackground(download(), "Couldn't download logs.");
-            }}
-            disabled={isDownloading}
+            onClick={() => downloadLog.mutate()}
+            pending={downloadLog.isPending}
+            pendingLabel="Downloading…"
             className="w-full shrink-0 sm:w-auto"
           >
-            <DownloadIcon className="size-4" />
-            {isDownloading ? 'Downloading…' : 'Download log file'}
+            <DownloadIcon />
+            Download log file
           </Button>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -391,7 +359,7 @@ export default function LogsPage() {
                 {(sinceDate || untilDate) && (
                   <div className="flex h-9 items-center">
                     <Button variant="ghost" size="sm" onClick={handleClearDates}>
-                      <XIcon className="w-3.5 h-3.5 mr-1" />
+                      <XIcon />
                       Clear
                     </Button>
                   </div>
@@ -400,129 +368,136 @@ export default function LogsPage() {
             </div>
           )}
 
-          <LogsResults
-            hasData={Boolean(data)}
-            error={error}
-            onRetry={() => void refetch()}
-            isRetrying={isFetching}
+          <QueryState
+            query={logsQuery}
+            errorTitle="Couldn't load logs"
+            loadingMessage="Loading logs…"
+            size="compact"
           >
-            {/* Results info */}
-            <div className="text-sm text-muted-foreground">
-              {totalEntriesLabel} entries
-              {debouncedSearch && ' matching search'}
-              {level !== 'all' && ` (${level})`}
-            </div>
+            {(logs) => (
+              <>
+                {/* Results info */}
+                <div className="text-sm text-muted-foreground">
+                  {totalEntriesLabel} entries
+                  {debouncedSearch && ' matching search'}
+                  {level !== 'all' && ` (${level})`}
+                </div>
 
-            {/* Table */}
-            <div className="overflow-hidden rounded-md border">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="w-[180px]">Timestamp</TableHead>
-                    <TableHead className="w-[80px]">Level</TableHead>
-                    <TableHead className="w-[160px]">Component</TableHead>
-                    <TableHead>Message</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {data?.entries.length === 0 && (
-                    <TableRow>
-                      <TableCell colSpan={4} className="text-center text-muted-foreground py-8">
-                        No log entries found
-                        <p className="mt-1 text-xs">
-                          Try a different search, log level, or time range.
-                        </p>
-                      </TableCell>
-                    </TableRow>
-                  )}
-                  {data?.entries.map((entry, i) => {
-                    // Content-based prefix for stability across refetches, with index suffix for uniqueness
-                    const rowId = `${entry.timestamp}-${entry.level}-${entry.component}-${i}`;
-                    const isExpanded = expandedRows.has(rowId);
-                    const fullEntry = {
-                      level: entry.level,
-                      timestamp: entry.timestamp,
-                      component: entry.component,
-                      message: entry.message,
-                      context: entry.context,
-                    };
-                    return (
-                      <Fragment key={rowId}>
-                        <TableRow
-                          className="cursor-pointer hover:bg-muted/50"
-                          onClick={() => toggleRow(rowId)}
-                        >
-                          <TableCell className="font-mono text-xs text-muted-foreground whitespace-nowrap">
-                            <div className="flex items-center gap-1">
-                              {isExpanded ? (
-                                <CaretDownIcon className="w-3.5 h-3.5 shrink-0" />
-                              ) : (
-                                <CaretRightIcon className="w-3.5 h-3.5 shrink-0" />
-                              )}
-                              <time
-                                dateTime={toDateTimeIso(entry.timestamp)}
-                                title={entry.timestamp}
-                              >
-                                {formatDateTime(entry.timestamp, { precision: 'second' })}
-                              </time>
-                            </div>
-                          </TableCell>
-                          <TableCell>
-                            <Badge variant={getLevelBadgeVariant(entry.level)}>{entry.level}</Badge>
-                          </TableCell>
-                          <TableCell className="font-mono text-xs">{entry.component}</TableCell>
-                          <TableCell className="max-w-md truncate" title={entry.message}>
-                            {entry.message}
+                {/* Table */}
+                <div className="overflow-hidden rounded-md border">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="w-[180px]">Timestamp</TableHead>
+                        <TableHead className="w-[80px]">Level</TableHead>
+                        <TableHead className="w-[160px]">Component</TableHead>
+                        <TableHead>Message</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {logs.entries.length === 0 && (
+                        <TableRow>
+                          <TableCell colSpan={4}>
+                            <EmptyState
+                              size="compact"
+                              title="No log entries found"
+                              description="Try a different search, log level, or time range."
+                            />
                           </TableCell>
                         </TableRow>
-                        {isExpanded && (
-                          <TableRow>
-                            <TableCell colSpan={4} className="bg-muted/30 p-4">
-                              <div className="space-y-2">
-                                <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                                  Raw JSON
+                      )}
+                      {logs.entries.map((entry, i) => {
+                        // Content-based prefix for stability across refetches, with index suffix for uniqueness
+                        const rowId = `${entry.timestamp}-${entry.level}-${entry.component}-${i}`;
+                        const isExpanded = expandedRows.has(rowId);
+                        const fullEntry = {
+                          level: entry.level,
+                          timestamp: entry.timestamp,
+                          component: entry.component,
+                          message: entry.message,
+                          context: entry.context,
+                        };
+                        return (
+                          <Fragment key={rowId}>
+                            <TableRow
+                              className="cursor-pointer hover:bg-muted/50"
+                              onClick={() => toggleRow(rowId)}
+                            >
+                              <TableCell className="font-mono text-xs text-muted-foreground whitespace-nowrap">
+                                <div className="flex items-center gap-1">
+                                  {isExpanded ? (
+                                    <CaretDownIcon className="w-3.5 h-3.5 shrink-0" />
+                                  ) : (
+                                    <CaretRightIcon className="w-3.5 h-3.5 shrink-0" />
+                                  )}
+                                  <time
+                                    dateTime={toDateTimeIso(entry.timestamp)}
+                                    title={entry.timestamp}
+                                  >
+                                    {formatDateTime(entry.timestamp, { precision: 'second' })}
+                                  </time>
                                 </div>
-                                <pre className="bg-background border rounded-md p-3 text-xs overflow-x-auto max-h-96 overflow-y-auto">
-                                  {JSON.stringify(fullEntry, null, 2)}
-                                </pre>
-                              </div>
-                            </TableCell>
-                          </TableRow>
-                        )}
-                      </Fragment>
-                    );
-                  })}
-                </TableBody>
-              </Table>
-            </div>
+                              </TableCell>
+                              <TableCell>
+                                <Badge variant={getLevelBadgeVariant(entry.level)}>
+                                  {entry.level}
+                                </Badge>
+                              </TableCell>
+                              <TableCell className="font-mono text-xs">{entry.component}</TableCell>
+                              <TableCell className="max-w-md truncate" title={entry.message}>
+                                {entry.message}
+                              </TableCell>
+                            </TableRow>
+                            {isExpanded && (
+                              <TableRow>
+                                <TableCell colSpan={4} className="bg-muted/30 p-4">
+                                  <div className="space-y-2">
+                                    <SectionLabel asChild>
+                                      <div>Raw JSON</div>
+                                    </SectionLabel>
+                                    <pre className="bg-background border rounded-md p-3 text-xs overflow-x-auto max-h-96 overflow-y-auto">
+                                      {JSON.stringify(fullEntry, null, 2)}
+                                    </pre>
+                                  </div>
+                                </TableCell>
+                              </TableRow>
+                            )}
+                          </Fragment>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                </div>
 
-            {/* Pagination */}
-            {pagination.showPagination && (
-              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={!pagination.hasPreviousPage}
-                  onClick={() => setOffset(Math.max(0, offset - PAGE_SIZE))}
-                  className="w-full sm:w-auto"
-                >
-                  Previous
-                </Button>
-                <span className="text-sm text-muted-foreground">
-                  {formatPageLabel(currentPage, pagination.totalPages)}
-                </span>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={!pagination.hasNextPage}
-                  onClick={() => setOffset(offset + PAGE_SIZE)}
-                  className="w-full sm:w-auto"
-                >
-                  Next
-                </Button>
-              </div>
+                {/* Pagination */}
+                {pagination.showPagination && (
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={!pagination.hasPreviousPage}
+                      onClick={() => setOffset(Math.max(0, offset - PAGE_SIZE))}
+                      className="w-full sm:w-auto"
+                    >
+                      Previous
+                    </Button>
+                    <span className="text-sm text-muted-foreground">
+                      {formatPageLabel(currentPage, pagination.totalPages)}
+                    </span>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={!pagination.hasNextPage}
+                      onClick={() => setOffset(offset + PAGE_SIZE)}
+                      className="w-full sm:w-auto"
+                    >
+                      Next
+                    </Button>
+                  </div>
+                )}
+              </>
             )}
-          </LogsResults>
+          </QueryState>
         </CardContent>
       </Card>
     </SettingsPageLayout>

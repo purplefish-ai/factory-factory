@@ -13,6 +13,7 @@ const activeSubagents: SubagentListItem[] = [
   {
     id: 'agent-security',
     name: 'Security review',
+    model: 'claude-sonnet-4-6',
     status: 'running',
     createdAt: minutesAgo(12),
     updatedAt: minutesAgo(1),

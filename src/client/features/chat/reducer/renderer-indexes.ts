@@ -11,8 +11,6 @@ import {
 export interface RendererIndexes {
   toolUseIdToIndex: Map<string, number>;
   agentMessageOrderToIndex: Map<number, number>;
-  /** Built on first use; most transcripts never need it. */
-  ids?: Set<string>;
 }
 
 interface CachedTranscript {
@@ -66,7 +64,6 @@ function addMessage(indexes: RendererIndexes, message: ChatMessage, index: numbe
   if (order !== null) {
     indexes.agentMessageOrderToIndex.set(order, index);
   }
-  indexes.ids?.add(message.id);
 }
 
 function buildIndexes(messages: ChatMessage[]): RendererIndexes {
@@ -211,7 +208,6 @@ function deriveFromPrevious(
     const next: RendererIndexes = {
       toolUseIdToIndex: new Map(indexes.toolUseIdToIndex),
       agentMessageOrderToIndex: new Map(indexes.agentMessageOrderToIndex),
-      ids: indexes.ids && new Set(indexes.ids),
     };
     addMessage(next, message, changedIndex);
     batchOwnedIndexes?.add(next);
@@ -251,15 +247,4 @@ export function resolveRendererTranscript(
   }
   transcriptCache.set(retained, { indexes, ordered: limit !== null });
   return { retained, indexes };
-}
-
-/** The set of message ids in a resolved transcript, built once per array. */
-export function getRendererTranscriptIds(
-  retained: ChatMessage[],
-  indexes: RendererIndexes
-): Set<string> {
-  if (!indexes.ids) {
-    indexes.ids = new Set(retained.map((message) => message.id));
-  }
-  return indexes.ids;
 }

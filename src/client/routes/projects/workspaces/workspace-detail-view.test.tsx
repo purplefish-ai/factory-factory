@@ -5,8 +5,6 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SubagentSelection } from '@/client/features/subagents';
 import type { ArchiveWorkspaceDialogProps } from '@/client/features/workspace/archive-workspace-dialog';
-import { ChatContentPropsProvider } from './workspace-chat-slot';
-import type { ChatContentProps } from './workspace-detail-chat-content';
 import { WorkspaceDetailView, type WorkspaceDetailViewProps } from './workspace-detail-view';
 
 const archiveDialogMock = vi.hoisted(() =>
@@ -150,15 +148,6 @@ vi.mock('@/client/features/workspace/workspace-content-view', () => ({
   },
 }));
 
-vi.mock('./workspace-detail-chat-content', () => ({
-  ChatContent: (props: ChatContentProps) =>
-    createElement(
-      'section',
-      { 'data-testid': 'parent-chat', 'data-session': props.sessionId },
-      'Chat'
-    ),
-}));
-
 vi.mock('./use-retry-workspace-init', () => ({
   useRetryWorkspaceInit: (workspaceId: string, availability: unknown) => {
     retryWorkspace(workspaceId);
@@ -193,7 +182,9 @@ function createInitStatus(
 function createViewProps(activeChildCount: number): WorkspaceDetailViewProps {
   return {
     workspaceState: {
-      workspaceLoading: false,
+      workspaceError: null,
+      isFetchingWorkspace: false,
+      refetchWorkspace: vi.fn(),
       workspace: {
         id: 'workspace-1',
       } as WorkspaceDetailViewProps['workspaceState']['workspace'],
@@ -234,10 +225,12 @@ function createViewProps(activeChildCount: number): WorkspaceDetailViewProps {
       handleNewChat: vi.fn(),
       handleCloseChatSession: vi.fn(),
       handleRestartSession: vi.fn(),
+      isRestartingSession: false,
       handleOpenSubagentTab: vi.fn(),
       maxSessions: 5,
       hasWorktreePath: true,
     },
+    chat: createElement('section', { 'data-testid': 'parent-chat' }, 'Chat'),
     resumeQueuedMessages: vi.fn(),
     rightPanelVisible: false,
     setRightPanelVisible: vi.fn(),
@@ -250,29 +243,13 @@ function createViewProps(activeChildCount: number): WorkspaceDetailViewProps {
   };
 }
 
-const chatProps = {
-  transcriptScroll: {
-    identity: 'main',
-    active: true,
-    ready: true,
-    initialIntent: 'following',
-    initialPosition: null,
-  },
-} as unknown as ChatContentProps;
-
 function renderView(props: WorkspaceDetailViewProps): { container: HTMLDivElement; root: Root } {
   const container = document.createElement('div');
   document.body.appendChild(container);
   const root = createRoot(container);
 
   void act(() => {
-    root.render(
-      createElement(
-        ChatContentPropsProvider,
-        { value: chatProps },
-        createElement(WorkspaceDetailView, props)
-      )
-    );
+    root.render(createElement(WorkspaceDetailView, props));
   });
 
   return { container, root };
@@ -459,34 +436,58 @@ describe('WorkspaceDetailView', () => {
     expect(props.sessionTabs.handleOpenSubagentTab).not.toHaveBeenCalled();
     act(() => root.unmount());
   });
+});
 
-  it('streams chat updates without re-rendering the workspace layout', () => {
+describe('workspace load failures', () => {
+  function withError(
+    workspace: WorkspaceDetailViewProps['workspaceState']['workspace'] | undefined,
+    error: { message: string; data?: { code: string } }
+  ) {
     const props = createViewProps(0);
-    props.rightPanelVisible = true;
-    const container = document.createElement('div');
-    document.body.appendChild(container);
-    const root = createRoot(container);
-    const renderWithChat = (sessionId: string) =>
-      act(() => {
-        root.render(
-          createElement(
-            ChatContentPropsProvider,
-            { value: { ...chatProps, sessionId } },
-            createElement(WorkspaceDetailView, props)
-          )
-        );
-      });
+    props.workspaceState.workspace = workspace;
+    props.workspaceState.workspaceError = Object.assign(new Error(error.message), {
+      data: error.data,
+    });
+    return props;
+  }
 
-    renderWithChat('session-1');
-    const layoutRenders = workspaceContentViewMock.mock.calls.length;
-    const panelRenders = rightPanelMock.mock.calls.length;
-    renderWithChat('session-streamed');
+  it('says not found only for a NOT_FOUND answer', () => {
+    const props = withError(undefined, {
+      message: 'Workspace not found: workspace-1',
+      data: { code: 'NOT_FOUND' },
+    });
+    const { container, root } = renderView(props);
 
-    expect(
-      container.querySelector('[data-testid="parent-chat"]')?.getAttribute('data-session')
-    ).toBe('session-streamed');
-    expect(workspaceContentViewMock).toHaveBeenCalledTimes(layoutRenders);
-    expect(rightPanelMock).toHaveBeenCalledTimes(panelRenders);
+    expect(container.textContent).toContain('Workspace not found');
+    expect(container.querySelector('[role="alert"]')).toBeNull();
+    act(() => root.unmount());
+  });
+
+  it('offers Retry, not "not found", when the load fails without data', () => {
+    const props = withError(undefined, {
+      message: 'Database is locked',
+      data: { code: 'INTERNAL_SERVER_ERROR' },
+    });
+    const { container, root } = renderView(props);
+
+    const alert = container.querySelector('[role="alert"]');
+    expect(alert?.textContent).toContain("Couldn't load workspace");
+    expect(alert?.textContent).toContain('Database is locked');
+    expect(container.textContent).not.toContain('Workspace not found');
+    act(() => alert?.querySelector('button')?.click());
+    expect(props.workspaceState.refetchWorkspace).toHaveBeenCalledOnce();
+    act(() => root.unmount());
+  });
+
+  it('keeps the cached workspace on screen when a refetch fails', () => {
+    const props = withError(createViewProps(0).workspaceState.workspace, {
+      message: 'Failed to fetch',
+    });
+    const { container, root } = renderView(props);
+
+    expect(container.querySelector('[data-testid="archive-dialog"]')).not.toBeNull();
+    expect(container.querySelector('[role="alert"]')).toBeNull();
+    expect(container.textContent).toContain("Couldn't refresh workspace");
     act(() => root.unmount());
   });
 });

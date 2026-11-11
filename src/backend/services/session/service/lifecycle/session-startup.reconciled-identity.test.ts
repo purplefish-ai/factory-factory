@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
+import { parseAcpConfigSnapshot } from '@/backend/services/session/service/config/acp-config-snapshot';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
-import { parseAcpConfigSnapshot } from './acp-config-snapshot';
 import { setupStartupConfig } from './session-startup-config.test-helpers';
 
 vi.mock('@/backend/services/codex-accounts', () => ({

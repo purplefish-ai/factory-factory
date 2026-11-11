@@ -239,3 +239,36 @@ export const MobileTaskCreated: Story = {
     ],
   },
 };
+
+/**
+ * Archive All in flight while two cards toggle PR updates: each card keeps its
+ * own pending wrench rather than only the latest toggle.
+ */
+export const PendingActions: Story = {
+  args: {
+    column: { id: 'DONE', label: 'Done', description: 'PR merged or closed' },
+    projectSlug: 'my-project',
+    onBulkArchive: fn(),
+    isBulkArchiving: true,
+    onToggleRatcheting: fn(),
+    togglingWorkspaceIds: ['done-1', 'done-2'],
+    workspaces: ['done-1', 'done-2', 'done-3'].map((id) => ({
+      ...baseWorkspace,
+      id,
+      name: `Workspace ${id}`,
+      kanbanColumn: 'DONE' as const,
+    })),
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const archiveAll = canvas.getByRole('button', { name: 'Archive All' });
+    await expect(archiveAll).toBeDisabled();
+    await expect(archiveAll).toHaveAttribute('aria-busy', 'true');
+    const toggles = canvas.getAllByRole('button', { name: /PR updates/ });
+    await expect(toggles.map((toggle) => toggle.getAttribute('aria-busy'))).toEqual([
+      'true',
+      'true',
+      null,
+    ]);
+  },
+};

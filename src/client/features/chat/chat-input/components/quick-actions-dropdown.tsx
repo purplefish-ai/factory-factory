@@ -10,9 +10,9 @@ import { SparkleIcon } from '@phosphor-icons/react/dist/csr/Sparkle';
 import { TerminalIcon } from '@phosphor-icons/react/dist/csr/Terminal';
 import type { Icon } from '@phosphor-icons/react/dist/lib/types';
 import { useState } from 'react';
+import { IconButton } from '@/client/components/icon-button';
 import { ShortcutKeys } from '@/client/features/shortcuts';
 import { trpc } from '@/client/lib/trpc';
-import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -23,7 +23,6 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
 /** An agent quick action from `prompts/quick-actions/` (`session.listQuickActions`). */
 export interface QuickActionOption {
@@ -138,31 +137,24 @@ export function QuickActionsDropdownView({
 
   return (
     <DropdownMenu open={open} onOpenChange={onOpenChange}>
-      <TooltipProvider>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <DropdownMenuTrigger asChild>
-              <Button
-                variant="ghost"
-                size="sm"
-                disabled={!(available.thisChat || available.newChat)}
-                className="h-6 w-6 p-0"
-                aria-label="Quick actions"
-              >
-                <LightningIcon className="h-3.5 w-3.5" />
-              </Button>
-            </DropdownMenuTrigger>
-          </TooltipTrigger>
-          <TooltipContent side="top">
+      <DropdownMenuTrigger asChild>
+        <IconButton
+          label="Quick actions"
+          size="icon-xs"
+          disabled={!(available.thisChat || available.newChat)}
+          tooltipSide="top"
+          tooltip={
             <p className="flex items-center gap-2">
               Quick actions
               <span className="inline-flex items-center gap-1">
                 In composer <ShortcutKeys id="composer.quickActions" all />
               </span>
             </p>
-          </TooltipContent>
-        </Tooltip>
-      </TooltipProvider>
+          }
+        >
+          <LightningIcon />
+        </IconButton>
+      </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="w-72 max-w-[calc(100vw-1rem)]">
         <DropdownMenuLabel>Quick actions</DropdownMenuLabel>
         {offersNewChat && (

@@ -49,7 +49,6 @@ describe('chat router application composition', () => {
     const router = createChatMessageRouterForApplication({ ...services, acceptWorkspaceFollowUp });
     const dispatch = vi.spyOn(sessionDispatchService, 'tryDispatchNextMessage').mockResolvedValue();
     const resume = vi.spyOn(sessionDispatchService, 'setManualDispatchResume');
-    const reset = vi.spyOn(sessionDispatchService, 'resetDispatchState');
     const stop = vi.spyOn(sessionLifecycleService, 'stopSession').mockResolvedValue();
     vi.spyOn(sessionBackgroundDeliveryService, 'captureResumeGuard').mockReturnValue(() => true);
     vi.spyOn(sessionBackgroundDeliveryService, 'userResume').mockResolvedValue();
@@ -81,8 +80,6 @@ describe('chat router application composition', () => {
     ]);
     expect(resume).toHaveBeenCalledExactlyOnceWith('queued-session', true);
     expect(stop).toHaveBeenCalledExactlyOnceWith('queued-session', { reason: 'USER_STOP' });
-    expect(reset).toHaveBeenCalledExactlyOnceWith('queued-session');
-    expect(stop.mock.invocationCallOrder[0]).toBeLessThan(reset.mock.invocationCallOrder[0]!);
     expect(sessionDomainService.peekNextMessage('queued-session')?.id).toBe('user-message');
   });
 });

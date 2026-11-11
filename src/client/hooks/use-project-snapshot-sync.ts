@@ -1,5 +1,4 @@
 import { type QueryClient, useQueryClient } from '@tanstack/react-query';
-import { getQueryKey } from '@trpc/react-query';
 /**
  * React hook that syncs /snapshots WebSocket messages into the
  * workspace.listForProject (sidebar + kanban) and workspace.get (detail
@@ -33,6 +32,7 @@ import {
   createWorkspaceDetailTransitionScope,
   type ProjectWorkspaceDetailTransitions,
 } from '@/client/lib/workspace-detail-snapshot-transitions';
+import { cancelProjectWorkspaceList } from '@/client/lib/workspace-queries';
 import { useWebSocketChannel } from '@/hooks/use-websocket-channel';
 import { buildWebSocketUrl } from '@/lib/websocket-config';
 import {
@@ -74,13 +74,9 @@ function healWorkspaceCachesAfterReconnect(
   projectId: string
 ): void {
   runInBackground(
-    queryClient.invalidateQueries(projectWorkspaceDetailQueryFilter(queryClient, projectId)),
-    "Couldn't refresh data."
+    queryClient.invalidateQueries(projectWorkspaceDetailQueryFilter(queryClient, projectId))
   );
-  runInBackground(
-    utils.workspace.listForProject.invalidate({ projectId }),
-    "Couldn't refresh data."
-  );
+  runInBackground(utils.workspace.listForProject.invalidate({ projectId }));
 }
 
 function seedPendingRequests(
@@ -335,20 +331,13 @@ export function useProjectSnapshotSync(projectId: string | undefined): void {
     if (!projectId) {
       return;
     }
-    const filter = {
-      queryKey: getQueryKey(trpc.workspace.listForProject, { projectId }, 'query'),
-      exact: true,
-    };
     const detailFilter = projectWorkspaceDetailQueryFilter(queryClient, projectId);
-    runInBackground(queryClient.cancelQueries(detailFilter), "Couldn't refresh data.");
-    runInBackground(queryClient.invalidateQueries(detailFilter), "Couldn't refresh data.");
+    runInBackground(queryClient.cancelQueries(detailFilter));
+    runInBackground(queryClient.invalidateQueries(detailFilter));
     // Cancel synchronously before invalidating, including an uncached bootstrap
     // whose old connection result must not win over the fallback request.
-    runInBackground(queryClient.cancelQueries(filter), "Couldn't refresh data.");
-    runInBackground(
-      utils.workspace.listForProject.invalidate({ projectId }),
-      "Couldn't refresh data."
-    );
+    runInBackground(cancelProjectWorkspaceList(queryClient, projectId));
+    runInBackground(utils.workspace.listForProject.invalidate({ projectId }));
   }, [projectId, queryClient, utils]);
   useEffect(() => {
     lifecycle.disposed = false;

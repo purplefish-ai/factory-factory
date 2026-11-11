@@ -19,7 +19,7 @@ afterEach(() => vi.unstubAllGlobals());
 const mocks = vi.hoisted(() => ({ projectId: '' }));
 const openForm = vi.hoisted(() => vi.fn());
 vi.mock('./kanban-context', () => ({
-  useKanban: () => ({ projectId: mocks.projectId, setShowInlineForm: openForm }),
+  useKanbanActions: () => ({ setShowInlineForm: openForm }),
 }));
 
 function DraftPreview() {
@@ -55,7 +55,7 @@ it('opens creation and appends dropped images to the project draft without repla
   try {
     await act(() =>
       root.render(
-        <KanbanImageDropZone>
+        <KanbanImageDropZone projectId={mocks.projectId}>
           <DraftPreview />
         </KanbanImageDropZone>
       )
@@ -94,7 +94,7 @@ it.each([true, false])(
     try {
       await act(() =>
         root.render(
-          <KanbanImageDropZone>
+          <KanbanImageDropZone projectId={mocks.projectId}>
             <DraftPreview />
           </KanbanImageDropZone>
         )

@@ -1,5 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react';
 import { useState } from 'react';
+import { expect, within } from 'storybook/test';
 import { SlackConnectionsView } from './slack-settings';
 
 const meta = {
@@ -69,7 +70,36 @@ export const ConnectionError: Story = {
     error: 'Slack rejected this bot token. Check that it is valid and has not been revoked.',
   },
 };
-export const Saving: Story = { args: { token: 'xoxb-example', busy: true } };
+export const Saving: Story = { args: { token: 'xoxb-example', pending: { kind: 'connect' } } };
+/** Only the row being tested shows the spinner; every other control waits. */
+export const TestingOneConnection: Story = {
+  args: {
+    pending: { kind: 'test', connectionId: 'slack-2' },
+    connections: [
+      {
+        id: 'slack-1',
+        name: 'Purplefish',
+        workspaceId: 'T-company',
+        hasCredentials: true,
+        isEnabled: true,
+      },
+      {
+        id: 'slack-2',
+        name: 'Purplefish Labs',
+        workspaceId: 'T-labs',
+        hasCredentials: true,
+        isEnabled: true,
+      },
+    ],
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const testing = canvas.getByRole('button', { name: 'Testing…' });
+    await expect(testing).toHaveAttribute('aria-busy', 'true');
+    await expect(canvas.getAllByRole('button', { name: 'Testing…' })).toHaveLength(1);
+    await expect(canvas.getByRole('button', { name: 'Test connection' })).toBeDisabled();
+  },
+};
 export const RotatingToken: Story = { args: { token: 'xoxe.xoxb-1-example' } };
 export const Interactive: Story = {
   render: function Preview(args) {

@@ -4,6 +4,7 @@ import { type MouseEvent, type ReactNode, useLayoutEffect, useRef, useState } fr
 import { Link } from 'react-router';
 import { EmptyState } from '@/client/components/empty-state';
 import { Loading } from '@/client/components/loading';
+import { StatusDot } from '@/client/components/status-indicators';
 import { getProjectAgentPath } from '@/client/lib/project-navigation';
 import { Button } from '@/components/ui/button';
 import {
@@ -130,7 +131,7 @@ function AgentRailItem({
       onClick={(event) => selectFromLink(event, agent.id, onAgentSelect)}
       aria-current={selected ? 'page' : undefined}
       className={cn(
-        'mb-1 block min-w-0 rounded-md border border-transparent p-3 outline-none transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring',
+        'mb-1 block min-w-0 rounded-md border border-transparent p-3 transition-colors hover:bg-muted focus-ring',
         selected && 'border-border bg-background shadow-sm'
       )}
     >
@@ -143,13 +144,8 @@ function AgentRailItem({
           {agent.prompt}
         </p>
       )}
-      <div className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-muted-foreground">
-        <span
-          className={cn(
-            'size-1.5 rounded-full',
-            agent.isEnabled ? 'bg-primary' : 'bg-muted-foreground/40'
-          )}
-        />
+      <div className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 text-2xs text-muted-foreground">
+        <StatusDot tone={agent.isEnabled ? 'success' : 'neutral'} size="xs" />
         <span>
           {agent.isEnabled ? (agent.kind === 'event' ? 'Definition enabled' : 'Active') : 'Paused'}
         </span>

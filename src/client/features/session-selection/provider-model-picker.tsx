@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
@@ -28,6 +29,9 @@ export interface ProviderModelPickerProps {
   providerOptions?: Partial<Record<ChatProvider, ProviderModelOptions>>;
   loading?: boolean;
   modelsLoading?: boolean;
+  /** The model catalog failed to load; the menu says so instead of listing no models. */
+  modelsError?: string;
+  onRetryModels?: () => void;
   updating?: boolean;
   error?: string;
   onRetry?: () => void;
@@ -37,6 +41,28 @@ export interface ProviderModelPickerProps {
 }
 
 const PROVIDER_NAMES = { CLAUDE: 'Claude', CODEX: 'Codex' };
+
+function ModelsErrorRow({ message, onRetry }: { message: string; onRetry?: () => void }) {
+  return (
+    <>
+      <p role="alert" className="px-2 py-1.5 text-xs text-destructive">
+        Couldn't load models. {message}
+      </p>
+      {onRetry ? (
+        <DropdownMenuItem
+          className="text-xs"
+          onSelect={(event) => {
+            event.preventDefault();
+            onRetry();
+          }}
+        >
+          <ArrowClockwiseIcon className="size-3.5" aria-hidden="true" />
+          Retry
+        </DropdownMenuItem>
+      ) : null}
+    </>
+  );
+}
 
 function getDisabledReason(unavailable: boolean, loading: boolean, reason?: string) {
   if (!unavailable) {
@@ -63,15 +89,15 @@ function SelectionRetry({
     <Button
       type="button"
       variant="ghost"
-      size="sm"
-      className="h-6 gap-1 px-2 text-xs text-muted-foreground"
+      size="xs"
+      className="text-muted-foreground"
       disabled={disabled || !onRetry}
       onClick={onRetry}
       title={reason ?? error}
       aria-description={reason}
       aria-label={`${label}: ${error}. Retry selection`}
     >
-      <ArrowClockwiseIcon className="h-3 w-3 shrink-0" />
+      <ArrowClockwiseIcon className="shrink-0" />
       <span>Retry selection</span>
     </Button>
   );
@@ -87,6 +113,8 @@ export function ProviderModelPicker({
   providerOptions,
   loading = false,
   modelsLoading = false,
+  modelsError,
+  onRetryModels,
   updating = false,
   error,
   onRetry,
@@ -126,9 +154,7 @@ export function ProviderModelPicker({
           title={reason ?? displayName}
           className="shrink"
           indicator={
-            updating ? (
-              <Spinner role="status" aria-label="Applying model selection" className="size-3" />
-            ) : undefined
+            updating ? <Spinner role="status" aria-label="Applying model selection" /> : undefined
           }
         >
           {modelName}
@@ -145,6 +171,7 @@ export function ProviderModelPicker({
             Loading models…
           </div>
         )}
+        {modelsError ? <ModelsErrorRow message={modelsError} onRetry={onRetryModels} /> : null}
         {onProviderChange ? (
           (['CLAUDE', 'CODEX'] as const).map((value) => (
             <ProviderModelSubmenu

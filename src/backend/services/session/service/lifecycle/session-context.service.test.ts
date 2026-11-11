@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { SessionRepository } from '@/backend/services/session/service/data/session.repository';
 import { ADVERSARIAL_REVIEW_WORKFLOW } from '@/shared/adversarial-review';
 import type { SessionPermissionPresetPort } from './session-context.service';
 import { SessionContextService } from './session-context.service';
@@ -6,7 +7,6 @@ import {
   createLifecycleTestSession,
   createLifecycleTestWorkspace,
 } from './session-lifecycle.test-helpers';
-import type { SessionRepository } from './session.repository';
 
 vi.mock('@/backend/services/logger.service', () => ({
   createLogger: () => ({
@@ -48,13 +48,13 @@ function createHarness() {
 
 describe('SessionContextService', () => {
   it.each(['CODEX', 'CLAUDE'] as const)(
-    'keeps the scheduled %s fallback provider-specific',
+    'defaults scheduled %s sessions to auto review when settings fail',
     async (provider) => {
       const { service, session, permissionPresetPort } = createHarness();
       permissionPresetPort.getPermissionPreset.mockRejectedValueOnce(new Error('settings failed'));
       await expect(
         service.resolvePermissionPreset({ ...session, workflow: 'periodic-task', provider })
-      ).resolves.toBe(provider === 'CODEX' ? 'YOLO' : 'STRICT');
+      ).resolves.toBe('RELAXED');
     }
   );
 

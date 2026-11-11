@@ -3,12 +3,14 @@ import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@/componen
 import { TabsContent } from '@/components/ui/tabs';
 import { cn } from '@/lib/utils';
 import { MobileToolSwitcher } from './mobile-tool-switcher';
-import { useWorkspacePanel } from './workspace-panel-context';
+import type { TopPanelTab } from './right-panel-state';
+import { useWorkspacePanelState } from './workspace-panel-context';
 
 export function RightPanelLayout({
   workspaceId,
   isMobile,
   mobilePanel,
+  activeTopTab,
   unreadCount,
   periodicTaskId,
   onOpenLogs,
@@ -19,6 +21,7 @@ export function RightPanelLayout({
   workspaceId: string;
   isMobile: boolean;
   mobilePanel: 'top' | 'bottom';
+  activeTopTab: TopPanelTab;
   unreadCount?: number;
   periodicTaskId: string | null;
   onOpenLogs: () => void;
@@ -26,7 +29,7 @@ export function RightPanelLayout({
   topPanel: ReactNode;
   bottomPanel: ReactNode;
 }) {
-  const { activeTopTab, activeBottomTab } = useWorkspacePanel();
+  const { activeBottomTab } = useWorkspacePanelState();
   const [bottomMountedFor, setBottomMountedFor] = useState<string | null>(null);
   if (mobilePanel === 'bottom' && bottomMountedFor !== workspaceId) {
     setBottomMountedFor(workspaceId);
@@ -37,6 +40,7 @@ export function RightPanelLayout({
     return (
       <div className={cn('flex h-full min-h-0 flex-col', className)}>
         <MobileToolSwitcher
+          activeTopTab={activeTopTab}
           periodicTaskId={periodicTaskId}
           onOpenLogs={onOpenLogs}
           unreadCount={unreadCount}

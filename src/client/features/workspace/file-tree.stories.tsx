@@ -5,6 +5,7 @@ import { observable } from '@trpc/server/observable';
 import { useState } from 'react';
 import { expect, fn, userEvent, waitFor, within } from 'storybook/test';
 import { z } from 'zod';
+import { removeStorageItem, writeStorageItem } from '@/client/lib/browser-storage';
 import { trpc } from '@/client/lib/trpc';
 import { type ChangeListEntry, ChangeTreeView } from './change-panel-shared';
 import { FileTree } from './file-tree';
@@ -105,11 +106,11 @@ const meta = {
   title: 'Workspace/FileTree',
   component: MatchingTrees,
   beforeEach: () => {
-    localStorage.setItem(
+    writeStorageItem(
       `file-tree-expanded-${workspaceId}`,
       JSON.stringify(['docs', 'docs/plans', 'src', 'drafts', 'drafts/nested'])
     );
-    return () => localStorage.removeItem(`file-tree-expanded-${workspaceId}`);
+    return () => removeStorageItem(`file-tree-expanded-${workspaceId}`);
   },
 } satisfies Meta<typeof MatchingTrees>;
 export default meta;

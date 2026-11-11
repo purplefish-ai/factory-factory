@@ -22,7 +22,7 @@ vi.mock('@/client/hooks/use-project-header-navigation', () => ({
   }),
 }));
 vi.mock('@/client/hooks/use-download-server-log', () => ({
-  useDownloadServerLog: () => ({ download: vi.fn(), isDownloading: false }),
+  useDownloadServerLog: () => ({ mutate: vi.fn(), isPending: false }),
 }));
 vi.mock('@/components/ui/select', () => ({
   Select: ({
@@ -173,4 +173,43 @@ it.each([false, true])('shows loading for unresolved logs when isLoading=%s', (i
   expect(container.textContent).toContain('Loading logs…');
   expect(container.textContent).not.toContain('0 entries');
   expect(container.querySelector('table')).toBeNull();
+});
+
+it('starts every settled search from the first page, including a return to an earlier one', () => {
+  mocks.query.mockReturnValue({
+    data: { entries: [], total: 1000, totalIsExact: true, hasMore: true },
+    isLoading: false,
+  });
+  void act(() =>
+    root.render(
+      <MemoryRouter initialEntries={['/admin/logs']}>
+        <LogsPage />
+      </MemoryRouter>
+    )
+  );
+  const search = (value: string) => {
+    const input = container.querySelector<HTMLInputElement>('input[aria-label="Search logs"]');
+    void act(() => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(input, value);
+      input?.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    void act(() => {
+      vi.advanceTimersByTime(300);
+    });
+  };
+  const next = () => {
+    const button = [...container.querySelectorAll('button')].find(
+      (candidate) => candidate.textContent === 'Next'
+    );
+    void act(() => button?.click());
+  };
+  const lastQuery = () => mocks.query.mock.lastCall?.[0];
+
+  search('foo');
+  next();
+  expect(lastQuery()).toMatchObject({ search: 'foo', offset: 200 });
+  search('bar');
+  expect(lastQuery()).toMatchObject({ search: 'bar', offset: 0 });
+  search('foo');
+  expect(lastQuery()).toMatchObject({ search: 'foo', offset: 0 });
 });

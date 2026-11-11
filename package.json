@@ -1,11 +1,11 @@
 {
   "name": "factory-factory",
-  "version": "0.5.8",
+  "version": "0.5.9",
   "description": "Workspace-based coding environment for running multiple Claude Code and Codex sessions in parallel",
   "private": false,
   "license": "MIT",
   "engines": {
-    "node": ">=26.12.1"
+    "node": ">=26.8.1"
   },
   "repository": {
     "type": "git",
@@ -36,7 +36,7 @@
     "factory-factory": "./dist/src/cli/bootstrap.mjs"
   },
   "files": [
-    ".node-version",
+    ".node-minimum",
     "dist",
     "prisma/migrations",
     "prisma/schema.prisma",
@@ -62,8 +62,9 @@
     "test:storybook": "vitest run --config vitest.storybook.config.ts",
     "test:integration": "node scripts/ensure-native-modules.mjs node && vitest run --config vitest.integration.config.ts",
     "check:coverage:critical": "node scripts/check-critical-coverage.mjs",
-    "check": "pnpm lint && pnpm check:format && pnpm check:file-length && pnpm check:env && pnpm check:ownership && pnpm check:fk-indexes && pnpm deps:check && pnpm check:unused-code",
+    "check": "pnpm lint && pnpm check:format && pnpm check:file-length && pnpm check:env && pnpm check:imports && pnpm check:ownership && pnpm check:fk-indexes && pnpm check:migrations && pnpm deps:check && pnpm knip && pnpm check:unused-code",
     "check:imports": "node scripts/check-ambiguous-relative-imports.mjs",
+    "check:migrations": "prisma migrate diff --from-schema prisma/schema.prisma --to-migrations prisma/migrations --exit-code",
     "check:env": "node scripts/check-no-direct-process-env.mjs",
     "check:biome-ignores": "pnpm check:lint-suppressions",
     "check:service-registry": "tsx scripts/check-service-registry.ts",
@@ -79,7 +80,7 @@
     "db:generate": "prisma generate",
     "db:studio": "node --import tsx src/cli/index.ts db:studio",
     "storybook": "storybook dev -p 6006",
-    "dev:electron": "node scripts/ensure-native-modules.mjs electron && tsc -p tsconfig.electron.json && concurrently \"pnpm dev:backend\" \"pnpm dev:frontend\" \"wait-on http://localhost:5173 && VITE_DEV_SERVER_URL=http://localhost:5173 electron .\"",
+    "dev:electron": "node scripts/ensure-native-modules.mjs electron && tsc -p tsconfig.electron.json && concurrently \"CORS_ALLOWED_ORIGINS=${CORS_ALLOWED_ORIGINS:-http://localhost:5173} pnpm dev:backend\" \"pnpm dev:frontend\" \"wait-on http://localhost:5173 && VITE_DEV_SERVER_URL=http://localhost:5173 electron .\"",
     "dev:backend": "BACKEND_PORT=3001 tsx watch src/backend/index.ts",
     "dev:frontend": "BACKEND_URL=http://localhost:3001 vite",
     "build:electron": "pnpm build && pnpm exec tsc -p tsconfig.electron.json && node scripts/ensure-native-modules.mjs electron && electron-builder",

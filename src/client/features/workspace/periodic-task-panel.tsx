@@ -1,25 +1,30 @@
 import { RobotIcon } from '@phosphor-icons/react/dist/csr/Robot';
 import { Link } from 'react-router';
 import { Loading } from '@/client/components/loading';
+import { QueryErrorState, QueryRefreshError } from '@/client/components/query-error-state';
+import { isNotFoundError } from '@/client/components/query-state';
 import { AgentRunHistoryQuery, describeAgentSchedule } from '@/client/features/agents';
 import { getProjectAgentPath, getProjectSectionPath } from '@/client/lib/project-navigation';
+import { POLL_INTERVAL_MS } from '@/client/lib/query-options';
 import { trpc } from '@/client/lib/trpc';
 import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
 
 interface PeriodicTaskPanelProps {
   periodicTaskId: string;
   projectId?: string;
 }
 
-function agentReadError(
-  error: { message: string; data?: { code: string } | null },
-  refresh = false
-): string {
-  if (error.data?.code === 'NOT_FOUND') {
-    return 'Automation not found. Its existing workspaces remain available.';
+type AgentReadError = { message: string; data?: { code: string } | null };
+
+/** NOT_FOUND gets friendly copy in place of the server message. */
+function agentReadError(error: AgentReadError, refresh = false) {
+  if (isNotFoundError(error)) {
+    return {
+      title: 'Automation not found',
+      error: { message: 'Its existing workspaces remain available.' },
+    };
   }
-  return `Couldn't ${refresh ? 'refresh' : 'load'} automation. ${error.message}`;
+  return { title: `Couldn't ${refresh ? 'refresh' : 'load'} automation`, error };
 }
 
 function managementPath(slug: string | undefined, id?: string): string {
@@ -32,54 +37,59 @@ function managementPath(slug: string | undefined, id?: string): string {
 function ProjectLookupState({
   error,
   retry,
+  isRetrying,
 }: {
   error: { message: string } | null;
   retry: () => void;
+  isRetrying: boolean;
 }) {
   if (!error) {
     return <Loading size="compact" message="Loading automation project…" />;
   }
   return (
-    <div role="alert" className="space-y-2 text-xs">
-      <p className="text-destructive">Couldn't load automation project. {error.message}</p>
-      <Button size="sm" variant="outline" onClick={retry}>
-        Retry project
-      </Button>
-    </div>
+    <QueryErrorState
+      title="Couldn't load automation project"
+      error={error}
+      onRetry={retry}
+      isRetrying={isRetrying}
+      className="p-2"
+    />
   );
 }
 
+type RetryableQuery<TError> = { error: TError | null; isFetching: boolean; refetch: () => unknown };
+
 function MissingAgentState({
-  taskError,
-  retryTask,
+  task,
   ownerSlug,
   hasKnownOwner,
-  ownerError,
-  retryOwner,
+  owner,
 }: {
-  taskError: Parameters<typeof agentReadError>[0] | null;
-  retryTask: () => void;
+  task: RetryableQuery<AgentReadError>;
   ownerSlug?: string;
   hasKnownOwner: boolean;
-  ownerError: { message: string } | null;
-  retryOwner: () => void;
+  owner: RetryableQuery<{ message: string }>;
 }) {
   return (
     <div className="space-y-3 p-4 text-sm">
-      {taskError ? (
+      {task.error ? (
         <>
-          <p role="alert" className="text-destructive">
-            {agentReadError(taskError)}
-          </p>
-          <Button size="sm" variant="outline" onClick={retryTask}>
-            Retry automation
-          </Button>
+          <QueryErrorState
+            {...agentReadError(task.error)}
+            onRetry={() => void task.refetch()}
+            isRetrying={task.isFetching}
+            className="p-2"
+          />
           {ownerSlug || !hasKnownOwner ? (
             <Link to={managementPath(ownerSlug)} className="block text-primary underline">
               Manage automations
             </Link>
           ) : (
-            <ProjectLookupState error={ownerError} retry={retryOwner} />
+            <ProjectLookupState
+              error={owner.error}
+              retry={() => void owner.refetch()}
+              isRetrying={owner.isFetching}
+            />
           )}
         </>
       ) : (
@@ -90,7 +100,10 @@ function MissingAgentState({
 }
 
 export function PeriodicTaskPanel({ periodicTaskId, projectId }: PeriodicTaskPanelProps) {
-  const task = trpc.periodicTask.get.useQuery({ id: periodicTaskId }, { refetchInterval: 10_000 });
+  const task = trpc.periodicTask.get.useQuery(
+    { id: periodicTaskId },
+    { refetchInterval: POLL_INTERVAL_MS.activity }
+  );
   const ownerProjectId = task.data?.projectId ?? projectId;
   const project = trpc.project.getById.useQuery(
     { id: ownerProjectId ?? '' },
@@ -100,16 +113,10 @@ export function PeriodicTaskPanel({ periodicTaskId, projectId }: PeriodicTaskPan
   if (!task.data) {
     return (
       <MissingAgentState
-        taskError={task.error}
-        retryTask={() => {
-          void task.refetch();
-        }}
+        task={task}
         ownerSlug={project.data?.slug}
         hasKnownOwner={!!ownerProjectId}
-        ownerError={project.error}
-        retryOwner={() => {
-          void project.refetch();
-        }}
+        owner={project}
       />
     );
   }
@@ -117,6 +124,13 @@ export function PeriodicTaskPanel({ periodicTaskId, projectId }: PeriodicTaskPan
   const agent = task.data;
   return (
     <div className="h-full overflow-y-auto">
+      {task.error ? (
+        <QueryRefreshError
+          {...agentReadError(task.error, true)}
+          onRetry={() => void task.refetch()}
+          isRetrying={task.isFetching}
+        />
+      ) : null}
       <div className="space-y-2 border-b bg-muted/30 px-3 py-3">
         <div className="flex flex-wrap items-center gap-2">
           <RobotIcon className="size-3.5 text-muted-foreground" />
@@ -137,26 +151,26 @@ export function PeriodicTaskPanel({ periodicTaskId, projectId }: PeriodicTaskPan
         >
           Manage automation
         </Link>
-        {task.error && (
-          <div className="space-y-2">
-            <p role="alert" className="text-xs text-destructive">
-              {agentReadError(task.error, true)}
-            </p>
-            <Button size="sm" variant="outline" onClick={() => void task.refetch()}>
-              Retry automation
-            </Button>
-          </div>
-        )}
       </div>
       <div className="p-3">
-        {project.error && (
+        {project.error && project.data ? (
+          <QueryRefreshError
+            title="Couldn't refresh automation project"
+            error={project.error}
+            onRetry={() => void project.refetch()}
+            isRetrying={project.isFetching}
+            className="mb-3 rounded-md border"
+          />
+        ) : null}
+        {project.error && !project.data ? (
           <ProjectLookupState
             error={project.error}
             retry={() => {
               void project.refetch();
             }}
+            isRetrying={project.isFetching}
           />
-        )}
+        ) : null}
         {project.data ? (
           <AgentRunHistoryQuery periodicTaskId={periodicTaskId} projectSlug={project.data.slug} />
         ) : !project.error ? (

@@ -69,7 +69,12 @@ export function PRRecipientPicker({
           <Button variant="outline" onClick={onCancel}>
             Cancel
           </Button>
-          <Button disabled={!selected || pending} onClick={() => onSelect(selected)}>
+          <Button
+            pending={pending}
+            pendingLabel="Enabling PR updates…"
+            disabled={!selected}
+            onClick={() => onSelect(selected)}
+          >
             Enable PR updates
           </Button>
         </DialogFooter>

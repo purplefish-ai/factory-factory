@@ -2,10 +2,10 @@ import type { inferRouterOutputs } from '@trpc/server';
 import type { AppRouter } from '@/client/lib/trpc';
 
 type Outputs = inferRouterOutputs<AppRouter>;
-export type EventAgent = Outputs['agent']['get'];
-export type EventAgentSummary = Outputs['agent']['list']['items'][number];
-export type EventDraftValidation = Outputs['agent']['validateDraft'];
-export type EventProjectSources = Outputs['agent']['projectSources'];
+export type EventAgent = Outputs['automation']['get'];
+export type EventAgentSummary = Outputs['automation']['list']['items'][number];
+export type EventDraftValidation = Outputs['automation']['validateDraft'];
+export type EventProjectSources = Outputs['automation']['projectSources'];
 export type Agent = Outputs['periodicTask']['get'];
 export type AgentListItem = Outputs['periodicTask']['list'][number];
 export type AgentRun = Outputs['periodicTask']['listExecutions'][number];

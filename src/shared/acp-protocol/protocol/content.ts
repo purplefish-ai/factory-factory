@@ -172,34 +172,3 @@ export interface ToolDefinition {
   description?: string;
   input_schema?: Record<string, unknown>;
 }
-
-/**
- * Plugin information from system init message.
- */
-export interface PluginInfo {
-  name: string;
-  path: string;
-}
-
-/**
- * Session initialization data from system init message.
- * Stores information about the session's available tools, model, etc.
- */
-export interface SessionInitData {
-  tools: ToolDefinition[];
-  model: string | null;
-  cwd: string | null;
-  apiKeySource: string | null;
-  slashCommands: string[];
-  plugins: PluginInfo[];
-}
-
-/**
- * Information about an active hook.
- */
-export interface ActiveHookInfo {
-  hookId: string;
-  hookName: string;
-  hookEvent: string;
-  startedAt: string;
-}

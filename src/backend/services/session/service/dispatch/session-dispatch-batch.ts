@@ -1,7 +1,8 @@
 import { createLogger } from '@/backend/services/logger.service';
 import type { SessionCallerGuard } from '@/backend/services/session/service/bridges';
 import { PermanentAttachmentError } from '@/backend/services/session/service/chat/chat-message-handlers/attachment-processing';
-import type { NotificationDispatchClaim } from '@/backend/services/session/service/lifecycle/session-notification-delivery.service';
+import { createPRDeliveryBlockedError } from '@/backend/services/session/service/delivery/pr-delivery-failure';
+import type { NotificationDispatchClaim } from '@/backend/services/session/service/delivery/session-notification-delivery.service';
 import { sessionDomainService } from '@/backend/services/session/service/session-domain.service';
 import type { AgentContentItem, QueuedMessage } from '@/shared/acp-protocol';
 import type {
@@ -141,7 +142,7 @@ export async function dispatchCollectedBatch(input: {
       await releasePreparedBackgrounds(
         messages,
         input.backgroundDelivery,
-        new Error('Turn in progress: human message queued during preparation')
+        createPRDeliveryBlockedError('preempted')
       );
       return 'retry';
     }

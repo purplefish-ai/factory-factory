@@ -30,16 +30,13 @@ export interface TranscriptDisplayProps {
   startingLabel?: string;
   /** Set of message IDs that are still queued (not yet dispatched to agent) */
   queuedMessageIds?: Set<string>;
+  pendingSteerMessageId?: string;
   /** Callback to remove/cancel a queued message */
   onRemoveQueuedMessage?: (id: string) => void;
   /** Send a queued human message into the active turn. */
   onSteerQueuedMessage?: (id: string) => void;
   /** Whether context compaction is in progress */
   isCompacting?: boolean;
-  /** Get the SDK-assigned UUID for a user message by its stable message ID */
-  getUuidForMessageId?: (messageId: string) => string | undefined;
-  /** Callback when user initiates rewind to a message */
-  onRewindToMessage?: (uuid: string) => void;
   resolveWorkspaceFileLink?: (href: string) => string | null;
   onWorkspaceFileLink?: (path: string) => void;
   /** Init banner for showing workspace initialization status */

@@ -232,9 +232,7 @@ function SourceControls({ editor, id }: { editor: Editor; id: string }) {
           disabled={editor.busy === 'save'}
           onClick={() => void editor.attempt('sources', connectionId ? { connectionId } : {})}
         >
-          {editor.sourceError && !editor.sources
-            ? 'Retry project sources'
-            : 'Refresh project sources'}
+          {editor.sourceError && !editor.sources ? 'Retry' : 'Refresh project sources'}
         </Button>
         {editor.sources?.slack.nextCursor && (
           <Button

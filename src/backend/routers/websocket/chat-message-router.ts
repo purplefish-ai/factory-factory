@@ -25,10 +25,7 @@ export interface ChatMessageRouterServices {
   startup: Parameters<SessionCommandFactories['createStartHandler']>[0]['startupService'];
   dispatch: Pick<
     SessionDispatchService,
-    | 'tryDispatchNextMessage'
-    | 'setManualDispatchResume'
-    | 'resetDispatchState'
-    | 'steerQueuedMessage'
+    'tryDispatchNextMessage' | 'setManualDispatchResume' | 'steerQueuedMessage'
   >;
   load: Pick<SessionLoadService, 'prepareLoad' | 'captureReplay' | 'completeLoad'>;
   eventBus: Pick<SessionEventBus, 'publishToSession'>;
@@ -89,7 +86,6 @@ export function createChatCommandRegistry(
     stop: createStopHandler({
       lifecycle: services.execution.lifecycle,
       clearPendingRequest: (sessionId) => services.execution.clearPendingRequest(sessionId),
-      resetDispatchState: (sessionId) => services.dispatch.resetDispatchState(sessionId),
       tryDispatchNextMessage: dispatch,
     }),
     load_session: ({ sessionId }, message) =>
@@ -126,7 +122,9 @@ export function createChatMessageRouter(services: ChatMessageRouterServices) {
             {
               type: 'error',
               error: { kind: 'no_session' },
-              ...((message.type === 'set_model' || message.type === 'set_config_option') &&
+              ...((message.type === 'set_model' ||
+                message.type === 'set_config_option' ||
+                message.type === 'steer_queued_message') &&
               message.requestId !== undefined
                 ? { requestId: message.requestId }
                 : {}),

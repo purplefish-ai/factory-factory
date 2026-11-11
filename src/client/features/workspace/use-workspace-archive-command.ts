@@ -19,6 +19,9 @@ export function useWorkspaceArchiveCommand() {
   const single = trpc.workspace.archive.useMutation({ meta: { errorToast: false } });
   const bulk = trpc.workspace.bulkArchive.useMutation({ meta: { errorToast: false } });
 
+  // Not the mutations' isPending: an observer tracks only its latest call, while
+  // several archives can run at once, and an archive stays in progress from the
+  // list cancel before the request until the caches are repaired after it.
   const [active, setActive] = useState({ single: 0, bulk: 0 });
 
   const executeArchive = async (
@@ -50,6 +53,11 @@ export function useWorkspaceArchiveCommand() {
         : []),
       ...affectedIds.map((id) =>
         Promise.resolve().then(() => utils.workspace.get.invalidate({ id }))
+      ),
+      // The Setup logs tab stops polling once setup settles, and archive
+      // releases the log, so refresh it to show the archived state.
+      ...affectedIds.map((id) =>
+        Promise.resolve().then(() => utils.workspace.getInitStatus.invalidate({ id }))
       ),
     ]);
     return outcomes;

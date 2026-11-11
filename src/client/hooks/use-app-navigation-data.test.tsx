@@ -1,4 +1,4 @@
-import { act, createElement } from 'react';
+import { act, createElement, memo, useState } from 'react';
 import { flushSync } from 'react-dom';
 import { createRoot } from 'react-dom/client';
 import { Link, MemoryRouter, Route, Routes } from 'react-router';
@@ -30,6 +30,26 @@ const mocks = vi.hoisted(() => ({
     | Array<{ id: string; boardCounts: { working: number; waiting: number } }>
     | undefined,
   boardCountsError: null as Error | null,
+  attention: { needsAttention: () => false, clearAttention: vi.fn() },
+  // React Query keeps one data reference until the data changes.
+  projects: [
+    {
+      id: 'alpha-id',
+      slug: 'alpha',
+      name: 'Alpha',
+      issueProvider: 'GITHUB',
+      githubOwner: 'o',
+      githubRepo: 'alpha',
+    },
+    {
+      id: 'new-id',
+      slug: 'new',
+      name: 'New',
+      issueProvider: 'GITHUB',
+      githubOwner: 'o',
+      githubRepo: 'new',
+    },
+  ],
 }));
 const mutation = { mutate: mocks.mutate };
 vi.mock('@/client/hooks/use-project-workspace-query', () => {
@@ -51,7 +71,7 @@ vi.mock('@/client/lib/trpc', () => ({
         useQuery: () => ({ data: undefined, isSuccess: false, isFetching: false }),
       },
     },
-    agent: {
+    automation: {
       navigationSummary: {
         useQuery: () => ({ data: undefined, isSuccess: false, isFetching: false }),
       },
@@ -67,26 +87,7 @@ vi.mock('@/client/lib/trpc', () => ({
           return {
             refetch: input.includeBoardCounts ? mocks.refetchBoardCounts : mocks.refetchProjectList,
             error: input.includeBoardCounts ? mocks.boardCountsError : null,
-            data: input.includeBoardCounts
-              ? mocks.boardCountsData
-              : [
-                  {
-                    id: 'alpha-id',
-                    slug: 'alpha',
-                    name: 'Alpha',
-                    issueProvider: 'GITHUB',
-                    githubOwner: 'o',
-                    githubRepo: 'alpha',
-                  },
-                  {
-                    id: 'new-id',
-                    slug: 'new',
-                    name: 'New',
-                    issueProvider: 'GITHUB',
-                    githubOwner: 'o',
-                    githubRepo: 'new',
-                  },
-                ],
+            data: input.includeBoardCounts ? mocks.boardCountsData : mocks.projects,
           };
         },
       },
@@ -100,10 +101,16 @@ vi.mock('@/client/lib/trpc', () => ({
 }));
 vi.mock('@/client/hooks/use-project-snapshot-sync', () => ({ useProjectSnapshotSync: vi.fn() }));
 vi.mock('@/client/hooks/use-workspace-attention', () => ({
-  useWorkspaceAttention: () => ({ needsAttention: () => false, clearAttention: vi.fn() }),
+  // The real hook keeps both callbacks until the attention set changes.
+  useWorkspaceAttention: () => mocks.attention,
 }));
 
-import { getProjectSlugFromPath, useAppNavigationData } from './use-app-navigation-data';
+import {
+  AppNavigationDataProvider,
+  getProjectSlugFromPath,
+  useAppNavigationData,
+  useAppNavigationDataContext,
+} from './use-app-navigation-data';
 
 function NavigationHarness({
   selected,
@@ -301,7 +308,7 @@ describe('project route selection', () => {
       expect(selected.reviewCount).toBe(1);
       expect(mocks.reviewQuery).toHaveBeenLastCalledWith(
         { projectId: 'new-id' },
-        expect.objectContaining({ enabled: true, staleTime: 30_000 })
+        expect.objectContaining({ enabled: true, staleTime: 120_000, refetchInterval: 120_000 })
       );
       expect(selected.selectedProjectSlug).toBe('new');
       expect(selected.selectedProjectId).toBe('new-id');
@@ -459,6 +466,47 @@ it('loads menu counts on demand and hides cached counts after a failed refresh',
     expect(
       selected.projects?.find((project) => project.id === 'alpha-id')?.boardCounts
     ).toBeUndefined();
+  } finally {
+    await act(() => root.unmount());
+    localStorage.clear();
+  }
+});
+
+let contextRenders = 0;
+let rerenderHost: () => void = () => undefined;
+const ContextConsumer = memo(function ContextConsumer() {
+  contextRenders += 1;
+  useAppNavigationDataContext();
+  return null;
+});
+
+function NavigationHost() {
+  const [, setRenderCount] = useState(0);
+  rerenderHost = () => setRenderCount((count) => count + 1);
+  const navigation = useAppNavigationData();
+  return (
+    <AppNavigationDataProvider value={navigation}>
+      <ContextConsumer />
+    </AppNavigationDataProvider>
+  );
+}
+
+it('keeps the context value when the layout re-renders without new navigation data', async () => {
+  localStorage.setItem(SELECTED_PROJECT_KEY, 'alpha');
+  window.history.replaceState({}, '', '/');
+  const root = createRoot(document.createElement('div'));
+  try {
+    await act(() =>
+      root.render(
+        <MemoryRouter initialEntries={['/']}>
+          <NavigationHost />
+        </MemoryRouter>
+      )
+    );
+    const settled = contextRenders;
+    await act(() => rerenderHost());
+    await act(() => rerenderHost());
+    expect(contextRenders - settled).toBe(0);
   } finally {
     await act(() => root.unmount());
     localStorage.clear();

@@ -7,6 +7,7 @@ import type {
 } from '@prisma-gen/client';
 
 export interface UpdateUserSettingsInput {
+  turnLimitMinutes?: number | null;
   preferredIde?: string;
   customIdeCommand?: string | null;
   playSoundOnComplete?: boolean;
@@ -21,6 +22,7 @@ export interface UpdateUserSettingsInput {
   defaultClaudeReasoningEffort?: string | null;
   defaultCodexReasoningEffort?: string | null;
   defaultWorkspacePermissions?: SessionPermissionPreset;
+  automationPermissions?: SessionPermissionPreset;
   reviewerSessionProvider?: SessionProvider;
   reviewerClaudeModel?: string | null;
   reviewerCodexModel?: string | null;

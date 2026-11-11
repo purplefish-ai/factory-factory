@@ -2,6 +2,8 @@ import { useLayoutEffect, useRef, useState } from 'react';
 import { trpc } from '@/client/lib/trpc';
 import { Input } from '@/components/ui/input';
 import { Popover, PopoverAnchor, PopoverContent } from '@/components/ui/popover';
+import { Spinner } from '@/components/ui/spinner';
+import { cn } from '@/lib/utils';
 
 /** Edits a chat name beside the tabs, preserving their selection semantics. */
 export function SessionNameEditor({
@@ -16,6 +18,7 @@ export function SessionNameEditor({
   onDone: () => void;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
+  // A save that settles after the editor closes must not close a newer editor.
   const mounted = useRef(false);
   useLayoutEffect(() => {
     mounted.current = true;
@@ -27,16 +30,17 @@ export function SessionNameEditor({
   }, []);
   const [value, setValue] = useState(name);
   const [error, setError] = useState(false);
-  const [saving, setSaving] = useState(false);
+  // Enter and the blur it can cause both call save before React re-renders
+  // with the mutation pending, so a ref blocks the second call.
   const inFlight = useRef(false);
   const cancelled = useRef(false);
   const utils = trpc.useUtils();
-  const update = trpc.session.updateSession.useMutation({ meta: { errorToast: false } });
-  const runIfMounted = (action: () => void) => {
-    if (mounted.current) {
-      action();
-    }
-  };
+  const update = trpc.session.updateSession.useMutation({
+    meta: { errorToast: false },
+    // Stay pending until the tabs show the new name.
+    onSuccess: () => utils.session.listSessions.invalidate({ workspaceId }),
+  });
+  const saving = update.isPending;
   const save = async () => {
     if (inFlight.current || cancelled.current) {
       return;
@@ -47,17 +51,16 @@ export function SessionNameEditor({
       return;
     }
     inFlight.current = true;
-    setSaving(true);
     setError(false);
     try {
       await update.mutateAsync({ id: sessionId, name: trimmed });
-      await utils.session.listSessions.invalidate({ workspaceId });
-      runIfMounted(onDone);
+      if (mounted.current) {
+        onDone();
+      }
     } catch {
-      runIfMounted(() => setError(true));
+      setError(true);
     } finally {
       inFlight.current = false;
-      runIfMounted(() => setSaving(false));
     }
   };
   return (
@@ -88,8 +91,14 @@ export function SessionNameEditor({
                 onDone();
               }
             }}
-            className="h-7 w-40 text-sm"
+            className={cn('h-7 w-40 text-sm', saving && 'pr-7')}
           />
+          {saving && (
+            <Spinner
+              aria-hidden="true"
+              className="pointer-events-none absolute top-1/2 right-3 -translate-y-1/2 text-muted-foreground"
+            />
+          )}
         </div>
       </PopoverAnchor>
       <PopoverContent

@@ -1,11 +1,11 @@
 import { configService } from '@/backend/services/config.service';
 import { serverInstanceService } from '@/backend/services/server-instance.service';
 import { getChildWorkspaceMcpServerConfig } from '@/backend/services/session/service/acp/child-workspace-mcp-server';
+import { getWorkflowPermissionPreset } from '@/backend/services/session/service/config/session-workflow-permissions';
+import { sessionRepository } from '@/backend/services/session/service/data/session.repository';
 import { userSettingsService } from '@/backend/services/settings';
 import { SessionContextService } from './session-context.service';
 import type { SessionAcpEnvironmentPort } from './session-lifecycle.types';
-import { getWorkflowPermissionPreset } from './session-workflow-permissions';
-import { sessionRepository } from './session.repository';
 
 function isWildcardHost(host: string): boolean {
   if (host === '0.0.0.0') {
@@ -18,9 +18,7 @@ function isWildcardHost(host: string): boolean {
   return URL.canParse(`http://${urlHost}`) && new URL(`http://${urlHost}`).hostname === '[::]';
 }
 
-// Scheduled Codex tasks use YOLO so approval prompts cannot stall headless runs;
-// other scheduled
-// providers retain workspace permissions (see getWorkflowPermissionPreset).
+// Scheduled and event automations use their explicit automation permission setting.
 // Adversarial review is also non-interactive but
 // is read-only by contract (see docs/design/adversarial-review.md) — it falls
 // through to `defaultWorkspacePermissions`. Lifecycle startup independently

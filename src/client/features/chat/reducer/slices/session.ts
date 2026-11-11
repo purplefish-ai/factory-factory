@@ -59,7 +59,6 @@ function applyRuntime(state: ChatState, runtime: ChatState['sessionRuntime']): C
     ...next,
     toolProgress: new Map(),
     isCompacting: false,
-    activeHooks: new Map(),
   };
 }
 
@@ -71,8 +70,6 @@ export function reduceSessionSlice(state: ChatState, action: ChatAction): ChatSt
       return applyRuntime(state, action.payload.sessionRuntime);
     case 'SESSION_RUNTIME_UPDATED':
       return applyRuntime(state, action.payload.sessionRuntime);
-    case 'WS_SESSIONS':
-      return { ...state, availableSessions: action.payload.sessions };
     case 'SESSION_SWITCH_START':
       return {
         ...state,
@@ -104,6 +101,19 @@ export function reduceSessionSlice(state: ChatState, action: ChatAction): ChatSt
             updatedAt: new Date().toISOString(),
           })
         : state;
+    case 'SESSION_HYDRATED':
+      return state.hydratedSessionId === action.payload.sessionId &&
+        state.controlsHydratedSessionId === action.payload.sessionId
+        ? state
+        : {
+            ...state,
+            hydratedSessionId: action.payload.sessionId,
+            controlsHydratedSessionId: action.payload.sessionId,
+          };
+    case 'CONNECTION_CHANGED':
+      return state.controlsHydratedSessionId === null
+        ? state
+        : { ...state, controlsHydratedSessionId: null };
     case 'STOP_REQUESTED':
       return withRuntime(state, {
         ...state.sessionRuntime,

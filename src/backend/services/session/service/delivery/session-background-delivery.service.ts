@@ -1,0 +1,333 @@
+import type { SessionCallerGuard } from '@/backend/services/session/service/bridges';
+import {
+  classifyPRDeliveryFailure,
+  type PRDeliveryFailure,
+} from '@/backend/services/session/service/delivery/pr-delivery-failure';
+import { sessionDomainService } from '@/backend/services/session/service/session-domain.service';
+import {
+  SessionResumeFences,
+  sessionResumeFences,
+} from '@/backend/services/session/service/session-resume-fence';
+import type { QueuedMessage } from '@/shared/acp-protocol';
+import {
+  type ClaimedPRDelivery,
+  PR_EVENT_MESSAGE_ID_PREFIX,
+  PR_UPDATE_QUEUED_TEXT,
+  type PRDeliveryRequest,
+} from '@/shared/pr-monitoring';
+import { prDeliveryRequestSchema } from '@/shared/schemas/pr-event.schema';
+export interface PRBackgroundDeliveryPort {
+  prepare(input: {
+    sessionId: string;
+    request: PRDeliveryRequest;
+  }): Promise<
+    | { status: 'ready'; delivery: ClaimedPRDelivery }
+    | { status: 'blocked'; reason: string }
+    | { status: 'discard' }
+  >;
+  validate(delivery: ClaimedPRDelivery): Promise<boolean>;
+  complete(delivery: ClaimedPRDelivery): Promise<void>;
+  fail(delivery: ClaimedPRDelivery, failure: PRDeliveryFailure): Promise<{ paused: boolean }>;
+  recover(sessionId: string): Promise<void>;
+  pause(sessionId: string, reason: 'USER_STOPPED' | 'SESSION_FAILED'): Promise<void>;
+  resume(sessionId: string, isCurrent?: () => boolean): Promise<void>;
+}
+export class SessionBackgroundDeliveryService {
+  private port: PRBackgroundDeliveryPort | null = null;
+  private tokens = new Map<
+    string,
+    { sessionId: string; messageId: string; request: PRDeliveryRequest; message: QueuedMessage }
+  >();
+  private deliveries = new Map<string, { delivery: ClaimedPRDelivery; message: QueuedMessage }>();
+  constructor(private readonly resumeFences = new SessionResumeFences()) {}
+  configure(port: PRBackgroundDeliveryPort) {
+    this.port = port;
+  }
+  enqueue(sessionId: string, rawRequest: PRDeliveryRequest): { queued: boolean; reason?: string } {
+    const request = prDeliveryRequestSchema.parse(rawRequest);
+    const key = `${sessionId}:${request.workspaceId}:${request.prId ?? 'control'}:${request.bindingRevision}:${request.deliveryMode ?? 'MAIN'}`;
+    const existing = this.tokens.get(key);
+    if (existing && sessionDomainService.hasQueuedMessage(sessionId, existing.messageId)) {
+      return { queued: true };
+    }
+    this.tokens.delete(key);
+    const messageId = `${PR_EVENT_MESSAGE_ID_PREFIX}queued-${key}`;
+    const message: QueuedMessage = {
+      id: messageId,
+      text: PR_UPDATE_QUEUED_TEXT,
+      timestamp: new Date().toISOString(),
+      source: { type: 'pr_event', request },
+      settings: {
+        selectedModel: null,
+        reasoningEffort: null,
+        thinkingEnabled: false,
+        planModeEnabled: false,
+      },
+    };
+    const result = sessionDomainService.enqueue(sessionId, message);
+    if ('error' in result) {
+      return { queued: false, reason: result.error };
+    }
+    this.tokens.set(key, { sessionId, messageId, request, message });
+    return { queued: true };
+  }
+  invalidate(workspaceId: string, bindingRevision: number) {
+    for (const [key, token] of this.tokens) {
+      if (
+        token.request.workspaceId === workspaceId &&
+        token.request.bindingRevision === bindingRevision
+      ) {
+        const removed = sessionDomainService.removeQueuedMessage(token.sessionId, token.messageId, {
+          expectedMessage: token.message,
+        });
+        const terminal = sessionDomainService
+          .getTranscriptSnapshot(token.sessionId)
+          .find((entry) => entry.id === token.messageId)?.message?.prDeliveryState;
+        if (
+          !removed &&
+          this.deliveries.get(token.messageId)?.message === token.message &&
+          !terminal
+        ) {
+          sessionDomainService.failMessage(
+            token.sessionId,
+            token.message,
+            'PR delivery cancelled',
+            'cancelled'
+          );
+        }
+        if (this.tokens.get(key) === token) {
+          this.tokens.delete(key);
+        }
+      }
+    }
+  }
+  async prepare(sessionId: string, message: QueuedMessage, guard?: SessionCallerGuard) {
+    if (guard) {
+      await guard.check();
+      guard.assertCurrent?.();
+    }
+    if (!(message.source && this.port)) {
+      this.forgetToken(message.id);
+      return { status: 'discard' as const };
+    }
+    const token = [...this.tokens.values()].find((entry) => entry.messageId === message.id);
+    const port = this.port;
+    const result = await port.prepare({ sessionId, request: message.source.request });
+    try {
+      if (guard) {
+        await guard.check();
+        guard.assertCurrent?.();
+      }
+      if (result.status === 'discard' && token && [...this.tokens.values()].includes(token)) {
+        this.forgetToken(message.id);
+      }
+      if (result.status === 'ready') {
+        const currentToken = [...this.tokens.values()].find(
+          (entry) => entry.messageId === message.id
+        );
+        if (!token || currentToken !== token || token.message !== message) {
+          // Receipt recovery checks active deliveries before settling. A direct
+          // stale failure could settle a replacement that reused the frozen ID.
+          await port.recover(sessionId);
+          return { status: 'discard' as const };
+        }
+        message.text = result.delivery.text;
+        this.deliveries.set(message.id, { delivery: result.delivery, message });
+        this.coalesceMainTokens(sessionId, message, guard);
+        return {
+          ...result,
+          releaseOnRejection: async (error: unknown) => {
+            try {
+              await port.fail(result.delivery, classifyPRDeliveryFailure(error));
+            } finally {
+              this.forgetCapturedDelivery(message, result.delivery);
+            }
+          },
+        };
+      }
+      return result;
+    } catch (error) {
+      if (
+        result.status === 'ready' &&
+        token?.message === message &&
+        [...this.tokens.values()].includes(token)
+      ) {
+        this.forgetCapturedDelivery(message, result.delivery);
+        await port.fail(result.delivery, classifyPRDeliveryFailure(error));
+      }
+      throw error;
+    }
+  }
+  private forgetCapturedDelivery(message: QueuedMessage, delivery: ClaimedPRDelivery) {
+    const owned = this.deliveries.get(message.id);
+    if (owned?.delivery === delivery && owned.message === message) {
+      this.deliveries.delete(message.id);
+    }
+  }
+  private coalesceMainTokens(
+    sessionId: string,
+    message: QueuedMessage,
+    guard?: SessionCallerGuard
+  ) {
+    const request = message.source?.request;
+    if (!request || (request.deliveryMode ?? 'MAIN') !== 'MAIN') {
+      return;
+    }
+    // Durable facts belong to the ready claim or a later observation; queued
+    // placeholders have no independent receipt or cancellation to preserve.
+    for (const [key, token] of [...this.tokens]) {
+      if (
+        token.messageId === message.id ||
+        token.sessionId !== sessionId ||
+        token.request.workspaceId !== request.workspaceId ||
+        token.request.bindingRevision !== request.bindingRevision ||
+        (token.request.deliveryMode ?? 'MAIN') !== 'MAIN' ||
+        this.deliveries.has(token.messageId)
+      ) {
+        continue;
+      }
+      guard?.assertCurrent?.();
+      const removed = sessionDomainService.removeQueuedMessage(sessionId, token.messageId, {
+        expectedMessage: token.message,
+        recordCancellation: false,
+      });
+      // Removal publishes synchronously, so retain any replacement token
+      // enqueued by a snapshot listener before the removal call returns.
+      if (removed && this.tokens.get(key) === token) {
+        this.tokens.delete(key);
+      }
+    }
+  }
+  /**
+   * Durable deletion drops the session's PR-update tokens. Its queued
+   * placeholders are cleared with the session store, and a delivery already
+   * prepared for dispatch stays with its complete/fail owner.
+   */
+  forgetSession(sessionId: string) {
+    for (const [key, token] of this.tokens) {
+      if (token.sessionId === sessionId) {
+        this.tokens.delete(key);
+      }
+    }
+  }
+  private forgetToken(messageId: string) {
+    for (const [key, token] of this.tokens) {
+      if (token.messageId === messageId) {
+        this.tokens.delete(key);
+      }
+    }
+  }
+  isDeliveryActive(deliveryId: string): boolean {
+    for (const delivery of this.deliveries.values()) {
+      if (delivery.delivery.deliveryId === deliveryId) {
+        return true;
+      }
+    }
+    return false;
+  }
+  async validate(message: QueuedMessage) {
+    const entry = this.deliveries.get(message.id);
+    return (
+      !!entry &&
+      entry.message === message &&
+      !!this.port &&
+      (await this.port.validate(entry.delivery))
+    );
+  }
+  async complete(message: QueuedMessage) {
+    const entry = this.deliveries.get(message.id);
+    if (!(entry && entry.message === message && this.port)) {
+      return;
+    }
+    try {
+      await this.port.complete(entry.delivery);
+      const token = [...this.tokens.values()].find((item) => item.messageId === message.id);
+      if (this.deliveries.get(message.id) !== entry || (token && token.message !== message)) {
+        return;
+      }
+      const terminal = sessionDomainService
+        .getTranscriptSnapshot(entry.delivery.sessionId)
+        .find((item) => item.id === message.id && item.message?.prDeliveryState === 'cancelled');
+      if (
+        terminal &&
+        !sessionDomainService.hasQueuedMessage(entry.delivery.sessionId, message.id)
+      ) {
+        sessionDomainService.commitSentUserMessageAtOrder(
+          entry.delivery.sessionId,
+          message,
+          terminal.order
+        );
+      }
+    } finally {
+      if (this.deliveries.get(message.id) === entry) {
+        this.deliveries.delete(message.id);
+      }
+      const token = [...this.tokens.values()].find((item) => item.messageId === message.id);
+      if (
+        token?.message === message &&
+        !sessionDomainService.hasQueuedMessage(entry.delivery.sessionId, message.id)
+      ) {
+        this.forgetToken(message.id);
+      }
+    }
+  }
+  async fail(
+    message: QueuedMessage,
+    error: unknown,
+    deliveryState: 'failed' | 'cancelled' = 'failed'
+  ) {
+    const entry = this.deliveries.get(message.id);
+    const delivery = entry?.delivery;
+    const token = [...this.tokens.values()].find((entry) => entry.messageId === message.id);
+    if (entry?.message === message && delivery && this.port) {
+      try {
+        const outcome = await this.port.fail(delivery, classifyPRDeliveryFailure(error));
+        const currentToken = [...this.tokens.values()].find(
+          (entry) => entry.messageId === message.id
+        );
+        if (
+          (outcome.paused || deliveryState === 'cancelled') &&
+          token !== undefined &&
+          token.message === message &&
+          currentToken === token &&
+          this.deliveries.get(message.id) === entry
+        ) {
+          sessionDomainService.failMessage(
+            delivery.sessionId,
+            message,
+            error instanceof Error ? error.message : String(error),
+            deliveryState
+          );
+          this.forgetToken(message.id);
+        }
+      } finally {
+        if (this.deliveries.get(message.id) === entry) {
+          this.deliveries.delete(message.id);
+        }
+      }
+    }
+  }
+  recover(sessionId: string) {
+    return this.port?.recover(sessionId) ?? Promise.resolve();
+  }
+  captureResumeGuard(sessionId: string): () => boolean {
+    return this.resumeFences.capture(sessionId);
+  }
+  async userStop(sessionId: string) {
+    this.resumeFences.advance(sessionId);
+    await this.port?.pause(sessionId, 'USER_STOPPED');
+  }
+  async runtimeFailure(sessionId: string) {
+    this.resumeFences.advance(sessionId);
+    await this.port?.pause(sessionId, 'SESSION_FAILED');
+  }
+  async userResume(sessionId: string, isCurrent = this.captureResumeGuard(sessionId)) {
+    if (!isCurrent()) {
+      return;
+    }
+    await this.port?.resume(sessionId, isCurrent);
+  }
+}
+export const sessionBackgroundDeliveryService = new SessionBackgroundDeliveryService(
+  sessionResumeFences
+);

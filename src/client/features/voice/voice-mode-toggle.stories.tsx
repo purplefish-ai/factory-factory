@@ -82,6 +82,10 @@ export const Connecting: Story = {
     const canvas = within(canvasElement);
     await userEvent.click(await canvas.findByRole('button', { name: 'Voice off' }));
     await expect(await canvas.findByRole('button', { name: 'Connecting…' })).toBeEnabled();
+    // The status badge pulses the shared neutral dot while connecting.
+    const dot = canvasElement.querySelector('output [data-status-tone]');
+    await expect(dot).toHaveAttribute('data-status-tone', 'neutral');
+    await expect(dot).toHaveClass('animate-pulse');
   },
 };
 export const ConnectingDark: Story = { ...Connecting, globals: { theme: 'dark' } };

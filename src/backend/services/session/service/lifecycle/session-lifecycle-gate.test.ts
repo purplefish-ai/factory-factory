@@ -243,3 +243,45 @@ describe('SessionLifecycleGate', () => {
     expect(() => gate.assertStartupAllowed(lease)).toThrow(SessionStartupCancelledError);
   });
 });
+
+describe('SessionLifecycleGate stop fence', () => {
+  it('does not count an unestablished startup lease as a stop', async () => {
+    const gate = new SessionLifecycleGate({ isRuntimeStopInProgress: () => false });
+    const captured = gate.getGeneration('session-1');
+
+    await gate.runStartup('session-1', () => Promise.resolve(false));
+    await expect(
+      gate.runStartup('session-1', () => Promise.reject(new Error('spawn failed')))
+    ).rejects.toThrow('spawn failed');
+
+    expect(gate.isGenerationCurrent('session-1', captured)).toBe(false);
+    expect(gate.hasStopSince('session-1', captured)).toBe(false);
+  });
+
+  it('fences generations captured before or during a stop or shutdown', () => {
+    const gate = new SessionLifecycleGate({ isRuntimeStopInProgress: () => false });
+    const beforeStop = gate.getGeneration('session-1');
+    const stop = gate.reserveStop('session-1');
+    const duringStop = gate.getGeneration('session-1');
+    stop?.release();
+    const afterStop = gate.getGeneration('session-1');
+
+    expect(gate.hasStopSince('session-1', beforeStop)).toBe(true);
+    expect(gate.hasStopSince('session-1', duringStop)).toBe(true);
+    expect(gate.hasStopSince('session-1', afterStop)).toBe(false);
+
+    gate.reserveShutdown(['session-1']);
+    gate.releaseShutdown('session-1');
+    expect(gate.hasStopSince('session-1', afterStop)).toBe(true);
+    expect(gate.hasStopSince('other-session', beforeStop)).toBe(false);
+  });
+
+  it('keeps fencing a pre-stop generation after the stop is released', () => {
+    const gate = new SessionLifecycleGate({ isRuntimeStopInProgress: () => false });
+    const captured = gate.getGeneration('session-1');
+    gate.reserveStop('session-1')?.release();
+
+    expect(gate.isSessionStopping('session-1')).toBe(false);
+    expect(gate.hasStopSince('session-1', captured)).toBe(true);
+  });
+});

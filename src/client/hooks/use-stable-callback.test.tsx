@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
-import { act, createElement } from 'react';
+import { act, createElement, type RefObject, useLayoutEffect } from 'react';
 import { createRoot } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { useStableCallback } from './use-stable-callback';
+import { useLatestRef, useStableCallback } from './use-stable-callback';
 
 const seen: Array<(value: number) => number> = [];
 
@@ -29,6 +29,31 @@ describe('useStableCallback', () => {
     expect(seen).toHaveLength(2);
     expect(seen[1]).toBe(seen[0]);
     expect(seen[0]?.(1)).toBe(11);
+    act(() => root.unmount());
+  });
+});
+
+const childReads: number[] = [];
+
+function Reader({ latest }: { latest: RefObject<number> }) {
+  useLayoutEffect(() => {
+    childReads.push(latest.current);
+  });
+  return null;
+}
+
+function LatestHarness({ value }: { value: number }) {
+  const latest = useLatestRef(value);
+  return createElement(Reader, { latest });
+}
+
+describe('useLatestRef', () => {
+  it("holds the committed value before a child's layout effect runs", () => {
+    childReads.length = 0;
+    const root = createRoot(document.createElement('div'));
+    act(() => root.render(createElement(LatestHarness, { value: 1 })));
+    act(() => root.render(createElement(LatestHarness, { value: 2 })));
+    expect(childReads).toEqual([1, 2]);
     act(() => root.unmount());
   });
 });

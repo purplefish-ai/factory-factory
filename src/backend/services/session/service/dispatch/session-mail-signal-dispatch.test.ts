@@ -1,16 +1,19 @@
 import { afterEach, expect, it, vi } from 'vitest';
+import type { AcpProcessHandle } from '@/backend/services/session/service/acp';
 import {
   AcpSteeringNotSentError,
   AcpSteeringTimeoutError,
 } from '@/backend/services/session/service/acp/acp-steering';
 import type { SessionCallerGuard } from '@/backend/services/session/service/bridges';
 import { sessionDataService } from '@/backend/services/session/service/data/session-data.service';
-import { SessionNotificationDeliveryService } from '@/backend/services/session/service/lifecycle/session-notification-delivery.service';
+import { SessionNotificationDeliveryService } from '@/backend/services/session/service/delivery/session-notification-delivery.service';
 import { sessionDomainService } from '@/backend/services/session/service/session-domain.service';
 import type { AgentContentItem, QueuedMessage } from '@/shared/acp-protocol';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 import { SessionDispatchService } from './session-dispatch.service';
 import { sendArmedWorkspaceMailBatch } from './session-mail-signal-dispatch';
+
+const fakeClient = unsafeCoerce<AcpProcessHandle>({});
 
 function harness(
   policy: 'allowed' | 'manual_resume' = 'allowed',
@@ -35,7 +38,7 @@ function harness(
     >()
     .mockResolvedValue({ outcome: 'injected' });
   const startup = {
-    getSessionClient: vi.fn<() => unknown>().mockReturnValue({}),
+    getSessionClient: vi.fn<() => AcpProcessHandle | undefined>().mockReturnValue(fakeClient),
     getOrCreateSessionClient: vi.fn().mockResolvedValue({}),
   };
   const runtimeManager = {
@@ -47,12 +50,8 @@ function harness(
     (_id: string, message: QueuedMessage) => message.settings
   );
   const configureQueuedMessage = vi.fn(
-    (
-      _id: string,
-      message: QueuedMessage,
-      _supportsThinking?: boolean,
-      _guard?: SessionCallerGuard
-    ) => Promise.resolve(message.settings)
+    (_id: string, message: QueuedMessage, _guard?: SessionCallerGuard) =>
+      Promise.resolve(message.settings)
   );
   const backgroundDelivery = {
     prepare: vi.fn(),
@@ -76,7 +75,7 @@ function harness(
   dispatcher.configureLifecycle({
     gate: {
       getGeneration: () => generation,
-      isGenerationCurrent: (_sessionId, expected) => expected === generation,
+      hasStopSince: (_sessionId, captured) => captured !== generation,
       isSessionStopping: () => false,
     },
     startup,
@@ -460,14 +459,12 @@ it.each(['arming', 'configuration'] as const)(
         return Promise.resolve(true);
       });
     } else {
-      h.configureQueuedMessage.mockImplementationOnce(
-        async (_id, message, _supports, capturedGuard) => {
-          await Promise.resolve();
-          allowed = false;
-          await capturedGuard?.check();
-          return message.settings;
-        }
-      );
+      h.configureQueuedMessage.mockImplementationOnce(async (_id, message, capturedGuard) => {
+        await Promise.resolve();
+        allowed = false;
+        await capturedGuard?.check();
+        return message.settings;
+      });
     }
     const fail = vi.spyOn(sessionDomainService, 'failMessage');
     await h.dispatcher.tryDispatchNextMessage('session', { guard });

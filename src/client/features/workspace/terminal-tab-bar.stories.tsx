@@ -1,6 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react';
 import { useState } from 'react';
-import { expect, userEvent, within } from 'storybook/test';
+import { expect, userEvent, waitFor, within } from 'storybook/test';
+import { StatusDot } from '@/client/components/status-indicators';
 import { TabButton } from '@/components/ui/tab-button';
 import { TerminalControls } from './right-panel';
 import { TerminalDisconnectBanner } from './terminal-disconnect-banner';
@@ -56,18 +57,25 @@ function PanelHeader({ empty = false }: { empty?: boolean }) {
     }
   };
   return (
-    <div className="flex w-[600px] items-center gap-0.5 bg-shell p-1">
-      <TabButton label="Logs" icon={null} isActive={!active} onSelect={() => setActive(false)} />
+    <div className="flex w-full max-w-[600px] items-center gap-0.5 bg-shell p-1">
       <TerminalControls
         activeBottomTab={active ? 'terminal' : 'setup-logs'}
-        terminalTabState={{
+        terminal={{
           tabs,
           activeTabId,
-          onSelectTab: setActiveTabId,
-          onCloseTab: (id) => setTabs(tabs.filter((tab) => tab.id !== id)),
-          onNewTab: () => undefined,
+          selectTab: setActiveTabId,
+          closeTab: (id) => setTabs(tabs.filter((tab) => tab.id !== id)),
+          newTab: () => undefined,
         }}
         onTabChange={openTerminal}
+        leadingTabs={
+          <TabButton
+            label="Logs"
+            icon={<StatusDot tone="success" size="xs" />}
+            isActive={!active}
+            onSelect={() => setActive(false)}
+          />
+        }
       />
     </div>
   );
@@ -78,16 +86,18 @@ export const PanelSelection: Story = {
   render: () => <PanelHeader />,
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    const terminal = canvas.getByRole('button', { name: 'Terminal 2' });
+    const terminal = canvas.getByRole('tab', { name: 'Terminal 2' });
     const before = terminal.getBoundingClientRect();
     const font = getComputedStyle(terminal).font;
     await userEvent.click(terminal);
+    await expect(terminal).toHaveAttribute('aria-selected', 'true');
     await expect(terminal.getBoundingClientRect().height).toBe(before.height);
     await expect(terminal.getBoundingClientRect().width).toBe(before.width);
     await expect(getComputedStyle(terminal).font).toBe(font);
     await expect(getComputedStyle(terminal).fontSize).toBe('12px');
-    await userEvent.click(canvas.getByRole('button', { name: 'Logs' }));
-    await expect(canvas.getByRole('button', { name: 'Terminal 2' })).toBe(terminal);
+    await userEvent.click(canvas.getByRole('tab', { name: 'Logs' }));
+    await expect(canvas.getByRole('tab', { name: 'Terminal 2' })).toBe(terminal);
+    await expect(terminal).toHaveAttribute('aria-selected', 'false');
     await expect(terminal.getBoundingClientRect().height).toBe(before.height);
     await expect(terminal.getBoundingClientRect().width).toBe(before.width);
     await userEvent.click(terminal);
@@ -96,15 +106,56 @@ export const PanelSelection: Story = {
 
 export const PanelSelectionDark: Story = { ...PanelSelection, globals: { theme: 'dark' } };
 
+/** Logs and the terminals are one tablist: one Tab stop, arrows move, Delete closes. */
+export const KeyboardNavigation: Story = {
+  globals: { theme: 'light' },
+  render: () => <PanelHeader />,
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByRole('tablist', { name: 'Logs and terminals' })).toBeVisible();
+    const logs = canvas.getByRole('tab', { name: 'Logs' });
+    await userEvent.click(logs);
+    await userEvent.keyboard('{ArrowRight}');
+    await expect(canvas.getByRole('tab', { name: 'Terminal 1' })).toHaveFocus();
+    await userEvent.keyboard('{End}');
+    const second = canvas.getByRole('tab', { name: 'Terminal 2' });
+    await expect(second).toHaveFocus();
+    await userEvent.keyboard('{Enter}');
+    await expect(second).toHaveAttribute('aria-selected', 'true');
+    // Delete, or Backspace on macOS.
+    await userEvent.keyboard(`{${second.getAttribute('aria-keyshortcuts')}}`);
+    await expect(canvas.queryByRole('tab', { name: 'Terminal 2' })).not.toBeInTheDocument();
+    await waitFor(() => expect(canvas.getByRole('tab', { name: 'Terminal 1' })).toHaveFocus());
+    await userEvent.keyboard('{Home}');
+    await expect(logs).toHaveFocus();
+  },
+};
+
+export const Phone: Story = {
+  globals: { theme: 'light', viewport: { value: 'phone', isRotated: false } },
+  render: () => <PanelHeader />,
+  play: async ({ canvasElement }) => {
+    const tablist = within(canvasElement).getByRole('tablist', { name: 'Logs and terminals' });
+    // The header shrinks to the phone width; terminals scroll inside it.
+    await expect(tablist.getBoundingClientRect().right).toBeLessThanOrEqual(
+      canvasElement.ownerDocument.documentElement.clientWidth
+    );
+    await expect(
+      canvasElement.ownerDocument.documentElement.scrollWidth -
+        canvasElement.ownerDocument.documentElement.clientWidth
+    ).toBeLessThanOrEqual(1);
+  },
+};
+
 export const EmptyPanel: Story = {
   render: () => <PanelHeader empty />,
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    const terminal = canvas.getByRole('button', { name: 'Terminal' });
+    const terminal = canvas.getByRole('tab', { name: 'Terminal' });
     const height = terminal.getBoundingClientRect().height;
     const font = getComputedStyle(terminal).font;
     await userEvent.click(terminal);
-    const first = canvas.getByRole('button', { name: 'Terminal 1' });
+    const first = canvas.getByRole('tab', { name: 'Terminal 1' });
     await expect(first.getBoundingClientRect().height).toBe(height);
     await expect(getComputedStyle(first).font).toBe(font);
   },

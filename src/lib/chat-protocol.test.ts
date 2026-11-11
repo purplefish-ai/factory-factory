@@ -7,8 +7,19 @@ import {
   groupAdjacentToolCalls,
   isReasoningToolCall,
   isToolSequence,
-  isWebSocketMessage,
 } from '@/lib/chat-protocol';
+import { parseChatServerMessage } from '@/shared/acp-protocol/protocol/chat-server-message-schema';
+
+const accepts = (data: unknown) => parseChatServerMessage(data).success;
+const snapshotFields = {
+  queuedMessages: [],
+  sessionRuntime: {
+    phase: 'idle',
+    processState: 'alive',
+    activity: 'IDLE',
+    updatedAt: '2026-07-30T12:22:23.353Z',
+  },
+};
 
 type LifecycleAgentMessage = Extract<AgentMessage, { type: 'session_lifecycle' }>;
 
@@ -32,8 +43,8 @@ describe('sub-agent change websocket validation', () => {
       change: 'completed',
     };
 
-    expect(isWebSocketMessage(invalidation)).toBe(true);
-    expect(isWebSocketMessage({ type: 'session_delta', data: invalidation })).toBe(true);
+    expect(accepts(invalidation)).toBe(true);
+    expect(accepts({ type: 'session_delta', data: invalidation })).toBe(true);
   });
 
   it.each([
@@ -60,16 +71,17 @@ describe('sub-agent change websocket validation', () => {
       },
     ],
   ])('rejects direct and session-delta-wrapped invalidations with %s', (_label, invalidation) => {
-    expect(isWebSocketMessage(invalidation)).toBe(false);
-    expect(isWebSocketMessage({ type: 'session_delta', data: invalidation })).toBe(false);
+    expect(accepts(invalidation)).toBe(false);
+    expect(accepts({ type: 'session_delta', data: invalidation })).toBe(false);
   });
 });
 
 describe('session lifecycle websocket validation', () => {
   it('accepts the complete discriminated lifecycle payload', () => {
     expect(
-      isWebSocketMessage({
+      accepts({
         type: 'agent_message',
+        order: 0,
         data: validLifecycleAgentMessage,
       })
     ).toBe(true);
@@ -114,8 +126,9 @@ describe('session lifecycle websocket validation', () => {
     ],
   ])('rejects %s', (_label, lifecycle) => {
     expect(
-      isWebSocketMessage({
+      accepts({
         type: 'agent_message',
+        order: 0,
         data: {
           type: 'session_lifecycle',
           ...(lifecycle === undefined ? {} : { lifecycle }),
@@ -133,10 +146,13 @@ describe('session lifecycle websocket validation', () => {
       message: validLifecycleAgentMessage,
     };
 
-    expect(isWebSocketMessage({ type: 'session_snapshot', messages: [lifecycleRow] })).toBe(true);
+    expect(accepts({ type: 'session_snapshot', ...snapshotFields, messages: [lifecycleRow] })).toBe(
+      true
+    );
     expect(
-      isWebSocketMessage({
+      accepts({
         type: 'session_snapshot',
+        ...snapshotFields,
         messages: [
           {
             ...lifecycleRow,
@@ -159,7 +175,9 @@ describe('session lifecycle websocket validation', () => {
     ['number', 42],
     ['boolean', true],
   ])('rejects %s entries in authoritative session snapshots', (_label, message) => {
-    expect(isWebSocketMessage({ type: 'session_snapshot', messages: [message] })).toBe(false);
+    expect(accepts({ type: 'session_snapshot', ...snapshotFields, messages: [message] })).toBe(
+      false
+    );
   });
 });
 
@@ -541,17 +559,18 @@ describe('ACP context occupancy', () => {
 
 it('validates snapshot history removal and reset metadata', () => {
   expect(
-    isWebSocketMessage({
+    accepts({
       type: 'session_snapshot',
+      ...snapshotFields,
       messages: [],
       removedMessageIds: ['older'],
       resetTranscript: true,
     })
   ).toBe(true);
   expect(
-    isWebSocketMessage({ type: 'session_snapshot', messages: [], removedMessageIds: [42] })
+    accepts({ type: 'session_snapshot', ...snapshotFields, messages: [], removedMessageIds: [42] })
   ).toBe(false);
   expect(
-    isWebSocketMessage({ type: 'session_snapshot', messages: [], resetTranscript: 'yes' })
+    accepts({ type: 'session_snapshot', ...snapshotFields, messages: [], resetTranscript: 'yes' })
   ).toBe(false);
 });

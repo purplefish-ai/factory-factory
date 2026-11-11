@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Button } from '@/components/ui/button';
 import { Spinner } from '@/components/ui/spinner';
 import type { TranscriptHistoryControls } from './use-transcript-history';
 
@@ -32,14 +33,15 @@ export function TranscriptHistoryHeader({ history }: { history: TranscriptHistor
       ) : (
         <>
           <span>{history.error || 'Could not load earlier messages.'}</span>
-          <button
+          <Button
             type="button"
+            variant="link"
+            size="inline"
             onClick={history.loadOlder}
             disabled={history.enabled === false}
-            className="underline underline-offset-2"
           >
             Retry
-          </button>
+          </Button>
         </>
       )}
     </div>

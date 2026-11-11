@@ -4,7 +4,6 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { type ChatMessage } from '@/lib/chat-protocol';
 import { createAssistantMessage, createUserMessage } from '@/lib/claude-fixtures';
-import { STREAMING_TEXT_INTERVAL_MS } from './agent-activity/message-renderers/use-streaming-text-snapshot';
 import { TranscriptRenderingFixture } from './transcript-rendering.test-utils';
 
 let container: HTMLDivElement;
@@ -16,7 +15,12 @@ beforeEach(() => {
     writable: true,
     value: true,
   });
-  vi.useFakeTimers();
+  // Word fades are disabled for reduced motion; report full motion.
+  vi.stubGlobal('matchMedia', () => ({
+    matches: false,
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
+  }));
   container = document.createElement('div');
   document.body.appendChild(container);
   root = createRoot(container);
@@ -25,7 +29,7 @@ beforeEach(() => {
 afterEach(async () => {
   await act(() => root.unmount());
   container.remove();
-  vi.useRealTimers();
+  vi.unstubAllGlobals();
 });
 
 const prompt = createUserMessage('Explain the change', 0);
@@ -42,7 +46,7 @@ function withText(text: string): ChatMessage {
 it.each([
   ['the last message', false],
   ['followed only by queued prompts', true],
-])('throttles the streaming reply when it is %s', async (_name, withQueued) => {
+])('streams the reply when it is %s', async (_name, withQueued) => {
   const render = (text: string, running: boolean) =>
     act(() =>
       root.render(
@@ -58,16 +62,13 @@ it.each([
 
   await render('First', true);
   await render('First words', true);
-  expect(container.textContent).toContain('First');
-  expect(container.textContent).not.toContain('First words');
-
-  await act(() => {
-    vi.advanceTimersByTime(STREAMING_TEXT_INTERVAL_MS);
-  });
+  // Streaming updates render as they commit; the reply animates its words.
   expect(container.textContent).toContain('First words');
+  expect(container.querySelector('[data-sd-animate]')).not.toBeNull();
 
   await render('First words, finished.', false);
   expect(container.textContent).toContain('First words, finished.');
+  expect(container.querySelector('[data-sd-animate]')).toBeNull();
 });
 
 it('renders a reply immediately once another message follows it', async () => {

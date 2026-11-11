@@ -308,6 +308,18 @@ export const ToolUseFileChange: Story = {
   },
 };
 
+/** Agent input that does not match the tool's schema shows as raw JSON instead of crashing. */
+export const ToolUseMalformedInput: Story = {
+  args: {
+    message: createToolUseClaudeMessage('TodoWrite', { todos: 'not a list' }),
+    defaultOpen: true,
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(await canvas.findByText(/"todos": "not a list"/)).toBeVisible();
+  },
+};
+
 // =============================================================================
 // Tool Result Stories
 // =============================================================================
@@ -700,6 +712,27 @@ export const ToolSequenceGroupCommands: StoryObj<typeof ToolSequenceGroup> = {
       ])}
     />
   ),
+};
+
+/** Adapter-provided activity titles follow the same sentence casing as built-in tools. */
+export const ToolSequenceGroupSentenceCase: StoryObj<typeof ToolSequenceGroup> = {
+  render: () => (
+    <ToolSequenceGroup
+      sequence={createToolSequence([
+        { name: 'Bash', input: { command: 'pnpm test' }, result: 'Tests passed' },
+        { name: 'Bash', input: { command: 'git status' }, result: 'Clean' },
+        { name: 'Editing files', input: {} },
+        { name: 'Reviewing Button.tsx', input: {} },
+        { name: 'mcp__github__fetch_status', input: {}, result: 'ok' },
+      ])}
+    />
+  ),
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const label = 'Ran commands, editing files, reviewing Button.tsx, GitHub';
+    const trigger = canvas.getByRole('button', { name: new RegExp(label) });
+    await expect(trigger.querySelector('span[title]')).toHaveAttribute('title', label);
+  },
 };
 
 /** Single calls identify the command without showing its arguments. */

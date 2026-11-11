@@ -339,6 +339,52 @@ export function proxyAuthenticatedHttpRequest(params: {
   sessionCookieName: string;
   authCookie?: string;
   localHost?: string;
+  /** Replaces the client's `Origin`, e.g. with the upstream's own origin. */
+  upstreamOrigin?: string;
+}): void {
+  if (params.authCookie) {
+    const existingCookieHeader = params.res.getHeader('set-cookie');
+    params.res.setHeader(
+      'set-cookie',
+      mergeSetCookieValues(existingCookieHeader, params.authCookie)
+    );
+  }
+
+  forwardHttpRequest({
+    req: params.req,
+    res: params.res,
+    upstreamPort: params.upstreamPort,
+    path: params.path,
+    headers: withUpstreamOrigin(
+      buildAuthenticatedProxyHeaders(params.req.headers, params.sessionCookieName),
+      params.upstreamOrigin
+    ),
+    localHost: params.localHost,
+  });
+}
+
+function withUpstreamOrigin(
+  headers: Record<string, string | string[] | undefined>,
+  upstreamOrigin: string | undefined
+): Record<string, string | string[] | undefined> {
+  if (upstreamOrigin !== undefined) {
+    headers.origin = upstreamOrigin;
+  }
+  return headers;
+}
+
+/**
+ * Forwards a request to the loopback upstream with the given headers, setting
+ * `Host` to the upstream's own loopback name, and streams the response back.
+ * Callers decide which client headers may cross the proxy.
+ */
+export function forwardHttpRequest(params: {
+  req: IncomingMessage;
+  res: ServerResponse;
+  upstreamPort: number;
+  path: string;
+  headers: Record<string, string | string[] | undefined>;
+  localHost?: string;
 }): void {
   const localHost = params.localHost ?? DEFAULT_LOCAL_HOST;
 
@@ -351,19 +397,6 @@ export function proxyAuthenticatedHttpRequest(params: {
     }
   };
 
-  if (params.authCookie) {
-    const existingCookieHeader = params.res.getHeader('set-cookie');
-    params.res.setHeader(
-      'set-cookie',
-      mergeSetCookieValues(existingCookieHeader, params.authCookie)
-    );
-  }
-
-  const upstreamHeaders = buildAuthenticatedProxyHeaders(
-    params.req.headers,
-    params.sessionCookieName
-  );
-
   const upstreamRequest = httpRequest(
     {
       host: localHost,
@@ -371,7 +404,7 @@ export function proxyAuthenticatedHttpRequest(params: {
       method: params.req.method,
       path: params.path,
       headers: {
-        ...upstreamHeaders,
+        ...params.headers,
         host: `localhost:${params.upstreamPort}`,
       },
     },
@@ -420,12 +453,17 @@ export function proxyAuthenticatedWebSocketUpgrade(params: {
   sanitizedPath: string;
   sessionCookieName: string;
   localHost?: string;
+  /** Replaces the client's `Origin`, e.g. with the upstream's own origin. */
+  upstreamOrigin?: string;
 }): void {
   const localHost = params.localHost ?? DEFAULT_LOCAL_HOST;
 
   const upstreamSocket = createConnection(params.upstreamPort, localHost, () => {
     const headers: Record<string, string | string[] | undefined> = {
-      ...buildAuthenticatedProxyHeaders(params.req.headers, params.sessionCookieName),
+      ...withUpstreamOrigin(
+        buildAuthenticatedProxyHeaders(params.req.headers, params.sessionCookieName),
+        params.upstreamOrigin
+      ),
       host: `localhost:${params.upstreamPort}`,
       connection: 'Upgrade',
       upgrade: params.req.headers.upgrade,

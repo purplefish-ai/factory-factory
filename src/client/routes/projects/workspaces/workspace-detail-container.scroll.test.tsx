@@ -69,9 +69,9 @@ function useMockChatWebSocket({ dbSessionId }: { dbSessionId: string | null }) {
   return mocks.transport;
 }
 
-// The view receives layout props; chat props reach ChatContent through context.
-// Each capture pairs both from one container render.
-type CapturedProps = WorkspaceDetailViewProps & { chat: ChatContentProps };
+// The view receives layout props; chat props reach ChatContent from the chat
+// session. Each capture pairs ChatContent's props with the latest view props.
+type CapturedProps = Omit<WorkspaceDetailViewProps, 'chat'> & { chat: ChatContentProps };
 const captures: { props: CapturedProps; passiveTransportSessionId: string | null }[] = [];
 let lastViewProps: WorkspaceDetailViewProps | undefined;
 
@@ -81,13 +81,8 @@ vi.mock('react-router', () => ({
   useSearchParams: () => [mocks.searchParams, mocks.setSearchParams],
   useLocation: () => ({ key: 'navigation' }),
 }));
-vi.mock('@/client/features/chat', async () => ({
+vi.mock('@/client/features/chat/use-chat-websocket', () => ({
   useChatWebSocket: mocks.useChatWebSocket,
-  getChatPendingRequestType: (
-    await vi.importActual<typeof import('@/client/features/chat/pending-request-type')>(
-      '@/client/features/chat/pending-request-type'
-    )
-  ).getChatPendingRequestType,
 }));
 vi.mock('@/client/features/workspace', () => ({
   useWorkspacePanel: () => mocks.panel,
@@ -107,6 +102,9 @@ vi.mock('./use-workspace-detail', () => ({
   useWorkspaceData: () => ({
     workspace: { id: mocks.workspaceId, creationSource: 'MANUAL', worktreePath: '/workspace' },
     workspaceLoading: false,
+    workspaceError: null,
+    isFetchingWorkspace: false,
+    refetchWorkspace: vi.fn(),
     sessions: ['session-a', 'session-b'].map((id) => ({
       id,
       name: id,
@@ -148,7 +146,7 @@ vi.mock('./use-workspace-detail-hooks', () => ({
 vi.mock('./workspace-detail-view', () => ({
   WorkspaceDetailView: (props: WorkspaceDetailViewProps) => {
     lastViewProps = props;
-    return CONNECTED_CHAT_CONTENT;
+    return props.chat;
   },
 }));
 vi.mock('./workspace-detail-chat-content', () => ({
@@ -164,7 +162,6 @@ vi.mock('./workspace-detail-chat-content', () => ({
   },
 }));
 
-import { CONNECTED_CHAT_CONTENT } from './workspace-chat-slot';
 import { WorkspaceDetailContainer } from './workspace-detail-container';
 
 let root: Root;

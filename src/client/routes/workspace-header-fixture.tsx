@@ -208,7 +208,7 @@ export function WorkspaceHeaderFixture({
                       runScriptCommand: 'pnpm dev',
                     };
                   case 'workspace.listForProject':
-                    return [];
+                    return { workspaces: [], reviewCount: 0 };
                   case 'workspace.get':
                     return { ...familyParent, status: 'READY', kanbanColumn: 'WAITING' };
                   case 'workspace.listChildren':

@@ -1,10 +1,10 @@
 import { z } from 'zod';
 import type { AcpProviderIdentityEvent } from '@/backend/services/session/service/acp';
+import type { closedSessionPersistenceService } from '@/backend/services/session/service/archive/closed-session-persistence.service';
+import type { SessionRepository } from '@/backend/services/session/service/data/session.repository';
+import type { AcpEventProcessor } from '@/backend/services/session/service/events/acp-event-processor';
 import type { SessionDomainService } from '@/backend/services/session/service/session-domain.service';
 import type { Prisma } from '@prisma-gen/client';
-import type { AcpEventProcessor } from './acp-event-processor';
-import type { closedSessionPersistenceService } from './closed-session-persistence.service';
-import type { SessionRepository } from './session.repository';
 
 export class SessionProviderIdentityService {
   constructor(

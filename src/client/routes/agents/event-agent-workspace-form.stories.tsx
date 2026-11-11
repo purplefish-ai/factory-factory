@@ -21,7 +21,7 @@ function EventCreation() {
   );
 }
 const meta = {
-  title: 'Automations/EventAgentCreation',
+  title: 'Automations/EventAutomationCreation',
   component: EventCreation,
   beforeEach: async () => {
     finishCreation = undefined;
@@ -35,7 +35,7 @@ export const Ready: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     const prompt = await canvas.findByRole('textbox');
-    await expect(prompt).toHaveProperty('value', expect.stringContaining('propose_agent'));
+    await expect(prompt).toHaveProperty('value', expect.stringContaining('propose_automation'));
     await waitFor(() => expect(prompt).toBeEnabled());
     await expect(
       canvas.getByText(/Listening and automatic event runs are not yet available/)

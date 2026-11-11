@@ -22,17 +22,28 @@ import type {
   SessionLifecycleMessageQueueBridge,
   SessionCallerGuard,
 } from '@/backend/services/session/service/bridges';
-import type { SessionDomainService } from '@/backend/services/session/service/session-domain.service';
-import type { SessionDeltaEvent } from '@/shared/acp-protocol';
-import { ADVERSARIAL_REVIEW_WORKFLOW } from '@/shared/adversarial-review';
-import { SessionStatus } from '@/shared/core';
-import type { AcpEventProcessor } from './acp-event-processor';
-import type { EventSessionAuthority, EventInitialPermit } from './event-session-authority';
+import type {
+  PersistAcpConfigSnapshotParams,
+  SessionConfigService,
+} from '@/backend/services/session/service/config/session.config.service';
+import type { SessionRepository } from '@/backend/services/session/service/data/session.repository';
+import { createResumeFailedError } from '@/backend/services/session/service/delivery/pr-delivery-failure';
+import type { SessionNotificationDeliveryService } from '@/backend/services/session/service/delivery/session-notification-delivery.service';
+import type {
+  EventSessionAuthority,
+  EventInitialPermit,
+} from '@/backend/services/session/service/event-agent/event-session-authority';
 import {
   guardEventStartup,
   pinEventSession,
   requestsStartupCleanup,
-} from './event-session-startup';
+} from '@/backend/services/session/service/event-agent/event-session-startup';
+import type { AcpEventProcessor } from '@/backend/services/session/service/events/acp-event-processor';
+import { getAcpWorkState } from '@/backend/services/session/service/events/session-work-state';
+import type { SessionDomainService } from '@/backend/services/session/service/session-domain.service';
+import { toErrorMessage } from '@/backend/services/session/service/session.error-message';
+import { ADVERSARIAL_REVIEW_WORKFLOW } from '@/shared/adversarial-review';
+import { SessionStatus } from '@/shared/core';
 import {
   assertSessionAccountBinding,
   resolveSessionCodexContext,
@@ -41,17 +52,12 @@ import {
 import type { SessionContextService } from './session-context.service';
 import { type SessionLifecycleGate, SessionStartupCancelledError } from './session-lifecycle-gate';
 import type { SessionAcpEnvironmentPort } from './session-lifecycle.types';
-import type { SessionNotificationDeliveryService } from './session-notification-delivery.service';
-import {
-  SessionStartupPermissionError,
-  SessionStartupTargetError,
-} from './session-permission-policy';
 import type { SessionRuntimeExitCoordinator } from './session-runtime-exit.coordinator';
 import {
   cleanupFailedStartup,
+  isTerminalConfigFailure,
   stopStartupConfigurationFailure,
 } from './session-startup-config-failure';
-import { SessionStartupPersistenceError } from './session-startup-configuration-finalizer';
 import {
   createSessionHistoryBarrier,
   type SessionStartupHistoryDependencies,
@@ -60,18 +66,6 @@ import { dispatchStartupNotifications, startupCallerGuard } from './session-star
 import { prepareSessionStartup } from './session-startup-preparation';
 import { SessionStartupRequest } from './session-startup-request';
 import type { StopSessionOptions } from './session-termination.coordinator';
-import { getAcpWorkState } from './session-work-state';
-import type {
-  PersistAcpConfigSnapshotParams,
-  SessionConfigService,
-} from './session.config.service';
-import { toErrorMessage } from './session.error-message';
-import type { SessionRepository } from './session.repository';
-
-const isTerminalConfigFailure = (error: unknown) =>
-  error instanceof SessionStartupPermissionError ||
-  error instanceof SessionStartupPersistenceError ||
-  error instanceof SessionStartupTargetError;
 
 const logger = createLogger('session');
 export type SessionStartupCoordinatorDependencies = {
@@ -264,7 +258,7 @@ export class SessionStartupCoordinator {
   async getOrCreateSessionClient(
     sessionId: string,
     options?: GetOrCreateSessionClientOptions
-  ): Promise<unknown> {
+  ): Promise<AcpProcessHandle> {
     options = await guardEventStartup(this.dependencies.eventAuthority, sessionId, options ?? {});
     const permit = options.eventInitial;
     return await this.dependencies.lifecycleGate.runStartup(sessionId, async (lease) => {
@@ -594,7 +588,7 @@ export class SessionStartupCoordinator {
       this.dependencies.sessionDomainService.emitDelta(sessionId, {
         type: 'config_options_update',
         configOptions: handle.configOptions,
-      } as SessionDeltaEvent);
+      });
     }
     this.dependencies.sessionDomainService.emitDelta(sessionId, {
       type: 'chat_capabilities',
@@ -851,7 +845,7 @@ export class SessionStartupCoordinator {
       handle.sessionCreationOutcome.kind === 'resume_fallback' ||
       (cold && handle.sessionCreationOutcome.kind !== 'resumed')
     ) {
-      throw new Error('Required existing conversation could not be restored');
+      throw createResumeFailedError();
     }
   }
 

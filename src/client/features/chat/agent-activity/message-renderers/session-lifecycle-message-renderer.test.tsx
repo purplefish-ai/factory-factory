@@ -81,13 +81,16 @@ describe('SessionLifecycleMessageRenderer', () => {
     const message = row?.querySelector('p');
     const time = row?.querySelector('time');
 
-    expect(message?.classList.contains('min-w-0')).toBe(true);
-    expect(message?.classList.contains('flex-1')).toBe(true);
-    expect(message?.classList.contains('break-words')).toBe(true);
+    // The StatusCallout body column takes the free width and wraps; the time
+    // sits in the trailing action slot right after it and never shrinks.
+    const body = message?.parentElement;
+    expect(body?.parentElement?.classList.contains('min-w-0')).toBe(true);
+    expect(body?.parentElement?.classList.contains('flex-1')).toBe(true);
+    expect(body?.parentElement?.classList.contains('break-words')).toBe(true);
     expect(message?.classList.contains('truncate')).toBe(false);
     expect(time?.classList.contains('shrink-0')).toBe(true);
     expect(time?.classList.contains('whitespace-nowrap')).toBe(true);
-    expect(message?.nextElementSibling).toBe(time);
+    expect(body?.parentElement?.nextElementSibling).toBe(time?.parentElement);
     expect(row?.querySelector('button')).toBeNull();
     root.unmount();
   });

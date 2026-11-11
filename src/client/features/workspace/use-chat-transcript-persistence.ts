@@ -1,6 +1,6 @@
 import { useCallback, useLayoutEffect, useMemo, useRef } from 'react';
 import type { TranscriptPosition } from '@/client/features/chat';
-import { useWorkspacePanel } from './workspace-panel-context';
+import { useWorkspacePanelScroll } from './workspace-panel-context';
 
 interface UseChatTranscriptPersistenceOptions {
   workspaceId: string | null;
@@ -15,9 +15,9 @@ export function useTranscriptPositionPersistence({
   workspaceId: string | null;
   tabId: string | null;
 }) {
-  const { scrollLoadedWorkspaceId, getScrollState, createScrollStateWriter, clearScrollState } =
-    useWorkspacePanel();
-  const ready = workspaceId !== null && tabId !== null && scrollLoadedWorkspaceId === workspaceId;
+  const { getScrollState, createScrollStateWriter, clearScrollState } = useWorkspacePanelScroll();
+  const ready = workspaceId !== null && tabId !== null;
+  // Closing a tab after unmount must not clear another workspace's saved scroll.
   const mountedRef = useRef(false);
   useLayoutEffect(() => {
     mountedRef.current = true;
@@ -59,11 +59,11 @@ export function useTranscriptPositionPersistence({
 
   const clearTab = useCallback(
     (closedTabId: string) => {
-      if (mountedRef.current && workspaceId !== null && scrollLoadedWorkspaceId === workspaceId) {
+      if (mountedRef.current && workspaceId !== null) {
         clearScrollState(closedTabId);
       }
     },
-    [workspaceId, scrollLoadedWorkspaceId, clearScrollState]
+    [workspaceId, clearScrollState]
   );
 
   return { ready, initialPosition: scope.initialPosition, onPositionChange, clearTab };

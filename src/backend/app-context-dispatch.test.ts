@@ -1,10 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { bindIssueMonitoringSession } from '@/backend/orchestration/pull-requests/pr-monitoring.orchestrator';
+import { clearWorkspaceInitOrchestratorStateForTests } from '@/backend/orchestration/workspace-lifecycle/workspace-init.orchestrator';
 import { createLifecycleTestSession } from '@/backend/services/session/service/lifecycle/session-lifecycle.test-helpers';
 import { userSettingsService } from '@/backend/services/settings';
 import { SessionStatus } from '@/shared/core';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 import { createDefaultApplicationDependencies } from './app-context';
-import { clearWorkspaceInitOrchestratorStateForTests } from './orchestration/workspace-init.orchestrator';
 import {
   SessionConfigService,
   SessionDomainService,
@@ -16,10 +17,15 @@ import {
 import { WorkspaceCreationService } from './services/workspace';
 
 // Only monitoring persistence is irrelevant to these producer/dispatcher contracts.
-vi.mock('./orchestration/pr-monitoring.orchestrator', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('./orchestration/pr-monitoring.orchestrator')>()),
-  bindIssueMonitoringSession: vi.fn(),
-}));
+vi.mock(
+  '@/backend/orchestration/pull-requests/pr-monitoring.orchestrator',
+  async (importOriginal) => ({
+    ...(await importOriginal<
+      typeof import('@/backend/orchestration/pull-requests/pr-monitoring.orchestrator')
+    >()),
+    bindIssueMonitoringSession: vi.fn(),
+  })
+);
 
 function createGraph(label: string) {
   const { services } = createDefaultApplicationDependencies();
@@ -30,9 +36,9 @@ function createGraph(label: string) {
     attempts,
     configure: vi.fn(),
     setManualDispatchResume: vi.fn(),
-    resetDispatchState: vi.fn(),
     steerQueuedMessage: vi.fn(),
     steerWorkspaceMailSignal: vi.fn(),
+    shutdown: vi.fn(async () => undefined),
     tryDispatchNextMessage(sessionId: string) {
       this.attempts.push(sessionId);
       const message = sessionDomainService.dequeueNext(sessionId);
@@ -59,6 +65,9 @@ function setupInitialization(services: ReturnType<typeof createGraph>['services'
   });
   vi.spyOn(services.workspaceDataService, 'findByIdWithProject').mockResolvedValue(workspace);
   vi.spyOn(services.workspaceDataService, 'findById').mockResolvedValue(unsafeCoerce(workspace));
+  vi.spyOn(services.workspaceDataService, 'findInitialMessageContext').mockResolvedValue(
+    unsafeCoerce(workspace)
+  );
   vi.spyOn(services.worktreeLifecycleService, 'getInitMode').mockResolvedValue(false);
   vi.spyOn(services.factoryConfigService, 'readConfig').mockResolvedValue(null);
   vi.spyOn(
@@ -95,6 +104,7 @@ describe('application queue producer composition', () => {
     const first = createGraph('first');
     const second = createGraph('second');
     setupInitialization(first.services);
+    vi.mocked(bindIssueMonitoringSession).mockClear();
 
     await first.services.initializeWorkspaceWorktree('workspace-init', {
       provisioningAlreadyStarted: true,
@@ -119,6 +129,16 @@ describe('application queue producer composition', () => {
       { sessionId: 'session-init', text: 'Queued while provisioning' },
     ]);
     expect(sessionDispatchService.tryDispatchNextMessage).not.toHaveBeenCalled();
+    // Issue binding stays in the owning graph's PR-monitoring cache scope.
+    const bindings = vi.mocked(bindIssueMonitoringSession).mock.calls;
+    expect(bindings.map(([workspaceId, sessionId]) => [workspaceId, sessionId])).toEqual([
+      ['workspace-init', 'session-init'],
+      ['workspace-init', 'session-init'],
+      ['workspace-init', 'session-init'],
+    ]);
+    expect(bindings[0]?.[2]).toBe(first.services);
+    expect(bindings[1]?.[2]).toBe(first.services);
+    expect(bindings[2]?.[2]).toBe(second.services);
   });
 
   it('carries READY retry authority through the selected graph wrapper', async () => {
@@ -295,9 +315,9 @@ describe('application queue producer composition', () => {
       services.sessionDispatchService = {
         configure: vi.fn(),
         setManualDispatchResume: vi.fn(),
-        resetDispatchState: vi.fn(),
         steerQueuedMessage: vi.fn(),
         steerWorkspaceMailSignal: vi.fn(),
+        shutdown: vi.fn(async () => undefined),
         tryDispatchNextMessage: dispatch,
       };
       domain.storeInitialMessage('shared-load', `Initial ${label}`);

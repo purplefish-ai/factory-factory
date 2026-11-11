@@ -1,0 +1,978 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { z } from 'zod';
+import {
+  CIStatus,
+  PRState,
+  RatchetState,
+  RunScriptStatus,
+  WorkspaceCreationSource,
+  WorkspaceStatus,
+} from '@/shared/core';
+import { DEFAULT_DEEPGRAM_TTS_MODEL } from '@/shared/deepgram-voices';
+import type { ExportData } from '@/shared/schemas/export-data.schema';
+import { exportDataSchema } from '@/shared/schemas/export-data.schema';
+
+vi.mock('@/backend/services/periodic-task', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/backend/services/periodic-task')>()),
+  exportPeriodicHistoryRecovery: vi.fn(async () => ({
+    version: 1,
+    executions: [],
+    jsonStorage: [],
+  })),
+}));
+vi.mock('@/backend/services/codex-accounts', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/backend/services/codex-accounts')>()),
+  exportCodexAccountMetadata: vi.fn(async () => [
+    { id: 'account-b', label: 'Work', kind: 'MANAGED', enabled: true, identityKey: 'a'.repeat(64) },
+  ]),
+  restoreCodexAccountMetadata: vi.fn((_tx, rows) =>
+    Promise.resolve(new Map(rows.map((row: { id: string }) => [row.id, row.id])))
+  ),
+}));
+import {
+  type AgentSession,
+  type Project,
+  SessionProvider,
+  type TerminalSession,
+  WorkspaceProviderSelection,
+} from '@prisma-gen/client';
+
+const mockTx = vi.hoisted(() => ({
+  agentConnection: { findMany: vi.fn().mockResolvedValue([]) },
+  agentDefinition: { findMany: vi.fn().mockResolvedValue([]) },
+  periodicTaskExecution: { findMany: vi.fn().mockResolvedValue([]) },
+  $queryRaw: vi.fn().mockResolvedValue([]),
+  periodicTask: { findMany: vi.fn().mockResolvedValue([]) },
+  workspacePREvent: {
+    updateMany: vi.fn().mockResolvedValue({ count: 0 }),
+    findMany: vi.fn().mockResolvedValue([]),
+  },
+  workspacePR: { findMany: vi.fn().mockResolvedValue([]) },
+  workspaceLaunchOrigin: { updateMany: vi.fn() },
+  workspaceChildOrigin: { upsert: vi.fn() },
+  workspacePRMonitoring: { upsert: vi.fn() },
+  project: {
+    findMany: vi.fn().mockResolvedValue([]),
+    findUnique: vi.fn<(args: { where: { id: string } }) => Promise<unknown>>(),
+    create: vi.fn(),
+  },
+  workspace: {
+    findMany: vi.fn().mockResolvedValue([]),
+    findUnique: vi.fn<(args: { where: { id?: string } }) => Promise<unknown>>(),
+    create:
+      vi.fn<
+        (args: { data: { id?: string; parentWorkspaceId?: string | null } }) => Promise<unknown>
+      >(),
+  },
+  agentSession: {
+    findMany: vi.fn().mockResolvedValue([]),
+    findUnique: vi.fn(),
+    create: vi.fn(),
+  },
+  terminalSession: {
+    findUnique: vi.fn(),
+    create: vi.fn(),
+  },
+  userSettings: {
+    findFirst: vi.fn(),
+    create: vi.fn(),
+  },
+}));
+
+vi.mock('@/backend/db', () => ({
+  prisma: {
+    agentConnection: { findMany: vi.fn().mockResolvedValue([]) },
+    agentDefinition: { findMany: vi.fn().mockResolvedValue([]) },
+    periodicTask: { findMany: vi.fn().mockResolvedValue([]) },
+    $queryRaw: vi.fn().mockResolvedValue([]),
+    project: {
+      findMany: vi.fn(),
+      findUnique: vi.fn(),
+      create: vi.fn(),
+    },
+    workspace: {
+      findMany: vi.fn(),
+      findUnique: vi.fn(),
+      create: vi.fn(),
+    },
+    agentSession: {
+      findMany: vi.fn(),
+      findUnique: vi.fn(),
+      create: vi.fn(),
+    },
+    terminalSession: {
+      findMany: vi.fn(),
+      findUnique: vi.fn(),
+      create: vi.fn(),
+    },
+    userSettings: {
+      findFirst: vi.fn(),
+      create: vi.fn(),
+    },
+    $transaction: vi.fn((callback) => callback(mockTx)),
+  },
+}));
+
+import { prisma } from '@/backend/db';
+vi.mock('@/backend/services/settings/resources/backup-snapshot', () => ({
+  withBackupImport: (_source: unknown, write: (tx: typeof mockTx) => Promise<unknown>) =>
+    write(mockTx),
+  withBackupSnapshot: (_source: unknown, read: (tx: typeof prisma) => Promise<unknown>) =>
+    read(prisma),
+}));
+import { dataBackupService } from './data-backup.service';
+import { mockUserSettings } from './data-backup.settings.test-support';
+
+const mockProject: Project = {
+  id: 'proj-1',
+  name: 'Test Project',
+  slug: 'test-project',
+  repoPath: '/path/to/repo',
+  worktreeBasePath: '/path/to/worktrees',
+  defaultBranch: 'main',
+  githubOwner: 'test-owner',
+  githubRepo: 'test-repo',
+  issueProvider: 'GITHUB' as const,
+  issueTrackerConfig: null,
+  isArchived: false,
+  startupScriptCommand: 'npm install',
+  startupScriptPath: null,
+  startupScriptTimeout: 300,
+  createdAt: new Date('2025-01-01T00:00:00.000Z'),
+  updatedAt: new Date('2025-01-01T00:00:00.000Z'),
+};
+
+/**
+ * A workspace row as the export reads it: the row plus its ratchet, PR cache and
+ * run-script group, which the v4 format carries as flat `ratchet*`, `pr*` and
+ * `runScript*` workspace fields.
+ */
+type WorkspaceForExport = import('@/backend/services/settings').WorkspaceForExport;
+
+const mockWorkspace: WorkspaceForExport = {
+  conversationMetadata: null,
+  id: 'ws-1',
+  projectId: 'proj-1',
+  name: 'Test Workspace',
+  description: 'Test description',
+  status: WorkspaceStatus.READY,
+  worktreePath: '/path/to/worktree',
+  branchName: 'feature/test',
+  isAutoGeneratedBranch: true,
+  creationSource: WorkspaceCreationSource.GITHUB_ISSUE,
+  creationMetadata: { issueNumber: 123 },
+  initErrorMessage: null,
+  initOutput: 'Init output',
+  initStartedAt: new Date('2025-01-01T00:00:00.000Z'),
+  initCompletedAt: new Date('2025-01-01T00:05:00.000Z'),
+  initScriptPid: null,
+  initRetryCount: 0,
+  githubIssueNumber: 123,
+  githubIssueUrl: 'https://github.com/test/repo/issues/123',
+  linearIssueId: null,
+  linearIssueIdentifier: null,
+  linearIssueUrl: null,
+  defaultSessionProvider: WorkspaceProviderSelection.CLAUDE,
+
+  prs: [
+    {
+      id: 'pr1',
+      dedicatedSession: null,
+      completionDismissed: false,
+      terminalObservedAt: null,
+      title: null,
+      headRefName: null,
+      baseRefName: null,
+      revision: 0,
+      detachedAt: null,
+      observation: null,
+      observationEpoch: 0,
+      transitionSequence: 0,
+      workspaceId: 'ws-1',
+      url: 'https://github.com/test/repo/pull/1',
+      number: 1,
+      state: PRState.OPEN,
+      reviewState: 'APPROVED',
+      ciStatus: CIStatus.SUCCESS,
+      hasMergeConflict: false,
+      syncedAt: new Date('2025-01-01T00:15:00.000Z'),
+      ciFailedAt: null,
+      ciLastNotifiedAt: null,
+      reviewLastCheckedAt: new Date('2025-01-01T00:20:00.000Z'),
+      reviewLastCommentId: 'comment-123',
+    },
+  ],
+  runScript: {
+    workspaceId: 'ws-1',
+    command: 'npm run dev',
+    postRunCommand: null,
+    cleanupCommand: 'npm run cleanup',
+    pid: 12_345,
+    port: 3000,
+    startedAt: new Date('2025-01-01T00:10:00.000Z'),
+    status: RunScriptStatus.RUNNING,
+  },
+  prMonitoring: {
+    deliveryMode: 'MAIN',
+    workspaceId: 'ws-1',
+    legacySessionIds: [],
+    enabled: true,
+    recipientSessionId: null,
+    bindingRevision: 0,
+    eventEpoch: 1,
+    deliveryPauseReason: null,
+    lastCheckedAt: new Date('2025-01-01T00:25:00.000Z'),
+  },
+  prEvents: [],
+  prDeliveries: [],
+  prDiscovery: null,
+  hasHadSessions: true,
+  periodicTaskId: null,
+  parentWorkspaceId: null,
+  createdAt: new Date('2025-01-01T00:00:00.000Z'),
+  updatedAt: new Date('2025-01-01T00:35:00.000Z'),
+};
+
+const mockAgentSession: AgentSession = {
+  codexAccountId: 'account-b',
+  workspacePrId: null,
+  id: 'session-1',
+  workspaceId: 'ws-1',
+  name: 'Codex Session',
+  workflow: 'followup',
+  model: 'sonnet',
+  status: 'RUNNING',
+  provider: SessionProvider.CODEX,
+  providerSessionId: 'thread-123',
+  providerProjectPath: '/tmp/worktree',
+  providerProcessPid: null,
+  providerMetadata: { transport: 'app-server' },
+  createdAt: new Date('2025-01-01T00:00:00.000Z'),
+  updatedAt: new Date('2025-01-01T00:05:00.000Z'),
+};
+
+const mockTerminalSession: TerminalSession = {
+  id: 'term-1',
+  workspaceId: 'ws-1',
+  name: 'Terminal',
+  status: 'RUNNING',
+  pid: 1234,
+  createdAt: new Date('2025-01-01T00:00:00.000Z'),
+  updatedAt: new Date('2025-01-01T00:05:00.000Z'),
+};
+
+function createImportData(
+  overrides?: Partial<z.input<typeof exportDataSchema>['data']>
+): ExportData {
+  return exportDataSchema.parse({
+    meta: {
+      exportedAt: '2025-01-01T00:00:00.000Z',
+      version: '1.0.0',
+      schemaVersion: 4,
+    },
+    data: {
+      projects: [
+        {
+          id: 'proj-1',
+          name: 'Test Project',
+          slug: 'test-project',
+          repoPath: '/path/to/repo',
+          worktreeBasePath: '/path/to/worktrees',
+          defaultBranch: 'main',
+          githubOwner: null,
+          githubRepo: null,
+          issueProvider: 'GITHUB',
+          issueTrackerConfig: null,
+          isArchived: false,
+          startupScriptCommand: null,
+          startupScriptPath: null,
+          startupScriptTimeout: 300,
+          createdAt: '2025-01-01T00:00:00.000Z',
+          updatedAt: '2025-01-01T00:00:00.000Z',
+        },
+      ],
+      workspaces: [
+        {
+          id: 'ws-1',
+          projectId: 'proj-1',
+          name: 'Test Workspace',
+          description: 'Test description',
+          status: WorkspaceStatus.READY,
+          worktreePath: '/path/to/worktree',
+          branchName: 'feature/test',
+          isAutoGeneratedBranch: true,
+          creationSource: WorkspaceCreationSource.GITHUB_ISSUE,
+          creationMetadata: { issueNumber: 123 },
+          initErrorMessage: null,
+          initOutput: 'Init output',
+          initStartedAt: '2025-01-01T00:00:00.000Z',
+          initCompletedAt: '2025-01-01T00:05:00.000Z',
+          initRetryCount: 0,
+          runScriptCommand: 'npm run dev',
+          runScriptCleanupCommand: 'npm run cleanup',
+          runScriptPid: 12_345,
+          runScriptPort: 3000,
+          runScriptStartedAt: '2025-01-01T00:10:00.000Z',
+          runScriptStatus: RunScriptStatus.RUNNING,
+          prUrl: 'https://github.com/test/repo/pull/1',
+          githubIssueNumber: 123,
+          githubIssueUrl: 'https://github.com/test/repo/issues/123',
+          linearIssueId: null,
+          linearIssueIdentifier: null,
+          linearIssueUrl: null,
+          defaultSessionProvider: WorkspaceProviderSelection.CLAUDE,
+
+          prNumber: 1,
+          prState: PRState.OPEN,
+          prReviewState: 'APPROVED',
+          prCiStatus: CIStatus.SUCCESS,
+          prUpdatedAt: '2025-01-01T00:15:00.000Z',
+          prCiFailedAt: null,
+          prCiLastNotifiedAt: null,
+          prReviewLastCheckedAt: '2025-01-01T00:20:00.000Z',
+          prReviewLastCommentId: 'comment-123',
+          ratchetEnabled: true,
+          ratchetState: RatchetState.READY,
+          ratchetLastCheckedAt: '2025-01-01T00:25:00.000Z',
+          ratchetActiveSessionId: 'session-123',
+          ratchetLastCiRunId: 'run-123',
+          hasHadSessions: true,
+          createdAt: '2025-01-01T00:00:00.000Z',
+          updatedAt: '2025-01-01T00:35:00.000Z',
+        },
+      ],
+      agentSessions: [
+        {
+          id: 'session-1',
+          workspaceId: 'ws-1',
+          name: 'Codex Session',
+          workflow: 'followup',
+          model: 'sonnet',
+          status: 'RUNNING',
+          provider: SessionProvider.CODEX,
+          providerSessionId: 'thread-123',
+          providerProjectPath: null,
+          providerProcessPid: null,
+          providerMetadata: { transport: 'app-server' },
+          createdAt: '2025-01-01T00:00:00.000Z',
+          updatedAt: '2025-01-01T00:05:00.000Z',
+        },
+      ],
+      terminalSessions: [
+        {
+          id: 'term-1',
+          workspaceId: 'ws-1',
+          name: 'Terminal',
+          status: 'RUNNING',
+          pid: 1234,
+          createdAt: '2025-01-01T00:00:00.000Z',
+          updatedAt: '2025-01-01T00:05:00.000Z',
+        },
+      ],
+      userSettings: {
+        preferredIde: 'cursor',
+        customIdeCommand: null,
+        playSoundOnComplete: true,
+        childWorkspacesEnabled: false,
+        notificationSoundPath: '/path/to/sound.mp3',
+        ratchetEnabled: true,
+        ratchetReplyToPrComments: true,
+        ratchetReviewTriggerMode: 'ALL_REVIEW_FEEDBACK',
+        defaultSessionProvider: SessionProvider.CLAUDE,
+        defaultClaudeModel: 'sonnet',
+        defaultCodexModel: 'gpt-5-codex',
+        defaultWorkspacePermissions: 'STRICT',
+        // Non-default so the import test below actually exercises restoring
+        // a persisted preference, not just the schema's own default.
+        reviewerSessionProvider: SessionProvider.CLAUDE,
+        reviewerClaudeModel: 'opus',
+        reviewerCodexModel: 'gpt-5-codex-high',
+        postReviewToGitHub: false,
+        voiceModeEnabled: true,
+        voiceTtsModel: 'flux-cliff-en',
+        voiceTtsSpeed: 1.3,
+        voiceUtteranceEndMs: 2500,
+        voiceBargeInSustainedMs: 24,
+        appearanceColorScheme: 'solarized',
+        appearanceBackgroundColor: '#002b36',
+        appearanceForegroundColor: '#93a1a1',
+        appearanceFontScale: 125,
+        appearanceFontSans: '"Inter", ui-sans-serif, system-ui, sans-serif',
+        appearanceFontMono: 'Fira Code',
+      },
+      ...overrides,
+    },
+  });
+}
+
+describe('DataBackupService', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(prisma.$queryRaw).mockResolvedValue([]);
+    mockTx.project.findMany.mockResolvedValue([]);
+    mockTx.workspace.findMany.mockResolvedValue([]);
+    mockTx.agentSession.findMany.mockResolvedValue([]);
+  });
+
+  describe('exportData', () => {
+    it('validates captured physical markers against exported source rows', async () => {
+      vi.mocked(prisma.project.findMany).mockResolvedValue([mockProject]);
+      vi.mocked(prisma.workspace.findMany).mockResolvedValue([mockWorkspace]);
+      vi.mocked(prisma.agentSession.findMany).mockResolvedValue([mockAgentSession]);
+      vi.mocked(prisma.terminalSession.findMany).mockResolvedValue([mockTerminalSession]);
+      vi.mocked(prisma.userSettings.findFirst).mockResolvedValue(mockUserSettings);
+      vi.mocked(prisma.$queryRaw).mockResolvedValue([{ id: 'missing-workspace' }]);
+      await expect(dataBackupService.exportData('test')).rejects.toThrow(
+        'Invalid Workspace JSON-null target'
+      );
+    });
+
+    it('exports an attached open sibling and aggregate state for compatibility readers', async () => {
+      const pr = mockWorkspace.prs[0]!;
+      vi.mocked(prisma.project.findMany).mockResolvedValue([mockProject]);
+      const workspace: WorkspaceForExport = {
+        ...mockWorkspace,
+        prs: [
+          {
+            ...pr,
+            id: 'detached',
+            url: 'https://github.com/test/repo/pull/3',
+            detachedAt: new Date(),
+            state: PRState.MERGED,
+          },
+          { ...pr, id: 'merged', state: PRState.MERGED },
+          {
+            ...pr,
+            id: 'open',
+            number: 2,
+            url: 'https://github.com/test/repo/pull/2',
+            ciStatus: CIStatus.FAILURE,
+            state: PRState.OPEN,
+          },
+        ],
+      };
+      vi.mocked(prisma.workspace.findMany).mockResolvedValue([workspace]);
+      vi.mocked(prisma.agentSession.findMany).mockResolvedValue([]);
+      vi.mocked(prisma.terminalSession.findMany).mockResolvedValue([]);
+      vi.mocked(prisma.userSettings.findFirst).mockResolvedValue(null);
+      const exported = await dataBackupService.exportData('1');
+      expect(exported.data.workspaces[0]).toMatchObject({
+        prUrl: 'https://github.com/test/repo/pull/2',
+        prNumber: 2,
+        prState: 'OPEN',
+        prCiStatus: 'FAILURE',
+        ratchetState: 'CI_FAILED',
+      });
+      expect(exported.data.workspaces[0]?.prs).toHaveLength(3);
+    });
+
+    it('exports version 8 with account bindings and all settings fields', async () => {
+      vi.mocked(prisma.project.findMany).mockResolvedValue([mockProject]);
+      vi.mocked(prisma.workspace.findMany).mockResolvedValue([mockWorkspace]);
+      vi.mocked(prisma.agentSession.findMany).mockResolvedValue([mockAgentSession]);
+      vi.mocked(prisma.terminalSession.findMany).mockResolvedValue([mockTerminalSession]);
+      vi.mocked(prisma.userSettings.findFirst).mockResolvedValue(mockUserSettings);
+
+      const result = await dataBackupService.exportData('1.0.0');
+
+      expect(result.meta.schemaVersion).toBe(8);
+      expect(result.data.agentSessions).toHaveLength(1);
+      expect(result.data.agentSessions[0]).toEqual(
+        expect.objectContaining({
+          id: 'session-1',
+          provider: SessionProvider.CODEX,
+          providerSessionId: 'thread-123',
+          codexAccountId: 'account-b',
+        })
+      );
+      expect(result.data.codexAccounts).toEqual([
+        {
+          id: 'account-b',
+          label: 'Work',
+          kind: 'MANAGED',
+          enabled: true,
+          identityKey: 'a'.repeat(64),
+        },
+      ]);
+      expect(result.data.userSettings).toEqual(
+        expect.objectContaining({
+          ticketDispatchPrompt: 'Implement the ticket and run tests.',
+          childWorkspacesEnabled: false,
+          ratchetEnabled: true,
+          ratchetReplyToPrComments: true,
+          ratchetReviewTriggerMode: 'CHANGES_REQUESTED',
+          defaultSessionProvider: SessionProvider.CLAUDE,
+          defaultClaudeModel: 'sonnet',
+          defaultCodexModel: 'gpt-5-codex',
+          defaultWorkspacePermissions: 'STRICT',
+          turnLimitMinutes: 120,
+          automationPermissions: 'YOLO',
+          reviewerSessionProvider: SessionProvider.CLAUDE,
+          reviewerClaudeModel: 'opus',
+          reviewerCodexModel: 'gpt-5-codex-high',
+          postReviewToGitHub: false,
+          voiceModeEnabled: true,
+          voiceTtsModel: 'flux-cliff-en',
+          voiceTtsSpeed: 1.3,
+          voiceUtteranceEndMs: 2500,
+          voiceBargeInSustainedMs: 24,
+          appearanceColorScheme: 'solarized',
+          appearanceBackgroundColor: '#002b36',
+          appearanceForegroundColor: '#93a1a1',
+          appearanceFontScale: 125,
+          appearanceFontSans: '"Inter", ui-sans-serif, system-ui, sans-serif',
+          appearanceFontMono: 'Fira Code',
+        })
+      );
+      // The Deepgram API key is a secret, not a preference — it must never
+      // appear in an export.
+      expect(result.data.userSettings).not.toHaveProperty('deepgramApiKeyEncrypted');
+      expect(exportDataSchema.safeParse(result).success).toBe(true);
+    });
+
+    it('defaults old backups to changes-requested review triggers', () => {
+      const exportedData = createImportData({
+        userSettings: {
+          preferredIde: 'cursor',
+          customIdeCommand: null,
+          playSoundOnComplete: true,
+          notificationSoundPath: null,
+          ratchetEnabled: true,
+          ratchetReplyToPrComments: true,
+          defaultSessionProvider: SessionProvider.CLAUDE,
+          defaultClaudeModel: 'sonnet',
+          defaultCodexModel: 'default',
+          defaultWorkspacePermissions: 'STRICT',
+          automationPermissions: 'YOLO',
+        },
+      });
+
+      expect(exportedData.data.userSettings?.ratchetReviewTriggerMode).toBe('CHANGES_REQUESTED');
+      expect(exportedData.data.userSettings?.childWorkspacesEnabled).toBe(true);
+      expect(exportedData.data.userSettings?.turnLimitMinutes).toBeNull();
+    });
+
+    it('exports null user settings when absent', async () => {
+      vi.mocked(prisma.project.findMany).mockResolvedValue([]);
+      vi.mocked(prisma.workspace.findMany).mockResolvedValue([]);
+      vi.mocked(prisma.agentSession.findMany).mockResolvedValue([]);
+      vi.mocked(prisma.terminalSession.findMany).mockResolvedValue([]);
+      vi.mocked(prisma.userSettings.findFirst).mockResolvedValue(null);
+
+      const result = await dataBackupService.exportData('1.0.0');
+
+      expect(result.data.userSettings).toBeNull();
+    });
+
+    it('loads retired auto-iteration workspaces as ordinary workspaces with sessions', async () => {
+      vi.mocked(prisma.project.findMany).mockResolvedValue([mockProject]);
+      vi.mocked(prisma.workspace.findMany).mockResolvedValue([mockWorkspace]);
+      vi.mocked(prisma.agentSession.findMany).mockResolvedValue([
+        { ...mockAgentSession, workflow: 'auto-iteration' },
+      ]);
+      vi.mocked(prisma.terminalSession.findMany).mockResolvedValue([]);
+      vi.mocked(prisma.userSettings.findFirst).mockResolvedValue(mockUserSettings);
+      const exported = await dataBackupService.exportData('1.0.0');
+      const exportedWorkspace = exported.data.workspaces[0];
+      for (const field of [
+        'mode',
+        'autoIterationConfig',
+        'autoIterationStatus',
+        'autoIterationProgress',
+        'autoIterationSessionId',
+      ]) {
+        expect(exportedWorkspace).not.toHaveProperty(field);
+      }
+      expect(exported.data.userSettings).not.toHaveProperty('autoIterationPermissions');
+      const restored = exportDataSchema.parse({
+        ...exported,
+        data: {
+          ...exported.data,
+          workspaces: exported.data.workspaces.map((workspace) => ({
+            ...workspace,
+            mode: 'AUTO_ITERATION',
+            autoIterationConfig: { testCommand: 'pnpm test', targetDescription: 'coverage' },
+            autoIterationStatus: 'RUNNING',
+            autoIterationProgress: { currentIteration: 2 },
+            autoIterationSessionId: mockAgentSession.id,
+          })),
+          userSettings: { ...exported.data.userSettings, autoIterationPermissions: 'YOLO' },
+        },
+      });
+      const workspace = restored.data.workspaces[0]!;
+      for (const field of [
+        'mode',
+        'autoIterationConfig',
+        'autoIterationStatus',
+        'autoIterationProgress',
+        'autoIterationSessionId',
+      ]) {
+        expect(workspace).not.toHaveProperty(field);
+      }
+      expect(restored.data.userSettings).not.toHaveProperty('autoIterationPermissions');
+      expect(restored.data.workspaces).toEqual(exported.data.workspaces);
+      expect(restored.data.agentSessions).toEqual(exported.data.agentSessions);
+      vi.mocked(mockTx.project.findUnique).mockResolvedValue(mockProject);
+      vi.mocked(mockTx.workspace.findUnique)
+        .mockResolvedValueOnce(null)
+        .mockResolvedValue(mockWorkspace);
+      vi.mocked(mockTx.workspace.create).mockResolvedValue(mockWorkspace);
+      vi.mocked(mockTx.agentSession.findUnique).mockResolvedValue(null);
+      vi.mocked(mockTx.agentSession.create).mockResolvedValue(mockAgentSession);
+      const result = await dataBackupService.importData(restored);
+      expect(result.workspaces.imported).toBe(1);
+      expect(result.agentSessions.imported).toBe(1);
+      const created = mockTx.workspace.create.mock.calls[0]?.[0].data;
+      expect(created).toMatchObject({
+        id: 'ws-1',
+        worktreePath: mockWorkspace.worktreePath,
+        branchName: mockWorkspace.branchName,
+      });
+      expect(created).not.toHaveProperty('autoIteration');
+      expect(mockTx.agentSession.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          id: mockAgentSession.id,
+          workspaceId: 'ws-1',
+          workflow: 'auto-iteration',
+          codexAccountId: 'account-b',
+          providerSessionId: 'thread-123',
+        }),
+      });
+    });
+
+    it('preserves parent-child relationships through export and import', async () => {
+      const parentWorkspace: WorkspaceForExport = {
+        ...mockWorkspace,
+        id: 'parent-ws',
+        prs: mockWorkspace.prs.map((pr) => ({ ...pr, id: 'parent-pr', workspaceId: 'parent-ws' })),
+        name: 'Parent Workspace',
+      };
+      const childWorkspace: WorkspaceForExport = {
+        ...mockWorkspace,
+        id: 'child-ws',
+        prs: mockWorkspace.prs.map((pr) => ({ ...pr, id: 'child-pr', workspaceId: 'child-ws' })),
+        name: 'Child Workspace',
+        parentWorkspaceId: parentWorkspace.id,
+        createdAt: new Date('2025-01-01T00:01:00.000Z'),
+        updatedAt: new Date('2025-01-01T00:36:00.000Z'),
+      };
+
+      vi.mocked(prisma.project.findMany).mockResolvedValue([mockProject]);
+      vi.mocked(prisma.workspace.findMany).mockResolvedValue([childWorkspace, parentWorkspace]);
+      vi.mocked(prisma.agentSession.findMany).mockResolvedValue([]);
+      vi.mocked(prisma.terminalSession.findMany).mockResolvedValue([]);
+      vi.mocked(prisma.userSettings.findFirst).mockResolvedValue(null);
+
+      const exported = exportDataSchema.parse(await dataBackupService.exportData('1.0.0'));
+
+      expect(exported.data.workspaces[0]?.parentWorkspaceId).toBe(parentWorkspace.id);
+      expect(exported.data.workspaces[1]?.parentWorkspaceId).toBeNull();
+
+      vi.mocked(mockTx.project.findUnique)
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce(null)
+        .mockResolvedValue(mockProject);
+      vi.mocked(mockTx.project.create).mockResolvedValue(mockProject);
+      const importedWorkspaceIds = new Set<string>();
+      vi.mocked(mockTx.workspace.findUnique).mockImplementation(({ where }) => {
+        if (!(where.id && importedWorkspaceIds.has(where.id))) {
+          return Promise.resolve(null);
+        }
+        return Promise.resolve(where.id === parentWorkspace.id ? parentWorkspace : childWorkspace);
+      });
+      vi.mocked(mockTx.workspace.create).mockImplementation(({ data }) => {
+        if (data.parentWorkspaceId && !importedWorkspaceIds.has(data.parentWorkspaceId as string)) {
+          return Promise.reject(new Error('Foreign key constraint failed'));
+        }
+
+        importedWorkspaceIds.add(data.id as string);
+        return Promise.resolve(data.id === parentWorkspace.id ? parentWorkspace : childWorkspace);
+      });
+
+      const result = await dataBackupService.importData(exported);
+
+      expect(result.workspaces.imported).toBe(2);
+      expect(mockTx.workspace.create).toHaveBeenNthCalledWith(1, {
+        data: expect.objectContaining({
+          id: parentWorkspace.id,
+          parentWorkspaceId: null,
+        }),
+      });
+      expect(mockTx.workspace.create).toHaveBeenNthCalledWith(2, {
+        data: expect.objectContaining({
+          id: childWorkspace.id,
+          parentWorkspaceId: parentWorkspace.id,
+        }),
+      });
+    });
+  });
+
+  describe('importData', () => {
+    it('round-trips ticket prompts, turn limits and automation permissions through current backups', async () => {
+      vi.mocked(prisma.project.findMany).mockResolvedValue([]);
+      vi.mocked(prisma.workspace.findMany).mockResolvedValue([]);
+      vi.mocked(prisma.agentSession.findMany).mockResolvedValue([]);
+      vi.mocked(prisma.terminalSession.findMany).mockResolvedValue([]);
+      vi.mocked(prisma.userSettings.findFirst).mockResolvedValue(mockUserSettings);
+      vi.mocked(mockTx.userSettings.findFirst).mockResolvedValue(null);
+      vi.mocked(mockTx.userSettings.create).mockResolvedValue(mockUserSettings);
+      const exported = await dataBackupService.exportData('test');
+      expect(exported.meta.schemaVersion).toBe(8);
+      expect(exported.data.userSettings?.turnLimitMinutes).toBe(120);
+      await dataBackupService.importData(exported);
+      expect(mockTx.userSettings.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          turnLimitMinutes: 120,
+          ticketDispatchPrompt: mockUserSettings.ticketDispatchPrompt,
+          automationPermissions: 'YOLO',
+        }),
+      });
+    });
+
+    it('imports strict v4 data', async () => {
+      const exportedData = createImportData();
+
+      vi.mocked(mockTx.project.findUnique)
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce(null)
+        .mockResolvedValue(mockProject);
+      vi.mocked(mockTx.project.create).mockResolvedValue(mockProject);
+
+      vi.mocked(mockTx.workspace.findUnique)
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce({ id: 'ws-1' } as never)
+        .mockResolvedValueOnce({ id: 'ws-1' } as never);
+      vi.mocked(mockTx.workspace.create).mockResolvedValue(mockWorkspace);
+
+      vi.mocked(mockTx.agentSession.findUnique).mockResolvedValue(null);
+      vi.mocked(mockTx.agentSession.create).mockResolvedValue(mockAgentSession);
+
+      vi.mocked(mockTx.terminalSession.findUnique).mockResolvedValue(null);
+      vi.mocked(mockTx.terminalSession.create).mockResolvedValue(mockTerminalSession);
+
+      vi.mocked(mockTx.userSettings.findFirst).mockResolvedValue(null);
+      vi.mocked(mockTx.userSettings.create).mockResolvedValue(mockUserSettings);
+
+      const result = await dataBackupService.importData(exportedData);
+
+      expect(result.projects.imported).toBe(1);
+      expect(result.workspaces.imported).toBe(1);
+      expect(result.agentSessions.imported).toBe(1);
+      expect(result.terminalSessions.imported).toBe(1);
+      expect(result.userSettings.imported).toBe(true);
+
+      expect(mockTx.workspacePRMonitoring.upsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          create: expect.objectContaining({
+            legacySessionIds: ['session-123'],
+            deliveryPauseReason: 'LEGACY_FIXER',
+          }),
+        })
+      );
+
+      expect(mockTx.workspace.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          id: 'ws-1',
+          // Preserve authored run-script and cleanup commands in the nested row;
+          // clear process identity, port, start time and running authority.
+          // `postRunCommand` is absent because the format never carried it, so it
+          // restores as null and the next reconcile reads it back off disk.
+          runScript: {
+            create: {
+              command: 'npm run dev',
+              cleanupCommand: 'npm run cleanup',
+              pid: null,
+              port: null,
+              startedAt: null,
+              status: RunScriptStatus.IDLE,
+            },
+          },
+          // The v4 format's flat ratchet fields land in the nested row, and
+          // `ratchetLastCiRunId` restores as `dispatchSnapshotKey`.
+        }),
+      });
+
+      expect(mockTx.agentSession.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          id: 'session-1',
+          provider: SessionProvider.CODEX,
+          providerSessionId: 'thread-123',
+          providerMetadata: { transport: 'app-server' },
+        }),
+      });
+      expect(mockTx.userSettings.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          ratchetReviewTriggerMode: 'ALL_REVIEW_FEEDBACK',
+          automationPermissions: 'RELAXED',
+          ticketDispatchPrompt: null,
+          childWorkspacesEnabled: false,
+          reviewerSessionProvider: SessionProvider.CLAUDE,
+          reviewerClaudeModel: 'opus',
+          reviewerCodexModel: 'gpt-5-codex-high',
+          postReviewToGitHub: false,
+          voiceModeEnabled: true,
+          voiceTtsModel: 'flux-cliff-en',
+          voiceTtsSpeed: 1.3,
+          voiceUtteranceEndMs: 2500,
+          voiceBargeInSustainedMs: 24,
+          appearanceColorScheme: 'solarized',
+          appearanceBackgroundColor: '#002b36',
+          appearanceForegroundColor: '#93a1a1',
+          appearanceFontScale: 125,
+          appearanceFontSans: '"Inter", ui-sans-serif, system-ui, sans-serif',
+          appearanceFontMono: 'Fira Code',
+        }),
+      });
+      // The Deepgram API key is never part of the export, so a restore
+      // never sets it — the admin re-enters it after import.
+      expect(mockTx.userSettings.create.mock.calls[0]?.[0].data).not.toHaveProperty(
+        'deepgramApiKeyEncrypted'
+      );
+    });
+
+    it('remaps an aura-2 voice from a pre-Flux backup to the current default', async () => {
+      // A backup taken before the Flux upgrade carries `aura-2-*` and possibly
+      // an off-grid speed. Import writes UserSettings directly and never
+      // replays the migration, so the parse-time normalization in
+      // exportedUserSettingsSchema is the only thing standing between a
+      // restore and a voice config that fails every v2/speak connection.
+      const exportedData = createImportData({
+        projects: [],
+        workspaces: [],
+        agentSessions: [],
+        terminalSessions: [],
+        userSettings: {
+          preferredIde: 'cursor',
+          customIdeCommand: null,
+          playSoundOnComplete: true,
+          ticketDispatchPrompt: null,
+          childWorkspacesEnabled: false,
+          notificationSoundPath: null,
+          ratchetEnabled: true,
+          ratchetReplyToPrComments: true,
+          defaultSessionProvider: SessionProvider.CLAUDE,
+          defaultClaudeModel: 'sonnet',
+          defaultCodexModel: 'gpt-5-codex',
+          defaultWorkspacePermissions: 'STRICT',
+          automationPermissions: 'YOLO',
+          voiceModeEnabled: true,
+          voiceTtsModel: 'aura-2-apollo-en',
+          voiceTtsSpeed: 0.72,
+        },
+      });
+
+      vi.mocked(mockTx.userSettings.findFirst).mockResolvedValue(null);
+
+      await dataBackupService.importData(exportedData);
+
+      expect(mockTx.userSettings.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          voiceTtsModel: DEFAULT_DEEPGRAM_TTS_MODEL,
+          voiceTtsSpeed: 0.7,
+        }),
+      });
+    });
+
+    it('skips existing projects', async () => {
+      const exportedData = createImportData({
+        workspaces: [],
+        agentSessions: [],
+        terminalSessions: [],
+        userSettings: null,
+      });
+
+      vi.mocked(mockTx.project.findMany).mockResolvedValue([mockProject]);
+
+      const result = await dataBackupService.importData(exportedData);
+
+      expect(result.projects.imported).toBe(0);
+      expect(result.projects.skipped).toBe(1);
+      expect(mockTx.project.create).not.toHaveBeenCalled();
+    });
+
+    it('skips workspaces with missing projects', async () => {
+      const exportedData = createImportData({
+        projects: [],
+        agentSessions: [],
+        terminalSessions: [],
+      });
+
+      vi.mocked(mockTx.workspace.findUnique).mockResolvedValue(null);
+      vi.mocked(mockTx.project.findUnique).mockResolvedValue(null);
+      vi.mocked(mockTx.userSettings.findFirst).mockResolvedValue(null);
+      vi.mocked(mockTx.userSettings.create).mockResolvedValue(mockUserSettings);
+
+      const result = await dataBackupService.importData(exportedData);
+
+      expect(result.workspaces.imported).toBe(0);
+      expect(result.workspaces.skipped).toBe(1);
+      expect(mockTx.workspace.create).not.toHaveBeenCalled();
+    });
+
+    it('skips the complete parent/child group when their shared project is missing', async () => {
+      const baseWorkspace = createImportData().data.workspaces[0]!;
+      const exportedData = createImportData({
+        projects: [],
+        workspaces: [
+          {
+            ...baseWorkspace,
+            id: 'child-ws',
+            projectId: 'missing-project',
+            parentWorkspaceId: 'parent-ws',
+          },
+          {
+            ...baseWorkspace,
+            id: 'parent-ws',
+            projectId: 'missing-project',
+            parentWorkspaceId: null,
+          },
+        ],
+        agentSessions: [],
+        terminalSessions: [],
+        userSettings: null,
+      });
+
+      vi.mocked(mockTx.workspace.findUnique).mockResolvedValue(null);
+      vi.mocked(mockTx.project.findUnique).mockResolvedValue(null);
+
+      const result = await dataBackupService.importData(exportedData);
+
+      expect(result.workspaces.imported).toBe(0);
+      expect(result.workspaces.skipped).toBe(2);
+      expect(mockTx.workspace.create).not.toHaveBeenCalled();
+    });
+
+    it('rejects a child with an empty parent ID before discovery or writes', async () => {
+      const exportedData = createImportData({
+        agentSessions: [],
+        terminalSessions: [],
+        userSettings: null,
+      });
+      exportedData.data.workspaces[0]!.parentWorkspaceId = '';
+
+      await expect(dataBackupService.importData(exportedData)).rejects.toThrow(
+        'Parent must be a different file-owned root in the same project'
+      );
+      expect(mockTx.workspace.findUnique).not.toHaveBeenCalled();
+      expect(mockTx.project.create).not.toHaveBeenCalled();
+      expect(mockTx.workspace.create).not.toHaveBeenCalled();
+    });
+
+    it('skips user settings when already present', async () => {
+      const exportedData = createImportData({
+        projects: [],
+        workspaces: [],
+        agentSessions: [],
+        terminalSessions: [],
+      });
+
+      vi.mocked(mockTx.userSettings.findFirst).mockResolvedValue(mockUserSettings);
+
+      const result = await dataBackupService.importData(exportedData);
+
+      expect(result.userSettings.imported).toBe(false);
+      expect(result.userSettings.skipped).toBe(true);
+      expect(mockTx.userSettings.create).not.toHaveBeenCalled();
+    });
+  });
+});

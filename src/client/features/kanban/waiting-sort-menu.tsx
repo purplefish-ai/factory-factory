@@ -20,8 +20,8 @@ export function WaitingSortMenu({
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="icon" className="h-7 w-7" aria-label="Waiting sort order">
-          <SortDescendingIcon className="h-4 w-4" />
+        <Button variant="ghost" size="icon-compact" aria-label="Waiting sort order">
+          <SortDescendingIcon />
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">

@@ -82,11 +82,58 @@ individual checks, so review surfaces never show raw GitHub enums. Diff
 statistics use `DIFF_STAT_CLASS_NAMES` (success and destructive text).
 
 Render statuses with `StatusDot`, `StatusIcon` and `StatusChip` from
-[`status-indicators.tsx`](../src/client/components/status-indicators.tsx), or
-with `getStatusToneStyle(tone)` classes. Tinted chips and banners use
-`bg-<token>-accent/15` with `text-<token>` in light mode and `bg-<token>/10` in
-dark mode; the Badge `success`, `warning` and `info` variants follow the same
-rule.
+[`status-indicators.tsx`](../src/client/components/status-indicators.tsx), and
+messages with `StatusCallout`, rather than with `getStatusToneStyle(tone)`
+classes. Tinted chips and callouts use `bg-<token>-accent/15` with
+`text-<token>` in light mode and `bg-<token>/10` in dark mode; the Badge
+`success`, `warning`, `info` and `danger` variants reuse the chip classes.
+
+`StatusDot` sizes are `xs` (6px, beside small text such as tabs and log
+banners), `sm` and `md`. Session tabs in the workspace and quick chat take their
+icon, color and label from `deriveSessionTabRuntime`
+([`session-tab-runtime.ts`](../src/client/lib/session-tab-runtime.ts)) and
+render them with `SessionStatusIcon`.
+
+## Callouts and chips
+
+Each kind of status surface has one component:
+
+| Need                                     | Use                                                      |
+| ---------------------------------------- | -------------------------------------------------------- |
+| An error, warning, success or info box   | `StatusCallout` (`src/client/components/status-callout`) |
+| A status word on a card, row or PR panel | `StatusChip`                                             |
+| A number beside a nav item, tab or title | `Badge size="count"` (`secondary`, `outline` or a tone)  |
+| A progress or usage bar                  | `Progress` (`src/components/ui/progress.tsx`)            |
+| A query that failed                      | `QueryErrorState` / `QueryRefreshError` (both callouts)  |
+
+`StatusCallout` takes a `tone`, an optional `icon` (the tone's icon by default,
+a specific Phosphor icon, an element such as `Spinner`, or `false`), a
+medium-weight `title`, the message as children and trailing `action` controls,
+which wrap under the message in narrow containers. `variant="card"` is a rounded
+box; `variant="strip"` spans the top of a pane with only a bottom border.
+`size="sm"` uses `text-xs` for dense panels. All callout text uses the tone
+color: the palette test checks it on every tone's surface, while the foreground
+color falls below AA on some tints (Solarized). Pass `role="alert"` for an error
+raised by an action and `role="status"` for a polite live update.
+
+`StatusChip` uses `text-2xs` at its default `sm` size and `text-xs` at `md`,
+with an optional tone icon, and passes span attributes through (`title`, `role`,
+`aria-label`). `CiStatusChip`, `PrStateBadge`, `KanbanStatusChip` and
+`UnreadMailBadge` render it.
+
+## Small text
+
+`text-2xs` (11px with a 14px line, in the `@theme` block of
+[`globals.css`](../src/client/globals.css)) is the one step below `text-xs`, for
+chips, section labels and dense metadata such as card and sidebar rows. It
+replaces the former mix of `text-[10px]` and `text-[11px]`: the two were used
+interchangeably for the same roles (uppercase labels used both), a 1px
+difference is not a distinguishable step in the scale, and 11px keeps uppercase
+labels and chips legible. `SectionLabel`
+([`section-label.tsx`](../src/client/components/section-label.tsx)) is the
+uppercase, tracked, muted `text-2xs` heading for groups of rows and menu groups;
+pass `asChild` to style a heading or `SelectLabel`. The `Foundations/Typography`
+`TypeScale` story shows the scale.
 
 ## Lint guard
 
@@ -110,6 +157,20 @@ The remaining exceptions are the rule's `exceptions` option in
 Oxlint binary and fails when an exception no longer contains raw classes. Add an
 exception only for color that is not a status and has no theme token, and give
 its reason in the option.
+
+`factory/use-status-callout` rejects a class string that pairs a tinted status
+background (`bg-warning/10`, `dark:bg-info-accent/15`) with a border of the same
+status token (`border-warning/30`, `border-b-warning/20`), the shape of a
+hand-rolled callout. Only unprefixed and `dark:` classes count, so hover, focus
+and data-state tints pass, as do a tint without a status border and mixed
+tokens. It checks each string on its own, so classes split across `cn()`
+arguments are not caught. Its exceptions are the tone map and status-carrying
+board cards and sidebar rows, which tint a whole item rather than show a
+message. `factory/no-arbitrary-font-size` rejects `text-[10px]`, `text-[0.8rem]`
+and other arbitrary font sizes in favor of the type scale; its exceptions are
+the shadcn calendar and files whose remaining arbitrary size is pending another
+change. Both rules take the same `exceptions` map, skip tests, and have the same
+stale-exception check.
 
 ## Content surfaces
 
@@ -160,8 +221,15 @@ accessible labels, so their meaning survives monochrome display.
 Geist and Geist Mono variable fonts are served locally, including in Storybook,
 so default text remains available offline. The assets and SIL Open Font License
 are in `public/fonts/geist`, sourced from `vercel/geist-font` commit
-`a2357c1398c81d88ff84823a2f50af3152ee8733`. Optional alternate font families
-continue to use the existing Google Fonts stylesheet.
+`a2357c1398c81d88ff84823a2f50af3152ee8733`. The optional Appearance families
+(Inter, IBM Plex Mono, Atkinson Hyperlegible Next and Mono) are also served
+locally from `public/fonts/<family>`, each with its license, using the
+Fontsource 5.3.0 builds of Google Fonts' unicode-range subsets. Their
+`@font-face` rules in `src/client/fonts.css` load with the app stylesheet, but
+the browser fetches a font file only when text uses that family and falls in its
+range, and the app loads no third-party stylesheet before first paint.
+`src/client/fonts.test.ts` fails if a preset names a web font that is not
+bundled or if `index.html` gains a cross-origin resource.
 
 Icon buttons and close controls have 36px minimum targets on devices with any
 coarse pointer. Targets participate in layout rather than extending over nearby

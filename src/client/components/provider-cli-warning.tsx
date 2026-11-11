@@ -1,9 +1,9 @@
 import { ArrowsClockwiseIcon } from '@phosphor-icons/react/dist/csr/ArrowsClockwise';
-import { WarningIcon } from '@phosphor-icons/react/dist/csr/Warning';
+import { StatusCallout } from '@/client/components/status-callout';
 import { runInBackground } from '@/client/lib/background-task';
+import { QUERY_RETRY } from '@/client/lib/query-options';
 import { trpc } from '@/client/lib/trpc';
 import { Button } from '@/components/ui/button';
-import { Spinner } from '@/components/ui/spinner';
 import type { CodexAccountSummary } from '@/shared/codex-accounts';
 
 function getWarning(
@@ -97,7 +97,6 @@ export function ProviderCliWarning({
   const { data: health, isRefetching } = trpc.admin.checkCLIHealth.useQuery(
     { forceRefresh: false },
     {
-      refetchOnWindowFocus: false,
       refetchOnReconnect: false,
       staleTime: 60_000,
     }
@@ -106,7 +105,7 @@ export function ProviderCliWarning({
   const { data: accounts } = trpc.codexAccounts.list.useQuery(undefined, {
     enabled: provider === 'CODEX' && (!!codexAccountId || health?.codex.isAuthenticated === false),
     staleTime: 30_000,
-    retry: false,
+    retry: QUERY_RETRY.costlyRead,
   });
   const hasUsableCodexAccount =
     accounts?.some(
@@ -129,31 +128,28 @@ export function ProviderCliWarning({
   }
 
   return (
-    <div className="flex items-start gap-2 rounded-lg border border-warning/30 bg-warning/10 p-3 text-sm">
-      <WarningIcon className="mt-0.5 h-4 w-4 shrink-0 text-warning" />
-      <div className="flex-1 space-y-1">
-        <p className="text-warning">{warning.title}</p>
-        <p className="text-xs text-muted-foreground">{warning.description}</p>
-      </div>
-      <Button
-        variant="ghost"
-        size="icon"
-        className="h-7 w-7 text-warning hover:bg-warning/10 hover:text-warning"
-        onClick={() => {
-          runInBackground(
-            utils.admin.checkCLIHealth.invalidate(),
-            "Couldn't check provider status."
-          );
-        }}
-        disabled={isRefetching}
-      >
-        {isRefetching ? (
-          <Spinner className="h-3.5 w-3.5" aria-hidden="true" />
-        ) : (
-          <ArrowsClockwiseIcon className="h-3.5 w-3.5" />
-        )}
-        <span className="sr-only">Recheck</span>
-      </Button>
-    </div>
+    <StatusCallout
+      tone="warning"
+      title={warning.title}
+      action={
+        <Button
+          variant="ghost"
+          size="icon-compact"
+          className="text-warning hover:bg-warning/10 hover:text-warning"
+          onClick={() => {
+            runInBackground(
+              utils.admin.checkCLIHealth.invalidate(),
+              "Couldn't check provider status."
+            );
+          }}
+          pending={isRefetching}
+        >
+          <ArrowsClockwiseIcon />
+          <span className="sr-only">Recheck</span>
+        </Button>
+      }
+    >
+      {warning.description}
+    </StatusCallout>
   );
 }

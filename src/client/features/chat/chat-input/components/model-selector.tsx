@@ -32,7 +32,7 @@ export function ModelSelector({ selectedModel, options, onChange, disabled }: Mo
           aria-label={`Reasoning effort: ${displayName}`}
           title={`Reasoning effort: ${displayName}`}
           className="max-w-[12rem]"
-          icon={<BrainIcon className="size-3.5 shrink-0" aria-hidden="true" />}
+          icon={<BrainIcon aria-hidden="true" />}
         >
           {displayName}
         </ComposerMenuTrigger>

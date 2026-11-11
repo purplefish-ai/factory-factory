@@ -36,8 +36,9 @@ terminals, issues, and pull request status together in one place.
 
 You will need:
 
-- Node.js 26.12.1+ for the CLI and development (pinned in `.node-version`); the
-  desktop app uses Electron 45.0's bundled Node.js 24.22 runtime
+- Node.js 26.8.1+ for the CLI; development uses the version pinned in
+  `.node-version`. The desktop app uses Electron 45.0's bundled Node.js 24.22
+  runtime
 - macOS 13 (Ventura) or newer for the macOS desktop app
 - A local git repository
 - At least one agent provider:
@@ -170,19 +171,63 @@ Useful commands:
 
 ```bash
 ff serve --help     # Ports, database path, host, and other options
-ff proxy --private  # Share the app through a password-protected Cloudflare tunnel
+ff proxy            # Share the app through a password-protected Cloudflare tunnel
 ff tailscale        # Start with private HTTPS access through your Tailscale network
 ff db:studio        # Inspect the local database with Prisma Studio
 ```
 
 `ff proxy` requires `cloudflared` on your `PATH`. Factory Factory automatically
 runs database migrations, finds an available port, and opens the browser when
-the server is ready. Use `--private` for remote workspace management and command
-execution. Public tunnels cannot invoke privileged operations; their forwarded
-requests are rejected even when they omit the `Origin` header. Both tunnel modes
-disable inherited `TRUST_PROXY_HEADERS` and dotenv override settings before
-launching the backend; private mode authenticates clients before stripping
-forwarded-address headers.
+the server is ready. cloudflared always reaches the server through a local proxy
+started by the command:
+
+- **Password-protected (default).** The command prints a six-character password
+  and a direct link that signs in without it. **Anyone who signs in has full
+  access, including chat, terminals and running commands on this machine**, the
+  same as a local browser. The proxy authenticates each request (the direct
+  link, or a `__Host-` session cookie that is `Secure`, `HttpOnly` and
+  `SameSite=Lax`). A signed-in request may change state or open a WebSocket only
+  when its `Origin` is exactly the tunnel's own `https://*.trycloudflare.com`
+  origin; other origins (including other tunnels and `localhost` pages), and
+  state-changing requests or WebSockets without an `Origin`, are refused at the
+  proxy. Accepted requests are forwarded without forwarded-address headers, and
+  those that carry an `Origin` get the backend's own loopback origin instead, so
+  the backend's allowed-origin list never includes the tunnel. Wrong passwords
+  are limited per client (5 per 5 minutes) and across all clients (20 per 5
+  minutes, at most 5,760 guesses a day against about 2.2 billion possible
+  passwords); while the global limit is reached, password sign-in is paused for
+  everyone, but signed-in browsers and the direct link keep working. `--private`
+  is still accepted and changes nothing.
+- **Public (`ff proxy --public`).** No password: **anyone with the URL can view
+  the app, including workspace file contents**. The proxy forwards only `GET`
+  and `HEAD` requests without a body and refuses every other method and every
+  WebSocket upgrade, whatever headers or `Origin` the client sends, so nothing
+  reached through a public tunnel can change data, send prompts or open chat and
+  terminals; tRPC runs only queries over `GET`. It also refuses the queries that
+  start processes (sub-agent browsing, provider model lists, CLI health) or read
+  beyond this instance's data (GitHub previews, PR details and diffs, and search
+  through your `gh` login, path probes, server logs, data export). `--public`
+  cannot be combined with `--private`.
+
+Both tunnel modes disable inherited `TRUST_PROXY_HEADERS` and dotenv override
+settings before launching the backend. A public tunnel keeps (or adds)
+forwarded-address headers, so the backend also refuses its trusted-local
+operations. A password-protected tunnel relies on the backend accepting its own
+loopback origin, which it does only while every `CORS_ALLOWED_ORIGINS` entry in
+your environment is a valid loopback origin (the default). Otherwise, including
+for a malformed or empty entry, its mutations and WebSockets are refused.
+
+The server listens on loopback only unless you pass another address with
+`ff serve --host` (for example `--host 0.0.0.0`, as the Docker image does).
+While it listens on loopback and every allowed origin is a loopback one (the
+default, and every local launch mode), its own page is always an allowed origin:
+an `http:` loopback origin (`localhost`, `127.x.x.x` or `[::1]`) on the port the
+server actually bound. When the requested port is taken and the server falls
+back to the next free one (for example a second desktop instance while
+`ff serve` holds 3001), the app on that port keeps working without listing it in
+`CORS_ALLOWED_ORIGINS`. Loopback pages on other, unconfigured ports are still
+rejected. A server bound beyond loopback, or configured with a public origin
+(`ff tailscale`, a reverse proxy), allows only the configured origins.
 
 Port selection rejects values outside the integer range 1–65535 before starting
 a process or binding a socket, then checks listening processes with `lsof` on
@@ -200,6 +245,30 @@ selects an available port. Set `BROWSER=none` to start Studio without opening a
 browser. Launch failures return a nonzero exit status. The command does not
 download Prisma or other packages. Windows UNC and device paths are rejected
 because Prisma Studio cannot preserve their location; use a local drive path.
+
+### Database upgrades
+
+Every launch (`ff serve`, `ff proxy`, `ff tailscale`, the desktop app and the
+Docker image) applies pending database migrations before starting. An older
+version refuses to start on a database a newer version has migrated, naming the
+migrations it does not know; upgrade Factory Factory and start it again. The
+`ff` commands accept `FF_ALLOW_UNKNOWN_MIGRATIONS=1` to start anyway with a
+warning, at the risk of errors from the mismatched schema. Development mode
+(`ff serve --dev`) always warns and continues instead of refusing.
+
+Before applying pending migrations to an existing database, every launch (and
+`ff db:migrate`) takes a SQLite online backup into `db-backups/` beside the
+database, for example
+`~/factory-factory/db-backups/data.db-pre-migration-<UTC time>.db`. The three
+newest backups per database are kept. No backup is taken when nothing is
+pending. If the backup cannot be written, startup warns and migrates anyway.
+When the backup succeeds, a failed migration's error names it; to restore it,
+stop Factory Factory, copy the backup over the database file and delete its
+`-wal` and `-shm` files.
+
+Startup warns, without failing, when an applied migration's file has changed
+since it was applied, or when a migration that disabled foreign keys left rows
+that reference missing records.
 
 ### Access through Tailscale
 
@@ -294,11 +363,18 @@ To serve Factory Factory from your own domain (e.g. `https://ff.example.com`)
 via nginx, Caddy, or another reverse proxy:
 
 - Set `CORS_ALLOWED_ORIGINS` to the exact public origin(s), comma-separated:
-  `CORS_ALLOWED_ORIGINS=https://ff.example.com`. This gates both HTTP CORS and
-  WebSocket upgrades; non-loopback origins must match exactly (scheme + host +
-  non-default port, no trailing slash).
-- Keep `BACKEND_HOST` bound to `localhost`/`127.0.0.1` so only your proxy can
-  reach the server.
+  `CORS_ALLOWED_ORIGINS=https://ff.example.com`. This gates HTTP CORS, every
+  tRPC API request that carries an `Origin` header, and WebSocket upgrades,
+  which must always carry an allowed `Origin`; non-loopback origins must match
+  exactly (scheme + host + non-default port, no trailing slash). With a public
+  origin configured, the backend no longer implies its own loopback origin, so
+  only the listed origins are accepted. While the backend listens on loopback,
+  tRPC requests must also use a loopback `Host` or the host of an allowed
+  origin, which blocks DNS rebinding; a proxy that forwards
+  `Host: ff.example.com` is covered by the setting above.
+- Keep the server on loopback so only your proxy can reach it: leave
+  `BACKEND_HOST` unset (the backend then binds `127.0.0.1` and, where IPv6 is
+  available, `::1`), or set it to `localhost` or `127.0.0.1`.
 
 By default the server rejects privileged HTTP requests and WebSocket upgrades
 that carry client-address headers (`x-forwarded-for`, `cf-connecting-ip`, etc.),
@@ -312,11 +388,11 @@ applies.
 
 For local testing from an origin that isn't in `CORS_ALLOWED_ORIGINS` (an
 alternate dev frontend, curl/Postman, or a LAN device that also satisfies
-`TRUSTED_LOCAL_CIDRS`), set `DISABLE_CORS_CHECKS=true` to skip Origin validation
-entirely. **Local dev only** — never set this in a deployed or reverse-proxied
-environment; it removes the app's only defense against a malicious webpage you
-have open calling the local API on your behalf (workspace/project creation,
-local command execution).
+`TRUSTED_LOCAL_CIDRS`), set `DISABLE_CORS_CHECKS=true` to skip Origin and `Host`
+validation entirely. **Local dev only** — never set this in a deployed or
+reverse-proxied environment; it removes the app's only defense against a
+malicious webpage you have open calling the local API on your behalf
+(workspace/project creation, local command execution).
 
 ## Security
 

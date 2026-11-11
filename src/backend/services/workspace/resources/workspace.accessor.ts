@@ -95,7 +95,7 @@ function flatten<
     prs?: WorkspacePRRow[];
     prDiscovery?: WorkspacePRDiscovery | null;
     runScript?: WorkspaceRunScriptRow | null;
-    _count?: { prEvents: number; childWorkspaces?: number };
+    _count?: { prEvents: number; prDeliveries?: number; childWorkspaces?: number };
     parentWorkspace?: Parameters<typeof projectWorkspaceFamily>[0]['parentWorkspace'];
     conversationMetadata?: Parameters<typeof projectConversationSummary>[0];
   },
@@ -110,7 +110,11 @@ function flatten<
     parentWorkspace,
     ...rest
   } = row;
-  const ratchetFields = flattenWorkspaceRatchet(prMonitoring, _count?.prEvents ?? 0);
+  const ratchetFields = flattenWorkspaceRatchet(
+    prMonitoring,
+    _count?.prEvents ?? 0,
+    _count?.prDeliveries ?? 0
+  );
   return {
     ...rest,
     ...projectWorkspaceFamily({ parentWorkspace, _count }),
@@ -122,11 +126,14 @@ function flatten<
   };
 }
 
-/** Included on every read that has to reproduce the old flat workspace shape. */
+/**
+ * Included on every read that has to reproduce the old flat workspace shape.
+ * The PR `observation` blob is omitted because flattening never projects it.
+ */
 const sideTables = {
   conversationMetadata: true,
   prMonitoring: true,
-  prs: { orderBy: { id: 'asc' } },
+  prs: { orderBy: { id: 'asc' }, omit: { observation: true } },
   prDiscovery: true,
   runScript: true,
   ...workspaceFamilyInclude,
@@ -136,6 +143,7 @@ type SideTableInclude = typeof sideTables;
 
 /** Side-table reads and flattening for sibling accessors that project their own workspace shape. */
 export {
+  sessionsWithoutBlobs as workspaceSessionsWithoutBlobs,
   flatten as flattenWorkspaceRow,
   sideTables as workspaceSideTables,
   type Flattened as FlattenedWorkspaceRow,
@@ -147,12 +155,32 @@ export type WorkspaceWithRatchet = Flattened<
   Prisma.WorkspaceGetPayload<{ include: SideTableInclude }>
 >;
 
+/**
+ * Large columns that hot workspace reads leave out. SQLite reads run on the
+ * main event loop, so loading them competes with WebSocket streaming:
+ * until archive, `creationMetadata` keeps base64 initial attachments (up to
+ * 10 MB per image) and `initOutput` up to 50 KB of startup log, and session
+ * `providerMetadata` carries provider config snapshots. Callers that need one
+ * use a separately named finder in `workspace-detail-read.accessor.ts` or the
+ * session capsule's own reads.
+ */
+const workspaceBlobOmit = {
+  initOutput: true,
+  creationMetadata: true,
+} satisfies Prisma.WorkspaceOmit;
+const sessionsWithoutBlobs = {
+  agentSessions: { omit: { providerMetadata: true } },
+  terminalSessions: true,
+} satisfies Prisma.WorkspaceInclude;
+
 type WorkspaceWithAgentSessions = Flattened<
   Prisma.WorkspaceGetPayload<{
-    include: { agentSessions: true; terminalSessions: true } & SideTableInclude;
+    omit: typeof workspaceBlobOmit;
+    include: typeof sessionsWithoutBlobs & SideTableInclude;
   }>
 >;
 
+/** A flattened workspace with its sessions, without the large blob columns. */
 export type WorkspaceWithSessions = WorkspaceWithAgentSessions;
 
 /**
@@ -165,7 +193,7 @@ export type WorkspaceWithSessions = WorkspaceWithAgentSessions;
 const projectAndPR = {
   project: true,
   prMonitoring: { select: { enabled: true } },
-  prs: { orderBy: { id: 'asc' } },
+  prs: { orderBy: { id: 'asc' }, omit: { observation: true } },
   prDiscovery: true,
 } satisfies Prisma.WorkspaceInclude;
 type WorkspaceWithProjectInclude = typeof projectAndPR;
@@ -195,11 +223,8 @@ function withProjectAndPR(
 
 type WorkspaceWithAgentSessionsAndProject = Flattened<
   Prisma.WorkspaceGetPayload<{
-    include: {
-      agentSessions: true;
-      terminalSessions: true;
-      project: true;
-    } & SideTableInclude;
+    omit: typeof workspaceBlobOmit;
+    include: typeof sessionsWithoutBlobs & { project: true } & SideTableInclude;
   }>
 >;
 
@@ -367,14 +392,12 @@ class WorkspaceAccessor {
     return flatten(existing);
   }
 
+  /** The flattened workspace with sessions, without the large blob columns. */
   async findById(id: string): Promise<WorkspaceWithSessions | null> {
     const row = await prisma.workspace.findUnique({
       where: { id },
-      include: {
-        agentSessions: true,
-        terminalSessions: true,
-        ...sideTables,
-      },
+      omit: workspaceBlobOmit,
+      include: { ...sessionsWithoutBlobs, ...sideTables },
     });
     return row ? flatten(row) : null;
   }
@@ -516,11 +539,8 @@ class WorkspaceAccessor {
     const rows = await prisma.workspace.findMany({
       where,
       orderBy: { updatedAt: 'desc' },
-      include: {
-        agentSessions: true,
-        terminalSessions: true,
-        ...sideTables,
-      },
+      omit: workspaceBlobOmit,
+      include: { ...sessionsWithoutBlobs, ...sideTables },
     });
     return rows.map(flatten);
   }
@@ -532,12 +552,8 @@ class WorkspaceAccessor {
   async findAllNonArchivedWithSessionsAndProject(): Promise<WorkspaceWithSessionsAndProject[]> {
     const rows = await prisma.workspace.findMany({
       where: { status: { not: 'ARCHIVED' } },
-      include: {
-        agentSessions: true,
-        terminalSessions: true,
-        project: true,
-        ...sideTables,
-      },
+      omit: workspaceBlobOmit,
+      include: { ...sessionsWithoutBlobs, project: true, ...sideTables },
       orderBy: { updatedAt: 'desc' },
     });
     return rows.map(flatten);
@@ -930,19 +946,16 @@ class WorkspaceAccessor {
     });
   }
 
-  /**
-   * Find child workspaces with session counts included, for status summaries.
-   */
-  async findChildrenWithStatus(parentId: string): Promise<
-    Flattened<
-      Prisma.WorkspaceGetPayload<{
-        include: { agentSessions: true; project: true } & SideTableInclude;
-      }>
-    >[]
-  > {
+  /** Child workspaces with their sessions, for the polled status panel, without blob columns. */
+  async findChildrenWithStatus(parentId: string) {
     const rows = await prisma.workspace.findMany({
       where: { parentWorkspaceId: parentId, status: { not: 'ARCHIVED' } },
-      include: { agentSessions: true, project: true, ...sideTables },
+      omit: workspaceBlobOmit,
+      include: {
+        agentSessions: sessionsWithoutBlobs.agentSessions,
+        project: true,
+        ...sideTables,
+      },
       orderBy: { createdAt: 'asc' },
     });
     return rows.map(flatten);

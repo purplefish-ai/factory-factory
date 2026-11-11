@@ -1,21 +1,22 @@
-import { memo, useCallback, useEffect, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { AcpConfigOption } from '@/client/features/chat/reducer';
 import { ProviderUsageControl } from '@/client/features/chat/usage-stats/provider-usage-control';
 import {
   FileMentionPalette,
   SlashCommandPalette,
+  useFileMentions,
   usePasteDropHandler,
   useSlashCommands,
 } from '@/client/features/composer';
 import { useShortcut } from '@/client/features/shortcuts';
 import { runInBackground } from '@/client/lib/background-task';
+import { trpc } from '@/client/lib/trpc';
 import { InputGroup, InputGroupAddon, InputGroupTextarea } from '@/components/ui/input-group';
 import type { ChatSettings, CommandInfo, MessageAttachment, TokenStats } from '@/lib/chat-protocol';
 import { cn } from '@/lib/utils';
 import type { ChatBarCapabilities } from '@/shared/chat-capabilities';
 import { AttachmentSection, LeftControls, RightControls } from './components/input-controls';
 import { useChatInputActions } from './hooks/use-chat-input-actions';
-import { useFileMentions } from './hooks/use-file-mentions';
 import { useTextareaResize } from './hooks/use-textarea-resize';
 
 // =============================================================================
@@ -142,7 +143,9 @@ export const ChatInput = memo(function ChatInput({
 
   // File mentions hook
   const fileMentions = useFileMentions({
-    workspaceId,
+    fileQuery: trpc.workspace.listAllFiles,
+    scope: { workspaceId: workspaceId ?? '' },
+    scopeReady: !!workspaceId,
     inputRef: resolvedInputRef,
     onChange,
   });
@@ -159,11 +162,13 @@ export const ChatInput = memo(function ChatInput({
     [slash, fileMentions]
   );
 
+  const openQuickActions = useCallback(() => setQuickActionsOpen(true), []);
+
   // Actions hook
   const actions = useChatInputActions({
     onSend,
     onStop,
-    onOpenQuickActions: () => setQuickActionsOpen(true),
+    onOpenQuickActions: openQuickActions,
     onCloseSlashMenu: slash.handleSlashMenuClose,
     onChange,
     onSettingsChange,
@@ -232,6 +237,29 @@ export const ChatInput = memo(function ChatInput({
   }, [value, resolvedInputRef]);
 
   const isDisabled = disabled;
+  const usageProvider =
+    capabilities?.usageStats.enabled &&
+    (capabilities.provider === 'CLAUDE' || capabilities.provider === 'CODEX')
+      ? capabilities.provider
+      : null;
+  const usageBusy = running || stopping || pendingMessageCount > 0;
+  // A stable element lets the memoized RightControls skip unrelated composer renders.
+  const usageControl = useMemo(
+    () =>
+      usageProvider && (
+        <ProviderUsageControl
+          key={`${usageProvider}:${codexAccountId ?? 'native'}`}
+          provider={usageProvider}
+          codexAccountId={codexAccountId}
+          tokenStats={tokenStats}
+          busy={usageBusy}
+          compacting={isCompacting}
+          disabled={isDisabled}
+          onCompact={onCompact}
+        />
+      ),
+    [usageProvider, codexAccountId, tokenStats, usageBusy, isCompacting, isDisabled, onCompact]
+  );
 
   return (
     <div className={cn('relative flex min-h-0 flex-col px-4 py-3', className)}>
@@ -252,6 +280,7 @@ export const ChatInput = memo(function ChatInput({
         files={fileMentions.files}
         isOpen={fileMentions.fileMentionMenuOpen}
         isLoading={fileMentions.filesLoading}
+        error={fileMentions.filesError}
         onClose={fileMentions.handleFileMentionMenuClose}
         onSelect={fileMentions.handleFileMentionSelect}
         filter={fileMentions.fileMentionFilter}
@@ -275,6 +304,8 @@ export const ChatInput = memo(function ChatInput({
           onDragOver={pasteDropHandler.handleDragOver}
           onDragLeave={pasteDropHandler.handleDragLeave}
           disabled={isDisabled}
+          // A stable name; the placeholder changes while connecting.
+          aria-label="Message"
           placeholder={isDisabled ? 'Connecting…' : placeholder}
           // Reserve a full line plus py-3 even while an empty field's intrinsic
           // size is recalculated; a transient shrink clamps the transcript above.
@@ -328,19 +359,7 @@ export const ChatInput = memo(function ChatInput({
             disabled={isDisabled}
             inputRef={resolvedInputRef}
           >
-            {capabilities?.usageStats.enabled &&
-              (capabilities.provider === 'CLAUDE' || capabilities.provider === 'CODEX') && (
-                <ProviderUsageControl
-                  key={`${capabilities.provider}:${codexAccountId ?? 'native'}`}
-                  provider={capabilities.provider}
-                  codexAccountId={codexAccountId}
-                  tokenStats={tokenStats}
-                  busy={running || stopping || pendingMessageCount > 0}
-                  compacting={isCompacting}
-                  disabled={isDisabled}
-                  onCompact={onCompact}
-                />
-              )}
+            {usageControl}
           </RightControls>
         </InputGroupAddon>
       </InputGroup>

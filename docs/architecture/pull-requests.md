@@ -4,11 +4,11 @@
 
 Reviews lives at `/projects/:slug/reviews`. The navbar selects its project;
 Automations and Reviews remain in the sidebar above global Settings. The page
-and sidebar badge share a project-keyed query with a 30-second freshness/refresh
-policy. The badge excludes approved PRs. The URL project wins over a temporarily
-stale saved selection, including archived projects absent from the active menu.
-Local-only projects show an explicit repository empty state without fetching
-reviews or PR details.
+and sidebar badge share a project-keyed query that polls every two minutes. The
+badge excludes approved PRs. The URL project wins over a temporarily stale saved
+selection, including archived projects absent from the active menu. Local-only
+projects show an explicit repository empty state without fetching reviews or PR
+details.
 
 `prReview.listReviewRequests` accepts optional `{ projectId }`; the server
 resolves and validates that project's GitHub owner/repository and qualifies the
@@ -16,6 +16,26 @@ GitHub search before pagination. Missing, unlinked, or malformed projects cannot
 fall back to a global search. Repository identity uses case-insensitive
 owner/repo matching. Undefined input retains the global review-count bridge and
 snapshot contract.
+
+`GitHubCLIService.listReviewRequests` caches each search for two minutes, keyed
+by lowercase repository, so every window shares one `gh api graphql` search per
+repository per interval. The review-count bridge's global search has its own
+entry and runs at most once per interval. The cache is stale-while-revalidate: a
+stale entry is returned at once while one background search refreshes it, and a
+failed refresh keeps the stale entry until a later read succeeds. The page's
+Refresh and Retry buttons send `forceRefresh`, which rechecks gh health and
+waits for a new search, then fill the shared query key. A submitted review drops
+every cached entry and stops searches already running from refilling it, so the
+next read searches again. New requests made on GitHub can therefore take up to
+about four minutes to appear without Refresh.
+
+The `gh` health check (`--version` and `auth status`) caches a healthy result
+for five minutes and an unhealthy one for 30 seconds, so `gh auth login` is
+noticed quickly. A `gh` command failing with missing authentication or a missing
+binary discards a healthy result, so the next read waits for a new check, and
+drops cached review requests that may belong to the previous account. Health and
+settings checks that pass `forceRefresh` (the CLI health Recheck) still run
+immediately.
 
 Legacy `/reviews` links redirect to the selected project. Explicit `repo` links
 resolve a configured owner (selected match, active match, then archived match)
@@ -31,8 +51,8 @@ search source. They also exclude PRs attached only to ARCHIVING or ARCHIVED
 workspaces. A PR attached to a live workspace remains visible, even when an
 archived workspace also references it. Requests without a local workspace remain
 visible; detached associations do not affect visibility. Filtering reads current
-workspace state after each GitHub list fetch, so restoring a workspace makes its
-requests eligible again on the next refresh.
+workspace state on every list read, including cached ones, so restoring a
+workspace makes its requests eligible again on the next poll.
 
 ## PR and issue link previews
 
@@ -270,22 +290,19 @@ The event collector uses one per-lifetime projection worker for PR collection
 and monitoring invalidations. Its narrow database read publishes the complete PR
 and monitoring field set together; it does not fetch the broad workspace record.
 Invalidations during a read supersede that read and retain their reasons until a
-current projection is accepted. For association-aware events, only accepted PR
-invalidations run PR-switch refresh and Linear-completion effects.
-Monitoring-only refreshes publish facts without invoking those effects. The
-worker owns retries and archive/stop fences, and has no GitHub, delivery,
-session, or Linear runtime dependency.
+current projection is accepted. Every PR snapshot and attachment event carries
+its association ID; only accepted PR invalidations run PR-switch refresh and
+Linear-completion effects, and completion uses the accepted projection without
+another PR-projection read. Monitoring-only refreshes publish facts without
+invoking those effects. The worker owns retries and archive/stop fences, and has
+no GitHub, delivery, session, or Linear runtime dependency.
 
 PR-switch handling immediately recomputes monitoring and wakes delivery using
 `checkWorkspaceById`. This automatic check retains the shared 90-second
-observation cooldown and terminal-PR policy; a just-accepted attachment or
-discovery observation is reused rather than fetched again. Explicit refreshes
-and delivery preparation retain their separate forced-observation contract.
-
-Legacy events without an association ID retain immediate scalar cache updates
-and PR-switch handling. Their Linear-completion gate retains its narrow read and
-missing-row fallback; association-aware completion uses the accepted projection
-without another database read.
+observation cooldown and terminal- and stable-PR policies; a just-accepted
+attachment or discovery observation is reused rather than fetched again.
+Explicit refreshes and delivery preparation retain their separate
+forced-observation contract.
 
 Manual workspace PR refreshes serialize per workspace so concurrent requests
 report a committed lifecycle transition only once. Sibling refresh failures log
@@ -318,6 +335,28 @@ workspace deletion still cascades both deliveries and events. A quarantined
 legacy receipt spanning multiple workspaces blocks deletion of its batch owner
 rather than cascading into another workspace's evidence.
 
+Membership that later becomes inconsistent, and old-format imports of unfinished
+receipts, are also quarantined as `BLOCKED`. A `BLOCKED` delivery holds every
+later claim for its workspace, so the workspace projection reports the derived
+pause reason `DELIVERY_BLOCKED` (a persisted pause reason takes precedence) and
+the status reads "PR update delivery needs attention". The PR menu says updates
+are stopped because an earlier update's delivery record is inconsistent, and
+offers **Discard stuck PR update…** instead of Resume. After confirmation, the
+trusted-local `workspace.discardBlockedPRDeliveries` mutation moves the
+workspace's `BLOCKED` deliveries to `DISMISSED` and wakes delivery. Nothing is
+resent or deleted: delivery rows, membership and member evidence stay verbatim,
+unsettled (pending or dispatching) members read as `CANCELLED` while members
+already recorded as delivered stay delivered history, and the cancelled facts
+are not delivered (the next PR transition emits fresh facts). Dismissed
+deliveries are never settled, retried or recovered. Export still writes
+quarantined evidence verbatim and still fails for damaged normalized membership;
+dismissal is local, so a restored backup quarantines the same evidence again.
+Delivery and event states are defined once in
+`src/shared/schemas/pr-event.schema.ts` and parsed on read; an unknown persisted
+state fails the read and holds claims instead of being treated as live. Frozen
+legacy metadata without a receipt ID (below) still blocks claims without this
+projection or action.
+
 Logical backups retain the existing flattened event format. Export validates
 complete normalized membership; old imports reconstruct batches with the same
 receipt IDs and quarantine contradictory evidence. Delivery ID collisions abort
@@ -345,11 +384,14 @@ requests.
 ### Ledger retention
 
 The `pr-event-retention` job, registered beside `pr-event-poll`, runs every 30
-minutes after its first interval. It deletes SUPERSEDED and CANCELLED facts
-older than 24 hours in batches of 100, oldest first, with at most 20 batches per
-run. Each batch is a separate short write; the delete re-checks the predicate,
-and the loop yields between batches and stops on shutdown. Superseded review
-facts copy the whole observation, so these rows hold most of the ledger's size.
+minutes after its first interval. It deletes SUPERSEDED and CANCELLED facts, and
+PENDING facts of ARCHIVED workspaces, older than 24 hours in batches of 100,
+oldest first, with at most 20 batches per run. Each batch is a separate short
+write; the delete re-checks the predicate, and the loop yields between batches
+and stops on shutdown. Superseded review facts copy the whole observation, so
+these rows hold most of the ledger's size. A `(state, createdAt)` index serves
+this cross-workspace query, so it reads only old rows in those states, never
+delivered history.
 
 Only rows that no reader uses are eligible. Rows must have no `batchId`, no
 legacy receipt or frozen metadata, and a PR target. The reducer reads only
@@ -361,10 +403,14 @@ Eligible kinds are those whose deduplication key includes the PR's transition
 sequence: review feedback, CI failure, conflict, merge and close. That sequence
 persists with every accepted observation and only increases, so the reducer
 never regenerates a pruned key. `CI_RECOVERED` and legacy `MONITORING_ENABLED`
-rows are retained. ARCHIVED workspaces cannot return to READY; their terminal
-facts are pruned under the same rule, while their delivery evidence and
-unclaimed pending facts remain until workspace deletion. Logical backups simply
-omit pruned facts.
+rows are retained. ARCHIVED workspaces cannot return to READY, polling observes
+only READY workspaces, and claims require READY, so their unclaimed PENDING
+facts can never be delivered. Those facts, like their terminal facts, are pruned
+under the same rule. Their delivery evidence and members, DISPATCHING and
+DELIVERED rows, and retained kinds remain until workspace deletion. ARCHIVING
+workspaces keep their pending facts, because a failed archive rolls back to
+READY. Logical backups simply omit pruned facts; an import cancels unclaimed
+pending facts anyway.
 
 Deletion returns pages to SQLite's free list for reuse by later writes; it does
 not shrink the file. The app does not run `VACUUM` automatically: it rewrites
@@ -392,15 +438,44 @@ three-minute pass cannot bypass the closed-PR backoff. Explicit refreshes (the
 Kanban Sync button and PR attachment) and delivery preparation's freshness
 checks force their observation and remain unrestricted.
 
+The policy (`shouldPollPR`) reads only whether an observation is stored, not its
+contents. The watcher's monitoring list and the scheduler's stale-PR read leave
+the observation out and, in the same read transaction, ask SQLite which PRs have
+none (SQL NULL or JSON null). That query decides from the record header
+(`typeof`, `octet_length`) instead of comparing stored values, so SQLite does
+not read observation pages either. Terminal PRs still match the scheduler's SQL
+filter and are dropped in application code: the policy compares each PR's
+observation epoch with its workspace's monitoring epoch, which a Prisma filter
+cannot express.
+
 Automatic refreshes are unforced: the workspace-idle refresh, the app-load and
 project-switch sweep, and the workspace page-load sync. They reuse an
-observation accepted in the last 90 seconds, apply the same terminal policy, and
-defer to the scheduler's per-PR fetch coordinator. A merge is still observed
-once, because the policy reads the committed state, which remains open until a
-MERGED observation is accepted. `refreshWorkspace` and the `syncPRStatus` and
-`syncAllPRStatuses` procedures take an explicit `force` flag (default `false`
-for the procedures). An automatic project sweep in flight does not suppress an
-explicit forced sync.
+observation accepted in the last 90 seconds, apply the same terminal and
+[stable-PR](#stable-pr-polling) policies, and defer to the scheduler's per-PR
+fetch coordinator. A merge is still observed once, because the policy reads the
+committed state, which remains open until a MERGED observation is accepted.
+`refreshWorkspace` and the `syncPRStatus` and `syncAllPRStatuses` procedures
+take an explicit `force` flag (default `false` for the procedures). An automatic
+project sweep in flight does not suppress an explicit forced sync.
+
+### Stable PR polling
+
+Automatic observations also back off an open PR whose facts have stopped
+changing. Once three consecutive observations of a PR are identical apart from
+their observation time, with CI terminal (`SUCCESS` or `FAILURE`) and, while
+monitoring is on, complete review facts, unforced observations keep the
+committed facts until 10 minutes have passed since the last GitHub read, instead
+of reading every two-minute poll. Pending or unknown CI, incomplete reviews, a
+changed observation, and a write by another observer (a revision change) keep
+the normal cadence. A forced observation (explicit refresh, attachment, or
+delivery preparation's freshness check) always reads GitHub and starts a new
+count, as does a session in the workspace starting or finishing a turn, since
+that is when an agent pushes. The state is in memory, scoped like the 90-second
+reuse window, so a restart starts every PR at the normal cadence. A change made
+on GitHub while a stable PR is backed off, such as a new human review or a merge
+through the web UI, is therefore observed up to 10 minutes later. GitHub's
+`updatedAt` is not used to skip reads, because it is not known to change when a
+review thread is resolved.
 
 ### Observations and events
 
@@ -443,9 +518,12 @@ accepted observation. The producer imports no runtime application dependencies
 and receives no service objects or event emitters. Composition supplies a stable
 opaque `cacheScope` shared by polling, manual refresh, and delivery wrappers for
 one application graph; distinct graphs have independent in-flight and recent
-observation caches. Delivery receives a `refreshObservation` callback from
-composition wiring and awaits it before claiming events, then rechecks the
-recipient binding. Recipient readiness belongs to delivery.
+observation caches. The scope is keyed by the application's services object; the
+PR pipeline has no process-default services, so polling, refresh, delivery,
+monitoring changes and issue-start recipient binding all receive that object
+explicitly. Delivery receives a `refreshObservation` callback from composition
+wiring and awaits it before claiming events, then rechecks the recipient
+binding. Recipient readiness belongs to delivery.
 
 `prFactPayloadSchema` validates GitHub-derived facts; the transition reducer
 accepts and emits only those facts. `prMonitoringControlPayloadSchema` validates
@@ -487,16 +565,23 @@ queued facts so the new recipient can receive them.
 
 Review policy defaults to `CHANGES_REQUESTED`: changes-requested review bodies
 and unresolved inline threads. `ALL_REVIEW_FEEDBACK` also includes commented
-review summaries. Ordinary PR conversation comments do not trigger updates. Core
-PR, head and check facts are fetched separately from optional review enrichment.
-Failed identity, review settings, review or comment lookups mark reviews
-incomplete without blocking CI, conflict or terminal-state observations. They
-claim no review resolutions, and the existing incomplete-review acceptance
-retains pending feedback. Identity must be known before accepting review facts;
-failed lookups retry on the next poll without disabling self-review filtering.
-The app's own [adversarial-review marker](../design/adversarial-review.md)
-remains an explicit exception to that filtering under its authenticated GitHub
-identity.
+review summaries. Ordinary PR conversation comments do not trigger updates.
+While monitoring is on, one `gh pr view` reads the core PR, head and check facts
+together with the conversation comments (one GraphQL request). Reviews (REST,
+for its chronological order), inline review comments (REST) and resolved review
+threads (GraphQL) are separate reads; the thread lookup is skipped when a
+complete inline-comment read found none, since resolution only filters inline
+comments. An observation therefore spawns four `gh` processes, or three without
+inline comments. If the combined read fails for any reason other than an abort
+or connectivity failure, the core facts are read again on their own and reviews
+are reported incomplete. Failed identity, review settings, review or comment
+lookups mark reviews incomplete without blocking CI, conflict or terminal-state
+observations. They claim no review resolutions, and the existing
+incomplete-review acceptance retains pending feedback. Identity must be known
+before accepting review facts; failed lookups retry on the next poll without
+disabling self-review filtering. The app's own
+[adversarial-review marker](../design/adversarial-review.md) remains an explicit
+exception to that filtering under its authenticated GitHub identity.
 
 While a workspace's monitoring is off, observations read only the core facts
 (one `gh pr view`); identity, review, review-comment and thread reads are
@@ -589,6 +674,19 @@ header cannot be isolated), and checks provider-owned history, including after
 another conversation is selected. If history is unavailable, restore the
 provider history files and archived identity, then explicitly resume the
 selected conversation. Local transcript messages cannot prove receipt.
+
+The session capsule tells the delivery port why a claimed delivery did not reach
+the provider with a typed `PRDeliveryFailureReason`. Dispatch raises
+`ApplicationError` kinds that the session's background delivery service
+classifies before calling the port, so the wording of the app's own messages
+never decides delivery state. `busy` (`SESSION_TURN_BUSY`: another turn holds
+the session or a human message arrived during preparation) defers the claim
+without spending an attempt. A provider runtime's busy-turn error is untyped, so
+the session capsule still recognizes that external payload by its reason text
+(`isTurnAlreadyInProgressError`) and reports it as `busy`. `resume_failed`
+(`SESSION_RESUME_FAILED`: the exact stored conversation could not be restored)
+pauses delivery as `RESUME_FAILED` immediately. Any other failure is a counted
+retry.
 
 Transport attempts stop after three failures. User stop and runtime failure
 persist a pause and invalidate queued requests; explicit user continuation

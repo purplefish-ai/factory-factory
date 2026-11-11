@@ -1,10 +1,9 @@
 import type { Meta, StoryObj } from '@storybook/react';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { observable } from '@trpc/server/observable';
+import { useQueryClient } from '@tanstack/react-query';
 import { ThemeProvider } from 'next-themes';
-import { type CSSProperties, type ReactNode, useState } from 'react';
-import { expect, within } from 'storybook/test';
-import { trpc } from '@/client/lib/trpc';
+import type { CSSProperties } from 'react';
+import { expect, userEvent, within } from 'storybook/test';
+import { STORY_TRPC_PENDING } from '@/client/lib/storybook-trpc';
 import { FileCode } from './file-code';
 import { FileViewer } from './file-viewer';
 import { WorkspacePanelProvider } from './workspace-panel-context';
@@ -13,52 +12,30 @@ const fontStyle: CSSProperties & { '--font-mono': string } = {
   '--font-mono': '"Atkinson Hyperlegible Mono", monospace',
 };
 
-function FileViewerStoryProvider({ children, size = 73 }: { children: ReactNode; size?: number }) {
-  const [queryClient] = useState(() => new QueryClient());
-  const [client] = useState(() =>
-    trpc.createClient({
-      links: [
-        () => () =>
-          observable((observer) => {
-            observer.next({
-              result: {
-                data: {
-                  content: 'export const greeting = "Hello, world!";\nconsole.log(greeting);',
-                  language: 'typescript',
-                  size,
-                  isBinary: false,
-                  truncated: size > 1024 ** 2,
-                },
-              },
-            });
-            observer.complete();
-          }),
-      ],
-    })
-  );
-
-  return (
-    <trpc.Provider client={client} queryClient={queryClient}>
-      <QueryClientProvider client={queryClient}>
-        <WorkspacePanelProvider workspaceId="file-viewer-story">
-          <div className="h-80 w-full bg-background text-foreground" style={fontStyle}>
-            {children}
-          </div>
-        </WorkspacePanelProvider>
-      </QueryClientProvider>
-    </trpc.Provider>
-  );
+function readFileResult(size: number) {
+  return {
+    content: 'export const greeting = "Hello, world!";\nconsole.log(greeting);',
+    language: 'typescript',
+    size,
+    isBinary: false,
+    truncated: size > 1024 ** 2,
+  };
 }
 
 const meta = {
   title: 'Workspace/FileViewer',
   component: FileViewer,
-  parameters: { layout: 'padded' },
+  parameters: {
+    layout: 'padded',
+    trpc: { handlers: { 'workspace.readFile': () => readFileResult(73) } },
+  },
   decorators: [
     (Story) => (
-      <FileViewerStoryProvider>
-        <Story />
-      </FileViewerStoryProvider>
+      <WorkspacePanelProvider workspaceId="file-viewer-story">
+        <div className="h-80 w-full bg-background text-foreground" style={fontStyle}>
+          <Story />
+        </div>
+      </WorkspacePanelProvider>
     ),
   ],
   args: {
@@ -116,16 +93,119 @@ export const MinifiedSourceFile: Story = {
 };
 
 export const GigabyteFile: Story = {
-  decorators: [
-    (Story) => (
-      <FileViewerStoryProvider size={1024 ** 3}>
-        <Story />
-      </FileViewerStoryProvider>
-    ),
-  ],
+  parameters: {
+    trpc: { handlers: { 'workspace.readFile': () => readFileResult(1024 ** 3) } },
+  },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await expect(await canvas.findByText('1.0 GB')).toBeVisible();
     await expect(canvas.getByText('File truncated to 1MB. Actual size: 1.0 GB')).toBeVisible();
+  },
+};
+
+export const LoadingFile: Story = {
+  parameters: { trpc: { handlers: { 'workspace.readFile': () => STORY_TRPC_PENDING } } },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(await canvas.findByText('Loading file…')).toBeVisible();
+  },
+};
+
+export const LoadError: Story = {
+  parameters: {
+    trpc: {
+      handlers: {
+        'workspace.readFile': () => {
+          throw new Error('ENOENT: no such file or directory');
+        },
+      },
+    },
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(await canvas.findByText("Couldn't load file")).toBeVisible();
+    await expect(canvas.getByText(/ENOENT: no such file or directory/)).toBeVisible();
+    await expect(canvas.getByRole('button', { name: 'Retry' })).toBeVisible();
+  },
+};
+
+const refreshFixture = { failing: false };
+
+function FailNextRefresh() {
+  const queryClient = useQueryClient();
+  return (
+    <button
+      type="button"
+      onClick={() => {
+        refreshFixture.failing = true;
+        void queryClient.refetchQueries();
+      }}
+    >
+      Fail next refresh
+    </button>
+  );
+}
+
+/** A failed refresh keeps the file under a notice, inside the panel's height. */
+export const RefreshError: Story = {
+  beforeEach: () => {
+    refreshFixture.failing = false;
+  },
+  parameters: {
+    trpc: {
+      handlers: {
+        'workspace.readFile': () => {
+          if (refreshFixture.failing) {
+            throw new Error('Worktree is busy');
+          }
+          return readFileResult(73);
+        },
+      },
+    },
+  },
+  decorators: [
+    (Story) => (
+      <>
+        <FailNextRefresh />
+        <Story />
+      </>
+    ),
+  ],
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await canvas.findByText('example.ts');
+    await userEvent.click(canvas.getByRole('button', { name: 'Fail next refresh' }));
+    const notice = await canvas.findByRole('status');
+    await expect(notice).toHaveTextContent('Worktree is busy');
+    await expect(canvas.getByText('example.ts')).toBeVisible();
+    // The loaded file shares the panel with the notice instead of overflowing it.
+    const panel = notice.closest('.h-80');
+    const viewer = notice.parentElement;
+    if (!(panel && viewer)) {
+      throw new Error('Missing file viewer panel');
+    }
+    await expect(viewer.scrollHeight).toBeLessThanOrEqual(panel.clientHeight);
+  },
+};
+
+export const MarkdownPreview: Story = {
+  args: { filePath: 'README.md' },
+  parameters: {
+    trpc: {
+      handlers: {
+        'workspace.readFile': () => ({
+          content: '# Factory Factory\n\nPreviewed **Markdown**.',
+          language: 'markdown',
+          size: 42,
+          isBinary: false,
+          truncated: false,
+        }),
+      },
+    },
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(await canvas.findByRole('heading', { name: 'Factory Factory' })).toBeVisible();
+    await expect(canvas.getByRole('button', { name: 'Code' })).toBeVisible();
   },
 };

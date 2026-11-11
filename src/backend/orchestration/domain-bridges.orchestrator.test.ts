@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   launchWorkspace,
   type WorkspaceLaunchPorts,
-} from '@/backend/orchestration/workspace-launch.orchestrator';
+} from '@/backend/orchestration/workspace-lifecycle/workspace-launch.orchestrator';
 
 const mockLogger = vi.hoisted(() => ({
   info: vi.fn(),
@@ -17,9 +17,7 @@ vi.mock('@/backend/services/logger.service', () => ({
   createLogger: () => mockLogger,
 }));
 
-vi.mock('@/backend/services/ratchet', () => ({ ratchetService: { configure: vi.fn() } }));
-
-vi.mock('./reconciliation.service', () => ({
+vi.mock('@/backend/orchestration/workspace-lifecycle/reconciliation.service', () => ({
   reconciliationService: { configure: vi.fn() },
 }));
 
@@ -128,11 +126,27 @@ vi.mock('@/backend/services/terminal', () => ({
   terminalSessionService: { recoverOrphanedSessions: vi.fn() },
 }));
 
-vi.mock('./workspace-init.orchestrator', () => ({
+vi.mock('@/backend/orchestration/workspace-lifecycle/workspace-init.orchestrator', () => ({
   initializeWorkspaceWorktree: vi.fn(),
   recoverStaleProvisioningWorkspace: vi.fn(),
 }));
 
+vi.mock(
+  '@/backend/orchestration/pull-requests/pr-observation.orchestrator',
+  async (importOriginal) => ({
+    ...(await importOriginal<
+      typeof import('@/backend/orchestration/pull-requests/pr-observation.orchestrator')
+    >()),
+    resetStablePRBackoff: vi.fn(),
+  })
+);
+
+import { resetStablePRBackoff } from '@/backend/orchestration/pull-requests/pr-observation.orchestrator';
+import { reconciliationService } from '@/backend/orchestration/workspace-lifecycle/reconciliation.service';
+import {
+  initializeWorkspaceWorktree,
+  recoverStaleProvisioningWorkspace,
+} from '@/backend/orchestration/workspace-lifecycle/workspace-init.orchestrator';
 import {
   githubCLIService,
   prFetchCoordinator,
@@ -141,7 +155,6 @@ import {
 } from '@/backend/services/github';
 import { createLogger } from '@/backend/services/logger.service';
 import { periodicTaskService } from '@/backend/services/periodic-task';
-import { ratchetService } from '@/backend/services/ratchet';
 import { startupScriptService } from '@/backend/services/run-script';
 import {
   acpRuntimeManager,
@@ -168,12 +181,9 @@ import {
 } from '@/backend/services/workspace';
 import * as backgroundDispatch from './background-action-dispatch.orchestrator';
 import { type BridgeServices, configureDomainBridges } from './domain-bridges.orchestrator';
-import { defaultPRMonitoringServices } from './pr-monitoring-dependencies';
-import { reconciliationService } from './reconciliation.service';
-import {
-  initializeWorkspaceWorktree,
-  recoverStaleProvisioningWorkspace,
-} from './workspace-init.orchestrator';
+import { createPRMonitoringTestServices } from './testing/pr-monitoring-services.test-support';
+
+const prServices = createPRMonitoringTestServices();
 
 function getBridge<T>(mockFn: (arg: T) => void): T {
   return vi.mocked(mockFn).mock.calls[0]![0];
@@ -184,7 +194,7 @@ function createBridgeServices(
   createWorkspace: WorkspaceLaunchPorts['createWorkspace'] = mockWorkspaceCreationService.create
 ): BridgeServices {
   const services: BridgeServices = {
-    ...defaultPRMonitoringServices,
+    ...prServices,
     chatEventForwarderService,
     sessionDispatchService,
     createLogger,
@@ -193,7 +203,6 @@ function createBridgeServices(
     periodicTaskService,
     prFetchCoordinator,
     prSnapshotService,
-    ratchetService,
     recoverStaleProvisioningWorkspace,
     reconciliationService,
     sessionLifecycleEventService,
@@ -267,10 +276,9 @@ describe('configureDomainBridges', () => {
     expect(sessionDispatchService.tryDispatchNextMessage).not.toHaveBeenCalled();
   });
 
-  it('configures all ratchet domain services', () => {
+  it('configures the reconciliation bridge', () => {
     configureDomainBridges(createBridgeServices());
 
-    expect(ratchetService.configure).toHaveBeenCalledTimes(1);
     expect(reconciliationService.configure).toHaveBeenCalledTimes(1);
   });
 
@@ -724,9 +732,7 @@ describe('configureDomainBridges', () => {
 
       bridge.workspace.markSessionIdle('ws1', 's1', 12);
       expect(workspaceActivityService.markSessionIdle).toHaveBeenCalledWith('ws1', 's1', 12);
-      expect(defaultPRMonitoringServices.workspacePRMonitoringService.get).toHaveBeenCalledWith(
-        'ws1'
-      );
+      expect(prServices.workspacePRMonitoringService.get).toHaveBeenCalledWith('ws1');
     });
 
     it('chatEventForwarder workspace bridge delegates on', () => {
@@ -760,10 +766,36 @@ describe('configureDomainBridges', () => {
 
       bridge.workspace.markSessionIdle('ws1', 's1', 12);
       expect(workspaceActivityService.markSessionIdle).toHaveBeenCalledWith('ws1', 's1', 12);
-      expect(defaultPRMonitoringServices.workspacePRMonitoringService.get).toHaveBeenCalledWith(
-        'ws1'
-      );
+      expect(prServices.workspacePRMonitoringService.get).toHaveBeenCalledWith('ws1');
     });
+
+    it.each([
+      ['chatEventForwarder', chatEventForwarderService.configure],
+      ['sessionService', sessionService.configure],
+    ] as const)(
+      '%s session transitions return the workspace PRs to the normal observation cadence',
+      (_name, configure) => {
+        configureDomainBridges(createBridgeServices());
+        const bridge = getBridge(configure as (arg: unknown) => void) as {
+          workspace: {
+            markSessionRunning(workspaceId: string, sessionId: string): number;
+            markSessionIdle(workspaceId: string, sessionId: string, generation?: number): void;
+          };
+        };
+        vi.mocked(resetStablePRBackoff).mockClear();
+        vi.mocked(workspaceActivityService.markSessionRunning).mockReturnValueOnce(5);
+
+        expect(bridge.workspace.markSessionRunning('ws1', 's1')).toBe(5);
+        bridge.workspace.markSessionIdle('ws2', 's1', 12);
+        expect(vi.mocked(resetStablePRBackoff).mock.calls.map((call) => call[1])).toEqual([
+          'ws1',
+          'ws2',
+        ]);
+        // Every entry point resets the same observation cache scope.
+        const [running, idle] = vi.mocked(resetStablePRBackoff).mock.calls;
+        expect(running?.[0].cacheScope).toBe(idle?.[0].cacheScope);
+      }
+    );
 
     it('session lifecycle message queue bridge delegates pending dispatch to the dispatcher', async () => {
       configureDomainBridges(createBridgeServices());
@@ -809,41 +841,30 @@ describe('configureDomainBridges', () => {
       configureDomainBridges(createBridgeServices());
       configureDomainBridges(createBridgeServices());
 
-      expect(ratchetService.configure).toHaveBeenCalledTimes(2);
+      expect(reconciliationService.configure).toHaveBeenCalledTimes(2);
       expect(workspaceQueryService.configure).toHaveBeenCalledTimes(2);
     });
   });
 });
 
 it('wires PR monitoring through the injected graph rather than global instances', async () => {
-  const monitoring = {
-    ...defaultPRMonitoringServices.workspacePRMonitoringService,
-    listLegacyRetirementCandidates: vi.fn(async () => []),
-    get: vi.fn(async () => null),
-  };
   const observer = { ...prObservationService, configure: vi.fn() };
   const background = {
-    ...defaultPRMonitoringServices.sessionBackgroundDeliveryService,
+    ...prServices.sessionBackgroundDeliveryService,
     configure: vi.fn(),
   };
   const settings = {
-    ...defaultPRMonitoringServices.userSettingsService,
+    ...prServices.userSettingsService,
     get: vi.fn(async () => ({ ratchetReviewTriggerMode: 'all' })),
   };
   configureDomainBridges(
     createBridgeServices({
-      workspacePRMonitoringService:
-        monitoring as unknown as BridgeServices['workspacePRMonitoringService'],
       prObservationService: observer as unknown as BridgeServices['prObservationService'],
       sessionBackgroundDeliveryService:
         background as unknown as BridgeServices['sessionBackgroundDeliveryService'],
       userSettingsService: settings as unknown as BridgeServices['userSettingsService'],
     })
   );
-  await getBridge(vi.mocked(ratchetService.configure)).retireLegacy?.();
-  await getBridge(vi.mocked(ratchetService.configure)).wake('custom-workspace');
-  expect(monitoring.listLegacyRetirementCandidates).toHaveBeenCalledOnce();
-  expect(monitoring.get).toHaveBeenCalledWith('custom-workspace');
   expect(background.configure).toHaveBeenCalledOnce();
   await getBridge(observer.configure).readPolicy();
   expect(settings.get).toHaveBeenCalledOnce();

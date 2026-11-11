@@ -38,9 +38,40 @@ describe('InitStatusBanner setup retry', () => {
       act(() => root.render(<InitStatusBanner {...props} retryPending />));
       expect(button?.disabled).toBe(true);
       expect(button?.textContent).toContain('Retrying…');
-      expect(button?.querySelector('.animate-spin')).not.toBeNull();
+      expect(button?.getAttribute('aria-busy')).toBe('true');
+      expect(button?.querySelector('[data-slot="spinner"]')).not.toBeNull();
       act(() => button?.click());
       expect(onRetry).toHaveBeenCalledOnce();
+    } finally {
+      act(() => root.unmount());
+    }
+  });
+});
+
+describe('InitStatusBanner progress', () => {
+  it('shows the shared spinner, hidden from assistive tech, while setup runs', () => {
+    const container = document.createElement('div');
+    const root = createRoot(container);
+    try {
+      act(() =>
+        root.render(
+          <InitStatusBanner
+            banner={{
+              kind: 'info',
+              message: 'Setting up workspace…',
+              showRetry: false,
+              showPlay: false,
+              showDismiss: false,
+            }}
+            retryPending={false}
+            onRetry={vi.fn()}
+            onPlay={vi.fn()}
+          />
+        )
+      );
+      const spinner = container.querySelector('[data-slot="spinner"]');
+      expect(spinner?.getAttribute('aria-hidden')).toBe('true');
+      expect(container.textContent).toContain('Setting up workspace…');
     } finally {
       act(() => root.unmount());
     }

@@ -96,7 +96,7 @@ function Harness() {
   );
 }
 function getEvent(input: unknown) {
-  if (fail === 'agent.get') {
+  if (fail === 'automation.get') {
     throw new Error('Saved read unavailable');
   }
   const args = z
@@ -123,7 +123,7 @@ function getEvent(input: unknown) {
 }
 async function listEvents(input: unknown) {
   await listWait;
-  if (fail === 'agent.list') {
+  if (fail === 'automation.list') {
     throw new Error('Event list unavailable');
   }
   const args = z.object({ projectId: z.string(), cursor: z.string().optional() }).parse(input);
@@ -181,20 +181,20 @@ async function updateEvent(input: unknown) {
   return saved;
 }
 async function respond(path: string, input: unknown) {
-  if (path === 'agent.list') {
+  if (path === 'automation.list') {
     return listEvents(input);
   }
-  if (path === 'agent.get') {
+  if (path === 'automation.get') {
     return getEvent(input);
   }
-  if (path === 'agent.updateSaved') {
+  if (path === 'automation.updateSaved') {
     return updateEvent(input);
   }
-  if (path === 'agent.validateDraft') {
+  if (path === 'automation.validateDraft') {
     await previewWait;
     return nativePreview;
   }
-  if (path === 'agent.projectSources') {
+  if (path === 'automation.projectSources') {
     await sourceWait;
     return {
       project: { id: 'owner', name: 'Project' },
@@ -361,7 +361,7 @@ it('opens an event outside page one, keeps equal IDs distinct and separates list
   await waitForReact(() => expect(container.textContent).toContain('retained-tail'));
   expect(requests).toContainEqual(
     expect.objectContaining({
-      path: 'agent.get',
+      path: 'automation.get',
       input: { projectId: 'owner', agentId: 'same', retainedCursor: 'retained-next' },
     })
   );
@@ -400,7 +400,7 @@ it('preserves a conflicted draft and original CAS through refresh, then reloads 
   await submit();
   expect(
     requests
-      .filter((item) => item.path === 'agent.updateSaved')
+      .filter((item) => item.path === 'automation.updateSaved')
       .map((item) => agentSavedUpdateSchema.parse(item.input).expectedManagementRevision)
   ).toEqual([2, 2]);
   await click('Discard edits and reload saved configuration');
@@ -419,18 +419,19 @@ it('keeps the draft across a read failure and later success without advancing it
   await click('Edit automation');
   await edit('input[name="name"]', 'Typed name');
   const form = container.querySelector('form');
-  fail = 'agent.get';
-  await act(() => queryClient.invalidateQueries({ queryKey: getQueryKey(trpc.agent.get) }));
+  fail = 'automation.get';
+  await act(() => queryClient.invalidateQueries({ queryKey: getQueryKey(trpc.automation.get) }));
   expect(container.querySelector('form')).toBe(form);
   await waitForReact(() => expect(container.textContent).toContain('draft is preserved'));
   fail = undefined;
   saved.managementRevision = 9;
-  await act(() => queryClient.invalidateQueries({ queryKey: getQueryKey(trpc.agent.get) }));
+  await act(() => queryClient.invalidateQueries({ queryKey: getQueryKey(trpc.automation.get) }));
   expect(container.querySelector<HTMLInputElement>('input[name="name"]')?.value).toBe('Typed name');
   await submit();
   expect(
-    agentSavedUpdateSchema.parse(requests.find((item) => item.path === 'agent.updateSaved')?.input)
-      .expectedManagementRevision
+    agentSavedUpdateSchema.parse(
+      requests.find((item) => item.path === 'automation.updateSaved')?.input
+    ).expectedManagementRevision
   ).toBe(2);
 });
 it('serializes save and invalidates the captured owner after switching kind, project and editing session', async () => {
@@ -444,10 +445,10 @@ it('serializes save and invalidates the captured owner after switching kind, pro
   await edit('input[name="name"]', 'Captured old edit');
   await submit();
   await submit();
-  expect(requests.filter((item) => item.path === 'agent.updateSaved')).toHaveLength(1);
+  expect(requests.filter((item) => item.path === 'automation.updateSaved')).toHaveLength(1);
   queryClient.setQueryData(
     getQueryKey(
-      trpc.agent.get,
+      trpc.automation.get,
       { projectId: 'owner', agentId: 'same', retainedCursor: 'cached-tail' },
       'query'
     ),
@@ -464,7 +465,7 @@ it('serializes save and invalidates the captured owner after switching kind, pro
     expect(
       queryClient.getQueryState(
         getQueryKey(
-          trpc.agent.get,
+          trpc.automation.get,
           { projectId: 'owner', agentId: 'same', retainedCursor: 'cached-tail' },
           'query'
         )
@@ -484,7 +485,8 @@ it('validates only by explicit mutation and keeps inherited settings through pre
   );
   expect(
     requests.some(
-      (item) => item.path === 'agent.projectSources' || item.path === 'agent.validateDraft'
+      (item) =>
+        item.path === 'automation.projectSources' || item.path === 'automation.validateDraft'
     )
   ).toBe(false);
   await click('Edit automation');
@@ -493,7 +495,7 @@ it('validates only by explicit mutation and keeps inherited settings through pre
   expect(container.textContent).toContain('requested-model');
   expect(container.textContent).toContain('INHERITED_TO_NATIVE_DEFAULT');
   expect(container.textContent).toContain('None (null)');
-  expect(requests.find((item) => item.path === 'agent.validateDraft')?.type).toBe('mutation');
+  expect(requests.find((item) => item.path === 'automation.validateDraft')?.type).toBe('mutation');
   expect(
     container.querySelector<HTMLTextAreaElement>('textarea[aria-label="Execution settings"]')?.value
   ).toBe('{\n  "version": 1\n}');
@@ -502,8 +504,9 @@ it('validates only by explicit mutation and keeps inherited settings through pre
   await submit();
   await waitForReact(() => expect(container.querySelector('form')).toBeNull());
   expect(
-    agentSavedUpdateSchema.parse(requests.find((item) => item.path === 'agent.updateSaved')?.input)
-      .specification.executionConfig
+    agentSavedUpdateSchema.parse(
+      requests.find((item) => item.path === 'automation.updateSaved')?.input
+    ).specification.executionConfig
   ).toEqual({ version: 1 });
 });
 it.each(['preview', 'sources'])(
@@ -558,7 +561,7 @@ it('inspects recovered zero-event bodies and validates only an explicitly author
     )?.value
   ).toBe('');
   await click('Validate draft');
-  expect(requests.some((item) => item.path === 'agent.validateDraft')).toBe(false);
+  expect(requests.some((item) => item.path === 'automation.validateDraft')).toBe(false);
   const specification = {
     name: saved.name,
     instructions: saved.instructions,
@@ -570,9 +573,9 @@ it('inspects recovered zero-event bodies and validates only an explicitly author
   await edit('textarea[aria-label="Full saved specification JSON"]', JSON.stringify(specification));
   await click('Validate draft');
   await waitForReact(() =>
-    expect(requests.some((item) => item.path === 'agent.validateDraft')).toBe(true)
+    expect(requests.some((item) => item.path === 'automation.validateDraft')).toBe(true)
   );
-  expect(requests.find((item) => item.path === 'agent.validateDraft')?.input).toMatchObject({
+  expect(requests.find((item) => item.path === 'automation.validateDraft')?.input).toMatchObject({
     specification,
   });
 });
@@ -600,14 +603,14 @@ it('requires an explicit blank complete replacement for unknown or invalid store
   );
   expect(json?.value).toBe('');
   await submit();
-  expect(requests.some((item) => item.path === 'agent.updateSaved')).toBe(false);
+  expect(requests.some((item) => item.path === 'automation.updateSaved')).toBe(false);
   await edit(
     'textarea[aria-label="Full saved specification JSON"]',
     JSON.stringify(eventAgentFixture().specification)
   );
   await submit();
   await waitForReact(() =>
-    expect(requests.some((item) => item.path === 'agent.updateSaved')).toBe(true)
+    expect(requests.some((item) => item.path === 'automation.updateSaved')).toBe(true)
   );
 });
 it('keeps archived details readable with writes disabled and missing IDs explicit', async () => {
@@ -620,7 +623,7 @@ it('keeps archived details readable with writes disabled and missing IDs explici
   expect(button('Create automation').disabled).toBe(true);
 });
 it('does not auto-select or claim empty when either initial list fails', async () => {
-  fail = 'agent.list';
+  fail = 'automation.list';
   await render('/projects/owner/agents');
   await waitForReact(() => expect(container.textContent).toContain('Event list unavailable'));
   expect(container.querySelector('output')?.textContent).toBe('/projects/owner/agents');
@@ -740,7 +743,7 @@ it('does not unlock a pending save when an earlier preview finishes', async () =
     container.querySelector<HTMLInputElement>('input[name="name"]')?.matches(':disabled')
   ).toBe(true);
   await submit();
-  expect(requests.filter((request) => request.path === 'agent.updateSaved')).toHaveLength(1);
+  expect(requests.filter((request) => request.path === 'automation.updateSaved')).toHaveLength(1);
   await act(() => saveGate.resolve());
   await waitForReact(() => expect(container.querySelector('form')).toBeNull());
 });
@@ -795,9 +798,9 @@ it('shows authoritative paused state and reopens with returned CAS when successf
   expect(container.querySelector('main')?.textContent).toContain('ACTIVE');
   await click('Edit automation');
   await edit('textarea[aria-label="Instructions"]', 'Authoritative returned instructions');
-  fail = 'agent.get';
+  fail = 'automation.get';
   await submit();
-  const key = getQueryKey(trpc.agent.get, { projectId: 'owner', agentId: 'same' }, 'query');
+  const key = getQueryKey(trpc.automation.get, { projectId: 'owner', agentId: 'same' }, 'query');
   await waitForReact(() => expect(queryClient.getQueryState(key)?.status).toBe('error'));
   await waitForReact(() => expect(container.querySelector('form')).toBeNull());
   expect(container.querySelector('main')?.textContent).toContain(
@@ -814,11 +817,11 @@ it('shows authoritative paused state and reopens with returned CAS when successf
   ).toBe('Authoritative returned instructions');
   await submit();
   await waitForReact(() =>
-    expect(requests.filter((request) => request.path === 'agent.updateSaved')).toHaveLength(2)
+    expect(requests.filter((request) => request.path === 'automation.updateSaved')).toHaveLength(2)
   );
   expect(
     agentSavedUpdateSchema.parse(
-      requests.filter((request) => request.path === 'agent.updateSaved')[1]?.input
+      requests.filter((request) => request.path === 'automation.updateSaved')[1]?.input
     ).expectedManagementRevision
   ).toBe(3);
 });
@@ -832,7 +835,7 @@ it('preserves a higher same-owner cached revision over an older successful mutat
   const gate = deferred();
   saveWait = gate.promise;
   await submit();
-  const key = getQueryKey(trpc.agent.get, { projectId: 'owner', agentId: 'same' }, 'query');
+  const key = getQueryKey(trpc.automation.get, { projectId: 'owner', agentId: 'same' }, 'query');
   const newer = managedAgentSchema.parse({
     ...saved,
     managementRevision: 5,
@@ -843,7 +846,7 @@ it('preserves a higher same-owner cached revision over an older successful mutat
   expect(
     container.querySelector<HTMLTextAreaElement>('textarea[aria-label="Instructions"]')?.value
   ).toBe('Pending revision three');
-  fail = 'agent.get';
+  fail = 'automation.get';
   await act(() => gate.resolve());
   await waitForReact(() => expect(container.querySelector('form')).toBeNull());
   expect(managedAgentSchema.parse(queryClient.getQueryData(key)).managementRevision).toBe(5);
@@ -866,9 +869,13 @@ it('seeds the captured event owner after delayed save without replacing the same
   const gate = deferred();
   saveWait = gate.promise;
   await submit();
-  const baseKey = getQueryKey(trpc.agent.get, { projectId: 'owner', agentId: 'same' }, 'query');
+  const baseKey = getQueryKey(
+    trpc.automation.get,
+    { projectId: 'owner', agentId: 'same' },
+    'query'
+  );
   const retainedKey = getQueryKey(
-    trpc.agent.get,
+    trpc.automation.get,
     { projectId: 'owner', agentId: 'same', retainedCursor: 'tail' },
     'query'
   );
@@ -880,7 +887,7 @@ it('seeds the captured event owner after delayed save without replacing the same
   await click('Edit automation');
   await edit('input[name="name"]', 'Keep scheduled draft');
   const form = container.querySelector('form');
-  fail = 'agent.get';
+  fail = 'automation.get';
   await act(() => gate.resolve());
   await waitForReact(() =>
     expect(queryClient.getQueryState(retainedKey)?.isInvalidated).toBe(true)

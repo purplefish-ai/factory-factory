@@ -18,7 +18,7 @@ vi.mock('@/backend/services/session/service/session-domain.service', () => ({
   },
 }));
 
-import { sessionBackgroundDeliveryService } from '@/backend/services/session/service/lifecycle/session-background-delivery.service';
+import { sessionBackgroundDeliveryService } from '@/backend/services/session/service/delivery/session-background-delivery.service';
 import { createQueueMessageHandler } from './queue-message.handler';
 
 describe('createQueueMessageHandler', () => {

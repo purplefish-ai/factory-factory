@@ -38,6 +38,8 @@ export function WorkspacePrAction({
     return null;
   }
   const loading = catalog.isPending || catalog.isLoading;
+  // Chat creation is one mutation shared by every new-chat control, so this
+  // shows the spinner whenever a chat is being created.
   const disabled = isCreatingSession || loading || !(action?.content || catalog.isError);
   const label = loading ? 'Loading PR action…' : catalog.isError ? 'Retry PR action' : 'Create PR';
   const description = catalog.isError
@@ -56,7 +58,7 @@ export function WorkspacePrAction({
   };
   if (renderAsMenuItem) {
     return (
-      <DropdownMenuItem disabled={disabled} onSelect={createPr}>
+      <DropdownMenuItem disabled={disabled} pending={isCreatingSession} onSelect={createPr}>
         <GitPullRequestIcon className="h-3 w-3" />
         {label}
       </DropdownMenuItem>
@@ -68,13 +70,13 @@ export function WorkspacePrAction({
         <span className="inline-flex">
           <Button
             variant="ghost"
-            size="sm"
-            className="h-6 gap-1 text-xs px-2"
+            size="xs"
             disabled={disabled}
+            pending={isCreatingSession}
             onClick={createPr}
             title={description}
           >
-            <GitPullRequestIcon className="h-3 w-3" />
+            <GitPullRequestIcon />
             {label}
           </Button>
         </span>

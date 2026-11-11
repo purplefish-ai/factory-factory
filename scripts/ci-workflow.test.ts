@@ -8,6 +8,9 @@ import { z } from 'zod';
 import { selectJobs } from '../.github/scripts/select-ci.mjs';
 
 const stepSchema = z.object({
+  env: z.record(z.string(), z.string()).optional(),
+  uses: z.string().optional(),
+  with: z.record(z.string(), z.unknown()).optional(),
   name: z.string().optional(),
   run: z.string().optional(),
 });
@@ -37,6 +40,23 @@ function runGate(selected: string, work: string, selection = 'success') {
 }
 
 describe('conservative CI selection', () => {
+  it('tests, builds and exercises native modules on the separate user minimum', () => {
+    const job = ci.jobs['minimum-node'];
+    expect(job?.needs).toBe('changes');
+    expect(job?.if).toBe("needs.changes.outputs.app == 'true'");
+    const setup = job?.steps?.find((step) => step.uses?.startsWith('actions/setup-node@'));
+    expect(setup?.with?.['node-version-file']).toBe('.node-minimum');
+    const commands = job?.steps
+      ?.map((step) => step.run)
+      .filter(Boolean)
+      .join('\n');
+    expect(commands).toContain('pnpm test');
+    expect(commands).toContain('pnpm build');
+    expect(commands).toContain('node dist/src/cli/bootstrap.mjs serve --help');
+    expect(commands).toContain('node dist/src/cli/bootstrap.mjs db:migrate');
+    expect(commands).toContain('node scripts/check-installed-native-runtime.mjs');
+  });
+
   it('skips app work only for the explicit documentation allowlist', () => {
     expect(selectJobs('pull_request', ['README.md', 'docs/architecture/jobs.md'])).toEqual({
       app: false,
@@ -148,6 +168,17 @@ describe('conservative CI selection', () => {
 });
 
 describe('required CI gates', () => {
+  it('requires the minimum runtime to pass the Build gate', () => {
+    const step = ci.jobs['require-build']?.steps?.[1];
+    expect(step?.run).toBe(gateCommand);
+    expect(step?.name).toBe('Require minimum runtime compatibility');
+    expect(step?.env).toEqual({
+      SELECTION_RESULT: '${{ needs.changes.result }}',
+      SELECTED: '${{ needs.changes.outputs.app }}',
+      WORK_RESULT: '${{ needs.minimum-node.result }}',
+    });
+  });
+
   it('accepts successful selected work and explicitly omitted work', () => {
     expect(runGate('true', 'success')).toBe(0);
     expect(runGate('false', 'skipped')).toBe(0);
@@ -178,7 +209,9 @@ describe('required CI gates', () => {
     const gate = ci.jobs[`require-${worker}`];
     expect(gate?.name).toBe(name);
     expect(gate?.if).toBe('always()');
-    expect(gate?.needs).toEqual(['changes', worker]);
+    expect(gate?.needs).toEqual(
+      worker === 'build' ? ['changes', worker, 'minimum-node'] : ['changes', worker]
+    );
     expect(gate?.steps?.[0]?.run).toBe(gateCommand);
   });
 });
@@ -246,4 +279,38 @@ it('installs only the minimal frozen coverage toolchain in the merge gate', () =
   );
   expect(steps.some((step) => step.run?.includes('pnpm install'))).toBe(false);
   expect(steps.some((step) => step.name === 'Install dependencies')).toBe(false);
+});
+
+it('keeps the CI checks job to `pnpm check` plus the steps that only make sense in CI', () => {
+  const scripts = z
+    .object({ scripts: z.record(z.string(), z.string()) })
+    .parse(JSON.parse(readFileSync('package.json', 'utf8'))).scripts;
+  const runs = (ci.jobs.checks?.steps ?? []).flatMap((step) => (step.run ? [step.run] : []));
+  // Local verification runs `pnpm check` and `pnpm typecheck`. The generated
+  // client drift check needs a clean checkout, so it stays CI-only.
+  expect(runs).toEqual([
+    'pnpm install --frozen-lockfile',
+    'pnpm db:generate',
+    'pnpm check:prisma-generated',
+    'pnpm check',
+    'pnpm typecheck',
+  ]);
+  expect((scripts.check ?? '').split(' && ')).toEqual([
+    'pnpm lint',
+    'pnpm check:format',
+    'pnpm check:file-length',
+    'pnpm check:env',
+    'pnpm check:imports',
+    'pnpm check:ownership',
+    'pnpm check:fk-indexes',
+    'pnpm check:migrations',
+    'pnpm deps:check',
+    'pnpm knip',
+    'pnpm check:unused-code',
+  ]);
+  expect(scripts.lint).toContain('pnpm check:lint-suppressions');
+  expect(scripts.knip).toBe('knip --include files,dependencies,unlisted');
+  expect(scripts['check:migrations']).toBe(
+    'prisma migrate diff --from-schema prisma/schema.prisma --to-migrations prisma/migrations --exit-code'
+  );
 });

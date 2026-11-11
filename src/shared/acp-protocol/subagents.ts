@@ -261,6 +261,7 @@ export const subagentSummarySchema = z
   .object({
     id: z.string().min(1),
     name: z.string().nullable(),
+    model: z.string().trim().min(1).optional(),
     status: subagentStatusSchema,
     stopControl: sessionStopControlSchema.optional(),
     generation: z.number().int().positive().optional(),

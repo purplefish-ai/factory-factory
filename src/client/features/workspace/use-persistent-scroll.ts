@@ -1,7 +1,7 @@
 import type { RefObject, UIEvent } from 'react';
 import { useCallback, useEffect } from 'react';
 import type { ScrollMode } from './scroll-state';
-import { useWorkspacePanel } from './workspace-panel-context';
+import { useWorkspacePanelScroll } from './workspace-panel-context';
 
 interface UsePersistentScrollOptions {
   tabId: string | null;
@@ -24,7 +24,7 @@ export function usePersistentScroll({
   stickToBottomThreshold = 150,
   onRestore,
 }: UsePersistentScrollOptions) {
-  const { getScrollState, setScrollState } = useWorkspacePanel();
+  const { getScrollState, setScrollState } = useWorkspacePanelScroll();
 
   const buildScrollState = useCallback(
     (viewport: HTMLDivElement) => {

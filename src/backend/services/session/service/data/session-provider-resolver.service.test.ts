@@ -63,6 +63,7 @@ describe('sessionProviderResolverService', () => {
     vi.mocked(userSettingsService.get).mockResolvedValue({
       id: 'settings-1',
       userId: 'default',
+      turnLimitMinutes: null,
       preferredIde: 'cursor',
       customIdeCommand: null,
       playSoundOnComplete: true,
@@ -80,6 +81,7 @@ describe('sessionProviderResolverService', () => {
       defaultClaudeReasoningEffort: null,
       defaultCodexReasoningEffort: null,
       defaultWorkspacePermissions: 'STRICT',
+      automationPermissions: 'RELAXED',
       reviewerSessionProvider: 'CODEX',
       reviewerClaudeModel: null,
       reviewerCodexModel: null,

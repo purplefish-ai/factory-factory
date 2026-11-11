@@ -4,8 +4,6 @@ import { act, type ReactNode } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@/components/ui/resizable';
-import { ChatContentPropsProvider } from './workspace-chat-slot';
-import type { ChatContentProps } from './workspace-detail-chat-content';
 import { WorkspaceDetailView, type WorkspaceDetailViewProps } from './workspace-detail-view';
 import { SIDE_PANEL_MOTION_MS } from './workspace-side-panel';
 
@@ -17,9 +15,6 @@ vi.mock('@/client/features/workspace/right-panel', () => ({
 }));
 vi.mock('@/client/features/workspace/workspace-content-view', () => ({
   WorkspaceContentView: ({ children }: { children: ReactNode }) => <main>{children}</main>,
-}));
-vi.mock('./workspace-detail-chat-content', () => ({
-  ChatContent: () => <div data-testid="chat">Mock workspace chat</div>,
 }));
 vi.mock('./workspace-overlays', () => ({
   ArchivingOverlay: () => null,
@@ -63,24 +58,19 @@ async function render(workspaceId: string, visible = true) {
     workspaceState: {
       workspaceId,
       workspace: { id: workspaceId },
-      workspaceLoading: false,
+      workspaceError: null,
       isScriptFailed: false,
       setupWarningDismissed: false,
     },
     header: { archivePending: false, isCreatingSession: false },
     sessionTabs: { sessions: [], sessionSummariesById: new Map() },
+    chat: <div data-testid="chat">Mock workspace chat</div>,
     resumeQueuedMessages: vi.fn(),
     rightPanelVisible: visible,
     setRightPanelVisible: vi.fn(),
     archiveDialog: { open: false, activeChildCount: 0 },
   } as unknown as WorkspaceDetailViewProps;
-  await act(() =>
-    root.render(
-      <ChatContentPropsProvider value={{} as ChatContentProps}>
-        <WorkspaceDetailView key={workspaceId} {...props} />
-      </ChatContentPropsProvider>
-    )
-  );
+  await act(() => root.render(<WorkspaceDetailView key={workspaceId} {...props} />));
 }
 
 function sizes() {

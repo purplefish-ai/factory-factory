@@ -3,8 +3,8 @@ import { GearSixIcon } from '@phosphor-icons/react/dist/csr/GearSix';
 import { InfoIcon } from '@phosphor-icons/react/dist/csr/Info';
 import { PencilIcon } from '@phosphor-icons/react/dist/csr/Pencil';
 import { type ReactNode, useRef, useState } from 'react';
-import { toast } from 'sonner';
-import { trpc } from '@/client/lib/trpc';
+import { IconButton } from '@/client/components/icon-button';
+import { useRenameWorkspace } from '@/client/features/workspace/use-workspace-mutations';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -22,7 +22,6 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { ArchiveActionButton } from './archive-action-button';
 import { OpenDevAppAction } from './open-dev-app-action';
 import { OpenInIdeAction } from './open-in-ide-action';
@@ -82,10 +81,7 @@ export function WorkspaceHeaderOverflowMenu({
   const [detailsOpen, setDetailsOpen] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const utils = trpc.useUtils();
-  const renameMutation = trpc.workspace.rename.useMutation({
-    onError: (error) => toast.error(`Couldn't rename workspace. ${error.message}`),
-  });
+  const renameMutation = useRenameWorkspace(workspace.projectId);
 
   const handleRenameOpen = () => {
     if (isArchived) {
@@ -108,14 +104,18 @@ export function WorkspaceHeaderOverflowMenu({
       return;
     }
     try {
+      // Resolves once the new name has been refetched, so the dialog closes onto it.
       await renameMutation.mutateAsync({ id: workspaceId, name: trimmed });
       setRenameOpen(false);
-      await Promise.all([
-        utils.workspace.get.invalidate({ id: workspaceId }),
-        utils.workspace.listForProject.invalidate({ projectId: workspace.projectId }),
-      ]);
     } catch {
-      // onError handles user feedback via toast
+      // The shared rename hook reports the failure; the dialog stays open to retry.
+    }
+  };
+
+  // Like ConfirmDialog, the rename dialog stays open while the rename runs.
+  const closeRename = () => {
+    if (!renameMutation.isPending) {
+      setRenameOpen(false);
     }
   };
 
@@ -132,7 +132,10 @@ export function WorkspaceHeaderOverflowMenu({
         open={providerSettingsOpen}
         onOpenChange={setProviderSettingsOpen}
       />
-      <Dialog open={renameOpen && !isArchived} onOpenChange={setRenameOpen}>
+      <Dialog
+        open={renameOpen && !isArchived}
+        onOpenChange={(open) => (open ? setRenameOpen(true) : closeRename())}
+      >
         <DialogContent className="sm:max-w-sm" aria-describedby={undefined}>
           <DialogHeader>
             <DialogTitle>Rename workspace</DialogTitle>
@@ -148,18 +151,20 @@ export function WorkspaceHeaderOverflowMenu({
                   void handleRenameSubmit();
                 }
               } else if (e.key === 'Escape') {
-                setRenameOpen(false);
+                closeRename();
               }
             }}
             placeholder="Workspace name"
           />
           <DialogFooter>
-            <Button variant="outline" onClick={() => setRenameOpen(false)}>
+            <Button variant="outline" onClick={closeRename} disabled={renameMutation.isPending}>
               Cancel
             </Button>
             <Button
               onClick={() => void handleRenameSubmit()}
-              disabled={!renameValue.trim() || renameMutation.isPending}
+              pending={renameMutation.isPending}
+              pendingLabel="Renaming…"
+              disabled={!renameValue.trim()}
             >
               Rename
             </Button>
@@ -173,22 +178,11 @@ export function WorkspaceHeaderOverflowMenu({
           }
         }}
       >
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <DropdownMenuTrigger asChild>
-              <Button
-                ref={triggerRef}
-                variant="ghost"
-                size="icon"
-                className="h-6 w-6 md:h-8 md:w-8"
-                aria-label="More actions"
-              >
-                <DotsThreeIcon className="h-3 w-3 md:h-4 md:w-4" />
-              </Button>
-            </DropdownMenuTrigger>
-          </TooltipTrigger>
-          <TooltipContent>More actions</TooltipContent>
-        </Tooltip>
+        <DropdownMenuTrigger asChild>
+          <IconButton ref={triggerRef} label="More actions" size="icon-sm">
+            <DotsThreeIcon />
+          </IconButton>
+        </DropdownMenuTrigger>
         <DropdownMenuContent
           align="end"
           className="w-60"

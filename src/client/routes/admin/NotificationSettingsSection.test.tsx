@@ -8,14 +8,14 @@ import {
 } from '@/client/lib/browser-notifications';
 import { NotificationSettingsSection } from './NotificationSettingsSection';
 
-vi.mock('@/client/lib/trpc', () => ({
-  trpc: {
-    userSettings: {
-      get: { useQuery: () => ({ data: { playSoundOnComplete: true }, isLoading: false }) },
-      update: { useMutation: () => ({ mutate: vi.fn(), isPending: false }) },
-    },
-    useUtils: () => ({ userSettings: { get: { invalidate: vi.fn() } } }),
-  },
+vi.mock('@/client/lib/user-settings-queries', () => ({
+  useUserSettings: () => ({
+    data: { playSoundOnComplete: true },
+    error: null,
+    isFetching: false,
+    refetch: vi.fn(),
+  }),
+  useUpdateUserSettings: () => ({ mutate: vi.fn(), isPending: false, isSaving: () => false }),
 }));
 let root: Root;
 let container: HTMLDivElement;
@@ -100,6 +100,11 @@ it('synchronizes same-window and other-tab changes and rejects malformed prefere
     window.dispatchEvent(new StorageEvent('storage', { key: BROWSER_NOTIFICATIONS_KEY }));
   });
   expect(toggle().getAttribute('aria-checked')).toBe('false');
+  localStorage.setItem(BROWSER_NOTIFICATIONS_KEY, 'true');
+  act(() => {
+    window.dispatchEvent(new StorageEvent('storage', { key: null }));
+  });
+  expect(toggle().getAttribute('aria-checked')).toBe('true');
 });
 
 it('reports storage failures without pretending the opt-in was saved', async () => {

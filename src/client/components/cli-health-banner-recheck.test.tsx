@@ -1,6 +1,11 @@
 // @vitest-environment jsdom
 
-import { QueryClient, QueryObserver, type RefetchOptions } from '@tanstack/react-query';
+import {
+  QueryClient,
+  QueryClientProvider,
+  QueryObserver,
+  type RefetchOptions,
+} from '@tanstack/react-query';
 import { createElement } from 'react';
 import { flushSync } from 'react-dom';
 import { createRoot } from 'react-dom/client';
@@ -45,7 +50,10 @@ describe('CLI health recheck', () => {
     const container = document.createElement('div');
     const root = createRoot(container);
     try {
-      flushSync(() => root.render(createElement(CLIHealthBanner)));
+      // The banner's terminal close refresh is a TanStack mutation.
+      flushSync(() =>
+        root.render(createElement(QueryClientProvider, { client }, createElement(CLIHealthBanner)))
+      );
       const button = [...container.querySelectorAll('button')].find((element) =>
         element.textContent?.includes('Recheck')
       );

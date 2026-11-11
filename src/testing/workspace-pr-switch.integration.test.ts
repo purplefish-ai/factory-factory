@@ -1,13 +1,13 @@
 // Cross-layer regression: backend publication through the client archive gate.
 import { EventEmitter } from 'node:events';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { RATCHET_DISPATCH_CHANGED } from '@/backend/orchestration/pull-requests/ratchet.service';
 import {
   createEventCollectorOrchestrator,
   type EventCollectorDependencies,
   type EventCollectorOrchestrator,
-} from '@/backend/orchestration/event-collector.orchestrator';
+} from '@/backend/orchestration/snapshots/event-collector.orchestrator';
 import { PR_SNAPSHOT_UPDATED, type PRSnapshotUpdatedEvent } from '@/backend/services/github';
-import { RATCHET_DISPATCH_CHANGED } from '@/backend/services/ratchet';
 import {
   deriveWorkspaceFlowState,
   SNAPSHOT_CHANGED,
@@ -131,6 +131,7 @@ function createFixture(previous: { prNumber?: number; prUrl?: string; prState?: 
 
 function emitOpen(prs: EventEmitter, overrides: Partial<PRSnapshotUpdatedEvent> = {}) {
   prs.emit(PR_SNAPSHOT_UPDATED, {
+    prId: 'pr-https://github.com/org/repo/pull/42',
     workspaceId: 'ws',
     prNumber: 42,
     prUrl: 'https://github.com/org/repo/pull/42',
@@ -160,50 +161,35 @@ describe('successful PR switch snapshot publication', () => {
   });
 
   it.each([
-    { label: 'new number and URL', overrides: {} },
-    { label: 'new number without URL', overrides: { prUrl: undefined } },
+    { label: 'new number and URL', prNumber: 42, prUrl: 'https://github.com/org/repo/pull/42' },
     {
       label: 'same number in a different repository',
-      overrides: {
-        prNumber: 41,
-        prUrl: 'https://github.com/org/other/pull/41',
-      },
+      prNumber: 41,
+      prUrl: 'https://github.com/org/other/pull/41',
     },
-  ])('clears MERGED before notifying subscribers for $label', async ({ overrides }) => {
-    const fixture = createFixture();
-    collector = fixture.collector;
-    const pending = deferred<Projection>();
-    fixture.read.mockReturnValue(pending.promise);
-    collector.start();
-    fixture.store.on(SNAPSHOT_CHANGED, () => expectOpen(fixture.store));
+  ])(
+    'publishes the accepted open projection and refreshes monitoring for $label',
+    async ({ prNumber, prUrl }) => {
+      const fixture = createFixture();
+      collector = fixture.collector;
+      const pending = deferred<Projection>();
+      fixture.read.mockReturnValue(pending.promise);
+      collector.start();
+      const published: string[] = [];
+      fixture.store.on(SNAPSHOT_CHANGED, () => {
+        published.push(fixture.store.getByWorkspaceId('ws')!.ratchetState);
+      });
 
-    emitOpen(fixture.prs, overrides);
+      emitOpen(fixture.prs, { prId: `pr-${prUrl}`, prNumber, prUrl });
+      pending.resolve(projection('OPEN', 'PENDING', prNumber, prUrl));
+      await vi.advanceTimersByTimeAsync(0);
 
-    expectOpen(fixture.store);
-    pending.resolve(
-      projection(
-        'OPEN',
-        'PENDING',
-        overrides.prNumber ?? 42,
-        overrides.prUrl ?? 'https://github.com/org/repo/pull/42'
-      )
-    );
-    await vi.advanceTimersByTimeAsync(0);
-    expect(fixture.store.getByWorkspaceId('ws')!.ratchetState).toBe('CI_RUNNING');
-    expectOpen(fixture.store);
-  });
-
-  it('remains safe when authoritative projection reads exhaust their retries', async () => {
-    const fixture = createFixture();
-    collector = fixture.collector;
-    fixture.read.mockRejectedValue(new Error('database unavailable'));
-    collector.start();
-    emitOpen(fixture.prs);
-    await vi.advanceTimersByTimeAsync(4000);
-
-    expect(fixture.read).toHaveBeenCalledTimes(3);
-    expectOpen(fixture.store);
-  });
+      expect(published).not.toContain('MERGED');
+      expect(fixture.store.getByWorkspaceId('ws')!.ratchetState).toBe('CI_RUNNING');
+      expectOpen(fixture.store);
+      expect(fixture.check).toHaveBeenCalledExactlyOnceWith('ws');
+    }
+  );
 
   it('discards an old in-flight MERGED projection before a fresh read completes', async () => {
     const fixture = createFixture();
@@ -222,8 +208,7 @@ describe('successful PR switch snapshot publication', () => {
     oldRead.resolve(mergedProjection);
     await vi.advanceTimersByTimeAsync(0);
     expect(fixture.read).toHaveBeenCalledTimes(2);
-    expect(publishedRatchetStates).not.toContain('MERGED');
-    expectOpen(fixture.store);
+    expect(publishedRatchetStates).toEqual([]);
 
     newRead.resolve(openProjection);
     await vi.advanceTimersByTimeAsync(0);
@@ -231,35 +216,51 @@ describe('successful PR switch snapshot publication', () => {
     expectOpen(fixture.store);
   });
 
-  it('preserves a current open PR projection when its identity is unchanged', () => {
+  it('does not refresh monitoring when the accepted PR identity is unchanged', async () => {
     const fixture = createFixture({ prState: 'OPEN' });
     collector = fixture.collector;
-    fixture.store.upsert('ws', { ratchetState: 'CI_FAILED' }, 'test', 2);
-    fixture.read.mockReturnValue(deferred<Projection>().promise);
+    fixture.read.mockResolvedValue(
+      projection('OPEN', 'PENDING', 41, 'https://github.com/org/repo/pull/41')
+    );
     collector.start();
-    emitOpen(fixture.prs, { prNumber: 41, prUrl: undefined });
+    emitOpen(fixture.prs, {
+      prId: 'pr-https://github.com/org/repo/pull/41',
+      prNumber: 41,
+      prUrl: 'https://github.com/org/repo/pull/41',
+    });
+    await vi.advanceTimersByTimeAsync(0);
 
-    expect(fixture.store.getByWorkspaceId('ws')!.ratchetState).toBe('CI_FAILED');
+    expectOpen(fixture.store);
     expect(fixture.check).not.toHaveBeenCalled();
   });
 
-  it('clears a stale merged projection when the same closed PR reopens', () => {
+  it('refreshes monitoring when the same closed PR reopens', async () => {
     const fixture = createFixture({ prState: 'CLOSED' });
     collector = fixture.collector;
-    fixture.read.mockReturnValue(deferred<Projection>().promise);
+    fixture.read.mockResolvedValue(
+      projection('OPEN', 'PENDING', 41, 'https://github.com/org/repo/pull/41')
+    );
     collector.start();
-    emitOpen(fixture.prs, { prNumber: 41, prUrl: undefined });
+    emitOpen(fixture.prs, {
+      prId: 'pr-https://github.com/org/repo/pull/41',
+      prNumber: 41,
+      prUrl: 'https://github.com/org/repo/pull/41',
+    });
+    await vi.advanceTimersByTimeAsync(0);
 
     expectOpen(fixture.store);
     expect(fixture.check).toHaveBeenCalledExactlyOnceWith('ws');
   });
 
-  it('still reports a newly linked merged PR as done during projection refresh', () => {
+  it('reports a newly linked merged PR as done', async () => {
     const fixture = createFixture();
     collector = fixture.collector;
-    fixture.read.mockReturnValue(deferred<Projection>().promise);
+    fixture.read.mockResolvedValue(
+      projection('MERGED', 'SUCCESS', 42, 'https://github.com/org/repo/pull/42')
+    );
     collector.start();
     emitOpen(fixture.prs, { prState: 'MERGED', prCiStatus: 'SUCCESS' });
+    await vi.advanceTimersByTimeAsync(0);
 
     const entry = fixture.store.getByWorkspaceId('ws')!;
     expect(entry.statusReason.code).toBe('MERGED');
@@ -268,17 +269,19 @@ describe('successful PR switch snapshot publication', () => {
     expect(isWorkspaceDoneOrMerged(entry)).toBe(true);
   });
 
-  it('preserves the projection for an unchanged merged PR', () => {
+  it('preserves the projection for an unchanged merged PR', async () => {
     const fixture = createFixture();
     collector = fixture.collector;
-    fixture.read.mockReturnValue(deferred<Projection>().promise);
+    fixture.read.mockResolvedValue(mergedProjection);
     collector.start();
     emitOpen(fixture.prs, {
+      prId: 'pr-https://github.com/org/repo/pull/41',
       prNumber: 41,
       prUrl: 'https://github.com/org/repo/pull/41',
       prState: 'MERGED',
       prCiStatus: 'SUCCESS',
     });
+    await vi.advanceTimersByTimeAsync(0);
 
     const entry = fixture.store.getByWorkspaceId('ws')!;
     expect(entry.ratchetState).toBe('MERGED');

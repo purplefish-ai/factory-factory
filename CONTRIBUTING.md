@@ -7,11 +7,17 @@ provides guidelines and information for contributors.
 
 ### Prerequisites
 
-- Node.js 26.12.1+ (pinned in `.node-version`)
+- Node.js 26.12.1 (pinned in `.node-version`)
 - pnpm
 - GitHub CLI (`gh`) - authenticated
 - Claude authentication via `pnpm exec tsx src/cli/index.ts claude auth login`
   (the runtime is included; a global Claude installation is not required)
+
+The CLI's minimum supported Node.js version is tracked separately in
+`.node-minimum` and `package.json` (`engines.node`). Keep those two values in
+sync. Updating the development pin must not raise the user minimum; raise it
+only for required runtime APIs, dependency compatibility, security fixes, or end
+of support. CI verifies the minimum runtime as well as the development pin.
 
 ### Development Setup
 
@@ -50,6 +56,14 @@ The app stores its database at `~/factory-factory/data.db` by default;
 inspect it. Follow the Prisma schema row below for migrations and generated
 client changes.
 
+Worktrees on different branches often share that database, so one branch can
+apply migrations another branch does not have. Production launches refuse such a
+database by default (the `ff` commands continue with a warning when
+`FF_ALLOW_UNKNOWN_MIGRATIONS=1` is set); `pnpm dev` (`ff serve --dev`) prints a
+warning naming the unknown migrations and starts anyway. Use a separate
+`DATABASE_PATH` when branch schemas diverge in ways the other branch's code
+cannot tolerate.
+
 ## Verification
 
 This is the shared verification policy for contributors and agents. Command
@@ -72,6 +86,15 @@ Draft persistence also has a browser storage suite:
 `pnpm exec playwright test --config=playwright.drafts.config.ts`. It uses the
 installed Playwright Chromium and a frontend-only Vite server; the regular
 Vitest suite does not require a browser installation.
+
+Test processes never write the real server log. When `NODE_ENV` is `test` or the
+process runs under Vitest (including children that inherit its environment), the
+logger opens `logs/server.log` only if `BASE_DIR` points inside the OS temporary
+directory. Without a file, development and test logging still prints to the
+console, production-mode logging (for example a child that sets
+`NODE_ENV=production`) keeps only errors on stderr, and fatal records use the
+stderr fallback. Tests that assert file output set `BASE_DIR` to a `mkdtemp`
+directory.
 
 Run `pnpm test:integration` for changes to integration behavior. Subsystem notes
 may name additional focused checks for their contracts. Inspect the final diff,
@@ -112,14 +135,35 @@ polling. Create a fresh `eventProviderCollection()` in each test fixture, add
 providers through its `add` method, and await `waitForProviders(count)` to
 retain exact-count assertions and a bounded failure when startup stalls. Fixture
 teardown tracks real background PR wakes through completion and drains newly
-spawned work before disconnecting the private database.
+spawned work before disconnecting the private database; the generic retry
+fixture also shuts down session queue retries, as application shutdown does.
+Work that outlives a test file and logs can fail CI with
+`EnvironmentTeardownError: Closing rpc while "onUserConsoleLog" was pending`;
+stop or drain its owner in teardown rather than muting the log.
 
-`pnpm check` covers linting, formatting, file lengths, environment access,
-ownership, foreign-key indexes, and dependencies. Upstream ACP adapters own
+A worker's first import of the session, workspace or agent runtime graph (about
+570 modules) takes one to two seconds on an idle machine and several under CPU
+load; reloading it after `vi.resetModules()` takes tens of milliseconds. Import
+it after `createIntegrationDatabase()` in a `beforeAll` with an explicit
+timeout, not inside a test's 5-second budget. Suites that build an event fixture
+per test can call `preloadEventFixtureModules()` from `beforeAll`; it binds a
+throwaway integration database so the import never opens the default one.
+
+`pnpm check` covers linting (including the inline suppression policy),
+formatting, file lengths, environment access, ambiguous relative imports,
+ownership, foreign-key indexes, migration drift, dependency rules, unused files
+and dependencies (Knip), and unused code. CI's checks job runs the same
+`pnpm check`, plus `pnpm typecheck` and the generated Prisma client drift check,
+which needs a clean checkout after `pnpm db:generate`; add new local checks to
+the `check` script rather than as separate CI steps. Upstream ACP adapters own
 their provider protocol schemas; test ACP client contracts when upgrading either
 adapter. After reducing oversized legacy files, run
 `pnpm check:file-length:update` to lower their exact ceilings; it never allows
-growth.
+growth. The file-length check also prints a non-failing warning listing files
+that are within the 1,000-line cap but at or above 98% of it, whether or not
+they have a stale baseline entry; files over the cap are reported only as
+violations. Before growing one, split it by responsibility; do not compress it
+by dropping blank lines or comments.
 
 CI caches the Node native-module binaries by operating system, Ubuntu release,
 architecture, Node ABI, dependency lockfile and native-module setup script. It
@@ -128,10 +172,10 @@ binaries into the fresh installation before tests; the active-runtime marker is
 never restored from CI cache.
 
 The [pre-commit hook](.husky/pre-commit) formats staged files and checks types,
-migration drift, dependencies, and unused code. CI also runs coverage,
-production and Storybook builds, story tests, and generated Prisma drift checks.
-Hooks and CI supplement the verification above; report any local skips rather
-than assuming CI ran.
+migration drift, relative imports, dependencies, unused files and dependencies
+(Knip), and unused code. CI also runs coverage, production and Storybook builds,
+story tests, and generated Prisma drift checks. Hooks and CI supplement the
+verification above; report any local skips rather than assuming CI ran.
 
 CI runs the full Vitest suite across exactly two parallel shards. The sequencer
 balances files using measured test, import, setup and environment durations from

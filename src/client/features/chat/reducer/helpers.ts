@@ -1,9 +1,5 @@
-import type {
-  AgentMessage,
-  ChatMessage,
-  PendingInteractiveRequest,
-  ToolUseContent,
-} from '@/lib/chat-protocol';
+import { z } from 'zod';
+import type { AgentMessage, ChatMessage, PendingInteractiveRequest } from '@/lib/chat-protocol';
 import {
   compareTranscriptMessageOrder,
   DEFAULT_RENDERER_TRANSCRIPT_LIMIT,
@@ -15,7 +11,7 @@ import {
 } from '@/lib/chat-protocol';
 import { createDebugLogger, DEBUG_CHAT_WS } from '@/lib/debug';
 import { getAskUserQuestions, isUserQuestionRequest } from '@/shared/pending-request-types';
-import { getRendererTranscriptIds, resolveRendererTranscript } from './renderer-indexes';
+import { resolveRendererTranscript } from './renderer-indexes';
 import type { ChatAction, ChatState, PendingRequest } from './types';
 
 // Shared chat debug flag, controlled by DEBUG_CHAT_WS env var.
@@ -148,37 +144,6 @@ export function trimMessagesForRenderer(
   return trimTranscriptForRenderer(messages, limit);
 }
 
-function filterMapByIds<Value>(
-  map: Map<string, Value>,
-  getRetainedIds: () => Set<string>
-): Map<string, Value> {
-  if (map.size === 0) {
-    return map;
-  }
-  const retainedIds = getRetainedIds();
-  const filtered = new Map<string, Value>();
-  for (const [id, value] of map) {
-    if (retainedIds.has(id)) {
-      filtered.set(id, value);
-    }
-  }
-  return filtered;
-}
-
-function filterSetByIds(set: Set<string>, getRetainedIds: () => Set<string>): Set<string> {
-  if (set.size === 0) {
-    return set;
-  }
-  const retainedIds = getRetainedIds();
-  const filtered = new Set<string>();
-  for (const id of set) {
-    if (retainedIds.has(id)) {
-      filtered.add(id);
-    }
-  }
-  return filtered;
-}
-
 export function applyRendererMessages(state: ChatState, messages: ChatMessage[]): ChatState {
   const { retained: retainedMessages, indexes } = resolveRendererTranscript(
     state.messages,
@@ -187,29 +152,16 @@ export function applyRendererMessages(state: ChatState, messages: ChatMessage[])
       ? DEFAULT_RENDERER_TRANSCRIPT_LIMIT
       : state.rendererTranscriptLimit
   );
-  const getRetainedIds = () => getRendererTranscriptIds(retainedMessages, indexes);
-  const hasUnmappedLocalUserMessage =
-    state.localUserMessageIds.size > 0 &&
-    retainedMessages.some(
-      (message) =>
-        message.source === 'user' &&
-        state.localUserMessageIds.has(message.id) &&
-        !state.messageIdToUuid.has(message.id)
-    );
-
   return {
     ...state,
     messages: retainedMessages,
     toolUseIdToIndex: indexes.toolUseIdToIndex,
     agentMessageOrderToIndex: indexes.agentMessageOrderToIndex,
-    messageIdToUuid: filterMapByIds(state.messageIdToUuid, getRetainedIds),
-    localUserMessageIds: filterSetByIds(state.localUserMessageIds, getRetainedIds),
-    pendingUserMessageUuids:
-      hasUnmappedLocalUserMessage || state.pendingMessages.size > 0
-        ? state.pendingUserMessageUuids
-        : [],
   };
 }
+
+/** The part of a streamed tool_use block that identifies it; a block without an id matches nothing. */
+const ToolUseBlockIdSchema = z.object({ type: z.literal('tool_use'), id: z.string() });
 
 /**
  * Checks if a message is a tool_use message with the given ID.
@@ -226,8 +178,8 @@ function isToolUseMessageWithId(msg: ChatMessage, toolUseId: string): boolean {
   if (event.type !== 'content_block_start' || event.content_block.type !== 'tool_use') {
     return false;
   }
-  const block = event.content_block as ToolUseContent;
-  return block.id === toolUseId;
+  const block = ToolUseBlockIdSchema.safeParse(event.content_block);
+  return block.success && block.data.id === toolUseId;
 }
 
 /** ACP thought chunks lack message_start; visible text and tool starts also end a sequence. */

@@ -2,26 +2,25 @@ import { PencilIcon } from '@phosphor-icons/react/dist/csr/Pencil';
 import { PlayIcon } from '@phosphor-icons/react/dist/csr/Play';
 import { SquareIcon } from '@phosphor-icons/react/dist/csr/Square';
 import { useState } from 'react';
+import { IconButton } from '@/client/components/icon-button';
 import { runInBackground } from '@/client/lib/background-task';
+import { POLL_INTERVAL_MS } from '@/client/lib/query-options';
 import { trpc } from '@/client/lib/trpc';
-import { Button } from '@/components/ui/button';
 import {
   ContextMenu,
   ContextMenuContent,
   ContextMenuItem,
   ContextMenuTrigger,
 } from '@/components/ui/context-menu';
-import { Spinner } from '@/components/ui/spinner';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { DevServerSetupPanel } from './dev-server-setup-panel';
-import { useWorkspacePanel } from './workspace-panel-context';
+import { useWorkspacePanelActions } from './workspace-panel-context';
 
 interface RunScriptButtonProps {
   workspaceId: string;
 }
 
 export function RunScriptButton({ workspaceId }: RunScriptButtonProps) {
-  const { setActiveBottomTab, setRightPanelVisible } = useWorkspacePanel();
+  const { setActiveBottomTab, setRightPanelVisible } = useWorkspacePanelActions();
   const [setupPanelOpen, setSetupPanelOpen] = useState(false);
 
   const utils = trpc.useUtils();
@@ -32,7 +31,9 @@ export function RunScriptButton({ workspaceId }: RunScriptButtonProps) {
     {
       refetchInterval: (query) => {
         // Poll more frequently when running
-        return query.state.data?.status === 'RUNNING' ? 2000 : 5000;
+        return query.state.data?.status === 'RUNNING'
+          ? POLL_INTERVAL_MS.runningProcess
+          : POLL_INTERVAL_MS.localStatus;
       },
     }
   );
@@ -42,7 +43,7 @@ export function RunScriptButton({ workspaceId }: RunScriptButtonProps) {
   const startScript = trpc.workspace.startRunScript.useMutation({
     meta: { errorToast: "Couldn't start dev server." },
     onSuccess: () => {
-      runInBackground(refetch(), "Couldn't refresh data.");
+      runInBackground(refetch());
       setActiveBottomTab('dev-logs');
       setRightPanelVisible(true);
     },
@@ -51,7 +52,7 @@ export function RunScriptButton({ workspaceId }: RunScriptButtonProps) {
   const stopScript = trpc.workspace.stopRunScript.useMutation({
     meta: { errorToast: "Couldn't stop dev server." },
     onSuccess: () => {
-      runInBackground(refetch(), "Couldn't refresh data.");
+      runInBackground(refetch());
     },
   });
 
@@ -59,10 +60,7 @@ export function RunScriptButton({ workspaceId }: RunScriptButtonProps) {
     // The setup panel renders the error inline.
     meta: { errorToast: false },
     onSuccess: () => {
-      runInBackground(
-        utils.workspace.getRunScriptStatus.invalidate({ workspaceId }),
-        "Couldn't refresh data."
-      );
+      runInBackground(utils.workspace.getRunScriptStatus.invalidate({ workspaceId }));
       setSetupPanelOpen(false);
     },
   });
@@ -82,20 +80,9 @@ export function RunScriptButton({ workspaceId }: RunScriptButtonProps) {
     return (
       <>
         <DevServerSetupPanel {...panelProps} />
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-6 w-6 md:h-8 md:w-8"
-              aria-label="Setup dev server"
-              onClick={() => setSetupPanelOpen(true)}
-            >
-              <PlayIcon className="h-3 w-3 text-success md:h-4 md:w-4" weight="fill" />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>Setup dev server</TooltipContent>
-        </Tooltip>
+        <IconButton label="Setup dev server" size="icon-sm" onClick={() => setSetupPanelOpen(true)}>
+          <PlayIcon className="text-success" weight="fill" />
+        </IconButton>
       </>
     );
   }
@@ -113,7 +100,7 @@ export function RunScriptButton({ workspaceId }: RunScriptButtonProps) {
 
   const tooltipText = (() => {
     if (isLoading) {
-      return 'Processing…';
+      return startScript.isPending ? 'Starting dev server…' : 'Stopping dev server…';
     }
     if (isRunning) {
       return status.port ? `Stop dev server (port ${status.port})` : 'Stop dev server';
@@ -136,27 +123,18 @@ export function RunScriptButton({ workspaceId }: RunScriptButtonProps) {
       <ContextMenu>
         <ContextMenuTrigger asChild>
           <span>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-6 w-6 md:h-8 md:w-8"
-                  aria-label={tooltipText}
-                  onClick={handleClick}
-                  disabled={isLoading}
-                >
-                  {isLoading ? (
-                    <Spinner aria-hidden="true" className="h-3 w-3 md:h-4 md:w-4" />
-                  ) : isRunning ? (
-                    <SquareIcon className="h-3 w-3 text-destructive md:h-4 md:w-4" weight="fill" />
-                  ) : (
-                    <PlayIcon className="h-3 w-3 text-success md:h-4 md:w-4" weight="fill" />
-                  )}
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>{tooltipText}</TooltipContent>
-            </Tooltip>
+            <IconButton
+              label={tooltipText}
+              size="icon-sm"
+              onClick={handleClick}
+              pending={isLoading}
+            >
+              {isRunning ? (
+                <SquareIcon className="text-destructive" weight="fill" />
+              ) : (
+                <PlayIcon className="text-success" weight="fill" />
+              )}
+            </IconButton>
           </span>
         </ContextMenuTrigger>
         <ContextMenuContent>

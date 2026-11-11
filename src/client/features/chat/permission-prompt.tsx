@@ -7,6 +7,7 @@ import { MarkdownRenderer } from '@/client/components/markdown';
 import { Button } from '@/components/ui/button';
 import { PromptCard } from '@/components/ui/prompt-card';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Toggle } from '@/components/ui/toggle';
 import type { PermissionRequest } from '@/lib/chat-protocol';
 import { cn } from '@/lib/utils';
 import { extractPlanText } from '@/shared/acp-protocol/plan-content';
@@ -96,12 +97,12 @@ function PermissionDecisionActions({
 }: PermissionDecisionActionsProps) {
   return (
     <>
-      <Button variant="outline" size="sm" onClick={onDeny} className="gap-1.5">
-        <ShieldSlashIcon className="h-3.5 w-3.5" aria-hidden="true" />
+      <Button variant="outline" size="sm" onClick={onDeny}>
+        <ShieldSlashIcon aria-hidden="true" />
         Deny
       </Button>
-      <Button ref={allowButtonRef} size="sm" onClick={onAllow} className="gap-1.5">
-        <ShieldCheckIcon className="h-3.5 w-3.5" aria-hidden="true" />
+      <Button ref={allowButtonRef} size="sm" onClick={onAllow}>
+        <ShieldCheckIcon aria-hidden="true" />
         Allow
       </Button>
     </>
@@ -181,7 +182,7 @@ function getPermissionOptionStyle(kind: PermissionOption['kind']) {
 }
 
 const permissionOptionButtonClass =
-  'h-auto min-h-8 min-w-0 max-w-full gap-1.5 whitespace-normal text-left leading-snug';
+  'h-auto min-h-8 min-w-0 max-w-full whitespace-normal text-left leading-snug';
 
 function PermissionInput({ content }: { content: string }) {
   return (
@@ -215,20 +216,15 @@ function PlanViewToggle({ value, onChange }: PlanViewToggleProps) {
   return (
     <div className="flex items-center rounded-md border bg-background p-0.5">
       {(['rendered', 'raw'] as const).map((mode) => (
-        <button
+        <Toggle
           key={mode}
-          type="button"
-          aria-pressed={value === mode}
-          onClick={() => onChange(mode)}
-          className={cn(
-            'text-[11px] px-2 py-1 rounded-sm transition-colors',
-            value === mode
-              ? 'bg-muted text-foreground'
-              : 'text-muted-foreground hover:text-foreground'
-          )}
+          size="sm"
+          pressed={value === mode}
+          onPressedChange={() => onChange(mode)}
+          className="h-6 min-w-0 rounded-sm px-2 text-2xs font-normal text-muted-foreground hover:bg-transparent hover:text-foreground data-[state=on]:bg-muted data-[state=on]:text-foreground"
         >
           {mode === 'rendered' ? 'Rendered' : 'Raw'}
-        </button>
+        </Toggle>
       ))}
     </div>
   );
@@ -290,13 +286,15 @@ function PlanApprovalPrompt({ permission, onApprove, className }: PermissionProm
           </div>
           <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
             {planContent && <PlanViewToggle value={viewMode} onChange={setViewMode} />}
-            <button
+            <Button
               type="button"
+              variant="ghost"
+              size="xs"
               onClick={() => setExpanded(!expanded)}
-              className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+              className="font-normal text-muted-foreground"
             >
               {expanded ? 'Collapse' : 'Expand'}
-            </button>
+            </Button>
           </div>
         </div>
 
@@ -321,7 +319,7 @@ function PlanApprovalPrompt({ permission, onApprove, className }: PermissionProm
           <div className="text-xs text-muted-foreground italic">No plan content available</div>
         )}
 
-        <p className="text-[11px] text-muted-foreground">
+        <p className="text-2xs text-muted-foreground">
           Choose Keep planning to request revisions, then send follow-up guidance in chat.
         </p>
 
@@ -339,7 +337,7 @@ function PlanApprovalPrompt({ permission, onApprove, className }: PermissionProm
                 onClick={() => handleOptionClick(option)}
                 className={permissionOptionButtonClass}
               >
-                <Icon className="h-3.5 w-3.5" aria-hidden="true" />
+                <Icon aria-hidden="true" />
                 <span className="min-w-0 [overflow-wrap:anywhere]">{option.name}</span>
               </Button>
             );
@@ -401,7 +399,7 @@ function AcpPermissionPrompt({ permission, onApprove, className }: PermissionPro
                 onClick={() => handleOptionClick(option.optionId, option.kind)}
                 className={permissionOptionButtonClass}
               >
-                <Icon className="h-3.5 w-3.5" aria-hidden="true" />
+                <Icon aria-hidden="true" />
                 <span className="min-w-0 [overflow-wrap:anywhere]">{option.name}</span>
               </Button>
             );

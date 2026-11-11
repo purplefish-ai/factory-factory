@@ -1,11 +1,11 @@
 import { acpRuntimeManager } from '@/backend/services/session/service/acp';
-import { sessionBackgroundDeliveryService } from '@/backend/services/session/service/lifecycle/session-background-delivery.service';
 import {
   sessionConfigService,
   sessionService,
-} from '@/backend/services/session/service/lifecycle/session-core-services';
-import { SessionQueuedSettings } from '@/backend/services/session/service/lifecycle/session-queued-settings';
-import type { SessionConfigService } from '@/backend/services/session/service/lifecycle/session.config.service';
+} from '@/backend/services/session/service/composition/session-core-services';
+import { SessionQueuedSettings } from '@/backend/services/session/service/config/session-queued-settings';
+import type { SessionConfigService } from '@/backend/services/session/service/config/session.config.service';
+import { sessionBackgroundDeliveryService } from '@/backend/services/session/service/delivery/session-background-delivery.service';
 import type { QueuedMessage } from '@/shared/acp-protocol';
 import { SessionDispatchService } from './session-dispatch.service';
 
@@ -22,26 +22,16 @@ export function createTestSessionDispatcher(): SessionDispatchService {
 export function configureTestQueuedMessage(
   service: Pick<
     SessionConfigService,
-    | 'setSessionCollaborationMode'
-    | 'setSessionThinkingBudget'
-    | 'setSessionModel'
-    | 'setSessionReasoningEffort'
+    'setSessionCollaborationMode' | 'setSessionModel' | 'setSessionReasoningEffort'
   >,
   sessionId: string,
-  message: QueuedMessage,
-  supportsThinkingBudget: boolean
+  message: QueuedMessage
 ): Promise<QueuedMessage['settings']> {
-  return new SessionQueuedSettings({ getClient: () => undefined }).configure(
-    sessionId,
-    message,
-    supportsThinkingBudget,
-    {
-      plan: () => service.setSessionCollaborationMode(sessionId, 'plan'),
-      thinking: (budget) => service.setSessionThinkingBudget(sessionId, budget),
-      model: (model) => service.setSessionModel(sessionId, model),
-      reasoning: (effort) => service.setSessionReasoningEffort(sessionId, effort),
-    }
-  );
+  return new SessionQueuedSettings({ getClient: () => undefined }).configure(sessionId, message, {
+    plan: () => service.setSessionCollaborationMode(sessionId, 'plan'),
+    model: (model) => service.setSessionModel(sessionId, model),
+    reasoning: (effort) => service.setSessionReasoningEffort(sessionId, effort),
+  });
 }
 
 export function createAttachmentMessage(message: QueuedMessage): QueuedMessage {

@@ -34,7 +34,7 @@ export function CodexAccountPicker({
           disabled={disabled}
           className="max-w-32 shrink-0"
           aria-label={`Codex account: ${label}`}
-          icon={<UserCircleIcon className="size-3.5" aria-hidden="true" />}
+          icon={<UserCircleIcon aria-hidden="true" />}
         >
           {label}
         </ComposerMenuTrigger>

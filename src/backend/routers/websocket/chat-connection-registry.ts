@@ -28,6 +28,7 @@ import {
 import type { WebSocketMessage } from '@/shared/acp-protocol';
 import type { SessionReplayChunk } from '@/shared/acp-protocol/protocol/replay-frame-schema';
 import { ChatReplayDelivery } from './chat-replay-delivery';
+import { serializeChatFrame } from './message-utils';
 
 type ChatRegistryLogger = Pick<
   ReturnType<ApplicationServices['createLogger']>,
@@ -169,11 +170,13 @@ export class ChatConnectionRegistry {
   /**
    * Forward a payload to all connections viewing a session. Returns the
    * number of viewer writes admitted. onWritten observes a successful local write.
+   * `serialized`, when given, must be `JSON.stringify(payload)`; it is sent as-is.
    */
   broadcastToSession(
     dbSessionId: string,
     payload: WebSocketMessage,
-    onWritten?: () => void
+    onWritten?: () => void,
+    serialized?: string
   ): number {
     this.chatWsMsgCounter++;
     const msgNum = this.chatWsMsgCounter;
@@ -195,7 +198,8 @@ export class ChatConnectionRegistry {
       });
     }
     const incoming = this.incomingReplays.get(dbSessionId);
-    const sent = this.broadcaster.broadcastWith(dbSessionId, payload, (ws, message) => {
+    const wire = serialized ?? payload;
+    const sent = this.broadcaster.broadcastWith(dbSessionId, wire, (ws, message) => {
       if (payload.type === 'session_replay_chunk') {
         return this.sendChunk(ws, payload, message, incoming, written);
       }
@@ -237,7 +241,6 @@ export class ChatConnectionRegistry {
         dbSessionId,
         type: payload.type,
         innerType: delta?.type,
-        uuid: delta?.uuid,
       });
     }
 
@@ -346,7 +349,7 @@ export class ChatConnectionRegistry {
   ): void {
     sendStateful(
       ws,
-      JSON.stringify({ type: 'error', code, loadRequestId, message }),
+      serializeChatFrame({ type: 'error', code, loadRequestId, message }),
       this.logger,
       'chat load error'
     );
@@ -416,8 +419,8 @@ export class ChatConnectionRegistry {
    * the connection map (not the topic index) because connections without a
    * selected session are not subscribed to any topic.
    */
-  broadcastToAll(payload: Record<string, unknown>): void {
-    const message = JSON.stringify(payload);
+  broadcastToAll(payload: WebSocketMessage): void {
+    const message = serializeChatFrame(payload);
     for (const entry of this.connections.values()) {
       sendStateful(entry.info.ws, message, this.logger, 'workspace notification');
     }
@@ -523,9 +526,14 @@ export function attachChatTransport(
   });
 
   const sessionOutboundListener = (event: SessionOutboundEvent) => {
-    registry.broadcastToSession(event.sessionId, event.payload, () => {
-      sessionFileLogger.log(event.sessionId, 'OUT_TO_CLIENT', event.payload);
-    });
+    registry.broadcastToSession(
+      event.sessionId,
+      event.payload,
+      () => {
+        sessionFileLogger.log(event.sessionId, 'OUT_TO_CLIENT', event.payload);
+      },
+      event.serialized
+    );
   };
   const chatBroadcastListener = (event: ChatBroadcastEvent) => {
     registry.broadcastToAll(event.payload);

@@ -2,6 +2,9 @@ import { ArrowCircleUpIcon } from '@phosphor-icons/react/dist/csr/ArrowCircleUp'
 import { CaretDownIcon } from '@phosphor-icons/react/dist/csr/CaretDown';
 import { XIcon } from '@phosphor-icons/react/dist/csr/X';
 import { useEffect, useId, useState } from 'react';
+import { StatusChip } from '@/client/components/status-indicators';
+import { readStorageItem, removeStorageItem, writeStorageItem } from '@/client/lib/browser-storage';
+import { POLL_INTERVAL_MS, QUERY_RETRY } from '@/client/lib/query-options';
 import { trpc } from '@/client/lib/trpc';
 import { Button } from '@/components/ui/button';
 import { Spinner } from '@/components/ui/spinner';
@@ -13,28 +16,20 @@ const PENDING_TARGET_KEY = 'ff_update_pending_target';
 const RELOADED_TARGET_KEY = 'ff_update_reloaded_target';
 const reloadedWithoutStorage = new Set<string>();
 
-function readStorage(kind: 'localStorage' | 'sessionStorage', key: string): string | null {
-  try {
-    return window[kind].getItem(key);
-  } catch {
-    return null;
-  }
+// Kept as thin adapters so call sites name the storage area they use.
+const STORAGE_AREAS = { localStorage: 'local', sessionStorage: 'session' } as const;
+
+function readStorage(kind: keyof typeof STORAGE_AREAS, key: string): string | null {
+  return readStorageItem(key, STORAGE_AREAS[kind]);
 }
 
-function writeStorage(kind: 'localStorage' | 'sessionStorage', key: string, value: string) {
-  try {
-    window[kind].setItem(key, value);
-  } catch {
-    // Updates and dismissal remain usable when browser storage is unavailable.
-  }
+function writeStorage(kind: keyof typeof STORAGE_AREAS, key: string, value: string) {
+  // Updates and dismissal remain usable when browser storage is unavailable.
+  writeStorageItem(key, value, STORAGE_AREAS[kind]);
 }
 
-function removeStorage(kind: 'localStorage' | 'sessionStorage', key: string) {
-  try {
-    window[kind].removeItem(key);
-  } catch {
-    // A previous dismissal must not prevent another update attempt.
-  }
+function removeStorage(kind: keyof typeof STORAGE_AREAS, key: string) {
+  removeStorageItem(key, STORAGE_AREAS[kind]);
 }
 
 function resetUpdateReload(targetVersion: string) {
@@ -86,18 +81,19 @@ function UpdateActions({ updates, isPending, onUpdate, onCancel, onDismiss }: Pr
   const updateLabel = status.phase === 'failed' ? 'Retry update' : 'Update';
   return (
     <div className="ml-auto flex shrink-0 items-center gap-1.5">
-      {active && <Spinner className="size-3.5" aria-hidden="true" />}
       {status.phase === 'waiting' ? (
-        <Button variant="ghost" size="sm" disabled={isPending} onClick={onCancel}>
-          Cancel update
-        </Button>
+        <>
+          {!isPending && <Spinner className="size-3.5" aria-hidden="true" />}
+          <Button variant="ghost" size="sm" pending={isPending} onClick={onCancel}>
+            Cancel update
+          </Button>
+        </>
       ) : active ? (
-        <Button variant="ghost" size="sm" disabled>
+        <Button variant="ghost" size="sm" pending>
           {progressLabel}
         </Button>
       ) : automaticUpdate ? (
-        <Button variant="outline" size="sm" disabled={isPending} onClick={onUpdate}>
-          {isPending && <Spinner className="size-3.5" aria-hidden="true" />}
+        <Button variant="outline" size="sm" pending={isPending} onClick={onUpdate}>
           {updateLabel}
         </Button>
       ) : null}
@@ -149,27 +145,25 @@ export function FactoryUpdateBannerContent({
             <div className="min-w-0 flex-1 space-y-0.5 [overflow-wrap:anywhere]">
               <div className="flex min-h-7 flex-wrap items-center gap-x-3 gap-y-1">
                 <p className="font-medium">{notice.label} update available</p>
-                <span className="inline-flex items-center gap-1.5 font-mono text-[11px] tabular-nums">
+                <span className="inline-flex items-center gap-1.5 font-mono text-2xs tabular-nums">
                   <span className="text-muted-foreground">{notice.currentVersion}</span>
                   <span className="text-muted-foreground" aria-hidden="true">
                     →
                   </span>
-                  <span className="rounded bg-primary/10 px-1.5 py-0.5 font-semibold text-primary">
-                    {notice.latestVersion}
-                  </span>
+                  <StatusChip tone="info">{notice.latestVersion}</StatusChip>
                 </span>
                 {index === 0 && !(active || automaticUpdate) && (
                   <Button
                     variant="ghost"
-                    size="sm"
-                    className="h-7 gap-1 px-2 text-xs text-muted-foreground"
+                    size="compact"
+                    className="text-muted-foreground"
                     aria-expanded={showInstructions}
                     aria-controls={showInstructions ? instructionsId : undefined}
                     onClick={() => setShowInstructions((previous) => !previous)}
                   >
                     How to update
                     <CaretDownIcon
-                      className={`size-3 transition-transform ${showInstructions ? 'rotate-180' : ''}`}
+                      className={`transition-transform ${showInstructions ? 'rotate-180' : ''}`}
                     />
                   </Button>
                 )}
@@ -185,7 +179,7 @@ export function FactoryUpdateBannerContent({
               className="shrink-0 text-muted-foreground"
               aria-label={`Dismiss ${notice.label} update`}
             >
-              <XIcon className="size-4" />
+              <XIcon />
             </Button>
           </li>
         ))}
@@ -238,14 +232,13 @@ export function FactoryUpdateBanner() {
   const [localStatus, setLocalStatus] = useState<ApplicationUpdateStatus>();
   const [dismissed, setDismissed] = useState<Set<string>>(() => new Set());
   const query = trpc.admin.checkUpdates.useQuery(undefined, {
-    retry: false,
-    refetchOnWindowFocus: false,
+    retry: QUERY_RETRY.costlyRead,
     refetchInterval: (state) =>
       isActive(
         localStatus ?? state.state.data?.status ?? lastConfirmed?.status ?? { phase: 'idle' }
       )
-        ? 5000
-        : 3_600_000,
+        ? POLL_INTERVAL_MS.localStatus
+        : POLL_INTERVAL_MS.releaseCheck,
   });
   const confirmed = query.data ?? lastConfirmed;
   const acceptStatus = (status: ApplicationUpdateStatus) => {

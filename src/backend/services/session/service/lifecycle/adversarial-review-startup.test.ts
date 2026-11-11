@@ -1,12 +1,12 @@
 import type { SessionConfigOption } from '@agentclientprotocol/sdk/unstable';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { assertReadOnlyReviewConfigOption } from '@/backend/services/session/service/config/session-permission-policy';
+import { SessionConfigService } from '@/backend/services/session/service/config/session.config.service';
+import { sessionBackgroundDeliveryService } from '@/backend/services/session/service/delivery/session-background-delivery.service';
 import { ADVERSARIAL_REVIEW_WORKFLOW } from '@/shared/adversarial-review';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
-import { sessionBackgroundDeliveryService } from './session-background-delivery.service';
 import { SessionStartupCancelledError } from './session-lifecycle-gate';
 import { createDeferred, createLifecycleHarness } from './session-lifecycle.test-helpers';
-import { assertReadOnlyReviewConfigOption } from './session-permission-policy';
-import { SessionConfigService } from './session.config.service';
 
 vi.mock('@/backend/services/logger.service', () => ({
   getCurrentProcessEnv: () => ({ NODE_ENV: 'test' }),

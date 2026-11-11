@@ -1,22 +1,62 @@
 import { CheckCircleIcon } from '@phosphor-icons/react/dist/csr/CheckCircle';
 import { TerminalIcon } from '@phosphor-icons/react/dist/csr/Terminal';
 import { WarningIcon } from '@phosphor-icons/react/dist/csr/Warning';
+import { QueryErrorState, QueryRefreshError } from '@/client/components/query-error-state';
+import { StatusCallout } from '@/client/components/status-callout';
 import { type ScriptType, StartupScriptForm } from '@/client/features/project/startup-script-form';
-import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Spinner } from '@/components/ui/spinner';
 
-function AuthStatusSection({
-  authStatus,
-  isCheckingAuth,
-  onOpenTerminal,
-}: {
+type AuthStatusProps = {
   authStatus: { authenticated: boolean; user?: string; error?: string } | undefined;
   isCheckingAuth: boolean;
+  authError: { message: string } | null;
+  onRetryAuth: () => void;
+  /** True while a Retry of a failed auth check is in flight. */
+  isRetryingAuth: boolean;
   onOpenTerminal: () => void;
-}) {
+};
+
+/** A failed recheck keeps the cached status under a notice. */
+function AuthStatusSection(props: AuthStatusProps) {
+  return (
+    <>
+      {props.authError && props.authStatus ? (
+        <QueryRefreshError
+          title="Couldn't refresh GitHub authentication"
+          error={props.authError}
+          onRetry={props.onRetryAuth}
+          isRetrying={props.isRetryingAuth}
+          className="rounded-md border"
+        />
+      ) : null}
+      <AuthStatusDetail {...props} />
+    </>
+  );
+}
+
+function AuthStatusDetail({
+  authStatus,
+  isCheckingAuth,
+  authError,
+  onRetryAuth,
+  isRetryingAuth,
+  onOpenTerminal,
+}: AuthStatusProps) {
+  if (!authStatus && authError) {
+    return (
+      <QueryErrorState
+        title="Couldn't check GitHub authentication"
+        error={authError}
+        onRetry={onRetryAuth}
+        isRetrying={isRetryingAuth}
+        className="p-0"
+      />
+    );
+  }
+
   if (isCheckingAuth) {
     return (
       <div className="space-y-2">
@@ -50,7 +90,7 @@ function AuthStatusSection({
         <span>Not authenticated — private repos will fail to clone</span>
       </div>
       <Button type="button" variant="outline" size="sm" onClick={onOpenTerminal}>
-        <TerminalIcon className="mr-2 h-4 w-4" />
+        <TerminalIcon />
         Open Terminal to Login
       </Button>
     </div>
@@ -64,6 +104,10 @@ export interface GithubUrlFormProps {
   parsedRepo: { owner: string; repo: string } | null;
   authStatus: { authenticated: boolean; user?: string; error?: string } | undefined;
   isCheckingAuth: boolean;
+  /** The auth check failed; shown with Retry instead of hiding the section. */
+  authError: { message: string } | null;
+  onRetryAuth: () => void;
+  isRetryingAuth: boolean;
   onOpenTerminal: () => void;
   scriptType: ScriptType;
   setScriptType: (value: ScriptType) => void;
@@ -85,6 +129,9 @@ export function GithubUrlForm({
   parsedRepo,
   authStatus,
   isCheckingAuth,
+  authError,
+  onRetryAuth,
+  isRetryingAuth,
   onOpenTerminal,
   scriptType,
   setScriptType,
@@ -101,9 +148,9 @@ export function GithubUrlForm({
   return (
     <form onSubmit={onSubmit} className="space-y-4">
       {error && (
-        <Alert variant="destructive">
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
+        <StatusCallout tone="danger" role="alert">
+          {error}
+        </StatusCallout>
       )}
 
       <div className="space-y-2">
@@ -136,6 +183,9 @@ export function GithubUrlForm({
       <AuthStatusSection
         authStatus={authStatus}
         isCheckingAuth={isCheckingAuth}
+        authError={authError}
+        onRetryAuth={onRetryAuth}
+        isRetryingAuth={isRetryingAuth}
         onOpenTerminal={onOpenTerminal}
       />
 
@@ -150,19 +200,24 @@ export function GithubUrlForm({
       {footerActions ? (
         <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end sm:gap-4">
           {footerActions}
-          <Button type="submit" disabled={isSubmitting || !parsedRepo}>
-            {isSubmitting && <Spinner className="mr-2" />}
-            {isSubmitting ? submittingLabel : submitLabel}
+          <Button
+            type="submit"
+            pending={isSubmitting}
+            pendingLabel={submittingLabel}
+            disabled={!parsedRepo}
+          >
+            {submitLabel}
           </Button>
         </div>
       ) : (
         <Button
           type="submit"
           className={submitFullWidth ? 'w-full' : undefined}
-          disabled={isSubmitting || !parsedRepo}
+          pending={isSubmitting}
+          pendingLabel={submittingLabel}
+          disabled={!parsedRepo}
         >
-          {isSubmitting && <Spinner className="mr-2" />}
-          {isSubmitting ? submittingLabel : submitLabel}
+          {submitLabel}
         </Button>
       )}
     </form>

@@ -78,9 +78,10 @@ it('creates distinct fresh agents without inheriting the selected agent history 
     expect(container.querySelector('main h2')?.textContent).toBe(name);
     expect(container.querySelector('main')?.textContent).toContain('Last run: No runs yet');
     expect(container.querySelector('main')?.textContent).toContain('Active');
-    expect(container.querySelector('main')?.textContent).toContain(
-      'No runs yet. Future runs will appear here.'
-    );
+    expect(
+      container.querySelector('section[aria-label="Run history"] [data-slot="empty-state"]')
+        ?.textContent
+    ).toBe('No runs yetFuture runs will appear here.');
     expect(container.querySelector('main a[href*="/workspaces/"]')).toBeNull();
   }
   expect(new Set(createdIds).size).toBe(2);

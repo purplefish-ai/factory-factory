@@ -20,12 +20,16 @@ export { projectAcpTranscriptUpdates } from './project-acp-transcript';
 export { QuestionPrompt } from './question-prompt';
 export { QueuedMessages } from './queued-messages';
 export type { TaskNotification } from './reducer';
-export type { RewindConfirmationDialogProps } from './rewind-confirmation-dialog';
-export { RewindConfirmationDialog } from './rewind-confirmation-dialog';
 export type { SessionData } from './session-tab-bar';
 export { SessionTabBar } from './session-tab-bar';
 export { TodoPanel } from './todo-panel';
 // Hooks
+export {
+  ChatSessionProvider,
+  useChatSessionState,
+  useChatSessionStore,
+  useChatSessionSummary,
+} from './chat-session-provider';
 export type { UseChatWebSocketOptions, UseChatWebSocketReturn } from './use-chat-websocket';
 export { useChatWebSocket } from './use-chat-websocket';
 export { useGroupedChatMessages } from './use-grouped-chat-messages';

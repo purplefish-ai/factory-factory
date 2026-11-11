@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, expect, it, vi } from 'vitest';
 import { ZodError } from 'zod';
-import { dataBackupService } from '@/backend/orchestration/data-backup.service';
+import { dataBackupService } from '@/backend/orchestration/data-backup/data-backup.service';
 import { redObservation } from '@/shared/pr-monitoring.test-helpers';
 import { exportDataSchema, type ExportData } from '@/shared/schemas/export-data.schema';
 import type { PrismaClient } from '@prisma-gen/client';

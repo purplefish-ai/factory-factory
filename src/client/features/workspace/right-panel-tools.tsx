@@ -6,8 +6,8 @@ import { RobotIcon } from '@phosphor-icons/react/dist/csr/Robot';
 import { TreeStructureIcon } from '@phosphor-icons/react/dist/csr/TreeStructure';
 import { WorkspaceInboxPanel, UnreadMailBadge } from '@/client/features/inbox';
 import type { SubagentSelection } from '@/client/features/subagents';
-import { TabButton } from '@/components/ui/tab-button';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { TabButton, TabList } from '@/components/ui/tab-button';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 import { AgentsPanel } from './agents-panel';
 import { CombinedChangesPanel } from './combined-changes-panel';
@@ -60,20 +60,14 @@ export function TopPanelArea({
   const showInbox = activeTopTab === 'inbox';
   const showAgents = activeTopTab === 'agents';
 
-  const screenshotsButtonClassName = cn(
-    'h-6 w-6 flex-shrink-0 flex items-center justify-center rounded-md transition-colors',
-    showScreenshots
-      ? 'bg-background text-foreground shadow-sm border border-border'
-      : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground border border-transparent'
-  );
-
   return (
     <div className="flex flex-col h-full min-h-0">
       {/* Tab bar */}
-      <div
+      <TabList
+        aria-label="Workspace tools"
         hidden={compact}
         className={cn(
-          'flex items-center gap-0.5 p-1 bg-shell border-b overflow-x-auto shrink-0 [&>button]:shrink-0',
+          'gap-0.5 p-1 bg-shell border-b overflow-x-auto shrink-0',
           compact && 'hidden'
         )}
         data-testid="workspace-tools-toolbar"
@@ -92,7 +86,7 @@ export function TopPanelArea({
         />
         {periodicTaskId && (
           <TabButton
-            label="Scheduled automation"
+            label="Runs"
             icon={<RobotIcon className="h-3.5 w-3.5" />}
             isActive={showPeriodicTask}
             onSelect={() => onTopTabChange('periodic-task')}
@@ -118,24 +112,21 @@ export function TopPanelArea({
         />
         <div className="flex-1" />
 
-        <TooltipProvider>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <button
-                type="button"
-                onClick={() => onTopTabChange('screenshots')}
-                className={screenshotsButtonClassName}
-                aria-label="Screenshots"
-              >
-                <CameraIcon className="h-3.5 w-3.5" />
-              </button>
-            </TooltipTrigger>
-            <TooltipContent>
-              <p>Screenshots</p>
-            </TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
-      </div>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <span className="shrink-0">
+              <TabButton
+                label="Screenshots"
+                hideLabel
+                icon={<CameraIcon className="h-3.5 w-3.5" />}
+                isActive={showScreenshots}
+                onSelect={() => onTopTabChange('screenshots')}
+              />
+            </span>
+          </TooltipTrigger>
+          <TooltipContent>Screenshots</TooltipContent>
+        </Tooltip>
+      </TabList>
 
       {/* Content */}
       <div className="flex-1 overflow-hidden">

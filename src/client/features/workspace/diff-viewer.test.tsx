@@ -15,7 +15,7 @@ const query = vi.hoisted(() => ({
   refetch: vi.fn(),
 }));
 vi.mock('./workspace-panel-context', () => ({
-  useWorkspacePanel: () => ({ getScrollState: () => null, setScrollState: () => undefined }),
+  useWorkspacePanelScroll: () => ({ getScrollState: () => null, setScrollState: () => undefined }),
 }));
 vi.mock('@/client/lib/trpc', () => ({
   trpc: {
@@ -243,4 +243,5 @@ it('keeps a cached diff visible after a failed background refresh', async () => 
   await render();
   expect(container.querySelector('[role="alert"]')).toBeNull();
   expect(container.textContent).toContain('const value0 = true;');
+  expect(container.textContent).toContain("Couldn't refresh");
 });

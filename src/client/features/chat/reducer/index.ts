@@ -10,12 +10,7 @@
  * The state is designed to be used with useReducer for predictable updates.
  */
 
-import type { ChatMessage, WebSocketMessage } from '@/lib/chat-protocol';
-import { isWebSocketMessage, isWsAgentMessage } from '@/lib/chat-protocol';
-import {
-  acpPlanNotificationSchema,
-  parseAcpPlanNotification,
-} from '@/shared/acp-protocol/task-plan';
+import type { ChatMessage, SessionDeltaEvent } from '@/lib/chat-protocol';
 import { generateMessageId } from './helpers';
 import { runRendererTranscriptBatch } from './renderer-indexes';
 import { reduceMessageCompactSlice } from './slices/messages/compact';
@@ -25,16 +20,15 @@ import { reduceSessionStateDeltaSlice } from './slices/messages/session-state-de
 import { reduceMessageSnapshotSlice } from './slices/messages/snapshot';
 import { reduceMessageStateMachineSlice } from './slices/messages/state-machine';
 import { reduceMessageTransportSlice } from './slices/messages/transport';
-import { reduceMessageUuidSlice } from './slices/messages/uuid';
 import { reduceRequestSlice } from './slices/requests';
-import { reduceRewindExecutionSlice, reduceRewindPreviewSlice } from './slices/rewind';
 import { reduceSessionSlice } from './slices/session';
 import { reduceSettingsSlice } from './slices/settings';
 import { reduceSystemSlice } from './slices/system';
 import { reduceToolingSlice } from './slices/tooling';
 import { reduceTranscriptHistory } from './slices/transcript-history';
 import { createBaseResetState, createInitialChatState } from './state';
-import type { AcpToolLocation, ChatAction, ChatState } from './types';
+import type { ChatAction, ChatState } from './types';
+import { createActionFromWebSocketMessage } from './websocket-actions';
 
 export type {
   AcpConfigOption,
@@ -49,12 +43,12 @@ export type {
   PendingRequest,
   ProcessStatus,
   RejectedMessageInfo,
-  RewindPreviewState,
   SessionStatus,
+  StreamDeltaAction,
   TaskNotification,
   ToolProgressInfo,
 } from './types';
-export { createInitialChatState };
+export { createActionFromWebSocketMessage, createInitialChatState };
 
 // =============================================================================
 // Reducer Slices
@@ -77,12 +71,9 @@ const chatReducerSlices: ReducerSlice[] = [
   reduceMessageSnapshotSlice,
   reduceSessionStateDeltaSlice,
   reduceMessageStateMachineSlice,
-  reduceMessageUuidSlice,
   reduceMessageCompactSlice,
   reduceToolingSlice,
   reduceSystemSlice,
-  reduceRewindPreviewSlice,
-  reduceRewindExecutionSlice,
 ];
 
 function reduceSingleAction(currentState: ChatState, currentAction: ChatAction): ChatState {
@@ -104,6 +95,7 @@ function createReplayBaseState(state: ChatState): ChatState {
       state.transcriptPageBoundaries.size > 0 ? undefined : state.rendererTranscriptLimit,
     // Preserve optimistic pending sends that are not yet reflected in replayed events.
     pendingMessages: state.pendingMessages,
+    pendingSteer: state.pendingSteer,
     // Preserve queued messages - they will be reconstructed from replay events,
     // but preserving them ensures they remain visible during replay processing.
     queuedMessages: state.queuedMessages,
@@ -121,17 +113,13 @@ function createReplayBaseState(state: ChatState): ChatState {
   };
 }
 
-function replaySessionEvents(state: ChatState, replayEvents: WebSocketMessage[]): ChatState {
+function replaySessionEvents(state: ChatState, replayEvents: SessionDeltaEvent[]): ChatState {
   let nextState = createReplayBaseState(state);
   for (const event of replayEvents) {
-    if (event.type === 'session_replay_batch') {
-      continue;
-    }
     const replayAction = createActionFromWebSocketMessage(event);
-    if (!replayAction || replayAction.type === 'SESSION_REPLAY_BATCH') {
-      continue;
+    if (replayAction) {
+      nextState = reduceSingleAction(nextState, replayAction);
     }
-    nextState = reduceSingleAction(nextState, replayAction);
   }
   // Clear loading state after replay completes
   // Only clear if still in loading phase (runtime updates during replay may have already changed it)
@@ -149,420 +137,20 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
     return runRendererTranscriptBatch(() => replaySessionEvents(state, replayEvents));
   }
 
+  if (action.type === 'STREAM_DELTA_BATCH') {
+    // Reducing each buffered delta in order yields exactly the state that
+    // dispatching them one at a time would have committed.
+    return runRendererTranscriptBatch(() =>
+      action.payload.actions.reduce(reduceSingleAction, state)
+    );
+  }
+
   return reduceSingleAction(state, action);
 }
 
 // =============================================================================
 // Action Creators (for type-safe dispatch)
 // =============================================================================
-
-// Individual message type handlers for createActionFromWebSocketMessage
-
-function handleSessionRuntimeSnapshotMessage(data: WebSocketMessage): ChatAction | null {
-  if (!data.sessionRuntime) {
-    return null;
-  }
-  return {
-    type: 'SESSION_RUNTIME_SNAPSHOT',
-    payload: { sessionRuntime: data.sessionRuntime },
-  };
-}
-
-function handleSessionRuntimeUpdatedMessage(data: WebSocketMessage): ChatAction | null {
-  if (!data.sessionRuntime) {
-    return null;
-  }
-  return {
-    type: 'SESSION_RUNTIME_UPDATED',
-    payload: { sessionRuntime: data.sessionRuntime },
-  };
-}
-
-function handleClaudeMessageAction(data: WebSocketMessage): ChatAction | null {
-  if (isWsAgentMessage(data) && data.order !== undefined) {
-    return {
-      type: 'WS_AGENT_MESSAGE',
-      payload: { message: data.data, order: data.order, messageId: data.messageId },
-    };
-  }
-  return null;
-}
-
-function handleAssistantTextDeltaAction(data: WebSocketMessage): ChatAction | null {
-  if (data.type !== 'assistant_text_delta') {
-    return null;
-  }
-  return {
-    type: 'WS_ASSISTANT_TEXT_DELTA',
-    payload: {
-      messageId: data.messageId,
-      order: data.order,
-      offset: data.offset,
-      text: data.text,
-    },
-  };
-}
-
-function handleErrorMessageAction(data: WebSocketMessage): ChatAction | null {
-  if (data.message) {
-    return {
-      type: 'WS_ERROR',
-      payload: {
-        message: data.message,
-        ...(typeof data.requestId === 'string' ? { requestId: data.requestId } : {}),
-      },
-    };
-  }
-  return null;
-}
-
-function handleSessionsMessage(data: WebSocketMessage): ChatAction | null {
-  if (data.sessions) {
-    return { type: 'WS_SESSIONS', payload: { sessions: data.sessions } };
-  }
-  return null;
-}
-
-function handleChatCapabilitiesMessage(data: WebSocketMessage): ChatAction | null {
-  if (!data.capabilities) {
-    return null;
-  }
-  return {
-    type: 'WS_CHAT_CAPABILITIES',
-    payload: { capabilities: data.capabilities },
-  };
-}
-
-function handlePermissionRequestMessage(data: WebSocketMessage): ChatAction | null {
-  if (data.requestId && data.toolName) {
-    return {
-      type: 'WS_PERMISSION_REQUEST',
-      payload: {
-        requestId: data.requestId,
-        toolName: data.toolName,
-        ...(data.rawToolName ? { rawToolName: data.rawToolName } : {}),
-        toolInput: data.toolInput ?? {},
-        ...(data.elicitation ? { elicitation: data.elicitation } : {}),
-        timestamp: new Date().toISOString(),
-        // Include plan content for ExitPlanMode requests
-        planContent: data.planContent ?? null,
-        // Include ACP permission options for multi-option UI
-        ...(Array.isArray(data.acpOptions) ? { acpOptions: data.acpOptions } : {}),
-      },
-    };
-  }
-  return null;
-}
-
-function handleUserQuestionMessage(data: WebSocketMessage): ChatAction | null {
-  if (data.requestId && data.questions) {
-    return {
-      type: 'WS_USER_QUESTION',
-      payload: {
-        requestId: data.requestId,
-        ...(typeof data.toolName === 'string' ? { toolName: data.toolName } : {}),
-        questions: data.questions,
-        ...(Array.isArray(data.acpOptions) ? { acpOptions: data.acpOptions } : {}),
-        timestamp: new Date().toISOString(),
-      },
-    };
-  }
-  return null;
-}
-
-function handleSessionSnapshot(data: WebSocketMessage): ChatAction | null {
-  if (
-    data.type !== 'session_snapshot' ||
-    !(data.messages && data.queuedMessages && data.sessionRuntime)
-  ) {
-    return null;
-  }
-  const taskPlan = acpPlanNotificationSchema.safeParse(data.taskPlan);
-  return {
-    type: 'SESSION_SNAPSHOT',
-    payload: {
-      messages: data.messages,
-      isHydration: Boolean(data.loadRequestId || data.resetTranscript),
-      removedMessageIds: data.removedMessageIds,
-      queuedMessages: data.queuedMessages,
-      sessionRuntime: data.sessionRuntime,
-      pendingInteractiveRequest: data.pendingInteractiveRequest ?? null,
-      acpPlan: taskPlan.success
-        ? { entries: taskPlan.data.entries, updatedAt: new Date().toISOString() }
-        : null,
-    },
-  };
-}
-
-function handleQueueUpdated(data: WebSocketMessage): ChatAction | null {
-  if (data.type !== 'queue_updated') {
-    return null;
-  }
-  return { type: 'QUEUE_UPDATED', payload: { queuedMessages: data.queuedMessages } };
-}
-
-function handleTranscriptMessageCommitted(data: WebSocketMessage): ChatAction | null {
-  if (data.type !== 'transcript_message_committed') {
-    return null;
-  }
-  return {
-    type: 'TRANSCRIPT_MESSAGE_COMMITTED',
-    payload: { message: data.chatMessage, queuedMessages: data.queuedMessages },
-  };
-}
-
-function handlePendingRequestUpdated(data: WebSocketMessage): ChatAction | null {
-  if (data.type !== 'pending_request_updated') {
-    return null;
-  }
-  return {
-    type: 'PENDING_REQUEST_UPDATED',
-    payload: { pendingInteractiveRequest: data.pendingInteractiveRequest },
-  };
-}
-
-function handleSessionReplayBatch(data: WebSocketMessage): ChatAction | null {
-  if (!Array.isArray(data.replayEvents)) {
-    return null;
-  }
-  return {
-    type: 'SESSION_REPLAY_BATCH',
-    payload: {
-      replayEvents: data.replayEvents.filter(isWebSocketMessage),
-    },
-  };
-}
-
-function handleMessageStateChanged(data: WebSocketMessage): ChatAction | null {
-  if (!(data.id && data.newState)) {
-    return null;
-  }
-  // Pass userMessage as-is; order may be undefined for ACCEPTED messages
-  const userMessage = data.userMessage ? { ...data.userMessage } : undefined;
-  return {
-    type: 'MESSAGE_STATE_CHANGED',
-    payload: {
-      id: data.id,
-      newState: data.newState,
-      queuePosition: data.queuePosition,
-      errorMessage: data.errorMessage,
-      userMessage,
-    },
-  };
-}
-
-function handleToolProgressMessage(data: WebSocketMessage): ChatAction | null {
-  if (!(data.tool_use_id && data.tool_name && data.elapsed_time_seconds !== undefined)) {
-    return null;
-  }
-  return {
-    type: 'SDK_TOOL_PROGRESS',
-    payload: {
-      toolUseId: data.tool_use_id,
-      toolName: data.tool_name,
-      elapsedSeconds: data.elapsed_time_seconds,
-      // Pass through ACP-specific fields from tool_progress WebSocket messages
-      acpLocations: (data as Record<string, unknown>).acpLocations as AcpToolLocation[] | undefined,
-      acpKind: (data as Record<string, unknown>).acpKind as string | undefined,
-    },
-  };
-}
-
-function handleToolUseSummaryMessage(data: WebSocketMessage): ChatAction | null {
-  // Only require preceding_tool_use_ids (used for cleanup). Summary can be empty string.
-  if (!Array.isArray(data.preceding_tool_use_ids)) {
-    return null;
-  }
-  return {
-    type: 'SDK_TOOL_USE_SUMMARY',
-    payload: {
-      summary: data.summary,
-      precedingToolUseIds: data.preceding_tool_use_ids,
-    },
-  };
-}
-
-function handleSystemInitMessage(data: WebSocketMessage): ChatAction | null {
-  const initData = data.data as
-    | {
-        tools?: Array<{
-          name: string;
-          description?: string;
-          input_schema?: Record<string, unknown>;
-        }>;
-        model?: string;
-        cwd?: string;
-        apiKeySource?: string;
-        slashCommands?: string[];
-        plugins?: Array<{ name: string; path: string }>;
-      }
-    | undefined;
-  if (!initData) {
-    return null;
-  }
-  return {
-    type: 'SYSTEM_INIT',
-    payload: {
-      tools: initData.tools ?? [],
-      model: initData.model ?? null,
-      cwd: initData.cwd ?? null,
-      apiKeySource: initData.apiKeySource ?? null,
-      slashCommands: initData.slashCommands ?? [],
-      plugins: initData.plugins ?? [],
-    },
-  };
-}
-
-function handleHookStartedMessage(data: WebSocketMessage): ChatAction | null {
-  const hookData = data.data as
-    | {
-        hookId?: string;
-        hookName?: string;
-        hookEvent?: string;
-      }
-    | undefined;
-  if (!(hookData?.hookId && hookData?.hookName && hookData?.hookEvent)) {
-    return null;
-  }
-  return {
-    type: 'HOOK_STARTED',
-    payload: {
-      hookId: hookData.hookId,
-      hookName: hookData.hookName,
-      hookEvent: hookData.hookEvent,
-    },
-  };
-}
-
-function handleHookResponseMessage(data: WebSocketMessage): ChatAction | null {
-  const hookRespData = data.data as { hookId?: string } | undefined;
-  if (!hookRespData?.hookId) {
-    return null;
-  }
-  return { type: 'HOOK_RESPONSE', payload: { hookId: hookRespData.hookId } };
-}
-
-function handlePermissionCancelledMessage(data: WebSocketMessage): ChatAction | null {
-  if (!data.requestId) {
-    return null;
-  }
-  return { type: 'WS_PERMISSION_CANCELLED', payload: { requestId: data.requestId } };
-}
-
-function handleMessageUsedAsResponseMessage(data: WebSocketMessage): ChatAction | null {
-  if (!(data.id && data.text && data.order !== undefined)) {
-    return null;
-  }
-  return {
-    type: 'MESSAGE_USED_AS_RESPONSE',
-    payload: { id: data.id, text: data.text, order: data.order },
-  };
-}
-
-function handleStatusUpdateMessage(data: WebSocketMessage): ChatAction {
-  return {
-    type: 'SDK_STATUS_UPDATE',
-    payload: { permissionMode: data.permissionMode },
-  };
-}
-
-function handleTaskNotificationMessage(data: WebSocketMessage): ChatAction | null {
-  if (!data.message) {
-    return null;
-  }
-  const parsed = parseAcpPlanNotification(data.message);
-  if (parsed) {
-    return {
-      type: 'ACP_PLAN_UPDATE',
-      payload: { entries: parsed.entries },
-    };
-  }
-  return { type: 'SDK_TASK_NOTIFICATION', payload: { message: data.message } };
-}
-
-function handleSlashCommandsMessage(data: WebSocketMessage): ChatAction | null {
-  return data.slashCommands
-    ? { type: 'WS_SLASH_COMMANDS', payload: { commands: data.slashCommands } }
-    : null;
-}
-
-function handleUserMessageUuidMessage(data: WebSocketMessage): ChatAction | null {
-  return data.uuid ? { type: 'USER_MESSAGE_UUID_RECEIVED', payload: { uuid: data.uuid } } : null;
-}
-
-function handleConfigOptionsUpdateMessage(data: WebSocketMessage): ChatAction | null {
-  const configOptions = (data as Record<string, unknown>).configOptions;
-  if (!Array.isArray(configOptions)) {
-    return null;
-  }
-  return {
-    type: 'CONFIG_OPTIONS_UPDATE',
-    payload: {
-      configOptions: configOptions.filter(
-        (option) =>
-          option && typeof option.currentValue === 'string' && Array.isArray(option.options)
-      ),
-    },
-  };
-}
-
-// Handler map for WebSocket message types
-type MessageHandler = (data: WebSocketMessage) => ChatAction | null;
-
-type MessageHandlerMap = {
-  [K in WebSocketMessage['type']]: MessageHandler | null;
-};
-
-const messageHandlers: MessageHandlerMap = {
-  session_runtime_snapshot: handleSessionRuntimeSnapshotMessage,
-  session_runtime_updated: handleSessionRuntimeUpdatedMessage,
-  agent_message: handleClaudeMessageAction,
-  assistant_text_delta: handleAssistantTextDeltaAction,
-  error: handleErrorMessageAction,
-  sessions: handleSessionsMessage,
-  chat_capabilities: handleChatCapabilitiesMessage,
-  agent_metadata: null,
-  permission_request: handlePermissionRequestMessage,
-  user_question: handleUserQuestionMessage,
-  permission_cancelled: handlePermissionCancelledMessage,
-  message_used_as_response: handleMessageUsedAsResponseMessage,
-  session_snapshot: handleSessionSnapshot,
-  session_delta: null,
-  queue_updated: handleQueueUpdated,
-  pending_request_updated: handlePendingRequestUpdated,
-  transcript_message_committed: handleTranscriptMessageCommitted,
-  subagents_changed: null,
-  session_replay_batch: handleSessionReplayBatch,
-  session_replay_chunk: null,
-  message_state_changed: handleMessageStateChanged,
-  tool_progress: handleToolProgressMessage,
-  tool_use_summary: handleToolUseSummaryMessage,
-  status_update: handleStatusUpdateMessage,
-  task_notification: handleTaskNotificationMessage,
-  system_init: handleSystemInitMessage,
-  compact_boundary: () => ({ type: 'COMPACT_BOUNDARY' }),
-  hook_started: handleHookStartedMessage,
-  hook_response: handleHookResponseMessage,
-  compacting_start: () => ({ type: 'SDK_COMPACTING_START' }),
-  compacting_end: () => ({ type: 'SDK_COMPACTING_END' }),
-  workspace_notification_request: null,
-  slash_commands: handleSlashCommandsMessage,
-  user_message_uuid: handleUserMessageUuidMessage,
-  config_options_update: handleConfigOptionsUpdateMessage,
-  config_option_applied: (data) =>
-    typeof data.requestId === 'string'
-      ? { type: 'CONFIG_OPTION_APPLIED', payload: { requestId: data.requestId } }
-      : null,
-};
-
-/**
- * Creates a ChatAction from a WebSocketMessage.
- * Returns null if the message type is not handled.
- */
-export function createActionFromWebSocketMessage(data: WebSocketMessage): ChatAction | null {
-  const handler = messageHandlers[data.type];
-  return handler ? handler(data) : null;
-}
 
 /**
  * Creates a user message action.

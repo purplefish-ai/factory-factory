@@ -37,6 +37,7 @@ import {
   normalizeDeepgramTtsSpeed,
   normalizeDeepgramVoiceModel,
 } from '@/shared/deepgram-voices';
+import { turnLimitMinutesSchema } from '@/shared/turn-limit';
 import {
   DEFAULT_VOICE_BARGE_IN_SUSTAINED_MS,
   DEFAULT_VOICE_UTTERANCE_END_MS,
@@ -192,6 +193,7 @@ const exportedTerminalSessionSchema = z.object({
 });
 
 const exportedUserSettingsSchema = z.object({
+  turnLimitMinutes: turnLimitMinutesSchema.optional().default(null),
   preferredIde: z.string(),
   customIdeCommand: z.string().nullable(),
   playSoundOnComplete: z.boolean(),
@@ -207,6 +209,7 @@ const exportedUserSettingsSchema = z.object({
   defaultClaudeReasoningEffort: z.string().nullable().optional().default(null),
   defaultCodexReasoningEffort: z.string().nullable().optional().default(null),
   defaultWorkspacePermissions: SessionPermissionPreset.optional().default('STRICT'),
+  automationPermissions: SessionPermissionPreset.optional().default('RELAXED'),
   ratchetPermissions: SessionPermissionPreset.optional(),
   // Adversarial review settings
   reviewerSessionProvider: SessionProvider.optional().default('CODEX'),

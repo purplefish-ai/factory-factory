@@ -5,7 +5,6 @@ export type {
   AcpConfigOptionGroup,
 } from '@/client/lib/acp-config';
 import type {
-  ActiveHookInfo,
   AgentMessage,
   ChatMessage,
   ChatSettings,
@@ -15,12 +14,10 @@ import type {
   PendingInteractiveRequest,
   PermissionRequest,
   QueuedMessage,
-  SessionInfo,
-  SessionInitData,
   SessionRuntimeState,
   TokenStats,
+  SessionDeltaEvent,
   UserQuestionRequest,
-  WebSocketMessage,
 } from '@/lib/chat-protocol';
 import type { ChatBarCapabilities } from '@/shared/chat-capabilities';
 
@@ -118,22 +115,6 @@ export interface TaskNotification {
   timestamp: string;
 }
 
-/** Rewind preview state for displaying confirmation dialog */
-export interface RewindPreviewState {
-  /** User message UUID we're rewinding to */
-  userMessageId: string;
-  /** Unique identifier for this specific rewind request (for race condition handling) */
-  requestNonce: string;
-  /** Whether we're currently loading the preview or executing the rewind */
-  isLoading: boolean;
-  /** Whether the actual rewind is in progress (vs just previewing) */
-  isExecuting?: boolean;
-  /** Files that would be affected (populated after dry run completes) */
-  affectedFiles?: string[];
-  /** Error message if preview failed */
-  error?: string;
-}
-
 export type TranscriptHistoryState =
   | { status: 'idle' | 'complete' }
   | {
@@ -161,10 +142,16 @@ export interface ChatState {
   processStatus: ProcessStatus;
   /** Authoritative runtime snapshot for this session. */
   sessionRuntime: SessionRuntimeState;
+  /**
+   * The session whose snapshot or replay this state was hydrated from. It survives
+   * reconnects to the same session and is cleared by a session switch, so
+   * consumers can tell whether `sessionRuntime` describes the selected session.
+   */
+  hydratedSessionId: string | null;
+  /** The session whose hydration the current connection accepted; cleared on connect and disconnect. */
+  controlsHydratedSessionId: string | null;
   /** Current git branch for the session */
   gitBranch: string | null;
-  /** Available Claude CLI sessions */
-  availableSessions: SessionInfo[];
   /**
    * Pending interactive request awaiting user response.
    * Discriminated union ensures only one request type can be active at a time.
@@ -202,20 +189,15 @@ export interface ChatState {
    * Replaces separate pendingMessageIds Set and pendingMessageContent Map.
    */
   pendingMessages: Map<string, PendingMessageContent>;
+  pendingSteer?: { messageId: string; requestId: string } | null;
   /** Last rejected message for recovery (allows restoring to input) */
   lastRejectedMessage: RejectedMessageInfo | null;
   /** Whether context compaction is in progress */
   isCompacting: boolean;
   /** Tool progress tracking for long-running tools - Map from tool_use_id to progress info */
   toolProgress: Map<string, ToolProgressInfo>;
-  /** Session initialization data (tools, model, etc.) from system init message */
-  sessionInitData: SessionInitData | null;
-  /** Current permission mode from status updates */
-  permissionMode: string | null;
   /** Whether a compact boundary has been encountered in this session */
   hasCompactBoundary: boolean;
-  /** Active hooks currently executing - Map from hook_id to hook info */
-  activeHooks: Map<string, ActiveHookInfo>;
   /** Task notifications from SDK (e.g., subagent updates) */
   taskNotifications: TaskNotification[];
   /** Slash commands from CLI initialize response */
@@ -226,26 +208,6 @@ export interface ChatState {
   tokenStats: TokenStats;
   /** Result orders included in tokenStats, independent of renderer retention. */
   countedResultOrders: Set<number>;
-  /**
-   * Queue of SDK-assigned UUIDs waiting to be mapped to user messages.
-   * Used when UUIDs arrive before their corresponding messages.
-   */
-  pendingUserMessageUuids: string[];
-  /**
-   * Map from user message ID (stable identifier) to SDK-assigned UUID.
-   * Populated as user_message_uuid events are received.
-   * Using message IDs instead of indices ensures correct mapping even when
-   * messages are inserted or removed from the array.
-   */
-  messageIdToUuid: Map<string, string>;
-  /**
-   * Set of user message IDs that were sent in the current session (not loaded from snapshot).
-   * Used to ensure UUIDs are only mapped to messages sent in this session,
-   * not historical messages from loaded sessions.
-   */
-  localUserMessageIds: Set<string>;
-  /** Current rewind preview state (null when not showing rewind dialog) */
-  rewindPreview: RewindPreviewState | null;
   /** ACP agent plan -- latest plan state from ACP plan session updates */
   acpPlan: AcpPlanState | null;
   /** ACP agent-provided config options (model, mode, thought level, custom) */
@@ -257,6 +219,21 @@ export interface ChatState {
 // =============================================================================
 // Action Types
 // =============================================================================
+
+/**
+ * Actions the chat transport may coalesce into a `STREAM_DELTA_BATCH`. The
+ * transport only buffers agent messages that carry a `content_block_delta`.
+ */
+export type StreamDeltaAction =
+  | {
+      type: 'WS_AGENT_MESSAGE';
+      payload: { message: AgentMessage; order: number; messageId?: string };
+    }
+  | {
+      type: 'WS_ASSISTANT_TEXT_DELTA';
+      payload: { messageId: string; order: number; offset: number; text: string };
+    }
+  | { type: 'TOOL_INPUT_UPDATE'; payload: { toolUseId: string; input: Record<string, unknown> } };
 
 export type ChatAction =
   | { type: 'TRANSCRIPT_HISTORY_START'; requestId: string; beforeMessageId: string }
@@ -270,16 +247,11 @@ export type ChatAction =
   // WebSocket message actions
   | { type: 'SESSION_RUNTIME_SNAPSHOT'; payload: { sessionRuntime: SessionRuntimeState } }
   | { type: 'SESSION_RUNTIME_UPDATED'; payload: { sessionRuntime: SessionRuntimeState } }
-  | {
-      type: 'WS_AGENT_MESSAGE';
-      payload: { message: AgentMessage; order: number; messageId?: string };
-    }
-  | {
-      type: 'WS_ASSISTANT_TEXT_DELTA';
-      payload: { messageId: string; order: number; offset: number; text: string };
-    }
+  // WS_AGENT_MESSAGE, WS_ASSISTANT_TEXT_DELTA and TOOL_INPUT_UPDATE
+  | StreamDeltaAction
+  // Stream deltas buffered within one animation frame, reduced in order
+  | { type: 'STREAM_DELTA_BATCH'; payload: { actions: StreamDeltaAction[] } }
   | { type: 'WS_ERROR'; payload: { message: string; requestId?: string } }
-  | { type: 'WS_SESSIONS'; payload: { sessions: SessionInfo[] } }
   | { type: 'WS_PERMISSION_REQUEST'; payload: PermissionRequest }
   | { type: 'WS_USER_QUESTION'; payload: UserQuestionRequest }
   | { type: 'WS_PERMISSION_CANCELLED'; payload: { requestId: string } }
@@ -288,8 +260,10 @@ export type ChatAction =
   | { type: 'SESSION_SWITCH_START' }
   | { type: 'SESSION_LOADING_START' }
   | { type: 'SESSION_LOADING_END' }
-  // Tool input streaming action
-  | { type: 'TOOL_INPUT_UPDATE'; payload: { toolUseId: string; input: Record<string, unknown> } }
+  // The current connection accepted a snapshot or replay for this session
+  | { type: 'SESSION_HYDRATED'; payload: { sessionId: string } }
+  // A connection opened or closed; targeted controls wait for its own hydration
+  | { type: 'CONNECTION_CHANGED' }
   // Track tool use message index
   | { type: 'TOOL_USE_INDEXED'; payload: { toolUseId: string; index: number } }
   // Permission/question response actions
@@ -310,9 +284,9 @@ export type ChatAction =
         sessionId?: string | null;
       };
     }
+  | { type: 'STEER_REQUESTED'; messageId: string; requestId: string }
+  | { type: 'STEER_SETTLED'; requestId: string }
   | { type: 'CLEAR_REJECTED_MESSAGE' }
-  // Message used as interactive response (clears pending request and adds message)
-  | { type: 'MESSAGE_USED_AS_RESPONSE'; payload: { id: string; text: string; order: number } }
   // Settings action
   | { type: 'UPDATE_SETTINGS'; payload: Partial<ChatSettings>; requestId?: string }
   | { type: 'SET_SETTINGS'; payload: ChatSettings }
@@ -345,7 +319,7 @@ export type ChatAction =
   | {
       type: 'SESSION_REPLAY_BATCH';
       payload: {
-        replayEvents: WebSocketMessage[];
+        replayEvents: SessionDeltaEvent[];
       };
     }
   | {
@@ -360,7 +334,7 @@ export type ChatAction =
           text: string;
           timestamp: string;
           attachments?: MessageAttachment[];
-          settings?: ChatSettings;
+          settings?: QueuedMessage['settings'];
           /** Backend-assigned order for reliable sorting. Undefined for ACCEPTED, defined for DISPATCHED. */
           order?: number;
           /** Source session for restoring a failed message to the correct composer. */
@@ -369,7 +343,6 @@ export type ChatAction =
       };
     }
   // SDK message type actions
-  | { type: 'SDK_STATUS_UPDATE'; payload: { permissionMode?: string } }
   | {
       type: 'SDK_TOOL_PROGRESS';
       payload: {
@@ -380,25 +353,16 @@ export type ChatAction =
         acpKind?: string;
       };
     }
-  | { type: 'SDK_TOOL_USE_SUMMARY'; payload: { summary?: string; precedingToolUseIds: string[] } }
   | { type: 'SDK_TASK_NOTIFICATION'; payload: { message: string } }
   | { type: 'SDK_COMPACTING_START' }
   | { type: 'SDK_COMPACTING_END' }
   // System subtype actions
-  | { type: 'SYSTEM_INIT'; payload: SessionInitData }
   | { type: 'COMPACT_BOUNDARY' }
-  | {
-      type: 'HOOK_STARTED';
-      payload: { hookId: string; hookName: string; hookEvent: string };
-    }
-  | { type: 'HOOK_RESPONSE'; payload: { hookId: string } }
   // Task notification management
   | { type: 'DISMISS_TASK_NOTIFICATION'; payload: { id: string } }
   | { type: 'CLEAR_TASK_NOTIFICATIONS' }
   // Slash commands discovery
   | { type: 'WS_SLASH_COMMANDS'; payload: { commands: CommandInfo[] } }
-  // User message UUID tracking (for rewind functionality)
-  | { type: 'USER_MESSAGE_UUID_RECEIVED'; payload: { uuid: string } }
   // ACP plan updates
   | { type: 'ACP_PLAN_UPDATE'; payload: { entries: AcpPlanEntry[] } }
   // ACP config options update
@@ -408,14 +372,4 @@ export type ChatAction =
       payload: { configId: string; value: string; requestId: string };
     }
   | { type: 'CONFIG_OPTION_APPLIED'; payload: { requestId: string } }
-  | { type: 'CONFIG_OPTIONS_DISCONNECTED' }
-  // Rewind files actions
-  | { type: 'REWIND_PREVIEW_START'; payload: { userMessageId: string; requestNonce: string } }
-  | { type: 'REWIND_PREVIEW_SUCCESS'; payload: { affectedFiles: string[]; userMessageId?: string } }
-  | {
-      type: 'REWIND_PREVIEW_ERROR';
-      payload: { error: string; userMessageId?: string; requestNonce?: string };
-    }
-  | { type: 'REWIND_CANCEL' }
-  | { type: 'REWIND_EXECUTING' } // Actual rewind in progress
-  | { type: 'REWIND_SUCCESS'; payload: { userMessageId?: string } }; // Actual rewind completed
+  | { type: 'CONFIG_OPTIONS_DISCONNECTED' };

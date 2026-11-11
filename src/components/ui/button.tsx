@@ -1,8 +1,15 @@
 import { Slot } from '@radix-ui/react-slot';
 import { cva, type VariantProps } from 'class-variance-authority';
 import type * as React from 'react';
+import { Spinner } from '@/components/ui/spinner';
 import { cn } from '@/lib/utils';
 
+/**
+ * The size variant sets the button's height and its icons' size, so icons
+ * inside a Button carry no size classes of their own: 16px icons from `sm` up,
+ * 14px in the 28px `compact` sizes and 12px in the 24px `xs` sizes. A `size-*`
+ * class on an icon opts out where a site truly needs another size.
+ */
 const buttonVariants = cva(
   "inline-flex shrink-0 items-center justify-center gap-2 rounded-md text-sm font-medium whitespace-nowrap transition-all outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
   {
@@ -20,10 +27,14 @@ const buttonVariants = cva(
       size: {
         default: 'h-9 px-4 py-2',
         xs: "h-6 gap-1 rounded-md px-2 text-xs [&_svg:not([class*='size-'])]:size-3",
+        compact: "h-7 gap-1.5 rounded-md px-2 text-xs [&_svg:not([class*='size-'])]:size-3.5",
         sm: 'h-8 gap-1.5 rounded-md px-3 text-xs',
         lg: 'h-10 rounded-md px-8',
+        // Text actions inside a line of text, usually with `variant="link"`.
+        inline: 'h-auto gap-1 rounded-sm p-0',
         icon: 'size-9',
         'icon-xs': "size-6 rounded-md [&_svg:not([class*='size-'])]:size-3",
+        'icon-compact': "size-7 rounded-md [&_svg:not([class*='size-'])]:size-3.5",
         'icon-sm': 'size-8',
         'icon-lg': 'size-10',
       },
@@ -35,26 +46,76 @@ const buttonVariants = cva(
   }
 );
 
+type ButtonProps = React.ComponentProps<'button'> &
+  VariantProps<typeof buttonVariants> & {
+    asChild?: boolean;
+    /**
+     * The action this button started is in flight. The button is disabled and
+     * `aria-busy`, and a `Spinner` replaces its icon: icon-size buttons hide
+     * every direct child except screen-reader text; other sizes hide their
+     * direct svg icons and keep the label beside the spinner. With `asChild`
+     * (a link, say) there is no spinner: the child is marked busy and
+     * `aria-disabled`, and its clicks are cancelled.
+     */
+    pending?: boolean;
+    /**
+     * Label while `pending` ("Saving…"). It replaces the children of text
+     * buttons and becomes the accessible name of icon-size buttons.
+     */
+    pendingLabel?: string;
+  };
+
+function isIconSize(size: ButtonProps['size']): boolean {
+  return typeof size === 'string' && size.startsWith('icon');
+}
+
 function Button({
   className,
   variant = 'default',
   size = 'default',
   asChild = false,
+  pending = false,
+  pendingLabel,
+  disabled,
+  children,
+  onClick,
   ...props
-}: React.ComponentProps<'button'> &
-  VariantProps<typeof buttonVariants> & {
-    asChild?: boolean;
-  }) {
+}: ButtonProps) {
   const Comp = asChild ? Slot : 'button';
+  const iconOnly = isIconSize(size);
+  const showSpinner = pending && !asChild;
 
   return (
     <Comp
       data-slot="button"
       data-variant={variant}
       data-size={size}
-      className={cn(buttonVariants({ variant, size, className }))}
+      className={cn(
+        buttonVariants({ variant, size }),
+        showSpinner &&
+          (iconOnly
+            ? "[&>:not([data-slot='spinner'],.sr-only)]:hidden"
+            : "[&>svg:not([data-slot='spinner'])]:hidden"),
+        className
+      )}
+      disabled={pending || disabled}
       {...props}
-    />
+      aria-busy={pending || props['aria-busy']}
+      {...(pending && asChild ? { 'aria-disabled': true } : {})}
+      {...(pending && iconOnly && pendingLabel ? { 'aria-label': pendingLabel } : {})}
+      onClick={
+        pending ? (event: React.MouseEvent<HTMLButtonElement>) => event.preventDefault() : onClick
+      }
+    >
+      {showSpinner ? (
+        <>
+          <Spinner aria-hidden="true" />
+          {iconOnly ? children : (pendingLabel ?? children)}
+        </>
+      ) : (
+        children
+      )}
+    </Comp>
   );
 }
 

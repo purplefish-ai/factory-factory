@@ -1,8 +1,7 @@
 import { ArrowSquareOutIcon } from '@phosphor-icons/react/dist/csr/ArrowSquareOut';
 import { trpc } from '@/client/lib/trpc';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
-import { Skeleton } from '@/components/ui/skeleton';
+import { SettingsSection } from './settings-section';
 
 function formatPortLabel(
   port: number | null | undefined,
@@ -31,61 +30,47 @@ function getFrontendPortLabel(location: Location): string {
 }
 
 export function AppInfoSection() {
-  const { data: serverInfo, isLoading } = trpc.admin.getServerInfo.useQuery(undefined, {
-    retry: 1,
-    retryDelay: 1000,
-    meta: { suppressErrors: true },
-  });
+  const serverInfoQuery = trpc.admin.getServerInfo.useQuery();
   const frontendPort = getFrontendPortLabel(window.location);
-  const backendPort = serverInfo?.backendPort ?? null;
-
-  if (isLoading) {
-    return (
-      <Card>
-        <CardHeader>
-          <CardTitle>App info</CardTitle>
-          <CardDescription>Repository and runtime details</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Skeleton className="h-10 w-full" />
-        </CardContent>
-      </Card>
-    );
-  }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>App info</CardTitle>
-        <CardDescription>Repository and runtime details</CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <div className="space-y-2">
-          <Label>Repository</Label>
-          <a
-            href="https://github.com/purplefish-ai/factory-factory"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
-          >
-            GitHub
-            <ArrowSquareOutIcon className="h-3.5 w-3.5" />
-          </a>
-        </div>
-        <div className="space-y-2">
-          <Label>Ports</Label>
-          <div className="space-y-1 text-sm text-muted-foreground">
-            <div className="flex items-center justify-between">
-              <span>Frontend</span>
-              <code className="rounded bg-muted px-1.5 py-0.5">{frontendPort}</code>
-            </div>
-            <div className="flex items-center justify-between">
-              <span>Backend</span>
-              <code className="rounded bg-muted px-1.5 py-0.5">{formatPortLabel(backendPort)}</code>
+    <SettingsSection
+      title="App info"
+      description="Repository and runtime details"
+      query={serverInfoQuery}
+      errorTitle="Couldn't load app info"
+    >
+      {(serverInfo) => (
+        <>
+          <div className="space-y-2">
+            <Label>Repository</Label>
+            <a
+              href="https://github.com/purplefish-ai/factory-factory"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
+            >
+              GitHub
+              <ArrowSquareOutIcon className="h-3.5 w-3.5" />
+            </a>
+          </div>
+          <div className="space-y-2">
+            <Label>Ports</Label>
+            <div className="space-y-1 text-sm text-muted-foreground">
+              <div className="flex items-center justify-between">
+                <span>Frontend</span>
+                <code className="rounded bg-muted px-1.5 py-0.5">{frontendPort}</code>
+              </div>
+              <div className="flex items-center justify-between">
+                <span>Backend</span>
+                <code className="rounded bg-muted px-1.5 py-0.5">
+                  {formatPortLabel(serverInfo.backendPort)}
+                </code>
+              </div>
             </div>
           </div>
-        </div>
-      </CardContent>
-    </Card>
+        </>
+      )}
+    </SettingsSection>
   );
 }

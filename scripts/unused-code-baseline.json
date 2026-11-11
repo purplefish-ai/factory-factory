@@ -9,15 +9,15 @@
       "disposition": "review-required",
       "reason": "Only mutex tests currently import this implementation; investigate lock ownership before removal."
     },
-    "src/backend/orchestration/data-backup.settings.test-support.ts": {
+    "src/backend/orchestration/data-backup/data-backup.settings.test-support.ts": {
       "disposition": "test-support",
       "reason": "User settings fixture for backup export/import and ticket prompt round-trip tests; no runtime consumers are expected."
     },
-    "src/backend/orchestration/pr-event-flow.test-helpers.ts": {
+    "src/backend/orchestration/pull-requests/pr-event-flow.test-helpers.ts": {
       "disposition": "test-support",
       "reason": "Test harness or fixture support remains explicit in this inventory; production callers are not expected."
     },
-    "src/backend/orchestration/snapshot-reconciliation.test-helpers.ts": {
+    "src/backend/orchestration/snapshots/snapshot-reconciliation.test-helpers.ts": {
       "disposition": "test-support",
       "reason": "Test harness or fixture support remains explicit in this inventory; production callers are not expected."
     },
@@ -29,7 +29,11 @@
       "disposition": "test-support",
       "reason": "Test harness or fixture support remains explicit in this inventory; production callers are not expected."
     },
-    "src/backend/orchestration/workspace-init.test-harness.ts": {
+    "src/backend/orchestration/testing/pr-monitoring-services.test-support.ts": {
+      "disposition": "test-support",
+      "reason": "Test harness or fixture support remains explicit in this inventory; production callers are not expected."
+    },
+    "src/backend/orchestration/workspace-lifecycle/workspace-init.test-harness.ts": {
       "disposition": "test-support",
       "reason": "Test harness or fixture support remains explicit in this inventory; production callers are not expected."
     },
@@ -73,15 +77,15 @@
       "disposition": "test-support",
       "reason": "Test harness or fixture support remains explicit in this inventory; production callers are not expected."
     },
+    "src/backend/services/session/service/config/session-config-authority.test-helpers.ts": {
+      "disposition": "test-support",
+      "reason": "Test harness or fixture support remains explicit in this inventory; production callers are not expected."
+    },
     "src/backend/services/session/service/dispatch/session-dispatch-visibility.test-helpers.ts": {
       "disposition": "test-support",
       "reason": "Test harness or fixture support remains explicit in this inventory; production callers are not expected."
     },
     "src/backend/services/session/service/dispatch/session-dispatch.test-helpers.ts": {
-      "disposition": "test-support",
-      "reason": "Test harness or fixture support remains explicit in this inventory; production callers are not expected."
-    },
-    "src/backend/services/session/service/lifecycle/session-config-authority.test-helpers.ts": {
       "disposition": "test-support",
       "reason": "Test harness or fixture support remains explicit in this inventory; production callers are not expected."
     },
@@ -177,17 +181,21 @@
       "disposition": "test-support",
       "reason": "Parses the theme CSS for the status palette contrast test; not browser runtime code."
     },
+    "src/client/lib/user-settings-queries.test-harness.tsx": {
+      "disposition": "test-support",
+      "reason": "Fake user-settings backend and Radix helpers shared by the settings hook and admin section tests; production callers are not expected."
+    },
     "src/client/routes/admin/settings-page-layout.story-fixtures.tsx": {
       "disposition": "test-support",
       "reason": "Shared navigation providers and header portal for settings and server-logs Storybook scenarios; no production caller is expected."
     },
+    "src/client/routes/admin/settings-sections.story-fixtures.tsx": {
+      "disposition": "test-support",
+      "reason": "Stateful settings tRPC handlers and request spy shared by the settings section Storybook scenarios; no production caller is expected."
+    },
     "src/client/routes/workspace-header-pwa-preview.tsx": {
       "disposition": "test-support",
       "reason": "workspace-header-fixture.stories.tsx renders this Storybook preview; keep visual fixture support."
-    },
-    "src/components/ui/progress.tsx": {
-      "disposition": "maintained-api",
-      "reason": "Retained shadcn Progress primitive has Storybook consumers; preserve the maintained component API."
     },
     "src/lib/claude-fixtures.ts": {
       "disposition": "test-support",
@@ -214,6 +222,14 @@
       "reason": "Test harness or fixture support remains explicit in this inventory; production callers are not expected."
     },
     "src/test-utils/application-graph.ts": {
+      "disposition": "test-support",
+      "reason": "Test harness or fixture support remains explicit in this inventory; production callers are not expected."
+    },
+    "src/test-utils/auto-stub.ts": {
+      "disposition": "test-support",
+      "reason": "Auto-stubbing doubles for the fake application graph and its module mocks; only tests import this helper."
+    },
+    "src/test-utils/commit-probe.ts": {
       "disposition": "test-support",
       "reason": "Test harness or fixture support remains explicit in this inventory; production callers are not expected."
     },
@@ -287,7 +303,7 @@
       "disposition": "review-required",
       "reason": "Visibility candidate in a reachable module; trace callers and schema/type contracts before narrowing this export."
     },
-    "src/backend/orchestration/snapshot-reconciliation.orchestrator.ts::exports::snapshotReconciliationService": {
+    "src/backend/orchestration/snapshots/snapshot-reconciliation.orchestrator.ts::exports::snapshotReconciliationService": {
       "disposition": "review-required",
       "reason": "Visibility candidate in a reachable module; trace callers and schema/type contracts before narrowing this export."
     },
@@ -603,18 +619,6 @@
       "disposition": "maintained-api",
       "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
     },
-    "src/backend/services/ratchet/service/index.ts::types::RatchetAction": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
-    "src/backend/services/ratchet/service/index.ts::types::RatchetCheckResult": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
-    "src/backend/services/ratchet/service/index.ts::types::WorkspaceRatchetResult": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
     "src/backend/services/registry.ts::types::InfrastructureServiceName": {
       "disposition": "review-required",
       "reason": "Visibility candidate in a reachable module; trace callers and schema/type contracts before narrowing this export."
@@ -643,23 +647,15 @@
       "disposition": "review-required",
       "reason": "Visibility candidate in a reachable module; trace callers and schema/type contracts before narrowing this export."
     },
-    "src/backend/services/session/service/index.ts::exports::AcpClientHandler": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
+    "src/backend/services/session/service/composition/session-services.ts::exports::sessionRetryService": {
+      "disposition": "review-required",
+      "reason": "Visibility candidate in a reachable module; trace callers and schema/type contracts before narrowing this export."
     },
-    "src/backend/services/session/service/index.ts::exports::ClaudeModelCatalogService": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
+    "src/backend/services/session/service/composition/session-services.ts::types::SessionPromptService": {
+      "disposition": "review-required",
+      "reason": "Visibility candidate in a reachable module; trace callers and schema/type contracts before narrowing this export."
     },
     "src/backend/services/session/service/index.ts::exports::SessionLifecycleService": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
-    "src/backend/services/session/service/index.ts::exports::SessionPermissionService": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
-    "src/backend/services/session/service/index.ts::exports::SessionService": {
       "disposition": "maintained-api",
       "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
     },
@@ -778,14 +774,6 @@
     "src/backend/services/session/service/lifecycle/session-lifecycle.test-helpers.ts::exports::createPendingWorkspaceNotification": {
       "disposition": "test-support",
       "reason": "Test-support export visibility candidate; inspect fixture consumers before narrowing this helper API."
-    },
-    "src/backend/services/session/service/lifecycle/session-services.ts::exports::sessionRetryService": {
-      "disposition": "review-required",
-      "reason": "Visibility candidate in a reachable module; trace callers and schema/type contracts before narrowing this export."
-    },
-    "src/backend/services/session/service/lifecycle/session-services.ts::types::SessionPromptService": {
-      "disposition": "review-required",
-      "reason": "Visibility candidate in a reachable module; trace callers and schema/type contracts before narrowing this export."
     },
     "src/backend/services/settings/service/index.ts::types::UpdateUserSettingsInput": {
       "disposition": "maintained-api",
@@ -964,10 +952,6 @@
       "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
     },
     "src/client/features/chat/index.ts::types::ChatMessage": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
-    "src/client/features/chat/index.ts::types::RewindConfirmationDialogProps": {
       "disposition": "maintained-api",
       "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
     },

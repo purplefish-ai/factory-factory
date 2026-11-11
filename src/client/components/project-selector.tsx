@@ -15,7 +15,7 @@ import { useIsMobile } from '@/hooks/use-mobile';
 import { cn } from '@/lib/utils';
 
 const DEFAULT_PROJECT_BUTTON_CLASS =
-  'h-7 w-auto max-w-[18rem] border-0 bg-transparent px-0.5 text-sm font-semibold text-foreground shadow-none focus:ring-0 sm:px-1';
+  'h-7 w-auto max-w-[18rem] border-0 bg-transparent px-0.5 text-sm font-semibold text-foreground shadow-none sm:px-1';
 
 function getProjectInitials(name: string): string {
   const tokens = name
@@ -136,7 +136,7 @@ export function ProjectSelectorDropdown({
             aria-label={`Open project menu: ${selectedProjectName}`}
             title={selectedProjectName}
             className={cn(
-              'flex min-w-0 items-center gap-1 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring',
+              'flex min-w-0 items-center gap-1 hover:text-foreground focus-ring',
               DEFAULT_PROJECT_BUTTON_CLASS,
               projectButtonClassName,
               triggerClassName
@@ -197,18 +197,10 @@ export function ProjectSelectorDropdown({
                       <span className="sr-only">
                         Working {project.boardCounts.working} Waiting {project.boardCounts.waiting}
                       </span>
-                      <Badge
-                        aria-hidden="true"
-                        variant="secondary"
-                        className="h-5 min-w-5 px-1.5 text-xs tabular-nums"
-                      >
+                      <Badge aria-hidden="true" variant="secondary" size="count">
                         {project.boardCounts.working}
                       </Badge>
-                      <Badge
-                        aria-hidden="true"
-                        variant="warning"
-                        className="h-5 min-w-5 px-1.5 text-xs tabular-nums"
-                      >
+                      <Badge aria-hidden="true" variant="warning" size="count">
                         {project.boardCounts.waiting}
                       </Badge>
                     </span>

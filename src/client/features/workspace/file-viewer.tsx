@@ -1,14 +1,13 @@
 import { EyeIcon } from '@phosphor-icons/react/dist/csr/Eye';
 import { FileCodeIcon } from '@phosphor-icons/react/dist/csr/FileCode';
 import { WarningIcon } from '@phosphor-icons/react/dist/csr/Warning';
-import { WarningCircleIcon } from '@phosphor-icons/react/dist/csr/WarningCircle';
 import type { inferRouterOutputs } from '@trpc/server';
 import { useTheme } from 'next-themes';
 import type { RefObject, UIEvent } from 'react';
-import { Component, useRef, useState } from 'react';
-import { EmptyState } from '@/client/components/empty-state';
-import { Loading } from '@/client/components/loading';
-import { QueryErrorState } from '@/client/components/query-error-state';
+import { useRef, useState } from 'react';
+import { QueryState } from '@/client/components/query-state';
+import { StatusCallout } from '@/client/components/status-callout';
+import { ErrorBoundary } from '@/client/error-boundary';
 import type { AppRouter } from '@/client/lib/trpc';
 import { trpc } from '@/client/lib/trpc';
 import { Button } from '@/components/ui/button';
@@ -37,44 +36,31 @@ type FileData = RouterOutputs['workspace']['readFile'];
 
 export function FileViewer({ workspaceId, filePath, tabId }: FileViewerProps) {
   const { resolvedTheme } = useTheme();
-  const { data, isLoading, error, isFetching, refetch } = trpc.workspace.readFile.useQuery({
+  const query = trpc.workspace.readFile.useQuery({
     workspaceId,
     path: filePath,
   });
-
-  if (isLoading) {
-    return <Loading message="Loading file…" />;
-  }
-
-  if (error && !data) {
-    return (
-      <QueryErrorState
-        title="Couldn't load file"
-        error={error}
-        onRetry={() => {
-          void refetch();
-        }}
-        isRetrying={isFetching}
-        className="h-full"
-      />
-    );
-  }
-
-  if (!data) {
-    return (
-      <EmptyState
-        icon={FileCodeIcon}
-        title="No content"
-        description={filePath}
-        className="h-full"
-      />
-    );
-  }
-
   const syntaxTheme = resolvedTheme === 'dark' ? 'dark' : 'light';
 
+  // A refresh notice sits above the loaded file, so the file fills the rest of the column.
   return (
-    <FileViewerLoaded filePath={filePath} tabId={tabId} data={data} syntaxTheme={syntaxTheme} />
+    <div className="flex h-full flex-col">
+      <QueryState
+        query={query}
+        errorTitle="Couldn't load file"
+        loadingMessage="Loading file…"
+        className="h-full"
+      >
+        {(data) => (
+          <FileViewerLoaded
+            filePath={filePath}
+            tabId={tabId}
+            data={data}
+            syntaxTheme={syntaxTheme}
+          />
+        )}
+      </QueryState>
+    </div>
   );
 }
 
@@ -108,12 +94,8 @@ function FileViewerHeader({
       </div>
       <div className="flex items-center gap-2 text-xs text-muted-foreground flex-shrink-0">
         {isMarkdown && (
-          <Button variant="ghost" size="sm" onClick={onTogglePreview} className="h-7 gap-1.5">
-            {showPreview ? (
-              <FileCodeIcon className="h-3.5 w-3.5" />
-            ) : (
-              <EyeIcon className="h-3.5 w-3.5" />
-            )}
+          <Button variant="ghost" size="compact" onClick={onTogglePreview}>
+            {showPreview ? <FileCodeIcon /> : <EyeIcon />}
             {showPreview ? 'Code' : 'Preview'}
           </Button>
         )}
@@ -134,48 +116,18 @@ function FileViewerWarnings({ truncated, fileSizeLabel, isBinary }: FileViewerWa
   return (
     <>
       {truncated && (
-        <div className="flex items-center gap-2 px-4 py-2 bg-warning/10 border-b border-warning/20">
-          <WarningIcon className="h-4 w-4 text-warning" />
-          <span className="text-sm text-warning">
-            File truncated to 1MB. Actual size: {fileSizeLabel}
-          </span>
-        </div>
+        <StatusCallout tone="warning" variant="strip" className="px-4">
+          File truncated to 1MB. Actual size: {fileSizeLabel}
+        </StatusCallout>
       )}
 
       {isBinary && (
-        <div className="flex items-center gap-2 px-4 py-2 bg-muted/50 border-b">
-          <WarningIcon className="h-4 w-4 text-muted-foreground" />
-          <span className="text-sm text-muted-foreground">Binary file cannot be displayed</span>
-        </div>
+        <StatusCallout tone="neutral" variant="strip" icon={WarningIcon} className="px-4">
+          Binary file cannot be displayed
+        </StatusCallout>
       )}
     </>
   );
-}
-
-class MarkdownPreviewErrorBoundary extends Component<
-  { children: React.ReactNode },
-  { hasError: boolean }
-> {
-  constructor(props: { children: React.ReactNode }) {
-    super(props);
-    this.state = { hasError: false };
-  }
-
-  static getDerivedStateFromError() {
-    return { hasError: true };
-  }
-
-  override render() {
-    if (this.state.hasError) {
-      return (
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <WarningCircleIcon className="h-4 w-4 shrink-0" />
-          <span>Couldn't render preview.</span>
-        </div>
-      );
-    }
-    return this.props.children;
-  }
 }
 
 function FileViewerContent({
@@ -207,9 +159,13 @@ function FileViewerContent({
     return (
       <ScrollArea className="flex-1" onScroll={onScroll} viewportRef={viewportRef}>
         <div className="p-4">
-          <MarkdownPreviewErrorBoundary>
+          <ErrorBoundary
+            variant="compact"
+            title="Couldn't render the preview"
+            resetKey={data.content}
+          >
             <MarkdownRenderer content={data.content} />
-          </MarkdownPreviewErrorBoundary>
+          </ErrorBoundary>
         </div>
       </ScrollArea>
     );
@@ -250,7 +206,7 @@ function FileViewerLoaded({ filePath, tabId, data, syntaxTheme }: FileViewerLoad
   const onTogglePreview = () => setShowPreview((prev) => !prev);
 
   return (
-    <div className="h-full flex flex-col">
+    <div className="flex min-h-0 flex-1 flex-col">
       <FileViewerHeader
         filePath={filePath}
         isMarkdown={isMarkdown && !data.isBinary}

@@ -1,12 +1,22 @@
+/**
+ * A complete fake application graph for unit tests.
+ *
+ * `services` defines only the members whose behaviour tests rely on; every
+ * other `ApplicationServices` member is a per-graph auto-stub (see
+ * `auto-stub.ts`), so adding a member to `ApplicationServices` needs no edit
+ * here. Configure what a test exercises: assign it on `graph.services`, or
+ * pass an override to the code under test. Spreading `graph.services` copies
+ * only the members defined below, not the auto-stubs.
+ *
+ * The module mocks keep real singletons, the database and jobs out of every
+ * test that imports this file, including tests that run the real
+ * `createDefaultApplicationDependencies()`. Exports a mock does not name
+ * resolve to auto-stubs, so a new export used by the composition root needs
+ * no edit here either.
+ */
 import { type Mock, vi } from 'vitest';
-import { createAgentAuthoring } from '@/backend/orchestration/agent-authoring.orchestrator';
-import { createAgentManagement } from '@/backend/orchestration/agent-management.orchestrator';
-import { defaultPRMonitoringServices } from '@/backend/orchestration/pr-monitoring-dependencies';
-import {
-  captureWorkspaceRetryGuard,
-  readWorkspaceRetryAvailability,
-} from '@/backend/orchestration/workspace-retry-authority';
-import { agentManagementService } from '@/backend/services/agent-definition';
+import { createAgentAuthoring } from '@/backend/orchestration/agents/agent-authoring.orchestrator';
+import { createAgentManagement } from '@/backend/orchestration/agents/agent-management.orchestrator';
 import { applicationUpdateAdmission } from '@/backend/services/application-update-admission.service';
 import type {
   PreparedSessionLoad,
@@ -15,6 +25,11 @@ import type {
   SessionLoadService,
 } from '@/backend/services/session';
 import { createInitialSessionRuntimeState } from '@/shared/session-runtime';
+import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
+
+const { withAutoStubs } = await vi.hoisted(() =>
+  vi.importActual<typeof import('@/test-utils/auto-stub')>('@/test-utils/auto-stub')
+);
 
 const hoistedApplicationGraphMocks = vi.hoisted(() => ({
   computePendingRequestType: vi.fn(),
@@ -28,178 +43,241 @@ export interface ApplicationGraphMocks {
 
 export const applicationGraphMocks: ApplicationGraphMocks = hoistedApplicationGraphMocks;
 
-vi.mock('@/backend/db', () => ({ prisma: { $disconnect: vi.fn() } }));
-vi.mock('@/backend/interceptors', () => ({
-  registerInterceptors: vi.fn(),
-  startInterceptors: vi.fn(),
-  stopInterceptors: vi.fn(),
-}));
-vi.mock('@/backend/orchestration/application-update.service', () => ({
-  ApplicationUpdateService: class {
-    start = vi.fn();
-    stop = vi.fn(async () => undefined);
-  },
-  createProcessUpdateSupervisor: vi.fn(),
-}));
-vi.mock('@/backend/services/application-update', () => ({
-  applicationReleaseService: { getPackageRoot: () => '/installed/factory-factory' },
-}));
-vi.mock('@/backend/orchestration/cli-health.service', () => ({ cliHealthService: {} }));
-vi.mock('@/backend/orchestration/data-backup.service', () => ({ dataBackupService: {} }));
-vi.mock('@/backend/orchestration/domain-bridges.orchestrator', () => ({
-  configureDomainBridges: vi.fn(),
-}));
-vi.mock('@/backend/orchestration/event-collector.orchestrator', () => ({
-  createEventCollectorOrchestrator: vi.fn(() => ({
-    start: vi.fn(),
-    stop: vi.fn(),
-    removeWorkspace: vi.fn(),
-  })),
-}));
-vi.mock('@/backend/orchestration/linear-config.helper', () => ({
-  getWorkspaceLinearContext: vi.fn().mockResolvedValue(null),
-}));
-vi.mock('@/backend/orchestration/reconciliation.service', () => ({ reconciliationService: {} }));
-vi.mock('@/backend/orchestration/scheduler.service', () => ({ schedulerService: {} }));
-vi.mock('@/backend/orchestration/snapshot-reconciliation.orchestrator', () => ({
-  SnapshotReconciliationService: class {
-    start = vi.fn();
-    stop = vi.fn(async () => undefined);
-  },
-}));
-vi.mock('@/backend/orchestration/adversarial-review.orchestrator', () => ({
-  triggerAdversarialReview: vi.fn(),
-}));
-vi.mock('@/backend/orchestration/workspace-archive.orchestrator', () => ({
-  archiveWorkspace: vi.fn(),
-  cleanupWorkspaceRuntimeResources: vi.fn(),
-  recoverStaleArchivingWorkspaces: vi.fn(),
-}));
-vi.mock('@/backend/orchestration/workspace-children.orchestrator', () => ({
-  createChildWorkspace: vi.fn(),
-  fireLifecycleNotification: vi.fn(),
-  persistChildNotification: vi.fn(),
-  persistParentNotification: vi.fn(),
-}));
-vi.mock('@/backend/orchestration/workspace-notification-delivery.orchestrator', () => ({
-  deliverWorkspaceNotification: vi.fn(),
-  recoverWorkspaceMail: vi.fn().mockResolvedValue({ queued: false }),
-}));
-vi.mock('@/backend/orchestration/workspace-init.orchestrator', () => ({
-  initializeWorkspaceWorktree: vi.fn(),
-  enqueueWorkspaceInitializationTask: vi.fn((_id: string, task: () => Promise<unknown>) => task()),
-  recoverStaleProvisioningWorkspace: vi.fn(),
-  retryQueuedDispatchAfterWorkspaceReady: vi.fn(),
-}));
-vi.mock('@/backend/orchestration/workspace-retry-authority', () => ({
-  captureWorkspaceRetryGuard: vi.fn(),
-  readWorkspaceRetryAvailability: vi.fn(),
-}));
-vi.mock('@/backend/orchestration/workspace-init-script-pipeline', () => ({
-  executeStartupScriptPipeline: vi.fn(),
-}));
-vi.mock('@/backend/prompts/quick-actions', () => ({
-  getQuickAction: vi.fn(),
-  listQuickActions: vi.fn(),
-}));
-vi.mock('@/backend/services/codex-accounts', () => ({
-  codexAccountService: {
-    getAccounts: vi.fn(async () => []),
-    getEnabledAccountIds: vi.fn(async () => []),
-    createAccount: vi.fn(),
-    updateAccount: vi.fn(),
-    getRuntimeContext: vi.fn(async (id = 'codex-native-default') => ({
-      accountId: id,
-      homeDir: '/tmp/.codex',
-      sessionsDir: '/tmp/.codex/sessions',
-      env: {},
+vi.mock('@/backend/db', () => withAutoStubs('db', { prisma: { $disconnect: vi.fn() } }));
+vi.mock('@/backend/interceptors', () =>
+  withAutoStubs('interceptors', {
+    registerInterceptors: vi.fn(),
+    startInterceptors: vi.fn(),
+    stopInterceptors: vi.fn(),
+  })
+);
+vi.mock('@/backend/orchestration/application-update.service', () =>
+  withAutoStubs('application-update.service', {
+    ApplicationUpdateService: class {
+      start = vi.fn();
+      stop = vi.fn(async () => undefined);
+    },
+    createProcessUpdateSupervisor: vi.fn(),
+  })
+);
+vi.mock('@/backend/services/application-update', () =>
+  withAutoStubs('application-update', {
+    applicationReleaseService: { getPackageRoot: () => '/installed/factory-factory' },
+  })
+);
+vi.mock('@/backend/orchestration/cli-health.service', () =>
+  withAutoStubs('cli-health.service', { cliHealthService: {} })
+);
+vi.mock('@/backend/orchestration/data-backup/data-backup.service', () =>
+  withAutoStubs('data-backup.service', { dataBackupService: {} })
+);
+vi.mock('@/backend/orchestration/domain-bridges.orchestrator', () =>
+  withAutoStubs('domain-bridges.orchestrator', { configureDomainBridges: vi.fn() })
+);
+vi.mock('@/backend/orchestration/snapshots/event-collector.orchestrator', () =>
+  withAutoStubs('event-collector.orchestrator', {
+    createEventCollectorOrchestrator: vi.fn(() => ({
+      start: vi.fn(),
+      stop: vi.fn(),
+      removeWorkspace: vi.fn(),
     })),
-    getPreviewRuntimeContext: vi.fn(async (options: { accountId?: string } = {}) => ({
-      accountId: options.accountId ?? 'codex-native-default',
-      homeDir: '/tmp/.codex',
-      sessionsDir: '/tmp/.codex/sessions',
-      env: {},
-    })),
-    withAccountReservation: vi.fn(async (input, operation) =>
-      operation(input.accountId ?? 'codex-native-default')
+  })
+);
+vi.mock('@/backend/orchestration/linear-config.helper', () =>
+  withAutoStubs('linear-config.helper', {
+    getWorkspaceLinearContext: vi.fn().mockResolvedValue(null),
+  })
+);
+vi.mock('@/backend/orchestration/workspace-lifecycle/reconciliation.service', () =>
+  withAutoStubs('reconciliation.service', {
+    reconciliationService: { stopPeriodicCleanup: vi.fn(async () => undefined) },
+  })
+);
+vi.mock('@/backend/orchestration/pull-requests/ratchet-dependencies', () =>
+  withAutoStubs('ratchet-dependencies', {
+    createRatchetService: vi.fn(() => ({ stop: vi.fn(async () => undefined) })),
+  })
+);
+vi.mock('@/backend/orchestration/pull-requests/scheduler.service', () =>
+  withAutoStubs('scheduler.service', { schedulerService: { stop: vi.fn(async () => undefined) } })
+);
+vi.mock('@/backend/orchestration/snapshots/snapshot-reconciliation.orchestrator', () =>
+  withAutoStubs('snapshot-reconciliation.orchestrator', {
+    SnapshotReconciliationService: class {
+      start = vi.fn();
+      stop = vi.fn(async () => undefined);
+    },
+  })
+);
+vi.mock('@/backend/orchestration/adversarial-review.orchestrator', () =>
+  withAutoStubs('adversarial-review.orchestrator', { triggerAdversarialReview: vi.fn() })
+);
+vi.mock('@/backend/orchestration/workspace-lifecycle/workspace-archive.orchestrator', () =>
+  withAutoStubs('workspace-archive.orchestrator', {
+    archiveWorkspace: vi.fn(),
+    cleanupWorkspaceRuntimeResources: vi.fn(),
+    recoverStaleArchivingWorkspaces: vi.fn(),
+  })
+);
+vi.mock('@/backend/orchestration/workspace-lifecycle/workspace-children.orchestrator', () =>
+  withAutoStubs('workspace-children.orchestrator', {
+    createChildWorkspace: vi.fn(),
+    fireLifecycleNotification: vi.fn(),
+    persistChildNotification: vi.fn(),
+    persistParentNotification: vi.fn(),
+  })
+);
+vi.mock(
+  '@/backend/orchestration/workspace-lifecycle/workspace-notification-delivery.orchestrator',
+  () =>
+    withAutoStubs('workspace-notification-delivery.orchestrator', {
+      deliverWorkspaceNotification: vi.fn(),
+      recoverWorkspaceMail: vi.fn().mockResolvedValue({ queued: false }),
+    })
+);
+vi.mock('@/backend/orchestration/workspace-lifecycle/workspace-init.orchestrator', () =>
+  withAutoStubs('workspace-init.orchestrator', {
+    initializeWorkspaceWorktree: vi.fn(),
+    enqueueWorkspaceInitializationTask: vi.fn((_id: string, task: () => Promise<unknown>) =>
+      task()
     ),
-    getUsage: vi.fn(),
-    startLogin: vi.fn(),
-    getLoginStatus: vi.fn(),
-    cancelLogin: vi.fn(),
-    shutdown: vi.fn(),
-  },
-}));
-vi.mock('@/backend/services/config.service', () => ({
-  configService: {
-    getDebugConfig: () => ({ chatWebSocket: false }),
-    getWorkspaceMetadataConfig: () => ({
-      enabled: false,
-      codexModel: 'gpt-6-luna',
-      claudeModel: 'haiku',
-    }),
-  },
-}));
-vi.mock('@/backend/services/crypto.service', () => ({ cryptoService: {} }));
-vi.mock('@/backend/services/agent-definition', () => ({
-  agentProposalService: {},
-  agentManagementService: {},
-  triggerCapability: vi.fn(),
-  slackConnectionService: {
-    list: vi.fn(async () => []),
-    connect: vi.fn(),
-    test: vi.fn(),
-    disconnect: vi.fn(),
-  },
-}));
-vi.mock('@/backend/services/decision-log', () => ({ decisionLogService: {} }));
-vi.mock('@/backend/services/search', () => ({ metadataSearchService: { search: vi.fn() } }));
-vi.mock('@/backend/services/github', () => ({
-  prObservationService: { configure: vi.fn() },
-  checkGithubAuth: vi.fn(),
-  githubCLIService: {},
-  prFetchCoordinator: {},
-  prSnapshotService: {},
-}));
-vi.mock('@/backend/services/linear', () => ({
-  linearClientService: {},
-  linearStateSyncService: {},
-}));
-vi.mock('@/backend/services/logger.service', () => ({
-  createLogger: vi.fn(() => ({
-    debug: vi.fn(),
-    info: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-  })),
-  getLogFilePath: vi.fn(),
-}));
-vi.mock('@/backend/services/periodic-task', () => ({
-  periodicTaskService: {},
-}));
-vi.mock('@/backend/services/port.service', () => ({ findAvailablePort: vi.fn() }));
-vi.mock('@/backend/services/ratchet', () => ({ ratchetService: {} }));
-vi.mock('@/backend/services/rate-limiter.service', () => ({ rateLimiter: {} }));
-vi.mock('@/backend/services/run-script', () => ({
-  createRunScriptService: vi.fn(() => ({})),
-  FactoryConfigService: { readConfig: vi.fn() },
-  runScriptConfigPersistenceService: {},
-  runScriptStateMachine: {},
-  startupScriptService: {},
-}));
-vi.mock('@/backend/services/server-instance.service', () => ({
-  createServerInstanceService: vi.fn(() => ({})),
-  serverInstanceService: {},
-}));
+    recoverStaleProvisioningWorkspace: vi.fn(),
+    retryQueuedDispatchAfterWorkspaceReady: vi.fn(),
+  })
+);
+vi.mock('@/backend/orchestration/workspace-lifecycle/workspace-retry-authority', () =>
+  withAutoStubs('workspace-retry-authority', {
+    captureWorkspaceRetryGuard: vi.fn(),
+    readWorkspaceRetryAvailability: vi.fn(),
+  })
+);
+vi.mock('@/backend/orchestration/workspace-lifecycle/workspace-init-script-pipeline', () =>
+  withAutoStubs('workspace-init-script-pipeline', { executeStartupScriptPipeline: vi.fn() })
+);
+vi.mock('@/backend/prompts/quick-actions', () =>
+  withAutoStubs('quick-actions', { getQuickAction: vi.fn(), listQuickActions: vi.fn() })
+);
+vi.mock('@/backend/services/codex-accounts', () =>
+  withAutoStubs('codex-accounts', {
+    codexAccountService: {
+      getAccounts: vi.fn(async () => []),
+      getEnabledAccountIds: vi.fn(async () => []),
+      createAccount: vi.fn(),
+      updateAccount: vi.fn(),
+      getRuntimeContext: vi.fn(async (id = 'codex-native-default') => ({
+        accountId: id,
+        homeDir: '/tmp/.codex',
+        sessionsDir: '/tmp/.codex/sessions',
+        env: {},
+      })),
+      getPreviewRuntimeContext: vi.fn(async (options: { accountId?: string } = {}) => ({
+        accountId: options.accountId ?? 'codex-native-default',
+        homeDir: '/tmp/.codex',
+        sessionsDir: '/tmp/.codex/sessions',
+        env: {},
+      })),
+      withAccountReservation: vi.fn(
+        async (input: { accountId?: string }, operation: (accountId: string) => Promise<unknown>) =>
+          operation(input.accountId ?? 'codex-native-default')
+      ),
+      getUsage: vi.fn(),
+      startLogin: vi.fn(),
+      getLoginStatus: vi.fn(),
+      cancelLogin: vi.fn(),
+      shutdown: vi.fn(),
+    },
+  })
+);
+vi.mock('@/backend/services/config.service', () =>
+  withAutoStubs('config.service', {
+    configService: {
+      getDebugConfig: () => ({ chatWebSocket: false }),
+      getWorkspaceMetadataConfig: () => ({
+        enabled: false,
+        codexModel: 'gpt-6-luna',
+        claudeModel: 'haiku',
+      }),
+    },
+  })
+);
+vi.mock('@/backend/services/crypto.service', () =>
+  withAutoStubs('crypto.service', { cryptoService: {} })
+);
+vi.mock('@/backend/services/agent-definition', () =>
+  withAutoStubs('agent-definition', {
+    agentProposalService: {},
+    agentManagementService: {},
+    triggerCapability: vi.fn(),
+    slackConnectionService: {
+      list: vi.fn(async () => []),
+      connect: vi.fn(),
+      test: vi.fn(),
+      disconnect: vi.fn(),
+    },
+  })
+);
+vi.mock('@/backend/services/decision-log', () =>
+  withAutoStubs('decision-log', { decisionLogService: {} })
+);
+vi.mock('@/backend/services/search', () =>
+  withAutoStubs('search', { metadataSearchService: { search: vi.fn() } })
+);
+vi.mock('@/backend/services/github', () =>
+  withAutoStubs('github', {
+    prObservationService: { configure: vi.fn() },
+    checkGithubAuth: vi.fn(),
+    githubCLIService: {},
+    prFetchCoordinator: {},
+    prSnapshotService: {},
+  })
+);
+vi.mock('@/backend/services/linear', () =>
+  withAutoStubs('linear', { linearClientService: {}, linearStateSyncService: {} })
+);
+vi.mock('@/backend/services/logger.service', () =>
+  withAutoStubs('logger.service', {
+    createLogger: vi.fn(() => ({
+      debug: vi.fn(),
+      info: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn(),
+    })),
+    getLogFilePath: vi.fn(),
+  })
+);
+vi.mock('@/backend/services/periodic-task', () =>
+  withAutoStubs('periodic-task', { periodicTaskService: { stop: vi.fn(async () => undefined) } })
+);
+vi.mock('@/backend/services/port.service', () =>
+  withAutoStubs('port.service', { findAvailablePort: vi.fn() })
+);
+vi.mock('@/backend/services/rate-limiter.service', () =>
+  withAutoStubs('rate-limiter.service', { rateLimiter: { stop: vi.fn(async () => undefined) } })
+);
+vi.mock('@/backend/services/run-script', () =>
+  withAutoStubs('run-script', {
+    createRunScriptService: vi.fn(() => ({ cleanup: vi.fn(async () => undefined) })),
+    FactoryConfigService: { readConfig: vi.fn() },
+    runScriptConfigPersistenceService: {},
+    runScriptStateMachine: {},
+    startupScriptService: {},
+  })
+);
+vi.mock('@/backend/services/server-instance.service', () =>
+  withAutoStubs('server-instance.service', {
+    createServerInstanceService: vi.fn(() => ({})),
+    serverInstanceService: {},
+  })
+);
 vi.mock('@/backend/services/session', async () => {
   const { sessionCommandFactories } = await vi.importActual<
     typeof import('@/backend/services/session/service/chat/session-command-factories')
   >('@/backend/services/session/service/chat/session-command-factories');
-  return {
+  return withAutoStubs('session', {
     sessionBackgroundDeliveryService: { configure: vi.fn() },
     findPRDeliveryReceipt: vi.fn(),
     acpRuntimeManager: {},
-    acpTraceLogger: {},
+    acpTraceLogger: { cleanup: vi.fn() },
     chatEventForwarderService: {},
     createSessionLoadService: vi.fn(
       (ports: Pick<SessionLoadDependencies, 'getRuntimeSnapshot'>) =>
@@ -226,15 +304,15 @@ vi.mock('@/backend/services/session', async () => {
     sessionCommandFactories,
     sessionConfigService: {},
     sessionPermissionService: {},
-    sessionDispatchService: {},
+    sessionDispatchService: { shutdown: vi.fn().mockResolvedValue(undefined) },
     claudeModelCatalogService: { getModels: vi.fn() },
     codexModelCatalogService: { getModels: vi.fn() },
     providerUsageService: { getUsage: vi.fn() },
     createSessionDataService: vi.fn(() => ({})),
     sessionDataService: {},
     sessionDomainService: {},
-    sessionEventBus: { publishToSession: vi.fn() },
-    sessionFileLogger: { log: vi.fn() },
+    sessionEventBus: unsafeCoerce({ publishToSession: vi.fn() }),
+    sessionFileLogger: { log: vi.fn(), cleanup: vi.fn() },
     sessionLifecycleEventService: {},
     sessionLifecycleService: {
       stopAllClients: vi.fn().mockResolvedValue(undefined),
@@ -251,44 +329,44 @@ vi.mock('@/backend/services/session', async () => {
     sessionRepository: {},
     sessionService: {},
     voiceNarrationService: {},
-  };
+  });
 });
-vi.mock('@/backend/services/settings', () => ({
-  settingsHealthService: {},
-  userSettingsService: {},
-}));
-vi.mock('@/backend/services/terminal', () => ({
-  terminalService: {},
-  terminalSessionService: {},
-}));
-vi.mock('@/backend/services/workspace', async () => ({
-  ...(await vi.importActual('@/backend/services/workspace/service/state/workspace-read-state')),
-  workspacePRMonitoringService: { get: vi.fn(), listLegacyRetirementCandidates: vi.fn() },
-  computePendingRequestType: (...args: unknown[]) =>
-    applicationGraphMocks.computePendingRequestType(...args),
-  deriveWorkspaceFlowStateFromWorkspace: (...args: unknown[]) =>
-    applicationGraphMocks.deriveWorkspaceFlowStateFromWorkspace(...args),
-  getWorkspaceInitPolicy: vi.fn(),
-  gitCloneService: {},
-  gitOpsService: {},
-  projectManagementService: {},
-  WorkspaceCreationService: class {},
-  workspaceActivityService: {},
-  workspaceDataService: {},
-  workspaceMaintenanceService: {},
-  workspaceNotificationService: {},
-  workspacePrSnapshotService: {},
-  workspaceQueryService: {},
-  workspaceRelationshipsService: {},
-  workspaceRunScriptService: {},
-  workspaceSnapshotStore: {},
-  workspaceStateMachine: {},
-  worktreeLifecycleService: {},
-  orphanedWorktreeService: {},
-}));
-vi.mock('@/backend/services/workspace-git-state.service', () => ({
-  workspaceGitStateService: { stop: vi.fn() },
-}));
+vi.mock('@/backend/services/settings', () =>
+  withAutoStubs('settings', { settingsHealthService: {}, userSettingsService: {} })
+);
+vi.mock('@/backend/services/terminal', () =>
+  withAutoStubs('terminal', { terminalService: { cleanup: vi.fn() }, terminalSessionService: {} })
+);
+vi.mock('@/backend/services/workspace', async () =>
+  withAutoStubs('workspace', {
+    ...(await vi.importActual('@/backend/services/workspace/service/state/workspace-read-state')),
+    workspacePRMonitoringService: { get: vi.fn(), listLegacyRetirementCandidates: vi.fn() },
+    computePendingRequestType: (...args: unknown[]) =>
+      applicationGraphMocks.computePendingRequestType(...args),
+    deriveWorkspaceFlowStateFromWorkspace: (...args: unknown[]) =>
+      applicationGraphMocks.deriveWorkspaceFlowStateFromWorkspace(...args),
+    getWorkspaceInitPolicy: vi.fn(),
+    gitCloneService: {},
+    gitOpsService: {},
+    projectManagementService: {},
+    WorkspaceCreationService: class {},
+    workspaceActivityService: {},
+    workspaceDataService: {},
+    workspaceMaintenanceService: {},
+    workspaceNotificationService: {},
+    workspacePrSnapshotService: {},
+    workspaceQueryService: {},
+    workspaceRelationshipsService: {},
+    workspaceRunScriptService: {},
+    workspaceSnapshotStore: {},
+    workspaceStateMachine: {},
+    worktreeLifecycleService: {},
+    orphanedWorktreeService: {},
+  })
+);
+vi.mock('@/backend/services/workspace-git-state.service', () =>
+  withAutoStubs('workspace-git-state.service', { workspaceGitStateService: { stop: vi.fn() } })
+);
 
 import type {
   ApplicationDependencies,
@@ -297,114 +375,30 @@ import type {
 } from '@/backend/app-context';
 import { prisma } from '@/backend/db';
 import { registerInterceptors, startInterceptors, stopInterceptors } from '@/backend/interceptors';
-import { triggerAdversarialReview } from '@/backend/orchestration/adversarial-review.orchestrator';
-import { cliHealthService } from '@/backend/orchestration/cli-health.service';
-import { dataBackupService } from '@/backend/orchestration/data-backup.service';
 import type { configureDomainBridges } from '@/backend/orchestration/domain-bridges.orchestrator';
+import { getWorkspaceLinearContext } from '@/backend/orchestration/linear-config.helper';
 import {
   createEventCollectorOrchestrator,
   type EventCollectorOrchestrator,
-} from '@/backend/orchestration/event-collector.orchestrator';
-import { getWorkspaceLinearContext } from '@/backend/orchestration/linear-config.helper';
-import { reconciliationService } from '@/backend/orchestration/reconciliation.service';
-import { schedulerService } from '@/backend/orchestration/scheduler.service';
-import { SnapshotReconciliationService } from '@/backend/orchestration/snapshot-reconciliation.orchestrator';
-import {
-  archiveWorkspace,
-  cleanupWorkspaceRuntimeResources,
-  recoverStaleArchivingWorkspaces,
-} from '@/backend/orchestration/workspace-archive.orchestrator';
-import {
-  fireLifecycleNotification,
-  persistChildNotification,
-  persistParentNotification,
-} from '@/backend/orchestration/workspace-children.orchestrator';
-import { executeStartupScriptPipeline } from '@/backend/orchestration/workspace-init-script-pipeline';
-import {
-  initializeWorkspaceWorktree,
-  enqueueWorkspaceInitializationTask,
-  recoverStaleProvisioningWorkspace,
-  retryQueuedDispatchAfterWorkspaceReady,
-} from '@/backend/orchestration/workspace-init.orchestrator';
-import {
-  deliverWorkspaceNotification,
-  recoverWorkspaceMail,
-} from '@/backend/orchestration/workspace-notification-delivery.orchestrator';
-import { getQuickAction, listQuickActions } from '@/backend/prompts/quick-actions';
-import { agentProposalService, slackConnectionService } from '@/backend/services/agent-definition';
+} from '@/backend/orchestration/snapshots/event-collector.orchestrator';
+import { SnapshotReconciliationService } from '@/backend/orchestration/snapshots/snapshot-reconciliation.orchestrator';
+import { recoverStaleArchivingWorkspaces } from '@/backend/orchestration/workspace-lifecycle/workspace-archive.orchestrator';
+import { enqueueWorkspaceInitializationTask } from '@/backend/orchestration/workspace-lifecycle/workspace-init.orchestrator';
+import { recoverWorkspaceMail } from '@/backend/orchestration/workspace-lifecycle/workspace-notification-delivery.orchestrator';
+import { slackConnectionService } from '@/backend/services/agent-definition';
 import { codexAccountService } from '@/backend/services/codex-accounts';
 import { configService } from '@/backend/services/config.service';
-import { cryptoService } from '@/backend/services/crypto.service';
-import { decisionLogService } from '@/backend/services/decision-log';
-import {
-  checkGithubAuth,
-  githubCLIService,
-  prFetchCoordinator,
-  prSnapshotService,
-} from '@/backend/services/github';
 import { JobRunner } from '@/backend/services/job-runner.service';
-import { linearClientService, linearStateSyncService } from '@/backend/services/linear';
-import { createLogger, getLogFilePath } from '@/backend/services/logger.service';
-import { periodicTaskService } from '@/backend/services/periodic-task';
+import { createLogger } from '@/backend/services/logger.service';
 import { PortShareService } from '@/backend/services/port-share';
-import { findAvailablePort } from '@/backend/services/port.service';
-import { ratchetService } from '@/backend/services/ratchet';
-import { rateLimiter } from '@/backend/services/rate-limiter.service';
-import {
-  createRunScriptService,
-  FactoryConfigService,
-  runScriptConfigPersistenceService,
-  runScriptStateMachine,
-  startupScriptService,
-} from '@/backend/services/run-script';
-import { metadataSearchService } from '@/backend/services/search';
-import { createServerInstanceService } from '@/backend/services/server-instance.service';
 import {
   acpRuntimeManager,
-  acpTraceLogger,
   chatEventForwarderService,
   createSessionLoadService,
   sessionCommandFactories,
-  sessionConfigService,
-  sessionPermissionService,
-  sessionDispatchService,
-  claudeModelCatalogService,
-  codexModelCatalogService,
-  providerUsageService,
-  sessionDataService,
-  sessionDomainService,
-  sessionEventBus,
-  sessionFileLogger,
-  sessionLifecycleEventService,
   sessionLifecycleService,
-  sessionPromptTurnCompletionService,
-  sessionProviderResolverService,
-  sessionRepository,
-  sessionService,
-  voiceNarrationService,
 } from '@/backend/services/session';
-import { settingsHealthService, userSettingsService } from '@/backend/services/settings';
-import { terminalService, terminalSessionService } from '@/backend/services/terminal';
-import {
-  computePendingRequestType,
-  getWorkspaceInitPolicy,
-  gitCloneService,
-  gitOpsService,
-  projectManagementService,
-  workspaceActivityService,
-  workspaceDataService,
-  workspaceMaintenanceService,
-  workspaceNotificationService,
-  workspacePrSnapshotService,
-  workspaceQueryService,
-  workspaceRelationshipsService,
-  workspaceRunScriptService,
-  workspaceSnapshotStore,
-  workspaceStateMachine,
-  worktreeLifecycleService,
-  orphanedWorktreeService,
-} from '@/backend/services/workspace';
-import { workspaceGitStateService } from '@/backend/services/workspace-git-state.service';
+import { computePendingRequestType } from '@/backend/services/workspace';
 
 const fakeSystemConfig = {
   baseDir: '/tmp/factory-factory',
@@ -453,32 +447,12 @@ export interface FakeApplicationGraph extends ApplicationDependencies {
 export function createFakeApplicationGraph(label = 'test'): FakeApplicationGraph {
   let graphEventCollector: EventCollectorOrchestrator | null = null;
   const graphSystemConfig = structuredClone(fakeSystemConfig);
-  const graphAcpRuntimeManager = Object.assign({}, acpRuntimeManager, {
-    setAcpStartupTimeoutMs: vi.fn(),
-    configureEnvironment: vi.fn(),
-  }) satisfies typeof acpRuntimeManager;
-  const graphConfigService = Object.assign({}, configService, {
-    getAcpStartupTimeoutMs: vi.fn(() => 4321),
-    isProduction: vi.fn(() => false),
-    getChildProcessEnv: vi.fn(() => ({ APPLICATION_LABEL: label })),
-    getSystemConfig: vi.fn(() => graphSystemConfig),
-    getWorktreeBaseDir: vi.fn(() => graphSystemConfig.worktreeBaseDir),
-    getWebSocketConfig: vi.fn(() => ({ maxFrameBytes: graphSystemConfig.websocketMaxFrameBytes })),
-    getMaxSessionsPerWorkspace: vi.fn(() => graphSystemConfig.maxSessionsPerWorkspace),
-    getCorsConfig: vi.fn(() => graphSystemConfig.cors),
-  }) satisfies typeof configService;
-  const graphSessionService = Object.assign({}, sessionService, {}) satisfies typeof sessionService;
   const graphSessionLifecycleService = Object.assign({}, sessionLifecycleService, {
     getRuntimeSnapshot: vi.fn(() => createInitialSessionRuntimeState()),
   }) satisfies typeof sessionLifecycleService;
-  const graphSessionEventBus = Object.assign({}, sessionEventBus, {
-    publishToSession: vi.fn(),
-  }) satisfies typeof sessionEventBus;
-  const graphChatEventForwarderService = Object.assign({}, chatEventForwarderService, {
-    getAllPendingRequests: vi.fn(() => new Map()),
-  }) satisfies typeof chatEventForwarderService;
 
-  const services = {
+  // Only members with behaviour a test relies on; everything else is auto-stubbed.
+  const services: ApplicationServices = withAutoStubs<ApplicationServices>(`graph:${label}`, {
     applicationUpdateAdmission,
     applicationUpdateService: {
       start: vi.fn(),
@@ -494,132 +468,67 @@ export function createFakeApplicationGraph(label = 'test'): FakeApplicationGraph
       cancelUpdate: vi.fn(async () => ({ phase: 'idle' as const })),
     },
     listVisibleReviewRequests: vi.fn(async () => []),
-    ...defaultPRMonitoringServices,
-    acpRuntimeManager: graphAcpRuntimeManager,
-    acpTraceLogger,
-    archiveWorkspace,
-    chatEventForwarderService: graphChatEventForwarderService,
+    acpRuntimeManager: Object.assign({}, acpRuntimeManager, {
+      setAcpStartupTimeoutMs: vi.fn(),
+      configureEnvironment: vi.fn(),
+    }) satisfies typeof acpRuntimeManager,
+    chatEventForwarderService: Object.assign({}, chatEventForwarderService, {
+      getAllPendingRequests: vi.fn(() => new Map()),
+    }) satisfies typeof chatEventForwarderService,
     sessionCommandFactories,
-    sessionLoadService: createSessionLoadService({
-      domain: sessionDomainService,
-      config: sessionConfigService,
-      hydrateLifecycleEvents: (id) => sessionLifecycleEventService.hydrate(id),
-      getRuntimeSnapshot: (id) => graphSessionLifecycleService.getRuntimeSnapshot(id),
-      tryDispatchNextMessage: (id) => sessionDispatchService.tryDispatchNextMessage(id),
-    }),
-    sessionConfigService,
-    sessionPermissionService,
-    sessionDispatchService,
-    checkGithubAuth,
-    cleanupWorkspaceRuntimeResources,
+    sessionLoadService: createSessionLoadService(
+      unsafeCoerce<Parameters<typeof createSessionLoadService>[0]>({
+        getRuntimeSnapshot: (id: string) => graphSessionLifecycleService.getRuntimeSnapshot(id),
+      })
+    ),
+    sessionLifecycleService: graphSessionLifecycleService,
+    sessionEventBus: unsafeCoerce({ publishToSession: vi.fn() }),
     cleanupWorkspaceScopedCaches: (workspaceId: string) =>
       graphEventCollector?.removeWorkspace(workspaceId),
-    cliHealthService,
-    configService: graphConfigService,
+    configService: Object.assign({}, configService, {
+      getAcpStartupTimeoutMs: vi.fn(() => 4321),
+      isProduction: vi.fn(() => false),
+      getChildProcessEnv: vi.fn(() => ({ APPLICATION_LABEL: label })),
+      getSystemConfig: vi.fn(() => graphSystemConfig),
+      getWorktreeBaseDir: vi.fn(() => graphSystemConfig.worktreeBaseDir),
+      getWebSocketConfig: vi.fn(() => ({
+        maxFrameBytes: graphSystemConfig.websocketMaxFrameBytes,
+      })),
+      getMaxSessionsPerWorkspace: vi.fn(() => graphSystemConfig.maxSessionsPerWorkspace),
+      getCorsConfig: vi.fn(() => graphSystemConfig.cors),
+    }) satisfies typeof configService,
     codexAccountService,
     computePendingRequestType,
-    triggerAdversarialReview,
-    createChildWorkspace: vi.fn<ApplicationServices['createChildWorkspace']>(),
-    deliverWorkspaceNotification,
     recoverWorkspaceMail,
+    enqueueWorkspaceInitializationTask,
+    getWorkspaceLinearContext,
+    slackConnectionService,
     createLogger,
     createWorkspaceCreationService: () => ({ create: vi.fn() }),
-    launchWorkspace: vi.fn(),
-    updateProjectSettings: vi.fn(),
-    renameWorkspace: vi.fn(),
     acceptWorkspaceFollowUp: vi.fn().mockResolvedValue(undefined),
-    cryptoService,
-    slackConnectionService,
-    agentProposalService,
-    agentAuthoring: createAgentAuthoring((): ApplicationServices => services),
-    agentManagementService,
-    agentManagement: createAgentManagement((): ApplicationServices => services),
+    searchGitHubIssues: vi.fn().mockResolvedValue({ results: [], errors: [] }),
+    agentAuthoring: createAgentAuthoring(() => services),
+    agentManagement: createAgentManagement(() => services),
     agentRuntime: {
       hasWork: vi.fn(() => false),
       start: vi.fn(),
       stop: vi.fn().mockResolvedValue(undefined),
       recovery: undefined,
     },
-    dataBackupService,
-    decisionLogQueryService: decisionLogService,
-    metadataSearchService,
-    searchGitHubIssues: vi.fn().mockResolvedValue({ results: [], errors: [] }),
-    executeStartupScriptPipeline,
-    factoryConfigService: FactoryConfigService,
-    claudeModelCatalogService,
-    codexModelCatalogService,
-    providerUsageService,
-    findAvailablePort,
-    fireLifecycleNotification,
-    getLogFilePath,
-    getQuickAction,
-    getWorkspaceLinearContext,
-    getWorkspaceInitPolicy,
-    gitCloneService,
-    gitOpsService,
-    githubCLIService,
-    settingsHealthService,
-    initializeWorkspaceWorktree,
-    enqueueWorkspaceInitializationTask,
-    captureWorkspaceRetryGuard,
-    readWorkspaceRetryAvailability,
-    linearClientService,
-    linearStateSyncService,
-    listQuickActions,
-    periodicTaskService,
-    persistChildNotification,
-    persistParentNotification,
-    prFetchCoordinator,
-    prSnapshotService,
-    projectManagementService,
-    rateLimiter,
-    ratchetService,
-    reconciliationService,
-    recoverStaleProvisioningWorkspace,
-    retryQueuedDispatchAfterWorkspaceReady,
-    runScriptConfigPersistenceService,
-    runScriptService: createRunScriptService({ registerShutdownHandlers: false }),
-    portShareService: new PortShareService({ getTailscaleConfig: () => null }),
-    runScriptStateMachine,
-    schedulerService,
-    serverInstanceService: createServerInstanceService(),
-    sessionDataService,
-    sessionDomainService,
-    sessionEventBus: graphSessionEventBus,
-    sessionFileLogger,
-    sessionLifecycleEventService,
-    sessionLifecycleService: graphSessionLifecycleService,
-    sessionProviderResolverService,
-    sessionPromptTurnCompletionService,
-    sessionRepository,
-    sessionService: graphSessionService,
-    startupScriptService,
-    terminalService,
-    terminalSessionService,
-    userSettingsQueryService: userSettingsService,
-    voiceNarrationService,
-    workspaceActivityService,
-    workspaceCreationService: {
-      create: vi.fn(),
-    } as unknown as ApplicationServices['workspaceCreationService'],
-    workspaceDataService,
-    workspaceMaintenanceService,
-    workspaceGitStateService,
-    workspaceNotificationService,
-    workspacePrSnapshotService,
-    workspaceQueryService,
-    workspaceRelationshipsService,
-    workspaceRunScriptService,
-    workspaceSnapshotStore,
-    workspaceStateMachine,
-    worktreeLifecycleService,
-    orphanedWorktreeService,
-  } satisfies ApplicationServices;
+    portShareService: new PortShareService({
+      getTailscaleConfig: () => null,
+      // No record file: graph disposal must not touch the filesystem.
+      records: unsafeCoerce({ write: vi.fn(async () => undefined) }),
+    }),
+    // Optional: absent unless workspace metadata generation is enabled.
+    workspaceMetadata: undefined,
+  });
 
   graphEventCollector = createEventCollectorOrchestrator(services);
 
   const lifecycle = {
     database: prisma,
+    jobs: { stopAll: vi.fn(async () => undefined) },
     interceptors: {
       register: registerInterceptors,
       start: startInterceptors,

@@ -123,7 +123,7 @@ export const workspaceCoreRouter = router({
       ctx.appContext.services;
     const workspace = await workspaceDataService.findDetailById(input.id);
     if (!workspace) {
-      throw new Error(`Workspace not found: ${input.id}`);
+      throw new TRPCError({ code: 'NOT_FOUND', message: `Workspace not found: ${input.id}` });
     }
     const flowState = deriveWorkspaceFlowStateFromWorkspace(workspace);
     const pendingRequests = sessionDomainService.getAllPendingRequests();
@@ -256,6 +256,20 @@ export const workspaceCoreRouter = router({
       return result;
     }),
 
+  // Discard quarantined PR deliveries; their evidence is kept and nothing is resent.
+  discardBlockedPRDeliveries: trustedLocalProcedure
+    .input(z.object({ workspaceId: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const { ratchetService } = ctx.appContext.services;
+      const result = await ratchetService.discardBlockedPRDeliveries(input.workspaceId);
+      if (result.discarded) {
+        void ratchetService
+          .wakePendingEvents(input.workspaceId)
+          .catch((error) => getLogger(ctx).warn('PR delivery wake deferred', { error }));
+      }
+      return result;
+    }),
+
   // Update workspace provider defaults (session + ratchet).
   updateProviderDefaults: publicProcedure
     .input(
@@ -355,7 +369,12 @@ export const workspaceCoreRouter = router({
       input.id,
       async () => {
         // Clean up running sessions, terminals, and dev processes before deleting
-        await cleanupWorkspaceRuntimeResources(input.id, ctx.appContext.services, 'delete');
+        await cleanupWorkspaceRuntimeResources(
+          input.id,
+          ctx.appContext.services,
+          'delete',
+          workspace
+        );
         ctx.appContext.services.runScriptService.evictWorkspaceBuffers(input.id);
 
         try {

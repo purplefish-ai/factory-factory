@@ -5,8 +5,9 @@ import { FileMinusIcon } from '@phosphor-icons/react/dist/csr/FileMinus';
 import { FilePlusIcon } from '@phosphor-icons/react/dist/csr/FilePlus';
 import type { Icon } from '@phosphor-icons/react/dist/lib/types';
 import { memo } from 'react';
+import { StatusChip, StatusIcon } from '@/client/components/status-indicators';
 import { withOccurrenceKeys } from '@/client/lib/list-keys';
-import { cn } from '@/lib/utils';
+import type { StatusTone } from '@/client/lib/status-tones';
 import type {
   CodexFileChangeEntry,
   CodexFileChangeKind,
@@ -39,42 +40,18 @@ function getKindLabel(kind: CodexFileChangeKind): string {
   }
 }
 
-function getKindMeta(kind: CodexFileChangeKind): {
-  icon: Icon;
-  className: string;
-  iconColorClass: string;
-} {
+function getKindMeta(kind: CodexFileChangeKind): { icon: Icon; tone: StatusTone } {
   switch (kind) {
     case 'create':
-      return {
-        icon: FilePlusIcon,
-        className: 'text-success border-success/40 bg-success/10',
-        iconColorClass: 'text-success',
-      };
+      return { icon: FilePlusIcon, tone: 'success' };
     case 'update':
-      return {
-        icon: FileCodeIcon,
-        className: 'text-warning border-warning/40 bg-warning/10',
-        iconColorClass: 'text-warning',
-      };
+      return { icon: FileCodeIcon, tone: 'warning' };
     case 'delete':
-      return {
-        icon: FileMinusIcon,
-        className: 'text-destructive border-destructive/40 bg-destructive/10',
-        iconColorClass: 'text-destructive',
-      };
+      return { icon: FileMinusIcon, tone: 'danger' };
     case 'move':
-      return {
-        icon: ArrowsLeftRightIcon,
-        className: 'text-info border-info/40 bg-info/10',
-        iconColorClass: 'text-info',
-      };
+      return { icon: ArrowsLeftRightIcon, tone: 'info' };
     case 'unknown':
-      return {
-        icon: FileDashedIcon,
-        className: 'text-muted-foreground border-border bg-muted/50',
-        iconColorClass: 'text-muted-foreground',
-      };
+      return { icon: FileDashedIcon, tone: 'neutral' };
   }
 }
 
@@ -124,27 +101,18 @@ export const CodexFileChangeRenderer = memo(function CodexFileChangeRenderer({
             {payload.changes.length} file {payload.changes.length === 1 ? 'change' : 'changes'}
           </span>
           {payload.status && (
-            <span className="ml-auto rounded border bg-muted/50 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-muted-foreground">
+            <StatusChip tone="neutral" className="ml-auto">
               {payload.status}
-            </span>
+            </StatusChip>
           )}
         </div>
         {kindCounts.length > 0 && (
           <div className="flex flex-wrap gap-1">
-            {kindCounts.map(({ kind, count }) => {
-              const meta = getKindMeta(kind);
-              return (
-                <span
-                  key={`${kind}-${count}`}
-                  className={cn(
-                    'rounded border px-1.5 py-0.5 text-[10px] font-medium',
-                    meta.className
-                  )}
-                >
-                  {count} {getKindLabel(kind)}
-                </span>
-              );
-            })}
+            {kindCounts.map(({ kind, count }) => (
+              <StatusChip key={`${kind}-${count}`} tone={getKindMeta(kind).tone}>
+                {count} {getKindLabel(kind)}
+              </StatusChip>
+            ))}
           </div>
         )}
       </div>
@@ -159,34 +127,26 @@ export const CodexFileChangeRenderer = memo(function CodexFileChangeRenderer({
             JSON.stringify([change.path, change.kind, change.movePath])
           ).map(({ item: change, key }) => {
             const meta = getKindMeta(change.kind);
-            const Icon = meta.icon;
             const { directory, filename } = splitPath(change.path);
 
             return (
               <div key={key} className="rounded border bg-muted/20 px-2 py-1.5">
                 <div className="flex items-center gap-1.5 min-w-0">
-                  <Icon className={cn('h-4 w-4 shrink-0', meta.iconColorClass)} />
+                  <StatusIcon tone={meta.tone} icon={meta.icon} className="h-4 w-4" />
                   <div className="min-w-0 flex-1">
                     <div className="font-mono text-xs truncate" title={change.path}>
                       {filename}
                     </div>
                     {directory && (
-                      <div className="text-[10px] text-muted-foreground truncate" title={directory}>
+                      <div className="text-2xs text-muted-foreground truncate" title={directory}>
                         {directory}
                       </div>
                     )}
                   </div>
-                  <span
-                    className={cn(
-                      'rounded border px-1 py-0.5 text-[10px] font-medium',
-                      meta.className
-                    )}
-                  >
-                    {getKindLabel(change.kind)}
-                  </span>
+                  <StatusChip tone={meta.tone}>{getKindLabel(change.kind)}</StatusChip>
                 </div>
                 {change.movePath && (
-                  <div className="mt-1 flex items-center gap-1 text-[10px] text-muted-foreground">
+                  <div className="mt-1 flex items-center gap-1 text-2xs text-muted-foreground">
                     <ArrowsLeftRightIcon className="h-3 w-3 shrink-0" />
                     <span className="font-mono truncate" title={change.movePath}>
                       {change.movePath}
@@ -208,7 +168,7 @@ export const CodexFileChangeRenderer = memo(function CodexFileChangeRenderer({
           })}
 
           {remainingCount > 0 && (
-            <div className="text-[10px] text-muted-foreground">
+            <div className="text-2xs text-muted-foreground">
               +{remainingCount} more file {remainingCount === 1 ? 'change' : 'changes'}
             </div>
           )}

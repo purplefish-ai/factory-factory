@@ -133,6 +133,8 @@ export const StartingReview: Story = {
     const button = within(canvasElement).getByRole('button', { name: 'Start adversarial review' });
     await userEvent.click(button);
     await expect(button).toBeDisabled();
+    await expect(button).toHaveAttribute('aria-busy', 'true');
+    await expect(button).toHaveAccessibleName('Starting adversarial review');
   },
 };
 export const StartingReviewDark: Story = { ...StartingReview, globals: { theme: 'dark' } };

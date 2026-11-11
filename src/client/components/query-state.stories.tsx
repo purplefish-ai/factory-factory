@@ -12,6 +12,8 @@ const refetch = fn();
 interface QueryStateStoryProps {
   data?: Screenshots;
   error?: string;
+  /** tRPC error code, e.g. `NOT_FOUND`. */
+  errorCode?: string;
   isFetching?: boolean;
   skeleton?: boolean;
   size?: 'default' | 'compact';
@@ -21,18 +23,19 @@ interface QueryStateStoryProps {
 function QueryStateStory({
   data,
   error,
+  errorCode,
   isFetching = false,
   skeleton,
   size,
 }: QueryStateStoryProps) {
   const query: QueryStateQuery<Screenshots> = {
     data,
-    error: error ? { message: error } : null,
+    error: error ? { message: error, data: errorCode ? { code: errorCode } : null } : null,
     isFetching,
     refetch,
   };
   return (
-    <div className="h-[320px] w-[420px] max-w-full rounded-md border bg-background">
+    <div className="flex h-[320px] w-[420px] max-w-full flex-col rounded-md border bg-background">
       <QueryState
         query={query}
         errorTitle="Couldn't load screenshots"
@@ -48,6 +51,14 @@ function QueryStateStory({
             </div>
           ) : undefined
         }
+        notFound={
+          <EmptyState
+            icon={CameraIcon}
+            title="Workspace not found"
+            description="It may have been archived."
+            className="h-full"
+          />
+        }
         isEmpty={(value) => value.names.length === 0}
         empty={
           <EmptyState
@@ -59,7 +70,7 @@ function QueryStateStory({
         }
       >
         {(value) => (
-          <ul className="divide-y text-sm">
+          <ul className="min-h-0 flex-1 divide-y overflow-auto text-sm">
             {value.names.map((name) => (
               <li key={name} className="px-3 py-2">
                 {name}
@@ -136,12 +147,34 @@ export const Content: Story = {
   args: { data: { names: ['home.png', 'settings.png', 'kanban.png'] } },
 };
 
-/** Cached data stays visible when only a background refetch fails. */
+/** Cached data stays visible when only a background refetch fails, under a Retry notice. */
 export const CachedDataWithRefetchError: Story = {
   args: { data: { names: ['home.png', 'settings.png'] }, error: 'Failed to fetch' },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await expect(canvas.getByText('home.png')).toBeVisible();
     await expect(canvas.queryByRole('alert')).toBeNull();
+    await expect(canvas.getByRole('status')).toHaveTextContent("Couldn't refresh");
+    await userEvent.click(canvas.getByRole('button', { name: 'Retry' }));
+    await expect(refetch).toHaveBeenCalledOnce();
+  },
+};
+
+export const CachedDataWithRefetchErrorDark: Story = {
+  args: { data: { names: ['home.png', 'settings.png'] }, error: 'Failed to fetch' },
+  globals: { theme: 'dark' },
+};
+
+/** A `NOT_FOUND` error shows the not-found branch, even over cached data. */
+export const NotFound: Story = {
+  args: {
+    data: { names: ['home.png'] },
+    error: 'Workspace not found: cmw1',
+    errorCode: 'NOT_FOUND',
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByText('Workspace not found')).toBeVisible();
+    await expect(canvas.queryByText('home.png')).toBeNull();
   },
 };

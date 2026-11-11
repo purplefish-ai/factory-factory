@@ -6,7 +6,16 @@ import { MemoryRouter } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import NewProjectPage from './new';
 
-const mocks = vi.hoisted(() => ({ createFromGithub: vi.fn() }));
+const mocks = vi.hoisted(() => ({
+  createFromGithub: vi.fn(),
+  auth: {
+    data: { authenticated: true } as { authenticated: boolean } | undefined,
+    isLoading: false,
+    isFetching: false,
+    error: null as { message: string } | null,
+    refetch: vi.fn(async () => undefined),
+  },
+}));
 vi.mock('@/client/components/app-header-context', () => ({
   useAppHeader: () => undefined,
   HeaderLeftStartSlot: ({ children }: { children: ReactNode }) => children,
@@ -35,7 +44,7 @@ vi.mock('@/client/lib/trpc', () => ({
     project: {
       checkFactoryConfig: { useQuery: () => ({ data: { exists: false } }) },
       checkGithubAuth: {
-        useQuery: () => ({ data: { authenticated: true }, isLoading: false, refetch: vi.fn() }),
+        useQuery: () => mocks.auth,
       },
       create: { useMutation: () => ({ mutate: vi.fn(), isPending: false }) },
       createFromGithub: {
@@ -51,6 +60,9 @@ let actDescriptor: PropertyDescriptor | undefined;
 
 beforeEach(async () => {
   vi.clearAllMocks();
+  mocks.auth.data = { authenticated: true };
+  mocks.auth.error = null;
+  mocks.auth.isFetching = false;
   actDescriptor = Object.getOwnPropertyDescriptor(globalThis, 'IS_REACT_ACT_ENVIRONMENT');
   Object.defineProperty(globalThis, 'IS_REACT_ACT_ENVIRONMENT', {
     configurable: true,
@@ -122,6 +134,60 @@ const invalidUrls = invalidSegments.flatMap((segment) => [
 const validUrls = ['http://github.com/', 'https://github.com/', 'git@github.com:'].flatMap(
   (prefix) => ['', '.git', '/', '.git/'].map((suffix) => `${prefix}OwNeR-1/RePo_2.name${suffix}`)
 );
+
+describe('GitHub authentication check', () => {
+  it('shows a failed check with Retry instead of hiding the auth status', async () => {
+    mocks.auth.data = undefined;
+    mocks.auth.error = { message: 'gh is not responding' };
+    await act(async () =>
+      root.render(
+        <MemoryRouter>
+          <NewProjectPage />
+        </MemoryRouter>
+      )
+    );
+    const alert = [...container.querySelectorAll('[role="alert"]')].find((node) =>
+      node.textContent?.includes("Couldn't check GitHub authentication")
+    );
+    expect(alert?.textContent).toContain('gh is not responding');
+    await act(async () => alert?.querySelector('button')?.click());
+    expect(mocks.auth.refetch).toHaveBeenCalledOnce();
+  });
+
+  it('keeps the cached status and adds a notice when a recheck fails', async () => {
+    mocks.auth.error = { message: 'gh is not responding' };
+    await act(async () =>
+      root.render(
+        <MemoryRouter>
+          <NewProjectPage />
+        </MemoryRouter>
+      )
+    );
+    expect(container.textContent).toContain('Authenticated');
+    const notice = [...container.querySelectorAll('[role="status"]')].find((node) =>
+      node.textContent?.includes("Couldn't refresh GitHub authentication")
+    );
+    expect(notice?.textContent).toContain('gh is not responding');
+  });
+
+  it('shows a retry in flight on the auth notice', async () => {
+    mocks.auth.error = { message: 'gh is not responding' };
+    mocks.auth.isFetching = true;
+    await act(async () =>
+      root.render(
+        <MemoryRouter>
+          <NewProjectPage />
+        </MemoryRouter>
+      )
+    );
+    const notice = [...container.querySelectorAll('[role="status"]')].find((node) =>
+      node.textContent?.includes("Couldn't refresh GitHub authentication")
+    );
+    const retry = notice?.querySelector('button');
+    expect(retry?.textContent).toBe('Retrying…');
+    expect(retry?.disabled).toBe(true);
+  });
+});
 
 describe('New Project GitHub URL validation', () => {
   it.each(invalidUrls)('shows inline validation and blocks submission for %s', async (url) => {

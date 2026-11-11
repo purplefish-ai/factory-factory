@@ -10,8 +10,8 @@ import type {
   ChatMessage,
   ChatSettings,
   PermissionRequest,
-  SessionInfo,
   UserQuestionRequest,
+  SessionDeltaEvent,
   WebSocketMessage,
 } from '@/lib/chat-protocol';
 import {
@@ -215,7 +215,6 @@ describe('createInitialChatState', () => {
     expect(state.messages).toEqual([]);
     expect(state.sessionStatus).toEqual({ phase: 'loading' });
     expect(state.gitBranch).toBeNull();
-    expect(state.availableSessions).toEqual([]);
     expect(state.pendingRequest).toEqual({ type: 'none' });
     expect(state.chatSettings).toEqual(DEFAULT_CHAT_SETTINGS);
     expect(state.queuedMessages).toBeInstanceOf(Map);
@@ -451,17 +450,6 @@ describe('chatReducer', () => {
         ...initialState,
         isCompacting: true,
         toolProgress: new Map([['tool-1', { toolName: 'Edit', elapsedSeconds: 5 }]]),
-        activeHooks: new Map([
-          [
-            'hook-1',
-            {
-              hookId: 'hook-1',
-              hookName: 'PostToolUse',
-              hookEvent: 'PostToolUse',
-              startedAt: '2026-02-07T00:00:00.000Z',
-            },
-          ],
-        ]),
       };
 
       const action: ChatAction = {
@@ -480,7 +468,6 @@ describe('chatReducer', () => {
 
       expect(newState.isCompacting).toBe(false);
       expect(newState.toolProgress.size).toBe(0);
-      expect(newState.activeHooks.size).toBe(0);
     });
   });
 
@@ -1088,7 +1075,7 @@ describe('chatReducer', () => {
     });
 
     it('keeps assistant text visible when an error arrives at the next backend order', () => {
-      const replayEvents: WebSocketMessage[] = Array.from({ length: 8 }, (_, order) => ({
+      const replayEvents: SessionDeltaEvent[] = Array.from({ length: 8 }, (_, order) => ({
         type: 'agent_message',
         messageId: `session-1-${order}`,
         order,
@@ -1135,7 +1122,7 @@ describe('chatReducer', () => {
     it('retains the error and assistant delta at the renderer transcript limit', () => {
       // The error fills the window; the delta then trims it back to the limit.
       const replayedCount = WINDOW_CAPACITY - 1;
-      const replayEvents = Array.from({ length: replayedCount }, (_, order): WebSocketMessage => ({
+      const replayEvents = Array.from({ length: replayedCount }, (_, order): SessionDeltaEvent => ({
         type: 'agent_message',
         messageId: `session-1-${order}`,
         order,
@@ -1287,33 +1274,6 @@ describe('chatReducer', () => {
       expect(newState.messages[0]!.source).toBe('agent');
       expect(newState.messages[0]!.message?.type).toBe('error');
       expect(newState.messages[0]!.message?.error).toBe('Connection failed');
-    });
-  });
-
-  // -------------------------------------------------------------------------
-  // WS_SESSIONS Action
-  // -------------------------------------------------------------------------
-
-  describe('WS_SESSIONS action', () => {
-    it('should update available sessions list', () => {
-      const sessions: SessionInfo[] = [
-        {
-          providerSessionId: 'session-1',
-          createdAt: '2024-01-01T00:00:00.000Z',
-          modifiedAt: '2024-01-01T00:00:00.000Z',
-          sizeBytes: 1024,
-        },
-        {
-          providerSessionId: 'session-2',
-          createdAt: '2024-01-02T00:00:00.000Z',
-          modifiedAt: '2024-01-02T00:00:00.000Z',
-          sizeBytes: 2048,
-        },
-      ];
-      const action: ChatAction = { type: 'WS_SESSIONS', payload: { sessions } };
-      const newState = chatReducer(initialState, action);
-
-      expect(newState.availableSessions).toEqual(sessions);
     });
   });
 
@@ -1972,135 +1932,6 @@ describe('chatReducer', () => {
   });
 
   // -------------------------------------------------------------------------
-  // MESSAGE_USED_AS_RESPONSE Action
-  // -------------------------------------------------------------------------
-
-  describe('MESSAGE_USED_AS_RESPONSE action', () => {
-    it('should add message to chat and clear pending request', () => {
-      const state: ChatState = {
-        ...initialState,
-        pendingRequest: {
-          type: 'question',
-          request: {
-            requestId: 'req-1',
-            questions: [{ question: 'Pick one', options: [{ label: 'A', description: '' }] }],
-            timestamp: '2024-01-01T00:00:00.000Z',
-          },
-        },
-        pendingMessages: new Map([['msg-1', { text: 'My response' }]]),
-      };
-      const action: ChatAction = {
-        type: 'MESSAGE_USED_AS_RESPONSE',
-        payload: { id: 'msg-1', text: 'My response', order: 0 },
-      };
-      const newState = chatReducer(state, action);
-
-      // Message should be added to chat
-      expect(newState.messages).toHaveLength(1);
-      expect(newState.messages[0]!.id).toBe('msg-1');
-      expect(newState.messages[0]!.source).toBe('user');
-      expect(newState.messages[0]!.text).toBe('My response');
-
-      // Pending request should be cleared
-      expect(newState.pendingRequest).toEqual({ type: 'none' });
-
-      // Pending message should be removed
-      expect(newState.pendingMessages.has('msg-1')).toBe(false);
-    });
-
-    it('should work with permission pending request', () => {
-      const state: ChatState = {
-        ...initialState,
-        pendingRequest: {
-          type: 'permission',
-          request: {
-            requestId: 'req-1',
-            toolName: 'ExitPlanMode',
-            toolInput: {},
-            timestamp: '2024-01-01T00:00:00.000Z',
-            planContent: 'Plan content here',
-          },
-        },
-      };
-      const action: ChatAction = {
-        type: 'MESSAGE_USED_AS_RESPONSE',
-        payload: { id: 'msg-1', text: 'Please revise the plan', order: 0 },
-      };
-      const newState = chatReducer(state, action);
-
-      // Message should be added
-      expect(newState.messages).toHaveLength(1);
-      expect(newState.messages[0]!.text).toBe('Please revise the plan');
-
-      // Pending request should be cleared
-      expect(newState.pendingRequest).toEqual({ type: 'none' });
-    });
-
-    it('should preserve attachments from pending messages', () => {
-      const attachments = [
-        { id: 'att-1', name: 'test.png', type: 'image/png', size: 1024, data: 'base64data' },
-      ];
-      const state: ChatState = {
-        ...initialState,
-        pendingRequest: {
-          type: 'question',
-          request: {
-            requestId: 'req-1',
-            questions: [{ question: 'Pick one', options: [{ label: 'A', description: '' }] }],
-            timestamp: '2024-01-01T00:00:00.000Z',
-          },
-        },
-        pendingMessages: new Map([['msg-1', { text: 'My response', attachments }]]),
-      };
-      const action: ChatAction = {
-        type: 'MESSAGE_USED_AS_RESPONSE',
-        payload: { id: 'msg-1', text: 'My response', order: 0 },
-      };
-      const newState = chatReducer(state, action);
-
-      // Message should include attachments
-      expect(newState.messages).toHaveLength(1);
-      expect(newState.messages[0]!.attachments).toEqual(attachments);
-    });
-
-    it('should de-dupe if message already exists (reconnect scenario)', () => {
-      const existingMessage: ChatMessage = {
-        id: 'msg-1',
-        source: 'user',
-        text: 'Already in chat',
-        timestamp: '2024-01-01T00:00:00.000Z',
-        order: 0,
-      };
-      const state: ChatState = {
-        ...initialState,
-        messages: [existingMessage],
-        pendingRequest: {
-          type: 'question',
-          request: {
-            requestId: 'req-1',
-            questions: [{ question: 'Pick one', options: [{ label: 'A', description: '' }] }],
-            timestamp: '2024-01-01T00:00:00.000Z',
-          },
-        },
-        pendingMessages: new Map([['msg-1', { text: 'Duplicate' }]]),
-      };
-      const action: ChatAction = {
-        type: 'MESSAGE_USED_AS_RESPONSE',
-        payload: { id: 'msg-1', text: 'Duplicate', order: 0 },
-      };
-      const newState = chatReducer(state, action);
-
-      // Message should NOT be duplicated
-      expect(newState.messages).toHaveLength(1);
-      expect(newState.messages[0]!.text).toBe('Already in chat');
-
-      // But pending state should still be cleared
-      expect(newState.pendingMessages.has('msg-1')).toBe(false);
-      expect(newState.pendingRequest).toEqual({ type: 'none' });
-    });
-  });
-
-  // -------------------------------------------------------------------------
   // STOP_REQUESTED Action
   // -------------------------------------------------------------------------
 
@@ -2135,18 +1966,11 @@ describe('chatReducer', () => {
   });
 
   describe('renderer transcript retention', () => {
-    it('caps live agent inserts to the recent renderer window and prunes rewind metadata', () => {
+    it('caps live agent inserts to the recent renderer window', () => {
       const messages = Array.from({ length: WINDOW_CAPACITY }, (_, order) =>
         createUserChatMessage(`msg-${order}`, order)
       );
-      const state = createInitialChatState({
-        messages,
-        messageIdToUuid: new Map([
-          ['msg-0', 'uuid-0'],
-          [`msg-${WINDOW_CAPACITY - 1}`, 'uuid-recent'],
-        ]),
-        localUserMessageIds: new Set(['msg-0', `msg-${WINDOW_CAPACITY - 1}`]),
-      });
+      const state = createInitialChatState({ messages });
 
       const newState = chatReducer(state, {
         type: 'WS_AGENT_MESSAGE',
@@ -2159,9 +1983,6 @@ describe('chatReducer', () => {
       expect(newState.messages).toHaveLength(DEFAULT_RENDERER_TRANSCRIPT_LIMIT);
       expect(newState.messages[0]).toBe(messages.at(1 - DEFAULT_RENDERER_TRANSCRIPT_LIMIT));
       expect(newState.messages.at(-1)?.source).toBe('agent');
-      expect(newState.messageIdToUuid.has('msg-0')).toBe(false);
-      expect(newState.messageIdToUuid.get(`msg-${WINDOW_CAPACITY - 1}`)).toBe('uuid-recent');
-      expect(newState.localUserMessageIds.has('msg-0')).toBe(false);
     });
 
     it('drops recovered old user-message deltas that fall outside the recent window', () => {
@@ -2248,32 +2069,6 @@ describe('chatReducer', () => {
       expect(newState.messages.some((message) => message.id === 'orphaned-tool-result')).toBe(
         false
       );
-    });
-
-    it('drops late user-message UUIDs when there is no retained local message or pending send', () => {
-      const state = createInitialChatState({
-        pendingUserMessageUuids: ['stale-uuid'],
-      });
-
-      const newState = chatReducer(state, {
-        type: 'USER_MESSAGE_UUID_RECEIVED',
-        payload: { uuid: 'late-uuid' },
-      });
-
-      expect(newState.pendingUserMessageUuids).toEqual([]);
-    });
-
-    it('still queues early user-message UUIDs while a local send is pending', () => {
-      const state = createInitialChatState({
-        pendingMessages: new Map([['pending-message', { text: 'Pending send' }]]),
-      });
-
-      const newState = chatReducer(state, {
-        type: 'USER_MESSAGE_UUID_RECEIVED',
-        payload: { uuid: 'early-uuid' },
-      });
-
-      expect(newState.pendingUserMessageUuids).toEqual(['early-uuid']);
     });
   });
 
@@ -3365,32 +3160,6 @@ describe('chatReducer', () => {
       expect(newState.messages[0]!.id).toBe('msg-0'); // order: 0
       expect(newState.messages[1]!.id).toBe('msg-1'); // order: 1
     });
-
-    it('should still apply ACCEPTED transition when first pending UUID is empty', () => {
-      const state: ChatState = {
-        ...initialState,
-        pendingUserMessageUuids: [''],
-      };
-
-      const action: ChatAction = {
-        type: 'MESSAGE_STATE_CHANGED',
-        payload: {
-          id: 'msg-empty-uuid',
-          newState: MessageState.ACCEPTED,
-          userMessage: {
-            text: 'Message should still be accepted',
-            timestamp: '2024-01-01T12:00:00.000Z',
-            order: 1,
-          },
-        },
-      };
-      const newState = chatReducer(state, action);
-
-      expect(newState.messages.some((message) => message.id === 'msg-empty-uuid')).toBe(true);
-      expect(newState.queuedMessages.has('msg-empty-uuid')).toBe(true);
-      expect(newState.pendingUserMessageUuids).toEqual([]);
-      expect(newState.messageIdToUuid.has('msg-empty-uuid')).toBe(false);
-    });
   });
 });
 
@@ -3399,20 +3168,6 @@ describe('chatReducer', () => {
 // =============================================================================
 
 describe('createActionFromWebSocketMessage', () => {
-  it('returns null for unknown legacy status-like message', () => {
-    const wsMessage = unsafeCoerce<WebSocketMessage>({ type: 'status' });
-    const action = createActionFromWebSocketMessage(wsMessage);
-
-    expect(action).toBeNull();
-  });
-
-  it('returns null for unknown legacy lifecycle-like messages', () => {
-    const wsMessage = unsafeCoerce<WebSocketMessage>({ type: 'starting' });
-    const action = createActionFromWebSocketMessage(wsMessage);
-
-    expect(action).toBeNull();
-  });
-
   it('should convert agent_message to WS_AGENT_MESSAGE action', () => {
     const claudeMsg: AgentMessage = {
       type: 'assistant',
@@ -3427,47 +3182,11 @@ describe('createActionFromWebSocketMessage', () => {
     });
   });
 
-  it('should return null for agent_message without data', () => {
-    const wsMessage = unsafeCoerce<WebSocketMessage>({ type: 'agent_message' });
-    const action = createActionFromWebSocketMessage(wsMessage);
-
-    expect(action).toBeNull();
-  });
-
   it('should convert error message to WS_ERROR action', () => {
     const wsMessage: WebSocketMessage = { type: 'error', message: 'Connection lost' };
     const action = createActionFromWebSocketMessage(wsMessage);
 
     expect(action).toEqual({ type: 'WS_ERROR', payload: { message: 'Connection lost' } });
-  });
-
-  it('should return null for error message without message field', () => {
-    const wsMessage = unsafeCoerce<WebSocketMessage>({ type: 'error' });
-    const action = createActionFromWebSocketMessage(wsMessage);
-
-    expect(action).toBeNull();
-  });
-
-  it('should convert sessions message to WS_SESSIONS action', () => {
-    const sessions: SessionInfo[] = [
-      {
-        providerSessionId: 'session-1',
-        createdAt: '2024-01-01T00:00:00.000Z',
-        modifiedAt: '2024-01-01T00:00:00.000Z',
-        sizeBytes: 1024,
-      },
-    ];
-    const wsMessage: WebSocketMessage = { type: 'sessions', sessions };
-    const action = createActionFromWebSocketMessage(wsMessage);
-
-    expect(action).toEqual({ type: 'WS_SESSIONS', payload: { sessions } });
-  });
-
-  it('should return null for sessions message without sessions field', () => {
-    const wsMessage = unsafeCoerce<WebSocketMessage>({ type: 'sessions' });
-    const action = createActionFromWebSocketMessage(wsMessage);
-
-    expect(action).toBeNull();
   });
 
   it('should convert config_options_update to CONFIG_OPTIONS_UPDATE action', () => {
@@ -3519,26 +3238,6 @@ describe('createActionFromWebSocketMessage', () => {
     expect((action as { payload: PermissionRequest }).payload.timestamp).toBeDefined();
   });
 
-  it('should return null for permission_request without requestId', () => {
-    const wsMessage: WebSocketMessage = {
-      type: 'permission_request',
-      toolName: 'Bash',
-    };
-    const action = createActionFromWebSocketMessage(wsMessage);
-
-    expect(action).toBeNull();
-  });
-
-  it('should return null for permission_request without toolName', () => {
-    const wsMessage: WebSocketMessage = {
-      type: 'permission_request',
-      requestId: 'req-123',
-    };
-    const action = createActionFromWebSocketMessage(wsMessage);
-
-    expect(action).toBeNull();
-  });
-
   it('should convert user_question to WS_USER_QUESTION action', () => {
     const questions = [
       {
@@ -3565,65 +3264,6 @@ describe('createActionFromWebSocketMessage', () => {
     expect((action as { payload: UserQuestionRequest }).payload.questions).toEqual(questions);
     expect((action as { payload: UserQuestionRequest }).payload.acpOptions).toEqual(acpOptions);
     expect((action as { payload: UserQuestionRequest }).payload.timestamp).toBeDefined();
-  });
-
-  it('should return null for user_question without requestId', () => {
-    const wsMessage: WebSocketMessage = {
-      type: 'user_question',
-      questions: [],
-    };
-    const action = createActionFromWebSocketMessage(wsMessage);
-
-    expect(action).toBeNull();
-  });
-
-  it('should return null for user_question without questions', () => {
-    const wsMessage: WebSocketMessage = {
-      type: 'user_question',
-      requestId: 'req-456',
-    };
-    const action = createActionFromWebSocketMessage(wsMessage);
-
-    expect(action).toBeNull();
-  });
-
-  it('should return null for unknown message type', () => {
-    const wsMessage = unsafeCoerce<WebSocketMessage>({ type: 'unknown_type' });
-    const action = createActionFromWebSocketMessage(wsMessage);
-
-    expect(action).toBeNull();
-  });
-
-  it('should convert message_used_as_response to MESSAGE_USED_AS_RESPONSE action', () => {
-    const wsMessage: WebSocketMessage = {
-      type: 'message_used_as_response',
-      id: 'msg-1',
-      text: 'My custom response',
-      order: 5,
-    };
-    const action = createActionFromWebSocketMessage(wsMessage);
-
-    expect(action).toEqual({
-      type: 'MESSAGE_USED_AS_RESPONSE',
-      payload: { id: 'msg-1', text: 'My custom response', order: 5 },
-    });
-  });
-
-  it('should return null for message_used_as_response without id', () => {
-    const wsMessage: WebSocketMessage = {
-      type: 'message_used_as_response',
-      text: 'My custom response',
-    };
-    const action = createActionFromWebSocketMessage(wsMessage);
-
-    expect(action).toBeNull();
-  });
-
-  it('should return null for message_used_as_response without text', () => {
-    const wsMessage: WebSocketMessage = { type: 'message_used_as_response', id: 'msg-1' };
-    const action = createActionFromWebSocketMessage(wsMessage);
-
-    expect(action).toBeNull();
   });
 
   // -------------------------------------------------------------------------
@@ -3683,26 +3323,6 @@ describe('createActionFromWebSocketMessage', () => {
         errorMessage: 'Queue full',
       },
     });
-  });
-
-  it('should return null for message_state_changed without id', () => {
-    const wsMessage: WebSocketMessage = {
-      type: 'message_state_changed',
-      newState: MessageState.DISPATCHED,
-    };
-    const action = createActionFromWebSocketMessage(wsMessage);
-
-    expect(action).toBeNull();
-  });
-
-  it('should return null for message_state_changed without newState', () => {
-    const wsMessage: WebSocketMessage = {
-      type: 'message_state_changed',
-      id: 'msg-1',
-    };
-    const action = createActionFromWebSocketMessage(wsMessage);
-
-    expect(action).toBeNull();
   });
 });
 
@@ -3869,41 +3489,6 @@ describe('SDK Task Notification Actions', () => {
   });
 });
 
-describe('SDK Status Update Actions', () => {
-  it('should update permissionMode on SDK_STATUS_UPDATE', () => {
-    const state = createInitialChatState({ permissionMode: null });
-    const action: ChatAction = {
-      type: 'SDK_STATUS_UPDATE',
-      payload: { permissionMode: 'acceptEdits' },
-    };
-
-    const newState = chatReducer(state, action);
-
-    expect(newState.permissionMode).toBe('acceptEdits');
-  });
-
-  it('should preserve existing permissionMode when payload is undefined', () => {
-    const state = createInitialChatState({ permissionMode: 'plan' });
-    const action: ChatAction = {
-      type: 'SDK_STATUS_UPDATE',
-      payload: {},
-    };
-
-    const newState = chatReducer(state, action);
-
-    expect(newState.permissionMode).toBe('plan');
-  });
-
-  it('should reset permissionMode on session switch', () => {
-    const state = createInitialChatState({ permissionMode: 'acceptEdits' });
-    const action: ChatAction = { type: 'SESSION_SWITCH_START' };
-
-    const newState = chatReducer(state, action);
-
-    expect(newState.permissionMode).toBeNull();
-  });
-});
-
 describe('createActionFromWebSocketMessage - SDK Events', () => {
   it('should create SDK_COMPACTING_START action for compacting_start message', () => {
     const message: WebSocketMessage = { type: 'compacting_start' };
@@ -3930,13 +3515,6 @@ describe('createActionFromWebSocketMessage - SDK Events', () => {
       type: 'SDK_TASK_NOTIFICATION',
       payload: { message: 'Agent started task' },
     });
-  });
-
-  it('should return null for task_notification without message', () => {
-    const message: WebSocketMessage = { type: 'task_notification' };
-    const action = createActionFromWebSocketMessage(message);
-
-    expect(action).toBeNull();
   });
 });
 
@@ -4224,44 +3802,6 @@ describe('Token Stats Accumulation', () => {
         toolName: 'TestTool',
         elapsedSeconds: 5,
       });
-    });
-
-    it('sets rewind preview state', () => {
-      const state = createInitialChatState();
-      const action: ChatAction = {
-        type: 'REWIND_PREVIEW_START',
-        payload: { userMessageId: 'msg-1', requestNonce: 'nonce-1' },
-      };
-      const newState = chatReducer(state, action);
-
-      expect(newState.rewindPreview).toEqual({
-        userMessageId: 'msg-1',
-        requestNonce: 'nonce-1',
-        isLoading: true,
-      });
-    });
-
-    it('adds interactive response message and clears pending request', () => {
-      const state = createInitialChatState({
-        pendingRequest: {
-          type: 'question',
-          request: {
-            requestId: 'req-1',
-            questions: [],
-            timestamp: new Date().toISOString(),
-          },
-        },
-        pendingMessages: new Map([['msg-1', { text: 'hi' }]]),
-      });
-
-      const action: ChatAction = {
-        type: 'MESSAGE_USED_AS_RESPONSE',
-        payload: { id: 'msg-1', text: 'hi', order: 1 },
-      };
-      const newState = chatReducer(state, action);
-
-      expect(newState.pendingRequest).toEqual({ type: 'none' });
-      expect(newState.messages[0]?.id).toBe('msg-1');
     });
   });
 });

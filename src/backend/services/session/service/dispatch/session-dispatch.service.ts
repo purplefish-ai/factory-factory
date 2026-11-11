@@ -2,18 +2,20 @@ import { WorkspaceInitFenceError } from '@/backend/lib/workspace-init-fence-erro
 import { applicationUpdateAdmission } from '@/backend/services/application-update-admission.service';
 /** Queue execution and dispatch fencing for session messages. */
 import { createLogger } from '@/backend/services/logger.service';
+import type { AcpProcessHandle } from '@/backend/services/session/service/acp';
 import { AcpSteeringNotSentError } from '@/backend/services/session/service/acp/acp-steering';
 import type { SessionInitPolicyBridge } from '@/backend/services/session/service/bridges';
 import type { SessionCallerGuard } from '@/backend/services/session/service/bridges';
 import { PermanentAttachmentError } from '@/backend/services/session/service/chat/chat-message-handlers/attachment-processing';
 import { DEBUG_CHAT_WS } from '@/backend/services/session/service/chat/chat-message-handlers/constants';
 import { sessionDataService } from '@/backend/services/session/service/data/session-data.service';
-import { EventSessionFenceError } from '@/backend/services/session/service/lifecycle/event-session-fence-error';
+import { createPRDeliveryBlockedError } from '@/backend/services/session/service/delivery/pr-delivery-failure';
+import { EventSessionFenceError } from '@/backend/services/session/service/event-agent/event-session-fence-error';
+import { sessionDomainService } from '@/backend/services/session/service/session-domain.service';
 import {
   isTurnAlreadyInProgressError,
   toErrorMessage,
-} from '@/backend/services/session/service/lifecycle/session.error-message';
-import { sessionDomainService } from '@/backend/services/session/service/session-domain.service';
+} from '@/backend/services/session/service/session.error-message';
 import { MessageState, type QueuedMessage, resolveSelectedModel } from '@/shared/acp-protocol';
 import {
   acknowledgeSentBatch,
@@ -25,7 +27,6 @@ import {
   combineBatchContents,
 } from './session-dispatch-batch';
 import { SessionDispatchClaim } from './session-dispatch-claim';
-import { isClaudeCompactionClient, isThinkingBudgetClient } from './session-dispatch-client';
 import {
   type DispatchGateResult,
   getPermanentBlockedDispatchReason,
@@ -156,11 +157,27 @@ export class SessionDispatchService {
     this.manualDispatchResumed.delete(sessionId);
   }
 
+  /** Runs at the end of every stop (session scope `completeStop`). */
   resetDispatchState(sessionId: string): void {
     this.steering.reset(sessionId);
     this.dispatchClaim.reset(sessionId);
     this.retry.clear(sessionId);
     this.notificationDeliveryService?.resetSession(sessionId);
+  }
+
+  /** Drops everything retained for a deleted session (session scope `forget`). */
+  forgetSession(sessionId: string): void {
+    this.resetDispatchState(sessionId);
+    this.manualDispatchResumed.delete(sessionId);
+  }
+
+  /**
+   * Application shutdown: cancel pending queue retries, refuse new ones and
+   * wait for retries already dispatching. Stopping all clients does not run
+   * per-session stops, so their retry timers would otherwise keep firing.
+   */
+  shutdown(): Promise<void> {
+    return this.retry.stop();
   }
 
   /** Keep messages queued during preparation so refresh cannot lose them. */
@@ -314,7 +331,7 @@ export class SessionDispatchService {
     if (peeked.source && sessionDomainService.peekNextMessage(dbSessionId) !== peeked) {
       await this.dependencies.backgroundDelivery.fail(
         peeked,
-        new Error('Turn in progress: human message queued during preparation')
+        createPRDeliveryBlockedError('preempted')
       );
       return;
     }
@@ -363,8 +380,7 @@ export class SessionDispatchService {
         }
         return this.isDispatchGenerationCurrent(dbSessionId, stopGeneration);
       },
-      send: (messages) =>
-        this.dispatchMessage(dbSessionId, messages, clientResult.client, stopGeneration, guard),
+      send: (messages) => this.dispatchMessage(dbSessionId, messages, stopGeneration, guard),
       onError: (message, error) =>
         isStoreCurrent() &&
         this.handleDispatchError(
@@ -396,7 +412,7 @@ export class SessionDispatchService {
     peeked: QueuedMessage,
     stopGeneration: number,
     guard?: SessionCallerGuard
-  ): Promise<{ client: unknown } | null> {
+  ): Promise<{ client: AcpProcessHandle } | null> {
     await guard?.check();
     guard?.assertCurrent?.();
     const clientResult = await this.resolveClientForDispatch(dbSessionId, peeked, guard);
@@ -408,11 +424,7 @@ export class SessionDispatchService {
       if (peeked.source) {
         await this.dependencies.backgroundDelivery.fail(
           peeked,
-          new Error(
-            clientResult.blocked === 'busy'
-              ? 'A turn is already in progress for this session'
-              : 'Required existing conversation could not be restored'
-          )
+          createPRDeliveryBlockedError(clientResult.blocked)
         );
       }
       return null;
@@ -458,7 +470,7 @@ export class SessionDispatchService {
     msg: QueuedMessage,
     error: unknown,
     stopGeneration: number,
-    capturedClient?: unknown,
+    capturedClient?: AcpProcessHandle,
     guard?: SessionCallerGuard
   ): void {
     if (!this.isDispatchGenerationCurrent(dbSessionId, stopGeneration)) {
@@ -578,7 +590,7 @@ export class SessionDispatchService {
     dbSessionId: string,
     msg: QueuedMessage,
     guard?: SessionCallerGuard
-  ): Promise<{ client: unknown } | { blocked: 'busy' | 'resume_failed' } | null> {
+  ): Promise<{ client: AcpProcessHandle } | { blocked: 'busy' | 'resume_failed' } | null> {
     let client = this.lifecycle.startup.getSessionClient(dbSessionId);
 
     if (!client || msg.source) {
@@ -591,9 +603,9 @@ export class SessionDispatchService {
 
     // Check the prompt slot even after startup: another caller may have acquired it
     // while startup/configuration was awaited. Background activity is only a UI signal.
-    const reason = this.getRequeueReason(dbSessionId, client);
-    if (reason) {
-      return msg.source && reason !== 'stopped' ? { blocked: 'busy' } : null;
+    const reason = this.getRequeueReason(dbSessionId);
+    if (reason || !client) {
+      return msg.source && reason && reason !== 'stopped' ? { blocked: 'busy' } : null;
     }
 
     return { client };
@@ -654,7 +666,6 @@ export class SessionDispatchService {
   private async dispatchMessage(
     dbSessionId: string,
     messages: QueuedMessage[],
-    client: unknown,
     stopGeneration: number,
     callerGuard?: SessionCallerGuard
   ): Promise<void> {
@@ -679,18 +690,8 @@ export class SessionDispatchService {
     if (!msg) {
       return;
     }
-    const isCompactCommand = this.isCompactCommand(msg.text);
-    const compactionClient = isClaudeCompactionClient(client) ? client : null;
-
     if (
-      !(await this.configureBatchForDispatch(
-        dbSessionId,
-        messages,
-        msg,
-        client,
-        stopGeneration,
-        guard
-      ))
+      !(await this.configureBatchForDispatch(dbSessionId, messages, msg, stopGeneration, guard))
     ) {
       return;
     }
@@ -724,56 +725,45 @@ export class SessionDispatchService {
       return { message, order, userMessage };
     });
 
-    if (isCompactCommand && compactionClient) {
-      compactionClient.startCompaction();
+    const sendPromise = sendArmedWorkspaceMailBatch({
+      sessionId: dbSessionId,
+      messages,
+      notifications: this.lifecycle.notificationDelivery,
+      assertCurrent: () => {
+        guard?.assertCurrent?.();
+        if (!this.isDispatchGenerationCurrent(dbSessionId, stopGeneration)) {
+          throw new AcpSteeringNotSentError('Session stopped before mail dispatch');
+        }
+      },
+      send: () =>
+        this.dependencies.promptService.sendSessionMessage(
+          dbSessionId,
+          content,
+          ...(guard ? ([guard] as const) : [])
+        ),
+    });
+    // Persist immediately after dispatch so refresh/replay keeps this user message
+    // visible while the provider is still working on the turn. Each commit
+    // publishes only its entry and the remaining queue.
+    for (const { message, order } of dispatched) {
+      sessionDomainService.commitSentUserMessageAtOrder(dbSessionId, message, order);
     }
-
-    try {
-      const sendPromise = sendArmedWorkspaceMailBatch({
-        sessionId: dbSessionId,
-        messages,
-        notifications: this.lifecycle.notificationDelivery,
-        assertCurrent: () => {
-          guard?.assertCurrent?.();
-          if (!this.isDispatchGenerationCurrent(dbSessionId, stopGeneration)) {
-            throw new AcpSteeringNotSentError('Session stopped before mail dispatch');
-          }
-        },
-        send: () =>
-          this.dependencies.promptService.sendSessionMessage(
-            dbSessionId,
-            content,
-            ...(guard ? ([guard] as const) : [])
-          ),
+    await sendPromise;
+    for (const { message, userMessage } of dispatched) {
+      sessionDomainService.emitDelta(dbSessionId, {
+        type: 'message_state_changed',
+        id: message.id,
+        newState: MessageState.COMMITTED,
+        userMessage,
       });
-      // Persist immediately after dispatch so refresh/replay keeps this user message
-      // visible while the provider is still working on the turn. Each commit
-      // publishes only its entry and the remaining queue.
-      for (const { message, order } of dispatched) {
-        sessionDomainService.commitSentUserMessageAtOrder(dbSessionId, message, order);
-      }
-      await sendPromise;
-      for (const { message, userMessage } of dispatched) {
-        sessionDomainService.emitDelta(dbSessionId, {
-          type: 'message_state_changed',
-          id: message.id,
-          newState: MessageState.COMMITTED,
-          userMessage,
-        });
-      }
-      await acknowledgeSentBatch({
-        sessionId: dbSessionId,
-        messages,
-        backgroundDelivery: this.dependencies.backgroundDelivery,
-        notifications: this.lifecycle.notificationDelivery,
-        isCurrent: () => this.isDispatchGenerationCurrent(dbSessionId, stopGeneration),
-      });
-    } catch (error) {
-      if (isCompactCommand && compactionClient) {
-        compactionClient.endCompaction();
-      }
-      throw error;
     }
+    await acknowledgeSentBatch({
+      sessionId: dbSessionId,
+      messages,
+      backgroundDelivery: this.dependencies.backgroundDelivery,
+      notifications: this.lifecycle.notificationDelivery,
+      isCurrent: () => this.isDispatchGenerationCurrent(dbSessionId, stopGeneration),
+    });
 
     if (DEBUG_CHAT_WS) {
       logger.info('[Chat WS] Dispatched queued message to Claude', {
@@ -788,13 +778,10 @@ export class SessionDispatchService {
     dbSessionId: string,
     messages: QueuedMessage[],
     msg: QueuedMessage,
-    client: unknown,
     stopGeneration: number,
     guard?: SessionCallerGuard
   ): Promise<boolean> {
-    if (
-      !(await this.configureMessageForDispatch(dbSessionId, msg, client, stopGeneration, guard))
-    ) {
+    if (!(await this.configureMessageForDispatch(dbSessionId, msg, stopGeneration, guard))) {
       await this.failStoppedBatch(
         dbSessionId,
         messages.filter((other) => other !== msg)
@@ -804,13 +791,7 @@ export class SessionDispatchService {
 
     for (const background of messages.filter((message) => message.source && message !== msg)) {
       if (
-        !(await this.configureMessageForDispatch(
-          dbSessionId,
-          background,
-          client,
-          stopGeneration,
-          guard
-        ))
+        !(await this.configureMessageForDispatch(dbSessionId, background, stopGeneration, guard))
       ) {
         messages.splice(messages.indexOf(background), 1);
       }
@@ -836,7 +817,6 @@ export class SessionDispatchService {
   private async configureMessageForDispatch(
     dbSessionId: string,
     msg: QueuedMessage,
-    client: unknown,
     stopGeneration: number,
     guard?: SessionCallerGuard
   ): Promise<boolean> {
@@ -856,7 +836,6 @@ export class SessionDispatchService {
       msg.settings = await this.dependencies.configService.configureQueuedMessage(
         dbSessionId,
         msg,
-        isThinkingBudgetClient(client),
         ...(guard ? ([guard] as const) : [])
       );
     } catch (error) {
@@ -889,32 +868,22 @@ export class SessionDispatchService {
     );
   }
 
+  /** Dispatch yields only to stops; startup-lease churn must not strand the queue. */
   private isDispatchGenerationCurrent(dbSessionId: string, stopGeneration: number): boolean {
-    return (
-      !this.lifecycle.gate.isSessionStopping(dbSessionId) &&
-      this.lifecycle.gate.isGenerationCurrent(dbSessionId, stopGeneration)
+    return !(
+      this.lifecycle.gate.isSessionStopping(dbSessionId) ||
+      this.lifecycle.gate.hasStopSince(dbSessionId, stopGeneration)
     );
   }
 
-  private getRequeueReason(
-    dbSessionId: string,
-    client?: unknown
-  ): 'working' | 'compacting' | 'stopped' | null {
+  private getRequeueReason(dbSessionId: string): 'working' | 'stopped' | null {
     if (this.dependencies.runtimeManager.isSessionPromptInFlight(dbSessionId)) {
       return 'working';
     }
     if (!this.dependencies.runtimeManager.isSessionRunning(dbSessionId)) {
       return 'stopped';
     }
-    if (isClaudeCompactionClient(client) && client.isCompactingActive()) {
-      return 'compacting';
-    }
     return null;
-  }
-
-  private isCompactCommand(text: string): boolean {
-    const trimmed = text.trim();
-    return trimmed === '/compact' || trimmed.startsWith('/compact ');
   }
 
   private handleBlockedDispatchGate(

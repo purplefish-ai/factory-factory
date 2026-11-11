@@ -6,7 +6,7 @@ import { cn } from '@/lib/utils';
 import { ClosedSessionTranscriptView } from './closed-session-transcript-view';
 import { ScreenshotViewerTab } from './screenshot-viewer-tab';
 import { useTranscriptPositionPersistence } from './use-chat-transcript-persistence';
-import { useWorkspacePanel } from './workspace-panel-context';
+import { useWorkspacePanelState } from './workspace-panel-context';
 
 const DiffViewer = lazy(() =>
   import('./diff-viewer').then((module) => ({ default: module.DiffViewer }))
@@ -26,7 +26,7 @@ interface MainViewContentProps {
 }
 
 export function MainViewContent({ workspaceId, children, className }: MainViewContentProps) {
-  const { tabs, activeTabId } = useWorkspacePanel();
+  const { tabs, activeTabId } = useWorkspacePanelState();
 
   const activeTab = tabs.find((tab) => tab.id === activeTabId);
 

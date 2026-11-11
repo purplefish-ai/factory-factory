@@ -1,6 +1,4 @@
-import { CheckCircleIcon } from '@phosphor-icons/react/dist/csr/CheckCircle';
-import { FileCodeIcon } from '@phosphor-icons/react/dist/csr/FileCode';
-import { Alert, AlertDescription } from '@/components/ui/alert';
+import { StatusCallout } from '@/client/components/status-callout';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import type { FactoryConfig } from '@/shared/schemas/factory-config.schema';
 
@@ -25,55 +23,48 @@ export function FactoryConfigScripts({
 
   if (variant === 'alert') {
     return (
-      <Alert className="border-success/30 bg-success/10">
-        <FileCodeIcon className="h-4 w-4 text-success" />
-        <AlertDescription>
-          <div className="space-y-2">
-            <div className="flex items-center gap-2">
-              <CheckCircleIcon className="h-4 w-4 text-success" />
-              <span className="font-medium text-success">factory-factory.json detected</span>
-            </div>
-            <p className="text-sm text-success">
-              This project has a factory-factory.json configuration file. New workspaces will
-              automatically:
-            </p>
-            <ul className="text-sm text-success space-y-1 ml-4">
-              {factoryConfig.scripts.setup && (
-                <li className="list-disc">
-                  Run setup script:{' '}
-                  <code className="bg-background px-1 rounded text-xs">
-                    {factoryConfig.scripts.setup}
-                  </code>
-                </li>
-              )}
-              {factoryConfig.scripts.run && (
-                <li className="list-disc">
-                  Have a dev server available via the play button:{' '}
-                  <code className="bg-background px-1 rounded text-xs">
-                    {factoryConfig.scripts.run}
-                  </code>
-                </li>
-              )}
-              {factoryConfig.scripts.postRun && (
-                <li className="list-disc">
-                  Run after dev server starts:{' '}
-                  <code className="bg-background px-1 rounded text-xs">
-                    {factoryConfig.scripts.postRun}
-                  </code>
-                </li>
-              )}
-              {factoryConfig.scripts.cleanup && (
-                <li className="list-disc">
-                  Run cleanup on stop:{' '}
-                  <code className="bg-background px-1 rounded text-xs">
-                    {factoryConfig.scripts.cleanup}
-                  </code>
-                </li>
-              )}
-            </ul>
-          </div>
-        </AlertDescription>
-      </Alert>
+      <StatusCallout tone="success" title="factory-factory.json detected">
+        <div className="space-y-2">
+          <p>
+            This project has a factory-factory.json configuration file. New workspaces will
+            automatically:
+          </p>
+          <ul className="space-y-1 ml-4">
+            {factoryConfig.scripts.setup && (
+              <li className="list-disc">
+                Run setup script:{' '}
+                <code className="bg-background px-1 rounded text-xs">
+                  {factoryConfig.scripts.setup}
+                </code>
+              </li>
+            )}
+            {factoryConfig.scripts.run && (
+              <li className="list-disc">
+                Have a dev server available via the play button:{' '}
+                <code className="bg-background px-1 rounded text-xs">
+                  {factoryConfig.scripts.run}
+                </code>
+              </li>
+            )}
+            {factoryConfig.scripts.postRun && (
+              <li className="list-disc">
+                Run after dev server starts:{' '}
+                <code className="bg-background px-1 rounded text-xs">
+                  {factoryConfig.scripts.postRun}
+                </code>
+              </li>
+            )}
+            {factoryConfig.scripts.cleanup && (
+              <li className="list-disc">
+                Run cleanup on stop:{' '}
+                <code className="bg-background px-1 rounded text-xs">
+                  {factoryConfig.scripts.cleanup}
+                </code>
+              </li>
+            )}
+          </ul>
+        </div>
+      </StatusCallout>
     );
   }
 

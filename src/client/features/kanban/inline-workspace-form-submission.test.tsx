@@ -34,6 +34,27 @@ function launch(container: HTMLElement, label = 'Launch') {
 }
 
 describe('workspace creation submission recovery', () => {
+  it('reports a failed launch once, inline in the composer rather than also as a toast', async () => {
+    mocks.toastErrorMock.mockClear();
+    const form = renderForm();
+    try {
+      launch(form.container);
+      const input = mocks.createWorkspaceMutateMock.mock.calls[0]?.[0] as Input;
+      const mutation = options();
+      const context = await mutation.onMutate(input);
+      actFlushSync(() => mutation.onError(new Error('boom'), input, context));
+      const alerts = [...form.container.querySelectorAll('[role=alert]')].map(
+        (alert) => alert.textContent
+      );
+      expect(alerts.filter((text) => text?.includes('boom'))).toEqual([
+        "Couldn't create workspace. boom",
+      ]);
+      expect(mocks.toastErrorMock).not.toHaveBeenCalled();
+    } finally {
+      actFlushSync(() => form.root.unmount());
+    }
+  });
+
   it('selects the launch before waiting for query cancellation or the create response', async () => {
     const onLaunching = vi.fn();
     const form = renderForm(getTestProjectId(), { onLaunching });
@@ -112,6 +133,40 @@ describe('workspace creation submission recovery', () => {
       ).toBe(false);
     } finally {
       actFlushSync(() => form.root.unmount());
+    }
+  });
+
+  it('reports an automation failure inline while open and as a toast once closed', async () => {
+    mocks.toastErrorMock.mockClear();
+    await expect(
+      saveWorkspaceCreationDraft(getTestProjectId(), {
+        ...createWorkspaceCreationDraft(),
+        mode: 'PERIODIC_TASK',
+        cadence: 'EVERY_FIVE_MINUTES',
+        prompt: 'Nightly review',
+      })
+    ).rejects.toThrow('could not be saved');
+    const form = renderForm();
+    try {
+      launch(form.container, 'Create automation');
+      const mutation = mocks.agentMutationOptions!;
+      const context = mutation.onMutate!();
+      actFlushSync(() => mutation.onError!(new Error('boom'), undefined, context));
+      expect(
+        [...form.container.querySelectorAll('[role=alert]')].map((alert) => alert.textContent)
+      ).toContain("Couldn't create automation. boom");
+      expect(mocks.toastErrorMock).not.toHaveBeenCalled();
+
+      launch(form.container, 'Create automation');
+      const retry = mutation.onMutate!();
+      actFlushSync(() => form.root.unmount());
+      mutation.onError!(new Error('late'), undefined, retry);
+      expect(mocks.toastErrorMock).toHaveBeenCalledTimes(1);
+      expect(mocks.toastErrorMock).toHaveBeenCalledWith("Couldn't create automation. late");
+    } finally {
+      if (form.container.isConnected) {
+        actFlushSync(() => form.root.unmount());
+      }
     }
   });
 

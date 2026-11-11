@@ -456,3 +456,24 @@ it('clears accumulated Slack pages when deliberately reloading a newer saved bas
   expect(container.textContent).not.toContain('A two');
   expect(discover.mock.calls.at(-1)?.[0].cursor).toBeUndefined();
 });
+
+it('offers Retry after project sources fail to load, then refreshes once they load', async () => {
+  const discover = vi
+    .fn()
+    .mockRejectedValueOnce(new Error('Slack unavailable'))
+    .mockImplementation(async (input: { cursor?: string }) => sources('A', input.cursor));
+  await mount(
+    <EventAgentEditor
+      agent={eventAgentFixture()}
+      onCancel={vi.fn()}
+      onSave={noSave}
+      onValidate={noPreview}
+      onSources={discover}
+    />
+  );
+  await click('Refresh project sources');
+  await waitForReact(() => expect(button('Retry')).toBeDefined());
+  await click('Retry');
+  await waitForReact(() => expect(container.textContent).toContain('A one'));
+  expect(button('Refresh project sources')).toBeDefined();
+});

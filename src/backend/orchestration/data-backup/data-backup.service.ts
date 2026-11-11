@@ -1,0 +1,944 @@
+/**
+ * Data Backup Service
+ *
+ * Handles export and import of database data for backup/restore purposes.
+ * Used when database migrations require a reset.
+ */
+import type { z } from 'zod';
+import {
+  exportSlackConnectionsRecovery,
+  planSlackConnectionsRecovery,
+  restoreSlackConnectionsRecovery,
+  exportAutomationDefinitionsRecovery,
+  planAutomationDefinitionsRecovery,
+  restoreAutomationDefinitionsRecovery,
+} from '@/backend/services/agent-definition';
+import {
+  exportCodexAccountMetadata,
+  restoreCodexAccountMetadata,
+  resolveRestoredCodexAccountId as restoredAccountId,
+} from '@/backend/services/codex-accounts';
+import { createLogger } from '@/backend/services/logger.service';
+import {
+  exportPeriodicConfigRecovery,
+  exportPeriodicHistoryRecovery,
+  planPeriodicHistoryRecovery,
+  restorePeriodicHistoryRecovery,
+  readPeriodicConfigRecoveryIds,
+  restorePeriodicConfigRecovery,
+} from '@/backend/services/periodic-task';
+import {
+  type DataBackupTransactionClient,
+  dataBackupAccessor,
+  type WorkspaceForExport,
+} from '@/backend/services/settings/resources/data-backup.accessor';
+import {
+  workspaceDataService,
+  workspacePrSnapshotService,
+  workspaceChildHistoryService,
+} from '@/backend/services/workspace';
+import { normalizeColorScheme } from '@/shared/appearance';
+import { backupPRIdentities } from '@/shared/backup-pr-identities';
+import {
+  createRecoveryImportReport,
+  type RecoveryImportReport,
+} from '@/shared/recovery-import-report';
+import type { AutomationDefinitionsRecovery } from '@/shared/schemas/automation-definitions-recovery.schema';
+import { exportDataSchema } from '@/shared/schemas/export-data.schema';
+import type {
+  ExportData,
+  exportedAgentSessionSchema,
+  exportedProjectSchema,
+  exportedTerminalSessionSchema,
+  exportedUserSettingsSchema,
+} from '@/shared/schemas/export-data.schema';
+import { Prisma } from '@prisma-gen/client';
+import { planLegacyImport } from './data-backup-legacy-collisions';
+import { createBaseRecoveryManifest } from './data-backup-manifest';
+import { exportPRBackupState, restorePRBackupState } from './data-backup-pr-events';
+import {
+  createInertImportReport,
+  inertWorkspaceRuntime,
+  recordStoppedProcess,
+  type InertImportReport,
+} from './data-backup-runtime';
+
+type TransactionClient = DataBackupTransactionClient;
+
+const logger = createLogger('data-backup');
+
+function planAutomationDefinitionImport(
+  tx: TransactionClient,
+  section: AutomationDefinitionsRecovery | undefined,
+  projectIds: ReadonlySet<string>
+) {
+  return section ? planAutomationDefinitionsRecovery(tx, section, projectIds) : undefined;
+}
+
+// ============================================================================
+// Types
+// ============================================================================
+
+export interface ImportCounter {
+  imported: number;
+  skipped: number;
+}
+
+export interface ImportResults {
+  recovery: RecoveryImportReport;
+  inertTransforms: InertImportReport;
+  projects: ImportCounter;
+  workspaces: ImportCounter;
+  agentSessions: ImportCounter;
+  terminalSessions: ImportCounter;
+  userSettings: { imported: boolean; skipped: boolean };
+}
+
+// Internal types extracted from schemas (using explicit exports instead of Zod internals)
+type ExportedProject = z.infer<typeof exportedProjectSchema>;
+type ExportedWorkspace = ExportData['data']['workspaces'][number];
+type ExportedAgentSession = z.infer<typeof exportedAgentSessionSchema>;
+type ExportedTerminalSession = z.infer<typeof exportedTerminalSessionSchema>;
+type ExportedUserSettings = z.infer<typeof exportedUserSettingsSchema>;
+
+// ============================================================================
+// Helpers
+// ============================================================================
+
+const toISOString = (date: Date | null): string | null => (date ? date.toISOString() : null);
+const parseDate = (str: string | null): Date | null => (str ? new Date(str) : null);
+
+function exportedConversationMetadata(workspace: WorkspaceForExport) {
+  const metadata = workspace.conversationMetadata;
+  if (!metadata) {
+    return null;
+  }
+  const { workspaceId: _workspaceId, generatedAt, ...fields } = metadata;
+  return { ...fields, generatedAt: toISOString(generatedAt) };
+}
+
+function exportedPRFields(workspace: WorkspaceForExport) {
+  const fields = workspacePrSnapshotService.projectCollection(
+    workspace.prs,
+    workspace.prMonitoring?.enabled ?? false
+  );
+  return {
+    prUrl: fields.prUrl,
+    prNumber: fields.prNumber,
+    prState: fields.prState,
+    prReviewState: fields.prReviewState,
+    prCiStatus: fields.prCiStatus,
+    ratchetState: fields.ratchetState,
+    prReviewLastCommentId: fields.prReviewLastCommentId,
+    prUpdatedAt: toISOString(fields.prUpdatedAt),
+    prCiFailedAt: toISOString(fields.prCiFailedAt),
+    prCiLastNotifiedAt: toISOString(fields.prCiLastNotifiedAt),
+    prReviewLastCheckedAt: toISOString(fields.prReviewLastCheckedAt),
+  };
+}
+
+/**
+ * The six run-script fields a v4 export file carries, flattened out of
+ * `WorkspaceRunScript`.
+ *
+ * Extracted rather than inlined into the workspace mapper because the mapper is
+ * at the lint's complexity ceiling and every `??` on a joined row costs a branch.
+ * `postRunCommand` is absent because the format never carried it.
+ */
+function exportedRunScriptFields(workspace: WorkspaceForExport) {
+  const runScript = workspace.runScript;
+  return {
+    runScriptCommand: runScript?.command ?? null,
+    runScriptCleanupCommand: runScript?.cleanupCommand ?? null,
+    runScriptPid: runScript?.pid ?? null,
+    runScriptPort: runScript?.port ?? null,
+    runScriptStartedAt: toISOString(runScript?.startedAt ?? null),
+    runScriptStatus: runScript?.status ?? 'IDLE',
+  };
+}
+
+function sanitizeIssueTrackerConfigForExport(config: unknown): unknown {
+  if (!config || typeof config !== 'object') {
+    return null;
+  }
+  const obj = config as Record<string, unknown>;
+  if (obj.linear && typeof obj.linear === 'object') {
+    const { apiKey: _apiKey, ...rest } = obj.linear as Record<string, unknown>;
+    return { ...obj, linear: rest };
+  }
+  return config;
+}
+
+// ============================================================================
+// Import Functions
+// ============================================================================
+
+async function planPeriodicWorkspaceImport(
+  tx: TransactionClient,
+  data: ExportData['data'],
+  admission: Awaited<ReturnType<typeof planLegacyImport>>
+) {
+  const section = 'recovery' in data ? data.recovery.periodicConfig : undefined;
+  const occupiedTaskIds = section ? await readPeriodicConfigRecoveryIds(tx) : new Set<string>();
+  const plannedTaskIds = new Set(
+    section?.tasks
+      .filter(
+        (task) => !occupiedTaskIds.has(task.id) && admission.createProjectIds.has(task.projectId)
+      )
+      .map((task) => task.id)
+  );
+  const sourceLinks = data.workspaces.flatMap((row) =>
+    'periodicTaskId' in row && row.periodicTaskId !== null
+      ? [{ id: row.id, periodicTaskId: row.periodicTaskId, updatedAt: row.updatedAt }]
+      : []
+  );
+  for (const row of sourceLinks) {
+    if (!plannedTaskIds.has(row.periodicTaskId)) {
+      admission.eligibleWorkspaceIds.delete(row.id);
+    }
+  }
+  for (const row of data.workspaces) {
+    if (
+      row.parentWorkspaceId !== null &&
+      !admission.eligibleWorkspaceIds.has(row.parentWorkspaceId)
+    ) {
+      admission.eligibleWorkspaceIds.delete(row.id);
+    }
+  }
+  return { section, occupiedTaskIds, plannedTaskIds, sourceLinks };
+}
+
+async function importProjects(
+  projects: ExportedProject[],
+  tx: TransactionClient,
+  createProjectIds: ReadonlySet<string>,
+  createdProjectIds: Set<string>
+): Promise<ImportCounter> {
+  const counter: ImportCounter = { imported: 0, skipped: 0 };
+
+  for (const p of projects) {
+    if (!createProjectIds.has(p.id)) {
+      counter.skipped++;
+      continue;
+    }
+
+    await tx.project.create({
+      data: {
+        id: p.id,
+        name: p.name,
+        slug: p.slug,
+        repoPath: p.repoPath,
+        worktreeBasePath: p.worktreeBasePath,
+        defaultBranch: p.defaultBranch,
+        githubOwner: p.githubOwner,
+        githubRepo: p.githubRepo,
+        issueProvider: p.issueProvider,
+        // issueTrackerConfig is NOT imported — it contains encrypted keys that are machine-specific
+        isArchived: p.isArchived,
+        startupScriptCommand: p.startupScriptCommand,
+        startupScriptPath: p.startupScriptPath,
+        startupScriptTimeout: p.startupScriptTimeout,
+        createdAt: new Date(p.createdAt),
+        updatedAt: new Date(p.updatedAt),
+      },
+    });
+    createdProjectIds.add(p.id);
+    counter.imported++;
+  }
+
+  return counter;
+}
+
+function importedPRs(workspace: ExportedWorkspace, jsonNullIds: JsonNullIds) {
+  const [identity] = backupPRIdentities(workspace);
+  return workspace.prs.length
+    ? workspace.prs.map(({ dedicatedSession: _dedicatedSession, ...pr }) => ({
+        ...pr,
+        syncedAt: parseDate(pr.syncedAt),
+        terminalObservedAt: parseDate(pr.terminalObservedAt),
+        detachedAt: parseDate(pr.detachedAt),
+        ciFailedAt: parseDate(pr.ciFailedAt),
+        ciLastNotifiedAt: parseDate(pr.ciLastNotifiedAt),
+        reviewLastCheckedAt: parseDate(pr.reviewLastCheckedAt),
+        observation: nullableJsonForImport(pr.observation, pr.id, jsonNullIds.get('WorkspacePR')),
+      }))
+    : identity
+      ? [
+          {
+            ...identity,
+
+            number: workspace.prNumber,
+            state: workspace.prState,
+            reviewState: workspace.prReviewState,
+            ciStatus: workspace.prCiStatus,
+            // A v4 file predating the projection never carried a conflict flag —
+            // `ratchetState: 'MERGE_CONFLICT'` was the only place a conflict was
+            // recorded, so that is what it restores from.
+            hasMergeConflict: workspace.ratchetState === 'MERGE_CONFLICT',
+            syncedAt: parseDate(workspace.prUpdatedAt),
+            ciFailedAt: parseDate(workspace.prCiFailedAt),
+            ciLastNotifiedAt: parseDate(workspace.prCiLastNotifiedAt),
+            reviewLastCheckedAt: parseDate(workspace.prReviewLastCheckedAt),
+            reviewLastCommentId: workspace.prReviewLastCommentId,
+          },
+        ]
+      : [];
+}
+
+type JsonNullIds = ReadonlyMap<'Workspace' | 'WorkspacePR' | 'AgentSession', ReadonlySet<string>>;
+function nullableJsonForImport(
+  value: unknown,
+  id: string,
+  jsonNullIds: ReadonlySet<string> | undefined
+) {
+  if (value != null) {
+    return value as Prisma.InputJsonValue;
+  }
+  if (!jsonNullIds) {
+    return undefined;
+  }
+  return jsonNullIds.has(id) ? Prisma.JsonNull : Prisma.DbNull;
+}
+
+async function importWorkspaces(
+  workspaces: ExportedWorkspace[],
+  tx: TransactionClient,
+  importedWorkspaceIds: string[],
+  report: InertImportReport,
+  eligibleWorkspaceIds: ReadonlySet<string>,
+  jsonNullIds: JsonNullIds
+): Promise<ImportCounter> {
+  const counter: ImportCounter = { imported: 0, skipped: 0 };
+  const orderedWorkspaces = [...workspaces].sort(
+    (a, b) => Number(a.parentWorkspaceId !== null) - Number(b.parentWorkspaceId !== null)
+  );
+
+  for (const workspace of orderedWorkspaces) {
+    if (
+      !eligibleWorkspaceIds.has(workspace.id) ||
+      (workspace.parentWorkspaceId !== null &&
+        !importedWorkspaceIds.includes(workspace.parentWorkspaceId))
+    ) {
+      if (eligibleWorkspaceIds.has(workspace.id)) {
+        logger.warn('Skipping backup child workspace', {
+          workspaceId: workspace.id,
+          reason: 'parent-not-imported',
+        });
+      }
+      counter.skipped++;
+      continue;
+    }
+
+    await tx.workspace.create({
+      data: {
+        id: workspace.id,
+        projectId: workspace.projectId,
+        parentWorkspaceId: workspace.parentWorkspaceId,
+        name: workspace.name,
+        description: workspace.description,
+        ...inertWorkspaceRuntime(workspace, report),
+        worktreePath: workspace.worktreePath,
+        branchName: workspace.branchName,
+        isAutoGeneratedBranch: workspace.isAutoGeneratedBranch,
+        creationSource: workspace.creationSource,
+        creationMetadata: nullableJsonForImport(
+          workspace.creationMetadata,
+          workspace.id,
+          jsonNullIds.get('Workspace')
+        ),
+        conversationMetadata: workspace.conversationMetadata
+          ? {
+              create: {
+                ...workspace.conversationMetadata,
+                generatedAt: parseDate(workspace.conversationMetadata.generatedAt),
+              },
+            }
+          : undefined,
+        initOutput: workspace.initOutput,
+        initCompletedAt: parseDate(workspace.initCompletedAt),
+        initRetryCount: workspace.initRetryCount,
+        githubIssueNumber: workspace.githubIssueNumber,
+        githubIssueUrl: workspace.githubIssueUrl,
+        linearIssueId: workspace.linearIssueId,
+        linearIssueIdentifier: workspace.linearIssueIdentifier,
+        linearIssueUrl: workspace.linearIssueUrl,
+        defaultSessionProvider: workspace.defaultSessionProvider,
+        // The v4 export carries the PR cache as flat workspace fields; it now
+        // lives in the WorkspacePR row this create brings with it. Discovery
+        // scheduling was never exported, so it restores at its defaults and the
+        // next poll re-derives it.
+        prDiscovery: {
+          create: workspace.prDiscovery
+            ? {
+                lastCheckedAt: parseDate(workspace.prDiscovery.lastCheckedAt),
+                retryCount: workspace.prDiscovery.retryCount,
+                nextCheckAt: parseDate(workspace.prDiscovery.nextCheckAt),
+              }
+            : {},
+        },
+        prs: { create: importedPRs(workspace, jsonNullIds) },
+        // `ratchetState` is not among them: it is derived from the PR row above,
+        // so restoring it would create a second copy to disagree with. It is still
+        // read on the way in — for the conflict flag — and recomputed on the way
+        // out, because the v4 format requires the field.
+        hasHadSessions: workspace.hasHadSessions,
+        createdAt: new Date(workspace.createdAt),
+        updatedAt: new Date(workspace.updatedAt),
+      },
+    });
+    await workspaceChildHistoryService.invalidateImportedWorkspace(tx, workspace.id);
+    await workspaceChildHistoryService.recordImportedChild(tx, workspace);
+    importedWorkspaceIds.push(workspace.id);
+    counter.imported++;
+  }
+
+  return counter;
+}
+
+async function importAgentSessions(
+  sessions: ExportedAgentSession[],
+  tx: TransactionClient,
+  report: InertImportReport,
+  importedWorkspaceIds: ReadonlySet<string>,
+  accountIds: ReadonlyMap<string, string>,
+  jsonNullIds: JsonNullIds
+): Promise<ImportCounter> {
+  const counter: ImportCounter = { imported: 0, skipped: 0 };
+
+  for (const s of sessions) {
+    if (!importedWorkspaceIds.has(s.workspaceId)) {
+      logger.warn('Skipping backup agent session', {
+        sessionId: s.id,
+        reason: 'workspace-not-imported',
+      });
+      counter.skipped++;
+      continue;
+    }
+
+    if (s.workspacePrId !== null) {
+      const pr = await tx.workspacePR.findUnique({ where: { id: s.workspacePrId } });
+      if (!pr || pr.workspaceId !== s.workspaceId) {
+        logger.warn('Skipping agent session due to missing or foreign PR association', {
+          sessionId: s.id,
+          workspaceId: s.workspaceId,
+          workspacePrId: s.workspacePrId,
+        });
+        counter.skipped++;
+        continue;
+      }
+    }
+
+    await tx.agentSession.create({
+      data: {
+        id: s.id,
+        workspaceId: s.workspaceId,
+        name: s.name,
+        workflow: s.workflow,
+        workspacePrId: s.workspacePrId,
+        model: s.model,
+        status: s.status === 'RUNNING' ? 'IDLE' : s.status,
+        provider: s.provider,
+        codexAccountId: restoredAccountId(s.codexAccountId, accountIds),
+        providerSessionId: s.providerSessionId,
+        providerProjectPath: s.providerProjectPath,
+        providerProcessPid: null,
+        providerMetadata: nullableJsonForImport(
+          s.providerMetadata,
+          s.id,
+          jsonNullIds.get('AgentSession')
+        ),
+        createdAt: new Date(s.createdAt),
+        updatedAt: new Date(s.updatedAt),
+      },
+    });
+    recordStoppedProcess(report, 'agentSessions', s.status, s.providerProcessPid);
+    counter.imported++;
+  }
+
+  return counter;
+}
+
+async function importTerminalSessions(
+  sessions: ExportedTerminalSession[],
+  tx: TransactionClient,
+  report: InertImportReport,
+  importedWorkspaceIds: ReadonlySet<string>
+): Promise<ImportCounter> {
+  const counter: ImportCounter = { imported: 0, skipped: 0 };
+
+  for (const s of sessions) {
+    if (!importedWorkspaceIds.has(s.workspaceId)) {
+      logger.warn('Skipping backup terminal session', {
+        terminalSessionId: s.id,
+        reason: 'workspace-not-imported',
+      });
+      counter.skipped++;
+      continue;
+    }
+
+    const existing = await tx.terminalSession.findUnique({ where: { id: s.id } });
+    if (existing) {
+      logger.warn('Skipping backup terminal session', {
+        terminalSessionId: s.id,
+        reason: 'terminal-id-collision',
+      });
+      counter.skipped++;
+      continue;
+    }
+
+    await tx.terminalSession.create({
+      data: {
+        id: s.id,
+        workspaceId: s.workspaceId,
+        name: s.name,
+        status: s.status === 'RUNNING' ? 'IDLE' : s.status,
+        pid: null,
+        createdAt: new Date(s.createdAt),
+        updatedAt: new Date(s.updatedAt),
+      },
+    });
+    recordStoppedProcess(report, 'terminalSessions', s.status, s.pid);
+    counter.imported++;
+  }
+
+  return counter;
+}
+
+async function importUserSettings(
+  settings: ExportedUserSettings | null,
+  tx: TransactionClient
+): Promise<{ imported: boolean; skipped: boolean }> {
+  if (!settings) {
+    return { imported: false, skipped: false };
+  }
+
+  const existing = await tx.userSettings.findFirst({ where: { userId: 'default' } });
+  if (existing) {
+    return { imported: false, skipped: true };
+  }
+
+  await tx.userSettings.create({
+    data: {
+      userId: 'default',
+      preferredIde: settings.preferredIde,
+      customIdeCommand: settings.customIdeCommand,
+      playSoundOnComplete: settings.playSoundOnComplete,
+      childWorkspacesEnabled: settings.childWorkspacesEnabled,
+      ticketDispatchPrompt: settings.ticketDispatchPrompt,
+      notificationSoundPath: settings.notificationSoundPath,
+      // Ratchet settings
+      ratchetEnabled: settings.ratchetEnabled,
+      ratchetReplyToPrComments: settings.ratchetReplyToPrComments,
+      ratchetReviewTriggerMode: settings.ratchetReviewTriggerMode,
+      defaultSessionProvider: settings.defaultSessionProvider,
+      defaultClaudeModel: settings.defaultClaudeModel,
+      defaultCodexModel: settings.defaultCodexModel,
+      defaultClaudeReasoningEffort: settings.defaultClaudeReasoningEffort,
+      defaultCodexReasoningEffort: settings.defaultCodexReasoningEffort,
+      defaultWorkspacePermissions: settings.defaultWorkspacePermissions,
+      turnLimitMinutes: settings.turnLimitMinutes,
+      automationPermissions: settings.automationPermissions,
+      // Adversarial review settings
+      reviewerSessionProvider: settings.reviewerSessionProvider,
+      reviewerClaudeModel: settings.reviewerClaudeModel,
+      reviewerCodexModel: settings.reviewerCodexModel,
+      postReviewToGitHub: settings.postReviewToGitHub,
+      voiceModeEnabled: settings.voiceModeEnabled,
+      voiceTtsModel: settings.voiceTtsModel,
+      voiceTtsSpeed: settings.voiceTtsSpeed,
+      voiceUtteranceEndMs: settings.voiceUtteranceEndMs,
+      voiceBargeInSustainedMs: settings.voiceBargeInSustainedMs,
+      appearanceColorScheme: settings.appearanceColorScheme,
+      appearanceBackgroundColor: settings.appearanceBackgroundColor,
+      appearanceForegroundColor: settings.appearanceForegroundColor,
+      appearanceFontScale: settings.appearanceFontScale,
+      appearanceFontSans: settings.appearanceFontSans,
+      appearanceFontMono: settings.appearanceFontMono,
+      // Note: workspaceOrder and cachedSlashCommands are intentionally not imported
+      // as they are rebuild-able cache data. deepgramApiKeyEncrypted is never
+      // exported (secret), so it's left unset here too.
+    },
+  });
+
+  return { imported: true, skipped: false };
+}
+
+// ============================================================================
+// Service Class
+// ============================================================================
+
+function planSlackConnectionImport(
+  tx: Prisma.TransactionClient,
+  section: Parameters<typeof planSlackConnectionsRecovery>[1] | undefined
+) {
+  return section ? planSlackConnectionsRecovery(tx, section) : undefined;
+}
+function restoreSlackConnectionImport(
+  tx: Prisma.TransactionClient,
+  plan: Awaited<ReturnType<typeof planSlackConnectionsRecovery>> | undefined
+) {
+  return plan ? restoreSlackConnectionsRecovery(tx, plan) : undefined;
+}
+
+class DataBackupService {
+  /**
+   * Export all data for backup/migration.
+   * Exports projects, workspaces, sessions, and user preferences.
+   * Excludes cached data (workspaceOrder, cachedSlashCommands) which will rebuild.
+   * Exports partial logical metadata with the version 8 coverage envelope.
+   */
+  async exportData(appVersion: string): Promise<ExportData> {
+    const recovery = createBaseRecoveryManifest();
+    logger.info('Exporting database data');
+
+    const {
+      projects,
+      workspaces,
+      agentSessions,
+      terminalSessions,
+      userSettings,
+      codexAccounts,
+      jsonStorage,
+      periodicConfig,
+      periodicHistory,
+      automationDefinitions,
+      slackConnections,
+    } = await dataBackupAccessor.withExportSnapshot(async (tx) => ({
+      ...(await dataBackupAccessor.getSnapshotForExport(tx)),
+      codexAccounts: await exportCodexAccountMetadata(tx),
+      jsonStorage: await dataBackupAccessor.getBaseJsonStorageForExport(tx),
+      periodicConfig: await exportPeriodicConfigRecovery(tx),
+      periodicHistory: await exportPeriodicHistoryRecovery(tx),
+      automationDefinitions: await exportAutomationDefinitionsRecovery(tx),
+      slackConnections: await exportSlackConnectionsRecovery(tx),
+    }));
+
+    const exportData: ExportData = {
+      meta: {
+        exportedAt: new Date().toISOString(),
+        version: appVersion,
+        schemaVersion: 8,
+        recovery,
+      },
+      data: {
+        recovery: {
+          baseJson: { version: 1, jsonStorage },
+          periodicConfig,
+          periodicHistory,
+          automationDefinitions,
+          slackConnections,
+        },
+        projects: projects.map((p) => ({
+          id: p.id,
+          name: p.name,
+          slug: p.slug,
+          repoPath: p.repoPath,
+          worktreeBasePath: p.worktreeBasePath,
+          defaultBranch: p.defaultBranch,
+          githubOwner: p.githubOwner,
+          githubRepo: p.githubRepo,
+          issueProvider: p.issueProvider,
+          issueTrackerConfig: sanitizeIssueTrackerConfigForExport(p.issueTrackerConfig),
+          isArchived: p.isArchived,
+          startupScriptCommand: p.startupScriptCommand,
+          startupScriptPath: p.startupScriptPath,
+          startupScriptTimeout: p.startupScriptTimeout,
+          createdAt: p.createdAt.toISOString(),
+          updatedAt: p.updatedAt.toISOString(),
+        })),
+        workspaces: workspaces.map((w) => ({
+          ...exportPRBackupState(w),
+          conversationMetadata: exportedConversationMetadata(w),
+          id: w.id,
+          projectId: w.projectId,
+          parentWorkspaceId: w.parentWorkspaceId,
+          name: w.name,
+          description: w.description,
+          status: w.status,
+          worktreePath: w.worktreePath,
+          branchName: w.branchName,
+          isAutoGeneratedBranch: w.isAutoGeneratedBranch,
+          creationSource: w.creationSource,
+          periodicTaskId: w.periodicTaskId,
+          creationMetadata: w.creationMetadata,
+          initErrorMessage: w.initErrorMessage,
+          initOutput: w.initOutput,
+          initStartedAt: toISOString(w.initStartedAt),
+          initCompletedAt: toISOString(w.initCompletedAt),
+          initRetryCount: w.initRetryCount,
+          // Flattened out of WorkspaceRunScript, same as the PR cache below: the
+          // v4 export format carries these as workspace fields.
+          ...exportedRunScriptFields(w),
+          githubIssueNumber: w.githubIssueNumber,
+          githubIssueUrl: w.githubIssueUrl,
+          linearIssueId: w.linearIssueId,
+          linearIssueIdentifier: w.linearIssueIdentifier,
+          linearIssueUrl: w.linearIssueUrl,
+          defaultSessionProvider: w.defaultSessionProvider,
+          // Flattened out of WorkspacePR: the v4 export format carries the PR
+          // cache as workspace fields, and `prUpdatedAt` keeps the name it has in
+          // files already on disk even though the column is now `syncedAt`.
+          ...exportedPRFields(w),
+          // Phase 3+ ratchet tracking fields. Flattened out of WorkspaceRatchet:
+          // the v4 export format carries them as workspace fields, and
+          // `ratchetLastCiRunId` keeps the name it has in files already on disk.
+          ratchetEnabled: w.prMonitoring?.enabled ?? false,
+          ratchetLastCheckedAt: toISOString(w.prMonitoring?.lastCheckedAt ?? null),
+          ratchetActiveSessionId: null,
+          ratchetLastCiRunId: null,
+          hasHadSessions: w.hasHadSessions,
+          createdAt: w.createdAt.toISOString(),
+          updatedAt: w.updatedAt.toISOString(),
+        })),
+        codexAccounts,
+        agentSessions: agentSessions.map((s) => ({
+          id: s.id,
+          workspaceId: s.workspaceId,
+          name: s.name,
+          workflow: s.workflow,
+          workspacePrId: s.workspacePrId,
+          model: s.model,
+          status: s.status,
+          provider: s.provider,
+          codexAccountId: s.codexAccountId,
+          providerSessionId: s.providerSessionId,
+          providerProjectPath: s.providerProjectPath,
+          providerProcessPid: s.providerProcessPid,
+          providerMetadata: s.providerMetadata,
+          createdAt: s.createdAt.toISOString(),
+          updatedAt: s.updatedAt.toISOString(),
+        })),
+        terminalSessions: terminalSessions.map((s) => ({
+          id: s.id,
+          workspaceId: s.workspaceId,
+          name: s.name,
+          status: s.status,
+          pid: s.pid,
+          createdAt: s.createdAt.toISOString(),
+          updatedAt: s.updatedAt.toISOString(),
+        })),
+        userSettings: userSettings
+          ? {
+              preferredIde: userSettings.preferredIde,
+              customIdeCommand: userSettings.customIdeCommand,
+              playSoundOnComplete: userSettings.playSoundOnComplete,
+              childWorkspacesEnabled: userSettings.childWorkspacesEnabled,
+              ticketDispatchPrompt: userSettings.ticketDispatchPrompt,
+              notificationSoundPath: userSettings.notificationSoundPath,
+              // Ratchet settings
+              ratchetEnabled: userSettings.ratchetEnabled,
+              ratchetReplyToPrComments: userSettings.ratchetReplyToPrComments,
+              ratchetReviewTriggerMode: userSettings.ratchetReviewTriggerMode,
+              defaultSessionProvider: userSettings.defaultSessionProvider,
+              defaultClaudeModel: userSettings.defaultClaudeModel,
+              defaultCodexModel: userSettings.defaultCodexModel,
+              defaultClaudeReasoningEffort: userSettings.defaultClaudeReasoningEffort,
+              defaultCodexReasoningEffort: userSettings.defaultCodexReasoningEffort,
+              defaultWorkspacePermissions: userSettings.defaultWorkspacePermissions,
+              turnLimitMinutes: userSettings.turnLimitMinutes,
+              automationPermissions: userSettings.automationPermissions,
+              // Adversarial review settings
+              reviewerSessionProvider: userSettings.reviewerSessionProvider,
+              reviewerClaudeModel: userSettings.reviewerClaudeModel,
+              reviewerCodexModel: userSettings.reviewerCodexModel,
+              postReviewToGitHub: userSettings.postReviewToGitHub,
+              voiceModeEnabled: userSettings.voiceModeEnabled,
+              voiceTtsModel: userSettings.voiceTtsModel,
+              voiceTtsSpeed: userSettings.voiceTtsSpeed,
+              voiceUtteranceEndMs: userSettings.voiceUtteranceEndMs,
+              voiceBargeInSustainedMs: userSettings.voiceBargeInSustainedMs,
+              appearanceColorScheme: normalizeColorScheme(userSettings.appearanceColorScheme),
+              appearanceBackgroundColor: userSettings.appearanceBackgroundColor,
+              appearanceForegroundColor: userSettings.appearanceForegroundColor,
+              appearanceFontScale: userSettings.appearanceFontScale,
+              appearanceFontSans: userSettings.appearanceFontSans,
+              appearanceFontMono: userSettings.appearanceFontMono,
+              // Note: workspaceOrder and cachedSlashCommands are intentionally excluded
+              // as they are rebuild-able cache data (per design doc). The Deepgram
+              // API key is excluded too — it's a secret, not a preference.
+            }
+          : null,
+      },
+    };
+
+    logger.info('Export completed', {
+      projectCount: projects.length,
+      workspaceCount: workspaces.length,
+      agentSessionCount: agentSessions.length,
+      terminalSessionCount: terminalSessions.length,
+    });
+
+    return exportDataSchema.parse(exportData);
+  }
+
+  /**
+   * Import data from a backup file.
+   * Accepts current and supported legacy backup payloads.
+   * Skips records that already exist (by ID).
+   * Returns counts of imported/skipped records.
+   * All imports are wrapped in a transaction for atomicity.
+   */
+  async importData(input: ExportData): Promise<ImportResults> {
+    input = exportDataSchema.parse(input);
+    logger.info('Starting data import', {
+      schemaVersion: input.meta.schemaVersion,
+      exportedAt: input.meta.exportedAt,
+      projectCount: input.data.projects.length,
+      workspaceCount: input.data.workspaces.length,
+    });
+
+    const jsonNullIds = new Map<
+      'Workspace' | 'WorkspacePR' | 'AgentSession',
+      ReadonlySet<string>
+    >();
+    if (
+      input.meta.schemaVersion === 8 &&
+      input.meta.recovery.profile !== 'base-1' &&
+      'recovery' in input.data
+    ) {
+      for (const model of ['Workspace', 'WorkspacePR', 'AgentSession'] as const) {
+        if (
+          model === 'Workspace' ||
+          input.meta.recovery.profile === 'base-json-1' ||
+          input.meta.recovery.profile === 'base-json-periodic-config-1' ||
+          input.meta.recovery.profile === 'base-json-periodic-links-1' ||
+          input.meta.recovery.profile === 'base-json-periodic-history-1' ||
+          input.meta.recovery.profile === 'base-json-automation-definitions-1' ||
+          input.meta.recovery.profile === 'base-json-slack-connections-1'
+        ) {
+          jsonNullIds.set(
+            model,
+            new Set(
+              input.data.recovery.baseJson?.jsonStorage
+                .filter((marker) => marker.model === model)
+                .map((marker) => marker.identity[0])
+            )
+          );
+        }
+      }
+    }
+
+    const slackSection =
+      'recovery' in input.data ? input.data.recovery.slackConnections : undefined;
+    const automationSection =
+      'recovery' in input.data ? input.data.recovery.automationDefinitions : undefined;
+    const historySection =
+      'recovery' in input.data ? input.data.recovery.periodicHistory : undefined;
+    const recoveryMetadata = input.meta.schemaVersion === 8 ? input.meta.recovery : undefined;
+    const restoresPeriodicLinks =
+      recoveryMetadata?.profile === 'base-json-periodic-links-1' ||
+      recoveryMetadata?.profile === 'base-json-periodic-history-1' ||
+      recoveryMetadata?.profile === 'base-json-automation-definitions-1' ||
+      recoveryMetadata?.profile === 'base-json-slack-connections-1';
+    // Import in dependency order within a transaction for atomicity
+    const results = await dataBackupAccessor.runInTransaction(async (tx) => {
+      const admission = await planLegacyImport(tx, input.data);
+      const { section, occupiedTaskIds, plannedTaskIds, sourceLinks } =
+        await planPeriodicWorkspaceImport(tx, input.data, admission);
+      const historyPlan = historySection
+        ? await planPeriodicHistoryRecovery(
+            tx,
+            historySection,
+            plannedTaskIds,
+            admission.eligibleWorkspaceIds
+          )
+        : undefined;
+      const automationPlan = await planAutomationDefinitionImport(
+        tx,
+        automationSection,
+        admission.createProjectIds
+      );
+      const slackPlan = await planSlackConnectionImport(tx, slackSection);
+      const inertTransforms = createInertImportReport();
+      const createdProjectIds = new Set<string>();
+      const projects = await importProjects(
+        input.data.projects,
+        tx,
+        admission.createProjectIds,
+        createdProjectIds
+      );
+      const slackConnections = await restoreSlackConnectionImport(tx, slackPlan);
+      const automationDefinitions = automationPlan
+        ? await restoreAutomationDefinitionsRecovery(tx, automationPlan, createdProjectIds)
+        : undefined;
+      const periodicConfig = section
+        ? await restorePeriodicConfigRecovery(tx, section, createdProjectIds, occupiedTaskIds)
+        : undefined;
+      const createdTaskIds = periodicConfig?.createdTaskIds ?? new Set<string>();
+      if (
+        createdTaskIds.size !== plannedTaskIds.size ||
+        [...plannedTaskIds].some((id) => !createdTaskIds.has(id))
+      ) {
+        throw new Error('Periodic recovery created task IDs disagree with admission');
+      }
+      const importedWorkspaceIds: string[] = [];
+      const workspaces = await importWorkspaces(
+        input.data.workspaces,
+        tx,
+        importedWorkspaceIds,
+        inertTransforms,
+        admission.eligibleWorkspaceIds,
+        jsonNullIds
+      );
+      const createdWorkspaceIds = new Set(importedWorkspaceIds);
+      const periodicWorkspaceLinks = restoresPeriodicLinks
+        ? await workspaceDataService.restorePeriodicTaskLinks(
+            tx,
+            sourceLinks,
+            createdWorkspaceIds,
+            createdTaskIds
+          )
+        : undefined;
+      const accountIds = await restoreCodexAccountMetadata(tx, input.data.codexAccounts);
+      const agentSessions = await importAgentSessions(
+        input.data.agentSessions,
+        tx,
+        inertTransforms,
+        createdWorkspaceIds,
+        accountIds,
+        jsonNullIds
+      );
+      await restorePRBackupState(input.data.workspaces, importedWorkspaceIds, tx, inertTransforms);
+      const terminalSessions = await importTerminalSessions(
+        input.data.terminalSessions,
+        tx,
+        inertTransforms,
+        createdWorkspaceIds
+      );
+      const periodicHistory = historyPlan
+        ? await restorePeriodicHistoryRecovery(tx, historyPlan, createdTaskIds, createdWorkspaceIds)
+        : undefined;
+      const userSettings = await importUserSettings(input.data.userSettings, tx);
+
+      return {
+        recovery: createRecoveryImportReport(
+          recoveryMetadata,
+          periodicConfig?.report,
+          periodicWorkspaceLinks,
+          periodicHistory,
+          automationDefinitions,
+          slackConnections
+        ),
+        inertTransforms,
+        projects,
+        workspaces,
+        agentSessions,
+        terminalSessions,
+        userSettings,
+      };
+    });
+
+    logger.info('Import completed', {
+      schemaVersion: input.meta.schemaVersion,
+      projects: results.projects,
+      workspaces: results.workspaces,
+      agentSessions: results.agentSessions,
+      terminalSessions: results.terminalSessions,
+    });
+
+    return results;
+  }
+}
+
+// Export singleton instance
+export const dataBackupService = new DataBackupService();

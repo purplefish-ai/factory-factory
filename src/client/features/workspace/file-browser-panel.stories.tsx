@@ -3,6 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { observable } from '@trpc/server/observable';
 import { useRef, useState } from 'react';
 import { expect, userEvent, within } from 'storybook/test';
+import { removeStorageItem, writeStorageItem } from '@/client/lib/browser-storage';
 import { trpc } from '@/client/lib/trpc';
 import { Button } from '@/components/ui/button';
 import { FileBrowserPanel } from './file-browser-panel';
@@ -60,14 +61,14 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 export const RefreshFreshCache: Story = {
   beforeEach: () => {
-    localStorage.setItem('file-tree-expanded-file-refresh-story', JSON.stringify(['src']));
-    return () => localStorage.removeItem('file-tree-expanded-file-refresh-story');
+    writeStorageItem('file-tree-expanded-file-refresh-story', JSON.stringify(['src']));
+    return () => removeStorageItem('file-tree-expanded-file-refresh-story');
   },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await canvas.findByText('before.ts');
     await userEvent.click(canvas.getByRole('button', { name: 'Simulate file change' }));
-    await userEvent.click(canvas.getByTitle('Refresh file tree'));
+    await userEvent.click(canvas.getByRole('button', { name: 'Refresh file tree' }));
     await expect(await canvas.findByText('after.ts')).toBeVisible();
   },
 };

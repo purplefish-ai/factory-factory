@@ -19,8 +19,6 @@ it.each(['workspace-mail-wake-recipient:228', 'provider-history-id'])(
         isQueued
         onRemove={() => undefined}
         onSteer={() => undefined}
-        userMessageUuid="uuid"
-        onRewindToMessage={() => undefined}
       />
     );
     expect(html).toContain('Workspace mail');
@@ -29,7 +27,6 @@ it.each(['workspace-mail-wake-recipient:228', 'provider-history-id'])(
     expect(html).not.toContain('workspace-mail-wake-');
     expect(html).not.toContain('Steer queued message');
     expect(html).not.toContain('Cancel queued message');
-    expect(html).not.toContain('Rewind files');
     expect(html).not.toContain('Workspace inbox');
   }
 );

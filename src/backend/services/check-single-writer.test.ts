@@ -69,7 +69,7 @@ describe('check-single-writer', () => {
       const rootDir = createTempBackend([
         {
           relPath: unauthorized
-            ? 'src/backend/services/session/service/lifecycle/session.service.ts'
+            ? 'src/backend/services/session/service/prompt/session.service.ts'
             : 'src/backend/services/workspace/service/lifecycle/data.service.ts',
           content: unauthorized
             ? "workspaceAccessor.markHasHadSessions('ws');"
@@ -91,7 +91,7 @@ describe('check-single-writer', () => {
   it('flags unauthorized field writes made through a wrapper mutator', () => {
     const tempRoot = createTempBackend([
       {
-        relPath: 'src/backend/services/session/service/lifecycle/session.service.ts',
+        relPath: 'src/backend/services/session/service/prompt/session.service.ts',
         content: `
           async function markActivity(workspaceAccessor) {
             await workspaceAccessor.markHasHadSessions('ws');
@@ -319,7 +319,7 @@ describe('check-single-writer', () => {
     it('allows nested creation of all three rows alongside a workspace', () => {
       const tempRoot = createTempBackend([
         {
-          relPath: 'src/backend/orchestration/data-backup.service.ts',
+          relPath: 'src/backend/orchestration/data-backup/data-backup.service.ts',
           content: `
             async function restore(tx, projectId) {
               await tx.workspace.create({
@@ -348,7 +348,7 @@ describe('check-single-writer', () => {
     it('rejects a nested create of a side table in a workspace update', () => {
       const tempRoot = createTempBackend([
         {
-          relPath: 'src/backend/orchestration/data-backup.service.ts',
+          relPath: 'src/backend/orchestration/data-backup/data-backup.service.ts',
           content: `
             async function reinstate(tx, id) {
               await tx.workspace.update({
@@ -373,7 +373,7 @@ describe('check-single-writer', () => {
     it('rejects a nested create in an update beside a legitimate workspace create', () => {
       const tempRoot = createTempBackend([
         {
-          relPath: 'src/backend/orchestration/data-backup.service.ts',
+          relPath: 'src/backend/orchestration/data-backup/data-backup.service.ts',
           content: `
             async function restore(tx, projectId, id) {
               await tx.workspace.create({
@@ -401,7 +401,7 @@ describe('check-single-writer', () => {
     it('rejects a nested create in an update evaluated inside a create argument', () => {
       const tempRoot = createTempBackend([
         {
-          relPath: 'src/backend/orchestration/data-backup.service.ts',
+          relPath: 'src/backend/orchestration/data-backup/data-backup.service.ts',
           content: `
             async function restore(tx, projectId, id) {
               await tx.workspace.create({
@@ -436,7 +436,7 @@ describe('check-single-writer', () => {
     it('allows a nested create when the create argument spreads other options in', () => {
       const tempRoot = createTempBackend([
         {
-          relPath: 'src/backend/orchestration/data-backup.service.ts',
+          relPath: 'src/backend/orchestration/data-backup/data-backup.service.ts',
           content: `
             async function restore(tx) {
               await tx.workspace.create({
@@ -533,7 +533,7 @@ describe('check-single-writer', () => {
   it('checks ownership for updateMany payload mutators', () => {
     const tempRoot = createTempBackend([
       {
-        relPath: 'src/backend/services/session/service/lifecycle/session.service.ts',
+        relPath: 'src/backend/services/session/service/prompt/session.service.ts',
         content: `
           async function transition(workspaceAccessor) {
             await workspaceAccessor.transitionWithCas('ws', 'READY', { initRetryCount: 0 });
@@ -551,7 +551,7 @@ describe('check-single-writer', () => {
   it('analyzes this.workspaces mutator calls without crashing', () => {
     const tempRoot = createTempBackend([
       {
-        relPath: 'src/backend/services/session/service/lifecycle/session.repository.ts',
+        relPath: 'src/backend/services/session/service/data/session.repository.ts',
         content: `
           class SessionRepository {
             workspaces;
@@ -597,7 +597,7 @@ export const workspaceAccessor = new WorkspaceAccessor();
     writeBackendFixtureFiles(tempRoot, { accessorContent: accessorWithNewMutator });
     writeSourceFiles(tempRoot, [
       {
-        relPath: 'src/backend/services/session/service/lifecycle/session.service.ts',
+        relPath: 'src/backend/services/session/service/prompt/session.service.ts',
         content: 'export const marker = "noop";\n',
       },
     ]);

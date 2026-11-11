@@ -44,6 +44,19 @@ export const StopShortcut: Story = {
     ).toHaveTextContent(`Stop agent (${formatShortcut('composer.stop')})`);
   },
 };
+/** A pending Stop is disabled but still explains itself and its shortcut on hover. */
+export const StopShortcutWhileStopping: Story = {
+  args: { stopping: true, disabled: false, pendingMessageCount: 0 },
+  play: async ({ canvasElement }) => {
+    const stop = within(canvasElement).getByRole('button', { name: 'Stopping…' });
+    await expect(stop).toBeDisabled();
+    // A disabled button takes no pointer events; its wrapper opens the tooltip.
+    await userEvent.hover(stop.parentElement as HTMLElement);
+    await expect(
+      await within(canvasElement.ownerDocument.body).findByRole('tooltip')
+    ).toHaveTextContent(`Stop agent (${formatShortcut('composer.stop')})`);
+  },
+};
 export const ReadyToSend: Story = {
   args: { running: false, stopping: false, disabled: false, pendingMessageCount: 0 },
   play: async ({ canvasElement }) => {

@@ -17,6 +17,9 @@ vi.mock('@/client/lib/trpc', () => ({
     workspace: {
       attachPR: { useMutation: () => ({ isPending: false, mutateAsync: vi.fn() }) },
       detachPR: { useMutation: () => ({ isPending: false, mutateAsync: vi.fn() }) },
+      discardBlockedPRDeliveries: {
+        useMutation: () => ({ isPending: false, mutateAsync: vi.fn() }),
+      },
     },
     adversarialReview: { trigger: { useMutation: () => ({ ...review, isPending: false }) } },
   },

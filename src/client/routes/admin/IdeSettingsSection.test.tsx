@@ -1,255 +1,168 @@
 // @vitest-environment jsdom
 
 import { act, createElement } from 'react';
-import { flushSync } from 'react-dom';
-import { createRoot } from 'react-dom/client';
-import { toast } from 'sonner';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+  chooseOption,
+  createSettingsServer,
+  type RenderedSettings,
+  renderWithSettingsServer,
+  type SettingsServer,
+  type SettingsServerOptions,
+  stubRadixLayout,
+} from '@/client/lib/user-settings-queries.test-harness';
+import { waitForCheck } from '@/test-utils/react-act';
 import { IdeSettingsSection } from './IdeSettingsSection';
 
-const mocks = vi.hoisted(() => ({
-  updateSettingsMutate: vi.fn(),
-  onSaveError: vi.fn() as (error: Error) => void,
-  onSaved: (() => Promise.resolve()) as () => Promise<void>,
-  onTested: (() => undefined) as () => void,
-  testCustomCommandMutate: vi.fn(),
-  userSettings: {
-    preferredIde: 'cursor' as 'cursor' | 'vscode' | 'custom',
-    customIdeCommand: null as string | null,
-  },
-}));
+const toast = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn() }));
+vi.mock('sonner', () => ({ toast, Toaster: () => null }));
 
-vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
-vi.mock('@/client/lib/trpc', () => ({
-  trpc: {
-    useUtils: () => ({
-      userSettings: { get: { invalidate: vi.fn() } },
-      workspace: { getAvailableIdes: { invalidate: vi.fn() } },
-    }),
-    userSettings: {
-      get: { useQuery: () => ({ data: mocks.userSettings, isLoading: false }) },
-      update: {
-        useMutation: (options: {
-          onSuccess: (...args: unknown[]) => unknown;
-          onError: (error: Error) => void;
-        }) => {
-          mocks.onSaveError = options.onError;
-          mocks.onSaved = () =>
-            Promise.resolve(options.onSuccess({}, { customIdeCommand: 'code {workspace}' })).then(
-              () => undefined
-            );
-          return { mutate: mocks.updateSettingsMutate, isPending: false };
-        },
-      },
-      testCustomCommand: {
-        useMutation: (options: { onSuccess: () => void }) => {
-          mocks.onTested = options.onSuccess;
-          return { mutate: mocks.testCustomCommandMutate, isPending: false };
-        },
-      },
-    },
-  },
-}));
+let server: SettingsServer;
+let view: RenderedSettings | undefined;
+const testCustomCommand = vi.fn(() => ({ success: true }));
+
+async function render(options: SettingsServerOptions = {}) {
+  server = createSettingsServer({
+    ...options,
+    handlers: { 'userSettings.testCustomCommand': testCustomCommand },
+  });
+  view = await renderWithSettingsServer(createElement(IdeSettingsSection), server);
+  return view.container;
+}
+
+const updates = () =>
+  server.requests.filter(({ path }) => path === 'userSettings.update').map(({ input }) => input);
+
+function typeInto(input: HTMLInputElement | null, value: string) {
+  const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
+  act(() => {
+    setValue?.call(input, value);
+    input?.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+}
+
+function button(container: HTMLElement, name: string) {
+  return Array.from(container.querySelectorAll('button')).find(
+    (candidate) => candidate.textContent === name
+  );
+}
 
 beforeEach(() => {
   vi.clearAllMocks();
-  mocks.userSettings.preferredIde = 'cursor';
-  mocks.userSettings.customIdeCommand = null;
+  stubRadixLayout();
 });
-afterEach(() => {
-  document.body.innerHTML = '';
+afterEach(async () => {
+  await view?.unmount();
+  view = undefined;
+  vi.unstubAllGlobals();
 });
 
 describe('IdeSettingsSection', () => {
   it('keeps IDE changes quiet and confirms only an explicit command test', async () => {
-    const root = createRoot(document.createElement('div'));
-    try {
-      flushSync(() => root.render(createElement(IdeSettingsSection)));
-      await act(async () => mocks.onSaved());
-      expect(toast.success).not.toHaveBeenCalled();
-      mocks.onTested();
-      expect(toast.success).toHaveBeenCalledExactlyOnceWith('Command executed');
-    } finally {
-      flushSync(() => root.unmount());
-    }
-  });
-  it('preserves the saved custom command when switching to a built-in IDE', () => {
-    mocks.userSettings.preferredIde = 'custom';
-    mocks.userSettings.customIdeCommand = 'code-insiders {workspace}';
-
-    const container = document.createElement('div');
-    document.body.appendChild(container);
-    const root = createRoot(container);
-
-    flushSync(() => {
-      root.render(createElement(IdeSettingsSection));
+    const container = await render({
+      settings: { preferredIde: 'custom', customIdeCommand: 'code {workspace}' },
     });
+    await chooseOption(container, 'ide-select', 'VS Code');
+    await waitForCheck(() => expect(updates()).toEqual([{ preferredIde: 'vscode' }]));
+    expect(toast.success).not.toHaveBeenCalled();
 
-    const trigger = container.querySelector<HTMLElement>('#ide-select');
-
-    flushSync(() => {
-      trigger?.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0 }));
-      trigger?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    });
-
-    const listbox = document.body.querySelector<HTMLElement>('[role="listbox"]');
-    const cursorOption = Array.from(
-      listbox?.querySelectorAll<HTMLElement>('[role="option"]') ?? []
-    ).find((option) => option.textContent === 'Cursor');
-    expect(cursorOption).toBeDefined();
-
-    flushSync(() => {
-      cursorOption?.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0 }));
-      cursorOption?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    });
-
-    expect(mocks.updateSettingsMutate).toHaveBeenCalledWith({
-      preferredIde: 'cursor',
-    });
-
-    root.unmount();
+    await chooseOption(container, 'ide-select', 'Custom');
+    await act(async () => button(container, 'Test')?.click());
+    await waitForCheck(() =>
+      expect(toast.success).toHaveBeenCalledExactlyOnceWith('Command executed')
+    );
+    expect(testCustomCommand).toHaveBeenCalledWith({ customCommand: 'code {workspace}' });
   });
 
-  it('autosaves Custom mode with the saved command while preserving an unsaved draft', () => {
-    mocks.userSettings.preferredIde = 'custom';
-    mocks.userSettings.customIdeCommand = 'saved {workspace}';
-    const container = document.createElement('div');
-    document.body.appendChild(container);
-    const root = createRoot(container);
-    flushSync(() => root.render(createElement(IdeSettingsSection)));
-    const input = container.querySelector<HTMLInputElement>('#custom-command');
-    const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
-    flushSync(() => {
-      setValue?.call(input, 'draft {workspace}');
-      input?.dispatchEvent(new Event('input', { bubbles: true }));
+  it('preserves the saved custom command when switching to a built-in IDE', async () => {
+    const container = await render({
+      settings: { preferredIde: 'custom', customIdeCommand: 'code-insiders {workspace}' },
     });
-    function choose(label: string) {
-      flushSync(() => container.querySelector<HTMLElement>('#ide-select')?.click());
-      const option = Array.from(document.querySelectorAll<HTMLElement>('[role="option"]')).find(
-        (element) => element.textContent === label
-      );
-      flushSync(() => option?.click());
-    }
-    choose('Cursor');
-    mocks.userSettings.preferredIde = 'cursor';
-    flushSync(() => root.render(createElement(IdeSettingsSection)));
-    choose('Custom');
-    expect(mocks.updateSettingsMutate).toHaveBeenLastCalledWith({
+    await chooseOption(container, 'ide-select', 'Cursor');
+    await waitForCheck(() => expect(updates()).toEqual([{ preferredIde: 'cursor' }]));
+    expect(container.querySelector('#custom-command')).toBeNull();
+    expect(server.settings.customIdeCommand).toBe('code-insiders {workspace}');
+  });
+
+  it('autosaves Custom mode with the saved command while preserving an unsaved draft', async () => {
+    const container = await render({
+      settings: { preferredIde: 'custom', customIdeCommand: 'saved {workspace}' },
+      hold: ['userSettings.update'],
+    });
+    typeInto(container.querySelector<HTMLInputElement>('#custom-command'), 'draft {workspace}');
+    await chooseOption(container, 'ide-select', 'Cursor');
+    await waitForCheck(() => expect(server.held).toHaveLength(1));
+    await act(async () => server.held[0]?.respond());
+    await chooseOption(container, 'ide-select', 'Custom');
+    await waitForCheck(() => expect(server.held).toHaveLength(2));
+    expect(server.held[1]?.input).toEqual({
       preferredIde: 'custom',
       customIdeCommand: 'saved {workspace}',
     });
     expect(container.querySelector<HTMLInputElement>('#custom-command')?.value).toBe(
       'draft {workspace}'
     );
-    root.unmount();
   });
 
-  it('tests the current custom command before it has been saved', () => {
-    mocks.userSettings.preferredIde = 'custom';
-    mocks.userSettings.customIdeCommand = null;
-
-    const container = document.createElement('div');
-    document.body.appendChild(container);
-    const root = createRoot(container);
-
-    flushSync(() => {
-      root.render(createElement(IdeSettingsSection));
-    });
-
+  it('tests the current custom command before it has been saved', async () => {
+    const container = await render({ settings: { preferredIde: 'custom' } });
     const input = container.querySelector<HTMLInputElement>('#custom-command');
-    const testButton = Array.from(container.querySelectorAll('button')).find(
-      (button) => button.textContent === 'Test'
-    );
-    const setInputValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
-
     expect(input).not.toBeNull();
-    expect(testButton).toBeDefined();
-    expect(testButton?.disabled).toBe(true);
+    expect(button(container, 'Test')?.disabled).toBe(true);
 
-    flushSync(() => {
-      setInputValue?.call(input, 'code-insiders {workspace}');
-      input?.dispatchEvent(new Event('input', { bubbles: true }));
-    });
+    typeInto(input, 'code-insiders {workspace}');
+    expect(button(container, 'Test')?.disabled).toBe(false);
+    await act(async () => button(container, 'Test')?.click());
 
-    expect(testButton?.disabled).toBe(false);
-
-    flushSync(() => {
-      testButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    });
-
-    expect(mocks.testCustomCommandMutate).toHaveBeenCalledWith({
-      customCommand: 'code-insiders {workspace}',
-    });
-
-    root.unmount();
+    await waitForCheck(() =>
+      expect(testCustomCommand).toHaveBeenCalledWith({ customCommand: 'code-insiders {workspace}' })
+    );
+    expect(updates()).toEqual([]);
   });
-  it('retains custom command text on failed Save and submits from the form', () => {
-    mocks.userSettings.preferredIde = 'custom';
-    const container = document.createElement('div');
-    const root = createRoot(container);
-    flushSync(() => root.render(createElement(IdeSettingsSection)));
+
+  it('retains custom command text on failed Save and submits from the form', async () => {
+    const container = await render({ settings: { preferredIde: 'custom' } });
+    server.failUpdates = 'offline';
     const input = container.querySelector<HTMLInputElement>('#custom-command');
-    const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
-    flushSync(() => {
-      setValue?.call(input, 'code-insiders {workspace}');
-      input?.dispatchEvent(new Event('input', { bubbles: true }));
-    });
-    flushSync(() =>
+    typeInto(input, 'code-insiders {workspace}');
+    await act(async () =>
       container
         .querySelector('form')
         ?.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
     );
-    expect(mocks.updateSettingsMutate).toHaveBeenCalledWith({
-      preferredIde: 'custom',
-      customIdeCommand: 'code-insiders {workspace}',
-    });
-    flushSync(() => mocks.onSaveError(new Error('offline')));
+    await waitForCheck(() =>
+      expect(updates()).toEqual([
+        { preferredIde: 'custom', customIdeCommand: 'code-insiders {workspace}' },
+      ])
+    );
+    await waitForCheck(() => expect(button(container, 'Save')?.disabled).toBe(false));
     expect(input?.value).toBe('code-insiders {workspace}');
-    expect(toast.error).toHaveBeenCalledWith("Couldn't update settings. offline");
-    root.unmount();
   });
 
-  it.each(['cursor', 'vscode'] as const)(
+  it.each(['cursor', 'vscode'])(
     'enters Custom from %s before saving a nonempty command',
-    (preferredIde) => {
-      mocks.userSettings.preferredIde = preferredIde;
-      const container = document.createElement('div');
-      document.body.appendChild(container);
-      const root = createRoot(container);
-      flushSync(() => root.render(createElement(IdeSettingsSection)));
-      const trigger = container.querySelector<HTMLElement>('#ide-select');
-      flushSync(() => trigger?.click());
-      const option = Array.from(document.querySelectorAll<HTMLElement>('[role="option"]')).find(
-        (element) => element.textContent === 'Custom'
-      );
-      expect(option).toBeDefined();
-      flushSync(() => option?.click());
-      expect(mocks.updateSettingsMutate).not.toHaveBeenCalled();
+    async (preferredIde) => {
+      const container = await render({ settings: { preferredIde } });
+      await chooseOption(container, 'ide-select', 'Custom');
+      expect(updates()).toEqual([]);
+      expect(container.querySelector('#ide-select')?.textContent).toContain('Custom');
+
       const input = container.querySelector<HTMLInputElement>('#custom-command');
-      expect(input).not.toBeNull();
-      expect(trigger?.textContent).toContain('Custom');
-      const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
-      flushSync(() => {
-        setValue?.call(input, '   ');
-        input?.dispatchEvent(new Event('input', { bubbles: true }));
+      typeInto(input, '   ');
+      expect(button(container, 'Save')?.disabled).toBe(true);
+      typeInto(input, 'code-insiders {workspace}');
+      act(() => {
+        input?.dispatchEvent(new FocusEvent('focusout', { bubbles: true }));
       });
-      flushSync(() => input?.dispatchEvent(new FocusEvent('focusout', { bubbles: true })));
-      expect(mocks.updateSettingsMutate).not.toHaveBeenCalled();
-      flushSync(() => {
-        setValue?.call(input, 'code-insiders {workspace}');
-        input?.dispatchEvent(new Event('input', { bubbles: true }));
-      });
-      flushSync(() => input?.dispatchEvent(new FocusEvent('focusout', { bubbles: true })));
-      expect(mocks.updateSettingsMutate).not.toHaveBeenCalled();
-      const save = Array.from(container.querySelectorAll('button')).find(
-        (button) => button.textContent === 'Save'
+      expect(updates()).toEqual([]);
+
+      await act(async () => button(container, 'Save')?.click());
+      await waitForCheck(() =>
+        expect(updates()).toEqual([
+          { preferredIde: 'custom', customIdeCommand: 'code-insiders {workspace}' },
+        ])
       );
-      flushSync(() => save?.click());
-      expect(mocks.updateSettingsMutate).toHaveBeenCalledWith({
-        preferredIde: 'custom',
-        customIdeCommand: 'code-insiders {workspace}',
-      });
-      root.unmount();
+      expect(container.querySelector('#ide-select')?.textContent).toContain('Custom');
     }
   );
 });

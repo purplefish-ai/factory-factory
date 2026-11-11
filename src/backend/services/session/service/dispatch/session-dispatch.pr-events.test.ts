@@ -40,12 +40,12 @@ const {
     getOrCreateSessionClient: vi.fn(),
     isSessionStopping: vi.fn(),
     getGeneration: vi.fn(),
-    isGenerationCurrent: vi.fn(),
+    hasStopSince: vi.fn(),
     isSessionRunning: vi.fn(),
     isSessionPromptInFlight: vi.fn(),
     resolveQueuedMessageSettings: (_id: string, message: QueuedMessage) => message.settings,
-    configureQueuedMessage: vi.fn((id: string, message: QueuedMessage, supportsThinking: boolean) =>
-      configureTestQueuedMessage(mockSessionService, id, message, supportsThinking)
+    configureQueuedMessage: vi.fn((id: string, message: QueuedMessage) =>
+      configureTestQueuedMessage(mockSessionService, id, message)
     ),
     setSessionModel: vi.fn(),
     setSessionReasoningEffort: vi.fn(),
@@ -80,7 +80,7 @@ vi.mock('@/backend/services/session/service/acp', () => ({
   acpRuntimeManager: mockSessionService,
 }));
 
-vi.mock('@/backend/services/session/service/lifecycle/session-core-services', () => ({
+vi.mock('@/backend/services/session/service/composition/session-core-services', () => ({
   sessionConfigService: mockSessionService,
   sessionLifecycleService: mockSessionService,
   sessionPermissionService: {},
@@ -91,7 +91,7 @@ vi.mock('@/backend/services/session/service/data/session-data.service', () => ({
   sessionDataService: mockSessionDataService,
 }));
 
-import { sessionBackgroundDeliveryService } from '@/backend/services/session/service/lifecycle/session-background-delivery.service';
+import { sessionBackgroundDeliveryService } from '@/backend/services/session/service/delivery/session-background-delivery.service';
 
 const sessionDispatchService = createTestSessionDispatcher();
 
@@ -150,7 +150,7 @@ describe('sessionDispatchService.tryDispatchNextMessage', () => {
     mockSessionService.isSessionRunning.mockReturnValue(true);
     mockSessionService.isSessionStopping.mockReturnValue(false);
     mockSessionService.getGeneration.mockReturnValue(0);
-    mockSessionService.isGenerationCurrent.mockReturnValue(true);
+    mockSessionService.hasStopSince.mockReturnValue(false);
     mockSessionDataService.findAgentSessionById.mockResolvedValue({
       workspace: {
         status: 'READY',
@@ -191,7 +191,7 @@ describe('sessionDispatchService.tryDispatchNextMessage', () => {
         if (stop === 'runtime-stopped') {
           mockSessionService.isSessionRunning.mockReturnValue(false);
         } else {
-          mockSessionService.isGenerationCurrent.mockReturnValue(false);
+          mockSessionService.hasStopSince.mockReturnValue(true);
         }
         return Promise.resolve();
       });
@@ -199,7 +199,10 @@ describe('sessionDispatchService.tryDispatchNextMessage', () => {
         await sessionDispatchService.tryDispatchNextMessage('s1');
         expect(fail).toHaveBeenCalledWith(
           delivery,
-          expect.objectContaining({ message: 'Session stopped before dispatch' })
+          expect.objectContaining({
+            reason: 'failed',
+            error: expect.objectContaining({ message: 'Session stopped before dispatch' }),
+          })
         );
         expect(sessionBackgroundDeliveryService.isDeliveryActive(delivery.deliveryId)).toBe(false);
         expect(mockSessionService.sendSessionMessage).not.toHaveBeenCalled();
@@ -260,58 +263,47 @@ describe('sessionDispatchService.tryDispatchNextMessage', () => {
     }
   });
 
-  it.each(['working', 'compacting'] as const)(
-    'defers a PR delivery when the provider becomes %s during preparation',
-    async (busy) => {
-      const background: QueuedMessage = {
-        ...queuedMessage,
-        id: 'pr-event-queued',
-        source: { type: 'pr_event', request: { workspaceId: 'w', prId: 'p', bindingRevision: 1 } },
-      };
-      mockSessionDomainService.peekNextMessage.mockReturnValue(background);
-      mockSessionDomainService.getPendingInteractiveRequest.mockReturnValue(null);
-      const client = {
-        isCompactingActive: () => busy === 'compacting',
-        startCompaction: vi.fn(),
-        endCompaction: vi.fn(),
-      };
-      mockSessionService.getSessionClient.mockReturnValue(client);
-      const prepare = vi
-        .spyOn(sessionBackgroundDeliveryService, 'prepare')
-        .mockImplementation(() => {
-          if (busy === 'working') {
-            mockSessionService.isSessionPromptInFlight.mockReturnValue(true);
-          }
-          return Promise.resolve({
-            status: 'ready' as const,
-            releaseOnRejection: async () => undefined,
-            delivery: {
-              deliveryId: 'd',
-              sessionId: 's1',
-              bindingRevision: 1,
-              eventIds: ['e'],
-              text: 'facts',
-              attempt: 1,
-            },
-          });
-        });
-      const fail = vi.spyOn(sessionBackgroundDeliveryService, 'fail').mockResolvedValue();
-      try {
-        await sessionDispatchService.tryDispatchNextMessage('s1');
-        expect(fail).toHaveBeenCalledWith(
-          background,
-          expect.objectContaining({
-            message: expect.stringContaining('A turn is already in progress'),
-          })
-        );
-        expect(mockSessionService.sendSessionMessage).not.toHaveBeenCalled();
-        expect(mockSessionDomainService.removeQueuedMessage).not.toHaveBeenCalled();
-      } finally {
-        prepare.mockRestore();
-        fail.mockRestore();
-      }
+  it('defers a PR delivery when the provider becomes busy during preparation', async () => {
+    const background: QueuedMessage = {
+      ...queuedMessage,
+      id: 'pr-event-queued',
+      source: { type: 'pr_event', request: { workspaceId: 'w', prId: 'p', bindingRevision: 1 } },
+    };
+    mockSessionDomainService.peekNextMessage.mockReturnValue(background);
+    mockSessionDomainService.getPendingInteractiveRequest.mockReturnValue(null);
+    mockSessionService.getSessionClient.mockReturnValue({});
+    const prepare = vi.spyOn(sessionBackgroundDeliveryService, 'prepare').mockImplementation(() => {
+      mockSessionService.isSessionPromptInFlight.mockReturnValue(true);
+      return Promise.resolve({
+        status: 'ready' as const,
+        releaseOnRejection: async () => undefined,
+        delivery: {
+          deliveryId: 'd',
+          sessionId: 's1',
+          bindingRevision: 1,
+          eventIds: ['e'],
+          text: 'facts',
+          attempt: 1,
+        },
+      });
+    });
+    const fail = vi.spyOn(sessionBackgroundDeliveryService, 'fail').mockResolvedValue();
+    try {
+      await sessionDispatchService.tryDispatchNextMessage('s1');
+      expect(fail).toHaveBeenCalledWith(
+        background,
+        expect.objectContaining({
+          message: expect.stringContaining('A turn is already in progress'),
+          kind: 'SESSION_TURN_BUSY',
+        })
+      );
+      expect(mockSessionService.sendSessionMessage).not.toHaveBeenCalled();
+      expect(mockSessionDomainService.removeQueuedMessage).not.toHaveBeenCalled();
+    } finally {
+      prepare.mockRestore();
+      fail.mockRestore();
     }
-  );
+  });
   it('verifies strict startup even when a provider handle is already installed', async () => {
     const background: QueuedMessage = {
       ...queuedMessage,
@@ -345,7 +337,10 @@ describe('sessionDispatchService.tryDispatchNextMessage', () => {
       expect(mockSessionService.sendSessionMessage).not.toHaveBeenCalled();
       expect(fail).toHaveBeenCalledWith(
         background,
-        expect.objectContaining({ message: expect.stringContaining('existing conversation') })
+        expect.objectContaining({
+          message: expect.stringContaining('existing conversation'),
+          kind: 'SESSION_RESUME_FAILED',
+        })
       );
     } finally {
       prepare.mockRestore();
@@ -386,7 +381,10 @@ describe('sessionDispatchService.tryDispatchNextMessage', () => {
     expect(mockSessionService.sendSessionMessage).toHaveBeenCalledWith('s1', 'hello');
     expect(fail).toHaveBeenCalledWith(
       background,
-      expect.objectContaining({ message: expect.stringContaining('human message queued') })
+      expect.objectContaining({
+        message: expect.stringContaining('human message queued'),
+        kind: 'SESSION_TURN_BUSY',
+      })
     );
     prepare.mockRestore();
     validate.mockRestore();
