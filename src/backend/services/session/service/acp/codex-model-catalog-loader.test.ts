@@ -66,6 +66,9 @@ beforeEach(() => {
       kill: vi.fn(() => {
         child.signalCode = 'SIGTERM';
         child.emit('exit');
+        child.stdout.destroy();
+        child.stderr.destroy();
+        child.emit('close');
         return true;
       }),
     });
@@ -157,4 +160,72 @@ it('retains stderr diagnostics for discovery failures', async () => {
   mocks.spawn.mock.results[0]?.value.stderr.write('startup diagnostic');
   await discovering;
   expect(mocks.debug).toHaveBeenCalledWith('Codex catalog stderr', { data: 'startup diagnostic' });
+});
+
+it('cancels the caller while retaining physical drain until child close', async () => {
+  const cancellation = new AbortController();
+  const reason = new Error('Model catalog discovery stopped');
+  const lifetimes: Promise<void>[] = [];
+  const reading = fetchCodexModelCatalogFromAppServer({
+    signal: cancellation.signal,
+    retainLifetime: (drained) => lifetimes.push(drained),
+  });
+  const rejected = expect(reading).rejects.toBe(reason);
+  const child = mocks.spawn.mock.results[0]!.value;
+  child.kill.mockImplementation(() => {
+    child.signalCode = 'SIGTERM';
+    child.emit('exit');
+    return true;
+  });
+  expect(mocks.spawn.mock.calls[0]?.[2].signal).toBe(cancellation.signal);
+  cancellation.abort(reason);
+  child.emit(
+    'error',
+    Object.assign(new Error('aborted', { cause: reason }), { name: 'AbortError' })
+  );
+  let drained = false;
+  const draining = Promise.all(lifetimes).then(() => {
+    drained = true;
+  });
+  try {
+    await rejected;
+    expect(drained).toBe(false);
+    child.emit('close');
+    await draining;
+  } finally {
+    child.emit('close');
+  }
+});
+
+it('bounds timed-out callers even when an exited child retains open pipes', async () => {
+  vi.useFakeTimers();
+  const lifetimes: Promise<void>[] = [];
+  const reading = fetchCodexModelCatalogFromAppServer({
+    retainLifetime: (drained) => lifetimes.push(drained),
+  });
+  let failure: unknown;
+  void reading.catch((error: unknown) => {
+    failure = error;
+  });
+  const child = mocks.spawn.mock.results[0]!.value;
+  child.stdin.removeAllListeners('data');
+  child.kill.mockImplementation(() => {
+    child.signalCode = 'SIGTERM';
+    child.emit('exit');
+    return true;
+  });
+  let drained = false;
+  const draining = Promise.all(lifetimes).then(() => {
+    drained = true;
+  });
+  try {
+    await vi.advanceTimersByTimeAsync(30_001);
+    expect(failure).toMatchObject({ message: expect.stringContaining('timed out') });
+    expect(drained).toBe(false);
+  } finally {
+    child.emit('close');
+    await reading.catch(() => undefined);
+    await draining;
+    vi.useRealTimers();
+  }
 });

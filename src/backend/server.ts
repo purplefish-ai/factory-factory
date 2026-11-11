@@ -589,6 +589,10 @@ export function createServer(application: Application, requestedPort?: number): 
         });
         await startRuntimeWork();
         startupComplete = true;
+        // Restore launcher capabilities and warm default models without delaying readiness.
+        void runStartupTask('Failed to warm launcher options', () =>
+          services.sessionConfigService.warmLaunchOptions()
+        );
 
         logger.info('Server endpoints available', {
           server: `http://${ENDPOINT_HOST}:${actualPort}`,

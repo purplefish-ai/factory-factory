@@ -196,8 +196,8 @@ export type ApplicationServices = BridgeServices & {
     input: Parameters<typeof searchGitHubIssues>[0]
   ) => ReturnType<typeof searchGitHubIssues>;
   executeStartupScriptPipeline: typeof executeStartupScriptPipeline;
-  claudeModelCatalogService: Pick<typeof claudeModelCatalogService, 'getModels'>;
-  codexModelCatalogService: Pick<typeof codexModelCatalogService, 'getModels'>;
+  claudeModelCatalogService: Pick<typeof claudeModelCatalogService, 'getModels' | 'stop'>;
+  codexModelCatalogService: Pick<typeof codexModelCatalogService, 'getModels' | 'stop'>;
   providerUsageService: Pick<typeof providerUsageService, 'getUsage'>;
   factoryConfigService: Pick<typeof FactoryConfigService, 'readConfig'>;
   findAvailablePort: typeof findAvailablePort;

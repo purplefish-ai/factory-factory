@@ -82,9 +82,11 @@ export const sessionPermissionService = new SessionPermissionService({
 
 export const codexModelCatalogService = new CodexModelCatalogService({
   listAccountIds: () => codexAccountService.getEnabledAccountIds(),
-  fetchModels: async (accountId) => {
+  fetchModels: async (accountId, signal, retainLifetime) => {
+    signal?.throwIfAborted();
     const context = await codexAccountService.getRuntimeContext(accountId);
-    return fetchCodexModelCatalogFromAppServer({ env: context.env });
+    signal?.throwIfAborted();
+    return fetchCodexModelCatalogFromAppServer({ env: context.env, signal, retainLifetime });
   },
 });
 

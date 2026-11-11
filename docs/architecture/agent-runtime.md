@@ -349,7 +349,14 @@ choices. Authentication-only validation requires the explicit
 verified when that fallback is used. Model discovery uses the same bundled Codex
 runtime, without starting an inference turn. Claude model discovery uses an
 ephemeral ACP session with tools disabled. Both catalog services coalesce
-requests and cache successful results for 30 seconds.
+requests and keep successful results fresh for five minutes. Later reads return
+the last success immediately while one background refresh runs; refresh failures
+retain those results and retry after a 30-second cooldown. Catalog refresh
+failures emit a sanitized warning once per attempt. Shutdown fences both catalog
+services, aborts their disposable children, and waits up to seven seconds for
+active work and physical child/pipe closure before account teardown. Caller
+timeouts remain independent of physical drain; undrained processes retain their
+cache's discovery admission rather than spawning retries.
 
 Session startup validates that the workspace working directory exists and is a
 directory before spawning an adapter. Missing worktrees report the affected path
@@ -474,12 +481,27 @@ session configured with the selected provider/model; the provider-wide model
 catalog is not used as a thinking capability list. Discovery submits no prompt,
 rejects permission/tool callbacks, and closes its processes. Its endpoint
 requires the trusted-local boundary used for local execution. Successful native
-results stay fresh for five minutes per provider/model/effective Codex account,
-then remain usable up to a 30-minute maximum age during a request-triggered
-background refresh. Failed refreshes retain a valid last success and retry after
-30 seconds. Cache size and concurrent discovery counts remain bounded. Cold or
-expired discovery failures offer Retry; creation waits for available options
-while model selection remains editable.
+results stay fresh for five minutes per provider/model/requested Codex account
+(or Auto), then remain usable during request-triggered background refreshes,
+without a hard expiry. Failed refreshes retain the last success and retry after
+30 seconds. Cache size and concurrent discovery counts remain bounded. Cold
+discovery failures offer Retry; creation waits for available options while model
+selection remains editable.
+
+Successful launcher options are persisted atomically to
+`BASE_DIR/cache/session-launch-options.json`. A versioned Zod schema validates
+restored metadata; missing, corrupt, or incompatible snapshots start cold.
+Saving skips an unsupported entry without discarding other valid models.
+Persistence errors do not block the launcher. Startup restores all retained
+entries and warms the saved default model for each provider without delaying
+server readiness. Restored entries refresh on their next use, including the
+startup warmup, so runtime upgrades obtain new capabilities in the background.
+Snapshots contain capability metadata, never credentials or runtime
+environments. Shutdown immediately fences new discovery and aborts disposable
+probe children. It waits up to seven seconds for native lifetimes and snapshot
+writes before account teardown. Account observations already in progress cannot
+be cancelled; a drain timeout is reported, and later observations cannot spawn
+another probe.
 
 Native discovery retains one of its eight admission slots until the disposable
 child emits `close`, including closure of its stdio pipes, and its ACP
@@ -487,10 +509,9 @@ connection is logically closed. Operation/session-close timeouts and TERM/KILL
 requests bound caller results but do not release that native lifetime. SDK
 logical closure alone does not prove child drain. A lifetime that never closes
 remains charged; retries share its bounded failure, or report discovery busy
-when its successful cache entry reaches its 30-minute maximum age or is evicted.
-The success timestamp is not refreshed while cleanup remains charged. This
-tracks the owned child and pipes, without claiming containment of every SDK
-continuation or external descendant.
+when its successful cache entry is evicted. The success timestamp is not
+refreshed while cleanup remains charged. This tracks the owned child and pipes,
+without claiming containment of every SDK continuation or external descendant.
 
 Each launch draft snapshots its saved provider defaults and retains explicit
 thinking/Plan choices across provider switches and settings refreshes. A model
@@ -835,15 +856,18 @@ models exclusive to one account remain selectable. A failed named-account
 catalog read advertises no fallback models from other accounts.
 
 Launcher thinking, planning and access options come from a disposable ACP
-session. Successful observations stay fresh for five minutes, then remain usable
-for up to 30 minutes while a request triggers one background refresh. Failed
-refreshes retain the last success and retry after a 30-second cooldown. Cache
-keys include the provider, requested model and effective Codex account; fresh
-saved effort defaults are applied to cloned results. Account validation still
-precedes cache access. Cold and expired entries await discovery when admission
-is available, or return a busy error when saturated. Process admission remains
-charged until both the native child and protocol pipes close. Cache refreshes
-respect the same admission limit and do not run on a timer.
+session. The durable capability cache described above keeps successful
+observations available while refreshing in the background. Keys distinguish
+provider, requested model, and explicit Codex account or Auto preview. Fresh
+saved effort defaults are applied to cloned results. Cached reads do not probe
+Codex accounts; account selection and validation run only for cold discovery or
+background refresh. Auto retains the last successful preview rather than
+tracking every usage-based account change. Actual session startup still selects
+and validates its account and applies native model/configuration checks. Cold
+entries await discovery when admission is available, or return a busy error when
+saturated. Process admission remains charged until both the native child and
+protocol pipes close. Cache refreshes respect the same admission limit and do
+not run on a timer.
 
 The `session-launch-options` logger records stage durations for settings,
 account resolution, options lookup and the overall request. Native probes also

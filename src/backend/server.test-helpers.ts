@@ -86,6 +86,10 @@ export function createTestHarness(options: TestHarnessOptions = {}) {
       cleanupOldLogs: vi.fn<(...args: unknown[]) => void>(),
     },
     cleanupOldLogFiles: vi.fn(async () => 0),
+    sessionConfigService: {
+      stopLaunchOptions: vi.fn(async () => undefined),
+      warmLaunchOptions: vi.fn(async () => undefined),
+    },
     sessionLifecycleService: {
       recoverStaleRunningSessions: vi.fn(async () => 0),
       stopAllClients: vi.fn(async () => undefined),

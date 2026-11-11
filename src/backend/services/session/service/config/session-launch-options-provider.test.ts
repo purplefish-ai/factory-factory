@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { deferred } from '@/test-utils/deferred';
 import { fetchAccountSessionLaunchOptions } from './session-launch-options-provider';
 const mocks = vi.hoisted(() => ({ preview: vi.fn(), probe: vi.fn() }));
 vi.mock('@/backend/services/codex-accounts', () => ({
@@ -24,6 +25,17 @@ describe('account-aware launch probe boundary', () => {
     expect(mocks.preview).toHaveBeenCalledExactlyOnceWith({ accountId: 'saved', model: 'model' });
     expect(mocks.probe).toHaveBeenCalledExactlyOnceWith({ provider: 'CODEX', model: 'model', env });
   });
+  it('does not spawn if shutdown interrupts account resolution', async () => {
+    const context = deferred<{ accountId: string; env: NodeJS.ProcessEnv }>();
+    mocks.preview.mockReturnValue(context.promise);
+    const cancellation = new AbortController();
+    const reading = fetchAccountSessionLaunchOptions({ provider: 'CODEX' }, cancellation.signal);
+    cancellation.abort(new Error('stopped'));
+    context.resolve({ accountId: 'saved', env: {} });
+    await expect(reading).rejects.toThrow('stopped');
+    expect(mocks.probe).not.toHaveBeenCalled();
+  });
+
   it('keeps Claude discovery independent of Codex accounts', async () => {
     mocks.probe.mockReturnValue({
       result: Promise.resolve({ provider: 'CLAUDE', model: 'sonnet' }),

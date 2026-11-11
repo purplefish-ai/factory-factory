@@ -21,6 +21,9 @@ export type ShutdownGraph = {
     readonly periodicTaskService: { stop(): Promise<void> };
     readonly agentRuntime?: { stop(): Promise<void> };
     readonly workspaceMetadata?: { stop(): Promise<void> };
+    readonly claudeModelCatalogService?: { stop(): Promise<void> };
+    readonly codexModelCatalogService?: { stop(): Promise<void> };
+    readonly sessionConfigService?: { stopLaunchOptions(): Promise<void> };
     readonly sessionLifecycleService: { stopAllClients(timeoutMs?: number): Promise<void> };
     readonly sessionDispatchService: { shutdown(): Promise<void> };
     readonly codexAccountService: { shutdown(): Promise<void> };
@@ -70,6 +73,8 @@ export function createShutdownPlan(
   hooks: ServerShutdownHooks = {}
 ): ShutdownPlan {
   const jobs: ShutdownJob[] = [
+    { name: 'claude-model-catalog', stop: () => services.claudeModelCatalogService?.stop() },
+    { name: 'codex-model-catalog', stop: () => services.codexModelCatalogService?.stop() },
     { name: 'application-update-idle', stop: () => services.applicationUpdateService?.stop() },
     {
       name: 'reconciliation-cleanup',
@@ -79,6 +84,10 @@ export function createShutdownPlan(
     { name: 'snapshot-reconciliation', stop: () => lifecycle.snapshotReconciliation.stop() },
     { name: 'pr-event-poll', stop: () => services.ratchetService.stop() },
     { name: 'periodic-task-poll', stop: () => services.periodicTaskService.stop() },
+    {
+      name: 'session-launch-options',
+      stop: () => services.sessionConfigService?.stopLaunchOptions(),
+    },
   ];
   const steps: ShutdownStep[] = [
     // Agent intake closes admission and drains committed launches before
@@ -97,7 +106,12 @@ export function createShutdownPlan(
     { name: 'session-dispatch', stop: () => services.sessionDispatchService.shutdown() },
     // Session teardown retains its final observation drain, which still reads
     // account context; cancelling an in-flight login waits until it settles.
-    { name: 'codex-accounts', stop: () => services.codexAccountService.shutdown() },
+    {
+      name: 'codex-accounts',
+      // Launcher and Codex catalog discovery still read account context.
+      after: ['session-launch-options', 'codex-model-catalog'],
+      stop: () => services.codexAccountService.shutdown(),
+    },
     { name: 'terminals', stop: () => services.terminalService.cleanup() },
     { name: 'run-scripts', stop: () => services.runScriptService.cleanup() },
     { name: 'port-shares', stop: () => services.portShareService.cleanup() },
@@ -123,7 +137,12 @@ export function createShutdownPlan(
     // running when the database disconnects.
     {
       name: 'job-runner',
-      after: ['pr-event-poll', 'periodic-task-poll', 'reconciliation-cleanup'],
+      after: [
+        'pr-event-poll',
+        'periodic-task-poll',
+        'reconciliation-cleanup',
+        'claude-model-catalog',
+      ],
       stop: () => lifecycle.jobs.stopAll(),
     },
     { name: 'database', stop: () => lifecycle.database.$disconnect() },

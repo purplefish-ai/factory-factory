@@ -64,10 +64,14 @@ async function requestModelPage(request: () => Promise<unknown>): Promise<unknow
 export async function fetchCodexModelCatalogFromAppServer(options?: {
   cwd?: string;
   env?: NodeJS.ProcessEnv;
+  signal?: AbortSignal;
+  retainLifetime?: (drained: Promise<void>) => void;
 }): Promise<CodexModelCatalogEntry[]> {
+  options?.signal?.throwIfAborted();
   const command = resolveProviderAcpSpawnCommand('CODEX');
   const child = spawn(command.command, [...command.args, 'cli', 'app-server'], {
     cwd: options?.cwd ?? tmpdir(),
+    ...(options?.signal ? { signal: options.signal } : {}),
     env: {
       ...(options?.env ?? getCurrentProcessEnv()),
       ELECTRON_RUN_AS_NODE: '1',
@@ -75,6 +79,8 @@ export async function fetchCodexModelCatalogFromAppServer(options?: {
     },
     stdio: ['pipe', 'pipe', 'pipe'],
   });
+  const childClosed = new Promise<void>((resolve) => child.once('close', () => resolve()));
+  options?.retainLifetime?.(childClosed);
   const pending = new Map<number, { resolve(value: unknown): void; reject(error: Error): void }>();
   let nextId = 0;
   let failure: Error | undefined;
@@ -85,7 +91,15 @@ export async function fetchCodexModelCatalogFromAppServer(options?: {
     }
     pending.clear();
   };
-  child.on('error', fail);
+  child.on('error', (error: Error) =>
+    fail(
+      error.name === 'AbortError' &&
+        options?.signal?.aborted &&
+        options.signal.reason instanceof Error
+        ? options.signal.reason
+        : error
+    )
+  );
   child.on('exit', () => fail(new Error('Codex model discovery process exited')));
   child.stdin.on('error', fail);
   child.stderr.on('data', (chunk: Buffer) => {
@@ -116,6 +130,7 @@ export async function fetchCodexModelCatalogFromAppServer(options?: {
     }
   });
   const request = (method: string, params?: unknown): Promise<unknown> => {
+    options?.signal?.throwIfAborted();
     if (failure) {
       return Promise.reject(failure);
     }

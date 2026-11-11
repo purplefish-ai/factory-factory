@@ -77,30 +77,37 @@ Teardown is one ordered plan, `createShutdownPlan` in
 stopped on one path is stopped on the other; the server adds only its transport
 and timer work through hooks at fixed points.
 
-The plan calls six jobs' `stop()` (application update idle, reconciliation
+The plan immediately calls `stop()` for application update idle, reconciliation
 cleanup, `pr-poll`, snapshot reconciliation, `pr-event-poll` with PR event
-retention, periodic tasks) as soon as it begins, so none starts new work during
-teardown and their in-flight runs drain concurrently with session/process
-teardown and with each other: shutdown waits for the slowest drain, not the sum.
-Agent runtime and workspace metadata jobs stop at their own ordered steps
-instead: agent runtime first, workspace metadata before transports and sessions
-close. The drains are awaited only after sessions, Codex logins, run scripts and
-the rate limiter have stopped, and all of them before the database disconnects.
-Two edges are kept by awaiting in order: the event collector stops after
-`pr-poll` drains, and the Git state service stops after snapshot reconciliation
-drains. `jobRunner.stopAll()` then runs as a backstop, so a registered job
-without an owner in the plan is still stopped before the disconnect. A failed
-job `stop()` is logged with its job name and does not block the other drains or
-the disconnect. A failed step is logged with its step name; the later steps
-still run, and shutdown then rejects. Startup re-checks for cleanup after each
-await before starting more jobs, since a start issued after its stop would
-revive the job; a startup interrupted that way rejects once cleanup finishes.
+retention, and periodic tasks. It also fences launcher-option discovery and both
+model catalog services. Their in-flight work drains concurrently with
+session/process teardown and with each other: shutdown waits for the slowest
+drain, not the sum. Discovery aborts its disposable provider children and bounds
+its drain at seven seconds; physical lifetimes remain charged independently of
+caller timeouts.
+
+Agent runtime and workspace metadata jobs stop at their own ordered steps: agent
+runtime first, workspace metadata before transports and sessions close. Codex
+account teardown waits for launcher-option and Codex model-catalog drains, which
+can still read account context. Claude catalog discovery has no Codex account
+dependency and drains at the final backstop instead. Recurring job drains are
+awaited after sessions, Codex logins, run scripts and the rate limiter have
+stopped, and all drains before the database disconnects. The event collector
+stops after `pr-poll` drains; the Git state service stops after snapshot
+reconciliation drains. `jobRunner.stopAll()` then runs as a backstop, so a
+registered job without an owner in the plan is still stopped before the
+disconnect. A failed job `stop()` is logged with its job name and does not block
+the other drains or the disconnect. A failed step is logged with its step name;
+the later steps still run, and shutdown then rejects. Startup re-checks for
+cleanup after each await before starting more jobs, since a start issued after
+its stop would revive the job; a startup interrupted that way rejects once
+cleanup finishes.
 
 There is deliberately no "run this job now" API. The two loops with a
 cancellable sleep only ever cancelled it from their own `stop()`, so
-interruptibility is a shutdown concern rather than a scheduling feature.
-`stop()` waits unbounded for an in-flight run, exactly as every loop did before
-— bounding it would change shutdown to abandon work mid-flight.
+interruptibility is a shutdown concern rather than a scheduling feature. For
+recurring poll loops, `stop()` waits unbounded for an in-flight run — bounding
+it would change shutdown to abandon work mid-flight.
 
 ### Fatal backend errors
 

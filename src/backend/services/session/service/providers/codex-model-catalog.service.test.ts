@@ -17,6 +17,40 @@ function catalog() {
 }
 
 describe('CodexModelCatalogService', () => {
+  it('does not create another catalog after shutdown interrupts account resolution', async () => {
+    const account = createDeferred<string>();
+    const fetchModels = vi.fn(async () => catalog());
+    const service = new CodexModelCatalogService({
+      fetchModels,
+      resolveAccountId: () => account.promise,
+    });
+    const reading = service.getModels('saved');
+    const rejected = expect(reading).rejects.toThrow('stopped');
+    await service.stop();
+    account.resolve('saved');
+    await rejected;
+    expect(fetchModels).not.toHaveBeenCalled();
+    await expect(service.getModels('other')).rejects.toThrow('stopped');
+  });
+
+  it('preserves the shutdown cause when Auto account catalogs are cancelled', async () => {
+    const fetchModels = vi.fn(
+      (_id?: string, signal?: AbortSignal) =>
+        new Promise<ReturnType<typeof catalog>>((_resolve, reject) => {
+          signal?.addEventListener('abort', () => reject(signal.reason), { once: true });
+        })
+    );
+    const service = new CodexModelCatalogService({
+      fetchModels,
+      listAccountIds: async () => ['saved'],
+    });
+    const reading = service.getModels();
+    const rejected = expect(reading).rejects.toThrow('Model catalog discovery stopped');
+    await vi.waitFor(() => expect(fetchModels).toHaveBeenCalledOnce());
+    await service.stop();
+    await rejected;
+  });
+
   it('isolates concurrent and cached catalogs by saved account', async () => {
     const fetchModels = vi.fn(async () => catalog());
     const service = new CodexModelCatalogService({ fetchModels });
@@ -24,8 +58,8 @@ describe('CodexModelCatalogService', () => {
     await service.getModels('a');
     await service.getModels('b');
     expect(fetchModels).toHaveBeenCalledTimes(2);
-    expect(fetchModels).toHaveBeenCalledWith('a');
-    expect(fetchModels).toHaveBeenCalledWith('b');
+    expect(fetchModels).toHaveBeenCalledWith('a', expect.any(AbortSignal), expect.any(Function));
+    expect(fetchModels).toHaveBeenCalledWith('b', expect.any(AbortSignal), expect.any(Function));
   });
   it('discovers Auto models across accounts and reuses their isolated caches', async () => {
     const fetchModels = vi.fn(async (id?: string) => [{ ...catalog()[0]!, id: `model-${id}` }]);
@@ -39,7 +73,10 @@ describe('CodexModelCatalogService', () => {
     ]);
     await service.getModels();
     await service.getModels('b');
-    expect(fetchModels.mock.calls).toEqual([['a'], ['b']]);
+    expect(fetchModels.mock.calls).toEqual([
+      ['a', expect.any(AbortSignal), expect.any(Function)],
+      ['b', expect.any(AbortSignal), expect.any(Function)],
+    ]);
   });
   it('keeps available Auto catalogs when another account probe fails', async () => {
     const fetchModels = vi.fn((id?: string) => {
@@ -78,7 +115,7 @@ describe('CodexModelCatalogService', () => {
     expect(fetchModels).toHaveBeenCalledOnce();
   });
 
-  it('keeps successful discovery for 30 seconds from completion', async () => {
+  it('serves successful discovery while refreshing after five minutes', async () => {
     vi.useFakeTimers();
     const pending = createDeferred<ReturnType<typeof catalog>>();
     const fetchModels = vi.fn(() => pending.promise);
@@ -88,11 +125,13 @@ describe('CodexModelCatalogService', () => {
     pending.resolve(catalog());
     await first;
 
-    await vi.advanceTimersByTimeAsync(29_999);
+    await vi.advanceTimersByTimeAsync(5 * 60_000 - 1);
     await expect(service.getModels()).resolves.toEqual(catalog());
     expect(fetchModels).toHaveBeenCalledOnce();
     fetchModels.mockResolvedValue([{ ...catalog()[0]!, id: 'new-model' }]);
     await vi.advanceTimersByTimeAsync(1);
+    await expect(service.getModels()).resolves.toEqual(catalog());
+    await vi.advanceTimersByTimeAsync(0);
     await expect(service.getModels()).resolves.toMatchObject([{ id: 'new-model' }]);
     expect(fetchModels).toHaveBeenCalledTimes(2);
   });
@@ -147,16 +186,21 @@ describe('CodexModelCatalogService', () => {
     await expect(service.getModels()).resolves.toEqual(catalog());
   });
 
-  it('rejects an expired refresh failure and retries without serving stale models', async () => {
+  it('keeps stale models after refresh failure and backs off before retrying', async () => {
     vi.useFakeTimers();
     const fetchModels = vi.fn().mockResolvedValue(catalog());
     const service = new CodexModelCatalogService({ fetchModels });
     await service.getModels();
-    await vi.advanceTimersByTimeAsync(30_000);
+    await vi.advanceTimersByTimeAsync(5 * 60_000);
     fetchModels.mockRejectedValueOnce(new Error('Refresh unavailable'));
-
-    await expect(service.getModels()).rejects.toThrow('Refresh unavailable');
+    await expect(service.getModels()).resolves.toEqual(catalog());
+    await vi.advanceTimersByTimeAsync(0);
+    await expect(service.getModels()).resolves.toEqual(catalog());
+    expect(fetchModels).toHaveBeenCalledTimes(2);
     fetchModels.mockResolvedValue([{ ...catalog()[0]!, id: 'new-model' }]);
+    await vi.advanceTimersByTimeAsync(30_000);
+    await expect(service.getModels()).resolves.toEqual(catalog());
+    await vi.advanceTimersByTimeAsync(0);
     await expect(service.getModels()).resolves.toMatchObject([{ id: 'new-model' }]);
     expect(fetchModels).toHaveBeenCalledTimes(3);
   });
