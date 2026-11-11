@@ -17,7 +17,8 @@ const ACTIVE_AGENT_SESSION_STATUSES: SessionStatus[] = [SessionStatus.RUNNING, S
 /**
  * Sessions that use a workspace session slot. Finished adversarial reviews keep
  * their transcript but no slot; this mirrors isFinishedAdversarialReview, where
- * an empty provider session ID means the review never started.
+ * an empty provider session ID means the review never started. The limit is
+ * checked only at creation, so resuming a finished review can briefly exceed it.
  */
 export function workspaceSessionSlotWhere(workspaceId: string): Prisma.AgentSessionWhereInput {
   return {

@@ -1336,7 +1336,10 @@ The active chat limit (`MAX_SESSIONS_PER_WORKSPACE`) counts `RUNNING` and `IDLE`
 sessions, except finished adversarial reviews: an `adversarial_review` session
 that is `IDLE` and has started a provider session keeps its transcript but no
 slot. A review created but not yet started still counts. Only a `RUNNING` review
-blocks another review of the same PR, so a finished review can be run again.
+blocks another review of the same PR, so a finished review can be run again. The
+limit is checked when a session is created, not when it resumes, so continuing
+the conversation in a finished review can briefly put the workspace over the
+limit until that turn ends.
 
 `prompts/` is copied into `dist/` on build and packaged alongside the unpacked
 Electron backend, so a new prompt file ships without a code change.
