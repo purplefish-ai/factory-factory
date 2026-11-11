@@ -8,6 +8,7 @@ behavior.
 | ------------------------------------------------------------------------------ | ---------------------------------------------------------------------------- |
 | [Cloud vision](factory-factory-cloud-vision/README.md)                         | Proposed; includes a possible MVP plan                                       |
 | [Adversarial review](adversarial-review.md)                                    | Implemented; the record identifies its remaining live-validation limitation  |
+| [Child workspace adversarial review](child-workspace-adversarial-review.md)    | Proposed                                                                     |
 | [Clipboard screenshot paste](clipboard-screenshot-paste-unsupported-format.md) | Option A implemented; alternatives remain design context                     |
 | [Workspace rename display](workspace-rename-display.md)                        | Header fix implemented; the Kanban report is not reproduced and remains open |
 | [Archive](archive/)                                                            | Superseded designs and migration records                                     |
