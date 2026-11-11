@@ -37,6 +37,7 @@ import {
   hasAdversarialReviewMarker,
 } from '@/shared/adversarial-review';
 import { isOpenPrState, SessionStatus } from '@/shared/core';
+import { prepareReviewCheckout } from './adversarial-review-checkout-context';
 import { buildDiffLineIndex } from './adversarial-review-diff-line-index';
 
 const logger = createLogger('adversarial-review');
@@ -79,7 +80,8 @@ async function triggerAdversarialReviewLocked(
   if (!fixerContext) {
     throw new ApplicationError('NOT_FOUND', `Workspace not found: ${workspaceId}`);
   }
-  if (!fixerContext.worktreePath) {
+  const { worktreePath } = fixerContext;
+  if (!worktreePath) {
     throw new ApplicationError('PRECONDITION_FAILED', 'Workspace is not ready yet (no worktree)');
   }
   if (!(prState?.prUrl && prState.prNumber && isOpenPrState(prState.prState))) {
@@ -144,6 +146,8 @@ async function triggerAdversarialReviewLocked(
   // take minutes, far longer than an HTTP request should block for.
   void runAdversarialReviewTurn({
     sessionId: session.id,
+    worktreePath,
+    prId: prState.prId,
     repo,
     prUrl: prState.prUrl,
     prNumber: prState.prNumber,
@@ -177,23 +181,61 @@ async function findActiveAdversarialReviewSession(
 
 interface RunAdversarialReviewTurnParams {
   sessionId: string;
+  worktreePath: string;
+  prId: string;
   repo: string;
   prUrl: string;
   prNumber: number;
   postReviewToGitHub: boolean;
 }
 
-async function runAdversarialReviewTurn(params: RunAdversarialReviewTurnParams): Promise<void> {
-  const { sessionId, repo, prUrl, prNumber, postReviewToGitHub } = params;
+const PR_SNAPSHOT_ATTEMPTS = 3;
 
-  try {
-    const [diff, headSha, fullDetails, description, authenticatedUsername] = await Promise.all([
+/**
+ * Read the PR bracketed by head lookups. The reviewer reads, and comments are
+ * anchored to, the head SHA, so it must be the commit the diff describes; a
+ * push between independent reads would otherwise mismatch them.
+ */
+async function readPRSnapshot(repo: string, prNumber: number) {
+  for (let attempt = 0; attempt < PR_SNAPSHOT_ATTEMPTS; attempt++) {
+    const headSha = await getPRHeadCommitSha(repo, prNumber);
+    const [diff, fullDetails, description, authenticatedUsername] = await Promise.all([
       githubCLIService.getPRDiff(repo, prNumber),
-      getPRHeadCommitSha(repo, prNumber),
       githubCLIService.getPRFullDetails(repo, prNumber),
       getPRDescription(repo, prNumber),
       githubCLIService.getAuthenticatedUsername(),
     ]);
+    if ((await getPRHeadCommitSha(repo, prNumber)) === headSha) {
+      return { diff, headSha, fullDetails, description, authenticatedUsername };
+    }
+  }
+  throw new Error(`PR #${prNumber} head kept changing while its diff was being read`);
+}
+
+async function runAdversarialReviewTurn(params: RunAdversarialReviewTurnParams): Promise<void> {
+  const { sessionId, worktreePath, prId, repo, prUrl, prNumber, postReviewToGitHub } = params;
+  let cleanupCheckout: () => Promise<void> = () => Promise.resolve();
+
+  try {
+    const { diff, headSha, fullDetails, description, authenticatedUsername } = await readPRSnapshot(
+      repo,
+      prNumber
+    );
+
+    const checkout = await prepareReviewCheckout({
+      worktreePath,
+      repo,
+      prNumber,
+      prId,
+      headSha,
+      headRefName: fullDetails.headRefName,
+    });
+    cleanupCheckout = checkout.cleanup;
+    logger.info('Adversarial review code context', {
+      sessionId,
+      prNumber,
+      context: checkout.context.kind,
+    });
 
     const prompt = buildAdversarialReviewDispatchPrompt({
       prUrl,
@@ -201,6 +243,7 @@ async function runAdversarialReviewTurn(params: RunAdversarialReviewTurnParams):
       prDescription: description,
       prDiff: diff,
       existingReviewCommentsSummary: summarizeExistingActivity(fullDetails, authenticatedUsername),
+      checkoutContext: checkout.context,
     });
 
     await sessionService.sendSessionMessage(sessionId, prompt);
@@ -228,6 +271,7 @@ async function runAdversarialReviewTurn(params: RunAdversarialReviewTurnParams):
 
     await postFindingsToGitHub(repo, prNumber, diff, headSha, findings);
   } finally {
+    await cleanupCheckout();
     // A one-off review turn: retire the session once it's done so a later
     // trigger starts a fresh review instead of finding this one "already
     // active" forever.
