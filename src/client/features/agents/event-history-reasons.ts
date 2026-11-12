@@ -19,7 +19,7 @@ const REASON_PHRASES: Readonly<Record<string, string>> = {
   SEMANTIC_FILTER_UNCERTAIN:
     "The classifier couldn't tell whether the event meets the natural-language filter; uncertain events never run.",
   SEMANTIC_FILTER_PROVIDER_UNPROVEN:
-    "The automation's provider hasn't passed the natural-language filter evaluation, so the event didn't run.",
+    "The natural-language filter classifier hasn't passed evaluation for this automation's provider, so the event didn't run.",
   SEMANTIC_FILTER_TOO_LONG:
     "The natural-language filter is too long to check, so the event didn't run. Shorten the filter.",
   SEMANTIC_FILTER_UNAVAILABLE:

@@ -72,11 +72,20 @@ export function triggerInBackendState(
   };
 }
 
+/** `pauseTriggers`: PAUSED on a new generation, with no reason. */
+function pausedOnNewGeneration(trigger: EventTriggerFixture): EventTriggerFixture {
+  return {
+    ...triggerInBackendState(trigger, 'PAUSED'),
+    activationGeneration: trigger.activationGeneration + 1,
+  };
+}
+
 /**
  * What `automation.enable` returns: the definition is enabled and its
  * revision advances at once; each supported trigger that is not already
- * listening starts a new STARTING generation; unsupported triggers stay
- * paused without an activation reason.
+ * listening starts a new STARTING generation; an unsupported trigger that is
+ * not paused is paused on a new generation, and every unsupported trigger
+ * loses its activation reason. Retained records are untouched.
  */
 export function backendEnable(agent: EventAgentFixture): EventAgentFixture {
   return {
@@ -85,7 +94,9 @@ export function backendEnable(agent: EventAgentFixture): EventAgentFixture {
     managementRevision: agent.managementRevision + 1,
     configuredTriggers: agent.configuredTriggers.map((trigger) => {
       if (trigger.capability.status !== 'SUPPORTED') {
-        return triggerInBackendState(trigger, 'PAUSED');
+        return trigger.activationState === 'PAUSED'
+          ? { ...trigger, pausedReasonCode: null }
+          : pausedOnNewGeneration(trigger);
       }
       if (trigger.activationState === 'ACTIVE' && trigger.isEnabled) {
         return trigger;
@@ -108,40 +119,41 @@ export function backendActivate(agent: EventAgentFixture): EventAgentFixture {
   };
 }
 
-/** What `automation.pause` returns: definition disabled, every trigger paused on a new generation. */
+/**
+ * What `automation.pause` returns: definition disabled, and every trigger of
+ * the definition, configured or retained, paused on a new generation.
+ */
 export function backendPause(agent: EventAgentFixture): EventAgentFixture {
   return {
     ...agent,
     isEnabled: false,
     managementRevision: agent.managementRevision + 1,
-    configuredTriggers: agent.configuredTriggers.map((trigger) => ({
-      ...triggerInBackendState(trigger, 'PAUSED'),
-      activationGeneration: trigger.activationGeneration + 1,
-    })),
+    configuredTriggers: agent.configuredTriggers.map(pausedOnNewGeneration),
+    retainedTriggers: agent.retainedTriggers.map(pausedOnNewGeneration),
   };
 }
 
 /**
  * How an automation reads after `automation.resetSource`: every trigger on the
- * source is paused on a new generation and the source reads reset. The
- * definition keeps its enabled flag and management revision.
+ * source, configured or retained, is paused on a new generation and the source
+ * reads reset. The definition keeps its enabled flag and management revision.
  */
 export function backendResetSource(
   agent: EventAgentFixture,
   connectionId: string,
   updatedAt: string
 ): EventAgentFixture {
+  const reset = (trigger: EventTriggerFixture): EventTriggerFixture =>
+    trigger.configuration?.connectionId === connectionId
+      ? {
+          ...pausedOnNewGeneration(trigger),
+          sourceHealth: { state: 'DISCONNECTED', reasonCode: 'GITHUB_SOURCE_RESET', updatedAt },
+        }
+      : trigger;
   return {
     ...agent,
-    configuredTriggers: agent.configuredTriggers.map((trigger) =>
-      trigger.configuration?.connectionId === connectionId
-        ? {
-            ...triggerInBackendState(trigger, 'PAUSED'),
-            activationGeneration: trigger.activationGeneration + 1,
-            sourceHealth: { state: 'DISCONNECTED', reasonCode: 'GITHUB_SOURCE_RESET', updatedAt },
-          }
-        : trigger
-    ),
+    configuredTriggers: agent.configuredTriggers.map(reset),
+    retainedTriggers: agent.retainedTriggers.map(reset),
   };
 }
 
