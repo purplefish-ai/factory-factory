@@ -89,8 +89,11 @@ it('blocks Abandon when a child appears after the recovery observation', async (
   const read = workspaces.workspaceRelationshipsService.findChildRestFacts.bind(
     workspaces.workspaceRelationshipsService
   );
-  vi.spyOn(workspaces.workspaceRelationshipsService, 'findChildRestFacts').mockImplementation(
-    async (...args) => {
+  // The pre-stop observation is accurate; the child appears right after the final
+  // post-stop observation, so only the owner transaction's ID check can catch it.
+  vi.spyOn(workspaces.workspaceRelationshipsService, 'findChildRestFacts')
+    .mockImplementationOnce(read)
+    .mockImplementationOnce(async (...args) => {
       const stale = await read(...args);
       await h.creation.create({
         projectId: h.workspaceSource.projectId,
@@ -99,10 +102,9 @@ it('blocks Abandon when a child appears after the recovery observation', async (
         parentWorkspaceId: h.claim.reservedWorkspaceId,
       });
       return stale;
-    }
-  );
+    });
   expect(
     await consumer.resolveAmbiguousRun({ ...(await context()), action: 'ABANDON' })
-  ).toMatchObject({ status: 'BLOCKED' });
+  ).toMatchObject({ status: 'BLOCKED', reason: 'CHILD_WORK_UNPROVEN' });
   expect(await row()).toMatchObject({ status: 'RUNNING' });
 });

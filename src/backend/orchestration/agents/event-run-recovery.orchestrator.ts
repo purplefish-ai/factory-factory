@@ -55,8 +55,9 @@ export async function inspectEventRun(input: EventRunRecoveryContext) {
     ...inspection,
     childHold: inspection.childHold && {
       ...inspection.childHold,
-      // Mirrors ABANDON: the own outcome is kept only when the run's own work was idle.
-      keepsOutcome: !!observation && childHeldOutcome(outcome, 0) !== null,
+      // Mirrors ABANDON: FAILED is always kept; COMPLETED only when the run's own work was idle.
+      keepsOutcome:
+        outcome === 'FAILED' || (!!observation && childHeldOutcome(outcome, 0) !== null),
     },
     retryResourcesAvailable: resources.available,
     retryBlocked: resources.available ? null : 'RESOURCES_UNAVAILABLE',
@@ -134,12 +135,18 @@ async function stopAndObserve(input: EventRunRecoveryInput, check: () => void) {
   if (observation?.proof.mode !== 'STOPPED') {
     return blocked('WORK_PROOF_UNAVAILABLE');
   }
+  // Re-observe after the stop await so RESOLVE/RETRY decide on the freshest child state.
+  const settledRest = await observeChildRest(input.claim.reservedWorkspaceId);
+  current();
+  if (!settledRest.atRest && input.action !== 'ABANDON') {
+    return blocked('CHILD_WORK_UNPROVEN');
+  }
   return {
     status: 'PROVED' as const,
     current,
     observation,
     stopped,
-    children: { rest, ownWorkIdle },
+    children: { rest: settledRest, ownWorkIdle },
   };
 }
 /** Called only after the consumer synchronously fences the exact old operation. */

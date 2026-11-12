@@ -45,7 +45,10 @@ export function eventChildRest(children: z.input<typeof childSchema>[]): EventCh
   });
 }
 
-/** Bounded settlement proof: state counts plus at most 20 children that were still held. */
+/**
+ * Bounded settlement proof: state counts plus at most 20 children that were still held.
+ * `observedAt` is when the owner accepted the observation against the current child set.
+ */
 export const eventChildRestProofSchema = z.strictObject({
   version: z.literal(1),
   observedAt: z.iso.datetime(),

@@ -452,11 +452,15 @@ it('offers only Abandon for a child-held run and keeps its outcome through the p
     },
   });
   expect(inspection.body.result.data.json.childHold.deadlineAt).toEqual(expect.any(String));
+  const before = await db.prisma.agentRun.findUniqueOrThrow({ where: { id: scope.runId } });
   for (const blockedAction of ['RESOLVE', 'RETRY'] as const) {
     expect((await action({ ...input, action: blockedAction })).body.result.data.json).toEqual({
       status: 'BLOCKED',
       reason: 'CHILD_WORK_UNPROVEN',
     });
+    expect(await db.prisma.agentRun.findUniqueOrThrow({ where: { id: scope.runId } })).toEqual(
+      before
+    );
   }
   expect((await action({ ...input, action: 'ABANDON' })).body.result.data.json).toEqual({
     status: 'ABANDONED',

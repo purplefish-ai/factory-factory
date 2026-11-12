@@ -530,7 +530,8 @@ it.each(['missing', 'corrupt'] as const)(
       { retentionDays: 1 },
       new AbortController().signal
     );
-    expect(preview).toMatchObject({ inspected: 1, eligible: 1, retained: {} });
+    expect(preview).toMatchObject({ inspected: 1, eligible: 1 });
+    expect(preview.retained).toEqual({});
     // Preview is read-only.
     expect(await read()).toEqual(run);
   }

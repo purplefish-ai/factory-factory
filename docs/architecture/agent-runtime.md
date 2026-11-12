@@ -1958,18 +1958,19 @@ preparation blocks. Child work is its own `childHold` block: the held children
 While it is present only ABANDON is offered; RESOLVE and RETRY return
 `CHILD_WORK_UNPROVEN`. Inspection and actions compare their child observation
 with the current child set and fail (CONFLICT or `CHILD_WORK_UNPROVEN`) when a
-child appeared in between. ABANDON of a run whose own initial turn completed or
-failed and whose own work was idle keeps that outcome (`COMPLETED`, `PR_CREATED`
-or `FAILED`) with reason `ABANDONED_WITH_CHILD_WORK`; a cancelled initial turn
-stays `CANCELLED`. ABANDON never stops children, and once a run is terminal by
-any path its children no longer block run-context expiry. Missing directory,
-frozen account or session resources prevent RETRY; otherwise supported
-RESOLVE/ABANDON still depend on authoritative stopped-source and current
-tracked-work proof. PENDING delivery means UNSENT, while incomplete setup
-retains its preparation hold. Manual retry keeps the logical run, reserved
-workspace/session/account, original message, setup start, inherited automatic
-attempt budget and initial outcome; it rotates only the current send identity
-and send generation.
+child appeared in between; RESOLVE and RETRY observe children again after the
+recovery stop. ABANDON with children still held records reason
+`ABANDONED_WITH_CHILD_WORK`. A failed initial turn stays `FAILED`, as for any
+ABANDON; a completed one keeps `COMPLETED` or `PR_CREATED` when the run's own
+work was idle before the recovery stop; a cancelled initial turn stays
+`CANCELLED`. ABANDON never stops children, and once a run is terminal by any
+path its children no longer block run-context expiry. Missing directory, frozen
+account or session resources prevent RETRY; otherwise supported RESOLVE/ABANDON
+still depend on authoritative stopped-source and current tracked-work proof.
+PENDING delivery means UNSENT, while incomplete setup retains its preparation
+hold. Manual retry keeps the logical run, reserved workspace/session/account,
+original message, setup start, inherited automatic attempt budget and initial
+outcome; it rotates only the current send identity and send generation.
 
 The boundary uses existing socket locality, configured CIDRs, browser Origin and
 explicit proxy trust rules. Origin-less loopback and other same-user local
