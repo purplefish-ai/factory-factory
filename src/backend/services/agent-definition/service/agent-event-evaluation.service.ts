@@ -69,6 +69,11 @@ export class AgentEventEvaluationService {
   private cursor: EvaluationCursor | null = null;
   constructor(private readonly ports: AgentEvaluationPorts) {}
 
+  /** Starts the next pass from the first trigger, so newly activated triggers are not passed over. */
+  restartRotation() {
+    this.cursor = null;
+  }
+
   async evaluatePendingEvents(signal: AbortSignal) {
     if (signal.aborted) {
       return;

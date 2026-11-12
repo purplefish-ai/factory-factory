@@ -90,7 +90,7 @@ export const EnableShowsTestMessage: Story = {
     const canvas = within(canvasElement);
     await userEvent.click(await canvas.findByRole('button', { name: 'Enable' }));
     await expect(await canvas.findByText('Connecting…')).toBeVisible();
-    await expect(canvas.getByText('Factory Factory check 7kq2-m9xh-c4tr')).toBeVisible();
+    await expect(canvas.getByText('Factory Factory check r5tc-8mzk-q2ye')).toBeVisible();
     await expect(canvas.getByRole('button', { name: 'Copy message' })).toBeVisible();
     await expect(canvas.getByRole('button', { name: 'Pause' })).toBeEnabled();
   },

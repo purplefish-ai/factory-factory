@@ -105,25 +105,32 @@ export function slackTriggerFixture(channelIds: string[] = ['C1']): EventTrigger
 
 /** What Enable shows for a Slack trigger: a fresh code, every channel waiting, ten minutes. */
 export interface SlackEnableFixture {
-  message: string;
+  /** The message for a trigger's new generation; the backend issues a new code each time. */
+  message: (triggerId: string, generation: number) => string;
   startedAt: string;
   /** Channel names Enable verified, by ID; the backend stores null when none was resolved. */
   channelNames: Record<string, string>;
 }
+const FIXTURE_CODES = ['7kq2-m9xh-c4tr', '3jw8-p2nd-v6hx', 'r5tc-8mzk-q2ye'];
 const SLACK_ENABLE: SlackEnableFixture = {
-  message: 'Factory Factory check 7kq2-m9xh-c4tr',
+  message: (triggerId, generation) => {
+    const index = [...triggerId].reduce((sum, character) => sum + character.charCodeAt(0), 0);
+    const code = FIXTURE_CODES[(index + generation - 1) % FIXTURE_CODES.length];
+    return `Factory Factory check ${code}`;
+  },
   startedAt: '2026-11-12T09:00:00.000Z',
   channelNames: { C1: '#support', C2: '#customer-feedback' },
 };
-function slackPending(trigger: EventTriggerFixture, slack: SlackEnableFixture) {
+function slackPending(trigger: EventTriggerFixture, generation: number, slack: SlackEnableFixture) {
   const configuration = trigger.configuration;
   if (configuration?.type !== 'SLACK_MESSAGE') {
     return null;
   }
   return {
-    message: slack.message,
+    message: slack.message(trigger.id, generation),
     expiresAt: new Date(Date.parse(slack.startedAt) + 10 * 60 * 1000).toISOString(),
-    channels: configuration.config.channelIds.map((channelId) => ({
+    // The backend lists each selected channel once.
+    channels: [...new Set(configuration.config.channelIds)].map((channelId) => ({
       channelId,
       name: slack.channelNames[channelId] ?? null,
       verified: false,
@@ -166,7 +173,7 @@ export function backendEnable(
       return {
         ...triggerInBackendState(trigger, 'STARTING'),
         activationGeneration: trigger.activationGeneration + 1,
-        pendingVerification: slackPending(trigger, slack),
+        pendingVerification: slackPending(trigger, trigger.activationGeneration + 1, slack),
       };
     }),
   };

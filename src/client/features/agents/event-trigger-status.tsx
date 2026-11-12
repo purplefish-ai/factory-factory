@@ -130,9 +130,10 @@ export function EventTriggerCard({ trigger, action }: { trigger: Trigger; action
         Source: {trigger.sourceName ?? 'Name unavailable'} ·{' '}
         {describeSourceHealth(trigger.sourceHealth)}
       </p>
-      {trigger.activationState === 'STARTING' && trigger.pendingVerification && (
-        <SlackVerification pending={trigger.pendingVerification} />
-      )}
+      {/* An unsupported trigger reads Can't run; a message to post would mislead. */}
+      {trigger.capability.status === 'SUPPORTED' &&
+        trigger.activationState === 'STARTING' &&
+        trigger.pendingVerification && <SlackVerification pending={trigger.pendingVerification} />}
       {action}
       <details className="text-xs text-muted-foreground">
         <summary className="cursor-pointer">Details</summary>

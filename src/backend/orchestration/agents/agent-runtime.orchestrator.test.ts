@@ -101,7 +101,7 @@ it('completes pending activations after each source poll in the same job', async
       },
       completeSlackPending: () => {
         calls.push('slack');
-        return Promise.resolve();
+        return Promise.resolve(0);
       },
     }
   );
@@ -114,6 +114,7 @@ it('completes pending activations after each source poll in the same job', async
 it('completes Slack activations before each evaluation pass, so held messages evaluate in the same pass', async () => {
   vi.useFakeTimers();
   const calls: string[] = [];
+  const activated = [1, 0];
   const runtime = createAgentRuntime(
     { pollCycle: async () => undefined },
     {
@@ -122,6 +123,9 @@ it('completes Slack activations before each evaluation pass, so held messages ev
         calls.push('evaluate');
         return Promise.resolve();
       },
+      restartRotation: () => {
+        calls.push('restart');
+      },
       claimNextRun: async () => ({ status: 'DEFERRED', reason: 'EMPTY' }),
     },
     undefined,
@@ -129,13 +133,14 @@ it('completes Slack activations before each evaluation pass, so held messages ev
       completePending: async () => undefined,
       completeSlackPending: () => {
         calls.push('slack');
-        return Promise.resolve();
+        return Promise.resolve(activated.shift() ?? 0);
       },
     }
   );
   runtime.start();
   await vi.advanceTimersByTimeAsync(5000);
-  expect(calls).toEqual(['slack', 'evaluate', 'slack', 'evaluate']);
+  // Only a pass that activated a trigger restarts the rotation before evaluating.
+  expect(calls).toEqual(['slack', 'restart', 'evaluate', 'slack', 'evaluate']);
   await runtime.stop();
 });
 

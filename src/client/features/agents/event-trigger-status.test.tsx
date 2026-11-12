@@ -201,7 +201,7 @@ describe('a Slack trigger waiting for its test message', () => {
       activationState: 'STARTING',
       isEnabled: false,
       pendingVerification: {
-        message: 'Factory Factory check 7kq2-m9xh-c4tr',
+        message: 'Factory Factory check r5tc-8mzk-q2ye',
         expiresAt: '2026-11-12T09:10:00.000Z',
         channels: [
           { channelId: 'C1', name: '#support', verified: false },
@@ -237,7 +237,7 @@ describe('a Slack trigger waiting for its test message', () => {
     await act(() => root.render(<EventTriggerCard trigger={{ ...partly, sourceHealth: ready }} />));
     const section = container.querySelector('section[aria-label="Slack test message"]');
     expect(section?.querySelector('code')?.textContent).toBe(
-      'Factory Factory check 7kq2-m9xh-c4tr'
+      'Factory Factory check r5tc-8mzk-q2ye'
     );
     const items = [...(section?.querySelectorAll('li') ?? [])].map((item) => item.textContent);
     expect(items).toEqual(['#supportReceived', '#customer-feedbackWaiting']);
@@ -252,7 +252,7 @@ describe('a Slack trigger waiting for its test message', () => {
       copy?.click();
       await Promise.resolve();
     });
-    expect(copied).toEqual(['Factory Factory check 7kq2-m9xh-c4tr']);
+    expect(copied).toEqual(['Factory Factory check r5tc-8mzk-q2ye']);
     expect(container.textContent).toContain('Copied');
   });
 
@@ -266,6 +266,32 @@ describe('a Slack trigger waiting for its test message', () => {
     });
     expect(describeTriggerState(active).label).toBe('Listening');
     await act(() => root.render(<EventTriggerCard trigger={active} />));
+    expect(container.querySelector('section[aria-label="Slack test message"]')).toBeNull();
+  });
+
+  it('gets a new message when enabled again after expiry, as the backend issues a new code', () => {
+    const again = backendEnable(backendExpireActivation(enabled)).configuredTriggers[0]!;
+    expect(again.activationGeneration).toBe(3);
+    expect(again.pendingVerification?.message).toMatch(/^Factory Factory check /);
+    expect(again.pendingVerification?.message).not.toBe(startingSlack.pendingVerification?.message);
+  });
+
+  it('shows no message to post when the trigger can no longer run', async () => {
+    await act(() =>
+      root.render(
+        <EventTriggerCard
+          trigger={{
+            ...startingSlack,
+            capability: {
+              status: 'UNAVAILABLE',
+              reasonCode: 'SLACK_INTAKE_UNAVAILABLE',
+              explanation: 'Slack event intake is not available yet.',
+            },
+          }}
+        />
+      )
+    );
+    expect(container.textContent).toContain("Can't run");
     expect(container.querySelector('section[aria-label="Slack test message"]')).toBeNull();
   });
 

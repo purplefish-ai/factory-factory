@@ -214,7 +214,7 @@ it('starts a supported Slack trigger and shows the test message for its channel'
         capability: { status: 'SUPPORTED' },
         pendingVerification: {
           message: expect.stringMatching(
-            /^Factory Factory check [a-z2-9]{4}-[a-z2-9]{4}-[a-z2-9]{4}$/
+            /^Factory Factory check [a-hjkmnp-z2-9]{4}-[a-hjkmnp-z2-9]{4}-[a-hjkmnp-z2-9]{4}$/
           ),
           channels: [{ channelId: 'C1', name: '#support', verified: false }],
         },

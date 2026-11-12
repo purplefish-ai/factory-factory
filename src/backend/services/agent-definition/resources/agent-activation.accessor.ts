@@ -185,6 +185,24 @@ async function begin(input: BeginActivationInput, now: Date, expiry: ActivationE
   });
 }
 
+/**
+ * An active trigger keeps listening, unless it is a Slack trigger whose boundary
+ * names another workspace or app than Enable just validated: every event from
+ * the new app would fail its identity check, so it needs a fresh test message.
+ */
+function listensAs(trigger: AgentTrigger, slack: SlackActivationSource | undefined) {
+  if (trigger.type !== 'SLACK_MESSAGE') {
+    return true;
+  }
+  const boundary = agentActivationBoundarySchema.safeParse(trigger.activationBoundary);
+  return (
+    boundary.success &&
+    boundary.data.provider === 'SLACK' &&
+    boundary.data.workspaceId === slack?.workspaceId &&
+    boundary.data.appId === slack.appId
+  );
+}
+
 /** Starts each supported trigger that is not already listening; returns the GitHub ones to advance. */
 async function startSupported(
   tx: Tx,
@@ -193,10 +211,10 @@ async function startSupported(
 ) {
   const starting: StartingTrigger[] = [];
   for (const trigger of supported) {
-    if (trigger.activationState === 'ACTIVE' && trigger.isEnabled) {
+    const slack = input.slackSources.find((source) => source.connectionId === trigger.connectionId);
+    if (trigger.activationState === 'ACTIVE' && trigger.isEnabled && listensAs(trigger, slack)) {
       continue;
     }
-    const slack = input.slackSources.find((source) => source.connectionId === trigger.connectionId);
     if (trigger.type === 'SLACK_MESSAGE' && slack) {
       // Slack needs no baseline: each channel's test message becomes its boundary.
       await slackActivationAccessor.start(tx, trigger, {

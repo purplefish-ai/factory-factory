@@ -192,17 +192,24 @@ function verifiedChannel(event: AgentEvent, pending: AgentSlackPendingActivation
 
 /** Records the earliest matching test message as each still-pending channel's boundary. */
 async function verifyChannels(tx: Tx, pending: AgentSlackPendingActivation) {
-  // The code is unique to this generation, so this text prefilter selects a handful of rows.
-  const ids = candidateIds.parse(
-    await tx.$queryRaw`
-      SELECT id FROM AgentEvent
-      WHERE connectionId = ${pending.connectionId} AND payload IS NOT NULL
-        AND instr(lower(json_extract(payload, '$.text')), ${pending.nonce}) > 0
-      ORDER BY id LIMIT 500`
-  );
-  const events = await tx.agentEvent.findMany({
-    where: { id: { in: ids.map((row) => row.id) } },
-  });
+  // One bounded lookup per pending channel, so a busy channel cannot crowd out another. The code
+  // is unique to this generation; verifiedChannel applies every rule exactly afterwards.
+  const ids: string[] = [];
+  for (const channel of pending.channels.filter((entry) => entry.eventTs === null)) {
+    const rows = candidateIds.parse(
+      await tx.$queryRaw`
+        SELECT id FROM AgentEvent
+        WHERE connectionId = ${pending.connectionId} AND payload IS NOT NULL
+          AND json_extract(payload, '$.channelId') = ${channel.channelId}
+          AND json_extract(payload, '$.actorType') = 'HUMAN'
+          AND json_extract(payload, '$.subtype') IS NULL
+          AND json_extract(payload, '$.threadTs') IS NULL
+          AND instr(lower(json_extract(payload, '$.text')), ${pending.nonce}) > 0
+        ORDER BY observedAt, id LIMIT 100`
+    );
+    ids.push(...rows.map((row) => row.id));
+  }
+  const events = await tx.agentEvent.findMany({ where: { id: { in: ids } } });
   const earliest = new Map<string, string>();
   for (const event of events) {
     const match = verifiedChannel(event, pending);

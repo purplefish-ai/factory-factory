@@ -21,9 +21,16 @@ export function slackVerificationMessage(code: string) {
   return `${PREFIX} ${code}`;
 }
 
-/** Slack may keep leading or trailing spaces and a retyped message may differ in case. */
+/**
+ * Slack may keep leading or trailing spaces and a retyped message may differ in
+ * case. Only ASCII letters fold: Unicode case folding would accept look-alikes
+ * such as the Kelvin sign for `k`.
+ */
 function normalize(text: string) {
-  return text.trim().replace(/\s+/g, ' ').toLowerCase();
+  return text
+    .trim()
+    .replace(/\s+/g, ' ')
+    .replace(/[A-Z]/g, (letter) => letter.toLowerCase());
 }
 
 /** The whole message must be the verification message for this code; nothing else matches. */

@@ -491,6 +491,63 @@ it('needs a fresh test message after a pause and re-enable', async () => {
   ]);
 });
 
+it("finds each channel's earliest test message even when another channel has many", async () => {
+  await begin();
+  const text = await message();
+  for (let offset = 10; offset < 130; offset++) {
+    await post('C1', offset, text);
+  }
+  await post('C2', 200, text);
+  await complete();
+  expect(await trigger()).toMatchObject({
+    activationState: 'ACTIVE',
+    activationBoundary: {
+      channels: [
+        { channelId: 'C1', eventTs: `${second + 10}.000100` },
+        { channelId: 'C2', eventTs: `${second + 200}.000100` },
+      ],
+    },
+  });
+});
+
+it('asks for a fresh test message when Enable finds an active trigger on another Slack app', async () => {
+  await begin();
+  const text = await message();
+  await post('C1', 10, text);
+  await post('C2', 11, text);
+  await complete();
+  expect((await trigger()).activationState).toBe('ACTIVE');
+  // A new app-level token for another app; the active boundary still names the old one.
+  await db.prisma.agentConnection.update({ where: { id: connectionId }, data: { appId: 'A2' } });
+  await begin({ slackSources: [{ connectionId, workspaceId: 'T1', appId: 'A2' }] });
+  expect(await trigger()).toMatchObject({
+    activationState: 'STARTING',
+    activationGeneration: 2,
+    activationBoundary: null,
+    pendingActivation: { appId: 'A2' },
+  });
+  // The same app keeps an active trigger listening.
+  await db.prisma.agentTrigger.update({
+    where: { id: triggerId },
+    data: {
+      activationState: 'ACTIVE',
+      isEnabled: true,
+      pendingActivation: Prisma.DbNull,
+      activationBoundary: {
+        provider: 'SLACK',
+        workspaceId: 'T1',
+        appId: 'A2',
+        channels: [
+          { channelId: 'C1', eventTs: `${second + 10}.000100` },
+          { channelId: 'C2', eventTs: `${second + 11}.000100` },
+        ],
+      },
+    },
+  });
+  await begin({ slackSources: [{ connectionId, workspaceId: 'T1', appId: 'A2' }] });
+  expect(await trigger()).toMatchObject({ activationState: 'ACTIVE', activationGeneration: 2 });
+});
+
 it('never runs a test message for another automation listening in the same channel', async () => {
   const other = await db.prisma.agentDefinition.create({
     data: {

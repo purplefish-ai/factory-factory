@@ -69,14 +69,21 @@ export class AgentActivationService {
     await this.advance(await agentActivationAccessor.listStarting(), signal);
   }
 
-  /** Database-only, so it runs with each evaluation pass and a test message counts within seconds. */
+  /**
+   * Database-only, so it runs with each evaluation pass and a test message counts
+   * within seconds. Returns how many triggers it activated.
+   */
   async completeSlackPending(signal: AbortSignal) {
+    let activated = 0;
     for (const trigger of await slackActivationAccessor.listStarting()) {
       if (signal.aborted) {
-        return;
+        break;
       }
-      await slackActivationAccessor.complete(trigger, this.now());
+      if ((await slackActivationAccessor.complete(trigger, this.now())) === 'ACTIVATED') {
+        activated++;
+      }
     }
+    return activated;
   }
 
   pause(input: unknown) {

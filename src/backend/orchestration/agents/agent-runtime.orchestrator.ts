@@ -36,6 +36,8 @@ type LaunchLifetime = Pick<
 type LaunchClaim = Extract<AgentClaimResult, { status: 'CLAIMED' }>;
 type EvaluationWorker = {
   evaluatePendingEvents(signal: AbortSignal): Promise<void>;
+  /** Forget the rotation cursor so the next pass starts from the first trigger. */
+  restartRotation?: () => void;
   maintainQueue(): Promise<void>;
   pruneExpired?: (signal: AbortSignal) => Promise<unknown>;
   claimNextRun(): Promise<AgentClaimResult>;
@@ -87,6 +89,7 @@ export function createAgentRuntime(
     poller,
     {
       evaluatePendingEvents: (signal) => evaluator.evaluatePendingEvents(signal),
+      restartRotation: () => evaluator.restartRotation(),
       maintainQueue,
       pruneExpired: (signal) => retention.pruneExpired(signal),
       claimNextRun,
@@ -161,9 +164,7 @@ export function createAgentRuntimeLifecycle(
         if (signal.aborted) {
           return;
         }
-        // Slack test messages are already in the ledger; activating first lets this same pass
-        // evaluate the messages that were held while the trigger was STARTING.
-        await activation?.completeSlackPending(signal);
+        await completeSlackActivations(worker, activation, signal);
         if (signal.aborted) {
           return;
         }
@@ -238,6 +239,20 @@ export async function resolveAgentExecutionConfig(
     model: requestedModel,
     ...(result.requestedEffort !== null && reasoningEffort ? { reasoningEffort } : {}),
   });
+}
+
+/**
+ * Slack test messages are already in the ledger. Activating first, then restarting the
+ * rotation, lets the same pass evaluate the messages held while a trigger was STARTING.
+ */
+async function completeSlackActivations(
+  worker: EvaluationWorker,
+  activation: Pick<AgentActivationService, 'completeSlackPending'> | undefined,
+  signal: AbortSignal
+) {
+  if (await activation?.completeSlackPending(signal)) {
+    worker.restartRotation?.();
+  }
 }
 
 async function pruneLedger(worker: EvaluationWorker, signal: AbortSignal) {

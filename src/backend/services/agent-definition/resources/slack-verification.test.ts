@@ -31,6 +31,8 @@ describe('Slack verification messages', () => {
       'Factory Factory check abcd-efgh-jkmp',
       'abcd-efgh-jkmn',
       '',
+      // Unicode case folding would turn the Kelvin sign into k.
+      'Factory Factory check abcd-efgh-j\u212Amn',
     ]) {
       expect(isSlackVerificationFor(text, 'abcd-efgh-jkmn')).toBe(false);
     }

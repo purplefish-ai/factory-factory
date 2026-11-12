@@ -41,7 +41,7 @@ export function SlackVerification({ pending }: { pending: PendingVerification })
           {copied ? 'Copied' : 'Copy message'}
         </Button>
       </div>
-      <ul className="space-y-1" aria-label="Channels">
+      <ul className="space-y-1" aria-label="Channels" aria-live="polite">
         {pending.channels.map((channel) => (
           <li key={channel.channelId} className="flex flex-wrap justify-between gap-2">
             <span className="min-w-0 break-words">{channel.name ?? channel.channelId}</span>
