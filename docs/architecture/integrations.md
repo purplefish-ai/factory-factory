@@ -841,8 +841,8 @@ classification require their own replay evaluation when the runtime is built.
 
 ### Slack credentials
 
-Settings > General Settings > Slack accepts an existing Slack Bot User OAuth
-Token (`xoxb-` or a rotating `xoxe.xoxb-` access token). Rotating tokens require
+Settings > Integrations > Slack accepts an existing Slack Bot User OAuth Token
+(`xoxb-` or a rotating `xoxe.xoxb-` access token). Rotating tokens require
 manual renewal when they expire; automatic OAuth refresh is not implemented.
 Connect Slack validates it against Slack's `auth.test` endpoint, requires a bot
 identity and workspace ID, and encrypts the token with the existing AES-256-GCM
@@ -850,31 +850,67 @@ encryption service before upserting an `AgentConnection`. Connecting the same
 workspace replaces its token without changing the connection ID or trigger
 references. Multiple workspaces can be connected.
 
-The trusted-local `slack` tRPC router supports list, connect, test and
-disconnect. Its summaries expose workspace name/ID, enabled state and credential
-presence; neither plaintext nor encrypted tokens cross read responses. List
-reads compute credential presence without loading ciphertext. Only the internal
-credential lookup loads the token for decryption. Provider responses are
-Zod-validated, outbound validation has a ten-second timeout, redirects are
-rejected, and provider/transport errors are sanitized rather than echoed.
-Disconnect clears credentials and disables the connection while retaining its
-identity and trigger references. It does not revoke the Slack token.
+Slack event intake uses outbound Socket Mode, which needs an app-level token
+(`xapp-`, or a rotating `xoxe.xapp-` access token that needs manual renewal;
+scope `connections:write`) from the same Slack app as the bot. Each connected
+workspace can save one, encrypted in `appCredentialsEncrypted` separately from
+the bot token. Saving it first checks the saved bot token with `auth.test` (it
+must still identify the connection's workspace), then resolves the bot's app ID
+with `bots.info`, which needs the bot's `users:read` scope. The app ID is stored
+as `appId`; it is never inferred from the token prefix. The app-level token is
+then validated with `apps.connections.open`. Slack's response is only a
+single-use Socket Mode URL: it is discarded immediately and never stored,
+returned or logged. Slack documents no field that names the token's app, so the
+only check is the `app_id` that Slack currently embeds in that URL: a mismatch
+rejects the token, and an absent value is accepted. The Socket Mode listener
+must still require the `hello` message's `connection_info.app_id` and each
+event's `api_app_id` and `team_id` to match the connection. App-level tokens
+belong to an app rather than a workspace, so the workspace match comes from the
+bot token. A save is discarded if the bot credential changed while it was being
+validated. Reconnecting the same workspace with a replacement bot token keeps
+the saved app-level token only when `bots.info` confirms the new bot belongs to
+the stored app; a different app, or a failed lookup, clears the app-level token
+and app ID. Test connection also reports a mismatch between the bot's current
+app and the stored app ID.
+
+The trusted-local `slack` tRPC router supports list, connect, test, disconnect,
+`setAppToken` and `clearAppToken`. Its summaries expose workspace name/ID,
+enabled state, bot and app-level credential presence (`hasCredentials`,
+`hasAppToken`) and `appId`; neither plaintext nor encrypted tokens cross read
+responses. Summary reads compute credential presence without loading ciphertext.
+Only the internal credential lookups load tokens for decryption;
+`getAppCredentials(connectionId)` returns the app-level token, app ID and
+workspace ID for the Socket Mode listener, or null unless the connection is
+enabled with both tokens. Provider responses are Zod-validated, each outbound
+call has a ten-second timeout, redirects are rejected, and provider/transport
+errors are sanitized rather than echoed. Disconnect clears both tokens and the
+app ID and disables the connection while retaining its identity and trigger
+references. Removing only the app-level token keeps the bot connection. Neither
+revokes tokens in Slack.
 
 The UI masks token entry, keeps it out of browser persistence, and clears it
-after a successful save. Existing tokens are never prefilled. Test connection
-uses the stored token and verifies its workspace identity. No signing secret or
-Socket Mode app token is needed for credential validation. Saving a connection
-does not enable event subscriptions, change an existing Slack app's webhook, or
-start automations. Slack event intake is still a separate implementation step.
+after a successful save. Existing tokens are never prefilled; replacing an
+app-level token opens an empty field. Test connection uses the stored bot token
+and verifies its workspace identity; when an app-level token is saved, it also
+re-resolves the bot's app and validates the app-level token. No signing secret
+is needed. Saving credentials does not enable event subscriptions, change an
+existing Slack app's webhook, or start automations.
+
+Slack intake is gated by `AGENT_SLACK_INTAKE_ENABLED`, read through
+`configService.getAgentRuntimeLimits().slackIntakeEnabled`. It is off unless set
+to exactly `true`, and stays off until a live check against a dedicated Slack
+test app passes. The Socket Mode listener is a separate implementation step;
+until it ships, Slack triggers keep reporting `SLACK_INTAKE_UNAVAILABLE`.
 
 These credentials depend on the server's `encryption.key`; retain it with any
 database-file backup. Logical export/import includes Slack connection identity,
-name, source enabled state and timestamps. Recovery restores new identities
-disabled with no token; existing connection IDs or Slack workspace identities
-are skipped without updates. Reconnect manually in Slack settings using a new
-bot token. GitHub connections, connection bindings, event configuration and
-automation execution history remain excluded; tokens and encryption keys never
-appear in logical exports.
+name, source enabled state and timestamps, but not the app-level token or app
+ID. Recovery restores new identities disabled with no tokens; existing
+connection IDs or Slack workspace identities are skipped without updates.
+Reconnect manually in Slack settings using a new bot token, then add the
+app-level token again. GitHub connections, connection bindings, event
+configuration and automation execution history remain excluded; tokens and
+encryption keys never appear in logical exports.
 
 ## Client query transport
 

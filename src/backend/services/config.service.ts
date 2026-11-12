@@ -383,6 +383,8 @@ function loadAgentRuntimeLimits() {
     evaluationBatchSize: 100,
     queueBatchSize: 100,
     retryDelaysMs: [30_000, 120_000, 600_000],
+    /** Slack Socket Mode intake stays off until a live check against a test app passes. */
+    slackIntakeEnabled: env.AGENT_SLACK_INTAKE_ENABLED,
   };
 }
 

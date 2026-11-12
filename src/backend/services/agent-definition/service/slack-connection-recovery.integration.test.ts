@@ -177,6 +177,30 @@ describe('global occupied identities', () => {
   });
 });
 
+it('never exports or restores Slack app-level tokens or app identity', async () => {
+  identify('T-app');
+  const saved = await service.connect({ botToken: 'xoxb-source-app' });
+  await db.prisma.agentConnection.update({
+    where: { id: saved.id },
+    data: { appCredentialsEncrypted: 'encrypted:xapp-1-secret', appId: 'A-app' },
+  });
+  const exported = await recovery.exportSlackConnectionsRecovery(db.prisma);
+  expect(exported.connections).toEqual([expect.objectContaining({ id: saved.id })]);
+  expect(JSON.stringify(exported)).not.toMatch(/xapp|A-app|appCredentials|appId/);
+
+  await db.prisma.agentConnection.deleteMany();
+  const plan = await recovery.planSlackConnectionsRecovery(db.prisma, exported);
+  await recovery.restoreSlackConnectionsRecovery(db.prisma, plan);
+  expect(
+    await db.prisma.agentConnection.findUniqueOrThrow({ where: { id: saved.id } })
+  ).toMatchObject({
+    isEnabled: false,
+    credentialsEncrypted: null,
+    appCredentialsEncrypted: null,
+    appId: null,
+  });
+});
+
 function runtimeState() {
   return Promise.all([
     db.prisma.agentDefinition.findMany(),

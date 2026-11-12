@@ -120,6 +120,7 @@ export const ConfigEnvSchema = z.object({
   AGENT_ACTIVE_PER_DEFINITION: PositiveIntEnvSchema.catch(1),
   AGENT_ACTIVE_GLOBAL: PositiveIntEnvSchema.catch(4),
   AGENT_WAITING_PER_DEFINITION: PositiveIntEnvSchema.catch(100),
+  AGENT_SLACK_INTAKE_ENABLED: z.preprocess(parseBoolean, z.boolean()).catch(false),
   PR_DISCOVERY_CANDIDATE_LIMIT: PositiveIntEnvSchema.catch(100),
   PR_DISCOVERY_REPOSITORY_LIMIT: PositiveIntEnvSchema.catch(10),
   WEBSOCKET_MAX_FRAME_BYTES: z.coerce

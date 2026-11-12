@@ -81,6 +81,8 @@ export function eventProjectSourcesFixture(
           workspaceId: 'fixture-workspace',
           isEnabled: true,
           hasCredentials: false,
+          hasAppToken: false,
+          appId: null,
         },
       ],
       ...(connectionId === 'fixture-slack'

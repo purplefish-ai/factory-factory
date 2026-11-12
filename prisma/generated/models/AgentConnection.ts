@@ -31,6 +31,8 @@ export type AgentConnectionMinAggregateOutputType = {
   name: string | null
   isEnabled: boolean | null
   credentialsEncrypted: string | null
+  appCredentialsEncrypted: string | null
+  appId: string | null
   createdAt: Date | null
   updatedAt: Date | null
 }
@@ -42,6 +44,8 @@ export type AgentConnectionMaxAggregateOutputType = {
   name: string | null
   isEnabled: boolean | null
   credentialsEncrypted: string | null
+  appCredentialsEncrypted: string | null
+  appId: string | null
   createdAt: Date | null
   updatedAt: Date | null
 }
@@ -53,6 +57,8 @@ export type AgentConnectionCountAggregateOutputType = {
   name: number
   isEnabled: number
   credentialsEncrypted: number
+  appCredentialsEncrypted: number
+  appId: number
   createdAt: number
   updatedAt: number
   _all: number
@@ -66,6 +72,8 @@ export type AgentConnectionMinAggregateInputType = {
   name?: true
   isEnabled?: true
   credentialsEncrypted?: true
+  appCredentialsEncrypted?: true
+  appId?: true
   createdAt?: true
   updatedAt?: true
 }
@@ -77,6 +85,8 @@ export type AgentConnectionMaxAggregateInputType = {
   name?: true
   isEnabled?: true
   credentialsEncrypted?: true
+  appCredentialsEncrypted?: true
+  appId?: true
   createdAt?: true
   updatedAt?: true
 }
@@ -88,6 +98,8 @@ export type AgentConnectionCountAggregateInputType = {
   name?: true
   isEnabled?: true
   credentialsEncrypted?: true
+  appCredentialsEncrypted?: true
+  appId?: true
   createdAt?: true
   updatedAt?: true
   _all?: true
@@ -172,6 +184,8 @@ export type AgentConnectionGroupByOutputType = {
   name: string
   isEnabled: boolean
   credentialsEncrypted: string | null
+  appCredentialsEncrypted: string | null
+  appId: string | null
   createdAt: Date
   updatedAt: Date
   _count: AgentConnectionCountAggregateOutputType | null
@@ -204,6 +218,8 @@ export type AgentConnectionWhereInput = {
   name?: Prisma.StringFilter<"AgentConnection"> | string
   isEnabled?: Prisma.BoolFilter<"AgentConnection"> | boolean
   credentialsEncrypted?: Prisma.StringNullableFilter<"AgentConnection"> | string | null
+  appCredentialsEncrypted?: Prisma.StringNullableFilter<"AgentConnection"> | string | null
+  appId?: Prisma.StringNullableFilter<"AgentConnection"> | string | null
   createdAt?: Prisma.DateTimeFilter<"AgentConnection"> | Date | string
   updatedAt?: Prisma.DateTimeFilter<"AgentConnection"> | Date | string
   triggers?: Prisma.AgentTriggerListRelationFilter
@@ -218,6 +234,8 @@ export type AgentConnectionOrderByWithRelationInput = {
   name?: Prisma.SortOrder
   isEnabled?: Prisma.SortOrder
   credentialsEncrypted?: Prisma.SortOrderInput | Prisma.SortOrder
+  appCredentialsEncrypted?: Prisma.SortOrderInput | Prisma.SortOrder
+  appId?: Prisma.SortOrderInput | Prisma.SortOrder
   createdAt?: Prisma.SortOrder
   updatedAt?: Prisma.SortOrder
   triggers?: Prisma.AgentTriggerOrderByRelationAggregateInput
@@ -236,6 +254,8 @@ export type AgentConnectionWhereUniqueInput = Prisma.AtLeast<{
   name?: Prisma.StringFilter<"AgentConnection"> | string
   isEnabled?: Prisma.BoolFilter<"AgentConnection"> | boolean
   credentialsEncrypted?: Prisma.StringNullableFilter<"AgentConnection"> | string | null
+  appCredentialsEncrypted?: Prisma.StringNullableFilter<"AgentConnection"> | string | null
+  appId?: Prisma.StringNullableFilter<"AgentConnection"> | string | null
   createdAt?: Prisma.DateTimeFilter<"AgentConnection"> | Date | string
   updatedAt?: Prisma.DateTimeFilter<"AgentConnection"> | Date | string
   triggers?: Prisma.AgentTriggerListRelationFilter
@@ -250,6 +270,8 @@ export type AgentConnectionOrderByWithAggregationInput = {
   name?: Prisma.SortOrder
   isEnabled?: Prisma.SortOrder
   credentialsEncrypted?: Prisma.SortOrderInput | Prisma.SortOrder
+  appCredentialsEncrypted?: Prisma.SortOrderInput | Prisma.SortOrder
+  appId?: Prisma.SortOrderInput | Prisma.SortOrder
   createdAt?: Prisma.SortOrder
   updatedAt?: Prisma.SortOrder
   _count?: Prisma.AgentConnectionCountOrderByAggregateInput
@@ -267,6 +289,8 @@ export type AgentConnectionScalarWhereWithAggregatesInput = {
   name?: Prisma.StringWithAggregatesFilter<"AgentConnection"> | string
   isEnabled?: Prisma.BoolWithAggregatesFilter<"AgentConnection"> | boolean
   credentialsEncrypted?: Prisma.StringNullableWithAggregatesFilter<"AgentConnection"> | string | null
+  appCredentialsEncrypted?: Prisma.StringNullableWithAggregatesFilter<"AgentConnection"> | string | null
+  appId?: Prisma.StringNullableWithAggregatesFilter<"AgentConnection"> | string | null
   createdAt?: Prisma.DateTimeWithAggregatesFilter<"AgentConnection"> | Date | string
   updatedAt?: Prisma.DateTimeWithAggregatesFilter<"AgentConnection"> | Date | string
 }
@@ -278,6 +302,8 @@ export type AgentConnectionCreateInput = {
   name: string
   isEnabled?: boolean
   credentialsEncrypted?: string | null
+  appCredentialsEncrypted?: string | null
+  appId?: string | null
   createdAt?: Date | string
   updatedAt?: Date | string
   triggers?: Prisma.AgentTriggerCreateNestedManyWithoutConnectionInput
@@ -292,6 +318,8 @@ export type AgentConnectionUncheckedCreateInput = {
   name: string
   isEnabled?: boolean
   credentialsEncrypted?: string | null
+  appCredentialsEncrypted?: string | null
+  appId?: string | null
   createdAt?: Date | string
   updatedAt?: Date | string
   triggers?: Prisma.AgentTriggerUncheckedCreateNestedManyWithoutConnectionInput
@@ -306,6 +334,8 @@ export type AgentConnectionUpdateInput = {
   name?: Prisma.StringFieldUpdateOperationsInput | string
   isEnabled?: Prisma.BoolFieldUpdateOperationsInput | boolean
   credentialsEncrypted?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  appCredentialsEncrypted?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  appId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   triggers?: Prisma.AgentTriggerUpdateManyWithoutConnectionNestedInput
@@ -320,6 +350,8 @@ export type AgentConnectionUncheckedUpdateInput = {
   name?: Prisma.StringFieldUpdateOperationsInput | string
   isEnabled?: Prisma.BoolFieldUpdateOperationsInput | boolean
   credentialsEncrypted?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  appCredentialsEncrypted?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  appId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   triggers?: Prisma.AgentTriggerUncheckedUpdateManyWithoutConnectionNestedInput
@@ -334,6 +366,8 @@ export type AgentConnectionCreateManyInput = {
   name: string
   isEnabled?: boolean
   credentialsEncrypted?: string | null
+  appCredentialsEncrypted?: string | null
+  appId?: string | null
   createdAt?: Date | string
   updatedAt?: Date | string
 }
@@ -345,6 +379,8 @@ export type AgentConnectionUpdateManyMutationInput = {
   name?: Prisma.StringFieldUpdateOperationsInput | string
   isEnabled?: Prisma.BoolFieldUpdateOperationsInput | boolean
   credentialsEncrypted?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  appCredentialsEncrypted?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  appId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
 }
@@ -356,6 +392,8 @@ export type AgentConnectionUncheckedUpdateManyInput = {
   name?: Prisma.StringFieldUpdateOperationsInput | string
   isEnabled?: Prisma.BoolFieldUpdateOperationsInput | boolean
   credentialsEncrypted?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  appCredentialsEncrypted?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  appId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
 }
@@ -372,6 +410,8 @@ export type AgentConnectionCountOrderByAggregateInput = {
   name?: Prisma.SortOrder
   isEnabled?: Prisma.SortOrder
   credentialsEncrypted?: Prisma.SortOrder
+  appCredentialsEncrypted?: Prisma.SortOrder
+  appId?: Prisma.SortOrder
   createdAt?: Prisma.SortOrder
   updatedAt?: Prisma.SortOrder
 }
@@ -383,6 +423,8 @@ export type AgentConnectionMaxOrderByAggregateInput = {
   name?: Prisma.SortOrder
   isEnabled?: Prisma.SortOrder
   credentialsEncrypted?: Prisma.SortOrder
+  appCredentialsEncrypted?: Prisma.SortOrder
+  appId?: Prisma.SortOrder
   createdAt?: Prisma.SortOrder
   updatedAt?: Prisma.SortOrder
 }
@@ -394,6 +436,8 @@ export type AgentConnectionMinOrderByAggregateInput = {
   name?: Prisma.SortOrder
   isEnabled?: Prisma.SortOrder
   credentialsEncrypted?: Prisma.SortOrder
+  appCredentialsEncrypted?: Prisma.SortOrder
+  appId?: Prisma.SortOrder
   createdAt?: Prisma.SortOrder
   updatedAt?: Prisma.SortOrder
 }
@@ -463,6 +507,8 @@ export type AgentConnectionCreateWithoutTriggersInput = {
   name: string
   isEnabled?: boolean
   credentialsEncrypted?: string | null
+  appCredentialsEncrypted?: string | null
+  appId?: string | null
   createdAt?: Date | string
   updatedAt?: Date | string
   sourceState?: Prisma.AgentSourceStateCreateNestedOneWithoutConnectionInput
@@ -476,6 +522,8 @@ export type AgentConnectionUncheckedCreateWithoutTriggersInput = {
   name: string
   isEnabled?: boolean
   credentialsEncrypted?: string | null
+  appCredentialsEncrypted?: string | null
+  appId?: string | null
   createdAt?: Date | string
   updatedAt?: Date | string
   sourceState?: Prisma.AgentSourceStateUncheckedCreateNestedOneWithoutConnectionInput
@@ -505,6 +553,8 @@ export type AgentConnectionUpdateWithoutTriggersInput = {
   name?: Prisma.StringFieldUpdateOperationsInput | string
   isEnabled?: Prisma.BoolFieldUpdateOperationsInput | boolean
   credentialsEncrypted?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  appCredentialsEncrypted?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  appId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   sourceState?: Prisma.AgentSourceStateUpdateOneWithoutConnectionNestedInput
@@ -518,6 +568,8 @@ export type AgentConnectionUncheckedUpdateWithoutTriggersInput = {
   name?: Prisma.StringFieldUpdateOperationsInput | string
   isEnabled?: Prisma.BoolFieldUpdateOperationsInput | boolean
   credentialsEncrypted?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  appCredentialsEncrypted?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  appId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   sourceState?: Prisma.AgentSourceStateUncheckedUpdateOneWithoutConnectionNestedInput
@@ -531,6 +583,8 @@ export type AgentConnectionCreateWithoutSourceStateInput = {
   name: string
   isEnabled?: boolean
   credentialsEncrypted?: string | null
+  appCredentialsEncrypted?: string | null
+  appId?: string | null
   createdAt?: Date | string
   updatedAt?: Date | string
   triggers?: Prisma.AgentTriggerCreateNestedManyWithoutConnectionInput
@@ -544,6 +598,8 @@ export type AgentConnectionUncheckedCreateWithoutSourceStateInput = {
   name: string
   isEnabled?: boolean
   credentialsEncrypted?: string | null
+  appCredentialsEncrypted?: string | null
+  appId?: string | null
   createdAt?: Date | string
   updatedAt?: Date | string
   triggers?: Prisma.AgentTriggerUncheckedCreateNestedManyWithoutConnectionInput
@@ -573,6 +629,8 @@ export type AgentConnectionUpdateWithoutSourceStateInput = {
   name?: Prisma.StringFieldUpdateOperationsInput | string
   isEnabled?: Prisma.BoolFieldUpdateOperationsInput | boolean
   credentialsEncrypted?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  appCredentialsEncrypted?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  appId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   triggers?: Prisma.AgentTriggerUpdateManyWithoutConnectionNestedInput
@@ -586,6 +644,8 @@ export type AgentConnectionUncheckedUpdateWithoutSourceStateInput = {
   name?: Prisma.StringFieldUpdateOperationsInput | string
   isEnabled?: Prisma.BoolFieldUpdateOperationsInput | boolean
   credentialsEncrypted?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  appCredentialsEncrypted?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  appId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   triggers?: Prisma.AgentTriggerUncheckedUpdateManyWithoutConnectionNestedInput
@@ -599,6 +659,8 @@ export type AgentConnectionCreateWithoutEventsInput = {
   name: string
   isEnabled?: boolean
   credentialsEncrypted?: string | null
+  appCredentialsEncrypted?: string | null
+  appId?: string | null
   createdAt?: Date | string
   updatedAt?: Date | string
   triggers?: Prisma.AgentTriggerCreateNestedManyWithoutConnectionInput
@@ -612,6 +674,8 @@ export type AgentConnectionUncheckedCreateWithoutEventsInput = {
   name: string
   isEnabled?: boolean
   credentialsEncrypted?: string | null
+  appCredentialsEncrypted?: string | null
+  appId?: string | null
   createdAt?: Date | string
   updatedAt?: Date | string
   triggers?: Prisma.AgentTriggerUncheckedCreateNestedManyWithoutConnectionInput
@@ -641,6 +705,8 @@ export type AgentConnectionUpdateWithoutEventsInput = {
   name?: Prisma.StringFieldUpdateOperationsInput | string
   isEnabled?: Prisma.BoolFieldUpdateOperationsInput | boolean
   credentialsEncrypted?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  appCredentialsEncrypted?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  appId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   triggers?: Prisma.AgentTriggerUpdateManyWithoutConnectionNestedInput
@@ -654,6 +720,8 @@ export type AgentConnectionUncheckedUpdateWithoutEventsInput = {
   name?: Prisma.StringFieldUpdateOperationsInput | string
   isEnabled?: Prisma.BoolFieldUpdateOperationsInput | boolean
   credentialsEncrypted?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  appCredentialsEncrypted?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  appId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   triggers?: Prisma.AgentTriggerUncheckedUpdateManyWithoutConnectionNestedInput
@@ -707,6 +775,8 @@ export type AgentConnectionSelect<ExtArgs extends runtime.Types.Extensions.Inter
   name?: boolean
   isEnabled?: boolean
   credentialsEncrypted?: boolean
+  appCredentialsEncrypted?: boolean
+  appId?: boolean
   createdAt?: boolean
   updatedAt?: boolean
   triggers?: boolean | Prisma.AgentConnection$triggersArgs<ExtArgs>
@@ -722,6 +792,8 @@ export type AgentConnectionSelectCreateManyAndReturn<ExtArgs extends runtime.Typ
   name?: boolean
   isEnabled?: boolean
   credentialsEncrypted?: boolean
+  appCredentialsEncrypted?: boolean
+  appId?: boolean
   createdAt?: boolean
   updatedAt?: boolean
 }, ExtArgs["result"]["agentConnection"]>
@@ -733,6 +805,8 @@ export type AgentConnectionSelectUpdateManyAndReturn<ExtArgs extends runtime.Typ
   name?: boolean
   isEnabled?: boolean
   credentialsEncrypted?: boolean
+  appCredentialsEncrypted?: boolean
+  appId?: boolean
   createdAt?: boolean
   updatedAt?: boolean
 }, ExtArgs["result"]["agentConnection"]>
@@ -744,11 +818,13 @@ export type AgentConnectionSelectScalar = {
   name?: boolean
   isEnabled?: boolean
   credentialsEncrypted?: boolean
+  appCredentialsEncrypted?: boolean
+  appId?: boolean
   createdAt?: boolean
   updatedAt?: boolean
 }
 
-export type AgentConnectionOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "provider" | "externalId" | "name" | "isEnabled" | "credentialsEncrypted" | "createdAt" | "updatedAt", ExtArgs["result"]["agentConnection"]>
+export type AgentConnectionOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "provider" | "externalId" | "name" | "isEnabled" | "credentialsEncrypted" | "appCredentialsEncrypted" | "appId" | "createdAt" | "updatedAt", ExtArgs["result"]["agentConnection"]>
 export type AgentConnectionInclude<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
   triggers?: boolean | Prisma.AgentConnection$triggersArgs<ExtArgs>
   sourceState?: boolean | Prisma.AgentConnection$sourceStateArgs<ExtArgs>
@@ -772,6 +848,8 @@ export type $AgentConnectionPayload<ExtArgs extends runtime.Types.Extensions.Int
     name: string
     isEnabled: boolean
     credentialsEncrypted: string | null
+    appCredentialsEncrypted: string | null
+    appId: string | null
     createdAt: Date
     updatedAt: Date
   }, ExtArgs["result"]["agentConnection"]>
@@ -1206,6 +1284,8 @@ export interface AgentConnectionFieldRefs {
   readonly name: Prisma.FieldRef<"AgentConnection", 'String'>
   readonly isEnabled: Prisma.FieldRef<"AgentConnection", 'Boolean'>
   readonly credentialsEncrypted: Prisma.FieldRef<"AgentConnection", 'String'>
+  readonly appCredentialsEncrypted: Prisma.FieldRef<"AgentConnection", 'String'>
+  readonly appId: Prisma.FieldRef<"AgentConnection", 'String'>
   readonly createdAt: Prisma.FieldRef<"AgentConnection", 'DateTime'>
   readonly updatedAt: Prisma.FieldRef<"AgentConnection", 'DateTime'>
 }

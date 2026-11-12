@@ -550,6 +550,8 @@ it('persists and reexports meaningful padded workspace identities and raw metada
       ...row,
       isEnabled: false,
       credentialsEncrypted: null,
+      appCredentialsEncrypted: null,
+      appId: null,
       createdAt: new Date(row.createdAt),
       updatedAt: new Date(row.updatedAt),
     }))

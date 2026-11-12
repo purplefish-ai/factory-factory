@@ -7,11 +7,17 @@ import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { slackConnectInputSchema, type SlackConnectionSummary } from '@/shared/slack-connection';
+import { SlackAppTokenControls } from './slack-app-token';
 
 /** The Slack operation in flight; the row or form that started it shows the spinner. */
 export type SlackPendingOperation =
   | { kind: 'connect' }
-  | { kind: 'test' | 'disconnect'; connectionId: string };
+  | {
+      kind: 'test' | 'disconnect' | 'setAppToken' | 'clearAppToken';
+      connectionId: string;
+    };
+
+type OperationResult = { succeeded: boolean; error?: string };
 
 interface SlackConnectionsViewProps {
   connections?: readonly SlackConnectionSummary[];
@@ -23,13 +29,22 @@ interface SlackConnectionsViewProps {
   onTokenChange: (value: string) => void;
   onConnect: () => void;
   onTest: (id: string) => void;
-  onDisconnect: (id: string) => Promise<{ succeeded: boolean; error?: string }>;
+  onDisconnect: (id: string) => Promise<OperationResult>;
+  /** The app-level token being entered for one connection; never prefilled. */
+  appTokenDraft?: { connectionId: string; token: string };
+  onAppTokenEdit: (connectionId: string | undefined) => void;
+  onAppTokenChange: (value: string) => void;
+  onSaveAppToken: () => void;
+  onClearAppToken: (id: string) => Promise<OperationResult>;
 }
 
 export function SlackConnectionsView(props: SlackConnectionsViewProps) {
   const [disconnectId, setDisconnectId] = useState<string>();
   const [disconnectError, setDisconnectError] = useState<string>();
+  const [removeAppId, setRemoveAppId] = useState<string>();
+  const [removeAppError, setRemoveAppError] = useState<string>();
   const busy = props.pending !== undefined;
+  const disconnecting = props.connections?.find((connection) => connection.id === disconnectId);
   const isPending = (kind: SlackPendingOperation['kind'], connectionId?: string) =>
     props.pending?.kind === kind &&
     (props.pending.kind === 'connect' || props.pending.connectionId === connectionId);
@@ -38,8 +53,8 @@ export function SlackConnectionsView(props: SlackConnectionsViewProps) {
       <CardHeader>
         <CardTitle>Slack</CardTitle>
         <CardDescription>
-          Connect a Slack workspace with a bot token. Tokens are encrypted on this Factory Factory
-          server.
+          Connect a Slack workspace with a bot token. Receiving Slack events also needs an app-level
+          token from the same Slack app. Tokens are encrypted on this Factory Factory server.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -90,6 +105,26 @@ export function SlackConnectionsView(props: SlackConnectionsViewProps) {
                   Disconnect
                 </Button>
               </div>
+            )}
+            {connection.hasCredentials && (
+              <SlackAppTokenControls
+                connection={connection}
+                draft={
+                  props.appTokenDraft?.connectionId === connection.id
+                    ? props.appTokenDraft.token
+                    : undefined
+                }
+                busy={busy || !!props.loading}
+                saving={isPending('setAppToken', connection.id)}
+                onEdit={() => props.onAppTokenEdit(connection.id)}
+                onCancel={() => props.onAppTokenEdit(undefined)}
+                onDraftChange={props.onAppTokenChange}
+                onSave={props.onSaveAppToken}
+                onRemove={() => {
+                  setRemoveAppError(undefined);
+                  setRemoveAppId(connection.id);
+                }}
+              />
             )}
           </div>
         ))}
@@ -144,7 +179,7 @@ export function SlackConnectionsView(props: SlackConnectionsViewProps) {
             }
           }}
           title="Disconnect Slack?"
-          description={`Remove the saved bot token from Factory Factory. This does not revoke the token or change your Slack app. You can reconnect with a valid token.${disconnectError ? ` ${disconnectError}` : ''}`}
+          description={`Remove the saved bot token${disconnecting?.hasAppToken ? ' and app-level token' : ''} from Factory Factory. This does not revoke the token or change your Slack app. You can reconnect with a valid token.${disconnectError ? ` ${disconnectError}` : ''}`}
           confirmText="Disconnect"
           pendingText="Disconnecting…"
           variant="destructive"
@@ -152,16 +187,35 @@ export function SlackConnectionsView(props: SlackConnectionsViewProps) {
           onConfirm={() => {
             if (disconnectId) {
               setDisconnectError(undefined);
-              void props.onDisconnect(disconnectId).then(
-                (result) => {
-                  if (result.succeeded) {
-                    setDisconnectId(undefined);
-                  } else {
-                    setDisconnectError(result.error ?? "Couldn't disconnect Slack. Try again.");
-                  }
-                },
-                () => setDisconnectError("Couldn't disconnect Slack. Try again.")
-              );
+              confirmOperation(props.onDisconnect(disconnectId), {
+                close: () => setDisconnectId(undefined),
+                fail: setDisconnectError,
+                fallback: "Couldn't disconnect Slack. Try again.",
+              });
+            }
+          }}
+        />
+        <ConfirmDialog
+          open={!!removeAppId}
+          onOpenChange={(open) => {
+            if (!open) {
+              setRemoveAppId(undefined);
+            }
+          }}
+          title="Remove app-level token?"
+          description={`Remove the saved app-level token from Factory Factory. The bot token stays connected. This does not revoke the token in Slack.${removeAppError ? ` ${removeAppError}` : ''}`}
+          confirmText="Remove"
+          pendingText="Removing…"
+          variant="destructive"
+          isPending={busy}
+          onConfirm={() => {
+            if (removeAppId) {
+              setRemoveAppError(undefined);
+              confirmOperation(props.onClearAppToken(removeAppId), {
+                close: () => setRemoveAppId(undefined),
+                fail: setRemoveAppError,
+                fallback: "Couldn't remove the app-level token. Try again.",
+              });
             }
           }}
         />
@@ -170,17 +224,53 @@ export function SlackConnectionsView(props: SlackConnectionsViewProps) {
   );
 }
 
+/** Operations confirmed in a dialog, which reports their failure itself. */
+const dialogOperations = new Set<SlackPendingOperation['kind']>(['disconnect', 'clearAppToken']);
+
+/** Closes a confirmation on success; keeps it open with the error otherwise. */
+function confirmOperation(
+  operation: Promise<OperationResult>,
+  handlers: { close: () => void; fail: (error: string) => void; fallback: string }
+) {
+  void operation.then(
+    (result) => {
+      if (result.succeeded) {
+        handlers.close();
+      } else {
+        handlers.fail(result.error ?? handlers.fallback);
+      }
+    },
+    () => handlers.fail(handlers.fallback)
+  );
+}
+
 export function SlackSettings() {
   const connections = trpc.slack.list.useQuery();
   const connect = trpc.slack.connect.useMutation({ gcTime: 0, meta: { errorToast: false } });
   const test = trpc.slack.test.useMutation({ meta: { errorToast: false } });
   const disconnect = trpc.slack.disconnect.useMutation({ meta: { errorToast: false } });
+  const setAppToken = trpc.slack.setAppToken.useMutation({
+    gcTime: 0,
+    meta: { errorToast: false },
+  });
+  const clearAppToken = trpc.slack.clearAppToken.useMutation({ meta: { errorToast: false } });
   const [token, setToken] = useState('');
+  const [appTokenDraft, setAppTokenDraft] = useState<{ connectionId: string; token: string }>();
   const [error, setError] = useState<string>();
   const [notice, setNotice] = useState<string>();
   // Spans the mutation and the list refresh after it, so controls stay
   // disabled until the refreshed connections are on screen.
   const [pending, setPending] = useState<SlackPendingOperation>();
+
+  async function refresh() {
+    const failed = await connections.refetch().then(
+      (refreshed) => !!refreshed.error,
+      () => true
+    );
+    if (failed) {
+      setError((current) => current ?? 'Connections could not be refreshed. Reload Settings.');
+    }
+  }
 
   async function perform(target: SlackPendingOperation, operation: () => Promise<string>) {
     setPending(target);
@@ -193,21 +283,16 @@ export function SlackSettings() {
       succeeded = true;
     } catch (error) {
       operationError = error instanceof Error ? error.message : "Couldn't update Slack connection.";
-      // The disconnect dialog shows its own failure; others use the page alert.
-      if (target.kind !== 'disconnect') {
+      // Confirmation dialogs show their own failure; others use the page alert.
+      if (!dialogOperations.has(target.kind)) {
         setError(operationError);
       }
     } finally {
-      try {
-        const refreshed = await connections.refetch();
-        if (refreshed.error) {
-          setError((current) => current ?? 'Connections could not be refreshed. Reload Settings.');
-        }
-      } catch {
-        setError((current) => current ?? 'Connections could not be refreshed. Reload Settings.');
-      }
+      await refresh();
       setPending(undefined);
+      // Drop the submitted tokens from the mutation state.
       connect.reset();
+      setAppToken.reset();
     }
     return { succeeded, ...(operationError ? { error: operationError } : {}) };
   }
@@ -237,7 +322,37 @@ export function SlackSettings() {
       onDisconnect={(id) => {
         return perform({ kind: 'disconnect', connectionId: id }, async () => {
           await disconnect.mutateAsync({ id });
+          if (appTokenDraft?.connectionId === id) {
+            setAppTokenDraft(undefined);
+          }
           return 'Slack credentials removed.';
+        });
+      }}
+      appTokenDraft={appTokenDraft}
+      onAppTokenEdit={(connectionId) =>
+        setAppTokenDraft(connectionId ? { connectionId, token: '' } : undefined)
+      }
+      onAppTokenChange={(value) =>
+        setAppTokenDraft((current) => (current ? { ...current, token: value } : current))
+      }
+      onSaveAppToken={() => {
+        const draft = appTokenDraft;
+        if (!draft) {
+          return;
+        }
+        void perform({ kind: 'setAppToken', connectionId: draft.connectionId }, async () => {
+          const saved = await setAppToken.mutateAsync({
+            connectionId: draft.connectionId,
+            appToken: draft.token.trim(),
+          });
+          setAppTokenDraft(undefined);
+          return `Saved the app-level token for ${saved.name}.`;
+        });
+      }}
+      onClearAppToken={(id) => {
+        return perform({ kind: 'clearAppToken', connectionId: id }, async () => {
+          await clearAppToken.mutateAsync({ connectionId: id });
+          return 'App-level token removed.';
         });
       }}
     />
