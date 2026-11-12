@@ -109,6 +109,14 @@ describe('EventEvaluationHistory', () => {
         explanation: 'The trigger does not select this action.',
       }),
       eventEvaluationFixture({
+        id: 'evaluation-too-long',
+        runId: null,
+        status: 'ERROR',
+        reasonCode: 'SEMANTIC_FILTER_TOO_LONG',
+        explanation:
+          'The natural-language filter is longer than 4000 characters, so the event was not run. Shorten the filter.',
+      }),
+      eventEvaluationFixture({
         id: 'evaluation-unshown',
         runId: null,
         status: 'SKIPPED',
@@ -146,6 +154,7 @@ describe('EventEvaluationHistory', () => {
       "The event came from a repository or channel this trigger doesn't watch."
     );
     expect(repository.textContent).toContain('Repository is outside the trigger scope.');
+    expect(evaluation('evaluation-too-long').textContent).toContain('longer than 4000 characters');
     expect(evaluation('evaluation-unrecognized').textContent).toContain(
       'The trigger does not select this action.'
     );

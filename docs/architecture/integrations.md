@@ -903,9 +903,11 @@ Details; neither is presented as empty or completed. A RUNNING run in
 row shows Matched, Skipped or Error, its trigger's description (or ID when the
 trigger is outside the loaded definition), a phrase for its reason, whether it
 started a run, and any next attempt. Beneath the phrase it shows the stored
-`explanation` when that says more: for a code without a phrase, or for
+`explanation` when that says more: for a code without a phrase, for
 `LABEL_MISMATCH`, `SOURCE_IDENTITY_MISMATCH` and `QUEUE_OVERFLOW`, whose
-explanation says which case applied.
+explanation says which case applied, and for `SEMANTIC_FILTER_PROVIDER_UNPROVEN`
+and `SEMANTIC_FILTER_TOO_LONG`, whose explanation names the provider or the
+length limit.
 
 <a id="event-run-recovery"></a>
 

@@ -310,7 +310,8 @@ it('shows each event automation as Active, Starting or Paused from its triggers'
       expired: 'Paused',
       reset: 'Paused',
     });
-    // The rail and the detail header read every state the same way.
+    // The rail applies the rule the detail header renders (describeAutomationState) to the
+    // list's counts, so both read every backend state the same way.
     for (const [id, agent] of Object.entries(states)) {
       expect(label(id)).toBe(describeAutomationState(agent.configuredTriggers));
     }

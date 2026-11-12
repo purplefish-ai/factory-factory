@@ -43,13 +43,16 @@ function evaluationDetails(evaluation: EventEvaluation) {
 }
 
 /**
- * Codes whose one phrase covers several cases the backend tells apart in the
- * stored explanation, such as which label check or which source failed.
+ * Codes whose phrase leaves out what the stored explanation says: which of
+ * several cases applied (which label check or source failed), the provider
+ * whose classifier is unproven, or the filter length limit.
  */
 const REFINED_REASONS: ReadonlySet<string> = new Set([
   'LABEL_MISMATCH',
   'SOURCE_IDENTITY_MISMATCH',
   'QUEUE_OVERFLOW',
+  'SEMANTIC_FILTER_PROVIDER_UNPROVEN',
+  'SEMANTIC_FILTER_TOO_LONG',
 ]);
 
 /**

@@ -1,6 +1,8 @@
 import { ApplicationError } from '@/backend/lib/application-error';
-import { SourceNotTargetedError } from '@/backend/services/agent-definition/resources/agent-source-queries';
-import { agentSourceAccessor } from '@/backend/services/agent-definition/resources/agent-source.accessor';
+import {
+  agentSourceAccessor,
+  SourceNotTargetedError,
+} from '@/backend/services/agent-definition/resources/agent-source.accessor';
 import { agentSourceHealthSchema } from '@/shared/agent-runtime';
 import type { AgentGitHubSourcePort } from '@/shared/agent-source';
 import { agentGithubCursorSchema } from '@/shared/agent-source-state';
