@@ -42,24 +42,31 @@ async function fakeTransport(flow: RuntimeFlow) {
 
 let db: IntegrationDatabase;
 let f: RuntimeFlow;
+const PROCESS_GONE = 'The suspended process is gone';
 /** Work a simulated process death left suspended; released only at teardown. */
 let suspended: ReturnType<typeof deferred<never>>[];
+/** Evaluation jobs left running by a suspension; each settles with its unexpected error or nothing. */
+let suspendedJobs: Promise<unknown>[];
 beforeAll(async () => {
   await preloadEventFixtureModules();
 }, 60_000);
 beforeEach(async () => {
   db = await createIntegrationDatabase();
   suspended = [];
+  suspendedJobs = [];
   f = await createRuntimeFlow(db);
   await fakeTransport(f);
 }, 30_000);
 afterEach(async () => {
   vi.useRealTimers();
   for (const hold of suspended) {
-    hold.reject(new Error('The suspended process is gone'));
+    hold.reject(new Error(PROCESS_GONE));
   }
   try {
     await f?.teardown();
+    for (const job of suspendedJobs) {
+      expect(await job).toBeUndefined();
+    }
   } finally {
     await destroyIntegrationDatabase(db);
   }
@@ -262,7 +269,14 @@ it.each(['claim committed', 'workspace created', 'session created'] as const)(
     await f.enable(owner);
     await f.arrive(githubEvent('event-84', { number: 84 }));
     // The claim case suspends the evaluation job itself; the others suspend the launch.
-    void f.evaluate().catch(() => undefined);
+    // Only the teardown rejection of the suspension is expected; anything else fails.
+    suspendedJobs.push(
+      f.evaluate().then(
+        () => undefined,
+        (error: unknown) =>
+          error instanceof Error && error.message === PROCESS_GONE ? undefined : error
+      )
+    );
     const reached = {
       'claim committed': async () =>
         expect(await f.db.prisma.agentRun.count({ where: { status: 'RUNNING' } })).toBe(1),

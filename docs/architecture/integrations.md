@@ -1002,7 +1002,8 @@ supported. Both discovery and proposal descriptions say that a created
 automation starts paused, that only the user enables it from the Automations
 page (the agent cannot enable, pause or run it), that GitHub `labeled` and
 `reopened` triggers run once enabled, and that Slack triggers run only when
-Slack event intake is turned on.
+Slack event intake is turned on and the user has posted the test message in each
+selected channel.
 
 `AgentProposal` persists the specification, verified display names, workspace,
 revision, and optional created definition. Tool results carry a proposal
@@ -1430,7 +1431,8 @@ the runtime as `app-context.ts` does.
 
 An opt-in live check reads a real repository's issue-events feed through
 `GitHubCLIService` with the local `gh` login and validates the parser against
-every row. It creates nothing on GitHub and is never run in CI; use a throwaway
+every row of the first three pages, requiring at least one labeled or reopened
+event. It creates nothing on GitHub and is never run in CI; use a throwaway
 repository with some labeled and reopened issues:
 
 ```sh

@@ -352,8 +352,13 @@ export async function createRuntimeFlow(db: IntegrationDatabase) {
     for (const provider of providers.providers) {
       provider.response.resolve({ stopReason: 'end_turn' });
     }
-    await Promise.allSettled(runtimes.map((runtime) => runtime.stop()));
-    await m.session.acpRuntimeManager.stopAllClients(10).catch(() => undefined);
+    await Promise.all(runtimes.map((runtime) => runtime.stop()));
+    // Fake providers have no host PID/group: UNKNOWN is the honest stop result.
+    await m.session.acpRuntimeManager
+      .stopAllClients(10)
+      .catch((error: unknown) =>
+        expect(error).toMatchObject({ message: 'Event runtime stop is unconfirmed' })
+      );
     // Let the controlled children's exit callbacks finish while SQLite is still open.
     await nextTurn();
     m.session.sessionPromptTurnCompletionService.clearAll();

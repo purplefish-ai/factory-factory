@@ -72,7 +72,7 @@ describeLive('live GitHub issue-events feed', () => {
       expect(result.nextPage === null || result.nextPage === page + 1).toBe(true);
       page = result.nextPage;
     }
-    // Every row is accounted for as an anchor or one of the two executable actions.
-    expect(counts.anchors + counts.labeled + counts.reopened).toBe(counts.rows);
+    // The repository must exercise the executable path, not only cursor anchors.
+    expect(counts.labeled + counts.reopened, JSON.stringify(counts)).toBeGreaterThan(0);
   }, 120_000);
 });

@@ -653,8 +653,9 @@ session-private metadata helpers cross-capsule.
       `pnpm test`, `pnpm test:integration`, relevant Storybook checks,
       `pnpm test:e2e:mobile`, and `pnpm check`. Inspect formatting diff for
       unrelated changes; verify desktop Electron smoke behavior and documented
-      setup steps. Close-out: the repository checks run on each pull request;
-      the Electron desktop smoke check was not done.
+      setup steps. Close-out: typecheck, unit, integration, Storybook and
+      `pnpm check` ran for the close-out pull request; `pnpm test:e2e:mobile`
+      and the Electron desktop smoke check were not run.
 - [ ] Run live opt-in GitHub/Slack smoke tests against explicitly configured
       test sources and both providers; never use production messages as
       fixtures. Close-out: not done; the opt-in live GitHub feed test exists
