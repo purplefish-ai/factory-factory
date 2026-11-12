@@ -540,7 +540,7 @@ function ActionConsequences({
       )}
       <p>
         {action === 'ABANDON_UNPROVEN'
-          ? unprovenAbandonOutcome(run)
+          ? unprovenAbandonOutcome(inspection, run)
           : abandonOutcome(inspection, run)}
       </p>
       <p>

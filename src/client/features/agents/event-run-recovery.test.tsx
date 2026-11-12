@@ -279,6 +279,22 @@ describe('EventRunRecovery', () => {
     expect(confirmation()?.textContent).not.toContain('recorded as Cancelled');
   });
 
+  it('does not promise Cancelled when the first turn finished after the list loaded', async () => {
+    // The list row still shows the ambiguous send; the fresh inspection says it finished.
+    serveRecovery('deliveryUncertain');
+    respond['automation.inspectRun'] = () => recoveryInspectionFixture('trackingLost');
+    respond['automation.recoveryTarget'] = () => recoveryTargetFixture('trackingLost');
+    runs = [{ ...recoveryRunFixture('deliveryUncertain'), id: 'run-trackingLost' }];
+    render();
+    await openInspection('run-trackingLost');
+    await act(async () => requireButton(inspection(), 'Abandon anyway').click());
+    await waitForCheck(() => expect(confirmation()).not.toBeNull());
+    expect(confirmation()?.textContent).toContain(
+      'This run will keep the result of its own first turn.'
+    );
+    expect(confirmation()?.textContent).not.toContain('recorded as Cancelled');
+  });
+
   it('reports an ordinary abandonment when the server proved the stop after all', async () => {
     serveRecovery('deliveryUncertain');
     // With the opt-in, the server still takes the proven path when proof turns up.

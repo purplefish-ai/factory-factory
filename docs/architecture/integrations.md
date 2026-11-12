@@ -917,9 +917,9 @@ instead (otherwise the dialog says no recovery action is available). Its dialog
 says Factory Factory can't confirm the agent stopped; that abandoning ends the
 run anyway and frees its slot; that an agent still running keeps working in its
 workspace until someone stops it there, so check the workspace; and that the run
-keeps the result of its own first turn when it had one (Completed, PR created or
-Failed), and is otherwise recorded as Cancelled. It sends ABANDON with
-`acceptUnprovenStop: true`
+keeps the result of its own first turn when the fresh inspection shows a
+finished first message (Completed, PR created or Failed), and is otherwise
+recorded as Cancelled. It sends ABANDON with `acceptUnprovenStop: true`
 ([abandon without proof](agent-runtime.md#abandon-without-proof)); an ordinary
 Abandon never sends the opt-in. The result line warns that the agent may still
 be running only when the server answers `unproven: true`; the server still takes
@@ -928,10 +928,10 @@ the `ABANDONED_UNPROVEN` reason phrase. Each action opens a `ConfirmDialog`.
 Resolve says it stops the agent and keeps the run, as Needs attention, holding
 its slot until Retry or Abandon. Retry warns that earlier effects may already
 have happened (the first message may have reached the agent) and keeps the slot
-and attempt count. Abandon says it frees the slot, how the run is recorded
-(Cancelled, or Failed after a failed first turn; with a child hold and
-`keepsOutcome`, the first turn's own outcome), and that child workspaces are not
-stopped. The action sends the inspected context unchanged. A `CONFLICT` or
+and attempt count. Ordinary (proven) Abandon says it frees the slot, how the run
+is recorded (Cancelled, or Failed after a failed first turn; with a child hold
+and `keepsOutcome`, the first turn's own outcome), and that child workspaces are
+not stopped. The action sends the inspected context unchanged. A `CONFLICT` or
 `BLOCKED` result keeps the dialog open, says the run's status did not change and
 offers only **Reload**, which reads the target again; nothing is resent
 automatically. Success shows a result line on the run and refreshes the history,

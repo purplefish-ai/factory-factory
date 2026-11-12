@@ -118,11 +118,21 @@ const STATUS_WORDS = {
  * What Abandon without a proven stop records: the result of the run's own first
  * turn when one was recorded (as settlement does), otherwise Cancelled.
  */
-export function unprovenAbandonOutcome(run: EventRun) {
-  const kept = childHeldOutcome(run.initialOutcome?.result, run.result?.pullRequests.length ?? 0);
+export function unprovenAbandonOutcome(inspection: RecoveryInspection, run: EventRun) {
+  const noResult =
+    "It's recorded as Cancelled, because its first turn has no completed or failed result.";
+  // The fresh inspection decides whether a first-turn result exists; only a finished
+  // delivery has one. The history row, possibly older, only names it.
+  if (inspection.run.deliveryState !== 'FINISHED') {
+    return noResult;
+  }
+  if (!run.initialOutcome) {
+    return 'This run will keep the result of its own first turn.';
+  }
+  const kept = childHeldOutcome(run.initialOutcome.result, run.result?.pullRequests.length ?? 0);
   return kept
     ? `This run will keep the result of its own first turn: it's recorded as ${STATUS_WORDS[kept]}.`
-    : "It's recorded as Cancelled, because its first turn has no completed or failed result.";
+    : noResult;
 }
 
 /** What Abandon records, matching the server's rules for a run with and without a child hold. */
