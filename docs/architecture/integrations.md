@@ -878,17 +878,18 @@ definition flag, because an edit, an expiry or a source reset leaves the
 definition enabled with every trigger paused. Each configured trigger reads
 Listening (enabled and `ACTIVE`), Starting (`STARTING`), Paused (with
 `pausedReasonCode` in words), or Can't run (capability not `SUPPORTED`, with its
-`explanation`, as for Slack, schedule, natural-language and actor filters and
-GitHub `opened`/`edited`). Source health is shown in words, including the
-`GITHUB_SOURCE_RESET` and `GITHUB_BASELINE_REQUIRED` states after a reset and
-Enable. Enable can take a few seconds while the server validates; a
-`PRECONDITION_FAILED` shows its reasons inline, and a `CONFLICT` keeps the page
-and offers **Reload automation**. The detail polls at the management cadence, so
-Starting moves to Listening or Paused after the next source poll cycle. Pause
-states that queued runs are cancelled, started runs continue, and events while
-paused never run. The rail shows Enabled or Paused from the definition flag
-only, because the list carries no trigger state. The editor still says which
-edits pause triggers; Enable restarts them after saving.
+`explanation`, as for Slack, schedule, actor filters, GitHub `opened`/`edited`,
+and natural-language filters whose provider has not passed the classifier gate).
+Source health is shown in words, including the `GITHUB_SOURCE_RESET` and
+`GITHUB_BASELINE_REQUIRED` states after a reset and Enable. Enable can take a
+few seconds while the server validates; a `PRECONDITION_FAILED` shows its
+reasons inline, and a `CONFLICT` keeps the page and offers **Reload
+automation**. The detail polls at the management cadence, so Starting moves to
+Listening or Paused after the next source poll cycle. Pause states that queued
+runs are cancelled, started runs continue, and events while paused never run.
+The rail shows Enabled or Paused from the definition flag only, because the list
+carries no trigger state. The editor still says which edits pause triggers;
+Enable restarts them after saving.
 
 A GitHub source in `RECOVERY_REQUIRED` shows one **Reset source** callout per
 connection. Its `ConfirmDialog` says that events from the gap will not run, that
