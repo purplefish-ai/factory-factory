@@ -458,12 +458,16 @@ verified per-channel boundaries.
 GitHub intake uses authenticated repository issue-event reads through the shared
 `GitHubCLIService` budget. Only `labeled` and `reopened` issue events enter the
 executable ledger, carrying the issue's labels as read at capture (at most 100);
-PRs, including reopened PRs, and other actions retain only their feed identities
-as control anchors. The configured project path must resolve to the connection's
-numeric repository identity on each cycle, including after repository renames.
-Paused authoring remains inert: only configured (`isConfigured = true`) active
-triggers or explicit starting activations on non-archived projects are source
-targets.
+PRs, including reopened PRs, rows without an issue (GitHub documents `issue` as
+nullable), and other actions retain only their feed identities as control
+anchors. GitHub reports a deleted actor or issue author as a null user; the
+event still enters the ledger, with a null `actorId` or `creatorId`. Intake
+stores those identities, but matching, evaluation and the starting prompt never
+use them, because actor filters stay rejected. The configured project path must
+resolve to the connection's numeric repository identity on each cycle, including
+after repository renames. Paused authoring remains inert: only configured
+(`isConfigured = true`) active triggers or explicit starting activations on
+non-archived projects are source targets.
 
 Runtime composition resolves GitHub reads and page limits from the owning
 application graph. Incomplete project paths are omitted from a shared source; if
@@ -884,6 +888,10 @@ labels through the authenticated `gh` CLI; its connection identity is
 repository-scoped (`gh:<repository-id>`), not a GitHub App installation or an
 event subscription. Missing GitHub access does not prevent Slack authoring.
 Actor-specific ID restrictions are rejected until actor discovery is supported.
+The `propose_automation` guidance proposes only the GitHub actions that can be
+enabled, `labeled` and `reopened`; GitHub records labels applied when an issue
+is created as `labeled` events. It states that `opened` and `edited` are not yet
+supported.
 
 `AgentProposal` persists the specification, verified display names, workspace,
 revision, and optional created definition. Tool results carry a proposal

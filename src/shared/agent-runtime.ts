@@ -34,8 +34,12 @@ const eventFields = {
   occurredAt: timestamp,
   observedAt: timestamp,
   sourceUrl: z.url().max(2048),
-  actorId: id,
 };
+/**
+ * GitHub reports a deleted account as a null user, so a GitHub actor or issue author can be
+ * unknown. Nothing matches on these identities: actor filters are rejected everywhere.
+ */
+const githubAccountId = id.nullable();
 /** GitHub issue-event actions that can start a run; every other feed row is an ordering anchor. */
 export const agentGithubExecutableActions = ['labeled', 'reopened'] as const;
 export function isAgentGithubExecutableAction(action: string) {
@@ -48,7 +52,8 @@ export const agentEventPayloadSchema = z.discriminatedUnion('provider', [
     repositoryId: id,
     repositoryFullName: id,
     action: z.string().min(1).max(64),
-    creatorId: id,
+    actorId: githubAccountId,
+    creatorId: githubAccountId,
     issue: z.strictObject({
       number: z.number().int().positive(),
       title: z.string().max(4096),
@@ -61,6 +66,7 @@ export const agentEventPayloadSchema = z.discriminatedUnion('provider', [
   z.strictObject({
     ...eventFields,
     provider: z.literal('SLACK'),
+    actorId: id,
     workspaceId: id,
     appId: id,
     channelId: id,

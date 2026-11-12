@@ -492,3 +492,28 @@ it('requires recovery when a pending activation head disappears from its next in
     cursor: { committedHeadEventId: 'B' },
   });
 });
+
+it('ingests an event from a deleted GitHub account without stalling the source', async () => {
+  feed = [{ providerEventId: 'B', payload: null }];
+  await baseline();
+  const deleted = fixture.github('deleted-account').payload;
+  feed = [
+    label('newer'),
+    // Intake reads a labeled row whose issue is null as an anchor without a payload.
+    { providerEventId: 'labeled-without-issue', payload: null },
+    { providerEventId: 'deleted-account', payload: { ...deleted, actorId: null, creatorId: null } },
+    ...feed,
+  ];
+  await cycle();
+  expect(await state()).toMatchObject({
+    isReady: true,
+    health: { state: 'READY' },
+    cursor: { committedHeadEventId: 'newer', scan: null },
+  });
+  expect(
+    await db.prisma.agentEvent.findMany({
+      orderBy: { sourceOrder: 'asc' },
+      select: { providerEventId: true },
+    })
+  ).toEqual([{ providerEventId: 'deleted-account' }, { providerEventId: 'newer' }]);
+});
