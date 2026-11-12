@@ -31,7 +31,7 @@ const sdkLogger: Logger = {
   warn: (...messages) =>
     logger.warn('Slack Socket Mode client warning.', { reason: category(messages) }),
   error: (...messages) =>
-    logger.warn('Slack Socket Mode client error.', { reason: category(messages) }),
+    logger.error('Slack Socket Mode client error.', { reason: category(messages) }),
   setLevel: () => undefined,
   // Above DEBUG, so the SDK never serializes frames or acknowledgements for logging.
   getLevel: () => LogLevel.INFO,

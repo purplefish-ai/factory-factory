@@ -51,9 +51,9 @@ class FakeSocket {
   fail(error: unknown) {
     this.rejectStart(error);
   }
+  /** Like the SDK during `apps.connections.open`, disconnecting does not settle a pending start. */
   disconnect() {
     this.disconnects++;
-    this.rejectStart(new Error('disconnected'));
     return Promise.resolve();
   }
   drop() {
@@ -431,11 +431,26 @@ it('closes a socket whose connection attempt finishes after stop', async () => {
   const pending = source.reconcileConnections(signal);
   await vi.waitFor(() => expect(sockets).toHaveLength(1));
   await source.stop();
-  await pending;
   const socket = sockets[0] as FakeSocket;
-  expect(socket.disconnects).toBeGreaterThanOrEqual(1);
+  expect(socket.disconnects).toBe(1);
+  // The attempt completes only now, after stop.
+  socket.hello('A1');
+  await pending;
+  await socket.deliver(message());
+  expect(socket.acks).toEqual([]);
+  expect(await db.prisma.agentEvent.count()).toBe(0);
+  expect((await sourceState()).health).toMatchObject({
+    state: 'DISCONNECTED',
+    reasonCode: 'SLACK_LISTENER_STOPPED',
+  });
   await source.reconcileConnections(signal);
   expect(sockets).toHaveLength(1);
+});
+
+it('does not connect when every listening trigger has malformed configuration', async () => {
+  await db.prisma.agentTrigger.updateMany({ data: { config: { version: 1, channelIds: [] } } });
+  await source.reconcileConnections(signal);
+  expect(sockets).toHaveLength(0);
 });
 
 it('opens no connection while the intake gate is off, and closes one when it turns off', async () => {

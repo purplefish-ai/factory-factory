@@ -85,7 +85,8 @@ const slackTriggerWhere = {
 };
 /**
  * Slack connections the listener should hold open, with the channels their
- * listening triggers select. Malformed trigger configuration selects nothing.
+ * listening triggers select. Malformed trigger configuration selects nothing,
+ * and a connection whose listening triggers select nothing is not a target.
  */
 export async function listSlackTargets(connectionId?: string) {
   const connections = await prisma.agentConnection.findMany({
@@ -111,19 +112,21 @@ export async function listSlackTargets(connectionId?: string) {
       },
     },
   });
-  return connections.map((connection) => ({
-    connectionId: connection.id,
-    channelIds: [
-      ...new Set(
-        connection.triggers.flatMap((trigger) => {
-          const parsed = agentTriggerInputSchema.safeParse(trigger);
-          return parsed.success && parsed.data.type === 'SLACK_MESSAGE'
-            ? parsed.data.config.channelIds
-            : [];
-        })
-      ),
-    ],
-  }));
+  return connections
+    .map((connection) => ({
+      connectionId: connection.id,
+      channelIds: [
+        ...new Set(
+          connection.triggers.flatMap((trigger) => {
+            const parsed = agentTriggerInputSchema.safeParse(trigger);
+            return parsed.success && parsed.data.type === 'SLACK_MESSAGE'
+              ? parsed.data.config.channelIds
+              : [];
+          })
+        ),
+      ],
+    }))
+    .filter((target) => target.channelIds.length > 0);
 }
 export async function assertTarget(tx: Tx, connectionId: string) {
   if (

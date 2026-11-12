@@ -1080,7 +1080,8 @@ connection, using the official `@slack/socket-mode` client (pinned in
 agent-definition capsule. A connection is eligible only while the intake gate is
 on, the connection is enabled with both tokens and an app ID, and at least one
 configured Slack trigger on a non-archived project is `STARTING`, or `ACTIVE`
-with its trigger and definition enabled. Nothing is opened otherwise.
+with its trigger and definition enabled, and those triggers select at least one
+channel in valid configuration. Nothing is opened otherwise.
 
 The Slack app needs:
 

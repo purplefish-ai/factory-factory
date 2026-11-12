@@ -170,10 +170,13 @@ cycle. It reconciles which Slack connections hold a Socket Mode connection
 `lastObservedAt` about once a minute, and opens nothing while
 `AGENT_SLACK_INTAKE_ENABLED` is off. The Socket Mode client's own timers (ping
 monitoring, close handshake) belong to `SlackEventSource`, which stops them by
-disconnecting. Envelopes arrive outside the job; each is stored, then
-acknowledged. The agent runtime's shutdown step stops the job and the adapter
-together: it disconnects every socket, waits for envelopes in flight to finish
-storing, and records the stop as a delivery gap before the database closes. See
+disconnecting. Envelopes arrive outside the job and end one of three ways: a
+supported message is stored, then acknowledged; an unsupported or unselected
+envelope is acknowledged without storing; and a failed insert or an identity
+mismatch is left unacknowledged for Slack to redeliver. The agent runtime's
+shutdown step stops the job and the adapter together: it disconnects every
+socket, waits for envelopes in flight to settle, and records the stop as a
+delivery gap before the database closes. See
 [Slack listener](integrations.md#slack-listener).
 
 The `agent-event-evaluation` job runs immediately, then waits five seconds after
