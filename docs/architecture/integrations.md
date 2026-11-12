@@ -817,11 +817,12 @@ The saved event detail/editor consumes these project-owned APIs independently of
 its authoring workspace/proposal. It displays saved instructions, execution
 settings, configured versus retained trigger records and each trigger's state in
 words (see [Enable, Pause and Reset source](#event-activation-controls)), with
-stored codes, revisions and raw JSON in collapsed **Details** sections. Editing
-captures managementRevision once; polling and CAS conflicts preserve all entered
-fields and the original token. Reloading is deliberate. Saved edits invalidate
-the captured owner and matching surviving proposal cards; proposal edits refresh
-the same saved owner.
+stored codes, revisions and inspected raw JSON in collapsed **Details**
+sections; the editor keeps its editable JSON fields visible. Editing captures
+managementRevision once; polling and CAS conflicts preserve all entered fields
+and the original token. Reloading is deliberate. Saved edits invalidate the
+captured owner and matching surviving proposal cards; proposal edits refresh the
+same saved owner.
 
 A complete valid specification initializes the field/JSON editor without
 rewriting inherited execution omissions. Unknown membership, null or invalid
@@ -887,20 +888,21 @@ reasons inline, and a `CONFLICT` keeps the page and offers **Reload
 automation**. The detail polls at the management cadence, so Starting moves to
 Listening or Paused after the next source poll cycle. Pause states that queued
 runs are cancelled, started runs continue, and events while paused never run.
-The rail shows Enabled or Paused from the definition flag only, because the list
-carries no trigger state. The editor still says which edits pause triggers;
-Enable restarts them after saving.
+The rail shows "Definition enabled" (with a neutral dot) or Paused, because the
+list carries only the definition flag and no trigger state. The editor still
+says which edits pause triggers; Enable restarts them after saving.
 
 A GitHub source in `RECOVERY_REQUIRED` shows one **Reset source** callout per
 connection. Its `ConfirmDialog` says that events from the gap will not run, that
 every automation on the source is paused (including other projects) with queued
 runs cancelled, and that each automation needs Enable again; a failure stays in
 the dialog. Success reports the paused-trigger and cancelled-run counts and
-invalidates every automation read, list and history in the project. Enable,
-Pause and Reset source are disabled in archived projects. Recovery controls and
-deletion belong to separate cuts. Scheduled CRUD and history retain their
-existing behavior. Exact-context operator recovery uses the separate
-trusted-local transport described in
+invalidates every cached automation read, list and history in every project,
+because the reset reaches other projects on the same source. Enable, Pause and
+Reset source are disabled in archived projects. Recovery controls and deletion
+belong to separate cuts. Scheduled CRUD and history retain their existing
+behavior. Exact-context operator recovery uses the separate trusted-local
+transport described in
 [agent runtime](agent-runtime.md#exact-context-operator-recovery-transport).
 Production authoring still creates paused definitions. Manually altered
 ACTIVE-looking legacy records without known membership or a current validated

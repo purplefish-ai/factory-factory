@@ -210,6 +210,6 @@ it('says the automation is created paused and enabled from the Automations page'
   expect(document.body.textContent).not.toMatch(/not (yet )?available/);
   await submit();
   expect(document.body.textContent).toContain('Automation created');
-  expect(document.body.textContent).toContain('Enable it on the Automations page');
+  expect(document.body.textContent).toContain('enable it on the Automations page');
   expect(document.body.textContent).not.toMatch(/not (yet )?available/);
 });

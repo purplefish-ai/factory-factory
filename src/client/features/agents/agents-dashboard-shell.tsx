@@ -145,11 +145,14 @@ function AgentRailItem({
         </p>
       )}
       <div className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 text-2xs text-muted-foreground">
-        <StatusDot tone={agent.isEnabled ? 'success' : 'neutral'} size="xs" />
+        <StatusDot
+          tone={agent.isEnabled && agent.kind !== 'event' ? 'success' : 'neutral'}
+          size="xs"
+        />
         <span>
           {/* The list carries only the definition flag; an edit or source problem can pause an
-              enabled event automation's triggers, so the detail shows whether it listens. */}
-          {agent.isEnabled ? (agent.kind === 'event' ? 'Enabled' : 'Active') : 'Paused'}
+              enabled event automation's triggers, so only the detail says whether it listens. */}
+          {agent.isEnabled ? (agent.kind === 'event' ? 'Definition enabled' : 'Active') : 'Paused'}
         </span>
         <span aria-hidden="true">·</span>
         <span>{agent.kind === 'event' ? 'Event-triggered' : describeAgentSchedule(agent)}</span>

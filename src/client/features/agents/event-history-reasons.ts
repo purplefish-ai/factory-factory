@@ -26,7 +26,8 @@ const REASON_PHRASES: Readonly<Record<string, string>> = {
   PROJECT_ARCHIVED: 'The project is archived.',
   CONNECTION_UNAVAILABLE: 'The source connection is unavailable.',
   SOURCE_RECOVERY_REQUIRED: 'The source needs to be reset before events can run.',
-  // Pause, an edit and a source reset all cancel queued runs and stale decisions with this code.
+  // Queued runs cancelled by Pause, an edit or a source reset carry this code, as do decisions
+  // made against a revision an edit has replaced.
   STALE_REVISION:
     'The automation was paused or edited, or its source was reset, before this could run.',
   STALE_EVENT_COHORT: 'A newer decision for this event replaced this one.',

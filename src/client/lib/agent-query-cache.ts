@@ -23,17 +23,14 @@ export function invalidateSavedAgentQueries(
   agentId: string
 ) {
   return Promise.all([
-    utils.automation.list.invalidate({ projectId }),
-    utils.automation.navigationSummary.invalidate({ projectId }),
-    utils.automation.get.invalidate({ projectId, agentId }),
+    // Saving can pause triggers and cancel queued runs, as Enable and Pause can.
+    invalidateAutomationActivationQueries(utils, projectId, agentId),
     utils.automation.getProposal.invalidate(undefined, {
       predicate: (query) => {
         const proposal = agentProposalSchema.safeParse(query.state.data);
         return proposal.success && proposal.data.agentDefinitionId === agentId;
       },
     }),
-    // Saving can pause triggers and cancel queued runs.
-    invalidateEventHistoryQueries(utils, projectId, agentId),
   ]);
 }
 
@@ -52,20 +49,18 @@ export function invalidateAutomationActivationQueries(
 }
 
 /**
- * After a source reset: every event automation in the project, because the
- * reset pauses each trigger on the source and cancels its queued runs.
+ * After a source reset: every cached event automation, in every project. The
+ * reset pauses each trigger on the source across projects and cancels its
+ * queued runs, and the client cannot tell which other projects use it.
  */
-export function invalidateProjectAutomationQueries(
-  utils: ReturnType<typeof trpc.useUtils>,
-  projectId: string
-) {
+export function invalidateAllAutomationQueries(utils: ReturnType<typeof trpc.useUtils>) {
   return Promise.all([
-    utils.automation.list.invalidate({ projectId }),
-    utils.automation.navigationSummary.invalidate({ projectId }),
-    utils.automation.get.invalidate({ projectId }),
-    utils.automation.runs.invalidate({ projectId }),
-    utils.automation.evaluations.invalidate({ projectId }),
-    utils.automation.workspaceOrigin.invalidate({ projectId }),
+    utils.automation.list.invalidate(),
+    utils.automation.navigationSummary.invalidate(),
+    utils.automation.get.invalidate(),
+    utils.automation.runs.invalidate(),
+    utils.automation.evaluations.invalidate(),
+    utils.automation.workspaceOrigin.invalidate(),
   ]);
 }
 

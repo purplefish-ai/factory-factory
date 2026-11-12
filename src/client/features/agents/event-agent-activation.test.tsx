@@ -373,6 +373,13 @@ it('resets a source that needs recovery only after a confirmation that names the
     'query'
   );
   queryClient.setQueryData(other, saved);
+  // The reset pauses automations on this source in other projects too.
+  const otherProject = getQueryKey(
+    trpc.automation.get,
+    { projectId: 'elsewhere', agentId: 'shared-source' },
+    'query'
+  );
+  queryClient.setQueryData(otherProject, saved);
   await click('Reset source');
   expect(requests.some((item) => item.path === 'automation.resetSource')).toBe(false);
   expect(dialog()?.textContent).toContain('Events from the gap will not run');
@@ -392,6 +399,7 @@ it('resets a source that needs recovery only after a confirmation that names the
     connectionId: 'github-connection',
   });
   expect(queryClient.getQueryState(other)?.isInvalidated).toBe(true);
+  expect(queryClient.getQueryState(otherProject)?.isInvalidated).toBe(true);
   await waitForReact(() =>
     expect(container.querySelector('main [role="status"]')?.textContent).toContain('Source reset')
   );
@@ -426,6 +434,25 @@ it('disables Pause and Reset source in an archived project', async () => {
   await render();
   expect(button('Pause').disabled).toBe(true);
   expect(button('Reset source').disabled).toBe(true);
+});
+
+it('disables Enable in an archived project', async () => {
+  archived = true;
+  await render();
+  expect(button('Enable').disabled).toBe(true);
+});
+
+it('tells the user to reload when the source no longer needs a reset', async () => {
+  saved = withTriggers((trigger) => ({ ...trigger, sourceHealth: recoveryRequired }));
+  resetFailure = 'PRECONDITION_FAILED';
+  await render();
+  await click('Reset source');
+  await confirmDialog('Reset source');
+  await waitForReact(() =>
+    expect(dialog()?.querySelector('[role="alert"]')?.textContent).toContain(
+      "Reload the automation to see the source's current state."
+    )
+  );
 });
 
 it('keeps revisions and raw JSON in collapsed details and never says listening is unavailable', async () => {

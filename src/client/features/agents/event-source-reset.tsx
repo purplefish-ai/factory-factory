@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { StatusCallout } from '@/client/components/status-callout';
-import { invalidateProjectAutomationQueries } from '@/client/lib/agent-query-cache';
+import { invalidateAllAutomationQueries } from '@/client/lib/agent-query-cache';
 import { runInBackground } from '@/client/lib/background-task';
 import { trpcErrorCode } from '@/client/lib/query-client';
 import { trpc } from '@/client/lib/trpc';
@@ -47,8 +47,12 @@ function plural(count: number, one: string, many: string) {
 }
 
 function resetErrorMessage(error: unknown) {
-  if (trpcErrorCode(error) === 'NOT_FOUND') {
+  const code = trpcErrorCode(error);
+  if (code === 'NOT_FOUND') {
     return 'This project no longer uses this source. Reload the automation.';
+  }
+  if (code === 'PRECONDITION_FAILED' && error instanceof Error) {
+    return `${error.message} Reload the automation to see the source's current state.`;
   }
   return error instanceof Error ? error.message : "Couldn't reset the source. Try again.";
 }
@@ -85,10 +89,7 @@ export function EventSourceRecovery({ agent, archived }: { agent: EventAgent; ar
     setError(null);
     try {
       const result = await reset.mutateAsync({ projectId, connectionId: target.connectionId });
-      runInBackground(
-        invalidateProjectAutomationQueries(utils, projectId),
-        "Couldn't refresh automations."
-      );
+      runInBackground(invalidateAllAutomationQueries(utils), "Couldn't refresh automations.");
       if (mounted.current) {
         setOutcome({ ...result, sourceName: target.sourceName });
         setTarget(null);

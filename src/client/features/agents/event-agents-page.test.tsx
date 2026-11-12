@@ -942,7 +942,7 @@ it('opens conversational event creation explicitly and cancels back to the selec
     'Create event-triggered automation'
   );
   expect(container.querySelector('main')?.textContent).toContain('created paused');
-  expect(container.querySelector('main')?.textContent).toContain('Enable');
+  expect(container.querySelector('main')?.textContent).toContain("choose Enable when you're ready");
   expect(container.querySelector('main')?.textContent).toContain('labeled or reopened');
   expect(container.querySelector('main')?.textContent).not.toMatch(/not (yet )?available/);
   expect(container.querySelector('nav [aria-current]')).toBeNull();
