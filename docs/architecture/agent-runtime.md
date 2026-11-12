@@ -1826,9 +1826,8 @@ retains at most 20 links across retries and deletion; it is not an unbounded
 history. The required capture port is wired by orchestration and deletion fails
 closed when unavailable. Capturing results or deleting a workspace never proves
 work resolution or releases held capacity. Ledger pruning and trusted-local
-operator transport are implemented. Operator UI remains an activation
-prerequisite. Monitoring never auto-archives a workspace and never stops a child
-workspace.
+operator transport are implemented; the operator recovery UI is separate work.
+Monitoring never auto-archives a workspace and never stops a child workspace.
 
 Event runtimes use an owned POSIX process group. Strict stop confirms
 LOCAL_RUNTIME_GROUP_STOPPED only after observing that group disappear. A
