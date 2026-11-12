@@ -5,6 +5,11 @@ class WorkspaceRelationshipsService {
     return workspaceAccessor.findChildrenWithStatus(parentWorkspaceId);
   }
 
+  /** Live child rows in every status plus retained origins, including deleted children. */
+  findChildRestFacts(parentWorkspaceId: string) {
+    return workspaceAccessor.findChildRestFacts(parentWorkspaceId);
+  }
+
   findParent(childWorkspaceId: string) {
     return workspaceAccessor.findParentWorkspace(childWorkspaceId);
   }

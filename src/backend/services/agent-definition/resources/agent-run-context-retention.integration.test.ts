@@ -381,7 +381,7 @@ it('keeps history, compact outcome, delivery evidence and origins readable after
   expect(await db.prisma.agentInitialDelivery.findMany()).toEqual(delivery);
   expect(await db.prisma.workspaceLaunchOrigin.findMany()).toEqual(origins);
 });
-it('retains terminal context with surviving child work/provenance dependencies', async () => {
+it('expires terminal context while its workspace has retained child work', async () => {
   await sentTerminal();
   await db.prisma.agentRun.updateMany({
     data: { launchPreparation: { version: 1, state: 'SAFE', setupStartedAt: null } },
@@ -392,11 +392,11 @@ it('retains terminal context with surviving child work/provenance dependencies',
   });
   enable();
   await prune();
-  expect(await read()).toEqual(run);
+  expect((await read()).contextExpiredAt).not.toBeNull();
 });
 
 it.each(['missing', 'legacy', 'workspace', 'project'] as const)(
-  'retains sent context with unproven %s child-history coverage',
+  'expires sent terminal context with %s child-history coverage',
   async (corruption) => {
     const { run } = await sentTerminal();
     if (corruption === 'missing') {
@@ -413,7 +413,7 @@ it.each(['missing', 'legacy', 'workspace', 'project'] as const)(
     }
     enable();
     await prune();
-    expect(await read()).toEqual(run);
+    expect((await read()).contextExpiredAt).not.toBeNull();
   }
 );
 
@@ -515,7 +515,7 @@ it('retains by default during inspection and does not advance the maintenance cu
 });
 
 it.each(['missing', 'corrupt'] as const)(
-  'inspection retains sent context with %s origin proof',
+  'inspection does not depend on %s child-history origin proof once terminal',
   async (corruption) => {
     const { run } = await sentTerminal();
     if (corruption === 'missing') {
@@ -530,12 +530,9 @@ it.each(['missing', 'corrupt'] as const)(
       { retentionDays: 1 },
       new AbortController().signal
     );
-    expect(preview).toMatchObject({
-      inspected: 1,
-      eligible: 0,
-      retained: { RECOVERY_DEPENDENCY: 1 },
-      byteImpact: { eligibleBefore: 0, eligibleAfter: 0, eligibleDelta: 0 },
-    });
+    expect(preview).toMatchObject({ inspected: 1, eligible: 1 });
+    expect(preview.retained).toEqual({});
+    // Preview is read-only.
     expect(await read()).toEqual(run);
   }
 );

@@ -962,6 +962,28 @@ class WorkspaceAccessor {
   }
 
   /**
+   * Live child rows (every status) and retained child origins from one read
+   * snapshot, so a child created or deleted mid-read is never half-observed.
+   */
+  findChildRestFacts(parentId: string) {
+    return prisma.$transaction(async (tx) => {
+      const retained = await workspaceChildOriginAccessor.findChildIds(parentId, tx);
+      // Retained children are read by ID too: deleting a parent clears their parent link.
+      const workspaces = await tx.workspace.findMany({
+        where: {
+          OR: [
+            { parentWorkspaceId: parentId },
+            { id: { in: retained.map((row) => row.childWorkspaceId) } },
+          ],
+        },
+        select: { id: true, status: true, hasHadSessions: true },
+        orderBy: { id: 'asc' },
+      });
+      return { workspaces, retainedChildIds: retained.map((row) => row.childWorkspaceId) };
+    });
+  }
+
+  /**
    * Find the parent workspace summary for a given child workspace id.
    * Returns the parent with project included for cross-project navigation.
    */

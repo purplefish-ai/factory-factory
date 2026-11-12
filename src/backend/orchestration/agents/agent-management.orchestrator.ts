@@ -169,6 +169,7 @@ export function createAgentManagement(getServices: () => Services) {
             preparationState: inspected.run.preparation?.state ?? null,
           },
           blocked: inspected.blocked,
+          childHold: inspected.childHold,
           retryBlocked: inspected.retryBlocked,
           retryResourcesAvailable: inspected.retryResourcesAvailable,
           proofAvailable: inspected.proofAvailable,

@@ -381,6 +381,8 @@ function loadAgentRuntimeLimits() {
     waitingExpiryMs: 24 * 60 * 60 * 1000,
     // A STARTING trigger whose baseline never resolves returns to PAUSED.
     activationExpiryMs: 30 * 60 * 1000,
+    /** Children hold a settled-looking run at most this long after its own initial turn ended. */
+    childHoldDeadlineMs: 24 * 60 * 60 * 1000,
     githubPagesPerCycle: 10,
     evaluationBatchSize: 100,
     queueBatchSize: 100,

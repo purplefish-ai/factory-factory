@@ -150,6 +150,32 @@ describe('EventRunHistory', () => {
     expect(container.textContent).not.toMatch(/no result|empty result/i);
   });
 
+  it('explains runs that ended before their child workspaces had finished', async () => {
+    pages.first?.items.push(
+      eventRunFixture({
+        id: 'run-child-hold',
+        status: 'COMPLETED',
+        reasonCode: 'CHILD_HOLD_EXPIRED',
+      }),
+      eventRunFixture({
+        id: 'run-child-abandoned',
+        status: 'PR_CREATED',
+        reasonCode: 'ABANDONED_WITH_CHILD_WORK',
+      })
+    );
+    render();
+    await waitForCheck(() => expect(container.querySelector('[data-run-id]')).not.toBeNull());
+
+    const expired = runArticle('run-child-hold');
+    expect(expired.textContent).toContain("Child workspaces hadn't finished after 24 hours");
+    expect(expired.textContent).not.toContain('Unrecognized reason');
+    const abandoned = runArticle('run-child-abandoned');
+    expect(abandoned.textContent).toContain(
+      'Abandoned by a person before its child workspaces had finished'
+    );
+    expect(abandoned.textContent).not.toContain('Unrecognized reason');
+  });
+
   it('requests the next cursor when loading more and appends that page', async () => {
     const [first, second, ...rest] = eventRunPageFixture();
     pages = {

@@ -3,7 +3,7 @@ import { expect, userEvent, within } from 'storybook/test';
 import { z } from 'zod';
 import { STORY_TRPC_PENDING } from '@/client/lib/storybook-trpc';
 import { Button } from '@/components/ui/button';
-import { eventRunPageFixture } from './event-history.story-fixtures';
+import { eventRunFixture, eventRunPageFixture } from './event-history.story-fixtures';
 import { EventRunHistory } from './event-run-history';
 
 const cursorInput = z.object({ cursor: z.string().optional() });
@@ -59,6 +59,40 @@ export const PopulatedDark: Story = { ...Populated, globals: { theme: 'dark' } }
 export const PopulatedPhone: Story = {
   ...Populated,
   globals: { viewport: { value: 'phone', isRotated: false } },
+};
+
+/** Runs that finished while child workspaces were still working. */
+export const ChildWork: Story = {
+  parameters: {
+    trpc: {
+      handlers: {
+        'automation.runs': () => ({
+          items: [
+            eventRunFixture({
+              id: 'run-child-hold',
+              status: 'COMPLETED',
+              reasonCode: 'CHILD_HOLD_EXPIRED',
+            }),
+            eventRunFixture({
+              id: 'run-child-abandoned',
+              status: 'FAILED',
+              reasonCode: 'ABANDONED_WITH_CHILD_WORK',
+            }),
+          ],
+          nextCursor: null,
+        }),
+      },
+    },
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(
+      await canvas.findByText(/Child workspaces hadn't finished after 24 hours/)
+    ).toBeVisible();
+    await expect(
+      canvas.getByText(/Abandoned by a person before its child workspaces had finished/)
+    ).toBeVisible();
+  },
 };
 
 /** The slot recovery controls fill; shown here with a placeholder button. */

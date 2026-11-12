@@ -50,8 +50,12 @@ const REASON_PHRASES: Readonly<Record<string, string>> = {
     "Workspace setup stopped and its cleanup couldn't be confirmed; check the workspace before retrying.",
   DELIVERY_UNCERTAIN:
     'The first message may have reached the agent; check the workspace before retrying.',
+  // Child workspaces (working, setting up or never started). The run keeps its own outcome.
+  CHILD_HOLD_EXPIRED:
+    "Child workspaces hadn't finished after 24 hours; the run ended with its own outcome.",
   // A person's decision.
   EXPLICIT_ABANDONMENT: 'Abandoned by a person.',
+  ABANDONED_WITH_CHILD_WORK: 'Abandoned by a person before its child workspaces had finished.',
   EXPLICITLY_RESOLVED: 'Marked resolved by a person.',
 };
 

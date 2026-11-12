@@ -13,6 +13,7 @@ export {
 } from './acp-protocol/runtime-observation';
 import { eventAgentExecutionSchema, eventLaunchIdentifierSchema as id } from './event-agent-launch';
 import { eventWorkProofSchema } from './event-agent-work';
+import { eventChildRestProofSchema } from './event-child-rest';
 
 export const initialAttemptSchema = z.strictObject({
   runId: id,
@@ -58,6 +59,8 @@ export const initialDeliveryEvidenceSchema = z.strictObject({
   stop: runtimeStopEvidenceSchema.optional(),
   work: eventWorkProofSchema.optional(),
   resolution: eventRunResolutionSchema.optional(),
+  /** Child observation that let settlement or ABANDON finish the run. */
+  children: eventChildRestProofSchema.optional(),
 });
 export type InitialDeliveryEvidence = z.infer<typeof initialDeliveryEvidenceSchema>;
 export const initialDeliveryFenceSchema = z.strictObject({

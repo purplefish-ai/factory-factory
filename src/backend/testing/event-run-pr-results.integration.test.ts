@@ -398,6 +398,7 @@ it('captures unseen detached, case-equivalent and multiple PRs while preserving 
       h.claim,
       h.attempt,
       { version: 1, summary: '', pullRequests: [] },
+      { atRest: true, children: [] },
       null,
       () => undefined
     )

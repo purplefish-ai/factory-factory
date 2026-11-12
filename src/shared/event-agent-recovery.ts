@@ -7,6 +7,7 @@ import {
 } from './agent-runtime';
 import { initialAttemptSchema } from './event-agent-delivery';
 import { eventLaunchPreparationSchema } from './event-agent-preparation';
+import { eventChildRestSchema } from './event-child-rest';
 
 export const eventRunRecoveryContextSchema = z.strictObject({
   projectId: z.string().min(1).max(256),
@@ -50,16 +51,27 @@ export const agentRecoveryTargetSchema = z.discriminatedUnion('status', [
   }),
 ]);
 const commonBlocked = z.enum([
-  'CHILD_WORK_UNPROVEN',
   'PREPARATION_CLEANUP_UNCERTAIN',
   'PREVIOUS_WORK_PROOF_UNAVAILABLE',
   'SOURCE_UNAVAILABLE',
   'WORK_PROOF_UNAVAILABLE',
 ]);
+/**
+ * Child workspaces that are not at rest. While present, only ABANDON is available;
+ * RESOLVE and RETRY report CHILD_WORK_UNPROVEN. `keepsOutcome` says ABANDON (or the
+ * deadline) records the run's own completed/failed outcome instead of CANCELLED.
+ */
+export const agentRecoveryChildHoldSchema = z.strictObject({
+  children: eventChildRestSchema.shape.children.max(20),
+  heldCount: z.number().int().positive(),
+  deadlineAt: z.iso.datetime().nullable(),
+  keepsOutcome: z.boolean(),
+});
 export const agentRecoveryInspectionSchema = reference.extend({
   context: eventRunRecoveryContextSchema,
   run: agentRecoveryRunSchema,
   blocked: commonBlocked.nullable(),
+  childHold: agentRecoveryChildHoldSchema.nullable(),
   retryBlocked: z.literal('RESOURCES_UNAVAILABLE').nullable(),
   retryResourcesAvailable: z.boolean(),
   proofAvailable: z.boolean(),
@@ -77,6 +89,7 @@ export const agentRecoveryResultSchema = z.discriminatedUnion('status', [
     status: z.literal('BLOCKED'),
     reason: z.enum([
       ...commonBlocked.options,
+      'CHILD_WORK_UNPROVEN',
       'RESOURCES_UNAVAILABLE',
       'OWNER_CLOSED',
       'OTHER_OWNER',

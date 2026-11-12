@@ -7,6 +7,8 @@ import {
 } from '@/backend/services/session';
 import { workspaceDataService } from '@/backend/services/workspace';
 import type { EventRunRecoveryInput, EventRunRecoveryContext } from '@/shared/event-agent-recovery';
+import { childHeldOutcome } from '@/shared/event-child-rest';
+import { observeChildRest } from './event-child-rest.orchestrator';
 
 const blocked = (reason: string) => ({ status: 'BLOCKED' as const, reason });
 class RetryResourcesUnavailable extends Error {}
@@ -36,7 +38,8 @@ async function retryResourceFacts(
   return { path, available: worktreeAvailable(path) };
 }
 export async function inspectEventRun(input: EventRunRecoveryContext) {
-  const inspection = await eventRunRecovery.inspect(input);
+  const children = await observeChildRest(input.claim.reservedWorkspaceId);
+  const inspection = await eventRunRecovery.inspect(input, children);
   const resources = await retryResourceFacts(input, inspection);
   const evidence = inspection.run.delivery.evidence;
   const previous = evidence?.resolution;
@@ -47,8 +50,15 @@ export async function inspectEventRun(input: EventRunRecoveryContext) {
   const observation = evidence?.source
     ? eventOwnedWork.observe(input.attempt, evidence.source, evidence.stop)
     : null;
+  const outcome = evidence?.outcome?.result;
   return {
     ...inspection,
+    childHold: inspection.childHold && {
+      ...inspection.childHold,
+      // Mirrors ABANDON: FAILED is always kept; COMPLETED only when the run's own work was idle.
+      keepsOutcome:
+        outcome === 'FAILED' || (!!observation && childHeldOutcome(outcome, 0) !== null),
+    },
     retryResourcesAvailable: resources.available,
     retryBlocked: resources.available ? null : 'RESOURCES_UNAVAILABLE',
     delivery:
@@ -67,10 +77,15 @@ export async function inspectEventRun(input: EventRunRecoveryContext) {
   };
 }
 async function stopAndObserve(input: EventRunRecoveryInput, check: () => void) {
-  const inspection = await eventRunRecovery.inspect(input);
+  const rest = await observeChildRest(input.claim.reservedWorkspaceId);
+  check();
+  const inspection = await eventRunRecovery.inspect(input, rest);
   check();
   if (inspection.blocked) {
     return blocked(inspection.blocked);
+  }
+  if (inspection.childHold && input.action !== 'ABANDON') {
+    return blocked('CHILD_WORK_UNPROVEN');
   }
   if (input.action === 'RETRY') {
     const resources = await retryResourceFacts(input, inspection);
@@ -92,6 +107,12 @@ async function stopAndObserve(input: EventRunRecoveryInput, check: () => void) {
   if (!guard) {
     return blocked('WORK_PROOF_UNAVAILABLE');
   }
+  // Whether the run's own work was idle before recovery stops it: only children held it.
+  const ownWorkIdle = !!eventOwnedWork.observe(
+    input.attempt,
+    source,
+    inspection.run.delivery.evidence?.stop
+  );
   const current = () => {
     check();
     guard();
@@ -114,7 +135,19 @@ async function stopAndObserve(input: EventRunRecoveryInput, check: () => void) {
   if (observation?.proof.mode !== 'STOPPED') {
     return blocked('WORK_PROOF_UNAVAILABLE');
   }
-  return { status: 'PROVED' as const, current, observation, stopped };
+  // Re-observe after the stop await so RESOLVE/RETRY decide on the freshest child state.
+  const settledRest = await observeChildRest(input.claim.reservedWorkspaceId);
+  current();
+  if (!settledRest.atRest && input.action !== 'ABANDON') {
+    return blocked('CHILD_WORK_UNPROVEN');
+  }
+  return {
+    status: 'PROVED' as const,
+    current,
+    observation,
+    stopped,
+    children: { rest: settledRest, ownWorkIdle },
+  };
 }
 /** Called only after the consumer synchronously fences the exact old operation. */
 export function resolveEventRun(input: EventRunRecoveryInput, assertOwned: () => void) {
@@ -129,7 +162,7 @@ export function resolveEventRun(input: EventRunRecoveryInput, assertOwned: () =>
       if (work.status === 'BLOCKED') {
         return work;
       }
-      const { current, observation, stopped } = work;
+      const { current, observation, stopped, children } = work;
       let path: string | null = null;
       if (input.action === 'RETRY') {
         const resources = await retryResourceFacts(input, stopped);
@@ -148,7 +181,7 @@ export function resolveEventRun(input: EventRunRecoveryInput, assertOwned: () =>
         }
       };
       validate();
-      return eventRunRecovery.resolve(input, observation.proof, validate);
+      return eventRunRecovery.resolve(input, observation.proof, children, validate);
     })
     .catch((error: unknown) => {
       // A resource lost during the guarded write must roll back, then retain its

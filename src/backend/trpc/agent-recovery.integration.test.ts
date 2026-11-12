@@ -394,7 +394,7 @@ it.each(['account', 'session'] as const)(
   }
 );
 
-it.each(['preparation', 'child', 'source', 'work'] as const)(
+it.each(['preparation', 'source', 'work'] as const)(
   'retains the existing %s hold through the public action',
   async (hold) => {
     if (hold === 'preparation') {
@@ -404,19 +404,10 @@ it.each(['preparation', 'child', 'source', 'work'] as const)(
       providers[0]?.response.resolve({ stopReason: 'end_turn' });
       await consumer.drain();
       await strictStop();
-      if (hold === 'child') {
-        await h.creation.create({
-          type: 'CHILD_WORKSPACE',
-          projectId: scope.projectId,
-          parentWorkspaceId: h.claim.reservedWorkspaceId,
-          name: 'Unproven child',
-        });
-      } else {
-        providers[0]?.update({
-          sessionUpdate: 'session_info_update',
-          _meta: { jetbrains: { air: { goal: { status: 'active' } } } },
-        });
-      }
+      providers[0]?.update({
+        sessionUpdate: 'session_info_update',
+        _meta: { jetbrains: { air: { goal: { status: 'active' } } } },
+      });
     }
     if (hold === 'preparation' || hold === 'source') {
       await consumer.consumeClaim(h.claim, new AbortController().signal, true);
@@ -429,7 +420,6 @@ it.each(['preparation', 'child', 'source', 'work'] as const)(
       status: 'BLOCKED',
       reason: {
         preparation: 'PREPARATION_CLEANUP_UNCERTAIN',
-        child: 'CHILD_WORK_UNPROVEN',
         source: 'SOURCE_UNAVAILABLE',
         work: 'WORK_PROOF_UNAVAILABLE',
       }[hold],
@@ -439,6 +429,51 @@ it.each(['preparation', 'child', 'source', 'work'] as const)(
     );
   }
 );
+
+it('offers only Abandon for a child-held run and keeps its outcome through the public action', async () => {
+  await launch();
+  providers[0]?.response.resolve({ stopReason: 'end_turn' });
+  await consumer.drain();
+  await strictStop();
+  const child = await h.creation.create({
+    type: 'CHILD_WORKSPACE',
+    projectId: scope.projectId,
+    parentWorkspaceId: h.claim.reservedWorkspaceId,
+    name: 'Unstarted child',
+  });
+  const input = fullInput();
+  const inspection = await inspect(input);
+  expect(inspection.status).toBe(200);
+  expect(inspection.body.result.data.json).toMatchObject({
+    blocked: null,
+    childHold: {
+      children: [{ workspaceId: child.id, state: 'NOT_STARTED' }],
+      keepsOutcome: true,
+    },
+  });
+  expect(inspection.body.result.data.json.childHold.deadlineAt).toEqual(expect.any(String));
+  const before = await db.prisma.agentRun.findUniqueOrThrow({ where: { id: scope.runId } });
+  for (const blockedAction of ['RESOLVE', 'RETRY'] as const) {
+    expect((await action({ ...input, action: blockedAction })).body.result.data.json).toEqual({
+      status: 'BLOCKED',
+      reason: 'CHILD_WORK_UNPROVEN',
+    });
+    expect(await db.prisma.agentRun.findUniqueOrThrow({ where: { id: scope.runId } })).toEqual(
+      before
+    );
+  }
+  expect((await action({ ...input, action: 'ABANDON' })).body.result.data.json).toEqual({
+    status: 'ABANDONED',
+  });
+  expect(await db.prisma.agentRun.findUniqueOrThrow({ where: { id: scope.runId } })).toMatchObject({
+    status: 'COMPLETED',
+    launchPhase: 'FINISHED',
+    reasonCode: 'ABANDONED_WITH_CHILD_WORK',
+  });
+  expect(await db.prisma.workspace.findUniqueOrThrow({ where: { id: child.id } })).toMatchObject({
+    status: 'NEW',
+  });
+});
 
 it('does not turn retained provenance for a removed run into a target', async () => {
   await db.prisma.agentEvaluation.updateMany({
