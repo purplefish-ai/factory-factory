@@ -993,8 +993,13 @@ account because no run account exists before admission.
 
 The prompt passes the filter and a bounded projection of the event (issue
 title/body, repository, label; Slack text and whether it is a thread reply) as
-JSON data marked untrusted. Actor identities and links are omitted. Event text
-that asks to be matched has no authority. The output schema is strict
+JSON data marked untrusted. For Slack, evaluation reads the trigger's
+[message context](#slack-message-context) before calling the classifier, so a
+context failure records its error without spending a classifier call, but the
+classifier still judges only the triggering message: adding context to the
+prompt is a prompt change that needs a new version and gate run. Actor
+identities and links are omitted. Event text that asks to be matched has no
+authority. The output schema is strict
 `{ decision: 'match' | 'skip' | 'uncertain', reason }`; only `match` admits a
 run. Evaluations persist `SEMANTIC_FILTER_*` reason codes and fixed
 explanations, never the model's reason text. When a classifier call runs, they
@@ -1142,17 +1147,23 @@ source health `ERROR` (`SLACK_APP_MISMATCH` or `SLACK_WORKSPACE_MISMATCH`); the
 listener does not reconnect until the stored credentials change or the
 application restarts.
 
-Only ordinary human messages enter the ledger: `message` events without a
-subtype or bot identity, both channel roots and thread replies, in a channel
-selected by a listening trigger on that connection. Each is stored through
-`ingestEvent` with identity `(connectionId, event_id)` and acknowledged only
-after the insert commits; a duplicate insert is acknowledged too. If the insert
-fails, the envelope stays unacknowledged so Slack can redeliver it. Bot
-messages, edits, deletes, other subtypes (including `thread_broadcast` and
-`file_share`), other event types, messages in unselected channels, malformed
-messages and non-`events_api` envelopes are acknowledged and not stored. Text
-longer than the 100,000-character payload limit is cut with a visible truncation
-marker. Message text is never logged.
+Only human messages enter the ledger: `message` events without a bot identity,
+both channel roots and thread replies, in a channel selected by a listening
+trigger on that connection, either without a subtype or with one of two subtypes
+a person's message carries: `file_share` (the message includes a file or
+screenshot) and `thread_broadcast` (a thread reply also sent to the channel).
+Those two are stored like ordinary messages, text only, with `subtype` recorded;
+files and attachments are never stored or fetched, and the starting prompt says
+that files were not included. The deterministic matcher accepts the same three
+forms. Each message is stored through `ingestEvent` with identity
+`(connectionId, event_id)` and acknowledged only after the insert commits; a
+duplicate insert is acknowledged too. If the insert fails, the envelope stays
+unacknowledged so Slack can redeliver it. Bot messages (including bot file
+shares), hidden messages, edits, deletes, every other subtype, other event
+types, messages in unselected channels, malformed messages and non-`events_api`
+envelopes are acknowledged and not stored. Text longer than the
+100,000-character payload limit is cut with a visible truncation marker. Message
+text is never logged.
 
 Source health is `READY` (with `isReady`) once a verified socket says hello. An
 unexpected close, a failed or timed-out connection attempt (30 seconds), a
@@ -1179,6 +1190,68 @@ connecting after the listener closed it is closed again and its events are not
 acknowledged. The SDK's logger is replaced with one that drops debug and info
 output and reduces warnings and errors to fixed category codes, so tokens,
 ticketed socket URLs and message bodies are never logged.
+
+### Slack message context
+
+A Slack trigger's `context` (`includeThread`, default on, and
+`nearbyMessageCount`, 0 to 100) decides what conversation the run sees besides
+the triggering message. Evaluation reads it once the event has matched
+deterministically and its execution settings resolved, before any
+natural-language filter, through the `resolveSlackContext` evaluation port. Root
+messages with only `includeThread` and replies with neither option need no Slack
+call.
+
+- With `includeThread`, a thread reply (including a `thread_broadcast`) reads
+  its thread with `conversations.replies`: the thread start and the replies
+  before the triggering message, oldest first, following cursors for at most
+  five pages of 200 replies.
+- With `nearbyMessageCount`, the channel's messages just before the triggering
+  message are read with `conversations.history` (newest first, paging until the
+  count is met, at most five pages), skipping messages already in the thread.
+- Only the triggering message's channel is read, and only when the trigger
+  selects it; nothing after the triggering message is read. Joins, topic
+  changes, edits and other system messages are not context. Bot messages are,
+  labelled as bot.
+
+Both reads use the connection's bot token through the internal credential lookup
+and `callSlackApi` (ten-second limit combined with the evaluation's abort
+signal, no redirects, Zod-validated pages, sanitized errors). The token never
+reaches logs, errors, evaluations, run snapshots or the event ledger, and the
+connection must still belong to the event's workspace. The scopes are the
+listener's history scopes: `channels:history` for public channels and
+`groups:history` for private channels, with the bot in the channel. Slack lists
+both methods as Tier 3 for internal apps; Slack's May 2025 limits for
+commercially distributed non-Marketplace apps (one request a minute, 15
+messages) would make context reads fail as rate limited.
+
+Context is capped at 100 messages and 100,000 characters in total. The budget
+goes nearest the triggering message first: the thread start, then replies newest
+first, then channel messages newest first. Each section drops only its oldest
+messages and says so in a marker such as
+`[51 earlier replies omitted: Slack context is capped at 100 messages and 100,000 characters.]`.
+A message longer than 10,000 characters is shortened with `[message shortened]`,
+and a thread longer than the page limit ends with a marker saying later replies
+were not read.
+
+The run input lists, in order: a `<eventId>:source` item naming the triggering
+message (channel, author, time, thread, files not included, link) and saying its
+text follows; `<eventId>:message`, the message text; `<eventId>:thread`, the
+thread section; and `<eventId>:channel`, the channel section. Each section
+starts by saying it is context only, not the request, then gives each message as
+`Reply from person U123 at <time>:` (or `Thread start from`, `From`, `bot`, and
+`(files not included)`) followed by its text with every line quoted with `> `,
+so context text cannot pose as a label or as the triggering message. The
+starting prompt already calls all of it task data, not authority.
+
+Failures never start a run with partial context. Rate limits (honoring
+`Retry-After`), unreachable Slack and Slack server errors record a retryable
+`ERROR` (`SLACK_CONTEXT_RATE_LIMITED` or `SLACK_CONTEXT_RETRY`) on the shared
+evaluation retry budget. A missing history scope (`SLACK_CONTEXT_MISSING_SCOPE`,
+naming both scopes), a channel or thread the bot cannot read
+(`SLACK_CONTEXT_CHANNEL_UNAVAILABLE`), a missing, rejected or other-workspace
+bot token (`SLACK_CONTEXT_NOT_CONNECTED`), an unexpected Slack response
+(`SLACK_CONTEXT_FAILED`), an unselected channel (`SLACK_CONTEXT_NOT_SELECTED`)
+or an unwired port (`SLACK_CONTEXT_UNAVAILABLE`) is a terminal `ERROR`.
 
 ## Client query transport
 

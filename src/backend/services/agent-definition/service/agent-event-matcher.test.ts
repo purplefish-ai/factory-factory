@@ -122,6 +122,9 @@ it.each([
   { subtype: 'message_changed' },
   { subtype: 'message_deleted' },
   { subtype: 'channel_join' },
+  { subtype: 'bot_message' },
+  { subtype: 'me_message' },
+  { subtype: 'file_share', actorType: 'BOT' },
 ] as const)('rejects nonhuman or subtype messages %j', (change) => {
   expect(runtime.matchAgentEvent).toBeTypeOf('function');
   expect(runtime.matchAgentEvent({ ...slack, ...change }, slackTrigger)).toMatchObject({
@@ -129,6 +132,18 @@ it.each([
     reasonCode: 'UNSUPPORTED_MESSAGE',
   });
 });
+
+it.each(['file_share', 'thread_broadcast'])(
+  "matches a person's %s message on its text like an ordinary message",
+  (subtype) => {
+    expect(runtime.matchAgentEvent({ ...slack, subtype }, slackTrigger)).toMatchObject({
+      status: 'MATCHED',
+    });
+    expect(
+      runtime.matchAgentEvent({ ...slack, subtype, text: 'unrelated' }, slackTrigger)
+    ).toMatchObject({ status: 'SKIPPED', reasonCode: 'TEXT_MISMATCH' });
+  }
+);
 
 it('fails closed for a labeled event when the configuration also requests unsupported actions', () => {
   expect(

@@ -251,7 +251,7 @@ it('acknowledges bot, edited, deleted and subtype messages and unsupported envel
     message({ subtype: 'message_changed', message: { text: 'edited secret' } }),
     message({ subtype: 'message_deleted', deleted_ts: '1700000000.000100' }),
     message({ subtype: 'channel_join' }),
-    message({ subtype: 'thread_broadcast' }),
+    message({ subtype: 'file_share', bot_id: 'B1' }),
     message({ type: 'reaction_added' }),
     message({ user: undefined }),
     { type: 'slash_commands', body: { command: '/deploy', text: 'secret' } },
@@ -262,6 +262,33 @@ it('acknowledges bot, edited, deleted and subtype messages and unsupported envel
   }
   expect(socket.acks).toHaveLength(ignored.length);
   expect(await db.prisma.agentEvent.count()).toBe(0);
+});
+
+it("stores a person's file share and thread broadcast as text-only messages", async () => {
+  const socket = await connected();
+  await socket.deliver(
+    message({ subtype: 'file_share', files: [{ id: 'F1', name: 'screen.png' }], text: 'See this' })
+  );
+  await socket.deliver(
+    message({
+      subtype: 'thread_broadcast',
+      ts: '1700000002.000300',
+      thread_ts: '1700000000.000100',
+      text: 'Also posting here',
+    })
+  );
+  expect(socket.acks).toHaveLength(2);
+  const events = await db.prisma.agentEvent.findMany({ orderBy: { occurredAt: 'asc' } });
+  expect(events.map((event) => event.payload)).toEqual([
+    expect.objectContaining({ subtype: 'file_share', actorType: 'HUMAN', text: 'See this' }),
+    expect.objectContaining({
+      subtype: 'thread_broadcast',
+      actorType: 'HUMAN',
+      threadTs: '1700000000.000100',
+      text: 'Also posting here',
+    }),
+  ]);
+  expect(JSON.stringify(events[0]?.payload)).not.toContain('screen.png');
 });
 
 it('acknowledges messages in channels no listening trigger selects without storing them', async () => {

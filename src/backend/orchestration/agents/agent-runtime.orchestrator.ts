@@ -47,7 +47,10 @@ type AgentRuntimeServices = AgentNativeValidationServices & {
     typeof githubCLIService,
     'getAgentRepositoryIdentity' | 'listAgentIssueEvents'
   >;
-  slackConnectionService: Pick<typeof slackConnectionService, 'getAppCredentials'>;
+  slackConnectionService: Pick<
+    typeof slackConnectionService,
+    'getAppCredentials' | 'resolveEventContext'
+  >;
   configService: {
     getAgentRuntimeLimits(): { githubPagesPerCycle: number; slackIntakeEnabled: boolean };
   };
@@ -77,6 +80,8 @@ export function createAgentRuntime(
     classifyEvent: createEventClassifierPort((input, signal) =>
       getServices().classifyAgentEvent(input, signal)
     ),
+    resolveSlackContext: (event, config, signal) =>
+      getServices().slackConnectionService.resolveEventContext(event, config, signal),
   });
   const lifecycle = createAgentRuntimeLifecycle(
     poller,
