@@ -58,7 +58,7 @@ function storedContextDependency(run: Run): RetentionReason | null {
 /**
  * A person's unproven Abandon is final: the bumped worker generation fences the
  * old attempt, so nothing can recover or reuse this run's context. Its marker
- * must still match the stored current send.
+ * must match the stored current send at the generation before that increment.
  */
 function unprovenAbandonDependency(run: Run): RetentionReason | null {
   const delivery = run.initialDelivery;
@@ -81,9 +81,13 @@ function unprovenAbandonDependency(run: Run): RetentionReason | null {
     workerGeneration: run.workerGeneration,
     attemptGeneration: run.attemptGeneration,
   };
-  const matches = (attempt: InitialDeliveryEvidence['attempt']) =>
+  // Older evidence may carry any earlier worker generation; the marker was written by the
+  // decision itself, against the generation that the same write then incremented.
+  const sameSend = (attempt: InitialDeliveryEvidence['attempt']) =>
     isDeepStrictEqual({ ...attempt, workerGeneration: run.workerGeneration }, current);
-  return evidence.success && marker && matches(evidence.data.attempt) && matches(marker.attempt)
+  const decided = (attempt: InitialDeliveryEvidence['attempt']) =>
+    isDeepStrictEqual(attempt, { ...current, workerGeneration: run.workerGeneration - 1 });
+  return evidence.success && marker && sameSend(evidence.data.attempt) && decided(marker.attempt)
     ? null
     : 'INVALID_STORED_DATA';
 }

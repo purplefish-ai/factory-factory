@@ -2018,10 +2018,14 @@ still running keeps working in its workspace until someone stops it there. The
 freed slot lets the automation claim its next queued run, so real concurrent
 work can exceed the run limits, as with child workspaces. Because the decision
 is final and fenced, run-context retention treats a run with reason
-`ABANDONED_UNPROVEN` as settled when its `unprovenAbandon` marker and evidence
-attempt match the stored current send (and its preparation marker parses), so
-its copied context can expire under the configured policy; a missing or
-mismatched marker is `INVALID_STORED_DATA` and is retained.
+`ABANDONED_UNPROVEN` as settled when its evidence attempt and `unprovenAbandon`
+marker identify the stored current send (run, session, message, send attempt and
+attempt generation) and its preparation marker parses. Their `workerGeneration`
+is fenced and is not the run's current one: the evidence attempt may carry any
+earlier generation, and the marker must carry exactly the generation before the
+decision's own increment. When those hold, the run's copied context can expire
+under the configured policy; a missing or mismatched marker is
+`INVALID_STORED_DATA` and is retained.
 
 The boundary uses existing socket locality, configured CIDRs, browser Origin and
 explicit proxy trust rules. Origin-less loopback and other same-user local

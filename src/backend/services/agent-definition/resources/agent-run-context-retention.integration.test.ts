@@ -367,7 +367,7 @@ async function sentTerminal() {
  * What ABANDON with `acceptUnprovenStop` writes for an ambiguous send: the
  * delivery stays AMBIGUOUS with an UNKNOWN observed stop and no work proof.
  */
-async function unprovenAbandoned(marker = true) {
+async function unprovenAbandoned(markerGeneration: number | null = 1) {
   const before = await terminal();
   const delivery = await db.prisma.agentInitialDelivery.findUniqueOrThrow({
     where: { runId: before.id },
@@ -411,11 +411,11 @@ async function unprovenAbandoned(marker = true) {
           status: 'UNKNOWN',
           observedAt: new Date().toISOString(),
         },
-        ...(marker
+        ...(markerGeneration !== null
           ? {
               unprovenAbandon: {
                 version: 1,
-                attempt,
+                attempt: { ...attempt, workerGeneration: markerGeneration },
                 reason: 'WORK_PROOF_UNAVAILABLE',
                 decidedAt: new Date().toISOString(),
               },
@@ -433,8 +433,12 @@ it('expires the context of a run a person abandoned without a proven stop', asyn
   expect(batches.find((batch) => batch.kind === 'runContext')).toMatchObject({ changed: 1 });
   expect((await read()).contextExpiredAt).not.toBeNull();
 });
-it('fails closed on an unproven-abandonment reason without its evidence marker', async () => {
-  const before = await unprovenAbandoned(false);
+it.each([
+  { case: 'no marker', markerGeneration: null },
+  // The decision's own write increments the generation, so its marker is exactly one behind.
+  { case: 'a marker from another generation', markerGeneration: 2 },
+])('fails closed on an unproven-abandonment reason with $case', async ({ markerGeneration }) => {
+  const before = await unprovenAbandoned(markerGeneration);
   enable();
   const batches = await prune();
   expect(await read()).toEqual(before);
@@ -443,7 +447,7 @@ it('fails closed on an unproven-abandonment reason without its evidence marker',
   });
 });
 it('keeps retaining an ambiguous send that was not abandoned', async () => {
-  const before = await unprovenAbandoned(false);
+  const before = await unprovenAbandoned(null);
   await db.prisma.agentRun.update({ where: { id: before.id }, data: { reasonCode: null } });
   enable();
   const batches = await prune();
