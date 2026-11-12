@@ -430,8 +430,8 @@ state.
 The agent-definition capsule also owns the durable event runtime foundation:
 `AgentSourceState`, `AgentEvent`, `AgentEvaluation` and `AgentInitialDelivery`.
 Its barrel exports `ingestEvent`, `finalizeEventOrder`, `recordEvaluation`,
-`admitRun` and `claimNextRun`. These are persistence primitives; no activation
-API, launch worker or automatic execution starts from them.
+`admitRun` and `claimNextRun`. These are persistence primitives; the runtime
+jobs and the activation flow below drive them.
 
 Events use the immutable `(connectionId, providerEventId)` identity and bounded,
 versioned GitHub/Slack payload schemas. Evaluations retain their definition and
@@ -461,8 +461,9 @@ executable ledger, carrying the issue's labels as read at capture (at most 100);
 PRs, including reopened PRs, and other actions retain only their feed identities
 as control anchors. The configured project path must resolve to the connection's
 numeric repository identity on each cycle, including after repository renames.
-Paused authoring remains inert: only active triggers or explicit starting
-activations on non-archived projects are source targets.
+Paused authoring remains inert: only configured (`isConfigured = true`) active
+triggers or explicit starting activations on non-archived projects are source
+targets.
 
 Runtime composition resolves GitHub reads and page limits from the owning
 application graph. Incomplete project paths are omitted from a shared source; if
@@ -500,8 +501,8 @@ historical events. An already-polled source retains a prepared head in
 `getBaseline(connectionId, id)` reads that result. A non-executable head can
 have ordinal zero. Retained completed-interval evidence also resolves
 preparation that races a newer commit, even after event rows are pruned. These
-methods do not enable any trigger; trusted activation and its
-revision/generation checks remain separate work.
+methods do not enable any trigger; [enable and pause](#enable-and-pause) owns
+that.
 
 `AgentSourceCheckpoint` and `AgentSourceHead` retain indexed API-order evidence
 for every captured identity, including unsupported/control heads. A head's
@@ -635,6 +636,52 @@ Compact run results and PR links survive workspace and event deletion. Logical
 export/import still excludes the agent tables and credentials; the complete
 supported backup is the database file together with `encryption.key`.
 
+### Enable and pause
+
+Trusted-local `automation.enable` and `automation.pause` take
+`{ projectId, agentId, expectedManagementRevision }`; a stale revision is
+`CONFLICT` and a foreign owner `NOT_FOUND`. They are user actions only; the MCP
+catalog has no activation tool. Enable applies to the whole automation. It runs
+the same server-side validation `validateDraft` previews (current source access
+and native model/effort support) and fails with `PRECONDITION_FAILED` and the
+reasons when execution is not validated or no trigger is supported. Otherwise,
+in one transaction, it persists `AgentDefinition.validatedIntent`
+(`{ version: 1, definitionRevision, validatedAt, execution }`), enables the
+definition, pauses configured triggers that are not supported, and moves each
+supported paused or starting trigger to `STARTING` with a new activation
+generation and a pending activation that expires after 30 minutes.
+Already-active supported triggers keep listening. Enable then prepares one
+GitHub baseline per connection and records it on each pending generation.
+
+A trigger becomes `ACTIVE` only in one transaction that finds its baseline
+resolved and its definition revision, trigger revision, membership, validated
+intent, connection and project still permitting it; the boundary is that
+baseline. Every write is fenced on the exact generation, so an execution or
+trigger edit, or Pause, during preparation leaves the trigger `PAUSED`; a
+cosmetic name edit does not interrupt activation. The `agent-source-poll` job
+completes pending generations after each cycle. A generation that cannot
+complete returns to `PAUSED` with `pausedReasonCode` `SOURCE_ERROR` (baseline
+preparation failed or the connection is unavailable),
+`SOURCE_RECOVERY_REQUIRED`, or `ACTIVATION_EXPIRED`. Pause disables the
+definition and, through the shared `pauseTriggers` helper used by edits, moves
+every trigger to `PAUSED`, advances its generation, clears pending activation
+and boundary, and cancels unclaimed runs; claimed runs finish. Re-enable always
+takes a fresh baseline, so events from the paused period never run.
+
+Runtime source targeting, evaluation, admission and claim require
+`isConfigured = true`. Activation and admission refuse a definition without a
+validated intent for its current `definitionRevision`
+(`EXECUTION_NOT_VALIDATED`). The intent is a gate, not a freeze: explicit
+provider, model and effort are pinned by the definition, while inherited
+settings follow current defaults at admission, so changing a default neither
+pauses the automation nor makes the intent stale. Admission applies the same
+native normalization as validation: an inherited effort the model does not offer
+becomes the native default (or none), an absent one stays absent so the provider
+default applies, and an explicit unsupported one is a permanent
+`INVALID_EXECUTION_CONFIG` evaluation error. Native discovery failures retry
+with the bounded evaluation budget and never launch. Logical export omits
+`validatedIntent`; restored definitions stay paused until enabled again.
+
 ### Project-owned saved management
 
 Trusted-local `automation.list`, `get`, `updateSaved`, `evaluations`, `runs`,
@@ -691,11 +738,12 @@ confirmation and Codex preview-account isolation. Intent preserves requested and
 confirmed models, explicit/inherited selections, and pinned reasoning effort.
 Unsupported explicit effort fails; unsupported/absent inherited effort
 normalizes to a supported native default or explicit null. This preview neither
-freezes a future run account nor authorizes activation. Ordinary reads never
-invoke native discovery. Only labeled and reopened GitHub events can pass this
-milestone's source capabilities; other GitHub actions (`opened`, `edited`),
-Slack intake, SCHEDULE, semantic and actor filters report specific
-unsupported/unavailable reasons while remaining inspectable drafts.
+freezes a future run account nor authorizes activation; Enable repeats the same
+validation on the server. Ordinary reads never invoke native discovery. Only
+labeled and reopened GitHub events can pass this milestone's source
+capabilities; other GitHub actions (`opened`, `edited`), Slack intake, SCHEDULE,
+semantic and actor filters report specific unsupported/unavailable reasons while
+remaining inspectable drafts.
 
 History exposes bounded reasons, nullable start times, separate automatic
 attempts and send generations, preparation/delivery state and durable deadlines,
@@ -764,18 +812,17 @@ whenever it returns a run; an origin without a retained run removes the tab, as
 deleting a scheduled automation does. The panel shows the automation's name, the
 run that started the workspace, and a link to the event automation.
 
-Event activation, recovery controls and deletion belong to separate cuts.
-Scheduled CRUD and history retain their existing behavior. These management APIs
-do not add activation. Exact-context operator recovery uses the separate
-trusted-local transport described in
+The Enable/Pause control, recovery controls and deletion belong to separate
+cuts; the backend [enable and pause](#enable-and-pause) procedures exist.
+Scheduled CRUD and history retain their existing behavior. Exact-context
+operator recovery uses the separate trusted-local transport described in
 [agent runtime](agent-runtime.md#exact-context-operator-recovery-transport).
-Production authoring still creates paused definitions. The current runtime has
-no membership or native intent gate for manually altered ACTIVE-looking legacy
-records; runtime-wide membership enforcement and persisted server-validated
-native intent remain mandatory before activation is delivered. Trusted-local
-HTTP uses existing locality/origin/forwarding checks, not authenticated
-human-versus-agent isolation. The MCP catalog still exposes only source
-discovery/proposal authoring/read tools.
+Production authoring still creates paused definitions. Manually altered
+ACTIVE-looking legacy records without known membership or a current validated
+intent never target, evaluate, admit or claim. Trusted-local HTTP uses existing
+locality/origin/forwarding checks, not authenticated human-versus-agent
+isolation. The MCP catalog still exposes only source discovery/proposal
+authoring/read tools.
 
 ### Conversational creation
 

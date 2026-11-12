@@ -1,5 +1,8 @@
 import { afterAll, beforeAll, beforeEach, expect, it, vi } from 'vitest';
-import { createLedgerFixture } from '@/backend/services/agent-definition/resources/testing/agent-ledger.test-support';
+import {
+  createLedgerFixture,
+  validatedIntent,
+} from '@/backend/services/agent-definition/resources/testing/agent-ledger.test-support';
 import {
   createIntegrationDatabase,
   destroyIntegrationDatabase,
@@ -70,7 +73,7 @@ async function author(twoTriggers = false) {
   });
   await db.prisma.agentDefinition.update({
     where: { id: definitionId },
-    data: { isEnabled: true },
+    data: { isEnabled: true, validatedIntent: validatedIntent() },
   });
   await db.prisma.agentTrigger.update({
     where: { id: trigger.id },

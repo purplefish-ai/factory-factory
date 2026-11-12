@@ -9,6 +9,26 @@ export const executionConfig = {
   model: 'sonnet',
 };
 
+/** The execution intent Enable persists; runtime gates require it for the current revision. */
+export function validatedIntent(definitionRevision = 1) {
+  return {
+    version: 1 as const,
+    definitionRevision,
+    validatedAt: new Date().toISOString(),
+    execution: {
+      version: 1 as const,
+      provider: 'CLAUDE' as const,
+      model: 'claude-sonnet',
+      requestedModel: 'sonnet',
+      reasoningEffort: null,
+      providerIntent: 'EXPLICIT' as const,
+      modelIntent: 'EXPLICIT' as const,
+      effortIntent: 'INHERITED' as const,
+      effortNormalization: 'NONE' as const,
+    },
+  };
+}
+
 export async function createLedgerFixture(
   db: IntegrationDatabase,
   runtime: typeof import('@/backend/services/agent-definition')
@@ -37,6 +57,7 @@ export async function createLedgerFixture(
       name: 'Investigator',
       instructions: 'Investigate bugs',
       isEnabled: true,
+      validatedIntent: validatedIntent(),
     },
   });
   const definitionId = definition.id;
@@ -58,6 +79,7 @@ export async function createLedgerFixture(
       description: 'Agent labels',
       config: { version: 1, repositoryIds: ['repo-1'], actions: ['labeled'] },
       isEnabled: true,
+      isConfigured: true,
       activationState: 'ACTIVE',
       activationGeneration: 1,
       activationBoundary: { provider: 'GITHUB', headEventId: null, sourceOrder: 0 },
@@ -98,6 +120,7 @@ export async function createLedgerFixture(
         description: 'Later trigger',
         config: { version: 1, repositoryIds: ['repo-1'], actions: ['labeled'] },
         isEnabled: true,
+        isConfigured: true,
         activationState: 'ACTIVE',
         activationGeneration: 1,
         activationBoundary: { provider: 'GITHUB', headEventId: null, sourceOrder: 0 },

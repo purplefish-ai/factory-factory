@@ -3,9 +3,11 @@ import {
   triggerCapability,
   type AgentManagementService,
 } from '@/backend/services/agent-definition';
+import { SERVICE_TIMEOUT_MS } from '@/backend/services/constants';
 import type { workspaceDataService } from '@/backend/services/workspace';
 import { agentRunPageSchema, agentWorkspaceOriginSchema } from '@/shared/agent-history';
 import {
+  agentActivationInputSchema,
   agentSavedUpdateSchema,
   type SavedAgentSpecification,
   type AgentSourceValidation,
@@ -37,7 +39,7 @@ type Services = AgentSourceServices &
   AgentNativeValidationServices & {
     projectManagementService: { findById(id: string): Promise<AgentSourceProject | null> };
     agentManagementService: AgentManagementService;
-    agentRuntime?: Pick<ReturnType<typeof createAgentRuntime>, 'recovery'>;
+    agentRuntime?: Pick<ReturnType<typeof createAgentRuntime>, 'recovery' | 'activation'>;
     workspaceDataService: Pick<typeof workspaceDataService, 'readEventOrigin'>;
   };
 async function activeProject(projectId: string, services: Services) {
@@ -102,6 +104,44 @@ async function recoveryScope(
   }
   return recovery;
 }
+function activationRuntime(services: Services) {
+  const activation = services.agentRuntime?.activation;
+  if (!activation) {
+    throw new ApplicationError('PRECONDITION_FAILED', 'Event activation is unavailable.');
+  }
+  return activation;
+}
+/** The server-side validation behind both the draft preview and Enable. */
+async function validateSpecification(
+  project: AgentSourceProject,
+  specification: SavedAgentSpecification,
+  services: Services
+) {
+  const validation = await validateTriggers(project, specification, services);
+  const execution = await validateAgentExecution(specification.executionConfig, services);
+  await assertProjectCurrent(project, services);
+  for (const source of validation.verified) {
+    try {
+      await services.agentManagementService.checkSources(
+        project.id,
+        source.specification,
+        source.evidence
+      );
+    } catch {
+      const result = validation.results[source.index];
+      if (!result) {
+        throw new Error('Missing validation result');
+      }
+      result.capability = {
+        status: 'UNAVAILABLE',
+        reasonCode: 'SOURCE_UNAVAILABLE',
+        explanation: 'The selected source changed during validation.',
+      };
+    }
+  }
+  await assertProjectCurrent(project, services);
+  return { triggers: validation.results, execution };
+}
 export function createAgentManagement(getServices: () => Services) {
   return {
     async inspectRun(input: unknown) {
@@ -163,33 +203,62 @@ export function createAgentManagement(getServices: () => Services) {
       const parsed = agentDraftValidationInputSchema.parse(input);
       const services = getServices();
       const project = await activeProject(parsed.projectId, services);
-      const validation = await validateTriggers(project, parsed.specification, services);
-      const execution = await validateAgentExecution(
-        parsed.specification.executionConfig,
-        services
+      return agentDraftValidationSchema.parse(
+        await validateSpecification(project, parsed.specification, services)
       );
-      await assertProjectCurrent(project, services);
-      for (const source of validation.verified) {
-        try {
-          await services.agentManagementService.checkSources(
-            project.id,
-            source.specification,
-            source.evidence
-          );
-        } catch {
-          const result = validation.results[source.index];
-          if (!result) {
-            throw new Error('Missing validation result');
-          }
-          result.capability = {
-            status: 'UNAVAILABLE',
-            reasonCode: 'SOURCE_UNAVAILABLE',
-            explanation: 'The selected source changed during validation.',
-          };
-        }
+    },
+    /** Validates exactly what the draft preview shows, then starts every supported trigger. */
+    async enable(input: unknown) {
+      const parsed = agentActivationInputSchema.parse(input);
+      const services = getServices();
+      const owner = { projectId: parsed.projectId, agentId: parsed.agentId };
+      const agent = await services.agentManagementService.get(owner);
+      if (agent.managementRevision !== parsed.expectedManagementRevision) {
+        throw new ApplicationError('CONFLICT', 'This automation changed. Reload it and try again.');
       }
-      await assertProjectCurrent(project, services);
-      return agentDraftValidationSchema.parse({ triggers: validation.results, execution });
+      if (!agent.specification) {
+        throw new ApplicationError(
+          'PRECONDITION_FAILED',
+          'Save the complete configuration before enabling this automation.'
+        );
+      }
+      const activation = activationRuntime(services);
+      const project = await activeProject(parsed.projectId, services);
+      const validation = await validateSpecification(project, agent.specification, services);
+      if (validation.execution.status !== 'VALIDATED') {
+        throw new ApplicationError('PRECONDITION_FAILED', validation.execution.explanation);
+      }
+      const triggerIds = validation.triggers.flatMap((result) =>
+        result.capability.status === 'SUPPORTED' && result.triggerId ? [result.triggerId] : []
+      );
+      if (!triggerIds.length) {
+        const reasons = new Set(validation.triggers.map((result) => result.capability.explanation));
+        throw new ApplicationError(
+          'PRECONDITION_FAILED',
+          ['No trigger in this automation can start.', ...reasons].join(' ')
+        );
+      }
+      await activation.begin(
+        {
+          ...parsed,
+          definitionRevision: agent.definitionRevision,
+          projectSource: { githubOwner: project.githubOwner, githubRepo: project.githubRepo },
+          execution: validation.execution.intent,
+          triggerIds,
+        },
+        AbortSignal.timeout(SERVICE_TIMEOUT_MS.agentActivationBaseline)
+      );
+      return services.agentManagementService.get(owner);
+    },
+    /** Pauses every trigger; claimed runs finish and unclaimed runs are cancelled. */
+    async pause(input: unknown) {
+      const parsed = agentActivationInputSchema.parse(input);
+      const services = getServices();
+      await activationRuntime(services).pause(parsed);
+      return services.agentManagementService.get({
+        projectId: parsed.projectId,
+        agentId: parsed.agentId,
+      });
     },
     async runs(input: { projectId: string; agentId: string; limit?: number; cursor?: string }) {
       const services = getServices();

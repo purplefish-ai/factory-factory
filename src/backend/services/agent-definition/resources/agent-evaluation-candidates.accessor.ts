@@ -14,7 +14,11 @@ import {
 export type EvaluationCursor = { triggerId: string; eventId: string };
 const candidateIds = z.array(z.object({ triggerId: z.string(), eventId: z.string() }));
 
-/** Keyset rotation bounds each cycle even with a permanently blocked prefix. */
+/**
+ * Keyset rotation bounds each cycle even with a permanently blocked prefix.
+ * Only configured triggers receive new decisions; an unresolved decision left
+ * by a trigger that was since removed is still returned so it can be settled.
+ */
 async function pending(cursor: EvaluationCursor | null) {
   const after = cursor
     ? Prisma.sql`AND (t.id > ${cursor.triggerId} OR (t.id = ${cursor.triggerId} AND e.id > ${cursor.eventId}))`
@@ -26,7 +30,8 @@ async function pending(cursor: EvaluationCursor | null) {
     WHERE t.type != 'SCHEDULE' AND t.activationState != 'STARTING'
       AND (e.sourceOrder IS NOT NULL OR t.type = 'SLACK_MESSAGE')
       AND e.payload IS NOT NULL
-      AND (NOT EXISTS (SELECT 1 FROM AgentEvaluation a WHERE a.eventId = e.id AND a.triggerId = t.id)
+      AND ((t.isConfigured = 1
+          AND NOT EXISTS (SELECT 1 FROM AgentEvaluation a WHERE a.eventId = e.id AND a.triggerId = t.id))
         OR EXISTS (SELECT 1 FROM AgentEvaluation a WHERE a.eventId = e.id AND a.triggerId = t.id
           AND ((a.status = 'ERROR' AND a.nextAttemptAt IS NOT NULL) OR (a.status = 'MATCHED' AND a.runId IS NULL))))
       ${after}

@@ -107,6 +107,10 @@ const ACCESSOR_POLICIES = {
     owner: 'agent-definition',
     module: 'src/backend/services/agent-definition/resources/agent-revision.accessor',
   },
+  agentActivationAccessor: {
+    owner: 'agent-definition',
+    module: 'src/backend/services/agent-definition/resources/agent-activation.accessor',
+  },
   agentProposalAccessor: {
     owner: 'agent-definition',
     module: 'src/backend/services/agent-definition/resources/agent-proposal.accessor',

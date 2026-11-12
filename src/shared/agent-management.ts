@@ -31,6 +31,40 @@ export const agentSavedUpdateSchema = agentOwnerInputSchema.extend({
   expectedManagementRevision: agentDefinitionRevisionSchema,
   specification: savedAgentSpecificationSchema,
 });
+/** Enable and Pause are trusted-local user actions guarded by the management revision. */
+export const agentActivationInputSchema = agentOwnerInputSchema.extend({
+  expectedManagementRevision: agentDefinitionRevisionSchema,
+});
+export type AgentActivationInput = z.infer<typeof agentActivationInputSchema>;
+const intentKind = z.enum(['EXPLICIT', 'INHERITED']);
+export const agentNativeIntentSchema = z.strictObject({
+  version: z.literal(1),
+  provider: z.enum(['CLAUDE', 'CODEX']),
+  model: agentManagementIdSchema,
+  requestedModel: agentManagementIdSchema,
+  reasoningEffort: agentManagementIdSchema.nullable(),
+  providerIntent: intentKind,
+  modelIntent: intentKind,
+  effortIntent: intentKind,
+  effortNormalization: z.enum(['NONE', 'INHERITED_TO_NATIVE_DEFAULT']),
+});
+export type AgentNativeIntent = z.infer<typeof agentNativeIntentSchema>;
+/**
+ * The execution intent Enable validated, scoped to one definition revision. It
+ * gates activation and admission; inherited settings still resolve at admission.
+ */
+export const agentValidatedIntentSchema = z.strictObject({
+  version: z.literal(1),
+  definitionRevision: agentDefinitionRevisionSchema,
+  validatedAt: z.iso.datetime(),
+  execution: agentNativeIntentSchema,
+});
+export const agentPausedReasonCodeSchema = z.enum([
+  'ACTIVATION_EXPIRED',
+  'SOURCE_ERROR',
+  'SOURCE_RECOVERY_REQUIRED',
+]);
+export type AgentPausedReasonCode = z.infer<typeof agentPausedReasonCodeSchema>;
 export const agentCapabilitySchema = z.strictObject({
   status: z.enum(['SUPPORTED', 'UNSUPPORTED', 'UNAVAILABLE']),
   reasonCode: z.enum([
@@ -55,6 +89,7 @@ export const managedTriggerSchema = z.strictObject({
   triggerRevision: agentDefinitionRevisionSchema,
   activationGeneration: agentActivationGenerationSchema,
   activationState: agentActivationStateSchema,
+  pausedReasonCode: agentPausedReasonCodeSchema.nullable(),
   isEnabled: z.boolean(),
   configuration: agentTriggerInputSchema.nullable(),
   capability: agentCapabilitySchema,

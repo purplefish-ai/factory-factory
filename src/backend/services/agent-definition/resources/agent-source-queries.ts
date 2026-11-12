@@ -10,6 +10,7 @@ const targetWhere = {
   triggers: {
     some: {
       type: 'GITHUB_ISSUE' as const,
+      isConfigured: true,
       agentDefinition: { project: { isArchived: false } },
       OR: [
         { activationState: 'STARTING' as const },
@@ -31,6 +32,7 @@ export async function listTargets(tx: Tx = prisma) {
       triggers: {
         where: {
           type: 'GITHUB_ISSUE',
+          isConfigured: true,
           agentDefinition: { project: { isArchived: false } },
           OR: [
             { activationState: 'STARTING' },

@@ -2,22 +2,11 @@ import { z } from 'zod';
 import {
   agentCapabilitySchema,
   agentManagementIdSchema,
+  agentNativeIntentSchema,
   savedAgentSpecificationSchema,
 } from './agent-management';
 import { slackConnectionSummarySchema } from './slack-connection';
 
-const intentKind = z.enum(['EXPLICIT', 'INHERITED']);
-export const agentNativeIntentSchema = z.strictObject({
-  version: z.literal(1),
-  provider: z.enum(['CLAUDE', 'CODEX']),
-  model: agentManagementIdSchema,
-  requestedModel: agentManagementIdSchema,
-  reasoningEffort: agentManagementIdSchema.nullable(),
-  providerIntent: intentKind,
-  modelIntent: intentKind,
-  effortIntent: intentKind,
-  effortNormalization: z.enum(['NONE', 'INHERITED_TO_NATIVE_DEFAULT']),
-});
 export const agentNativeValidationSchema = z.discriminatedUnion('status', [
   z.strictObject({ status: z.literal('VALIDATED'), intent: agentNativeIntentSchema }),
   z.strictObject({

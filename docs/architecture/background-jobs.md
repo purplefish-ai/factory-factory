@@ -153,8 +153,12 @@ and cancellation signal. Shutdown stops and drains this intake before stopping
 provider sessions or disconnecting the database. After resolving its repository,
 each target with a valid, non-recovery cursor advances one bounded
 source-checkpoint backfill, authority-validation, or compaction transaction;
-this uses retained database proof and makes no provider requests. This job does
-not evaluate events, activate saved triggers, or launch workspaces.
+this uses retained database proof and makes no provider requests. After each
+cycle the same job completes pending activations: a STARTING trigger becomes
+ACTIVE once its prepared baseline resolves, retries a baseline that was never
+recorded, and returns to PAUSED with a reason on source failure, recovery or
+after 30 minutes (`activationExpiryMs`). There is no separate activation job.
+This job does not evaluate events or launch workspaces.
 
 The `agent-event-evaluation` job runs immediately, then waits five seconds after
 completion. It evaluates at most 100 durable event/trigger candidates per cycle,
@@ -165,9 +169,11 @@ issue carried a configured label at capture, or always when no labels are
 configured. A GitHub run input starts with a source item naming the repository,
 issue number and link, and the triggering action (with the JSON-quoted added
 label for `labeled`), followed by the issue title and body. Semantic and actor
-filters fail closed; SCHEDULE stays with PeriodicTask. STARTING generations
-remain held until activation owns their completion, cancellation, or expiry.
-Terminal decisions are not replayed under new revisions or generations.
+filters fail closed; SCHEDULE stays with PeriodicTask. STARTING generations are
+never candidates; the source poll job completes, cancels or expires them. Only
+configured triggers (`isConfigured = true`) receive new decisions; an unresolved
+decision left by a removed trigger is still settled. Terminal decisions are not
+replayed under new revisions or generations.
 
 Queue maintenance rotates through bounded batches even when all active slots are
 occupied. Claims choose FIFO heads of unsaturated definitions and serialize
@@ -218,9 +224,9 @@ Provisioning retries retain RUNNING capacity, frozen snapshots, identities and
 account; they never return to the authoring-sensitive QUEUED state. Retry-After
 extends the remaining shared retry delay. Only typed transient failures retry.
 The original fifteen-minute setup deadline is retained across safe retries.
-Unknown cleanup keeps capacity and forbids retry. Saved agents cannot yet be
-enabled; activation capability/UI validation and the positive child-cleanup
-product boundary remain prerequisites.
+Unknown cleanup keeps capacity and forbids retry. Saved agents are enabled
+through the trusted-local `automation.enable` procedure; the UI control and the
+positive child-cleanup product boundary are separate work.
 
 The evaluation job also owns bounded ledger retention before evaluation: one
 rotating page each of expired evaluations, event payloads and event identities.

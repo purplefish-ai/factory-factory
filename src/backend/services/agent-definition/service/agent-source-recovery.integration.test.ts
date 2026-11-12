@@ -279,6 +279,9 @@ it('uses the application graph GitHub reads and page limit lazily', async () => 
       listAgentIssueEvents: port.listIssueEvents,
     },
     configService: { getAgentRuntimeLimits: () => ({ githubPagesPerCycle: 5 }) },
+    sessionConfigService: {
+      getLaunchOptions: () => Promise.reject(new Error('No execution is resolved here')),
+    },
   };
   const runtime = createAgentRuntime(() => graph);
   const identities: string[] = [];

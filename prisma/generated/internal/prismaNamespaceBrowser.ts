@@ -434,6 +434,7 @@ export const AgentDefinitionScalarFieldEnum = {
   executionConfig: 'executionConfig',
   definitionRevision: 'definitionRevision',
   managementRevision: 'managementRevision',
+  validatedIntent: 'validatedIntent',
   createdAt: 'createdAt',
   updatedAt: 'updatedAt'
 } as const
@@ -486,6 +487,7 @@ export const AgentTriggerScalarFieldEnum = {
   activationState: 'activationState',
   activationBoundary: 'activationBoundary',
   pendingActivation: 'pendingActivation',
+  pausedReasonCode: 'pausedReasonCode',
   createdAt: 'createdAt',
   updatedAt: 'updatedAt'
 } as const

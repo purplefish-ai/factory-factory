@@ -173,9 +173,11 @@ it('roundtrips actual proposal/create/edit bodies then publicly inspects and exp
     }),
   ]);
   const reexport = await dataBackupService.exportData('disabled-truth');
+  // Validated intent is activation authority and is never exported.
+  const { validatedIntent: _sourceIntent, ...exportedRow } = sourceRow;
   expect(reexport.data).toHaveProperty('recovery.automationDefinitions.definitions', [
     {
-      ...sourceRow,
+      ...exportedRow,
       isEnabled: false,
       createdAt: sourceRow.createdAt.toISOString(),
       updatedAt: sourceRow.updatedAt.toISOString(),
@@ -436,8 +438,13 @@ it('exports one complete earlier readonly snapshot while a concurrent body/prefe
   try {
     const file = await dataBackupService.exportData('snapshot');
     expect(committed).toBe(true);
+    const { validatedIntent: _oldIntent, ...exported } = old;
     expect(file.data).toHaveProperty('recovery.automationDefinitions.definitions', [
-      { ...old, createdAt: old.createdAt.toISOString(), updatedAt: old.updatedAt.toISOString() },
+      {
+        ...exported,
+        createdAt: old.createdAt.toISOString(),
+        updatedAt: old.updatedAt.toISOString(),
+      },
     ]);
     expect(
       await source.prisma.agentDefinition.findUniqueOrThrow({ where: { id: old.id } })

@@ -4,7 +4,7 @@ import {
   destroyIntegrationDatabase,
   type IntegrationDatabase,
 } from '@/backend/testing/integration-db';
-import { createLedgerFixture } from './testing/agent-ledger.test-support';
+import { createLedgerFixture, validatedIntent } from './testing/agent-ledger.test-support';
 let db: IntegrationDatabase;
 let runtime: typeof import('../index');
 let fixture: Awaited<ReturnType<typeof createLedgerFixture>>;
@@ -43,7 +43,13 @@ async function otherDefinition(id: string) {
     where: { id: fixture.definitionId },
   });
   const definition = await db.prisma.agentDefinition.create({
-    data: { projectId: base.projectId, name: id, instructions: 'Other task', isEnabled: true },
+    data: {
+      projectId: base.projectId,
+      name: id,
+      instructions: 'Other task',
+      isEnabled: true,
+      validatedIntent: validatedIntent(),
+    },
   });
   const trigger = await db.prisma.agentTrigger.findUniqueOrThrow({
     where: { id: fixture.triggerId },
@@ -56,6 +62,7 @@ async function otherDefinition(id: string) {
       type: 'GITHUB_ISSUE',
       description: 'Other definition trigger',
       isEnabled: true,
+      isConfigured: true,
       activationState: 'ACTIVE',
       activationGeneration: 1,
       activationBoundary: { provider: 'GITHUB', headEventId: null, sourceOrder: 0 },
