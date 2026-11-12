@@ -1,4 +1,4 @@
-import type { AgentEventPayload } from '@/shared/agent-runtime';
+import { type AgentEventPayload, isAgentGithubExecutableAction } from '@/shared/agent-runtime';
 import type { AgentTriggerInput } from '@/shared/schemas/agent-definition.schema';
 
 export type MatchResult = {
@@ -47,17 +47,25 @@ function matchGithub(
   event: Extract<AgentEventPayload, { provider: 'GITHUB' }>,
   trigger: Extract<AgentTriggerInput, { type: 'GITHUB_ISSUE' }>
 ): MatchResult {
-  if (event.action !== 'labeled' || trigger.config.actions.some((action) => action !== 'labeled')) {
-    return skip('UNSUPPORTED_ACTION', 'Only GitHub labeled events are executable.');
+  if (
+    !isAgentGithubExecutableAction(event.action) ||
+    trigger.config.actions.some((action) => !isAgentGithubExecutableAction(action))
+  ) {
+    return skip('UNSUPPORTED_ACTION', 'Only GitHub labeled and reopened events are executable.');
   }
   if (!trigger.config.repositoryIds.includes(event.repositoryId)) {
     return skip('SOURCE_IDENTITY_MISMATCH', 'Repository is outside the trigger scope.');
   }
-  if (
-    !event.issue.addedLabel ||
-    (trigger.config.labels && !trigger.config.labels.includes(event.issue.addedLabel))
-  ) {
-    return skip('LABEL_MISMATCH', 'The added label does not match.');
+  if (!trigger.config.actions.some((action) => action === event.action)) {
+    return skip('ACTION_MISMATCH', 'The trigger does not select this action.');
+  }
+  const labels = trigger.config.labels;
+  if (event.action === 'labeled') {
+    if (!event.issue.addedLabel || (labels && !labels.includes(event.issue.addedLabel))) {
+      return skip('LABEL_MISMATCH', 'The added label does not match.');
+    }
+  } else if (labels && !event.issue.labels.some((label) => labels.includes(label))) {
+    return skip('LABEL_MISMATCH', 'The issue carries none of the selected labels.');
   }
   return matched();
 }

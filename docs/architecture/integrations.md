@@ -455,12 +455,13 @@ an ordinal of zero. Slack compares exact provider timestamp strings against
 verified per-channel boundaries.
 
 GitHub intake uses authenticated repository issue-event reads through the shared
-`GitHubCLIService` budget. Only `labeled` issue events enter the executable
-ledger; PRs and other actions retain only their feed identities as control
-anchors. The configured project path must resolve to the connection's numeric
-repository identity on each cycle, including after repository renames. Paused
-authoring remains inert: only active triggers or explicit starting activations
-on non-archived projects are source targets.
+`GitHubCLIService` budget. Only `labeled` and `reopened` issue events enter the
+executable ledger, carrying the issue's labels as read at capture (at most 100);
+PRs, including reopened PRs, and other actions retain only their feed identities
+as control anchors. The configured project path must resolve to the connection's
+numeric repository identity on each cycle, including after repository renames.
+Paused authoring remains inert: only active triggers or explicit starting
+activations on non-archived projects are source targets.
 
 Runtime composition resolves GitHub reads and page limits from the owning
 application graph. Incomplete project paths are omitted from a shared source; if
@@ -690,10 +691,10 @@ confirmed models, explicit/inherited selections, and pinned reasoning effort.
 Unsupported explicit effort fails; unsupported/absent inherited effort
 normalizes to a supported native default or explicit null. This preview neither
 freezes a future run account nor authorizes activation. Ordinary reads never
-invoke native discovery. Only labeled GitHub events can pass this milestone's
-source capabilities; other GitHub actions, Slack intake, SCHEDULE, semantic and
-actor filters report specific unsupported/unavailable reasons while remaining
-inspectable drafts.
+invoke native discovery. Only labeled and reopened GitHub events can pass this
+milestone's source capabilities; other GitHub actions (`opened`, `edited`),
+Slack intake, SCHEDULE, semantic and actor filters report specific
+unsupported/unavailable reasons while remaining inspectable drafts.
 
 History exposes bounded reasons, nullable start times, separate automatic
 attempts and send generations, preparation/delivery state and durable deadlines,

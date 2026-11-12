@@ -36,6 +36,11 @@ const eventFields = {
   sourceUrl: z.url().max(2048),
   actorId: id,
 };
+/** GitHub issue-event actions that can start a run; every other feed row is an ordering anchor. */
+export const agentGithubExecutableActions = ['labeled', 'reopened'] as const;
+export function isAgentGithubExecutableAction(action: string) {
+  return agentGithubExecutableActions.some((supported) => supported === action);
+}
 export const agentEventPayloadSchema = z.discriminatedUnion('provider', [
   z.strictObject({
     ...eventFields,
@@ -49,6 +54,8 @@ export const agentEventPayloadSchema = z.discriminatedUnion('provider', [
       title: z.string().max(4096),
       body: z.string().max(100_000),
       addedLabel: z.string().max(256).nullable(),
+      // The issue's labels when the event was captured; payloads stored earlier have none.
+      labels: z.array(z.string().min(1).max(256)).max(100).default([]),
     }),
   }),
   z.strictObject({

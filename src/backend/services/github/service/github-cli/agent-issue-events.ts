@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { isAgentGithubExecutableAction } from '@/shared/agent-runtime';
 import { agentIssueEventPageSchema, type AgentIssueEventRequest } from '@/shared/agent-source';
 import { agentSourcePageNumberSchema } from '@/shared/agent-source-state';
 import { githubIssuePreviewInputSchema } from '@/shared/github-issue-preview';
@@ -10,18 +11,39 @@ const controlSchema = z.object({
   event: z.string(),
   issue: z.object({ pull_request: z.unknown().optional() }).optional(),
 });
-const labelSchema = z.object({
-  created_at: z.iso.datetime(),
-  actor: z.object({ id }),
-  label: z.object({ name: z.string().min(1) }),
-  issue: z.object({
-    number: z.number().int().positive(),
-    title: z.string(),
-    body: z.string().nullable(),
-    html_url: z.url(),
-    user: z.object({ id }),
-  }),
+const issueSchema = z.object({
+  number: z.number().int().positive(),
+  title: z.string(),
+  body: z.string().nullable(),
+  html_url: z.url(),
+  user: z.object({ id }),
+  // GitHub documents each issue label as a name string or a label object.
+  labels: z
+    .array(z.union([z.string(), z.object({ name: z.string().nullish() })]))
+    .optional()
+    .transform((labels = []) =>
+      labels
+        .map((label) => (typeof label === 'string' ? label : (label.name ?? '')))
+        .filter((name) => name.length > 0)
+        .map((name) => name.slice(0, 256))
+        .slice(0, 100)
+    ),
 });
+const executableSchema = z.discriminatedUnion('event', [
+  z.object({
+    event: z.literal('labeled'),
+    created_at: z.iso.datetime(),
+    actor: z.object({ id }),
+    label: z.object({ name: z.string().min(1) }),
+    issue: issueSchema,
+  }),
+  z.object({
+    event: z.literal('reopened'),
+    created_at: z.iso.datetime(),
+    actor: z.object({ id }),
+    issue: issueSchema,
+  }),
+]);
 
 /** Node's parse source preserves numeric identities beyond Number.MAX_SAFE_INTEGER. */
 function parseProviderJson(text: string): unknown {
@@ -107,10 +129,13 @@ export async function listAgentIssueEvents(input: AgentIssueEventRequest, read: 
   const observedAt = new Date().toISOString();
   const events = raw.map((row) => {
     const control = controlSchema.parse(row);
-    if (control.event !== 'labeled' || control.issue?.pull_request !== undefined) {
+    if (
+      !isAgentGithubExecutableAction(control.event) ||
+      control.issue?.pull_request !== undefined
+    ) {
       return { providerEventId: control.id, payload: null };
     }
-    const event = labelSchema.parse(row);
+    const event = executableSchema.parse(row);
     return {
       providerEventId: control.id,
       payload: {
@@ -118,7 +143,7 @@ export async function listAgentIssueEvents(input: AgentIssueEventRequest, read: 
         provider: 'GITHUB' as const,
         repositoryId: input.repositoryId,
         repositoryFullName: input.repository,
-        action: 'labeled',
+        action: event.event,
         actorId: event.actor.id,
         creatorId: event.issue.user.id,
         occurredAt: event.created_at,
@@ -128,7 +153,8 @@ export async function listAgentIssueEvents(input: AgentIssueEventRequest, read: 
           number: event.issue.number,
           title: event.issue.title.slice(0, 4096),
           body: (event.issue.body ?? '').slice(0, 100_000),
-          addedLabel: event.label.name.slice(0, 256),
+          addedLabel: event.event === 'labeled' ? event.label.name.slice(0, 256) : null,
+          labels: event.issue.labels,
         },
       },
     };

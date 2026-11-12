@@ -12,7 +12,7 @@ import {
   savedAgentSpecificationSchema,
   type AgentCapability,
 } from '@/shared/agent-management';
-import { agentSourceHealthSchema } from '@/shared/agent-runtime';
+import { agentSourceHealthSchema, isAgentGithubExecutableAction } from '@/shared/agent-runtime';
 import {
   agentExecutionConfigSchema,
   agentTriggerInputSchema,
@@ -37,7 +37,7 @@ export function triggerCapability(
     reasonCode = 'UNSUPPORTED_SCHEDULE';
   } else if (trigger.type === 'SLACK_MESSAGE') {
     reasonCode = 'SLACK_INTAKE_UNAVAILABLE';
-  } else if (trigger.config.actions.some((action) => action !== 'labeled')) {
+  } else if (trigger.config.actions.some((action) => !isAgentGithubExecutableAction(action))) {
     reasonCode = 'UNSUPPORTED_GITHUB_ACTION';
   } else if (!verified) {
     reasonCode = 'SOURCE_UNVERIFIED';
@@ -51,7 +51,7 @@ const explanations: Record<AgentCapability['reasonCode'], string> = {
   INVALID_STORED_DATA: 'Stored configuration is unavailable.',
   UNSUPPORTED_SCHEDULE: 'Use scheduled automations for time-based tasks.',
   SLACK_INTAKE_UNAVAILABLE: 'Slack event intake is not available yet.',
-  UNSUPPORTED_GITHUB_ACTION: 'Only GitHub labeled events are supported.',
+  UNSUPPORTED_GITHUB_ACTION: 'Only GitHub labeled and reopened events are supported.',
   UNSUPPORTED_SEMANTIC_FILTER: 'Semantic event filtering is not available yet.',
   UNSUPPORTED_ACTOR_FILTER:
     'Actor restrictions require actor discovery, which is not available yet.',
