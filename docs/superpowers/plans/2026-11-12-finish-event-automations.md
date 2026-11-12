@@ -285,7 +285,8 @@ export readers that enumerate connection fields, stories and tests.
 **Interfaces:**
 
 - Produces: column `AgentConnection.appCredentialsEncrypted String?`;
-  `slack.setAppToken({ connectionId, appToken })` and
+  `slack.setAppToken({ connectionId, appToken })` (this replaces the earlier
+  plan's `setSlackEventCredentials`; build only this one) and
   `slack.clearAppToken({ connectionId })`; summary fields `hasAppToken` and
   `appId`; internal `getAppCredentials(connectionId)` for task 11;
   `slackIntakeEnabled`.
@@ -323,14 +324,20 @@ and tests.
   `src/backend/services/agent-definition/testing/classifier-gate.json` with
   `{ provider, model, promptVersion, passed, measuredAt, metrics }` per
   provider. `triggerCapability` reports `UNSUPPORTED_SEMANTIC_FILTER` unless the
-  automation's provider has `passed: true` in that record.
+  automation's provider has `passed: true` in that record. Evaluation rechecks
+  the record for the provider resolved for each event; an unpassed effective
+  provider is a `SKIPPED` evaluation with reason
+  `SEMANTIC_FILTER_PROVIDER_UNPROVEN`, never an unfiltered run.
 - Limits from the plan: 30 seconds per call, two concurrent calls, no tools, MCP
   servers, repository instructions or credentials. `uncertain`, malformed output
   and failures never dispatch.
 
 - [ ] Write failing deterministic tests: match, skip, uncertain, malformed
       output, timeout, rate limit with retry, an instruction-injection event
-      that asks to be matched, and a filter that tries to widen scope.
+      that asks to be matched, and a filter that tries to widen scope, and an
+      automation with an inherited provider whose default changes to an unpassed
+      provider after Enable (the next event is skipped with the reason, the
+      classifier is not called).
 - [ ] Add at least 40 fixture cases across GitHub and Slack plus at least 10
       adversarial negatives, split into tuning and held-out sets before tuning.
 - [ ] Implement, pass deterministic tests.
@@ -414,7 +421,8 @@ Needs tasks 1 and 9 merged.
 
 ### Task 11: Slack listener (`automation-slack-listener`)
 
-Needs task 6 merged. Follows plan task 7.
+Needs task 6 merged. Follows task 7 of the earlier plan
+(`2026-11-01-event-triggered-agents.md`).
 
 **Files:** add `@slack/socket-mode` (lockfile); create
 `service/slack-event-source.ts`,

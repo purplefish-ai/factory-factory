@@ -107,14 +107,17 @@ Today any child ever created blocks settlement for good
   The deadline is durable and checked by the existing launch-maintenance job.
 - `ABANDON` in recovery becomes available when child work is the only thing
   holding a run, so the user can end it sooner.
-- A run held only by children keeps its own outcome when the deadline or Abandon
-  ends it: `COMPLETED`, `PR_CREATED` or `FAILED`, never `CANCELLED`. A bounded
-  reason records that children were still working.
+- A run whose own initial turn completed or failed, and that is held only by
+  children, keeps that outcome when the deadline or Abandon ends it:
+  `COMPLETED`, `PR_CREATED` or `FAILED`, not `CANCELLED`. A run the user had
+  already cancelled stays `CANCELLED`. A bounded reason records that children
+  were still working.
 - Runs whose child history coverage is unknown use the same live check (my
   call); no production data depends on the old distinction because nothing could
   be enabled.
-- `hasChildWork` also gates terminal run-context retention. Retention follows
-  the settled run: once a run is terminal, children no longer block expiry.
+- Today `hasChildWork` also blocks terminal run-context expiry. Change that:
+  child work matters only before settlement. Once a run is terminal, by any path
+  including the deadline and Abandon, its children no longer block expiry.
 
 Left to the builder: where the at-rest signal is read (it must come through the
 workspace and session capsule barrels, passed in by orchestration) and what
@@ -163,11 +166,12 @@ compact proof is persisted with the settlement.
 
 ### Slack
 
-Build milestone 2 as the plan specifies in its execution contracts and task 7:
-separately encrypted app-level token, Socket Mode through the official client
-behind a narrow adapter, acknowledge only after the event is stored, team/app/
-channel verification, activation by a test message in each selected channel,
-visible delivery gaps, and bounded thread and nearby-message context.
+Build milestone 2 as the earlier plan specifies in its execution contracts and
+its task 7: separately encrypted app-level token, Socket Mode through the
+official client behind a narrow adapter, acknowledge only after the event is
+stored, team/app/ channel verification, activation by a test message in each
+selected channel, visible delivery gaps, and bounded thread and nearby-message
+context.
 
 Slack enabling stays off behind a `configService` setting until a live check
 against a dedicated test app passes (my call). Until then the existing
@@ -175,7 +179,8 @@ against a dedicated test app passes (my call). Until then the existing
 
 ### Natural-language filters
 
-Build the classifier and replay evaluation as the plan specifies in task 8.
+Build the classifier and replay evaluation as the earlier plan specifies in its
+task 8.
 
 The implementing agent runs the live fixture gate itself, with the locally
 installed provider CLIs and each provider's default small model, and reports the
@@ -186,18 +191,23 @@ the gate. A passing provider is unlocked in that same pull request. A provider
 that fails, or that the agent cannot run, stays off with the existing reason and
 is reported to Martin.
 
+An inherited provider can change after Enable, so the gate is also checked for
+the provider actually resolved for each event. A deterministic match whose
+effective provider has not passed is a visible, non-dispatching skip; it never
+runs unfiltered and never calls an unproven classifier.
+
 ### Verification and close-out
 
 - An integration test that goes through the real Enable procedure: label event,
   one run, one workspace and session, initial prompt, terminal result. Include a
   run that creates a child. Cover pause racing a claim and restart at the launch
-  boundaries from plan task 9.
+  boundaries from the earlier plan's task 9.
 - An opt-in live GitHub test against a repository named by configuration, never
   run in CI.
 - Update `integrations.md`, `background-jobs.md` and `agent-runtime.md` where
   they say activation, operator UI or the child-work decision are outstanding.
-  Tick the plan's completed checkboxes. Comment on #2772 with what shipped and
-  the known limits.
+  Tick the earlier plan's completed checkboxes. The coordinator comments on
+  #2772 with what shipped and the known limits once the work has merged.
 - A short webhook design note: tunnel versus relay, hook installation, and how a
   second intake feeds the same event ledger.
 
