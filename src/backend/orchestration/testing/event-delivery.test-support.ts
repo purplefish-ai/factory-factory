@@ -127,6 +127,32 @@ export async function preloadEventFixtureModules() {
   }
 }
 
+/** The session wiring `app-context.ts` composes, for fixtures that start real sessions. */
+export function configureEventSessionServices(
+  workspace: typeof import('@/backend/services/workspace'),
+  session: typeof import('@/backend/services/session')
+) {
+  const activity = {
+    markSessionRunning: (w: string, s: string) =>
+      workspace.workspaceActivityService.markSessionRunning(w, s),
+    markSessionIdle: (w: string, s: string) =>
+      workspace.workspaceActivityService.markSessionIdle(w, s),
+    resetPRDiscoveryBackoff: (id: string) =>
+      workspace.workspaceDataService.resetPRDiscoveryBackoff(id),
+  };
+  session.sessionService.configure({ workspace: activity });
+  session.sessionLifecycleService.configure({
+    workspace: activity,
+    messageQueue: {
+      tryDispatchNextMessage: (id, options) =>
+        session.sessionDispatchService.tryDispatchNextMessage(id, ...(options ? [options] : [])),
+    },
+  });
+  session.sessionDispatchService.configure({
+    initPolicy: { getWorkspaceInitPolicy: workspace.getWorkspaceInitPolicy },
+  });
+}
+
 /** Shared source identity and execution settings for both admission fixture boundaries. */
 async function createEventSeed(
   db: IntegrationDatabase,
@@ -173,59 +199,110 @@ async function createEventSeed(
       githubRepo: 'repo',
     },
   });
-  const definition = await db.prisma.agentDefinition.create({
-    data: {
-      projectId: project.id,
-      name: 'Agent',
-      instructions: 'Frozen task',
-      isEnabled: true,
-      // What Enable persists; runtime gates require it for the current definition revision.
-      validatedIntent: {
-        version: 1,
-        definitionRevision: 1,
-        validatedAt: new Date().toISOString(),
-        execution: {
-          version: 1,
-          provider,
-          model: execution.model,
-          requestedModel: execution.model,
-          reasoningEffort: execution.reasoningEffort,
-          providerIntent: 'EXPLICIT',
-          modelIntent: 'EXPLICIT',
-          effortIntent: 'EXPLICIT',
-          effortNormalization: 'NONE',
-        },
-      },
-    },
+  // A saved, paused automation on a source nothing has read yet; Enable activates it below.
+  let definition = await db.prisma.agentDefinition.create({
+    data: { projectId: project.id, name: 'Agent', instructions: 'Frozen task' },
   });
   const connection = await db.prisma.agentConnection.create({
     data: {
       provider: 'GITHUB',
       externalId: `gh:${project.id}`,
       name: 'Repo',
-      sourceState: {
-        create: { isReady: true, lastSourceOrder: admission === 'persisted' ? 1 : 0 },
-      },
+      sourceState: { create: { isReady: true } },
     },
   });
-  const trigger = await db.prisma.agentTrigger.create({
+  let trigger = await db.prisma.agentTrigger.create({
     data: {
       agentDefinitionId: definition.id,
       connectionId: connection.id,
       type: 'GITHUB_ISSUE',
       description: 'Labels',
       config: { version: 1, repositoryIds: [project.id], actions: ['labeled'] },
-      isEnabled: true,
+      isEnabled: false,
       isConfigured: true,
-      activationState: 'ACTIVE',
-      activationGeneration: 1,
-      activationBoundary: { provider: 'GITHUB', headEventId: null, sourceOrder: 0 },
     },
   });
+  let capture = false;
+  const poller = new owner.AgentSourcePollService(
+    {
+      getRepositoryIdentity: async () => ({ id: project.id, name: 'org/repo' }),
+      classifyError: () => 'unknown',
+      listIssueEvents: async () => ({
+        nextPage: null,
+        events: capture
+          ? [
+              {
+                providerEventId: 'event-1',
+                payload: {
+                  version: 1,
+                  provider: 'GITHUB',
+                  repositoryId: project.id,
+                  repositoryFullName: 'org/repo',
+                  action: 'labeled',
+                  actorId: 'human',
+                  creatorId: 'human',
+                  occurredAt: new Date().toISOString(),
+                  observedAt: new Date().toISOString(),
+                  sourceUrl: 'https://github.com/org/repo/issues/1',
+                  issue: {
+                    number: 1,
+                    title: 'Task',
+                    body: 'Frozen issue',
+                    addedLabel: 'agent',
+                    labels: ['agent'],
+                  },
+                },
+              },
+            ]
+          : [],
+      }),
+    },
+    () => 10
+  );
+  // The activation service behind automation.enable, given the intent its validation
+  // would persist: downstream suites start from the fields Enable really writes.
+  await new owner.AgentActivationService(poller).begin(
+    {
+      projectId: project.id,
+      agentId: definition.id,
+      expectedManagementRevision: definition.managementRevision,
+      definitionRevision: definition.definitionRevision,
+      projectSource: { githubOwner: 'org', githubRepo: 'repo' },
+      execution: {
+        version: 1,
+        provider,
+        model: execution.model,
+        requestedModel: execution.model,
+        reasoningEffort: execution.reasoningEffort,
+        providerIntent: 'EXPLICIT',
+        modelIntent: 'EXPLICIT',
+        effortIntent: 'EXPLICIT',
+        effortNormalization: 'NONE',
+      },
+      triggerIds: [trigger.id],
+    },
+    new AbortController().signal
+  );
+  definition = await db.prisma.agentDefinition.findUniqueOrThrow({ where: { id: definition.id } });
+  trigger = await db.prisma.agentTrigger.findUniqueOrThrow({ where: { id: trigger.id } });
+  if (trigger.activationState !== 'ACTIVE') {
+    throw new Error(`Enable did not activate the fixture trigger: ${trigger.activationState}`);
+  }
+  const fence = {
+    definitionRevision: definition.definitionRevision,
+    triggerRevision: trigger.triggerRevision,
+    activationGeneration: trigger.activationGeneration,
+  };
   // Downstream delivery/recovery tests start at the durable queued-run boundary.
   // Bootstrap capture tests keep the full source -> evaluation -> admission path below.
   if (admission === 'persisted') {
     const now = new Date();
+    // Fabricated ledger state: the event is recorded as ordered after the activation
+    // boundary without a captured interval, so the source high water must match it.
+    await db.prisma.agentSourceState.update({
+      where: { connectionId: connection.id },
+      data: { lastSourceOrder: 1 },
+    });
     const event = await db.prisma.agentEvent.create({
       data: {
         connectionId: connection.id,
@@ -274,7 +351,7 @@ async function createEventSeed(
         triggerId: trigger.id,
         eventId: event.id,
         idempotencyKey: `event:${event.id}`,
-        activationGeneration: 1,
+        activationGeneration: fence.activationGeneration,
         definitionSnapshot: snapshot.definition,
         triggerSnapshot: snapshot.trigger,
         input: snapshot.input,
@@ -291,9 +368,7 @@ async function createEventSeed(
         connectionId: connection.id,
         agentDefinitionId: definition.id,
         triggerId: trigger.id,
-        definitionRevision: 1,
-        triggerRevision: 1,
-        activationGeneration: 1,
+        ...fence,
         status: 'MATCHED',
         reasonCode: 'DETERMINISTIC_MATCH',
         explanation: 'Matched',
@@ -304,44 +379,6 @@ async function createEventSeed(
     });
     return { owner, workspace, session, execution, project, input: snapshot.input };
   }
-  let capture = false;
-  const poller = new owner.AgentSourcePollService(
-    {
-      getRepositoryIdentity: async () => ({ id: project.id, name: 'org/repo' }),
-      classifyError: () => 'unknown',
-      listIssueEvents: async () => ({
-        nextPage: null,
-        events: capture
-          ? [
-              {
-                providerEventId: 'event-1',
-                payload: {
-                  version: 1,
-                  provider: 'GITHUB',
-                  repositoryId: project.id,
-                  repositoryFullName: 'org/repo',
-                  action: 'labeled',
-                  actorId: 'human',
-                  creatorId: 'human',
-                  occurredAt: new Date().toISOString(),
-                  observedAt: new Date().toISOString(),
-                  sourceUrl: 'https://github.com/org/repo/issues/1',
-                  issue: {
-                    number: 1,
-                    title: 'Task',
-                    body: 'Frozen issue',
-                    addedLabel: 'agent',
-                    labels: ['agent'],
-                  },
-                },
-              },
-            ]
-          : [],
-      }),
-    },
-    () => 10
-  );
-  await poller.prepareBaseline(connection.id, new AbortController().signal);
   capture = true;
   await poller.pollCycle(new AbortController().signal);
   const event = await db.prisma.agentEvent.findFirstOrThrow({
@@ -356,9 +393,7 @@ async function createEventSeed(
     eventId: event.id,
     triggerId: trigger.id,
     agentDefinitionId: definition.id,
-    definitionRevision: 1,
-    triggerRevision: 1,
-    activationGeneration: 1,
+    ...fence,
     status: 'MATCHED',
     reasonCode: 'DETERMINISTIC_MATCH',
     explanation: 'Matched',
@@ -368,12 +403,7 @@ async function createEventSeed(
   if (!('evaluationId' in evaluation)) {
     throw new Error(`Evaluation failed: ${JSON.stringify(evaluation)}`);
   }
-  await owner.admitRun({
-    evaluationId: evaluation.evaluationId,
-    definitionRevision: 1,
-    triggerRevision: 1,
-    activationGeneration: 1,
-  });
+  await owner.admitRun({ evaluationId: evaluation.evaluationId, ...fence });
   return { owner, workspace, session, execution, project, input };
 }
 
@@ -470,25 +500,7 @@ export async function createEventDeliveryFixture(
     await workspace.workspaceStateMachine.markReady(claim.reservedWorkspaceId);
   }
   session.eventSessionAuthority.configure(owner.agentInitialDelivery);
-  const activity = {
-    markSessionRunning: (w: string, s: string) =>
-      workspace.workspaceActivityService.markSessionRunning(w, s),
-    markSessionIdle: (w: string, s: string) =>
-      workspace.workspaceActivityService.markSessionIdle(w, s),
-    resetPRDiscoveryBackoff: (id: string) =>
-      workspace.workspaceDataService.resetPRDiscoveryBackoff(id),
-  };
-  session.sessionService.configure({ workspace: activity });
-  session.sessionLifecycleService.configure({
-    workspace: activity,
-    messageQueue: {
-      tryDispatchNextMessage: (id, options) =>
-        session.sessionDispatchService.tryDispatchNextMessage(id, ...(options ? [options] : [])),
-    },
-  });
-  session.sessionDispatchService.configure({
-    initPolicy: { getWorkspaceInitPolicy: workspace.getWorkspaceInitPolicy },
-  });
+  configureEventSessionServices(workspace, session);
   const attempt = {
     runId: claim.runId,
     sessionId: claim.reservedSessionId,

@@ -21,6 +21,10 @@
       "disposition": "test-support",
       "reason": "Test harness or fixture support remains explicit in this inventory; production callers are not expected."
     },
+    "src/backend/orchestration/testing/agent-runtime-flow.test-support.ts": {
+      "disposition": "test-support",
+      "reason": "Test harness or fixture support remains explicit in this inventory; production callers are not expected."
+    },
     "src/backend/orchestration/testing/event-delivery.test-support.ts": {
       "disposition": "test-support",
       "reason": "Test harness or fixture support remains explicit in this inventory; production callers are not expected."
