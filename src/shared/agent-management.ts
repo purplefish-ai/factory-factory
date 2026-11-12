@@ -84,6 +84,7 @@ export const agentCapabilitySchema = z.strictObject({
     'INVALID_STORED_DATA',
     'UNSUPPORTED_SCHEDULE',
     'SLACK_INTAKE_UNAVAILABLE',
+    'SLACK_APP_TOKEN_REQUIRED',
     'UNSUPPORTED_GITHUB_ACTION',
     'UNSUPPORTED_SEMANTIC_FILTER',
     'UNSUPPORTED_ACTOR_FILTER',
@@ -93,6 +94,26 @@ export const agentCapabilitySchema = z.strictObject({
   explanation: z.string().max(500),
 });
 export type AgentCapability = z.infer<typeof agentCapabilitySchema>;
+/**
+ * A Slack trigger that is STARTING waits for the user to post `message` in
+ * every selected channel before `expiresAt`. Names are the channel names Enable
+ * verified, when known.
+ */
+export const agentPendingVerificationSchema = z.strictObject({
+  message: z.string().min(1).max(200),
+  expiresAt: z.iso.datetime(),
+  channels: z
+    .array(
+      z.strictObject({
+        channelId: agentManagementIdSchema,
+        name: z.string().max(500).nullable(),
+        verified: z.boolean(),
+      })
+    )
+    .min(1)
+    .max(100),
+});
+export type AgentPendingVerification = z.infer<typeof agentPendingVerificationSchema>;
 export const managedTriggerSchema = z.strictObject({
   id: agentManagementIdSchema,
   isConfigured: z.boolean().nullable(),
@@ -105,6 +126,7 @@ export const managedTriggerSchema = z.strictObject({
   capability: agentCapabilitySchema,
   sourceName: z.string().max(500).nullable(),
   sourceHealth: agentSourceHealthSchema.nullable(),
+  pendingVerification: agentPendingVerificationSchema.nullable().default(null),
 });
 export const agentSummarySchema = z.strictObject({
   id: agentManagementIdSchema,

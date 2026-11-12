@@ -656,12 +656,14 @@ definition, pauses configured triggers that are not supported, and moves each
 supported paused or starting trigger to `STARTING` with a new activation
 generation and a pending activation that expires after 30 minutes.
 Already-active supported triggers keep listening. Enable then prepares one
-GitHub baseline per connection and records it on each pending generation.
+GitHub baseline per connection and records it on each pending generation. A
+Slack trigger instead waits ten minutes for a test message in each channel; see
+[Slack activation](#slack-activation).
 
-A trigger becomes `ACTIVE` only in one transaction that finds its baseline
-resolved and its definition revision, trigger revision, membership, validated
-intent, connection and project still permitting it; the boundary is that
-baseline. Every write is fenced on the exact generation, so an execution or
+A GitHub trigger becomes `ACTIVE` only in one transaction that finds its
+baseline resolved and its definition revision, trigger revision, membership,
+validated intent, connection and project still permitting it; the boundary is
+that baseline. Every write is fenced on the exact generation, so an execution or
 trigger edit, or Pause, during preparation leaves the trigger `PAUSED`; a
 cosmetic name edit does not interrupt activation. The `agent-source-poll` job
 completes pending generations after each cycle. A generation that cannot
@@ -1123,10 +1125,10 @@ existing Slack app's webhook, or start automations.
 Slack intake is gated by `AGENT_SLACK_INTAKE_ENABLED`, read through
 `configService.getAgentRuntimeLimits().slackIntakeEnabled`. It is off unless set
 to exactly `true`, and stays off until a live check against a dedicated Slack
-test app passes. The [Socket Mode listener](#slack-listener) exists behind that
-gate, but nothing can yet move a Slack trigger to `STARTING` or `ACTIVE`:
-activation by test message is separate work, so Slack triggers keep reporting
-`SLACK_INTAKE_UNAVAILABLE`.
+test app passes. While it is off, Slack triggers report
+`SLACK_INTAKE_UNAVAILABLE`, Enable refuses them and no pending activation is
+created. Behind the gate are the [Socket Mode listener](#slack-listener) and
+[activation by test message](#slack-activation).
 
 These credentials depend on the server's `encryption.key`; retain it with any
 database-file backup. Logical export/import includes Slack connection identity,
@@ -1282,6 +1284,78 @@ naming both scopes), a channel or thread the bot cannot read
 bot token (`SLACK_CONTEXT_NOT_CONNECTED`), an unexpected Slack response
 (`SLACK_CONTEXT_FAILED`), an unselected channel (`SLACK_CONTEXT_NOT_SELECTED`)
 or an unwired port (`SLACK_CONTEXT_UNAVAILABLE`) is a terminal `ERROR`.
+
+### Slack activation
+
+A Slack trigger has no provider feed to take a baseline from, so it starts from
+a test message the user posts in each selected channel. The message proves that
+Slack delivers that channel's messages to this app, and its provider timestamp
+becomes that channel's activation boundary.
+
+To turn on a Slack automation:
+
+1. Set up the Slack app as described under [Slack listener](#slack-listener),
+   connect the workspace and save its app-level token in Settings >
+   Integrations > Slack, and invite the bot to every channel the automation
+   selects.
+2. With intake switched on, select Enable on the automation. Its Slack trigger
+   reads Starting, first "Connecting…", then "Connected; waiting for test
+   message" once the listener is connected (within about 15 seconds).
+3. Copy the message the trigger shows, for example
+   `Factory Factory check 7kq2-m9xh-c4tr`, and post it as an ordinary message
+   (not a thread reply, not with a file) in each listed channel within ten
+   minutes. Each channel reads Received as its message arrives, usually within
+   five seconds, and the trigger reads Listening once every channel has it.
+4. If the ten minutes pass first, the trigger returns to Paused
+   (`ACTIVATION_EXPIRED`); select Enable again for a new message.
+
+Enable runs the shared validation: a Slack trigger is supported only while
+intake is on, its connection is enabled with both tokens and an app ID
+(`SLACK_APP_TOKEN_REQUIRED` otherwise), its channels are still readable by the
+bot (`SOURCE_UNAVAILABLE` otherwise), and it has no sender filter
+(`UNSUPPORTED_ACTOR_FILTER`). Enable then stores the pending activation on a new
+generation before the listener can open for it: a code of twelve characters from
+a 31-character alphabet without look-alikes (about 59 bits), the expected
+workspace and app IDs, the selected channels with the names validation resolved,
+the definition and trigger revisions, and a ten-minute expiry
+(`slackActivationExpiryMs`). The code proves delivery, not identity; it is safe
+to post and grants nothing. Reads expose it as `pendingVerification`
+(`{ message, expiresAt, channels: { channelId, name, verified }[] }`) while the
+trigger is `STARTING`; the detail refreshes every 10 seconds.
+
+The listener stores test messages like any other message. The
+`agent-event-evaluation` job completes Slack activations at the start of each
+pass, in a ledger transaction per generation. A stored event verifies a channel
+only when it is on the expected connection, workspace and app, from a person
+(`actorType` `HUMAN`) with no subtype and no thread (a root message), in a
+pending channel of this generation, observed by the listener no later than the
+expiry, and its whole text, ignoring case and surrounding or repeated spaces, is
+`Factory Factory check <code>` for this generation's code. The earliest such
+message in a channel (by exact provider timestamp) is its boundary. When every
+channel is verified, the same transaction rechecks the definition and trigger
+revisions, validated intent, membership, project and connection identity and
+activates the trigger with the Slack boundary
+`{ workspaceId, appId, channels: { channelId, eventTs }[] }`. An edit, Pause or
+source change in the meantime leaves it `PAUSED` instead; a changed app or
+disabled connection records `SOURCE_ERROR`. A generation still unverified at its
+expiry returns to `PAUSED` with `ACTIVATION_EXPIRED`; a message observed after
+the expiry never counts, even if completion runs later. Re-enabling always
+creates a new generation with a new code, so an earlier test message cannot
+activate it, and messages from the paused period stay before the new boundaries.
+
+Messages that arrive while a trigger is `STARTING` are held: evaluation skips
+`STARTING` triggers and records nothing for them. Once the trigger is active,
+the next evaluation pass evaluates them against their channel's boundary, so a
+message posted after channel A was verified, while channel B was still pending,
+runs; one in B before B's test message is `BEFORE_ACTIVATION`. Boundaries
+compare Slack `ts` strings exactly as decimals (whole seconds as integers, then
+the fraction digit by digit), never as floats, local clocks or `observedAt`. A
+test message sits at its own channel's boundary, so it is never after it. If the
+generation expires or is paused instead, the held messages are evaluated against
+the paused trigger and settle as `SKIPPED` (`TRIGGER_DISABLED`). Any message
+whose whole text has the test-message form is skipped as `VERIFICATION_MESSAGE`
+for every Slack trigger, so posting one in a channel another automation already
+listens to starts no run and costs no Slack history read.
 
 ## Client query transport
 

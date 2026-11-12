@@ -50,6 +50,8 @@ const REASON_PHRASES: Readonly<Record<string, string>> = {
     "The event came from a repository or channel this trigger doesn't watch.",
   OWNERSHIP_MISMATCH: "The event doesn't belong to this trigger's source.",
   BEFORE_ACTIVATION: 'The event happened before this trigger started listening.',
+  VERIFICATION_MESSAGE:
+    'This was a test message for turning on a Slack automation; those never run.',
   EVENT_EXPIRED: 'The event expired before it could run.',
   NOT_MATCHED: "The event didn't match this trigger.",
   // Automation, trigger and source state.

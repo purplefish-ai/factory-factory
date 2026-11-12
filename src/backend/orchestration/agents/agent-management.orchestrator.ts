@@ -2,7 +2,10 @@ import { ApplicationError } from '@/backend/lib/application-error';
 import {
   triggerCapability,
   type AgentManagementService,
+  type SlackConnectionService,
+  type SlackIntakeReadiness,
 } from '@/backend/services/agent-definition';
+import { configService } from '@/backend/services/config.service';
 import { SERVICE_TIMEOUT_MS } from '@/backend/services/constants';
 import type { workspaceDataService } from '@/backend/services/workspace';
 import { agentRunPageSchema, agentWorkspaceOriginSchema } from '@/shared/agent-history';
@@ -39,6 +42,7 @@ import {
 
 type Services = AgentSourceServices &
   AgentNativeValidationServices & {
+    slackConnectionService: Pick<SlackConnectionService, 'getAppCredentials'>;
     projectManagementService: { findById(id: string): Promise<AgentSourceProject | null> };
     agentManagementService: AgentManagementService;
     agentRuntime?: Pick<ReturnType<typeof createAgentRuntime>, 'recovery' | 'activation'>;
@@ -60,6 +64,38 @@ async function assertProjectCurrent(project: AgentSourceProject, services: Servi
     throw new ApplicationError('CONFLICT', 'The project sources changed. Retry validation.');
   }
 }
+type SlackApp = { connectionId: string; workspaceId: string; appId: string };
+/**
+ * The workspace and app a Slack connection would listen as, or null without an
+ * enabled connection holding both tokens and an app ID. The token is not kept.
+ */
+async function slackApp(connectionId: string, services: Services): Promise<SlackApp | null> {
+  try {
+    const credentials = await services.slackConnectionService.getAppCredentials(connectionId);
+    return credentials
+      ? { connectionId, workspaceId: credentials.workspaceId, appId: credentials.appId }
+      : null;
+  } catch {
+    return null;
+  }
+}
+/** Slack triggers need intake switched on and an app-level token; apps are cached per connection. */
+async function slackReadiness(
+  trigger: SavedAgentSpecification['triggers'][number],
+  apps: Map<string, SlackApp | null>,
+  services: Services
+): Promise<SlackIntakeReadiness> {
+  if (
+    trigger.type !== 'SLACK_MESSAGE' ||
+    !configService.getAgentRuntimeLimits().slackIntakeEnabled
+  ) {
+    return 'INTAKE_OFF';
+  }
+  if (!apps.has(trigger.connectionId)) {
+    apps.set(trigger.connectionId, await slackApp(trigger.connectionId, services));
+  }
+  return apps.get(trigger.connectionId) ? 'READY' : 'APP_TOKEN_REQUIRED';
+}
 async function validateTriggers(
   project: AgentSourceProject,
   specification: SavedAgentSpecification,
@@ -72,13 +108,15 @@ async function validateTriggers(
     specification: SavedAgentSpecification;
     evidence: AgentSourceValidation;
   }[] = [];
+  const slackApps = new Map<string, SlackApp | null>();
   for (const [index, trigger] of specification.triggers.entries()) {
-    let result = triggerCapability(trigger, false, provider);
+    const slack = await slackReadiness(trigger, slackApps, services);
+    let result = triggerCapability(trigger, false, provider, slack);
     try {
       const selected = { ...specification, triggers: [trigger] };
       const evidence = await resolveProjectAgentSources(project, selected, services);
       verified.push({ index, specification: selected, evidence });
-      result = triggerCapability(trigger, true, provider);
+      result = triggerCapability(trigger, true, provider, slack);
     } catch {
       if (result.reasonCode === 'SOURCE_UNVERIFIED') {
         result = {
@@ -90,7 +128,7 @@ async function validateTriggers(
     }
     results.push({ index, triggerId: trigger.id ?? null, capability: result });
   }
-  return { results, verified };
+  return { results, verified, slackApps };
 }
 async function recoveryScope(
   input: { projectId: string; agentId: string; claim: { runId: string } },
@@ -148,7 +186,30 @@ async function validateSpecification(
     }
   }
   await assertProjectCurrent(project, services);
-  return { triggers: validation.results, execution };
+  return {
+    triggers: validation.results,
+    execution,
+    activation: activationSources(specification, validation),
+  };
+}
+/** What Enable stores with each Slack generation: the validated app and the channel names. */
+function activationSources(
+  specification: SavedAgentSpecification,
+  validation: Awaited<ReturnType<typeof validateTriggers>>
+) {
+  const slackSources = new Map<string, SlackApp>();
+  for (const result of validation.results) {
+    const trigger = specification.triggers[result.index];
+    const app = trigger?.type === 'SLACK_MESSAGE' && validation.slackApps.get(trigger.connectionId);
+    if (result.capability.status === 'SUPPORTED' && app) {
+      slackSources.set(app.connectionId, app);
+    }
+  }
+  const sourceNames: Record<string, string> = {};
+  for (const source of validation.verified) {
+    Object.assign(sourceNames, source.evidence.sourceNames);
+  }
+  return { slackSources: [...slackSources.values()], sourceNames };
 }
 export function createAgentManagement(getServices: () => Services) {
   return {
@@ -217,9 +278,12 @@ export function createAgentManagement(getServices: () => Services) {
       const parsed = agentDraftValidationInputSchema.parse(input);
       const services = getServices();
       const project = await activeProject(parsed.projectId, services);
-      return agentDraftValidationSchema.parse(
-        await validateSpecification(project, parsed.specification, services)
+      const { triggers, execution } = await validateSpecification(
+        project,
+        parsed.specification,
+        services
       );
+      return agentDraftValidationSchema.parse({ triggers, execution });
     },
     /** Validates exactly what the draft preview shows, then starts every supported trigger. */
     async enable(input: unknown) {
@@ -259,6 +323,7 @@ export function createAgentManagement(getServices: () => Services) {
           projectSource: { githubOwner: project.githubOwner, githubRepo: project.githubRepo },
           execution: validation.execution.intent,
           triggerIds,
+          ...validation.activation,
         },
         AbortSignal.timeout(SERVICE_TIMEOUT_MS.agentActivationBaseline)
       );

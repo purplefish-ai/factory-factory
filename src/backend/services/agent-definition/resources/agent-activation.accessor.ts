@@ -8,29 +8,35 @@ import type {
 import {
   agentActivationBoundarySchema,
   agentGithubPendingActivationSchema,
-  agentSourceHealthSchema,
   type AgentGithubPendingActivation,
 } from '@/shared/agent-runtime';
 import { Prisma, type AgentTrigger } from '@prisma-gen/client';
+import {
+  activationSourceHealth,
+  failStartingInTransaction,
+  permitsPending,
+  type StartingTrigger,
+} from './agent-activation-fences';
 import { ledgerTransaction } from './agent-ledger-transaction';
 import { ownedAgent } from './agent-management.accessor';
-import {
-  hasCurrentValidatedIntent,
-  runtimeTriggerInclude,
-  type RuntimeTrigger,
-} from './agent-runtime-guards';
+import { runtimeTriggerInclude, type RuntimeTrigger } from './agent-runtime-guards';
 import { pauseTriggers } from './agent-trigger-pause';
+import { type SlackActivationSource, startSlackTrigger } from './slack-activation.accessor';
 
 type Tx = Prisma.TransactionClient;
-/** One STARTING generation; every write below is fenced on this exact generation. */
-export type StartingTrigger = { triggerId: string; connectionId: string; generation: number };
+export type { StartingTrigger } from './agent-activation-fences';
 export type BeginActivationInput = AgentActivationInput & {
   definitionRevision: number;
   /** The repository the sources were validated against, rechecked under the ledger lock. */
   projectSource: { githubOwner: string | null; githubRepo: string | null };
   execution: AgentNativeIntent;
   triggerIds: string[];
+  /** The workspace and app each Slack connection was validated with, rechecked under the lock. */
+  slackSources: SlackActivationSource[];
+  /** Verified source names keyed `connectionId:channelId`, shown with the test message. */
+  sourceNames: Record<string, string>;
 };
+export type ActivationExpiry = { githubMs: number; slackMs: number };
 export type ActivationOutcome = 'ACTIVATED' | 'NEEDS_BASELINE' | 'WAITING' | 'PAUSED' | 'GONE';
 
 async function claimManagementRevision(tx: Tx, input: AgentActivationInput) {
@@ -44,36 +50,25 @@ async function claimManagementRevision(tx: Tx, input: AgentActivationInput) {
   return definition;
 }
 
-/** Null when no health is recorded; malformed stored health is reported as INVALID. */
-function sourceHealth(trigger: RuntimeTrigger) {
-  const stored = trigger.connection?.sourceState?.health;
-  if (stored == null) {
-    return null;
+function startable(trigger: AgentTrigger, slackSources: SlackActivationSource[]) {
+  if (!trigger.connectionId) {
+    return false;
   }
-  const health = agentSourceHealthSchema.safeParse(stored);
-  return health.success ? health.data.state : 'INVALID';
+  if (trigger.type === 'GITHUB_ISSUE') {
+    return true;
+  }
+  return (
+    trigger.type === 'SLACK_MESSAGE' &&
+    slackSources.some((source) => source.connectionId === trigger.connectionId)
+  );
 }
 
-async function failStartingInTransaction(
+async function loadSupported(
   tx: Tx,
-  trigger: StartingTrigger,
-  reason: AgentPausedReasonCode | null
+  definitionId: string,
+  triggerIds: string[],
+  slackSources: SlackActivationSource[]
 ) {
-  const where = {
-    id: trigger.triggerId,
-    activationState: 'STARTING' as const,
-    activationGeneration: trigger.generation,
-  };
-  const { pausedTriggerCount } = await pauseTriggers(tx, where);
-  if (pausedTriggerCount && reason) {
-    await tx.agentTrigger.update({
-      where: { id: trigger.triggerId },
-      data: { pausedReasonCode: reason },
-    });
-  }
-}
-
-async function loadSupported(tx: Tx, definitionId: string, triggerIds: string[]) {
   const triggers = await tx.agentTrigger.findMany({
     where: { agentDefinitionId: definitionId },
     orderBy: { id: 'asc' },
@@ -88,7 +83,7 @@ async function loadSupported(tx: Tx, definitionId: string, triggerIds: string[])
   const supported = configured.filter((trigger) => triggerIds.includes(trigger.id));
   if (
     supported.length !== new Set(triggerIds).size ||
-    supported.some((trigger) => trigger.type !== 'GITHUB_ISSUE' || !trigger.connectionId)
+    supported.some((trigger) => !startable(trigger, slackSources))
   ) {
     throw new ApplicationError('CONFLICT', 'The automation triggers changed. Retry.');
   }
@@ -140,7 +135,7 @@ async function startTrigger(
  * STARTING generation. Already-ACTIVE supported triggers keep listening;
  * configured triggers that are not supported are paused.
  */
-async function begin(input: BeginActivationInput, now: Date, expiryMs: number) {
+async function begin(input: BeginActivationInput, now: Date, expiry: ActivationExpiry) {
   return await ledgerTransaction(async (tx) => {
     const definition = await claimManagementRevision(tx, input);
     if (definition.definitionRevision !== input.definitionRevision) {
@@ -156,7 +151,12 @@ async function begin(input: BeginActivationInput, now: Date, expiryMs: number) {
     ) {
       throw new ApplicationError('CONFLICT', 'The project sources changed. Retry.');
     }
-    const { supported, unsupportedIds } = await loadSupported(tx, definition.id, input.triggerIds);
+    const { supported, unsupportedIds } = await loadSupported(
+      tx,
+      definition.id,
+      input.triggerIds,
+      input.slackSources
+    );
     await tx.agentDefinition.update({
       where: { id: definition.id },
       data: {
@@ -176,16 +176,44 @@ async function begin(input: BeginActivationInput, now: Date, expiryMs: number) {
       where: { id: { in: unsupportedIds } },
       data: { pausedReasonCode: null },
     });
-    const expiresAt = new Date(now.getTime() + expiryMs);
-    const starting: StartingTrigger[] = [];
-    for (const trigger of supported) {
-      const started = await startTrigger(tx, trigger, definition.definitionRevision, expiresAt);
-      if (started) {
-        starting.push(started);
-      }
-    }
-    return starting;
+    return await startSupported(tx, supported, {
+      ...input,
+      definitionRevision: definition.definitionRevision,
+      now,
+      expiry,
+    });
   });
+}
+
+/** Starts each supported trigger that is not already listening; returns the GitHub ones to advance. */
+async function startSupported(
+  tx: Tx,
+  supported: AgentTrigger[],
+  input: BeginActivationInput & { now: Date; expiry: ActivationExpiry }
+) {
+  const starting: StartingTrigger[] = [];
+  for (const trigger of supported) {
+    if (trigger.activationState === 'ACTIVE' && trigger.isEnabled) {
+      continue;
+    }
+    const slack = input.slackSources.find((source) => source.connectionId === trigger.connectionId);
+    if (trigger.type === 'SLACK_MESSAGE' && slack) {
+      // Slack needs no baseline: each channel's test message becomes its boundary.
+      await startSlackTrigger(tx, trigger, {
+        definitionRevision: input.definitionRevision,
+        source: slack,
+        sourceNames: input.sourceNames,
+        expiresAt: new Date(input.now.getTime() + input.expiry.slackMs),
+      });
+      continue;
+    }
+    const expiresAt = new Date(input.now.getTime() + input.expiry.githubMs);
+    const started = await startTrigger(tx, trigger, input.definitionRevision, expiresAt);
+    if (started) {
+      starting.push(started);
+    }
+  }
+  return starting;
 }
 
 async function listStarting(): Promise<StartingTrigger[]> {
@@ -240,22 +268,11 @@ async function failStarting(trigger: StartingTrigger) {
     await failStartingInTransaction(
       tx,
       trigger,
-      sourceHealth(row) === 'RECOVERY_REQUIRED' ? 'SOURCE_RECOVERY_REQUIRED' : 'SOURCE_ERROR'
+      activationSourceHealth(row) === 'RECOVERY_REQUIRED'
+        ? 'SOURCE_RECOVERY_REQUIRED'
+        : 'SOURCE_ERROR'
     );
   });
-}
-
-function permits(trigger: RuntimeTrigger, pending: AgentGithubPendingActivation) {
-  const definition = trigger.agentDefinition;
-  return (
-    trigger.isConfigured === true &&
-    trigger.triggerRevision === pending.triggerRevision &&
-    trigger.connectionId === pending.connectionId &&
-    definition.definitionRevision === pending.definitionRevision &&
-    definition.isEnabled &&
-    hasCurrentValidatedIntent(definition) &&
-    !definition.project.isArchived
-  );
 }
 
 type PendingCheck =
@@ -271,7 +288,7 @@ function checkPending(row: RuntimeTrigger, now: Date): PendingCheck {
   ) {
     return { pause: 'ACTIVATION_EXPIRED' };
   }
-  const health = sourceHealth(row);
+  const health = activationSourceHealth(row);
   if (health === 'RECOVERY_REQUIRED') {
     return { pause: 'SOURCE_RECOVERY_REQUIRED' };
   }
@@ -281,7 +298,7 @@ function checkPending(row: RuntimeTrigger, now: Date): PendingCheck {
   ) {
     return { pause: 'SOURCE_ERROR' };
   }
-  return permits(row, parsed.data) ? { pending: parsed.data } : { pause: null };
+  return permitsPending(row, parsed.data) ? { pending: parsed.data } : { pause: null };
 }
 
 /**

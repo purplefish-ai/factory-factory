@@ -12,6 +12,7 @@ import {
   type AgentTriggerInput,
 } from '@/shared/schemas/agent-definition.schema';
 import type { AgentEvent, Prisma } from '@prisma-gen/client';
+import { isSlackVerificationText } from './slack-verification';
 
 export const runtimeTriggerInclude = {
   agentDefinition: { include: { project: true } },
@@ -52,14 +53,18 @@ export function rawTriggerInput(trigger: RuntimeTrigger) {
   };
 }
 
-/** Exact decimal provider timestamp comparison; local clocks and floating point are not boundaries. */
-function laterTimestamp(value: string, boundary: string) {
-  const [valueSeconds = '', valueFraction = ''] = value.split('.');
-  const [boundarySeconds = '', boundaryFraction = ''] = boundary.split('.');
-  if (BigInt(valueSeconds) !== BigInt(boundarySeconds)) {
-    return BigInt(valueSeconds) > BigInt(boundarySeconds);
+/**
+ * Exact decimal comparison of Slack `ts` strings (`"1731430000.000100"`); local
+ * clocks and floating point are never boundaries. Negative when `left` is earlier.
+ */
+export function compareSlackTimestamps(left: string, right: string) {
+  const [leftSeconds = '', leftFraction = ''] = left.split('.');
+  const [rightSeconds = '', rightFraction = ''] = right.split('.');
+  if (BigInt(leftSeconds) !== BigInt(rightSeconds)) {
+    return BigInt(leftSeconds) > BigInt(rightSeconds) ? 1 : -1;
   }
-  return valueFraction.padEnd(20, '0') > boundaryFraction.padEnd(20, '0');
+  const [a, b] = [leftFraction.padEnd(20, '0'), rightFraction.padEnd(20, '0')];
+  return a === b ? 0 : a > b ? 1 : -1;
 }
 
 function githubEligibility(
@@ -102,7 +107,11 @@ function slackEligibility(
     return 'SOURCE_IDENTITY_MISMATCH';
   }
   const channel = boundary.channels.find((entry) => entry.channelId === payload.channelId);
-  return channel && laterTimestamp(payload.eventTs, channel.eventTs) ? null : 'BEFORE_ACTIVATION';
+  if (!channel || compareSlackTimestamps(payload.eventTs, channel.eventTs) <= 0) {
+    return 'BEFORE_ACTIVATION';
+  }
+  // A test message posted to turn on any Slack automation never starts a run.
+  return isSlackVerificationText(payload.text) ? 'VERIFICATION_MESSAGE' : null;
 }
 
 export function eventEligibility(

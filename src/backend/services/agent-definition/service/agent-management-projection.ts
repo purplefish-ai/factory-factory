@@ -4,6 +4,8 @@ import {
   managementCursorSchema,
   type ManagementCursor,
 } from '@/backend/services/agent-definition/resources/agent-management.accessor';
+import { slackVerificationMessage } from '@/backend/services/agent-definition/resources/slack-verification';
+import { configService } from '@/backend/services/config.service';
 import {
   agentCapabilitySchema,
   agentPausedReasonCodeSchema,
@@ -12,8 +14,13 @@ import {
   managedTriggerSchema,
   savedAgentSpecificationSchema,
   type AgentCapability,
+  type AgentPendingVerification,
 } from '@/shared/agent-management';
-import { agentSourceHealthSchema, isAgentGithubExecutableAction } from '@/shared/agent-runtime';
+import {
+  agentSlackPendingActivationSchema,
+  agentSourceHealthSchema,
+  isAgentGithubExecutableAction,
+} from '@/shared/agent-runtime';
 import type { SessionProvider } from '@/shared/core/enums';
 import {
   agentExecutionConfigSchema,
@@ -23,13 +30,20 @@ import {
 import { semanticFilterSupported } from './semantic-filter-gate';
 
 /**
+ * Whether a Slack trigger could listen: intake must be switched on
+ * (`slackIntakeEnabled`) and its connection must have an app-level token.
+ */
+export type SlackIntakeReadiness = 'INTAKE_OFF' | 'APP_TOKEN_REQUIRED' | 'READY';
+
+/**
  * `provider` is the automation's provider; undefined means it inherits the user
  * default, so natural-language filters need every provider's classifier proven.
  */
 export function triggerCapability(
   trigger: AgentTriggerInput | null,
   verified = false,
-  provider?: SessionProvider
+  provider?: SessionProvider,
+  slack: SlackIntakeReadiness = 'INTAKE_OFF'
 ): AgentCapability {
   let reasonCode: AgentCapability['reasonCode'] = 'SUPPORTED';
   if (!trigger) {
@@ -43,9 +57,14 @@ export function triggerCapability(
     reasonCode = 'UNSUPPORTED_SEMANTIC_FILTER';
   } else if (trigger.type === 'SCHEDULE') {
     reasonCode = 'UNSUPPORTED_SCHEDULE';
-  } else if (trigger.type === 'SLACK_MESSAGE') {
+  } else if (trigger.type === 'SLACK_MESSAGE' && slack === 'INTAKE_OFF') {
     reasonCode = 'SLACK_INTAKE_UNAVAILABLE';
-  } else if (trigger.config.actions.some((action) => !isAgentGithubExecutableAction(action))) {
+  } else if (trigger.type === 'SLACK_MESSAGE' && slack === 'APP_TOKEN_REQUIRED') {
+    reasonCode = 'SLACK_APP_TOKEN_REQUIRED';
+  } else if (
+    trigger.type === 'GITHUB_ISSUE' &&
+    trigger.config.actions.some((action) => !isAgentGithubExecutableAction(action))
+  ) {
     reasonCode = 'UNSUPPORTED_GITHUB_ACTION';
   } else if (!verified) {
     reasonCode = 'SOURCE_UNVERIFIED';
@@ -59,6 +78,8 @@ const explanations: Record<AgentCapability['reasonCode'], string> = {
   INVALID_STORED_DATA: 'Stored configuration is unavailable.',
   UNSUPPORTED_SCHEDULE: 'Use scheduled automations for time-based tasks.',
   SLACK_INTAKE_UNAVAILABLE: 'Slack event intake is not available yet.',
+  SLACK_APP_TOKEN_REQUIRED:
+    "Add this Slack workspace's app-level token in Settings > Integrations > Slack, then enable again.",
   UNSUPPORTED_GITHUB_ACTION: 'Only GitHub labeled and reopened events are supported.',
   UNSUPPORTED_SEMANTIC_FILTER:
     "Natural-language filters are not available for this automation's provider yet.",
@@ -133,7 +154,7 @@ export function managementProjection(
 ) {
   const { definition, unknown, configured, retained } = data;
   const provider = agentExecutionConfigSchema.safeParse(definition.executionConfig).data?.provider;
-  function triggerProjection(row: (typeof retained)[number]) {
+  function triggerProjection(row: TriggerRow) {
     const parsed = agentTriggerInputSchema.safeParse({
       type: row.type,
       connectionId: row.connectionId,
@@ -157,6 +178,7 @@ export function managementProjection(
       capability: membershipCapability(row, unknown, configuration, provider),
       sourceName: row.connection ? row.connection.name.slice(0, 500) : row.connectionId,
       sourceHealth: health.success ? health.data : null,
+      pendingVerification: pendingVerification(row),
     });
   }
   const execution = agentExecutionConfigSchema.safeParse(definition.executionConfig);
@@ -183,8 +205,18 @@ export function managementProjection(
   });
 }
 
+type TriggerRow = Awaited<ReturnType<typeof agentManagementAccessor.get>>['retained'][number];
+
+/** Bot and app-level tokens are saved and cleared with the app ID, so the ID stands for both. */
+function slackReadiness(row: TriggerRow): SlackIntakeReadiness {
+  if (!configService.getAgentRuntimeLimits().slackIntakeEnabled) {
+    return 'INTAKE_OFF';
+  }
+  return row.connection?.isEnabled && row.connection.appId ? 'READY' : 'APP_TOKEN_REQUIRED';
+}
+
 function membershipCapability(
-  row: Awaited<ReturnType<typeof agentManagementAccessor.get>>['retained'][number],
+  row: TriggerRow,
   unknown: boolean,
   configuration: AgentTriggerInput | null,
   provider: SessionProvider | undefined
@@ -198,5 +230,28 @@ function membershipCapability(
   if (row.connectionId && !row.connection?.isEnabled) {
     return capability('SOURCE_UNAVAILABLE');
   }
-  return triggerCapability(configuration, false, provider);
+  // A read cannot recheck source access; Enable does, and a disabled connection is reported
+  // above. Treating the source as unverified here would show every trigger as unable to run.
+  return triggerCapability(configuration, true, provider, slackReadiness(row));
+}
+
+/** The test message a STARTING Slack generation waits for, and which channels have it. */
+function pendingVerification(row: TriggerRow): AgentPendingVerification | null {
+  const pending = agentSlackPendingActivationSchema.safeParse(row.pendingActivation);
+  if (
+    row.activationState !== 'STARTING' ||
+    !pending.success ||
+    pending.data.activationGeneration !== row.activationGeneration
+  ) {
+    return null;
+  }
+  return {
+    message: slackVerificationMessage(pending.data.nonce),
+    expiresAt: pending.data.expiresAt,
+    channels: pending.data.channels.map((channel) => ({
+      channelId: channel.channelId,
+      name: channel.name,
+      verified: channel.eventTs !== null,
+    })),
+  };
 }

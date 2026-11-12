@@ -99,11 +99,43 @@ it('completes pending activations after each source poll in the same job', async
         calls.push('activate');
         return Promise.resolve();
       },
+      completeSlackPending: () => {
+        calls.push('slack');
+        return Promise.resolve();
+      },
     }
   );
   runtime.start();
   await vi.advanceTimersByTimeAsync(60_000);
   expect(calls).toEqual(['poll', 'activate', 'poll', 'activate']);
+  await runtime.stop();
+});
+
+it('completes Slack activations before each evaluation pass, so held messages evaluate in the same pass', async () => {
+  vi.useFakeTimers();
+  const calls: string[] = [];
+  const runtime = createAgentRuntime(
+    { pollCycle: async () => undefined },
+    {
+      maintainQueue: async () => undefined,
+      evaluatePendingEvents: () => {
+        calls.push('evaluate');
+        return Promise.resolve();
+      },
+      claimNextRun: async () => ({ status: 'DEFERRED', reason: 'EMPTY' }),
+    },
+    undefined,
+    {
+      completePending: async () => undefined,
+      completeSlackPending: () => {
+        calls.push('slack');
+        return Promise.resolve();
+      },
+    }
+  );
+  runtime.start();
+  await vi.advanceTimersByTimeAsync(5000);
+  expect(calls).toEqual(['slack', 'evaluate', 'slack', 'evaluate']);
   await runtime.stop();
 });
 

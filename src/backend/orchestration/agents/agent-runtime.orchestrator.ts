@@ -122,7 +122,7 @@ export function createAgentRuntimeLifecycle(
   poller: Pick<AgentSourcePollService, 'pollCycle'>,
   worker?: EvaluationWorker,
   launcher?: LaunchLifetime,
-  activation?: Pick<AgentActivationService, 'completePending'>
+  activation?: Pick<AgentActivationService, 'completePending' | 'completeSlackPending'>
 ) {
   if (launcher) {
     jobRunner.register({
@@ -158,6 +158,12 @@ export function createAgentRuntimeLifecycle(
           return;
         }
         await pruneLedger(worker, signal);
+        if (signal.aborted) {
+          return;
+        }
+        // Slack test messages are already in the ledger; activating first lets this same pass
+        // evaluate the messages that were held while the trigger was STARTING.
+        await activation?.completeSlackPending(signal);
         if (signal.aborted) {
           return;
         }
