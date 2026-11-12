@@ -3,6 +3,7 @@ import type { AgentSourcePollService } from '@/backend/services/agent-definition
 import {
   createLedgerFixture,
   executionConfig,
+  validatedIntent,
 } from '@/backend/services/agent-definition/resources/testing/agent-ledger.test-support';
 import {
   createIntegrationDatabase,
@@ -37,11 +38,6 @@ beforeEach(async () => {
   projectId = (
     await db.prisma.agentDefinition.findUniqueOrThrow({ where: { id: fixture.definitionId } })
   ).projectId;
-  // Reset is offered to projects with a configured trigger on the source.
-  await db.prisma.agentTrigger.update({
-    where: { id: fixture.triggerId },
-    data: { isConfigured: true },
-  });
   pagesPerCycle = 10;
   feed = [{ providerEventId: 'B', payload: null }];
   port = {
@@ -80,27 +76,28 @@ function state() {
 function evaluator() {
   return new runtime.AgentEventEvaluationService({ resolveExecution: async () => executionConfig });
 }
-/** Task 1 owns the real Enable; this reproduces its contract: a fresh generation and baseline. */
-async function enable(triggerId = fixture.triggerId) {
-  await db.prisma.agentTrigger.update({
-    where: { id: triggerId },
-    data: {
-      activationState: 'STARTING',
-      isEnabled: false,
-      activationGeneration: { increment: 1 },
-    },
+/** The real Enable path: a new STARTING generation whose fresh baseline becomes its boundary. */
+async function enable() {
+  const definition = await db.prisma.agentDefinition.findUniqueOrThrow({
+    where: { id: fixture.definitionId },
   });
-  const prepared = await service().prepareBaseline(fixture.connectionId, signal());
-  expect(prepared.boundary).not.toBeNull();
-  await db.prisma.agentTrigger.update({
-    where: { id: triggerId },
-    data: {
-      activationState: 'ACTIVE',
-      isEnabled: true,
-      activationBoundary: prepared.boundary ?? undefined,
+  await new runtime.AgentActivationService(service()).begin(
+    {
+      projectId,
+      agentId: fixture.definitionId,
+      expectedManagementRevision: definition.managementRevision,
+      definitionRevision: definition.definitionRevision,
+      projectSource: { githubOwner: 'org', githubRepo: 'repo' },
+      execution: validatedIntent(definition.definitionRevision).execution,
+      triggerIds: [fixture.triggerId],
     },
+    signal()
+  );
+  const trigger = await db.prisma.agentTrigger.findUniqueOrThrow({
+    where: { id: fixture.triggerId },
   });
-  return prepared;
+  expect(trigger).toMatchObject({ activationState: 'ACTIVE', isEnabled: true });
+  return { boundary: trigger.activationBoundary };
 }
 /** Every retained proof row, in a stable order, as the database returns it. */
 async function proof() {
@@ -218,6 +215,7 @@ it('pauses every trigger on the connection, cancels queued runs and keeps claime
         activationGeneration: true,
         activationBoundary: true,
         pendingActivation: true,
+        pausedReasonCode: true,
       },
     })
   ).toEqual([
@@ -228,6 +226,7 @@ it('pauses every trigger on the connection, cancels queued runs and keeps claime
       activationGeneration: 5,
       activationBoundary: null,
       pendingActivation: null,
+      pausedReasonCode: null,
     },
     {
       id: fixture.triggerId,
@@ -236,10 +235,11 @@ it('pauses every trigger on the connection, cancels queued runs and keeps claime
       activationGeneration: 2,
       activationBoundary: null,
       pendingActivation: null,
+      pausedReasonCode: null,
     },
   ]);
   expect(await db.prisma.agentRun.findUniqueOrThrow({ where: { id: queued.runId } })).toMatchObject(
-    { status: 'CANCELLED', launchPhase: 'FINISHED', reasonCode: 'TRIGGER_DISABLED' }
+    { status: 'CANCELLED', launchPhase: 'FINISHED', reasonCode: 'STALE_REVISION' }
   );
   expect(
     await db.prisma.agentInitialDelivery.findUnique({ where: { runId: queued.runId } })
@@ -351,6 +351,33 @@ it('answers historical heads from the new epoch, not the ordinals recorded befor
   ).toBe(0);
   const later = await service().prepareBaseline(fixture.connectionId, signal());
   expect(later.boundary).toEqual({ provider: 'GITHUB', headEventId: 'N1', sourceOrder: 3 });
+});
+
+it('activates on an empty feed after a reset at the retained high water, not zero', async () => {
+  feed = [label('A1'), ...feed];
+  await cycle();
+  // Every event is deleted at the provider: an empty page cannot witness the committed head.
+  feed = [];
+  await cycle();
+  expect(await state()).toMatchObject({ health: { state: 'RECOVERY_REQUIRED' } });
+  await reset();
+  expect((await enable()).boundary).toEqual({
+    provider: 'GITHUB',
+    headEventId: null,
+    sourceOrder: 1,
+  });
+  feed = [label('N1')];
+  await cycle();
+  expect(await eventOrder('N1')).toBe(2);
+  expect(await state()).toMatchObject({ health: { state: 'READY' }, lastSourceOrder: 2 });
+  expect(
+    await db.prisma.agentSourceCheckpoint.count({
+      where: { connectionId: fixture.connectionId, status: 'INVALID' },
+    })
+  ).toBe(0);
+  await evaluator().evaluatePendingEvents(signal());
+  expect(await runsFor('N1')).toBe(1);
+  expect(await runsFor('A1')).toBe(0);
 });
 
 it('lets a new epoch prepare baselines beside rejected historical proof', async () => {

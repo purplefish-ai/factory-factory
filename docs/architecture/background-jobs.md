@@ -156,11 +156,11 @@ source-checkpoint backfill, authority-validation, or compaction transaction for
 its current source epoch; this uses retained database proof and makes no
 provider requests. A reset source has no cursor, so cycles read nothing from it
 until Enable prepares a fresh baseline. After each cycle the same job completes
-pending activations: a STARTING trigger becomes ACTIVE once its prepared baseline
-resolves, retries a baseline that was never recorded, and returns to PAUSED with
-a reason on source failure, recovery or after 30 minutes (`activationExpiryMs`).
-There is no separate activation job. This job does not evaluate events or launch
-workspaces.
+pending activations: a STARTING trigger becomes ACTIVE once its prepared
+baseline resolves, retries a baseline that was never recorded, and returns to
+PAUSED with a reason on source failure, recovery or after 30 minutes
+(`activationExpiryMs`). There is no separate activation job. This job does not
+evaluate events or launch workspaces.
 
 The `agent-event-evaluation` job runs immediately, then waits five seconds after
 completion. It evaluates at most 100 durable event/trigger candidates per cycle,

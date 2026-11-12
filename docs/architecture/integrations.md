@@ -681,6 +681,7 @@ default applies, and an explicit unsupported one is a permanent
 `INVALID_EXECUTION_CONFIG` evaluation error. Native discovery failures retry
 with the bounded evaluation budget and never launch. Logical export omits
 `validatedIntent`; restored definitions stay paused until enabled again.
+
 ### Source reset
 
 Trusted-local `automation.resetSource({ projectId, connectionId })` is the
@@ -722,8 +723,8 @@ as usual, but their identities stay retained as unordered source dependencies,
 as they do behind a recovery fence. Evaluation and admission of a paused
 generation are rejected as stale, so an event mid-evaluation when the reset
 commits admits no run. A repeated reset before a fresh head is captured returns
-zero counts and changes nothing, including triggers enabled since; after that,
-a healthy source refuses reset.
+zero counts and changes nothing, including triggers enabled since; after that, a
+healthy source refuses reset.
 
 ### Project-owned saved management
 
