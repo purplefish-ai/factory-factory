@@ -185,7 +185,8 @@ export function createAgentRuntimeLifecycle(
 /**
  * Admission-time execution: explicit selections are pinned by the definition,
  * inherited ones follow current defaults, and the same native normalization as
- * Enable applies, so a run never freezes an effort its model rejects.
+ * Enable applies, so a run never freezes an effort its model rejects. An absent
+ * effort stays absent so the provider's own default applies.
  */
 export async function resolveAgentExecutionConfig(
   services: AgentNativeValidationServices,
@@ -199,11 +200,13 @@ export async function resolveAgentExecutionConfig(
     );
   }
   const { provider, requestedModel, reasoningEffort } = result.intent;
+  // With no explicit or default effort the provider's own default applies at
+  // launch; only a requested effort the model rejects is normalized.
   return agentResolvedExecutionConfigSchema.parse({
     version: 1,
     provider,
     model: requestedModel,
-    ...(reasoningEffort ? { reasoningEffort } : {}),
+    ...(result.requestedEffort !== null && reasoningEffort ? { reasoningEffort } : {}),
   });
 }
 

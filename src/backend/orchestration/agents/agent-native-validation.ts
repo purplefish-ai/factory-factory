@@ -33,7 +33,7 @@ export type AgentNativeValidationServices = {
   };
 };
 type NativeExecution =
-  | { status: 'VALIDATED'; intent: AgentNativeIntent }
+  | { status: 'VALIDATED'; intent: AgentNativeIntent; requestedEffort: string | null }
   | { status: 'UNSUPPORTED_REASONING_EFFORT' };
 
 /**
@@ -73,6 +73,7 @@ export async function resolveNativeExecution(
   const nativeDefault = options.reasoning.defaultValue;
   return {
     status: 'VALIDATED',
+    requestedEffort: requestedEffort ?? null,
     intent: agentNativeIntentSchema.parse({
       version: 1,
       provider: resolved.provider,
@@ -105,7 +106,7 @@ export async function validateAgentExecution(
         explanation: 'The selected native model does not support this reasoning effort.',
       });
     }
-    return agentNativeValidationSchema.parse(result);
+    return agentNativeValidationSchema.parse({ status: result.status, intent: result.intent });
   } catch {
     return agentNativeValidationSchema.parse({
       status: 'UNAVAILABLE',

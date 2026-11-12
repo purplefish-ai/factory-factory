@@ -14,6 +14,10 @@ import type { AgentSourcePollService } from './agent-source-poll.service';
 
 const beginActivationSchema = agentActivationInputSchema.extend({
   definitionRevision: agentDefinitionRevisionSchema,
+  projectSource: z.strictObject({
+    githubOwner: z.string().nullable(),
+    githubRepo: z.string().nullable(),
+  }),
   execution: agentNativeIntentSchema,
   triggerIds: z.array(agentManagementIdSchema).max(20),
 });

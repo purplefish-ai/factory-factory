@@ -1,6 +1,9 @@
 import { afterEach, expect, it, vi } from 'vitest';
 import { jobRunner } from '@/backend/services/job-runner.service';
-import { createAgentRuntimeLifecycle as createAgentRuntime } from './agent-runtime.orchestrator';
+import {
+  createAgentRuntimeLifecycle as createAgentRuntime,
+  resolveAgentExecutionConfig,
+} from './agent-runtime.orchestrator';
 
 afterEach(async () => {
   await jobRunner.stopAll();
@@ -264,3 +267,30 @@ it.each([false, true])(
     expect(calls).toEqual(aborted ? ['retention'] : ['retention', 'evaluation', 'claim']);
   }
 );
+
+it('leaves an absent inherited effort absent instead of pinning the native default', async () => {
+  const services = {
+    sessionProviderResolverService: {
+      resolveDefaultsForWorkspaceCreation: () =>
+        Promise.resolve({ provider: 'CLAUDE' as const, model: 'sonnet' }),
+    },
+    userSettingsQueryService: {
+      get: () =>
+        Promise.resolve({ defaultClaudeReasoningEffort: null, defaultCodexReasoningEffort: null }),
+    },
+    sessionConfigService: {
+      getLaunchOptions: () =>
+        Promise.resolve({
+          provider: 'CLAUDE' as const,
+          model: 'claude-sonnet',
+          reasoning: { options: [{ value: 'low', label: 'Low' }], defaultValue: 'low' },
+          planMode: { supported: false, selected: false },
+        }),
+    },
+  };
+  expect(await resolveAgentExecutionConfig(services, { version: 1 })).toEqual({
+    version: 1,
+    provider: 'CLAUDE',
+    model: 'sonnet',
+  });
+});

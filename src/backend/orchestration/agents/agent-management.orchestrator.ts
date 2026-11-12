@@ -242,6 +242,7 @@ export function createAgentManagement(getServices: () => Services) {
         {
           ...parsed,
           definitionRevision: agent.definitionRevision,
+          projectSource: { githubOwner: project.githubOwner, githubRepo: project.githubRepo },
           execution: validation.execution.intent,
           triggerIds,
         },

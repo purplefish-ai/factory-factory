@@ -656,8 +656,9 @@ GitHub baseline per connection and records it on each pending generation.
 A trigger becomes `ACTIVE` only in one transaction that finds its baseline
 resolved and its definition revision, trigger revision, membership, validated
 intent, connection and project still permitting it; the boundary is that
-baseline. Every write is fenced on the exact generation, so an edit or Pause
-during preparation leaves the trigger `PAUSED`. The `agent-source-poll` job
+baseline. Every write is fenced on the exact generation, so an execution or
+trigger edit, or Pause, during preparation leaves the trigger `PAUSED`; a
+cosmetic name edit does not interrupt activation. The `agent-source-poll` job
 completes pending generations after each cycle. A generation that cannot
 complete returns to `PAUSED` with `pausedReasonCode` `SOURCE_ERROR` (baseline
 preparation failed or the connection is unavailable),
@@ -675,7 +676,8 @@ provider, model and effort are pinned by the definition, while inherited
 settings follow current defaults at admission, so changing a default neither
 pauses the automation nor makes the intent stale. Admission applies the same
 native normalization as validation: an inherited effort the model does not offer
-becomes the native default (or none), and an explicit one is a permanent
+becomes the native default (or none), an absent one stays absent so the provider
+default applies, and an explicit unsupported one is a permanent
 `INVALID_EXECUTION_CONFIG` evaluation error. Native discovery failures retry
 with the bounded evaluation budget and never launch. Logical export omits
 `validatedIntent`; restored definitions stay paused until enabled again.

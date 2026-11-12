@@ -107,6 +107,7 @@ async function begin(overrides: Record<string, unknown> = {}) {
       agentId: fixture.definitionId,
       expectedManagementRevision: current.managementRevision,
       definitionRevision: current.definitionRevision,
+      projectSource: { githubOwner: 'org', githubRepo: 'repo' },
       execution: validatedIntent(current.definitionRevision).execution,
       triggerIds: [fixture.triggerId],
       ...overrides,
@@ -179,6 +180,9 @@ it('refuses stale management or definition revisions without changing state', as
   });
   await expect(begin({ definitionRevision: 2 })).rejects.toMatchObject({ code: 'CONFLICT' });
   await expect(begin({ projectId: 'foreign' })).rejects.toMatchObject({ code: 'NOT_FOUND' });
+  await expect(
+    begin({ projectSource: { githubOwner: 'org', githubRepo: 'renamed' } })
+  ).rejects.toMatchObject({ code: 'CONFLICT' });
   await expect(begin({ triggerIds: [] })).rejects.toMatchObject({
     code: 'PRECONDITION_FAILED',
   });
@@ -239,6 +243,22 @@ it('returns to PAUSED with a source reason when the baseline cannot be prepared'
   });
 });
 
+it('does not activate over malformed source health', async () => {
+  await pausedAutomation();
+  feed = [label('N'), ...feed];
+  await begin();
+  await db.prisma.agentSourceState.update({
+    where: { connectionId: fixture.connectionId },
+    data: { health: { state: 'UNKNOWN' } },
+  });
+  await activation().completePending(signal());
+  expect(await trigger()).toMatchObject({
+    activationState: 'PAUSED',
+    pausedReasonCode: 'SOURCE_ERROR',
+    activationBoundary: null,
+  });
+});
+
 it('does not activate a definition whose validated intent is no longer current', async () => {
   await pausedAutomation();
   feed = [label('N'), ...feed];
@@ -252,6 +272,7 @@ it('does not activate a definition whose validated intent is no longer current',
 });
 
 it('pauses every trigger, cancels queued runs and lets claimed runs finish', async () => {
+  await fixture.secondTrigger();
   const claimed = await fixture.admit(await fixture.event('event-1'));
   const queued = await fixture.admit(await fixture.event('event-2'));
   if (!('runId' in claimed && 'runId' in queued)) {
@@ -272,14 +293,16 @@ it('pauses every trigger, cancels queued runs and lets claimed runs finish', asy
       agentId: fixture.definitionId,
       expectedManagementRevision: current.managementRevision,
     })
-  ).toEqual({ pausedTriggerCount: 1, cancelledRunCount: 1 });
-  expect(await trigger()).toMatchObject({
-    activationState: 'PAUSED',
-    isEnabled: false,
-    activationGeneration: 2,
-    activationBoundary: null,
-    pendingActivation: null,
-  });
+  ).toEqual({ pausedTriggerCount: 2, cancelledRunCount: 1 });
+  for (const id of [fixture.triggerId, 'trigger-b']) {
+    expect(await trigger(id)).toMatchObject({
+      activationState: 'PAUSED',
+      isEnabled: false,
+      activationGeneration: 2,
+      activationBoundary: null,
+      pendingActivation: null,
+    });
+  }
   expect(await definition()).toMatchObject({ isEnabled: false, managementRevision: 2 });
   const runs = await db.prisma.agentRun.findMany({ include: { initialDelivery: true } });
   expect(runs.find((run) => run.id === claimed.runId)?.status).toBe('RUNNING');

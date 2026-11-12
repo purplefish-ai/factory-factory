@@ -26,6 +26,8 @@ type Tx = Prisma.TransactionClient;
 export type StartingTrigger = { triggerId: string; connectionId: string; generation: number };
 export type BeginActivationInput = AgentActivationInput & {
   definitionRevision: number;
+  /** The repository the sources were validated against, rechecked under the ledger lock. */
+  projectSource: { githubOwner: string | null; githubRepo: string | null };
   execution: AgentNativeIntent;
   triggerIds: string[];
 };
@@ -42,9 +44,14 @@ async function claimManagementRevision(tx: Tx, input: AgentActivationInput) {
   return definition;
 }
 
+/** Null when no health is recorded; malformed stored health is reported as INVALID. */
 function sourceHealth(trigger: RuntimeTrigger) {
-  const health = agentSourceHealthSchema.safeParse(trigger.connection?.sourceState?.health);
-  return health.success ? health.data.state : null;
+  const stored = trigger.connection?.sourceState?.health;
+  if (stored == null) {
+    return null;
+  }
+  const health = agentSourceHealthSchema.safeParse(stored);
+  return health.success ? health.data.state : 'INVALID';
 }
 
 async function failStartingInTransaction(
@@ -143,6 +150,12 @@ async function begin(input: BeginActivationInput, now: Date, expiryMs: number) {
     if (project.isArchived) {
       throw new ApplicationError('PRECONDITION_FAILED', 'Choose an active project.');
     }
+    if (
+      project.githubOwner !== input.projectSource.githubOwner ||
+      project.githubRepo !== input.projectSource.githubRepo
+    ) {
+      throw new ApplicationError('CONFLICT', 'The project sources changed. Retry.');
+    }
     const { supported, unsupportedIds } = await loadSupported(tx, definition.id, input.triggerIds);
     await tx.agentDefinition.update({
       where: { id: definition.id },
@@ -158,6 +171,11 @@ async function begin(input: BeginActivationInput, now: Date, expiryMs: number) {
       },
     });
     await pauseTriggers(tx, { id: { in: unsupportedIds }, activationState: { not: 'PAUSED' } });
+    // Unsupported triggers report their capability reason, not an old activation failure.
+    await tx.agentTrigger.updateMany({
+      where: { id: { in: unsupportedIds } },
+      data: { pausedReasonCode: null },
+    });
     const expiresAt = new Date(now.getTime() + expiryMs);
     const starting: StartingTrigger[] = [];
     for (const trigger of supported) {
@@ -253,10 +271,14 @@ function checkPending(row: RuntimeTrigger, now: Date): PendingCheck {
   ) {
     return { pause: 'ACTIVATION_EXPIRED' };
   }
-  if (sourceHealth(row) === 'RECOVERY_REQUIRED') {
+  const health = sourceHealth(row);
+  if (health === 'RECOVERY_REQUIRED') {
     return { pause: 'SOURCE_RECOVERY_REQUIRED' };
   }
-  if (!(row.connection?.isEnabled && row.connection.provider === 'GITHUB')) {
+  if (
+    health === 'INVALID' ||
+    !(row.connection?.isEnabled && row.connection.provider === 'GITHUB')
+  ) {
     return { pause: 'SOURCE_ERROR' };
   }
   return permits(row, parsed.data) ? { pending: parsed.data } : { pause: null };
