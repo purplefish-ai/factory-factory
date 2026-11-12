@@ -44,6 +44,9 @@ resets, refs and effects follow [client state](architecture/client-state.md).
 designs. The [cloud vision](design/factory-factory-cloud-vision/README.md)
 remains a proposal; its plans do not describe the shipped local application.
 
+The [GitHub webhook intake](design/github-webhook-intake.md) note is a proposal
+for receiving GitHub events beside the shipped issue-event polling.
+
 The older top-level voice, agent-status, CORS, and notification design documents
 are point-in-time records. Check current behavior in source and architecture
 notes before using their examples.

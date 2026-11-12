@@ -10,6 +10,7 @@ behavior.
 | [Adversarial review](adversarial-review.md)                                    | Implemented; the record identifies its remaining live-validation limitation  |
 | [Child workspace adversarial review](child-workspace-adversarial-review.md)    | Proposed; step 1 (checkout context) implemented                              |
 | [Clipboard screenshot paste](clipboard-screenshot-paste-unsupported-format.md) | Option A implemented; alternatives remain design context                     |
+| [GitHub webhook intake](github-webhook-intake.md)                              | Proposed; polling remains the shipped GitHub intake                          |
 | [Workspace rename display](workspace-rename-display.md)                        | Header fix implemented; the Kanban report is not reproduced and remains open |
 | [Archive](archive/)                                                            | Superseded designs and migration records                                     |
 
