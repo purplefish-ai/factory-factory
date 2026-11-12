@@ -789,7 +789,9 @@ capabilities; other GitHub actions (`opened`, `edited`), Slack intake, SCHEDULE
 and actor filters report specific unsupported/unavailable reasons while
 remaining inspectable drafts. Natural-language `filterInstructions` report
 `UNSUPPORTED_SEMANTIC_FILTER` unless the automation's provider passed the live
-classifier gate; an inherited provider needs every provider to have passed.
+classifier gate. Draft validation and Enable check the provider resolved at that
+moment, including an inherited one; ordinary reads do not resolve providers, so
+they report an inherited provider as supported only when every provider passed.
 
 History exposes bounded reasons, nullable start times, separate automatic
 attempts and send generations, preparation/delivery state and durable deadlines,

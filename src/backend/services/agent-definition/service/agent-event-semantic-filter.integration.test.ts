@@ -264,6 +264,14 @@ it('skips an event whose inherited provider changed to an unproven one after Ena
       getModelDefaults: () => userSettingsService.get(),
       findWorkspace: async () => null,
     }),
+    sessionConfigService: {
+      getLaunchOptions: async (input: { provider: 'CLAUDE' | 'CODEX'; model: string }) => ({
+        provider: input.provider,
+        model: input.model,
+        reasoning: { options: [{ value: 'low', label: 'low' }], defaultValue: 'low' },
+        planMode: { supported: false, selected: false },
+      }),
+    },
   };
   expect(
     await db.prisma.agentDefinition.findUniqueOrThrow({ where: { id: fixture.definitionId } })

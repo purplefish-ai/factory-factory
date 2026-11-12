@@ -16,11 +16,11 @@ import { classifyGitHubCLIError, type githubCLIService } from '@/backend/service
 import { jobRunner } from '@/backend/services/job-runner.service';
 import { createLogger } from '@/backend/services/logger.service';
 import type { classifyAgentEvent } from '@/backend/services/session';
+import { createEventClassifierPort } from './agent-event-classifier.orchestrator';
 import {
   resolveNativeExecution,
   type AgentNativeValidationServices,
 } from './agent-native-validation';
-import { createEventClassifierPort } from './agent-event-classifier.orchestrator';
 import { createEventRunConsumer } from './event-run-consumer.orchestrator';
 
 const logger = createLogger('agent-runtime');

@@ -7,6 +7,12 @@ import {
   destroyIntegrationDatabase,
   type IntegrationDatabase,
 } from '@/backend/testing/integration-db';
+const gate = vi.hoisted(() => ({ proven: ['CLAUDE', 'CODEX'] }));
+vi.mock('@/backend/services/agent-definition/service/semantic-filter-gate', () => ({
+  isClassifierProven: (provider: string) => gate.proven.includes(provider),
+  semanticFilterSupported: (provider: string | undefined) =>
+    provider ? gate.proven.includes(provider) : gate.proven.length === 2,
+}));
 let createAgentManagement: typeof import('@/backend/orchestration/agents/agent-management.orchestrator').createAgentManagement;
 let createAgentAuthoring: typeof import('@/backend/orchestration/agents/agent-authoring.orchestrator').createAgentAuthoring;
 let createContext: typeof import('./trpc').createContext;
@@ -192,6 +198,38 @@ it('rejects project source changes during external validation before any saved w
   ).rejects.toMatchObject({ code: 'CONFLICT' });
   expect((await caller.get(owner)).name).toBe('Investigator');
   expect((await caller.get(owner)).managementRevision).toBe(1);
+});
+it('gates natural-language filters on the provider resolved at validation, including inherited ones', async () => {
+  gate.proven = ['CLAUDE'];
+  try {
+    const owner = await save();
+    const original = await caller.get(owner);
+    const filtered = {
+      ...original.specification!,
+      triggers: original.specification!.triggers.map((trigger) => ({
+        ...trigger,
+        filterInstructions: 'Only billing bugs',
+      })),
+    };
+    const capability = async (specification: typeof filtered) =>
+      (await caller.validateDraft({ projectId, specification })).triggers[0]?.capability.reasonCode;
+    // The inherited provider resolves to Claude, which is proven.
+    expect(await capability(filtered)).toBe('SUPPORTED');
+    native.mockResolvedValue({
+      provider: 'CODEX',
+      model: 'gpt-6-luna',
+      reasoning: { options: [{ value: 'high', label: 'High' }], defaultValue: 'high' },
+      planMode: { supported: true, selected: false },
+    });
+    expect(
+      await capability({
+        ...filtered,
+        executionConfig: { version: 1, provider: 'CODEX', model: 'gpt-6-luna' },
+      })
+    ).toBe('UNSUPPORTED_SEMANTIC_FILTER');
+  } finally {
+    gate.proven = ['CLAUDE', 'CODEX'];
+  }
 });
 it('keeps unsupported settings saveable while rejecting foreign and archived ownership', async () => {
   const owner = await save();
