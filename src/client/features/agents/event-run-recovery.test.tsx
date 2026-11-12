@@ -24,6 +24,7 @@ import {
   recoveryTargetFixture,
   staleRecoveryContextError,
   unavailableTargetFixture,
+  unprovenAbandonedRunFixture,
 } from './event-run-recovery.story-fixtures';
 import type { EventRun } from './types';
 
@@ -206,15 +207,85 @@ describe('EventRunRecovery', () => {
 
   it('names the block when no action is available', async () => {
     serveRecovery('deliveryUncertain');
+    respond['automation.inspectRun'] = () => ({
+      ...recoveryInspectionFixture('deliveryUncertain'),
+      unprovenAbandonAvailable: false,
+    });
+    render();
+    const dialog = await openInspection('run-deliveryUncertain');
+
+    for (const action of ['Resolve', 'Abandon', 'Retry', 'Abandon anyway']) {
+      expect(buttonIn(dialog, action)).toBeUndefined();
+    }
+    expect(dialog.textContent).toContain('No recovery action is available');
+    expect(dialog.textContent).toContain("can't confirm that this run's agent has stopped");
+    expect(dialog.textContent).toContain('may have reached the agent');
+  });
+
+  it('offers Abandon anyway for a blocked run and sends the opt-in with the exact context', async () => {
+    serveRecovery('deliveryUncertain');
     render();
     const dialog = await openInspection('run-deliveryUncertain');
 
     for (const action of ['Resolve', 'Abandon', 'Retry']) {
       expect(buttonIn(dialog, action)).toBeUndefined();
     }
-    expect(dialog.textContent).toContain('No recovery action is available');
-    expect(dialog.textContent).toContain("can't confirm that this run's agent has stopped");
-    expect(dialog.textContent).toContain('may have reached the agent');
+    expect(dialog.textContent).toContain("Resolve, Retry and Abandon aren't available");
+    await act(async () => requireButton(inspection(), 'Abandon anyway').click());
+    await waitForCheck(() => expect(confirmation()).not.toBeNull());
+    const confirm = confirmation() as HTMLElement;
+    expect(confirm.textContent).toContain(
+      "Factory Factory can't confirm this run's agent has stopped"
+    );
+    expect(confirm.textContent).toContain('frees its run slot');
+    expect(confirm.textContent).toContain('keeps working in its workspace until you stop it there');
+    expect(confirm.textContent).toContain('Check the workspace');
+    expect(confirm.textContent).toContain(
+      'recorded as Cancelled, or Failed if its first turn failed'
+    );
+    expect(confirm.textContent).not.toMatch(/archiv|delet|idle/i);
+
+    await act(async () => requireButton(confirm, 'Abandon anyway').click());
+    await waitForCheck(() =>
+      expect(runArticle('run-deliveryUncertain').textContent).toContain('Run abandoned')
+    );
+    expect(runArticle('run-deliveryUncertain').textContent).toContain(
+      "couldn't confirm its agent stopped"
+    );
+    const target = recoveryTargetFixture('deliveryUncertain');
+    if (target.status !== 'AVAILABLE') {
+      throw new Error('Expected an available target');
+    }
+    const sent = requests.filter((request) => request.path === 'automation.resolveAmbiguousRun');
+    expect(sent).toHaveLength(1);
+    expect(agentRecoveryInputSchema.parse(sent[0]?.input)).toEqual({
+      agentId: 'event-agent',
+      ...target.context,
+      action: 'ABANDON',
+      acceptUnprovenStop: true,
+    });
+  });
+
+  it('never sends the opt-in with an ordinary Abandon', async () => {
+    serveRecovery('heldAfterTurn');
+    render();
+    await openInspection('run-heldAfterTurn');
+    const confirm = await choose('Abandon');
+    await act(async () => requireButton(confirm, 'Abandon run').click());
+    await waitForCheck(() => expect(count('automation.resolveAmbiguousRun')).toBe(1));
+    const sent = requests.find((request) => request.path === 'automation.resolveAmbiguousRun');
+    expect(sent?.input).not.toHaveProperty('acceptUnprovenStop');
+  });
+
+  it('explains a run abandoned without a confirmed stop', async () => {
+    runs = [unprovenAbandonedRunFixture()];
+    render();
+    await waitForCheck(() => expect(container.querySelector('[data-run-id]')).not.toBeNull());
+    const ended = runArticle('run-deliveryUncertain');
+    expect(ended.textContent).toContain('Cancelled');
+    expect(ended.textContent).toContain("couldn't confirm its agent had stopped");
+    expect(ended.textContent).not.toContain('Unrecognized reason');
+    expect(buttonIn(ended, 'Inspect')).toBeUndefined();
   });
 
   it('offers only Abandon for a child-held run and says it keeps its outcome', async () => {

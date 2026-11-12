@@ -51,6 +51,24 @@ export const eventRunResolutionSchema = z.strictObject({
   resolvedAt: z.iso.datetime(),
 });
 export type EventRunResolution = z.infer<typeof eventRunResolutionSchema>;
+/** Why recovery could not prove the run's own work stopped (the common recovery blocks). */
+export const unprovenStopReasonSchema = z.enum([
+  'PREPARATION_CLEANUP_UNCERTAIN',
+  'PREVIOUS_WORK_PROOF_UNAVAILABLE',
+  'SOURCE_UNAVAILABLE',
+  'WORK_PROOF_UNAVAILABLE',
+]);
+export type UnprovenStopReason = z.infer<typeof unprovenStopReasonSchema>;
+/**
+ * A person ended the run although its stop could not be proven. It records no
+ * stop or work proof: any `stop` beside it is only what was actually observed.
+ */
+export const unprovenAbandonSchema = z.strictObject({
+  version: z.literal(1),
+  attempt: initialAttemptSchema,
+  reason: unprovenStopReasonSchema,
+  decidedAt: z.iso.datetime(),
+});
 export const initialDeliveryEvidenceSchema = z.strictObject({
   version: z.literal(1),
   attempt: initialAttemptSchema,
@@ -59,6 +77,7 @@ export const initialDeliveryEvidenceSchema = z.strictObject({
   stop: runtimeStopEvidenceSchema.optional(),
   work: eventWorkProofSchema.optional(),
   resolution: eventRunResolutionSchema.optional(),
+  unprovenAbandon: unprovenAbandonSchema.optional(),
   /** Child observation that let settlement or ABANDON finish the run. */
   children: eventChildRestProofSchema.optional(),
 });

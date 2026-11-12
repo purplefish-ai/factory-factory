@@ -35,6 +35,7 @@ import {
   type RecoveryInspection,
   type RecoveryOutcome,
   UNAVAILABLE_TARGET,
+  UNPROVEN_ABANDON_OUTCOME,
 } from './event-run-recovery-copy';
 import type { EventRun } from './types';
 
@@ -72,6 +73,40 @@ function isStale(problem: Problem | null) {
 }
 
 const recoveryQueryKey = (scope: Scope) => ['automation', 'runRecovery', scope] as const;
+
+/**
+ * The inspected context, unchanged, with the chosen action. Only Abandon anyway
+ * carries the opt-in to an unproven stop.
+ */
+function recoveryRequest(agentId: string, action: RecoveryAction, inspection: RecoveryInspection) {
+  return action === 'ABANDON_UNPROVEN'
+    ? {
+        agentId,
+        ...inspection.context,
+        action: 'ABANDON' as const,
+        acceptUnprovenStop: true as const,
+      }
+    : { agentId, ...inspection.context, action };
+}
+
+function agentState(inspection: RecoveryInspection) {
+  if (inspection.proofAvailable) {
+    return 'Stopped.';
+  }
+  return inspection.blocked
+    ? 'Not confirmed stopped.'
+    : 'Not confirmed stopped. Each action stops it first.';
+}
+
+function actionProblem(error: unknown): Problem {
+  if (trpcErrorCode(error) === 'CONFLICT') {
+    return { kind: 'changed' };
+  }
+  return {
+    kind: 'failed',
+    message: error instanceof Error ? error.message : "Couldn't reach the app.",
+  };
+}
 
 /**
  * The target, then its inspection, read together and only on request. Neither
@@ -143,7 +178,7 @@ export function EventRunRecovery({
     submitting.current = true;
     const { action, inspection } = view;
     try {
-      const result = await resolve.mutateAsync({ agentId, ...inspection.context, action });
+      const result = await resolve.mutateAsync(recoveryRequest(agentId, action, inspection));
       if (result.status === 'BLOCKED') {
         setView({ ...view, problem: { kind: 'blocked', reason: result.reason } });
         return;
@@ -152,19 +187,10 @@ export function EventRunRecovery({
         invalidateRunRecoveryQueries(utils, projectId, agentId),
         "Couldn't refresh runs."
       );
-      setOutcome(result.status);
+      setOutcome(action === 'ABANDON_UNPROVEN' ? 'ABANDONED_UNPROVEN' : result.status);
       close();
     } catch (error) {
-      setView({
-        ...view,
-        problem:
-          trpcErrorCode(error) === 'CONFLICT'
-            ? { kind: 'changed' }
-            : {
-                kind: 'failed',
-                message: error instanceof Error ? error.message : "Couldn't reach the app.",
-              },
-      });
+      setView({ ...view, problem: actionProblem(error) });
     } finally {
       submitting.current = false;
     }
@@ -283,19 +309,35 @@ function RecoveryReadState({
         <dt className="text-muted-foreground">First message</dt>
         <dd>{FIRST_MESSAGE[inspection.run.deliveryState]}</dd>
         <dt className="text-muted-foreground">Agent</dt>
-        <dd>
-          {inspection.proofAvailable
-            ? 'Stopped.'
-            : 'Not confirmed stopped. Each action stops it first.'}
-        </dd>
+        <dd>{agentState(inspection)}</dd>
       </dl>
       {inspection.childHold && (
         <ChildHoldNotice hold={inspection.childHold} projectSlug={projectSlug} />
       )}
       {blocked && (
-        <StatusCallout tone="warning" title="No recovery action is available">
+        <StatusCallout
+          tone="warning"
+          title={
+            inspection.unprovenAbandonAvailable
+              ? "Resolve, Retry and Abandon aren't available"
+              : 'No recovery action is available'
+          }
+        >
           {describeRecoveryBlock(blocked)}
         </StatusCallout>
+      )}
+      {blocked && inspection.unprovenAbandonAvailable && (
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={archived}
+            onClick={() => onChoose('ABANDON_UNPROVEN', inspection)}
+          >
+            {ACTION_LABELS.ABANDON_UNPROVEN}
+          </Button>
+          <span className="text-muted-foreground">{ACTION_SUMMARIES.ABANDON_UNPROVEN}</span>
+        </div>
       )}
       {archived && (
         <StatusCallout tone="info">
@@ -388,7 +430,7 @@ function RecoveryConfirm({
       description={copy.description}
       confirmText={stale ? 'Reload' : copy.confirmText}
       pendingText={copy.pendingText}
-      variant={action === 'ABANDON' && !stale ? 'destructive' : 'default'}
+      variant={action.startsWith('ABANDON') && !stale ? 'destructive' : 'default'}
       isPending={pending}
       onConfirm={stale ? onReload : onConfirm}
     >
@@ -445,6 +487,13 @@ const CONFIRM_COPY: Record<
     confirmText: 'Abandon run',
     pendingText: 'Abandoning…',
   },
+  ABANDON_UNPROVEN: {
+    title: 'Abandon this run anyway?',
+    description:
+      "Factory Factory can't confirm this run's agent has stopped. Abandoning ends the run anyway and frees its run slot, so this automation can start its next run.",
+    confirmText: 'Abandon anyway',
+    pendingText: 'Abandoning…',
+  },
 };
 
 function ActionConsequences({
@@ -479,7 +528,16 @@ function ActionConsequences({
   }
   return (
     <>
-      <p>{abandonOutcome(inspection, run)}</p>
+      {action === 'ABANDON_UNPROVEN' && (
+        <StatusCallout tone="warning" title="Its agent may still be running">
+          If it is, it keeps working in its workspace until you stop it there. Check the workspace
+          after abandoning. Factory Factory stops it first if it can still reach it, and never sends
+          the first message again.
+        </StatusCallout>
+      )}
+      <p>
+        {action === 'ABANDON_UNPROVEN' ? UNPROVEN_ABANDON_OUTCOME : abandonOutcome(inspection, run)}
+      </p>
       <p>
         Abandon doesn't stop this run's child workspaces; any that are still working keep going as
         ordinary workspaces.

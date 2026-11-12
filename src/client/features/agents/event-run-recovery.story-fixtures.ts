@@ -106,6 +106,20 @@ export function recoveryRunFixture(recovery: RecoveryFixture): EventRun {
   });
 }
 
+/**
+ * The ambiguous-delivery run after Abandon with an accepted unproven stop: the
+ * history keeps its AMBIGUOUS first message; only status and reason change.
+ */
+export function unprovenAbandonedRunFixture(): EventRun {
+  return eventRunFixture({
+    ...recoveryRunFixture('deliveryUncertain'),
+    status: 'CANCELLED',
+    launchPhase: 'FINISHED',
+    reasonCode: 'ABANDONED_UNPROVEN',
+    completedAt: '2026-11-11T10:00:00.000Z',
+  });
+}
+
 /** The exact claim and current send for a run; a retry raises `attemptGeneration` to 2. */
 export function recoveryContextFixture(runId: string, attemptGeneration = 1) {
   const rotated = attemptGeneration > 1;
@@ -183,12 +197,35 @@ const CHILD_HOLD = {
 /** What `automation.inspectRun` returned for each state in the backend tests. */
 const INSPECTIONS = {
   // Own work not yet proven stopped: each action stops it first.
-  heldAfterTurn: { blocked: null, childHold: null, proofAvailable: false },
-  resolved: { blocked: null, childHold: null, proofAvailable: true },
-  childHeld: { blocked: null, childHold: CHILD_HOLD, proofAvailable: false },
-  deliveryUncertain: { blocked: 'WORK_PROOF_UNAVAILABLE', childHold: null, proofAvailable: false },
+  heldAfterTurn: {
+    blocked: null,
+    unprovenAbandonAvailable: false,
+    childHold: null,
+    proofAvailable: false,
+  },
+  resolved: {
+    blocked: null,
+    unprovenAbandonAvailable: false,
+    childHold: null,
+    proofAvailable: true,
+  },
+  childHeld: {
+    blocked: null,
+    unprovenAbandonAvailable: false,
+    childHold: CHILD_HOLD,
+    proofAvailable: false,
+  },
+  // Every common block leaves Abandon with an accepted unproven stop
+  // (`event-run-unproven-abandon.integration.test.ts`).
+  deliveryUncertain: {
+    blocked: 'WORK_PROOF_UNAVAILABLE',
+    unprovenAbandonAvailable: true,
+    childHold: null,
+    proofAvailable: false,
+  },
   setupUncertain: {
     blocked: 'PREPARATION_CLEANUP_UNCERTAIN',
+    unprovenAbandonAvailable: true,
     childHold: null,
     proofAvailable: false,
   },

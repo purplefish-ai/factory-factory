@@ -230,6 +230,7 @@ export function createAgentManagement(getServices: () => Services) {
             preparationState: inspected.run.preparation?.state ?? null,
           },
           blocked: inspected.blocked,
+          unprovenAbandonAvailable: inspected.unprovenAbandonAvailable,
           childHold: inspected.childHold,
           retryBlocked: inspected.retryBlocked,
           retryResourcesAvailable: inspected.retryResourcesAvailable,

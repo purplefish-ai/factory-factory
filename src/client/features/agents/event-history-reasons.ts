@@ -93,6 +93,8 @@ const REASON_PHRASES: Readonly<Record<string, string>> = {
   // A person's decision.
   EXPLICIT_ABANDONMENT: 'Abandoned by a person.',
   ABANDONED_WITH_CHILD_WORK: 'Abandoned by a person before its child workspaces had finished.',
+  ABANDONED_UNPROVEN:
+    "Abandoned by a person although Factory Factory couldn't confirm its agent had stopped. If it was still running, it may have kept working in its workspace.",
   // Resolve keeps the run open and holding its slot for a later decision.
   EXPLICITLY_RESOLVED:
     'Marked resolved by a person after its agent stopped. It keeps its run slot until someone retries or abandons it.',

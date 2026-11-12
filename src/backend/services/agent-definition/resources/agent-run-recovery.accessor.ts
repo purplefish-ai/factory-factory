@@ -4,7 +4,9 @@ import { agentRunResultSchema } from '@/shared/agent-runtime';
 import {
   initialDeliveryEvidenceSchema,
   eventRunResolutionSchema,
+  unprovenAbandonSchema,
   type InitialDeliveryEvidence,
+  type UnprovenStopReason,
 } from '@/shared/event-agent-delivery';
 import {
   eventRunRecoveryContextSchema,
@@ -283,6 +285,62 @@ export const agentRunRecoveryAccessor = {
       return {
         status: context.action === 'ABANDON' ? ('ABANDONED' as const) : ('RESOLVED' as const),
       };
+    });
+  },
+  /**
+   * ABANDON accepted without stop or work proof. The exact claim and send are
+   * checked as for any action. The run ends with its failed first turn kept,
+   * otherwise CANCELLED, and frees its slot. Bumping the worker generation
+   * fences every later owner write for the old attempt (send, outcome,
+   * ambiguity, stop, lease and settlement). Evidence records the decision and
+   * its reason only: no stop or work proof is written.
+   */
+  abandonUnproven(
+    input: EventRunRecoveryInput,
+    reason: UnprovenStopReason,
+    observedChildren: EventChildRest,
+    assertCurrent: () => void
+  ) {
+    const context = eventRunRecoveryInputSchema.parse(input);
+    const rest = eventChildRestSchema.parse(observedChildren);
+    if (context.action !== 'ABANDON' || !context.acceptUnprovenStop) {
+      launchConflict();
+    }
+    assertCurrent();
+    return ledgerTransaction(async (tx) => {
+      const run = await currentLaunch(tx, context.claim);
+      assertContext(run, context);
+      if (!(await childObservationIsCurrent(tx, context.claim.reservedWorkspaceId, rest))) {
+        return { status: 'BLOCKED' as const, reason: 'CHILD_WORK_UNPROVEN' as const };
+      }
+      const evidence: InitialDeliveryEvidence =
+        run.initialDelivery.evidence === null
+          ? { version: 1, attempt: context.attempt }
+          : initialDeliveryEvidenceSchema.parse(run.initialDelivery.evidence);
+      const unprovenAbandon = unprovenAbandonSchema.parse({
+        version: 1,
+        attempt: context.attempt,
+        reason,
+        decidedAt: new Date().toISOString(),
+      });
+      await tx.agentInitialDelivery.update({
+        where: { runId: run.id },
+        data: { evidence: { ...evidence, children: eventChildRestProof(rest), unprovenAbandon } },
+      });
+      await tx.agentRun.update({
+        where: { id: run.id },
+        data: {
+          status: evidence.outcome?.result === 'FAILED' ? 'FAILED' : 'CANCELLED',
+          launchPhase: 'FINISHED',
+          completedAt: new Date(),
+          leaseExpiresAt: null,
+          nextAttemptAt: null,
+          reasonCode: 'ABANDONED_UNPROVEN',
+          workerGeneration: { increment: 1 },
+        },
+      });
+      assertCurrent();
+      return { status: 'ABANDONED' as const };
     });
   },
 };
