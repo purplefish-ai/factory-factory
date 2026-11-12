@@ -2,7 +2,14 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { eventAgentFixture, triggerInBackendState } from './event-agent.test-support';
+import {
+  backendEnable,
+  backendExpireActivation,
+  backendVerifySlackChannel,
+  eventAgentFixture,
+  slackTriggerFixture,
+  triggerInBackendState,
+} from './event-agent.test-support';
 import {
   describeAutomationState,
   describeSourceHealth,
@@ -167,5 +174,140 @@ describe('EventTriggerCard', () => {
     expect(details?.textContent).toContain('Trigger revision 1');
     expect(details?.textContent).toContain('"connectionId": "github-connection"');
     expect(details?.textContent).toContain('GITHUB_RATE_LIMITED');
+  });
+});
+
+describe('a Slack trigger waiting for its test message', () => {
+  const agent = { ...eventAgentFixture(), configuredTriggers: [slackTriggerFixture(['C1', 'C2'])] };
+  const enabled = backendEnable(agent);
+  const startingSlack = enabled.configuredTriggers[0]!;
+  const ready = { state: 'READY' as const, reasonCode: null, updatedAt };
+  let root: Root;
+  let container: HTMLDivElement;
+  beforeEach(() => {
+    vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
+    container = document.createElement('div');
+    document.body.append(container);
+    root = createRoot(container);
+  });
+  afterEach(async () => {
+    await act(() => root.unmount());
+    container.remove();
+    vi.unstubAllGlobals();
+  });
+
+  it('is stored as the backend writes it: STARTING, not enabled, every channel waiting', () => {
+    expect(startingSlack).toMatchObject({
+      activationState: 'STARTING',
+      isEnabled: false,
+      pendingVerification: {
+        message: 'Factory Factory check r5tc-8mzk-q2ye',
+        expiresAt: '2026-11-12T09:10:00.000Z',
+        channels: [
+          { channelId: 'C1', name: '#support', verified: false },
+          { channelId: 'C2', name: '#customer-feedback', verified: false },
+        ],
+      },
+    });
+  });
+
+  it('reads Connecting until the listener is ready, then waits for the test message', () => {
+    expect(describeTriggerState(startingSlack)).toMatchObject({
+      label: 'Starting',
+      reason: 'Connecting…',
+    });
+    expect(describeTriggerState({ ...startingSlack, sourceHealth: ready })).toMatchObject({
+      label: 'Starting',
+      reason: 'Connected; waiting for test message',
+    });
+    expect(isTriggerRunning(startingSlack)).toBe(true);
+  });
+
+  it('shows the exact message with a copy button, each channel and the expiry', async () => {
+    const copied: string[] = [];
+    vi.stubGlobal('navigator', {
+      clipboard: {
+        writeText: (text: string) => {
+          copied.push(text);
+          return Promise.resolve();
+        },
+      },
+    });
+    const partly = backendVerifySlackChannel(enabled, 'C1').configuredTriggers[0]!;
+    await act(() => root.render(<EventTriggerCard trigger={{ ...partly, sourceHealth: ready }} />));
+    const section = container.querySelector('section[aria-label="Slack test message"]');
+    expect(section?.querySelector('code')?.textContent).toBe(
+      'Factory Factory check r5tc-8mzk-q2ye'
+    );
+    const items = [...(section?.querySelectorAll('li') ?? [])].map((item) => item.textContent);
+    expect(items).toEqual(['#supportReceived', '#customer-feedbackWaiting']);
+    expect(section?.textContent).toContain('1 of 2 received');
+    expect(section?.querySelector('time')?.getAttribute('datetime')).toBe(
+      '2026-11-12T09:10:00.000Z'
+    );
+    const copy = [...container.querySelectorAll('button')].find(
+      (button) => button.textContent === 'Copy message'
+    );
+    await act(async () => {
+      copy?.click();
+      await Promise.resolve();
+    });
+    expect(copied).toEqual(['Factory Factory check r5tc-8mzk-q2ye']);
+    expect(container.textContent).toContain('Copied');
+  });
+
+  it('starts listening once every channel is verified, with no message left to show', async () => {
+    const active = backendVerifySlackChannel(backendVerifySlackChannel(enabled, 'C1'), 'C2')
+      .configuredTriggers[0]!;
+    expect(active).toMatchObject({
+      activationState: 'ACTIVE',
+      isEnabled: true,
+      pendingVerification: null,
+    });
+    expect(describeTriggerState(active).label).toBe('Listening');
+    await act(() => root.render(<EventTriggerCard trigger={active} />));
+    expect(container.querySelector('section[aria-label="Slack test message"]')).toBeNull();
+  });
+
+  it('gets a new message when enabled again after expiry, as the backend issues a new code', () => {
+    const again = backendEnable(backendExpireActivation(enabled)).configuredTriggers[0]!;
+    expect(again.activationGeneration).toBe(3);
+    expect(again.pendingVerification?.message).toMatch(/^Factory Factory check /);
+    expect(again.pendingVerification?.message).not.toBe(startingSlack.pendingVerification?.message);
+  });
+
+  it('shows no message to post when the trigger can no longer run', async () => {
+    await act(() =>
+      root.render(
+        <EventTriggerCard
+          trigger={{
+            ...startingSlack,
+            capability: {
+              status: 'UNAVAILABLE',
+              reasonCode: 'SLACK_INTAKE_UNAVAILABLE',
+              explanation: 'Slack event intake is not available yet.',
+            },
+          }}
+        />
+      )
+    );
+    expect(container.textContent).toContain("Can't run");
+    expect(container.querySelector('section[aria-label="Slack test message"]')).toBeNull();
+  });
+
+  it('explains an expired test window and offers nothing to post', async () => {
+    const paused = backendExpireActivation(enabled).configuredTriggers[0]!;
+    expect(paused).toMatchObject({
+      activationState: 'PAUSED',
+      pausedReasonCode: 'ACTIVATION_EXPIRED',
+      pendingVerification: null,
+    });
+    expect(describeTriggerState(paused)).toMatchObject({
+      label: 'Paused',
+      reason: expect.stringMatching(/didn't arrive in every channel within 10 minutes/),
+    });
+    expect(isTriggerRunning(paused)).toBe(false);
+    await act(() => root.render(<EventTriggerCard trigger={paused} />));
+    expect(container.querySelector('section[aria-label="Slack test message"]')).toBeNull();
   });
 });

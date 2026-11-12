@@ -173,7 +173,13 @@ it('starts the supported trigger, keeps the unsupported one paused, then activat
   const [labeled, opened] = [...enabled.configuredTriggers].sort((a, b) =>
     (a.configuration?.description ?? '').localeCompare(b.configuration?.description ?? '')
   );
-  expect(labeled).toMatchObject({ activationState: 'STARTING', pausedReasonCode: null });
+  // Regression: the read reports a supported trigger as supported, not as an unverified source.
+  expect(labeled).toMatchObject({
+    activationState: 'STARTING',
+    pausedReasonCode: null,
+    capability: { status: 'SUPPORTED', reasonCode: 'SUPPORTED' },
+    pendingVerification: null,
+  });
   expect(opened).toMatchObject({
     activationState: 'PAUSED',
     capability: { status: 'UNSUPPORTED', reasonCode: 'UNSUPPORTED_GITHUB_ACTION' },

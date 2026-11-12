@@ -130,15 +130,40 @@ export const agentGithubPendingActivationSchema = z.strictObject({
   provider: z.literal('GITHUB'),
   baselineId: id.nullable(),
 });
-export const agentPendingActivationSchema = z.union([
+/** The code in a Slack verification message: twelve characters without look-alikes. */
+export const agentSlackVerificationCodeSchema = z
+  .string()
+  .regex(/^[a-hjkmnp-z2-9]{4}-[a-hjkmnp-z2-9]{4}-[a-hjkmnp-z2-9]{4}$/);
+/**
+ * A Slack STARTING generation waits for a verification message in each
+ * selected channel. The expected workspace and app are stored before the
+ * listener opens; each channel's `eventTs` is the provider timestamp of the
+ * message that verified it, and becomes that channel's activation boundary.
+ */
+export const agentSlackPendingActivationSchema = z.strictObject({
+  ...pendingActivationFields,
+  provider: z.literal('SLACK'),
+  workspaceId: id,
+  appId: id,
+  nonce: agentSlackVerificationCodeSchema,
+  channels: z
+    .array(
+      z.strictObject({
+        channelId: id,
+        name: z.string().max(500).nullable(),
+        eventTs: providerTimestamp.nullable(),
+      })
+    )
+    .min(1)
+    .max(100)
+    .refine(
+      (channels) => new Set(channels.map((channel) => channel.channelId)).size === channels.length,
+      'Pending channels must be unique'
+    ),
+});
+export const agentPendingActivationSchema = z.discriminatedUnion('provider', [
   agentGithubPendingActivationSchema,
-  z.strictObject({
-    ...pendingActivationFields,
-    nonce: id,
-    channels: z
-      .array(z.strictObject({ channelId: id, eventTs: providerTimestamp.nullable() }))
-      .max(100),
-  }),
+  agentSlackPendingActivationSchema,
 ]);
 export const agentSourceCursorSchema = z.discriminatedUnion('provider', [
   z.strictObject({
@@ -236,6 +261,7 @@ export const agentRuntimeReasonSchema = z.enum([
   'PROJECT_ARCHIVED',
   'EVENT_EXPIRED',
   'INVALID_STORED_DATA',
+  'VERIFICATION_MESSAGE',
   'NOT_MATCHED',
   'EARLIER_EVALUATION_PENDING',
   'EARLIER_EVALUATION_ERROR',
@@ -301,6 +327,7 @@ export type AgentEventPayload = z.infer<typeof agentEventPayloadSchema>;
 
 export type AgentActivationBoundary = z.infer<typeof agentActivationBoundarySchema>;
 export type AgentGithubPendingActivation = z.infer<typeof agentGithubPendingActivationSchema>;
+export type AgentSlackPendingActivation = z.infer<typeof agentSlackPendingActivationSchema>;
 
 export type AgentExecutionConfig = z.infer<typeof agentExecutionConfigSchema>;
 export type AgentResolvedExecutionConfig = z.infer<typeof agentResolvedExecutionConfigSchema>;

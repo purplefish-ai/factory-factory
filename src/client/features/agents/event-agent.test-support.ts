@@ -21,10 +21,11 @@ export function eventAgentFixture() {
     capability: {
       status: 'SUPPORTED',
       reasonCode: 'SUPPORTED',
-      explanation: 'This GitHub label configuration is supported.',
+      explanation: 'The trigger settings and selected source are supported.',
     },
     sourceName: 'example/repo',
     sourceHealth: null,
+    pendingVerification: null,
   };
   return managedAgentSchema.parse({
     id: 'event-agent',
@@ -69,6 +70,71 @@ export function triggerInBackendState(
     isEnabled: state === 'ACTIVE',
     activationState: state,
     pausedReasonCode: state === 'PAUSED' ? pausedReasonCode : null,
+    // Only a STARTING Slack generation has a test message to wait for.
+    pendingVerification: state === 'STARTING' ? trigger.pendingVerification : null,
+  };
+}
+
+/**
+ * A saved Slack trigger as the backend reads it with intake on and the app-level
+ * token saved: supported, paused, named after the Slack connection.
+ */
+export function slackTriggerFixture(channelIds: string[] = ['C1']): EventTriggerFixture {
+  const [saved] = eventAgentFixture().configuredTriggers;
+  if (!saved) {
+    throw new Error('The event agent fixture has no trigger');
+  }
+  return {
+    ...saved,
+    id: 'saved-event:slack',
+    configuration: {
+      type: 'SLACK_MESSAGE',
+      connectionId: 'slack-connection',
+      description: 'Answer questions in support channels',
+      filterInstructions: null,
+      isEnabled: false,
+      config: {
+        version: 1,
+        channelIds,
+        context: { includeThread: true, nearbyMessageCount: 0 },
+      },
+    },
+    sourceName: 'Company Slack',
+  };
+}
+
+/** What Enable shows for a Slack trigger: a fresh code, every channel waiting, ten minutes. */
+export interface SlackEnableFixture {
+  /** The message for a trigger's new generation; the backend issues a new code each time. */
+  message: (triggerId: string, generation: number) => string;
+  startedAt: string;
+  /** Channel names Enable verified, by ID; the backend stores null when none was resolved. */
+  channelNames: Record<string, string>;
+}
+const FIXTURE_CODES = ['7kq2-m9xh-c4tr', '3jw8-p2nd-v6hx', 'r5tc-8mzk-q2ye'];
+const SLACK_ENABLE: SlackEnableFixture = {
+  message: (triggerId, generation) => {
+    const index = [...triggerId].reduce((sum, character) => sum + character.charCodeAt(0), 0);
+    const code = FIXTURE_CODES[(index + generation - 1) % FIXTURE_CODES.length];
+    return `Factory Factory check ${code}`;
+  },
+  startedAt: '2026-11-12T09:00:00.000Z',
+  channelNames: { C1: '#support', C2: '#customer-feedback' },
+};
+function slackPending(trigger: EventTriggerFixture, generation: number, slack: SlackEnableFixture) {
+  const configuration = trigger.configuration;
+  if (configuration?.type !== 'SLACK_MESSAGE') {
+    return null;
+  }
+  return {
+    message: slack.message(trigger.id, generation),
+    expiresAt: new Date(Date.parse(slack.startedAt) + 10 * 60 * 1000).toISOString(),
+    // The backend lists each selected channel once.
+    channels: [...new Set(configuration.config.channelIds)].map((channelId) => ({
+      channelId,
+      name: slack.channelNames[channelId] ?? null,
+      verified: false,
+    })),
   };
 }
 
@@ -87,7 +153,10 @@ function pausedOnNewGeneration(trigger: EventTriggerFixture): EventTriggerFixtur
  * not paused is paused on a new generation, and every unsupported trigger
  * loses its activation reason. Retained records are untouched.
  */
-export function backendEnable(agent: EventAgentFixture): EventAgentFixture {
+export function backendEnable(
+  agent: EventAgentFixture,
+  slack: SlackEnableFixture = SLACK_ENABLE
+): EventAgentFixture {
   return {
     ...agent,
     isEnabled: true,
@@ -104,17 +173,60 @@ export function backendEnable(agent: EventAgentFixture): EventAgentFixture {
       return {
         ...triggerInBackendState(trigger, 'STARTING'),
         activationGeneration: trigger.activationGeneration + 1,
+        pendingVerification: slackPending(trigger, trigger.activationGeneration + 1, slack),
       };
     }),
   };
 }
 
-/** What the poll-cycle job writes once a starting trigger's baseline lands. */
+/** What the poll-cycle job writes once a starting GitHub trigger's baseline lands. */
 export function backendActivate(agent: EventAgentFixture): EventAgentFixture {
   return {
     ...agent,
     configuredTriggers: agent.configuredTriggers.map((trigger) =>
-      trigger.activationState === 'STARTING' ? triggerInBackendState(trigger, 'ACTIVE') : trigger
+      trigger.activationState === 'STARTING' && trigger.configuration?.type !== 'SLACK_MESSAGE'
+        ? triggerInBackendState(trigger, 'ACTIVE')
+        : trigger
+    ),
+  };
+}
+
+/**
+ * What Slack completion writes when a channel's test message arrives: that
+ * channel reads verified, and once every channel is, the trigger is ACTIVE.
+ */
+export function backendVerifySlackChannel(
+  agent: EventAgentFixture,
+  channelId: string
+): EventAgentFixture {
+  return {
+    ...agent,
+    configuredTriggers: agent.configuredTriggers.map((trigger) => {
+      const pending = trigger.pendingVerification;
+      if (trigger.activationState !== 'STARTING' || !pending) {
+        return trigger;
+      }
+      const channels = pending.channels.map((channel) =>
+        channel.channelId === channelId ? { ...channel, verified: true } : channel
+      );
+      return channels.every((channel) => channel.verified)
+        ? triggerInBackendState(trigger, 'ACTIVE')
+        : { ...trigger, pendingVerification: { ...pending, channels } };
+    }),
+  };
+}
+
+/** A starting generation whose window passed: paused on a new generation with the reason. */
+export function backendExpireActivation(agent: EventAgentFixture): EventAgentFixture {
+  return {
+    ...agent,
+    configuredTriggers: agent.configuredTriggers.map((trigger) =>
+      trigger.activationState === 'STARTING'
+        ? {
+            ...triggerInBackendState(trigger, 'PAUSED', 'ACTIVATION_EXPIRED'),
+            activationGeneration: trigger.activationGeneration + 1,
+          }
+        : trigger
     ),
   };
 }

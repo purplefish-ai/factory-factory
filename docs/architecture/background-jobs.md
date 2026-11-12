@@ -158,11 +158,12 @@ source-checkpoint backfill, authority-validation, or compaction transaction for
 its current source epoch; this uses retained database proof and makes no
 provider requests. A reset source has no cursor, so cycles read nothing from it
 until Enable prepares a fresh baseline. After each cycle the same job completes
-pending activations: a STARTING trigger becomes ACTIVE once its prepared
+pending GitHub activations: a STARTING trigger becomes ACTIVE once its prepared
 baseline resolves, retries a baseline that was never recorded, and returns to
 PAUSED with a reason on source failure, recovery or after 30 minutes
-(`activationExpiryMs`). There is no separate activation job. This job does not
-evaluate events or launch workspaces.
+(`activationExpiryMs`). There is no separate activation job; Slack activations
+complete in `agent-event-evaluation` below. This job does not evaluate events or
+launch workspaces.
 
 The `agent-slack-intake` job runs immediately, then waits 15 seconds after each
 cycle. It reconciles which Slack connections hold a Socket Mode connection
@@ -180,28 +181,37 @@ delivery gap before the database closes. See
 [Slack listener](integrations.md#slack-listener).
 
 The `agent-event-evaluation` job runs immediately, then waits five seconds after
-completion. It evaluates at most 100 durable event/trigger candidates per cycle,
-rotating past deferred decisions. GitHub matching supports `labeled` and
-`reopened` and fails closed when a trigger also lists an unsupported action. A
-`labeled` event matches its added label. A `reopened` event matches when the
-issue carried a configured label at capture, or always when no labels are
-configured. A GitHub run input starts with a source item naming the repository,
-issue number and link, and the triggering action (with the JSON-quoted added
-label for `labeled`), followed by the issue title and body. Actor filters fail
-closed; SCHEDULE stays with PeriodicTask. A deterministic match on a trigger
-with `filterInstructions` then calls the event classifier: a disposable,
-tools-disabled provider call limited to 30 seconds and two concurrent calls. The
-evaluation job awaits it inline, so one slow classification delays later
-candidates in that cycle by at most the call limit plus up to five seconds of
-disposable process cleanup. A Slack match first reads its bounded thread and
-channel context inline (at most ten Slack calls of ten seconds each, usually one
-or two). Before calling, evaluation checks the live classifier gate for the
-provider resolved for that event; an unproven provider records
-`SEMANTIC_FILTER_PROVIDER_UNPROVEN` and never runs the event unfiltered.
-STARTING generations are never candidates; the source poll job completes,
-cancels or expires them. Only configured triggers (`isConfigured = true`)
-receive new decisions; an unresolved decision left by a removed trigger is still
-settled. Terminal decisions are not replayed under new revisions or generations.
+completion. After queue maintenance and ledger pruning, it first completes
+pending Slack activations: each STARTING Slack generation applies the test
+messages already stored in the ledger, becomes ACTIVE once every channel is
+verified, or returns to PAUSED after ten minutes (`slackActivationExpiryMs`).
+This makes no provider calls, so it runs every pass, and a test message
+typically activates its trigger within five seconds of arriving; the messages
+held while the trigger was starting are evaluated in that same pass. See
+[Slack activation](integrations.md#slack-activation). It then evaluates at most
+100 durable event/trigger candidates per cycle, rotating past deferred
+decisions. GitHub matching supports `labeled` and `reopened` and fails closed
+when a trigger also lists an unsupported action. A `labeled` event matches its
+added label. A `reopened` event matches when the issue carried a configured
+label at capture, or always when no labels are configured. A GitHub run input
+starts with a source item naming the repository, issue number and link, and the
+triggering action (with the JSON-quoted added label for `labeled`), followed by
+the issue title and body. Actor filters fail closed; SCHEDULE stays with
+PeriodicTask. A deterministic match on a trigger with `filterInstructions` then
+calls the event classifier: a disposable, tools-disabled provider call limited
+to 30 seconds and two concurrent calls. The evaluation job awaits it inline, so
+one slow classification delays later candidates in that cycle by at most the
+call limit plus up to five seconds of disposable process cleanup. A Slack match
+first reads its bounded thread and channel context inline (at most ten Slack
+calls of ten seconds each, usually one or two). Before calling, evaluation
+checks the live classifier gate for the provider resolved for that event; an
+unproven provider records `SEMANTIC_FILTER_PROVIDER_UNPROVEN` and never runs the
+event unfiltered. STARTING generations are never candidates, which holds their
+messages unevaluated; the source poll job (GitHub) or this job (Slack)
+completes, cancels or expires them. Only configured triggers
+(`isConfigured = true`) receive new decisions; an unresolved decision left by a
+removed trigger is still settled. Terminal decisions are not replayed under new
+revisions or generations.
 
 Queue maintenance rotates through bounded batches even when all active slots are
 occupied. Claims choose FIFO heads of unsaturated definitions and serialize

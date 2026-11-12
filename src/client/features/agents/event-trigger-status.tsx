@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import { StatusChip } from '@/client/components/status-indicators';
 import type { StatusTone } from '@/client/lib/status-tones';
 import type { AgentPausedReasonCode } from '@/shared/agent-management';
+import { SlackVerification } from './event-slack-verification';
 import type { EventAgent } from './types';
 
 type Trigger = EventAgent['configuredTriggers'][number];
@@ -21,6 +22,16 @@ const PAUSED_REASONS: Readonly<Record<AgentPausedReasonCode, string>> = {
     "The source couldn't be read while it was starting. Enable the automation again to retry.",
   SOURCE_RECOVERY_REQUIRED: 'The source needs a reset before it can listen again.',
 };
+const SLACK_EXPIRED =
+  "The test message didn't arrive in every channel within 10 minutes. Enable the automation again for a new message.";
+
+function pausedReason(trigger: Trigger) {
+  const code = trigger.pausedReasonCode;
+  if (code === 'ACTIVATION_EXPIRED' && trigger.configuration?.type === 'SLACK_MESSAGE') {
+    return SLACK_EXPIRED;
+  }
+  return code ? PAUSED_REASONS[code] : null;
+}
 
 /**
  * A trigger's state as the user should read it. It comes from the trigger,
@@ -39,9 +50,15 @@ export function describeTriggerState(trigger: Trigger): TriggerDisplayState {
     return { label: 'Listening', tone: 'success', reason: null };
   }
   if (trigger.activationState === 'STARTING') {
-    return { label: 'Starting', tone: 'working', reason: null };
+    // A Slack trigger starts from a test message, once its listener is connected.
+    const waiting = trigger.pendingVerification
+      ? trigger.sourceHealth?.state === 'READY'
+        ? 'Connected; waiting for test message'
+        : 'Connecting…'
+      : null;
+    return { label: 'Starting', tone: 'working', reason: waiting };
   }
-  const reason = trigger.pausedReasonCode ? PAUSED_REASONS[trigger.pausedReasonCode] : null;
+  const reason = pausedReason(trigger);
   return { label: 'Paused', tone: reason ? 'warning' : 'neutral', reason };
 }
 
@@ -113,6 +130,10 @@ export function EventTriggerCard({ trigger, action }: { trigger: Trigger; action
         Source: {trigger.sourceName ?? 'Name unavailable'} ·{' '}
         {describeSourceHealth(trigger.sourceHealth)}
       </p>
+      {/* An unsupported trigger reads Can't run; a message to post would mislead. */}
+      {trigger.capability.status === 'SUPPORTED' &&
+        trigger.activationState === 'STARTING' &&
+        trigger.pendingVerification && <SlackVerification pending={trigger.pendingVerification} />}
       {action}
       <details className="text-xs text-muted-foreground">
         <summary className="cursor-pointer">Details</summary>

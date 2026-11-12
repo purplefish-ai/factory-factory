@@ -63,7 +63,10 @@ export { eventRunRecovery } from './service/agent-run-recovery.service';
 export { eventRunResults } from './service/agent-run-results.service';
 export { AgentLedgerRetentionService } from './service/agent-ledger-retention.service';
 export { AgentManagementService } from './service/agent-management.service';
-export { triggerCapability } from './service/agent-management-projection';
+export {
+  triggerCapability,
+  type SlackIntakeReadiness,
+} from './service/agent-management-projection';
 
 export const agentManagementService = new AgentManagementService();
 export { workspaceRetryAuthorityService } from './service/workspace-retry-authority.service';

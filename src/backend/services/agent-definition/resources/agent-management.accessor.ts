@@ -24,6 +24,7 @@ export const managementTriggerInclude = {
       isEnabled: true,
       provider: true,
       externalId: true,
+      appId: true,
       sourceState: { select: { health: true } },
     },
   },

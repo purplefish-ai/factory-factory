@@ -36,6 +36,8 @@ type LaunchLifetime = Pick<
 type LaunchClaim = Extract<AgentClaimResult, { status: 'CLAIMED' }>;
 type EvaluationWorker = {
   evaluatePendingEvents(signal: AbortSignal): Promise<void>;
+  /** Forget the rotation cursor so the next pass starts from the first trigger. */
+  restartRotation?: () => void;
   maintainQueue(): Promise<void>;
   pruneExpired?: (signal: AbortSignal) => Promise<unknown>;
   claimNextRun(): Promise<AgentClaimResult>;
@@ -87,6 +89,7 @@ export function createAgentRuntime(
     poller,
     {
       evaluatePendingEvents: (signal) => evaluator.evaluatePendingEvents(signal),
+      restartRotation: () => evaluator.restartRotation(),
       maintainQueue,
       pruneExpired: (signal) => retention.pruneExpired(signal),
       claimNextRun,
@@ -122,7 +125,7 @@ export function createAgentRuntimeLifecycle(
   poller: Pick<AgentSourcePollService, 'pollCycle'>,
   worker?: EvaluationWorker,
   launcher?: LaunchLifetime,
-  activation?: Pick<AgentActivationService, 'completePending'>
+  activation?: Pick<AgentActivationService, 'completePending' | 'completeSlackPending'>
 ) {
   if (launcher) {
     jobRunner.register({
@@ -158,6 +161,10 @@ export function createAgentRuntimeLifecycle(
           return;
         }
         await pruneLedger(worker, signal);
+        if (signal.aborted) {
+          return;
+        }
+        await completeSlackActivations(worker, activation, signal);
         if (signal.aborted) {
           return;
         }
@@ -232,6 +239,20 @@ export async function resolveAgentExecutionConfig(
     model: requestedModel,
     ...(result.requestedEffort !== null && reasoningEffort ? { reasoningEffort } : {}),
   });
+}
+
+/**
+ * Slack test messages are already in the ledger. Activating first, then restarting the
+ * rotation, lets the same pass evaluate the messages held while a trigger was STARTING.
+ */
+async function completeSlackActivations(
+  worker: EvaluationWorker,
+  activation: Pick<AgentActivationService, 'completeSlackPending'> | undefined,
+  signal: AbortSignal
+) {
+  if (await activation?.completeSlackPending(signal)) {
+    worker.restartRotation?.();
+  }
 }
 
 async function pruneLedger(worker: EvaluationWorker, signal: AbortSignal) {
