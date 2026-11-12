@@ -49,6 +49,18 @@ export function invalidateAutomationActivationQueries(
 }
 
 /**
+ * After Resolve, Abandon or Retry on a run: the same reads as Enable and Pause.
+ * The run's status, its workspace origin and the rail's counts can all change.
+ */
+export function invalidateRunRecoveryQueries(
+  utils: ReturnType<typeof trpc.useUtils>,
+  projectId: string,
+  agentId: string
+) {
+  return invalidateAutomationActivationQueries(utils, projectId, agentId);
+}
+
+/**
  * After a source reset: every cached event automation, in every project. The
  * reset pauses each trigger on the source across projects and cancels its
  * queued runs, and the client cannot tell which other projects use it.

@@ -854,12 +854,38 @@ LIVE workspace state links to a workspace; otherwise an active run says no
 workspace yet and a finished one says workspace deleted (DELETED), no workspace
 was created (UNRESERVED) or workspace unavailable (RESERVED). A null result is
 shown as nothing and a null event link reads "Event record no longer kept" in
-Details; neither is presented as empty or completed. Each run row has an action
-slot for recovery controls. An event row shows Matched, Skipped or Error, its
-trigger's description (or ID when the trigger is outside the loaded definition),
-a phrase for its reason, whether it started a run, and any next attempt. The
-history API returns a fixed placeholder `explanation` rather than the stored
-one, so the view does not show it.
+Details; neither is presented as empty or completed. A RUNNING run in
+`NEEDS_ATTENTION` reads Needs attention, including one marked resolved
+(`EXPLICITLY_RESOLVED`), because Resolve keeps the run and its slot. An event
+row shows Matched, Skipped or Error, its trigger's description (or ID when the
+trigger is outside the loaded definition), a phrase for its reason, whether it
+started a run, and any next attempt. The history API returns a fixed placeholder
+`explanation` rather than the stored one, so the view does not show it.
+
+<a id="event-run-recovery"></a>
+
+A RUNNING run in `NEEDS_ATTENTION`, or still open after its first turn ended
+(held by unproven work or child workspaces), shows **Inspect**, disabled in an
+archived project. Inspect reads `automation.recoveryTarget` and then
+`automation.inspectRun` with that exact context, only when opened and afresh on
+each opening; neither polls. The dialog shows the first message's delivery
+state, whether the agent is proven stopped, any child hold (held count, each
+held child as a workspace link with Working or Not started, and the 24-hour
+deadline at which the run ends on its own), and Resolve, Retry and Abandon. Only
+actions the inspection allows have buttons: a common `blocked` reason removes
+all three with that reason in words, a child hold leaves only Abandon, and
+`retryBlocked` removes only Retry; each missing action says why. Each action
+opens a `ConfirmDialog`. Resolve says it stops the agent and keeps the run, as
+Needs attention, holding its slot until Retry or Abandon. Retry warns that
+earlier effects may already have happened (the first message may have reached
+the agent) and keeps the slot and attempt count. Abandon says it frees the slot,
+how the run is recorded (Cancelled, or Failed after a failed first turn; with a
+child hold and `keepsOutcome`, the first turn's own outcome), and that child
+workspaces are not stopped. The action sends the inspected context unchanged. A
+`CONFLICT` or `BLOCKED` result keeps the dialog open, says the run's status did
+not change and offers only **Reload**, which reads the target again; nothing is
+resent automatically. Success shows a result line on the run and refreshes the
+history, workspace origin, automation detail, list and navigation summary.
 
 An event-run workspace (`creationSource` `EVENT_AGENT`) reads
 `automation.workspaceOrigin`; other workspaces never call it. Its **Runs** tab
@@ -899,10 +925,10 @@ runs cancelled, and that each automation needs Enable again; a failure stays in
 the dialog. Success reports the paused-trigger and cancelled-run counts and
 invalidates every cached automation read, list and history in every project,
 because the reset reaches other projects on the same source. Enable, Pause and
-Reset source are disabled in archived projects. Recovery controls and deletion
-belong to separate cuts. Scheduled CRUD and history retain their existing
-behavior. Exact-context operator recovery uses the separate trusted-local
-transport described in
+Reset source are disabled in archived projects. Deletion belongs to a separate
+cut. Scheduled CRUD and history retain their existing behavior.
+[Run recovery](#event-run-recovery) uses the separate trusted-local
+exact-context transport described in
 [agent runtime](agent-runtime.md#exact-context-operator-recovery-transport).
 Production authoring still creates paused definitions. Manually altered
 ACTIVE-looking legacy records without known membership or a current validated

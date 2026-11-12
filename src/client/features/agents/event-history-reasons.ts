@@ -91,7 +91,9 @@ const REASON_PHRASES: Readonly<Record<string, string>> = {
   // A person's decision.
   EXPLICIT_ABANDONMENT: 'Abandoned by a person.',
   ABANDONED_WITH_CHILD_WORK: 'Abandoned by a person before its child workspaces had finished.',
-  EXPLICITLY_RESOLVED: 'Marked resolved by a person.',
+  // Resolve keeps the run open and holding its slot for a later decision.
+  EXPLICITLY_RESOLVED:
+    'Marked resolved by a person after its agent stopped. It keeps its run slot until someone retries or abandons it.',
 };
 
 /** A readable phrase for a stored reason code, or null when none was stored. */
