@@ -3,6 +3,10 @@
 > **For agentic workers:** Use `superpowers:subagent-driven-development` or
 > `superpowers:executing-plans` after the user approves this plan. Checkboxes
 > describe proposed implementation work, not completed functionality.
+>
+> **Close-out (2026-11-12):** ticked boxes were checked against merged code and
+> tests; unticked ones carry a note. Remaining work is tracked in the
+> [finish plan](2026-11-12-finish-event-automations.md).
 
 **Goal:** Turn saved GitHub and Slack triggers into controlled, observable agent
 runs, without duplicate workspaces after retries or restarts.
@@ -406,13 +410,13 @@ admitRun accepts evaluation ID, expected definition/trigger revisions and
 activation generation, not caller-provided eligibility booleans. Add explicit
 phase/outbox schemas and retention fields.
 
-- [ ] Write migration/resource tests: duplicate event and run, two matching
+- [x] Write migration/resource tests: duplicate event and run, two matching
       triggers, cross-definition/connection ownership, invalid JSON, immutable
       snapshots, result retention, FIFO/capacity, pause/revision races.
-- [ ] Run `pnpm test:integration` with focused Vitest file selection while
+- [x] Run `pnpm test:integration` with focused Vitest file selection while
       iterating; confirm failures target missing behavior, then implement sole
       writers.
-- [ ] Add DB transactions for admission/claim and model/index ownership;
+- [x] Add DB transactions for admission/claim and model/index ownership;
       generate with `pnpm check:prisma-schema`; run resource tests and commit
       schema/ledger.
 
@@ -432,14 +436,14 @@ injected source port; all source-state/event writes remain in agent-definition
 accessors. Start with a 60-second cadence and at most ten pages per repository
 per cycle.
 
-- [ ] Test initial empty/nonempty baseline, labels added/removed/readded, PR
+- [x] Test initial empty/nonempty baseline, labels added/removed/readded, PR
       exclusion, renamed repositories, overlapping pages, >1,000 new events,
       process death mid-interval, missing boundary, auth/rate-limit failure and
       archive.
-- [ ] Run failing focused tests, implement ingestion and durable boundary logic,
+- [x] Run failing focused tests, implement ingestion and durable boundary logic,
       then pass tests. Add identity/readiness checks without treating `gh:` as
       an App.
-- [ ] Verify start/stop/restart with server lifecycle tests; commit usable
+- [x] Verify start/stop/restart with server lifecycle tests; commit usable
       intake.
 
 ### Task 3: Deterministic evaluation and launch admission
@@ -454,13 +458,13 @@ shared runtime schemas and config settings.
 `claimNextRun(now): Promise<LaunchClaim | null>` atomically enforces all gates,
 capacity and expected generation. Run a jobRunner cycle every five seconds.
 
-- [ ] Test added-label semantics, explicit unsupported actions, same-event
+- [x] Test added-label semantics, explicit unsupported actions, same-event
       overlapping triggers, changed revisions, paused-time events, queue
       overflow/ expiry, FIFO and capacity races. No inference is needed in
       milestone 1; filterInstructions blocks activation until task 8 is
       available.
-- [ ] Run failing matcher/admission tests; implement and pass them.
-- [ ] Verify pause has the documented launch-claim boundary and SCHEDULE
+- [x] Run failing matcher/admission tests; implement and pass them.
+- [x] Verify pause has the documented launch-claim boundary and SCHEDULE
       definitions never enter this worker; commit evaluation/admission.
 
 ### Task 4: Recoverable workspace/session launch and prompt outbox
@@ -483,21 +487,22 @@ generations. `launchEventRun(claim, signal)` belongs to orchestration and
 returns the existing identities on retry. No generic legacy launcher gains
 replay semantics by accident.
 
-- [ ] Write integration failure injection after each durable boundary: reserved
+- [x] Write integration failure injection after each durable boundary: reserved
       IDs, workspace insert, session insert, linkage, setup, queue insertion,
       before/after provider invocation and before acceptance persistence. Cover
       a workspace deleted after its atomic creation/origin write but before run
       linkage; a retry must refuse resurrection. Cover human input and a second
       IDLE chat created during setup; only the reserved session gets the
       isolated initial turn.
-- [ ] Test repeated launch returns one workspace/session, archive/delete never
+- [x] Test repeated launch returns one workspace/session, archive/delete never
       resurrects, explicit model/effort reaches both providers, stalled setup
       and ambiguous sends stop retrying, and legacy launch behavior stays
       identical.
 - [ ] Run failures, implement owner-specific create-once APIs, outbox hooks and
       restart reconciliation, then pass. Cover supported Node and Electron
-      runtimes.
-- [ ] Commit launch/delivery with no provider-effect exactly-once claim.
+      runtimes. Close-out: Node is covered by the integration suites; the
+      Electron runtime was not separately exercised.
+- [x] Commit launch/delivery with no provider-effect exactly-once claim.
 
 ### Task 5: Run outcome monitoring and recovery
 
@@ -509,14 +514,14 @@ retention helpers and tests; modify runtime orchestration, `server.ts`,
 settles with generation checks; `reconcileRuns(signal)` recovers durable phases;
 `resolveAmbiguousRun(input)` requires an explicit trusted-local user decision.
 
-- [ ] Test idle before first prompt, provider acceptance before a crash, pending
+- [x] Test idle before first prompt, provider acceptance before a crash, pending
       interactive requests, PR before session failure, deliberate stop, provider
       crash, worktree setup failure, archive/delete, 15-minute setup and 4-hour
       turn deadlines, and shutdown/restart. Never infer completion from
       workspace idle.
-- [ ] Run failing tests; implement bounded retry/backoff, lifecycle monitoring,
+- [x] Run failing tests; implement bounded retry/backoff, lifecycle monitoring,
       retained result metadata and payload/tombstone pruning; pass tests.
-- [ ] Prove legacy periodic scheduling and PR monitoring still dispatch exactly
+- [x] Prove legacy periodic scheduling and PR monitoring still dispatch exactly
       as before with existing flow/composition suites; commit
       monitoring/recovery.
 
@@ -532,20 +537,21 @@ stories and focused component/integration tests.
 runtime RPCs accept projectId/agentId with revision guards; `setEnabled` checks
 capabilities and establishes baselines before exposing enabled status.
 
-- [ ] Test scheduled/event agents coexist, saved definitions without their
+- [x] Test scheduled/event agents coexist, saved definitions without their
       proposal remain editable, pause races, changed versus unchanged triggers,
       unsupported GitHub/Slack/SCHEDULE/filter settings and stale edit
       protection.
-- [ ] Test a skipped/error event followed by instruction/execution edit and
+- [x] Test a skipped/error event followed by instruction/execution edit and
       re-enable: the old event never launches under the new revision. A fresh
       post-baseline event can launch; cosmetic rename preserves active state.
-- [ ] Implement desktop/mobile list/detail, health, evaluations, run history,
+- [x] Implement desktop/mobile list/detail, health, evaluations, run history,
       workspace origin links, queued-state reasons and explicit
       uncertain-delivery recovery. Preserve existing scheduled-agent URLs and
       footer badge semantics.
 - [ ] Pass focused tests, Storybook states and mobile tests; update integration,
       background-job and agent-runtime notes plus setup docs; commit
-      milestone 1.
+      milestone 1. Close-out: focused tests, stories and docs merged; the mobile
+      e2e suite was not re-run for these changes.
 
 ### Task 7: Slack Socket Mode intake and bounded context
 
@@ -565,26 +571,28 @@ app and connection. Do not infer app identity from a token prefix. Connected
 without a matching test event is unverified, not ready. Configure SDK logs to
 exclude tokens, socket ticket URLs and event bodies.
 
-- [ ] Test human root/reply messages, bots/edits/subtypes ignored, wrong team/
+- [x] Test human root/reply messages, bots/edits/subtypes ignored, wrong team/
       app/channel, redelivery, invalid/oversized payloads, failed commit before
       ack, token rotation/disconnect and overlapping socket reconnects.
 - [ ] Characterize bot app metadata, manual ack timing, event_ts ordering and
       context API permissions with a dedicated test app before enabling the
       feature. Test shared connections, per-channel verification, delayed
       delivery, pause/re-enable during catch-up, nonce expiry and host-clock
-      skew.
-- [ ] Test a message after channel A verification while channel B remains
+      skew. Close-out: not done; the live characterization against a dedicated
+      Slack test app is pending, so Slack intake stays off.
+- [x] Test a message after channel A verification while channel B remains
       pending: hold it unevaluated, process it only after successful activation,
       and settle skipped on activation cancellation/expiry.
-- [ ] Test includeThread/nearbyMessageCount, pagination, rate limits, truncation
+- [x] Test includeThread/nearbyMessageCount, pagination, rate limits, truncation
       and unavailable history scopes. Required context failures yield ERROR, not
       silent partial classification. Cap context at 100 messages and 100,000
       total characters; flag omissions. Retrieve only channels authorized by the
       trigger.
 - [ ] Implement setup/readiness, listener and context using validated provider
       APIs; pass tests. Report downtime gaps and explain live-delivery
-      limitations.
-- [ ] Integrate shutdown draining, masked token UI and scope/setup
+      limitations. Close-out: implemented and tested with fakes (#3185, #3188);
+      not yet validated against a live Slack app.
+- [x] Integrate shutdown draining, masked token UI and scope/setup
       documentation; commit Slack intake without automatically enabling old
       triggers.
 
@@ -603,21 +611,21 @@ strict output parser, 30-second limit and disposable process cleanup;
 agent-definition owns decision and retry persistence. Never import
 session-private metadata helpers cross-capsule.
 
-- [ ] Tests cover match/skip/uncertain, malformed output, timeout/rate limits,
+- [x] Tests cover match/skip/uncertain, malformed output, timeout/rate limits,
       no tools/MCP/config hooks, scope violations and instruction-injection
       attempts.
-- [ ] Write/publish replay fixtures with expected labels and no real private
+- [x] Write/publish replay fixtures with expected labels and no real private
       messages; include >=40 cases across GitHub and Slack plus >=10 adversarial
       negatives. Separate the tuning set from held-out cases before tuning
       prompts.
-- [ ] Pass deterministic tests; evaluate both supported providers separately on
+- [x] Pass deterministic tests; evaluate both supported providers separately on
       the same held-out set. Require zero adversarial false-positive dispatches,
       all designated obvious-positive cases matched, positive-case recall >=90%,
       and combined error/uncertain rate <=10%. Freeze obvious-positive labels
       before tuning; always-skip and always-uncertain classifiers must fail the
       gate. Report precision/recall, decision counts, latency and model/prompt
       versions. These are fixture release gates, not population accuracy claims.
-- [ ] Enable semantic-filter activation only after the gate passes; expose
+- [x] Enable semantic-filter activation only after the gate passes; expose
       skipped/error reasons and bounded reevaluation; commit milestone 2.
 
 ### Task 9: End-to-end verification and release
@@ -630,25 +638,34 @@ session-private metadata helpers cross-capsule.
 
 - [ ] End-to-end GitHub label -> evaluation -> one run/workspace/session ->
       initial prompt -> retained result, plus equivalent Slack root/reply flows.
-- [ ] Replay duplicates and restart at every task-4 boundary; assert zero second
+      Close-out: GitHub is covered end to end
+      (src/backend/testing/agent-runtime-flow*.integration.test.ts); Slack
+      root/reply runs are covered at the capsule level, not through the composed
+      runtime.
+- [x] Replay duplicates and restart at every task-4 boundary; assert zero second
       workspaces/automatic second sends, visible ambiguous outcomes, pause
       behavior, bounded capacity and source isolation. Include no-PR success and
       failure paths.
-- [ ] Verify auth scope loss, app shutdown during source commit, full pagination
+- [x] Verify auth scope loss, app shutdown during source commit, full pagination
       catch-up and mixed legacy scheduled/event definitions with disposable
       fixtures.
 - [ ] Run `pnpm check:prisma-schema`, `pnpm check:fix`, `pnpm typecheck`,
       `pnpm test`, `pnpm test:integration`, relevant Storybook checks,
       `pnpm test:e2e:mobile`, and `pnpm check`. Inspect formatting diff for
       unrelated changes; verify desktop Electron smoke behavior and documented
-      setup steps.
+      setup steps. Close-out: the repository checks run on each pull request;
+      the Electron desktop smoke check was not done.
 - [ ] Run live opt-in GitHub/Slack smoke tests against explicitly configured
       test sources and both providers; never use production messages as
-      fixtures.
+      fixtures. Close-out: not done; the opt-in live GitHub feed test exists
+      (AGENT_LIVE_GITHUB_REPO) but has not been run, and there is no Slack live
+      smoke test.
 - [ ] Release disabled-by-default capabilities by milestone; user activation is
       explicit. Report provider capture gaps, unsupported GitHub actions, backup
       limits and the measured semantic-evaluation results. Close #2772 only
-      after both milestones meet the in-scope acceptance checks.
+      after both milestones meet the in-scope acceptance checks. Close-out:
+      GitHub has shipped with explicit Enable; Slack stays off behind
+      AGENT_SLACK_INTAKE_ENABLED, so #2772 stays open.
 
 ## Review record
 

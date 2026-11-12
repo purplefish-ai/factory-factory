@@ -11,7 +11,8 @@ bookmark it and use the browser's Back button:
   (`xapp-`) is saved for Socket Mode event intake; add, replace or remove it
   from the workspace row. It must come from the same Slack app as the bot token,
   and the bot needs the `users:read` scope so the app can be confirmed. Saved
-  tokens are never shown or prefilled. See
+  tokens are never shown or prefilled. Slack automations also need the server
+  started with `AGENT_SLACK_INTAKE_ENABLED=true`; it is off by default. See
   [Slack credentials](architecture/integrations.md#slack-credentials).
 - **Appearance** (`/admin/appearance`): color scheme, text size, and fonts.
 - **Voice** (`/admin/voice`): voice mode and Deepgram credentials.
@@ -43,7 +44,9 @@ Scheduled automations are managed from **Automations** in the sidebar or the
 Automations link in Settings. The management page replaces the former Periodic
 Tasks settings editor. See
 [scheduled automations](architecture/integrations.md#scheduled-agents) for
-schedule and run behavior.
+schedule and run behavior. Event automations created from chat are listed there
+too, start paused, and run only after you select Enable; see
+[current limits](architecture/integrations.md#current-event-automation-limits).
 
 ## Appearance
 

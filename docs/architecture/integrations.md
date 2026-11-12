@@ -998,7 +998,11 @@ Actor-specific ID restrictions are rejected until actor discovery is supported.
 The `propose_automation` guidance proposes only the GitHub actions that can be
 enabled, `labeled` and `reopened`; GitHub records labels applied when an issue
 is created as `labeled` events. It states that `opened` and `edited` are not yet
-supported.
+supported. Both discovery and proposal descriptions say that a created
+automation starts paused, that only the user enables it from the Automations
+page (the agent cannot enable, pause or run it), that GitHub `labeled` and
+`reopened` triggers run once enabled, and that Slack triggers run only when
+Slack event intake is turned on.
 
 `AgentProposal` persists the specification, verified display names, workspace,
 revision, and optional created definition. Tool results carry a proposal
@@ -1409,6 +1413,52 @@ selects its channel and is past that channel's boundary, it is skipped as
 `VERIFICATION_MESSAGE` (otherwise it is skipped earlier, for example as
 `BEFORE_ACTIVATION`). Posting one in a channel another automation already
 listens to therefore starts no run and costs no Slack history read.
+
+### End-to-end checks
+
+The `src/backend/testing/agent-runtime-flow.integration.test.ts` and
+`agent-runtime-flow-launch.integration.test.ts` suites drive a saved GitHub
+automation through `automation.enable`, the runtime's registered jobs (source
+poll, evaluation, launch maintenance) and the history reads, with fake GitHub,
+Git, classifier and provider transport. They cover `labeled` and `reopened`
+runs, events before Enable and while paused, filter outcomes, pause racing a
+claim, an edit while `STARTING`, Reset source, Delete, child-workspace
+settlement and its 24-hour deadline, duplicate delivery, restarts at the launch
+boundaries, and an uncertain send.
+`src/backend/orchestration/testing/agent-runtime-flow.test-support.ts` composes
+the runtime as `app-context.ts` does.
+
+An opt-in live check reads a real repository's issue-events feed through
+`GitHubCLIService` with the local `gh` login and validates the parser against
+every row. It creates nothing on GitHub and is never run in CI; use a throwaway
+repository with some labeled and reopened issues:
+
+```sh
+AGENT_LIVE_GITHUB_REPO=owner/name pnpm test:integration src/backend/services/github/service/github-cli-agent-issue-events.manual.integration.test.ts
+```
+
+### Current event automation limits
+
+- GitHub triggers run on `labeled` and `reopened` issue events, read by polling
+  about once a minute. `opened` and `edited` can be saved but not enabled
+  (`UNSUPPORTED_GITHUB_ACTION`); pull request, comment, review and CI events are
+  not triggers. See the
+  [webhook intake proposal](../design/github-webhook-intake.md).
+- Actor filters (`creatorIds`, `senderIds`) are rejected
+  (`UNSUPPORTED_ACTOR_FILTER`).
+- Schedule triggers stay with [scheduled automations](#scheduled-automations)
+  (`PeriodicTask`); event evaluation never runs them.
+- A natural-language filter's classifier judges only the triggering event's own
+  text (issue title and body, or the Slack message), not thread or channel
+  context.
+- Logical export/import restores definition bodies paused and Slack connection
+  identities without tokens, but omits GitHub connections, event configuration,
+  activation and run/event history; the complete backup is the database file
+  with `encryption.key`.
+- Slack intake is off by default: Slack triggers can be enabled only with
+  `AGENT_SLACK_INTAKE_ENABLED=true`. Keep it unset until the live check against
+  a dedicated Slack app passes.
+- Runs never reply on the source issue or Slack thread.
 
 ## Client query transport
 
