@@ -1,6 +1,7 @@
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { EventAgentActivation } from './event-agent-activation';
+import { EventAgentDelete } from './event-agent-delete';
 import { EventSourceRecovery } from './event-source-reset';
 import { describeAutomationState, EventTriggerCard } from './event-trigger-status';
 import type { EventAgent } from './types';
@@ -95,12 +96,15 @@ export function EventAgentInspection({
 export function EventAgentDetail({
   agent,
   onEdit,
+  onDeleted,
   archived = false,
   saved = false,
   children,
 }: {
   agent: EventAgent;
   onEdit: () => void;
+  /** Offers Delete; called once the automation is deleted, to return to the list. */
+  onDeleted?: (agentId: string) => void;
   archived?: boolean;
   saved?: boolean;
   children?: React.ReactNode;
@@ -121,11 +125,14 @@ export function EventAgentDetail({
           <Button variant="outline" size="sm" onClick={onEdit} disabled={archived}>
             Edit automation
           </Button>
+          {onDeleted && (
+            <EventAgentDelete agent={agent} archived={archived} onDeleted={onDeleted} />
+          )}
         </EventAgentActivation>
         {archived && (
           <p className="text-sm text-muted-foreground">
-            Archived project: saved details are readable; editing, enabling, pausing and resetting a
-            source require an active project.
+            Archived project: saved details are readable; editing, enabling, pausing, resetting a
+            source and deleting require an active project.
           </p>
         )}
         <details className="text-xs text-muted-foreground">

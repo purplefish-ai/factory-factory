@@ -351,9 +351,11 @@ it('opens an event outside page one, keeps equal IDs distinct and separates list
     )
   ).toBe(false);
   expect(container.textContent).not.toContain('Next run');
-  expect(
-    [...container.querySelectorAll('main button')].map((item) => item.textContent)
-  ).not.toContain('Delete');
+  // The event detail has its own Delete (automation.delete, covered in event-agent-delete.test);
+  // the scheduled controls, which call periodicTask, never appear.
+  const actions = [...container.querySelectorAll('main button')].map((item) => item.textContent);
+  expect(actions.filter((text) => text === 'Delete')).toHaveLength(1);
+  expect(actions).not.toContain('Resume');
   await click('Load more event-triggered automations');
   await waitForReact(() =>
     expect(

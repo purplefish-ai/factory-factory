@@ -55,9 +55,13 @@ export const agentPromptAccessor: InitialDeliveryOwnerPort = {
       where: { id: runId },
       include: { initialDelivery: true },
     });
-    const delivery = run?.initialDelivery;
+    if (!run) {
+      // Deleted with its automation, which is refused while any run is unfinished.
+      return null;
+    }
+    const delivery = run.initialDelivery;
     if (
-      !(run && delivery) ||
+      !delivery ||
       run.reservedSessionId !== sessionId ||
       delivery.attemptGeneration !== run.attemptGeneration
     ) {

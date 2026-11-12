@@ -266,6 +266,25 @@ export function useAgentsController(project: AgentProject, kind: AgentKind = 'sc
       setSavedEvent(true);
       setMode('detail');
     },
+    /** Drops a deleted event automation from the list and leaves its detail, if still shown. */
+    eventDeleted: (agentId: string) => {
+      utils.automation.list.setInfiniteData({ projectId: project.id }, (data) =>
+        data
+          ? {
+              ...data,
+              pages: data.pages.map((page) => ({
+                ...page,
+                items: page.items.filter((item) => item.id !== agentId),
+              })),
+            }
+          : data
+      );
+      if (active.current && currentId.current === agentId) {
+        setMode('detail');
+        setSavedEvent(false);
+        void navigate(`${getProjectSectionPath(project.slug, 'agents')}?kind=event`);
+      }
+    },
     task: { data: task.data, error: task.error, isLoading: task.isLoading, refetch: task.refetch },
     list: { data: list.data, error: list.error, isLoading: list.isLoading, refetch: list.refetch },
     project,

@@ -101,3 +101,48 @@ it('records unexpected exit uncertainty only for the captured provider incarnati
   await h.authority.observeUnexpectedExit('reserved', 'current');
   expect(stops).toEqual([expect.objectContaining({ cause: 'UNEXPECTED_EXIT', status: 'UNKNOWN' })]);
 });
+it('treats a session whose run was deleted with its finished automation as ordinary', async () => {
+  const h = harness();
+  const stops: unknown[] = [];
+  h.owner.readFence = async () => null;
+  h.owner.stop = (_attempt, stop) => {
+    stops.push(stop);
+    return Promise.resolve();
+  };
+  h.authority.configure(h.owner);
+  await expect(h.authority.assertOrdinary('reserved')).resolves.toBeUndefined();
+  await expect(h.authority.assertStartup('reserved')).resolves.toBeUndefined();
+  // Nothing can start or resume an initial delivery without its run.
+  await expect(h.authority.runInitial(attempt, async () => undefined)).rejects.toThrow();
+  await expect(h.authority.assertStartup('reserved', { attempt, execution })).rejects.toThrow();
+  await expect(
+    h.authority
+      .createWorkspaceRetryGuard({
+        projectId: 'project',
+        workspaceId: 'workspace',
+        initialMessageId: 'initial',
+        fence: { state: 'FINISHED', attempt, execution },
+      } as never)
+      .check()
+  ).rejects.toThrow();
+  // A stop has nothing to record.
+  await h.authority.recordStop('reserved', {
+    version: 1,
+    cause: 'USER_STOP',
+    status: 'UNKNOWN',
+    source: null,
+    observedAt: new Date().toISOString(),
+  });
+  await h.authority.observeUnexpectedExit('reserved', 'runtime');
+  expect(stops).toEqual([]);
+  // A session with no origin is still not a stop target.
+  await expect(
+    h.authority.recordStop('ordinary', {
+      version: 1,
+      cause: 'USER_STOP',
+      status: 'UNKNOWN',
+      source: null,
+      observedAt: new Date().toISOString(),
+    })
+  ).rejects.toThrow();
+});

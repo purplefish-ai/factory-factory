@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { prisma } from '@/backend/db';
 import { ApplicationError } from '@/backend/lib/application-error';
 import {
+  type AgentActivationInput,
   type agentSavedUpdateSchema,
   type AgentSourceValidation,
   type SavedAgentSpecification,
@@ -14,6 +15,7 @@ import {
   validateManagementSources,
 } from './agent-management-write';
 import { agentRevisionAccessor } from './agent-revision.accessor';
+import { cancelQueuedRuns, pauseTriggers } from './agent-trigger-pause';
 
 export const managementTriggerInclude = {
   connection: {
@@ -81,7 +83,49 @@ async function get(
   });
   return { definition, unknown: Boolean(unknown), configured, retained };
 }
+function unfinishedRunMessage(count: number) {
+  const runs =
+    count === 1 ? '1 run of this automation has' : `${count} runs of this automation have`;
+  const them = count === 1 ? 'it' : 'them';
+  return (
+    `${runs} started and not finished. Let ${them} finish, or stop ${them} in the workspace ` +
+    `(or abandon ${them} from the Runs view if ${count === 1 ? 'it needs' : 'they need'} ` +
+    'attention), then delete the automation again. Nothing was changed.'
+  );
+}
+/**
+ * Pauses the automation, cancelling its queued runs, then deletes the
+ * definition with its triggers, run history, evaluations and accepted
+ * proposal. Workspaces and their retained origins stay. A run that has been
+ * claimed and is not finished refuses the delete, and the whole transaction,
+ * pause included, rolls back.
+ */
+async function deleteAgent(input: AgentActivationInput) {
+  return await ledgerTransaction(async (tx) => {
+    const definition = await ownedAgent(tx, input.projectId, input.agentId);
+    if (definition.managementRevision !== input.expectedManagementRevision) {
+      throw new ApplicationError('CONFLICT', 'This automation changed. Reload it and try again.');
+    }
+    const project = await tx.project.findUniqueOrThrow({ where: { id: definition.projectId } });
+    if (project.isArchived) {
+      throw new ApplicationError('PRECONDITION_FAILED', 'Choose an active project.');
+    }
+    await pauseTriggers(tx, { agentDefinitionId: definition.id });
+    // Pausing cancels trigger runs; this also covers queued runs without a trigger.
+    await cancelQueuedRuns(tx, { agentDefinitionId: definition.id });
+    const unfinished = await tx.agentRun.count({
+      where: { agentDefinitionId: definition.id, status: { in: ['QUEUED', 'RUNNING'] } },
+    });
+    if (unfinished) {
+      throw new ApplicationError('PRECONDITION_FAILED', unfinishedRunMessage(unfinished));
+    }
+    // Cascades triggers, runs, initial deliveries, evaluations and the accepted proposal.
+    await tx.agentDefinition.delete({ where: { id: definition.id } });
+    return { deleted: true as const };
+  });
+}
 export const agentManagementAccessor = {
+  delete: deleteAgent,
   checkSources(
     projectId: string,
     specification: SavedAgentSpecification,

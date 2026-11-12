@@ -38,6 +38,13 @@ beforeEach(async () => {
 afterAll(async () => {
   await destroyIntegrationDatabase(db);
 });
+async function readFence(attempt: { runId: string; sessionId: string }) {
+  const fence = await runtime.agentInitialDelivery.readFence(attempt.runId, attempt.sessionId);
+  if (!fence) {
+    throw new Error('Expected the run to exist');
+  }
+  return fence;
+}
 async function setup() {
   await fixture.admit(await fixture.event());
   const claim = await runtime.claimNextRun();
@@ -63,12 +70,20 @@ it('persists correlated terminal evidence without settling capacity or changing 
     stopReason: 'end_turn',
     result: 'COMPLETED',
   });
-  const fence = await runtime.agentInitialDelivery.readFence(attempt.runId, attempt.sessionId);
+  const fence = await readFence(attempt);
   expect(fence.state).toBe('FINISHED');
   expect(fence.evidence?.outcome?.result).toBe('COMPLETED');
   const run = await db.prisma.agentRun.findUniqueOrThrow({ where: { id: attempt.runId } });
   expect(run.status).toBe('RUNNING');
   expect(run.initialMessageId).toBe(attempt.messageId);
+});
+it('reads no fence once the run is deleted with its automation, and still fences a foreign session', async () => {
+  const attempt = await setup();
+  await expect(
+    runtime.agentInitialDelivery.readFence(attempt.runId, 'another-session')
+  ).rejects.toMatchObject({ code: 'CONFLICT' });
+  await db.prisma.agentDefinition.delete({ where: { id: fixture.definitionId } });
+  expect(await runtime.agentInitialDelivery.readFence(attempt.runId, attempt.sessionId)).toBeNull();
 });
 it('rejects expired pre-send claims and never re-sends SENDING', async () => {
   const attempt = await setup();
@@ -104,9 +119,7 @@ it.each([
       result: 'COMPLETED',
     })
   ).rejects.toThrow();
-  expect(
-    (await runtime.agentInitialDelivery.readFence(attempt.runId, attempt.sessionId)).state
-  ).toBe('SENDING');
+  expect((await readFence(attempt)).state).toBe('SENDING');
 });
 it('rejects stale provider incarnation and does not overwrite a terminal outcome', async () => {
   const attempt = await setup();
@@ -142,7 +155,7 @@ it('keeps shutdown stop evidence separate from ambiguous initial outcome', async
     status: 'LOCAL_RUNTIME_GROUP_STOPPED',
     observedAt: new Date().toISOString(),
   });
-  const fence = await runtime.agentInitialDelivery.readFence(attempt.runId, attempt.sessionId);
+  const fence = await readFence(attempt);
   expect(fence.state).toBe('AMBIGUOUS');
   expect(fence.evidence?.outcome).toBeUndefined();
   expect(fence.evidence?.stop?.cause).toBe('SHUTDOWN');
@@ -165,9 +178,7 @@ it('allows a new worker to fence the same interrupted attempt while rejecting th
       result: 'COMPLETED',
     })
   ).rejects.toThrow();
-  expect(
-    (await runtime.agentInitialDelivery.readFence(attempt.runId, attempt.sessionId)).state
-  ).toBe('AMBIGUOUS');
+  expect((await readFence(attempt)).state).toBe('AMBIGUOUS');
 });
 
 it('records a later human runtime stop without changing the original initial outcome', async () => {
@@ -192,7 +203,7 @@ it('records a later human runtime stop without changing the original initial out
     result: 'COMPLETED',
   });
   await runtime.agentInitialDelivery.stop(attempt, stop);
-  const fence = await runtime.agentInitialDelivery.readFence(attempt.runId, attempt.sessionId);
+  const fence = await readFence(attempt);
   expect(fence.evidence?.outcome?.source).toEqual(source);
   expect(fence.evidence?.stop?.source).toEqual(laterSource);
   expect(fence.state).toBe('FINISHED');
@@ -209,9 +220,7 @@ it.each(['COMPLETED', 'CANCELLED'] as const)(
         stopReason: result === 'COMPLETED' ? 'cancelled' : 'end_turn',
       })
     ).rejects.toThrow();
-    expect(
-      (await runtime.agentInitialDelivery.readFence(attempt.runId, attempt.sessionId)).state
-    ).toBe('SENDING');
+    expect((await readFence(attempt)).state).toBe('SENDING');
   }
 );
 it('rejects ambiguous callbacks after run settlement', async () => {
@@ -219,9 +228,7 @@ it('rejects ambiguous callbacks after run settlement', async () => {
   await runtime.agentInitialDelivery.beforeSend(attempt, source);
   await db.prisma.agentRun.update({ where: { id: attempt.runId }, data: { status: 'CANCELLED' } });
   await expect(runtime.agentInitialDelivery.ambiguous(attempt)).rejects.toThrow();
-  expect(
-    (await runtime.agentInitialDelivery.readFence(attempt.runId, attempt.sessionId)).state
-  ).toBe('SENDING');
+  expect((await readFence(attempt)).state).toBe('SENDING');
 });
 it('rejects inconsistent stored delivery generation before startup', async () => {
   const attempt = await setup();

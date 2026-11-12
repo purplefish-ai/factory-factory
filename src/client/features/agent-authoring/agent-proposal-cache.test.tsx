@@ -1,11 +1,15 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { TRPCClientError } from '@trpc/client';
 import { getQueryKey } from '@trpc/react-query';
 import { observable } from '@trpc/server/observable';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { invalidateSavedAgentQueries } from '@/client/lib/agent-query-cache';
+import {
+  invalidateDeletedAutomationQueries,
+  invalidateSavedAgentQueries,
+} from '@/client/lib/agent-query-cache';
 import { trpc } from '@/client/lib/trpc';
 import { agentProposalSchema } from '@/shared/agent-proposal';
 import { waitForReact } from '@/test-utils/react-act';
@@ -41,13 +45,32 @@ let finish: (() => void) | undefined;
 let wait: Promise<void> | undefined;
 let ownerFailure: boolean;
 let invalidate: (() => Promise<unknown>) | undefined;
+let afterDelete: (() => Promise<unknown>) | undefined;
+let deleted: boolean;
+let staleRead: Promise<void> | undefined;
 function Probe() {
   const utils = trpc.useUtils();
   invalidate = () => invalidateSavedAgentQueries(utils, 'owner-project', 'saved-id');
+  afterDelete = () =>
+    invalidateDeletedAutomationQueries(utils, client, 'owner-project', 'saved-id');
   return null;
 }
 async function respond(path: string) {
   if (path === 'automation.getProposal') {
+    const stale = staleRead;
+    if (stale !== undefined) {
+      // A read that started before the delete answers with the old proposal.
+      staleRead = undefined;
+      await stale;
+      return proposal;
+    }
+    if (deleted) {
+      // Deleting a saved automation deletes its accepted proposal.
+      const message = 'Automation proposal not found in this workspace.';
+      throw new TRPCClientError(message, {
+        result: { error: { message, code: -32_004, data: { code: 'NOT_FOUND', httpStatus: 404 } } },
+      });
+    }
     return proposal;
   }
   if (path === 'workspace.get') {
@@ -102,6 +125,9 @@ beforeEach(() => {
   wait = undefined;
   finish = undefined;
   invalidate = undefined;
+  afterDelete = undefined;
+  deleted = false;
+  staleRead = undefined;
   container = document.createElement('div');
   document.body.append(container);
   root = createRoot(container);
@@ -201,4 +227,38 @@ it('shows an explicit owner load problem and never updates against sidebar selec
     expect(container.textContent).toContain("Couldn't load the authoring workspace project")
   );
   expect(requests.some((request) => request.path === 'automation.update')).toBe(false);
+});
+it('replaces a mounted card with a plain notice once its automation is deleted', async () => {
+  await render();
+  await waitForReact(() => expect(container.textContent).toContain('Automation created'));
+  deleted = true;
+  await act(async () => {
+    await afterDelete?.();
+  });
+  await waitForReact(() =>
+    expect(container.querySelector('[role="alert"]')?.textContent).toBe(
+      'This automation proposal is no longer available. Deleting a saved automation also deletes the proposal that created it.'
+    )
+  );
+  expect(container.textContent).not.toContain('Automation created');
+  expect(container.querySelector('form')).toBeNull();
+});
+it('restarts a card whose first read was in flight when its automation was deleted', async () => {
+  let release: () => void = () => undefined;
+  staleRead = new Promise<void>((done) => {
+    release = done;
+  });
+  await render();
+  await waitForReact(() => expect(container.textContent).toContain('Loading automation proposal'));
+  deleted = true;
+  await act(async () => {
+    await afterDelete?.();
+  });
+  await act(() => release());
+  await waitForReact(() =>
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain(
+      'This automation proposal is no longer available.'
+    )
+  );
+  expect(container.textContent).not.toContain('Automation created');
 });
