@@ -303,7 +303,7 @@ it('blocks FINISHED while the real initial operation remains active, then allows
   const run = await db.prisma.agentRun.findUniqueOrThrow({ where: { id: runId } });
   const fence = await h.owner.agentInitialDelivery.readFence(runId, run.reservedSessionId!);
   const held = boundary();
-  const initial = h.session.eventSessionAuthority.runInitial(fence.attempt, () => held.wait());
+  const initial = h.session.eventSessionAuthority.runInitial(fence!.attempt, () => held.wait());
   await held.entered;
   try {
     await db.prisma.agentInitialDelivery.update({ where: { runId }, data: { state: 'FINISHED' } });

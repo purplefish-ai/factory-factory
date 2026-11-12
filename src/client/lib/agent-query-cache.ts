@@ -1,4 +1,4 @@
-import { type QueryKey, useInfiniteQuery } from '@tanstack/react-query';
+import { type QueryClient, type QueryKey, useInfiniteQuery } from '@tanstack/react-query';
 import { getQueryKey } from '@trpc/react-query';
 import { POLL_INTERVAL_MS } from '@/client/lib/query-options';
 import { trpc } from '@/client/lib/trpc';
@@ -45,6 +45,37 @@ export function invalidateAutomationActivationQueries(
     utils.automation.navigationSummary.invalidate({ projectId }),
     utils.automation.get.invalidate({ projectId, agentId }),
     invalidateEventHistoryQueries(utils, projectId, agentId),
+  ]);
+}
+
+/**
+ * After a delete. The project's list and rail entry refresh, and so do
+ * workspace origins, whose run is now gone. The deleted automation's own reads
+ * and history are marked stale without refetching: the detail closes, and a
+ * refetch would only report the automation missing. A chat proposal card for
+ * it is reset, because deleting the automation also deletes its proposal.
+ */
+export function invalidateDeletedAutomationQueries(
+  utils: ReturnType<typeof trpc.useUtils>,
+  queryClient: QueryClient,
+  projectId: string,
+  agentId: string
+) {
+  const owner = { projectId, agentId };
+  return Promise.all([
+    utils.automation.list.invalidate({ projectId }),
+    utils.automation.navigationSummary.invalidate({ projectId }),
+    utils.automation.get.invalidate(owner, { refetchType: 'none' }),
+    utils.automation.runs.invalidate(owner, { refetchType: 'none' }),
+    utils.automation.evaluations.invalidate(owner, { refetchType: 'none' }),
+    utils.automation.workspaceOrigin.invalidate({ projectId }),
+    queryClient.resetQueries({
+      queryKey: getQueryKey(trpc.automation.getProposal),
+      predicate: (query) => {
+        const proposal = agentProposalSchema.safeParse(query.state.data);
+        return proposal.success && proposal.data.agentDefinitionId === agentId;
+      },
+    }),
   ]);
 }
 

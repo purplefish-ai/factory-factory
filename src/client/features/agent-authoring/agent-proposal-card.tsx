@@ -282,7 +282,9 @@ export function AgentProposalCard({ reference }: { reference: AgentProposalRefer
   if (!query.data) {
     return query.error ? (
       <p role="alert" className="my-3 text-sm">
-        {query.error.message}
+        {query.error.data?.code === 'NOT_FOUND'
+          ? 'This automation proposal is no longer available. Deleting a saved automation also deletes the proposal that created it.'
+          : query.error.message}
       </p>
     ) : (
       <Loading size="compact" message="Loading automation proposal…" className="my-3" />

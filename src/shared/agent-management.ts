@@ -36,6 +36,8 @@ export const agentActivationInputSchema = agentOwnerInputSchema.extend({
   expectedManagementRevision: agentDefinitionRevisionSchema,
 });
 export type AgentActivationInput = z.infer<typeof agentActivationInputSchema>;
+/** `automation.delete`: the definition, its triggers, run history and accepted proposal are gone. */
+export const agentDeleteResultSchema = z.strictObject({ deleted: z.literal(true) });
 const intentKind = z.enum(['EXPLICIT', 'INHERITED']);
 export const agentNativeIntentSchema = z.strictObject({
   version: z.literal(1),

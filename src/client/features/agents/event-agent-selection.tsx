@@ -165,6 +165,7 @@ export function EventAgentSelection({
         archived={project.isArchived}
         saved={controller.savedEvent}
         onEdit={() => controller.setMode('edit')}
+        onDeleted={controller.eventDeleted}
       >
         <RetainedContinuation key={`${project.id}:event:${event.data.id}`} agent={event.data} />
       </EventAgentDetail>

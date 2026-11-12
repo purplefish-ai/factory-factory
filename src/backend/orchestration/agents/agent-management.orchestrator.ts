@@ -205,6 +205,14 @@ export function createAgentManagement(getServices: () => Services) {
       const parsed = agentSourceResetInputSchema.parse(input);
       return await getServices().agentManagementService.resetSource(parsed);
     },
+    /**
+     * Trusted-local only: the MCP catalog has no delete tool. Workspaces and
+     * their retained origins stay with the workspace capsule.
+     */
+    async delete(input: unknown) {
+      const parsed = agentActivationInputSchema.parse(input);
+      return await getServices().agentManagementService.delete(parsed);
+    },
     async projectSources(input: unknown) {
       const parsed = agentProjectSourcesInputSchema.parse(input);
       const services = getServices();

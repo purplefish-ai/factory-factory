@@ -1,4 +1,5 @@
 import { afterEach, expect, it, vi } from 'vitest';
+import { EventSessionAuthority } from '@/backend/services/session/service/event-agent/event-session-authority';
 import { createTerminationHarness } from './session-lifecycle.test-helpers';
 import { SessionTerminationCoordinator } from './session-termination.coordinator';
 const logger = vi.hoisted(() => ({ debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() }));
@@ -85,6 +86,45 @@ it.each(['SENDING', 'FINISHED'] as const)(
     );
   }
 );
+it('stops a session whose run was deleted with its automation like a finished event session', async () => {
+  const base = createTerminationHarness();
+  const owner = {
+    readFence: vi.fn(async () => null),
+    beforeSend: vi.fn(async () => undefined),
+    outcome: vi.fn(async () => undefined),
+    ambiguous: vi.fn(async () => undefined),
+    stop: vi.fn(async () => undefined),
+  };
+  const authority = new EventSessionAuthority(async () => ({
+    runId: 'deleted-run',
+    execution: {
+      version: 1,
+      provider: 'CLAUDE',
+      model: 'sonnet',
+      reasoningEffort: null,
+      codexAccountId: null,
+      startupModePreset: 'non_interactive',
+      accessMode: 'bypassPermissions',
+      planModeEnabled: false,
+    },
+  }));
+  authority.configure(owner);
+  const stopAndQuiesceObserved = vi.fn(async () => ({
+    version: 1 as const,
+    cause: 'USER_STOP' as const,
+    status: 'LOCAL_RUNTIME_GROUP_STOPPED' as const,
+    source: null,
+    observedAt: new Date().toISOString(),
+  }));
+  const coordinator = new SessionTerminationCoordinator({
+    ...base,
+    eventAuthority: authority,
+    runtimeManager: { ...base.runtimeManager, stopAndQuiesceObserved },
+  });
+  await coordinator.stopSession(base.session.id, { reason: 'USER_STOP' });
+  expect(stopAndQuiesceObserved).toHaveBeenCalledWith(base.session.id, 'USER_STOP', undefined);
+  expect(owner.stop).not.toHaveBeenCalled();
+});
 it('inactive lookup failure cleans physical ownership without fabricating a recovered ordinary user stop', async () => {
   const base = createTerminationHarness();
   base.repository.getSessionsByWorkspaceId.mockResolvedValue([{ ...base.session, status: 'IDLE' }]);

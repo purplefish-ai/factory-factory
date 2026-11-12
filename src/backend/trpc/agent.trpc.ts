@@ -6,6 +6,7 @@ import {
 } from '@/shared/agent-history';
 import {
   agentActivationInputSchema,
+  agentDeleteResultSchema,
   agentOwnerInputSchema,
   agentGetInputSchema,
   agentHistoryInputSchema,
@@ -86,6 +87,11 @@ export const agentRouter = router({
     .input(agentActivationInputSchema)
     .output(managedAgentSchema)
     .mutation(({ ctx, input }) => ctx.appContext.services.agentManagement.pause(input)),
+  // Pauses, cancels queued runs and deletes; refused while a claimed run is unfinished.
+  delete: trustedLocalProcedure
+    .input(agentActivationInputSchema)
+    .output(agentDeleteResultSchema)
+    .mutation(({ ctx, input }) => ctx.appContext.services.agentManagement.delete(input)),
   evaluations: trustedLocalProcedure
     .input(agentHistoryInputSchema)
     .output(agentEvaluationPageSchema)

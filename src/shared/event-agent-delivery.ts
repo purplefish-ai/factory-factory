@@ -72,7 +72,11 @@ export const initialDeliveryFenceSchema = z.strictObject({
 export type InitialDeliveryFence = z.infer<typeof initialDeliveryFenceSchema>;
 /** Injected by orchestration. Reads must also cover FINISHED attempts after restart. */
 export interface InitialDeliveryOwnerPort {
-  readFence(runId: string, sessionId: string): Promise<InitialDeliveryFence>;
+  /**
+   * Null when the run no longer exists: it was deleted with its automation,
+   * which requires every run to be finished, so the session is ordinary.
+   */
+  readFence(runId: string, sessionId: string): Promise<InitialDeliveryFence | null>;
   beforeSend(attempt: InitialAttempt, source: ProviderSource): Promise<void>;
   outcome(attempt: InitialAttempt, outcome: InitialOutcome): Promise<void>;
   ambiguous(attempt: InitialAttempt): Promise<void>;

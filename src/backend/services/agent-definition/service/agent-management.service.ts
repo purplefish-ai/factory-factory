@@ -11,6 +11,8 @@ import {
   savedAgentSpecificationSchema,
 } from '@/shared/agent-management';
 import {
+  agentActivationInputSchema,
+  agentDeleteResultSchema,
   agentGetInputSchema,
   agentListInputSchema,
   agentListPageSchema,
@@ -48,6 +50,12 @@ export class AgentManagementService {
     const parsed = agentSourceResetInputSchema.parse(input);
     return agentSourceResetResultSchema.parse(
       await agentSourceAccessor.resetSource(parsed.projectId, parsed.connectionId)
+    );
+  }
+  /** Trusted-local only: refused while a claimed run is unfinished; workspaces stay. */
+  async delete(input: unknown) {
+    return agentDeleteResultSchema.parse(
+      await agentManagementAccessor.delete(agentActivationInputSchema.parse(input))
     );
   }
   checkSources(projectId: string, specification: unknown, evidence: unknown) {

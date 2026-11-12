@@ -731,6 +731,41 @@ commits admits no run. A repeated reset before a fresh head is captured returns
 zero counts and changes nothing, including triggers enabled since; after that, a
 healthy source refuses reset.
 
+### Delete
+
+Trusted-local
+`automation.delete({ projectId, agentId, expectedManagementRevision })` returns
+`{ deleted: true }`; the MCP catalog has no delete tool. A stale revision is
+`CONFLICT`, a foreign owner `NOT_FOUND`, and, like other management writes, an
+archived project is `PRECONDITION_FAILED`. One ledger transaction pauses every
+trigger through the shared `pauseTriggers` helper, cancelling queued runs (a
+`STARTING` activation becomes a paused generation), then refuses with
+`PRECONDITION_FAILED` if any run is still QUEUED or RUNNING: claimed,
+provisioning, running, needing attention or held by child workspaces. The
+message says how many runs are unfinished and that the user lets them finish,
+stops them in the workspace, or abandons them from the Runs view first. The
+refusal rolls the whole transaction back, so the automation stays exactly as it
+was, still enabled and listening. Otherwise the definition is deleted with its
+triggers (configured and retained), runs, initial deliveries, evaluations and
+accepted proposal. The shared connection, its source state and ledger events
+stay.
+
+Work that read the automation before the delete finds nothing to write: a
+pending activation step or baseline record returns without change, an evaluation
+is rejected as `NOT_FOUND`, and a source poll no longer targets the connection
+for this automation. An Enable whose automation is deleted while its baseline is
+prepared reports `NOT_FOUND`.
+
+Workspaces its runs started stay, with their sessions and pull requests. Their
+retained launch origins stay too: `automation.workspaceOrigin` returns the
+origin with `run: null`, so the workspace's **Runs** tab disappears, as it does
+after a scheduled automation is deleted, and deleting the workspace later still
+works. The session's retained origin no longer has a run to read, so the session
+is ordinary (see
+[event creation ownership](agent-runtime.md#event-creation-ownership)). A chat
+proposal card for the automation reports that the proposal is no longer
+available.
+
 ### Project-owned saved management
 
 Trusted-local `automation.list`, `get`, `updateSaved`, `evaluations`, `runs`,
@@ -899,10 +934,20 @@ runs cancelled, and that each automation needs Enable again; a failure stays in
 the dialog. Success reports the paused-trigger and cancelled-run counts and
 invalidates every cached automation read, list and history in every project,
 because the reset reaches other projects on the same source. Enable, Pause and
-Reset source are disabled in archived projects. Recovery controls and deletion
-belong to separate cuts. Scheduled CRUD and history retain their existing
-behavior. Exact-context operator recovery uses the separate trusted-local
-transport described in
+Reset source are disabled in archived projects.
+
+The detail's **Delete** opens a `ConfirmDialog` that names what is removed (the
+triggers, run and event history, and the saved proposal) and what is kept
+(workspaces its runs started, with their chats and pull requests). It sends the
+loaded `managementRevision` to [delete](#delete). A refusal while a run is
+unfinished stays in the dialog with the server's reason, and a `CONFLICT` offers
+**Reload automation** there. Success removes the automation from the list,
+returns to the event automations list, refreshes the list, rail count and
+workspace origins, marks the automation's own reads stale without refetching
+them, and resets any chat proposal card for it. Delete is disabled in archived
+projects. Recovery controls belong to a separate cut. Scheduled CRUD and history
+retain their existing behavior. Exact-context operator recovery uses the
+separate trusted-local transport described in
 [agent runtime](agent-runtime.md#exact-context-operator-recovery-transport).
 Production authoring still creates paused definitions. Manually altered
 ACTIVE-looking legacy records without known membership or a current validated

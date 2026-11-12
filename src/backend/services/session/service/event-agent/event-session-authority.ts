@@ -66,10 +66,13 @@ export class EventSessionAuthority {
     if (!this.owner) {
       throw new Error('Event initial delivery is fenced: durable authority is unavailable');
     }
-    const fence = initialDeliveryFenceSchema.parse(
-      await this.owner.readFence(origin.runId, sessionId)
-    );
+    const stored = await this.owner.readFence(origin.runId, sessionId);
     assertCurrent();
+    if (stored === null) {
+      // The run was deleted with its finished automation; the retained origin is provenance only.
+      return null;
+    }
+    const fence = initialDeliveryFenceSchema.parse(stored);
     if (
       fence.attempt.runId !== origin.runId ||
       fence.attempt.sessionId !== sessionId ||
@@ -284,8 +287,13 @@ export class EventSessionAuthority {
   ): Promise<void> {
     return this.observe(async (assertCurrent) => {
       assertInitialCurrent?.();
-      const fence = await this.read(sessionId, assertCurrent);
+      const origin = await this.findOrigin(sessionId);
+      const fence = await this.readOwnedFence(sessionId, origin, assertCurrent);
       assertInitialCurrent?.();
+      if (origin && !fence && !expected) {
+        // The run was deleted with its finished automation: there is nothing to record.
+        return;
+      }
       if (!(fence && this.owner)) {
         blocked();
       }

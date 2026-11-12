@@ -506,7 +506,16 @@ export async function createEventDeliveryFixture(
     claim,
     attempt,
     workspaceSource,
-    read: () => owner.agentInitialDelivery.readFence(claim.runId, claim.reservedSessionId),
+    read: async () => {
+      const fence = await owner.agentInitialDelivery.readFence(
+        claim.runId,
+        claim.reservedSessionId
+      );
+      if (!fence) {
+        throw new Error('The event run no longer exists');
+      }
+      return fence;
+    },
     dispatch: () =>
       trackEventFixtureTask(
         session.dispatchAgentInitialPrompt({

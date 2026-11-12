@@ -1117,6 +1117,13 @@ recreation, including deletion before run linkage. Archived workspaces and
 projects also block creation/reuse. Generic interactive, child and periodic
 creation keeps its existing behavior.
 
+Deleting an automation, which is refused while any of its runs is unfinished,
+removes its runs but not these origins. The owner's fence read then returns
+null, and the session authority treats such a session as ordinary: messages,
+startup and stops proceed as for a finished event session, with no stop evidence
+to record. Initial delivery, retry and workspace setup retry stay blocked,
+because there is no run to authorize them.
+
 The agent-definition owner exposes `readEventExecutionBinding` and
 `freezeEventExecution`. Freeze checks the current worker/attempt, lease,
 reserved IDs and PENDING delivery identity, then stores immutable effective
