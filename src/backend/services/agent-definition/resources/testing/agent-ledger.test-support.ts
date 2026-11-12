@@ -78,7 +78,13 @@ export async function createLedgerFixture(
       occurredAt: new Date().toISOString(),
       observedAt: new Date().toISOString(),
       sourceUrl: 'https://github.com/org/repo/issues/1',
-      issue: { number: 1, title: 'Bug', body: 'Investigate this issue', addedLabel: 'agent' },
+      issue: {
+        number: 1,
+        title: 'Bug',
+        body: 'Investigate this issue',
+        addedLabel: 'agent',
+        labels: ['agent'],
+      },
     },
   });
 

@@ -66,6 +66,60 @@ it('preserves opaque feed order, drops PR content, and follows repository-ID pag
   );
 });
 
+it('makes reopened issue events executable with the issue labels at capture', async () => {
+  const issue = {
+    ...event.issue,
+    labels: [{ name: 'bug' }, 'agent', { name: '' }, { name: null }],
+  };
+  vi.mocked(execFile).mockResolvedValue(
+    response([
+      { id: 'reopened-pr', event: 'reopened', issue: { pull_request: {}, body: 'private PR' } },
+      {
+        id: 'reopened',
+        event: 'reopened',
+        created_at: '2026-11-02T12:00:00Z',
+        actor: { id: 'actor' },
+        issue,
+      },
+      { ...event, issue },
+      { ...event, id: 'without-labels' },
+    ]) as never
+  );
+  const page = await githubCLIService.listAgentIssueEvents({
+    repository: 'org/repo',
+    repositoryId: '123',
+    page: 1,
+    perPage: 100,
+  });
+  expect(page.events[0]).toEqual({ providerEventId: 'reopened-pr', payload: null });
+  expect(page.events[1]?.payload).toMatchObject({
+    provider: 'GITHUB',
+    action: 'reopened',
+    occurredAt: '2026-11-02T12:00:00Z',
+    sourceUrl: 'https://github.com/org/repo/issues/7',
+    issue: { number: 7, addedLabel: null, labels: ['bug', 'agent'] },
+  });
+  expect(page.events[2]?.payload).toMatchObject({
+    action: 'labeled',
+    issue: { addedLabel: 'agent', labels: ['bug', 'agent'] },
+  });
+  expect(page.events[3]?.payload).toMatchObject({ issue: { labels: [] } });
+});
+
+it.each(['opened', 'edited', 'closed'])(
+  'keeps %s issue events as non-executable feed identities',
+  async (action) => {
+    vi.mocked(execFile).mockResolvedValue(response([{ ...event, event: action }]) as never);
+    const page = await githubCLIService.listAgentIssueEvents({
+      repository: 'org/repo',
+      repositoryId: '123',
+      page: 1,
+      perPage: 100,
+    });
+    expect(page.events).toEqual([{ providerEventId: event.id, payload: null }]);
+  }
+);
+
 it('does not round numeric provider identities during JSON parsing', async () => {
   const result = response([event]);
   result.stdout = result.stdout.replace('"90071992547409931234"', '90071992547409931234');
@@ -96,7 +150,12 @@ it.each([
 });
 
 it('rejects malformed executable events and duplicate control identities', async () => {
-  for (const rows of [[{ ...event, actor: null }], [event, event]]) {
+  for (const rows of [
+    [{ ...event, actor: null }],
+    [{ ...event, event: 'reopened', issue: { ...event.issue, number: 0 } }],
+    [{ ...event, issue: { ...event.issue, labels: [7] } }],
+    [event, event],
+  ]) {
     vi.mocked(execFile).mockResolvedValue(response(rows) as never);
     await expect(
       githubCLIService.listAgentIssueEvents({

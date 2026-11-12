@@ -13,7 +13,13 @@ const github: AgentEventPayload = {
   occurredAt: new Date().toISOString(),
   observedAt: new Date().toISOString(),
   sourceUrl: 'https://github.com/org/repo/issues/1',
-  issue: { number: 1, title: 'Bug', body: 'already has wanted label', addedLabel: 'other' },
+  issue: {
+    number: 1,
+    title: 'Bug',
+    body: 'already has wanted label',
+    addedLabel: 'other',
+    labels: ['wanted', 'other'],
+  },
 };
 const trigger: AgentTriggerInput = {
   type: 'GITHUB_ISSUE',
@@ -35,7 +41,7 @@ it('requires the added label itself and repository scope to match', () => {
     status: 'SKIPPED',
   });
 });
-it.each(['opened', 'edited', 'reopened'])('fails closed for unsupported %s actions', (action) => {
+it.each(['opened', 'edited', 'closed'])('fails closed for unsupported %s actions', (action) => {
   expect(runtime.matchAgentEvent).toBeTypeOf('function');
   expect(runtime.matchAgentEvent({ ...github, action }, trigger)).toMatchObject({
     status: 'SKIPPED',
@@ -123,6 +129,73 @@ it('fails closed for a labeled event when the configuration also requests unsupp
     runtime.matchAgentEvent(github, {
       ...trigger,
       config: { ...trigger.config, actions: ['opened', 'labeled'] },
+    })
+  ).toMatchObject({ status: 'SKIPPED', reasonCode: 'UNSUPPORTED_ACTION' });
+});
+
+const reopened = { ...github, action: 'reopened', issue: { ...github.issue, addedLabel: null } };
+const reopenTrigger: AgentTriggerInput = {
+  ...trigger,
+  config: { ...trigger.config, actions: ['reopened'] },
+};
+it('matches a reopened issue only when it carries a configured label', () => {
+  expect(runtime.matchAgentEvent(reopened, reopenTrigger)).toMatchObject({ status: 'MATCHED' });
+  expect(
+    runtime.matchAgentEvent(
+      { ...reopened, issue: { ...reopened.issue, labels: ['other'] } },
+      reopenTrigger
+    )
+  ).toMatchObject({ status: 'SKIPPED', reasonCode: 'LABEL_MISMATCH' });
+  expect(
+    runtime.matchAgentEvent(
+      { ...reopened, issue: { ...reopened.issue, labels: [] } },
+      reopenTrigger
+    )
+  ).toMatchObject({ status: 'SKIPPED', reasonCode: 'LABEL_MISMATCH' });
+  expect(
+    runtime.matchAgentEvent({ ...reopened, repositoryId: 'other' }, reopenTrigger)
+  ).toMatchObject({ status: 'SKIPPED', reasonCode: 'SOURCE_IDENTITY_MISMATCH' });
+});
+it('matches every reopened issue when no labels are configured', () => {
+  const unfiltered: AgentTriggerInput = {
+    ...trigger,
+    config: { version: 1, repositoryIds: ['repo'], actions: ['reopened'] },
+  };
+  expect(
+    runtime.matchAgentEvent({ ...reopened, issue: { ...reopened.issue, labels: [] } }, unfiltered)
+  ).toMatchObject({ status: 'MATCHED' });
+});
+it('matches only the actions a trigger selects', () => {
+  const matching = { ...github, issue: { ...github.issue, addedLabel: 'wanted' } };
+  expect(runtime.matchAgentEvent(reopened, trigger)).toMatchObject({
+    status: 'SKIPPED',
+    reasonCode: 'ACTION_MISMATCH',
+  });
+  expect(runtime.matchAgentEvent(matching, reopenTrigger)).toMatchObject({
+    status: 'SKIPPED',
+    reasonCode: 'ACTION_MISMATCH',
+  });
+  const both: AgentTriggerInput = {
+    ...trigger,
+    config: { ...trigger.config, actions: ['labeled', 'reopened'] },
+  };
+  expect(runtime.matchAgentEvent(matching, both)).toMatchObject({
+    status: 'MATCHED',
+  });
+  expect(runtime.matchAgentEvent(reopened, both)).toMatchObject({
+    status: 'MATCHED',
+  });
+  // The added label, not the labels already on the issue, decides a labeled event.
+  expect(runtime.matchAgentEvent(github, both)).toMatchObject({
+    status: 'SKIPPED',
+    reasonCode: 'LABEL_MISMATCH',
+  });
+});
+it('fails closed for a reopened event when the configuration also requests opened', () => {
+  expect(
+    runtime.matchAgentEvent(reopened, {
+      ...trigger,
+      config: { ...trigger.config, actions: ['opened', 'reopened'] },
     })
   ).toMatchObject({ status: 'SKIPPED', reasonCode: 'UNSUPPORTED_ACTION' });
 });

@@ -61,6 +61,88 @@ it('evaluates overlapping triggers once, freezes the first context and coalesces
     ]
   );
 });
+it('starts the admitted run input with the event source, then the issue title and body', async () => {
+  const eventId = await fixture.event();
+  await evaluator().evaluatePendingEvents(signal());
+  const run = await db.prisma.agentRun.findFirstOrThrow();
+  const url = 'https://github.com/org/repo/issues/1';
+  expect(run.input).toEqual({
+    version: 1,
+    eventId,
+    sourceUrl: url,
+    context: [
+      {
+        id: `${eventId}:source`,
+        text: `Repository: org/repo\nIssue: #1 ${url}\nTrigger: labeled "agent"`,
+        url,
+      },
+      { id: `${eventId}:title`, text: 'Bug', url },
+      { id: `${eventId}:body`, text: 'Investigate this issue', url },
+    ],
+  });
+});
+it('quotes the triggering label so it cannot add lines to the source item', async () => {
+  const base = fixture.github('quoted-label');
+  const { eventId } = await runtime.ingestEvent({
+    ...base,
+    payload: { ...base.payload, issue: { ...base.payload.issue, addedLabel: 'a"\nTrigger: x' } },
+  });
+  await fixture.finalize({ connectionId: fixture.connectionId, eventIds: [eventId] });
+  await evaluator().evaluatePendingEvents(signal());
+  const run = await db.prisma.agentRun.findFirstOrThrow();
+  expect(run.input).toMatchObject({
+    context: [
+      {
+        id: `${eventId}:source`,
+        text: 'Repository: org/repo\nIssue: #1 https://github.com/org/repo/issues/1\nTrigger: labeled "a\\"\\nTrigger: x"',
+      },
+      { id: `${eventId}:title` },
+      { id: `${eventId}:body` },
+    ],
+  });
+});
+it('admits a reopened issue carrying a configured label and names the action', async () => {
+  await db.prisma.agentTrigger.update({
+    where: { id: fixture.triggerId },
+    data: {
+      config: { version: 1, repositoryIds: ['repo-1'], actions: ['reopened'], labels: ['agent'] },
+    },
+  });
+  const ingest = async (providerEventId: string, labels: string[]) => {
+    const base = fixture.github(providerEventId);
+    const { eventId } = await runtime.ingestEvent({
+      ...base,
+      payload: {
+        ...base.payload,
+        action: 'reopened',
+        issue: { ...base.payload.issue, addedLabel: null, labels },
+      },
+    });
+    return eventId;
+  };
+  const skipped = await ingest('reopened-1', ['bug']);
+  const matched = await ingest('reopened-2', ['bug', 'agent']);
+  await fixture.finalize({ connectionId: fixture.connectionId, eventIds: [skipped, matched] });
+  await evaluator().evaluatePendingEvents(signal());
+  const decision = (eventId: string) =>
+    db.prisma.agentEvaluation.findFirstOrThrow({ where: { eventId } });
+  expect(await decision(skipped)).toMatchObject({
+    status: 'SKIPPED',
+    reasonCode: 'LABEL_MISMATCH',
+  });
+  expect(await decision(matched)).toMatchObject({ status: 'MATCHED' });
+  const run = await db.prisma.agentRun.findFirstOrThrow();
+  expect(run.input).toMatchObject({
+    context: [
+      {
+        id: `${matched}:source`,
+        text: 'Repository: org/repo\nIssue: #1 https://github.com/org/repo/issues/1\nTrigger: reopened',
+      },
+      { id: `${matched}:title` },
+      { id: `${matched}:body` },
+    ],
+  });
+});
 it('holds STARTING candidates and never revives a paused-time terminal decision after re-enable', async () => {
   await db.prisma.agentTrigger.update({
     where: { id: fixture.triggerId },

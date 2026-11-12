@@ -303,7 +303,13 @@ async function createEventSeed(
                   occurredAt: new Date().toISOString(),
                   observedAt: new Date().toISOString(),
                   sourceUrl: 'https://github.com/org/repo/issues/1',
-                  issue: { number: 1, title: 'Task', body: 'Frozen issue', addedLabel: 'agent' },
+                  issue: {
+                    number: 1,
+                    title: 'Task',
+                    body: 'Frozen issue',
+                    addedLabel: 'agent',
+                    labels: ['agent'],
+                  },
                 },
               },
             ]

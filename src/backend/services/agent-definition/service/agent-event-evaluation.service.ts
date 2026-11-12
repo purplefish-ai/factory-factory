@@ -173,9 +173,22 @@ function eventInput(eventId: string, payload: AgentEventPayload) {
   const context =
     payload.provider === 'GITHUB'
       ? [
+          { id: `${eventId}:source`, text: githubSourceText(payload), url: payload.sourceUrl },
           { id: `${eventId}:title`, text: payload.issue.title, url: payload.sourceUrl },
           { id: `${eventId}:body`, text: payload.issue.body, url: payload.sourceUrl },
         ]
       : [{ id: eventId, text: payload.text, url: payload.sourceUrl }];
   return { version: 1 as const, eventId, sourceUrl: payload.sourceUrl, context };
+}
+/**
+ * States where the event came from as task data, ahead of the issue's own text. The label is
+ * JSON-quoted so a provider label cannot add lines to this item.
+ */
+function githubSourceText(payload: Extract<AgentEventPayload, { provider: 'GITHUB' }>) {
+  const label = payload.action === 'labeled' && payload.issue.addedLabel;
+  return [
+    `Repository: ${payload.repositoryFullName}`,
+    `Issue: #${payload.issue.number} ${payload.sourceUrl}`,
+    `Trigger: ${payload.action}${label ? ` ${JSON.stringify(label)}` : ''}`,
+  ].join('\n');
 }

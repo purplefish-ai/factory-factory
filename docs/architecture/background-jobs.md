@@ -158,11 +158,16 @@ not evaluate events, activate saved triggers, or launch workspaces.
 
 The `agent-event-evaluation` job runs immediately, then waits five seconds after
 completion. It evaluates at most 100 durable event/trigger candidates per cycle,
-rotating past deferred decisions. GitHub matching supports only `labeled` and
-matches the added label. Semantic and actor filters fail closed; SCHEDULE stays
-with PeriodicTask. STARTING generations remain held until activation owns their
-completion, cancellation, or expiry. Terminal decisions are not replayed under
-new revisions or generations.
+rotating past deferred decisions. GitHub matching supports `labeled` and
+`reopened` and fails closed when a trigger also lists an unsupported action. A
+`labeled` event matches its added label. A `reopened` event matches when the
+issue carried a configured label at capture, or always when no labels are
+configured. A GitHub run input starts with a source item naming the repository,
+issue number and link, and the triggering action (with the JSON-quoted added
+label for `labeled`), followed by the issue title and body. Semantic and actor
+filters fail closed; SCHEDULE stays with PeriodicTask. STARTING generations
+remain held until activation owns their completion, cancellation, or expiry.
+Terminal decisions are not replayed under new revisions or generations.
 
 Queue maintenance rotates through bounded batches even when all active slots are
 occupied. Claims choose FIFO heads of unsaturated definitions and serialize

@@ -3,6 +3,7 @@ import {
   agentEventOrderInputSchema,
   agentSourceHealthSchema,
   type AgentEventOrderInput,
+  isAgentGithubExecutableAction,
 } from '@/shared/agent-runtime';
 import { agentIssueEventPageSchema, type AgentIssueEventPage } from '@/shared/agent-source';
 import {
@@ -158,7 +159,10 @@ function beginPage(cursor: AgentGithubCursor, requestPage: number, page: AgentIs
 async function ingestEntries(tx: Tx, connectionId: string, fresh: AgentIssueEventPage['events']) {
   const entries: AgentSourceEntry[] = [];
   for (const item of fresh) {
-    if (item.payload && (item.payload.provider !== 'GITHUB' || item.payload.action !== 'labeled')) {
+    if (
+      item.payload &&
+      (item.payload.provider !== 'GITHUB' || !isAgentGithubExecutableAction(item.payload.action))
+    ) {
       discontinuity();
     }
     const event = item.payload
