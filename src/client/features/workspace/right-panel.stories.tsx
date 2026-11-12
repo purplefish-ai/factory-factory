@@ -4,6 +4,7 @@ import { TRPCClientError } from '@trpc/client';
 import { observable } from '@trpc/server/observable';
 import { useRef, useState } from 'react';
 import { expect, fn, userEvent, within } from 'storybook/test';
+import { z } from 'zod';
 import { ChatTranscript } from '@/client/features/chat';
 import type { SubagentSelection } from '@/client/features/subagents';
 import { runInBackground } from '@/client/lib/background-task';
@@ -31,7 +32,35 @@ const activitySelection: SubagentSelection = {
     resultPreview: null,
   },
 };
-const eventOrigin = automationOriginFixture();
+const projectId = 'right-panel-project';
+const eventOrigin = automationOriginFixture({ projectId, workspaceId });
+const eventOriginInput = z.strictObject({
+  projectId: z.literal(projectId),
+  workspaceId: z.literal(workspaceId),
+});
+const eventAgentInput = z.strictObject({
+  projectId: z.literal(projectId),
+  agentId: z.literal('event-agent'),
+});
+/** Completes a story request, failing it when the fixture rejects its input. */
+function answer(
+  observer: {
+    next: (value: { result: { data: unknown } }) => void;
+    complete: () => void;
+    error: (error: TRPCClientError<never>) => void;
+  },
+  respond: () => unknown
+) {
+  let data: unknown;
+  try {
+    data = respond();
+  } catch (error) {
+    observer.error(TRPCClientError.from(error instanceof Error ? error : new Error(String(error))));
+    return;
+  }
+  observer.next({ result: { data } });
+  observer.complete();
+}
 function RightPanelStory({
   hasTask = false,
   eventRun = false,
@@ -55,7 +84,7 @@ function RightPanelStory({
         () =>
           ({ op }) =>
             observable((observer) => {
-              const responses: Record<string, () => unknown> = {
+              const responses: Record<string, (input: unknown) => unknown> = {
                 'userSettings.get': () => ({ childWorkspacesEnabled: true }),
                 'session.listSubagents': () => ({
                   supported: true,
@@ -68,8 +97,15 @@ function RightPanelStory({
                   periodicTaskId: taskPresent.current ? 'task-1' : null,
                   creationSource,
                 }),
-                'automation.workspaceOrigin': () => eventOrigin.origin,
-                'automation.get': () => eventOrigin.agent,
+                // Both reads must name this story's workspace and project.
+                'automation.workspaceOrigin': (input) => {
+                  eventOriginInput.parse(input);
+                  return eventOrigin.origin;
+                },
+                'automation.get': (input) => {
+                  eventAgentInput.parse(input);
+                  return eventOrigin.agent;
+                },
                 'workspace.unreadMailCounts': () => (showUnread ? { [workspaceId]: 3 } : {}),
                 'workspace.getInitStatus': () => ({ status: 'READY', initOutput: '' }),
                 'workspace.getGitStatus': () => ({ files: [] }),
@@ -104,8 +140,7 @@ function RightPanelStory({
                 observer.error(new TRPCClientError(`Missing story fixture: ${op.path}`));
                 return;
               }
-              observer.next({ result: { data: respond() } });
-              observer.complete();
+              answer(observer, () => respond(op.input));
             }),
       ],
     })

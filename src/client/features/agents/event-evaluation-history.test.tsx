@@ -8,10 +8,10 @@ import { createStoryTrpcClient } from '@/client/lib/storybook-trpc';
 import { trpc } from '@/client/lib/trpc';
 import { waitForCheck } from '@/test-utils/react-act';
 import { EventEvaluationHistory } from './event-evaluation-history';
-import { eventEvaluationPageFixture } from './event-history.story-fixtures';
+import { eventEvaluationFixture, eventEvaluationPageFixture } from './event-history.story-fixtures';
 import type { EventEvaluation } from './types';
 
-const historyInput = z.object({
+const historyInput = z.strictObject({
   projectId: z.string(),
   agentId: z.string(),
   cursor: z.string().optional(),
@@ -89,32 +89,37 @@ afterEach(() => {
 });
 
 describe('EventEvaluationHistory', () => {
-  it('shows matched, skipped and errored events with their stored explanation', async () => {
+  it('shows why matched, skipped and errored events were decided', async () => {
+    pages.first?.items.push(
+      eventEvaluationFixture({ id: 'evaluation-removed-trigger', triggerId: 'unlisted-trigger' })
+    );
     render();
     await waitForCheck(() => expect(evaluation('evaluation-matched')).toBeDefined());
 
     const matched = evaluation('evaluation-matched');
     expect(matched.textContent).toContain('Matched');
     expect(matched.textContent).toContain('The event matched this trigger');
-    expect(matched.textContent).toContain('The deterministic trigger filters match.');
     expect(matched.textContent).toContain('Started a run');
-    expect(matched.textContent).toContain('Investigate labeled issues');
+    expect(matched.textContent).toContain('Trigger: Investigate labeled issues');
 
     const skipped = evaluation('evaluation-skipped');
     expect(skipped.textContent).toContain('Skipped');
-    expect(skipped.textContent).toContain("The added label isn't one this trigger watches");
-    expect(skipped.textContent).toContain('The added label does not match.');
+    expect(skipped.textContent).toContain("The event's label doesn't match this trigger");
     expect(skipped.querySelector('[title="LABEL_MISMATCH"]')).not.toBeNull();
     expect(skipped.textContent).not.toContain('Started a run');
 
     const errored = evaluation('evaluation-error');
     expect(errored.textContent).toContain('Error');
     expect(errored.textContent).toContain("Couldn't read the automation's execution settings");
-    expect(errored.textContent).toContain(
-      'Execution defaults could not be read; retry is bounded.'
-    );
     expect(errored.textContent).toContain('Next attempt');
     expect(errored.querySelector('details')?.textContent).toContain('EXECUTION_RESOLUTION_RETRY');
+
+    // The API's fixed placeholder explanation adds nothing to the reason.
+    expect(container.textContent).not.toContain('Recorded event evaluation.');
+    // A trigger outside the loaded definition pages is still identified.
+    expect(evaluation('evaluation-removed-trigger').textContent).toContain(
+      'Trigger: unlisted-trigger'
+    );
   });
 
   it('requests the next cursor when loading more events', async () => {

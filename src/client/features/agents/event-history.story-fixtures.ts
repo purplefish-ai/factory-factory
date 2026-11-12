@@ -80,6 +80,19 @@ export function eventRunPageFixture(): EventRun[] {
     }),
     eventRunFixture(),
     eventRunFixture({
+      id: 'run-completed',
+      eventId: 'event-completed',
+      createdAt: '2026-11-09T15:00:00.000Z',
+      startedAt: '2026-11-09T15:00:04.000Z',
+      completedAt: '2026-11-09T15:12:00.000Z',
+      status: 'COMPLETED',
+      // No validated result metadata: shown as nothing, not as an empty result.
+      result: null,
+      reservedWorkspaceId: 'workspace-completed',
+      reservedSessionId: 'session-completed',
+      workspaceId: 'workspace-completed',
+    }),
+    eventRunFixture({
       id: 'run-overflow',
       eventId: 'event-overflow',
       createdAt: '2026-11-09T12:00:00.000Z',
@@ -122,7 +135,8 @@ export function eventEvaluationFixture(overrides: Partial<EventEvaluation> = {})
     createdAt: '2026-11-10T09:00:00.000Z',
     status: 'MATCHED',
     reasonCode: 'DETERMINISTIC_MATCH',
-    explanation: 'The deterministic trigger filters match.',
+    // The history API returns this fixed text rather than the stored explanation.
+    explanation: 'Recorded event evaluation.',
     definitionRevision: 1,
     triggerRevision: 1,
     activationGeneration: 1,
@@ -143,7 +157,6 @@ export function eventEvaluationPageFixture(): EventEvaluation[] {
       createdAt: '2026-11-11T08:00:00.000Z',
       status: 'ERROR',
       reasonCode: 'EXECUTION_RESOLUTION_RETRY',
-      explanation: 'Execution defaults could not be read; retry is bounded.',
       attemptCount: 2,
       nextAttemptAt: '2026-11-11T08:05:00.000Z',
     }),
@@ -154,7 +167,6 @@ export function eventEvaluationPageFixture(): EventEvaluation[] {
       createdAt: '2026-11-10T10:00:00.000Z',
       status: 'SKIPPED',
       reasonCode: 'LABEL_MISMATCH',
-      explanation: 'The added label does not match.',
     }),
     eventEvaluationFixture(),
   ];

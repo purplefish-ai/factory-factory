@@ -76,7 +76,8 @@ export function EventHistoryFrame({
           <Skeleton className="h-24 rounded-lg" />
         </div>
       )}
-      {count === 0 && !error && (
+      {/* A loaded empty page stays visible under a failed refresh notice. */}
+      {count === 0 && (
         <EmptyState
           title={`No ${noun} yet`}
           description={emptyDescription}

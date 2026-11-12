@@ -38,7 +38,7 @@ export const Populated: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await expect(
-      await canvas.findByText("The added label isn't one this trigger watches.")
+      await canvas.findByText("The event's label doesn't match this trigger.")
     ).toBeVisible();
     await expect(canvas.getByText('Started a run')).toBeVisible();
     await expect(canvas.getByRole('button', { name: 'Load more events' })).toBeVisible();

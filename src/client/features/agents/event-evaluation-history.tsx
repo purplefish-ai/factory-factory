@@ -8,7 +8,6 @@ import {
   EventReason,
   EventTime,
 } from './event-history-frame';
-import { describeEventReason } from './event-history-reasons';
 import type { EventEvaluation } from './types';
 
 const STATUS: Record<
@@ -50,18 +49,18 @@ function EventEvaluationItem({
   triggerLabel?: string;
 }) {
   const status = STATUS[evaluation.status];
-  const explanation = evaluation.explanation.trim();
+  // The history API returns a fixed placeholder `explanation`, not the stored
+  // one, so the reason code is the only source of why.
   return (
     <article data-evaluation-id={evaluation.id} className="min-w-0 space-y-2 p-4 text-xs">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
         <Badge variant={status.variant}>{status.label}</Badge>
         <EventTime value={evaluation.createdAt} prefix="Decided" />
-        {triggerLabel && <span className="min-w-0 break-words">Trigger: {triggerLabel}</span>}
+        <span className="min-w-0 break-words">
+          Trigger: {triggerLabel ?? <span className="break-all">{evaluation.triggerId}</span>}
+        </span>
       </div>
-      <EventReason code={evaluation.reasonCode} />
-      {explanation && explanation !== describeEventReason(evaluation.reasonCode) && (
-        <p className="whitespace-pre-wrap break-words text-muted-foreground">{explanation}</p>
-      )}
+      <EventReason code={evaluation.reasonCode} fallback="No reason was recorded." />
       {evaluation.runId && <p>Started a run</p>}
       {evaluation.nextAttemptAt && (
         <p>

@@ -747,11 +747,14 @@ identifiers, attempts and first-message state), queue expiry or next attempt
 while active, retained PR links and summary, and expired run context. Only a
 LIVE workspace state links to a workspace; otherwise an active run says no
 workspace yet and a finished one says workspace deleted (DELETED), no workspace
-was created (UNRESERVED) or workspace unavailable (RESERVED). A null result or
-event link is shown as nothing, never as empty or completed. Each run row has an
-action slot for recovery controls. An event row shows Matched, Skipped or Error,
-its trigger's description, a phrase for its reason and the stored explanation,
-whether it started a run, and any next attempt.
+was created (UNRESERVED) or workspace unavailable (RESERVED). A null result is
+shown as nothing and a null event link reads "Event record no longer kept" in
+Details; neither is presented as empty or completed. Each run row has an action
+slot for recovery controls. An event row shows Matched, Skipped or Error, its
+trigger's description (or ID when the trigger is outside the loaded definition),
+a phrase for its reason, whether it started a run, and any next attempt. The
+history API returns a fixed placeholder `explanation` rather than the stored
+one, so the view does not show it.
 
 An event-run workspace (`creationSource` `EVENT_AGENT`) reads
 `automation.workspaceOrigin`; other workspaces never call it. Its **Runs** tab

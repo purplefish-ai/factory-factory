@@ -7,7 +7,7 @@
 const REASON_PHRASES: Readonly<Record<string, string>> = {
   // Matching an event against a trigger.
   DETERMINISTIC_MATCH: 'The event matched this trigger.',
-  LABEL_MISMATCH: "The added label isn't one this trigger watches.",
+  LABEL_MISMATCH: "The event's label doesn't match this trigger.",
   TEXT_MISMATCH: "The message doesn't contain this trigger's text.",
   UNSUPPORTED_ACTION: "This kind of GitHub event can't start a run.",
   UNSUPPORTED_MESSAGE: 'Only ordinary messages from people can start a run.',
@@ -18,7 +18,7 @@ const REASON_PHRASES: Readonly<Record<string, string>> = {
     "The event came from a repository or channel this trigger doesn't watch.",
   OWNERSHIP_MISMATCH: "The event doesn't belong to this trigger's source.",
   BEFORE_ACTIVATION: 'The event happened before this trigger started listening.',
-  EVENT_EXPIRED: 'The event was more than 30 days old.',
+  EVENT_EXPIRED: 'The event expired before it could run.',
   NOT_MATCHED: "The event didn't match this trigger.",
   // Automation, trigger and source state.
   DEFINITION_DISABLED: 'The automation was paused.',

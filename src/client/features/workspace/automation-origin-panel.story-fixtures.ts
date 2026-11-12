@@ -2,7 +2,10 @@ import { agentRunHistorySchema, agentWorkspaceOriginSchema } from '@/shared/agen
 import { managedAgentSchema } from '@/shared/agent-management';
 
 /** The run, automation and project an event-run workspace's Runs tab reads. */
-export function automationOriginFixture() {
+export function automationOriginFixture({
+  projectId = 'owner',
+  workspaceId = 'workspace-pr',
+}: { projectId?: string; workspaceId?: string } = {}) {
   const run = agentRunHistorySchema.parse({
     id: 'run-pr',
     context: { state: 'RETAINED' },
@@ -29,15 +32,15 @@ export function automationOriginFixture() {
       summary: 'Fixed the flaky retry test.',
       pullRequests: [{ url: 'https://github.com/example/repo/pull/42', number: 42 }],
     },
-    reservedWorkspaceId: 'workspace-pr',
+    reservedWorkspaceId: workspaceId,
     reservedSessionId: 'session-pr',
-    workspaceId: 'workspace-pr',
+    workspaceId,
     workspaceState: 'LIVE',
   });
   const origin = agentWorkspaceOriginSchema.parse({
     origin: {
-      projectId: 'owner',
-      workspaceId: 'workspace-pr',
+      projectId,
+      workspaceId,
       runId: run.id,
       workspaceState: 'LIVE',
     },
@@ -45,7 +48,7 @@ export function automationOriginFixture() {
   });
   const agent = managedAgentSchema.parse({
     id: 'event-agent',
-    projectId: 'owner',
+    projectId,
     name: 'Investigate labeled issues',
     instructions: 'Investigate labeled issues and propose a focused fix.',
     managementRevision: 2,
@@ -60,5 +63,5 @@ export function automationOriginFixture() {
     retainedTriggers: [],
     retainedNextCursor: null,
   });
-  return { origin, agent, project: { id: 'owner', slug: 'demo', name: 'Demo' } };
+  return { origin, agent, project: { id: projectId, slug: 'demo', name: 'Demo' } };
 }

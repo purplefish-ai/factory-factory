@@ -12,7 +12,7 @@ import { eventRunFixture, eventRunPageFixture } from './event-history.story-fixt
 import { EventRunHistory } from './event-run-history';
 import type { EventRun } from './types';
 
-const historyInput = z.object({
+const historyInput = z.strictObject({
   projectId: z.string(),
   agentId: z.string(),
   cursor: z.string().optional(),
@@ -140,6 +140,10 @@ describe('EventRunHistory', () => {
     expect(timedOut.textContent).toContain('Workspace deleted');
     expect(timedOut.textContent).toContain('Run details expired');
 
+    const completed = runArticle('run-completed');
+    expect(completed.textContent).toContain('Completed');
+    expect(completed.querySelector('a[href$="/workspaces/workspace-completed"]')).not.toBeNull();
+
     expect(runArticle('run-reserved').textContent).toContain('Workspace unavailable');
     expect(runArticle('run-reserved').querySelector('a')).toBeNull();
     // Missing results are never presented as an empty or finished outcome.
@@ -192,10 +196,17 @@ describe('EventRunHistory', () => {
     expect(container.textContent).not.toContain('No runs yet');
   });
 
-  it('shows an empty state once a successful read has no runs', async () => {
+  it('shows an empty state once a successful read has no runs, and keeps it under a failed refresh', async () => {
     pages.first = { items: [], nextCursor: null };
     render();
     await waitForCheck(() => expect(container.textContent).toContain('No runs yet'));
+
+    failure = 'Database is locked';
+    await act(async () => {
+      await queryClient.refetchQueries().catch(() => undefined);
+    });
+    await waitForCheck(() => expect(container.textContent).toContain("Couldn't refresh runs"));
+    expect(container.textContent).toContain('No runs yet');
   });
 
   it('renders the run action slot for each run', async () => {
