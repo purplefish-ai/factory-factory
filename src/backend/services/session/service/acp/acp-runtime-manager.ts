@@ -67,7 +67,11 @@ export class AcpRuntimeManager {
     assertOpen: () => undefined,
   };
 
-  constructor(options?: { acpStartupTimeoutMs?: number; admission?: AcpWorkAdmission }) {
+  constructor(options?: {
+    acpStartupTimeoutMs?: number;
+    acpSessionCreationTimeoutMs?: number;
+    admission?: AcpWorkAdmission;
+  }) {
     if (options?.admission) {
       this.admission = options.admission;
     }
@@ -86,6 +90,10 @@ export class AcpRuntimeManager {
 
   setAcpStartupTimeoutMs(timeoutMs: number): void {
     this.clientFactory.setAcpStartupTimeoutMs(timeoutMs);
+  }
+
+  setAcpSessionCreationTimeoutMs(timeoutMs: number): void {
+    this.clientFactory.setAcpSessionCreationTimeoutMs(timeoutMs);
   }
 
   configureAdmission(admission: AcpWorkAdmission): void {

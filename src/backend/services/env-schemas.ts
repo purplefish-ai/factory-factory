@@ -69,6 +69,7 @@ export const ConfigEnvSchema = z.object({
   LOG_LEVEL: z.preprocess(toLowerString, LogLevelSchema).catch('info'),
   SERVICE_NAME: z.preprocess(toTrimmedString, z.string().min(1)).catch('factoryfactory'),
   ACP_STARTUP_TIMEOUT_MS: PositiveIntEnvSchema.catch(30_000),
+  ACP_SESSION_CREATION_TIMEOUT_MS: PositiveIntEnvSchema.catch(120_000),
   ACP_TRACE_LOGS_ENABLED: z.preprocess(parseBoolean, z.boolean()).optional().catch(undefined),
   ACP_TRACE_LOGS_PATH: z.preprocess(toTrimmedString, z.string()).optional().catch(undefined),
   WS_LOGS_ENABLED: z.preprocess(parseBoolean, z.boolean()).catch(false),

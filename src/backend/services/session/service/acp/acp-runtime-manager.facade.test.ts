@@ -14,6 +14,7 @@ import {
 type ExpectedRuntimeSurface = Pick<
   AcpRuntimeManager,
   | 'setAcpStartupTimeoutMs'
+  | 'setAcpSessionCreationTimeoutMs'
   | 'configureEnvironment'
   | 'setOnClientCreated'
   | 'isStopInProgress'

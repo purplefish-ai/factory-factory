@@ -1,202 +1,26 @@
 import type { ChildProcess } from 'node:child_process';
-import { EventEmitter } from 'node:events';
 import { tmpdir } from 'node:os';
-import { PassThrough } from 'node:stream';
 import type { RequestPermissionRequest } from '@agentclientprotocol/sdk/unstable';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+  AcpClientFactory,
+  CONFIG_OPTIONS,
+  createMockChildProcess,
+  createParams,
+  createSignal,
+  defaultHandlers,
+  defaultOptions,
+  mocks,
+  resetAcpClientFactoryMocks,
+  setupSuccessfulSpawn,
+} from '@/backend/services/session/service/acp/acp-client-factory.test-harness';
 import { AcpEventProcessor } from '@/backend/services/session/service/events/acp-event-processor';
 import { SessionDomainService } from '@/backend/services/session/service/session-domain.service';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
-import { AcpClientFactory } from './acp-client-factory';
 import type { AcpClientCallbacks } from './acp-connection';
 import type { AcpPermissionBridge } from './acp-permission-bridge';
-import type { AcpStartupSignal } from './acp-runtime-contracts';
-import type { AcpRuntimeEventHandlers } from './acp-runtime-events';
 import { AcpRuntimeSupervisor } from './acp-runtime-supervisor';
-import type { AcpClientOptions, PermissionPreset } from './types';
-
-const mocks = vi.hoisted(() => ({
-  spawn: vi.fn(),
-  initialize: vi.fn(),
-  loadSession: vi.fn(),
-  newSession: vi.fn(),
-  setSessionConfigOption: vi.fn(),
-  ndJsonStream: vi.fn(),
-  connections: [] as Array<{
-    toClient: (agent: unknown) => unknown;
-    stream: unknown;
-  }>,
-  logger: {
-    info: vi.fn(),
-    debug: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-  },
-}));
-
-vi.mock('node:child_process', () => ({
-  spawn: (...args: unknown[]) => mocks.spawn(...args),
-}));
-
-vi.mock('@agentclientprotocol/sdk/unstable', () => ({
-  ndJsonStream: (...args: unknown[]) => mocks.ndJsonStream(...args),
-  PROTOCOL_VERSION: 1,
-}));
-
-vi.mock('./acp-connection', () => ({
-  createAcpConnection: (handler: unknown, stream: unknown) => {
-    mocks.connections.push({ toClient: () => handler, stream });
-    return {
-      initialize: mocks.initialize,
-      loadSession: mocks.loadSession,
-      newSession: mocks.newSession,
-      setSessionConfigOption: mocks.setSessionConfigOption,
-    };
-  },
-}));
-
-vi.mock('@/backend/services/logger.service', () => ({
-  createLogger: () => mocks.logger,
-  getCurrentProcessEnv: () => ({ FROM_DEFAULT_PROVIDER: 'yes' }),
-}));
-
-vi.mock('@/backend/services/session/service/logging/acp-trace-logger.service', () => ({
-  acpTraceLogger: { log: vi.fn() },
-}));
-vi.mock('@/backend/services/session/service/logging/session-file-logger.service', () => ({
-  sessionFileLogger: { log: vi.fn() },
-}));
-
-type MockChildProcess = EventEmitter & {
-  pid: number;
-  exitCode: number | null;
-  signalCode: NodeJS.Signals | null;
-  killed: boolean;
-  kill: ReturnType<typeof vi.fn>;
-  stdout: PassThrough;
-  stderr: PassThrough;
-  stdin: PassThrough;
-};
-
-type RejectableSignal = AcpStartupSignal & { reject(error: Error): void };
-
-const CONFIG_OPTIONS = [
-  {
-    id: 'model',
-    name: 'Model',
-    type: 'select' as const,
-    category: 'model',
-    currentValue: 'sonnet',
-    options: [{ value: 'sonnet', name: 'Sonnet' }],
-  },
-  {
-    id: 'mode',
-    name: 'Mode',
-    type: 'select' as const,
-    category: 'mode',
-    currentValue: 'default',
-    options: [{ value: 'default', name: 'Default' }],
-  },
-];
-
-function createMockChildProcess(options?: { exitAfterSigterm?: boolean }): MockChildProcess {
-  const child = new EventEmitter() as MockChildProcess;
-  child.pid = 12_345;
-  child.exitCode = null;
-  child.signalCode = null;
-  child.killed = false;
-  child.stdout = new PassThrough();
-  child.stderr = new PassThrough();
-  child.stdin = new PassThrough();
-  child.kill = vi.fn((signal?: NodeJS.Signals) => {
-    child.killed = signal !== undefined;
-    if (signal === 'SIGTERM' && options?.exitAfterSigterm) {
-      queueMicrotask(() => {
-        child.signalCode = 'SIGTERM';
-        child.emit('close', null, 'SIGTERM');
-      });
-    }
-    if (signal === 'SIGKILL') {
-      child.signalCode = 'SIGKILL';
-      child.emit('close', null, 'SIGKILL');
-    }
-    return true;
-  });
-  return child;
-}
-
-function createSignal(): RejectableSignal {
-  let rejectSignal!: (error: Error) => void;
-  const promise = new Promise<never>((_resolve, reject) => {
-    rejectSignal = reject;
-  });
-  return { promise, dispose: vi.fn(), reject: rejectSignal };
-}
-
-function createDeferred<T>() {
-  let resolvePromise!: (value: T) => void;
-  const promise = new Promise<T>((resolve) => {
-    resolvePromise = resolve;
-  });
-  return { promise, resolve: resolvePromise };
-}
-
-function defaultOptions(overrides?: Partial<AcpClientOptions>): AcpClientOptions {
-  return {
-    provider: 'CLAUDE',
-    workingDir: tmpdir(),
-    sessionId: 'log-session-1',
-    ...overrides,
-  };
-}
-
-function defaultHandlers(): AcpRuntimeEventHandlers {
-  return {
-    onRuntimeError: vi.fn(),
-    onAcpEvent: vi.fn(),
-    onAcpLog: vi.fn(),
-  };
-}
-
-function createParams(overrides?: {
-  options?: AcpClientOptions;
-  handlers?: AcpRuntimeEventHandlers;
-  shutdownSignal?: AcpStartupSignal;
-  stopSignal?: AcpStartupSignal;
-  installed?: boolean;
-}) {
-  return {
-    sessionId: 'session-1',
-    options: overrides?.options ?? defaultOptions(),
-    handlers: overrides?.handlers ?? defaultHandlers(),
-    metadata: {
-      incarnationId: 'incarnation-1',
-      purpose: overrides?.options?.purpose ?? ('active' as const),
-      installed: overrides?.installed ?? false,
-    },
-    shutdownSignal: overrides?.shutdownSignal ?? createSignal(),
-    stopSignal: overrides?.stopSignal ?? createSignal(),
-    shouldDispatchRuntimeError: vi.fn(() => true),
-  };
-}
-
-function setupSuccessfulSpawn(
-  child = createMockChildProcess(),
-  agentCapabilities: Record<string, unknown> = {}
-): MockChildProcess {
-  mocks.spawn.mockReturnValue(child);
-  mocks.initialize.mockResolvedValue({
-    protocolVersion: 1,
-    agentCapabilities,
-    agentInfo: { name: 'test-adapter' },
-  });
-  mocks.newSession.mockResolvedValue({
-    sessionId: 'provider-session-new',
-    configOptions: CONFIG_OPTIONS,
-  });
-  mocks.loadSession.mockResolvedValue({ configOptions: CONFIG_OPTIONS });
-  return child;
-}
+import type { PermissionPreset } from './types';
 
 function permissionRequest(): RequestPermissionRequest {
   return {
@@ -210,14 +34,7 @@ function permissionRequest(): RequestPermissionRequest {
 }
 
 describe('AcpClientFactory', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    mocks.connections.length = 0;
-    mocks.ndJsonStream.mockReturnValue({
-      writable: {},
-      readable: { pipeThrough: () => ({}) },
-    });
-  });
+  beforeEach(resetAcpClientFactoryMocks);
 
   it.each(['active', 'browse'] as const)(
     'resumes large hydrated history for %s without overflowing startup or duplicating messages',
@@ -760,81 +577,6 @@ describe('AcpClientFactory', () => {
     });
     expect(child.kill).toHaveBeenCalledWith('SIGTERM');
   });
-
-  it('times out startup and terminates the child', async () => {
-    const child = setupSuccessfulSpawn(createMockChildProcess({ exitAfterSigterm: true }));
-    mocks.initialize.mockReturnValue(new Promise(() => undefined));
-
-    await expect(
-      new AcpClientFactory({ acpStartupTimeoutMs: 10 }).createClient(createParams())
-    ).rejects.toThrow('ACP initialize handshake timed out after 10ms');
-    expect(child.kill).toHaveBeenCalledWith('SIGTERM');
-  });
-
-  it('keeps the creation timeout snapshot when configuration changes during initialize', async () => {
-    vi.useFakeTimers();
-    try {
-      setupSuccessfulSpawn(createMockChildProcess({ exitAfterSigterm: true }));
-      const initialize = createDeferred<{
-        protocolVersion: number;
-        agentCapabilities: Record<string, unknown>;
-      }>();
-      const newSession = createDeferred<{
-        sessionId: string;
-        configOptions: typeof CONFIG_OPTIONS;
-      }>();
-      mocks.initialize.mockReturnValue(initialize.promise);
-      mocks.newSession.mockReturnValue(newSession.promise);
-      const factory = new AcpClientFactory({ acpStartupTimeoutMs: 100 });
-      const creation = factory.createClient(createParams());
-      const result = creation.then(
-        (handle) => ({ handle }),
-        (error: unknown) => ({ error })
-      );
-      await vi.advanceTimersByTimeAsync(0);
-
-      factory.setAcpStartupTimeoutMs(10);
-      initialize.resolve({ protocolVersion: 1, agentCapabilities: {} });
-      await vi.advanceTimersByTimeAsync(0);
-      expect(mocks.newSession).toHaveBeenCalledTimes(1);
-
-      await vi.advanceTimersByTimeAsync(10);
-      newSession.resolve({
-        sessionId: 'provider-session-after-config-change',
-        configOptions: CONFIG_OPTIONS,
-      });
-      await vi.advanceTimersByTimeAsync(0);
-
-      await expect(result).resolves.toMatchObject({
-        handle: { providerSessionId: 'provider-session-after-config-change' },
-      });
-    } finally {
-      vi.useRealTimers();
-    }
-  });
-
-  it.each(['shutdown', 'stop'] as const)(
-    'preserves %s cancellation classification and leaves signal disposal to the manager',
-    async (kind) => {
-      const child = setupSuccessfulSpawn(createMockChildProcess({ exitAfterSigterm: true }));
-      mocks.initialize.mockReturnValue(new Promise(() => undefined));
-      const shutdownSignal = createSignal();
-      const stopSignal = createSignal();
-      const selectedSignal = kind === 'shutdown' ? shutdownSignal : stopSignal;
-      const expected = new Error(`${kind} cancellation`);
-      const creation = new AcpClientFactory().createClient(
-        createParams({ shutdownSignal, stopSignal })
-      );
-      await vi.waitFor(() => expect(mocks.initialize).toHaveBeenCalledTimes(1));
-
-      selectedSignal.reject(expected);
-
-      await expect(creation).rejects.toBe(expected);
-      expect(child.kill).toHaveBeenCalledWith('SIGTERM');
-      expect(shutdownSignal.dispose).not.toHaveBeenCalled();
-      expect(stopSignal.dispose).not.toHaveBeenCalled();
-    }
-  );
 
   it('forwards adapter stderr to the ACP log handler', async () => {
     const child = setupSuccessfulSpawn();

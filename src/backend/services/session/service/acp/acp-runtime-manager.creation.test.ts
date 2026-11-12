@@ -310,7 +310,7 @@ describe('AcpRuntimeManager', () => {
     });
 
     it('times out when ACP session creation never resolves', async () => {
-      manager.setAcpStartupTimeoutMs(20);
+      manager.setAcpSessionCreationTimeoutMs(20);
 
       const child = createMockChildProcess();
       exitChildAfterSigterm(child);

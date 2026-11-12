@@ -284,6 +284,9 @@ describe('createApplication', () => {
     expect(dependencies.services.acpRuntimeManager.setAcpStartupTimeoutMs).toHaveBeenCalledWith(
       4321
     );
+    expect(
+      dependencies.services.acpRuntimeManager.setAcpSessionCreationTimeoutMs
+    ).toHaveBeenCalledWith(8765);
     expect(dependencies.services.acpRuntimeManager.configureEnvironment).toHaveBeenCalledWith({
       childProcessEnvProvider: expect.any(Function),
     });

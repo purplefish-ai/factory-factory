@@ -53,6 +53,10 @@
       "disposition": "build-input",
       "reason": "scripts/check-service-registry.ts consumes this verification helper outside production runtime."
     },
+    "src/backend/services/session/service/acp/acp-client-factory.test-harness.ts": {
+      "disposition": "test-support",
+      "reason": "Test harness or fixture support remains explicit in this inventory; production callers are not expected."
+    },
     "src/backend/services/session/service/acp/acp-runtime-manager.test-harness.ts": {
       "disposition": "test-support",
       "reason": "Test harness or fixture support remains explicit in this inventory; production callers are not expected."

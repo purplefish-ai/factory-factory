@@ -159,6 +159,7 @@ it('keeps healthy local hydration outside the provider RPC deadline', async () =
   vi.useFakeTimers();
   const { manager } = createManagerTestHarness();
   manager.setAcpStartupTimeoutMs(10);
+  manager.setAcpSessionCreationTimeoutMs(10);
   const child = setupSuccessfulSpawn({ loadSession: true });
   exitChildAfterSigterm(child);
   const history = createDeferred<void>();

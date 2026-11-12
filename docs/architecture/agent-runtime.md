@@ -126,6 +126,14 @@ to initialization and session creation; the local history barrier retains its
 previous independent wait. Passive chat loads continue to await complete history
 hydration.
 
+The initialize handshake uses `ACP_STARTUP_TIMEOUT_MS` (default 30 seconds).
+Provider session new/load/resume and the startup model configuration that
+follows use `ACP_SESSION_CREATION_TIMEOUT_MS` (default 120 seconds): providers
+do filesystem and project setup there, which can block for tens of seconds on a
+loaded machine (for example a degraded macOS `fseventsd`), while initialize
+stays fast. Each start snapshots both values. Disposable launch-option probes
+and model-catalog loaders keep their own deadlines.
+
 Replay batches up to 128 KiB retain their existing envelope. Larger batches use
 normal JSON event frames, with base64 fragments for an oversized event. When
 batch metadata itself cannot fit in a JSON event frame, the entire batch uses

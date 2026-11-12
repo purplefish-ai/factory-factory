@@ -158,6 +158,7 @@ interface SystemConfig {
 
   // ACP/runtime settings
   acpStartupTimeoutMs: number;
+  acpSessionCreationTimeoutMs: number;
   acpTraceLogsEnabled: boolean;
   wsLogsEnabled: boolean;
   runScriptProxyEnabled: boolean;
@@ -340,6 +341,7 @@ function loadSystemConfig(): SystemConfig {
 
     // ACP/runtime settings
     acpStartupTimeoutMs: env.ACP_STARTUP_TIMEOUT_MS,
+    acpSessionCreationTimeoutMs: env.ACP_SESSION_CREATION_TIMEOUT_MS,
     acpTraceLogsEnabled,
     wsLogsEnabled: env.WS_LOGS_ENABLED,
     runScriptProxyEnabled: env.FF_RUN_SCRIPT_PROXY_ENABLED,
@@ -505,6 +507,13 @@ class ConfigService {
    */
   getAcpStartupTimeoutMs(): number {
     return this.config.acpStartupTimeoutMs;
+  }
+
+  /**
+   * Get the ACP session creation and model configuration timeout in milliseconds
+   */
+  getAcpSessionCreationTimeoutMs(): number {
+    return this.config.acpSessionCreationTimeoutMs;
   }
 
   /**

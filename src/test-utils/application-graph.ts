@@ -433,6 +433,7 @@ const fakeSystemConfig = {
   cors: { allowedOrigins: [] },
   debug: { chatWebSocket: false },
   acpStartupTimeoutMs: 4321,
+  acpSessionCreationTimeoutMs: 8765,
   acpTraceLogsEnabled: false,
   wsLogsEnabled: false,
   runScriptProxyEnabled: false,
@@ -473,6 +474,7 @@ export function createFakeApplicationGraph(label = 'test'): FakeApplicationGraph
     listVisibleReviewRequests: vi.fn(async () => []),
     acpRuntimeManager: Object.assign({}, acpRuntimeManager, {
       setAcpStartupTimeoutMs: vi.fn(),
+      setAcpSessionCreationTimeoutMs: vi.fn(),
       configureEnvironment: vi.fn(),
     }) satisfies typeof acpRuntimeManager,
     chatEventForwarderService: Object.assign({}, chatEventForwarderService, {
@@ -490,6 +492,7 @@ export function createFakeApplicationGraph(label = 'test'): FakeApplicationGraph
       graphEventCollector?.removeWorkspace(workspaceId),
     configService: Object.assign({}, configService, {
       getAcpStartupTimeoutMs: vi.fn(() => 4321),
+      getAcpSessionCreationTimeoutMs: vi.fn(() => 8765),
       isProduction: vi.fn(() => false),
       getChildProcessEnv: vi.fn(() => ({ APPLICATION_LABEL: label })),
       getSystemConfig: vi.fn(() => graphSystemConfig),
