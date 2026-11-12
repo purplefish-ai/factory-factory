@@ -636,6 +636,9 @@ export function createApplication(
   services.acpRuntimeManager.setAcpStartupTimeoutMs?.(
     services.configService.getAcpStartupTimeoutMs()
   );
+  services.acpRuntimeManager.setAcpSessionCreationTimeoutMs?.(
+    services.configService.getAcpSessionCreationTimeoutMs()
+  );
   services.acpRuntimeManager.configureAdmission?.(services.applicationUpdateAdmission);
   services.acpRuntimeManager.configureEnvironment?.({
     childProcessEnvProvider: () => services.configService.getChildProcessEnv(),

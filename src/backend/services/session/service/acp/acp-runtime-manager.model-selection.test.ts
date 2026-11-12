@@ -126,10 +126,10 @@ describe('saved startup model versus native ACP default', () => {
     expect(mockSetSessionConfigOption).not.toHaveBeenCalled();
   });
 
-  it('fails and cleans up a stalled initial model configuration at the startup deadline', async () => {
+  it('fails and cleans up a stalled initial model configuration at the session creation deadline', async () => {
     vi.useFakeTimers();
     const { manager } = createManagerTestHarness();
-    manager.setAcpStartupTimeoutMs(25);
+    manager.setAcpSessionCreationTimeoutMs(25);
     const child = setupSuccessfulSpawn();
     child.kill.mockImplementation(() => {
       child.emit('exit', 0);

@@ -43,6 +43,14 @@ import type { AcpClientOptions } from './types';
 
 const logger = createLogger('acp-runtime-manager');
 const DEFAULT_ACP_STARTUP_TIMEOUT_MS = 30_000;
+// Session creation (new/load/resume) and the follow-up model configuration run
+// provider-side work that can block for tens of seconds on a slow machine, while
+// the initialize handshake stays fast. A slow start should not become a failure.
+const DEFAULT_ACP_SESSION_CREATION_TIMEOUT_MS = 120_000;
+
+function normalizeTimeoutMs(timeoutMs: number, fallbackMs: number): number {
+  return Number.isFinite(timeoutMs) && timeoutMs > 0 ? Math.floor(timeoutMs) : fallbackMs;
+}
 
 export type CreateAcpClientParams = {
   sessionId: string;
@@ -73,18 +81,27 @@ function resolveSpawnCommand(options: AcpClientOptions): SpawnCommand {
 
 export class AcpClientFactory {
   private acpStartupTimeoutMs = DEFAULT_ACP_STARTUP_TIMEOUT_MS;
+  private acpSessionCreationTimeoutMs = DEFAULT_ACP_SESSION_CREATION_TIMEOUT_MS;
   private childProcessEnvProvider: () => NodeJS.ProcessEnv = getCurrentProcessEnv;
 
-  constructor(options?: { acpStartupTimeoutMs?: number }) {
+  constructor(options?: { acpStartupTimeoutMs?: number; acpSessionCreationTimeoutMs?: number }) {
     this.setAcpStartupTimeoutMs(options?.acpStartupTimeoutMs ?? DEFAULT_ACP_STARTUP_TIMEOUT_MS);
+    this.setAcpSessionCreationTimeoutMs(
+      options?.acpSessionCreationTimeoutMs ?? DEFAULT_ACP_SESSION_CREATION_TIMEOUT_MS
+    );
   }
 
+  /** Deadline for the ACP initialize handshake. */
   setAcpStartupTimeoutMs(timeoutMs: number): void {
-    if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) {
-      this.acpStartupTimeoutMs = DEFAULT_ACP_STARTUP_TIMEOUT_MS;
-      return;
-    }
-    this.acpStartupTimeoutMs = Math.floor(timeoutMs);
+    this.acpStartupTimeoutMs = normalizeTimeoutMs(timeoutMs, DEFAULT_ACP_STARTUP_TIMEOUT_MS);
+  }
+
+  /** Deadline for provider session new/load/resume and startup model configuration. */
+  setAcpSessionCreationTimeoutMs(timeoutMs: number): void {
+    this.acpSessionCreationTimeoutMs = normalizeTimeoutMs(
+      timeoutMs,
+      DEFAULT_ACP_SESSION_CREATION_TIMEOUT_MS
+    );
   }
 
   configureEnvironment(options: { childProcessEnvProvider: () => NodeJS.ProcessEnv }): void {
@@ -94,6 +111,7 @@ export class AcpClientFactory {
   async createClient(params: CreateAcpClientParams): Promise<AcpProcessHandle> {
     const { sessionId, options, handlers, metadata, shutdownSignal, stopSignal } = params;
     const startupTimeoutMs = this.acpStartupTimeoutMs;
+    const sessionCreationTimeoutMs = this.acpSessionCreationTimeoutMs;
     validateAcpWorkingDir(options.workingDir);
 
     const spawnCommand = resolveSpawnCommand(options);
@@ -273,7 +291,7 @@ export class AcpClientFactory {
               params.discardFailedResumeReplay?.();
             }
           ),
-          timeoutMs: startupTimeoutMs,
+          timeoutMs: sessionCreationTimeoutMs,
           description: 'session creation',
           cancelOn: startupCancelOn,
         }),
@@ -311,7 +329,7 @@ export class AcpClientFactory {
                   configOptions: sessionInfo.configOptions,
                   model: options.model,
                 }),
-                timeoutMs: startupTimeoutMs,
+                timeoutMs: sessionCreationTimeoutMs,
                 description: 'model configuration',
                 cancelOn: startupCancelOn,
               }),

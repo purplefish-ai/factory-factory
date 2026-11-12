@@ -150,6 +150,29 @@ describe('configService environment accessors', () => {
     });
   });
 
+  it('defaults ACP startup and session creation timeouts independently', () => {
+    Reflect.deleteProperty(process.env, 'ACP_STARTUP_TIMEOUT_MS');
+    Reflect.deleteProperty(process.env, 'ACP_SESSION_CREATION_TIMEOUT_MS');
+    configService.reload();
+
+    expect(configService.getAcpStartupTimeoutMs()).toBe(30_000);
+    expect(configService.getAcpSessionCreationTimeoutMs()).toBe(120_000);
+  });
+
+  it('reads the ACP session creation timeout and rejects invalid values', () => {
+    process.env.ACP_STARTUP_TIMEOUT_MS = '5000';
+    process.env.ACP_SESSION_CREATION_TIMEOUT_MS = '90000';
+    configService.reload();
+
+    expect(configService.getAcpStartupTimeoutMs()).toBe(5000);
+    expect(configService.getAcpSessionCreationTimeoutMs()).toBe(90_000);
+
+    process.env.ACP_SESSION_CREATION_TIMEOUT_MS = '0';
+    configService.reload();
+
+    expect(configService.getAcpSessionCreationTimeoutMs()).toBe(120_000);
+  });
+
   it('returns defensive copies of PR discovery limits', () => {
     process.env.PR_DISCOVERY_CANDIDATE_LIMIT = '25';
     process.env.PR_DISCOVERY_REPOSITORY_LIMIT = '4';
