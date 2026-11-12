@@ -128,6 +128,19 @@ export async function listSlackTargets(connectionId?: string) {
     }))
     .filter((target) => target.channelIds.length > 0);
 }
+/**
+ * No trigger targets the source any more, for example because its automation
+ * was paused, edited or deleted. This says nothing about the source's health.
+ */
+export class SourceNotTargetedError extends ApplicationError {
+  constructor() {
+    super(
+      'PRECONDITION_FAILED',
+      'The GitHub source has no active or starting trigger in an active project.'
+    );
+    this.name = 'SourceNotTargetedError';
+  }
+}
 export async function assertTarget(tx: Tx, connectionId: string) {
   if (
     !(await tx.agentConnection.findFirst({
@@ -135,10 +148,7 @@ export async function assertTarget(tx: Tx, connectionId: string) {
       select: { id: true },
     }))
   ) {
-    throw new ApplicationError(
-      'PRECONDITION_FAILED',
-      'The GitHub source has no active or starting trigger in an active project.'
-    );
+    throw new SourceNotTargetedError();
   }
 }
 export async function entriesFor(

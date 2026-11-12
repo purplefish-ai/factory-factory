@@ -383,3 +383,84 @@ it('refuses admission when the validated intent is not for the current definitio
   ).toEqual({ status: 'REJECTED', reason: 'EXECUTION_NOT_VALIDATED' });
   expect(await db.prisma.agentRun.count()).toBe(0);
 });
+
+function sourceState() {
+  return db.prisma.agentSourceState.findUniqueOrThrow({
+    where: { connectionId: fixture.connectionId },
+  });
+}
+
+it.each(['paused', 'deleted'] as const)(
+  'leaves source health alone for other automations when one is %s while its baseline is prepared',
+  async (change) => {
+    await pausedAutomation();
+    feed = [label('N'), ...feed];
+    // Another automation on the same repository that listened before and is now paused.
+    const other = await db.prisma.agentDefinition.create({
+      data: { projectId, name: 'Triage', instructions: 'Triage issues', isEnabled: false },
+    });
+    await db.prisma.agentTrigger.create({
+      data: {
+        id: 'trigger-other',
+        agentDefinitionId: other.id,
+        connectionId: fixture.connectionId,
+        type: 'GITHUB_ISSUE',
+        description: 'Triage labels',
+        config: { version: 1, repositoryIds: ['repo-1'], actions: ['labeled'] },
+        isEnabled: false,
+        isConfigured: true,
+        activationState: 'PAUSED',
+        activationGeneration: 1,
+      },
+    });
+    const read = port.listIssueEvents;
+    port.listIssueEvents = async (input, readSignal) => {
+      // The user acts while Enable reads the provider head.
+      const owner = { projectId, agentId: fixture.definitionId };
+      const { managementRevision } = await definition();
+      if (change === 'paused') {
+        await activation().pause({ ...owner, expectedManagementRevision: managementRevision });
+      } else {
+        await new runtime.AgentManagementService().delete({
+          ...owner,
+          expectedManagementRevision: managementRevision,
+        });
+      }
+      return read(input, readSignal);
+    };
+    await begin();
+
+    if (change === 'paused') {
+      expect(await trigger()).toMatchObject({
+        activationState: 'PAUSED',
+        pausedReasonCode: null,
+        pendingActivation: null,
+      });
+    } else {
+      expect(await db.prisma.agentTrigger.count({ where: { id: fixture.triggerId } })).toBe(0);
+    }
+    expect(await sourceState()).toMatchObject({
+      isReady: true,
+      health: { state: 'READY', reasonCode: null },
+    });
+    const otherRead = await new runtime.AgentManagementService().get({
+      projectId,
+      agentId: other.id,
+    });
+    expect(otherRead.configuredTriggers[0]?.sourceHealth).toMatchObject({
+      state: 'READY',
+      reasonCode: null,
+    });
+  }
+);
+
+it('still records a real provider failure as source health', async () => {
+  await pausedAutomation();
+  port.classifyError = () => 'auth_required';
+  failSource = true;
+  await begin();
+  expect(await sourceState()).toMatchObject({
+    isReady: false,
+    health: { state: 'ERROR', reasonCode: 'GITHUB_AUTH_REQUIRED' },
+  });
+});
