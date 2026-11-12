@@ -2,11 +2,12 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { eventAgentFixture } from './event-agent.test-support';
+import { eventAgentFixture, triggerInBackendState } from './event-agent.test-support';
 import {
   describeAutomationState,
   describeSourceHealth,
   describeTriggerState,
+  isTriggerRunning,
   EventTriggerCard,
 } from './event-trigger-status';
 import type { EventAgent } from './types';
@@ -16,8 +17,9 @@ const base = eventAgentFixture().configuredTriggers[0]!;
 function trigger(overrides: Partial<Trigger>): Trigger {
   return { ...base, ...overrides };
 }
-const listening = trigger({ activationState: 'ACTIVE', isEnabled: true });
-const starting = trigger({ activationState: 'STARTING', isEnabled: true });
+// The backend's exact combinations: only ACTIVE carries isEnabled: true.
+const listening = triggerInBackendState(base, 'ACTIVE');
+const starting = triggerInBackendState(base, 'STARTING');
 const unsupported = trigger({
   capability: {
     status: 'UNAVAILABLE',
@@ -65,6 +67,23 @@ describe('describeTriggerState', () => {
     expect(
       describeTriggerState({ ...unsupported, activationState: 'ACTIVE', isEnabled: true }).label
     ).toBe("Can't run");
+  });
+});
+
+// Regression: the backend writes a starting trigger with isEnabled: false
+// (startTrigger); only activate sets isEnabled: true, with ACTIVE.
+describe('the backend field combination for each state', () => {
+  it.each([
+    ['PAUSED', null, 'Paused', false, 'Paused'],
+    ['PAUSED', 'SOURCE_ERROR', 'Paused', false, 'Paused'],
+    ['STARTING', null, 'Starting', true, 'Starting'],
+    ['ACTIVE', null, 'Listening', true, 'Active'],
+  ] as const)('%s (reason %s) reads %s', (state, pausedReasonCode, label, running, automation) => {
+    const stored = triggerInBackendState(base, state, pausedReasonCode);
+    expect(stored.isEnabled).toBe(state === 'ACTIVE');
+    expect(describeTriggerState(stored).label).toBe(label);
+    expect(isTriggerRunning(stored)).toBe(running);
+    expect(describeAutomationState([stored])).toBe(automation);
   });
 });
 

@@ -26,6 +26,10 @@ const PAUSED_REASONS: Readonly<Record<AgentPausedReasonCode, string>> = {
  * A trigger's state as the user should read it. It comes from the trigger,
  * not the definition: after an edit the definition can stay enabled while
  * every trigger is paused.
+ *
+ * The backend stores PAUSED and STARTING triggers with `isEnabled: false`;
+ * only activation sets `isEnabled: true`, together with ACTIVE. So Starting
+ * reads from `activationState` alone.
  */
 export function describeTriggerState(trigger: Trigger): TriggerDisplayState {
   if (trigger.capability.status !== 'SUPPORTED') {
@@ -34,7 +38,7 @@ export function describeTriggerState(trigger: Trigger): TriggerDisplayState {
   if (trigger.isEnabled && trigger.activationState === 'ACTIVE') {
     return { label: 'Listening', tone: 'success', reason: null };
   }
-  if (trigger.isEnabled && trigger.activationState === 'STARTING') {
+  if (trigger.activationState === 'STARTING') {
     return { label: 'Starting', tone: 'working', reason: null };
   }
   const reason = trigger.pausedReasonCode ? PAUSED_REASONS[trigger.pausedReasonCode] : null;

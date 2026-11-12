@@ -5,7 +5,13 @@ import { Loading } from '@/client/components/loading';
 import { trpc } from '@/client/lib/trpc';
 import { managedAgentSchema } from '@/shared/agent-management';
 import { EventAgentDetail } from './event-agent-detail';
-import { eventAgentFixture } from './event-agent.test-support';
+import {
+  backendEnable,
+  backendPause,
+  backendResetSource,
+  eventAgentFixture,
+  triggerInBackendState,
+} from './event-agent.test-support';
 import type { EventAgent } from './types';
 
 type Trigger = EventAgent['configuredTriggers'][number];
@@ -19,18 +25,20 @@ function withTriggers(triggers: Trigger[], overrides: Partial<EventAgent> = {}):
 function githubTrigger(overrides: Partial<Trigger>): Trigger {
   return { ...github, ...overrides };
 }
-const listening = githubTrigger({
-  isEnabled: true,
-  activationState: 'ACTIVE',
+// Each state uses the backend's exact fields: only ACTIVE has isEnabled: true.
+const listening: Trigger = {
+  ...triggerInBackendState(github, 'ACTIVE'),
   activationGeneration: 1,
   sourceHealth: { state: 'READY', reasonCode: null, updatedAt },
-});
-const starting = githubTrigger({
-  isEnabled: true,
-  activationState: 'STARTING',
+};
+const starting: Trigger = {
+  ...triggerInBackendState(github, 'STARTING'),
   activationGeneration: 1,
   sourceHealth: { state: 'ERROR', reasonCode: 'GITHUB_BASELINE_REQUIRED', updatedAt },
-});
+};
+function pausedWith(pausedReasonCode: Trigger['pausedReasonCode']): Trigger {
+  return { ...triggerInBackendState(github, 'PAUSED', pausedReasonCode), activationGeneration: 2 };
+}
 const slack: Trigger = {
   ...github,
   id: 'saved-event:slack',
@@ -70,48 +78,28 @@ const opened: Trigger = {
     explanation: 'Only labeled and reopened GitHub issue events can start runs.',
   },
 };
-const recovery = githubTrigger({
-  pausedReasonCode: 'SOURCE_RECOVERY_REQUIRED',
+const recovery: Trigger = {
+  ...pausedWith('SOURCE_RECOVERY_REQUIRED'),
   sourceHealth: { state: 'RECOVERY_REQUIRED', reasonCode: 'GITHUB_CONTINUITY_LOST', updatedAt },
-});
+};
 
-/** The automation the story's `automation.get` answers with; Enable, Pause and Reset change it. */
+/**
+ * The automation the story's `automation.get` answers with. Enable, Pause and
+ * Reset change it exactly as the backend does (see the test-support helpers).
+ */
 let current: EventAgent = base;
-function respondWith(next: EventAgent) {
-  current = { ...next, managementRevision: current.managementRevision + 1 };
-  return current;
-}
-function moveTriggers(state: 'STARTING' | 'PAUSED') {
-  return respondWith({
-    ...current,
-    isEnabled: state === 'STARTING',
-    configuredTriggers: current.configuredTriggers.map((trigger) =>
-      trigger.capability.status === 'SUPPORTED'
-        ? {
-            ...trigger,
-            isEnabled: state === 'STARTING',
-            activationState: state,
-            pausedReasonCode: null,
-          }
-        : trigger
-    ),
-  });
-}
 const handlers = {
   'automation.get': () => current,
-  'automation.enable': () => moveTriggers('STARTING'),
-  'automation.pause': () => moveTriggers('PAUSED'),
+  'automation.enable': () => {
+    current = backendEnable(current);
+    return current;
+  },
+  'automation.pause': () => {
+    current = backendPause(current);
+    return current;
+  },
   'automation.resetSource': () => {
-    respondWith({
-      ...current,
-      configuredTriggers: current.configuredTriggers.map((trigger) => ({
-        ...trigger,
-        isEnabled: false,
-        activationState: 'PAUSED',
-        pausedReasonCode: null,
-        sourceHealth: { state: 'DISCONNECTED', reasonCode: 'GITHUB_SOURCE_RESET', updatedAt },
-      })),
-    });
+    current = backendResetSource(current, 'github-connection', updatedAt);
     return { connectionId: 'github-connection', pausedTriggerCount: 3, cancelledRunCount: 1 };
   },
 };
@@ -162,10 +150,10 @@ export const Listening: Story = {
   },
 };
 export const PausedAfterSourceError: Story = {
-  args: { agent: withTriggers([githubTrigger({ pausedReasonCode: 'SOURCE_ERROR' })]) },
+  args: { agent: withTriggers([pausedWith('SOURCE_ERROR')], { isEnabled: true }) },
 };
 export const PausedAfterStartTimedOut: Story = {
-  args: { agent: withTriggers([githubTrigger({ pausedReasonCode: 'ACTIVATION_EXPIRED' })]) },
+  args: { agent: withTriggers([pausedWith('ACTIVATION_EXPIRED')], { isEnabled: true }) },
 };
 export const CantRun: Story = {
   args: { agent: withTriggers([listening, opened, slack], { isEnabled: true }) },
@@ -179,8 +167,10 @@ export const EnableStartsListening: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await userEvent.click(await canvas.findByRole('button', { name: 'Enable' }));
-    await expect((await canvas.findAllByText('Starting')).length).toBeGreaterThan(0);
-    await expect(canvas.getByRole('button', { name: 'Pause' })).toBeEnabled();
+    // The response stores the starting trigger with isEnabled: false, as the backend does.
+    await expect(await canvas.findByRole('button', { name: 'Pause' })).toBeEnabled();
+    await expect(canvas.getAllByText('Starting').length).toBeGreaterThan(0);
+    await expect(canvas.queryByRole('button', { name: 'Enable' })).not.toBeInTheDocument();
   },
 };
 export const EnableRejected: Story = {
@@ -228,9 +218,11 @@ export const EnableConflict: Story = {
     await expect(canvas.getByText('This automation changed since it was loaded.')).toBeVisible();
   },
 };
-export const NeedsSourceReset: Story = { args: { agent: withTriggers([recovery]) } };
+export const NeedsSourceReset: Story = {
+  args: { agent: withTriggers([recovery], { isEnabled: true }) },
+};
 export const ResetSourceDialog: Story = {
-  args: { agent: withTriggers([recovery]) },
+  args: { agent: withTriggers([recovery], { isEnabled: true }) },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await userEvent.click(await canvas.findByRole('button', { name: 'Reset source' }));
@@ -240,7 +232,7 @@ export const ResetSourceDialog: Story = {
   },
 };
 export const ResetSourceSucceeds: Story = {
-  args: { agent: withTriggers([recovery]) },
+  args: { agent: withTriggers([recovery], { isEnabled: true }) },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await userEvent.click(await canvas.findByRole('button', { name: 'Reset source' }));
@@ -255,7 +247,7 @@ export const ResetSourceSucceeds: Story = {
   },
 };
 export const ResetSourceRejected: Story = {
-  args: { agent: withTriggers([recovery]) },
+  args: { agent: withTriggers([recovery], { isEnabled: true }) },
   parameters: {
     trpc: {
       handlers: {
@@ -281,11 +273,14 @@ export const ResetSourceRejected: Story = {
 };
 export const AwaitingEnableAfterReset: Story = {
   args: {
-    agent: withTriggers([
-      githubTrigger({
-        sourceHealth: { state: 'DISCONNECTED', reasonCode: 'GITHUB_SOURCE_RESET', updatedAt },
-      }),
-    ]),
+    agent: withTriggers(
+      [
+        githubTrigger({
+          sourceHealth: { state: 'DISCONNECTED', reasonCode: 'GITHUB_SOURCE_RESET', updatedAt },
+        }),
+      ],
+      { isEnabled: true }
+    ),
   },
 };
 export const Archived: Story = {

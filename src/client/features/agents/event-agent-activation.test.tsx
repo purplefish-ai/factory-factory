@@ -16,7 +16,15 @@ import {
 import { waitForReact } from '@/test-utils/react-act';
 import { renderEventCreationCancel } from './agent-menu.test-support';
 import { AgentsPage } from './agents-page';
-import { eventAgentFixture, eventSummaryFixture } from './event-agent.test-support';
+import {
+  backendActivate,
+  backendEnable,
+  backendPause,
+  backendResetSource,
+  eventAgentFixture,
+  eventSummaryFixture,
+  triggerInBackendState,
+} from './event-agent.test-support';
 
 type Saved = ReturnType<typeof eventAgentFixture>;
 type Trigger = Saved['configuredTriggers'][number];
@@ -48,7 +56,7 @@ function withTriggers(map: (trigger: Trigger) => Trigger, overrides: Partial<Sav
     configuredTriggers: saved.configuredTriggers.map(map),
   });
 }
-/** What the server does: Enable starts supported triggers, Pause stops them; both bump the revision. */
+/** What the server returns, with the backend's exact field combinations (see test support). */
 function activate(input: unknown, enable: boolean) {
   const args = agentActivationInputSchema.parse(input);
   if (args.expectedManagementRevision !== saved.managementRevision) {
@@ -60,18 +68,7 @@ function activate(input: unknown, enable: boolean) {
       'No trigger in this automation can start. Slack event intake is not running in this app.'
     );
   }
-  saved = withTriggers(
-    (trigger) =>
-      trigger.capability.status !== 'SUPPORTED'
-        ? trigger
-        : {
-            ...trigger,
-            isEnabled: enable,
-            activationState: enable ? 'STARTING' : 'PAUSED',
-            pausedReasonCode: null,
-          },
-    { isEnabled: enable, managementRevision: saved.managementRevision + 1 }
-  );
+  saved = managedAgentSchema.parse(enable ? backendEnable(saved) : backendPause(saved));
   return saved;
 }
 function resetSource(input: unknown) {
@@ -82,16 +79,7 @@ function resetSource(input: unknown) {
   if (resetFailure) {
     throw trpcError('PRECONDITION_FAILED', 'The source no longer needs a reset.');
   }
-  saved = withTriggers(
-    (trigger) => ({
-      ...trigger,
-      isEnabled: false,
-      activationState: 'PAUSED',
-      pausedReasonCode: null,
-      sourceHealth: { state: 'DISCONNECTED', reasonCode: 'GITHUB_SOURCE_RESET', updatedAt },
-    }),
-    { managementRevision: saved.managementRevision + 1 }
-  );
+  saved = managedAgentSchema.parse(backendResetSource(saved, args.connectionId, updatedAt));
   return { connectionId: args.connectionId, pausedTriggerCount: 3, cancelledRunCount: 1 };
 }
 function respond(path: string, input: unknown) {
@@ -278,16 +266,21 @@ it("enables with the loaded revision and shows each trigger as Starting, Listeni
   const slack = triggerCard('Feedback channel messages').textContent;
   expect(slack).toContain("Can't run");
   expect(slack).toContain('Slack event intake is not running in this app.');
+  // The real response stores the starting trigger with isEnabled: false.
+  expect(saved.configuredTriggers[0]).toMatchObject({
+    activationState: 'STARTING',
+    isEnabled: false,
+  });
+  expect(container.querySelector('main header')?.textContent).toContain('Starting');
   expect(button('Pause')).toBeDefined();
+  expect(() => button('Enable')).toThrow();
   await waitForReact(() =>
     expect(requests.filter((item) => item.path === 'automation.runs').length).toBeGreaterThan(
       historyReads
     )
   );
   // The poll-cycle job finishes the baseline; the next read shows Listening.
-  saved = withTriggers((trigger) =>
-    trigger.activationState === 'STARTING' ? { ...trigger, activationState: 'ACTIVE' } : trigger
-  );
+  saved = managedAgentSchema.parse(backendActivate(saved));
   await act(() => queryClient.invalidateQueries({ queryKey: getQueryKey(trpc.automation.get) }));
   await waitForReact(() =>
     expect(triggerCard('Investigate labeled issues').textContent).toContain('Listening')
@@ -340,9 +333,7 @@ it('prompts a reload on a conflict and keeps the page', async () => {
 });
 
 it('pauses with the loaded revision and says that started work continues', async () => {
-  saved = withTriggers((trigger) => ({ ...trigger, isEnabled: true, activationState: 'ACTIVE' }), {
-    isEnabled: true,
-  });
+  saved = withTriggers((trigger) => triggerInBackendState(trigger, 'ACTIVE'), { isEnabled: true });
   await render();
   expect(triggerCard('Investigate labeled issues').textContent).toContain('Listening');
   expect(container.querySelector('main')?.textContent).toContain('Runs already started continue');
@@ -426,9 +417,7 @@ it('says a source the project no longer uses cannot be reset from here', async (
 it('disables Pause and Reset source in an archived project', async () => {
   archived = true;
   saved = withTriggers((trigger) => ({
-    ...trigger,
-    isEnabled: true,
-    activationState: 'ACTIVE',
+    ...triggerInBackendState(trigger, 'ACTIVE'),
     sourceHealth: recoveryRequired,
   }));
   await render();
