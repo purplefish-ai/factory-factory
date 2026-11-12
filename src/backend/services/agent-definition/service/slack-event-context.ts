@@ -39,8 +39,9 @@ interface SlackContextDependencies {
 }
 
 const timestampSchema = z.string().regex(/^\d{1,20}\.\d{1,20}$/);
+/** Every page entry must have this shape; a malformed entry fails the whole read. */
 const messageSchema = z.object({
-  type: z.literal('message'),
+  type: z.string(),
   ts: timestampSchema,
   thread_ts: timestampSchema.optional(),
   subtype: z.string().optional(),
@@ -52,7 +53,7 @@ const messageSchema = z.object({
 });
 const pageSchema = z.object({
   ok: z.literal(true),
-  messages: z.array(z.unknown()),
+  messages: z.array(messageSchema),
   response_metadata: z.object({ next_cursor: z.string().optional() }).optional(),
 });
 /** Subtypes that are a person's or bot's conversation; joins, topics and the like are not. */
@@ -110,28 +111,30 @@ const failures = {
       false
     ),
 };
-const slackErrors: Record<string, () => ContextFailure> = {
-  ratelimited: () => failures.rateLimited(),
-  missing_scope: failures.missingScope,
-  channel_not_found: failures.channelUnavailable,
-  not_in_channel: failures.channelUnavailable,
-  thread_not_found: failures.channelUnavailable,
-  access_denied: failures.channelUnavailable,
-  no_permission: failures.channelUnavailable,
-  ekm_access_denied: failures.channelUnavailable,
-  team_access_not_granted: failures.channelUnavailable,
-  method_not_supported_for_channel_type: failures.channelUnavailable,
-  not_authed: failures.notConnected,
-  invalid_auth: failures.notConnected,
-  account_inactive: failures.notConnected,
-  token_revoked: failures.notConnected,
-  token_expired: failures.notConnected,
-  not_allowed_token_type: failures.notConnected,
-  internal_error: failures.retry,
-  fatal_error: failures.retry,
-  service_unavailable: failures.retry,
-  request_timeout: failures.retry,
-};
+const slackErrors = new Map<string, () => ContextFailure>(
+  Object.entries({
+    ratelimited: () => failures.rateLimited(),
+    missing_scope: failures.missingScope,
+    channel_not_found: failures.channelUnavailable,
+    not_in_channel: failures.channelUnavailable,
+    thread_not_found: failures.channelUnavailable,
+    access_denied: failures.channelUnavailable,
+    no_permission: failures.channelUnavailable,
+    ekm_access_denied: failures.channelUnavailable,
+    team_access_not_granted: failures.channelUnavailable,
+    method_not_supported_for_channel_type: failures.channelUnavailable,
+    not_authed: failures.notConnected,
+    invalid_auth: failures.notConnected,
+    account_inactive: failures.notConnected,
+    token_revoked: failures.notConnected,
+    token_expired: failures.notConnected,
+    not_allowed_token_type: failures.notConnected,
+    internal_error: failures.retry,
+    fatal_error: failures.retry,
+    service_unavailable: failures.retry,
+    request_timeout: failures.retry,
+  })
+);
 
 /**
  * The triggering message as run input: a labelled source item, then its text.
@@ -326,7 +329,7 @@ async function readPage(
   }
   const failure = slackFailureSchema.safeParse(body);
   if (failure.success) {
-    throw (slackErrors[failure.data.error] ?? failures.failed)();
+    throw (slackErrors.get(failure.data.error) ?? failures.failed)();
   }
   const page = pageSchema.safeParse(body);
   if (!page.success) {
@@ -336,13 +339,12 @@ async function readPage(
 }
 
 /** Keeps conversation messages before the trigger; system messages are not context. */
-function contextMessage(raw: unknown, beforeTs: string): ContextMessage | null {
-  const parsed = messageSchema.safeParse(raw);
-  if (!parsed.success) {
-    return null;
-  }
-  const message = parsed.data;
+function contextMessage(
+  message: z.infer<typeof messageSchema>,
+  beforeTs: string
+): ContextMessage | null {
   if (
+    message.type !== 'message' ||
     message.hidden ||
     (message.subtype !== undefined && !conversationSubtypes.has(message.subtype)) ||
     !earlier(message.ts, beforeTs)

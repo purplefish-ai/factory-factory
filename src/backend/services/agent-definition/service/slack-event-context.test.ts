@@ -472,6 +472,14 @@ describe('resolveSlackEventContext', () => {
       { body: { ok: true, messages: 'nope' } },
       { reasonCode: 'SLACK_CONTEXT_FAILED', retryable: false },
     ],
+    [
+      { body: { ok: true, messages: [{ type: 'message', ts: 'not-a-timestamp', user: 'U1' }] } },
+      { reasonCode: 'SLACK_CONTEXT_FAILED', retryable: false },
+    ],
+    [
+      { body: { ok: false, error: 'constructor' } },
+      { reasonCode: 'SLACK_CONTEXT_FAILED', retryable: false },
+    ],
   ] as const)('maps Slack failure %j to %j without partial context', async (response, expected) => {
     const { request } = slack({ 'conversations.replies': [response] });
     const outcome = await resolve(reply, config(), request);

@@ -288,6 +288,7 @@ it("stores a person's file share and thread broadcast as text-only messages", as
       text: 'Also posting here',
     }),
   ]);
+  expect(events[0]?.payload).not.toHaveProperty('files');
   expect(JSON.stringify(events[0]?.payload)).not.toContain('screen.png');
 });
 

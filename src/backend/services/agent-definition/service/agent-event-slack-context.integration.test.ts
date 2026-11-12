@@ -91,10 +91,20 @@ async function slackEvent(overrides: Record<string, unknown> = {}) {
 type Route = { status?: number; headers?: Record<string, string>; body: unknown };
 function slackApi(routes: Record<string, Route[]>) {
   const calls: { method: string; channel: string | null }[] = [];
-  const request = vi.fn<typeof fetch>((input) => {
+  const requests: {
+    method: string;
+    query: Record<string, string>;
+    authorization: string | null;
+  }[] = [];
+  const request = vi.fn<typeof fetch>((input, init) => {
     const url = new URL(input instanceof Request ? input.url : String(input));
     const method = url.pathname.replace('/api/', '');
     calls.push({ method, channel: url.searchParams.get('channel') });
+    requests.push({
+      method,
+      query: Object.fromEntries(url.searchParams),
+      authorization: new Headers(init?.headers).get('Authorization'),
+    });
     const next = routes[method]?.shift();
     if (!next) {
       return Promise.reject(new Error(`Unexpected Slack call ${method}`));
@@ -107,7 +117,7 @@ function slackApi(routes: Record<string, Route[]>) {
     { encrypt: (value) => value, decrypt: () => TOKEN },
     request
   );
-  return { calls, service };
+  return { calls, requests, service };
 }
 const ok = (messages: unknown[]): Route => ({
   body: { ok: true, messages, response_metadata: { next_cursor: '' } },
@@ -152,14 +162,29 @@ function evaluator(
 
 it('admits a run whose input carries the trigger, then the thread, then channel neighbours', async () => {
   const eventId = await slackEvent();
-  const { calls, service } = slackApi({
+  const { requests, service } = slackApi({
     'conversations.replies': [threadPage],
     'conversations.history': [historyPage],
   });
   await evaluator(service).evaluatePendingEvents(signal());
-  expect(calls).toEqual([
-    { method: 'conversations.replies', channel: 'C1' },
-    { method: 'conversations.history', channel: 'C1' },
+  // Bounded to the selected channel and to messages before the trigger, with the bot token.
+  expect(requests).toEqual([
+    {
+      method: 'conversations.replies',
+      query: {
+        channel: 'C1',
+        ts: '1700000000.000100',
+        latest: '1700000500.000500',
+        inclusive: 'false',
+        limit: '200',
+      },
+      authorization: `Bearer ${TOKEN}`,
+    },
+    {
+      method: 'conversations.history',
+      query: { channel: 'C1', latest: '1700000500.000500', inclusive: 'false', limit: '2' },
+      authorization: `Bearer ${TOKEN}`,
+    },
   ]);
   const evaluation = await db.prisma.agentEvaluation.findFirstOrThrow();
   expect(evaluation).toMatchObject({ status: 'MATCHED', reasonCode: 'DETERMINISTIC_MATCH' });
