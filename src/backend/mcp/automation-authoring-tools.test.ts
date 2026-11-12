@@ -23,3 +23,24 @@ it('advises only GitHub issue actions that can be enabled', () => {
   );
   expect(propose?.description).toContain('The opened and edited actions are not yet supported');
 });
+
+it('states that event automations run once the user enables them', () => {
+  expect(AUTOMATION_AUTHORING_TOOLS.map((tool) => tool.name)).toEqual([
+    'list_automation_sources',
+    'propose_automation',
+    'get_automation_proposal',
+  ]);
+  for (const tool of AUTOMATION_AUTHORING_TOOLS) {
+    expect(tool.description, tool.name).not.toMatch(/execution is not available/i);
+  }
+  for (const name of ['list_automation_sources', 'propose_automation']) {
+    const description = AUTOMATION_AUTHORING_TOOLS.find((tool) => tool.name === name)?.description;
+    expect(description, name).toMatch(/start(s)? paused/);
+    expect(description, name).toContain('only the user enables');
+    expect(description, name).toContain('from the Automations page');
+    expect(description, name).toContain('GitHub labeled and reopened triggers');
+    expect(description, name).toContain(
+      'Slack triggers run only when Slack event intake is turned on'
+    );
+  }
+});

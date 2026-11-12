@@ -125,7 +125,7 @@ capsule `index.ts`, `resources/agent-runtime-guards.ts`,
   `AgentActivationService` with `begin`, `completePending(signal)` and `pause`.
   `completePending` runs after each `agent-source-poll` cycle; no new job.
 
-- [ ] Write failing integration tests: enable with one supported and one
+- [x] Write failing integration tests: enable with one supported and one
       unsupported trigger leaves the first `STARTING` then `ACTIVE` with a
       boundary and the second `PAUSED` with its capability reason; enable with
       nothing supported throws `PRECONDITION_FAILED`; stale revision throws
@@ -137,12 +137,12 @@ capsule `index.ts`, `resources/agent-runtime-guards.ts`,
       target, candidate, admission or claim; admission refuses a definition
       whose `validatedIntent.definitionRevision` is not current; an inherited
       effort the model rejects is normalized at admission.
-- [ ] Run them and confirm they fail for missing behavior.
-- [ ] Implement schema, accessor, service, guards, orchestrator and procedures.
-- [ ] Run `pnpm check:prisma-schema`, the focused tests, then full verification.
-- [ ] Update the activation statements in `integrations.md`,
+- [x] Run them and confirm they fail for missing behavior.
+- [x] Implement schema, accessor, service, guards, orchestrator and procedures.
+- [x] Run `pnpm check:prisma-schema`, the focused tests, then full verification.
+- [x] Update the activation statements in `integrations.md`,
       `background-jobs.md` and `agent-runtime.md` that this task makes false.
-- [ ] Commit, push, open the pull request.
+- [x] Commit, push, open the pull request.
 
 ### Task 2: Child at-rest settlement (`automation-child-rest`)
 
@@ -164,7 +164,7 @@ barrels as needed for the read.
 - The settlement transaction compares the current set of child workspace IDs
   with the observation and rolls back when they differ.
 
-- [ ] Write failing tests: a run whose only child is idle after one turn settles
+- [x] Write failing tests: a run whose only child is idle after one turn settles
       `COMPLETED`; a child that has not started holds the run; archived, deleted
       and setup-failed children do not hold; a child waiting on an approval does
       not hold; a child created between observation and write rolls the
@@ -174,9 +174,9 @@ barrels as needed for the read.
       not `CANCELLED`; child pull request links appear in the result under the
       20-link cap; a failed run does not stop its children; a terminal run's
       context can expire while a child exists.
-- [ ] Confirm failure, implement, run focused then full verification.
-- [ ] Replace the child-work statements in `agent-runtime.md`.
-- [ ] Commit, push, open the pull request.
+- [x] Confirm failure, implement, run focused then full verification.
+- [x] Replace the child-work statements in `agent-runtime.md`.
+- [x] Commit, push, open the pull request.
 
 ### Task 3: Runs, Events and origin panel (`automation-history-ui`)
 
@@ -195,17 +195,17 @@ modify `event-agent-selection.tsx`, `types.ts`,
   `<EventEvaluationHistory projectId agentId />`, each rendering a slot
   `renderRunActions?: (run) => ReactNode` that task 9 fills.
 
-- [ ] Write failing component tests: runs list shows status, reason in words,
+- [x] Write failing component tests: runs list shows status, reason in words,
       workspace link or "Workspace unavailable", and PR links; "Load more"
       requests the next cursor; Events list shows matched, skipped and error
       with the stored explanation; a failed read keeps cached rows with a retry
       notice; the right panel shows the automation tab for a workspace whose
       origin query returns a run and links to the automation; a scheduled
       workspace is unchanged.
-- [ ] Confirm failure, implement following `agent-run-history.tsx` and
+- [x] Confirm failure, implement following `agent-run-history.tsx` and
       `periodic-task-panel.tsx`, add stories for loading, empty, error and
       populated states, run UI verification.
-- [ ] Commit, push, open the pull request.
+- [x] Commit, push, open the pull request.
 
 ### Task 4: `reopened` and the starting prompt (`automation-github-reopened`)
 
@@ -234,16 +234,16 @@ their tests.
 - `UNSUPPORTED_GITHUB_ACTION` explanation becomes "Only GitHub labeled and
   reopened events are supported."
 
-- [ ] Write failing tests: a `reopened` issue event becomes an executable event
+- [x] Write failing tests: a `reopened` issue event becomes an executable event
       and a `reopened` pull request event stays a control anchor; a `reopened`
       trigger with labels matches only when the issue carries one; without
       labels it matches; a trigger listing `opened` stays unsupported; stored
       payloads without `labels` still parse; the admitted run input starts with
       the source item.
-- [ ] Confirm failure, implement, run focused then full verification.
-- [ ] Update `integrations.md` and `background-jobs.md` where they say only
+- [x] Confirm failure, implement, run focused then full verification.
+- [x] Update `integrations.md` and `background-jobs.md` where they say only
       `labeled`.
-- [ ] Commit, push, open the pull request.
+- [x] Commit, push, open the pull request.
 
 ### Task 5: Source reset (`automation-source-reset`)
 
@@ -261,7 +261,7 @@ tests beside `agent-source-recovery.integration.test.ts`.
   on the connection, otherwise `NOT_FOUND`. A source not in `RECOVERY_REQUIRED`
   is `PRECONDITION_FAILED`.
 
-- [ ] Write failing tests: reset on a `RECOVERY_REQUIRED` source pauses its
+- [x] Write failing tests: reset on a `RECOVERY_REQUIRED` source pauses its
       triggers across definitions, cancels their queued runs, and the next poll
       cycle captures a fresh head with health no longer `RECOVERY_REQUIRED`;
       finalized markers, checkpoints, heads and baseline rows are byte-for-byte
@@ -269,10 +269,10 @@ tests beside `agent-source-recovery.integration.test.ts`.
       unordered before the reset is never eligible after re-enable; an event
       mid-evaluation at reset admits no run (review focus 4); reset on a healthy
       source is refused; a second reset is idempotent.
-- [ ] Confirm failure, implement, run `pnpm test:integration` for the capsule,
+- [x] Confirm failure, implement, run `pnpm test:integration` for the capsule,
       then full verification.
-- [ ] Document the operation in `integrations.md`.
-- [ ] Commit, push, open the pull request.
+- [x] Document the operation in `integrations.md`.
+- [x] Commit, push, open the pull request.
 
 ### Task 6: Slack app token (`automation-slack-app-token`)
 
@@ -295,15 +295,15 @@ export readers that enumerate connection fields, stories and tests.
   discarded and never logged). Resolve the bot's app ID with `auth.test` and
   `bots.info` and store it as connection metadata.
 
-- [ ] Write failing tests: a valid token is stored encrypted separately from the
+- [x] Write failing tests: a valid token is stored encrypted separately from the
       bot token and never appears in list, test or error output; a token for
       another workspace or app is rejected; disconnect clears both credentials;
       logical export still contains no token; the settings form masks entry,
       never prefills, and shows presence.
-- [ ] Confirm failure, implement, run schema and UI verification.
-- [ ] Update the Slack credentials section of `integrations.md` and
+- [x] Confirm failure, implement, run schema and UI verification.
+- [x] Update the Slack credentials section of `integrations.md` and
       `docs/admin-settings.md`.
-- [ ] Commit, push, open the pull request.
+- [x] Commit, push, open the pull request.
 
 ### Task 7: Natural-language filters (`automation-semantic-filters`)
 
@@ -332,22 +332,22 @@ and tests.
   servers, repository instructions or credentials. `uncertain`, malformed output
   and failures never dispatch.
 
-- [ ] Write failing deterministic tests: match, skip, uncertain, malformed
+- [x] Write failing deterministic tests: match, skip, uncertain, malformed
       output, timeout, rate limit with retry, an instruction-injection event
       that asks to be matched, and a filter that tries to widen scope, and an
       automation with an inherited provider whose default changes to an unpassed
       provider after Enable (the next event is skipped with the reason, the
       classifier is not called).
-- [ ] Add at least 40 fixture cases across GitHub and Slack plus at least 10
+- [x] Add at least 40 fixture cases across GitHub and Slack plus at least 10
       adversarial negatives, split into tuning and held-out sets before tuning.
-- [ ] Implement, pass deterministic tests.
-- [ ] Run the live gate for Claude and Codex with each provider's default small
+- [x] Implement, pass deterministic tests.
+- [x] Run the live gate for Claude and Codex with each provider's default small
       model. Pass requires zero adversarial false positives, every designated
       obvious positive matched, positive recall at least 90% and combined
       error/uncertain at most 10%. Record results in `classifier-gate.json`; a
       provider that fails or cannot be run stays `passed: false`.
-- [ ] Update `integrations.md`; put measured results in the pull request body.
-- [ ] Commit, push, open the pull request.
+- [x] Update `integrations.md`; put measured results in the pull request body.
+- [x] Commit, push, open the pull request.
 
 ## Wave 2
 
@@ -365,7 +365,7 @@ Needs tasks 1, 3 and 5 merged.
 **Interfaces:** consumes `automation.enable`, `automation.pause`,
 `automation.resetSource`, `pausedReasonCode`.
 
-- [ ] Write failing tests: Enable calls the mutation with the loaded revision
+- [x] Write failing tests: Enable calls the mutation with the loaded revision
       and shows each trigger as Listening, Starting, Paused or Can't run with
       its reason; a `PRECONDITION_FAILED` lists the reasons inline; a `CONFLICT`
       prompts a reload and keeps the page; Pause says active work continues; a
@@ -373,10 +373,10 @@ Needs tasks 1, 3 and 5 merged.
       stating that events from the gap will not run; raw JSON and revision
       numbers sit in a collapsed details section; none of the four files still
       says listening is unavailable; archived projects disable the controls.
-- [ ] Confirm failure, implement, add stories for each trigger state, run UI
+- [x] Confirm failure, implement, add stories for each trigger state, run UI
       verification including `pnpm test:e2e:mobile`.
-- [ ] Update the Automations page section of `integrations.md`.
-- [ ] Commit, push, open the pull request.
+- [x] Update the Automations page section of `integrations.md`.
+- [x] Commit, push, open the pull request.
 
 ### Task 9: Run recovery (`automation-recovery-ui`)
 
@@ -388,15 +388,15 @@ and tests; modify `event-run-history.tsx` to fill `renderRunActions`.
 **Interfaces:** consumes `automation.recoveryTarget`, `inspectRun`,
 `resolveAmbiguousRun` and the child-hold block from task 2.
 
-- [ ] Write failing tests: a run needing attention shows Inspect; inspection
+- [x] Write failing tests: a run needing attention shows Inspect; inspection
       shows only the actions the server reports available, with the block reason
       for the others; Retry warns that earlier effects may have occurred;
       Abandon on a child-held run says the run will keep its outcome; a
       `CONFLICT` from a stale context keeps the dialog open with a reload prompt
       and sends nothing further (review focus 3); success refreshes the run list
       and navigation summary.
-- [ ] Confirm failure, implement, add stories, run UI verification.
-- [ ] Commit, push, open the pull request.
+- [x] Confirm failure, implement, add stories, run UI verification.
+- [x] Commit, push, open the pull request.
 
 ### Task 10: Delete (`automation-delete`)
 
@@ -410,14 +410,14 @@ Needs tasks 1 and 9 merged.
 
 **Interfaces:** produces `automation.delete`; consumes `pauseTriggers`.
 
-- [ ] Write failing tests: delete pauses, cancels queued runs and removes the
+- [x] Write failing tests: delete pauses, cancels queued runs and removes the
       definition, triggers, run history and accepted proposal in one transaction
       while workspaces remain; an unfinished claimed run makes it
       `PRECONDITION_FAILED` and changes nothing; stale revision is `CONFLICT`;
       the UI confirms through `ConfirmDialog`, names what is removed, and
       returns to the list; scheduled delete is unchanged.
-- [ ] Confirm failure, implement, run full and UI verification.
-- [ ] Commit, push, open the pull request.
+- [x] Confirm failure, implement, run full and UI verification.
+- [x] Commit, push, open the pull request.
 
 ### Task 11: Slack listener (`automation-slack-listener`)
 
@@ -439,7 +439,7 @@ capsule barrel, `server.ts` shutdown ordering if required.
   Slack trigger. Source health `READY`, `DISCONNECTED` and gap records in the
   Slack cursor.
 
-- [ ] Write failing tests with a fake socket client: a human root message and a
+- [x] Write failing tests with a fake socket client: a human root message and a
       reply are stored then acknowledged; a failed insert is not acknowledged; a
       duplicate is acknowledged without a second row; bot, edit, delete and
       subtype messages and unsupported envelopes are acknowledged and not
@@ -447,9 +447,9 @@ capsule barrel, `server.ts` shutdown ordering if required.
       bounded; a disconnect records a gap; token rotation reconnects once;
       overlapping reconnects leave one socket; the gate off means no connection;
       SDK logs contain no token, socket URL or message body.
-- [ ] Confirm failure, implement, run focused then full verification.
-- [ ] Update `integrations.md` and `background-jobs.md`.
-- [ ] Commit, push, open the pull request.
+- [x] Confirm failure, implement, run focused then full verification.
+- [x] Update `integrations.md` and `background-jobs.md`.
+- [x] Commit, push, open the pull request.
 
 ## Wave 3
 
@@ -465,7 +465,7 @@ Needs tasks 1, 8 and 11 merged.
 **Interfaces:** produces `pendingVerification`; Slack triggers are supported
 only when `slackIntakeEnabled` is true.
 
-- [ ] Write failing tests: enabling a Slack trigger stores a ten-minute nonce
+- [x] Write failing tests: enabling a Slack trigger stores a ten-minute nonce
       and shows the exact message to post per channel; a matching human message
       in each channel records that channel's `event_ts` boundary and creates no
       run; the trigger turns `ACTIVE` only after every channel verifies; a
@@ -474,9 +474,9 @@ only when `slackIntakeEnabled` is true.
       late or wrong-channel verification message does nothing (review focus 5);
       re-enable needs a fresh verification; with the gate off the capability
       stays `SLACK_INTAKE_UNAVAILABLE`.
-- [ ] Confirm failure, implement, add stories, run full and UI verification.
-- [ ] Update `integrations.md`.
-- [ ] Commit, push, open the pull request.
+- [x] Confirm failure, implement, add stories, run full and UI verification.
+- [x] Update `integrations.md`.
+- [x] Commit, push, open the pull request.
 
 ### Task 13: Slack context (`automation-slack-context`)
 
@@ -490,12 +490,12 @@ Needs task 11 merged.
 returning context items for `agentRunInputSchema`, capped at 100 messages and
 100,000 characters with an explicit omission marker.
 
-- [ ] Write failing tests: `includeThread` adds the thread; `nearbyMessageCount`
+- [x] Write failing tests: `includeThread` adds the thread; `nearbyMessageCount`
       adds neighbors; pagination and rate limits are followed; truncation is
       flagged; a missing history scope yields an `ERROR` evaluation, not a
       partial run; only channels the trigger selects are read.
-- [ ] Confirm failure, implement, run focused then full verification.
-- [ ] Commit, push, open the pull request.
+- [x] Confirm failure, implement, run focused then full verification.
+- [x] Commit, push, open the pull request.
 
 ### Task 14: End-to-end test and close-out (`automation-e2e-closeout`)
 
@@ -509,28 +509,34 @@ through the real procedure; update `integrations.md`, `background-jobs.md`,
 `agent-runtime.md`, `docs/README.md`, and tick completed boxes in
 [the earlier plan](2026-11-01-event-triggered-agents.md).
 
-- [ ] Write the flow test: enable through `automation.enable`, deliver a label
+As shipped, the flow suites live in
+`src/backend/testing/agent-runtime-flow*.integration.test.ts`: the dependency
+rules let only tests outside `orchestration/` replace the ACP transport. Their
+harness is
+`src/backend/orchestration/testing/agent-runtime-flow.test-support.ts`.
+
+- [x] Write the flow test: enable through `automation.enable`, deliver a label
       event fixture, assert one evaluation, one run, one workspace and session,
       the initial prompt with the source item, and a terminal result; repeat
       with a run that creates a child; replay the event and restart at each
       launch boundary and assert no second workspace or send; pause racing a
       claim.
-- [ ] Add the live test, skipped unless `AGENT_LIVE_GITHUB_REPO` is set.
-- [ ] Run full verification.
+- [x] Add the live test, skipped unless `AGENT_LIVE_GITHUB_REPO` is set.
+- [x] Run full verification.
 - [ ] Post the completion comment on #2772 only when the coordinator asks.
-- [ ] Commit, push, open the pull request.
+- [x] Commit, push, open the pull request.
 
 ### Task 15: Webhook design note (`automation-webhook-note`)
 
 **Files:** create `docs/design/github-webhook-intake.md`; link it from
 `docs/README.md`.
 
-- [ ] Write the note: why polling ships first; tunnel versus hosted relay; hook
+- [x] Write the note: why polling ships first; tunnel versus hosted relay; hook
       installation and signature verification; how deliveries map onto
       `(connectionId, providerEventId)` and what replaces the polling activation
       boundary; which triggers webhooks unlock (`opened`, `edited`, pull request
       events).
-- [ ] Run documentation verification, commit, push, open the pull request.
+- [x] Run documentation verification, commit, push, open the pull request.
 
 ## After the live checks
 
