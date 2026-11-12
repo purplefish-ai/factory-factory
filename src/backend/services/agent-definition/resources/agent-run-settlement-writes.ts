@@ -9,7 +9,8 @@ export async function writeRunSettlement(
   evidence: InitialDeliveryEvidence,
   proof: EventWorkProof,
   result: ReturnType<typeof agentRunResultSchema.parse>,
-  status: 'COMPLETED' | 'PR_CREATED' | 'FAILED' | 'CANCELLED'
+  status: 'COMPLETED' | 'PR_CREATED' | 'FAILED' | 'CANCELLED',
+  reasonCode: 'CHILD_HOLD_EXPIRED' | null = null
 ) {
   await tx.agentInitialDelivery.update({
     where: { runId },
@@ -28,7 +29,7 @@ export async function writeRunSettlement(
       completedAt: new Date(),
       leaseExpiresAt: null,
       nextAttemptAt: null,
-      reasonCode: null,
+      reasonCode,
     },
   });
 }

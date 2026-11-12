@@ -445,6 +445,9 @@ describe('terminal agent run context retention policy', () => {
     configService.reload();
     expect(configService.getAgentRuntimeLimits().runContextRetentionMs).toBe(45 * 86_400_000);
   });
+  it('holds event runs for child work at most 24 hours', () => {
+    expect(configService.getAgentRuntimeLimits().childHoldDeadlineMs).toBe(24 * 60 * 60 * 1000);
+  });
 });
 
 describe('Slack event intake gate', () => {

@@ -210,8 +210,10 @@ session and database teardown. Session teardown retains the final observation
 drain, and the shared shutdown plan drains sessions before cancelling Codex
 logins.
 
-That same launch-maintenance owner observes initial outcomes and tracked work,
-retaining leases after the initial response until settlement. Expired
+That same launch-maintenance owner observes initial outcomes, tracked work and
+whether child workspaces are at rest, retaining leases after the initial
+response until settlement. It also enforces the durable 24-hour child-hold
+deadline, measured from the end of the run's own initial turn. Expired
 observation ownership can be adopted without a send or retry-budget charge;
 local capacity is checked again after the adoption await. A revoked launch that
 later finishes releases only its own local owner, never a replacement. Its
@@ -227,8 +229,8 @@ account; they never return to the authoring-sensitive QUEUED state. Retry-After
 extends the remaining shared retry delay. Only typed transient failures retry.
 The original fifteen-minute setup deadline is retained across safe retries.
 Unknown cleanup keeps capacity and forbids retry. Saved agents are enabled
-through the trusted-local `automation.enable` procedure; the UI control and the
-positive child-cleanup product boundary are separate work.
+through the trusted-local `automation.enable` procedure; the UI control is
+separate work.
 
 The evaluation job also owns bounded ledger retention before evaluation: one
 rotating page each of expired evaluations, event payloads and event identities.

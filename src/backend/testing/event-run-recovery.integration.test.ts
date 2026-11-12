@@ -292,14 +292,7 @@ it('fences pending initial admission through recovery timeout and preserves a re
   expect(providers).toHaveLength(0);
 });
 
-it.each([
-  'goal',
-  'child',
-  'unknown-history',
-  'missing-worktree',
-  'replay',
-  'deleted-session',
-] as const)(
+it.each(['goal', 'child', 'missing-worktree', 'replay', 'deleted-session'] as const)(
   'blocks retry for %s without rotating identities or releasing capacity',
   async (reason) => {
     await launch();
@@ -317,12 +310,6 @@ it.each([
         name: 'Child',
         type: 'CHILD_WORKSPACE',
         parentWorkspaceId: h.claim.reservedWorkspaceId,
-      });
-    }
-    if (reason === 'unknown-history') {
-      await db.prisma.workspaceLaunchOrigin.update({
-        where: { runId: h.claim.runId },
-        data: { childHistoryVersion: null },
       });
     }
     if (reason === 'missing-worktree') {
@@ -345,7 +332,6 @@ it.each([
       reason: {
         goal: 'WORK_PROOF_UNAVAILABLE',
         child: 'CHILD_WORK_UNPROVEN',
-        'unknown-history': 'CHILD_WORK_UNPROVEN',
         'missing-worktree': 'RESOURCES_UNAVAILABLE',
         replay: 'WORK_PROOF_UNAVAILABLE',
         'deleted-session': 'RESOURCES_UNAVAILABLE',

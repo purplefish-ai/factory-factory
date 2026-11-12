@@ -21,11 +21,7 @@ import {
   validRetentionEvaluation,
   type RetentionReason,
 } from './agent-retention-dependencies';
-import {
-  childHistoryIsClear,
-  hasChildWork,
-  hasStoppedRunWork,
-} from './agent-run-settlement.accessor';
+import { hasStoppedRunWork } from './agent-run-settlement.accessor';
 
 const include = {
   initialDelivery: true,
@@ -193,14 +189,7 @@ async function dependency(
       return eventReason;
     }
   }
-  const childHold =
-    run.initialDelivery?.evidence !== null
-      ? !(await childHistoryIsClear(tx, run))
-      : run.reservedWorkspaceId && (await hasChildWork(tx, run.reservedWorkspaceId));
-  assertCurrent();
-  if (childHold) {
-    return 'RECOVERY_DEPENDENCY';
-  }
+  // Child work matters only before settlement: a terminal run's children never block expiry.
   const evaluations = await tx.agentEvaluation.findMany({
     where: { runId: run.id },
     include: { run: { select: { agentDefinitionId: true, eventId: true } } },

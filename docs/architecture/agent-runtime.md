@@ -1509,6 +1509,11 @@ independent. Explicit startup assignments always precede recovered mail signals.
 Max workspace depth is 1 — children cannot have child workspaces.
 Provider-native subagents are a separate facility.
 
+An event run whose workspace creates children settles only once every child is
+at rest, or 24 hours after its own initial turn ended; see
+[event initial delivery](#event-initial-delivery-infrastructure). Children are
+never stopped by settlement and outlive their run as ordinary workspaces.
+
 Child creation validates the target project's active status before delegating to
 its injected workspace-launch owner. The workspace capsule still validates the
 parent and depth and persists the parent, prompt, and report-back metadata.
@@ -1736,21 +1741,23 @@ read, before targeted cleanup. This does not abort into a second untargeted stop
 or revoke a replacement. Active human follow-ups block recovery cleanup.
 
 Resolution requires correlated strict local stop plus a current stopped-work
-window and complete child-history coverage. RESOLVE retains the RUNNING slot for
-a later decision; ABANDON closes it with an explicit decision separate from the
-provider outcome. RETRY retains capacity continuously and preserves the run,
-workspace, session, frozen account/input, original initialMessageId,
-setupStartedAt and inherited attemptCount, including an exhausted budget. It
-rotates only the current send identities and attemptGeneration, reuses the READY
-worktree without rerunning setup, and replaces the consumer's old operation.
-Deleted or unavailable resources block retry. Inspection includes directory
-existence and read/traversal access in `retryResourcesAvailable` and reports a
-retry-specific `retryBlocked` resource reason, separate from common proof
-blocks. An unavailable retry directory does not block RESOLVE or ABANDON. Retry
-checks resources before targeted stop and again at final transaction validation;
-losing the directory during the write rolls back with `RESOURCES_UNAVAILABLE`.
-Known child work, unknown child history and settled UNKNOWN setup cleanup have
-no supported recovery action.
+window. RESOLVE and RETRY also require every child workspace to be at rest (see
+below); ABANDON does not. RESOLVE retains the RUNNING slot for a later decision;
+ABANDON closes it with an explicit decision separate from the provider outcome.
+RETRY retains capacity continuously and preserves the run, workspace, session,
+frozen account/input, original initialMessageId, setupStartedAt and inherited
+attemptCount, including an exhausted budget. It rotates only the current send
+identities and attemptGeneration, reuses the READY worktree without rerunning
+setup, and replaces the consumer's old operation. Deleted or unavailable
+resources block retry. Inspection includes directory existence and
+read/traversal access in `retryResourcesAvailable` and reports a retry-specific
+`retryBlocked` resource reason, separate from common proof blocks. An
+unavailable retry directory does not block RESOLVE or ABANDON. Retry checks
+resources before targeted stop and again at final transaction validation; losing
+the directory during the write rolls back with `RESOURCES_UNAVAILABLE`. Settled
+UNKNOWN setup cleanup has no supported recovery action. A run held by child
+workspaces that are not at rest offers only ABANDON; RESOLVE and RETRY return
+`CHILD_WORK_UNPROVEN`.
 
 Saved resolution JSON does not restore lost live coverage. Both a later action
 and the rotated attempt's startup require the old stopped-work window to remain
@@ -1765,25 +1772,36 @@ settlement.
 Normal settlement requires the current initial runtime's live tracking window,
 established before its send, and zero in-flight prompts, interactive requests,
 active goals, native children and non-shell agent tasks. Shell/dev-server-only
-work does not retain capacity. FF child-workspace creation is retained by its
-workspace owner, including through archive and deletion, and holds parent
-capacity independently of native tracking. The current ordinary child lifecycle
-cannot supply positive child-work cleanup proof: archive, deletion, IDLE and a
-successful legacy stop return cannot resolve that hold. Recovery and UI must not
-advertise those operations as resolution; supported positive child cleanup still
-requires implementation before activation. Missing tracking, replay, source
-replacement and restart without live coverage remain unknown; history inspection
-never starts a provider. A newly created event-workspace origin marks complete
-child-history capture in its creation transaction. Historical origins remain
-unknown; importing a matching workspace revokes that coverage even when the
-workspace already exists. Backfilling surviving children retains holds but does
-not certify an empty history. A terminal failure/cancellation, unexpected exit,
-timeout or workspace removal also needs correlated strict runtime-stop evidence.
-Event runs freeze the global turn limit at launch and use the durable send
-timestamp for their deadline. Both providers default to unlimited, including
-historical runs without a saved limit; run history advertises no deadline in
-that case. Ordinary turns read the setting when each prompt starts. SHUTDOWN
-uncertainty remains reserved for recovery and does not fall through to timeout.
+work does not retain capacity. FF child workspaces of the run's workspace are a
+separate hold: the run settles only when every child is at rest. A child is at
+rest when it is archived, archiving or deleted (known only from its retained
+`WorkspaceChildOrigin`), when its setup failed, or when it has started at least
+once (`Workspace.hasHadSessions`) and none of its sessions has a turn running
+(runtime activity `WORKING` or phase `starting`/`running`/`stopping`) or queued
+input. A session waiting on a person's approval counts as at rest. A child that
+is still setting up, or READY without ever starting a provider session, holds
+the run. Orchestration reads these signals through the workspace and session
+barrels (`observeChildRest`) and passes them to settlement, which compares the
+observed child IDs with the current child rows and retained origins under the
+ledger write lock and holds on any difference. Settlement is final: a child that
+wakes later is an ordinary workspace, does not reopen the run and holds no
+capacity, so real concurrent work can exceed the run limits. Settlement never
+stops children, including for failed or cancelled runs. A child hold expires 24
+hours (`childHoldDeadlineMs`) after the run's own initial turn ended (its
+recorded outcome, else its stop evidence); the launch-maintenance observation
+then settles the run with its own status and reason `CHILD_HOLD_EXPIRED`. The
+settled delivery evidence records a bounded child proof: counts per state and at
+most 20 children that were still held. Unknown historical child-history coverage
+(`childHistoryVersion`) no longer holds a run; the live check decides. Missing
+tracking, replay, source replacement and restart without live coverage remain
+unknown; history inspection never starts a provider. A terminal
+failure/cancellation, unexpected exit, timeout or workspace removal also needs
+correlated strict runtime-stop evidence. Event runs freeze the global turn limit
+at launch and use the durable send timestamp for their deadline. Both providers
+default to unlimited, including historical runs without a saved limit; run
+history advertises no deadline in that case. Ordinary turns read the setting
+when each prompt starts. SHUTDOWN uncertainty remains reserved for recovery and
+does not fall through to timeout.
 
 The owner transaction persists the work proof and terminal result together,
 checking worker, send attempt and current source. Settlement linearizes at its
@@ -1794,21 +1812,23 @@ supported FF-tracked work, not universal containment of future native activity
 or remote effects. Tracker updates continue normally throughout persistence.
 
 Observed PR links are unioned into bounded run results while work remains held.
-Successful quiescent work becomes PR_CREATED when links exist; failed or
-cancelled initial work preserves its outcome and links. Workspace deletion
-captures valid still-persisted PR associations, including detached links, in the
-same SQLite write transaction as the cascade. Attachments committed first are
-included; a concurrent attachment cannot commit against the deleted workspace.
-Capture failure rolls back deletion. This result-only update also supports
-terminal runs without a live lease and preserves their status, summary,
-completedAt, provider outcome and explicit recovery decision. The validated
-union filters invalid links and retains at most 20 links across retries and
-deletion; it is not an unbounded history. The required capture port is wired by
-orchestration and deletion fails closed when unavailable. Capturing results or
-deleting a workspace never proves work resolution or releases held capacity.
-Ledger pruning and trusted-local operator transport are implemented. Operator UI
-and the child-work product decision remain activation prerequisites. Monitoring
-never auto-archives a workspace.
+Links attached to child workspaces are included after the run workspace's own
+links, under the same 20-link bound. Successful quiescent work becomes
+PR_CREATED when links exist; failed or cancelled initial work preserves its
+outcome and links. Workspace deletion captures valid still-persisted PR
+associations, including detached links, in the same SQLite write transaction as
+the cascade. Attachments committed first are included; a concurrent attachment
+cannot commit against the deleted workspace. Capture failure rolls back
+deletion. This result-only update also supports terminal runs without a live
+lease and preserves their status, summary, completedAt, provider outcome and
+explicit recovery decision. The validated union filters invalid links and
+retains at most 20 links across retries and deletion; it is not an unbounded
+history. The required capture port is wired by orchestration and deletion fails
+closed when unavailable. Capturing results or deleting a workspace never proves
+work resolution or releases held capacity. Ledger pruning and trusted-local
+operator transport are implemented. Operator UI remains an activation
+prerequisite. Monitoring never auto-archives a workspace and never stops a child
+workspace.
 
 Event runtimes use an owned POSIX process group. Strict stop confirms
 LOCAL_RUNTIME_GROUP_STOPPED only after observing that group disappear. A
@@ -1932,14 +1952,24 @@ independently; stale inspection or target data is never refreshed to make an
 action succeed. Inspection returns only safe status and bounded availability,
 without prompts, provider source/work evidence or transcripts.
 
-`retryBlocked: RESOURCES_UNAVAILABLE` is separate from common proof, preparation
-and child-work blocks. Missing directory, frozen account or session resources
-prevent RETRY; otherwise supported RESOLVE/ABANDON still depend on authoritative
-stopped-source and current tracked-work proof. PENDING delivery means UNSENT,
-while incomplete setup retains its preparation hold. Manual retry keeps the
-logical run, reserved workspace/session/account, original message, setup start,
-inherited automatic attempt budget and initial outcome; it rotates only the
-current send identity and send generation.
+`retryBlocked: RESOURCES_UNAVAILABLE` is separate from common proof and
+preparation blocks. Child work is its own `childHold` block: the held children
+(at most 20, with `heldCount`), the durable `deadlineAt`, and `keepsOutcome`.
+While it is present only ABANDON is offered; RESOLVE and RETRY return
+`CHILD_WORK_UNPROVEN`. Inspection and actions compare their child observation
+with the current child set and fail (CONFLICT or `CHILD_WORK_UNPROVEN`) when a
+child appeared in between. ABANDON of a run whose own initial turn completed or
+failed and whose own work was idle keeps that outcome (`COMPLETED`, `PR_CREATED`
+or `FAILED`) with reason `ABANDONED_WITH_CHILD_WORK`; a cancelled initial turn
+stays `CANCELLED`. ABANDON never stops children, and once a run is terminal by
+any path its children no longer block run-context expiry. Missing directory,
+frozen account or session resources prevent RETRY; otherwise supported
+RESOLVE/ABANDON still depend on authoritative stopped-source and current
+tracked-work proof. PENDING delivery means UNSENT, while incomplete setup
+retains its preparation hold. Manual retry keeps the logical run, reserved
+workspace/session/account, original message, setup start, inherited automatic
+attempt budget and initial outcome; it rotates only the current send identity
+and send generation.
 
 The boundary uses existing socket locality, configured CIDRs, browser Origin and
 explicit proxy trust rules. Origin-less loopback and other same-user local

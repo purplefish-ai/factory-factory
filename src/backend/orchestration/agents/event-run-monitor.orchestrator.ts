@@ -12,6 +12,7 @@ import {
 import { workspacePrSnapshotService, workspaceDataService } from '@/backend/services/workspace';
 import { compactAgentRunResult } from '@/shared/agent-run-result';
 import { turnLimitMs } from '@/shared/turn-limit';
+import { observeChildRest } from './event-child-rest.orchestrator';
 
 const monitor = new AgentRunMonitorService();
 /** Coordinates public owner reads without starting/restoring a provider. */
@@ -29,9 +30,11 @@ export function observeEventRun(
     check();
     const workspace = await workspaceDataService.findById(claim.reservedWorkspaceId);
     check();
-    const prs = workspace ? await workspacePrSnapshotService.list(workspace.id) : [];
-    check();
-    const result = compactAgentRunResult(prs);
+    const { result, children } = await observeResultsAndChildren(
+      claim.reservedWorkspaceId,
+      !!workspace,
+      check
+    );
     const attempt = {
       runId: claim.runId,
       sessionId: claim.reservedSessionId,
@@ -80,6 +83,7 @@ export function observeEventRun(
       claim,
       attempt,
       result,
+      children,
       observation?.proof ?? null,
       () => {
         check();
@@ -91,6 +95,23 @@ export function observeEventRun(
     }
     return settled;
   });
+}
+
+/** The run's PR links (own first, then children's, under the shared cap) and child rest. */
+async function observeResultsAndChildren(
+  workspaceId: string,
+  workspaceExists: boolean,
+  check: () => void
+) {
+  const prs = workspaceExists ? await workspacePrSnapshotService.list(workspaceId) : [];
+  check();
+  const children = await observeChildRest(workspaceId);
+  check();
+  for (const child of children.children) {
+    prs.push(...(await workspacePrSnapshotService.list(child.workspaceId)));
+    check();
+  }
+  return { result: compactAgentRunResult(prs), children };
 }
 
 function interruptionCause(

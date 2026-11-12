@@ -592,10 +592,11 @@ opts into expiry measured from `completedAt`; absent, blank or invalid values
 retain context. Existing evaluation maintenance inspects one additional rotating
 page of at most 100 run candidates per cycle. It acquires the ledger write lock
 before sampling policy/time and rechecking terminal status, finished launch,
-retry/lease, source/evaluation, delivery and child-work dependencies. Active,
-uncertain, malformed or recovery-dependent rows remain intact; expiry never
-retries or resends provider effects. Batch metrics contain counts and bounded
-reason codes, without context or run identifiers.
+retry/lease, source/evaluation and delivery dependencies. Child workspaces no
+longer block a terminal run's context. Active, uncertain, malformed or
+recovery-dependent rows remain intact; expiry never retries or resends provider
+effects. Batch metrics contain counts and bounded reason codes, without context
+or run identifiers.
 
 `AgentLedgerRetentionService.inspectRunContexts({ retentionDays?, after? }, signal)`
 previews one bounded page in a read-only transaction. Omit `retentionDays` to

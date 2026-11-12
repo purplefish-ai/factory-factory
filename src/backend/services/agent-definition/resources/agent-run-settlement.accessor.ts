@@ -1,4 +1,5 @@
 import { isDeepStrictEqual } from 'node:util';
+import { configService } from '@/backend/services/config.service';
 import { agentRunResultSchema } from '@/shared/agent-runtime';
 import {
   initialAttemptSchema,
@@ -7,6 +8,11 @@ import {
   type InitialDeliveryEvidence,
 } from '@/shared/event-agent-delivery';
 import { eventWorkProofSchema, type EventWorkProof } from '@/shared/event-agent-work';
+import {
+  eventChildRestProof,
+  eventChildRestSchema,
+  type EventChildRest,
+} from '@/shared/event-child-rest';
 import type { Prisma } from '@prisma-gen/client';
 import type { EventLaunchClaim } from './agent-execution-binding.accessor';
 import { currentLaunch, launchConflict } from './agent-launch.accessor';
@@ -33,16 +39,8 @@ function terminalResult(evidence: InitialDeliveryEvidence, unavailable: boolean)
       return null;
   }
 }
-async function settlementFor(
-  tx: Prisma.TransactionClient,
-  run: Run,
-  proof: EventWorkProof | null,
-  result: Result
-): Promise<{
-  evidence: InitialDeliveryEvidence;
-  proof: EventWorkProof;
-  status: Parameters<typeof writeRunSettlement>[5];
-} | null> {
+/** The existing conditions on the run's own initial turn, without child workspaces. */
+async function ownSettlement(tx: Prisma.TransactionClient, run: Run, proof: EventWorkProof | null) {
   if (!proof || run.initialDelivery.evidence === null || run.reasonCode === 'EXPLICITLY_RESOLVED') {
     return null;
   }
@@ -68,45 +66,90 @@ async function settlementFor(
   if (!terminal || ((terminal !== 'COMPLETED' || unavailable) && !stopped)) {
     return null;
   }
-  if (!(await childHistoryIsClear(tx, run))) {
+  return { evidence, proof, terminal, workspaceId };
+}
+async function settlementFor(
+  tx: Prisma.TransactionClient,
+  run: Run,
+  work: EventWorkProof | null,
+  result: Result,
+  children: EventChildRest
+): Promise<{
+  evidence: InitialDeliveryEvidence;
+  proof: EventWorkProof;
+  status: Parameters<typeof writeRunSettlement>[5];
+  reasonCode: 'CHILD_HOLD_EXPIRED' | null;
+} | null> {
+  const own = await ownSettlement(tx, run, work);
+  if (!own) {
+    return null;
+  }
+  const { evidence, proof, terminal, workspaceId } = own;
+  // A child created after the observation was never classified; never settle on it.
+  if (!(await childObservationIsCurrent(tx, workspaceId, children))) {
+    return null;
+  }
+  if (!(children.atRest || childHoldExpired(run, evidence))) {
     return null;
   }
   const status = terminal === 'COMPLETED' && result.pullRequests.length ? 'PR_CREATED' : terminal;
-  return { evidence, proof, status };
-}
-/** The write lock serializes child creation and its retained origin before settlement. */
-export async function childHistoryIsClear(
-  tx: Prisma.TransactionClient,
-  run: Pick<Run, 'id' | 'reservedWorkspaceId' | 'agentDefinition'>
-): Promise<boolean> {
-  const workspaceId = run.reservedWorkspaceId;
-  if (!workspaceId) {
-    return false;
-  }
-  const origin = await tx.workspaceLaunchOrigin.findUnique({ where: { runId: run.id } });
-  if (
-    origin?.childHistoryVersion !== 1 ||
-    origin.workspaceId !== workspaceId ||
-    origin.projectId !== run.agentDefinition.projectId
-  ) {
-    return false;
-  }
-  return !(await hasChildWork(tx, workspaceId));
+  return {
+    evidence: { ...evidence, children: eventChildRestProof(children) },
+    proof,
+    status,
+    reasonCode: children.atRest ? null : 'CHILD_HOLD_EXPIRED',
+  };
 }
 
-/** Shared child-work hold for settlement and terminal context retention. */
-export async function hasChildWork(tx: Prisma.TransactionClient, workspaceId: string) {
-  const child = await tx.workspace.findFirst({
-    where: { parentWorkspaceId: workspaceId },
-    select: { id: true },
-  });
-  if (child) {
-    return true;
+/** When the run's own initial turn ended: its recorded outcome, else its stop evidence. */
+export function initialTurnEndedAt(
+  run: Pick<Run, 'initialDelivery'>,
+  evidence: InitialDeliveryEvidence
+) {
+  if (evidence.outcome) {
+    return run.initialDelivery.finishedAt;
   }
-  return !!(await tx.workspaceChildOrigin.findFirst({
-    where: { parentWorkspaceId: workspaceId },
-    select: { childWorkspaceId: true },
-  }));
+  return evidence.stop ? new Date(evidence.stop.observedAt) : null;
+}
+
+/** Durable child-hold deadline, measured from the end of the run's own initial turn. */
+export function childHoldDeadline(
+  run: Pick<Run, 'initialDelivery'>,
+  evidence: InitialDeliveryEvidence
+) {
+  const ended = initialTurnEndedAt(run, evidence);
+  return ended
+    ? new Date(ended.getTime() + configService.getAgentRuntimeLimits().childHoldDeadlineMs)
+    : null;
+}
+
+function childHoldExpired(run: Pick<Run, 'initialDelivery'>, evidence: InitialDeliveryEvidence) {
+  const deadline = childHoldDeadline(run, evidence);
+  return !!deadline && Date.now() >= deadline.getTime();
+}
+
+/**
+ * The write lock serializes child creation (row and retained origin) with this
+ * read, so an observation that matches the current child set is complete.
+ */
+export async function childObservationIsCurrent(
+  tx: Prisma.TransactionClient,
+  workspaceId: string,
+  observation: EventChildRest
+) {
+  const [rows, origins] = await Promise.all([
+    tx.workspace.findMany({ where: { parentWorkspaceId: workspaceId }, select: { id: true } }),
+    tx.workspaceChildOrigin.findMany({
+      where: { parentWorkspaceId: workspaceId },
+      select: { childWorkspaceId: true },
+    }),
+  ]);
+  const current = new Set([
+    ...rows.map((row) => row.id),
+    ...origins.map((origin) => origin.childWorkspaceId),
+  ]);
+  const observed = new Set(observation.children.map((child) => child.workspaceId));
+  return current.size === observed.size && [...current].every((id) => observed.has(id));
 }
 /** Positive stopped-source/work proof shared by recovery, settlement and retention. */
 export function hasStoppedRunWork(evidence: InitialDeliveryEvidence, proof: EventWorkProof) {
@@ -135,10 +178,12 @@ export const agentRunSettlementAccessor = {
     claim: EventLaunchClaim,
     attempt: InitialAttempt,
     result: Result,
+    children: EventChildRest,
     work: EventWorkProof | null,
     assertCurrent: () => void
   ) {
     const incoming = agentRunResultSchema.parse(result);
+    const observedChildren = eventChildRestSchema.parse(children);
     const expected = initialAttemptSchema.parse(attempt);
     const proof = work === null ? null : eventWorkProofSchema.parse(work);
     assertCurrent();
@@ -146,7 +191,7 @@ export const agentRunSettlementAccessor = {
       const run = await currentLaunch(tx, claim);
       assertAttempt(run, expected);
       const merged = mergeRunResults(run.result, incoming);
-      const settlement = await settlementFor(tx, run, proof, merged);
+      const settlement = await settlementFor(tx, run, proof, merged, observedChildren);
       if (settlement) {
         await writeRunSettlement(
           tx,
@@ -154,7 +199,8 @@ export const agentRunSettlementAccessor = {
           settlement.evidence,
           settlement.proof,
           merged,
-          settlement.status
+          settlement.status,
+          settlement.reasonCode
         );
       } else {
         await tx.agentRun.update({ where: { id: run.id }, data: { result: merged } });
