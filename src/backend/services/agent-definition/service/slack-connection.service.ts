@@ -56,9 +56,25 @@ export class SlackConnectionService {
     const connection = await slackConnectionAccessor.save(
       identity.team_id,
       identity.team,
-      this.crypto.encrypt(botToken)
+      this.crypto.encrypt(botToken),
+      await this.appIdToKeep(identity, botToken)
     );
     return connection;
+  }
+
+  /**
+   * A saved app-level token stays with a replacement bot only if Slack confirms
+   * the bot belongs to the same app; otherwise saving clears it (fail closed).
+   */
+  private async appIdToKeep(identity: { team_id: string; bot_id: string }, botToken: string) {
+    const storedAppId = await slackConnectionAccessor.appIdForWorkspace(identity.team_id);
+    if (!storedAppId) {
+      return null;
+    }
+    const appId = await resolveSlackBotAppId(this.request, botToken, identity.bot_id).catch(
+      () => null
+    );
+    return appId === storedAppId ? storedAppId : null;
   }
 
   async test(id: string) {

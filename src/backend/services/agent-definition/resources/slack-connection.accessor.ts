@@ -39,12 +39,38 @@ export const slackConnectionAccessor = {
   get(id: string) {
     return prisma.agentConnection.findFirst({ where: { id, provider: 'SLACK' } });
   },
-  async save(workspaceId: string, name: string, credentialsEncrypted: string) {
-    const connection = await prisma.agentConnection.upsert({
+  async appIdForWorkspace(workspaceId: string) {
+    const connection = await prisma.agentConnection.findUnique({
       where: { provider_externalId: { provider: 'SLACK', externalId: workspaceId } },
-      create: { provider: 'SLACK', externalId: workspaceId, name, credentialsEncrypted },
-      update: { name, credentialsEncrypted, isEnabled: true },
-      select: { id: true },
+      select: { appId: true },
+    });
+    return connection?.appId ?? null;
+  },
+  /**
+   * Saves a bot token. A saved app-level token survives only when it belongs to
+   * `keepAppId`, the replacement bot's own app; otherwise it is cleared.
+   */
+  async save(
+    workspaceId: string,
+    name: string,
+    credentialsEncrypted: string,
+    keepAppId: string | null
+  ) {
+    const connection = await prisma.$transaction(async (tx) => {
+      const saved = await tx.agentConnection.upsert({
+        where: { provider_externalId: { provider: 'SLACK', externalId: workspaceId } },
+        create: { provider: 'SLACK', externalId: workspaceId, name, credentialsEncrypted },
+        update: { name, credentialsEncrypted, isEnabled: true },
+        select: { id: true },
+      });
+      await tx.agentConnection.updateMany({
+        where: {
+          id: saved.id,
+          ...(keepAppId ? { OR: [{ appId: null }, { appId: { not: keepAppId } }] } : {}),
+        },
+        data: { appCredentialsEncrypted: null, appId: null },
+      });
+      return saved;
     });
     const saved = await summary(connection.id);
     if (!saved) {

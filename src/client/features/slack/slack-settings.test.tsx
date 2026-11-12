@@ -283,6 +283,7 @@ it('shows app-token presence without rendering an entry field until asked', () =
 it('masks a new app token, never prefills it, and clears it after saving', async () => {
   savedConnection({ hasAppToken: true, appId: 'A-app' });
   act(() => button('Replace app token').click());
+  expect(document.activeElement).toBe(appTokenInput());
   expect(appTokenInput()?.type).toBe('password');
   expect(appTokenInput()?.value).toBe('');
   expect(appTokenInput()?.autocomplete).toBe('off');
@@ -318,6 +319,14 @@ it('keeps the app-token draft and shows the error when saving fails', async () =
   });
   expect(appTokenInput()?.value).toBe('xapp-1-secret');
   expect(document.querySelector('[role="alert"]')?.textContent).toContain('different Slack app');
+});
+
+it('accepts a rotating app-level token and notes manual renewal', () => {
+  savedConnection();
+  act(() => button('Add app token').click());
+  enterAppToken('xoxe.xapp-1-rotating');
+  expect(button('Save app token').disabled).toBe(false);
+  expect(document.body.textContent).toContain('Rotating tokens need manual renewal');
 });
 
 it('cancels app-token entry and discards the draft', () => {

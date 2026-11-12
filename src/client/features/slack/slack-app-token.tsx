@@ -52,6 +52,7 @@ export function SlackAppTokenControls(props: SlackAppTokenControlsProps) {
         >
           <Label htmlFor={inputId}>App-level token</Label>
           <Input
+            autoFocus
             id={inputId}
             type="password"
             autoComplete="off"
@@ -66,6 +67,8 @@ export function SlackAppTokenControls(props: SlackAppTokenControlsProps) {
             Turn on Socket Mode in the same Slack app as the bot token, then create an app-level
             token with the connections:write scope under Basic Information. Slack events will arrive
             through this token once event intake is available.
+            {props.draft.trim().startsWith('xoxe.xapp-') &&
+              ' Rotating tokens need manual renewal; automatic refresh is not supported.'}
           </p>
           <div className="flex flex-wrap gap-2">
             <Button

@@ -816,24 +816,27 @@ workspace replaces its token without changing the connection ID or trigger
 references. Multiple workspaces can be connected.
 
 Slack event intake uses outbound Socket Mode, which needs an app-level token
-(`xapp-`, scope `connections:write`) from the same Slack app as the bot. Each
-connected workspace can save one, encrypted in `appCredentialsEncrypted`
-separately from the bot token. Saving it first checks the saved bot token with
-`auth.test` (it must still identify the connection's workspace), then resolves
-the bot's app ID with `bots.info`, which needs the bot's `users:read` scope. The
-app ID is stored as `appId`; it is never inferred from the token prefix. The
-app-level token is then validated with `apps.connections.open`. Slack's response
-is only a single-use Socket Mode URL: it is discarded immediately and never
-stored, returned or logged. Slack documents no field that names the token's app,
-so the only check is the `app_id` that Slack currently embeds in that URL: a
-mismatch rejects the token, and an absent value is accepted. The Socket Mode
-listener must still require the `hello` message's `connection_info.app_id` and
-each event's `api_app_id` and `team_id` to match the connection. App-level
-tokens belong to an app rather than a workspace, so the workspace match comes
-from the bot token. A save is discarded if the bot credential changed while it
-was being validated. Reconnecting the same workspace with a replacement bot
-token keeps the saved app-level token; Test connection then reports a mismatch
-if the new bot belongs to another app.
+(`xapp-`, or a rotating `xoxe.xapp-` access token that needs manual renewal;
+scope `connections:write`) from the same Slack app as the bot. Each connected
+workspace can save one, encrypted in `appCredentialsEncrypted` separately from
+the bot token. Saving it first checks the saved bot token with `auth.test` (it
+must still identify the connection's workspace), then resolves the bot's app ID
+with `bots.info`, which needs the bot's `users:read` scope. The app ID is stored
+as `appId`; it is never inferred from the token prefix. The app-level token is
+then validated with `apps.connections.open`. Slack's response is only a
+single-use Socket Mode URL: it is discarded immediately and never stored,
+returned or logged. Slack documents no field that names the token's app, so the
+only check is the `app_id` that Slack currently embeds in that URL: a mismatch
+rejects the token, and an absent value is accepted. The Socket Mode listener
+must still require the `hello` message's `connection_info.app_id` and each
+event's `api_app_id` and `team_id` to match the connection. App-level tokens
+belong to an app rather than a workspace, so the workspace match comes from the
+bot token. A save is discarded if the bot credential changed while it was being
+validated. Reconnecting the same workspace with a replacement bot token keeps
+the saved app-level token only when `bots.info` confirms the new bot belongs to
+the stored app; a different app, or a failed lookup, clears the app-level token
+and app ID. Test connection also reports a mismatch between the bot's current
+app and the stored app ID.
 
 The trusted-local `slack` tRPC router supports list, connect, test, disconnect,
 `setAppToken` and `clearAppToken`. Its summaries expose workspace name/ID,

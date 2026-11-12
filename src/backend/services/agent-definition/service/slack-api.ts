@@ -37,10 +37,20 @@ export async function callSlackApi(
         : 'Slack could not validate this connection. Try again.'
     );
   }
+  let text: string;
   try {
-    return await response.json();
+    text = await response.text();
   } catch {
     throw unreachable();
+  }
+  try {
+    const body: unknown = JSON.parse(text);
+    return body;
+  } catch {
+    throw new ApplicationError(
+      'PRECONDITION_FAILED',
+      'Slack returned an unreadable response. Try again.'
+    );
   }
 }
 

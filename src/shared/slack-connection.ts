@@ -10,11 +10,17 @@ export const slackConnectInputSchema = z.strictObject({
     )
     .max(4096),
 });
-/** Socket Mode app-level token; its app is verified against the bot, never inferred from the prefix. */
+/**
+ * Socket Mode app-level token, or a rotating `xoxe.xapp-` access token. Its app
+ * is verified against the bot, never inferred from the prefix.
+ */
 export const slackAppTokenSchema = z
   .string()
   .trim()
-  .regex(/^xapp-[A-Za-z0-9-]+$/, 'Enter a Slack app-level token starting with xapp-')
+  .regex(
+    /^(?:xoxe\.)?xapp-[A-Za-z0-9-]+$/,
+    'Enter a Slack app-level token starting with xapp- or xoxe.xapp-'
+  )
   .max(4096);
 export const slackSetAppTokenInputSchema = z.strictObject({
   connectionId: z.string().min(1),

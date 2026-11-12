@@ -38,7 +38,9 @@ function route(url: string, init?: RequestInit) {
     });
   }
   if (method === 'apps.connections.open') {
-    expect(init?.headers).toEqual({ Authorization: `Bearer ${appToken}` });
+    expect(init?.headers).toEqual({
+      Authorization: expect.stringMatching(/^Bearer x(?:oxe\.x)?app-/),
+    });
     return json(slack.appResponse ?? { ok: true, url: slack.socketUrl });
   }
   throw new Error(`Unexpected Slack request ${method}`);
@@ -160,12 +162,48 @@ it('rejects an app token when the saved bot token now identifies another workspa
 it('rejects bot and user tokens in the app-token field before any request', async () => {
   const saved = await connected();
   request.mockClear();
-  for (const token of [botToken, 'xoxp-user', 'xapp', 'xapp-', 'XAPP-1-upper']) {
+  for (const token of [
+    botToken,
+    'xoxe.xoxb-1-rotated-bot',
+    'xoxp-user',
+    'xapp',
+    'xapp-',
+    'XAPP-1-upper',
+  ]) {
     await expect(
       service.setAppToken({ connectionId: saved.id, appToken: token })
-    ).rejects.toThrow();
+    ).rejects.toMatchObject({
+      name: 'ZodError',
+      message: expect.stringContaining('Enter a Slack app-level token'),
+    });
   }
   expect(request).not.toHaveBeenCalled();
+});
+
+it('accepts a rotating app-level access token', async () => {
+  const saved = await connected();
+  const rotating = 'xoxe.xapp-1-A0APP-123-rotating';
+  expect(await service.setAppToken({ connectionId: saved.id, appToken: rotating })).toMatchObject({
+    hasAppToken: true,
+    appId: 'A-app',
+  });
+  expect(calls('apps.connections.open')[0]?.[1]).toMatchObject({
+    headers: { Authorization: `Bearer ${rotating}` },
+  });
+  expect(await service.getAppCredentials(saved.id)).toMatchObject({ appToken: rotating });
+});
+
+it('reports an unreadable Slack body without blaming the network', async () => {
+  const saved = await connected();
+  request.mockImplementation((url, init) =>
+    String(url).includes('apps.connections.open')
+      ? Promise.resolve(new Response(`<html>${appToken}</html>`))
+      : Promise.resolve(route(String(url), init))
+  );
+  const error = await failure(service.setAppToken({ connectionId: saved.id, appToken }));
+  expect(error).toMatchObject({ code: 'PRECONDITION_FAILED' });
+  expect(error.message).toContain('unreadable response');
+  expect(error.message).not.toContain(appToken);
 });
 
 it('sanitizes Slack app-token rejections and malformed responses', async () => {
@@ -307,12 +345,51 @@ it('tests the saved app token and its app identity along with the bot token', as
   });
 });
 
-it('keeps a saved app token when the bot token for the same workspace is replaced', async () => {
+it('keeps a saved app token when a replacement bot belongs to the same app', async () => {
   const saved = await connected();
   await service.setAppToken({ connectionId: saved.id, appToken });
+  request.mockClear();
   expect(await service.connect({ botToken: 'xoxb-rotated' })).toMatchObject({
     id: saved.id,
     hasAppToken: true,
     appId: 'A-app',
   });
+  expect(calls('bots.info')).toHaveLength(1);
+  expect(calls('bots.info')[0]?.[1]).toMatchObject({
+    headers: { Authorization: 'Bearer xoxb-rotated' },
+  });
+  expect(await service.getAppCredentials(saved.id)).toMatchObject({ appToken, appId: 'A-app' });
+});
+
+it('clears a saved app token when a replacement bot belongs to another app', async () => {
+  const saved = await connected();
+  await service.setAppToken({ connectionId: saved.id, appToken });
+  slack.botAppId = 'A-other';
+  expect(await service.connect({ botToken: 'xoxb-other-app' })).toMatchObject({
+    id: saved.id,
+    hasCredentials: true,
+    hasAppToken: false,
+    appId: null,
+  });
+  expect(await service.getAppCredentials(saved.id)).toBeNull();
+});
+
+it('clears a saved app token when the replacement bot app cannot be confirmed', async () => {
+  const saved = await connected();
+  await service.setAppToken({ connectionId: saved.id, appToken });
+  request.mockImplementation((url, init) =>
+    String(url).includes('bots.info')
+      ? Promise.resolve(json({ ok: false, error: 'missing_scope' }))
+      : Promise.resolve(route(String(url), init))
+  );
+  expect(await service.connect({ botToken: 'xoxb-no-scope' })).toMatchObject({
+    hasCredentials: true,
+    hasAppToken: false,
+    appId: null,
+  });
+});
+
+it('connects a bot without an app lookup when no app token is saved', async () => {
+  await connected();
+  expect(calls('bots.info')).toHaveLength(0);
 });
