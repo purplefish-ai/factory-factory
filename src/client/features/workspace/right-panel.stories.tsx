@@ -11,6 +11,7 @@ import { readStorageItem, removeStorageItem, writeStorageItem } from '@/client/l
 import { trpc } from '@/client/lib/trpc';
 import { invalidateWorkspaceDetail } from '@/client/lib/workspace-queries';
 import { Button } from '@/components/ui/button';
+import { automationOriginFixture } from './automation-origin-panel.story-fixtures';
 import { MainViewTabBar } from './main-view-tab-bar';
 import { RightPanel } from './right-panel';
 import { useWorkspacePanel, WorkspacePanelProvider } from './workspace-panel-context';
@@ -30,18 +31,23 @@ const activitySelection: SubagentSelection = {
     resultPreview: null,
   },
 };
+const eventOrigin = automationOriginFixture();
 function RightPanelStory({
   hasTask = false,
+  eventRun = false,
   showChatToolbar = false,
   showActivity = false,
   showUnread = false,
 }: {
   showUnread?: boolean;
   hasTask?: boolean;
+  /** An event-run workspace whose origin run is retained. */
+  eventRun?: boolean;
   showChatToolbar?: boolean;
   showActivity?: boolean;
 }) {
   const taskPresent = useRef(hasTask);
+  const creationSource = eventRun ? 'EVENT_AGENT' : showActivity ? 'CHILD_WORKSPACE' : 'MANUAL';
   const [queryClient] = useState(() => new QueryClient());
   const [client] = useState(() =>
     trpc.createClient({
@@ -60,8 +66,10 @@ function RightPanelStory({
                   id: workspaceId,
                   projectId: 'right-panel-project',
                   periodicTaskId: taskPresent.current ? 'task-1' : null,
-                  creationSource: showActivity ? 'CHILD_WORKSPACE' : 'MANUAL',
+                  creationSource,
                 }),
+                'automation.workspaceOrigin': () => eventOrigin.origin,
+                'automation.get': () => eventOrigin.agent,
                 'workspace.unreadMailCounts': () => (showUnread ? { [workspaceId]: 3 } : {}),
                 'workspace.getInitStatus': () => ({ status: 'READY', initOutput: '' }),
                 'workspace.getGitStatus': () => ({ files: [] }),
@@ -308,6 +316,30 @@ export const ToolTabLabels: Story = {
     await expect(within(tools).getByRole('tab', { name: 'Screenshots' })).toBeVisible();
     await expect(await canvas.findByText('Child workspaces')).toBeVisible();
     await expect(await canvas.findByText('No child workspaces yet')).toBeVisible();
+  },
+};
+
+/** An event-run workspace opens its Runs tab on the automation that started it. */
+export const EventRunOrigin: Story = {
+  args: { eventRun: true },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(await canvas.findByText('Investigate labeled issues')).toBeVisible();
+    await expect(canvas.getByRole('tab', { name: 'Runs' })).toHaveAttribute(
+      'aria-selected',
+      'true'
+    );
+    await expect(canvas.getByRole('link', { name: 'Manage automation' })).toBeVisible();
+  },
+};
+
+export const EventRunOriginPhone: Story = {
+  args: { eventRun: true },
+  globals: { viewport: { value: 'phone', isRotated: false } },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(await canvas.findByText('Investigate labeled issues')).toBeVisible();
+    await expect(canvas.getByRole('tab', { name: 'Runs', selected: true })).toBeVisible();
   },
 };
 

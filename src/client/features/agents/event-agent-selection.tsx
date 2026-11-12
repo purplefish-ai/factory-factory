@@ -4,6 +4,7 @@ import { trpc } from '@/client/lib/trpc';
 import { Button } from '@/components/ui/button';
 import { Spinner } from '@/components/ui/spinner';
 import { EventAgentDetail, TriggerInspection } from './event-agent-detail';
+import { EventAgentHistory } from './event-agent-history';
 import { SavedEventEditor } from './saved-event-editor';
 import type { EventAgent } from './types';
 import type { useAgentsController } from './use-agents-controller';
@@ -167,6 +168,11 @@ export function EventAgentSelection({
       >
         <RetainedContinuation key={`${project.id}:event:${event.data.id}`} agent={event.data} />
       </EventAgentDetail>
+      <EventAgentHistory
+        key={`${project.id}:event-history:${event.data.id}`}
+        agent={event.data}
+        projectSlug={project.slug}
+      />
     </>
   );
 }

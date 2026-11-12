@@ -10,6 +10,7 @@ import { TabButton, TabList } from '@/components/ui/tab-button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 import { AgentsPanel } from './agents-panel';
+import { AutomationOriginPanel } from './automation-origin-panel';
 import { CombinedChangesPanel } from './combined-changes-panel';
 import { FileBrowserPanel } from './file-browser-panel';
 import { PeriodicTaskPanel } from './periodic-task-panel';
@@ -26,6 +27,8 @@ interface TopPanelAreaProps {
   isTakingScreenshots: boolean;
   onTakeScreenshots?: () => void;
   periodicTaskId: string | null;
+  /** An event-run workspace whose origin run is retained (or still loading). */
+  hasEventOrigin: boolean;
   isParentWorkspace: boolean;
   selectedSessionId: string | null;
   selectedSessionName: string | null;
@@ -45,6 +48,7 @@ export function TopPanelArea({
   isTakingScreenshots,
   onTakeScreenshots,
   periodicTaskId,
+  hasEventOrigin,
   isParentWorkspace,
   selectedSessionId,
   selectedSessionName,
@@ -56,7 +60,8 @@ export function TopPanelArea({
   const showChanges = activeTopTab === 'changes';
   const showFiles = activeTopTab === 'files';
   const showScreenshots = activeTopTab === 'screenshots';
-  const showPeriodicTask = !!periodicTaskId && activeTopTab === 'periodic-task';
+  const hasRuns = !!periodicTaskId || hasEventOrigin;
+  const showRuns = hasRuns && activeTopTab === 'periodic-task';
   const showInbox = activeTopTab === 'inbox';
   const showAgents = activeTopTab === 'agents';
 
@@ -84,11 +89,11 @@ export function TopPanelArea({
           isActive={showFiles}
           onSelect={() => onTopTabChange('files')}
         />
-        {periodicTaskId && (
+        {hasRuns && (
           <TabButton
             label="Runs"
             icon={<RobotIcon className="h-3.5 w-3.5" />}
-            isActive={showPeriodicTask}
+            isActive={showRuns}
             onSelect={() => onTopTabChange('periodic-task')}
           />
         )}
@@ -140,8 +145,11 @@ export function TopPanelArea({
             onTakeScreenshots={onTakeScreenshots}
           />
         )}
-        {showPeriodicTask && periodicTaskId && (
+        {showRuns && periodicTaskId && (
           <PeriodicTaskPanel periodicTaskId={periodicTaskId} projectId={projectId} />
+        )}
+        {showRuns && !periodicTaskId && projectId && (
+          <AutomationOriginPanel workspaceId={workspaceId} projectId={projectId} />
         )}
         {showAgents && (
           <AgentsPanel

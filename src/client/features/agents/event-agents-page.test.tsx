@@ -202,6 +202,9 @@ async function respond(path: string, input: unknown) {
       github: { error: 'GitHub access unavailable' },
     };
   }
+  if (path === 'automation.runs' || path === 'automation.evaluations') {
+    return { items: [], nextCursor: null };
+  }
   if (path.endsWith('navigationSummary')) {
     return { totalCount: 1, failedCount: 0 };
   }

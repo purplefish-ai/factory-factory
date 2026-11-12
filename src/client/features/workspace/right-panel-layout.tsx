@@ -12,7 +12,7 @@ export function RightPanelLayout({
   mobilePanel,
   activeTopTab,
   unreadCount,
-  periodicTaskId,
+  showRuns,
   onOpenLogs,
   className,
   topPanel,
@@ -23,7 +23,8 @@ export function RightPanelLayout({
   mobilePanel: 'top' | 'bottom';
   activeTopTab: TopPanelTab;
   unreadCount?: number;
-  periodicTaskId: string | null;
+  /** Whether the workspace has a Runs tab (an automation origin). */
+  showRuns: boolean;
   onOpenLogs: () => void;
   className?: string;
   topPanel: ReactNode;
@@ -41,7 +42,7 @@ export function RightPanelLayout({
       <div className={cn('flex h-full min-h-0 flex-col', className)}>
         <MobileToolSwitcher
           activeTopTab={activeTopTab}
-          periodicTaskId={periodicTaskId}
+          showRuns={showRuns}
           onOpenLogs={onOpenLogs}
           unreadCount={unreadCount}
         >

@@ -2,7 +2,7 @@
 
 import { act, createElement, Profiler, type ReactNode, useEffect, useRef } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import type { TerminalOutputStream } from '@/client/lib/terminal-output-stream';
 import { RightPanel } from './right-panel';
 import { useWorkspacePanel, WorkspacePanelProvider } from './workspace-panel-context';
@@ -21,7 +21,11 @@ const mocks = vi.hoisted(() => ({
   selectTerminal: vi.fn(),
   createTerminal: vi.fn(),
   destroyTerminal: vi.fn(),
-  workspaceData: undefined as undefined | { periodicTaskId: string | null; creationSource: string },
+  workspaceData: undefined as
+    | undefined
+    | { periodicTaskId: string | null; creationSource: string; projectId?: string },
+  origin: { data: undefined as unknown, error: null },
+  originCalls: [] as Array<{ input: unknown; options: unknown }>,
 }));
 
 vi.mock('@phosphor-icons/react/dist/csr/ArrowsClockwise', () => ({
@@ -46,7 +50,20 @@ vi.mock('@/client/lib/trpc', () => ({
     workspace: {
       getInitStatus: { useQuery: () => ({ data: { status: 'READY' } }) },
     },
+    automation: {
+      workspaceOrigin: {
+        useQuery: (input: unknown, options: unknown) => {
+          mocks.originCalls.push({ input, options });
+          return mocks.origin;
+        },
+      },
+    },
   },
+}));
+
+vi.mock('./automation-origin-panel', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('./automation-origin-panel')>()),
+  AutomationOriginPanel: () => createElement('div', { 'data-testid': 'automation-origin-panel' }),
 }));
 
 vi.mock('@/components/ui/resizable', () => ({
@@ -190,6 +207,8 @@ describe('RightPanel Agents tab', () => {
       periodicTaskId: null,
       creationSource: 'MANUAL',
     };
+    mocks.origin = { data: undefined, error: null };
+    mocks.originCalls = [];
     mocks.agentsProps.mockClear();
     container = document.createElement('div');
     document.body.appendChild(container);
@@ -507,6 +526,102 @@ describe('RightPanel Agents tab', () => {
     );
     expect(container.querySelector('[data-testid="changes-panel"]')).not.toBeNull();
     expect(localStorage.getItem('workspace-right-panel-tab-workspace-1')).toBe('changes');
+  });
+
+  it('opens an event-run workspace on the automation that started it', () => {
+    mocks.workspaceData = {
+      periodicTaskId: null,
+      creationSource: 'EVENT_AGENT',
+      projectId: 'project-1',
+    };
+    mocks.origin = {
+      data: {
+        origin: {
+          projectId: 'project-1',
+          workspaceId: 'workspace-1',
+          runId: 'run-1',
+          workspaceState: 'LIVE',
+        },
+        run: { id: 'run-1', agentId: 'event-agent' },
+      },
+      error: null,
+    };
+    render();
+    expect(container.querySelector('[data-testid="automation-origin-panel"]')).not.toBeNull();
+    expect(container.querySelector('[data-testid="periodic-task-panel"]')).toBeNull();
+    expect([...container.querySelectorAll('button')].map((button) => button.textContent)).toContain(
+      'Runs'
+    );
+    expect(mocks.originCalls.at(-1)).toEqual({
+      input: { projectId: 'project-1', workspaceId: 'workspace-1' },
+      options: expect.objectContaining({ enabled: true }),
+    });
+    expect(localStorage.getItem('workspace-right-panel-tab-workspace-1')).toBeNull();
+  });
+
+  it('selects Runs on mobile for an event-run workspace', () => {
+    mocks.mobile = true;
+    // The switcher scrolls a selected overflow tool into view; jsdom has no layout.
+    Object.defineProperty(Element.prototype, 'scrollIntoView', {
+      configurable: true,
+      value: vi.fn(),
+    });
+    onTestFinished(() => {
+      Reflect.deleteProperty(Element.prototype, 'scrollIntoView');
+    });
+    mocks.workspaceData = {
+      periodicTaskId: null,
+      creationSource: 'EVENT_AGENT',
+      projectId: 'project-1',
+    };
+    render();
+    const selected = container.querySelector('[role="tab"][aria-selected="true"]');
+    expect(selected?.textContent).toBe('Runs');
+    expect(
+      container.querySelector('[data-testid="automation-origin-panel"]')?.closest('[hidden]')
+    ).toBeNull();
+  });
+
+  it('falls back to Changes when an event-run workspace has no retained run', () => {
+    localStorage.setItem('workspace-right-panel-tab-workspace-1', 'periodic-task');
+    mocks.workspaceData = {
+      periodicTaskId: null,
+      creationSource: 'EVENT_AGENT',
+      projectId: 'project-1',
+    };
+    mocks.origin = {
+      data: {
+        origin: {
+          projectId: 'project-1',
+          workspaceId: 'workspace-1',
+          runId: 'run-1',
+          workspaceState: 'LIVE',
+        },
+        run: null,
+      },
+      error: null,
+    };
+    render();
+    expect(container.querySelector('[data-testid="changes-panel"]')).not.toBeNull();
+    expect(
+      [...container.querySelectorAll('button')].map((button) => button.textContent)
+    ).not.toContain('Runs');
+    expect(localStorage.getItem('workspace-right-panel-tab-workspace-1')).toBe('periodic-task');
+  });
+
+  it('keeps a scheduled workspace on its schedule without reading an event origin', () => {
+    mocks.workspaceData = {
+      periodicTaskId: 'task-1',
+      creationSource: 'PERIODIC_TASK',
+      projectId: 'project-1',
+    };
+    render();
+    expect(container.querySelector('[data-testid="periodic-task-panel"]')).not.toBeNull();
+    expect(container.querySelector('[data-testid="automation-origin-panel"]')).toBeNull();
+    expect(mocks.originCalls.length).toBeGreaterThan(0);
+    for (const call of mocks.originCalls) {
+      expect(call.options).toEqual(expect.objectContaining({ enabled: false }));
+    }
   });
 
   it('preserves another workspace preference when switching from a periodic task', () => {

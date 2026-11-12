@@ -42,20 +42,22 @@ export const StoredTopTabSchema = z
   .pipe(z.enum(['changes', 'files', 'screenshots', 'periodic-task', 'agents', 'inbox']));
 
 /**
- * The top tab to show. Without a stored choice a scheduled-automation
- * workspace opens its automation and others open Changes. A stored
- * periodic-task choice falls back to Changes once the workspace has loaded
- * without one; the stored choice is kept until the user picks a tab.
+ * The top tab to show. Without a stored choice an automation workspace
+ * (scheduled, or event-run with a retained origin run) opens its Runs tab and
+ * others open Changes. The `periodic-task` key is the Runs tab for both kinds.
+ * A stored Runs choice falls back to Changes once the workspace has loaded
+ * without an origin; the stored choice is kept until the user picks a tab.
  */
 export function resolveTopTab(
   stored: TopPanelTab | null,
-  workspace: { periodicTaskId?: string | null } | undefined
+  workspace: { periodicTaskId?: string | null } | undefined,
+  hasEventOrigin = false
 ): TopPanelTab {
-  const periodicTaskId = workspace?.periodicTaskId ?? null;
+  const hasRuns = !!workspace?.periodicTaskId || hasEventOrigin;
   if (stored === null) {
-    return periodicTaskId ? 'periodic-task' : 'changes';
+    return hasRuns ? 'periodic-task' : 'changes';
   }
-  if (stored === 'periodic-task' && workspace !== undefined && !periodicTaskId) {
+  if (stored === 'periodic-task' && workspace !== undefined && !hasRuns) {
     return 'changes';
   }
   return stored;

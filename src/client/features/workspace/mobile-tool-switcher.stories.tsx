@@ -24,7 +24,7 @@ function ToolPreview({ initialTool }: { initialTool: Tool }) {
       isMobile
       mobilePanel={mobilePanel}
       activeTopTab={activeTopTab}
-      periodicTaskId="periodic-task"
+      showRuns
       onOpenLogs={() => setActiveBottomTab('setup-logs')}
       topPanel={<div className="p-4 text-sm text-muted-foreground">{activeTopTab} content</div>}
       bottomPanel={

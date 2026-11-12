@@ -26,14 +26,15 @@ const tabClassName =
 
 export function MobileToolSwitcher({
   activeTopTab,
-  periodicTaskId,
+  showRuns,
   unreadCount,
   onOpenLogs,
   children,
 }: {
   /** The top tab RightPanel shows (resolveTopTab). */
   activeTopTab: TopPanelTab;
-  periodicTaskId: string | null;
+  /** Whether the workspace has a Runs tab (an automation origin). */
+  showRuns: boolean;
   unreadCount?: number;
   onOpenLogs: () => void;
   children: ReactNode;
@@ -125,7 +126,7 @@ export function MobileToolSwitcher({
           <DropdownMenuContent align="end">
             <DropdownMenuRadioGroup value={activeTool} onValueChange={selectTool}>
               {overflowTools
-                .filter((tool) => tool.value !== 'periodic-task' || periodicTaskId)
+                .filter((tool) => tool.value !== 'periodic-task' || showRuns)
                 .map((tool) => (
                   <DropdownMenuRadioItem key={tool.value} value={tool.value} className="min-h-9">
                     {tool.label}
