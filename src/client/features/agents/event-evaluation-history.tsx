@@ -8,6 +8,7 @@ import {
   EventReason,
   EventTime,
 } from './event-history-frame';
+import { hasEventReasonPhrase } from './event-history-reasons';
 import type { EventEvaluation } from './types';
 
 const STATUS: Record<
@@ -41,6 +42,29 @@ function evaluationDetails(evaluation: EventEvaluation) {
   return rows;
 }
 
+/**
+ * Codes whose one phrase covers several cases the backend tells apart in the
+ * stored explanation, such as which label check or which source failed.
+ */
+const REFINED_REASONS: ReadonlySet<string> = new Set([
+  'LABEL_MISMATCH',
+  'SOURCE_IDENTITY_MISMATCH',
+  'QUEUE_OVERFLOW',
+]);
+
+/**
+ * The stored explanation, when it says more than the reason phrase. The API
+ * returns only system-written sentences, or null for any other stored text.
+ */
+function addedExplanation({ reasonCode, explanation }: EventEvaluation) {
+  if (!explanation) {
+    return null;
+  }
+  const refines =
+    reasonCode === null || !hasEventReasonPhrase(reasonCode) || REFINED_REASONS.has(reasonCode);
+  return refines ? explanation : null;
+}
+
 function EventEvaluationItem({
   evaluation,
   triggerLabel,
@@ -49,8 +73,7 @@ function EventEvaluationItem({
   triggerLabel?: string;
 }) {
   const status = STATUS[evaluation.status];
-  // The history API returns a fixed placeholder `explanation`, not the stored
-  // one, so the reason code is the only source of why.
+  const explanation = addedExplanation(evaluation);
   return (
     <article data-evaluation-id={evaluation.id} className="min-w-0 space-y-2 p-4 text-xs">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
@@ -61,6 +84,7 @@ function EventEvaluationItem({
         </span>
       </div>
       <EventReason code={evaluation.reasonCode} fallback="No reason was recorded." />
+      {explanation && <p className="break-words text-muted-foreground">{explanation}</p>}
       {evaluation.runId && <p>Started a run</p>}
       {evaluation.nextAttemptAt && (
         <p>

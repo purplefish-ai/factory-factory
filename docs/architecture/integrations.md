@@ -838,17 +838,20 @@ they report an inherited provider as supported only when every provider passed.
 History exposes bounded reasons, nullable start times, separate automatic
 attempts and send generations, preparation/delivery state and durable deadlines,
 immutable initial outcome, compact result/PR links and retained workspace
-provenance. It excludes raw prompts, provider evidence and unrestricted errors.
-Pruned event text or a null event FK does not erase run identity or prove
-completion. The workspace owner's retained-origin read covers creation before
-linkage and deletion; it is provenance, not work proof or permission to retry
-setup. Public history confirms LIVE only through that retained-origin owner; a
-live run FK with missing reservation or origin returns a bounded NOT_FOUND.
-Never-created reservations remain RESERVED, and runs without workspace claims
-remain UNRESERVED. LIVE means an extant owner-validated workspace row, including
-archived rows; it does not mean ready or running. Null result/preparation
-metadata means no validated public metadata is available, not an empty result,
-completion or cleanup.
+provenance. An evaluation's `explanation` is returned only when it is one of the
+fixed sentences the system writes (`agent-evaluation-explanations.ts`), which
+carry no event text, provider output or credentials; any other stored text reads
+as null. History excludes raw prompts, provider evidence and unrestricted
+errors. Pruned event text or a null event FK does not erase run identity or
+prove completion. The workspace owner's retained-origin read covers creation
+before linkage and deletion; it is provenance, not work proof or permission to
+retry setup. Public history confirms LIVE only through that retained-origin
+owner; a live run FK with missing reservation or origin returns a bounded
+NOT_FOUND. Never-created reservations remain RESERVED, and runs without
+workspace claims remain UNRESERVED. LIVE means an extant owner-validated
+workspace row, including archived rows; it does not mean ready or running. Null
+result/preparation metadata means no validated public metadata is available, not
+an empty result, completion or cleanup.
 
 The saved event detail/editor consumes these project-owned APIs independently of
 its authoring workspace/proposal. It displays saved instructions, execution
@@ -896,8 +899,10 @@ Details; neither is presented as empty or completed. A RUNNING run in
 (`EXPLICITLY_RESOLVED`), because Resolve keeps the run and its slot. An event
 row shows Matched, Skipped or Error, its trigger's description (or ID when the
 trigger is outside the loaded definition), a phrase for its reason, whether it
-started a run, and any next attempt. The history API returns a fixed placeholder
-`explanation` rather than the stored one, so the view does not show it.
+started a run, and any next attempt. Beneath the phrase it shows the stored
+`explanation` when that says more: for a code without a phrase, or for
+`LABEL_MISMATCH`, `SOURCE_IDENTITY_MISMATCH` and `QUEUE_OVERFLOW`, whose
+explanation says which case applied.
 
 <a id="event-run-recovery"></a>
 

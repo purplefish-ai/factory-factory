@@ -135,8 +135,9 @@ export function eventEvaluationFixture(overrides: Partial<EventEvaluation> = {})
     createdAt: '2026-11-10T09:00:00.000Z',
     status: 'MATCHED',
     reasonCode: 'DETERMINISTIC_MATCH',
-    // The history API returns this fixed text rather than the stored explanation.
-    explanation: 'Recorded event evaluation.',
+    // The backend's own sentences (agent-evaluation-explanations.ts); the API
+    // returns null for any other stored text.
+    explanation: 'The deterministic trigger filters match.',
     definitionRevision: 1,
     triggerRevision: 1,
     activationGeneration: 1,
@@ -157,6 +158,7 @@ export function eventEvaluationPageFixture(): EventEvaluation[] {
       createdAt: '2026-11-11T08:00:00.000Z',
       status: 'ERROR',
       reasonCode: 'EXECUTION_RESOLUTION_RETRY',
+      explanation: 'Execution defaults could not be read; retry is bounded.',
       attemptCount: 2,
       nextAttemptAt: '2026-11-11T08:05:00.000Z',
     }),
@@ -167,6 +169,7 @@ export function eventEvaluationPageFixture(): EventEvaluation[] {
       createdAt: '2026-11-10T10:00:00.000Z',
       status: 'SKIPPED',
       reasonCode: 'LABEL_MISMATCH',
+      explanation: 'The added label does not match.',
     }),
     eventEvaluationFixture(),
   ];

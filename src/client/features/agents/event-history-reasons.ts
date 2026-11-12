@@ -105,3 +105,8 @@ export function describeEventReason(code: string | null): string | null {
   }
   return REASON_PHRASES[code] ?? 'Unrecognized reason.';
 }
+
+/** Whether a stored reason code has its own phrase. */
+export function hasEventReasonPhrase(code: string): boolean {
+  return Object.hasOwn(REASON_PHRASES, code);
+}

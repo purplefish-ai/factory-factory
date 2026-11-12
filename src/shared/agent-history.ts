@@ -69,7 +69,8 @@ export const agentEvaluationHistorySchema = z.strictObject({
   createdAt: z.iso.datetime(),
   status: agentEvaluationStatusSchema,
   reasonCode: reason,
-  explanation: z.string().max(500),
+  /** A system-authored sentence; null when the stored text is not one of them. */
+  explanation: z.string().max(500).nullable(),
   definitionRevision: z.number().int().positive(),
   triggerRevision: z.number().int().positive(),
   activationGeneration: agentActivationGenerationSchema,

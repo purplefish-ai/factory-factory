@@ -95,6 +95,7 @@ export const agentManagementHistoryAccessor = {
           createdAt: true,
           status: true,
           reasonCode: true,
+          explanation: true,
           definitionRevision: true,
           triggerRevision: true,
           activationGeneration: true,

@@ -91,7 +91,28 @@ afterEach(() => {
 describe('EventEvaluationHistory', () => {
   it('shows why matched, skipped and errored events were decided', async () => {
     pages.first?.items.push(
-      eventEvaluationFixture({ id: 'evaluation-removed-trigger', triggerId: 'unlisted-trigger' })
+      eventEvaluationFixture({ id: 'evaluation-removed-trigger', triggerId: 'unlisted-trigger' }),
+      eventEvaluationFixture({
+        id: 'evaluation-repository',
+        runId: null,
+        status: 'SKIPPED',
+        reasonCode: 'SOURCE_IDENTITY_MISMATCH',
+        explanation: 'Repository is outside the trigger scope.',
+      }),
+      eventEvaluationFixture({
+        id: 'evaluation-unrecognized',
+        runId: null,
+        status: 'SKIPPED',
+        reasonCode: 'ACTION_MISMATCH',
+        explanation: 'The trigger does not select this action.',
+      }),
+      eventEvaluationFixture({
+        id: 'evaluation-unshown',
+        runId: null,
+        status: 'SKIPPED',
+        reasonCode: 'SOURCE_IDENTITY_MISMATCH',
+        explanation: null,
+      })
     );
     render();
     await waitForCheck(() => expect(evaluation('evaluation-matched')).toBeDefined());
@@ -114,8 +135,21 @@ describe('EventEvaluationHistory', () => {
     expect(errored.textContent).toContain('Next attempt');
     expect(errored.querySelector('details')?.textContent).toContain('EXECUTION_RESOLUTION_RETRY');
 
-    // The API's fixed placeholder explanation adds nothing to the reason.
-    expect(container.textContent).not.toContain('Recorded event evaluation.');
+    // The stored explanation shows only where it says more than the reason phrase.
+    expect(skipped.textContent).toContain('The added label does not match.');
+    expect(matched.textContent).not.toContain('The deterministic trigger filters match.');
+    expect(errored.textContent).not.toContain('Execution defaults could not be read');
+    const repository = evaluation('evaluation-repository');
+    expect(repository.textContent).toContain(
+      "The event came from a repository or channel this trigger doesn't watch."
+    );
+    expect(repository.textContent).toContain('Repository is outside the trigger scope.');
+    expect(evaluation('evaluation-unrecognized').textContent).toContain(
+      'The trigger does not select this action.'
+    );
+    expect(evaluation('evaluation-unshown').textContent).toContain(
+      "The event came from a repository or channel this trigger doesn't watch."
+    );
     // A trigger outside the loaded definition pages is still identified.
     expect(evaluation('evaluation-removed-trigger').textContent).toContain(
       'Trigger: unlisted-trigger'
