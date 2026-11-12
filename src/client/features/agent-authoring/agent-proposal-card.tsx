@@ -149,8 +149,8 @@ export function AgentProposalEditor(props: EditorProps) {
         <h3 className="text-base font-semibold">{heading(Boolean(accepted), editing)}</h3>
         <p className="text-xs text-muted-foreground">
           {accepted
-            ? 'Configuration saved. Event listening and automatic runs are not available yet.'
-            : 'Review or edit the configuration, then create your automation. Event listening and automatic runs are not available yet.'}
+            ? 'Configuration saved. Automations are created paused. Enable it on the Automations page; changing its instructions, events or execution settings pauses it again.'
+            : 'Review or edit the configuration, then create your automation. It is created paused; enable it on the Automations page. Today only GitHub issue triggers for labeled or reopened issues can run.'}
         </p>
       </div>
       {accepted && !editing ? (

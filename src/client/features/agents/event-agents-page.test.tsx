@@ -624,6 +624,7 @@ it('keeps archived details readable with writes disabled and missing IDs explici
   );
   expect(button('Edit automation').disabled).toBe(true);
   expect(button('Create automation').disabled).toBe(true);
+  expect(button('Enable').disabled).toBe(true);
 });
 it('does not auto-select or claim empty when either initial list fails', async () => {
   fail = 'automation.list';
@@ -812,7 +813,7 @@ it('shows authoritative paused state and reopens with returned CAS when successf
   expect(container.querySelector('main')?.textContent).toContain('Management revision 3');
   expect(container.querySelector('main')?.textContent).toContain('PAUSED');
   expect(container.querySelector('main')?.textContent).not.toContain('ACTIVE');
-  expect(container.querySelector('main')?.textContent).toContain('re-enabling is needed');
+  expect(container.querySelector('main')?.textContent).toContain('Enable it to start listening');
   expect(managedAgentSchema.parse(queryClient.getQueryData(key)).managementRevision).toBe(3);
   await click('Edit automation');
   expect(
@@ -940,8 +941,10 @@ it('opens conversational event creation explicitly and cancels back to the selec
   expect(container.querySelector('main')?.textContent).toContain(
     'Create event-triggered automation'
   );
-  expect(container.querySelector('main')?.textContent).toContain('paused');
-  expect(container.querySelector('main')?.textContent).toContain('not yet available');
+  expect(container.querySelector('main')?.textContent).toContain('created paused');
+  expect(container.querySelector('main')?.textContent).toContain('Enable');
+  expect(container.querySelector('main')?.textContent).toContain('labeled or reopened');
+  expect(container.querySelector('main')?.textContent).not.toMatch(/not (yet )?available/);
   expect(container.querySelector('nav [aria-current]')).toBeNull();
   expect(requests.filter((request) => request.type === 'mutation')).toHaveLength(0);
   await click('Cancel');

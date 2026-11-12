@@ -182,7 +182,7 @@ for (const width of [320, 390, 1280]) {
       page.getByRole('heading', { name: 'Create event-triggered automation', exact: true })
     ).toBeVisible();
     await expect(page.locator('main')).toContainText('paused');
-    await expect(page.locator('main')).toContainText('not yet available');
+    await expect(page.locator('main')).toContainText('created paused');
     const prompt = page.locator('main textarea');
     await expect(prompt).toHaveValue(/propose_automation/);
     await prompt.fill('Propose my event-triggered automation');

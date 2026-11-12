@@ -37,9 +37,7 @@ export const Ready: Story = {
     const prompt = await canvas.findByRole('textbox');
     await expect(prompt).toHaveProperty('value', expect.stringContaining('propose_automation'));
     await waitFor(() => expect(prompt).toBeEnabled());
-    await expect(
-      canvas.getByText(/Listening and automatic event runs are not yet available/)
-    ).toBeVisible();
+    await expect(canvas.getByText(/Automations are created paused/)).toBeVisible();
     await userEvent.clear(prompt);
     await userEvent.type(prompt, 'Propose an agent that reviews labeled issues.');
     await expect(prompt).toHaveValue('Propose an agent that reviews labeled issues.');

@@ -37,6 +37,38 @@ export function invalidateSavedAgentQueries(
   ]);
 }
 
+/** After Enable or Pause: the automation, its rail entry and its history (Pause cancels queued runs). */
+export function invalidateAutomationActivationQueries(
+  utils: ReturnType<typeof trpc.useUtils>,
+  projectId: string,
+  agentId: string
+) {
+  return Promise.all([
+    utils.automation.list.invalidate({ projectId }),
+    utils.automation.navigationSummary.invalidate({ projectId }),
+    utils.automation.get.invalidate({ projectId, agentId }),
+    invalidateEventHistoryQueries(utils, projectId, agentId),
+  ]);
+}
+
+/**
+ * After a source reset: every event automation in the project, because the
+ * reset pauses each trigger on the source and cancels its queued runs.
+ */
+export function invalidateProjectAutomationQueries(
+  utils: ReturnType<typeof trpc.useUtils>,
+  projectId: string
+) {
+  return Promise.all([
+    utils.automation.list.invalidate({ projectId }),
+    utils.automation.navigationSummary.invalidate({ projectId }),
+    utils.automation.get.invalidate({ projectId }),
+    utils.automation.runs.invalidate({ projectId }),
+    utils.automation.evaluations.invalidate({ projectId }),
+    utils.automation.workspaceOrigin.invalidate({ projectId }),
+  ]);
+}
+
 /** Every loaded Runs and Events page of one event automation, and the workspace origins of its runs. */
 export function invalidateEventHistoryQueries(
   utils: ReturnType<typeof trpc.useUtils>,

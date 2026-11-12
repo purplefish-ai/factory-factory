@@ -201,3 +201,15 @@ it('combines local filter edits with newer conversational instructions', async (
     })
   );
 });
+
+it('says the automation is created paused and enabled from the Automations page', async () => {
+  const create = vi.fn().mockResolvedValue({ ...proposal, agentDefinitionId: 'agent-1' });
+  await act(() => root.render(createElement(AgentProposalEditor, { proposal, onCreate: create })));
+  expect(document.body.textContent).toContain('created paused');
+  expect(document.body.textContent).toContain('labeled or reopened');
+  expect(document.body.textContent).not.toMatch(/not (yet )?available/);
+  await submit();
+  expect(document.body.textContent).toContain('Automation created');
+  expect(document.body.textContent).toContain('Enable it on the Automations page');
+  expect(document.body.textContent).not.toMatch(/not (yet )?available/);
+});
