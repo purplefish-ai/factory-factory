@@ -85,6 +85,7 @@ beforeEach(async () => {
   // Provider timestamps a little in the past, ordered by the integer part.
   second = Math.floor(clock.getTime() / 1000) - 600;
   intakeEnabled = true;
+  contextReads = [];
   const limits = configService.getAgentRuntimeLimits();
   vi.spyOn(configService, 'getAgentRuntimeLimits').mockImplementation(() => ({
     ...limits,
@@ -98,9 +99,15 @@ function activation() {
     () => clock
   );
 }
+/** Event IDs whose Slack context evaluation asked for; a test message must never be one. */
+let contextReads: string[];
 function evaluator() {
   return new runtime.AgentEventEvaluationService({
     resolveExecution: async () => ({ version: 1, provider: 'CLAUDE', model: 'sonnet' }),
+    resolveSlackContext: (event) => {
+      contextReads.push(event.id);
+      return Promise.resolve({ status: 'RESOLVED', context: [] });
+    },
     now: () => clock,
   });
 }
@@ -268,6 +275,7 @@ it('verifies each channel from its test message, activates after the last, and r
     ]);
   }
   expect(await db.prisma.agentRun.count()).toBe(0);
+  expect(contextReads).toEqual([]);
 });
 
 it('verifies through the listener: the STARTING trigger opens a socket and its test messages are stored', async () => {
@@ -589,6 +597,8 @@ it('never runs a test message for another automation listening in the same chann
   expect((await db.prisma.agentRun.findMany()).map((run) => run.eventId)).toEqual([
     ordinary.eventId,
   ]);
+  // It is skipped before matching, so it never costs a Slack history read.
+  expect(contextReads).toEqual([ordinary.eventId]);
 });
 
 it('starts no Slack trigger while intake is off or without the expected app', async () => {
