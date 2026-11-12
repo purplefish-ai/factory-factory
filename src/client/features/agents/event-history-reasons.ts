@@ -8,6 +8,7 @@ const REASON_PHRASES: Readonly<Record<string, string>> = {
   // Matching an event against a trigger.
   DETERMINISTIC_MATCH: 'The event matched this trigger.',
   LABEL_MISMATCH: "The event's label doesn't match this trigger.",
+  ACTION_MISMATCH: "The event's action isn't one this trigger selects.",
   TEXT_MISMATCH: "The message doesn't contain this trigger's text.",
   UNSUPPORTED_ACTION: "This kind of GitHub event can't start a run.",
   UNSUPPORTED_MESSAGE: 'Only ordinary messages from people can start a run.',
@@ -104,4 +105,9 @@ export function describeEventReason(code: string | null): string | null {
     return null;
   }
   return REASON_PHRASES[code] ?? 'Unrecognized reason.';
+}
+
+/** Whether a stored reason code has its own phrase. */
+export function hasEventReasonPhrase(code: string): boolean {
+  return Object.hasOwn(REASON_PHRASES, code);
 }

@@ -12,10 +12,12 @@ import { eventRunFixture, eventRunPageFixture } from './event-history.story-fixt
 import { EventRunHistory } from './event-run-history';
 import type { EventRun } from './types';
 
+/** The procedure input: tRPC's infinite hook adds `direction`, which the server strips. */
 const historyInput = z.strictObject({
   projectId: z.string(),
   agentId: z.string(),
   cursor: z.string().optional(),
+  direction: z.literal('forward').optional(),
 });
 
 let container: HTMLDivElement;
@@ -192,6 +194,7 @@ describe('EventRunHistory', () => {
       projectId: 'owner',
       agentId: 'event-agent',
       cursor: 'runs-page-2',
+      direction: 'forward',
     });
     expect(runArticle('run-queued')).toBeDefined();
     expect(container.textContent).not.toContain('Load more runs');

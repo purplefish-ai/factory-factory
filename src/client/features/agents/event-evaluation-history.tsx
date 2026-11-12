@@ -8,6 +8,7 @@ import {
   EventReason,
   EventTime,
 } from './event-history-frame';
+import { hasEventReasonPhrase } from './event-history-reasons';
 import type { EventEvaluation } from './types';
 
 const STATUS: Record<
@@ -41,6 +42,32 @@ function evaluationDetails(evaluation: EventEvaluation) {
   return rows;
 }
 
+/**
+ * Codes whose phrase leaves out what the stored explanation says: which of
+ * several cases applied (which label check or source failed), the provider
+ * whose classifier is unproven, or the filter length limit.
+ */
+const REFINED_REASONS: ReadonlySet<string> = new Set([
+  'LABEL_MISMATCH',
+  'SOURCE_IDENTITY_MISMATCH',
+  'QUEUE_OVERFLOW',
+  'SEMANTIC_FILTER_PROVIDER_UNPROVEN',
+  'SEMANTIC_FILTER_TOO_LONG',
+]);
+
+/**
+ * The stored explanation, when it says more than the reason phrase. The API
+ * returns only system-written sentences, or null for any other stored text.
+ */
+function addedExplanation({ reasonCode, explanation }: EventEvaluation) {
+  if (!explanation) {
+    return null;
+  }
+  const refines =
+    reasonCode === null || !hasEventReasonPhrase(reasonCode) || REFINED_REASONS.has(reasonCode);
+  return refines ? explanation : null;
+}
+
 function EventEvaluationItem({
   evaluation,
   triggerLabel,
@@ -49,8 +76,7 @@ function EventEvaluationItem({
   triggerLabel?: string;
 }) {
   const status = STATUS[evaluation.status];
-  // The history API returns a fixed placeholder `explanation`, not the stored
-  // one, so the reason code is the only source of why.
+  const explanation = addedExplanation(evaluation);
   return (
     <article data-evaluation-id={evaluation.id} className="min-w-0 space-y-2 p-4 text-xs">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
@@ -61,6 +87,7 @@ function EventEvaluationItem({
         </span>
       </div>
       <EventReason code={evaluation.reasonCode} fallback="No reason was recorded." />
+      {explanation && <p className="break-words text-muted-foreground">{explanation}</p>}
       {evaluation.runId && <p>Started a run</p>}
       {evaluation.nextAttemptAt && (
         <p>

@@ -149,8 +149,21 @@ export const managedAgentSchema = agentSummarySchema.extend({
   retainedTriggers: z.array(managedTriggerSchema).max(100),
   retainedNextCursor: z.string().nullable(),
 });
+const triggerCountSchema = z.number().int().nonnegative();
+/**
+ * Configured triggers by state, as the backend writes them: listening is
+ * `ACTIVE` with `isEnabled`, starting is `STARTING`, and paused is the rest.
+ */
+export const agentTriggerStateCountsSchema = z.strictObject({
+  listening: triggerCountSchema,
+  starting: triggerCountSchema,
+  paused: triggerCountSchema,
+});
+export const agentListItemSchema = agentSummarySchema.extend({
+  triggerStates: agentTriggerStateCountsSchema,
+});
 export const agentListPageSchema = z.strictObject({
-  items: z.array(agentSummarySchema).max(100),
+  items: z.array(agentListItemSchema).max(100),
   nextCursor: z.string().nullable(),
 });
 export const agentNavigationSummarySchema = z.strictObject({

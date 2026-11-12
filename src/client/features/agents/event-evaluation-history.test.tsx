@@ -11,10 +11,12 @@ import { EventEvaluationHistory } from './event-evaluation-history';
 import { eventEvaluationFixture, eventEvaluationPageFixture } from './event-history.story-fixtures';
 import type { EventEvaluation } from './types';
 
+/** The procedure input: tRPC's infinite hook adds `direction`, which the server strips. */
 const historyInput = z.strictObject({
   projectId: z.string(),
   agentId: z.string(),
   cursor: z.string().optional(),
+  direction: z.literal('forward').optional(),
 });
 
 let container: HTMLDivElement;
@@ -91,7 +93,44 @@ afterEach(() => {
 describe('EventEvaluationHistory', () => {
   it('shows why matched, skipped and errored events were decided', async () => {
     pages.first?.items.push(
-      eventEvaluationFixture({ id: 'evaluation-removed-trigger', triggerId: 'unlisted-trigger' })
+      eventEvaluationFixture({ id: 'evaluation-removed-trigger', triggerId: 'unlisted-trigger' }),
+      eventEvaluationFixture({
+        id: 'evaluation-repository',
+        runId: null,
+        status: 'SKIPPED',
+        reasonCode: 'SOURCE_IDENTITY_MISMATCH',
+        explanation: 'Repository is outside the trigger scope.',
+      }),
+      eventEvaluationFixture({
+        id: 'evaluation-action',
+        runId: null,
+        status: 'SKIPPED',
+        reasonCode: 'ACTION_MISMATCH',
+        explanation: 'The trigger does not select this action.',
+      }),
+      // A code this client has no phrase for, as from another app version.
+      eventEvaluationFixture({
+        id: 'evaluation-unrecognized',
+        runId: null,
+        status: 'SKIPPED',
+        reasonCode: 'NEWER_REASON',
+        explanation: 'The waiting-run limit was reached.',
+      }),
+      eventEvaluationFixture({
+        id: 'evaluation-too-long',
+        runId: null,
+        status: 'ERROR',
+        reasonCode: 'SEMANTIC_FILTER_TOO_LONG',
+        explanation:
+          'The natural-language filter is longer than 4000 characters, so the event was not run. Shorten the filter.',
+      }),
+      eventEvaluationFixture({
+        id: 'evaluation-unshown',
+        runId: null,
+        status: 'SKIPPED',
+        reasonCode: 'SOURCE_IDENTITY_MISMATCH',
+        explanation: null,
+      })
     );
     render();
     await waitForCheck(() => expect(evaluation('evaluation-matched')).toBeDefined());
@@ -114,8 +153,26 @@ describe('EventEvaluationHistory', () => {
     expect(errored.textContent).toContain('Next attempt');
     expect(errored.querySelector('details')?.textContent).toContain('EXECUTION_RESOLUTION_RETRY');
 
-    // The API's fixed placeholder explanation adds nothing to the reason.
-    expect(container.textContent).not.toContain('Recorded event evaluation.');
+    // The stored explanation shows only where it says more than the reason phrase.
+    expect(skipped.textContent).toContain('The added label does not match.');
+    expect(matched.textContent).not.toContain('The deterministic trigger filters match.');
+    expect(errored.textContent).not.toContain('Execution defaults could not be read');
+    const repository = evaluation('evaluation-repository');
+    expect(repository.textContent).toContain(
+      "The event came from a repository or channel this trigger doesn't watch."
+    );
+    expect(repository.textContent).toContain('Repository is outside the trigger scope.');
+    expect(evaluation('evaluation-too-long').textContent).toContain('longer than 4000 characters');
+    const action = evaluation('evaluation-action');
+    expect(action.textContent).toContain("The event's action isn't one this trigger selects.");
+    // The phrase already says it; the explanation would repeat it.
+    expect(action.textContent).not.toContain('The trigger does not select this action.');
+    const unrecognized = evaluation('evaluation-unrecognized');
+    expect(unrecognized.textContent).toContain('Unrecognized reason.');
+    expect(unrecognized.textContent).toContain('The waiting-run limit was reached.');
+    expect(evaluation('evaluation-unshown').textContent).toContain(
+      "The event came from a repository or channel this trigger doesn't watch."
+    );
     // A trigger outside the loaded definition pages is still identified.
     expect(evaluation('evaluation-removed-trigger').textContent).toContain(
       'Trigger: unlisted-trigger'
@@ -136,6 +193,7 @@ describe('EventEvaluationHistory', () => {
       projectId: 'owner',
       agentId: 'event-agent',
       cursor: 'events-page-2',
+      direction: 'forward',
     });
   });
 

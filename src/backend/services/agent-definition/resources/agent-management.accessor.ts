@@ -125,6 +125,25 @@ async function deleteAgent(input: AgentActivationInput) {
     return { deleted: true as const };
   });
 }
+/**
+ * The states the backend writes: activation stores `isEnabled: true` only with
+ * ACTIVE, so that pair listens; STARTING starts; anything else is paused.
+ */
+function triggerStateCounts(
+  groups: { activationState: string; isEnabled: boolean; _count: { _all: number } }[]
+) {
+  const counts = { listening: 0, starting: 0, paused: 0 };
+  for (const { activationState, isEnabled, _count } of groups) {
+    const state =
+      activationState === 'ACTIVE' && isEnabled
+        ? 'listening'
+        : activationState === 'STARTING'
+          ? 'starting'
+          : 'paused';
+    counts[state] += _count._all;
+  }
+  return counts;
+}
 export const agentManagementAccessor = {
   delete: deleteAgent,
   checkSources(
@@ -139,14 +158,31 @@ export const agentManagementAccessor = {
   get(input: { projectId: string; agentId: string }, cursor?: ManagementCursor) {
     return prisma.$transaction((tx) => get(tx, input, cursor));
   },
-  async list(projectId: string, limit: number, cursor?: ManagementCursor) {
-    if (!(await prisma.project.findUnique({ where: { id: projectId }, select: { id: true } }))) {
-      throw new ApplicationError('NOT_FOUND', 'Project not found.');
-    }
-    return prisma.agentDefinition.findMany({
-      where: { projectId, ...pageAfter(cursor) },
-      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
-      take: limit + 1,
+  /** One page of definitions, each with its configured triggers counted by state in one query. */
+  list(projectId: string, limit: number, cursor?: ManagementCursor) {
+    return prisma.$transaction(async (tx) => {
+      if (!(await tx.project.findUnique({ where: { id: projectId }, select: { id: true } }))) {
+        throw new ApplicationError('NOT_FOUND', 'Project not found.');
+      }
+      const rows = await tx.agentDefinition.findMany({
+        where: { projectId, ...pageAfter(cursor) },
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        take: limit + 1,
+      });
+      const groups = await tx.agentTrigger.groupBy({
+        by: ['agentDefinitionId', 'activationState', 'isEnabled'],
+        where: {
+          agentDefinitionId: { in: rows.slice(0, limit).map((row) => row.id) },
+          isConfigured: true,
+        },
+        _count: { _all: true },
+      });
+      return rows.map((row) => ({
+        ...row,
+        triggerStates: triggerStateCounts(
+          groups.filter((group) => group.agentDefinitionId === row.id)
+        ),
+      }));
     });
   },
   updateSaved(input: z.infer<typeof agentSavedUpdateSchema>, evidence: AgentSourceValidation) {

@@ -10,6 +10,7 @@ import { AgentForm } from '@/client/features/agents/agent-form';
 import { AgentRunHistory } from '@/client/features/agents/agent-run-history';
 import { AgentsDashboardShell } from '@/client/features/agents/agents-dashboard-shell';
 import { EventAgentCreate } from '@/client/features/agents/event-agent-create';
+import { eventSummaryFixture } from '@/client/features/agents/event-agent.test-support';
 import type { Agent, AgentRun } from '@/client/features/agents/types';
 import {
   AppNavigationDataProvider,
@@ -212,7 +213,10 @@ function MobileAgentsSession() {
                     projectSlug={project.slug}
                     agents={[
                       ...agents,
-                      ...events.map((event) => ({ ...event, kind: 'event' as const })),
+                      ...events.map((event) => ({
+                        ...eventSummaryFixture(event),
+                        kind: 'event' as const,
+                      })),
                     ]}
                     selectedKind={selectedKind}
                     selectedAgentId={formMode?.startsWith('create') ? undefined : selectedId}

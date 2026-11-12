@@ -493,6 +493,7 @@ async function writeSlackSources(
     }
   });
 }
+export { SourceNotTargetedError } from './agent-source-queries';
 export const agentSourceAccessor = {
   resetSource,
   writeSlackSources,

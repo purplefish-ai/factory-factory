@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { evaluationExplanations } from '@/backend/services/agent-definition/resources/agent-evaluation-explanations';
 import type { AgentEventPayload } from '@/shared/agent-runtime';
 import type { AgentRunInput, AgentTriggerInput } from '@/shared/schemas/agent-definition.schema';
 import { callSlackApi, SlackApiError, slackFailureSchema } from './slack-api';
@@ -76,40 +77,32 @@ const failures = {
   rateLimited: (retryAfterMs?: number) =>
     new ContextFailure(
       'SLACK_CONTEXT_RATE_LIMITED',
-      'Slack is rate limiting message history reads; retry is bounded.',
+      evaluationExplanations.slackContextRateLimited,
       true,
       retryAfterMs
     ),
   retry: () =>
-    new ContextFailure(
-      'SLACK_CONTEXT_RETRY',
-      'Slack message context could not be read; retry is bounded.',
-      true
-    ),
+    new ContextFailure('SLACK_CONTEXT_RETRY', evaluationExplanations.slackContextRetry, true),
   missingScope: () =>
     new ContextFailure(
       'SLACK_CONTEXT_MISSING_SCOPE',
-      'The Slack bot cannot read message history. Add the bot scopes channels:history (public channels) and groups:history (private channels), then reinstall the app. The event was not run.',
+      evaluationExplanations.slackContextMissingScope,
       false
     ),
   channelUnavailable: () =>
     new ContextFailure(
       'SLACK_CONTEXT_CHANNEL_UNAVAILABLE',
-      'Slack would not return history for this channel or thread. Invite the bot to the channel. The event was not run.',
+      evaluationExplanations.slackContextChannelUnavailable,
       false
     ),
   notConnected: () =>
     new ContextFailure(
       'SLACK_CONTEXT_NOT_CONNECTED',
-      'The Slack connection has no usable bot token for this workspace. Reconnect it in Slack settings. The event was not run.',
+      evaluationExplanations.slackContextNotConnected,
       false
     ),
   failed: () =>
-    new ContextFailure(
-      'SLACK_CONTEXT_FAILED',
-      'Slack returned an unexpected response for the message context. The event was not run.',
-      false
-    ),
+    new ContextFailure('SLACK_CONTEXT_FAILED', evaluationExplanations.slackContextFailed, false),
 };
 const slackErrors = new Map<string, () => ContextFailure>(
   Object.entries({
@@ -195,7 +188,7 @@ async function readContext(
   if (!config.channelIds.includes(payload.channelId)) {
     throw new ContextFailure(
       'SLACK_CONTEXT_NOT_SELECTED',
-      'The message is in a channel this trigger does not select, so its context was not read.',
+      evaluationExplanations.slackContextNotSelected,
       false
     );
   }

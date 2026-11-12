@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { ApplicationError } from '@/backend/lib/application-error';
+import { publicEvaluationExplanation } from '@/backend/services/agent-definition/resources/agent-evaluation-explanations';
 import { agentManagementHistoryAccessor } from '@/backend/services/agent-definition/resources/agent-management-history.accessor';
 import { agentManagementAccessor } from '@/backend/services/agent-definition/resources/agent-management.accessor';
 import { agentSourceAccessor } from '@/backend/services/agent-definition/resources/agent-source.accessor';
@@ -15,6 +16,7 @@ import {
   agentDeleteResultSchema,
   agentGetInputSchema,
   agentListInputSchema,
+  agentListItemSchema,
   agentListPageSchema,
   agentSavedUpdateSchema,
   agentSourceResetInputSchema,
@@ -92,7 +94,7 @@ export class AgentManagementService {
       items: rows.slice(0, parsed.limit).map((row) => ({
         ...row,
         reasonCode: publicReason(row.reasonCode),
-        explanation: 'Recorded event evaluation.',
+        explanation: publicEvaluationExplanation(row.explanation),
         createdAt: row.createdAt.toISOString(),
         nextAttemptAt: row.nextAttemptAt?.toISOString() ?? null,
         expiresAt: row.expiresAt.toISOString(),
@@ -144,7 +146,11 @@ export class AgentManagementService {
       readManagementCursor(parsed.cursor, scope)
     );
     return agentListPageSchema.parse({
-      items: rows.slice(0, parsed.limit).map(managementSummary),
+      items: rows
+        .slice(0, parsed.limit)
+        .map((row) =>
+          agentListItemSchema.parse({ ...managementSummary(row), triggerStates: row.triggerStates })
+        ),
       nextCursor: nextManagementCursor(rows, parsed.limit, scope),
     });
   }

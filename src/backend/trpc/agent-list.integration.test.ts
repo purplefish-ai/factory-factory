@@ -109,3 +109,53 @@ it('keeps ordinary list calls compatible and rejects unrelated input fields', as
   const input = { projectId, unexpected: true };
   await expect(caller.list(input)).rejects.toMatchObject({ code: 'BAD_REQUEST' });
 });
+
+it('summarizes each automation by its configured triggers states as the backend writes them', async () => {
+  const connection = await db.prisma.agentConnection.create({
+    data: { provider: 'GITHUB', externalId: 'gh:list-repo', name: 'Repo' },
+  });
+  const trigger = (
+    id: string,
+    agentDefinitionId: string,
+    state: { activationState: 'ACTIVE' | 'STARTING' | 'PAUSED'; isEnabled: boolean },
+    isConfigured = true
+  ) => ({
+    id,
+    agentDefinitionId,
+    connectionId: connection.id,
+    type: 'GITHUB_ISSUE' as const,
+    description: id,
+    config: { version: 1, repositoryIds: ['list-repo'], actions: ['labeled'] },
+    isConfigured,
+    ...state,
+  });
+  // Only activation stores isEnabled: true, together with ACTIVE; STARTING and PAUSED store false.
+  await db.prisma.agentTrigger.createMany({
+    data: [
+      trigger('newer-listening', 'newer', { activationState: 'ACTIVE', isEnabled: true }),
+      trigger('newer-starting', 'newer', { activationState: 'STARTING', isEnabled: false }),
+      trigger('newer-paused', 'newer', { activationState: 'PAUSED', isEnabled: false }),
+      // A removed trigger is history, not configuration.
+      trigger('newer-removed', 'newer', { activationState: 'ACTIVE', isEnabled: true }, false),
+      trigger('older-starting', 'older', { activationState: 'STARTING', isEnabled: false }),
+      trigger('older-paused', 'older', { activationState: 'PAUSED', isEnabled: false }),
+      trigger('foreign-listening', 'foreign', { activationState: 'ACTIVE', isEnabled: true }),
+    ],
+  });
+  try {
+    const caller = agentRouter.createCaller(context());
+    const page = await caller.list({ projectId });
+    expect(page.items.map(({ id, triggerStates }) => ({ id, triggerStates }))).toEqual([
+      { id: 'newer', triggerStates: { listening: 1, starting: 1, paused: 1 } },
+      { id: 'older', triggerStates: { listening: 0, starting: 1, paused: 1 } },
+    ]);
+    // A shorter page summarizes only its own automations.
+    const first = await caller.list({ projectId, limit: 1 });
+    expect(first.items.map(({ id, triggerStates }) => ({ id, triggerStates }))).toEqual([
+      { id: 'newer', triggerStates: { listening: 1, starting: 1, paused: 1 } },
+    ]);
+  } finally {
+    await db.prisma.agentTrigger.deleteMany({ where: { connectionId: connection.id } });
+    await db.prisma.agentConnection.delete({ where: { id: connection.id } });
+  }
+});

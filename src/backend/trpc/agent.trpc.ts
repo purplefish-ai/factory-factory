@@ -43,11 +43,16 @@ const referenceInput = z.strictObject({
   workspaceId: z.string().min(1),
   proposalId: z.string().min(1),
 });
-// Infinite queries add direction even on the first page. The domain list is
-// forward-only, so validate and remove that transport metadata here.
+// Infinite queries add direction even on the first page. The domain list and
+// history pages are forward-only, so validate and remove that transport
+// metadata here; other unknown fields are still rejected.
+const infiniteQueryDirection = { direction: z.literal('forward').optional() };
 const agentListQueryInputSchema = agentListInputSchema
-  .extend({ direction: z.literal('forward').optional() })
+  .extend(infiniteQueryDirection)
   .transform(({ projectId, limit, cursor }) => ({ projectId, limit, cursor }));
+const agentHistoryQueryInputSchema = agentHistoryInputSchema
+  .extend(infiniteQueryDirection)
+  .transform(({ projectId, agentId, limit, cursor }) => ({ projectId, agentId, limit, cursor }));
 
 export const agentRouter = router({
   recoveryTarget: trustedLocalProcedure
@@ -93,11 +98,11 @@ export const agentRouter = router({
     .output(agentDeleteResultSchema)
     .mutation(({ ctx, input }) => ctx.appContext.services.agentManagement.delete(input)),
   evaluations: trustedLocalProcedure
-    .input(agentHistoryInputSchema)
+    .input(agentHistoryQueryInputSchema)
     .output(agentEvaluationPageSchema)
     .query(({ ctx, input }) => ctx.appContext.services.agentManagementService.evaluations(input)),
   runs: trustedLocalProcedure
-    .input(agentHistoryInputSchema)
+    .input(agentHistoryQueryInputSchema)
     .output(agentRunPageSchema)
     .query(({ ctx, input }) => ctx.appContext.services.agentManagement.runs(input)),
   navigationSummary: trustedLocalProcedure

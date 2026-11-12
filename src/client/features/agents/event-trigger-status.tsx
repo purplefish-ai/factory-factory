@@ -67,15 +67,30 @@ export function isTriggerRunning(trigger: Trigger): boolean {
   return label === 'Listening' || label === 'Starting';
 }
 
-/** The automation reads Active while any trigger listens, using the scheduled Active/Paused words. */
-export function describeAutomationState(
-  triggers: readonly Trigger[]
-): 'Active' | 'Starting' | 'Paused' {
-  const labels = triggers.map((trigger) => describeTriggerState(trigger).label);
-  if (labels.includes('Listening')) {
+export type AutomationState = 'Active' | 'Starting' | 'Paused';
+
+/**
+ * Active while any trigger listens, else Starting while any starts, else
+ * Paused, using the scheduled Active/Paused words. The list rail applies it to
+ * `automation.list`'s per-state trigger counts.
+ */
+export function automationStateFromCounts(counts: {
+  listening: number;
+  starting: number;
+}): AutomationState {
+  if (counts.listening > 0) {
     return 'Active';
   }
-  return labels.includes('Starting') ? 'Starting' : 'Paused';
+  return counts.starting > 0 ? 'Starting' : 'Paused';
+}
+
+/** The detail header's state, from each configured trigger's displayed state. */
+export function describeAutomationState(triggers: readonly Trigger[]): AutomationState {
+  const labels = triggers.map((trigger) => describeTriggerState(trigger).label);
+  return automationStateFromCounts({
+    listening: labels.filter((label) => label === 'Listening').length,
+    starting: labels.filter((label) => label === 'Starting').length,
+  });
 }
 
 const SOURCE_REASONS: Readonly<Record<string, string>> = {

@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { prisma } from '@/backend/db';
 import { configService } from '@/backend/services/config.service';
 import { Prisma } from '@prisma-gen/client';
+import { evaluationExplanations } from './agent-evaluation-explanations';
 import { ledgerTransaction } from './agent-ledger-transaction';
 import {
   eventEligibility,
@@ -88,7 +89,7 @@ async function settleUnavailable(evaluationId: string, now: Date) {
         status: reason === 'INVALID_STORED_DATA' ? 'ERROR' : 'SKIPPED',
         reasonCode: reason,
         nextAttemptAt: null,
-        explanation: 'The pending decision is no longer eligible for execution.',
+        explanation: evaluationExplanations.pendingIneligible,
       },
     });
     return true;

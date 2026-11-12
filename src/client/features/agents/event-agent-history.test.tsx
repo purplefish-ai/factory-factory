@@ -61,6 +61,7 @@ it('shows the saved automation runs and, on request, its events', async () => {
   expect(requests.find((item) => item.path === 'automation.runs')?.input).toEqual({
     projectId: 'owner',
     agentId: 'event-agent',
+    direction: 'forward',
   });
   // Events load only once their view is opened.
   expect(requests.some((item) => item.path === 'automation.evaluations')).toBe(false);
