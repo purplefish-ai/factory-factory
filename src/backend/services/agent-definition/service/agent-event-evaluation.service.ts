@@ -26,6 +26,8 @@ import {
 } from '@/shared/schemas/agent-definition.schema';
 import { matchAgentEvent } from './agent-event-matcher';
 import {
+  filterTooLongDecision,
+  MAX_FILTER_INSTRUCTIONS_LENGTH,
   type SemanticFilterInput,
   type SemanticFilterOutcome,
   semanticDecision,
@@ -190,6 +192,9 @@ export class AgentEventEvaluationService {
   ) {
     if (!(this.ports.isClassifierProven ?? isClassifierProven)(input.provider)) {
       return unprovenProviderDecision(input.provider);
+    }
+    if (input.filterInstructions.length > MAX_FILTER_INSTRUCTIONS_LENGTH) {
+      return filterTooLongDecision();
     }
     if (!this.ports.classifyEvent) {
       return unavailableDecision();

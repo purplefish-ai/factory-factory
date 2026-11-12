@@ -91,6 +91,12 @@ describe('classifier gate scoring', () => {
 
   it('requires an outcome for every held-out case', () => {
     expect(() => scoreClassifierGate(heldOut, constant('skip').slice(1))).toThrow();
+    expect(() =>
+      scoreClassifierGate(heldOut, [
+        ...constant('skip'),
+        { id: 't01', decision: 'match', latencyMs: 1 },
+      ])
+    ).toThrow();
   });
 });
 

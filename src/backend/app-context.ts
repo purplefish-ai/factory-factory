@@ -125,6 +125,7 @@ import {
   sessionService,
   voiceNarrationService,
   generateWorkspaceMetadata,
+  classifyAgentEvent,
   sessionInterceptorBridge,
 } from './services/session';
 import { settingsHealthService, userSettingsService } from './services/settings';
@@ -159,6 +160,7 @@ export type ApplicationServices = BridgeServices & {
     'start' | 'stop' | 'checkUpdates' | 'requestUpdate' | 'cancelUpdate'
   >;
   agentRuntime: ReturnType<typeof createAgentRuntime>;
+  classifyAgentEvent: typeof classifyAgentEvent;
   agentAuthoring: ReturnType<typeof createAgentAuthoring>;
   agentManagement: ReturnType<typeof createAgentManagement>;
   agentManagementService: AgentManagementService;
@@ -397,6 +399,7 @@ export function createDefaultApplicationDependencies(): ApplicationDependencies 
     agentManagementService,
     agentManagement: createAgentManagement(() => services),
     agentRuntime: createAgentRuntime(() => services),
+    classifyAgentEvent,
     createLogger,
     dataBackupService,
     decisionLogQueryService: decisionLogService,

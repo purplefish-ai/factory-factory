@@ -84,6 +84,18 @@ const failures: Record<
     retryable: true,
   },
 };
+/** Longer filters are not sent to a provider; the trigger schema does not bound them. */
+export const MAX_FILTER_INSTRUCTIONS_LENGTH = 4000;
+
+export function filterTooLongDecision(): SemanticDecision {
+  return {
+    status: 'ERROR',
+    reasonCode: 'SEMANTIC_FILTER_TOO_LONG',
+    explanation: `The natural-language filter is longer than ${MAX_FILTER_INSTRUCTIONS_LENGTH} characters, so the event was not run. Shorten the filter.`,
+    retryable: false,
+  };
+}
+
 const providerNames: Record<SessionProvider, string> = { CLAUDE: 'Claude', CODEX: 'Codex' };
 
 export function unprovenProviderDecision(provider: SessionProvider): SemanticDecision {

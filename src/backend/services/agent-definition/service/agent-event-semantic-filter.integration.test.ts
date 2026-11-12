@@ -225,6 +225,23 @@ it('never lets a filter widen deterministic scope or reach the classifier for a 
   expect(await db.prisma.agentRun.count()).toBe(0);
 });
 
+it('never sends an oversized filter to the provider', async () => {
+  await db.prisma.agentTrigger.update({
+    where: { id: fixture.triggerId },
+    data: { filterInstructions: `Only billing bugs. ${'x'.repeat(4000)}` },
+  });
+  await fixture.event();
+  const classify = vi.fn(decided('match'));
+  await evaluator(classify).evaluatePendingEvents(signal());
+  expect(classify).not.toHaveBeenCalled();
+  expect(await db.prisma.agentEvaluation.findFirstOrThrow()).toMatchObject({
+    status: 'ERROR',
+    reasonCode: 'SEMANTIC_FILTER_TOO_LONG',
+    nextAttemptAt: null,
+  });
+  expect(await db.prisma.agentRun.count()).toBe(0);
+});
+
 it('skips without a classifier port rather than running the event unfiltered', async () => {
   await fixture.event();
   await new runtime.AgentEventEvaluationService({

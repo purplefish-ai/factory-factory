@@ -200,14 +200,16 @@ evaluated later.
 
 Evaluation retries persist their attempt count and next time: three retries at
 30 seconds, two minutes and ten minutes, extended by Retry-After when needed.
-Classifier timeouts, rate limits and provider failures use this same budget,
-with a provider rate-limit reset time as Retry-After. Malformed classifier
-output and permanent configuration failures do not retry. `skip` and `uncertain`
-decisions are terminal skips, never model retries. The winning evaluation's used
-retries transfer into AgentRun.attemptCount; the initial launch claim increments
-it to the successful evaluation attempt number. Provisioning must continue that
-same budget rather than start another four attempts. Non-dispatching decisions
-retain an explicitly marked configuration snapshot that admission cannot use.
+Classifier timeouts, rate limits and provider failures use this same budget.
+When Claude reports a rate-limit reset time it acts as Retry-After; Codex rate
+limits use the normal delays. Malformed classifier output, filters over 4,000
+characters and permanent configuration failures do not retry. `skip` and
+`uncertain` decisions are terminal skips, never model retries. The winning
+evaluation's used retries transfer into AgentRun.attemptCount; the initial
+launch claim increments it to the successful evaluation attempt number.
+Provisioning must continue that same budget rather than start another four
+attempts. Non-dispatching decisions retain an explicitly marked configuration
+snapshot that admission cannot use.
 
 The application installs a durable event launch consumer. A committed claim is
 registered before asynchronous work begins; the evaluation job returns after

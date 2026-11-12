@@ -86,6 +86,15 @@ export async function runDisposableInference<T>(
   }
 }
 
+function untilAborted<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {
+  signal.throwIfAborted();
+  return new Promise<T>((resolve, reject) => {
+    const abort = () => reject(signal.reason);
+    signal.addEventListener('abort', abort, { once: true });
+    promise.then(resolve, reject).finally(() => signal.removeEventListener('abort', abort));
+  });
+}
+
 type RateLimitObservation = { limited: boolean; retryAfterMs?: number };
 
 function observeClaudeRateLimit(message: SDKMessage, observed: RateLimitObservation) {
@@ -168,7 +177,11 @@ async function runCodex<T>(
   directory: string,
   controller: AbortController
 ) {
-  const context = await codexAccountService.getRuntimeContext(request.codexAccountId ?? undefined);
+  // Account lookup takes no signal; stop waiting on abort so a stalled lookup cannot outlive the limit.
+  const context = await untilAborted(
+    codexAccountService.getRuntimeContext(request.codexAccountId ?? undefined),
+    controller.signal
+  );
   const credentialsStore = await getMetadataCredentialsStore(context, controller.signal);
   const instructions = join(directory, 'instructions.txt');
   const outputSchema = join(directory, 'schema.json');

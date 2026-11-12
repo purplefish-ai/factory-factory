@@ -282,6 +282,7 @@ it('uses the application graph GitHub reads and page limit lazily', async () => 
     sessionConfigService: {
       getLaunchOptions: () => Promise.reject(new Error('No execution is resolved here')),
     },
+    classifyAgentEvent: () => Promise.reject(new Error('No natural-language filters here')),
   };
   const runtime = createAgentRuntime(() => graph);
   const identities: string[] = [];

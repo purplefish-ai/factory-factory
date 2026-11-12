@@ -215,6 +215,15 @@ describe('classifyAgentEvent', () => {
     expect(close).toHaveBeenCalledTimes(1);
   });
 
+  it('times out while Codex account setup stalls and frees the slot', async () => {
+    mocks.timeoutMs = 20;
+    mocks.context.mockReturnValue(new Promise(() => undefined));
+    await expect(
+      classifyAgentEvent({ ...input, provider: 'CODEX' }, signal())
+    ).rejects.toMatchObject({ code: 'TIMEOUT' });
+    expect(mocks.spawn).not.toHaveBeenCalled();
+  });
+
   it('reports Claude rate limits with the provider reset time', async () => {
     const resetsAt = Math.floor(Date.now() / 1000) + 300;
     claudeReturns(

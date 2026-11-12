@@ -1,5 +1,5 @@
 import type { AgentEvaluationPorts } from '@/backend/services/agent-definition';
-import { AgentEventClassificationError, classifyAgentEvent } from '@/backend/services/session';
+import { AgentEventClassificationError, type classifyAgentEvent } from '@/backend/services/session';
 
 type ClassifyEvent = NonNullable<AgentEvaluationPorts['classifyEvent']>;
 
@@ -8,9 +8,7 @@ type ClassifyEvent = NonNullable<AgentEvaluationPorts['classifyEvent']>;
  * The classifier's reason text is dropped: evaluations persist only the
  * decision, classifier identity and input hash.
  */
-export function createEventClassifierPort(
-  classify: typeof classifyAgentEvent = classifyAgentEvent
-): ClassifyEvent {
+export function createEventClassifierPort(classify: typeof classifyAgentEvent): ClassifyEvent {
   return async ({ provider, filterInstructions, event }, signal) => {
     try {
       const result = await classify(

@@ -217,8 +217,13 @@ export function scoreClassifierGate(
   cases: ClassifierFixtureCase[],
   outcomes: ClassifierGateOutcome[]
 ) {
+  const caseIds = new Set(cases.map((item) => item.id));
   const byId = new Map(outcomes.map((outcome) => [outcome.id, outcome]));
-  if (byId.size !== outcomes.length || cases.some((item) => !byId.has(item.id))) {
+  if (
+    byId.size !== outcomes.length ||
+    byId.size !== caseIds.size ||
+    [...caseIds].some((id) => !byId.has(id))
+  ) {
     throw new Error('Each case needs exactly one outcome');
   }
   const splits = new Set(cases.map((item) => item.split));
