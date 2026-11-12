@@ -102,11 +102,19 @@ describe('EventEvaluationHistory', () => {
         explanation: 'Repository is outside the trigger scope.',
       }),
       eventEvaluationFixture({
-        id: 'evaluation-unrecognized',
+        id: 'evaluation-action',
         runId: null,
         status: 'SKIPPED',
         reasonCode: 'ACTION_MISMATCH',
         explanation: 'The trigger does not select this action.',
+      }),
+      // A code this client has no phrase for, as from another app version.
+      eventEvaluationFixture({
+        id: 'evaluation-unrecognized',
+        runId: null,
+        status: 'SKIPPED',
+        reasonCode: 'NEWER_REASON',
+        explanation: 'The waiting-run limit was reached.',
       }),
       eventEvaluationFixture({
         id: 'evaluation-too-long',
@@ -155,9 +163,13 @@ describe('EventEvaluationHistory', () => {
     );
     expect(repository.textContent).toContain('Repository is outside the trigger scope.');
     expect(evaluation('evaluation-too-long').textContent).toContain('longer than 4000 characters');
-    expect(evaluation('evaluation-unrecognized').textContent).toContain(
-      'The trigger does not select this action.'
-    );
+    const action = evaluation('evaluation-action');
+    expect(action.textContent).toContain("The event's action isn't one this trigger selects.");
+    // The phrase already says it; the explanation would repeat it.
+    expect(action.textContent).not.toContain('The trigger does not select this action.');
+    const unrecognized = evaluation('evaluation-unrecognized');
+    expect(unrecognized.textContent).toContain('Unrecognized reason.');
+    expect(unrecognized.textContent).toContain('The waiting-run limit was reached.');
     expect(evaluation('evaluation-unshown').textContent).toContain(
       "The event came from a repository or channel this trigger doesn't watch."
     );

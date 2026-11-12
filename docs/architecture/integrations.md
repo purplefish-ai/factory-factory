@@ -505,11 +505,14 @@ historical events. An already-polled source retains a prepared head in
 `getBaseline(connectionId, id)` reads that result. A non-executable head can
 have ordinal zero. Retained completed-interval evidence also resolves
 preparation that races a newer commit, even after event rows are pruned. A
-provider or continuity failure records source health; a source that no trigger
-targets any more by the time the baseline is recorded (its automation was
-paused, edited or deleted during Enable) fails preparation without changing
-source health, so other automations on the repository stay ready. These methods
-do not enable any trigger; [enable and pause](#enable-and-pause) owns that.
+provider or continuity failure records source health. A source that no trigger
+targets any more (its last automation was paused, edited or deleted during
+Enable or a poll cycle) is not a failure: baseline preparation fails and the
+poll cycle stops that source without changing its health, so other automations
+on the repository stay ready. The page or finalize step that notices writes
+nothing, so the cursor resumes from where it was when a trigger targets the
+source again. These methods do not enable any trigger;
+[enable and pause](#enable-and-pause) owns that.
 
 `AgentSourceCheckpoint` and `AgentSourceHead` retain indexed API-order evidence
 for every captured identity, including unsupported/control heads. A head's

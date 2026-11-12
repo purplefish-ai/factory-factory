@@ -80,6 +80,11 @@ export class AgentSourcePollService {
         if (signal.aborted) {
           return;
         }
+        // Its last trigger was paused, edited or deleted mid-cycle. The step that
+        // noticed wrote nothing, so the cursor resumes when a trigger targets it again.
+        if (error instanceof SourceNotTargetedError) {
+          continue;
+        }
         const classification = await this.recordFailure(target.connectionId, error);
         if (classification === 'rate_limit') {
           return;

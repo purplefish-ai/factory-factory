@@ -13,6 +13,7 @@ import { Prisma } from '@prisma-gen/client';
 
 let db: IntegrationDatabase;
 let runtime: typeof import('../index');
+let sourceAccessor: typeof import('../resources/agent-source.accessor').agentSourceAccessor;
 let fixture: Awaited<ReturnType<typeof createLedgerFixture>>;
 let feed: AgentIssueEventPage['events'];
 let failSource: boolean;
@@ -23,6 +24,9 @@ let port: AgentGitHubSourcePort;
 beforeAll(async () => {
   db = await createIntegrationDatabase();
   runtime = await vi.importActual<typeof import('../index')>('../index');
+  ({ agentSourceAccessor: sourceAccessor } = await vi.importActual<
+    typeof import('../resources/agent-source.accessor')
+  >('../resources/agent-source.accessor'));
 }, 30_000);
 afterAll(async () => {
   await destroyIntegrationDatabase(db);
@@ -389,68 +393,146 @@ function sourceState() {
     where: { connectionId: fixture.connectionId },
   });
 }
+/** Another automation on the same repository that listened before and is now paused. */
+async function otherAutomation() {
+  const other = await db.prisma.agentDefinition.create({
+    data: { projectId, name: 'Triage', instructions: 'Triage issues', isEnabled: false },
+  });
+  await db.prisma.agentTrigger.create({
+    data: {
+      id: 'trigger-other',
+      agentDefinitionId: other.id,
+      connectionId: fixture.connectionId,
+      type: 'GITHUB_ISSUE',
+      description: 'Triage labels',
+      config: { version: 1, repositoryIds: ['repo-1'], actions: ['labeled'] },
+      isEnabled: false,
+      isConfigured: true,
+      activationState: 'PAUSED',
+      activationGeneration: 1,
+    },
+  });
+  return other;
+}
+/** The user pauses or deletes the fixture automation, the only one targeting the source. */
+async function removeTarget(change: 'paused' | 'deleted') {
+  const owner = { projectId, agentId: fixture.definitionId };
+  const { managementRevision } = await definition();
+  if (change === 'paused') {
+    await activation().pause({ ...owner, expectedManagementRevision: managementRevision });
+  } else {
+    await new runtime.AgentManagementService().delete({
+      ...owner,
+      expectedManagementRevision: managementRevision,
+    });
+  }
+}
+async function expectTargetRemoved(change: 'paused' | 'deleted') {
+  if (change === 'paused') {
+    expect(await trigger()).toMatchObject({
+      activationState: 'PAUSED',
+      pausedReasonCode: null,
+      pendingActivation: null,
+    });
+  } else {
+    expect(await db.prisma.agentTrigger.count({ where: { id: fixture.triggerId } })).toBe(0);
+  }
+}
+async function expectSourceReadyFor(agentId: string, state: 'READY' | 'CATCHING_UP' = 'READY') {
+  expect(await sourceState()).toMatchObject({
+    isReady: true,
+    health: { state, reasonCode: null },
+  });
+  const read = await new runtime.AgentManagementService().get({ projectId, agentId });
+  expect(read.configuredTriggers[0]?.sourceHealth).toMatchObject({ state, reasonCode: null });
+}
 
 it.each(['paused', 'deleted'] as const)(
   'leaves source health alone for other automations when one is %s while its baseline is prepared',
   async (change) => {
     await pausedAutomation();
     feed = [label('N'), ...feed];
-    // Another automation on the same repository that listened before and is now paused.
-    const other = await db.prisma.agentDefinition.create({
-      data: { projectId, name: 'Triage', instructions: 'Triage issues', isEnabled: false },
-    });
-    await db.prisma.agentTrigger.create({
-      data: {
-        id: 'trigger-other',
-        agentDefinitionId: other.id,
-        connectionId: fixture.connectionId,
-        type: 'GITHUB_ISSUE',
-        description: 'Triage labels',
-        config: { version: 1, repositoryIds: ['repo-1'], actions: ['labeled'] },
-        isEnabled: false,
-        isConfigured: true,
-        activationState: 'PAUSED',
-        activationGeneration: 1,
-      },
-    });
+    const other = await otherAutomation();
     const read = port.listIssueEvents;
     port.listIssueEvents = async (input, readSignal) => {
       // The user acts while Enable reads the provider head.
-      const owner = { projectId, agentId: fixture.definitionId };
-      const { managementRevision } = await definition();
-      if (change === 'paused') {
-        await activation().pause({ ...owner, expectedManagementRevision: managementRevision });
-      } else {
-        await new runtime.AgentManagementService().delete({
-          ...owner,
-          expectedManagementRevision: managementRevision,
-        });
-      }
+      await removeTarget(change);
       return read(input, readSignal);
     };
     await begin();
 
-    if (change === 'paused') {
-      expect(await trigger()).toMatchObject({
-        activationState: 'PAUSED',
-        pausedReasonCode: null,
-        pendingActivation: null,
-      });
+    await expectTargetRemoved(change);
+    await expectSourceReadyFor(other.id);
+  }
+);
+
+it.each([
+  ['paused', 'capture'],
+  ['deleted', 'capture'],
+  ['paused', 'finalize'],
+  ['deleted', 'finalize'],
+] as const)(
+  'stops a poll cycle cleanly when the only listening automation is %s during %s',
+  async (change, phase) => {
+    // A source whose proof the poller wrote itself: the first baseline initializes it at N.
+    await pausedAutomation();
+    await db.prisma.agentSourceState.deleteMany();
+    feed = [label('N')];
+    await begin();
+    expect((await trigger()).activationState).toBe('ACTIVE');
+    const other = await otherAutomation();
+    feed = [label('M'), ...feed];
+    let before: unknown = null;
+    const vanish = async () => {
+      before = (await sourceState()).cursor;
+      await removeTarget(change);
+    };
+    expect(await db.prisma.agentSourceCheckpoint.count({ where: { status: 'INVALID' } })).toBe(0);
+    if (phase === 'capture') {
+      const read = port.listIssueEvents;
+      port.listIssueEvents = async (input, readSignal) => {
+        port.listIssueEvents = read;
+        await vanish();
+        return read(input, readSignal);
+      };
     } else {
-      expect(await db.prisma.agentTrigger.count({ where: { id: fixture.triggerId } })).toBe(0);
+      const finalize = sourceAccessor.finalizeNextChunk;
+      vi.spyOn(sourceAccessor, 'finalizeNextChunk').mockImplementationOnce(async (id) => {
+        await vanish();
+        return finalize(id);
+      });
     }
-    expect(await sourceState()).toMatchObject({
-      isReady: true,
-      health: { state: 'READY', reasonCode: null },
+    await poller().pollCycle(signal());
+
+    await expectTargetRemoved(change);
+    expect(before).not.toBeNull();
+    // The stopped step wrote nothing, so the cursor resumes where it was. A cycle that
+    // stopped at finalize has committed capture and verification pages and is catching up.
+    expect((await sourceState()).cursor).toEqual(before);
+    await expectSourceReadyFor(other.id, phase === 'capture' ? 'READY' : 'CATCHING_UP');
+
+    // Another automation's Enable on the source neither sees nor inherits a failure.
+    const current = await db.prisma.agentDefinition.findUniqueOrThrow({ where: { id: other.id } });
+    await activation().begin(
+      {
+        projectId,
+        agentId: other.id,
+        expectedManagementRevision: current.managementRevision,
+        definitionRevision: current.definitionRevision,
+        projectSource: { githubOwner: 'org', githubRepo: 'repo' },
+        execution: validatedIntent(current.definitionRevision).execution,
+        triggerIds: ['trigger-other'],
+      },
+      signal()
+    );
+    await expectSourceReadyFor(other.id, phase === 'capture' ? 'READY' : 'CATCHING_UP');
+    await cycle();
+    expect(await trigger('trigger-other')).toMatchObject({
+      activationState: 'ACTIVE',
+      isEnabled: true,
+      pausedReasonCode: null,
     });
-    const otherRead = await new runtime.AgentManagementService().get({
-      projectId,
-      agentId: other.id,
-    });
-    expect(otherRead.configuredTriggers[0]?.sourceHealth).toMatchObject({
-      state: 'READY',
-      reasonCode: null,
-    });
+    expect((await sourceState()).cursor).toMatchObject({ committedHeadEventId: 'M', scan: null });
   }
 );
 
