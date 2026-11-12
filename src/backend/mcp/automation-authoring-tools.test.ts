@@ -17,5 +17,9 @@ it('advises only GitHub issue actions that can be enabled', () => {
   expect(propose?.description).toContain(
     `choose actions only from ${agentGithubExecutableActions.join(' and ')};`
   );
+  // Labels applied at creation arrive as labeled events, so opened is never needed for them.
+  expect(propose?.description).toContain(
+    'labeled also covers labels applied when an issue is created'
+  );
   expect(propose?.description).toContain('The opened and edited actions are not yet supported');
 });

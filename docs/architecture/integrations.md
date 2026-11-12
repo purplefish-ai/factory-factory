@@ -461,11 +461,12 @@ executable ledger, carrying the issue's labels as read at capture (at most 100);
 PRs, including reopened PRs, and other actions retain only their feed identities
 as control anchors. GitHub reports a deleted actor or issue author as a null
 user; the event still enters the ledger, with a null `actorId` or `creatorId`.
-Nothing reads those identities, because actor filters stay rejected. The
-configured project path must resolve to the connection's numeric repository
-identity on each cycle, including after repository renames. Paused authoring
-remains inert: only configured (`isConfigured = true`) active triggers or
-explicit starting activations on non-archived projects are source targets.
+Intake stores those identities, but matching, evaluation and the starting prompt
+never use them, because actor filters stay rejected. The configured project path
+must resolve to the connection's numeric repository identity on each cycle,
+including after repository renames. Paused authoring remains inert: only
+configured (`isConfigured = true`) active triggers or explicit starting
+activations on non-archived projects are source targets.
 
 Runtime composition resolves GitHub reads and page limits from the owning
 application graph. Incomplete project paths are omitted from a shared source; if
