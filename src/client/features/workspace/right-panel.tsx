@@ -10,6 +10,7 @@ import type { StatusTone } from '@/client/lib/status-tones';
 import { trpc } from '@/client/lib/trpc';
 import { TabButton, TabList } from '@/components/ui/tab-button';
 import { cn } from '@/lib/utils';
+import { useRunsOrigin } from './automation-origin-panel';
 import { DevLogsPanel } from './dev-logs-panel';
 import { RightPanelLayout } from './right-panel-layout';
 import { resolveTopTab } from './right-panel-state';
@@ -132,6 +133,7 @@ export const RightPanel = memo(function RightPanel({
     (workspace as { creationSource?: string | null } | undefined)?.creationSource ?? null;
   // Child-workspace eligibility is unknown until the workspace query resolves.
   const isParentWorkspace = workspace !== undefined && creationSource !== 'CHILD_WORKSPACE';
+  const { hasEventOrigin, hasRuns } = useRunsOrigin(workspaceId, workspace);
 
   const { data: initStatus } = trpc.workspace.getInitStatus.useQuery(
     { id: workspaceId },
@@ -148,7 +150,7 @@ export const RightPanel = memo(function RightPanel({
     }
   );
 
-  const activeTopTab = resolveTopTab(storedTopTab, workspace);
+  const activeTopTab = resolveTopTab(storedTopTab, workspace, hasEventOrigin);
 
   const handleTakeScreenshots = useCallback(() => {
     handleTopTabChange('screenshots');
@@ -192,6 +194,7 @@ export const RightPanel = memo(function RightPanel({
       isTakingScreenshots={isTakingScreenshots}
       onTakeScreenshots={onTakeScreenshots ? handleTakeScreenshots : undefined}
       periodicTaskId={periodicTaskId}
+      hasEventOrigin={hasEventOrigin}
       isParentWorkspace={isParentWorkspace}
       selectedSessionId={selectedSessionId}
       selectedSessionName={selectedSessionName}
@@ -289,7 +292,7 @@ export const RightPanel = memo(function RightPanel({
       mobilePanel={mobilePanel}
       activeTopTab={activeTopTab}
       unreadCount={unreadCount}
-      periodicTaskId={periodicTaskId}
+      showRuns={hasRuns}
       onOpenLogs={handleLogsTabChange}
       className={className}
       topPanel={topPanel}

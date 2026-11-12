@@ -4,6 +4,7 @@ import { TRPCClientError } from '@trpc/client';
 import { observable } from '@trpc/server/observable';
 import { useRef, useState } from 'react';
 import { expect, fn, userEvent, within } from 'storybook/test';
+import { z } from 'zod';
 import { ChatTranscript } from '@/client/features/chat';
 import type { SubagentSelection } from '@/client/features/subagents';
 import { runInBackground } from '@/client/lib/background-task';
@@ -11,6 +12,7 @@ import { readStorageItem, removeStorageItem, writeStorageItem } from '@/client/l
 import { trpc } from '@/client/lib/trpc';
 import { invalidateWorkspaceDetail } from '@/client/lib/workspace-queries';
 import { Button } from '@/components/ui/button';
+import { automationOriginFixture } from './automation-origin-panel.story-fixtures';
 import { MainViewTabBar } from './main-view-tab-bar';
 import { RightPanel } from './right-panel';
 import { useWorkspacePanel, WorkspacePanelProvider } from './workspace-panel-context';
@@ -30,18 +32,51 @@ const activitySelection: SubagentSelection = {
     resultPreview: null,
   },
 };
+const projectId = 'right-panel-project';
+const eventOrigin = automationOriginFixture({ projectId, workspaceId });
+const eventOriginInput = z.strictObject({
+  projectId: z.literal(projectId),
+  workspaceId: z.literal(workspaceId),
+});
+const eventAgentInput = z.strictObject({
+  projectId: z.literal(projectId),
+  agentId: z.literal('event-agent'),
+});
+/** Completes a story request, failing it when the fixture rejects its input. */
+function answer(
+  observer: {
+    next: (value: { result: { data: unknown } }) => void;
+    complete: () => void;
+    error: (error: TRPCClientError<never>) => void;
+  },
+  respond: () => unknown
+) {
+  let data: unknown;
+  try {
+    data = respond();
+  } catch (error) {
+    observer.error(TRPCClientError.from(error instanceof Error ? error : new Error(String(error))));
+    return;
+  }
+  observer.next({ result: { data } });
+  observer.complete();
+}
 function RightPanelStory({
   hasTask = false,
+  eventRun = false,
   showChatToolbar = false,
   showActivity = false,
   showUnread = false,
 }: {
   showUnread?: boolean;
   hasTask?: boolean;
+  /** An event-run workspace whose origin run is retained. */
+  eventRun?: boolean;
   showChatToolbar?: boolean;
   showActivity?: boolean;
 }) {
   const taskPresent = useRef(hasTask);
+  const creationSource = eventRun ? 'EVENT_AGENT' : showActivity ? 'CHILD_WORKSPACE' : 'MANUAL';
   const [queryClient] = useState(() => new QueryClient());
   const [client] = useState(() =>
     trpc.createClient({
@@ -49,7 +84,7 @@ function RightPanelStory({
         () =>
           ({ op }) =>
             observable((observer) => {
-              const responses: Record<string, () => unknown> = {
+              const responses: Record<string, (input: unknown) => unknown> = {
                 'userSettings.get': () => ({ childWorkspacesEnabled: true }),
                 'session.listSubagents': () => ({
                   supported: true,
@@ -60,8 +95,17 @@ function RightPanelStory({
                   id: workspaceId,
                   projectId: 'right-panel-project',
                   periodicTaskId: taskPresent.current ? 'task-1' : null,
-                  creationSource: showActivity ? 'CHILD_WORKSPACE' : 'MANUAL',
+                  creationSource,
                 }),
+                // Both reads must name this story's workspace and project.
+                'automation.workspaceOrigin': (input) => {
+                  eventOriginInput.parse(input);
+                  return eventOrigin.origin;
+                },
+                'automation.get': (input) => {
+                  eventAgentInput.parse(input);
+                  return eventOrigin.agent;
+                },
                 'workspace.unreadMailCounts': () => (showUnread ? { [workspaceId]: 3 } : {}),
                 'workspace.getInitStatus': () => ({ status: 'READY', initOutput: '' }),
                 'workspace.getGitStatus': () => ({ files: [] }),
@@ -96,8 +140,7 @@ function RightPanelStory({
                 observer.error(new TRPCClientError(`Missing story fixture: ${op.path}`));
                 return;
               }
-              observer.next({ result: { data: respond() } });
-              observer.complete();
+              answer(observer, () => respond(op.input));
             }),
       ],
     })
@@ -308,6 +351,30 @@ export const ToolTabLabels: Story = {
     await expect(within(tools).getByRole('tab', { name: 'Screenshots' })).toBeVisible();
     await expect(await canvas.findByText('Child workspaces')).toBeVisible();
     await expect(await canvas.findByText('No child workspaces yet')).toBeVisible();
+  },
+};
+
+/** An event-run workspace opens its Runs tab on the automation that started it. */
+export const EventRunOrigin: Story = {
+  args: { eventRun: true },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(await canvas.findByText('Investigate labeled issues')).toBeVisible();
+    await expect(canvas.getByRole('tab', { name: 'Runs' })).toHaveAttribute(
+      'aria-selected',
+      'true'
+    );
+    await expect(canvas.getByRole('link', { name: 'Manage automation' })).toBeVisible();
+  },
+};
+
+export const EventRunOriginPhone: Story = {
+  args: { eventRun: true },
+  globals: { viewport: { value: 'phone', isRotated: false } },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(await canvas.findByText('Investigate labeled issues')).toBeVisible();
+    await expect(canvas.getByRole('tab', { name: 'Runs', selected: true })).toBeVisible();
   },
 };
 

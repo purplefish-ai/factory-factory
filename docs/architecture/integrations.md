@@ -271,9 +271,10 @@ The UI calls saved instructions and triggers **automations**, each execution a
 and stored identifiers retain their names for compatibility. Event automation
 procedures use the `automation` tRPC namespace. The naming convention is
 **Runs** for tool tabs and **Run history** for history headings, independent of
-trigger kind. Currently only scheduled automations expose these views;
-event-triggered automations have no run history panel yet. **Scheduled** and
-**Event-triggered** describe the trigger or the creation choice.
+trigger kind; both kinds expose these views (see
+[Runs and Events](#event-runs-and-events) for event-triggered automations).
+**Scheduled** and **Event-triggered** describe the trigger or the creation
+choice.
 
 The mixed Automations page at `/projects/:slug/agents` groups definitions under
 **Scheduled** and **Event-triggered** headings. Event pagination stays in its
@@ -358,10 +359,10 @@ says workspace unavailable. The origin panel links back to automation
 management.
 
 The workspace's provider subagent/child-workspace tab is **Subagents**. Stored
-panel keys remain `agents` for Subagents and `periodic-task` for Runs. Once
-workspace data loads, an unavailable origin tab falls back to Changes, as does a
-retired auto-iteration preference. Deleting a definition therefore cannot leave
-that panel blank.
+panel keys remain `agents` for Subagents and `periodic-task` for Runs, for both
+scheduled and event-run workspaces. Once workspace data loads, an unavailable
+origin tab falls back to Changes, as does a retired auto-iteration preference.
+Deleting a definition therefore cannot leave that panel blank.
 
 Service capsule: `src/backend/services/periodic-task/`.
 
@@ -729,11 +730,44 @@ explicit user actions; validation is a POST preview of the current full draft
 and grants no activation or account authority. Late previews cannot certify
 newer drafts. Archived details remain readable with writes/previews disabled.
 
-This UI cut offers Edit for events. Event activation, run/evaluation history,
-workspace origin extensions, recovery controls and deletion belong to separate
-cuts. Scheduled CRUD and history retain their existing behavior. These
-management APIs do not add activation. Exact-context operator recovery uses the
-separate trusted-local transport described in
+<a id="event-runs-and-events"></a>
+
+Below the saved detail, **Runs** and **Events** tabs read `automation.runs` and
+`automation.evaluations`, newest first, 50 per page with **Load more**. Both
+poll at the management cadence; a refresh reloads every loaded page from the
+first cursor, so new runs never open a gap. The client reads pages through the
+plain tRPC client under tRPC's infinite key because the strict history input
+rejects the `direction` field tRPC's infinite hook adds. A failed refresh or
+next page keeps loaded rows with a retry notice; a failed first read shows an
+error, never an empty state. Saved edits invalidate both views.
+
+A run shows its status in words (Queued, Starting, Running, Needs attention, PR
+created, Completed, Failed, Cancelled), a readable phrase for its reason code
+(the code stays in the phrase's title and a collapsed **Details** section with
+identifiers, attempts and first-message state), queue expiry or next attempt
+while active, retained PR links and summary, and expired run context. Only a
+LIVE workspace state links to a workspace; otherwise an active run says no
+workspace yet and a finished one says workspace deleted (DELETED), no workspace
+was created (UNRESERVED) or workspace unavailable (RESERVED). A null result is
+shown as nothing and a null event link reads "Event record no longer kept" in
+Details; neither is presented as empty or completed. Each run row has an action
+slot for recovery controls. An event row shows Matched, Skipped or Error, its
+trigger's description (or ID when the trigger is outside the loaded definition),
+a phrase for its reason, whether it started a run, and any next attempt. The
+history API returns a fixed placeholder `explanation` rather than the stored
+one, so the view does not show it.
+
+An event-run workspace (`creationSource` `EVENT_AGENT`) reads
+`automation.workspaceOrigin`; other workspaces never call it. Its **Runs** tab
+is shown while that read is pending or failed (with loading or error states) and
+whenever it returns a run; an origin without a retained run removes the tab, as
+deleting a scheduled automation does. The panel shows the automation's name, the
+run that started the workspace, and a link to the event automation.
+
+Event activation, recovery controls and deletion belong to separate cuts.
+Scheduled CRUD and history retain their existing behavior. These management APIs
+do not add activation. Exact-context operator recovery uses the separate
+trusted-local transport described in
 [agent runtime](agent-runtime.md#exact-context-operator-recovery-transport).
 Production authoring still creates paused definitions. The current runtime has
 no membership or native intent gate for manually altered ACTIVE-looking legacy

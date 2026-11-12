@@ -16,7 +16,7 @@ function Tools() {
       isMobile
       mobilePanel={mobilePanel}
       activeTopTab={resolveTopTab(storedTopTab, undefined)}
-      periodicTaskId={null}
+      showRuns={false}
       onOpenLogs={() => setActiveBottomTab('dev-logs')}
       topPanel={<input aria-label="Tool draft" defaultValue="Preserved draft" />}
       bottomPanel={<input aria-label="Terminal input" />}

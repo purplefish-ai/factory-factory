@@ -43,4 +43,14 @@ describe('resolveTopTab', () => {
   ] as const)('shows %s with workspace %o as %s', (stored, workspace, expected) => {
     expect(resolveTopTab(stored, workspace)).toBe(expected);
   });
+
+  // An event-run workspace opens and keeps Runs while its origin run is retained.
+  it.each([
+    [null, true, 'periodic-task'],
+    ['periodic-task', true, 'periodic-task'],
+    ['files', true, 'files'],
+    ['periodic-task', false, 'changes'],
+  ] as const)('shows %s with event origin %s as %s', (stored, hasEventOrigin, expected) => {
+    expect(resolveTopTab(stored, plain, hasEventOrigin)).toBe(expected);
+  });
 });
