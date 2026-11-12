@@ -1,8 +1,9 @@
-import { type ReactNode, useState } from 'react';
+import { useState } from 'react';
 import { TabButton, TabList } from '@/components/ui/tab-button';
 import { EventEvaluationHistory } from './event-evaluation-history';
 import { EventRunHistory } from './event-run-history';
-import type { EventAgent, EventRun } from './types';
+import { EventRunRecovery } from './event-run-recovery';
+import type { EventAgent } from './types';
 
 /** Trigger descriptions by ID, including removed triggers still kept for inspection. */
 function triggerLabels(agent: EventAgent) {
@@ -16,15 +17,16 @@ function triggerLabels(agent: EventAgent) {
   return labels;
 }
 
-/** The Runs and Events views of a saved event-triggered automation. */
+/** The Runs and Events views of a saved event-triggered automation, with run recovery. */
 export function EventAgentHistory({
   agent,
   projectSlug,
-  renderRunActions,
+  archived,
 }: {
   agent: EventAgent;
   projectSlug: string;
-  renderRunActions?: (run: EventRun) => ReactNode;
+  /** Recovery actions are disabled in an archived project. */
+  archived: boolean;
 }) {
   const [view, setView] = useState<'runs' | 'events'>('runs');
   return (
@@ -38,7 +40,15 @@ export function EventAgentHistory({
           projectId={agent.projectId}
           agentId={agent.id}
           projectSlug={projectSlug}
-          renderRunActions={renderRunActions}
+          renderRunActions={(run) => (
+            <EventRunRecovery
+              run={run}
+              projectId={agent.projectId}
+              agentId={agent.id}
+              projectSlug={projectSlug}
+              archived={archived}
+            />
+          )}
         />
       ) : (
         <EventEvaluationHistory

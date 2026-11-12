@@ -11,8 +11,15 @@ const callbackSchema = z.object({
   event_id: z.string(),
   event: z.looseObject({ type: z.string() }),
 });
+/**
+ * A person's message that shares files or also sends a thread reply to the channel is stored
+ * like an ordinary message, text only; the files themselves are never stored or fetched, so a
+ * file share without a comment carries nothing to act on and is ignored.
+ */
+export const slackHumanSubtypes = ['file_share', 'thread_broadcast'] as const;
 const humanMessageSchema = z.object({
   type: z.literal('message'),
+  subtype: z.enum(slackHumanSubtypes).optional(),
   channel: z.string(),
   user: z.string(),
   ts: z.string(),
@@ -29,6 +36,7 @@ export type SlackEnvelopeDecision =
         | 'UNSUPPORTED_ENVELOPE'
         | 'UNSUPPORTED_EVENT'
         | 'NOT_HUMAN_MESSAGE'
+        | 'BLANK_FILE_SHARE'
         | 'INVALID_PAYLOAD';
     }
   | { kind: 'REJECT'; reason: 'SLACK_APP_MISMATCH' | 'SLACK_WORKSPACE_MISMATCH' };
@@ -36,8 +44,9 @@ export type SlackEnvelopeDecision =
 /**
  * Classifies one Socket Mode envelope for a verified listener. Identity is
  * checked before anything else: an events_api envelope for another app or
- * workspace is rejected, never stored. Only ordinary human messages (roots and
- * thread replies, no subtype, no bot identity) become ledger input.
+ * workspace is rejected, never stored. Only human messages (roots and thread
+ * replies with no bot identity, and no subtype other than a file share or a
+ * thread reply also sent to the channel) become ledger input.
  */
 export function classifySlackEnvelope(
   listener: SlackListenerIdentity,
@@ -62,12 +71,20 @@ export function classifySlackEnvelope(
   if (event.type !== 'message') {
     return { kind: 'IGNORE', reason: 'UNSUPPORTED_EVENT' };
   }
-  if ('subtype' in event || 'bot_id' in event || 'bot_profile' in event || 'hidden' in event) {
+  if (
+    ('subtype' in event && !slackHumanSubtypes.some((subtype) => subtype === event.subtype)) ||
+    'bot_id' in event ||
+    'bot_profile' in event ||
+    'hidden' in event
+  ) {
     return { kind: 'IGNORE', reason: 'NOT_HUMAN_MESSAGE' };
   }
   const message = humanMessageSchema.safeParse(event);
   if (!message.success) {
     return { kind: 'IGNORE', reason: 'INVALID_PAYLOAD' };
+  }
+  if (message.data.subtype === 'file_share' && !message.data.text?.trim()) {
+    return { kind: 'IGNORE', reason: 'BLANK_FILE_SHARE' };
   }
   const input = agentEventInputSchema.safeParse(
     eventInput(listener, callback.data.event_id, message.data, observedAt)
@@ -98,9 +115,9 @@ function eventInput(
       threadTs,
       actorType: 'HUMAN',
       actorId: message.user,
-      subtype: null,
+      subtype: message.subtype ?? null,
       text: boundedText(message.text ?? ''),
-      occurredAt: occurredAt(message.ts),
+      occurredAt: slackTimestampIso(message.ts),
       observedAt: observedAt.toISOString(),
       sourceUrl: permalink(message.channel, message.ts, threadTs),
     },
@@ -120,7 +137,8 @@ function boundedText(text: string) {
   return `${text.slice(0, end)}${TRUNCATION_MARKER}`;
 }
 
-function occurredAt(ts: string) {
+/** Slack `ts` values are seconds with a fractional sequence; milliseconds keep their order. */
+export function slackTimestampIso(ts: string) {
   const [seconds = '', fraction = ''] = ts.split('.');
   const millis = Number(seconds) * 1000 + Number(fraction.padEnd(3, '0').slice(0, 3));
   const date = new Date(millis);

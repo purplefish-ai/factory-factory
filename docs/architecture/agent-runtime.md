@@ -1683,8 +1683,9 @@ during setup and delivery. Queue reset, retry, manual resume, steering, direct
 startup and configuration edits cannot remove the durable fence. The event
 launcher freezes execution, creates and links the reserved workspace/session,
 then uses strict owned initialization before this API. Saved agents are enabled
-through the trusted-local `automation.enable` procedure; the operator recovery
-UI is separate work.
+through the trusted-local `automation.enable` procedure; operators recover runs
+from the automation's Runs view (see
+[exact-context operator recovery](#exact-context-operator-recovery-transport)).
 
 AgentRun.launchPreparation is a versioned physical-operation marker. A null or
 SAFE marker with PENDING delivery can resume with the same identities. SETUP or
@@ -1832,8 +1833,8 @@ explicit recovery decision. The validated union filters invalid links and
 retains at most 20 links across retries and deletion; it is not an unbounded
 history. The required capture port is wired by orchestration and deletion fails
 closed when unavailable. Capturing results or deleting a workspace never proves
-work resolution or releases held capacity. Ledger pruning and trusted-local
-operator transport are implemented; the operator recovery UI is separate work.
+work resolution or releases held capacity. Ledger pruning, trusted-local
+operator transport and its Runs view recovery controls are implemented.
 Monitoring never auto-archives a workspace and never stops a child workspace.
 
 Event runtimes use an owned POSIX process group. Strict stop confirms
@@ -1983,8 +1984,13 @@ explicit proxy trust rules. Origin-less loopback and other same-user local
 processes satisfy locality; this is not authenticated human-versus-agent
 isolation. Parent and child workspace MCP advertise only their workspace tools
 and the existing sources/propose/getProposal authoring allowlist. They expose no
-recovery target, inspection, action or activation tools. No activation or
-operational recovery UI is supplied by these endpoints.
+recovery target, inspection, action or activation tools.
+
+The only client is the automation's Runs view
+([run recovery](integrations.md#event-run-recovery)). It reads the target and
+inspection only when a person opens **Inspect**, sends the inspected context
+unchanged with the chosen action, and on `CONFLICT` keeps its dialog open with
+**Reload** instead of reading a fresh context and resending.
 
 A fresh application-construction integration test exercises real production
 bridge registration and public workspace deletion without preinstalling capture.

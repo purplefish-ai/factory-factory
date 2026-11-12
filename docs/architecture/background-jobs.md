@@ -193,9 +193,11 @@ with `filterInstructions` then calls the event classifier: a disposable,
 tools-disabled provider call limited to 30 seconds and two concurrent calls. The
 evaluation job awaits it inline, so one slow classification delays later
 candidates in that cycle by at most the call limit plus up to five seconds of
-disposable process cleanup. Before calling, evaluation checks the live
-classifier gate for the provider resolved for that event; an unproven provider
-records `SEMANTIC_FILTER_PROVIDER_UNPROVEN` and never runs the event unfiltered.
+disposable process cleanup. A Slack match first reads its bounded thread and
+channel context inline (at most ten Slack calls of ten seconds each, usually one
+or two). Before calling, evaluation checks the live classifier gate for the
+provider resolved for that event; an unproven provider records
+`SEMANTIC_FILTER_PROVIDER_UNPROVEN` and never runs the event unfiltered.
 STARTING generations are never candidates; the source poll job completes,
 cancels or expires them. Only configured triggers (`isConfigured = true`)
 receive new decisions; an unresolved decision left by a removed trigger is still
@@ -217,11 +219,12 @@ evaluated later.
 
 Evaluation retries persist their attempt count and next time: three retries at
 30 seconds, two minutes and ten minutes, extended by Retry-After when needed.
-Classifier timeouts, rate limits and provider failures use this same budget.
-When Claude reports a rate-limit reset time it acts as Retry-After; Codex rate
-limits use the normal delays. Malformed classifier output, filters over 4,000
-characters and permanent configuration failures do not retry. `skip` and
-`uncertain` decisions are terminal skips, never model retries. The winning
+Classifier timeouts, rate limits and provider failures use this same budget, as
+do Slack context rate limits (with Slack's Retry-After) and transient Slack
+failures. When Claude reports a rate-limit reset time it acts as Retry-After;
+Codex rate limits use the normal delays. Malformed classifier output, filters
+over 4,000 characters and permanent configuration failures do not retry. `skip`
+and `uncertain` decisions are terminal skips, never model retries. The winning
 evaluation's used retries transfer into AgentRun.attemptCount; the initial
 launch claim increments it to the successful evaluation attempt number.
 Provisioning must continue that same budget rather than start another four

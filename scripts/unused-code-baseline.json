@@ -161,6 +161,10 @@
       "disposition": "test-support",
       "reason": "Schema-validated event run and evaluation pages shared by the Runs and Events stories and their component tests; no production caller is expected."
     },
+    "src/client/features/agents/event-run-recovery.story-fixtures.ts": {
+      "disposition": "test-support",
+      "reason": "Schema-validated run recovery targets, inspections and results copied from the backend recovery integration tests, shared by the recovery stories and component tests; no production caller is expected."
+    },
     "src/client/features/chat/transcript-rendering.test-utils.tsx": {
       "disposition": "test-support",
       "reason": "Test harness or fixture support remains explicit in this inventory; production callers are not expected."
@@ -1332,10 +1336,6 @@
       "reason": "Visibility candidate in a reachable module; trace callers and schema/type contracts before narrowing this export."
     },
     "src/shared/schemas/agent-definition.schema.ts::types::AgentDefinitionInput": {
-      "disposition": "review-required",
-      "reason": "Visibility candidate in a reachable module; trace callers and schema/type contracts before narrowing this export."
-    },
-    "src/shared/schemas/agent-definition.schema.ts::types::AgentRunInput": {
       "disposition": "review-required",
       "reason": "Visibility candidate in a reachable module; trace callers and schema/type contracts before narrowing this export."
     },

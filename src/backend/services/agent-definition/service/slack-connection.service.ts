@@ -4,7 +4,12 @@ import { slackConnectionAccessor } from '@/backend/services/agent-definition/res
 import { slackConnectInputSchema, slackSetAppTokenInputSchema } from '@/shared/slack-connection';
 import { callSlackApi, slackFailureSchema } from './slack-api';
 import { resolveSlackBotAppId, verifySlackAppToken } from './slack-app-identity';
-import { readSlackSource } from './slack-sources';
+import {
+  resolveSlackEventContext,
+  type SlackContextConfig,
+  type SlackContextEvent,
+} from './slack-event-context';
+import { readSlackBotCredentials, readSlackSource } from './slack-sources';
 
 const botIdentitySchema = z.object({
   ok: z.literal(true),
@@ -171,6 +176,26 @@ export class SlackConnectionService {
       appId: connection.appId,
       appToken: this.decryptAppToken(connection.appCredentialsEncrypted),
     };
+  }
+
+  /**
+   * Internal: reads a matched event's bounded thread and channel context with the
+   * connection's bot token. The token stays inside the Slack calls.
+   */
+  resolveEventContext(event: SlackContextEvent, config: SlackContextConfig, signal: AbortSignal) {
+    return resolveSlackEventContext(
+      { event, config },
+      {
+        request: this.request,
+        credentials: async () => {
+          const credentials = await readSlackBotCredentials(event.connectionId, (value) =>
+            this.crypto.decrypt(value)
+          );
+          return credentials.status === 'READY' ? credentials : null;
+        },
+      },
+      signal
+    );
   }
 
   private async requireConnection(id: string): Promise<StoredConnection> {

@@ -15,6 +15,32 @@ const pageSchema = z.object({
 });
 const infoSchema = z.object({ ok: z.literal(true), channel: channelSchema });
 
+/**
+ * Internal bot-token lookup for channel discovery and message context. The token
+ * never leaves the capsule's Slack calls.
+ */
+export async function readSlackBotCredentials(
+  connectionId: string,
+  decrypt: (value: string) => string
+): Promise<
+  | { status: 'READY'; token: string; workspaceId: string }
+  | { status: 'NOT_CONNECTED' | 'UNREADABLE' }
+> {
+  const connection = await slackConnectionAccessor.get(connectionId);
+  if (!(connection?.isEnabled && connection.credentialsEncrypted)) {
+    return { status: 'NOT_CONNECTED' };
+  }
+  try {
+    return {
+      status: 'READY',
+      token: decrypt(connection.credentialsEncrypted),
+      workspaceId: connection.externalId,
+    };
+  } catch {
+    return { status: 'UNREADABLE' };
+  }
+}
+
 export async function readSlackSource(options: {
   connectionId: string;
   decrypt: (value: string) => string;
@@ -22,22 +48,16 @@ export async function readSlackSource(options: {
   channelId?: string;
   cursor?: string;
 }) {
-  const connection = await slackConnectionAccessor.get(options.connectionId);
-  if (!(connection?.isEnabled && connection.credentialsEncrypted)) {
+  const credentials = await readSlackBotCredentials(options.connectionId, options.decrypt);
+  if (credentials.status !== 'READY') {
     throw new ApplicationError(
       'PRECONDITION_FAILED',
-      'Connect this Slack workspace before selecting channels.'
+      credentials.status === 'NOT_CONNECTED'
+        ? 'Connect this Slack workspace before selecting channels.'
+        : 'Reconnect this Slack workspace to restore its credentials.'
     );
   }
-  let token: string;
-  try {
-    token = options.decrypt(connection.credentialsEncrypted);
-  } catch {
-    throw new ApplicationError(
-      'PRECONDITION_FAILED',
-      'Reconnect this Slack workspace to restore its credentials.'
-    );
-  }
+  const { token } = credentials;
   const url = new URL(`https://slack.com/api/conversations.${options.channelId ? 'info' : 'list'}`);
   if (options.channelId) {
     url.searchParams.set('channel', options.channelId);

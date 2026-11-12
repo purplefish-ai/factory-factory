@@ -54,6 +54,18 @@ export function invalidateAutomationActivationQueries(
 }
 
 /**
+ * After Resolve, Abandon or Retry on a run: the same reads as Enable and Pause.
+ * The run's status, its workspace origin and the rail's counts can all change.
+ */
+export function invalidateRunRecoveryQueries(
+  utils: ReturnType<typeof trpc.useUtils>,
+  projectId: string,
+  agentId: string
+) {
+  return invalidateAutomationActivationQueries(utils, projectId, agentId);
+}
+
+/**
  * After a delete. The project's list and rail entry refresh, and so do
  * workspace origins, whose run is now gone. The deleted automation's own reads
  * and history are marked stale without refetching: the detail closes, and a

@@ -173,6 +173,7 @@ export function EventAgentSelection({
         key={`${project.id}:event-history:${event.data.id}`}
         agent={event.data}
         projectSlug={project.slug}
+        archived={!!project.isArchived}
       />
     </>
   );
