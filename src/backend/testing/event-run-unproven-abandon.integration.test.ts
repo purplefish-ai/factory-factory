@@ -82,10 +82,13 @@ async function restart() {
   return freshConsumer();
 }
 
-async function expectUnprovenEnd(reason: string) {
+async function expectUnprovenEnd(
+  reason: string,
+  status: 'CANCELLED' | 'COMPLETED' | 'PR_CREATED' = 'CANCELLED'
+) {
   const ended = await row();
   expect(ended).toMatchObject({
-    status: 'CANCELLED',
+    status,
     launchPhase: 'FINISHED',
     reasonCode: 'ABANDONED_UNPROVEN',
     leaseExpiresAt: null,
@@ -160,6 +163,47 @@ it('abandons a run that lost live coverage in a restart only with the opt-in, an
     await restarted.stop();
   }
 });
+
+it.each([
+  { case: 'completed', pullRequests: [], status: 'COMPLETED' },
+  {
+    case: 'PR-producing',
+    pullRequests: [{ url: 'https://github.com/org/repo/pull/42', number: 42 }],
+    status: 'PR_CREATED',
+  },
+] as const)(
+  'keeps the recorded outcome of a $case first turn whose tracking was lost in a restart',
+  async ({ pullRequests, status }) => {
+    await launch();
+    providers[0]!.response.resolve({ stopReason: 'end_turn' });
+    await consumer.drain();
+    if (pullRequests.length) {
+      await db.prisma.agentRun.update({
+        where: { id: h.claim.runId },
+        data: { result: { version: 1, summary: '', pullRequests: [...pullRequests] } },
+      });
+    }
+    expect((await h.read()).evidence?.outcome?.result).toBe('COMPLETED');
+    const restarted = await restart();
+    try {
+      const input = await context();
+      expect(await restarted.inspectRun(input)).toMatchObject({
+        blocked: 'WORK_PROOF_UNAVAILABLE',
+        unprovenAbandonAvailable: true,
+      });
+      expect(
+        await restarted.resolveAmbiguousRun({
+          ...input,
+          action: 'ABANDON',
+          acceptUnprovenStop: true,
+        })
+      ).toEqual({ status: 'ABANDONED', unproven: true });
+      await expectUnprovenEnd('WORK_PROOF_UNAVAILABLE', status);
+    } finally {
+      await restarted.stop();
+    }
+  }
+);
 
 it('abandons a run whose first message went ambiguous after a transport disconnect', async () => {
   await disconnect();

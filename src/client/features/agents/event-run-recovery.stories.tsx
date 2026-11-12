@@ -180,6 +180,17 @@ export const ConfirmAbandonAnyway: Story = {
   },
 };
 
+/** A completed first turn whose tracking was lost in a restart keeps its Completed result. */
+export const ConfirmAbandonAnywayCompletedTurn: Story = {
+  parameters: { trpc: { handlers: handlersFor('trackingLost') } },
+  play: async (context) => {
+    const confirm = await chooseAction(context, 'Abandon anyway');
+    await expect(
+      await confirm.findByText(/keep the result of its own first turn: it's recorded as Completed/)
+    ).toBeVisible();
+  },
+};
+
 export const ConfirmAbandonAnywayPhone: Story = {
   ...ConfirmAbandonAnyway,
   globals: { viewport: { value: 'phone', isRotated: false } },

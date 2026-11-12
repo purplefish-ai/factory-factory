@@ -289,8 +289,8 @@ export const agentRunRecoveryAccessor = {
   },
   /**
    * ABANDON accepted without stop or work proof. The exact claim and send are
-   * checked as for any action. The run ends with its failed first turn kept,
-   * otherwise CANCELLED, and frees its slot. Bumping the worker generation
+   * checked as for any action. The run ends with its own first turn's recorded
+   * outcome (COMPLETED, PR_CREATED or FAILED), otherwise CANCELLED, and frees its slot. Bumping the worker generation
    * fences every later owner write for the old attempt (send, outcome,
    * ambiguity, stop, lease and settlement). Evidence records the decision and
    * its reason only: no stop or work proof is written.
@@ -327,10 +327,14 @@ export const agentRunRecoveryAccessor = {
         where: { runId: run.id },
         data: { evidence: { ...evidence, children: eventChildRestProof(rest), unprovenAbandon } },
       });
+      // The run keeps its own first turn's recorded outcome, as settlement and the child
+      // hold do; with no outcome (unsent, ambiguous, setup unfinished) it is CANCELLED.
+      const result = run.result === null ? null : agentRunResultSchema.parse(run.result);
+      const kept = childHeldOutcome(evidence.outcome?.result, result?.pullRequests.length ?? 0);
       await tx.agentRun.update({
         where: { id: run.id },
         data: {
-          status: evidence.outcome?.result === 'FAILED' ? 'FAILED' : 'CANCELLED',
+          status: kept ?? 'CANCELLED',
           launchPhase: 'FINISHED',
           completedAt: new Date(),
           leaseExpiresAt: null,

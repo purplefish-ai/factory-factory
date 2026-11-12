@@ -1997,13 +1997,16 @@ opt-in, the action still runs the normal proven path when proof is available,
 and otherwise still attempts a targeted strict stop of the run's own recorded
 runtime source when a live handle exists (never a replacement). The owner write
 keeps the exact claim and send checks (a stale context is `CONFLICT`) and the
-child-set comparison, then records status `FAILED` when the first turn failed
-and `CANCELLED` otherwise (own work cannot be shown idle, so no completed
-outcome is kept), reason `ABANDONED_UNPROVEN`, `launchPhase` FINISHED, no lease
-or next attempt, and an incremented `workerGeneration`. The increment fences
-every later owner write for the old attempt: a late send, outcome, ambiguity or
-stop observation, lease renewal and settlement all conflict, so nothing is
-resent and nothing reopens or settles the run. The result is
+child-set comparison, then records the result of the run's own first turn when
+one was recorded, by the rule settlement uses: `COMPLETED` (`PR_CREATED` when
+the run's result has pull request links) or `FAILED`; `CANCELLED` only when no
+outcome was recorded (first message unsent or ambiguous, setup unfinished) or
+the turn itself was cancelled. It also records reason `ABANDONED_UNPROVEN`,
+which says the stop was not proven, `launchPhase` FINISHED, no lease or next
+attempt, and an incremented `workerGeneration`. The increment fences every later
+owner write for the old attempt: a late send, outcome, ambiguity or stop
+observation, lease renewal and settlement all conflict, so nothing is resent and
+nothing reopens or settles the run. The result is
 `{ status: 'ABANDONED', unproven: true }` (a proven Abandon omits `unproven`).
 The evidence gains `unprovenAbandon` (attempt, reason, decision time) and the
 child proof. The decision adds no `resolution`, `work` proof or stop of its own;

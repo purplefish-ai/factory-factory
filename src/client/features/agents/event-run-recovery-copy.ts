@@ -114,9 +114,16 @@ const STATUS_WORDS = {
   FAILED: 'Failed',
 } as const;
 
-/** What Abandon without a proven stop records: own work can't be shown idle, so only a failure is kept. */
-export const UNPROVEN_ABANDON_OUTCOME =
-  "It's recorded as Cancelled, or Failed if its first turn failed.";
+/**
+ * What Abandon without a proven stop records: the result of the run's own first
+ * turn when one was recorded (as settlement does), otherwise Cancelled.
+ */
+export function unprovenAbandonOutcome(run: EventRun) {
+  const kept = childHeldOutcome(run.initialOutcome?.result, run.result?.pullRequests.length ?? 0);
+  return kept
+    ? `This run will keep the result of its own first turn: it's recorded as ${STATUS_WORDS[kept]}.`
+    : "It's recorded as Cancelled, because its first turn has no completed or failed result.";
+}
 
 /** What Abandon records, matching the server's rules for a run with and without a child hold. */
 export function abandonOutcome(inspection: RecoveryInspection, run: EventRun) {

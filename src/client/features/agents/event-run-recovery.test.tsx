@@ -241,7 +241,7 @@ describe('EventRunRecovery', () => {
     expect(confirm.textContent).toContain('keeps working in its workspace until you stop it there');
     expect(confirm.textContent).toContain('Check the workspace');
     expect(confirm.textContent).toContain(
-      'recorded as Cancelled, or Failed if its first turn failed'
+      'recorded as Cancelled, because its first turn has no completed or failed result'
     );
     expect(confirm.textContent).not.toMatch(/archiv|delet|idle/i);
 
@@ -264,6 +264,19 @@ describe('EventRunRecovery', () => {
       action: 'ABANDON',
       acceptUnprovenStop: true,
     });
+  });
+
+  it('says a run whose first turn completed keeps that result when abandoned anyway', async () => {
+    runs = [recoveryRunFixture('trackingLost')];
+    serveRecovery('trackingLost');
+    render();
+    await openInspection('run-trackingLost');
+    await act(async () => requireButton(inspection(), 'Abandon anyway').click());
+    await waitForCheck(() => expect(confirmation()).not.toBeNull());
+    expect(confirmation()?.textContent).toContain(
+      "This run will keep the result of its own first turn: it's recorded as Completed."
+    );
+    expect(confirmation()?.textContent).not.toContain('recorded as Cancelled');
   });
 
   it('reports an ordinary abandonment when the server proved the stop after all', async () => {
@@ -480,6 +493,7 @@ describe('EventRunRecovery', () => {
       'childHeld',
       'deliveryUncertain',
       'setupUncertain',
+      'trackingLost',
     ] as const) {
       const target = recoveryTargetFixture(recovery);
       const inspected = recoveryInspectionFixture(recovery);

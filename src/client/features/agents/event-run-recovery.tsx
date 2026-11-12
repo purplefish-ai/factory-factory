@@ -35,7 +35,7 @@ import {
   type RecoveryInspection,
   type RecoveryOutcome,
   UNAVAILABLE_TARGET,
-  UNPROVEN_ABANDON_OUTCOME,
+  unprovenAbandonOutcome,
 } from './event-run-recovery-copy';
 import type { EventRun } from './types';
 
@@ -539,7 +539,9 @@ function ActionConsequences({
         </StatusCallout>
       )}
       <p>
-        {action === 'ABANDON_UNPROVEN' ? UNPROVEN_ABANDON_OUTCOME : abandonOutcome(inspection, run)}
+        {action === 'ABANDON_UNPROVEN'
+          ? unprovenAbandonOutcome(run)
+          : abandonOutcome(inspection, run)}
       </p>
       <p>
         Abandon doesn't stop this run's child workspaces; any that are still working keep going as

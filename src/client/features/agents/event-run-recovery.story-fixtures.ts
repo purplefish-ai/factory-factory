@@ -29,7 +29,8 @@ export type RecoveryFixture =
   | 'resolved'
   | 'childHeld'
   | 'deliveryUncertain'
-  | 'setupUncertain';
+  | 'setupUncertain'
+  | 'trackingLost';
 
 const SETUP = { version: 1, state: 'STARTUP', setupStartedAt: '2026-11-11T09:00:06.000Z' } as const;
 const FINISHED_DELIVERY = {
@@ -58,6 +59,13 @@ const RUNS: Record<RecoveryFixture, Partial<EventRun>> = {
   },
   // The first turn ended while child workspaces were not at rest.
   childHeld: {
+    launchPhase: 'ACTIVE',
+    reasonCode: null,
+    delivery: FINISHED_DELIVERY,
+    initialOutcome: COMPLETED_TURN,
+  },
+  // The first turn completed, then the app restarted and lost live tracking of its work.
+  trackingLost: {
     launchPhase: 'ACTIVE',
     reasonCode: null,
     delivery: FINISHED_DELIVERY,
@@ -217,6 +225,12 @@ const INSPECTIONS = {
   },
   // Every common block leaves Abandon with an accepted unproven stop
   // (`event-run-unproven-abandon.integration.test.ts`).
+  trackingLost: {
+    blocked: 'WORK_PROOF_UNAVAILABLE',
+    unprovenAbandonAvailable: true,
+    childHold: null,
+    proofAvailable: false,
+  },
   deliveryUncertain: {
     blocked: 'WORK_PROOF_UNAVAILABLE',
     unprovenAbandonAvailable: true,
