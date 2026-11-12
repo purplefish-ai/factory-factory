@@ -925,10 +925,10 @@ runs cancelled, and that each automation needs Enable again; a failure stays in
 the dialog. Success reports the paused-trigger and cancelled-run counts and
 invalidates every cached automation read, list and history in every project,
 because the reset reaches other projects on the same source. Enable, Pause and
-Reset source are disabled in archived projects. Recovery controls and deletion
-belong to separate cuts. Scheduled CRUD and history retain their existing
-behavior. Exact-context operator recovery uses the separate trusted-local
-transport described in
+Reset source are disabled in archived projects. Deletion belongs to a separate
+cut. Scheduled CRUD and history retain their existing behavior.
+[Run recovery](#event-run-recovery) uses the separate trusted-local
+exact-context transport described in
 [agent runtime](agent-runtime.md#exact-context-operator-recovery-transport).
 Production authoring still creates paused definitions. Manually altered
 ACTIVE-looking legacy records without known membership or a current validated

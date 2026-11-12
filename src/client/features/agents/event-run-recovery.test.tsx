@@ -38,12 +38,22 @@ const count = (path: string) => requests.filter((request) => request.path === pa
 
 /** Serves recovery for one fixture state, as the backend does. */
 function serveRecovery(recovery: RecoveryFixture, options: { retryUnavailable?: boolean } = {}) {
+  const target = recoveryTargetFixture(recovery);
+  // A request for any other run, or with an altered context, fails the read.
   respond['automation.recoveryTarget'] = (input) => {
-    agentRecoveryTargetInputSchema.parse(input);
-    return recoveryTargetFixture(recovery);
+    expect(agentRecoveryTargetInputSchema.parse(input)).toEqual({
+      projectId: 'owner',
+      agentId: 'event-agent',
+      runId: recoveryRunFixture(recovery).id,
+    });
+    return target;
   };
   respond['automation.inspectRun'] = (input) => {
-    agentRecoveryContextSchema.parse(input);
+    expect(target.status === 'AVAILABLE').toBe(true);
+    expect(agentRecoveryContextSchema.parse(input)).toEqual({
+      agentId: 'event-agent',
+      ...(target.status === 'AVAILABLE' ? target.context : {}),
+    });
     return recoveryInspectionFixture(recovery, options);
   };
   respond['automation.resolveAmbiguousRun'] = (input) => recoveryResultFixture(input);
