@@ -155,6 +155,24 @@ it.each(['opened', 'edited', 'closed'])(
   }
 );
 
+it.each(['closed', 'labeled', 'reopened'])(
+  'keeps a %s event whose issue is null as a non-executable feed identity',
+  async (action) => {
+    // GitHub documents an issue event's `issue` as nullable.
+    vi.mocked(execFile).mockResolvedValue(
+      response([{ ...event, id: 'no-issue', event: action, issue: null }, event]) as never
+    );
+    const page = await githubCLIService.listAgentIssueEvents({
+      repository: 'org/repo',
+      repositoryId: '123',
+      page: 1,
+      perPage: 100,
+    });
+    expect(page.events[0]).toEqual({ providerEventId: 'no-issue', payload: null });
+    expect(page.events[1]?.payload).toMatchObject({ action: 'labeled' });
+  }
+);
+
 it('does not round numeric provider identities during JSON parsing', async () => {
   const result = response([event]);
   result.stdout = result.stdout.replace('"90071992547409931234"', '90071992547409931234');

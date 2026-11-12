@@ -11,7 +11,8 @@ type Read = (args: string[]) => Promise<{ stdout: string }>;
 const controlSchema = z.object({
   id,
   event: z.string(),
-  issue: z.object({ pull_request: z.unknown().optional() }).optional(),
+  // GitHub documents `issue` as nullable and optional; without one a row is only an anchor.
+  issue: z.object({ pull_request: z.unknown().optional() }).nullish(),
 });
 const issueSchema = z.object({
   number: z.number().int().positive(),
@@ -132,8 +133,8 @@ export async function listAgentIssueEvents(input: AgentIssueEventRequest, read: 
   const events = raw.map((row) => {
     const control = controlSchema.parse(row);
     if (
-      !isAgentGithubExecutableAction(control.event) ||
-      control.issue?.pull_request !== undefined
+      !(isAgentGithubExecutableAction(control.event) && control.issue) ||
+      control.issue.pull_request !== undefined
     ) {
       return { providerEventId: control.id, payload: null };
     }
