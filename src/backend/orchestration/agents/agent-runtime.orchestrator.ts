@@ -9,6 +9,7 @@ import {
   agentResolvedExecutionConfigSchema,
   type AgentClaimResult,
   type AgentExecutionConfig,
+  type slackConnectionService,
 } from '@/backend/services/agent-definition';
 import { applicationUpdateAdmission } from '@/backend/services/application-update-admission.service';
 import { SERVICE_INTERVAL_MS } from '@/backend/services/constants';
@@ -22,6 +23,7 @@ import {
   type AgentNativeValidationServices,
 } from './agent-native-validation';
 import { createEventRunConsumer } from './event-run-consumer.orchestrator';
+import { createSlackIntake } from './slack-intake.orchestrator';
 
 const logger = createLogger('agent-runtime');
 const JOB = 'agent-source-poll';
@@ -45,7 +47,10 @@ type AgentRuntimeServices = AgentNativeValidationServices & {
     typeof githubCLIService,
     'getAgentRepositoryIdentity' | 'listAgentIssueEvents'
   >;
-  configService: { getAgentRuntimeLimits(): { githubPagesPerCycle: number } };
+  slackConnectionService: Pick<typeof slackConnectionService, 'getAppCredentials'>;
+  configService: {
+    getAgentRuntimeLimits(): { githubPagesPerCycle: number; slackIntakeEnabled: boolean };
+  };
   classifyAgentEvent: typeof classifyAgentEvent;
 };
 
@@ -86,9 +91,17 @@ export function createAgentRuntime(
     launcher,
     activation
   );
+  const slackIntake = createSlackIntake(getServices);
   return {
     ...lifecycle,
     activation,
+    start: () => {
+      lifecycle.start();
+      slackIntake.start();
+    },
+    stop: async () => {
+      await Promise.all([slackIntake.stop(), lifecycle.stop()]);
+    },
     hasWork: () => launcher?.hasWork() ?? false,
     recovery: launcher
       ? {

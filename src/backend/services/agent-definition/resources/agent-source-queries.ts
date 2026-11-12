@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { prisma } from '@/backend/db';
 import { ApplicationError } from '@/backend/lib/application-error';
 import { agentSourcePageEvidenceSchema, type AgentSourceEntry } from '@/shared/agent-source-state';
+import { agentTriggerInputSchema } from '@/shared/schemas/agent-definition.schema';
 import type { Prisma } from '@prisma-gen/client';
 type Tx = Prisma.TransactionClient;
 /** The current epoch of a source. Only proof written in it is authority for ordinals. */
@@ -72,6 +73,60 @@ export async function listTargets(tx: Tx = prisma) {
       ),
     ],
   }));
+}
+const slackTriggerWhere = {
+  type: 'SLACK_MESSAGE' as const,
+  isConfigured: true,
+  agentDefinition: { project: { isArchived: false } },
+  OR: [
+    { activationState: 'STARTING' as const },
+    { activationState: 'ACTIVE' as const, isEnabled: true, agentDefinition: { isEnabled: true } },
+  ],
+};
+/**
+ * Slack connections the listener should hold open, with the channels their
+ * listening triggers select. Malformed trigger configuration selects nothing,
+ * and a connection whose listening triggers select nothing is not a target.
+ */
+export async function listSlackTargets(connectionId?: string) {
+  const connections = await prisma.agentConnection.findMany({
+    where: {
+      ...(connectionId ? { id: connectionId } : {}),
+      provider: 'SLACK',
+      isEnabled: true,
+      triggers: { some: slackTriggerWhere },
+    },
+    orderBy: { id: 'asc' },
+    select: {
+      id: true,
+      triggers: {
+        where: slackTriggerWhere,
+        select: {
+          type: true,
+          description: true,
+          filterInstructions: true,
+          isEnabled: true,
+          connectionId: true,
+          config: true,
+        },
+      },
+    },
+  });
+  return connections
+    .map((connection) => ({
+      connectionId: connection.id,
+      channelIds: [
+        ...new Set(
+          connection.triggers.flatMap((trigger) => {
+            const parsed = agentTriggerInputSchema.safeParse(trigger);
+            return parsed.success && parsed.data.type === 'SLACK_MESSAGE'
+              ? parsed.data.config.channelIds
+              : [];
+          })
+        ),
+      ],
+    }))
+    .filter((target) => target.channelIds.length > 0);
 }
 export async function assertTarget(tx: Tx, connectionId: string) {
   if (

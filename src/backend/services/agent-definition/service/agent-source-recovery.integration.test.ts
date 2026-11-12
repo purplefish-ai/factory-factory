@@ -278,7 +278,10 @@ it('uses the application graph GitHub reads and page limit lazily', async () => 
         Promise.reject(new Error('Original graph service must not be captured')),
       listAgentIssueEvents: port.listIssueEvents,
     },
-    configService: { getAgentRuntimeLimits: () => ({ githubPagesPerCycle: 5 }) },
+    slackConnectionService: { getAppCredentials: () => Promise.resolve(null) },
+    configService: {
+      getAgentRuntimeLimits: () => ({ githubPagesPerCycle: 5, slackIntakeEnabled: false }),
+    },
     sessionConfigService: {
       getLaunchOptions: () => Promise.reject(new Error('No execution is resolved here')),
     },
@@ -290,7 +293,10 @@ it('uses the application graph GitHub reads and page limit lazily', async () => 
     identities.push(repository);
     return Promise.resolve({ id: 'repo-1', name: 'org/repo' });
   };
-  graph.configService.getAgentRuntimeLimits = () => ({ githubPagesPerCycle: 1 });
+  graph.configService.getAgentRuntimeLimits = () => ({
+    githubPagesPerCycle: 1,
+    slackIntakeEnabled: false,
+  });
   calls = [];
   try {
     runtime.start();

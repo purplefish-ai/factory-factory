@@ -115,6 +115,7 @@
     "@linear/sdk": "^101.1.0",
     "@prisma/adapter-better-sqlite3": "7.10.1",
     "@prisma/client": "7.10.1",
+    "@slack/socket-mode": "3.1.1",
     "@trpc/server": "^11.22.1",
     "better-sqlite3": "^13.0.3",
     "chalk": "^6.0.1",

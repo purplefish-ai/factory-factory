@@ -1057,8 +1057,10 @@ existing Slack app's webhook, or start automations.
 Slack intake is gated by `AGENT_SLACK_INTAKE_ENABLED`, read through
 `configService.getAgentRuntimeLimits().slackIntakeEnabled`. It is off unless set
 to exactly `true`, and stays off until a live check against a dedicated Slack
-test app passes. The Socket Mode listener is a separate implementation step;
-until it ships, Slack triggers keep reporting `SLACK_INTAKE_UNAVAILABLE`.
+test app passes. The [Socket Mode listener](#slack-listener) exists behind that
+gate, but nothing can yet move a Slack trigger to `STARTING` or `ACTIVE`:
+activation by test message is separate work, so Slack triggers keep reporting
+`SLACK_INTAKE_UNAVAILABLE`.
 
 These credentials depend on the server's `encryption.key`; retain it with any
 database-file backup. Logical export/import includes Slack connection identity,
@@ -1069,6 +1071,79 @@ Reconnect manually in Slack settings using a new bot token, then add the
 app-level token again. GitHub connections, connection bindings, event
 configuration and automation execution history remain excluded; tokens and
 encryption keys never appear in logical exports.
+
+### Slack listener
+
+The listener holds one outbound Socket Mode connection per eligible Slack
+connection, using the official `@slack/socket-mode` client (pinned in
+`package.json`) behind a narrow adapter, `SlackEventSource` in the
+agent-definition capsule. A connection is eligible only while the intake gate is
+on, the connection is enabled with both tokens and an app ID, and at least one
+configured Slack trigger on a non-archived project is `STARTING`, or `ACTIVE`
+with its trigger and definition enabled, and those triggers select at least one
+channel in valid configuration. Nothing is opened otherwise.
+
+The Slack app needs:
+
+- Socket Mode turned on, and an app-level token with `connections:write` saved
+  in Settings > Integrations > Slack.
+- Event Subscriptions turned on with the bot events `message.channels` (public
+  channels, bot scope `channels:history`) and `message.groups` (private
+  channels, bot scope `groups:history`). Request URLs are not used.
+- Bot scopes `users:read` (to confirm the app when the app-level token is saved)
+  and `channels:read`/`groups:read` (channel discovery), and the bot invited to
+  every selected channel.
+- To be dedicated to this connection. Socket Mode spreads an app's events across
+  all of its open connections, so another listener on the same app (or the same
+  app connected for a second workspace here) would receive some of the events.
+  Two eligible connections with one app ID are both refused with
+  `SLACK_APP_SHARED`.
+
+Identity fails closed. The socket's `hello` frame must carry
+`connection_info.app_id` equal to the stored app ID, and every `events_api`
+envelope must carry the stored `api_app_id` and `team_id`. A mismatch stores
+nothing, leaves the envelope unacknowledged, closes the socket and records
+source health `ERROR` (`SLACK_APP_MISMATCH` or `SLACK_WORKSPACE_MISMATCH`); the
+listener does not reconnect until the stored credentials change or the
+application restarts.
+
+Only ordinary human messages enter the ledger: `message` events without a
+subtype or bot identity, both channel roots and thread replies, in a channel
+selected by a listening trigger on that connection. Each is stored through
+`ingestEvent` with identity `(connectionId, event_id)` and acknowledged only
+after the insert commits; a duplicate insert is acknowledged too. If the insert
+fails, the envelope stays unacknowledged so Slack can redeliver it. Bot
+messages, edits, deletes, other subtypes (including `thread_broadcast` and
+`file_share`), other event types, messages in unselected channels, malformed
+messages and non-`events_api` envelopes are acknowledged and not stored. Text
+longer than the 100,000-character payload limit is cut with a visible truncation
+marker. Message text is never logged.
+
+Source health is `READY` (with `isReady`) once a verified socket says hello. An
+unexpected close, a failed or timed-out connection attempt (30 seconds), a
+credential change and listener shutdown open a delivery gap `{ from, to: null }`
+in the Slack cursor and mark the source `DISCONNECTED` or `ERROR` with a reason
+code; the next verified connection closes the gap. A process that exits without
+recording its stop leaves `READY` behind; the next start opens a gap from the
+last time that listener was known to be connected (`lastObservedAt`, refreshed
+about once a minute). When the listener stops on purpose (gate turned off, no
+listening trigger left, app-level token missing) it records `DISCONNECTED`
+without a gap and closes any open one. The cursor keeps the latest 100 gaps.
+Slack may redeliver unacknowledged events, but its documentation says events can
+be lost while no connection is open, so a gap means events may have been missed;
+nothing recovers them automatically. `RECOVERY_REQUIRED` health is never
+overwritten.
+
+The SDK's own reconnection and HTTP retries are turned off: its reconnect path
+can reject outside any caller, which is fatal in this backend, and its retries
+outlive `disconnect()`. Reconnection is instead the `agent-slack-intake`
+reconciliation described in
+[background jobs](background-jobs.md#timer-dispatch-ownership), with backoff
+from 5 seconds to 5 minutes after failed attempts. A socket that finishes
+connecting after the listener closed it is closed again and its events are not
+acknowledged. The SDK's logger is replaced with one that drops debug and info
+output and reduces warnings and errors to fixed category codes, so tokens,
+ticketed socket URLs and message bodies are never logged.
 
 ## Client query transport
 

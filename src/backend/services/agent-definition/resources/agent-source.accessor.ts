@@ -28,6 +28,7 @@ import {
 } from './agent-source-queries';
 import { capturePage, discontinuity, newScan, resumeScan, verifyPage } from './agent-source-scan';
 import { pauseTriggers } from './agent-trigger-pause';
+import type { SlackSourceWrite } from './slack-source-health';
 type Tx = Prisma.TransactionClient;
 function requiresRecovery(state: { health: unknown } | null) {
   return (
@@ -459,8 +460,42 @@ async function resetSource(projectId: string, connectionId: string) {
   });
 }
 
+type SlackSourceRow = Awaited<ReturnType<Tx['agentSourceState']['findUnique']>>;
+/**
+ * Slack listener health and delivery gaps. `next` decides each row's new
+ * value from its current one under the ledger lock; null leaves it unchanged.
+ * Without a connection ID it visits every Slack source that has a row.
+ */
+async function writeSlackSources(
+  connectionId: string | null,
+  next: (row: SlackSourceRow) => SlackSourceWrite
+) {
+  await ledgerTransaction(async (tx) => {
+    const rows = connectionId
+      ? [
+          {
+            connectionId,
+            row: await tx.agentSourceState.findUnique({ where: { connectionId } }),
+          },
+        ]
+      : (await tx.agentSourceState.findMany({ where: { connection: { provider: 'SLACK' } } })).map(
+          (row) => ({ connectionId: row.connectionId, row })
+        );
+    for (const { connectionId: id, row } of rows) {
+      const data = next(row);
+      if (data) {
+        await tx.agentSourceState.upsert({
+          where: { connectionId: id },
+          create: { connectionId: id, ...data },
+          update: data,
+        });
+      }
+    }
+  });
+}
 export const agentSourceAccessor = {
   resetSource,
+  writeSlackSources,
   listTargets,
   getState,
   getBaseline,
