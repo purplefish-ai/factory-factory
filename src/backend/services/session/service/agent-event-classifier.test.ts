@@ -53,7 +53,13 @@ const event: AgentEventPayload = {
   occurredAt: '2026-11-01T00:00:00.000Z',
   observedAt: '2026-11-01T00:00:01.000Z',
   sourceUrl: 'https://github.com/acme/shop/issues/9',
-  issue: { number: 9, title: 'Update README badges', body: injection, addedLabel: 'agent' },
+  issue: {
+    number: 9,
+    title: 'Update README badges',
+    body: injection,
+    addedLabel: 'agent',
+    labels: [],
+  },
 };
 const input = {
   provider: 'CLAUDE' as const,

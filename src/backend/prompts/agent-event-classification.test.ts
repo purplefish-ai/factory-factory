@@ -19,7 +19,7 @@ const github: AgentEventPayload = {
   occurredAt: '2026-11-01T00:00:00.000Z',
   observedAt: '2026-11-01T00:00:01.000Z',
   sourceUrl: 'https://github.com/acme/shop/issues/7',
-  issue: { number: 7, title: 'Add dark mode', body: injection, addedLabel: 'agent' },
+  issue: { number: 7, title: 'Add dark mode', body: injection, addedLabel: 'agent', labels: [] },
 };
 const slack: AgentEventPayload = {
   version: 1,
