@@ -780,9 +780,10 @@ independently of those pages. Archived projects remain readable; writes and
 discovery require an active project. Scheduled automation APIs and routes retain
 their existing behavior.
 
-`automation.list` accepts the optional `direction: "forward"` metadata added by
-tRPC infinite queries and removes it before domain validation. Pagination
-remains forward-only; unrelated input fields are still rejected.
+`automation.list`, `runs` and `evaluations` accept the optional
+`direction: "forward"` metadata added by tRPC infinite queries and remove it
+before domain validation. Pagination remains forward-only; unrelated input
+fields are still rejected.
 
 `managementRevision` is the shared optimistic save token. Both saved replacement
 and accepted-proposal edits increment it once, including a rename/no-op. Saved
@@ -879,11 +880,10 @@ newer drafts. Archived details remain readable with writes/previews disabled.
 Below the saved detail, **Runs** and **Events** tabs read `automation.runs` and
 `automation.evaluations`, newest first, 50 per page with **Load more**. Both
 poll at the management cadence; a refresh reloads every loaded page from the
-first cursor, so new runs never open a gap. The client reads pages through the
-plain tRPC client under tRPC's infinite key because the strict history input
-rejects the `direction` field tRPC's infinite hook adds. A failed refresh or
-next page keeps loaded rows with a retry notice; a failed first read shows an
-error, never an empty state. Saved edits invalidate both views.
+first cursor, so new runs never open a gap. Both views use tRPC's own infinite
+queries. A failed refresh or next page keeps loaded rows with a retry notice; a
+failed first read shows an error, never an empty state. Saved edits invalidate
+both views.
 
 A run shows its status in words (Queued, Starting, Running, Needs attention, PR
 created, Completed, Failed, Cancelled), a readable phrase for its reason code

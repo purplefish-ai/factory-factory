@@ -11,10 +11,12 @@ import { EventEvaluationHistory } from './event-evaluation-history';
 import { eventEvaluationFixture, eventEvaluationPageFixture } from './event-history.story-fixtures';
 import type { EventEvaluation } from './types';
 
+/** The procedure input: tRPC's infinite hook adds `direction`, which the server strips. */
 const historyInput = z.strictObject({
   projectId: z.string(),
   agentId: z.string(),
   cursor: z.string().optional(),
+  direction: z.literal('forward').optional(),
 });
 
 let container: HTMLDivElement;
@@ -170,6 +172,7 @@ describe('EventEvaluationHistory', () => {
       projectId: 'owner',
       agentId: 'event-agent',
       cursor: 'events-page-2',
+      direction: 'forward',
     });
   });
 
