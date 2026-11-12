@@ -46,6 +46,9 @@ const TIMEOUT_MS = 30_000;
 const SESSION_CREATION_TIMEOUT_MS = 120_000;
 const CLOSE_TIMEOUT_MS = 1000;
 const MAX_ADDITIONAL_MODELS = 64;
+// The whole sweep shares one budget so a slow provider cannot hold a
+// discovery slot for minutes; whatever was captured by then is kept.
+const SWEEP_BUDGET_MS = 60_000;
 function choices(option: SessionConfigOption | undefined): SessionConfigSelectOption[] {
   return option?.type === 'select'
     ? option.options.flatMap((entry) => ('group' in entry ? entry.options : [entry]))
@@ -276,9 +279,11 @@ async function probeLaunchOptions(
       { provider: input.provider },
       async () => {
         const captured: NativeSessionLaunchOptions[] = [];
+        const deadline = Date.now() + SWEEP_BUDGET_MS;
         let current = config;
         for (const model of models) {
-          if (input.signal?.aborted) {
+          const remainingMs = deadline - Date.now();
+          if (input.signal?.aborted || remainingMs <= 0) {
             break;
           }
           try {
@@ -291,7 +296,7 @@ async function probeLaunchOptions(
                   configOptions: current,
                   model,
                 }),
-                timeoutMs: TIMEOUT_MS,
+                timeoutMs: Math.min(TIMEOUT_MS, remainingMs),
                 description: 'launch discovery model sweep',
               }),
               failed,

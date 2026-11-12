@@ -481,39 +481,43 @@ session configured with the selected provider/model; the provider-wide model
 catalog is not used as a thinking capability list. Discovery submits no prompt,
 rejects permission/tool callbacks, and closes its processes. Its endpoint
 requires the trusted-local boundary used for local execution. After reporting
-the requested model, the same disposable session switches through every other
-advertised model that has no cached entry yet, so later model changes in the
-launcher read the cache. The sweep stops at the first failed switch, only fills
-free cache capacity, and never replaces an entry discovered directly. Swept
-entries omit the thinking default, because a model switch can carry the previous
-level forward; they start stale, so their first use returns them at once and
-refreshes them directly in the background. Provider session creation may take up
-to two minutes, since a loaded machine can stall provider startup well past 30
-seconds; other discovery steps keep 30-second bounds. Successful native results
-stay fresh for five minutes per provider/model/requested Codex account (or
-Auto), then remain usable during request-triggered background refreshes, without
-a hard expiry. Failed refreshes retain the last success and retry after 30
-seconds. Cache size (128 entries) and concurrent discovery counts remain
-bounded.
+the requested model, the same disposable session switches through up to 64 other
+advertised models that have no cached entry yet, so later model changes in the
+launcher read the cache. The sweep shares a one-minute budget, stops at the
+first failed switch, only fills free cache capacity (keeping a slot for the
+requested model), and never replaces an entry discovered directly. Swept entries
+omit the thinking default, because a model switch can carry the previous level
+forward; they start stale, so their first use returns them at once and refreshes
+them directly in the background. Provider session creation may take up to two
+minutes, since a loaded machine can stall provider startup well past 30 seconds;
+other discovery steps keep 30-second bounds. Successful native results stay
+fresh for five minutes per provider/model/requested Codex account (or Auto),
+then remain usable during request-triggered background refreshes, without a hard
+expiry. Failed refreshes retain the last success and retry after 30 seconds.
+Cache size (128 entries) and concurrent discovery counts remain bounded.
 
 The launcher never waits for thinking and planning options. While another
-model's options load, it keeps showing the previous ones. Validation and the
-creation payload use only options confirmed for the selected model. Without
-them, creation sends only explicit thinking, access and Plan choices, and the
-server applies saved defaults to the rest. Cold discovery failures show Retry in
-the thinking control without blocking creation, and model selection remains
-editable.
+model's options load, it keeps showing the previous ones from the same provider
+and Codex account. Validation and the creation payload use only options
+confirmed for the selected model. Without them, creation sends only explicit
+thinking, access and Plan choices, and the server applies saved defaults to the
+rest. Cold discovery failures show Retry in the thinking control without
+blocking creation, and model selection remains editable. An explicit access
+choice is still checked against the selected model's options before the
+workspace is created; that check reads the same cache, so it only waits when the
+model has never been discovered.
 
 Successful launcher options are persisted atomically to
 `BASE_DIR/cache/session-launch-options.json`. A versioned Zod schema validates
 restored metadata; missing, corrupt, or incompatible snapshots start cold.
-Saving skips an unsupported entry without discarding other valid models.
-Persistence errors do not block the launcher. Startup restores all retained
-entries, warms the saved default model for each provider (which sweeps the other
-models), and loads both provider model lists, without delaying server readiness.
-Restored entries refresh on their next use, including the startup warmup, so
-runtime upgrades obtain new capabilities in the background. Snapshots contain
-capability metadata, never credentials or runtime environments. Shutdown
+Saving skips an unsupported entry without discarding other valid models, and
+drops the oldest entries if the snapshot would exceed the 1 MiB that restore
+reads. Persistence errors do not block the launcher. Startup restores all
+retained entries, warms the saved default model for each provider (which sweeps
+the other models), and loads both provider model lists, without delaying server
+readiness. Restored entries refresh on their next use, including the startup
+warmup, so runtime upgrades obtain new capabilities in the background. Snapshots
+contain capability metadata, never credentials or runtime environments. Shutdown
 immediately fences new discovery and aborts disposable probe children. It waits
 up to seven seconds for native lifetimes and snapshot writes before account
 teardown. Account observations already in progress cannot be cancelled; a drain

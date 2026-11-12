@@ -1,4 +1,5 @@
 import { useCallback, useState } from 'react';
+import { z } from 'zod';
 import { useLatestRef } from '@/client/hooks/use-stable-callback';
 import { QUERY_RETRY } from '@/client/lib/query-options';
 import { trpc } from '@/client/lib/trpc';
@@ -235,6 +236,17 @@ function getLaunchSettings(
   };
 }
 
+// tRPC query keys are [path, { input, type }].
+const launchQueryKeySchema = z.tuple([
+  z.unknown(),
+  z.object({ input: z.object({ codexAccountId: z.string().optional() }) }),
+]);
+/** The Codex account a launch-options query asked for; null when unrecognized. */
+function launchQueryAccount(queryKey: unknown): string | undefined | null {
+  const parsed = launchQueryKeySchema.safeParse(queryKey);
+  return parsed.success ? parsed.data[1].input.codexAccountId : null;
+}
+
 function useNativeLaunchOptions(
   provider: ChatProvider | null,
   model: string | undefined,
@@ -251,8 +263,14 @@ function useNativeLaunchOptions(
       enabled: enabled && provider !== null,
       staleTime: 30_000,
       retry: QUERY_RETRY.costlyRead,
-      // Keep showing the last options while another model's cached options load.
-      placeholderData: (previous) => (previous?.provider === provider ? previous : undefined),
+      // Keep showing the last options while another model's cached options
+      // load, but never another Codex account's: access and Plan can differ.
+      placeholderData: (previous, previousQuery) =>
+        previous?.provider === provider &&
+        (provider !== 'CODEX' ||
+          launchQueryAccount(previousQuery?.queryKey) === (codexAccountId || undefined))
+          ? previous
+          : undefined,
     }
   );
   // The query is keyed by input; confirmed native IDs may differ from requested aliases.

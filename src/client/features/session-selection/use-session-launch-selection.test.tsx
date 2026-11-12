@@ -21,7 +21,12 @@ const mocks = vi.hoisted(() => ({
   launches: new Map<string, SessionLaunchOptions | undefined>(),
   launchPlaceholders: new Map<string, SessionLaunchOptions>(),
   launchQueryOptions: undefined as
-    | { placeholderData?: (previous?: SessionLaunchOptions) => SessionLaunchOptions | undefined }
+    | {
+        placeholderData?: (
+          previous?: SessionLaunchOptions,
+          previousQuery?: { queryKey: unknown }
+        ) => SessionLaunchOptions | undefined;
+      }
     | undefined,
   launchErrors: new Map<string, Error>(),
   refetchLaunch: vi.fn().mockResolvedValue({}),
@@ -436,10 +441,26 @@ it('keeps the last options on screen while the next model loads without validati
   mocks.launches.set('CODEX:saved-sol:auto', solNative);
   const mounted = mountConnected();
   expect(mounted.current.creationDefaults.reasoningEffort).toBe('ultra');
-  // Only the same provider's previous options may stand in for the next model.
-  expect(mocks.launchQueryOptions?.placeholderData?.(solNative)).toBe(solNative);
+  // Only the same provider and Codex account may stand in for the next model.
+  const previousQuery = (input: object) => ({
+    queryKey: [['session', 'getLaunchOptions'], { input, type: 'query' }],
+  });
+  const placeholder = mocks.launchQueryOptions?.placeholderData;
+  expect(placeholder?.(solNative, previousQuery({ provider: 'CODEX', model: 'saved-sol' }))).toBe(
+    solNative
+  );
   expect(
-    mocks.launchQueryOptions?.placeholderData?.({ ...solNative, provider: 'CLAUDE' })
+    placeholder?.(
+      solNative,
+      previousQuery({ provider: 'CODEX', model: 'saved-sol', codexAccountId: 'work' })
+    )
+  ).toBeUndefined();
+  expect(placeholder?.(solNative, { queryKey: ['unrecognized'] })).toBeUndefined();
+  expect(
+    placeholder?.(
+      { ...solNative, provider: 'CLAUDE' },
+      previousQuery({ provider: 'CLAUDE', model: 'saved-sonnet' })
+    )
   ).toBeUndefined();
   mocks.launchPlaceholders.set('CODEX:luna:auto', solNative);
   flushSync(() => mounted.current.pickerProps.onModelChange?.('luna'));

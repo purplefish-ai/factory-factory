@@ -220,7 +220,8 @@ export class SessionLaunchOptionsService {
           const modelKey = this.key({ ...input, model });
           return !(this.cache.has(modelKey) || this.pending.has(modelKey));
         })
-        .slice(0, Math.max(0, MAX_CACHE_ENTRIES - this.cache.size));
+        // Leave room for the requested model's own entry.
+        .slice(0, Math.max(0, MAX_CACHE_ENTRIES - this.cache.size - (this.cache.has(key) ? 0 : 1)));
     const started = Promise.resolve().then(async () => {
       this.assertRunning();
       if (input.provider === 'CODEX' && this.deps.resolveAccountId) {

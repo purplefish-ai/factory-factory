@@ -129,13 +129,19 @@ describe('launch discovery model sweep', () => {
     expect(f.fetchOptions).toHaveBeenCalledTimes(3);
   });
 
-  it('only sweeps into free cache capacity', async () => {
-    const f = fixture(() => Promise.resolve([]));
-    for (let i = 0; i < 127; i++) {
+  it('sweeps only into free cache capacity, keeping a slot for the requested model', async () => {
+    // Record what each probe may sweep, without caching anything extra.
+    const f = fixture((_input, select) => {
+      select(['w', 'x', 'y', 'z']);
+      return Promise.resolve([]);
+    });
+    for (let i = 0; i < 128; i++) {
       await f.service.getOptions({ provider: 'CODEX', model: `model-${i}` });
     }
-    const select = f.fetchOptions.mock.calls.at(-1)?.[2];
-    // 127 cached entries leave room for one more model.
-    expect(select?.(['x', 'y', 'z'])).toEqual(['x']);
+    // Probe i runs with i cached entries and reserves one slot for its own result.
+    expect(f.selections[0]).toEqual(['w', 'x', 'y', 'z']);
+    expect(f.selections[125]).toEqual(['w', 'x']);
+    expect(f.selections[126]).toEqual(['w']);
+    expect(f.selections[127]).toEqual([]);
   });
 });

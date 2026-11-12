@@ -594,12 +594,15 @@ export function createServer(application: Application, requestedPort?: number): 
         void runStartupTask('Failed to warm launcher options', () =>
           services.sessionConfigService.warmLaunchOptions()
         );
-        void runStartupTask('Failed to warm model catalogs', async () => {
-          await Promise.allSettled([
-            services.claudeModelCatalogService.getModels(),
-            services.codexModelCatalogService.getModels(),
-          ]);
-        });
+        // Each provider warms independently; failures are still reported.
+        for (const [provider, catalog] of [
+          ['Claude', services.claudeModelCatalogService],
+          ['Codex', services.codexModelCatalogService],
+        ] as const) {
+          void runStartupTask(`Failed to warm ${provider} model catalog`, async () => {
+            await catalog.getModels();
+          });
+        }
 
         logger.info('Server endpoints available', {
           server: `http://${ENDPOINT_HOST}:${actualPort}`,

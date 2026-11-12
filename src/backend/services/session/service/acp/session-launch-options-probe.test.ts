@@ -247,6 +247,43 @@ describe('native launch capability discovery', () => {
       vi.useRealTimers();
     }
   });
+  it('bounds the whole sweep by one budget and keeps the models captured in time', async () => {
+    vi.useFakeTimers();
+    try {
+      const child = createMockChildProcess();
+      exitChildAfterSigterm(child);
+      mocks.spawn.mockReturnValue(child);
+      const many = Array.from({ length: 10 }, (_, i) => `m${i}`);
+      const advertised = (model = 'm0') =>
+        config(model).map((option) =>
+          option.id === 'model' && option.type === 'select'
+            ? { ...option, options: many.map((value) => ({ value, name: value })) }
+            : option
+        );
+      mocks.newSession.mockResolvedValue({ sessionId: 'probe', configOptions: advertised() });
+      // Every switch answers just inside its own 30s bound.
+      mocks.set.mockImplementation(
+        ({ value }: { value: string }) =>
+          new Promise((resolve) => {
+            setTimeout(() => resolve({ configOptions: advertised(value) }), 25_000);
+          })
+      );
+      const probe = startProbe({
+        provider: 'CLAUDE',
+        model: 'm0',
+        selectAdditionalModels: (models) => models,
+      });
+      await vi.advanceTimersByTimeAsync(0);
+      await probe.result;
+      await vi.advanceTimersByTimeAsync(10 * 30_000);
+      // Two switches fit in the 60s budget; the third is cut off at the deadline.
+      expect((await probe.additional).map((options) => options.model)).toEqual(['m1', 'm2']);
+      await probe.drained;
+    } finally {
+      vi.clearAllTimers();
+      vi.useRealTimers();
+    }
+  });
   it('waits longer for provider session creation than for other discovery steps', async () => {
     vi.useFakeTimers();
     try {
@@ -256,16 +293,15 @@ describe('native launch capability discovery', () => {
       const creating = deferred<{ sessionId: string; configOptions: SessionConfigOption[] }>();
       mocks.newSession.mockReturnValueOnce(creating.promise);
       let settled = false;
-      const probing = fetchSessionLaunchOptionsFromAcp({
-        provider: 'CLAUDE',
-        model: 'opus',
-      }).finally(() => {
+      const probe = startProbe({ provider: 'CLAUDE', model: 'opus' });
+      const probing = probe.result.finally(() => {
         settled = true;
       });
-      await vi.advanceTimersByTimeAsync(60_000);
+      await vi.advanceTimersByTimeAsync(119_999);
       expect(settled).toBe(false);
       creating.resolve({ sessionId: 'probe', configOptions: config() });
       expect((await probing).model).toBe('opus');
+      await probe.drained;
     } finally {
       vi.clearAllTimers();
       vi.useRealTimers();
