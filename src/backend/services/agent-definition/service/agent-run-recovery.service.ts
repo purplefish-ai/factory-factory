@@ -8,4 +8,7 @@ export const eventRunRecovery = {
   resolve(...input: Parameters<typeof agentRunRecoveryAccessor.resolve>) {
     return agentRunRecoveryAccessor.resolve(...input);
   },
+  abandonUnproven(...input: Parameters<typeof agentRunRecoveryAccessor.abandonUnproven>) {
+    return agentRunRecoveryAccessor.abandonUnproven(...input);
+  },
 };

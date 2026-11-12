@@ -5,7 +5,7 @@ import {
   agentLaunchPhaseSchema,
   agentDeliveryStateSchema,
 } from './agent-runtime';
-import { initialAttemptSchema } from './event-agent-delivery';
+import { initialAttemptSchema, unprovenStopReasonSchema } from './event-agent-delivery';
 import { eventLaunchPreparationSchema } from './event-agent-preparation';
 import { eventChildRestSchema } from './event-child-rest';
 
@@ -14,9 +14,23 @@ export const eventRunRecoveryContextSchema = z.strictObject({
   claim: agentClaimResultSchema.options[0],
   attempt: initialAttemptSchema,
 });
-export const eventRunRecoveryInputSchema = eventRunRecoveryContextSchema.extend({
+const recoveryActionFields = {
   action: z.enum(['RESOLVE', 'ABANDON', 'RETRY']),
-});
+  /**
+   * ABANDON only: end the run even when its stop or work cannot be proven. An
+   * explicit opt-in, so an ordinary Abandon never silently becomes unproven.
+   */
+  acceptUnprovenStop: z.literal(true).optional(),
+};
+const onlyAbandonAcceptsUnproven = (input: { action: string; acceptUnprovenStop?: true }) =>
+  !input.acceptUnprovenStop || input.action === 'ABANDON';
+const unprovenOnlyForAbandon = {
+  message: 'Only Abandon can accept an unproven stop',
+  path: ['acceptUnprovenStop'],
+};
+export const eventRunRecoveryInputSchema = eventRunRecoveryContextSchema
+  .extend(recoveryActionFields)
+  .refine(onlyAbandonAcceptsUnproven, unprovenOnlyForAbandon);
 export type EventRunRecoveryContext = z.infer<typeof eventRunRecoveryContextSchema>;
 export type EventRunRecoveryInput = z.infer<typeof eventRunRecoveryInputSchema>;
 
@@ -29,9 +43,9 @@ export const agentRecoveryTargetInputSchema = z.strictObject({
 export const agentRecoveryContextSchema = eventRunRecoveryContextSchema.extend({
   agentId: agentManagementIdSchema,
 });
-export const agentRecoveryInputSchema = eventRunRecoveryInputSchema.extend({
-  agentId: agentManagementIdSchema,
-});
+export const agentRecoveryInputSchema = eventRunRecoveryContextSchema
+  .extend({ ...recoveryActionFields, agentId: agentManagementIdSchema })
+  .refine(onlyAbandonAcceptsUnproven, unprovenOnlyForAbandon);
 const reference = agentRecoveryTargetInputSchema;
 export const agentRecoveryRunSchema = z.strictObject({
   status: z.literal('RUNNING'),
@@ -50,12 +64,7 @@ export const agentRecoveryTargetSchema = z.discriminatedUnion('status', [
     reason: z.enum(['NOT_FOUND', 'NOT_RECOVERABLE', 'INVALID_STORED_DATA']),
   }),
 ]);
-const commonBlocked = z.enum([
-  'PREPARATION_CLEANUP_UNCERTAIN',
-  'PREVIOUS_WORK_PROOF_UNAVAILABLE',
-  'SOURCE_UNAVAILABLE',
-  'WORK_PROOF_UNAVAILABLE',
-]);
+const commonBlocked = unprovenStopReasonSchema;
 /**
  * Child workspaces that are not at rest. While present, only ABANDON is available;
  * RESOLVE and RETRY report CHILD_WORK_UNPROVEN. `keepsOutcome` says ABANDON (or the
@@ -71,6 +80,11 @@ export const agentRecoveryInspectionSchema = reference.extend({
   context: eventRunRecoveryContextSchema,
   run: agentRecoveryRunSchema,
   blocked: commonBlocked.nullable(),
+  /**
+   * While `blocked`, ABANDON with `acceptUnprovenStop` can still end the run
+   * without proof that its agent stopped. Always false when not blocked.
+   */
+  unprovenAbandonAvailable: z.boolean(),
   childHold: agentRecoveryChildHoldSchema.nullable(),
   retryBlocked: z.literal('RESOURCES_UNAVAILABLE').nullable(),
   retryResourcesAvailable: z.boolean(),
@@ -79,7 +93,8 @@ export const agentRecoveryInspectionSchema = reference.extend({
 });
 export const agentRecoveryResultSchema = z.discriminatedUnion('status', [
   z.strictObject({ status: z.literal('RESOLVED') }),
-  z.strictObject({ status: z.literal('ABANDONED') }),
+  /** `unproven` when the run ended without a proven stop (ABANDON with `acceptUnprovenStop`). */
+  z.strictObject({ status: z.literal('ABANDONED'), unproven: z.literal(true).optional() }),
   z.strictObject({
     status: z.literal('RETRIED'),
     claim: agentClaimResultSchema.options[0],

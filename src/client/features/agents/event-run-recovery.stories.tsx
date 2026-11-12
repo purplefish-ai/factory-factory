@@ -12,6 +12,7 @@ import {
   recoveryTargetFixture,
   staleRecoveryContextError,
   unavailableTargetFixture,
+  unprovenAbandonedRunFixture,
 } from './event-run-recovery.story-fixtures';
 
 /** The Runs view with one run in a recovery state above a finished run. */
@@ -58,7 +59,10 @@ async function inspect({ canvasElement }: PlayContext) {
   return within(await page(canvasElement).findByRole('dialog', { name: 'Recover run' }));
 }
 
-async function chooseAction(context: PlayContext, action: 'Resolve' | 'Abandon' | 'Retry') {
+async function chooseAction(
+  context: PlayContext,
+  action: 'Resolve' | 'Abandon' | 'Retry' | 'Abandon anyway'
+) {
   const dialog = await inspect(context);
   await userEvent.click(await dialog.findByRole('button', { name: action }));
   return within(await page(context.canvasElement).findByRole('alertdialog'));
@@ -137,12 +141,84 @@ export const InspectionConflict: Story = {
   },
 };
 
-/** Lost delivery tracking: the server offers no action, and the dialog says why. */
+/** Lost delivery tracking: only Abandon anyway, which accepts that the stop is unproven. */
+export const AbandonAnywayOffered: Story = {
+  play: async (context) => {
+    const dialog = await inspect(context);
+    await expect(
+      await dialog.findByText("Resolve, Retry and Abandon aren't available")
+    ).toBeVisible();
+    await expect(dialog.getByRole('button', { name: 'Abandon anyway' })).toBeEnabled();
+    await expect(dialog.queryByRole('button', { name: 'Abandon' })).not.toBeInTheDocument();
+  },
+};
+
+/** Blocked with no unproven Abandon either (for example another owner holds the session). */
 export const NothingAvailable: Story = {
+  parameters: {
+    trpc: {
+      handlers: handlersFor('deliveryUncertain', {
+        'automation.inspectRun': () => ({
+          ...recoveryInspectionFixture('deliveryUncertain'),
+          unprovenAbandonAvailable: false,
+        }),
+      }),
+    },
+  },
   play: async (context) => {
     const dialog = await inspect(context);
     await expect(await dialog.findByText('No recovery action is available')).toBeVisible();
-    await expect(dialog.queryByRole('button', { name: 'Abandon' })).not.toBeInTheDocument();
+    await expect(dialog.queryByRole('button', { name: /Abandon/ })).not.toBeInTheDocument();
+  },
+};
+
+export const ConfirmAbandonAnyway: Story = {
+  play: async (context) => {
+    const confirm = await chooseAction(context, 'Abandon anyway');
+    await expect(await confirm.findByText('Its agent may still be running')).toBeVisible();
+    await expect(confirm.getByRole('button', { name: 'Abandon anyway' })).toBeEnabled();
+  },
+};
+
+/** A completed first turn whose tracking was lost in a restart keeps its Completed result. */
+export const ConfirmAbandonAnywayCompletedTurn: Story = {
+  parameters: { trpc: { handlers: handlersFor('trackingLost') } },
+  play: async (context) => {
+    const confirm = await chooseAction(context, 'Abandon anyway');
+    await expect(
+      await confirm.findByText(/keep the result of its own first turn: it's recorded as Completed/)
+    ).toBeVisible();
+  },
+};
+
+export const ConfirmAbandonAnywayPhone: Story = {
+  ...ConfirmAbandonAnyway,
+  globals: { viewport: { value: 'phone', isRotated: false } },
+};
+
+export const AbandonedAnyway: Story = {
+  play: async (context) => {
+    const confirm = await chooseAction(context, 'Abandon anyway');
+    await userEvent.click(confirm.getByRole('button', { name: 'Abandon anyway' }));
+    await expect(
+      await within(context.canvasElement).findByText(/couldn't confirm its agent stopped/)
+    ).toBeVisible();
+  },
+};
+
+/** The history row once a run was abandoned without a confirmed stop. */
+export const AbandonedUnprovenInHistory: Story = {
+  parameters: {
+    trpc: {
+      handlers: handlersFor('deliveryUncertain', {
+        'automation.runs': () => ({ items: [unprovenAbandonedRunFixture()], nextCursor: null }),
+      }),
+    },
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(await canvas.findByText(/couldn't confirm its agent had stopped/)).toBeVisible();
+    await expect(canvas.queryByRole('button', { name: 'Inspect' })).not.toBeInTheDocument();
   },
 };
 

@@ -1173,7 +1173,8 @@ observers or delaying later subscribers. A missing retained READY worktree
 becomes FAILED under the same claim and path fence, preserving its path and
 provenance for inspection. Recovery must not infer safe reinitialization from
 PROVISIONING alone: the consumer preserves uncertain physical-work evidence and
-retains capacity until current cleanup proof permits reset. Persisted PIDs never
+retains capacity until current cleanup proof permits reset, or until a person
+accepts an [unproven Abandon](#abandon-without-proof). Persisted PIDs never
 grant process ownership.
 
 Event setup has a fifteen-minute deadline. Uncancellable Git work remains owned
@@ -1186,12 +1187,13 @@ fresh durable claim and caller ownership, checked independently of cancellation.
 If creation rejects without that result, remaining disk or registration effects
 are retained as UNKNOWN. CONFIRMED requires positive absence on disk and in Git
 under the unchanged, available canonical base identity. Inspection failure is
-UNKNOWN. Unknown cleanup forbids retry or capacity release. Ordinary nonzero
-script exits still produce READY with a warning, and successful scripts may
-retain background dev servers. Invalid configuration and execution errors return
-explicit failures. Event initialization does not create an unattended terminal
-or send a Linear status update; a user can open a terminal afterward. Ordinary
-interactive, child and periodic initialization retain their policies.
+UNKNOWN. Unknown cleanup forbids retry and automatic capacity release; only an
+explicit [unproven Abandon](#abandon-without-proof) frees the slot. Ordinary
+nonzero script exits still produce READY with a warning, and successful scripts
+may retain background dev servers. Invalid configuration and execution errors
+return explicit failures. Event initialization does not create an unattended
+terminal or send a Linear status update; a user can open a terminal afterward.
+Ordinary interactive, child and periodic initialization retain their policies.
 
 ## Session lifecycle ownership
 
@@ -1763,9 +1765,9 @@ read/traversal access in `retryResourcesAvailable` and reports a retry-specific
 unavailable retry directory does not block RESOLVE or ABANDON. Retry checks
 resources before targeted stop and again at final transaction validation; losing
 the directory during the write rolls back with `RESOURCES_UNAVAILABLE`. Settled
-UNKNOWN setup cleanup has no supported recovery action. A run held by child
-workspaces that are not at rest offers only ABANDON; RESOLVE and RETRY return
-`CHILD_WORK_UNPROVEN`.
+UNKNOWN setup cleanup, like any other common proof block, supports only ABANDON
+with an accepted unproven stop (below). A run held by child workspaces that are
+not at rest offers only ABANDON; RESOLVE and RETRY return `CHILD_WORK_UNPROVEN`.
 
 Saved resolution JSON does not restore lost live coverage. Both a later action
 and the rotated attempt's startup require the old stopped-work window to remain
@@ -1858,8 +1860,9 @@ unexpected exit remain distinct causes. Shutdown interruption preserves
 reconciliation and no-resend semantics instead of inventing a user cancellation.
 Observation writes are awaited before completion; shutdown bounds its drain and
 still attempts physical cleanup when persistence fails or times out. Missing
-durable stop evidence remains an error and cannot authorize retry or capacity
-release.
+durable stop evidence remains an error and cannot authorize retry, settlement or
+automatic capacity release; only a person's
+[unproven Abandon](#abandon-without-proof) ends such a run.
 
 Event stop separates immediate owned-runtime termination from creation and
 observation draining. Startup failure cleanup never waits for its own creation
@@ -1978,6 +1981,54 @@ PENDING delivery means UNSENT, while incomplete setup retains its preparation
 hold. Manual retry keeps the logical run, reserved workspace/session/account,
 original message, setup start, inherited automatic attempt budget and initial
 outcome; it rotates only the current send identity and send generation.
+
+<a id="abandon-without-proof"></a>
+
+Every run can still reach a terminal state by a person's explicit decision. When
+inspection reports a common `blocked` reason (`WORK_PROOF_UNAVAILABLE`,
+`PREVIOUS_WORK_PROOF_UNAVAILABLE`, `SOURCE_UNAVAILABLE` or
+`PREPARATION_CLEANUP_UNCERTAIN`; for example an ambiguous first message after a
+transport disconnect, live tracking lost in a restart, or uncertain setup
+cleanup) and the session is still event-owned, it also reports
+`unprovenAbandonAvailable: true`. ABANDON with `acceptUnprovenStop: true` then
+ends the run even though its stop cannot be proven; the opt-in is rejected for
+RESOLVE and RETRY, and an ABANDON without it is unchanged (`BLOCKED`). With the
+opt-in, the action still runs the normal proven path when proof is available,
+and otherwise still attempts a targeted strict stop of the run's own recorded
+runtime source when a live handle exists (never a replacement). The owner write
+keeps the exact claim and send checks (a stale context is `CONFLICT`) and the
+child-set comparison, then records the result of the run's own first turn when
+one was recorded, by the rule settlement uses: `COMPLETED` (`PR_CREATED` when
+the run's result has pull request links) or `FAILED`; `CANCELLED` only when no
+outcome was recorded (first message unsent or ambiguous, setup unfinished) or
+the turn itself was cancelled. It also records reason `ABANDONED_UNPROVEN`,
+which says the stop was not proven, `launchPhase` FINISHED, no lease or next
+attempt, and an incremented `workerGeneration`. The increment fences every later
+owner write for the old attempt: a late send, outcome, ambiguity or stop
+observation, lease renewal and settlement all conflict, so nothing is resent and
+nothing reopens or settles the run. The result is
+`{ status: 'ABANDONED', unproven: true }` (a proven Abandon omits `unproven`).
+The evidence gains `unprovenAbandon` (attempt, reason, decision time) and the
+child proof. The decision adds no `resolution`, `work` proof or stop of its own;
+fields already present, such as an earlier retry's resolution, stay as they
+were, and `stop` holds only what was actually observed, such as an UNKNOWN
+attempted stop. The consumer releases its local owner without starting a
+replacement observer. The delivery state stays as it was (for example
+AMBIGUOUS), so the reserved session keeps its initial-delivery fence against
+ordinary sends, as after any Abandon of an unfinished delivery. Children are not
+stopped, the workspace is neither archived nor deleted, and an agent that was
+still running keeps working in its workspace until someone stops it there. The
+freed slot lets the automation claim its next queued run, so real concurrent
+work can exceed the run limits, as with child workspaces. Because the decision
+is final and fenced, run-context retention treats a run with reason
+`ABANDONED_UNPROVEN` as settled when its evidence attempt and `unprovenAbandon`
+marker identify the stored current send (run, session, message, send attempt and
+attempt generation) and its preparation marker parses. Their `workerGeneration`
+is fenced and is not the run's current one: the evidence attempt may carry any
+earlier generation, and the marker must carry exactly the generation before the
+decision's own increment. When those hold, the run's copied context can expire
+under the configured policy; a missing or mismatched marker is
+`INVALID_STORED_DATA` and is retained.
 
 The boundary uses existing socket locality, configured CIDRs, browser Origin and
 explicit proxy trust rules. Origin-less loopback and other same-user local

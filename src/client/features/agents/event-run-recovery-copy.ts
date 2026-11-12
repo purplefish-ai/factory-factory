@@ -6,20 +6,24 @@ import type { EventRun } from './types';
 type Outputs = inferRouterOutputs<AppRouter>['automation'];
 export type RecoveryInspection = Outputs['inspectRun'];
 export type ChildHold = NonNullable<RecoveryInspection['childHold']>;
-export type RecoveryAction = 'RESOLVE' | 'ABANDON' | 'RETRY';
-export type RecoveryOutcome = 'RESOLVED' | 'ABANDONED' | 'RETRIED';
+type ServerAction = 'RESOLVE' | 'ABANDON' | 'RETRY';
+/** The server's actions, plus Abandon that accepts an unproven stop (ABANDON with the opt-in). */
+export type RecoveryAction = ServerAction | 'ABANDON_UNPROVEN';
+export type RecoveryOutcome = 'RESOLVED' | 'ABANDONED' | 'ABANDONED_UNPROVEN' | 'RETRIED';
 type UnavailableReason = Extract<Outputs['recoveryTarget'], { status: 'UNAVAILABLE' }>['reason'];
 
 export const ACTION_LABELS: Record<RecoveryAction, string> = {
   RESOLVE: 'Resolve',
   RETRY: 'Retry',
   ABANDON: 'Abandon',
+  ABANDON_UNPROVEN: 'Abandon anyway',
 };
 
 export const ACTION_SUMMARIES: Record<RecoveryAction, string> = {
   RESOLVE: 'Stop the agent and keep the run open for a later decision.',
   RETRY: 'Send the first message again in the same workspace.',
   ABANDON: 'End the run and free its run slot.',
+  ABANDON_UNPROVEN: 'End the run and free its run slot without confirming that its agent stopped.',
 };
 
 /**
@@ -70,7 +74,7 @@ export const UNAVAILABLE_TARGET: Record<UnavailableReason, string> = {
  * child hold leaves only Abandon; missing resources stop only Retry.
  */
 export function recoveryAvailability(inspection: RecoveryInspection) {
-  const reason = (action: RecoveryAction): string | null => {
+  const reason = (action: ServerAction): string | null => {
     if (inspection.blocked) {
       return describeRecoveryBlock(inspection.blocked);
     }
@@ -110,6 +114,27 @@ const STATUS_WORDS = {
   FAILED: 'Failed',
 } as const;
 
+/**
+ * What Abandon without a proven stop records: the result of the run's own first
+ * turn when one was recorded (as settlement does), otherwise Cancelled.
+ */
+export function unprovenAbandonOutcome(inspection: RecoveryInspection, run: EventRun) {
+  const noResult =
+    "It's recorded as Cancelled, because its first turn has no completed or failed result.";
+  // The fresh inspection decides whether a first-turn result exists; only a finished
+  // delivery has one. The history row, possibly older, only names it.
+  if (inspection.run.deliveryState !== 'FINISHED') {
+    return noResult;
+  }
+  if (!run.initialOutcome) {
+    return 'This run will keep the result of its own first turn.';
+  }
+  const kept = childHeldOutcome(run.initialOutcome.result, run.result?.pullRequests.length ?? 0);
+  return kept
+    ? `This run will keep the result of its own first turn: it's recorded as ${STATUS_WORDS[kept]}.`
+    : noResult;
+}
+
 /** What Abandon records, matching the server's rules for a run with and without a child hold. */
 export function abandonOutcome(inspection: RecoveryInspection, run: EventRun) {
   if (!inspection.childHold) {
@@ -131,6 +156,10 @@ export const OUTCOME_MESSAGES: Record<RecoveryOutcome, { title: string; body: st
   ABANDONED: {
     title: 'Run abandoned.',
     body: 'Its run slot is free. Child workspaces were not stopped.',
+  },
+  ABANDONED_UNPROVEN: {
+    title: 'Run abandoned.',
+    body: "Its run slot is free. Factory Factory couldn't confirm its agent stopped: if it was still running, it keeps working in its workspace until you stop it there.",
   },
   RETRIED: {
     title: 'Retry started.',

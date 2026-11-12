@@ -29,7 +29,8 @@ export type RecoveryFixture =
   | 'resolved'
   | 'childHeld'
   | 'deliveryUncertain'
-  | 'setupUncertain';
+  | 'setupUncertain'
+  | 'trackingLost';
 
 const SETUP = { version: 1, state: 'STARTUP', setupStartedAt: '2026-11-11T09:00:06.000Z' } as const;
 const FINISHED_DELIVERY = {
@@ -58,6 +59,13 @@ const RUNS: Record<RecoveryFixture, Partial<EventRun>> = {
   },
   // The first turn ended while child workspaces were not at rest.
   childHeld: {
+    launchPhase: 'ACTIVE',
+    reasonCode: null,
+    delivery: FINISHED_DELIVERY,
+    initialOutcome: COMPLETED_TURN,
+  },
+  // The first turn completed, then the app restarted and lost live tracking of its work.
+  trackingLost: {
     launchPhase: 'ACTIVE',
     reasonCode: null,
     delivery: FINISHED_DELIVERY,
@@ -103,6 +111,20 @@ export function recoveryRunFixture(recovery: RecoveryFixture): EventRun {
     workspaceId: WORKSPACE_ID,
     workspaceState: 'LIVE',
     ...RUNS[recovery],
+  });
+}
+
+/**
+ * The ambiguous-delivery run after Abandon with an accepted unproven stop: the
+ * history keeps its AMBIGUOUS first message; only status and reason change.
+ */
+export function unprovenAbandonedRunFixture(): EventRun {
+  return eventRunFixture({
+    ...recoveryRunFixture('deliveryUncertain'),
+    status: 'CANCELLED',
+    launchPhase: 'FINISHED',
+    reasonCode: 'ABANDONED_UNPROVEN',
+    completedAt: '2026-11-11T10:00:00.000Z',
   });
 }
 
@@ -183,12 +205,41 @@ const CHILD_HOLD = {
 /** What `automation.inspectRun` returned for each state in the backend tests. */
 const INSPECTIONS = {
   // Own work not yet proven stopped: each action stops it first.
-  heldAfterTurn: { blocked: null, childHold: null, proofAvailable: false },
-  resolved: { blocked: null, childHold: null, proofAvailable: true },
-  childHeld: { blocked: null, childHold: CHILD_HOLD, proofAvailable: false },
-  deliveryUncertain: { blocked: 'WORK_PROOF_UNAVAILABLE', childHold: null, proofAvailable: false },
+  heldAfterTurn: {
+    blocked: null,
+    unprovenAbandonAvailable: false,
+    childHold: null,
+    proofAvailable: false,
+  },
+  resolved: {
+    blocked: null,
+    unprovenAbandonAvailable: false,
+    childHold: null,
+    proofAvailable: true,
+  },
+  childHeld: {
+    blocked: null,
+    unprovenAbandonAvailable: false,
+    childHold: CHILD_HOLD,
+    proofAvailable: false,
+  },
+  // Every common block leaves Abandon with an accepted unproven stop
+  // (`event-run-unproven-abandon.integration.test.ts`).
+  trackingLost: {
+    blocked: 'WORK_PROOF_UNAVAILABLE',
+    unprovenAbandonAvailable: true,
+    childHold: null,
+    proofAvailable: false,
+  },
+  deliveryUncertain: {
+    blocked: 'WORK_PROOF_UNAVAILABLE',
+    unprovenAbandonAvailable: true,
+    childHold: null,
+    proofAvailable: false,
+  },
   setupUncertain: {
     blocked: 'PREPARATION_CLEANUP_UNCERTAIN',
+    unprovenAbandonAvailable: true,
     childHold: null,
     proofAvailable: false,
   },
@@ -232,6 +283,8 @@ export function recoveryResultFixture(
   }
   return agentRecoveryResultSchema.parse({
     status: parsed.action === 'RESOLVE' ? 'RESOLVED' : 'ABANDONED',
+    // The real server answers this way for a run blocked on proof (unproven abandon tests).
+    ...(parsed.acceptUnprovenStop ? { unproven: true } : {}),
   });
 }
 
