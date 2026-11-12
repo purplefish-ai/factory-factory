@@ -169,7 +169,7 @@ compact proof is persisted with the settlement.
 Build milestone 2 as the earlier plan specifies in its execution contracts and
 its task 7: separately encrypted app-level token, Socket Mode through the
 official client behind a narrow adapter, acknowledge only after the event is
-stored, team/app/ channel verification, activation by a test message in each
+stored, team, app and channel verification, activation by a test message in each
 selected channel, visible delivery gaps, and bounded thread and nearby-message
 context.
 
