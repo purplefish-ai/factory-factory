@@ -14,12 +14,14 @@ Recurring backend work is declared to `jobRunner`
 for the poll loops: the snapshot reconciliation safety net, the PR
 sync/discovery poll, the periodic reconciliation cleanup, archived workspace
 data retention, PR monitoring, PR event ledger retention, the periodic-task
-poll, GitHub agent source intake, event evaluation/admission, and workspace
-metadata updates. Each owning service or orchestrator registers its job and
-exposes thin `start()`/`stop()` delegates. GitHub agent intake registers through
-`createAgentRuntime()` in the agent-runtime orchestrator; its poll service owns
-neither registration nor lifecycle methods. These delegates are the injection
-seam `server.ts` and `server.upgrade.test.ts` use.
+poll, GitHub agent source intake, Slack listener reconciliation, event
+evaluation/admission, and workspace metadata updates. Each owning service or
+orchestrator registers its job and exposes thin `start()`/`stop()` delegates.
+GitHub agent intake registers through `createAgentRuntime()` in the
+agent-runtime orchestrator, which also composes the Slack listener
+(`createSlackIntake()`); its poll service owns neither registration nor
+lifecycle methods. These delegates are the injection seam `server.ts` and
+`server.upgrade.test.ts` use.
 
 Both PR pollers live in `src/backend/orchestration/pull-requests/`:
 `scheduler.service.ts` owns `pr-poll` (PR sync and discovery), and
@@ -161,6 +163,18 @@ baseline resolves, retries a baseline that was never recorded, and returns to
 PAUSED with a reason on source failure, recovery or after 30 minutes
 (`activationExpiryMs`). There is no separate activation job. This job does not
 evaluate events or launch workspaces.
+
+The `agent-slack-intake` job runs immediately, then waits 15 seconds after each
+cycle. It reconciles which Slack connections hold a Socket Mode connection
+(including reconnecting after Slack closes one), refreshes a connected source's
+`lastObservedAt` about once a minute, and opens nothing while
+`AGENT_SLACK_INTAKE_ENABLED` is off. The Socket Mode client's own timers (ping
+monitoring, close handshake) belong to `SlackEventSource`, which stops them by
+disconnecting. Envelopes arrive outside the job; each is stored, then
+acknowledged. The agent runtime's shutdown step stops the job and the adapter
+together: it disconnects every socket, waits for envelopes in flight to finish
+storing, and records the stop as a delivery gap before the database closes. See
+[Slack listener](integrations.md#slack-listener).
 
 The `agent-event-evaluation` job runs immediately, then waits five seconds after
 completion. It evaluates at most 100 durable event/trigger candidates per cycle,

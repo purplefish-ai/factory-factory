@@ -27,6 +27,7 @@ export const SERVICE_INTERVAL_MS = Object.freeze({
   applicationUpdateIdle: 1000,
   agentSourcePoll: 60_000,
   agentEventEvaluation: 5000,
+  agentSlackIntake: 15_000,
   workspaceMetadata: 10_000,
   prEventPoll: 2 * 60_000, // Increased from 1min to 2min to reduce GitHub API pressure
   prPoll: 3 * 60 * 1000, // Increased from 2min to 3min to reduce GitHub API pressure

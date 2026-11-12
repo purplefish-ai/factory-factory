@@ -471,10 +471,6 @@
       "disposition": "maintained-api",
       "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
     },
-    "src/backend/services/agent-definition/index.ts::exports::ingestEvent": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
     "src/backend/services/agent-definition/index.ts::exports::recordEvaluation": {
       "disposition": "maintained-api",
       "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
@@ -500,10 +496,6 @@
       "reason": "Visibility candidate in a reachable module; trace callers and schema/type contracts before narrowing this export."
     },
     "src/backend/services/agent-definition/service/agent-runtime.service.ts::exports::finalizeEventOrder": {
-      "disposition": "review-required",
-      "reason": "Visibility candidate in a reachable module; trace callers and schema/type contracts before narrowing this export."
-    },
-    "src/backend/services/agent-definition/service/agent-runtime.service.ts::exports::ingestEvent": {
       "disposition": "review-required",
       "reason": "Visibility candidate in a reachable module; trace callers and schema/type contracts before narrowing this export."
     },
@@ -1312,10 +1304,6 @@
       "reason": "Visibility candidate in a reachable module; trace callers and schema/type contracts before narrowing this export."
     },
     "src/shared/agent-runtime.ts::exports::agentInitialDeliverySchema": {
-      "disposition": "review-required",
-      "reason": "Visibility candidate in a reachable module; trace callers and schema/type contracts before narrowing this export."
-    },
-    "src/shared/agent-runtime.ts::exports::agentSourceCursorSchema": {
       "disposition": "review-required",
       "reason": "Visibility candidate in a reachable module; trace callers and schema/type contracts before narrowing this export."
     },
