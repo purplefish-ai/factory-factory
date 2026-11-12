@@ -1157,14 +1157,15 @@ files and attachments are never stored or fetched, and the starting prompt says
 that files were not included. Because files are never included, a `file_share`
 whose text is empty or only whitespace (an upload without a comment, in the
 channel or a thread) is acknowledged and not stored: it would start a run with
-nothing to act on. Every `thread_broadcast` is stored. The deterministic matcher
-accepts the same three forms. Each message is stored through `ingestEvent` with
-identity `(connectionId, event_id)` and acknowledged only after the insert
-commits; a duplicate insert is acknowledged too. If the insert fails, the
-envelope stays unacknowledged so Slack can redeliver it. Bot messages (including
-bot file shares), hidden messages, edits, deletes, every other subtype, other
-event types, messages in unselected channels, malformed messages and
-non-`events_api` envelopes are acknowledged and not stored. Text longer than the
+nothing to act on. Every human `thread_broadcast` that passes the checks above
+is stored, whatever its text. The deterministic matcher accepts the same three
+forms. Each message is stored through `ingestEvent` with identity
+`(connectionId, event_id)` and acknowledged only after the insert commits; a
+duplicate insert is acknowledged too. If the insert fails, the envelope stays
+unacknowledged so Slack can redeliver it. Bot messages (including bot file
+shares), hidden messages, edits, deletes, every other subtype, other event
+types, messages in unselected channels, malformed messages and non-`events_api`
+envelopes are acknowledged and not stored. Text longer than the
 100,000-character payload limit is cut with a visible truncation marker. Message
 text is never logged.
 

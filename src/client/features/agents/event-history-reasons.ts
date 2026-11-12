@@ -43,7 +43,7 @@ const REASON_PHRASES: Readonly<Record<string, string>> = {
   SLACK_CONTEXT_FAILED:
     "Slack returned an unexpected response for the message context, so the event didn't run.",
   SLACK_CONTEXT_NOT_SELECTED:
-    "The message is in a channel this trigger doesn't watch, so its context wasn't read.",
+    "The message is in a channel this trigger doesn't watch, so its context wasn't read and the event didn't run.",
   SLACK_CONTEXT_UNAVAILABLE:
     "Slack message context isn't available in this app, so the event didn't run.",
   SOURCE_IDENTITY_MISMATCH:

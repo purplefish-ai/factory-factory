@@ -32,7 +32,7 @@ it.each([
   ['SLACK_CONTEXT_CHANNEL_UNAVAILABLE', /Invite the bot/],
   ['SLACK_CONTEXT_NOT_CONNECTED', /Reconnect/],
   ['SLACK_CONTEXT_FAILED', /didn't run/],
-  ['SLACK_CONTEXT_NOT_SELECTED', /doesn't watch/],
+  ['SLACK_CONTEXT_NOT_SELECTED', /doesn't watch.*didn't run/],
   ['SLACK_CONTEXT_UNAVAILABLE', /didn't run/],
 ])('describes the Slack context outcome %s', (code, wording) => {
   const phrase = describeEventReason(code);
