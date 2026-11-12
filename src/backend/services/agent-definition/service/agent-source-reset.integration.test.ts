@@ -163,9 +163,18 @@ async function abandonCaptureOfE1(midCapture: () => Promise<unknown> = async () 
 }
 
 it('pauses every trigger on the connection, cancels queued runs and keeps claimed work', async () => {
+  // The source is shared: another project's automation on it is paused too.
+  const otherProject = await db.prisma.project.create({
+    data: {
+      name: 'Other project',
+      slug: crypto.randomUUID(),
+      repoPath: '/other',
+      worktreeBasePath: '/other-wt',
+    },
+  });
   const other = await db.prisma.agentDefinition.create({
     data: {
-      projectId,
+      projectId: otherProject.id,
       name: 'Other',
       instructions: 'Other work',
       isEnabled: true,

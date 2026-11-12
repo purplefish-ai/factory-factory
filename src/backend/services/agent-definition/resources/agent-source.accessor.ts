@@ -411,8 +411,8 @@ async function finalizeEventOrder(value: AgentEventOrderInput) {
 }
 /**
  * An explicit decision to give up on the gap behind a recovery fence. Retained proof is never
- * deleted or rewritten: the next baseline starts a new epoch at the current head and the
- * retained high water, beside the old epoch's proof.
+ * deleted or rewritten: the reset starts a new epoch at the retained high water, beside the
+ * old epoch's proof, and the next baseline records the then-current head in it.
  */
 async function resetSource(projectId: string, connectionId: string) {
   return await ledgerTransaction(async (tx) => {
