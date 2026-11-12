@@ -499,6 +499,8 @@ it('ingests an event from a deleted GitHub account without stalling the source',
   const deleted = fixture.github('deleted-account').payload;
   feed = [
     label('newer'),
+    // Intake reads a labeled row whose issue is null as an anchor without a payload.
+    { providerEventId: 'labeled-without-issue', payload: null },
     { providerEventId: 'deleted-account', payload: { ...deleted, actorId: null, creatorId: null } },
     ...feed,
   ];
