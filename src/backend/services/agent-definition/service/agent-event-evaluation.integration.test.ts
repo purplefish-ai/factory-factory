@@ -324,6 +324,17 @@ it('resolves provider-specific saved defaults and preserves explicit execution o
       getModelDefaults: () => userSettingsService.get(),
       findWorkspace: async () => null,
     }),
+    sessionConfigService: {
+      getLaunchOptions: async (input: { provider: 'CLAUDE' | 'CODEX'; model: string }) => ({
+        provider: input.provider,
+        model: `native-${input.model}`,
+        reasoning: {
+          options: ['low', 'high'].map((value) => ({ value, label: value })),
+          defaultValue: 'high',
+        },
+        planMode: { supported: false, selected: false },
+      }),
+    },
   };
   expect(await resolveAgentExecutionConfig(services, { version: 1 })).toEqual({
     version: 1,
@@ -339,6 +350,20 @@ it('resolves provider-specific saved defaults and preserves explicit execution o
       reasoningEffort: 'low',
     })
   ).toEqual({ version: 1, provider: 'CLAUDE', model: 'sonnet', reasoningEffort: 'low' });
+  // The inherited Claude default "medium" is not offered natively: admission
+  // normalizes it to the native default, as Enable's validation does.
+  expect(
+    await resolveAgentExecutionConfig(services, { version: 1, provider: 'CLAUDE', model: 'opus' })
+  ).toEqual({ version: 1, provider: 'CLAUDE', model: 'opus', reasoningEffort: 'high' });
+  // An explicit effort the model rejects is a permanent error, never a launch.
+  await expect(
+    resolveAgentExecutionConfig(services, {
+      version: 1,
+      provider: 'CLAUDE',
+      model: 'opus',
+      reasoningEffort: 'max',
+    })
+  ).rejects.toMatchObject({ name: 'ApplicationError', code: 'PRECONDITION_FAILED' });
 });
 
 it.each(['new', 'pending'] as const)(

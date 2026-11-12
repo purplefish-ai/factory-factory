@@ -695,6 +695,7 @@ model AgentDefinition {
   executionConfig    Json              @default("{\"version\":1}") // agentExecutionConfigSchema
   definitionRevision Int               @default(1)
   managementRevision Int               @default(1)
+  validatedIntent    Json? // agentValidatedIntentSchema; activation/admission gate for definitionRevision
   createdAt          DateTime          @default(now())
   updatedAt          DateTime          @updatedAt
   triggers           AgentTrigger[]
@@ -760,6 +761,7 @@ model AgentTrigger {
   activationState      AgentActivationState @default(PAUSED)
   activationBoundary   Json? // agentActivationBoundarySchema
   pendingActivation    Json? // agentPendingActivationSchema; never enables dispatch
+  pausedReasonCode     String? // Why a STARTING activation returned to PAUSED; cleared by Enable/Pause
   createdAt            DateTime             @default(now())
   updatedAt            DateTime             @updatedAt
   runs                 AgentRun[]

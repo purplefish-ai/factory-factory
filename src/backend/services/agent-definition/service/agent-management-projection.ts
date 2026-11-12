@@ -6,6 +6,7 @@ import {
 } from '@/backend/services/agent-definition/resources/agent-management.accessor';
 import {
   agentCapabilitySchema,
+  agentPausedReasonCodeSchema,
   agentSummarySchema,
   managedAgentSchema,
   managedTriggerSchema,
@@ -134,12 +135,14 @@ export function managementProjection(
     });
     const configuration = parsed.success ? parsed.data : null;
     const health = agentSourceHealthSchema.safeParse(row.connection?.sourceState?.health);
+    const pausedReason = agentPausedReasonCodeSchema.safeParse(row.pausedReasonCode);
     return managedTriggerSchema.parse({
       id: row.id,
       isConfigured: row.isConfigured,
       triggerRevision: row.triggerRevision,
       activationGeneration: row.activationGeneration,
       activationState: row.activationState,
+      pausedReasonCode: pausedReason.success ? pausedReason.data : null,
       isEnabled: row.isEnabled,
       configuration,
       capability: membershipCapability(row, unknown, configuration),

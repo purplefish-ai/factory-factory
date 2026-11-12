@@ -1,3 +1,4 @@
+import { agentValidatedIntentSchema } from '@/shared/agent-management';
 import {
   agentActivationBoundarySchema,
   agentSourceHealthSchema,
@@ -136,6 +137,15 @@ export function eventEligibility(
     : slackEligibility(trigger, payload, settings.data, boundary.data);
 }
 
+/** Enable persists the intent it validated; any later execution edit makes it stale. */
+export function hasCurrentValidatedIntent(definition: {
+  definitionRevision: number;
+  validatedIntent: unknown;
+}) {
+  const intent = agentValidatedIntentSchema.safeParse(definition.validatedIntent);
+  return intent.success && intent.data.definitionRevision === definition.definitionRevision;
+}
+
 export function permanentRuntimeStateReason(trigger: RuntimeTrigger): AgentRuntimeReason | null {
   if (trigger.type === 'SCHEDULE') {
     return 'UNSUPPORTED_TRIGGER';
@@ -146,8 +156,11 @@ export function permanentRuntimeStateReason(trigger: RuntimeTrigger): AgentRunti
   if (!trigger.agentDefinition.isEnabled) {
     return 'DEFINITION_DISABLED';
   }
-  if (!trigger.isEnabled || trigger.activationState !== 'ACTIVE') {
+  if (!trigger.isEnabled || trigger.activationState !== 'ACTIVE' || trigger.isConfigured !== true) {
     return 'TRIGGER_DISABLED';
+  }
+  if (!hasCurrentValidatedIntent(trigger.agentDefinition)) {
+    return 'EXECUTION_NOT_VALIDATED';
   }
   if (
     !trigger.connection?.isEnabled ||

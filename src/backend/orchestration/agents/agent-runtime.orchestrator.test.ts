@@ -79,6 +79,31 @@ it('paces completed source polls at sixty seconds without overlap', async () => 
   await runtime.stop();
 });
 
+it('completes pending activations after each source poll in the same job', async () => {
+  vi.useFakeTimers();
+  const calls: string[] = [];
+  const runtime = createAgentRuntime(
+    {
+      pollCycle: () => {
+        calls.push('poll');
+        return Promise.resolve();
+      },
+    },
+    undefined,
+    undefined,
+    {
+      completePending: () => {
+        calls.push('activate');
+        return Promise.resolve();
+      },
+    }
+  );
+  runtime.start();
+  await vi.advanceTimersByTimeAsync(60_000);
+  expect(calls).toEqual(['poll', 'activate', 'poll', 'activate']);
+  await runtime.stop();
+});
+
 it('runs evaluation and maintenance every five seconds without claiming when no launcher is wired', async () => {
   vi.useFakeTimers();
   const evaluations: number[] = [];

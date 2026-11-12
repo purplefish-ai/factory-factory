@@ -1146,8 +1146,9 @@ Event sessions use `event-agent` and explicit `non_interactive` intent, with
 ratchet disabled at workspace creation. They do not inherit periodic Codex YOLO
 permissions. These APIs neither initialize a provider nor dispatch a prompt; the
 consumer composes strict setup/restart and observed initial dispatch around
-them. Monitoring and operator recovery, plus activation and native capability
-validation, remain prerequisites for enabling saved agents.
+them. Enabling a saved agent validates native capability on the server and
+persists that intent; admission applies the same native effort normalization
+(see [integrations](integrations.md#enable-and-pause)).
 
 The strict event workspace initializer shares the ordinary initializer's
 per-workspace queue and worktree preparation. It validates the reserved session

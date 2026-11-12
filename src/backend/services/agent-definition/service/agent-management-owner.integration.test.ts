@@ -1,5 +1,8 @@
 import { afterAll, beforeAll, beforeEach, expect, it, vi } from 'vitest';
-import { createLedgerFixture } from '@/backend/services/agent-definition/resources/testing/agent-ledger.test-support';
+import {
+  createLedgerFixture,
+  validatedIntent,
+} from '@/backend/services/agent-definition/resources/testing/agent-ledger.test-support';
 import {
   createIntegrationDatabase,
   destroyIntegrationDatabase,
@@ -128,7 +131,7 @@ it('keeps the exact saved set after real proposal removal and public workspace d
   const saved = await author();
   await db.prisma.agentDefinition.update({
     where: { id: saved.input.agentId },
-    data: { isEnabled: true },
+    data: { isEnabled: true, validatedIntent: validatedIntent() },
   });
   const removedId = `${saved.proposal.id}:second`;
   await db.prisma.agentTrigger.update({
@@ -249,7 +252,7 @@ it.each([null, false])(
     const original = await management.get(saved.input);
     await db.prisma.agentDefinition.update({
       where: { id: saved.input.agentId },
-      data: { isEnabled: true },
+      data: { isEnabled: true, validatedIntent: validatedIntent() },
     });
     await db.prisma.agentTrigger.updateMany({
       where: { agentDefinitionId: saved.input.agentId },
@@ -261,12 +264,14 @@ it.each([null, false])(
       },
     });
     const id = `${saved.proposal.id}:first`;
-    await db.prisma.agentTrigger.update({ where: { id }, data: { isConfigured: membership } });
+    // Runtime admission requires known membership, so the run is queued before
+    // membership becomes unknown or removed.
     const admitted = await fixture.admit(await fixture.event('membership'), {
       agentDefinitionId: saved.input.agentId,
       triggerId: id,
     });
     expect(admitted.status).toBe('ADMITTED');
+    await db.prisma.agentTrigger.update({ where: { id }, data: { isConfigured: membership } });
     const before = await management.get(saved.input);
     if (membership === null) {
       expect(before.configurationMembership).toBe('UNKNOWN');
@@ -461,7 +466,7 @@ it('rejects borrowed/duplicate IDs and preserves claimed snapshots during a save
   ).rejects.toThrow();
   await db.prisma.agentDefinition.update({
     where: { id: saved.input.agentId },
-    data: { isEnabled: true },
+    data: { isEnabled: true, validatedIntent: validatedIntent() },
   });
   const id = `${saved.proposal.id}:first`;
   await db.prisma.agentTrigger.update({
@@ -741,7 +746,7 @@ it.each(['trigger', 'execution', 'both'] as const)(
     const id = `${saved.proposal.id}:first`;
     await db.prisma.agentDefinition.update({
       where: { id: saved.input.agentId },
-      data: { isEnabled: true },
+      data: { isEnabled: true, validatedIntent: validatedIntent() },
     });
     await db.prisma.agentTrigger.update({
       where: { id },

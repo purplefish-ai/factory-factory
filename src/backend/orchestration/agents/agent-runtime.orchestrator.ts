@@ -1,4 +1,6 @@
+import { ApplicationError } from '@/backend/lib/application-error';
 import {
+  AgentActivationService,
   AgentSourcePollService,
   AgentLedgerRetentionService,
   AgentEventEvaluationService,
@@ -13,8 +15,10 @@ import { SERVICE_INTERVAL_MS } from '@/backend/services/constants';
 import { classifyGitHubCLIError, type githubCLIService } from '@/backend/services/github';
 import { jobRunner } from '@/backend/services/job-runner.service';
 import { createLogger } from '@/backend/services/logger.service';
-import type { sessionProviderResolverService } from '@/backend/services/session';
-import type { userSettingsService } from '@/backend/services/settings';
+import {
+  resolveNativeExecution,
+  type AgentNativeValidationServices,
+} from './agent-native-validation';
 import { createEventRunConsumer } from './event-run-consumer.orchestrator';
 
 const logger = createLogger('agent-runtime');
@@ -34,12 +38,7 @@ type EvaluationWorker = {
   consumeClaim?: (claim: LaunchClaim, signal: AbortSignal) => Promise<void>;
   canClaim?: () => boolean;
 };
-type AgentRuntimeServices = {
-  userSettingsQueryService: Pick<typeof userSettingsService, 'get'>;
-  sessionProviderResolverService: Pick<
-    typeof sessionProviderResolverService,
-    'resolveDefaultsForWorkspaceCreation'
-  >;
+type AgentRuntimeServices = AgentNativeValidationServices & {
   githubCLIService: Pick<
     typeof githubCLIService,
     'getAgentRepositoryIdentity' | 'listAgentIssueEvents'
@@ -63,6 +62,7 @@ export function createAgentRuntime(
     },
     () => getServices().configService.getAgentRuntimeLimits().githubPagesPerCycle
   );
+  const activation = new AgentActivationService(poller);
   const retention = new AgentLedgerRetentionService();
   const evaluator = new AgentEventEvaluationService({
     resolveExecution: async (config) => resolveAgentExecutionConfig(getServices(), config),
@@ -77,10 +77,12 @@ export function createAgentRuntime(
       consumeClaim: consumeClaim ?? launcher?.consumeClaim,
       canClaim: launcher?.canClaim,
     },
-    launcher
+    launcher,
+    activation
   );
   return {
     ...lifecycle,
+    activation,
     hasWork: () => launcher?.hasWork() ?? false,
     recovery: launcher
       ? {
@@ -95,7 +97,8 @@ export function createAgentRuntime(
 export function createAgentRuntimeLifecycle(
   poller: Pick<AgentSourcePollService, 'pollCycle'>,
   worker?: EvaluationWorker,
-  launcher?: LaunchLifetime
+  launcher?: LaunchLifetime,
+  activation?: Pick<AgentActivationService, 'completePending'>
 ) {
   if (launcher) {
     jobRunner.register({
@@ -112,7 +115,13 @@ export function createAgentRuntimeLifecycle(
     name: JOB,
     intervalMs: SERVICE_INTERVAL_MS.agentSourcePoll,
     runImmediately: true,
-    run: (signal) => poller.pollCycle(signal),
+    run: async (signal) => {
+      await poller.pollCycle(signal);
+      // Baselines resolve as the poll commits intervals; activation follows each cycle.
+      if (!signal.aborted) {
+        await activation?.completePending(signal);
+      }
+    },
   });
   if (worker) {
     jobRunner.register({
@@ -173,29 +182,27 @@ export function createAgentRuntimeLifecycle(
   };
 }
 
+/**
+ * Admission-time execution: explicit selections are pinned by the definition,
+ * inherited ones follow current defaults, and the same native normalization as
+ * Enable applies, so a run never freezes an effort its model rejects.
+ */
 export async function resolveAgentExecutionConfig(
-  services: Pick<
-    AgentRuntimeServices,
-    'userSettingsQueryService' | 'sessionProviderResolverService'
-  >,
+  services: AgentNativeValidationServices,
   config: AgentExecutionConfig
 ) {
-  const { provider, model } =
-    await services.sessionProviderResolverService.resolveDefaultsForWorkspaceCreation(
-      config.provider,
-      config.model
+  const result = await resolveNativeExecution(config, services);
+  if (result.status !== 'VALIDATED') {
+    throw new ApplicationError(
+      'PRECONDITION_FAILED',
+      'The selected native model does not support this reasoning effort.'
     );
-  const settings = await services.userSettingsQueryService.get();
-  const reasoningEffort =
-    config.reasoningEffort ??
-    (provider === 'CLAUDE'
-      ? settings.defaultClaudeReasoningEffort
-      : settings.defaultCodexReasoningEffort) ??
-    undefined;
+  }
+  const { provider, requestedModel, reasoningEffort } = result.intent;
   return agentResolvedExecutionConfigSchema.parse({
     version: 1,
     provider,
-    model,
+    model: requestedModel,
     ...(reasoningEffort ? { reasoningEffort } : {}),
   });
 }

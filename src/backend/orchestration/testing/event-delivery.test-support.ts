@@ -174,7 +174,29 @@ async function createEventSeed(
     },
   });
   const definition = await db.prisma.agentDefinition.create({
-    data: { projectId: project.id, name: 'Agent', instructions: 'Frozen task', isEnabled: true },
+    data: {
+      projectId: project.id,
+      name: 'Agent',
+      instructions: 'Frozen task',
+      isEnabled: true,
+      // What Enable persists; runtime gates require it for the current definition revision.
+      validatedIntent: {
+        version: 1,
+        definitionRevision: 1,
+        validatedAt: new Date().toISOString(),
+        execution: {
+          version: 1,
+          provider: 'CLAUDE',
+          model: 'sonnet',
+          requestedModel: 'sonnet',
+          reasoningEffort: null,
+          providerIntent: 'EXPLICIT',
+          modelIntent: 'EXPLICIT',
+          effortIntent: 'INHERITED',
+          effortNormalization: 'NONE',
+        },
+      },
+    },
   });
   const connection = await db.prisma.agentConnection.create({
     data: {
@@ -194,6 +216,7 @@ async function createEventSeed(
       description: 'Labels',
       config: { version: 1, repositoryIds: [project.id], actions: ['labeled'] },
       isEnabled: true,
+      isConfigured: true,
       activationState: 'ACTIVE',
       activationGeneration: 1,
       activationBoundary: { provider: 'GITHUB', headEventId: null, sourceOrder: 0 },

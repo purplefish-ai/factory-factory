@@ -176,6 +176,7 @@ async function claimInTransaction(
       JOIN AgentSourceState s ON s.connectionId = c.id
       WHERE r.status = 'QUEUED' AND r.eventId IS NOT NULL
         AND t.type != 'SCHEDULE' AND t.isEnabled = 1 AND t.activationState = 'ACTIVE'
+        AND t.isConfigured = 1
         AND c.isEnabled = 1 AND s.isReady = 1 ${excluded}
         AND (r.nextAttemptAt IS NULL OR r.nextAttemptAt <= ${now})
         AND (r.expiresAt IS NULL OR r.expiresAt > ${now})
@@ -195,6 +196,7 @@ async function claimInTransaction(
       trigger: {
         type: { not: 'SCHEDULE' },
         isEnabled: true,
+        isConfigured: true,
         activationState: 'ACTIVE',
         connection: { isEnabled: true, sourceState: { isReady: true } },
       },

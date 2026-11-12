@@ -9,6 +9,7 @@ export function eventAgentFixture() {
     triggerRevision: 1,
     activationGeneration: 0,
     activationState: 'PAUSED',
+    pausedReasonCode: null,
     isEnabled: false,
     configuration: {
       type: 'GITHUB_ISSUE',

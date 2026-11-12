@@ -1,5 +1,8 @@
 import { afterAll, beforeAll, beforeEach, expect, it, vi } from 'vitest';
-import { createLedgerFixture } from '@/backend/services/agent-definition/resources/testing/agent-ledger.test-support';
+import {
+  createLedgerFixture,
+  validatedIntent,
+} from '@/backend/services/agent-definition/resources/testing/agent-ledger.test-support';
 import {
   createIntegrationDatabase,
   destroyIntegrationDatabase,
@@ -33,6 +36,7 @@ it('allows independent definitions for one event but enforces four global active
         name: `Definition ${index}`,
         instructions: 'Investigate',
         isEnabled: true,
+        validatedIntent: validatedIntent(),
       },
     });
     const trigger = await db.prisma.agentTrigger.create({
@@ -43,6 +47,7 @@ it('allows independent definitions for one event but enforces four global active
         description: 'Label',
         config: { version: 1, repositoryIds: ['repo-1'], actions: ['labeled'] },
         isEnabled: true,
+        isConfigured: true,
         activationState: 'ACTIVE',
         activationGeneration: 1,
         activationBoundary: { provider: 'GITHUB', headEventId: null, sourceOrder: 0 },

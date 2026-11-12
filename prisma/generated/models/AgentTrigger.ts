@@ -48,6 +48,7 @@ export type AgentTriggerMinAggregateOutputType = {
   triggerRevision: number | null
   activationGeneration: number | null
   activationState: $Enums.AgentActivationState | null
+  pausedReasonCode: string | null
   createdAt: Date | null
   updatedAt: Date | null
 }
@@ -64,6 +65,7 @@ export type AgentTriggerMaxAggregateOutputType = {
   triggerRevision: number | null
   activationGeneration: number | null
   activationState: $Enums.AgentActivationState | null
+  pausedReasonCode: string | null
   createdAt: Date | null
   updatedAt: Date | null
 }
@@ -83,6 +85,7 @@ export type AgentTriggerCountAggregateOutputType = {
   activationState: number
   activationBoundary: number
   pendingActivation: number
+  pausedReasonCode: number
   createdAt: number
   updatedAt: number
   _all: number
@@ -111,6 +114,7 @@ export type AgentTriggerMinAggregateInputType = {
   triggerRevision?: true
   activationGeneration?: true
   activationState?: true
+  pausedReasonCode?: true
   createdAt?: true
   updatedAt?: true
 }
@@ -127,6 +131,7 @@ export type AgentTriggerMaxAggregateInputType = {
   triggerRevision?: true
   activationGeneration?: true
   activationState?: true
+  pausedReasonCode?: true
   createdAt?: true
   updatedAt?: true
 }
@@ -146,6 +151,7 @@ export type AgentTriggerCountAggregateInputType = {
   activationState?: true
   activationBoundary?: true
   pendingActivation?: true
+  pausedReasonCode?: true
   createdAt?: true
   updatedAt?: true
   _all?: true
@@ -252,6 +258,7 @@ export type AgentTriggerGroupByOutputType = {
   activationState: $Enums.AgentActivationState
   activationBoundary: runtime.JsonValue | null
   pendingActivation: runtime.JsonValue | null
+  pausedReasonCode: string | null
   createdAt: Date
   updatedAt: Date
   _count: AgentTriggerCountAggregateOutputType | null
@@ -294,6 +301,7 @@ export type AgentTriggerWhereInput = {
   activationState?: Prisma.EnumAgentActivationStateFilter<"AgentTrigger"> | $Enums.AgentActivationState
   activationBoundary?: Prisma.JsonNullableFilter<"AgentTrigger">
   pendingActivation?: Prisma.JsonNullableFilter<"AgentTrigger">
+  pausedReasonCode?: Prisma.StringNullableFilter<"AgentTrigger"> | string | null
   createdAt?: Prisma.DateTimeFilter<"AgentTrigger"> | Date | string
   updatedAt?: Prisma.DateTimeFilter<"AgentTrigger"> | Date | string
   agentDefinition?: Prisma.XOR<Prisma.AgentDefinitionScalarRelationFilter, Prisma.AgentDefinitionWhereInput>
@@ -317,6 +325,7 @@ export type AgentTriggerOrderByWithRelationInput = {
   activationState?: Prisma.SortOrder
   activationBoundary?: Prisma.SortOrderInput | Prisma.SortOrder
   pendingActivation?: Prisma.SortOrderInput | Prisma.SortOrder
+  pausedReasonCode?: Prisma.SortOrderInput | Prisma.SortOrder
   createdAt?: Prisma.SortOrder
   updatedAt?: Prisma.SortOrder
   agentDefinition?: Prisma.AgentDefinitionOrderByWithRelationInput
@@ -344,6 +353,7 @@ export type AgentTriggerWhereUniqueInput = Prisma.AtLeast<{
   activationState?: Prisma.EnumAgentActivationStateFilter<"AgentTrigger"> | $Enums.AgentActivationState
   activationBoundary?: Prisma.JsonNullableFilter<"AgentTrigger">
   pendingActivation?: Prisma.JsonNullableFilter<"AgentTrigger">
+  pausedReasonCode?: Prisma.StringNullableFilter<"AgentTrigger"> | string | null
   createdAt?: Prisma.DateTimeFilter<"AgentTrigger"> | Date | string
   updatedAt?: Prisma.DateTimeFilter<"AgentTrigger"> | Date | string
   agentDefinition?: Prisma.XOR<Prisma.AgentDefinitionScalarRelationFilter, Prisma.AgentDefinitionWhereInput>
@@ -367,6 +377,7 @@ export type AgentTriggerOrderByWithAggregationInput = {
   activationState?: Prisma.SortOrder
   activationBoundary?: Prisma.SortOrderInput | Prisma.SortOrder
   pendingActivation?: Prisma.SortOrderInput | Prisma.SortOrder
+  pausedReasonCode?: Prisma.SortOrderInput | Prisma.SortOrder
   createdAt?: Prisma.SortOrder
   updatedAt?: Prisma.SortOrder
   _count?: Prisma.AgentTriggerCountOrderByAggregateInput
@@ -394,6 +405,7 @@ export type AgentTriggerScalarWhereWithAggregatesInput = {
   activationState?: Prisma.EnumAgentActivationStateWithAggregatesFilter<"AgentTrigger"> | $Enums.AgentActivationState
   activationBoundary?: Prisma.JsonNullableWithAggregatesFilter<"AgentTrigger">
   pendingActivation?: Prisma.JsonNullableWithAggregatesFilter<"AgentTrigger">
+  pausedReasonCode?: Prisma.StringNullableWithAggregatesFilter<"AgentTrigger"> | string | null
   createdAt?: Prisma.DateTimeWithAggregatesFilter<"AgentTrigger"> | Date | string
   updatedAt?: Prisma.DateTimeWithAggregatesFilter<"AgentTrigger"> | Date | string
 }
@@ -411,6 +423,7 @@ export type AgentTriggerCreateInput = {
   activationState?: $Enums.AgentActivationState
   activationBoundary?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   pendingActivation?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  pausedReasonCode?: string | null
   createdAt?: Date | string
   updatedAt?: Date | string
   agentDefinition: Prisma.AgentDefinitionCreateNestedOneWithoutTriggersInput
@@ -434,6 +447,7 @@ export type AgentTriggerUncheckedCreateInput = {
   activationState?: $Enums.AgentActivationState
   activationBoundary?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   pendingActivation?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  pausedReasonCode?: string | null
   createdAt?: Date | string
   updatedAt?: Date | string
   runs?: Prisma.AgentRunUncheckedCreateNestedManyWithoutTriggerInput
@@ -453,6 +467,7 @@ export type AgentTriggerUpdateInput = {
   activationState?: Prisma.EnumAgentActivationStateFieldUpdateOperationsInput | $Enums.AgentActivationState
   activationBoundary?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   pendingActivation?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  pausedReasonCode?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   agentDefinition?: Prisma.AgentDefinitionUpdateOneRequiredWithoutTriggersNestedInput
@@ -476,6 +491,7 @@ export type AgentTriggerUncheckedUpdateInput = {
   activationState?: Prisma.EnumAgentActivationStateFieldUpdateOperationsInput | $Enums.AgentActivationState
   activationBoundary?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   pendingActivation?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  pausedReasonCode?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   runs?: Prisma.AgentRunUncheckedUpdateManyWithoutTriggerNestedInput
@@ -497,6 +513,7 @@ export type AgentTriggerCreateManyInput = {
   activationState?: $Enums.AgentActivationState
   activationBoundary?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   pendingActivation?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  pausedReasonCode?: string | null
   createdAt?: Date | string
   updatedAt?: Date | string
 }
@@ -514,6 +531,7 @@ export type AgentTriggerUpdateManyMutationInput = {
   activationState?: Prisma.EnumAgentActivationStateFieldUpdateOperationsInput | $Enums.AgentActivationState
   activationBoundary?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   pendingActivation?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  pausedReasonCode?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
 }
@@ -533,6 +551,7 @@ export type AgentTriggerUncheckedUpdateManyInput = {
   activationState?: Prisma.EnumAgentActivationStateFieldUpdateOperationsInput | $Enums.AgentActivationState
   activationBoundary?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   pendingActivation?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  pausedReasonCode?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
 }
@@ -567,6 +586,7 @@ export type AgentTriggerCountOrderByAggregateInput = {
   activationState?: Prisma.SortOrder
   activationBoundary?: Prisma.SortOrder
   pendingActivation?: Prisma.SortOrder
+  pausedReasonCode?: Prisma.SortOrder
   createdAt?: Prisma.SortOrder
   updatedAt?: Prisma.SortOrder
 }
@@ -588,6 +608,7 @@ export type AgentTriggerMaxOrderByAggregateInput = {
   triggerRevision?: Prisma.SortOrder
   activationGeneration?: Prisma.SortOrder
   activationState?: Prisma.SortOrder
+  pausedReasonCode?: Prisma.SortOrder
   createdAt?: Prisma.SortOrder
   updatedAt?: Prisma.SortOrder
 }
@@ -604,6 +625,7 @@ export type AgentTriggerMinOrderByAggregateInput = {
   triggerRevision?: Prisma.SortOrder
   activationGeneration?: Prisma.SortOrder
   activationState?: Prisma.SortOrder
+  pausedReasonCode?: Prisma.SortOrder
   createdAt?: Prisma.SortOrder
   updatedAt?: Prisma.SortOrder
 }
@@ -762,6 +784,7 @@ export type AgentTriggerCreateWithoutAgentDefinitionInput = {
   activationState?: $Enums.AgentActivationState
   activationBoundary?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   pendingActivation?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  pausedReasonCode?: string | null
   createdAt?: Date | string
   updatedAt?: Date | string
   connection?: Prisma.AgentConnectionCreateNestedOneWithoutTriggersInput
@@ -783,6 +806,7 @@ export type AgentTriggerUncheckedCreateWithoutAgentDefinitionInput = {
   activationState?: $Enums.AgentActivationState
   activationBoundary?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   pendingActivation?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  pausedReasonCode?: string | null
   createdAt?: Date | string
   updatedAt?: Date | string
   runs?: Prisma.AgentRunUncheckedCreateNestedManyWithoutTriggerInput
@@ -832,6 +856,7 @@ export type AgentTriggerScalarWhereInput = {
   activationState?: Prisma.EnumAgentActivationStateFilter<"AgentTrigger"> | $Enums.AgentActivationState
   activationBoundary?: Prisma.JsonNullableFilter<"AgentTrigger">
   pendingActivation?: Prisma.JsonNullableFilter<"AgentTrigger">
+  pausedReasonCode?: Prisma.StringNullableFilter<"AgentTrigger"> | string | null
   createdAt?: Prisma.DateTimeFilter<"AgentTrigger"> | Date | string
   updatedAt?: Prisma.DateTimeFilter<"AgentTrigger"> | Date | string
 }
@@ -849,6 +874,7 @@ export type AgentTriggerCreateWithoutConnectionInput = {
   activationState?: $Enums.AgentActivationState
   activationBoundary?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   pendingActivation?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  pausedReasonCode?: string | null
   createdAt?: Date | string
   updatedAt?: Date | string
   agentDefinition: Prisma.AgentDefinitionCreateNestedOneWithoutTriggersInput
@@ -870,6 +896,7 @@ export type AgentTriggerUncheckedCreateWithoutConnectionInput = {
   activationState?: $Enums.AgentActivationState
   activationBoundary?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   pendingActivation?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  pausedReasonCode?: string | null
   createdAt?: Date | string
   updatedAt?: Date | string
   runs?: Prisma.AgentRunUncheckedCreateNestedManyWithoutTriggerInput
@@ -914,6 +941,7 @@ export type AgentTriggerCreateWithoutRunsInput = {
   activationState?: $Enums.AgentActivationState
   activationBoundary?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   pendingActivation?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  pausedReasonCode?: string | null
   createdAt?: Date | string
   updatedAt?: Date | string
   agentDefinition: Prisma.AgentDefinitionCreateNestedOneWithoutTriggersInput
@@ -936,6 +964,7 @@ export type AgentTriggerUncheckedCreateWithoutRunsInput = {
   activationState?: $Enums.AgentActivationState
   activationBoundary?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   pendingActivation?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  pausedReasonCode?: string | null
   createdAt?: Date | string
   updatedAt?: Date | string
   evaluations?: Prisma.AgentEvaluationUncheckedCreateNestedManyWithoutTriggerInput
@@ -970,6 +999,7 @@ export type AgentTriggerUpdateWithoutRunsInput = {
   activationState?: Prisma.EnumAgentActivationStateFieldUpdateOperationsInput | $Enums.AgentActivationState
   activationBoundary?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   pendingActivation?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  pausedReasonCode?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   agentDefinition?: Prisma.AgentDefinitionUpdateOneRequiredWithoutTriggersNestedInput
@@ -992,6 +1022,7 @@ export type AgentTriggerUncheckedUpdateWithoutRunsInput = {
   activationState?: Prisma.EnumAgentActivationStateFieldUpdateOperationsInput | $Enums.AgentActivationState
   activationBoundary?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   pendingActivation?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  pausedReasonCode?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   evaluations?: Prisma.AgentEvaluationUncheckedUpdateManyWithoutTriggerNestedInput
@@ -1010,6 +1041,7 @@ export type AgentTriggerCreateWithoutEvaluationsInput = {
   activationState?: $Enums.AgentActivationState
   activationBoundary?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   pendingActivation?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  pausedReasonCode?: string | null
   createdAt?: Date | string
   updatedAt?: Date | string
   agentDefinition: Prisma.AgentDefinitionCreateNestedOneWithoutTriggersInput
@@ -1032,6 +1064,7 @@ export type AgentTriggerUncheckedCreateWithoutEvaluationsInput = {
   activationState?: $Enums.AgentActivationState
   activationBoundary?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   pendingActivation?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  pausedReasonCode?: string | null
   createdAt?: Date | string
   updatedAt?: Date | string
   runs?: Prisma.AgentRunUncheckedCreateNestedManyWithoutTriggerInput
@@ -1066,6 +1099,7 @@ export type AgentTriggerUpdateWithoutEvaluationsInput = {
   activationState?: Prisma.EnumAgentActivationStateFieldUpdateOperationsInput | $Enums.AgentActivationState
   activationBoundary?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   pendingActivation?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  pausedReasonCode?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   agentDefinition?: Prisma.AgentDefinitionUpdateOneRequiredWithoutTriggersNestedInput
@@ -1088,6 +1122,7 @@ export type AgentTriggerUncheckedUpdateWithoutEvaluationsInput = {
   activationState?: Prisma.EnumAgentActivationStateFieldUpdateOperationsInput | $Enums.AgentActivationState
   activationBoundary?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   pendingActivation?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  pausedReasonCode?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   runs?: Prisma.AgentRunUncheckedUpdateManyWithoutTriggerNestedInput
@@ -1107,6 +1142,7 @@ export type AgentTriggerCreateManyAgentDefinitionInput = {
   activationState?: $Enums.AgentActivationState
   activationBoundary?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   pendingActivation?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  pausedReasonCode?: string | null
   createdAt?: Date | string
   updatedAt?: Date | string
 }
@@ -1124,6 +1160,7 @@ export type AgentTriggerUpdateWithoutAgentDefinitionInput = {
   activationState?: Prisma.EnumAgentActivationStateFieldUpdateOperationsInput | $Enums.AgentActivationState
   activationBoundary?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   pendingActivation?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  pausedReasonCode?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   connection?: Prisma.AgentConnectionUpdateOneWithoutTriggersNestedInput
@@ -1145,6 +1182,7 @@ export type AgentTriggerUncheckedUpdateWithoutAgentDefinitionInput = {
   activationState?: Prisma.EnumAgentActivationStateFieldUpdateOperationsInput | $Enums.AgentActivationState
   activationBoundary?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   pendingActivation?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  pausedReasonCode?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   runs?: Prisma.AgentRunUncheckedUpdateManyWithoutTriggerNestedInput
@@ -1165,6 +1203,7 @@ export type AgentTriggerUncheckedUpdateManyWithoutAgentDefinitionInput = {
   activationState?: Prisma.EnumAgentActivationStateFieldUpdateOperationsInput | $Enums.AgentActivationState
   activationBoundary?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   pendingActivation?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  pausedReasonCode?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
 }
@@ -1183,6 +1222,7 @@ export type AgentTriggerCreateManyConnectionInput = {
   activationState?: $Enums.AgentActivationState
   activationBoundary?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   pendingActivation?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  pausedReasonCode?: string | null
   createdAt?: Date | string
   updatedAt?: Date | string
 }
@@ -1200,6 +1240,7 @@ export type AgentTriggerUpdateWithoutConnectionInput = {
   activationState?: Prisma.EnumAgentActivationStateFieldUpdateOperationsInput | $Enums.AgentActivationState
   activationBoundary?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   pendingActivation?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  pausedReasonCode?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   agentDefinition?: Prisma.AgentDefinitionUpdateOneRequiredWithoutTriggersNestedInput
@@ -1221,6 +1262,7 @@ export type AgentTriggerUncheckedUpdateWithoutConnectionInput = {
   activationState?: Prisma.EnumAgentActivationStateFieldUpdateOperationsInput | $Enums.AgentActivationState
   activationBoundary?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   pendingActivation?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  pausedReasonCode?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   runs?: Prisma.AgentRunUncheckedUpdateManyWithoutTriggerNestedInput
@@ -1241,6 +1283,7 @@ export type AgentTriggerUncheckedUpdateManyWithoutConnectionInput = {
   activationState?: Prisma.EnumAgentActivationStateFieldUpdateOperationsInput | $Enums.AgentActivationState
   activationBoundary?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   pendingActivation?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  pausedReasonCode?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
 }
@@ -1300,6 +1343,7 @@ export type AgentTriggerSelect<ExtArgs extends runtime.Types.Extensions.Internal
   activationState?: boolean
   activationBoundary?: boolean
   pendingActivation?: boolean
+  pausedReasonCode?: boolean
   createdAt?: boolean
   updatedAt?: boolean
   agentDefinition?: boolean | Prisma.AgentDefinitionDefaultArgs<ExtArgs>
@@ -1324,6 +1368,7 @@ export type AgentTriggerSelectCreateManyAndReturn<ExtArgs extends runtime.Types.
   activationState?: boolean
   activationBoundary?: boolean
   pendingActivation?: boolean
+  pausedReasonCode?: boolean
   createdAt?: boolean
   updatedAt?: boolean
   agentDefinition?: boolean | Prisma.AgentDefinitionDefaultArgs<ExtArgs>
@@ -1345,6 +1390,7 @@ export type AgentTriggerSelectUpdateManyAndReturn<ExtArgs extends runtime.Types.
   activationState?: boolean
   activationBoundary?: boolean
   pendingActivation?: boolean
+  pausedReasonCode?: boolean
   createdAt?: boolean
   updatedAt?: boolean
   agentDefinition?: boolean | Prisma.AgentDefinitionDefaultArgs<ExtArgs>
@@ -1366,11 +1412,12 @@ export type AgentTriggerSelectScalar = {
   activationState?: boolean
   activationBoundary?: boolean
   pendingActivation?: boolean
+  pausedReasonCode?: boolean
   createdAt?: boolean
   updatedAt?: boolean
 }
 
-export type AgentTriggerOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "agentDefinitionId" | "type" | "connectionId" | "description" | "config" | "filterInstructions" | "isEnabled" | "isConfigured" | "triggerRevision" | "activationGeneration" | "activationState" | "activationBoundary" | "pendingActivation" | "createdAt" | "updatedAt", ExtArgs["result"]["agentTrigger"]>
+export type AgentTriggerOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "agentDefinitionId" | "type" | "connectionId" | "description" | "config" | "filterInstructions" | "isEnabled" | "isConfigured" | "triggerRevision" | "activationGeneration" | "activationState" | "activationBoundary" | "pendingActivation" | "pausedReasonCode" | "createdAt" | "updatedAt", ExtArgs["result"]["agentTrigger"]>
 export type AgentTriggerInclude<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
   agentDefinition?: boolean | Prisma.AgentDefinitionDefaultArgs<ExtArgs>
   connection?: boolean | Prisma.AgentTrigger$connectionArgs<ExtArgs>
@@ -1410,6 +1457,7 @@ export type $AgentTriggerPayload<ExtArgs extends runtime.Types.Extensions.Intern
     activationState: $Enums.AgentActivationState
     activationBoundary: runtime.JsonValue | null
     pendingActivation: runtime.JsonValue | null
+    pausedReasonCode: string | null
     createdAt: Date
     updatedAt: Date
   }, ExtArgs["result"]["agentTrigger"]>
@@ -1853,6 +1901,7 @@ export interface AgentTriggerFieldRefs {
   readonly activationState: Prisma.FieldRef<"AgentTrigger", 'AgentActivationState'>
   readonly activationBoundary: Prisma.FieldRef<"AgentTrigger", 'Json'>
   readonly pendingActivation: Prisma.FieldRef<"AgentTrigger", 'Json'>
+  readonly pausedReasonCode: Prisma.FieldRef<"AgentTrigger", 'String'>
   readonly createdAt: Prisma.FieldRef<"AgentTrigger", 'DateTime'>
   readonly updatedAt: Prisma.FieldRef<"AgentTrigger", 'DateTime'>
 }

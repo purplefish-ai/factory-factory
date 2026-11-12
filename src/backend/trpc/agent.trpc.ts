@@ -5,6 +5,7 @@ import {
   agentWorkspaceOriginSchema,
 } from '@/shared/agent-history';
 import {
+  agentActivationInputSchema,
   agentOwnerInputSchema,
   agentGetInputSchema,
   agentHistoryInputSchema,
@@ -74,6 +75,15 @@ export const agentRouter = router({
     .input(agentSavedUpdateSchema)
     .output(managedAgentSchema)
     .mutation(({ ctx, input }) => ctx.appContext.services.agentManagement.updateSaved(input)),
+  // User actions only: the MCP catalog has no activation tool.
+  enable: trustedLocalProcedure
+    .input(agentActivationInputSchema)
+    .output(managedAgentSchema)
+    .mutation(({ ctx, input }) => ctx.appContext.services.agentManagement.enable(input)),
+  pause: trustedLocalProcedure
+    .input(agentActivationInputSchema)
+    .output(managedAgentSchema)
+    .mutation(({ ctx, input }) => ctx.appContext.services.agentManagement.pause(input)),
   evaluations: trustedLocalProcedure
     .input(agentHistoryInputSchema)
     .output(agentEvaluationPageSchema)

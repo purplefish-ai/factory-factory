@@ -72,6 +72,7 @@ async function firstMatchedEvaluation(
       agentDefinitionId: requested.agentDefinitionId,
       connectionId: requested.connectionId,
       isEnabled: true,
+      isConfigured: true,
       activationState: 'ACTIVE',
       id: { lte: requested.triggerId },
     },

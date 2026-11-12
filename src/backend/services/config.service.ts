@@ -379,6 +379,8 @@ function loadAgentRuntimeLimits() {
     activeGlobal: env.AGENT_ACTIVE_GLOBAL,
     waitingPerDefinition: env.AGENT_WAITING_PER_DEFINITION,
     waitingExpiryMs: 24 * 60 * 60 * 1000,
+    // A STARTING trigger whose baseline never resolves returns to PAUSED.
+    activationExpiryMs: 30 * 60 * 1000,
     githubPagesPerCycle: 10,
     evaluationBatchSize: 100,
     queueBatchSize: 100,

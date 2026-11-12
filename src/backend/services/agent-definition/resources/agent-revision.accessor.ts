@@ -4,7 +4,8 @@ import {
   agentExecutionConfigSchema,
   agentTriggerInputSchema,
 } from '@/shared/schemas/agent-definition.schema';
-import { Prisma, type AgentTrigger } from '@prisma-gen/client';
+import type { AgentTrigger, Prisma } from '@prisma-gen/client';
+import { cancelQueuedRuns, pauseTriggers } from './agent-trigger-pause';
 
 async function pauseRemovedTriggers(
   tx: Prisma.TransactionClient,
@@ -24,15 +25,7 @@ async function pauseRemovedTriggers(
     pausedIds.push(removed.id);
     await tx.agentTrigger.update({
       where: { id: removed.id },
-      data: {
-        isConfigured: false,
-        isEnabled: false,
-        activationState: 'PAUSED',
-        triggerRevision: { increment: 1 },
-        activationGeneration: { increment: 1 },
-        activationBoundary: Prisma.DbNull,
-        pendingActivation: Prisma.DbNull,
-      },
+      data: { isConfigured: false, triggerRevision: { increment: 1 } },
     });
   }
   return pausedIds;
@@ -109,44 +102,18 @@ async function reviseDefinition(
       data: {
         ...settings,
         isConfigured: true,
-        isEnabled: false,
-        activationState: 'PAUSED',
-        activationGeneration: { increment: 1 },
         ...(changed ? { triggerRevision: { increment: 1 } } : {}),
-        activationBoundary: Prisma.DbNull,
-        pendingActivation: Prisma.DbNull,
       },
     });
   }
   for (const id of await pauseRemovedTriggers(tx, current, retained, executionChanged)) {
     pausedIds.add(id);
   }
-  if (!executionChanged && pausedIds.size === 0) {
-    return;
+  await pauseTriggers(tx, { id: { in: [...pausedIds] } });
+  if (executionChanged) {
+    // Execution edits also invalidate queued work that no paused trigger owns.
+    await cancelQueuedRuns(tx, { agentDefinitionId: definitionId });
   }
-  const now = new Date();
-  const affected = await tx.agentRun.findMany({
-    where: {
-      agentDefinitionId: definitionId,
-      status: 'QUEUED',
-      ...(executionChanged ? {} : { triggerId: { in: [...pausedIds] } }),
-    },
-    select: { id: true },
-  });
-  const ids = affected.map((run) => run.id);
-  await tx.agentRun.updateMany({
-    where: { id: { in: ids } },
-    data: {
-      status: 'CANCELLED',
-      launchPhase: 'FINISHED',
-      reasonCode: 'STALE_REVISION',
-      completedAt: now,
-    },
-  });
-  await tx.agentInitialDelivery.updateMany({
-    where: { runId: { in: ids }, state: 'PENDING' },
-    data: { state: 'FINISHED', finishedAt: now },
-  });
 }
 
 export const agentRevisionAccessor = { reviseDefinition };

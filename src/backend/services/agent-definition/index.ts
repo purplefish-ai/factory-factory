@@ -5,6 +5,7 @@ import { SlackConnectionService } from './service/slack-connection.service';
 
 export { AgentProposalService } from './service/agent-proposal.service';
 export { AgentSourcePollService } from './service/agent-source-poll.service';
+export { AgentActivationService } from './service/agent-activation.service';
 export const agentProposalService = new AgentProposalService();
 
 export { SlackConnectionService } from './service/slack-connection.service';

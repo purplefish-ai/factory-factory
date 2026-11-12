@@ -520,6 +520,12 @@ export function createFakeApplicationGraph(label = 'test'): FakeApplicationGraph
       start: vi.fn(),
       stop: vi.fn().mockResolvedValue(undefined),
       recovery: undefined,
+      // The graph has no GitHub source; activation must be exercised with a real poller.
+      activation: unsafeCoerce({
+        begin: vi.fn().mockRejectedValue(new Error('Event activation is not wired here')),
+        completePending: vi.fn().mockResolvedValue(undefined),
+        pause: vi.fn().mockRejectedValue(new Error('Event activation is not wired here')),
+      }),
     },
     portShareService: new PortShareService({
       getTailscaleConfig: () => null,

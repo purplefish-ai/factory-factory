@@ -10,6 +10,8 @@ export const SERVICE_LIMITS = Object.freeze({
 
 export const SERVICE_TIMEOUT_MS = Object.freeze({
   agentLaunchLease: 60_000,
+  // Enable prepares GitHub baselines in the request; an interrupted one retries after the next poll.
+  agentActivationBaseline: 60_000,
   eventWorkspaceSetup: 15 * 60 * 1000,
   claudeCliVersionCheck: 5000,
   claudeCliAuthCheck: 5000,

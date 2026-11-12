@@ -112,18 +112,30 @@ export const agentActivationBoundarySchema = z.discriminatedUnion('provider', [
       ),
   }),
 ]);
-export const agentPendingActivationSchema = z.strictObject({
+const pendingActivationFields = {
   version: z.literal(1),
   activationGeneration: revision,
   definitionRevision: revision,
   triggerRevision: agentTriggerRevisionSchema,
   connectionId: id,
-  nonce: id,
   expiresAt: timestamp,
-  channels: z
-    .array(z.strictObject({ channelId: id, eventTs: providerTimestamp.nullable() }))
-    .max(100),
+};
+/** A GitHub STARTING generation waits for its prepared baseline to resolve. */
+export const agentGithubPendingActivationSchema = z.strictObject({
+  ...pendingActivationFields,
+  provider: z.literal('GITHUB'),
+  baselineId: id.nullable(),
 });
+export const agentPendingActivationSchema = z.union([
+  agentGithubPendingActivationSchema,
+  z.strictObject({
+    ...pendingActivationFields,
+    nonce: id,
+    channels: z
+      .array(z.strictObject({ channelId: id, eventTs: providerTimestamp.nullable() }))
+      .max(100),
+  }),
+]);
 export const agentSourceCursorSchema = z.discriminatedUnion('provider', [
   z.strictObject({
     version: z.literal(1),
@@ -212,6 +224,7 @@ export const agentRuntimeReasonSchema = z.enum([
   'BEFORE_ACTIVATION',
   'SOURCE_IDENTITY_MISMATCH',
   'DEFINITION_DISABLED',
+  'EXECUTION_NOT_VALIDATED',
   'TRIGGER_DISABLED',
   'CONNECTION_UNAVAILABLE',
   'SOURCE_RECOVERY_REQUIRED',
@@ -283,6 +296,7 @@ export type AgentRuntimeReason = z.infer<typeof agentRuntimeReasonSchema>;
 export type AgentEventPayload = z.infer<typeof agentEventPayloadSchema>;
 
 export type AgentActivationBoundary = z.infer<typeof agentActivationBoundarySchema>;
+export type AgentGithubPendingActivation = z.infer<typeof agentGithubPendingActivationSchema>;
 
 export type AgentExecutionConfig = z.infer<typeof agentExecutionConfigSchema>;
 export type AgentResolvedExecutionConfig = z.infer<typeof agentResolvedExecutionConfigSchema>;

@@ -348,6 +348,9 @@ const exportColumns: Record<string, ModelColumns> = {
       executionConfig: exported(),
       definitionRevision: exported(),
       managementRevision: exported(),
+      validatedIntent: excluded(
+        'Activation authority; restored definitions stay paused until Enable validates again.'
+      ),
       createdAt: exported(),
       updatedAt: exported(),
     }
