@@ -90,6 +90,14 @@ export function createTestHarness(options: TestHarnessOptions = {}) {
       stopLaunchOptions: vi.fn(async () => undefined),
       warmLaunchOptions: vi.fn(async () => undefined),
     },
+    claudeModelCatalogService: {
+      getModels: vi.fn(async () => []),
+      stop: vi.fn(async () => undefined),
+    },
+    codexModelCatalogService: {
+      getModels: vi.fn(async () => []),
+      stop: vi.fn(async () => undefined),
+    },
     sessionLifecycleService: {
       recoverStaleRunningSessions: vi.fn(async () => 0),
       stopAllClients: vi.fn(async () => undefined),

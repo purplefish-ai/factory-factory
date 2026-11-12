@@ -13,10 +13,17 @@ type Defaults = {
 };
 const CACHE_FRESH_MS = 5 * 60_000;
 const REFRESH_RETRY_MS = 30_000;
-const MAX_CACHE_ENTRIES = 32;
+// Room for every advertised model of both providers across a few Codex accounts.
+const MAX_CACHE_ENTRIES = 128;
 const MAX_PENDING_DISCOVERIES = 8;
 const logger = createLogger('session-launch-options');
-type Discovery = { result: Promise<SessionLaunchOptions>; drained: Promise<void> };
+type Discovery = {
+  result: Promise<SessionLaunchOptions>;
+  /** Other models captured by the same disposable session; never rejects. */
+  additional?: Promise<SessionLaunchOptions[]>;
+  drained: Promise<void>;
+};
+type SelectModels = (models: readonly string[]) => readonly string[];
 type PendingDiscovery = Discovery & { succeeded: boolean };
 type CachedOptions = StoredLaunchOptions & { refreshAfter: number };
 export class SessionLaunchOptionsService {
@@ -27,7 +34,11 @@ export class SessionLaunchOptionsService {
   private writing: Promise<void> = Promise.resolve();
   constructor(
     private readonly deps: {
-      fetchOptions(input: Input, signal?: AbortSignal): Promise<Discovery>;
+      fetchOptions(
+        input: Input,
+        signal?: AbortSignal,
+        selectAdditionalModels?: SelectModels
+      ): Promise<Discovery>;
       getSettings(): Promise<Defaults>;
       resolveAccountId?(input: Input): Promise<string>;
       store?: LaunchOptionsPersistence;
@@ -163,15 +174,66 @@ export class SessionLaunchOptionsService {
     }
     this.cache.set(key, cached);
   }
+  /**
+   * Swept models fill only missing entries: a direct discovery of a model also
+   * knows its thinking default, which a sweep cannot observe. They start stale
+   * so their first use returns them at once and refreshes in the background.
+   */
+  private async cacheAdditional(
+    input: Input,
+    additional: Promise<SessionLaunchOptions[]>
+  ): Promise<void> {
+    const captured = await additional;
+    if (this.cancellation.signal.aborted) {
+      return;
+    }
+    const capturedAt = Date.now() - CACHE_FRESH_MS;
+    let added = false;
+    for (const value of captured) {
+      const modelInput = { ...input, model: value.model };
+      const modelKey = this.key(modelInput);
+      if (this.cache.size >= MAX_CACHE_ENTRIES) {
+        break;
+      }
+      if (this.cache.has(modelKey)) {
+        continue;
+      }
+      this.cacheOptions(modelKey, {
+        input: modelInput,
+        value: structuredClone(value),
+        capturedAt,
+        refreshAfter: 0,
+      });
+      added = true;
+    }
+    if (added) {
+      this.persist();
+    }
+  }
   private discover(key: string, input: Input): PendingDiscovery {
+    // Capture every advertised model nobody has discovered yet, so switching
+    // models in the launcher reads the cache instead of starting a probe.
+    // Swept entries only use free capacity; they never evict other results.
+    const selectAdditionalModels: SelectModels = (models) =>
+      models
+        .filter((model) => {
+          const modelKey = this.key({ ...input, model });
+          return !(this.cache.has(modelKey) || this.pending.has(modelKey));
+        })
+        // Leave room for the requested model's own entry.
+        .slice(0, Math.max(0, MAX_CACHE_ENTRIES - this.cache.size - (this.cache.has(key) ? 0 : 1)));
     const started = Promise.resolve().then(async () => {
       this.assertRunning();
       if (input.provider === 'CODEX' && this.deps.resolveAccountId) {
         const codexAccountId = await this.deps.resolveAccountId(input);
         this.assertRunning();
-        return this.deps.fetchOptions({ ...input, codexAccountId }, this.cancellation.signal);
+        return this.deps.fetchOptions(
+          { ...input, codexAccountId },
+          this.cancellation.signal,
+          selectAdditionalModels
+        );
       }
-      return this.deps.fetchOptions(input, this.cancellation.signal);
+      return this.deps.fetchOptions(input, this.cancellation.signal, selectAdditionalModels);
     });
     const entry: PendingDiscovery = {
       succeeded: false,
@@ -187,20 +249,22 @@ export class SessionLaunchOptionsService {
         },
         () => undefined
       ),
-      result: started
-        .then((discovery) => discovery.result)
-        .then((value) => {
-          this.assertRunning();
-          this.cacheOptions(key, {
-            input,
-            value: structuredClone(value),
-            capturedAt: Date.now(),
-            refreshAfter: 0,
-          });
-          this.persist();
-          entry.succeeded = true;
-          return value;
-        }),
+      result: started.then(async (discovery) => {
+        const value = await discovery.result;
+        this.assertRunning();
+        this.cacheOptions(key, {
+          input,
+          value: structuredClone(value),
+          capturedAt: Date.now(),
+          refreshAfter: 0,
+        });
+        this.persist();
+        entry.succeeded = true;
+        if (discovery.additional) {
+          void this.cacheAdditional(input, discovery.additional);
+        }
+        return value;
+      }),
     };
     this.pending.set(key, entry);
     void entry.drained.then(

@@ -106,9 +106,35 @@ describe('durable launcher options', () => {
     expect(await store.load()).toEqual(entries);
   });
 
+  it('drops the oldest entries so a large snapshot still loads after restart', async () => {
+    const { store, path } = await fixture();
+    // About 100 KiB per entry: twelve entries exceed what load() reads back.
+    const large = Array.from({ length: 12 }, (_, i) => ({
+      ...entries[0]!,
+      input: { provider: 'CLAUDE' as const, model: `model-${i}` },
+      value: {
+        ...entries[0]!.value,
+        model: `model-${i}`,
+        reasoning: {
+          options: Array.from({ length: 100 }, (_unused, j) => ({
+            value: `level-${j}`,
+            label: `Level ${j}`,
+            description: 'x'.repeat(1000),
+          })),
+        },
+      },
+    }));
+    await store.save(large);
+    const restored = await new LaunchOptionsStore(path).load();
+    expect(restored.length).toBeGreaterThan(0);
+    expect(restored.length).toBeLessThan(large.length);
+    expect(restored.map((entry) => entry.input.model)).toEqual(
+      large.slice(-restored.length).map((entry) => entry.input.model)
+    );
+  });
   it('rejects snapshots above the entry bound asynchronously', async () => {
     const { store } = await fixture();
-    const invalid = Array.from({ length: 33 }, () => entries[0]!);
+    const invalid = Array.from({ length: 129 }, () => entries[0]!);
     let writing: Promise<void> | undefined;
     expect(() => {
       writing = store.save(invalid);

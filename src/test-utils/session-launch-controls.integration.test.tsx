@@ -301,8 +301,12 @@ async function openModels(name: string) {
     item.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, key: 'ArrowRight' }));
   });
 }
+/** Launch is enabled before discovery settles, so also wait for the controls to load. */
 async function ready() {
-  await waitForReact(() => expect(button('Submit launch')?.disabled).toBe(false));
+  await waitForReact(() => {
+    expect(button('Submit launch')?.disabled).toBe(false);
+    expect(document.body.querySelector('[aria-busy="true"]')).toBeNull();
+  });
 }
 
 describe('real launch controls and tRPC payloads', () => {
@@ -456,7 +460,8 @@ describe('real launch controls and tRPC payloads', () => {
     await openModels('Codex');
     await choose('Slow model');
     await waitForReact(() => expect(view.pending.has('CODEX:slow')).toBe(true));
-    expect(button('Submit launch')?.disabled).toBe(true);
+    // Pending thinking options never block launch; saved defaults apply.
+    expect(button('Submit launch')?.disabled).toBe(false);
     await open('New conversation provider and model: Codex · Slow model');
     await chooseProviderDefault('Claude');
     await ready();
@@ -473,7 +478,8 @@ describe('real launch controls and tRPC payloads', () => {
     await openModels('Codex');
     await choose('6 Luna');
     await waitForReact(() => expect(button('Thinking level: Unavailable')).toBeDefined());
-    expect(button('Submit launch')?.disabled).toBe(true);
+    // A failed probe offers Retry without blocking launch.
+    expect(button('Submit launch')?.disabled).toBe(false);
     expect(button('New conversation provider and model: Codex · 6 Luna')?.disabled).toBe(false);
     await open('Thinking level: Unavailable');
     const retry = [...document.body.querySelectorAll<HTMLElement>('[role="menuitem"]')].find(

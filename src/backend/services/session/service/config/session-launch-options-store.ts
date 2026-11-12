@@ -32,8 +32,10 @@ const entrySchema = z
     }),
   })
   .refine((entry) => entry.input.provider === entry.value.provider);
-const snapshotSchema = z.object({ version: z.literal(1), entries: z.array(entrySchema).max(32) });
+const snapshotSchema = z.object({ version: z.literal(1), entries: z.array(entrySchema).max(128) });
 export type StoredLaunchOptions = z.infer<typeof entrySchema>;
+/** Snapshots this large are not read back, so saving drops the oldest entries to fit. */
+const MAX_SNAPSHOT_BYTES = 1024 * 1024;
 export interface LaunchOptionsPersistence {
   load(): Promise<StoredLaunchOptions[]>;
   save(entries: StoredLaunchOptions[]): Promise<void>;
@@ -49,7 +51,7 @@ export class LaunchOptionsStore implements LaunchOptionsPersistence {
       const file = await open(this.path, 'r');
       try {
         // Bounded reads also cover files replaced or enlarged by another process.
-        const buffer = Buffer.alloc(1024 * 1024 + 1);
+        const buffer = Buffer.alloc(MAX_SNAPSHOT_BYTES + 1);
         const { bytesRead } = await file.read(buffer, 0, buffer.length, 0);
         if (bytesRead === buffer.length) {
           return [];
@@ -72,7 +74,12 @@ export class LaunchOptionsStore implements LaunchOptionsPersistence {
       const parsed = entrySchema.safeParse(entry);
       return parsed.success ? [parsed.data] : [];
     });
-    const data = JSON.stringify(snapshotSchema.parse({ version: 1, entries: supported }));
+    let data = JSON.stringify(snapshotSchema.parse({ version: 1, entries: supported }));
+    // Entries arrive oldest first; keep the newest that load() can read back.
+    while (Buffer.byteLength(data) > MAX_SNAPSHOT_BYTES && supported.length > 0) {
+      supported.shift();
+      data = JSON.stringify({ version: 1, entries: supported });
+    }
     const write = this.writing
       .catch(() => undefined)
       .then(async () => {

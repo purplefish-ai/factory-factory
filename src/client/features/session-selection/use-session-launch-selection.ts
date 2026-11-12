@@ -1,4 +1,5 @@
 import { useCallback, useState } from 'react';
+import { z } from 'zod';
 import { useLatestRef } from '@/client/hooks/use-stable-callback';
 import { QUERY_RETRY } from '@/client/lib/query-options';
 import { trpc } from '@/client/lib/trpc';
@@ -7,7 +8,7 @@ import { resolveEffectiveSessionProvider } from '@/lib/session-provider-selectio
 import type { ChatModelOption, ChatProvider } from '@/shared/chat-capabilities';
 import type { CodexAccountSummary } from '@/shared/codex-accounts';
 import type { SessionPermissionPreset } from '@/shared/core';
-import type { SessionLaunchOptions, SessionLaunchSettings } from '@/shared/session-launch';
+import type { SessionLaunchSettings } from '@/shared/session-launch';
 import { getEffectiveLaunchOptions } from './launch-options-state';
 import type { SessionLaunchSelectionSnapshot } from './launch-selection-snapshot';
 import type { ProviderModelPickerProps } from './provider-model-picker';
@@ -179,14 +180,15 @@ function getModels(
     ...options,
   ];
 }
+type EffectiveLaunchOptions = ReturnType<typeof getEffectiveLaunchOptions>;
+/**
+ * Thinking and planning options never block creation: without options
+ * confirmed for the selected model, the session starts with saved defaults.
+ */
 function getUnavailableReason(
   defaultsLoading: boolean,
   error: string | undefined,
-  native: SessionLaunchOptions | undefined,
-  nativeError: string | undefined,
-  invalidReasoning: boolean,
-  invalidPlan: boolean,
-  invalidAccess: boolean
+  confirmed: EffectiveLaunchOptions | undefined
 ) {
   if (error) {
     return error;
@@ -194,22 +196,55 @@ function getUnavailableReason(
   if (defaultsLoading) {
     return 'Loading chat defaults';
   }
-  if (nativeError) {
-    return nativeError;
-  }
-  if (!native) {
-    return 'Loading thinking and planning options';
-  }
-  if (invalidReasoning) {
+  if (confirmed?.invalidReasoning) {
     return 'Choose a supported thinking level or Default';
   }
-  if (invalidAccess) {
+  if (confirmed?.invalidAccess) {
     return 'Choose a supported access mode';
   }
-  if (invalidPlan) {
+  if (confirmed?.invalidPlan) {
     return 'Turn Plan off because this model does not support it';
   }
   return undefined;
+}
+
+/**
+ * Confirmed options produce the full launch payload. Otherwise only explicit
+ * choices are sent, and the server applies saved defaults to the rest.
+ */
+function getLaunchSettings(
+  selection: Pick<
+    ReturnType<typeof useSessionLaunchSelectionState>,
+    'accessMode' | 'reasoningEffort' | 'planModeEnabled'
+  >,
+  confirmed: EffectiveLaunchOptions | undefined
+): SessionLaunchSettings {
+  if (confirmed) {
+    return {
+      ...(confirmed.accessMode !== undefined ? { accessMode: confirmed.accessMode } : {}),
+      reasoningEffort: confirmed.reasoningEffort ?? null,
+      planModeEnabled: confirmed.planModeEnabled,
+    };
+  }
+  const { accessMode, reasoningEffort, planModeEnabled } = selection;
+  return {
+    ...(accessMode !== undefined ? { accessMode } : {}),
+    ...(reasoningEffort !== undefined
+      ? { reasoningEffort: reasoningEffort === 'default' ? null : reasoningEffort }
+      : {}),
+    ...(planModeEnabled !== undefined ? { planModeEnabled } : {}),
+  };
+}
+
+// tRPC query keys are [path, { input, type }].
+const launchQueryKeySchema = z.tuple([
+  z.unknown(),
+  z.object({ input: z.object({ codexAccountId: z.string().optional() }) }),
+]);
+/** The Codex account a launch-options query asked for; null when unrecognized. */
+function launchQueryAccount(queryKey: unknown): string | undefined | null {
+  const parsed = launchQueryKeySchema.safeParse(queryKey);
+  return parsed.success ? parsed.data[1].input.codexAccountId : null;
 }
 
 function useNativeLaunchOptions(
@@ -224,13 +259,27 @@ function useNativeLaunchOptions(
       model,
       ...(provider === 'CODEX' && codexAccountId ? { codexAccountId } : {}),
     },
-    { enabled: enabled && provider !== null, staleTime: 30_000, retry: QUERY_RETRY.costlyRead }
+    {
+      enabled: enabled && provider !== null,
+      staleTime: 30_000,
+      retry: QUERY_RETRY.costlyRead,
+      // Keep showing the last options while another model's cached options
+      // load, but never another Codex account's: access and Plan can differ.
+      placeholderData: (previous, previousQuery) =>
+        previous?.provider === provider &&
+        (provider !== 'CODEX' ||
+          launchQueryAccount(previousQuery?.queryKey) === (codexAccountId || undefined))
+          ? previous
+          : undefined,
+    }
   );
   // The query is keyed by input; confirmed native IDs may differ from requested aliases.
   const native = query.data?.provider === provider ? query.data : undefined;
   const error = !native && query.error ? "Couldn't load thinking and planning options" : undefined;
   return {
     native,
+    /** Options discovered for the selected model, not a placeholder from the last one. */
+    confirmed: native !== undefined && !query.isPlaceholderData,
     error,
     loading: !(native || error),
     retry: () => {
@@ -321,17 +370,9 @@ export function useSessionLaunchSelection(
     scopeKey !== null && !selection.loading && !error,
     selection.codexAccountId
   );
-  const { native, error: nativeError } = discovery;
-  const effective = getEffectiveLaunchOptions(selection, native);
-  const unavailableReason = getUnavailableReason(
-    selection.loading,
-    error,
-    native,
-    nativeError,
-    effective.invalidReasoning,
-    effective.invalidPlan,
-    effective.invalidAccess
-  );
+  const effective = getEffectiveLaunchOptions(selection, discovery.native);
+  const confirmed = discovery.confirmed ? effective : undefined;
+  const unavailableReason = getUnavailableReason(selection.loading, error, confirmed);
   const ready = !unavailableReason;
   const models = getModels(selection.provider, selection.model, catalog);
   const pickerProps: ProviderModelPickerProps = {
@@ -376,7 +417,7 @@ export function useSessionLaunchSelection(
     account,
     ready,
     unavailableReason,
-    ...getConfigurationControls(selection, discovery, effective),
+    ...getConfigurationControls(selection, discovery, effective, confirmed),
   };
   return {
     snapshot: selection.snapshot,
@@ -391,10 +432,8 @@ export function useSessionLaunchSelection(
     creationDefaults: {
       provider: selection.provider ?? undefined,
       model: selection.model,
-      ...(effective.accessMode !== undefined ? { accessMode: effective.accessMode } : {}),
       ...getAccountInput(selection.codexAccountId),
-      reasoningEffort: effective.reasoningEffort ?? null,
-      planModeEnabled: effective.planModeEnabled,
+      ...getLaunchSettings(selection, confirmed),
     },
     reset: selection.reset,
   };
@@ -403,7 +442,8 @@ export function useSessionLaunchSelection(
 function getConfigurationControls(
   selection: ReturnType<typeof useSessionLaunchSelectionState>,
   discovery: ReturnType<typeof useNativeLaunchOptions>,
-  effective: ReturnType<typeof getEffectiveLaunchOptions>
+  effective: EffectiveLaunchOptions,
+  confirmed: EffectiveLaunchOptions | undefined
 ): Pick<SessionLaunchControlsProps, 'reasoning' | 'accessMode' | 'planMode'> {
   const { native, error: nativeError, loading: nativeLoading } = discovery;
   return {
@@ -414,7 +454,7 @@ function getConfigurationControls(
           defaultValue: native?.reasoning.defaultValue,
           loading: nativeLoading,
           error: nativeError,
-          invalid: effective.invalidReasoning,
+          invalid: confirmed?.invalidReasoning ?? false,
           onChange: selection.onReasoningChange,
           onRetry: discovery.retry,
         }
@@ -424,7 +464,7 @@ function getConfigurationControls(
           value: effective.accessMode,
           options: native?.accessMode?.options ?? [],
           loading: nativeLoading,
-          invalid: effective.invalidAccess,
+          invalid: confirmed?.invalidAccess ?? false,
           onChange: selection.onAccessModeChange,
         }
       : undefined,

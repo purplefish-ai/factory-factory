@@ -132,7 +132,10 @@ describe('native launch capability discovery', () => {
     const child = createMockChildProcess();
     exitChildAfterSigterm(child);
     mocks.spawn.mockReturnValue(child);
-    const result = await fetchSessionLaunchOptionsFromAcp({ provider: 'CLAUDE', model: 'opus' });
+    const probe = startProbe({ provider: 'CLAUDE', model: 'opus' });
+    const result = await probe.result;
+    // The requested model is reported before the disposable session is torn down.
+    await probe.drained;
     expect(result.model).toBe('opus');
     expect(result.reasoning.options.map((option) => option.value)).toEqual([
       'default',
@@ -169,6 +172,140 @@ describe('native launch capability discovery', () => {
     expect(mocks.ext).toHaveBeenCalledWith('session/close', { sessionId: 'probe' });
     expect(child.kill).toHaveBeenCalledWith('SIGTERM');
     expect(mocks.close).toHaveBeenCalledOnce();
+  });
+  it('captures other selected models in the same session after reporting the requested one', async () => {
+    const child = createMockChildProcess();
+    exitChildAfterSigterm(child);
+    mocks.spawn.mockReturnValue(child);
+    mocks.set.mockImplementation(({ value }: { value: string }) =>
+      Promise.resolve({ configOptions: config(value) })
+    );
+    const selectAdditionalModels = vi.fn((models: readonly string[]) => models);
+    const probe = startProbe({ provider: 'CLAUDE', model: 'opus', selectAdditionalModels });
+    expect((await probe.result).model).toBe('opus');
+    const additional = await probe.additional;
+    await probe.drained;
+    expect(selectAdditionalModels).toHaveBeenCalledExactlyOnceWith(['sonnet']);
+    expect(additional).toEqual([
+      expect.objectContaining({
+        model: 'sonnet',
+        // A model switch may carry the previous level forward, so no default is claimed.
+        reasoning: { options: expect.arrayContaining([{ value: 'max', label: 'max' }]) },
+      }),
+    ]);
+    expect(mocks.spawn).toHaveBeenCalledOnce();
+    expect(mocks.newSession).toHaveBeenCalledOnce();
+    expect(mocks.set.mock.calls.map(([request]) => request.value)).toEqual(['opus', 'sonnet']);
+    expect(mocks.ext).toHaveBeenCalledWith('session/close', { sessionId: 'probe' });
+    expect(child.kill).toHaveBeenCalledWith('SIGTERM');
+  });
+  it('captures no other models without a selector', async () => {
+    const child = createMockChildProcess();
+    exitChildAfterSigterm(child);
+    mocks.spawn.mockReturnValue(child);
+    const probe = startProbe({ provider: 'CLAUDE', model: 'opus' });
+    await probe.result;
+    expect(await probe.additional).toEqual([]);
+    expect(mocks.set).toHaveBeenCalledOnce();
+  });
+  it('reports the requested model before a stalled sweep and keeps what the sweep captured', async () => {
+    vi.useFakeTimers();
+    try {
+      const child = createMockChildProcess();
+      exitChildAfterSigterm(child);
+      mocks.spawn.mockReturnValue(child);
+      const advertised = (model?: string) =>
+        config(model).map((option) =>
+          option.id === 'model' && option.type === 'select'
+            ? {
+                ...option,
+                options: ['sonnet', 'opus', 'haiku', 'fable'].map((value) => ({
+                  value,
+                  name: value,
+                })),
+              }
+            : option
+        );
+      mocks.newSession.mockResolvedValue({ sessionId: 'probe', configOptions: advertised() });
+      mocks.set
+        .mockResolvedValueOnce({ configOptions: advertised('opus') })
+        .mockResolvedValueOnce({ configOptions: advertised('sonnet') })
+        .mockReturnValueOnce(new Promise(() => undefined));
+      const probe = startProbe({
+        provider: 'CLAUDE',
+        model: 'opus',
+        selectAdditionalModels: (models) => models,
+      });
+      expect((await probe.result).model).toBe('opus');
+      await vi.advanceTimersByTimeAsync(30_001);
+      expect((await probe.additional).map((options) => options.model)).toEqual(['sonnet']);
+      // The stalled switch ends the sweep: the last model is never attempted.
+      expect(mocks.set).toHaveBeenCalledTimes(3);
+      expect(child.kill).toHaveBeenCalledWith('SIGTERM');
+    } finally {
+      vi.clearAllTimers();
+      vi.useRealTimers();
+    }
+  });
+  it('bounds the whole sweep by one budget and keeps the models captured in time', async () => {
+    vi.useFakeTimers();
+    try {
+      const child = createMockChildProcess();
+      exitChildAfterSigterm(child);
+      mocks.spawn.mockReturnValue(child);
+      const many = Array.from({ length: 10 }, (_, i) => `m${i}`);
+      const advertised = (model = 'm0') =>
+        config(model).map((option) =>
+          option.id === 'model' && option.type === 'select'
+            ? { ...option, options: many.map((value) => ({ value, name: value })) }
+            : option
+        );
+      mocks.newSession.mockResolvedValue({ sessionId: 'probe', configOptions: advertised() });
+      // Every switch answers just inside its own 30s bound.
+      mocks.set.mockImplementation(
+        ({ value }: { value: string }) =>
+          new Promise((resolve) => {
+            setTimeout(() => resolve({ configOptions: advertised(value) }), 25_000);
+          })
+      );
+      const probe = startProbe({
+        provider: 'CLAUDE',
+        model: 'm0',
+        selectAdditionalModels: (models) => models,
+      });
+      await vi.advanceTimersByTimeAsync(0);
+      await probe.result;
+      await vi.advanceTimersByTimeAsync(10 * 30_000);
+      // Two switches fit in the 60s budget; the third is cut off at the deadline.
+      expect((await probe.additional).map((options) => options.model)).toEqual(['m1', 'm2']);
+      await probe.drained;
+    } finally {
+      vi.clearAllTimers();
+      vi.useRealTimers();
+    }
+  });
+  it('waits longer for provider session creation than for other discovery steps', async () => {
+    vi.useFakeTimers();
+    try {
+      const child = createMockChildProcess();
+      exitChildAfterSigterm(child);
+      mocks.spawn.mockReturnValue(child);
+      const creating = deferred<{ sessionId: string; configOptions: SessionConfigOption[] }>();
+      mocks.newSession.mockReturnValueOnce(creating.promise);
+      let settled = false;
+      const probe = startProbe({ provider: 'CLAUDE', model: 'opus' });
+      const probing = probe.result.finally(() => {
+        settled = true;
+      });
+      await vi.advanceTimersByTimeAsync(119_999);
+      expect(settled).toBe(false);
+      creating.resolve({ sessionId: 'probe', configOptions: config() });
+      expect((await probing).model).toBe('opus');
+      await probe.drained;
+    } finally {
+      vi.clearAllTimers();
+      vi.useRealTimers();
+    }
   });
   it('preserves the shutdown reason when Node emits AbortError after spawn', async () => {
     const child = createMockChildProcess();
