@@ -1675,9 +1675,9 @@ a synchronous current-claim guard. Human input stays in the ordinary queue
 during setup and delivery. Queue reset, retry, manual resume, steering, direct
 startup and configuration edits cannot remove the durable fence. The event
 launcher freezes execution, creates and links the reserved workspace/session,
-then uses strict owned initialization before this API. Saved agents remain
-unactivatable until operator recovery, lossless predelete result capture, native
-capability validation and UI gates exist.
+then uses strict owned initialization before this API. Saved agents are enabled
+through the trusted-local `automation.enable` procedure; the operator recovery
+UI is separate work.
 
 AgentRun.launchPreparation is a versioned physical-operation marker. A null or
 SAFE marker with PENDING delivery can resume with the same identities. SETUP or

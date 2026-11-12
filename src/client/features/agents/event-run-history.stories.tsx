@@ -87,10 +87,10 @@ export const ChildWork: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await expect(
-      await canvas.findByText(/Child workspaces were still working after 24 hours/)
+      await canvas.findByText(/Child workspaces hadn't finished after 24 hours/)
     ).toBeVisible();
     await expect(
-      canvas.getByText(/Abandoned by a person while child workspaces were still working/)
+      canvas.getByText(/Abandoned by a person before its child workspaces had finished/)
     ).toBeVisible();
   },
 };

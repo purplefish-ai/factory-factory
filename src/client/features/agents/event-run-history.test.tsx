@@ -150,7 +150,7 @@ describe('EventRunHistory', () => {
     expect(container.textContent).not.toMatch(/no result|empty result/i);
   });
 
-  it('explains runs that finished while child workspaces were still working', async () => {
+  it('explains runs that ended before their child workspaces had finished', async () => {
     pages.first?.items.push(
       eventRunFixture({
         id: 'run-child-hold',
@@ -167,11 +167,11 @@ describe('EventRunHistory', () => {
     await waitForCheck(() => expect(container.querySelector('[data-run-id]')).not.toBeNull());
 
     const expired = runArticle('run-child-hold');
-    expect(expired.textContent).toContain('Child workspaces were still working after 24 hours');
+    expect(expired.textContent).toContain("Child workspaces hadn't finished after 24 hours");
     expect(expired.textContent).not.toContain('Unrecognized reason');
     const abandoned = runArticle('run-child-abandoned');
     expect(abandoned.textContent).toContain(
-      'Abandoned by a person while child workspaces were still working'
+      'Abandoned by a person before its child workspaces had finished'
     );
     expect(abandoned.textContent).not.toContain('Unrecognized reason');
   });
