@@ -16,6 +16,7 @@ import {
   agentDeleteResultSchema,
   agentGetInputSchema,
   agentListInputSchema,
+  agentListItemSchema,
   agentListPageSchema,
   agentSavedUpdateSchema,
   agentSourceResetInputSchema,
@@ -145,7 +146,11 @@ export class AgentManagementService {
       readManagementCursor(parsed.cursor, scope)
     );
     return agentListPageSchema.parse({
-      items: rows.slice(0, parsed.limit).map(managementSummary),
+      items: rows
+        .slice(0, parsed.limit)
+        .map((row) =>
+          agentListItemSchema.parse({ ...managementSummary(row), triggerStates: row.triggerStates })
+        ),
       nextCursor: nextManagementCursor(rows, parsed.limit, scope),
     });
   }

@@ -4,7 +4,17 @@ import { MemoryRouter } from 'react-router';
 import { expect, it, vi } from 'vitest';
 import { actFlushSync } from '@/test-utils/react-act';
 import { AgentsDashboardShell } from './agents-dashboard-shell';
-import { eventAgentFixture, eventSummaryFixture } from './event-agent.test-support';
+import {
+  backendActivate,
+  backendEnable,
+  backendExpireActivation,
+  backendPause,
+  backendResetSource,
+  eventAgentFixture,
+  eventSummaryFixture,
+  slackTriggerFixture,
+} from './event-agent.test-support';
+import { describeAutomationState } from './event-trigger-status';
 
 it('keeps the project rail visible beside task errors and links explicit selections', () => {
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
@@ -241,5 +251,73 @@ it('waits for the loading rail before revealing route intent once, then preserve
     } else {
       Reflect.deleteProperty(HTMLElement.prototype, 'scrollIntoView');
     }
+  }
+});
+
+it('shows each event automation as Active, Starting or Paused from its triggers', () => {
+  Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
+  const container = document.createElement('div');
+  const root = createRoot(container);
+  const saved = eventAgentFixture();
+  const enabled = backendEnable(saved);
+  const listening = backendActivate(enabled);
+  // A GitHub trigger listens while a Slack trigger still waits for its test message.
+  const mixed = backendActivate(
+    backendEnable({
+      ...saved,
+      configuredTriggers: [...saved.configuredTriggers, slackTriggerFixture()],
+    })
+  );
+  const states = {
+    'never-enabled': saved,
+    starting: enabled,
+    listening,
+    mixed,
+    paused: backendPause(listening),
+    // The definition stays enabled while every trigger is paused.
+    expired: backendExpireActivation(enabled),
+    reset: backendResetSource(listening, 'github-connection', '2026-11-12T00:00:00.000Z'),
+  };
+  actFlushSync(() =>
+    root.render(
+      <MemoryRouter>
+        <AgentsDashboardShell
+          projectSlug="project"
+          agents={Object.entries(states).map(([id, agent]) => ({
+            ...eventSummaryFixture(agent),
+            id,
+            kind: 'event' as const,
+          }))}
+          onCreate={vi.fn()}
+        >
+          <p>Detail</p>
+        </AgentsDashboardShell>
+      </MemoryRouter>
+    )
+  );
+  try {
+    const label = (id: string) =>
+      container
+        .querySelector(`a[href$="/${id}?kind=event"]`)
+        ?.textContent?.replace(saved.name, '')
+        .replace('·Event-triggered', '');
+    expect(Object.fromEntries(Object.keys(states).map((id) => [id, label(id)]))).toEqual({
+      'never-enabled': 'Paused',
+      starting: 'Starting',
+      listening: 'Active',
+      mixed: 'Active',
+      paused: 'Paused',
+      expired: 'Paused',
+      reset: 'Paused',
+    });
+    // The rail and the detail header read every state the same way.
+    for (const [id, agent] of Object.entries(states)) {
+      expect(label(id)).toBe(describeAutomationState(agent.configuredTriggers));
+    }
+    expect(states.expired.isEnabled).toBe(true);
+    expect(states.reset.isEnabled).toBe(true);
+    expect(container.textContent).not.toContain('Definition enabled');
+  } finally {
+    actFlushSync(() => root.unmount());
   }
 });

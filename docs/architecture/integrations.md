@@ -956,9 +956,12 @@ reasons inline, and a `CONFLICT` keeps the page and offers **Reload
 automation**. The detail polls at the management cadence, so Starting moves to
 Listening or Paused after the next source poll cycle. Pause states that queued
 runs are cancelled, started runs continue, and events while paused never run.
-The rail shows "Definition enabled" (with a neutral dot) or Paused, because the
-list carries only the definition flag and no trigger state. The editor still
-says which edits pause triggers; Enable restarts them after saving.
+The rail uses the same rule: each `automation.list` item carries
+`triggerStates`, its configured triggers counted as listening (`ACTIVE` and
+enabled), starting (`STARTING`) or paused (the rest), from one grouped query per
+page, so the rail reads Active, Starting or Paused without loading each
+automation. The editor still says which edits pause triggers; Enable restarts
+them after saving.
 
 A GitHub source in `RECOVERY_REQUIRED` shows one **Reset source** callout per
 connection. Its `ConfirmDialog` says that events from the gap will not run, that
