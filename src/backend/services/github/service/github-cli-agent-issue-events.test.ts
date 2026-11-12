@@ -106,6 +106,41 @@ it('makes reopened issue events executable with the issue labels at capture', as
   expect(page.events[3]?.payload).toMatchObject({ issue: { labels: [] } });
 });
 
+it('ingests executable events whose issue author or actor account was deleted', async () => {
+  // GitHub documents both `actor` and `issue.user` as nullable simple users.
+  vi.mocked(execFile).mockResolvedValue(
+    response([
+      { ...event, id: 'deleted-author', issue: { ...event.issue, user: null } },
+      { ...event, id: 'deleted-actor', actor: null },
+      {
+        id: 'reopened-by-deleted',
+        event: 'reopened',
+        created_at: '2026-11-02T12:00:00Z',
+        actor: null,
+        issue: { ...event.issue, user: null },
+      },
+      event,
+    ]) as never
+  );
+  const page = await githubCLIService.listAgentIssueEvents({
+    repository: 'org/repo',
+    repositoryId: '123',
+    page: 1,
+    perPage: 100,
+  });
+  expect(
+    page.events.map(({ payload }) =>
+      payload?.provider === 'GITHUB' ? [payload.actorId, payload.creatorId] : payload
+    )
+  ).toEqual([
+    ['actor', null],
+    [null, 'creator'],
+    [null, null],
+    ['actor', 'creator'],
+  ]);
+  expect(page.events[2]?.payload).toMatchObject({ action: 'reopened', issue: { number: 7 } });
+});
+
 it.each(['opened', 'edited', 'closed'])(
   'keeps %s issue events as non-executable feed identities',
   async (action) => {
@@ -151,7 +186,8 @@ it.each([
 
 it('rejects malformed executable events and duplicate control identities', async () => {
   for (const rows of [
-    [{ ...event, actor: null }],
+    [{ ...event, actor: {} }],
+    [{ ...event, issue: { ...event.issue, user: { id: '' } } }],
     [{ ...event, event: 'reopened', issue: { ...event.issue, number: 0 } }],
     [{ ...event, issue: { ...event.issue, labels: [7] } }],
     [event, event],

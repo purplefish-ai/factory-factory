@@ -5,6 +5,8 @@ import { agentSourcePageNumberSchema } from '@/shared/agent-source-state';
 import { githubIssuePreviewInputSchema } from '@/shared/github-issue-preview';
 
 const id = z.string().min(1).max(256);
+// GitHub documents `actor` and `issue.user` as nullable: a deleted account reads as null.
+const account = z.object({ id }).nullable();
 type Read = (args: string[]) => Promise<{ stdout: string }>;
 const controlSchema = z.object({
   id,
@@ -16,7 +18,7 @@ const issueSchema = z.object({
   title: z.string(),
   body: z.string().nullable(),
   html_url: z.url(),
-  user: z.object({ id }),
+  user: account,
   // GitHub documents each issue label as a name string or a label object.
   labels: z
     .array(z.union([z.string(), z.object({ name: z.string().nullish() })]))
@@ -33,14 +35,14 @@ const executableSchema = z.discriminatedUnion('event', [
   z.object({
     event: z.literal('labeled'),
     created_at: z.iso.datetime(),
-    actor: z.object({ id }),
+    actor: account,
     label: z.object({ name: z.string().min(1) }),
     issue: issueSchema,
   }),
   z.object({
     event: z.literal('reopened'),
     created_at: z.iso.datetime(),
-    actor: z.object({ id }),
+    actor: account,
     issue: issueSchema,
   }),
 ]);
@@ -144,8 +146,8 @@ export async function listAgentIssueEvents(input: AgentIssueEventRequest, read: 
         repositoryId: input.repositoryId,
         repositoryFullName: input.repository,
         action: event.event,
-        actorId: event.actor.id,
-        creatorId: event.issue.user.id,
+        actorId: event.actor?.id ?? null,
+        creatorId: event.issue.user?.id ?? null,
         occurredAt: event.created_at,
         observedAt,
         sourceUrl: event.issue.html_url,
