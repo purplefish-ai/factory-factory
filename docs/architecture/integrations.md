@@ -950,12 +950,13 @@ title/body, repository, label; Slack text and whether it is a thread reply) as
 JSON data marked untrusted. Actor identities and links are omitted. Event text
 that asks to be matched has no authority. The output schema is strict
 `{ decision: 'match' | 'skip' | 'uncertain', reason }`; only `match` admits a
-run. Evaluations persist `SEMANTIC_FILTER_*` reason codes, fixed explanations
-and the classifier identity (provider, model, prompt version, input hash), never
-the model's reason text. `uncertain` and malformed output are terminal;
-timeouts, rate limits and provider failures retry on the evaluation budget. A
-filter longer than 4,000 characters is never sent to a provider and records a
-terminal `SEMANTIC_FILTER_TOO_LONG` error.
+run. Evaluations persist `SEMANTIC_FILTER_*` reason codes and fixed
+explanations, never the model's reason text. When a classifier call runs, they
+also persist its identity (provider, model, prompt version, input hash);
+unproven-provider, unavailable and too-long skips have none. `uncertain` and
+malformed output are terminal; timeouts, rate limits and provider failures retry
+on the evaluation budget. A filter longer than 4,000 characters is never sent to
+a provider and records a terminal `SEMANTIC_FILTER_TOO_LONG` error.
 
 Evaluation rechecks the gate for the provider resolved for each event, because
 an inherited provider can change after Enable. An unproven effective provider

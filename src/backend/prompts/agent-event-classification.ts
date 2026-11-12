@@ -30,12 +30,16 @@ export const agentEventClassificationResultSchema = z.strictObject({
   reason: z.string().max(1000),
 });
 
+const TRUNCATED = '\n[truncated]\n';
+
+/** Caps text at `limit` characters, marker included, keeping its start and end. */
 function boundedText(text: string, limit: number) {
   if (text.length <= limit) {
     return text;
   }
-  const head = Math.floor(limit * 0.6);
-  return `${text.slice(0, head)}\n[truncated]\n${text.slice(text.length - (limit - head))}`;
+  const kept = limit - TRUNCATED.length;
+  const head = Math.floor(kept * 0.6);
+  return `${text.slice(0, head)}${TRUNCATED}${text.slice(text.length - (kept - head))}`;
 }
 
 /** Projects only the classified subject; actor identities and links are omitted. */

@@ -175,14 +175,14 @@ closed; SCHEDULE stays with PeriodicTask. A deterministic match on a trigger
 with `filterInstructions` then calls the event classifier: a disposable,
 tools-disabled provider call limited to 30 seconds and two concurrent calls. The
 evaluation job awaits it inline, so one slow classification delays later
-candidates in that cycle by at most the call limit. Before calling, evaluation
-checks the live classifier gate for the provider resolved for that event; an
-unproven provider records `SEMANTIC_FILTER_PROVIDER_UNPROVEN` and never runs the
-event unfiltered. STARTING generations are never candidates; the source poll job
-completes, cancels or expires them. Only configured triggers
-(`isConfigured = true`) receive new decisions; an unresolved decision left by a
-removed trigger is still settled. Terminal decisions are not replayed under new
-revisions or generations.
+candidates in that cycle by at most the call limit plus up to five seconds of
+disposable process cleanup. Before calling, evaluation checks the live
+classifier gate for the provider resolved for that event; an unproven provider
+records `SEMANTIC_FILTER_PROVIDER_UNPROVEN` and never runs the event unfiltered.
+STARTING generations are never candidates; the source poll job completes,
+cancels or expires them. Only configured triggers (`isConfigured = true`)
+receive new decisions; an unresolved decision left by a removed trigger is still
+settled. Terminal decisions are not replayed under new revisions or generations.
 
 Queue maintenance rotates through bounded batches even when all active slots are
 occupied. Claims choose FIFO heads of unsaturated definitions and serialize

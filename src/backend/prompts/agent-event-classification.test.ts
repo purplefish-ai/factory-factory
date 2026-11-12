@@ -82,6 +82,9 @@ describe('agent event classification prompt', () => {
       issue: { ...github.issue, body },
     });
     expect(prompt.length).toBeLessThan(14_000);
+    expect(parsePrompt(prompt)).toMatchObject({
+      event: { body: expect.stringMatching(/^[\s\S]{12000}$/) },
+    });
     expect(prompt).toContain('start start');
     expect(prompt).toContain('end end');
     expect(prompt).toContain('[truncated]');
