@@ -78,6 +78,54 @@ describe('classifySlackEnvelope', () => {
     expect(JSON.stringify(event)).not.toContain('Root text');
   });
 
+  it.each([
+    ['a root upload', {}],
+    ['a thread reply upload', { thread_ts: '1700000000.000100' }],
+  ])('ignores %s without a comment, blank or whitespace only', (_name, thread) => {
+    for (const text of [undefined, '', '  \n\t ']) {
+      expect(
+        classifySlackEnvelope(
+          listener,
+          envelope({ ...thread, subtype: 'file_share', text, files: [{ id: 'F1' }] }),
+          observedAt
+        )
+      ).toEqual({ kind: 'IGNORE', reason: 'BLANK_FILE_SHARE' });
+    }
+  });
+
+  it('stores a thread reply upload that has a comment', () => {
+    expect(
+      stored(
+        classifySlackEnvelope(
+          listener,
+          envelope({
+            subtype: 'file_share',
+            thread_ts: '1700000000.000100',
+            text: 'Error after retry',
+            files: [{ id: 'F1' }],
+          }),
+          observedAt
+        )
+      ).payload
+    ).toMatchObject({
+      subtype: 'file_share',
+      threadTs: '1700000000.000100',
+      text: 'Error after retry',
+    });
+  });
+
+  it('still stores a thread broadcast whatever its text', () => {
+    expect(
+      stored(
+        classifySlackEnvelope(
+          listener,
+          envelope({ subtype: 'thread_broadcast', thread_ts: '1700000000.000100', text: '' }),
+          observedAt
+        )
+      ).payload
+    ).toMatchObject({ subtype: 'thread_broadcast', text: '' });
+  });
+
   it('stores an ordinary message with a null subtype', () => {
     expect(stored(classifySlackEnvelope(listener, envelope({}), observedAt)).payload).toMatchObject(
       { subtype: null }

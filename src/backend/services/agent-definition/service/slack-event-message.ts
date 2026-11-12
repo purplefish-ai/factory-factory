@@ -13,7 +13,8 @@ const callbackSchema = z.object({
 });
 /**
  * A person's message that shares files or also sends a thread reply to the channel is stored
- * like an ordinary message, text only; the files themselves are never stored or fetched.
+ * like an ordinary message, text only; the files themselves are never stored or fetched, so a
+ * file share without a comment carries nothing to act on and is ignored.
  */
 export const slackHumanSubtypes = ['file_share', 'thread_broadcast'] as const;
 const humanMessageSchema = z.object({
@@ -35,6 +36,7 @@ export type SlackEnvelopeDecision =
         | 'UNSUPPORTED_ENVELOPE'
         | 'UNSUPPORTED_EVENT'
         | 'NOT_HUMAN_MESSAGE'
+        | 'BLANK_FILE_SHARE'
         | 'INVALID_PAYLOAD';
     }
   | { kind: 'REJECT'; reason: 'SLACK_APP_MISMATCH' | 'SLACK_WORKSPACE_MISMATCH' };
@@ -80,6 +82,9 @@ export function classifySlackEnvelope(
   const message = humanMessageSchema.safeParse(event);
   if (!message.success) {
     return { kind: 'IGNORE', reason: 'INVALID_PAYLOAD' };
+  }
+  if (message.data.subtype === 'file_share' && !message.data.text?.trim()) {
+    return { kind: 'IGNORE', reason: 'BLANK_FILE_SHARE' };
   }
   const input = agentEventInputSchema.safeParse(
     eventInput(listener, callback.data.event_id, message.data, observedAt)

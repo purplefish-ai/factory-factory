@@ -292,6 +292,22 @@ it("stores a person's file share and thread broadcast as text-only messages", as
   expect(JSON.stringify(events[0]?.payload)).not.toContain('screen.png');
 });
 
+it('acknowledges a file share without a comment, in the channel or a thread, without storing it', async () => {
+  const socket = await connected();
+  await socket.deliver(message({ subtype: 'file_share', files: [{ id: 'F1' }], text: '' }));
+  await socket.deliver(
+    message({
+      subtype: 'file_share',
+      files: [{ id: 'F2' }],
+      text: ' \n ',
+      ts: '1700000003.000400',
+      thread_ts: '1700000000.000100',
+    })
+  );
+  expect(socket.acks).toHaveLength(2);
+  expect(await db.prisma.agentEvent.count()).toBe(0);
+});
+
 it('acknowledges messages in channels no listening trigger selects without storing them', async () => {
   const socket = await connected();
   await socket.deliver(message({ channel: 'C-other' }));
