@@ -1,4 +1,8 @@
 import type { z } from 'zod';
+import {
+  evaluationExplanations,
+  unprovenProviderExplanation,
+} from '@/backend/services/agent-definition/resources/agent-evaluation-explanations';
 import type {
   AgentEvaluationInput,
   AgentEventPayload,
@@ -40,23 +44,22 @@ const decisions: Record<
   match: {
     status: 'MATCHED',
     reasonCode: 'SEMANTIC_FILTER_MATCH',
-    explanation: 'The trigger filters and the natural-language filter match.',
+    explanation: evaluationExplanations.semanticMatch,
   },
   skip: {
     status: 'SKIPPED',
     reasonCode: 'SEMANTIC_FILTER_SKIP',
-    explanation: 'The event does not meet the natural-language filter.',
+    explanation: evaluationExplanations.semanticSkip,
   },
   uncertain: {
     status: 'SKIPPED',
     reasonCode: 'SEMANTIC_FILTER_UNCERTAIN',
-    explanation:
-      'The classifier could not tell whether the event meets the natural-language filter; uncertain events never start a run.',
+    explanation: evaluationExplanations.semanticUncertain,
   },
   UNAVAILABLE: {
     status: 'SKIPPED',
     reasonCode: 'SEMANTIC_FILTER_UNAVAILABLE',
-    explanation: 'Natural-language filtering is not available, so the event was not run.',
+    explanation: evaluationExplanations.semanticUnavailable,
   },
 };
 const failures: Record<
@@ -65,44 +68,40 @@ const failures: Record<
 > = {
   MALFORMED: {
     reasonCode: 'SEMANTIC_FILTER_MALFORMED',
-    explanation: 'The classifier returned invalid output, so the event was not run.',
+    explanation: evaluationExplanations.semanticMalformed,
     retryable: false,
   },
   TIMEOUT: {
     reasonCode: 'SEMANTIC_FILTER_TIMEOUT',
-    explanation: 'The classifier timed out; retry is bounded.',
+    explanation: evaluationExplanations.semanticTimeout,
     retryable: true,
   },
   RATE_LIMITED: {
     reasonCode: 'SEMANTIC_FILTER_RATE_LIMITED',
-    explanation: 'The classifier provider is rate limited; retry is bounded.',
+    explanation: evaluationExplanations.semanticRateLimited,
     retryable: true,
   },
   FAILED: {
     reasonCode: 'SEMANTIC_FILTER_FAILED',
-    explanation: 'The classifier could not run; retry is bounded.',
+    explanation: evaluationExplanations.semanticFailed,
     retryable: true,
   },
 };
-/** Longer filters are not sent to a provider; the trigger schema does not bound them. */
-export const MAX_FILTER_INSTRUCTIONS_LENGTH = 4000;
 
 export function filterTooLongDecision(): SemanticDecision {
   return {
     status: 'ERROR',
     reasonCode: 'SEMANTIC_FILTER_TOO_LONG',
-    explanation: `The natural-language filter is longer than ${MAX_FILTER_INSTRUCTIONS_LENGTH} characters, so the event was not run. Shorten the filter.`,
+    explanation: evaluationExplanations.filterTooLong,
     retryable: false,
   };
 }
-
-const providerNames: Record<SessionProvider, string> = { CLAUDE: 'Claude', CODEX: 'Codex' };
 
 export function unprovenProviderDecision(provider: SessionProvider): SemanticDecision {
   return {
     status: 'SKIPPED',
     reasonCode: 'SEMANTIC_FILTER_PROVIDER_UNPROVEN',
-    explanation: `This automation now runs with ${providerNames[provider]}, whose natural-language filter classifier has not passed evaluation, so the event was not run.`,
+    explanation: unprovenProviderExplanation(provider),
     retryable: false,
   };
 }

@@ -8,6 +8,13 @@ import { AgentRunHistory } from './agent-run-history';
 import { AgentsDashboardShell } from './agents-dashboard-shell';
 import { EventAgentCreate } from './event-agent-create';
 import {
+  backendActivate,
+  backendEnable,
+  backendExpireActivation,
+  eventAgentFixture,
+  eventSummaryFixture,
+} from './event-agent.test-support';
+import {
   EventDashboardStory,
   eventStoryAgent,
   type EventStoryState,
@@ -181,7 +188,13 @@ function DashboardSession({ state = 'populated' }: { state?: StoryMode }) {
             ? []
             : mode === 'loading' || mode === 'error'
               ? undefined
-              : [...agents, { ...eventStoryAgent(eventState ?? 'event'), kind: 'event' as const }]
+              : [
+                  ...agents,
+                  {
+                    ...eventSummaryFixture(eventStoryAgent(eventState ?? 'event')),
+                    kind: 'event' as const,
+                  },
+                ]
         }
         selectedKind={eventState ? 'event' : 'scheduled'}
         selectedAgentId={
@@ -344,3 +357,47 @@ export const PhoneLongRail: Story = {
     await expect(editor.getBoundingClientRect().top).toBeLessThan(window.innerHeight);
   },
 };
+
+/** Event automations in the rail read their triggers, as the detail header does. */
+function EventRail() {
+  const saved = eventAgentFixture();
+  const starting = backendEnable(saved);
+  const rail = [
+    { agent: backendActivate(starting), id: 'listening', name: 'Investigate labeled issues' },
+    { agent: starting, id: 'starting', name: 'Triage reopened issues' },
+    // Enabled, but its start expired, so every trigger is paused.
+    { agent: backendExpireActivation(starting), id: 'expired', name: 'Label follow-ups' },
+    { agent: saved, id: 'never-enabled', name: 'Draft release notes' },
+  ].map(({ agent, id, name }) => ({
+    ...eventSummaryFixture(agent),
+    id,
+    name,
+    kind: 'event' as const,
+  }));
+  return (
+    <div className="h-dvh">
+      <AgentsDashboardShell
+        projectSlug={project.slug}
+        agents={rail}
+        selectedKind="event"
+        selectedAgentId="listening"
+        onCreate={() => undefined}
+      >
+        <p>Automation details and controls</p>
+      </AgentsDashboardShell>
+    </div>
+  );
+}
+export const EventRailStates: Story = {
+  render: () => <EventRail />,
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const state = (name: string) => canvas.getByRole('link', { name: new RegExp(name) });
+    await expect(state('Investigate labeled issues')).toHaveTextContent('Active');
+    await expect(state('Triage reopened issues')).toHaveTextContent('Starting');
+    await expect(state('Label follow-ups')).toHaveTextContent('Paused');
+    await expect(state('Draft release notes')).toHaveTextContent('Paused');
+    await expect(canvas.queryByText('Definition enabled')).not.toBeInTheDocument();
+  },
+};
+export const EventRailStatesDark: Story = { ...EventRailStates, globals: { theme: 'dark' } };

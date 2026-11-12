@@ -1,4 +1,8 @@
-import { managedAgentSchema, agentSummarySchema } from '@/shared/agent-management';
+import {
+  agentListItemSchema,
+  agentSummarySchema,
+  managedAgentSchema,
+} from '@/shared/agent-management';
 import { agentProjectSourcesSchema } from '@/shared/agent-validation';
 
 /** Canonical public shape for visual fixtures; ownership/CAS use real integration owners. */
@@ -269,8 +273,24 @@ export function backendResetSource(
   };
 }
 
+/**
+ * What `automation.list` returns for an automation: its summary and its
+ * configured triggers counted by the states the backend writes (listening is
+ * ACTIVE with `isEnabled`, starting is STARTING, the rest are paused).
+ */
 export function eventSummaryFixture(agent: ReturnType<typeof eventAgentFixture>) {
-  return agentSummarySchema.strip().parse(agent);
+  const count = (matches: (trigger: EventTriggerFixture) => boolean) =>
+    agent.configuredTriggers.filter(matches).length;
+  const listening = count((trigger) => trigger.isEnabled && trigger.activationState === 'ACTIVE');
+  const starting = count((trigger) => trigger.activationState === 'STARTING');
+  return agentListItemSchema.parse({
+    ...agentSummarySchema.strip().parse(agent),
+    triggerStates: {
+      listening,
+      starting,
+      paused: agent.configuredTriggers.length - listening - starting,
+    },
+  });
 }
 
 /** Frontend-only discovery pages; credentials/native/source ports are never acquired. */

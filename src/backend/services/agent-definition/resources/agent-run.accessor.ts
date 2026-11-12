@@ -8,6 +8,7 @@ import {
   type AgentRuntimeReason,
 } from '@/shared/agent-runtime';
 import type { Prisma } from '@prisma-gen/client';
+import { evaluationExplanations } from './agent-evaluation-explanations';
 import { ledgerTransaction } from './agent-ledger-transaction';
 import {
   eventEligibility,
@@ -171,7 +172,7 @@ async function admitRun(value: AgentAdmissionInput): Promise<AdmissionResult> {
         data: {
           status: 'SKIPPED',
           reasonCode: 'QUEUE_OVERFLOW',
-          explanation: 'This event already exceeded the waiting-run limit.',
+          explanation: evaluationExplanations.eventOverflowed,
         },
       });
       return { status: 'REJECTED', reason: 'QUEUE_OVERFLOW' };
@@ -200,7 +201,7 @@ async function admitRun(value: AgentAdmissionInput): Promise<AdmissionResult> {
         data: {
           status: 'SKIPPED',
           reasonCode: 'QUEUE_OVERFLOW',
-          explanation: 'The waiting-run limit was reached.',
+          explanation: evaluationExplanations.queueOverflow,
         },
       });
       return { status: 'REJECTED', reason: 'QUEUE_OVERFLOW' };

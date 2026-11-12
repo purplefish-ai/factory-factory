@@ -1,4 +1,4 @@
-import { type QueryClient, type QueryKey, useInfiniteQuery } from '@tanstack/react-query';
+import type { QueryClient } from '@tanstack/react-query';
 import { getQueryKey } from '@trpc/react-query';
 import { POLL_INTERVAL_MS } from '@/client/lib/query-options';
 import { trpc } from '@/client/lib/trpc';
@@ -146,46 +146,25 @@ export function invalidateEventHistoryQueries(
 }
 
 type EventHistoryOwner = { projectId: string; agentId: string };
-type EventHistoryPage<T> = { items: T[]; nextCursor: string | null };
+const eventHistoryPageOptions = {
+  getNextPageParam: (page: { nextCursor: string | null }) => page.nextCursor ?? undefined,
+  refetchInterval: POLL_INTERVAL_MS.activity,
+};
 
 /**
- * Keyset pages, newest first. tRPC's own infinite hook adds a `direction`
- * field that the strict history input rejects, so pages are read through the
- * plain client. They keep tRPC's infinite key, so owner invalidation above
- * still reaches them. A refetch rereads every loaded page from the first
- * cursor, so new runs never leave a gap between pages.
+ * Keyset pages, newest first, under tRPC's infinite key, so owner invalidation
+ * above reaches them. The server strips the `direction` field tRPC adds. A
+ * refetch rereads every loaded page from the first cursor, so new runs never
+ * leave a gap between pages.
  */
-function useEventHistoryPages<T>(
-  queryKey: QueryKey,
-  readPage: (cursor: string | undefined, signal: AbortSignal) => Promise<EventHistoryPage<T>>
-) {
-  return useInfiniteQuery({
-    queryKey,
-    queryFn: ({ pageParam, signal }) => readPage(pageParam, signal),
-    initialPageParam: undefined as string | undefined,
-    getNextPageParam: (page) => page.nextCursor ?? undefined,
-    refetchInterval: POLL_INTERVAL_MS.activity,
-  });
-}
-
-/** The Runs view: one event automation's runs. */
-export function useEventRunPages(owner: EventHistoryOwner) {
-  const utils = trpc.useUtils();
-  const { projectId, agentId } = owner;
-  return useEventHistoryPages(
-    getQueryKey(trpc.automation.runs, { projectId, agentId }, 'infinite'),
-    (cursor, signal) =>
-      utils.client.automation.runs.query({ projectId, agentId, cursor }, { signal })
-  );
+export function useEventRunPages({ projectId, agentId }: EventHistoryOwner) {
+  return trpc.automation.runs.useInfiniteQuery({ projectId, agentId }, eventHistoryPageOptions);
 }
 
 /** The Events view: how one event automation's triggers decided each event. */
-export function useEventEvaluationPages(owner: EventHistoryOwner) {
-  const utils = trpc.useUtils();
-  const { projectId, agentId } = owner;
-  return useEventHistoryPages(
-    getQueryKey(trpc.automation.evaluations, { projectId, agentId }, 'infinite'),
-    (cursor, signal) =>
-      utils.client.automation.evaluations.query({ projectId, agentId, cursor }, { signal })
+export function useEventEvaluationPages({ projectId, agentId }: EventHistoryOwner) {
+  return trpc.automation.evaluations.useInfiniteQuery(
+    { projectId, agentId },
+    eventHistoryPageOptions
   );
 }

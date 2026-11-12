@@ -504,9 +504,15 @@ historical events. An already-polled source retains a prepared head in
 `AgentSourceBaseline` until all older events have canonical ordinals;
 `getBaseline(connectionId, id)` reads that result. A non-executable head can
 have ordinal zero. Retained completed-interval evidence also resolves
-preparation that races a newer commit, even after event rows are pruned. These
-methods do not enable any trigger; [enable and pause](#enable-and-pause) owns
-that.
+preparation that races a newer commit, even after event rows are pruned. A
+provider or continuity failure records source health. A source that no trigger
+targets any more (its last automation was paused, edited or deleted during
+Enable or a poll cycle) is not a failure: baseline preparation fails and the
+poll cycle stops that source without changing its health, so other automations
+on the repository stay ready. The page or finalize step that notices writes
+nothing, so the cursor resumes from where it was when a trigger targets the
+source again. These methods do not enable any trigger;
+[enable and pause](#enable-and-pause) owns that.
 
 `AgentSourceCheckpoint` and `AgentSourceHead` retain indexed API-order evidence
 for every captured identity, including unsupported/control heads. A head's
@@ -780,9 +786,10 @@ independently of those pages. Archived projects remain readable; writes and
 discovery require an active project. Scheduled automation APIs and routes retain
 their existing behavior.
 
-`automation.list` accepts the optional `direction: "forward"` metadata added by
-tRPC infinite queries and removes it before domain validation. Pagination
-remains forward-only; unrelated input fields are still rejected.
+`automation.list`, `runs` and `evaluations` accept the optional
+`direction: "forward"` metadata added by tRPC infinite queries and remove it
+before domain validation. Pagination remains forward-only; unrelated input
+fields are still rejected.
 
 `managementRevision` is the shared optimistic save token. Both saved replacement
 and accepted-proposal edits increment it once, including a rename/no-op. Saved
@@ -838,17 +845,20 @@ they report an inherited provider as supported only when every provider passed.
 History exposes bounded reasons, nullable start times, separate automatic
 attempts and send generations, preparation/delivery state and durable deadlines,
 immutable initial outcome, compact result/PR links and retained workspace
-provenance. It excludes raw prompts, provider evidence and unrestricted errors.
-Pruned event text or a null event FK does not erase run identity or prove
-completion. The workspace owner's retained-origin read covers creation before
-linkage and deletion; it is provenance, not work proof or permission to retry
-setup. Public history confirms LIVE only through that retained-origin owner; a
-live run FK with missing reservation or origin returns a bounded NOT_FOUND.
-Never-created reservations remain RESERVED, and runs without workspace claims
-remain UNRESERVED. LIVE means an extant owner-validated workspace row, including
-archived rows; it does not mean ready or running. Null result/preparation
-metadata means no validated public metadata is available, not an empty result,
-completion or cleanup.
+provenance. An evaluation's `explanation` is returned only when it is one of the
+fixed sentences the system writes (`agent-evaluation-explanations.ts`), which
+carry no event text, provider output or credentials; any other stored text reads
+as null. History excludes raw prompts, provider evidence and unrestricted
+errors. Pruned event text or a null event FK does not erase run identity or
+prove completion. The workspace owner's retained-origin read covers creation
+before linkage and deletion; it is provenance, not work proof or permission to
+retry setup. Public history confirms LIVE only through that retained-origin
+owner; a live run FK with missing reservation or origin returns a bounded
+NOT_FOUND. Never-created reservations remain RESERVED, and runs without
+workspace claims remain UNRESERVED. LIVE means an extant owner-validated
+workspace row, including archived rows; it does not mean ready or running. Null
+result/preparation metadata means no validated public metadata is available, not
+an empty result, completion or cleanup.
 
 The saved event detail/editor consumes these project-owned APIs independently of
 its authoring workspace/proposal. It displays saved instructions, execution
@@ -876,11 +886,10 @@ newer drafts. Archived details remain readable with writes/previews disabled.
 Below the saved detail, **Runs** and **Events** tabs read `automation.runs` and
 `automation.evaluations`, newest first, 50 per page with **Load more**. Both
 poll at the management cadence; a refresh reloads every loaded page from the
-first cursor, so new runs never open a gap. The client reads pages through the
-plain tRPC client under tRPC's infinite key because the strict history input
-rejects the `direction` field tRPC's infinite hook adds. A failed refresh or
-next page keeps loaded rows with a retry notice; a failed first read shows an
-error, never an empty state. Saved edits invalidate both views.
+first cursor, so new runs never open a gap. Both views use tRPC's own infinite
+queries. A failed refresh or next page keeps loaded rows with a retry notice; a
+failed first read shows an error, never an empty state. Saved edits invalidate
+both views.
 
 A run shows its status in words (Queued, Starting, Running, Needs attention, PR
 created, Completed, Failed, Cancelled), a readable phrase for its reason code
@@ -896,8 +905,12 @@ Details; neither is presented as empty or completed. A RUNNING run in
 (`EXPLICITLY_RESOLVED`), because Resolve keeps the run and its slot. An event
 row shows Matched, Skipped or Error, its trigger's description (or ID when the
 trigger is outside the loaded definition), a phrase for its reason, whether it
-started a run, and any next attempt. The history API returns a fixed placeholder
-`explanation` rather than the stored one, so the view does not show it.
+started a run, and any next attempt. Beneath the phrase it shows the stored
+`explanation` when that says more: for a code without a phrase, for
+`LABEL_MISMATCH`, `SOURCE_IDENTITY_MISMATCH` and `QUEUE_OVERFLOW`, whose
+explanation says which case applied, and for `SEMANTIC_FILTER_PROVIDER_UNPROVEN`
+and `SEMANTIC_FILTER_TOO_LONG`, whose explanation names the provider or the
+length limit.
 
 <a id="event-run-recovery"></a>
 
@@ -964,9 +977,12 @@ reasons inline, and a `CONFLICT` keeps the page and offers **Reload
 automation**. The detail polls at the management cadence, so Starting moves to
 Listening or Paused after the next source poll cycle. Pause states that queued
 runs are cancelled, started runs continue, and events while paused never run.
-The rail shows "Definition enabled" (with a neutral dot) or Paused, because the
-list carries only the definition flag and no trigger state. The editor still
-says which edits pause triggers; Enable restarts them after saving.
+The rail uses the same rule: each `automation.list` item carries
+`triggerStates`, its configured triggers counted as listening (`ACTIVE` and
+enabled), starting (`STARTING`) or paused (the rest), from one grouped query per
+page, so the rail reads Active, Starting or Paused without loading each
+automation. The editor still says which edits pause triggers; Enable restarts
+them after saving.
 
 A GitHub source in `RECOVERY_REQUIRED` shows one **Reset source** callout per
 connection. Its `ConfirmDialog` says that events from the gap will not run, that

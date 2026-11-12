@@ -1,5 +1,8 @@
 import { ApplicationError } from '@/backend/lib/application-error';
-import { agentSourceAccessor } from '@/backend/services/agent-definition/resources/agent-source.accessor';
+import {
+  agentSourceAccessor,
+  SourceNotTargetedError,
+} from '@/backend/services/agent-definition/resources/agent-source.accessor';
 import { agentSourceHealthSchema } from '@/shared/agent-runtime';
 import type { AgentGitHubSourcePort } from '@/shared/agent-source';
 import { agentGithubCursorSchema } from '@/shared/agent-source-state';
@@ -34,10 +37,7 @@ export class AgentSourcePollService {
       (item) => item.connectionId === connectionId
     );
     if (!target) {
-      throw new ApplicationError(
-        'PRECONDITION_FAILED',
-        'The source requires an active or starting trigger.'
-      );
+      throw new SourceNotTargetedError();
     }
     try {
       const repository = await this.repository(target, signal);
@@ -52,6 +52,11 @@ export class AgentSourcePollService {
       );
     } catch (error) {
       signal.throwIfAborted();
+      // The last trigger was paused, edited or deleted during preparation. The
+      // source itself did not fail, so other automations on it stay ready.
+      if (error instanceof SourceNotTargetedError) {
+        throw error;
+      }
       await this.recordFailure(connectionId, error);
       throw new ApplicationError(
         'PRECONDITION_FAILED',
@@ -74,6 +79,11 @@ export class AgentSourcePollService {
       } catch (error) {
         if (signal.aborted) {
           return;
+        }
+        // Its last trigger was paused, edited or deleted mid-cycle. The step that
+        // noticed wrote nothing, so the cursor resumes when a trigger targets it again.
+        if (error instanceof SourceNotTargetedError) {
+          continue;
         }
         const classification = await this.recordFailure(target.connectionId, error);
         if (classification === 'rate_limit') {

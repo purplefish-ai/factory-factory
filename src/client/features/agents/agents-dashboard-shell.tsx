@@ -6,6 +6,7 @@ import { EmptyState } from '@/client/components/empty-state';
 import { Loading } from '@/client/components/loading';
 import { StatusDot } from '@/client/components/status-indicators';
 import { getProjectAgentPath } from '@/client/lib/project-navigation';
+import type { StatusTone } from '@/client/lib/status-tones';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -15,6 +16,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
 import { describeAgentSchedule } from './agent-schedule';
+import { type AutomationState, automationStateFromCounts } from './event-trigger-status';
 import type { Agent, EventAgentSummary } from './types';
 
 type ScheduledRailAgent = Pick<
@@ -113,6 +115,24 @@ function selectFromLink(
   onSelect?.(id);
 }
 
+const EVENT_STATE_TONES: Record<AutomationState, StatusTone> = {
+  Active: 'success',
+  Starting: 'working',
+  Paused: 'neutral',
+};
+
+/** The rail's state words: scheduled tasks by their flag, event automations by their triggers. */
+function railState(agent: RailAgent): { label: AutomationState; tone: StatusTone } {
+  if (agent.kind === 'event') {
+    // The definition flag stays on when an edit, expiry or source reset pauses every trigger.
+    const label = automationStateFromCounts(agent.triggerStates);
+    return { label, tone: EVENT_STATE_TONES[label] };
+  }
+  return agent.isEnabled
+    ? { label: 'Active', tone: 'success' }
+    : { label: 'Paused', tone: 'neutral' };
+}
+
 function AgentRailItem({
   agent,
   projectSlug,
@@ -124,6 +144,7 @@ function AgentRailItem({
   selected: boolean;
   onAgentSelect?: (id: string) => void;
 }) {
+  const state = railState(agent);
   return (
     <Link
       to={getProjectAgentPath(projectSlug, agent.id, agent.kind)}
@@ -145,15 +166,8 @@ function AgentRailItem({
         </p>
       )}
       <div className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 text-2xs text-muted-foreground">
-        <StatusDot
-          tone={agent.isEnabled && agent.kind !== 'event' ? 'success' : 'neutral'}
-          size="xs"
-        />
-        <span>
-          {/* The list carries only the definition flag; an edit or source problem can pause an
-              enabled event automation's triggers, so only the detail says whether it listens. */}
-          {agent.isEnabled ? (agent.kind === 'event' ? 'Definition enabled' : 'Active') : 'Paused'}
-        </span>
+        <StatusDot tone={state.tone} size="xs" />
+        <span>{state.label}</span>
         <span aria-hidden="true">·</span>
         <span>{agent.kind === 'event' ? 'Event-triggered' : describeAgentSchedule(agent)}</span>
       </div>

@@ -3,6 +3,10 @@ import {
   agentEvaluationCandidatesAccessor,
   type EvaluationCursor,
 } from '@/backend/services/agent-definition/resources/agent-evaluation-candidates.accessor';
+import {
+  evaluationExplanations,
+  MAX_FILTER_INSTRUCTIONS_LENGTH,
+} from '@/backend/services/agent-definition/resources/agent-evaluation-explanations';
 import { agentEvaluationAccessor } from '@/backend/services/agent-definition/resources/agent-evaluation.accessor';
 import { agentRunAccessor } from '@/backend/services/agent-definition/resources/agent-run.accessor';
 import {
@@ -27,7 +31,6 @@ import {
 import { matchAgentEvent } from './agent-event-matcher';
 import {
   filterTooLongDecision,
-  MAX_FILTER_INSTRUCTIONS_LENGTH,
   type SemanticFilterInput,
   type SemanticFilterOutcome,
   semanticDecision,
@@ -144,7 +147,7 @@ export class AgentEventEvaluationService {
       ...triggerRevisions(trigger),
       status: 'ERROR',
       reasonCode: 'INVALID_STORED_DATA',
-      explanation: 'Stored event or configuration is invalid.',
+      explanation: evaluationExplanations.invalidStoredData,
       executionConfig: { version: 1 },
       input: { version: 1, eventId: event.id, context: [] },
     };
@@ -153,7 +156,7 @@ export class AgentEventEvaluationService {
       Object.assign(decision, {
         status: unavailable === 'INVALID_STORED_DATA' ? 'ERROR' : 'SKIPPED',
         reasonCode: unavailable,
-        explanation: 'Runtime eligibility prevents execution.',
+        explanation: evaluationExplanations.runtimeIneligible,
       });
       return { decision };
     }
@@ -168,7 +171,7 @@ export class AgentEventEvaluationService {
       Object.assign(decision, {
         status: eligibility === 'INVALID_STORED_DATA' ? 'ERROR' : 'SKIPPED',
         reasonCode: eligibility,
-        explanation: 'The event is outside the active trigger boundary.',
+        explanation: evaluationExplanations.outsideBoundary,
       });
       return { decision };
     }
@@ -289,8 +292,8 @@ export class AgentEventEvaluationService {
           ? 'EXECUTION_RESOLUTION_RETRY'
           : 'INVALID_EXECUTION_CONFIG',
         explanation: classified.retryable
-          ? 'Execution defaults could not be read; retry is bounded.'
-          : 'Execution configuration is invalid.',
+          ? evaluationExplanations.executionRetry
+          : evaluationExplanations.invalidExecution,
       });
       return { decision, ...classified };
     }
@@ -304,8 +307,8 @@ function contextFailure(
     status: 'FAILED',
     reasonCode,
     explanation: retryable
-      ? 'Slack message context could not be read; retry is bounded.'
-      : 'Slack message context is not available, so the event was not run.',
+      ? evaluationExplanations.slackContextRetry
+      : evaluationExplanations.slackContextUnavailable,
     retryable,
   };
 }

@@ -8,6 +8,12 @@ it('names pause, edit and source reset as causes of a stale-revision cancellatio
   expect(phrase).toContain('source was reset');
 });
 
+it('describes an event whose action the trigger does not select', () => {
+  expect(describeEventReason('ACTION_MISMATCH')).toBe(
+    "The event's action isn't one this trigger selects."
+  );
+});
+
 it.each([
   'SEMANTIC_FILTER_MATCH',
   'SEMANTIC_FILTER_SKIP',

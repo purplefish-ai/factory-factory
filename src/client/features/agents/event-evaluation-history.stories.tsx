@@ -33,13 +33,18 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-/** An errored decision that will retry, a skipped event and a match that started a run. */
+/**
+ * An errored decision that will retry, a skipped event and a match that started
+ * a run. The skipped event also shows its stored explanation, which says which
+ * label check failed.
+ */
 export const Populated: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await expect(
       await canvas.findByText("The event's label doesn't match this trigger.")
     ).toBeVisible();
+    await expect(canvas.getByText('The added label does not match.')).toBeVisible();
     await expect(canvas.getByText('Started a run')).toBeVisible();
     await expect(canvas.getByRole('button', { name: 'Load more events' })).toBeVisible();
   },
