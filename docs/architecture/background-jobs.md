@@ -170,12 +170,19 @@ rotating past deferred decisions. GitHub matching supports `labeled` and
 issue carried a configured label at capture, or always when no labels are
 configured. A GitHub run input starts with a source item naming the repository,
 issue number and link, and the triggering action (with the JSON-quoted added
-label for `labeled`), followed by the issue title and body. Semantic and actor
-filters fail closed; SCHEDULE stays with PeriodicTask. STARTING generations are
-never candidates; the source poll job completes, cancels or expires them. Only
-configured triggers (`isConfigured = true`) receive new decisions; an unresolved
-decision left by a removed trigger is still settled. Terminal decisions are not
-replayed under new revisions or generations.
+label for `labeled`), followed by the issue title and body. Actor filters fail
+closed; SCHEDULE stays with PeriodicTask. A deterministic match on a trigger
+with `filterInstructions` then calls the event classifier: a disposable,
+tools-disabled provider call limited to 30 seconds and two concurrent calls. The
+evaluation job awaits it inline, so one slow classification delays later
+candidates in that cycle by at most the call limit. Before calling, evaluation
+checks the live classifier gate for the provider resolved for that event; an
+unproven provider records `SEMANTIC_FILTER_PROVIDER_UNPROVEN` and never runs the
+event unfiltered. STARTING generations are never candidates; the source poll job
+completes, cancels or expires them. Only configured triggers
+(`isConfigured = true`) receive new decisions; an unresolved decision left by a
+removed trigger is still settled. Terminal decisions are not replayed under new
+revisions or generations.
 
 Queue maintenance rotates through bounded batches even when all active slots are
 occupied. Claims choose FIFO heads of unsaturated definitions and serialize
@@ -193,7 +200,10 @@ evaluated later.
 
 Evaluation retries persist their attempt count and next time: three retries at
 30 seconds, two minutes and ten minutes, extended by Retry-After when needed.
-Permanent configuration failures do not retry. The winning evaluation's used
+Classifier timeouts, rate limits and provider failures use this same budget,
+with a provider rate-limit reset time as Retry-After. Malformed classifier
+output and permanent configuration failures do not retry. `skip` and `uncertain`
+decisions are terminal skips, never model retries. The winning evaluation's used
 retries transfer into AgentRun.attemptCount; the initial launch claim increments
 it to the successful evaluation attempt number. Provisioning must continue that
 same budget rather than start another four attempts. Non-dispatching decisions

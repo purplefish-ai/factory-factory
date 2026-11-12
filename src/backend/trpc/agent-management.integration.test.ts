@@ -196,12 +196,28 @@ it('rejects project source changes during external validation before any saved w
 it('keeps unsupported settings saveable while rejecting foreign and archived ownership', async () => {
   const owner = await save();
   const original = await caller.get(owner);
-  const unsupported = {
+  const filtered = {
     ...original.specification!,
     triggers: original.specification!.triggers.map((trigger) => ({
       ...trigger,
       filterInstructions: 'Semantic intent',
     })),
+  };
+  // Both providers passed the live classifier gate, so an inherited provider supports filters.
+  expect(
+    (await caller.validateDraft({ projectId, specification: filtered })).triggers[0]?.capability
+      .reasonCode
+  ).toBe('SUPPORTED');
+  const unsupported = {
+    ...filtered,
+    triggers: filtered.triggers.map((trigger) =>
+      trigger.type === 'GITHUB_ISSUE'
+        ? {
+            ...trigger,
+            config: { ...trigger.config, actions: ['labeled' as const, 'opened' as const] },
+          }
+        : trigger
+    ),
   };
   expect(
     await caller.updateSaved({
@@ -213,7 +229,7 @@ it('keeps unsupported settings saveable while rejecting foreign and archived own
   expect(
     (await caller.validateDraft({ projectId, specification: unsupported })).triggers[0]?.capability
       .reasonCode
-  ).toBe('UNSUPPORTED_SEMANTIC_FILTER');
+  ).toBe('UNSUPPORTED_GITHUB_ACTION');
   await expect(caller.get({ ...owner, projectId: 'foreign' })).rejects.toMatchObject({
     code: 'NOT_FOUND',
   });

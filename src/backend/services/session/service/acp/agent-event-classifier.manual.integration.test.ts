@@ -6,6 +6,7 @@ import {
   destroyIntegrationDatabase,
 } from '@/backend/testing/integration-db';
 import {
+  type ClassifierFixtureCase,
   type ClassifierGateOutcome,
   fixturePayload,
   loadClassifierFixtures,
@@ -32,41 +33,50 @@ describe.skipIf(!enabled)('live event classifier replay gate', () => {
       >('../agent-event-classifier');
       const fixtures = loadClassifierFixtures();
       const cases = fixtures.cases.filter((item) => item.split === split);
-      const results = await Promise.all(
-        cases.map(async (item) => {
-          const started = performance.now();
-          try {
-            const result = await classifyAgentEvent(
-              {
-                provider,
-                accountId: null,
-                filterInstructions: fixtures.filters[item.filter] ?? '',
-                eventContext: fixturePayload(item),
-              },
-              AbortSignal.timeout(300_000)
-            );
-            return {
-              outcome: {
-                id: item.id,
-                decision: result.decision,
-                latencyMs: Math.round(performance.now() - started),
-              } satisfies ClassifierGateOutcome,
-              reason: result.reason,
-              classifier: result.classifier,
-            };
-          } catch (error) {
-            return {
-              outcome: {
-                id: item.id,
-                decision: 'error',
-                latencyMs: Math.round(performance.now() - started),
-              } satisfies ClassifierGateOutcome,
-              reason: error instanceof Error ? error.message : 'unknown error',
-              classifier: null,
-            };
-          }
-        })
+      const classifyCase = async (item: ClassifierFixtureCase) => {
+        const started = performance.now();
+        const elapsed = () => Math.round(performance.now() - started);
+        try {
+          const result = await classifyAgentEvent(
+            {
+              provider,
+              accountId: null,
+              filterInstructions: fixtures.filters[item.filter] ?? '',
+              eventContext: fixturePayload(item),
+            },
+            AbortSignal.timeout(300_000)
+          );
+          const outcome: ClassifierGateOutcome = {
+            id: item.id,
+            decision: result.decision,
+            latencyMs: elapsed(),
+          };
+          return { outcome, reason: result.reason, classifier: result.classifier };
+        } catch (error) {
+          const outcome: ClassifierGateOutcome = {
+            id: item.id,
+            decision: 'error',
+            latencyMs: elapsed(),
+          };
+          const reason = error instanceof Error ? error.message : 'unknown error';
+          return { outcome, reason, classifier: null };
+        }
+      };
+      // Two workers match the classifier's concurrency limit, so latency is per call.
+      const queue = [...cases];
+      const worker = async () => {
+        const done = [];
+        for (let item = queue.shift(); item; item = queue.shift()) {
+          done.push(await classifyCase(item));
+        }
+        return done;
+      };
+      const byId = new Map(
+        (await Promise.all([worker(), worker()]))
+          .flat()
+          .map((result) => [result.outcome.id, result])
       );
+      const results = cases.flatMap((item) => byId.get(item.id) ?? []);
       const score = scoreClassifierGate(
         cases,
         results.map((result) => result.outcome)
