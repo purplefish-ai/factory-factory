@@ -41,7 +41,11 @@ it('shows the saved automation runs and, on request, its events', async () => {
             }),
           }}
         >
-          <EventAgentHistory agent={eventAgentFixture()} projectSlug="owner-slug" />
+          <EventAgentHistory
+            agent={eventAgentFixture()}
+            projectSlug="owner-slug"
+            archived={false}
+          />
         </StoryTrpcProvider>
       </MemoryRouter>
     )

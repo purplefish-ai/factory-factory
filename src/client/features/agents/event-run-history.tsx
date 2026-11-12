@@ -15,16 +15,20 @@ import type { EventRun } from './types';
 
 type BadgeVariant = 'outline' | 'info' | 'warning' | 'success' | 'secondary' | 'destructive';
 
-/** The run's state in words. RUNNING covers setup, the agent working and runs held for a person. */
+/**
+ * The run's state in words. RUNNING covers setup, the agent working and runs
+ * held for a person, including one marked resolved: Resolve keeps the run and
+ * its slot until someone retries or abandons it.
+ */
 function runStatus(run: EventRun): { label: string; variant: BadgeVariant } {
   switch (run.status) {
     case 'QUEUED':
       return { label: 'Queued', variant: 'outline' };
     case 'RUNNING':
-      if (run.launchPhase === 'NEEDS_ATTENTION' && run.reasonCode !== 'EXPLICITLY_RESOLVED') {
+      if (run.launchPhase === 'NEEDS_ATTENTION') {
         return { label: 'Needs attention', variant: 'warning' };
       }
-      return run.launchPhase === 'ACTIVE' || run.launchPhase === 'NEEDS_ATTENTION'
+      return run.launchPhase === 'ACTIVE'
         ? { label: 'Running', variant: 'info' }
         : { label: 'Starting', variant: 'info' };
     case 'PR_CREATED':
