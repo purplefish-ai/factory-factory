@@ -270,9 +270,9 @@ Provisioning retries retain RUNNING capacity, frozen snapshots, identities and
 account; they never return to the authoring-sensitive QUEUED state. Retry-After
 extends the remaining shared retry delay. Only typed transient failures retry.
 The original fifteen-minute setup deadline is retained across safe retries.
-Unknown cleanup keeps capacity and forbids retry. Saved agents are enabled
-through the trusted-local `automation.enable` procedure; the UI control is
-separate work.
+Unknown cleanup keeps capacity and forbids retry. Saved agents are enabled only
+by the user, through the Automations page's Enable control and the trusted-local
+`automation.enable` procedure behind it.
 
 The evaluation job also owns bounded ledger retention before evaluation: one
 rotating page each of expired evaluations, event payloads and event identities.

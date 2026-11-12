@@ -29,6 +29,14 @@ export function validatedIntent(definitionRevision = 1) {
   };
 }
 
+/**
+ * Resource-level ledger state with a fabricated ACTIVE trigger at generation 1 and
+ * management revision 1. Suites over this capsule assert exact revisions, generations
+ * and baseline counts, and the activation and delete suites derive their own paused
+ * preconditions from it, so it stays fabricated. Orchestration fixtures
+ * (`event-delivery.test-support.ts`, `agent-runtime-flow.test-support.ts`) enable
+ * through the real activation path instead.
+ */
 export async function createLedgerFixture(
   db: IntegrationDatabase,
   runtime: typeof import('@/backend/services/agent-definition')
