@@ -29,6 +29,23 @@ const REASON_PHRASES: Readonly<Record<string, string>> = {
   SEMANTIC_FILTER_RATE_LIMITED:
     "The classifier's provider is rate limited; it retries a limited number of times.",
   SEMANTIC_FILTER_FAILED: "The classifier couldn't run; it retries a limited number of times.",
+  // Slack thread and channel context (slack-event-context.ts). A run never starts with partial context.
+  SLACK_CONTEXT_RATE_LIMITED:
+    'Slack is rate limiting message history reads; it retries a limited number of times.',
+  SLACK_CONTEXT_RETRY:
+    "The Slack message context couldn't be read; it retries a limited number of times.",
+  SLACK_CONTEXT_MISSING_SCOPE:
+    "The Slack bot can't read message history, so the event didn't run. Add the channels:history and groups:history bot scopes to the Slack app, then reinstall it.",
+  SLACK_CONTEXT_CHANNEL_UNAVAILABLE:
+    "Slack wouldn't return this channel's or thread's history, so the event didn't run. Invite the bot to the channel.",
+  SLACK_CONTEXT_NOT_CONNECTED:
+    "The Slack connection has no usable bot token for this workspace, so the event didn't run. Reconnect it in Slack settings.",
+  SLACK_CONTEXT_FAILED:
+    "Slack returned an unexpected response for the message context, so the event didn't run.",
+  SLACK_CONTEXT_NOT_SELECTED:
+    "The message is in a channel this trigger doesn't watch, so its context wasn't read and the event didn't run.",
+  SLACK_CONTEXT_UNAVAILABLE:
+    "Slack message context isn't available in this app, so the event didn't run.",
   SOURCE_IDENTITY_MISMATCH:
     "The event came from a repository or channel this trigger doesn't watch.",
   OWNERSHIP_MISMATCH: "The event doesn't belong to this trigger's source.",

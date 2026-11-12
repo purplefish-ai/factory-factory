@@ -1,5 +1,6 @@
 import { type AgentEventPayload, isAgentGithubExecutableAction } from '@/shared/agent-runtime';
 import type { AgentTriggerInput } from '@/shared/schemas/agent-definition.schema';
+import { slackHumanSubtypes } from './slack-event-message';
 
 export type MatchResult = {
   status: 'MATCHED' | 'SKIPPED';
@@ -75,7 +76,10 @@ function matchSlack(
   event: Extract<AgentEventPayload, { provider: 'SLACK' }>,
   trigger: Extract<AgentTriggerInput, { type: 'SLACK_MESSAGE' }>
 ): MatchResult {
-  if (event.actorType !== 'HUMAN' || event.subtype !== null) {
+  if (
+    event.actorType !== 'HUMAN' ||
+    (event.subtype !== null && !slackHumanSubtypes.some((subtype) => subtype === event.subtype))
+  ) {
     return skip('UNSUPPORTED_MESSAGE', 'Only ordinary human messages are supported.');
   }
   if (!trigger.config.channelIds.includes(event.channelId)) {

@@ -1335,10 +1335,6 @@
       "disposition": "review-required",
       "reason": "Visibility candidate in a reachable module; trace callers and schema/type contracts before narrowing this export."
     },
-    "src/shared/schemas/agent-definition.schema.ts::types::AgentRunInput": {
-      "disposition": "review-required",
-      "reason": "Visibility candidate in a reachable module; trace callers and schema/type contracts before narrowing this export."
-    },
     "src/shared/schemas/issue-tracker-config.schema.ts::types::LinearConfig": {
       "disposition": "review-required",
       "reason": "Visibility candidate in a reachable module; trace callers and schema/type contracts before narrowing this export."

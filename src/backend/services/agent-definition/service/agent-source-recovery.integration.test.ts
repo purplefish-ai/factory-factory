@@ -278,7 +278,10 @@ it('uses the application graph GitHub reads and page limit lazily', async () => 
         Promise.reject(new Error('Original graph service must not be captured')),
       listAgentIssueEvents: port.listIssueEvents,
     },
-    slackConnectionService: { getAppCredentials: () => Promise.resolve(null) },
+    slackConnectionService: {
+      getAppCredentials: () => Promise.resolve(null),
+      resolveEventContext: () => Promise.reject(new Error('No Slack context here')),
+    },
     configService: {
       getAgentRuntimeLimits: () => ({ githubPagesPerCycle: 5, slackIntakeEnabled: false }),
     },

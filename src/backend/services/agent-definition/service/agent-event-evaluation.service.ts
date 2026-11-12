@@ -35,6 +35,12 @@ import {
   unprovenProviderDecision,
 } from './agent-semantic-filter';
 import { isClassifierProven } from './semantic-filter-gate';
+import {
+  type SlackContextConfig,
+  type SlackContextEvent,
+  type SlackContextOutcome,
+  slackMessageItems,
+} from './slack-event-context';
 
 export interface AgentEvaluationPorts {
   resolveExecution(config: AgentExecutionConfig): Promise<AgentResolvedExecutionConfig>;
@@ -47,6 +53,12 @@ export interface AgentEvaluationPorts {
   ) => Promise<SemanticFilterOutcome>;
   /** Defaults to the checked-in live classifier gate. */
   isClassifierProven?: (provider: SessionProvider) => boolean;
+  /** Bounded Slack thread and channel context; without it Slack matches never dispatch. */
+  resolveSlackContext?: (
+    event: SlackContextEvent,
+    config: SlackContextConfig,
+    signal: AbortSignal
+  ) => Promise<SlackContextOutcome>;
 }
 type Decided = { decision: AgentEvaluationInput; retryable?: boolean; retryAfterMs?: number };
 type Candidate = Awaited<
@@ -160,11 +172,51 @@ export class AgentEventEvaluationService {
       return { decision };
     }
     const resolved = await this.resolveMatch(decision, payload.data, execution.data);
+    if (decision.status !== 'MATCHED') {
+      return resolved;
+    }
+    // Context comes before the classifier: a run never starts, and no classifier
+    // call is spent, on an event whose required context cannot be read.
+    if (payload.data.provider === 'SLACK' && settings.data.type === 'SLACK_MESSAGE') {
+      const context = await this.slackContext(
+        decision,
+        { id: event.id, connectionId: event.connectionId, payload: payload.data },
+        settings.data.config,
+        signal
+      );
+      if (decision.status !== 'MATCHED') {
+        return context;
+      }
+    }
     const filterInstructions = settings.data.filterInstructions;
-    if (decision.status !== 'MATCHED' || !filterInstructions) {
+    if (!filterInstructions) {
       return resolved;
     }
     return await this.filterMatch(decision, filterInstructions, payload.data, signal);
+  }
+
+  /** Appends the trigger's Slack context to the run input, or turns the match into an ERROR. */
+  private async slackContext(
+    decision: AgentEvaluationInput,
+    event: SlackContextEvent,
+    config: SlackContextConfig,
+    signal: AbortSignal
+  ): Promise<Decided> {
+    const outcome: SlackContextOutcome = this.ports.resolveSlackContext
+      ? await this.ports
+          .resolveSlackContext(event, config, signal)
+          .catch((): SlackContextOutcome => contextFailure('SLACK_CONTEXT_RETRY', true))
+      : contextFailure('SLACK_CONTEXT_UNAVAILABLE', false);
+    if (outcome.status === 'RESOLVED') {
+      decision.input = {
+        ...decision.input,
+        context: [...(decision.input.context ?? []), ...outcome.context],
+      };
+      return { decision };
+    }
+    const { reasonCode, explanation, retryable, retryAfterMs } = outcome;
+    Object.assign(decision, { status: 'ERROR', reasonCode, explanation });
+    return { decision, retryable, ...(retryAfterMs === undefined ? {} : { retryAfterMs }) };
   }
 
   /** Only a deterministic match reaches the classifier; anything but a clear match never runs. */
@@ -239,6 +291,19 @@ export class AgentEventEvaluationService {
     }
   }
 }
+function contextFailure(
+  reasonCode: 'SLACK_CONTEXT_RETRY' | 'SLACK_CONTEXT_UNAVAILABLE',
+  retryable: boolean
+): SlackContextOutcome {
+  return {
+    status: 'FAILED',
+    reasonCode,
+    explanation: retryable
+      ? 'Slack message context could not be read; retry is bounded.'
+      : 'Slack message context is not available, so the event was not run.',
+    retryable,
+  };
+}
 function eventInput(eventId: string, payload: AgentEventPayload) {
   const context =
     payload.provider === 'GITHUB'
@@ -247,7 +312,7 @@ function eventInput(eventId: string, payload: AgentEventPayload) {
           { id: `${eventId}:title`, text: payload.issue.title, url: payload.sourceUrl },
           { id: `${eventId}:body`, text: payload.issue.body, url: payload.sourceUrl },
         ]
-      : [{ id: eventId, text: payload.text, url: payload.sourceUrl }];
+      : slackMessageItems(eventId, payload);
   return { version: 1 as const, eventId, sourceUrl: payload.sourceUrl, context };
 }
 /**
