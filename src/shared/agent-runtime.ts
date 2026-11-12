@@ -87,16 +87,14 @@ export const agentEventOrderInputSchema = z.strictObject({
 });
 
 export const agentActivationBoundarySchema = z.discriminatedUnion('provider', [
-  z
-    .strictObject({
-      provider: z.literal('GITHUB'),
-      headEventId: id.nullable(),
-      sourceOrder: generation,
-    })
-    .refine(
-      (boundary) => boundary.headEventId !== null || boundary.sourceOrder === 0,
-      'An empty baseline has ordinal zero'
-    ),
+  // A null head is an empty feed. Its ordinal is the source epoch's starting high water:
+  // zero before any reset, the retained lastSourceOrder after one. Only the source's
+  // per-epoch proof knows that value, so it is checked when the baseline resolves.
+  z.strictObject({
+    provider: z.literal('GITHUB'),
+    headEventId: id.nullable(),
+    sourceOrder: generation,
+  }),
   z.strictObject({
     provider: z.literal('SLACK'),
     workspaceId: id,

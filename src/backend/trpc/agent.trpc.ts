@@ -13,6 +13,8 @@ import {
   agentListPageSchema,
   agentNavigationSummarySchema,
   agentSavedUpdateSchema,
+  agentSourceResetInputSchema,
+  agentSourceResetResultSchema,
   managedAgentSchema,
 } from '@/shared/agent-management';
 import {
@@ -98,6 +100,10 @@ export const agentRouter = router({
     .query(({ ctx, input }) =>
       ctx.appContext.services.agentManagementService.navigationSummary(input)
     ),
+  resetSource: trustedLocalProcedure
+    .input(agentSourceResetInputSchema)
+    .output(agentSourceResetResultSchema)
+    .mutation(({ ctx, input }) => ctx.appContext.services.agentManagement.resetSource(input)),
   projectSources: trustedLocalProcedure
     .input(agentProjectSourcesInputSchema)
     .output(agentProjectSourcesSchema)

@@ -46,9 +46,14 @@ async function ingestEventInTransaction(tx: Prisma.TransactionClient, event: Age
   }
   const occurredAt = new Date(payload.occurredAt);
   const observedAt = new Date(payload.observedAt);
+  const source = await tx.agentSourceState.findUnique({
+    where: { connectionId: input.connectionId },
+    select: { epoch: true },
+  });
   const created = await tx.agentEvent.create({
     data: {
       ...input,
+      sourceEpoch: source?.epoch ?? 0,
       occurredAt,
       observedAt,
       payloadExpiresAt: new Date(occurredAt.getTime() + 30 * DAY_MS),

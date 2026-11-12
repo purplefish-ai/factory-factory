@@ -487,11 +487,11 @@ same cycle budget. New head events wait for the next interval. Missing anchors
 or observed sequence changes stop intake with `RECOVERY_REQUIRED`; no cursor is
 silently reset. Recovery health and its original reason remain a durable fence:
 normal failures, baseline preparation and late page/chunk writes cannot clear or
-advance it. GitHub's offset pages are not a snapshot, so these checks detect
-observed discontinuity rather than guarantee lossless capture under arbitrary
-provider deletion or reordering. Finalization requires verified durable scan
-evidence and commits each oldest-first chunk with its progress before another
-interval can start.
+advance it; only an explicit [source reset](#source-reset) lifts it. GitHub's
+offset pages are not a snapshot, so these checks detect observed discontinuity
+rather than guarantee lossless capture under arbitrary provider deletion or
+reordering. Finalization requires verified durable scan evidence and commits
+each oldest-first chunk with its progress before another interval can start.
 
 `AgentSourcePollService.prepareBaseline(connectionId, signal)` requires an
 active or starting source and returns a baseline ID plus a nullable boundary. An
@@ -538,13 +538,13 @@ intervals remain INDEXED with their full pages until maintenance finishes.
 Continuous authority writes can defer completion, but cannot authorize partial
 validation. Conflicting ordinals fail closed and retain their original proof.
 Any rejected interval fences new baseline preparation (including the current
-committed head) and page compaction for that connection, since later pages may
-contain unexamined conflicting heads. Already-issued baseline IDs remain
-readable through `getBaseline`. The verifier progress migration resets older
-BUILDING checkpoints for replay from their retained pages. Subsequent serialized
-maintenance replays them without deleting their heads or interrupting active
-source scans. INDEXED, COMPLETE, and rejected checkpoints retain their existing
-status.
+committed head) and page compaction for that connection's epoch, since later
+pages may contain unexamined conflicting heads. Already-issued baseline IDs
+remain readable through `getBaseline`. The verifier progress migration resets
+older BUILDING checkpoints for replay from their retained pages. Subsequent
+serialized maintenance replays them without deleting their heads or interrupting
+active source scans. INDEXED, COMPLETE, and rejected checkpoints retain their
+existing status.
 
 During legacy capture replay, an observation without any indexed identity can be
 a boundary-only continuation only when the next retained page starts
@@ -681,6 +681,50 @@ default applies, and an explicit unsupported one is a permanent
 `INVALID_EXECUTION_CONFIG` evaluation error. Native discovery failures retry
 with the bounded evaluation budget and never launch. Logical export omits
 `validatedIntent`; restored definitions stay paused until enabled again.
+
+### Source reset
+
+Trusted-local `automation.resetSource({ projectId, connectionId })` is the
+explicit decision to give up on the gap behind a GitHub `RECOVERY_REQUIRED`
+fence; the MCP catalog has no reset tool. The project must have a configured
+trigger on the connection (otherwise `NOT_FOUND`) and must not be archived.
+Apart from the repeat described below, any other source health is
+`PRECONDITION_FAILED`. One ledger transaction pauses every trigger on the
+connection, across definitions and projects, through the shared `pauseTriggers`
+helper: each advances its activation generation, has its boundary, pending
+activation and `pausedReasonCode` cleared, and has its queued runs cancelled
+with `STALE_REVISION`; claimed runs continue. It returns
+`{ connectionId, pausedTriggerCount, cancelledRunCount }`, where the trigger
+count covers every trigger on the connection. No trigger is enabled: each
+automation needs Enable again, whose baseline captures the then-current head.
+Events from the gap never run.
+
+The reset opens a new source epoch. `AgentSourceState.epoch` advances,
+`epochStartSourceOrder` records the retained `lastSourceOrder`, and the cursor
+is cleared with health `DISCONNECTED`/`GITHUB_SOURCE_RESET`. The next baseline
+records the then-current head in the epoch with that high water as its ordinal,
+so `lastSourceOrder` never moves backwards. Pages, checkpoints, heads, baselines
+and events record the epoch that wrote them. Ordinal authority is per epoch:
+historical head lookups, pending-baseline resolution, required-baseline checks,
+the rejected-proof fence, maintenance and checkpoint promotion read only the
+current epoch. A provider identity can therefore have different ordinals in
+different epochs without invalidating new proof. An empty feed's head marker has
+the epoch's starting ordinal, so an activation boundary with a null head carries
+that ordinal rather than zero.
+
+Reset never deletes or rewrites retained proof. Earlier epochs' FINALIZED
+markers, checkpoints, heads, pages and baselines stay exactly as they were;
+maintenance no longer backfills, promotes or compacts them, and
+`getBaseline(connectionId, id)` still answers every issued ID. An event captured
+but never ordered before the reset can never receive an ordinal: capture fails
+closed with `RECOVERY_REQUIRED` if an earlier epoch's event reappears, and
+finalization rechecks each event's capture epoch. Those events' payloads expire
+as usual, but their identities stay retained as unordered source dependencies,
+as they do behind a recovery fence. Evaluation and admission of a paused
+generation are rejected as stale, so an event mid-evaluation when the reset
+commits admits no run. A repeated reset before a fresh head is captured returns
+zero counts and changes nothing, including triggers enabled since; after that, a
+healthy source refuses reset.
 
 ### Project-owned saved management
 

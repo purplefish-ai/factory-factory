@@ -216,13 +216,15 @@ it('bounds backfill to100 heads per call and uses indexed lookups after page com
     await source.maintainCheckpoints(fixture.connectionId);
   }
   expect(await db.prisma.agentSourcePage.count()).toBe(1);
-  const { historicalHeadOrder } =
+  const { historicalHeadOrder, sourceEpoch } =
     await vi.importActual<typeof import('./agent-source-queries')>('./agent-source-queries');
   await db.prisma.$transaction(async (tx) => {
     const raw = vi.spyOn(tx, '$queryRaw');
     const pages = vi.spyOn(tx.agentSourcePage, 'findMany');
     const heads = vi.spyOn(tx.agentSourceHead, 'findFirst');
-    expect(await historicalHeadOrder(tx, fixture.connectionId, 'control-249')).toBe(0);
+    expect(
+      await historicalHeadOrder(tx, sourceEpoch(fixture.connectionId, null), 'control-249')
+    ).toBe(0);
     expect(heads).toHaveBeenCalledTimes(1);
     expect(raw).not.toHaveBeenCalled();
     expect(pages).not.toHaveBeenCalled();
@@ -479,9 +481,11 @@ it('backfills a previous boundary at the start of a new capture page without fen
 it('applies the invalid historical-proof fence before resolving an empty head', async () => {
   await interval();
   await db.prisma.agentSourceCheckpoint.updateMany({ data: { status: 'INVALID' } });
-  const { historicalHeadOrder } =
+  const { historicalHeadOrder, sourceEpoch } =
     await vi.importActual<typeof import('./agent-source-queries')>('./agent-source-queries');
   await expect(
-    db.prisma.$transaction((tx) => historicalHeadOrder(tx, fixture.connectionId, null))
+    db.prisma.$transaction((tx) =>
+      historicalHeadOrder(tx, sourceEpoch(fixture.connectionId, null), null)
+    )
   ).rejects.toMatchObject({ code: 'CONFLICT' });
 });

@@ -9,6 +9,7 @@ import { agentRunPageSchema, agentWorkspaceOriginSchema } from '@/shared/agent-h
 import {
   agentActivationInputSchema,
   agentSavedUpdateSchema,
+  agentSourceResetInputSchema,
   type SavedAgentSpecification,
   type AgentSourceValidation,
 } from '@/shared/agent-management';
@@ -190,6 +191,11 @@ export function createAgentManagement(getServices: () => Services) {
       const project = await activeProject(parsed.projectId, services);
       const evidence = await resolveProjectAgentSources(project, parsed.specification, services);
       return services.agentManagementService.updateSaved(parsed, evidence);
+    },
+    /** Trusted-local only: the MCP catalog has no reset tool. */
+    async resetSource(input: unknown) {
+      const parsed = agentSourceResetInputSchema.parse(input);
+      return await getServices().agentManagementService.resetSource(parsed);
     },
     async projectSources(input: unknown) {
       const parsed = agentProjectSourcesInputSchema.parse(input);

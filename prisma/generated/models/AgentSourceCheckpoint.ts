@@ -33,6 +33,7 @@ export type AgentSourceCheckpointAvgAggregateOutputType = {
   verifiedCount: number | null
   initialSourceOrder: number | null
   sourceOrder: number | null
+  epoch: number | null
 }
 
 export type AgentSourceCheckpointSumAggregateOutputType = {
@@ -42,6 +43,7 @@ export type AgentSourceCheckpointSumAggregateOutputType = {
   verifiedCount: number | null
   initialSourceOrder: number | null
   sourceOrder: number | null
+  epoch: number | null
 }
 
 export type AgentSourceCheckpointMinAggregateOutputType = {
@@ -57,6 +59,7 @@ export type AgentSourceCheckpointMinAggregateOutputType = {
   previousBoundaryEventId: string | null
   initialSourceOrder: number | null
   sourceOrder: number | null
+  epoch: number | null
 }
 
 export type AgentSourceCheckpointMaxAggregateOutputType = {
@@ -72,6 +75,7 @@ export type AgentSourceCheckpointMaxAggregateOutputType = {
   previousBoundaryEventId: string | null
   initialSourceOrder: number | null
   sourceOrder: number | null
+  epoch: number | null
 }
 
 export type AgentSourceCheckpointCountAggregateOutputType = {
@@ -89,6 +93,7 @@ export type AgentSourceCheckpointCountAggregateOutputType = {
   initialSourceOrder: number
   sourceOrder: number
   validationCursor: number
+  epoch: number
   _all: number
 }
 
@@ -100,6 +105,7 @@ export type AgentSourceCheckpointAvgAggregateInputType = {
   verifiedCount?: true
   initialSourceOrder?: true
   sourceOrder?: true
+  epoch?: true
 }
 
 export type AgentSourceCheckpointSumAggregateInputType = {
@@ -109,6 +115,7 @@ export type AgentSourceCheckpointSumAggregateInputType = {
   verifiedCount?: true
   initialSourceOrder?: true
   sourceOrder?: true
+  epoch?: true
 }
 
 export type AgentSourceCheckpointMinAggregateInputType = {
@@ -124,6 +131,7 @@ export type AgentSourceCheckpointMinAggregateInputType = {
   previousBoundaryEventId?: true
   initialSourceOrder?: true
   sourceOrder?: true
+  epoch?: true
 }
 
 export type AgentSourceCheckpointMaxAggregateInputType = {
@@ -139,6 +147,7 @@ export type AgentSourceCheckpointMaxAggregateInputType = {
   previousBoundaryEventId?: true
   initialSourceOrder?: true
   sourceOrder?: true
+  epoch?: true
 }
 
 export type AgentSourceCheckpointCountAggregateInputType = {
@@ -156,6 +165,7 @@ export type AgentSourceCheckpointCountAggregateInputType = {
   initialSourceOrder?: true
   sourceOrder?: true
   validationCursor?: true
+  epoch?: true
   _all?: true
 }
 
@@ -260,6 +270,7 @@ export type AgentSourceCheckpointGroupByOutputType = {
   initialSourceOrder: number | null
   sourceOrder: number | null
   validationCursor: runtime.JsonValue | null
+  epoch: number
   _count: AgentSourceCheckpointCountAggregateOutputType | null
   _avg: AgentSourceCheckpointAvgAggregateOutputType | null
   _sum: AgentSourceCheckpointSumAggregateOutputType | null
@@ -300,6 +311,7 @@ export type AgentSourceCheckpointWhereInput = {
   initialSourceOrder?: Prisma.IntNullableFilter<"AgentSourceCheckpoint"> | number | null
   sourceOrder?: Prisma.IntNullableFilter<"AgentSourceCheckpoint"> | number | null
   validationCursor?: Prisma.JsonNullableFilter<"AgentSourceCheckpoint">
+  epoch?: Prisma.IntFilter<"AgentSourceCheckpoint"> | number
   source?: Prisma.XOR<Prisma.AgentSourceStateScalarRelationFilter, Prisma.AgentSourceStateWhereInput>
   heads?: Prisma.AgentSourceHeadListRelationFilter
 }
@@ -319,6 +331,7 @@ export type AgentSourceCheckpointOrderByWithRelationInput = {
   initialSourceOrder?: Prisma.SortOrderInput | Prisma.SortOrder
   sourceOrder?: Prisma.SortOrderInput | Prisma.SortOrder
   validationCursor?: Prisma.SortOrderInput | Prisma.SortOrder
+  epoch?: Prisma.SortOrder
   source?: Prisma.AgentSourceStateOrderByWithRelationInput
   heads?: Prisma.AgentSourceHeadOrderByRelationAggregateInput
 }
@@ -342,6 +355,7 @@ export type AgentSourceCheckpointWhereUniqueInput = Prisma.AtLeast<{
   initialSourceOrder?: Prisma.IntNullableFilter<"AgentSourceCheckpoint"> | number | null
   sourceOrder?: Prisma.IntNullableFilter<"AgentSourceCheckpoint"> | number | null
   validationCursor?: Prisma.JsonNullableFilter<"AgentSourceCheckpoint">
+  epoch?: Prisma.IntFilter<"AgentSourceCheckpoint"> | number
   source?: Prisma.XOR<Prisma.AgentSourceStateScalarRelationFilter, Prisma.AgentSourceStateWhereInput>
   heads?: Prisma.AgentSourceHeadListRelationFilter
 }, "connectionId_scanId">
@@ -361,6 +375,7 @@ export type AgentSourceCheckpointOrderByWithAggregationInput = {
   initialSourceOrder?: Prisma.SortOrderInput | Prisma.SortOrder
   sourceOrder?: Prisma.SortOrderInput | Prisma.SortOrder
   validationCursor?: Prisma.SortOrderInput | Prisma.SortOrder
+  epoch?: Prisma.SortOrder
   _count?: Prisma.AgentSourceCheckpointCountOrderByAggregateInput
   _avg?: Prisma.AgentSourceCheckpointAvgOrderByAggregateInput
   _max?: Prisma.AgentSourceCheckpointMaxOrderByAggregateInput
@@ -386,6 +401,7 @@ export type AgentSourceCheckpointScalarWhereWithAggregatesInput = {
   initialSourceOrder?: Prisma.IntNullableWithAggregatesFilter<"AgentSourceCheckpoint"> | number | null
   sourceOrder?: Prisma.IntNullableWithAggregatesFilter<"AgentSourceCheckpoint"> | number | null
   validationCursor?: Prisma.JsonNullableWithAggregatesFilter<"AgentSourceCheckpoint">
+  epoch?: Prisma.IntWithAggregatesFilter<"AgentSourceCheckpoint"> | number
 }
 
 export type AgentSourceCheckpointCreateInput = {
@@ -402,6 +418,7 @@ export type AgentSourceCheckpointCreateInput = {
   initialSourceOrder?: number | null
   sourceOrder?: number | null
   validationCursor?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  epoch?: number
   source: Prisma.AgentSourceStateCreateNestedOneWithoutCheckpointsInput
   heads?: Prisma.AgentSourceHeadCreateNestedManyWithoutCheckpointInput
 }
@@ -421,6 +438,7 @@ export type AgentSourceCheckpointUncheckedCreateInput = {
   initialSourceOrder?: number | null
   sourceOrder?: number | null
   validationCursor?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  epoch?: number
   heads?: Prisma.AgentSourceHeadUncheckedCreateNestedManyWithoutCheckpointInput
 }
 
@@ -438,6 +456,7 @@ export type AgentSourceCheckpointUpdateInput = {
   initialSourceOrder?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   sourceOrder?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   validationCursor?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  epoch?: Prisma.IntFieldUpdateOperationsInput | number
   source?: Prisma.AgentSourceStateUpdateOneRequiredWithoutCheckpointsNestedInput
   heads?: Prisma.AgentSourceHeadUpdateManyWithoutCheckpointNestedInput
 }
@@ -457,6 +476,7 @@ export type AgentSourceCheckpointUncheckedUpdateInput = {
   initialSourceOrder?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   sourceOrder?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   validationCursor?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  epoch?: Prisma.IntFieldUpdateOperationsInput | number
   heads?: Prisma.AgentSourceHeadUncheckedUpdateManyWithoutCheckpointNestedInput
 }
 
@@ -475,6 +495,7 @@ export type AgentSourceCheckpointCreateManyInput = {
   initialSourceOrder?: number | null
   sourceOrder?: number | null
   validationCursor?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  epoch?: number
 }
 
 export type AgentSourceCheckpointUpdateManyMutationInput = {
@@ -491,6 +512,7 @@ export type AgentSourceCheckpointUpdateManyMutationInput = {
   initialSourceOrder?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   sourceOrder?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   validationCursor?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  epoch?: Prisma.IntFieldUpdateOperationsInput | number
 }
 
 export type AgentSourceCheckpointUncheckedUpdateManyInput = {
@@ -508,6 +530,7 @@ export type AgentSourceCheckpointUncheckedUpdateManyInput = {
   initialSourceOrder?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   sourceOrder?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   validationCursor?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  epoch?: Prisma.IntFieldUpdateOperationsInput | number
 }
 
 export type AgentSourceCheckpointListRelationFilter = {
@@ -540,6 +563,7 @@ export type AgentSourceCheckpointCountOrderByAggregateInput = {
   initialSourceOrder?: Prisma.SortOrder
   sourceOrder?: Prisma.SortOrder
   validationCursor?: Prisma.SortOrder
+  epoch?: Prisma.SortOrder
 }
 
 export type AgentSourceCheckpointAvgOrderByAggregateInput = {
@@ -549,6 +573,7 @@ export type AgentSourceCheckpointAvgOrderByAggregateInput = {
   verifiedCount?: Prisma.SortOrder
   initialSourceOrder?: Prisma.SortOrder
   sourceOrder?: Prisma.SortOrder
+  epoch?: Prisma.SortOrder
 }
 
 export type AgentSourceCheckpointMaxOrderByAggregateInput = {
@@ -564,6 +589,7 @@ export type AgentSourceCheckpointMaxOrderByAggregateInput = {
   previousBoundaryEventId?: Prisma.SortOrder
   initialSourceOrder?: Prisma.SortOrder
   sourceOrder?: Prisma.SortOrder
+  epoch?: Prisma.SortOrder
 }
 
 export type AgentSourceCheckpointMinOrderByAggregateInput = {
@@ -579,6 +605,7 @@ export type AgentSourceCheckpointMinOrderByAggregateInput = {
   previousBoundaryEventId?: Prisma.SortOrder
   initialSourceOrder?: Prisma.SortOrder
   sourceOrder?: Prisma.SortOrder
+  epoch?: Prisma.SortOrder
 }
 
 export type AgentSourceCheckpointSumOrderByAggregateInput = {
@@ -588,6 +615,7 @@ export type AgentSourceCheckpointSumOrderByAggregateInput = {
   verifiedCount?: Prisma.SortOrder
   initialSourceOrder?: Prisma.SortOrder
   sourceOrder?: Prisma.SortOrder
+  epoch?: Prisma.SortOrder
 }
 
 export type AgentSourceCheckpointScalarRelationFilter = {
@@ -665,6 +693,7 @@ export type AgentSourceCheckpointCreateWithoutSourceInput = {
   initialSourceOrder?: number | null
   sourceOrder?: number | null
   validationCursor?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  epoch?: number
   heads?: Prisma.AgentSourceHeadCreateNestedManyWithoutCheckpointInput
 }
 
@@ -682,6 +711,7 @@ export type AgentSourceCheckpointUncheckedCreateWithoutSourceInput = {
   initialSourceOrder?: number | null
   sourceOrder?: number | null
   validationCursor?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  epoch?: number
   heads?: Prisma.AgentSourceHeadUncheckedCreateNestedManyWithoutCheckpointInput
 }
 
@@ -728,6 +758,7 @@ export type AgentSourceCheckpointScalarWhereInput = {
   initialSourceOrder?: Prisma.IntNullableFilter<"AgentSourceCheckpoint"> | number | null
   sourceOrder?: Prisma.IntNullableFilter<"AgentSourceCheckpoint"> | number | null
   validationCursor?: Prisma.JsonNullableFilter<"AgentSourceCheckpoint">
+  epoch?: Prisma.IntFilter<"AgentSourceCheckpoint"> | number
 }
 
 export type AgentSourceCheckpointCreateWithoutHeadsInput = {
@@ -744,6 +775,7 @@ export type AgentSourceCheckpointCreateWithoutHeadsInput = {
   initialSourceOrder?: number | null
   sourceOrder?: number | null
   validationCursor?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  epoch?: number
   source: Prisma.AgentSourceStateCreateNestedOneWithoutCheckpointsInput
 }
 
@@ -762,6 +794,7 @@ export type AgentSourceCheckpointUncheckedCreateWithoutHeadsInput = {
   initialSourceOrder?: number | null
   sourceOrder?: number | null
   validationCursor?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  epoch?: number
 }
 
 export type AgentSourceCheckpointCreateOrConnectWithoutHeadsInput = {
@@ -794,6 +827,7 @@ export type AgentSourceCheckpointUpdateWithoutHeadsInput = {
   initialSourceOrder?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   sourceOrder?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   validationCursor?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  epoch?: Prisma.IntFieldUpdateOperationsInput | number
   source?: Prisma.AgentSourceStateUpdateOneRequiredWithoutCheckpointsNestedInput
 }
 
@@ -812,6 +846,7 @@ export type AgentSourceCheckpointUncheckedUpdateWithoutHeadsInput = {
   initialSourceOrder?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   sourceOrder?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   validationCursor?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  epoch?: Prisma.IntFieldUpdateOperationsInput | number
 }
 
 export type AgentSourceCheckpointCreateManySourceInput = {
@@ -828,6 +863,7 @@ export type AgentSourceCheckpointCreateManySourceInput = {
   initialSourceOrder?: number | null
   sourceOrder?: number | null
   validationCursor?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  epoch?: number
 }
 
 export type AgentSourceCheckpointUpdateWithoutSourceInput = {
@@ -844,6 +880,7 @@ export type AgentSourceCheckpointUpdateWithoutSourceInput = {
   initialSourceOrder?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   sourceOrder?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   validationCursor?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  epoch?: Prisma.IntFieldUpdateOperationsInput | number
   heads?: Prisma.AgentSourceHeadUpdateManyWithoutCheckpointNestedInput
 }
 
@@ -861,6 +898,7 @@ export type AgentSourceCheckpointUncheckedUpdateWithoutSourceInput = {
   initialSourceOrder?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   sourceOrder?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   validationCursor?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  epoch?: Prisma.IntFieldUpdateOperationsInput | number
   heads?: Prisma.AgentSourceHeadUncheckedUpdateManyWithoutCheckpointNestedInput
 }
 
@@ -878,6 +916,7 @@ export type AgentSourceCheckpointUncheckedUpdateManyWithoutSourceInput = {
   initialSourceOrder?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   sourceOrder?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   validationCursor?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  epoch?: Prisma.IntFieldUpdateOperationsInput | number
 }
 
 
@@ -926,6 +965,7 @@ export type AgentSourceCheckpointSelect<ExtArgs extends runtime.Types.Extensions
   initialSourceOrder?: boolean
   sourceOrder?: boolean
   validationCursor?: boolean
+  epoch?: boolean
   source?: boolean | Prisma.AgentSourceStateDefaultArgs<ExtArgs>
   heads?: boolean | Prisma.AgentSourceCheckpoint$headsArgs<ExtArgs>
   _count?: boolean | Prisma.AgentSourceCheckpointCountOutputTypeDefaultArgs<ExtArgs>
@@ -946,6 +986,7 @@ export type AgentSourceCheckpointSelectCreateManyAndReturn<ExtArgs extends runti
   initialSourceOrder?: boolean
   sourceOrder?: boolean
   validationCursor?: boolean
+  epoch?: boolean
   source?: boolean | Prisma.AgentSourceStateDefaultArgs<ExtArgs>
 }, ExtArgs["result"]["agentSourceCheckpoint"]>
 
@@ -964,6 +1005,7 @@ export type AgentSourceCheckpointSelectUpdateManyAndReturn<ExtArgs extends runti
   initialSourceOrder?: boolean
   sourceOrder?: boolean
   validationCursor?: boolean
+  epoch?: boolean
   source?: boolean | Prisma.AgentSourceStateDefaultArgs<ExtArgs>
 }, ExtArgs["result"]["agentSourceCheckpoint"]>
 
@@ -982,9 +1024,10 @@ export type AgentSourceCheckpointSelectScalar = {
   initialSourceOrder?: boolean
   sourceOrder?: boolean
   validationCursor?: boolean
+  epoch?: boolean
 }
 
-export type AgentSourceCheckpointOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"connectionId" | "scanId" | "status" | "nextOrdinal" | "entryCount" | "executableCount" | "verifiedCount" | "verification" | "headEventId" | "boundaryKnown" | "previousBoundaryEventId" | "initialSourceOrder" | "sourceOrder" | "validationCursor", ExtArgs["result"]["agentSourceCheckpoint"]>
+export type AgentSourceCheckpointOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"connectionId" | "scanId" | "status" | "nextOrdinal" | "entryCount" | "executableCount" | "verifiedCount" | "verification" | "headEventId" | "boundaryKnown" | "previousBoundaryEventId" | "initialSourceOrder" | "sourceOrder" | "validationCursor" | "epoch", ExtArgs["result"]["agentSourceCheckpoint"]>
 export type AgentSourceCheckpointInclude<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
   source?: boolean | Prisma.AgentSourceStateDefaultArgs<ExtArgs>
   heads?: boolean | Prisma.AgentSourceCheckpoint$headsArgs<ExtArgs>
@@ -1018,6 +1061,7 @@ export type $AgentSourceCheckpointPayload<ExtArgs extends runtime.Types.Extensio
     initialSourceOrder: number | null
     sourceOrder: number | null
     validationCursor: runtime.JsonValue | null
+    epoch: number
   }, ExtArgs["result"]["agentSourceCheckpoint"]>
   composites: {}
 }
@@ -1457,6 +1501,7 @@ export interface AgentSourceCheckpointFieldRefs {
   readonly initialSourceOrder: Prisma.FieldRef<"AgentSourceCheckpoint", 'Int'>
   readonly sourceOrder: Prisma.FieldRef<"AgentSourceCheckpoint", 'Int'>
   readonly validationCursor: Prisma.FieldRef<"AgentSourceCheckpoint", 'Json'>
+  readonly epoch: Prisma.FieldRef<"AgentSourceCheckpoint", 'Int'>
 }
     
 

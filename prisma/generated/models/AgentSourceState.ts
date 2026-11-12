@@ -29,16 +29,22 @@ export type AggregateAgentSourceState = {
 export type AgentSourceStateAvgAggregateOutputType = {
   authorityRevision: number | null
   lastSourceOrder: number | null
+  epoch: number | null
+  epochStartSourceOrder: number | null
 }
 
 export type AgentSourceStateSumAggregateOutputType = {
   authorityRevision: number | null
   lastSourceOrder: number | null
+  epoch: number | null
+  epochStartSourceOrder: number | null
 }
 
 export type AgentSourceStateMinAggregateOutputType = {
   authorityRevision: number | null
   lastSourceOrder: number | null
+  epoch: number | null
+  epochStartSourceOrder: number | null
   connectionId: string | null
   isReady: boolean | null
   lastObservedAt: Date | null
@@ -48,6 +54,8 @@ export type AgentSourceStateMinAggregateOutputType = {
 export type AgentSourceStateMaxAggregateOutputType = {
   authorityRevision: number | null
   lastSourceOrder: number | null
+  epoch: number | null
+  epochStartSourceOrder: number | null
   connectionId: string | null
   isReady: boolean | null
   lastObservedAt: Date | null
@@ -57,6 +65,8 @@ export type AgentSourceStateMaxAggregateOutputType = {
 export type AgentSourceStateCountAggregateOutputType = {
   authorityRevision: number
   lastSourceOrder: number
+  epoch: number
+  epochStartSourceOrder: number
   connectionId: number
   isReady: number
   cursor: number
@@ -70,16 +80,22 @@ export type AgentSourceStateCountAggregateOutputType = {
 export type AgentSourceStateAvgAggregateInputType = {
   authorityRevision?: true
   lastSourceOrder?: true
+  epoch?: true
+  epochStartSourceOrder?: true
 }
 
 export type AgentSourceStateSumAggregateInputType = {
   authorityRevision?: true
   lastSourceOrder?: true
+  epoch?: true
+  epochStartSourceOrder?: true
 }
 
 export type AgentSourceStateMinAggregateInputType = {
   authorityRevision?: true
   lastSourceOrder?: true
+  epoch?: true
+  epochStartSourceOrder?: true
   connectionId?: true
   isReady?: true
   lastObservedAt?: true
@@ -89,6 +105,8 @@ export type AgentSourceStateMinAggregateInputType = {
 export type AgentSourceStateMaxAggregateInputType = {
   authorityRevision?: true
   lastSourceOrder?: true
+  epoch?: true
+  epochStartSourceOrder?: true
   connectionId?: true
   isReady?: true
   lastObservedAt?: true
@@ -98,6 +116,8 @@ export type AgentSourceStateMaxAggregateInputType = {
 export type AgentSourceStateCountAggregateInputType = {
   authorityRevision?: true
   lastSourceOrder?: true
+  epoch?: true
+  epochStartSourceOrder?: true
   connectionId?: true
   isReady?: true
   cursor?: true
@@ -196,6 +216,8 @@ export type AgentSourceStateGroupByArgs<ExtArgs extends runtime.Types.Extensions
 export type AgentSourceStateGroupByOutputType = {
   authorityRevision: number
   lastSourceOrder: number
+  epoch: number
+  epochStartSourceOrder: number
   connectionId: string
   isReady: boolean
   cursor: runtime.JsonValue | null
@@ -230,6 +252,8 @@ export type AgentSourceStateWhereInput = {
   NOT?: Prisma.AgentSourceStateWhereInput | Prisma.AgentSourceStateWhereInput[]
   authorityRevision?: Prisma.IntFilter<"AgentSourceState"> | number
   lastSourceOrder?: Prisma.IntFilter<"AgentSourceState"> | number
+  epoch?: Prisma.IntFilter<"AgentSourceState"> | number
+  epochStartSourceOrder?: Prisma.IntFilter<"AgentSourceState"> | number
   connectionId?: Prisma.StringFilter<"AgentSourceState"> | string
   isReady?: Prisma.BoolFilter<"AgentSourceState"> | boolean
   cursor?: Prisma.JsonNullableFilter<"AgentSourceState">
@@ -245,6 +269,8 @@ export type AgentSourceStateWhereInput = {
 export type AgentSourceStateOrderByWithRelationInput = {
   authorityRevision?: Prisma.SortOrder
   lastSourceOrder?: Prisma.SortOrder
+  epoch?: Prisma.SortOrder
+  epochStartSourceOrder?: Prisma.SortOrder
   connectionId?: Prisma.SortOrder
   isReady?: Prisma.SortOrder
   cursor?: Prisma.SortOrderInput | Prisma.SortOrder
@@ -264,6 +290,8 @@ export type AgentSourceStateWhereUniqueInput = Prisma.AtLeast<{
   NOT?: Prisma.AgentSourceStateWhereInput | Prisma.AgentSourceStateWhereInput[]
   authorityRevision?: Prisma.IntFilter<"AgentSourceState"> | number
   lastSourceOrder?: Prisma.IntFilter<"AgentSourceState"> | number
+  epoch?: Prisma.IntFilter<"AgentSourceState"> | number
+  epochStartSourceOrder?: Prisma.IntFilter<"AgentSourceState"> | number
   isReady?: Prisma.BoolFilter<"AgentSourceState"> | boolean
   cursor?: Prisma.JsonNullableFilter<"AgentSourceState">
   health?: Prisma.JsonNullableFilter<"AgentSourceState">
@@ -278,6 +306,8 @@ export type AgentSourceStateWhereUniqueInput = Prisma.AtLeast<{
 export type AgentSourceStateOrderByWithAggregationInput = {
   authorityRevision?: Prisma.SortOrder
   lastSourceOrder?: Prisma.SortOrder
+  epoch?: Prisma.SortOrder
+  epochStartSourceOrder?: Prisma.SortOrder
   connectionId?: Prisma.SortOrder
   isReady?: Prisma.SortOrder
   cursor?: Prisma.SortOrderInput | Prisma.SortOrder
@@ -297,6 +327,8 @@ export type AgentSourceStateScalarWhereWithAggregatesInput = {
   NOT?: Prisma.AgentSourceStateScalarWhereWithAggregatesInput | Prisma.AgentSourceStateScalarWhereWithAggregatesInput[]
   authorityRevision?: Prisma.IntWithAggregatesFilter<"AgentSourceState"> | number
   lastSourceOrder?: Prisma.IntWithAggregatesFilter<"AgentSourceState"> | number
+  epoch?: Prisma.IntWithAggregatesFilter<"AgentSourceState"> | number
+  epochStartSourceOrder?: Prisma.IntWithAggregatesFilter<"AgentSourceState"> | number
   connectionId?: Prisma.StringWithAggregatesFilter<"AgentSourceState"> | string
   isReady?: Prisma.BoolWithAggregatesFilter<"AgentSourceState"> | boolean
   cursor?: Prisma.JsonNullableWithAggregatesFilter<"AgentSourceState">
@@ -308,6 +340,8 @@ export type AgentSourceStateScalarWhereWithAggregatesInput = {
 export type AgentSourceStateCreateInput = {
   authorityRevision?: number
   lastSourceOrder?: number
+  epoch?: number
+  epochStartSourceOrder?: number
   isReady?: boolean
   cursor?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   health?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
@@ -322,6 +356,8 @@ export type AgentSourceStateCreateInput = {
 export type AgentSourceStateUncheckedCreateInput = {
   authorityRevision?: number
   lastSourceOrder?: number
+  epoch?: number
+  epochStartSourceOrder?: number
   connectionId: string
   isReady?: boolean
   cursor?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
@@ -336,6 +372,8 @@ export type AgentSourceStateUncheckedCreateInput = {
 export type AgentSourceStateUpdateInput = {
   authorityRevision?: Prisma.IntFieldUpdateOperationsInput | number
   lastSourceOrder?: Prisma.IntFieldUpdateOperationsInput | number
+  epoch?: Prisma.IntFieldUpdateOperationsInput | number
+  epochStartSourceOrder?: Prisma.IntFieldUpdateOperationsInput | number
   isReady?: Prisma.BoolFieldUpdateOperationsInput | boolean
   cursor?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   health?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
@@ -350,6 +388,8 @@ export type AgentSourceStateUpdateInput = {
 export type AgentSourceStateUncheckedUpdateInput = {
   authorityRevision?: Prisma.IntFieldUpdateOperationsInput | number
   lastSourceOrder?: Prisma.IntFieldUpdateOperationsInput | number
+  epoch?: Prisma.IntFieldUpdateOperationsInput | number
+  epochStartSourceOrder?: Prisma.IntFieldUpdateOperationsInput | number
   connectionId?: Prisma.StringFieldUpdateOperationsInput | string
   isReady?: Prisma.BoolFieldUpdateOperationsInput | boolean
   cursor?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
@@ -364,6 +404,8 @@ export type AgentSourceStateUncheckedUpdateInput = {
 export type AgentSourceStateCreateManyInput = {
   authorityRevision?: number
   lastSourceOrder?: number
+  epoch?: number
+  epochStartSourceOrder?: number
   connectionId: string
   isReady?: boolean
   cursor?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
@@ -375,6 +417,8 @@ export type AgentSourceStateCreateManyInput = {
 export type AgentSourceStateUpdateManyMutationInput = {
   authorityRevision?: Prisma.IntFieldUpdateOperationsInput | number
   lastSourceOrder?: Prisma.IntFieldUpdateOperationsInput | number
+  epoch?: Prisma.IntFieldUpdateOperationsInput | number
+  epochStartSourceOrder?: Prisma.IntFieldUpdateOperationsInput | number
   isReady?: Prisma.BoolFieldUpdateOperationsInput | boolean
   cursor?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   health?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
@@ -385,6 +429,8 @@ export type AgentSourceStateUpdateManyMutationInput = {
 export type AgentSourceStateUncheckedUpdateManyInput = {
   authorityRevision?: Prisma.IntFieldUpdateOperationsInput | number
   lastSourceOrder?: Prisma.IntFieldUpdateOperationsInput | number
+  epoch?: Prisma.IntFieldUpdateOperationsInput | number
+  epochStartSourceOrder?: Prisma.IntFieldUpdateOperationsInput | number
   connectionId?: Prisma.StringFieldUpdateOperationsInput | string
   isReady?: Prisma.BoolFieldUpdateOperationsInput | boolean
   cursor?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
@@ -401,6 +447,8 @@ export type AgentSourceStateNullableScalarRelationFilter = {
 export type AgentSourceStateCountOrderByAggregateInput = {
   authorityRevision?: Prisma.SortOrder
   lastSourceOrder?: Prisma.SortOrder
+  epoch?: Prisma.SortOrder
+  epochStartSourceOrder?: Prisma.SortOrder
   connectionId?: Prisma.SortOrder
   isReady?: Prisma.SortOrder
   cursor?: Prisma.SortOrder
@@ -412,11 +460,15 @@ export type AgentSourceStateCountOrderByAggregateInput = {
 export type AgentSourceStateAvgOrderByAggregateInput = {
   authorityRevision?: Prisma.SortOrder
   lastSourceOrder?: Prisma.SortOrder
+  epoch?: Prisma.SortOrder
+  epochStartSourceOrder?: Prisma.SortOrder
 }
 
 export type AgentSourceStateMaxOrderByAggregateInput = {
   authorityRevision?: Prisma.SortOrder
   lastSourceOrder?: Prisma.SortOrder
+  epoch?: Prisma.SortOrder
+  epochStartSourceOrder?: Prisma.SortOrder
   connectionId?: Prisma.SortOrder
   isReady?: Prisma.SortOrder
   lastObservedAt?: Prisma.SortOrder
@@ -426,6 +478,8 @@ export type AgentSourceStateMaxOrderByAggregateInput = {
 export type AgentSourceStateMinOrderByAggregateInput = {
   authorityRevision?: Prisma.SortOrder
   lastSourceOrder?: Prisma.SortOrder
+  epoch?: Prisma.SortOrder
+  epochStartSourceOrder?: Prisma.SortOrder
   connectionId?: Prisma.SortOrder
   isReady?: Prisma.SortOrder
   lastObservedAt?: Prisma.SortOrder
@@ -435,6 +489,8 @@ export type AgentSourceStateMinOrderByAggregateInput = {
 export type AgentSourceStateSumOrderByAggregateInput = {
   authorityRevision?: Prisma.SortOrder
   lastSourceOrder?: Prisma.SortOrder
+  epoch?: Prisma.SortOrder
+  epochStartSourceOrder?: Prisma.SortOrder
 }
 
 export type AgentSourceStateScalarRelationFilter = {
@@ -519,6 +575,8 @@ export type AgentSourceStateUpdateOneRequiredWithoutBaselinesNestedInput = {
 export type AgentSourceStateCreateWithoutConnectionInput = {
   authorityRevision?: number
   lastSourceOrder?: number
+  epoch?: number
+  epochStartSourceOrder?: number
   isReady?: boolean
   cursor?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   health?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
@@ -532,6 +590,8 @@ export type AgentSourceStateCreateWithoutConnectionInput = {
 export type AgentSourceStateUncheckedCreateWithoutConnectionInput = {
   authorityRevision?: number
   lastSourceOrder?: number
+  epoch?: number
+  epochStartSourceOrder?: number
   isReady?: boolean
   cursor?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   health?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
@@ -561,6 +621,8 @@ export type AgentSourceStateUpdateToOneWithWhereWithoutConnectionInput = {
 export type AgentSourceStateUpdateWithoutConnectionInput = {
   authorityRevision?: Prisma.IntFieldUpdateOperationsInput | number
   lastSourceOrder?: Prisma.IntFieldUpdateOperationsInput | number
+  epoch?: Prisma.IntFieldUpdateOperationsInput | number
+  epochStartSourceOrder?: Prisma.IntFieldUpdateOperationsInput | number
   isReady?: Prisma.BoolFieldUpdateOperationsInput | boolean
   cursor?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   health?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
@@ -574,6 +636,8 @@ export type AgentSourceStateUpdateWithoutConnectionInput = {
 export type AgentSourceStateUncheckedUpdateWithoutConnectionInput = {
   authorityRevision?: Prisma.IntFieldUpdateOperationsInput | number
   lastSourceOrder?: Prisma.IntFieldUpdateOperationsInput | number
+  epoch?: Prisma.IntFieldUpdateOperationsInput | number
+  epochStartSourceOrder?: Prisma.IntFieldUpdateOperationsInput | number
   isReady?: Prisma.BoolFieldUpdateOperationsInput | boolean
   cursor?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   health?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
@@ -587,6 +651,8 @@ export type AgentSourceStateUncheckedUpdateWithoutConnectionInput = {
 export type AgentSourceStateCreateWithoutPagesInput = {
   authorityRevision?: number
   lastSourceOrder?: number
+  epoch?: number
+  epochStartSourceOrder?: number
   isReady?: boolean
   cursor?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   health?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
@@ -600,6 +666,8 @@ export type AgentSourceStateCreateWithoutPagesInput = {
 export type AgentSourceStateUncheckedCreateWithoutPagesInput = {
   authorityRevision?: number
   lastSourceOrder?: number
+  epoch?: number
+  epochStartSourceOrder?: number
   connectionId: string
   isReady?: boolean
   cursor?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
@@ -629,6 +697,8 @@ export type AgentSourceStateUpdateToOneWithWhereWithoutPagesInput = {
 export type AgentSourceStateUpdateWithoutPagesInput = {
   authorityRevision?: Prisma.IntFieldUpdateOperationsInput | number
   lastSourceOrder?: Prisma.IntFieldUpdateOperationsInput | number
+  epoch?: Prisma.IntFieldUpdateOperationsInput | number
+  epochStartSourceOrder?: Prisma.IntFieldUpdateOperationsInput | number
   isReady?: Prisma.BoolFieldUpdateOperationsInput | boolean
   cursor?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   health?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
@@ -642,6 +712,8 @@ export type AgentSourceStateUpdateWithoutPagesInput = {
 export type AgentSourceStateUncheckedUpdateWithoutPagesInput = {
   authorityRevision?: Prisma.IntFieldUpdateOperationsInput | number
   lastSourceOrder?: Prisma.IntFieldUpdateOperationsInput | number
+  epoch?: Prisma.IntFieldUpdateOperationsInput | number
+  epochStartSourceOrder?: Prisma.IntFieldUpdateOperationsInput | number
   connectionId?: Prisma.StringFieldUpdateOperationsInput | string
   isReady?: Prisma.BoolFieldUpdateOperationsInput | boolean
   cursor?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
@@ -655,6 +727,8 @@ export type AgentSourceStateUncheckedUpdateWithoutPagesInput = {
 export type AgentSourceStateCreateWithoutCheckpointsInput = {
   authorityRevision?: number
   lastSourceOrder?: number
+  epoch?: number
+  epochStartSourceOrder?: number
   isReady?: boolean
   cursor?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   health?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
@@ -668,6 +742,8 @@ export type AgentSourceStateCreateWithoutCheckpointsInput = {
 export type AgentSourceStateUncheckedCreateWithoutCheckpointsInput = {
   authorityRevision?: number
   lastSourceOrder?: number
+  epoch?: number
+  epochStartSourceOrder?: number
   connectionId: string
   isReady?: boolean
   cursor?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
@@ -697,6 +773,8 @@ export type AgentSourceStateUpdateToOneWithWhereWithoutCheckpointsInput = {
 export type AgentSourceStateUpdateWithoutCheckpointsInput = {
   authorityRevision?: Prisma.IntFieldUpdateOperationsInput | number
   lastSourceOrder?: Prisma.IntFieldUpdateOperationsInput | number
+  epoch?: Prisma.IntFieldUpdateOperationsInput | number
+  epochStartSourceOrder?: Prisma.IntFieldUpdateOperationsInput | number
   isReady?: Prisma.BoolFieldUpdateOperationsInput | boolean
   cursor?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   health?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
@@ -710,6 +788,8 @@ export type AgentSourceStateUpdateWithoutCheckpointsInput = {
 export type AgentSourceStateUncheckedUpdateWithoutCheckpointsInput = {
   authorityRevision?: Prisma.IntFieldUpdateOperationsInput | number
   lastSourceOrder?: Prisma.IntFieldUpdateOperationsInput | number
+  epoch?: Prisma.IntFieldUpdateOperationsInput | number
+  epochStartSourceOrder?: Prisma.IntFieldUpdateOperationsInput | number
   connectionId?: Prisma.StringFieldUpdateOperationsInput | string
   isReady?: Prisma.BoolFieldUpdateOperationsInput | boolean
   cursor?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
@@ -723,6 +803,8 @@ export type AgentSourceStateUncheckedUpdateWithoutCheckpointsInput = {
 export type AgentSourceStateCreateWithoutBaselinesInput = {
   authorityRevision?: number
   lastSourceOrder?: number
+  epoch?: number
+  epochStartSourceOrder?: number
   isReady?: boolean
   cursor?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   health?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
@@ -736,6 +818,8 @@ export type AgentSourceStateCreateWithoutBaselinesInput = {
 export type AgentSourceStateUncheckedCreateWithoutBaselinesInput = {
   authorityRevision?: number
   lastSourceOrder?: number
+  epoch?: number
+  epochStartSourceOrder?: number
   connectionId: string
   isReady?: boolean
   cursor?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
@@ -765,6 +849,8 @@ export type AgentSourceStateUpdateToOneWithWhereWithoutBaselinesInput = {
 export type AgentSourceStateUpdateWithoutBaselinesInput = {
   authorityRevision?: Prisma.IntFieldUpdateOperationsInput | number
   lastSourceOrder?: Prisma.IntFieldUpdateOperationsInput | number
+  epoch?: Prisma.IntFieldUpdateOperationsInput | number
+  epochStartSourceOrder?: Prisma.IntFieldUpdateOperationsInput | number
   isReady?: Prisma.BoolFieldUpdateOperationsInput | boolean
   cursor?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   health?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
@@ -778,6 +864,8 @@ export type AgentSourceStateUpdateWithoutBaselinesInput = {
 export type AgentSourceStateUncheckedUpdateWithoutBaselinesInput = {
   authorityRevision?: Prisma.IntFieldUpdateOperationsInput | number
   lastSourceOrder?: Prisma.IntFieldUpdateOperationsInput | number
+  epoch?: Prisma.IntFieldUpdateOperationsInput | number
+  epochStartSourceOrder?: Prisma.IntFieldUpdateOperationsInput | number
   connectionId?: Prisma.StringFieldUpdateOperationsInput | string
   isReady?: Prisma.BoolFieldUpdateOperationsInput | boolean
   cursor?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
@@ -840,6 +928,8 @@ export type AgentSourceStateCountOutputTypeCountCheckpointsArgs<ExtArgs extends 
 export type AgentSourceStateSelect<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetSelect<{
   authorityRevision?: boolean
   lastSourceOrder?: boolean
+  epoch?: boolean
+  epochStartSourceOrder?: boolean
   connectionId?: boolean
   isReady?: boolean
   cursor?: boolean
@@ -856,6 +946,8 @@ export type AgentSourceStateSelect<ExtArgs extends runtime.Types.Extensions.Inte
 export type AgentSourceStateSelectCreateManyAndReturn<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetSelect<{
   authorityRevision?: boolean
   lastSourceOrder?: boolean
+  epoch?: boolean
+  epochStartSourceOrder?: boolean
   connectionId?: boolean
   isReady?: boolean
   cursor?: boolean
@@ -868,6 +960,8 @@ export type AgentSourceStateSelectCreateManyAndReturn<ExtArgs extends runtime.Ty
 export type AgentSourceStateSelectUpdateManyAndReturn<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetSelect<{
   authorityRevision?: boolean
   lastSourceOrder?: boolean
+  epoch?: boolean
+  epochStartSourceOrder?: boolean
   connectionId?: boolean
   isReady?: boolean
   cursor?: boolean
@@ -880,6 +974,8 @@ export type AgentSourceStateSelectUpdateManyAndReturn<ExtArgs extends runtime.Ty
 export type AgentSourceStateSelectScalar = {
   authorityRevision?: boolean
   lastSourceOrder?: boolean
+  epoch?: boolean
+  epochStartSourceOrder?: boolean
   connectionId?: boolean
   isReady?: boolean
   cursor?: boolean
@@ -888,7 +984,7 @@ export type AgentSourceStateSelectScalar = {
   updatedAt?: boolean
 }
 
-export type AgentSourceStateOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"authorityRevision" | "lastSourceOrder" | "connectionId" | "isReady" | "cursor" | "health" | "lastObservedAt" | "updatedAt", ExtArgs["result"]["agentSourceState"]>
+export type AgentSourceStateOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"authorityRevision" | "lastSourceOrder" | "epoch" | "epochStartSourceOrder" | "connectionId" | "isReady" | "cursor" | "health" | "lastObservedAt" | "updatedAt", ExtArgs["result"]["agentSourceState"]>
 export type AgentSourceStateInclude<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
   connection?: boolean | Prisma.AgentConnectionDefaultArgs<ExtArgs>
   pages?: boolean | Prisma.AgentSourceState$pagesArgs<ExtArgs>
@@ -914,6 +1010,8 @@ export type $AgentSourceStatePayload<ExtArgs extends runtime.Types.Extensions.In
   scalars: runtime.Types.Extensions.GetPayloadResult<{
     authorityRevision: number
     lastSourceOrder: number
+    epoch: number
+    epochStartSourceOrder: number
     connectionId: string
     isReady: boolean
     cursor: runtime.JsonValue | null
@@ -1349,6 +1447,8 @@ export interface Prisma__AgentSourceStateClient<T, Null = never, ExtArgs extends
 export interface AgentSourceStateFieldRefs {
   readonly authorityRevision: Prisma.FieldRef<"AgentSourceState", 'Int'>
   readonly lastSourceOrder: Prisma.FieldRef<"AgentSourceState", 'Int'>
+  readonly epoch: Prisma.FieldRef<"AgentSourceState", 'Int'>
+  readonly epochStartSourceOrder: Prisma.FieldRef<"AgentSourceState", 'Int'>
   readonly connectionId: Prisma.FieldRef<"AgentSourceState", 'String'>
   readonly isReady: Prisma.FieldRef<"AgentSourceState", 'Boolean'>
   readonly cursor: Prisma.FieldRef<"AgentSourceState", 'Json'>

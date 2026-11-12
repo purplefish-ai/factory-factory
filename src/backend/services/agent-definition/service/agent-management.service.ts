@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { ApplicationError } from '@/backend/lib/application-error';
 import { agentManagementHistoryAccessor } from '@/backend/services/agent-definition/resources/agent-management-history.accessor';
 import { agentManagementAccessor } from '@/backend/services/agent-definition/resources/agent-management.accessor';
+import { agentSourceAccessor } from '@/backend/services/agent-definition/resources/agent-source.accessor';
 import { agentRunPageSchema, agentEvaluationPageSchema } from '@/shared/agent-history';
 import {
   agentHistoryInputSchema,
@@ -14,6 +15,8 @@ import {
   agentListInputSchema,
   agentListPageSchema,
   agentSavedUpdateSchema,
+  agentSourceResetInputSchema,
+  agentSourceResetResultSchema,
   agentSourceValidationSchema,
 } from '@/shared/agent-management';
 import { agentRecoveryTargetInputSchema } from '@/shared/event-agent-recovery';
@@ -39,6 +42,13 @@ export class AgentManagementService {
     if (!(await agentManagementHistoryAccessor.recoveryTarget(parsed))) {
       throw new ApplicationError('NOT_FOUND', 'Event run not found.');
     }
+  }
+  /** Pauses every trigger on the source, cancels queued runs and lifts the recovery fence. */
+  async resetSource(input: unknown) {
+    const parsed = agentSourceResetInputSchema.parse(input);
+    return agentSourceResetResultSchema.parse(
+      await agentSourceAccessor.resetSource(parsed.projectId, parsed.connectionId)
+    );
   }
   checkSources(projectId: string, specification: unknown, evidence: unknown) {
     return agentManagementAccessor.checkSources(

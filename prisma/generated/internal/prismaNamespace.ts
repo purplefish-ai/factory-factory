@@ -3660,6 +3660,8 @@ export type AgentRunScalarFieldEnum = (typeof AgentRunScalarFieldEnum)[keyof typ
 export const AgentSourceStateScalarFieldEnum = {
   authorityRevision: 'authorityRevision',
   lastSourceOrder: 'lastSourceOrder',
+  epoch: 'epoch',
+  epochStartSourceOrder: 'epochStartSourceOrder',
   connectionId: 'connectionId',
   isReady: 'isReady',
   cursor: 'cursor',
@@ -3681,6 +3683,7 @@ export const AgentSourcePageScalarFieldEnum = {
   nextPage: 'nextPage',
   sourceOrder: 'sourceOrder',
   evidence: 'evidence',
+  epoch: 'epoch',
   createdAt: 'createdAt'
 } as const
 
@@ -3701,7 +3704,8 @@ export const AgentSourceCheckpointScalarFieldEnum = {
   previousBoundaryEventId: 'previousBoundaryEventId',
   initialSourceOrder: 'initialSourceOrder',
   sourceOrder: 'sourceOrder',
-  validationCursor: 'validationCursor'
+  validationCursor: 'validationCursor',
+  epoch: 'epoch'
 } as const
 
 export type AgentSourceCheckpointScalarFieldEnum = (typeof AgentSourceCheckpointScalarFieldEnum)[keyof typeof AgentSourceCheckpointScalarFieldEnum]
@@ -3712,7 +3716,8 @@ export const AgentSourceHeadScalarFieldEnum = {
   scanId: 'scanId',
   providerEventId: 'providerEventId',
   position: 'position',
-  precedingEventCount: 'precedingEventCount'
+  precedingEventCount: 'precedingEventCount',
+  epoch: 'epoch'
 } as const
 
 export type AgentSourceHeadScalarFieldEnum = (typeof AgentSourceHeadScalarFieldEnum)[keyof typeof AgentSourceHeadScalarFieldEnum]
@@ -3724,6 +3729,7 @@ export const AgentSourceBaselineScalarFieldEnum = {
   headEventId: 'headEventId',
   afterHeadEventId: 'afterHeadEventId',
   sourceOrder: 'sourceOrder',
+  epoch: 'epoch',
   createdAt: 'createdAt'
 } as const
 
@@ -3735,6 +3741,7 @@ export const AgentEventScalarFieldEnum = {
   connectionId: 'connectionId',
   providerEventId: 'providerEventId',
   sourceOrder: 'sourceOrder',
+  sourceEpoch: 'sourceEpoch',
   payload: 'payload',
   occurredAt: 'occurredAt',
   observedAt: 'observedAt',

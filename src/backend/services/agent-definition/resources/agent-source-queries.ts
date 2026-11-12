@@ -4,6 +4,18 @@ import { ApplicationError } from '@/backend/lib/application-error';
 import { agentSourcePageEvidenceSchema, type AgentSourceEntry } from '@/shared/agent-source-state';
 import type { Prisma } from '@prisma-gen/client';
 type Tx = Prisma.TransactionClient;
+/** The current epoch of a source. Only proof written in it is authority for ordinals. */
+export type SourceEpoch = { connectionId: string; epoch: number; epochStartSourceOrder: number };
+export function sourceEpoch(
+  connectionId: string,
+  state: { epoch: number; epochStartSourceOrder: number } | null
+): SourceEpoch {
+  return {
+    connectionId,
+    epoch: state?.epoch ?? 0,
+    epochStartSourceOrder: state?.epochStartSourceOrder ?? 0,
+  };
+}
 const targetWhere = {
   provider: 'GITHUB' as const,
   isEnabled: true,
@@ -105,10 +117,10 @@ export async function getBaseline(connectionId: string, id: string) {
     : null;
 }
 
-/** Rejected proof fences new preparation; already-issued baseline IDs remain readable. */
-export async function assertCheckpointProof(tx: Tx, connectionId: string) {
+/** Rejected proof fences new preparation in its epoch; already-issued baseline IDs remain readable. */
+export async function assertCheckpointProof(tx: Tx, { connectionId, epoch }: SourceEpoch) {
   const rejected = await tx.agentSourceCheckpoint.findFirst({
-    where: { connectionId, status: 'INVALID' },
+    where: { connectionId, epoch, status: 'INVALID' },
     select: { scanId: true },
   });
   if (rejected) {
@@ -116,17 +128,22 @@ export async function assertCheckpointProof(tx: Tx, connectionId: string) {
   }
 }
 
-/** A baseline read can race a newer interval commit. Retained evidence resolves its exact head. */
-export async function historicalHeadOrder(tx: Tx, connectionId: string, head: string | null) {
-  await assertCheckpointProof(tx, connectionId);
+/**
+ * A baseline read can race a newer interval commit. Retained evidence of the current epoch
+ * resolves its exact head; an identity's ordinal in an earlier epoch is not evidence.
+ */
+export async function historicalHeadOrder(tx: Tx, source: SourceEpoch, head: string | null) {
+  const { connectionId, epoch } = source;
+  await assertCheckpointProof(tx, source);
   if (head === null) {
-    return 0;
+    return source.epochStartSourceOrder;
   }
   const indexed = await tx.agentSourceHead.findFirst({
     where: {
       connectionId,
+      epoch,
       providerEventId: head,
-      checkpoint: { status: 'COMPLETE' },
+      checkpoint: { epoch, status: 'COMPLETE' },
     },
     include: { checkpoint: true },
   });
@@ -135,9 +152,9 @@ export async function historicalHeadOrder(tx: Tx, connectionId: string, head: st
   }
   // Initial heads have no captured interval. Their durable baseline is also an exact witness.
   const baseline = await tx.agentSourceBaseline.findFirst({
-    where: { connectionId, headEventId: head, sourceOrder: { not: null } },
+    where: { connectionId, epoch, headEventId: head, sourceOrder: { not: null } },
   });
-  const legacy = await legacyHeadOrder(tx, connectionId, head);
+  const legacy = await legacyHeadOrder(tx, source, head);
   if (legacy !== null && baseline?.sourceOrder != null && legacy !== baseline.sourceOrder) {
     throw new ApplicationError(
       'CONFLICT',
@@ -147,7 +164,7 @@ export async function historicalHeadOrder(tx: Tx, connectionId: string, head: st
   return legacy ?? baseline?.sourceOrder ?? null;
 }
 
-async function legacyHeadOrder(tx: Tx, connectionId: string, head: string) {
+async function legacyHeadOrder(tx: Tx, { connectionId, epoch }: SourceEpoch, head: string) {
   const matches = z
     .array(z.object({ scanId: z.string(), checkpointStatus: z.string().nullable() }))
     .parse(
@@ -155,7 +172,7 @@ async function legacyHeadOrder(tx: Tx, connectionId: string, head: string) {
     SELECT DISTINCT page."scanId", checkpoint."status" AS "checkpointStatus" FROM "AgentSourcePage" page
     LEFT JOIN "AgentSourceCheckpoint" checkpoint ON checkpoint."connectionId" = page."connectionId" AND checkpoint."scanId" = page."scanId"
     CROSS JOIN json_each(json_extract(page."evidence", '$.entries')) item
-    WHERE page."connectionId" = ${connectionId} AND page."phase" = 'CAPTURE'
+    WHERE page."connectionId" = ${connectionId} AND page."epoch" = ${epoch} AND page."phase" = 'CAPTURE'
       AND json_extract(item.value, '$.providerEventId') = ${head}
   `
     );

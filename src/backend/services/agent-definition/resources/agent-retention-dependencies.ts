@@ -183,6 +183,16 @@ function validPendingActivation(trigger: RetentionTrigger) {
   );
 }
 
+/** The GitHub scan state, or null when the cursor is invalid. */
+function githubScan(source: AgentSourceState) {
+  // A reset source has no cursor until its next baseline captures a fresh head.
+  if (source.epoch > 0 && source.cursor === null) {
+    return { active: false };
+  }
+  const cursor = agentGithubCursorSchema.safeParse(source.cursor);
+  return cursor.success ? { active: cursor.data.scan !== null } : null;
+}
+
 function sourceDependency(
   connection: (AgentConnection & { sourceState: AgentSourceState | null }) | null,
   event: AgentEvent,
@@ -207,14 +217,9 @@ function sourceDependency(
   if (connection.provider !== 'GITHUB') {
     return null;
   }
-  const cursor = agentGithubCursorSchema.safeParse(source?.cursor);
+  const scan = source ? githubScan(source) : null;
   if (
-    !(
-      source &&
-      cursor.success &&
-      Number.isSafeInteger(source.lastSourceOrder) &&
-      source.lastSourceOrder >= 0
-    )
+    !(source && scan && Number.isSafeInteger(source.lastSourceOrder) && source.lastSourceOrder >= 0)
   ) {
     return 'INVALID_STORED_DATA';
   }
@@ -222,7 +227,7 @@ function sourceDependency(
   // identity is collectible until the entire scan has committed its boundary.
   if (
     identity &&
-    (cursor.data.scan !== null ||
+    (scan.active ||
       event.sourceOrder === null ||
       event.sourceOrder < 1 ||
       event.sourceOrder > source.lastSourceOrder)
