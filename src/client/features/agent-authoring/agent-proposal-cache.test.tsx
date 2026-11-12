@@ -47,6 +47,7 @@ let ownerFailure: boolean;
 let invalidate: (() => Promise<unknown>) | undefined;
 let afterDelete: (() => Promise<unknown>) | undefined;
 let deleted: boolean;
+let staleRead: Promise<void> | undefined;
 function Probe() {
   const utils = trpc.useUtils();
   invalidate = () => invalidateSavedAgentQueries(utils, 'owner-project', 'saved-id');
@@ -56,6 +57,13 @@ function Probe() {
 }
 async function respond(path: string) {
   if (path === 'automation.getProposal') {
+    const stale = staleRead;
+    if (stale !== undefined) {
+      // A read that started before the delete answers with the old proposal.
+      staleRead = undefined;
+      await stale;
+      return proposal;
+    }
     if (deleted) {
       // Deleting a saved automation deletes its accepted proposal.
       const message = 'Automation proposal not found in this workspace.';
@@ -119,6 +127,7 @@ beforeEach(() => {
   invalidate = undefined;
   afterDelete = undefined;
   deleted = false;
+  staleRead = undefined;
   container = document.createElement('div');
   document.body.append(container);
   root = createRoot(container);
@@ -233,4 +242,23 @@ it('replaces a mounted card with a plain notice once its automation is deleted',
   );
   expect(container.textContent).not.toContain('Automation created');
   expect(container.querySelector('form')).toBeNull();
+});
+it('restarts a card whose first read was in flight when its automation was deleted', async () => {
+  let release: () => void = () => undefined;
+  staleRead = new Promise<void>((done) => {
+    release = done;
+  });
+  await render();
+  await waitForReact(() => expect(container.textContent).toContain('Loading automation proposal'));
+  deleted = true;
+  await act(async () => {
+    await afterDelete?.();
+  });
+  await act(() => release());
+  await waitForReact(() =>
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain(
+      'This automation proposal is no longer available.'
+    )
+  );
+  expect(container.textContent).not.toContain('Automation created');
 });

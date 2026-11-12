@@ -745,10 +745,10 @@ provisioning, running, needing attention or held by child workspaces. The
 message says how many runs are unfinished and that the user lets them finish,
 stops them in the workspace, or abandons them from the Runs view first. The
 refusal rolls the whole transaction back, so the automation stays exactly as it
-was, still enabled and listening. Otherwise the definition is deleted with its
-triggers (configured and retained), runs, initial deliveries, evaluations and
-accepted proposal. The shared connection, its source state and ledger events
-stay.
+was: no pause or cancellation is persisted. Otherwise the definition is deleted
+with its triggers (configured and retained), runs, initial deliveries,
+evaluations and accepted proposal. The shared connection, its source state and
+ledger events stay.
 
 Work that read the automation before the delete finds nothing to write: a
 pending activation step or baseline record returns without change, an evaluation

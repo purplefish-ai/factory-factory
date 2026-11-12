@@ -27,6 +27,11 @@ export function invalidateSavedAgentQueries(
     invalidateAutomationActivationQueries(utils, projectId, agentId),
     utils.automation.getProposal.invalidate(undefined, {
       predicate: (query) => {
+        // A first read still in flight may have started before the delete and
+        // would land the old proposal; restart it so it reads the current state.
+        if (query.state.data === undefined) {
+          return query.state.fetchStatus === 'fetching';
+        }
         const proposal = agentProposalSchema.safeParse(query.state.data);
         return proposal.success && proposal.data.agentDefinitionId === agentId;
       },
@@ -53,7 +58,8 @@ export function invalidateAutomationActivationQueries(
  * workspace origins, whose run is now gone. The deleted automation's own reads
  * and history are marked stale without refetching: the detail closes, and a
  * refetch would only report the automation missing. A chat proposal card for
- * it is reset, because deleting the automation also deletes its proposal.
+ * it is reset, because deleting the automation also deletes its proposal, and
+ * so is any proposal card whose first read is still in flight.
  */
 export function invalidateDeletedAutomationQueries(
   utils: ReturnType<typeof trpc.useUtils>,
@@ -69,14 +75,33 @@ export function invalidateDeletedAutomationQueries(
     utils.automation.runs.invalidate(owner, { refetchType: 'none' }),
     utils.automation.evaluations.invalidate(owner, { refetchType: 'none' }),
     utils.automation.workspaceOrigin.invalidate({ projectId }),
-    queryClient.resetQueries({
-      queryKey: getQueryKey(trpc.automation.getProposal),
-      predicate: (query) => {
-        const proposal = agentProposalSchema.safeParse(query.state.data);
-        return proposal.success && proposal.data.agentDefinitionId === agentId;
-      },
-    }),
+    resetDeletedProposalCards(queryClient, agentId),
   ]);
+}
+
+/**
+ * Proposal cards for a deleted automation, and any card whose first read is
+ * still in flight: that read may have started before the delete and would land
+ * the old proposal. A first read is shared rather than cancelled by a refetch,
+ * so it is cancelled explicitly before the reset reads again.
+ */
+async function resetDeletedProposalCards(queryClient: QueryClient, agentId: string) {
+  const queryKey = getQueryKey(trpc.automation.getProposal);
+  const firstReads = queryClient
+    .getQueryCache()
+    .findAll({ queryKey })
+    .filter((query) => query.state.data === undefined && query.state.fetchStatus === 'fetching');
+  await Promise.all(firstReads.map((query) => query.cancel({ revert: true })));
+  await queryClient.resetQueries({
+    queryKey,
+    predicate: (query) => {
+      if (firstReads.includes(query)) {
+        return true;
+      }
+      const proposal = agentProposalSchema.safeParse(query.state.data);
+      return proposal.success && proposal.data.agentDefinitionId === agentId;
+    },
+  });
 }
 
 /**
