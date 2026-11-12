@@ -33,18 +33,22 @@ GitHub App installation. The owner confirmed this choice in the
 What polling captures (`agent-issue-events.ts`, `agent-runtime.ts`): it reads
 `repos/{repo}/issues/events` 100 rows per page. Only issue (not PR) `labeled`
 and `reopened` rows become executable `AgentEvent` payloads, with the issue's
-labels as read at capture. Every other row, including PR rows, is kept only as a
-control anchor for ordering.
+labels as read at capture. GitHub records labels applied when an issue is
+created as `labeled` events, so a labeled new issue already reaches automations.
+A deleted actor or issue author arrives as a null user and is stored as a null
+`actorId` or `creatorId`. Every other row, including PR rows and rows with no
+issue, is kept only as a control anchor for ordering.
 
 What polling cannot do:
 
 - **Coverage.** GitHub's
   [issue event types](https://docs.github.com/en/rest/using-the-rest-api/issue-event-types)
-  have no `opened` or `edited` type. `renamed` covers only title changes.
-  `commented` and `reviewed` exist only in the timeline API, not the repository
-  feed. The feed has no CI events. It does carry some PR lifecycle rows (for
-  example `labeled`, `merged`), but intake treats every PR row as a control
-  anchor, so no PR trigger exists.
+  have no `opened` or `edited` type, so an issue opened without a label is
+  invisible. `renamed` covers only title changes. `commented` and `reviewed`
+  exist only in the timeline API, not the repository feed. The feed has no CI
+  events. It does carry some PR lifecycle rows (for example `labeled`,
+  `merged`), but intake treats every PR row as a control anchor, so no PR
+  trigger exists.
 - **Latency.** The `agent-source-poll` job waits 60 seconds after each cycle and
   reads at most ten pages per repository per cycle, so a backlog takes several
   cycles
@@ -174,9 +178,10 @@ change.
 
 Keep the bounded, versioned payload in `agentEventPayloadSchema`: title 4,096
 characters, body 100,000 characters, at most 100 labels, and no raw provider
-JSON. Issue actions fit the existing GitHub variant. PR, comment and CI events
-need new variants, because the current one requires an `issue`. `ingestEvent`
-already rejects a payload whose `repositoryId` does not match the connection's
+JSON. Issue actions fit the existing GitHub variant, including its nullable
+`actorId` and `creatorId` for deleted accounts. PR, comment and CI events need
+new variants, because the current one requires an `issue`. `ingestEvent` already
+rejects a payload whose `repositoryId` does not match the connection's
 `gh:<repository-id>`. The webhook body's `repository.id` provides that value.
 The listener should also check that `X-GitHub-Hook-ID` is the registered hook
 and that `X-GitHub-Hook-Installation-Target-ID` is the repository.
@@ -215,9 +220,18 @@ get a `sourceOrder`, so they cannot use this rule. Reusing the column would also
 corrupt the poller's ordinal proof. GitHub documents no delivery order or
 sequence number; none of the pages cited here gives an ordering guarantee.
 
-Slack's planned approach is the model. Enable shows a nonce; a verified human
-message in each channel proves delivery and supplies a provider `event_ts`
-boundary; candidates are held unevaluated while the generation is `STARTING`
+Today `automation.enable` prepares one GitHub baseline per connection
+(`AgentSourcePollService.prepareBaseline`, retained in `AgentSourceBaseline`)
+and records its ID on each `STARTING` trigger's pending activation. The
+`agent-source-poll` job then makes the trigger `ACTIVE` once that baseline has
+an ordinal, or returns it to `PAUSED` with `SOURCE_ERROR`,
+`SOURCE_RECOVERY_REQUIRED` or, after 30 minutes, `ACTIVATION_EXPIRED`
+([enable and pause](../architecture/integrations.md#enable-and-pause)).
+
+Slack's planned approach is the model for a push source. Enable shows a nonce; a
+verified human message in each channel proves delivery and supplies a provider
+`event_ts` boundary; candidates are held unevaluated while the generation is
+`STARTING`
 ([event ingestion and identity](../superpowers/plans/2026-11-01-event-triggered-agents.md#event-ingestion-and-identity)).
 The GitHub equivalent:
 
@@ -229,8 +243,11 @@ The GitHub equivalent:
   hook is per repository, not per channel.
 - The boundary is the ping's position in a new monotonic local ledger sequence.
   `AgentEvent` has none today other than the GitHub-only `sourceOrder`.
-  Deliveries committed after the ping are eligible. The boundary schema gains a
-  webhook variant beside the polling one.
+  Deliveries committed after the ping are eligible. The pending-activation
+  schema gains a webhook variant that waits for the ping instead of a
+  `baselineId`, and the boundary schema gains one beside the polling boundary.
+  The generation fence, the 30-minute expiry and the paused reasons stay as they
+  are; a webhook ping that never arrives expires like an unresolved baseline.
 - Commit order is not occurrence order. A late delivery, or a redelivery during
   catch-up, of something that happened before Enable would pass. Adding a floor
   on the payload's provider time (`created_at` or `updated_at`) relative to the
@@ -284,15 +301,19 @@ that catch-up cannot close.
 
 ### Reset source
 
-For polling, [source reset](../architecture/integrations.md#source-reset) opens
-a new epoch, clears the cursor, pauses every trigger on the connection, and
-never runs events from the gap. A push source has no ordinal proof to fence, so
-reset becomes: accept the recorded gap, pause that intake's triggers, cancel
-their queued runs, optionally rotate the secret or re-register the hook, and
-require Enable again, which takes a fresh ping boundary. Stored but unevaluated
-deliveries stay ineligible because their generation is stale. Today
-`automation.resetSource` pauses every trigger on the connection. With two
-intakes it should probably act per intake; see the
+For polling, `automation.resetSource({ projectId, connectionId })` is accepted
+only behind a `RECOVERY_REQUIRED` fence
+([source reset](../architecture/integrations.md#source-reset)). In one ledger
+transaction it pauses every trigger on the connection through the shared
+`pauseTriggers` helper and cancels their queued runs. It then advances
+`AgentSourceState.epoch` and clears the cursor, so the next Enable takes a fresh
+baseline and events from the gap never run. Retained proof is never deleted. A
+push source has no ordinal proof to fence, so reset becomes: accept the recorded
+gap, pause that intake's triggers, cancel their queued runs, optionally rotate
+the secret or re-register the hook, and require Enable again, which takes a
+fresh ping boundary. Stored but unevaluated deliveries stay ineligible because
+their generation is stale. Today `automation.resetSource` pauses every trigger
+on the connection. With two intakes it should probably act per intake; see the
 [open questions](#open-questions).
 
 ## Triggers webhooks unlock
@@ -305,18 +326,25 @@ Every row needs changes in four places:
   replaces `UNSUPPORTED_GITHUB_ACTION`.
 - **UI copy.** The current wording is "Only GitHub labeled and reopened events
   are supported."
-- **Authoring guidance** (`src/backend/mcp/automation-authoring-tools.ts`). It
-  already tells authors to "usually include opened and labeled actions", which
-  leaves such triggers impossible to enable today.
+- **Authoring guidance** (`src/backend/mcp/automation-authoring-tools.ts`).
+  `propose_automation` now offers only `labeled` and `reopened`, notes that
+  `labeled` covers labels applied at creation, and says `opened` and `edited`
+  are not yet supported. Webhook support would make that list depend on the
+  repository's intake: offer `opened` (and later other actions) only where a
+  verified hook exists, and steer away from pairing `opened` with a label filter
+  and `labeled` in one automation. A labeled new issue produces both an `opened`
+  delivery and a `labeled` feed row; they are different events, so that
+  automation would run twice. `list_automation_sources` would also need to
+  report whether each repository has a hook.
 
-| Trigger                                                     | Webhook event                                        | Trigger schema                                             | Matcher and other needs                                                                                                                                        |
-| ----------------------------------------------------------- | ---------------------------------------------------- | ---------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Issue opened                                                | `issues.opened`                                      | Already allowed in `GITHUB_ISSUE.actions`                  | Label filter means labels at open time, like `reopened`. The natural first target                                                                              |
-| Issue edited                                                | `issues.edited`                                      | Already allowed                                            | Each edit is a separate event and could start a run. Needs a "what changed" filter (title or body) and probably a debounce rule before it is safe              |
-| Pull request (opened, labeled, ready for review, and so on) | `pull_request`                                       | New `GITHUB_PULL_REQUEST` trigger type and payload variant | New matcher and starting prompt; polling's PR rows remain control anchors                                                                                      |
-| Comment                                                     | `issue_comment`                                      | New trigger type                                           | Text filter; an automation's own comments would trigger it again, so it needs actor filters (rejected today as `UNSUPPORTED_ACTOR_FILTER`) or self-exclusion   |
-| Review or review comment                                    | `pull_request_review`, `pull_request_review_comment` | New trigger type                                           | Same loop risk; overlaps [PR monitoring](../architecture/pull-requests.md), which already delivers review feedback and CI failures to sessions that own the PR |
-| CI                                                          | `check_suite`, `check_run` or `workflow_run`         | New trigger type                                           | Conclusion filter; same overlap with PR monitoring                                                                                                             |
+| Trigger                                                     | Webhook event                                        | Trigger schema                                             | Matcher and other needs                                                                                                                                                                                        |
+| ----------------------------------------------------------- | ---------------------------------------------------- | ---------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Issue opened                                                | `issues.opened`                                      | Already allowed in `GITHUB_ISSUE.actions`                  | Label filter means labels at open time, like `reopened`. The natural first target, mainly for issues opened without a label; a labeled new issue is already caught by `labeled` (see authoring guidance above) |
+| Issue edited                                                | `issues.edited`                                      | Already allowed                                            | Each edit is a separate event and could start a run. Needs a "what changed" filter (title or body) and probably a debounce rule before it is safe                                                              |
+| Pull request (opened, labeled, ready for review, and so on) | `pull_request`                                       | New `GITHUB_PULL_REQUEST` trigger type and payload variant | New matcher and starting prompt; polling's PR rows remain control anchors                                                                                                                                      |
+| Comment                                                     | `issue_comment`                                      | New trigger type                                           | Text filter; an automation's own comments would trigger it again, so it needs actor filters (rejected today as `UNSUPPORTED_ACTOR_FILTER`) or self-exclusion                                                   |
+| Review or review comment                                    | `pull_request_review`, `pull_request_review_comment` | New trigger type                                           | Same loop risk; overlaps [PR monitoring](../architecture/pull-requests.md), which already delivers review feedback and CI failures to sessions that own the PR                                                 |
+| CI                                                          | `check_suite`, `check_run` or `workflow_run`         | New trigger type                                           | Conclusion filter; same overlap with PR monitoring                                                                                                                                                             |
 
 ## Recommendation
 
