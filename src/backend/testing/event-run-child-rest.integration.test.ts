@@ -352,7 +352,6 @@ it.each(['archive', 'delete'] as const)(
   async (operation) => {
     await finish();
     const { child, session: childSession, childProvider, finishTurn } = await workingChild();
-    expect(await observe(h.claim)).toBe('HELD');
     const stopped = vi
       .spyOn(h.session.acpRuntimeManager, 'stopAndQuiesce')
       .mockRejectedValue(new Error('Unconfirmed child cleanup'));
@@ -375,6 +374,7 @@ it.each(['archive', 'delete'] as const)(
       githubCLIService: { addIssueComment: async () => undefined },
     };
     try {
+      expect(await observe(h.claim)).toBe('HELD');
       const workspace = await h.workspace.workspaceDataService.findByIdWithProject(child.id);
       if (operation === 'archive') {
         await archives.archiveWorkspace(workspace!, {}, services);
