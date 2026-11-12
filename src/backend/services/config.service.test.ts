@@ -195,6 +195,19 @@ describe('configService environment accessors', () => {
     expect(configService.getShellPath()).toBe('/bin/bash');
   });
 
+  it('keeps event classifier settings separate from execution and metadata settings', () => {
+    process.env.WORKSPACE_METADATA_CLAUDE_MODEL = 'metadata-claude';
+    configService.reload();
+    const classifier = configService.getAgentEventClassifierConfig();
+    expect(classifier).toEqual({
+      claudeModel: 'haiku',
+      codexModel: 'gpt-6-luna',
+      timeoutMs: 30_000,
+      maxConcurrent: 2,
+    });
+    expect(Object.isFrozen(configService.getAgentEventClassifierConfig())).toBe(false);
+  });
+
   it('returns a defensive copy of workspace metadata configuration', () => {
     process.env.WORKSPACE_METADATA_ENABLED = 'true';
     process.env.WORKSPACE_METADATA_CODEX_MODEL = 'metadata-codex';

@@ -48,7 +48,16 @@ it.each(['opened', 'edited', 'closed'])('fails closed for unsupported %s actions
     reasonCode: 'UNSUPPORTED_ACTION',
   });
 });
-it('rejects unsupported actor filters, semantic filters and schedule triggers', () => {
+it('leaves semantic filters to evaluation after a deterministic match', () => {
+  const matching = { ...github, issue: { ...github.issue, addedLabel: 'wanted' } };
+  const filtered = { ...trigger, filterInstructions: 'Only urgent issues' };
+  expect(runtime.matchAgentEvent(matching, filtered)).toMatchObject({ status: 'MATCHED' });
+  expect(runtime.matchAgentEvent(github, filtered)).toMatchObject({
+    status: 'SKIPPED',
+    reasonCode: 'LABEL_MISMATCH',
+  });
+});
+it('rejects unsupported actor filters and schedule triggers', () => {
   expect(runtime.matchAgentEvent).toBeTypeOf('function');
   expect(
     runtime.matchAgentEvent(github, {
@@ -56,9 +65,6 @@ it('rejects unsupported actor filters, semantic filters and schedule triggers', 
       config: { ...trigger.config, creatorIds: ['creator'] },
     })
   ).toMatchObject({ reasonCode: 'UNSUPPORTED_ACTOR_FILTER' });
-  expect(
-    runtime.matchAgentEvent(github, { ...trigger, filterInstructions: 'Only urgent issues' })
-  ).toMatchObject({ reasonCode: 'SEMANTIC_FILTER_UNAVAILABLE' });
   expect(
     runtime.matchAgentEvent(github, {
       type: 'SCHEDULE',

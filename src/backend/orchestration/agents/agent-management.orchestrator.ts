@@ -71,12 +71,13 @@ async function validateTriggers(
     evidence: AgentSourceValidation;
   }[] = [];
   for (const [index, trigger] of specification.triggers.entries()) {
-    let result = triggerCapability(trigger);
+    const provider = specification.executionConfig.provider;
+    let result = triggerCapability(trigger, false, provider);
     try {
       const selected = { ...specification, triggers: [trigger] };
       const evidence = await resolveProjectAgentSources(project, selected, services);
       verified.push({ index, specification: selected, evidence });
-      result = triggerCapability(trigger, true);
+      result = triggerCapability(trigger, true, provider);
     } catch {
       if (result.reasonCode === 'SOURCE_UNVERIFIED') {
         result = {

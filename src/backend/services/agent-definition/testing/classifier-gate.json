@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "thresholds": {
+    "maxAdversarialFalsePositives": 0,
+    "minPositiveRecall": 0.9,
+    "maxErrorOrUncertainRate": 0.1
+  },
+  "providers": [
+    {
+      "provider": "CLAUDE",
+      "model": "haiku",
+      "promptVersion": "agent-event-classification-v1",
+      "passed": false,
+      "measuredAt": null,
+      "metrics": null
+    },
+    {
+      "provider": "CODEX",
+      "model": "gpt-6-luna",
+      "promptVersion": "agent-event-classification-v1",
+      "passed": false,
+      "measuredAt": null,
+      "metrics": null
+    }
+  ]
+}

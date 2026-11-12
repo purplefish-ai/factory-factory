@@ -19,6 +19,7 @@ import {
   resolveNativeExecution,
   type AgentNativeValidationServices,
 } from './agent-native-validation';
+import { createEventClassifierPort } from './agent-event-classifier.orchestrator';
 import { createEventRunConsumer } from './event-run-consumer.orchestrator';
 
 const logger = createLogger('agent-runtime');
@@ -66,6 +67,7 @@ export function createAgentRuntime(
   const retention = new AgentLedgerRetentionService();
   const evaluator = new AgentEventEvaluationService({
     resolveExecution: async (config) => resolveAgentExecutionConfig(getServices(), config),
+    classifyEvent: createEventClassifierPort(),
   });
   const lifecycle = createAgentRuntimeLifecycle(
     poller,

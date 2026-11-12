@@ -8,7 +8,7 @@ import {
   type AgentEvaluationResult,
   type AgentRuntimeReason,
 } from '@/shared/agent-runtime';
-import type { AgentEvent, AgentEvaluation, Prisma } from '@prisma-gen/client';
+import { type AgentEvent, type AgentEvaluation, Prisma } from '@prisma-gen/client';
 import { ledgerTransaction } from './agent-ledger-transaction';
 import {
   rawTriggerInput,
@@ -128,6 +128,8 @@ async function recordEvaluation(
 ): Promise<AgentEvaluationResult> {
   const input = agentEvaluationInputSchema.parse(value);
   const now = attempt.now ?? new Date();
+  // Identity describes the latest attempt; a retry that never classified clears it.
+  const classifier = input.classifier ?? Prisma.DbNull;
   return await ledgerTransaction(async (tx) => {
     const context = await evaluationContext(tx, input);
     if ('reason' in context) {
@@ -172,6 +174,7 @@ async function recordEvaluation(
             reasonCode: input.reasonCode,
             explanation: input.explanation,
             configurationSnapshot: snapshot.data,
+            classifier,
             attemptCount,
             nextAttemptAt,
           },
