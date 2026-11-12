@@ -171,9 +171,9 @@ issue number and link, and the triggering action (with the JSON-quoted added
 label for `labeled`), followed by the issue title and body. Semantic and actor
 filters fail closed; SCHEDULE stays with PeriodicTask. STARTING generations are
 never candidates; the source poll job completes, cancels or expires them. Only
-configured triggers (`isConfigured = true`) receive new decisions; an
-unresolved decision left by a removed trigger is still settled. Terminal
-decisions are not replayed under new revisions or generations.
+configured triggers (`isConfigured = true`) receive new decisions; an unresolved
+decision left by a removed trigger is still settled. Terminal decisions are not
+replayed under new revisions or generations.
 
 Queue maintenance rotates through bounded batches even when all active slots are
 occupied. Claims choose FIFO heads of unsaturated definitions and serialize

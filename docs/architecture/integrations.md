@@ -739,9 +739,9 @@ normalizes to a supported native default or explicit null. This preview neither
 freezes a future run account nor authorizes activation; Enable repeats the same
 validation on the server. Ordinary reads never invoke native discovery. Only
 labeled and reopened GitHub events can pass this milestone's source
-capabilities; other GitHub actions (`opened`, `edited`), Slack intake,
-SCHEDULE, semantic and actor filters report specific unsupported/unavailable
-reasons while remaining inspectable drafts.
+capabilities; other GitHub actions (`opened`, `edited`), Slack intake, SCHEDULE,
+semantic and actor filters report specific unsupported/unavailable reasons while
+remaining inspectable drafts.
 
 History exposes bounded reasons, nullable start times, separate automatic
 attempts and send generations, preparation/delivery state and durable deadlines,
