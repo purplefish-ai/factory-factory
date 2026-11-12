@@ -785,9 +785,13 @@ normalizes to a supported native default or explicit null. This preview neither
 freezes a future run account nor authorizes activation; Enable repeats the same
 validation on the server. Ordinary reads never invoke native discovery. Only
 labeled and reopened GitHub events can pass this milestone's source
-capabilities; other GitHub actions (`opened`, `edited`), Slack intake, SCHEDULE,
-semantic and actor filters report specific unsupported/unavailable reasons while
-remaining inspectable drafts.
+capabilities; other GitHub actions (`opened`, `edited`), Slack intake, SCHEDULE
+and actor filters report specific unsupported/unavailable reasons while
+remaining inspectable drafts. Natural-language `filterInstructions` report
+`UNSUPPORTED_SEMANTIC_FILTER` unless the automation's provider passed the live
+classifier gate. Draft validation and Enable check the provider resolved at that
+moment, including an inherited one; ordinary reads do not resolve providers, so
+they report an inherited provider as supported only when every provider passed.
 
 History exposes bounded reasons, nullable start times, separate automatic
 attempts and send generations, preparation/delivery state and durable deadlines,
@@ -927,8 +931,62 @@ It covers the feedback, packet-unlock, and GitHub-label scenarios, a focused
 follow-up edit, and ambiguous workspace clarification. Optional
 `AGENT_AUTHORING_EVAL_MODEL` selects a model and `AGENT_AUTHORING_EVAL_OUTPUT`
 names an existing directory for transcripts/configurations. These are authoring
-evaluations, not classifier recall/precision measurements: event matching and
-classification require their own replay evaluation when the runtime is built.
+evaluations, not classifier recall/precision measurements.
+
+### Natural-language event filters
+
+Deterministic matching runs first; only a deterministic match on a trigger with
+`filterInstructions` reaches the classifier, so a filter can narrow but never
+widen repository, label or channel scope. The session capsule's
+`classifyAgentEvent` makes one disposable structured-output call through the
+same isolated path as workspace metadata: a temporary directory, no tools, MCP
+servers, hooks, settings, repository instructions or saved session, and the
+provider process tree cleaned up. It uses each provider's default small model
+from `configService.getAgentEventClassifierConfig()` (Claude `haiku`, Codex
+`gpt-6-luna`), separate from the automation's execution settings, with a
+30-second limit and at most two concurrent calls. Codex calls use the default
+account because no run account exists before admission.
+
+The prompt passes the filter and a bounded projection of the event (issue
+title/body, repository, label; Slack text and whether it is a thread reply) as
+JSON data marked untrusted. Actor identities and links are omitted. Event text
+that asks to be matched has no authority. The output schema is strict
+`{ decision: 'match' | 'skip' | 'uncertain', reason }`; only `match` admits a
+run. Evaluations persist `SEMANTIC_FILTER_*` reason codes and fixed
+explanations, never the model's reason text. When a classifier call runs, they
+also persist its identity (provider, model, prompt version, input hash);
+unproven-provider and unavailable skips and too-long errors have none.
+`uncertain` and malformed output are terminal; timeouts, rate limits and
+provider failures retry on the evaluation budget. A filter longer than 4,000
+characters is never sent to a provider and records a terminal
+`SEMANTIC_FILTER_TOO_LONG` error.
+
+Evaluation rechecks the gate for the provider resolved for each event, because
+an inherited provider can change after Enable. An unproven effective provider
+records a `SEMANTIC_FILTER_PROVIDER_UNPROVEN` skip without calling the
+classifier.
+
+The gate is a fixture release gate, not a population accuracy claim. Replay
+fixtures (GitHub and Slack, with adversarial injection negatives) live in
+`src/backend/services/agent-definition/testing/classifier-fixtures.json`, split
+into tuning and held-out cases with obvious positives frozen before tuning. A
+provider passes on the held-out set with zero adversarial false positives, every
+obvious positive matched, positive recall of at least 90% and at most 10% errors
+plus `uncertain` decisions. Results per provider are recorded in
+`classifier-gate.json` beside the fixtures and mirrored by
+`PROVEN_CLASSIFIER_PROVIDERS`, which a test keeps in agreement with the record,
+the current prompt version and the configured models. Changing the prompt or a
+classifier model requires a new prompt version and a new gate run. The live run
+calls real providers and never runs in CI:
+
+```sh
+RUN_AGENT_EVENT_CLASSIFIER_EVAL=1 AGENT_EVENT_CLASSIFIER_EVAL_PROVIDER=CLAUDE pnpm test:integration src/backend/services/session/service/acp/agent-event-classifier.manual.integration.test.ts
+```
+
+`AGENT_EVENT_CLASSIFIER_EVAL_PROVIDER` is `CLAUDE` or `CODEX`,
+`AGENT_EVENT_CLASSIFIER_EVAL_SPLIT=tuning` scores the tuning set instead of the
+held-out set, and `AGENT_EVENT_CLASSIFIER_EVAL_OUTPUT` names an existing
+directory for a per-case report.
 
 ### Slack credentials
 

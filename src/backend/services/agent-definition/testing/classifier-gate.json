@@ -1,0 +1,76 @@
+{
+  "version": 1,
+  "thresholds": {
+    "maxAdversarialFalsePositives": 0,
+    "minPositiveRecall": 0.9,
+    "maxErrorOrUncertainRate": 0.1
+  },
+  "providers": [
+    {
+      "provider": "CLAUDE",
+      "model": "haiku",
+      "promptVersion": "agent-event-classification-v2",
+      "passed": true,
+      "measuredAt": "2026-11-12T17:23:52.872Z",
+      "metrics": {
+        "fixtureSplit": "heldOut",
+        "cases": 40,
+        "positives": 18,
+        "obviousPositives": 9,
+        "negatives": 11,
+        "adversarial": 11,
+        "decisions": {
+          "match": 18,
+          "skip": 22,
+          "uncertain": 0,
+          "error": 0
+        },
+        "truePositives": 18,
+        "falsePositives": 0,
+        "adversarialFalsePositives": 0,
+        "missedObviousPositives": [],
+        "precision": 1,
+        "recall": 1,
+        "errorOrUncertainRate": 0,
+        "latencyMs": {
+          "p50": 2317,
+          "p95": 3147,
+          "max": 3548
+        }
+      }
+    },
+    {
+      "provider": "CODEX",
+      "model": "gpt-6-luna",
+      "promptVersion": "agent-event-classification-v2",
+      "passed": true,
+      "measuredAt": "2026-11-12T17:26:05.942Z",
+      "metrics": {
+        "fixtureSplit": "heldOut",
+        "cases": 40,
+        "positives": 18,
+        "obviousPositives": 9,
+        "negatives": 11,
+        "adversarial": 11,
+        "decisions": {
+          "match": 17,
+          "skip": 23,
+          "uncertain": 0,
+          "error": 0
+        },
+        "truePositives": 17,
+        "falsePositives": 0,
+        "adversarialFalsePositives": 0,
+        "missedObviousPositives": [],
+        "precision": 1,
+        "recall": 0.9444,
+        "errorOrUncertainRate": 0,
+        "latencyMs": {
+          "p50": 5945,
+          "p95": 8116,
+          "max": 8707
+        }
+      }
+    }
+  ]
+}

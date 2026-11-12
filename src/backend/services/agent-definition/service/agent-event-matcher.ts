@@ -12,13 +12,14 @@ const skip = (reasonCode: string, explanation: string): MatchResult => ({
   explanation,
 });
 
-/** Deterministic matching only; event content never configures execution or permissions. */
+/**
+ * Deterministic matching only; event content never configures execution or
+ * permissions. Natural-language filters run afterwards, during evaluation, and
+ * can only narrow a deterministic match.
+ */
 export function matchAgentEvent(event: AgentEventPayload, trigger: AgentTriggerInput): MatchResult {
   if (trigger.type === 'SCHEDULE') {
     return skip('UNSUPPORTED_TRIGGER', 'Schedules use PeriodicTask.');
-  }
-  if (trigger.filterInstructions) {
-    return skip('SEMANTIC_FILTER_UNAVAILABLE', 'Semantic filters are not available.');
   }
   if (
     (trigger.type === 'GITHUB_ISSUE' && trigger.config.creatorIds) ||

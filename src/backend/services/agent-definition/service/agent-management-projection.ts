@@ -14,15 +14,22 @@ import {
   type AgentCapability,
 } from '@/shared/agent-management';
 import { agentSourceHealthSchema, isAgentGithubExecutableAction } from '@/shared/agent-runtime';
+import type { SessionProvider } from '@/shared/core/enums';
 import {
   agentExecutionConfigSchema,
   agentTriggerInputSchema,
   type AgentTriggerInput,
 } from '@/shared/schemas/agent-definition.schema';
+import { semanticFilterSupported } from './semantic-filter-gate';
 
+/**
+ * `provider` is the automation's provider; undefined means it inherits the user
+ * default, so natural-language filters need every provider's classifier proven.
+ */
 export function triggerCapability(
   trigger: AgentTriggerInput | null,
-  verified = false
+  verified = false,
+  provider?: SessionProvider
 ): AgentCapability {
   let reasonCode: AgentCapability['reasonCode'] = 'SUPPORTED';
   if (!trigger) {
@@ -32,7 +39,7 @@ export function triggerCapability(
     (trigger.type === 'SLACK_MESSAGE' && trigger.config.senderIds)
   ) {
     reasonCode = 'UNSUPPORTED_ACTOR_FILTER';
-  } else if (trigger.filterInstructions) {
+  } else if (trigger.filterInstructions && !semanticFilterSupported(provider)) {
     reasonCode = 'UNSUPPORTED_SEMANTIC_FILTER';
   } else if (trigger.type === 'SCHEDULE') {
     reasonCode = 'UNSUPPORTED_SCHEDULE';
@@ -53,7 +60,8 @@ const explanations: Record<AgentCapability['reasonCode'], string> = {
   UNSUPPORTED_SCHEDULE: 'Use scheduled automations for time-based tasks.',
   SLACK_INTAKE_UNAVAILABLE: 'Slack event intake is not available yet.',
   UNSUPPORTED_GITHUB_ACTION: 'Only GitHub labeled and reopened events are supported.',
-  UNSUPPORTED_SEMANTIC_FILTER: 'Semantic event filtering is not available yet.',
+  UNSUPPORTED_SEMANTIC_FILTER:
+    "Natural-language filters are not available for this automation's provider yet.",
   UNSUPPORTED_ACTOR_FILTER:
     'Actor restrictions require actor discovery, which is not available yet.',
   SOURCE_UNVERIFIED: 'Validate the draft to verify current source access.',
@@ -124,6 +132,7 @@ export function managementProjection(
   data: Awaited<ReturnType<typeof agentManagementAccessor.get>>
 ) {
   const { definition, unknown, configured, retained } = data;
+  const provider = agentExecutionConfigSchema.safeParse(definition.executionConfig).data?.provider;
   function triggerProjection(row: (typeof retained)[number]) {
     const parsed = agentTriggerInputSchema.safeParse({
       type: row.type,
@@ -145,7 +154,7 @@ export function managementProjection(
       pausedReasonCode: pausedReason.success ? pausedReason.data : null,
       isEnabled: row.isEnabled,
       configuration,
-      capability: membershipCapability(row, unknown, configuration),
+      capability: membershipCapability(row, unknown, configuration, provider),
       sourceName: row.connection ? row.connection.name.slice(0, 500) : row.connectionId,
       sourceHealth: health.success ? health.data : null,
     });
@@ -177,7 +186,8 @@ export function managementProjection(
 function membershipCapability(
   row: Awaited<ReturnType<typeof agentManagementAccessor.get>>['retained'][number],
   unknown: boolean,
-  configuration: AgentTriggerInput | null
+  configuration: AgentTriggerInput | null,
+  provider: SessionProvider | undefined
 ) {
   if (unknown) {
     return capability('UNKNOWN_MEMBERSHIP');
@@ -188,5 +198,5 @@ function membershipCapability(
   if (row.connectionId && !row.connection?.isEnabled) {
     return capability('SOURCE_UNAVAILABLE');
   }
-  return triggerCapability(configuration);
+  return triggerCapability(configuration, false, provider);
 }

@@ -18,6 +18,7 @@ import {
   agentDraftValidationSchema,
   agentProjectSourcesInputSchema,
 } from '@/shared/agent-validation';
+import type { SessionProvider } from '@/shared/core/enums';
 import {
   agentRecoveryContextSchema,
   agentRecoveryInputSchema,
@@ -62,6 +63,7 @@ async function assertProjectCurrent(project: AgentSourceProject, services: Servi
 async function validateTriggers(
   project: AgentSourceProject,
   specification: SavedAgentSpecification,
+  provider: SessionProvider | undefined,
   services: Services
 ) {
   const results = [];
@@ -71,12 +73,12 @@ async function validateTriggers(
     evidence: AgentSourceValidation;
   }[] = [];
   for (const [index, trigger] of specification.triggers.entries()) {
-    let result = triggerCapability(trigger);
+    let result = triggerCapability(trigger, false, provider);
     try {
       const selected = { ...specification, triggers: [trigger] };
       const evidence = await resolveProjectAgentSources(project, selected, services);
       verified.push({ index, specification: selected, evidence });
-      result = triggerCapability(trigger, true);
+      result = triggerCapability(trigger, true, provider);
     } catch {
       if (result.reasonCode === 'SOURCE_UNVERIFIED') {
         result = {
@@ -118,8 +120,13 @@ async function validateSpecification(
   specification: SavedAgentSpecification,
   services: Services
 ) {
-  const validation = await validateTriggers(project, specification, services);
   const execution = await validateAgentExecution(specification.executionConfig, services);
+  // Natural-language filters are gated on the provider resolved now, including an inherited one.
+  const provider =
+    execution.status === 'VALIDATED'
+      ? execution.intent.provider
+      : specification.executionConfig.provider;
+  const validation = await validateTriggers(project, specification, provider, services);
   await assertProjectCurrent(project, services);
   for (const source of validation.verified) {
     try {

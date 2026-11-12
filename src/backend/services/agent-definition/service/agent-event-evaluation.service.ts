@@ -19,17 +19,36 @@ import {
   type AgentEvaluationInput,
   type AgentEventPayload,
 } from '@/shared/agent-runtime';
+import type { SessionProvider } from '@/shared/core/enums';
 import {
   agentExecutionConfigSchema,
   agentTriggerInputSchema,
 } from '@/shared/schemas/agent-definition.schema';
 import { matchAgentEvent } from './agent-event-matcher';
+import {
+  filterTooLongDecision,
+  MAX_FILTER_INSTRUCTIONS_LENGTH,
+  type SemanticFilterInput,
+  type SemanticFilterOutcome,
+  semanticDecision,
+  unavailableDecision,
+  unprovenProviderDecision,
+} from './agent-semantic-filter';
+import { isClassifierProven } from './semantic-filter-gate';
 
 export interface AgentEvaluationPorts {
   resolveExecution(config: AgentExecutionConfig): Promise<AgentResolvedExecutionConfig>;
   now?: () => Date;
   classifyError?: (error: unknown) => { retryable: boolean; retryAfterMs?: number };
+  /** Natural-language filter classifier; without it filtered triggers never dispatch. */
+  classifyEvent?: (
+    input: SemanticFilterInput,
+    signal: AbortSignal
+  ) => Promise<SemanticFilterOutcome>;
+  /** Defaults to the checked-in live classifier gate. */
+  isClassifierProven?: (provider: SessionProvider) => boolean;
 }
+type Decided = { decision: AgentEvaluationInput; retryable?: boolean; retryAfterMs?: number };
 type Candidate = Awaited<
   ReturnType<typeof agentEvaluationCandidatesAccessor.pending>
 >['candidates'][number];
@@ -79,7 +98,8 @@ export class AgentEventEvaluationService {
     }
     const { decision, retryable, retryAfterMs } = await this.decide(
       { event, trigger, evaluation },
-      now
+      now,
+      signal
     );
     if (signal.aborted) {
       return;
@@ -95,7 +115,11 @@ export class AgentEventEvaluationService {
     }
   }
 
-  private async decide({ event, trigger }: Candidate, now: Date) {
+  private async decide(
+    { event, trigger }: Candidate,
+    now: Date,
+    signal: AbortSignal
+  ): Promise<Decided> {
     const decision: AgentEvaluationInput = {
       eventId: event.id,
       agentDefinitionId: trigger.agentDefinitionId,
@@ -135,14 +159,60 @@ export class AgentEventEvaluationService {
     if (decision.status !== 'MATCHED') {
       return { decision };
     }
-    return await this.resolveMatch(decision, payload.data, execution.data);
+    const resolved = await this.resolveMatch(decision, payload.data, execution.data);
+    const filterInstructions = settings.data.filterInstructions;
+    if (decision.status !== 'MATCHED' || !filterInstructions) {
+      return resolved;
+    }
+    return await this.filterMatch(decision, filterInstructions, payload.data, signal);
+  }
+
+  /** Only a deterministic match reaches the classifier; anything but a clear match never runs. */
+  private async filterMatch(
+    decision: AgentEvaluationInput,
+    filterInstructions: string,
+    event: AgentEventPayload,
+    signal: AbortSignal
+  ): Promise<Decided> {
+    const { provider } = agentResolvedExecutionConfigSchema.parse(decision.executionConfig);
+    const result = await this.semanticFilter(
+      decision,
+      { provider, filterInstructions, event },
+      signal
+    );
+    const { retryable, retryAfterMs, ...fields } = result;
+    Object.assign(decision, fields);
+    return { decision, retryable, retryAfterMs };
+  }
+
+  private async semanticFilter(
+    decision: AgentEvaluationInput,
+    input: SemanticFilterInput,
+    signal: AbortSignal
+  ) {
+    if (!(this.ports.isClassifierProven ?? isClassifierProven)(input.provider)) {
+      return unprovenProviderDecision(input.provider);
+    }
+    if (input.filterInstructions.length > MAX_FILTER_INSTRUCTIONS_LENGTH) {
+      return filterTooLongDecision();
+    }
+    if (!this.ports.classifyEvent) {
+      return unavailableDecision();
+    }
+    const outcome = await this.ports
+      .classifyEvent(input, signal)
+      .catch((): SemanticFilterOutcome => ({ status: 'FAILED', failure: 'FAILED' }));
+    if (outcome.classifier) {
+      decision.classifier = outcome.classifier;
+    }
+    return semanticDecision(outcome);
   }
 
   private async resolveMatch(
     decision: AgentEvaluationInput,
     payload: AgentEventPayload,
     execution: AgentExecutionConfig
-  ): Promise<{ decision: AgentEvaluationInput; retryable?: boolean; retryAfterMs?: number }> {
+  ): Promise<Decided> {
     try {
       decision.executionConfig = agentResolvedExecutionConfigSchema.parse(
         await this.ports.resolveExecution(execution)

@@ -15,6 +15,8 @@ import { SERVICE_INTERVAL_MS } from '@/backend/services/constants';
 import { classifyGitHubCLIError, type githubCLIService } from '@/backend/services/github';
 import { jobRunner } from '@/backend/services/job-runner.service';
 import { createLogger } from '@/backend/services/logger.service';
+import type { classifyAgentEvent } from '@/backend/services/session';
+import { createEventClassifierPort } from './agent-event-classifier.orchestrator';
 import {
   resolveNativeExecution,
   type AgentNativeValidationServices,
@@ -44,6 +46,7 @@ type AgentRuntimeServices = AgentNativeValidationServices & {
     'getAgentRepositoryIdentity' | 'listAgentIssueEvents'
   >;
   configService: { getAgentRuntimeLimits(): { githubPagesPerCycle: number } };
+  classifyAgentEvent: typeof classifyAgentEvent;
 };
 
 /** Composition owns provider wiring and intake lifecycle; the capsule owns persistence. */
@@ -66,6 +69,9 @@ export function createAgentRuntime(
   const retention = new AgentLedgerRetentionService();
   const evaluator = new AgentEventEvaluationService({
     resolveExecution: async (config) => resolveAgentExecutionConfig(getServices(), config),
+    classifyEvent: createEventClassifierPort((input, signal) =>
+      getServices().classifyAgentEvent(input, signal)
+    ),
   });
   const lifecycle = createAgentRuntimeLifecycle(
     poller,

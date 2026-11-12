@@ -390,6 +390,18 @@ function loadAgentRuntimeLimits() {
   };
 }
 
+/**
+ * Event-filter classification is fixed to each provider's default small model;
+ * the live fixture gate in agent-definition/testing/classifier-gate.json is
+ * measured against exactly these models, so they are not user-overridable.
+ */
+const AGENT_EVENT_CLASSIFIER = {
+  claudeModel: 'haiku',
+  codexModel: 'gpt-6-luna',
+  timeoutMs: 30_000,
+  maxConcurrent: 2,
+} as const;
+
 /** Configuration Service class. */
 class ConfigService {
   private config: SystemConfig;
@@ -687,6 +699,11 @@ class ConfigService {
 
   getWorkspaceMetadataConfig() {
     return { ...this.config.workspaceMetadata };
+  }
+
+  /** Event-filter classifier settings, separate from automation execution settings. */
+  getAgentEventClassifierConfig() {
+    return { ...AGENT_EVENT_CLASSIFIER };
   }
 
   /**
