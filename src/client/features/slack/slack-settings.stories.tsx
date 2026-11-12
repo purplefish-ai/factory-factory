@@ -1,6 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react';
 import { useState } from 'react';
-import { expect, within } from 'storybook/test';
+import { expect, userEvent, within } from 'storybook/test';
+import type { SlackConnectionSummary } from '@/shared/slack-connection';
 import { SlackConnectionsView } from './slack-settings';
 
 const meta = {
@@ -13,11 +14,86 @@ const meta = {
     onConnect: () => undefined,
     onTest: () => undefined,
     onDisconnect: () => Promise.resolve({ succeeded: true }),
+    onAppTokenEdit: () => undefined,
+    onAppTokenChange: () => undefined,
+    onSaveAppToken: () => undefined,
+    onClearAppToken: () => Promise.resolve({ succeeded: true }),
   },
 } satisfies Meta<typeof SlackConnectionsView>;
 export default meta;
 type Story = StoryObj<typeof meta>;
+const withAppToken: SlackConnectionSummary = {
+  id: 'slack-1',
+  name: 'Purplefish',
+  workspaceId: 'T-company',
+  hasCredentials: true,
+  isEnabled: true,
+  hasAppToken: true,
+  appId: 'A0123456789',
+};
 export const Empty: Story = { args: { connections: [] } };
+export const AppTokenSaved: Story = { args: { connections: [withAppToken] } };
+export const AppTokenSavedPhone: Story = {
+  args: { connections: [withAppToken] },
+  globals: { viewport: { value: 'phone', isRotated: false } },
+};
+export const EnteringAppToken: Story = {
+  args: {
+    connections: [{ ...withAppToken, hasAppToken: false, appId: null }],
+    appTokenDraft: { connectionId: 'slack-1', token: 'xapp-1-A0123456789-example' },
+  },
+};
+export const SavingAppToken: Story = {
+  args: {
+    connections: [{ ...withAppToken, hasAppToken: false, appId: null }],
+    appTokenDraft: { connectionId: 'slack-1', token: 'xapp-1-A0123456789-example' },
+    pending: { kind: 'setAppToken', connectionId: 'slack-1' },
+  },
+};
+export const AppTokenRejected: Story = {
+  args: {
+    connections: [{ ...withAppToken, hasAppToken: false, appId: null }],
+    appTokenDraft: { connectionId: 'slack-1', token: 'xapp-1-A0999999999-example' },
+    error:
+      'This app-level token belongs to a different Slack app than the bot token. Create the token in the same Slack app.',
+  },
+};
+/** Replacing a saved token opens an empty, masked field; the saved token is never shown. */
+export const ReplacingAppToken: Story = {
+  args: { connections: [withAppToken] },
+  render: function ReplaceAppToken(args) {
+    const [draft, setDraft] = useState<{ connectionId: string; token: string }>();
+    return (
+      <SlackConnectionsView
+        {...args}
+        appTokenDraft={draft}
+        onAppTokenEdit={(connectionId) =>
+          setDraft(connectionId ? { connectionId, token: '' } : undefined)
+        }
+        onAppTokenChange={(token) => setDraft((current) => current && { ...current, token })}
+      />
+    );
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(canvas.getByRole('button', { name: 'Replace app token' }));
+    const input = canvas.getByLabelText('App-level token');
+    await expect(input).toHaveAttribute('type', 'password');
+    await expect(input).toHaveValue('');
+    await expect(canvas.getByRole('button', { name: 'Save app token' })).toBeDisabled();
+    await userEvent.type(input, 'xapp-1-A0123456789-example');
+    await expect(canvas.getByRole('button', { name: 'Save app token' })).toBeEnabled();
+  },
+};
+export const RemovingAppToken: Story = {
+  args: { connections: [withAppToken] },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(canvas.getByRole('button', { name: 'Remove app token' }));
+    const dialog = within(canvasElement.ownerDocument.body).getByRole('alertdialog');
+    await expect(dialog).toHaveTextContent('The bot token stays connected');
+  },
+};
 export const Connected: Story = {
   args: {
     connections: [
@@ -27,6 +103,8 @@ export const Connected: Story = {
         workspaceId: 'T-company',
         hasCredentials: true,
         isEnabled: true,
+        hasAppToken: false,
+        appId: null,
       },
     ],
   },
@@ -40,6 +118,8 @@ export const Disconnected: Story = {
         workspaceId: 'T-company',
         hasCredentials: false,
         isEnabled: false,
+        hasAppToken: false,
+        appId: null,
       },
     ],
   },
@@ -53,6 +133,8 @@ export const LongWorkspaceIdentity: Story = {
         workspaceId: `T-${'A'.repeat(200)}-製品部`,
         hasCredentials: false,
         isEnabled: false,
+        hasAppToken: false,
+        appId: null,
       },
       {
         id: '',
@@ -60,6 +142,8 @@ export const LongWorkspaceIdentity: Story = {
         workspaceId: 'T-empty-key',
         hasCredentials: false,
         isEnabled: false,
+        hasAppToken: false,
+        appId: null,
       },
     ],
   },
@@ -82,6 +166,8 @@ export const TestingOneConnection: Story = {
         workspaceId: 'T-company',
         hasCredentials: true,
         isEnabled: true,
+        hasAppToken: false,
+        appId: null,
       },
       {
         id: 'slack-2',
@@ -89,6 +175,8 @@ export const TestingOneConnection: Story = {
         workspaceId: 'T-labs',
         hasCredentials: true,
         isEnabled: true,
+        hasAppToken: false,
+        appId: null,
       },
     ],
   },
@@ -117,6 +205,8 @@ export const RecoveredMetadata: Story = {
         workspaceId: 'T-recovered-enabled',
         hasCredentials: false,
         isEnabled: false,
+        hasAppToken: false,
+        appId: null,
       },
       {
         id: 'slack-recovered-disabled',
@@ -124,6 +214,8 @@ export const RecoveredMetadata: Story = {
         workspaceId: 'T-recovered-disabled',
         hasCredentials: false,
         isEnabled: false,
+        hasAppToken: false,
+        appId: null,
       },
     ],
   },

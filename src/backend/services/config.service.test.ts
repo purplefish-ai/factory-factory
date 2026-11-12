@@ -446,3 +446,24 @@ describe('terminal agent run context retention policy', () => {
     expect(configService.getAgentRuntimeLimits().runContextRetentionMs).toBe(45 * 86_400_000);
   });
 });
+
+describe('Slack event intake gate', () => {
+  afterEach(() => {
+    process.env = { ...ORIGINAL_ENV };
+    configService.reload();
+  });
+  it.each([undefined, '', 'false', '1', 'yes', 'TRUE '])('stays off for %j', (value) => {
+    if (value === undefined) {
+      Reflect.deleteProperty(process.env, 'AGENT_SLACK_INTAKE_ENABLED');
+    } else {
+      process.env.AGENT_SLACK_INTAKE_ENABLED = value;
+    }
+    configService.reload();
+    expect(configService.getAgentRuntimeLimits().slackIntakeEnabled).toBe(false);
+  });
+  it('turns on only for an explicit true', () => {
+    process.env.AGENT_SLACK_INTAKE_ENABLED = 'true';
+    configService.reload();
+    expect(configService.getAgentRuntimeLimits().slackIntakeEnabled).toBe(true);
+  });
+});

@@ -723,15 +723,19 @@ model AgentProposal {
 
 /// Reusable installation identity. Secrets are encrypted at rest, never part of trigger JSON.
 model AgentConnection {
-  id                   String                  @id @default(cuid())
-  provider             AgentConnectionProvider
-  externalId           String // Slack workspace ID or repository-scoped gh:<repository-id>
-  name                 String
-  isEnabled            Boolean                 @default(true)
-  credentialsEncrypted String?
-  createdAt            DateTime                @default(now())
-  updatedAt            DateTime                @updatedAt
-  triggers             AgentTrigger[]
+  id                      String                  @id @default(cuid())
+  provider                AgentConnectionProvider
+  externalId              String // Slack workspace ID or repository-scoped gh:<repository-id>
+  name                    String
+  isEnabled               Boolean                 @default(true)
+  credentialsEncrypted    String?
+  // Slack only: the app-level (xapp-) Socket Mode token, encrypted apart from the bot token
+  appCredentialsEncrypted String?
+  // Slack only: the bot's app ID, resolved when the app-level token was validated
+  appId                   String?
+  createdAt               DateTime                @default(now())
+  updatedAt               DateTime                @updatedAt
+  triggers                AgentTrigger[]
 
   sourceState AgentSourceState?
   events      AgentEvent[]

@@ -462,6 +462,8 @@ export const AgentConnectionScalarFieldEnum = {
   name: 'name',
   isEnabled: 'isEnabled',
   credentialsEncrypted: 'credentialsEncrypted',
+  appCredentialsEncrypted: 'appCredentialsEncrypted',
+  appId: 'appId',
   createdAt: 'createdAt',
   updatedAt: 'updatedAt'
 } as const

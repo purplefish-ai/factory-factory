@@ -12,10 +12,14 @@ const api = vi.hoisted(() => ({
     workspaceId: string;
     hasCredentials: boolean;
     isEnabled: boolean;
+    hasAppToken: boolean;
+    appId: string | null;
   }[],
   connect: vi.fn(),
   test: vi.fn(),
   disconnect: vi.fn(),
+  setAppToken: vi.fn(),
+  clearAppToken: vi.fn(),
   refetch: vi.fn(),
 }));
 vi.mock('@/client/lib/trpc', () => ({
@@ -27,6 +31,10 @@ vi.mock('@/client/lib/trpc', () => ({
       },
       test: { useMutation: () => ({ mutateAsync: api.test, isPending: false }) },
       disconnect: { useMutation: () => ({ mutateAsync: api.disconnect, isPending: false }) },
+      setAppToken: {
+        useMutation: () => ({ mutateAsync: api.setAppToken, reset: vi.fn(), isPending: false }),
+      },
+      clearAppToken: { useMutation: () => ({ mutateAsync: api.clearAppToken, isPending: false }) },
     },
   },
 }));
@@ -37,6 +45,8 @@ beforeEach(() => {
   api.connect.mockReset().mockResolvedValue({ name: 'Purplefish' });
   api.test.mockReset().mockResolvedValue({ valid: true, workspaceName: 'Purplefish' });
   api.disconnect.mockReset().mockResolvedValue({ disconnected: true });
+  api.setAppToken.mockReset().mockResolvedValue({ name: 'Purplefish' });
+  api.clearAppToken.mockReset().mockResolvedValue({ name: 'Purplefish' });
   api.refetch.mockReset().mockResolvedValue({});
   const container = document.createElement('div');
   document.body.append(container);
@@ -85,7 +95,7 @@ it('preserves the draft and shows a connection error on failed save', async () =
   expect(tokenInput().value).toBe('xoxb-test-token');
   expect(document.querySelector('[role="alert"]')?.textContent).toContain('Slack rejected');
 });
-function savedConnection() {
+function savedConnection(app: { hasAppToken: boolean; appId: string | null } = noApp) {
   api.connections = [
     {
       id: 'slack-1',
@@ -93,10 +103,12 @@ function savedConnection() {
       workspaceId: 'T-company',
       hasCredentials: true,
       isEnabled: true,
+      ...app,
     },
   ];
   mount();
 }
+const noApp = { hasAppToken: false, appId: null };
 function confirmButton(): HTMLButtonElement {
   const found = [
     ...document.querySelectorAll<HTMLButtonElement>('[role="alertdialog"] button'),
@@ -183,9 +195,12 @@ it('shows the spinner only on the connection being tested', async () => {
   api.connections = [
     { id: 'slack-1', name: 'One', workspaceId: 'T-1', hasCredentials: true, isEnabled: true },
     { id: 'slack-2', name: 'Two', workspaceId: 'T-2', hasCredentials: true, isEnabled: true },
-  ];
+  ].map((connection) => ({ ...connection, ...noApp }));
   mount();
-  const second = document.querySelectorAll<HTMLButtonElement>('button')[2];
+  // Each row now also has app-token buttons, so find the second row's Test button by label.
+  const second = [...document.querySelectorAll<HTMLButtonElement>('button')].filter(
+    (candidate) => candidate.textContent === 'Test connection'
+  )[1];
   expect(second?.textContent).toBe('Test connection');
   act(() => second?.click());
   expect(api.test).toHaveBeenCalledWith({ id: 'slack-2' });
@@ -239,4 +254,102 @@ it('does not show an unrelated test error in a new disconnect dialog', async () 
   expect(document.querySelector('[role="alertdialog"]')?.textContent).not.toContain(
     'Saved token validation failed'
   );
+});
+
+function appTokenInput() {
+  return document.querySelector<HTMLInputElement>('#slack-app-token-slack-1');
+}
+function enterAppToken(value: string) {
+  const input = appTokenInput();
+  if (!input) {
+    throw new Error('Missing app token input');
+  }
+  act(() => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(input, value);
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+}
+
+it('shows app-token presence without rendering an entry field until asked', () => {
+  savedConnection();
+  expect(document.body.textContent).toContain('No app-level token');
+  expect(appTokenInput()).toBeNull();
+  savedConnection({ hasAppToken: true, appId: 'A-app' });
+  expect(document.body.textContent).toContain('App-level token saved');
+  expect(document.body.textContent).toContain('A-app');
+  expect(document.body.textContent).not.toContain('xapp-');
+});
+
+it('masks a new app token, never prefills it, and clears it after saving', async () => {
+  savedConnection({ hasAppToken: true, appId: 'A-app' });
+  act(() => button('Replace app token').click());
+  expect(appTokenInput()?.type).toBe('password');
+  expect(appTokenInput()?.value).toBe('');
+  expect(appTokenInput()?.autocomplete).toBe('off');
+  expect(button('Save app token').disabled).toBe(true);
+  enterAppToken('xoxb-not-an-app-token');
+  expect(button('Save app token').disabled).toBe(true);
+  enterAppToken(' xapp-1-A0APP-123-secret ');
+  expect(button('Save app token').disabled).toBe(false);
+  await act(async () => {
+    button('Save app token').click();
+    await Promise.resolve();
+  });
+  expect(api.setAppToken).toHaveBeenCalledWith({
+    connectionId: 'slack-1',
+    appToken: 'xapp-1-A0APP-123-secret',
+  });
+  expect(appTokenInput()).toBeNull();
+  expect(document.body.textContent).toContain('Saved the app-level token for Purplefish');
+  act(() => button('Replace app token').click());
+  expect(appTokenInput()?.value).toBe('');
+});
+
+it('keeps the app-token draft and shows the error when saving fails', async () => {
+  api.setAppToken.mockRejectedValue(
+    new Error('This app-level token belongs to a different Slack app than the bot token.')
+  );
+  savedConnection();
+  act(() => button('Add app token').click());
+  enterAppToken('xapp-1-secret');
+  await act(async () => {
+    button('Save app token').click();
+    await Promise.resolve();
+  });
+  expect(appTokenInput()?.value).toBe('xapp-1-secret');
+  expect(document.querySelector('[role="alert"]')?.textContent).toContain('different Slack app');
+});
+
+it('cancels app-token entry and discards the draft', () => {
+  savedConnection();
+  act(() => button('Add app token').click());
+  enterAppToken('xapp-1-secret');
+  act(() => button('Cancel').click());
+  expect(appTokenInput()).toBeNull();
+  act(() => button('Add app token').click());
+  expect(appTokenInput()?.value).toBe('');
+});
+
+it('removes a saved app token only after confirmation', async () => {
+  savedConnection({ hasAppToken: true, appId: 'A-app' });
+  act(() => button('Remove app token').click());
+  const dialog = document.querySelector('[role="alertdialog"]');
+  expect(dialog?.textContent).toContain('bot token stays connected');
+  expect(api.clearAppToken).not.toHaveBeenCalled();
+  const confirm = [
+    ...document.querySelectorAll<HTMLButtonElement>('[role="alertdialog"] button'),
+  ].find((candidate) => candidate.textContent === 'Remove');
+  await act(async () => {
+    confirm?.click();
+    await Promise.resolve();
+  });
+  expect(api.clearAppToken).toHaveBeenCalledWith({ connectionId: 'slack-1' });
+  expect(document.querySelector('[role="alertdialog"]')).toBeNull();
+  expect(document.body.textContent).toContain('App-level token removed');
+});
+
+it('warns that disconnect also removes the app token', () => {
+  savedConnection({ hasAppToken: true, appId: 'A-app' });
+  act(() => button('Disconnect').click());
+  expect(document.querySelector('[role="alertdialog"]')?.textContent).toContain('app-level token');
 });

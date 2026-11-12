@@ -7,7 +7,12 @@ bookmark it and use the browser's Back button:
 - **Workspace** (`/admin/workspace`): child workspaces, ticket dispatch prompts,
   and PR review defaults.
 - **Integrations** (`/admin/integrations`): Codex accounts, CLI authentication,
-  and Slack.
+  and Slack. Each connected Slack workspace shows whether an app-level token
+  (`xapp-`) is saved for Socket Mode event intake; add, replace or remove it
+  from the workspace row. It must come from the same Slack app as the bot token,
+  and the bot needs the `users:read` scope so the app can be confirmed. Saved
+  tokens are never shown or prefilled. See
+  [Slack credentials](architecture/integrations.md#slack-credentials).
 - **Appearance** (`/admin/appearance`): color scheme, text size, and fonts.
 - **Voice** (`/admin/voice`): voice mode and Deepgram credentials.
 - **System** (`/admin/system`): API usage, processes, app information, backups,
@@ -148,15 +153,16 @@ user-settings booleans remain measured import outcomes. Embedded row totals and
 account remapping totals are explicitly unreported, not zero; inert changes may
 overlap those primary counts.
 
-Slack connection metadata restores disconnected, without tokens; reconnect
-manually in Slack settings. The report counts source enabled rows across the
-entire source section, imports restored disabled and skips for any existing
-connection ID or Slack workspace identity. Existing local connections stay
-unchanged. GitHub connections, connection bindings and event configuration are
-excluded. Definition bodies and execution preferences still restore disabled;
-inspect bodies and author complete event configuration where editing is
-available. Archived projects and definitions at their revision limit retain
-ordinary editing restrictions.
+Slack connection metadata restores disconnected, without bot or app-level tokens
+or app IDs; reconnect manually in Slack settings and add the app-level token
+again. The report counts source enabled rows across the entire source section,
+imports restored disabled and skips for any existing connection ID or Slack
+workspace identity. Existing local connections stay unchanged. GitHub
+connections, connection bindings and event configuration are excluded.
+Definition bodies and execution preferences still restore disabled; inspect
+bodies and author complete event configuration where editing is available.
+Archived projects and definitions at their revision limit retain ordinary
+editing restrictions.
 
 Blank Slack connection IDs and workspace identifiers reject on import. A stored
 blank connection ID or workspace identifier also makes the current export fail

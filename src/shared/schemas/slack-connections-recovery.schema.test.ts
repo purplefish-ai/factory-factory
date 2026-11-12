@@ -39,6 +39,8 @@ it.each([
   { createdAt: 'yesterday' },
   { updatedAt: '2026-11-02' },
   { credentialsEncrypted: 'cipher' },
+  { appCredentialsEncrypted: 'cipher' },
+  { appId: 'A-app' },
   { botToken: undefined },
 ])('rejects malformed and unknown row properties %j', (patch) => {
   const input = section();

@@ -362,6 +362,12 @@ const exportColumns: Record<string, ModelColumns> = {
       name: exported(),
       isEnabled: exported(),
       credentialsEncrypted: excluded('Secret; connections are restored without credentials.'),
+      appCredentialsEncrypted: excluded(
+        'Secret Slack app-level token; connections are restored without credentials.'
+      ),
+      appId: excluded(
+        'Describes the app-level token, which is not restored; resolved again when one is saved.'
+      ),
       createdAt: exported(),
       updatedAt: exported(),
     }

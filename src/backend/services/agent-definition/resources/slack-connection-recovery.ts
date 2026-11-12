@@ -76,6 +76,8 @@ export async function restoreSlackConnectionsRecovery(
         ...row,
         isEnabled: false,
         credentialsEncrypted: null,
+        appCredentialsEncrypted: null,
+        appId: null,
         createdAt: new Date(row.createdAt),
         updatedAt: new Date(row.updatedAt),
       },
