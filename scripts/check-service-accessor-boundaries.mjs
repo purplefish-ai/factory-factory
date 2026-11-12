@@ -111,6 +111,10 @@ const ACCESSOR_POLICIES = {
     owner: 'agent-definition',
     module: 'src/backend/services/agent-definition/resources/agent-activation.accessor',
   },
+  slackActivationAccessor: {
+    owner: 'agent-definition',
+    module: 'src/backend/services/agent-definition/resources/slack-activation.accessor',
+  },
   agentProposalAccessor: {
     owner: 'agent-definition',
     module: 'src/backend/services/agent-definition/resources/agent-proposal.accessor',

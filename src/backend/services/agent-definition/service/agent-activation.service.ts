@@ -4,10 +4,7 @@ import {
   agentActivationAccessor,
   type StartingTrigger,
 } from '@/backend/services/agent-definition/resources/agent-activation.accessor';
-import {
-  completeSlack,
-  listStartingSlack,
-} from '@/backend/services/agent-definition/resources/slack-activation.accessor';
+import { slackActivationAccessor } from '@/backend/services/agent-definition/resources/slack-activation.accessor';
 import { configService } from '@/backend/services/config.service';
 import {
   agentActivationInputSchema,
@@ -74,11 +71,11 @@ export class AgentActivationService {
 
   /** Database-only, so it runs with each evaluation pass and a test message counts within seconds. */
   async completeSlackPending(signal: AbortSignal) {
-    for (const trigger of await listStartingSlack()) {
+    for (const trigger of await slackActivationAccessor.listStarting()) {
       if (signal.aborted) {
         return;
       }
-      await completeSlack(trigger, this.now());
+      await slackActivationAccessor.complete(trigger, this.now());
     }
   }
 

@@ -53,7 +53,7 @@ async function assertSlackSource(tx: Tx, source: SlackActivationSource) {
  * message in each selected channel. The code, expected workspace and app, and
  * revisions are stored here, before the listener opens for this trigger.
  */
-export async function startSlackTrigger(
+async function startSlackTrigger(
   tx: Tx,
   trigger: AgentTrigger,
   input: {
@@ -117,7 +117,7 @@ export async function startSlackTrigger(
   });
 }
 
-export async function listStartingSlack(): Promise<StartingTrigger[]> {
+async function listStartingSlack(): Promise<StartingTrigger[]> {
   // A plain read: completion rechecks each generation under the ledger lock.
   const rows = await prisma.agentTrigger.findMany({
     where: { activationState: 'STARTING', type: 'SLACK_MESSAGE', connectionId: { not: null } },
@@ -226,10 +226,7 @@ async function verifyChannels(tx: Tx, pending: AgentSlackPendingActivation) {
  * everything that permits it. Messages observed after the window never count;
  * an unverified generation past its window returns to PAUSED.
  */
-export async function completeSlack(
-  trigger: StartingTrigger,
-  now: Date
-): Promise<SlackActivationOutcome> {
+async function completeSlack(trigger: StartingTrigger, now: Date): Promise<SlackActivationOutcome> {
   return await ledgerTransaction(async (tx) => {
     const row = await tx.agentTrigger.findUnique({
       where: { id: trigger.triggerId },
@@ -287,3 +284,9 @@ export async function completeSlack(
     return 'WAITING';
   });
 }
+
+export const slackActivationAccessor = {
+  start: startSlackTrigger,
+  listStarting: listStartingSlack,
+  complete: completeSlack,
+};
