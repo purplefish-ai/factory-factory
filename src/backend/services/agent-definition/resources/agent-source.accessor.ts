@@ -11,7 +11,7 @@ import {
   type AgentGithubCursor,
   type AgentSourceEntry,
 } from '@/shared/agent-source-state';
-import type { Prisma } from '@prisma-gen/client';
+import { Prisma } from '@prisma-gen/client';
 import { agentEventAccessor } from './agent-event.accessor';
 import { ledgerTransaction } from './agent-ledger-transaction';
 import { agentSourceCheckpointAccessor } from './agent-source-checkpoint.accessor';
@@ -23,8 +23,11 @@ import {
   getState,
   getBaseline,
   historicalHeadOrder,
+  sourceEpoch,
+  type SourceEpoch,
 } from './agent-source-queries';
 import { capturePage, discontinuity, newScan, resumeScan, verifyPage } from './agent-source-scan';
+import { pauseTriggers } from './agent-trigger-pause';
 type Tx = Prisma.TransactionClient;
 function requiresRecovery(state: { health: unknown } | null) {
   return (
@@ -38,7 +41,7 @@ function assertOperational(state: { health: unknown } | null) {
   }
 }
 function health(
-  state: 'READY' | 'CATCHING_UP' | 'ERROR' | 'RECOVERY_REQUIRED',
+  state: 'READY' | 'CATCHING_UP' | 'DISCONNECTED' | 'ERROR' | 'RECOVERY_REQUIRED',
   reasonCode: string | null = null
 ) {
   return agentSourceHealthSchema.parse({ state, reasonCode, updatedAt: new Date().toISOString() });
@@ -56,9 +59,10 @@ async function initializeSource(
   tx: Tx,
   connectionId: string,
   headEventId: string | null,
-  lastOrder: number
+  state: { lastSourceOrder: number; epochStartSourceOrder: number } | null
 ) {
-  if (lastOrder) {
+  // Only a source that has ordered nothing in its current epoch can start from a fresh head.
+  if ((state?.lastSourceOrder ?? 0) !== (state?.epochStartSourceOrder ?? 0)) {
     discontinuity();
   }
   const cursor: AgentGithubCursor = {
@@ -78,18 +82,24 @@ async function prepareBaseline(connectionId: string, headEventId: string | null)
     await assertTarget(tx, connectionId);
     const state = await tx.agentSourceState.findUnique({ where: { connectionId } });
     assertOperational(state);
-    await assertCheckpointProof(tx, connectionId);
+    const source = sourceEpoch(connectionId, state);
+    await assertCheckpointProof(tx, source);
     const cursor = state?.cursor ? agentGithubCursorSchema.parse(state.cursor) : null;
     if (!cursor) {
-      await initializeSource(tx, connectionId, headEventId, state?.lastSourceOrder ?? 0);
+      await initializeSource(tx, connectionId, headEventId, state);
     }
     const order =
       baselineOrder(cursor, headEventId, state?.lastSourceOrder ?? 0) ??
-      (await historicalHeadOrder(tx, connectionId, headEventId));
+      (await historicalHeadOrder(tx, source, headEventId));
+    // Every ordinal of this epoch is at or after the high water it started from.
+    if (order !== null && order < source.epochStartSourceOrder) {
+      discontinuity();
+    }
     return (
       await tx.agentSourceBaseline.create({
         data: {
           connectionId,
+          epoch: source.epoch,
           headEventId,
           sourceOrder: order,
           afterHeadEventId: cursor?.scan?.fixedHeadEventId ?? cursor?.committedHeadEventId ?? null,
@@ -156,7 +166,11 @@ function beginPage(cursor: AgentGithubCursor, requestPage: number, page: AgentIs
   cursor.scan = newScan(head, cursor.committedHeadEventId);
   return true;
 }
-async function ingestEntries(tx: Tx, connectionId: string, fresh: AgentIssueEventPage['events']) {
+async function ingestEntries(
+  tx: Tx,
+  { connectionId, epoch }: SourceEpoch,
+  fresh: AgentIssueEventPage['events']
+) {
   const entries: AgentSourceEntry[] = [];
   for (const item of fresh) {
     if (
@@ -174,7 +188,8 @@ async function ingestEntries(tx: Tx, connectionId: string, fresh: AgentIssueEven
       : null;
     if (event) {
       const stored = await tx.agentEvent.findUniqueOrThrow({ where: { id: event.eventId } });
-      if (stored.sourceOrder !== null) {
+      // An event captured before a reset is never ordered, so it can never become eligible.
+      if (stored.sourceOrder !== null || stored.sourceEpoch !== epoch) {
         discontinuity();
       }
     }
@@ -188,9 +203,10 @@ async function savePage(connectionId: string, requestPage: number, pageValue: Ag
     await assertTarget(tx, connectionId);
     const state = await tx.agentSourceState.findUniqueOrThrow({ where: { connectionId } });
     assertOperational(state);
+    const source = sourceEpoch(connectionId, state);
     const cursor = agentGithubCursorSchema.parse(state.cursor);
     if (!beginPage(cursor, requestPage, page)) {
-      await assertRequiredBaselines(tx, connectionId, [], cursor.committedHeadEventId);
+      await assertRequiredBaselines(tx, source, [], cursor.committedHeadEventId);
       await tx.agentSourceState.update({
         where: { connectionId },
         data: { isReady: true, health: health('READY'), lastObservedAt: new Date() },
@@ -208,13 +224,14 @@ async function savePage(connectionId: string, requestPage: number, pageValue: Ag
     const phase = scan.phase;
     const entries: AgentSourceEntry[] = [];
     if (phase === 'CAPTURE') {
-      entries.push(...(await ingestEntries(tx, connectionId, capturePage(scan, captured, page))));
+      entries.push(...(await ingestEntries(tx, source, capturePage(scan, captured, page))));
     } else {
       verifyPage(scan, captured, page);
     }
     const savedPage = await tx.agentSourcePage.create({
       data: {
         connectionId,
+        epoch: source.epoch,
         scanId: scan.id,
         ordinal: scan.observationCount++,
         phase,
@@ -241,7 +258,7 @@ async function savePage(connectionId: string, requestPage: number, pageValue: Ag
 
 async function resolveBaselines(
   tx: Tx,
-  connectionId: string,
+  { connectionId, epoch, epochStartSourceOrder }: SourceEpoch,
   entries: AgentSourceEntry[],
   lastSourceOrder: number,
   previousBoundaryEventId: string | null
@@ -249,8 +266,9 @@ async function resolveBaselines(
   // A control head inherits the ordinal of the latest executable event at/before it.
   // afterHeadEventId makes missing evidence due; it does not exclude an exact
   // head witness from a scan that was already in flight during preparation.
+  // Pins issued in an earlier epoch keep their answer; this interval is not evidence for them.
   const baselineRows = await tx.agentSourceBaseline.findMany({
-    where: { connectionId, sourceOrder: null },
+    where: { connectionId, epoch, sourceOrder: null },
   });
   let ordinal = lastSourceOrder;
   const orders = new Map<string, number>();
@@ -264,7 +282,8 @@ async function resolveBaselines(
     orders.set(previousBoundaryEventId, ordinal);
   }
   for (const baseline of baselineRows) {
-    const sourceOrder = baseline.headEventId === null ? 0 : orders.get(baseline.headEventId);
+    const sourceOrder =
+      baseline.headEventId === null ? epochStartSourceOrder : orders.get(baseline.headEventId);
     if (sourceOrder !== undefined) {
       await tx.agentSourceBaseline.update({ where: { id: baseline.id }, data: { sourceOrder } });
     }
@@ -275,19 +294,28 @@ async function finalizeInTransaction(tx: Tx, connectionId: string, requestedIds?
   await assertTarget(tx, connectionId);
   const state = await tx.agentSourceState.findUniqueOrThrow({ where: { connectionId } });
   assertOperational(state);
+  const source = sourceEpoch(connectionId, state);
   const cursor = agentGithubCursorSchema.parse(state.cursor);
   const scan = cursor.scan;
   if (scan?.phase !== 'FINALIZE') {
     discontinuity();
   }
   const entries = await entriesFor(tx, connectionId, scan.id);
-  await assertRequiredBaselines(tx, connectionId, entries, scan.previousBoundaryEventId);
+  await assertRequiredBaselines(tx, source, entries, scan.previousBoundaryEventId);
   const ordered = entries
     .slice()
     .reverse()
     .flatMap((entry) => (entry.eventId ? [entry.eventId] : []));
   const eventIds = ordered.slice(scan.finalizedCount, scan.finalizedCount + 1000);
   if (requestedIds && JSON.stringify(requestedIds) !== JSON.stringify(eventIds)) {
+    discontinuity();
+  }
+  // Capture already refuses earlier epochs' events; ordering one would make it eligible.
+  const epochs = await tx.agentEvent.findMany({
+    where: { id: { in: eventIds } },
+    select: { sourceEpoch: true },
+  });
+  if (epochs.some((event) => event.sourceEpoch !== source.epoch)) {
     discontinuity();
   }
   const result = eventIds.length
@@ -300,16 +328,11 @@ async function finalizeInTransaction(tx: Tx, connectionId: string, requestedIds?
   const lastSourceOrder = result.at(-1)?.sourceOrder ?? state.lastSourceOrder;
   scan.finalizedCount += eventIds.length;
   if (scan.finalizedCount === ordered.length) {
-    await resolveBaselines(
-      tx,
-      connectionId,
-      entries,
-      lastSourceOrder,
-      scan.previousBoundaryEventId
-    );
+    await resolveBaselines(tx, source, entries, lastSourceOrder, scan.previousBoundaryEventId);
     const finalizedPage = await tx.agentSourcePage.create({
       data: {
         connectionId,
+        epoch: source.epoch,
         scanId: scan.id,
         ordinal: scan.observationCount,
         phase: 'FINALIZED',
@@ -336,12 +359,12 @@ async function finalizeInTransaction(tx: Tx, connectionId: string, requestedIds?
 
 async function assertRequiredBaselines(
   tx: Tx,
-  connectionId: string,
+  { connectionId, epoch }: SourceEpoch,
   entries: AgentSourceEntry[],
   previousHead: string | null
 ) {
   const required = await tx.agentSourceBaseline.findMany({
-    where: { connectionId, sourceOrder: null, afterHeadEventId: previousHead },
+    where: { connectionId, epoch, sourceOrder: null, afterHeadEventId: previousHead },
   });
   const captured = new Set(entries.map((entry) => entry.providerEventId));
   for (const baseline of required) {
@@ -386,7 +409,58 @@ async function finalizeEventOrder(value: AgentEventOrderInput) {
     return await finalizeInTransaction(tx, input.connectionId, input.eventIds);
   });
 }
+/**
+ * An explicit decision to give up on the gap behind a recovery fence. Retained proof is never
+ * deleted or rewritten: the next baseline starts a new epoch at the current head and the
+ * retained high water, beside the old epoch's proof.
+ */
+async function resetSource(projectId: string, connectionId: string) {
+  return await ledgerTransaction(async (tx) => {
+    const project = await tx.project.findUnique({ where: { id: projectId } });
+    const owned = await tx.agentTrigger.findFirst({
+      where: { connectionId, isConfigured: true, agentDefinition: { projectId } },
+      select: { id: true },
+    });
+    if (!(project && owned)) {
+      throw new ApplicationError('NOT_FOUND', 'Source not found.');
+    }
+    if (project.isArchived) {
+      throw new ApplicationError('PRECONDITION_FAILED', 'Choose an active project.');
+    }
+    const connection = await tx.agentConnection.findUniqueOrThrow({
+      where: { id: connectionId },
+      include: { sourceState: true },
+    });
+    const state = connection.sourceState;
+    const parsed = agentSourceHealthSchema.safeParse(state?.health);
+    if (connection.provider === 'GITHUB' && state && parsed.data?.state === 'RECOVERY_REQUIRED') {
+      const paused = await pauseTriggers(tx, { connectionId });
+      await tx.agentSourceState.update({
+        where: { connectionId },
+        data: {
+          epoch: { increment: 1 },
+          epochStartSourceOrder: state.lastSourceOrder,
+          cursor: Prisma.DbNull,
+          isReady: false,
+          health: health('DISCONNECTED', 'GITHUB_SOURCE_RESET'),
+        },
+      });
+      return { connectionId, ...paused };
+    }
+    // A repeat before any fresh head was captured has nothing left to do. It must not pause
+    // triggers the user enabled again in between.
+    if (state && state.epoch > 0 && state.cursor === null) {
+      return { connectionId, pausedTriggerCount: 0, cancelledRunCount: 0 };
+    }
+    throw new ApplicationError(
+      'PRECONDITION_FAILED',
+      'Only a GitHub source that requires recovery can be reset.'
+    );
+  });
+}
+
 export const agentSourceAccessor = {
+  resetSource,
   listTargets,
   getState,
   getBaseline,

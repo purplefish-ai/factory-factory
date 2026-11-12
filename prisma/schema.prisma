@@ -830,6 +830,10 @@ model AgentRun {
 model AgentSourceState {
   authorityRevision Int @default(0) // SQLite triggers fence checkpoint validation between transactions
   lastSourceOrder Int @default(0) // Retained beyond event tombstones; canonical API-order high water
+  // An explicit source reset starts a new epoch. Proof rows carry the epoch that wrote them and
+  // only the current epoch's proof is authority; earlier epochs are retained unchanged.
+  epoch Int @default(0)
+  epochStartSourceOrder Int @default(0) // lastSourceOrder when the current epoch began
   connectionId   String          @id
   connection     AgentConnection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
   isReady        Boolean         @default(false)
@@ -854,10 +858,12 @@ model AgentSourcePage {
   nextPage Int?
   sourceOrder Int? // Finalized interval high water; retained after event pruning
   evidence Json // agentSourcePageEvidenceSchema
+  epoch Int @default(0) // AgentSourceState.epoch when written
   createdAt DateTime @default(now())
 
   @@unique([connectionId, scanId, ordinal])
   @@index([connectionId, phase, scanId, ordinal])
+  @@index([connectionId, epoch, phase, scanId, ordinal])
 }
 
 /// Retained interval proof. Only COMPLETE rows authorize historical reads and page compaction.
@@ -877,10 +883,12 @@ model AgentSourceCheckpoint {
   initialSourceOrder Int?
   sourceOrder Int?
   validationCursor Json? // Bounded authority traversal and revision; never authorizes reads
+  epoch Int @default(0) // AgentSourceState.epoch when written
   heads AgentSourceHead[]
 
   @@id([connectionId, scanId])
   @@index([connectionId, status])
+  @@index([connectionId, epoch, status])
 }
 
 /// Every captured provider identity, including unsupported/control heads, in API order.
@@ -890,11 +898,13 @@ model AgentSourceHead {
   providerEventId String
   position Int
   precedingEventCount Int // Canonical ordinal = completed checkpoint highwater minus this offset
+  epoch Int @default(0) // Its checkpoint's epoch; bounds authority traversal to one epoch
   checkpoint AgentSourceCheckpoint @relation(fields: [connectionId, scanId], references: [connectionId, scanId], onDelete: Cascade)
 
   @@id([connectionId, scanId, providerEventId])
   @@unique([connectionId, scanId, position])
   @@index([connectionId, providerEventId])
+  @@index([connectionId, epoch, scanId, position])
 }
 
 /// Prepared provider head; an ordinal is assigned only after all older captured events.
@@ -905,12 +915,15 @@ model AgentSourceBaseline {
   headEventId String?
   afterHeadEventId String? // The next interval must witness this prepared head
   sourceOrder Int?
+  epoch Int @default(0) // AgentSourceState.epoch when issued; getBaseline answers every epoch
   createdAt DateTime @default(now())
 
   @@index([connectionId, sourceOrder])
   @@index([connectionId, headEventId])
   @@index([connectionId, headEventId, sourceOrder])
   @@index([connectionId, id])
+  @@index([connectionId, epoch, id])
+  @@index([connectionId, epoch, headEventId, sourceOrder])
 }
 
 model AgentEvent {
@@ -919,6 +932,7 @@ model AgentEvent {
   connection        AgentConnection   @relation(fields: [connectionId], references: [id], onDelete: Restrict)
   providerEventId   String
   sourceOrder       Int?
+  sourceEpoch       Int               @default(0) // Only the capture epoch can assign sourceOrder
   payload           Json? // agentEventPayloadSchema; null after ledger retention
   occurredAt        DateTime
   observedAt        DateTime

@@ -51,7 +51,10 @@ const baselinesSchema = z.array(
   })
 );
 
-async function markers(tx: Tx, connectionId: string, progress: Progress, take: number) {
+/** Authority is the proof of one epoch; identities may carry other ordinals in earlier epochs. */
+type Authority = { connectionId: string; epoch: number; epochStartSourceOrder: number };
+
+async function markers(tx: Tx, authority: Authority, progress: Progress, take: number) {
   return markersSchema.parse(
     await tx.$queryRaw`
     SELECT page."scanId", page."ordinal", checkpoint."status", page."sourceOrder",
@@ -68,7 +71,8 @@ async function markers(tx: Tx, connectionId: string, progress: Progress, take: n
     FROM "AgentSourcePage" page
     LEFT JOIN "AgentSourceCheckpoint" checkpoint
       ON checkpoint."connectionId" = page."connectionId" AND checkpoint."scanId" = page."scanId"
-    WHERE page."connectionId" = ${connectionId} AND page."phase" = 'FINALIZED'
+    WHERE page."connectionId" = ${authority.connectionId} AND page."epoch" = ${authority.epoch}
+      AND page."phase" = 'FINALIZED'
       AND (page."scanId", page."ordinal") > (${progress.scanId}, ${progress.position})
     ORDER BY page."scanId", page."ordinal" LIMIT ${take}
   `
@@ -77,7 +81,7 @@ async function markers(tx: Tx, connectionId: string, progress: Progress, take: n
 
 async function heads(
   tx: Tx,
-  connectionId: string,
+  { connectionId, epoch }: Authority,
   scanId: string,
   sourceOrder: number,
   boundaryEventId: string | null,
@@ -93,10 +97,12 @@ async function heads(
     SELECT authority."scanId", authority."position",
       other."sourceOrder" - authority."precedingEventCount" AS "canonicalOrder",
       (SELECT pin."sourceOrder" FROM "AgentSourceBaseline" pin
-        WHERE pin."connectionId" = authority."connectionId" AND pin."headEventId" = authority."providerEventId"
+        WHERE pin."connectionId" = authority."connectionId" AND pin."epoch" = ${epoch}
+          AND pin."headEventId" = authority."providerEventId"
           AND pin."sourceOrder" IS NOT NULL ORDER BY pin."sourceOrder" ASC LIMIT 1) AS "baselineMinimum",
       (SELECT pin."sourceOrder" FROM "AgentSourceBaseline" pin
-        WHERE pin."connectionId" = authority."connectionId" AND pin."headEventId" = authority."providerEventId"
+        WHERE pin."connectionId" = authority."connectionId" AND pin."epoch" = ${epoch}
+          AND pin."headEventId" = authority."providerEventId"
           AND pin."sourceOrder" IS NOT NULL ORDER BY pin."sourceOrder" DESC LIMIT 1) AS "baselineMaximum",
       CASE WHEN other."sourceOrder" IS NOT NULL AND target."providerEventId" IS NOT NULL
         AND other."sourceOrder" - authority."precedingEventCount" != ${sourceOrder} - target."precedingEventCount"
@@ -109,7 +115,7 @@ async function heads(
       ON other."connectionId" = authority."connectionId" AND other."scanId" = authority."scanId"
     LEFT JOIN "AgentSourceHead" target ON target."connectionId" = authority."connectionId"
       AND target."scanId" = ${scanId} AND target."providerEventId" = authority."providerEventId"
-    WHERE authority."connectionId" = ${connectionId}
+    WHERE authority."connectionId" = ${connectionId} AND authority."epoch" = ${epoch}
       AND (authority."scanId", authority."position") > (${progress.scanId}, ${progress.position})
     ORDER BY authority."scanId", authority."position" LIMIT ${take}
   `
@@ -118,7 +124,7 @@ async function heads(
 
 async function baselines(
   tx: Tx,
-  connectionId: string,
+  { connectionId, epoch, epochStartSourceOrder }: Authority,
   scanId: string,
   sourceOrder: number,
   boundaryEventId: string | null,
@@ -129,7 +135,7 @@ async function baselines(
   return baselinesSchema.parse(
     await tx.$queryRaw`
     SELECT baseline."id", CASE WHEN baseline."sourceOrder" IS NOT NULL
-      AND ((baseline."headEventId" IS NULL AND baseline."sourceOrder" != 0)
+      AND ((baseline."headEventId" IS NULL AND baseline."sourceOrder" != ${epochStartSourceOrder})
         OR (target."providerEventId" IS NOT NULL
           AND baseline."sourceOrder" != ${sourceOrder} - target."precedingEventCount"))
       THEN 'CONFLICT' ELSE 'OK' END AS conflict,
@@ -139,10 +145,27 @@ async function baselines(
     FROM "AgentSourceBaseline" baseline
     LEFT JOIN "AgentSourceHead" target ON target."connectionId" = baseline."connectionId"
       AND target."scanId" = ${scanId} AND target."providerEventId" = baseline."headEventId"
-    WHERE baseline."connectionId" = ${connectionId} AND baseline."id" > ${progress.baselineId}
+    WHERE baseline."connectionId" = ${connectionId} AND baseline."epoch" = ${epoch}
+      AND baseline."id" > ${progress.baselineId}
     ORDER BY baseline."id" LIMIT ${take}
   `
   );
+}
+
+function resumeProgress(checkpoint: AgentSourceCheckpoint, revision: number): Progress {
+  const parsed = progressSchema.safeParse(checkpoint.validationCursor);
+  return parsed.success && parsed.data.revision === revision
+    ? parsed.data
+    : {
+        version: 2,
+        boundaryWitnessed: checkpoint.previousBoundaryEventId === null,
+        revision,
+        phase: 'MARKERS',
+        scanId: '',
+        position: -1,
+        baselineId: '',
+        headCount: 0,
+      };
 }
 
 /** At most 100 authority rows, including indexed baseline extrema, per ledger writer transaction.
@@ -158,20 +181,16 @@ export async function checkpointPromotionStatus(tx: Tx, connectionId: string, sc
     return;
   }
   const state = await tx.agentSourceState.findUniqueOrThrow({ where: { connectionId } });
-  const parsed = progressSchema.safeParse(checkpoint.validationCursor);
-  const progress: Progress =
-    parsed.success && parsed.data.revision === state.authorityRevision
-      ? parsed.data
-      : {
-          version: 2,
-          boundaryWitnessed: checkpoint.previousBoundaryEventId === null,
-          revision: state.authorityRevision,
-          phase: 'MARKERS',
-          scanId: '',
-          position: -1,
-          baselineId: '',
-          headCount: 0,
-        };
+  // An earlier epoch's interval stays INDEXED: its authority is retained, not revalidated.
+  if (checkpoint.epoch !== state.epoch) {
+    return;
+  }
+  const authority: Authority = {
+    connectionId,
+    epoch: state.epoch,
+    epochStartSourceOrder: state.epochStartSourceOrder,
+  };
+  const progress = resumeProgress(checkpoint, state.authorityRevision);
   let remaining = 100;
   for (const phase of ['MARKERS', 'HEADS', 'BASELINES'] as const) {
     if (remaining === 0 || progress.phase !== phase) {
@@ -179,10 +198,10 @@ export async function checkpointPromotionStatus(tx: Tx, connectionId: string, sc
     }
     const outcome =
       phase === 'MARKERS'
-        ? await advanceMarkers(tx, checkpoint, progress, remaining)
+        ? await advanceMarkers(tx, authority, checkpoint, progress, remaining)
         : phase === 'HEADS'
-          ? await advanceHeads(tx, checkpoint, progress, remaining)
-          : await advanceBaselines(tx, checkpoint, progress, remaining);
+          ? await advanceHeads(tx, authority, checkpoint, progress, remaining)
+          : await advanceBaselines(tx, authority, checkpoint, progress, remaining);
     switch (outcome.kind) {
       case 'DEFERRED':
         return;
@@ -200,11 +219,12 @@ export async function checkpointPromotionStatus(tx: Tx, connectionId: string, sc
 
 async function advanceMarkers(
   tx: Tx,
+  authority: Authority,
   checkpoint: AgentSourceCheckpoint,
   progress: Progress,
   remaining: number
 ): Promise<PhaseOutcome> {
-  const rows = await markers(tx, checkpoint.connectionId, progress, remaining);
+  const rows = await markers(tx, authority, progress, remaining);
   // Unindexed legacy intervals might contain contradictory heads. Keep their proof.
   if (rows.some((row) => row.status !== 'INDEXED' && row.status !== 'COMPLETE')) {
     return { kind: 'DEFERRED' };
@@ -242,6 +262,7 @@ async function advanceMarkers(
 
 async function advanceHeads(
   tx: Tx,
+  authority: Authority,
   checkpoint: AgentSourceCheckpoint,
   progress: Progress,
   remaining: number
@@ -255,7 +276,7 @@ async function advanceHeads(
   }
   const rows = await heads(
     tx,
-    checkpoint.connectionId,
+    authority,
     checkpoint.scanId,
     checkpoint.sourceOrder,
     checkpoint.previousBoundaryEventId,
@@ -292,6 +313,7 @@ async function advanceHeads(
 
 async function advanceBaselines(
   tx: Tx,
+  authority: Authority,
   checkpoint: AgentSourceCheckpoint,
   progress: Progress,
   remaining: number
@@ -301,7 +323,7 @@ async function advanceBaselines(
   }
   const rows = await baselines(
     tx,
-    checkpoint.connectionId,
+    authority,
     checkpoint.scanId,
     checkpoint.sourceOrder,
     checkpoint.previousBoundaryEventId,

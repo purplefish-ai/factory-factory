@@ -28,10 +28,12 @@ export type AggregateAgentSourceBaseline = {
 
 export type AgentSourceBaselineAvgAggregateOutputType = {
   sourceOrder: number | null
+  epoch: number | null
 }
 
 export type AgentSourceBaselineSumAggregateOutputType = {
   sourceOrder: number | null
+  epoch: number | null
 }
 
 export type AgentSourceBaselineMinAggregateOutputType = {
@@ -40,6 +42,7 @@ export type AgentSourceBaselineMinAggregateOutputType = {
   headEventId: string | null
   afterHeadEventId: string | null
   sourceOrder: number | null
+  epoch: number | null
   createdAt: Date | null
 }
 
@@ -49,6 +52,7 @@ export type AgentSourceBaselineMaxAggregateOutputType = {
   headEventId: string | null
   afterHeadEventId: string | null
   sourceOrder: number | null
+  epoch: number | null
   createdAt: Date | null
 }
 
@@ -58,6 +62,7 @@ export type AgentSourceBaselineCountAggregateOutputType = {
   headEventId: number
   afterHeadEventId: number
   sourceOrder: number
+  epoch: number
   createdAt: number
   _all: number
 }
@@ -65,10 +70,12 @@ export type AgentSourceBaselineCountAggregateOutputType = {
 
 export type AgentSourceBaselineAvgAggregateInputType = {
   sourceOrder?: true
+  epoch?: true
 }
 
 export type AgentSourceBaselineSumAggregateInputType = {
   sourceOrder?: true
+  epoch?: true
 }
 
 export type AgentSourceBaselineMinAggregateInputType = {
@@ -77,6 +84,7 @@ export type AgentSourceBaselineMinAggregateInputType = {
   headEventId?: true
   afterHeadEventId?: true
   sourceOrder?: true
+  epoch?: true
   createdAt?: true
 }
 
@@ -86,6 +94,7 @@ export type AgentSourceBaselineMaxAggregateInputType = {
   headEventId?: true
   afterHeadEventId?: true
   sourceOrder?: true
+  epoch?: true
   createdAt?: true
 }
 
@@ -95,6 +104,7 @@ export type AgentSourceBaselineCountAggregateInputType = {
   headEventId?: true
   afterHeadEventId?: true
   sourceOrder?: true
+  epoch?: true
   createdAt?: true
   _all?: true
 }
@@ -191,6 +201,7 @@ export type AgentSourceBaselineGroupByOutputType = {
   headEventId: string | null
   afterHeadEventId: string | null
   sourceOrder: number | null
+  epoch: number
   createdAt: Date
   _count: AgentSourceBaselineCountAggregateOutputType | null
   _avg: AgentSourceBaselineAvgAggregateOutputType | null
@@ -223,6 +234,7 @@ export type AgentSourceBaselineWhereInput = {
   headEventId?: Prisma.StringNullableFilter<"AgentSourceBaseline"> | string | null
   afterHeadEventId?: Prisma.StringNullableFilter<"AgentSourceBaseline"> | string | null
   sourceOrder?: Prisma.IntNullableFilter<"AgentSourceBaseline"> | number | null
+  epoch?: Prisma.IntFilter<"AgentSourceBaseline"> | number
   createdAt?: Prisma.DateTimeFilter<"AgentSourceBaseline"> | Date | string
   source?: Prisma.XOR<Prisma.AgentSourceStateScalarRelationFilter, Prisma.AgentSourceStateWhereInput>
 }
@@ -233,6 +245,7 @@ export type AgentSourceBaselineOrderByWithRelationInput = {
   headEventId?: Prisma.SortOrderInput | Prisma.SortOrder
   afterHeadEventId?: Prisma.SortOrderInput | Prisma.SortOrder
   sourceOrder?: Prisma.SortOrderInput | Prisma.SortOrder
+  epoch?: Prisma.SortOrder
   createdAt?: Prisma.SortOrder
   source?: Prisma.AgentSourceStateOrderByWithRelationInput
 }
@@ -246,6 +259,7 @@ export type AgentSourceBaselineWhereUniqueInput = Prisma.AtLeast<{
   headEventId?: Prisma.StringNullableFilter<"AgentSourceBaseline"> | string | null
   afterHeadEventId?: Prisma.StringNullableFilter<"AgentSourceBaseline"> | string | null
   sourceOrder?: Prisma.IntNullableFilter<"AgentSourceBaseline"> | number | null
+  epoch?: Prisma.IntFilter<"AgentSourceBaseline"> | number
   createdAt?: Prisma.DateTimeFilter<"AgentSourceBaseline"> | Date | string
   source?: Prisma.XOR<Prisma.AgentSourceStateScalarRelationFilter, Prisma.AgentSourceStateWhereInput>
 }, "id">
@@ -256,6 +270,7 @@ export type AgentSourceBaselineOrderByWithAggregationInput = {
   headEventId?: Prisma.SortOrderInput | Prisma.SortOrder
   afterHeadEventId?: Prisma.SortOrderInput | Prisma.SortOrder
   sourceOrder?: Prisma.SortOrderInput | Prisma.SortOrder
+  epoch?: Prisma.SortOrder
   createdAt?: Prisma.SortOrder
   _count?: Prisma.AgentSourceBaselineCountOrderByAggregateInput
   _avg?: Prisma.AgentSourceBaselineAvgOrderByAggregateInput
@@ -273,6 +288,7 @@ export type AgentSourceBaselineScalarWhereWithAggregatesInput = {
   headEventId?: Prisma.StringNullableWithAggregatesFilter<"AgentSourceBaseline"> | string | null
   afterHeadEventId?: Prisma.StringNullableWithAggregatesFilter<"AgentSourceBaseline"> | string | null
   sourceOrder?: Prisma.IntNullableWithAggregatesFilter<"AgentSourceBaseline"> | number | null
+  epoch?: Prisma.IntWithAggregatesFilter<"AgentSourceBaseline"> | number
   createdAt?: Prisma.DateTimeWithAggregatesFilter<"AgentSourceBaseline"> | Date | string
 }
 
@@ -281,6 +297,7 @@ export type AgentSourceBaselineCreateInput = {
   headEventId?: string | null
   afterHeadEventId?: string | null
   sourceOrder?: number | null
+  epoch?: number
   createdAt?: Date | string
   source: Prisma.AgentSourceStateCreateNestedOneWithoutBaselinesInput
 }
@@ -291,6 +308,7 @@ export type AgentSourceBaselineUncheckedCreateInput = {
   headEventId?: string | null
   afterHeadEventId?: string | null
   sourceOrder?: number | null
+  epoch?: number
   createdAt?: Date | string
 }
 
@@ -299,6 +317,7 @@ export type AgentSourceBaselineUpdateInput = {
   headEventId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   afterHeadEventId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   sourceOrder?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
+  epoch?: Prisma.IntFieldUpdateOperationsInput | number
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   source?: Prisma.AgentSourceStateUpdateOneRequiredWithoutBaselinesNestedInput
 }
@@ -309,6 +328,7 @@ export type AgentSourceBaselineUncheckedUpdateInput = {
   headEventId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   afterHeadEventId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   sourceOrder?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
+  epoch?: Prisma.IntFieldUpdateOperationsInput | number
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
 }
 
@@ -318,6 +338,7 @@ export type AgentSourceBaselineCreateManyInput = {
   headEventId?: string | null
   afterHeadEventId?: string | null
   sourceOrder?: number | null
+  epoch?: number
   createdAt?: Date | string
 }
 
@@ -326,6 +347,7 @@ export type AgentSourceBaselineUpdateManyMutationInput = {
   headEventId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   afterHeadEventId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   sourceOrder?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
+  epoch?: Prisma.IntFieldUpdateOperationsInput | number
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
 }
 
@@ -335,6 +357,7 @@ export type AgentSourceBaselineUncheckedUpdateManyInput = {
   headEventId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   afterHeadEventId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   sourceOrder?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
+  epoch?: Prisma.IntFieldUpdateOperationsInput | number
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
 }
 
@@ -354,11 +377,13 @@ export type AgentSourceBaselineCountOrderByAggregateInput = {
   headEventId?: Prisma.SortOrder
   afterHeadEventId?: Prisma.SortOrder
   sourceOrder?: Prisma.SortOrder
+  epoch?: Prisma.SortOrder
   createdAt?: Prisma.SortOrder
 }
 
 export type AgentSourceBaselineAvgOrderByAggregateInput = {
   sourceOrder?: Prisma.SortOrder
+  epoch?: Prisma.SortOrder
 }
 
 export type AgentSourceBaselineMaxOrderByAggregateInput = {
@@ -367,6 +392,7 @@ export type AgentSourceBaselineMaxOrderByAggregateInput = {
   headEventId?: Prisma.SortOrder
   afterHeadEventId?: Prisma.SortOrder
   sourceOrder?: Prisma.SortOrder
+  epoch?: Prisma.SortOrder
   createdAt?: Prisma.SortOrder
 }
 
@@ -376,11 +402,13 @@ export type AgentSourceBaselineMinOrderByAggregateInput = {
   headEventId?: Prisma.SortOrder
   afterHeadEventId?: Prisma.SortOrder
   sourceOrder?: Prisma.SortOrder
+  epoch?: Prisma.SortOrder
   createdAt?: Prisma.SortOrder
 }
 
 export type AgentSourceBaselineSumOrderByAggregateInput = {
   sourceOrder?: Prisma.SortOrder
+  epoch?: Prisma.SortOrder
 }
 
 export type AgentSourceBaselineCreateNestedManyWithoutSourceInput = {
@@ -430,6 +458,7 @@ export type AgentSourceBaselineCreateWithoutSourceInput = {
   headEventId?: string | null
   afterHeadEventId?: string | null
   sourceOrder?: number | null
+  epoch?: number
   createdAt?: Date | string
 }
 
@@ -438,6 +467,7 @@ export type AgentSourceBaselineUncheckedCreateWithoutSourceInput = {
   headEventId?: string | null
   afterHeadEventId?: string | null
   sourceOrder?: number | null
+  epoch?: number
   createdAt?: Date | string
 }
 
@@ -475,6 +505,7 @@ export type AgentSourceBaselineScalarWhereInput = {
   headEventId?: Prisma.StringNullableFilter<"AgentSourceBaseline"> | string | null
   afterHeadEventId?: Prisma.StringNullableFilter<"AgentSourceBaseline"> | string | null
   sourceOrder?: Prisma.IntNullableFilter<"AgentSourceBaseline"> | number | null
+  epoch?: Prisma.IntFilter<"AgentSourceBaseline"> | number
   createdAt?: Prisma.DateTimeFilter<"AgentSourceBaseline"> | Date | string
 }
 
@@ -483,6 +514,7 @@ export type AgentSourceBaselineCreateManySourceInput = {
   headEventId?: string | null
   afterHeadEventId?: string | null
   sourceOrder?: number | null
+  epoch?: number
   createdAt?: Date | string
 }
 
@@ -491,6 +523,7 @@ export type AgentSourceBaselineUpdateWithoutSourceInput = {
   headEventId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   afterHeadEventId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   sourceOrder?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
+  epoch?: Prisma.IntFieldUpdateOperationsInput | number
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
 }
 
@@ -499,6 +532,7 @@ export type AgentSourceBaselineUncheckedUpdateWithoutSourceInput = {
   headEventId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   afterHeadEventId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   sourceOrder?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
+  epoch?: Prisma.IntFieldUpdateOperationsInput | number
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
 }
 
@@ -507,6 +541,7 @@ export type AgentSourceBaselineUncheckedUpdateManyWithoutSourceInput = {
   headEventId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   afterHeadEventId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   sourceOrder?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
+  epoch?: Prisma.IntFieldUpdateOperationsInput | number
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
 }
 
@@ -518,6 +553,7 @@ export type AgentSourceBaselineSelect<ExtArgs extends runtime.Types.Extensions.I
   headEventId?: boolean
   afterHeadEventId?: boolean
   sourceOrder?: boolean
+  epoch?: boolean
   createdAt?: boolean
   source?: boolean | Prisma.AgentSourceStateDefaultArgs<ExtArgs>
 }, ExtArgs["result"]["agentSourceBaseline"]>
@@ -528,6 +564,7 @@ export type AgentSourceBaselineSelectCreateManyAndReturn<ExtArgs extends runtime
   headEventId?: boolean
   afterHeadEventId?: boolean
   sourceOrder?: boolean
+  epoch?: boolean
   createdAt?: boolean
   source?: boolean | Prisma.AgentSourceStateDefaultArgs<ExtArgs>
 }, ExtArgs["result"]["agentSourceBaseline"]>
@@ -538,6 +575,7 @@ export type AgentSourceBaselineSelectUpdateManyAndReturn<ExtArgs extends runtime
   headEventId?: boolean
   afterHeadEventId?: boolean
   sourceOrder?: boolean
+  epoch?: boolean
   createdAt?: boolean
   source?: boolean | Prisma.AgentSourceStateDefaultArgs<ExtArgs>
 }, ExtArgs["result"]["agentSourceBaseline"]>
@@ -548,10 +586,11 @@ export type AgentSourceBaselineSelectScalar = {
   headEventId?: boolean
   afterHeadEventId?: boolean
   sourceOrder?: boolean
+  epoch?: boolean
   createdAt?: boolean
 }
 
-export type AgentSourceBaselineOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "connectionId" | "headEventId" | "afterHeadEventId" | "sourceOrder" | "createdAt", ExtArgs["result"]["agentSourceBaseline"]>
+export type AgentSourceBaselineOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "connectionId" | "headEventId" | "afterHeadEventId" | "sourceOrder" | "epoch" | "createdAt", ExtArgs["result"]["agentSourceBaseline"]>
 export type AgentSourceBaselineInclude<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
   source?: boolean | Prisma.AgentSourceStateDefaultArgs<ExtArgs>
 }
@@ -573,6 +612,7 @@ export type $AgentSourceBaselinePayload<ExtArgs extends runtime.Types.Extensions
     headEventId: string | null
     afterHeadEventId: string | null
     sourceOrder: number | null
+    epoch: number
     createdAt: Date
   }, ExtArgs["result"]["agentSourceBaseline"]>
   composites: {}
@@ -1003,6 +1043,7 @@ export interface AgentSourceBaselineFieldRefs {
   readonly headEventId: Prisma.FieldRef<"AgentSourceBaseline", 'String'>
   readonly afterHeadEventId: Prisma.FieldRef<"AgentSourceBaseline", 'String'>
   readonly sourceOrder: Prisma.FieldRef<"AgentSourceBaseline", 'Int'>
+  readonly epoch: Prisma.FieldRef<"AgentSourceBaseline", 'Int'>
   readonly createdAt: Prisma.FieldRef<"AgentSourceBaseline", 'DateTime'>
 }
     

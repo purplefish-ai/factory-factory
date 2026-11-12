@@ -31,6 +31,7 @@ export type AgentSourcePageAvgAggregateOutputType = {
   requestPage: number | null
   nextPage: number | null
   sourceOrder: number | null
+  epoch: number | null
 }
 
 export type AgentSourcePageSumAggregateOutputType = {
@@ -38,6 +39,7 @@ export type AgentSourcePageSumAggregateOutputType = {
   requestPage: number | null
   nextPage: number | null
   sourceOrder: number | null
+  epoch: number | null
 }
 
 export type AgentSourcePageMinAggregateOutputType = {
@@ -49,6 +51,7 @@ export type AgentSourcePageMinAggregateOutputType = {
   requestPage: number | null
   nextPage: number | null
   sourceOrder: number | null
+  epoch: number | null
   createdAt: Date | null
 }
 
@@ -61,6 +64,7 @@ export type AgentSourcePageMaxAggregateOutputType = {
   requestPage: number | null
   nextPage: number | null
   sourceOrder: number | null
+  epoch: number | null
   createdAt: Date | null
 }
 
@@ -74,6 +78,7 @@ export type AgentSourcePageCountAggregateOutputType = {
   nextPage: number
   sourceOrder: number
   evidence: number
+  epoch: number
   createdAt: number
   _all: number
 }
@@ -84,6 +89,7 @@ export type AgentSourcePageAvgAggregateInputType = {
   requestPage?: true
   nextPage?: true
   sourceOrder?: true
+  epoch?: true
 }
 
 export type AgentSourcePageSumAggregateInputType = {
@@ -91,6 +97,7 @@ export type AgentSourcePageSumAggregateInputType = {
   requestPage?: true
   nextPage?: true
   sourceOrder?: true
+  epoch?: true
 }
 
 export type AgentSourcePageMinAggregateInputType = {
@@ -102,6 +109,7 @@ export type AgentSourcePageMinAggregateInputType = {
   requestPage?: true
   nextPage?: true
   sourceOrder?: true
+  epoch?: true
   createdAt?: true
 }
 
@@ -114,6 +122,7 @@ export type AgentSourcePageMaxAggregateInputType = {
   requestPage?: true
   nextPage?: true
   sourceOrder?: true
+  epoch?: true
   createdAt?: true
 }
 
@@ -127,6 +136,7 @@ export type AgentSourcePageCountAggregateInputType = {
   nextPage?: true
   sourceOrder?: true
   evidence?: true
+  epoch?: true
   createdAt?: true
   _all?: true
 }
@@ -227,6 +237,7 @@ export type AgentSourcePageGroupByOutputType = {
   nextPage: number | null
   sourceOrder: number | null
   evidence: runtime.JsonValue
+  epoch: number
   createdAt: Date
   _count: AgentSourcePageCountAggregateOutputType | null
   _avg: AgentSourcePageAvgAggregateOutputType | null
@@ -263,6 +274,7 @@ export type AgentSourcePageWhereInput = {
   nextPage?: Prisma.IntNullableFilter<"AgentSourcePage"> | number | null
   sourceOrder?: Prisma.IntNullableFilter<"AgentSourcePage"> | number | null
   evidence?: Prisma.JsonFilter<"AgentSourcePage">
+  epoch?: Prisma.IntFilter<"AgentSourcePage"> | number
   createdAt?: Prisma.DateTimeFilter<"AgentSourcePage"> | Date | string
   source?: Prisma.XOR<Prisma.AgentSourceStateScalarRelationFilter, Prisma.AgentSourceStateWhereInput>
 }
@@ -277,6 +289,7 @@ export type AgentSourcePageOrderByWithRelationInput = {
   nextPage?: Prisma.SortOrderInput | Prisma.SortOrder
   sourceOrder?: Prisma.SortOrderInput | Prisma.SortOrder
   evidence?: Prisma.SortOrder
+  epoch?: Prisma.SortOrder
   createdAt?: Prisma.SortOrder
   source?: Prisma.AgentSourceStateOrderByWithRelationInput
 }
@@ -295,6 +308,7 @@ export type AgentSourcePageWhereUniqueInput = Prisma.AtLeast<{
   nextPage?: Prisma.IntNullableFilter<"AgentSourcePage"> | number | null
   sourceOrder?: Prisma.IntNullableFilter<"AgentSourcePage"> | number | null
   evidence?: Prisma.JsonFilter<"AgentSourcePage">
+  epoch?: Prisma.IntFilter<"AgentSourcePage"> | number
   createdAt?: Prisma.DateTimeFilter<"AgentSourcePage"> | Date | string
   source?: Prisma.XOR<Prisma.AgentSourceStateScalarRelationFilter, Prisma.AgentSourceStateWhereInput>
 }, "id" | "connectionId_scanId_ordinal">
@@ -309,6 +323,7 @@ export type AgentSourcePageOrderByWithAggregationInput = {
   nextPage?: Prisma.SortOrderInput | Prisma.SortOrder
   sourceOrder?: Prisma.SortOrderInput | Prisma.SortOrder
   evidence?: Prisma.SortOrder
+  epoch?: Prisma.SortOrder
   createdAt?: Prisma.SortOrder
   _count?: Prisma.AgentSourcePageCountOrderByAggregateInput
   _avg?: Prisma.AgentSourcePageAvgOrderByAggregateInput
@@ -330,6 +345,7 @@ export type AgentSourcePageScalarWhereWithAggregatesInput = {
   nextPage?: Prisma.IntNullableWithAggregatesFilter<"AgentSourcePage"> | number | null
   sourceOrder?: Prisma.IntNullableWithAggregatesFilter<"AgentSourcePage"> | number | null
   evidence?: Prisma.JsonWithAggregatesFilter<"AgentSourcePage">
+  epoch?: Prisma.IntWithAggregatesFilter<"AgentSourcePage"> | number
   createdAt?: Prisma.DateTimeWithAggregatesFilter<"AgentSourcePage"> | Date | string
 }
 
@@ -342,6 +358,7 @@ export type AgentSourcePageCreateInput = {
   nextPage?: number | null
   sourceOrder?: number | null
   evidence: Prisma.JsonNullValueInput | runtime.InputJsonValue
+  epoch?: number
   createdAt?: Date | string
   source: Prisma.AgentSourceStateCreateNestedOneWithoutPagesInput
 }
@@ -356,6 +373,7 @@ export type AgentSourcePageUncheckedCreateInput = {
   nextPage?: number | null
   sourceOrder?: number | null
   evidence: Prisma.JsonNullValueInput | runtime.InputJsonValue
+  epoch?: number
   createdAt?: Date | string
 }
 
@@ -368,6 +386,7 @@ export type AgentSourcePageUpdateInput = {
   nextPage?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   sourceOrder?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   evidence?: Prisma.JsonNullValueInput | runtime.InputJsonValue
+  epoch?: Prisma.IntFieldUpdateOperationsInput | number
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   source?: Prisma.AgentSourceStateUpdateOneRequiredWithoutPagesNestedInput
 }
@@ -382,6 +401,7 @@ export type AgentSourcePageUncheckedUpdateInput = {
   nextPage?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   sourceOrder?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   evidence?: Prisma.JsonNullValueInput | runtime.InputJsonValue
+  epoch?: Prisma.IntFieldUpdateOperationsInput | number
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
 }
 
@@ -395,6 +415,7 @@ export type AgentSourcePageCreateManyInput = {
   nextPage?: number | null
   sourceOrder?: number | null
   evidence: Prisma.JsonNullValueInput | runtime.InputJsonValue
+  epoch?: number
   createdAt?: Date | string
 }
 
@@ -407,6 +428,7 @@ export type AgentSourcePageUpdateManyMutationInput = {
   nextPage?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   sourceOrder?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   evidence?: Prisma.JsonNullValueInput | runtime.InputJsonValue
+  epoch?: Prisma.IntFieldUpdateOperationsInput | number
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
 }
 
@@ -420,6 +442,7 @@ export type AgentSourcePageUncheckedUpdateManyInput = {
   nextPage?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   sourceOrder?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   evidence?: Prisma.JsonNullValueInput | runtime.InputJsonValue
+  epoch?: Prisma.IntFieldUpdateOperationsInput | number
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
 }
 
@@ -449,6 +472,7 @@ export type AgentSourcePageCountOrderByAggregateInput = {
   nextPage?: Prisma.SortOrder
   sourceOrder?: Prisma.SortOrder
   evidence?: Prisma.SortOrder
+  epoch?: Prisma.SortOrder
   createdAt?: Prisma.SortOrder
 }
 
@@ -457,6 +481,7 @@ export type AgentSourcePageAvgOrderByAggregateInput = {
   requestPage?: Prisma.SortOrder
   nextPage?: Prisma.SortOrder
   sourceOrder?: Prisma.SortOrder
+  epoch?: Prisma.SortOrder
 }
 
 export type AgentSourcePageMaxOrderByAggregateInput = {
@@ -468,6 +493,7 @@ export type AgentSourcePageMaxOrderByAggregateInput = {
   requestPage?: Prisma.SortOrder
   nextPage?: Prisma.SortOrder
   sourceOrder?: Prisma.SortOrder
+  epoch?: Prisma.SortOrder
   createdAt?: Prisma.SortOrder
 }
 
@@ -480,6 +506,7 @@ export type AgentSourcePageMinOrderByAggregateInput = {
   requestPage?: Prisma.SortOrder
   nextPage?: Prisma.SortOrder
   sourceOrder?: Prisma.SortOrder
+  epoch?: Prisma.SortOrder
   createdAt?: Prisma.SortOrder
 }
 
@@ -488,6 +515,7 @@ export type AgentSourcePageSumOrderByAggregateInput = {
   requestPage?: Prisma.SortOrder
   nextPage?: Prisma.SortOrder
   sourceOrder?: Prisma.SortOrder
+  epoch?: Prisma.SortOrder
 }
 
 export type AgentSourcePageCreateNestedManyWithoutSourceInput = {
@@ -541,6 +569,7 @@ export type AgentSourcePageCreateWithoutSourceInput = {
   nextPage?: number | null
   sourceOrder?: number | null
   evidence: Prisma.JsonNullValueInput | runtime.InputJsonValue
+  epoch?: number
   createdAt?: Date | string
 }
 
@@ -553,6 +582,7 @@ export type AgentSourcePageUncheckedCreateWithoutSourceInput = {
   nextPage?: number | null
   sourceOrder?: number | null
   evidence: Prisma.JsonNullValueInput | runtime.InputJsonValue
+  epoch?: number
   createdAt?: Date | string
 }
 
@@ -594,6 +624,7 @@ export type AgentSourcePageScalarWhereInput = {
   nextPage?: Prisma.IntNullableFilter<"AgentSourcePage"> | number | null
   sourceOrder?: Prisma.IntNullableFilter<"AgentSourcePage"> | number | null
   evidence?: Prisma.JsonFilter<"AgentSourcePage">
+  epoch?: Prisma.IntFilter<"AgentSourcePage"> | number
   createdAt?: Prisma.DateTimeFilter<"AgentSourcePage"> | Date | string
 }
 
@@ -606,6 +637,7 @@ export type AgentSourcePageCreateManySourceInput = {
   nextPage?: number | null
   sourceOrder?: number | null
   evidence: Prisma.JsonNullValueInput | runtime.InputJsonValue
+  epoch?: number
   createdAt?: Date | string
 }
 
@@ -618,6 +650,7 @@ export type AgentSourcePageUpdateWithoutSourceInput = {
   nextPage?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   sourceOrder?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   evidence?: Prisma.JsonNullValueInput | runtime.InputJsonValue
+  epoch?: Prisma.IntFieldUpdateOperationsInput | number
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
 }
 
@@ -630,6 +663,7 @@ export type AgentSourcePageUncheckedUpdateWithoutSourceInput = {
   nextPage?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   sourceOrder?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   evidence?: Prisma.JsonNullValueInput | runtime.InputJsonValue
+  epoch?: Prisma.IntFieldUpdateOperationsInput | number
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
 }
 
@@ -642,6 +676,7 @@ export type AgentSourcePageUncheckedUpdateManyWithoutSourceInput = {
   nextPage?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   sourceOrder?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   evidence?: Prisma.JsonNullValueInput | runtime.InputJsonValue
+  epoch?: Prisma.IntFieldUpdateOperationsInput | number
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
 }
 
@@ -657,6 +692,7 @@ export type AgentSourcePageSelect<ExtArgs extends runtime.Types.Extensions.Inter
   nextPage?: boolean
   sourceOrder?: boolean
   evidence?: boolean
+  epoch?: boolean
   createdAt?: boolean
   source?: boolean | Prisma.AgentSourceStateDefaultArgs<ExtArgs>
 }, ExtArgs["result"]["agentSourcePage"]>
@@ -671,6 +707,7 @@ export type AgentSourcePageSelectCreateManyAndReturn<ExtArgs extends runtime.Typ
   nextPage?: boolean
   sourceOrder?: boolean
   evidence?: boolean
+  epoch?: boolean
   createdAt?: boolean
   source?: boolean | Prisma.AgentSourceStateDefaultArgs<ExtArgs>
 }, ExtArgs["result"]["agentSourcePage"]>
@@ -685,6 +722,7 @@ export type AgentSourcePageSelectUpdateManyAndReturn<ExtArgs extends runtime.Typ
   nextPage?: boolean
   sourceOrder?: boolean
   evidence?: boolean
+  epoch?: boolean
   createdAt?: boolean
   source?: boolean | Prisma.AgentSourceStateDefaultArgs<ExtArgs>
 }, ExtArgs["result"]["agentSourcePage"]>
@@ -699,10 +737,11 @@ export type AgentSourcePageSelectScalar = {
   nextPage?: boolean
   sourceOrder?: boolean
   evidence?: boolean
+  epoch?: boolean
   createdAt?: boolean
 }
 
-export type AgentSourcePageOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "connectionId" | "scanId" | "ordinal" | "phase" | "requestPage" | "nextPage" | "sourceOrder" | "evidence" | "createdAt", ExtArgs["result"]["agentSourcePage"]>
+export type AgentSourcePageOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "connectionId" | "scanId" | "ordinal" | "phase" | "requestPage" | "nextPage" | "sourceOrder" | "evidence" | "epoch" | "createdAt", ExtArgs["result"]["agentSourcePage"]>
 export type AgentSourcePageInclude<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
   source?: boolean | Prisma.AgentSourceStateDefaultArgs<ExtArgs>
 }
@@ -728,6 +767,7 @@ export type $AgentSourcePagePayload<ExtArgs extends runtime.Types.Extensions.Int
     nextPage: number | null
     sourceOrder: number | null
     evidence: runtime.JsonValue
+    epoch: number
     createdAt: Date
   }, ExtArgs["result"]["agentSourcePage"]>
   composites: {}
@@ -1162,6 +1202,7 @@ export interface AgentSourcePageFieldRefs {
   readonly nextPage: Prisma.FieldRef<"AgentSourcePage", 'Int'>
   readonly sourceOrder: Prisma.FieldRef<"AgentSourcePage", 'Int'>
   readonly evidence: Prisma.FieldRef<"AgentSourcePage", 'Json'>
+  readonly epoch: Prisma.FieldRef<"AgentSourcePage", 'Int'>
   readonly createdAt: Prisma.FieldRef<"AgentSourcePage", 'DateTime'>
 }
     

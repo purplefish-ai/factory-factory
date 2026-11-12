@@ -28,10 +28,12 @@ export type AggregateAgentEvent = {
 
 export type AgentEventAvgAggregateOutputType = {
   sourceOrder: number | null
+  sourceEpoch: number | null
 }
 
 export type AgentEventSumAggregateOutputType = {
   sourceOrder: number | null
+  sourceEpoch: number | null
 }
 
 export type AgentEventMinAggregateOutputType = {
@@ -39,6 +41,7 @@ export type AgentEventMinAggregateOutputType = {
   connectionId: string | null
   providerEventId: string | null
   sourceOrder: number | null
+  sourceEpoch: number | null
   occurredAt: Date | null
   observedAt: Date | null
   payloadExpiresAt: Date | null
@@ -51,6 +54,7 @@ export type AgentEventMaxAggregateOutputType = {
   connectionId: string | null
   providerEventId: string | null
   sourceOrder: number | null
+  sourceEpoch: number | null
   occurredAt: Date | null
   observedAt: Date | null
   payloadExpiresAt: Date | null
@@ -63,6 +67,7 @@ export type AgentEventCountAggregateOutputType = {
   connectionId: number
   providerEventId: number
   sourceOrder: number
+  sourceEpoch: number
   payload: number
   occurredAt: number
   observedAt: number
@@ -75,10 +80,12 @@ export type AgentEventCountAggregateOutputType = {
 
 export type AgentEventAvgAggregateInputType = {
   sourceOrder?: true
+  sourceEpoch?: true
 }
 
 export type AgentEventSumAggregateInputType = {
   sourceOrder?: true
+  sourceEpoch?: true
 }
 
 export type AgentEventMinAggregateInputType = {
@@ -86,6 +93,7 @@ export type AgentEventMinAggregateInputType = {
   connectionId?: true
   providerEventId?: true
   sourceOrder?: true
+  sourceEpoch?: true
   occurredAt?: true
   observedAt?: true
   payloadExpiresAt?: true
@@ -98,6 +106,7 @@ export type AgentEventMaxAggregateInputType = {
   connectionId?: true
   providerEventId?: true
   sourceOrder?: true
+  sourceEpoch?: true
   occurredAt?: true
   observedAt?: true
   payloadExpiresAt?: true
@@ -110,6 +119,7 @@ export type AgentEventCountAggregateInputType = {
   connectionId?: true
   providerEventId?: true
   sourceOrder?: true
+  sourceEpoch?: true
   payload?: true
   occurredAt?: true
   observedAt?: true
@@ -210,6 +220,7 @@ export type AgentEventGroupByOutputType = {
   connectionId: string
   providerEventId: string
   sourceOrder: number | null
+  sourceEpoch: number
   payload: runtime.JsonValue | null
   occurredAt: Date
   observedAt: Date
@@ -246,6 +257,7 @@ export type AgentEventWhereInput = {
   connectionId?: Prisma.StringFilter<"AgentEvent"> | string
   providerEventId?: Prisma.StringFilter<"AgentEvent"> | string
   sourceOrder?: Prisma.IntNullableFilter<"AgentEvent"> | number | null
+  sourceEpoch?: Prisma.IntFilter<"AgentEvent"> | number
   payload?: Prisma.JsonNullableFilter<"AgentEvent">
   occurredAt?: Prisma.DateTimeFilter<"AgentEvent"> | Date | string
   observedAt?: Prisma.DateTimeFilter<"AgentEvent"> | Date | string
@@ -262,6 +274,7 @@ export type AgentEventOrderByWithRelationInput = {
   connectionId?: Prisma.SortOrder
   providerEventId?: Prisma.SortOrder
   sourceOrder?: Prisma.SortOrderInput | Prisma.SortOrder
+  sourceEpoch?: Prisma.SortOrder
   payload?: Prisma.SortOrderInput | Prisma.SortOrder
   occurredAt?: Prisma.SortOrder
   observedAt?: Prisma.SortOrder
@@ -284,6 +297,7 @@ export type AgentEventWhereUniqueInput = Prisma.AtLeast<{
   connectionId?: Prisma.StringFilter<"AgentEvent"> | string
   providerEventId?: Prisma.StringFilter<"AgentEvent"> | string
   sourceOrder?: Prisma.IntNullableFilter<"AgentEvent"> | number | null
+  sourceEpoch?: Prisma.IntFilter<"AgentEvent"> | number
   payload?: Prisma.JsonNullableFilter<"AgentEvent">
   occurredAt?: Prisma.DateTimeFilter<"AgentEvent"> | Date | string
   observedAt?: Prisma.DateTimeFilter<"AgentEvent"> | Date | string
@@ -300,6 +314,7 @@ export type AgentEventOrderByWithAggregationInput = {
   connectionId?: Prisma.SortOrder
   providerEventId?: Prisma.SortOrder
   sourceOrder?: Prisma.SortOrderInput | Prisma.SortOrder
+  sourceEpoch?: Prisma.SortOrder
   payload?: Prisma.SortOrderInput | Prisma.SortOrder
   occurredAt?: Prisma.SortOrder
   observedAt?: Prisma.SortOrder
@@ -321,6 +336,7 @@ export type AgentEventScalarWhereWithAggregatesInput = {
   connectionId?: Prisma.StringWithAggregatesFilter<"AgentEvent"> | string
   providerEventId?: Prisma.StringWithAggregatesFilter<"AgentEvent"> | string
   sourceOrder?: Prisma.IntNullableWithAggregatesFilter<"AgentEvent"> | number | null
+  sourceEpoch?: Prisma.IntWithAggregatesFilter<"AgentEvent"> | number
   payload?: Prisma.JsonNullableWithAggregatesFilter<"AgentEvent">
   occurredAt?: Prisma.DateTimeWithAggregatesFilter<"AgentEvent"> | Date | string
   observedAt?: Prisma.DateTimeWithAggregatesFilter<"AgentEvent"> | Date | string
@@ -333,6 +349,7 @@ export type AgentEventCreateInput = {
   id?: string
   providerEventId: string
   sourceOrder?: number | null
+  sourceEpoch?: number
   payload?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   occurredAt: Date | string
   observedAt: Date | string
@@ -349,6 +366,7 @@ export type AgentEventUncheckedCreateInput = {
   connectionId: string
   providerEventId: string
   sourceOrder?: number | null
+  sourceEpoch?: number
   payload?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   occurredAt: Date | string
   observedAt: Date | string
@@ -363,6 +381,7 @@ export type AgentEventUpdateInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   providerEventId?: Prisma.StringFieldUpdateOperationsInput | string
   sourceOrder?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
+  sourceEpoch?: Prisma.IntFieldUpdateOperationsInput | number
   payload?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   occurredAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   observedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
@@ -379,6 +398,7 @@ export type AgentEventUncheckedUpdateInput = {
   connectionId?: Prisma.StringFieldUpdateOperationsInput | string
   providerEventId?: Prisma.StringFieldUpdateOperationsInput | string
   sourceOrder?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
+  sourceEpoch?: Prisma.IntFieldUpdateOperationsInput | number
   payload?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   occurredAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   observedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
@@ -394,6 +414,7 @@ export type AgentEventCreateManyInput = {
   connectionId: string
   providerEventId: string
   sourceOrder?: number | null
+  sourceEpoch?: number
   payload?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   occurredAt: Date | string
   observedAt: Date | string
@@ -406,6 +427,7 @@ export type AgentEventUpdateManyMutationInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   providerEventId?: Prisma.StringFieldUpdateOperationsInput | string
   sourceOrder?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
+  sourceEpoch?: Prisma.IntFieldUpdateOperationsInput | number
   payload?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   occurredAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   observedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
@@ -419,6 +441,7 @@ export type AgentEventUncheckedUpdateManyInput = {
   connectionId?: Prisma.StringFieldUpdateOperationsInput | string
   providerEventId?: Prisma.StringFieldUpdateOperationsInput | string
   sourceOrder?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
+  sourceEpoch?: Prisma.IntFieldUpdateOperationsInput | number
   payload?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   occurredAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   observedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
@@ -462,6 +485,7 @@ export type AgentEventCountOrderByAggregateInput = {
   connectionId?: Prisma.SortOrder
   providerEventId?: Prisma.SortOrder
   sourceOrder?: Prisma.SortOrder
+  sourceEpoch?: Prisma.SortOrder
   payload?: Prisma.SortOrder
   occurredAt?: Prisma.SortOrder
   observedAt?: Prisma.SortOrder
@@ -472,6 +496,7 @@ export type AgentEventCountOrderByAggregateInput = {
 
 export type AgentEventAvgOrderByAggregateInput = {
   sourceOrder?: Prisma.SortOrder
+  sourceEpoch?: Prisma.SortOrder
 }
 
 export type AgentEventMaxOrderByAggregateInput = {
@@ -479,6 +504,7 @@ export type AgentEventMaxOrderByAggregateInput = {
   connectionId?: Prisma.SortOrder
   providerEventId?: Prisma.SortOrder
   sourceOrder?: Prisma.SortOrder
+  sourceEpoch?: Prisma.SortOrder
   occurredAt?: Prisma.SortOrder
   observedAt?: Prisma.SortOrder
   payloadExpiresAt?: Prisma.SortOrder
@@ -491,6 +517,7 @@ export type AgentEventMinOrderByAggregateInput = {
   connectionId?: Prisma.SortOrder
   providerEventId?: Prisma.SortOrder
   sourceOrder?: Prisma.SortOrder
+  sourceEpoch?: Prisma.SortOrder
   occurredAt?: Prisma.SortOrder
   observedAt?: Prisma.SortOrder
   payloadExpiresAt?: Prisma.SortOrder
@@ -500,6 +527,7 @@ export type AgentEventMinOrderByAggregateInput = {
 
 export type AgentEventSumOrderByAggregateInput = {
   sourceOrder?: Prisma.SortOrder
+  sourceEpoch?: Prisma.SortOrder
 }
 
 export type AgentEventScalarRelationFilter = {
@@ -583,6 +611,7 @@ export type AgentEventCreateWithoutConnectionInput = {
   id?: string
   providerEventId: string
   sourceOrder?: number | null
+  sourceEpoch?: number
   payload?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   occurredAt: Date | string
   observedAt: Date | string
@@ -597,6 +626,7 @@ export type AgentEventUncheckedCreateWithoutConnectionInput = {
   id?: string
   providerEventId: string
   sourceOrder?: number | null
+  sourceEpoch?: number
   payload?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   occurredAt: Date | string
   observedAt: Date | string
@@ -640,6 +670,7 @@ export type AgentEventScalarWhereInput = {
   connectionId?: Prisma.StringFilter<"AgentEvent"> | string
   providerEventId?: Prisma.StringFilter<"AgentEvent"> | string
   sourceOrder?: Prisma.IntNullableFilter<"AgentEvent"> | number | null
+  sourceEpoch?: Prisma.IntFilter<"AgentEvent"> | number
   payload?: Prisma.JsonNullableFilter<"AgentEvent">
   occurredAt?: Prisma.DateTimeFilter<"AgentEvent"> | Date | string
   observedAt?: Prisma.DateTimeFilter<"AgentEvent"> | Date | string
@@ -652,6 +683,7 @@ export type AgentEventCreateWithoutRunsInput = {
   id?: string
   providerEventId: string
   sourceOrder?: number | null
+  sourceEpoch?: number
   payload?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   occurredAt: Date | string
   observedAt: Date | string
@@ -667,6 +699,7 @@ export type AgentEventUncheckedCreateWithoutRunsInput = {
   connectionId: string
   providerEventId: string
   sourceOrder?: number | null
+  sourceEpoch?: number
   payload?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   occurredAt: Date | string
   observedAt: Date | string
@@ -696,6 +729,7 @@ export type AgentEventUpdateWithoutRunsInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   providerEventId?: Prisma.StringFieldUpdateOperationsInput | string
   sourceOrder?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
+  sourceEpoch?: Prisma.IntFieldUpdateOperationsInput | number
   payload?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   occurredAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   observedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
@@ -711,6 +745,7 @@ export type AgentEventUncheckedUpdateWithoutRunsInput = {
   connectionId?: Prisma.StringFieldUpdateOperationsInput | string
   providerEventId?: Prisma.StringFieldUpdateOperationsInput | string
   sourceOrder?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
+  sourceEpoch?: Prisma.IntFieldUpdateOperationsInput | number
   payload?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   occurredAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   observedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
@@ -724,6 +759,7 @@ export type AgentEventCreateWithoutEvaluationsInput = {
   id?: string
   providerEventId: string
   sourceOrder?: number | null
+  sourceEpoch?: number
   payload?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   occurredAt: Date | string
   observedAt: Date | string
@@ -739,6 +775,7 @@ export type AgentEventUncheckedCreateWithoutEvaluationsInput = {
   connectionId: string
   providerEventId: string
   sourceOrder?: number | null
+  sourceEpoch?: number
   payload?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   occurredAt: Date | string
   observedAt: Date | string
@@ -768,6 +805,7 @@ export type AgentEventUpdateWithoutEvaluationsInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   providerEventId?: Prisma.StringFieldUpdateOperationsInput | string
   sourceOrder?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
+  sourceEpoch?: Prisma.IntFieldUpdateOperationsInput | number
   payload?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   occurredAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   observedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
@@ -783,6 +821,7 @@ export type AgentEventUncheckedUpdateWithoutEvaluationsInput = {
   connectionId?: Prisma.StringFieldUpdateOperationsInput | string
   providerEventId?: Prisma.StringFieldUpdateOperationsInput | string
   sourceOrder?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
+  sourceEpoch?: Prisma.IntFieldUpdateOperationsInput | number
   payload?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   occurredAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   observedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
@@ -796,6 +835,7 @@ export type AgentEventCreateManyConnectionInput = {
   id?: string
   providerEventId: string
   sourceOrder?: number | null
+  sourceEpoch?: number
   payload?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   occurredAt: Date | string
   observedAt: Date | string
@@ -808,6 +848,7 @@ export type AgentEventUpdateWithoutConnectionInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   providerEventId?: Prisma.StringFieldUpdateOperationsInput | string
   sourceOrder?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
+  sourceEpoch?: Prisma.IntFieldUpdateOperationsInput | number
   payload?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   occurredAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   observedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
@@ -822,6 +863,7 @@ export type AgentEventUncheckedUpdateWithoutConnectionInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   providerEventId?: Prisma.StringFieldUpdateOperationsInput | string
   sourceOrder?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
+  sourceEpoch?: Prisma.IntFieldUpdateOperationsInput | number
   payload?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   occurredAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   observedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
@@ -836,6 +878,7 @@ export type AgentEventUncheckedUpdateManyWithoutConnectionInput = {
   id?: Prisma.StringFieldUpdateOperationsInput | string
   providerEventId?: Prisma.StringFieldUpdateOperationsInput | string
   sourceOrder?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
+  sourceEpoch?: Prisma.IntFieldUpdateOperationsInput | number
   payload?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   occurredAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   observedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
@@ -889,6 +932,7 @@ export type AgentEventSelect<ExtArgs extends runtime.Types.Extensions.InternalAr
   connectionId?: boolean
   providerEventId?: boolean
   sourceOrder?: boolean
+  sourceEpoch?: boolean
   payload?: boolean
   occurredAt?: boolean
   observedAt?: boolean
@@ -906,6 +950,7 @@ export type AgentEventSelectCreateManyAndReturn<ExtArgs extends runtime.Types.Ex
   connectionId?: boolean
   providerEventId?: boolean
   sourceOrder?: boolean
+  sourceEpoch?: boolean
   payload?: boolean
   occurredAt?: boolean
   observedAt?: boolean
@@ -920,6 +965,7 @@ export type AgentEventSelectUpdateManyAndReturn<ExtArgs extends runtime.Types.Ex
   connectionId?: boolean
   providerEventId?: boolean
   sourceOrder?: boolean
+  sourceEpoch?: boolean
   payload?: boolean
   occurredAt?: boolean
   observedAt?: boolean
@@ -934,6 +980,7 @@ export type AgentEventSelectScalar = {
   connectionId?: boolean
   providerEventId?: boolean
   sourceOrder?: boolean
+  sourceEpoch?: boolean
   payload?: boolean
   occurredAt?: boolean
   observedAt?: boolean
@@ -942,7 +989,7 @@ export type AgentEventSelectScalar = {
   createdAt?: boolean
 }
 
-export type AgentEventOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "connectionId" | "providerEventId" | "sourceOrder" | "payload" | "occurredAt" | "observedAt" | "payloadExpiresAt" | "identityExpiresAt" | "createdAt", ExtArgs["result"]["agentEvent"]>
+export type AgentEventOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "connectionId" | "providerEventId" | "sourceOrder" | "sourceEpoch" | "payload" | "occurredAt" | "observedAt" | "payloadExpiresAt" | "identityExpiresAt" | "createdAt", ExtArgs["result"]["agentEvent"]>
 export type AgentEventInclude<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
   connection?: boolean | Prisma.AgentConnectionDefaultArgs<ExtArgs>
   evaluations?: boolean | Prisma.AgentEvent$evaluationsArgs<ExtArgs>
@@ -968,6 +1015,7 @@ export type $AgentEventPayload<ExtArgs extends runtime.Types.Extensions.Internal
     connectionId: string
     providerEventId: string
     sourceOrder: number | null
+    sourceEpoch: number
     payload: runtime.JsonValue | null
     occurredAt: Date
     observedAt: Date
@@ -1404,6 +1452,7 @@ export interface AgentEventFieldRefs {
   readonly connectionId: Prisma.FieldRef<"AgentEvent", 'String'>
   readonly providerEventId: Prisma.FieldRef<"AgentEvent", 'String'>
   readonly sourceOrder: Prisma.FieldRef<"AgentEvent", 'Int'>
+  readonly sourceEpoch: Prisma.FieldRef<"AgentEvent", 'Int'>
   readonly payload: Prisma.FieldRef<"AgentEvent", 'Json'>
   readonly occurredAt: Prisma.FieldRef<"AgentEvent", 'DateTime'>
   readonly observedAt: Prisma.FieldRef<"AgentEvent", 'DateTime'>

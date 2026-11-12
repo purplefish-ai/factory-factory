@@ -29,11 +29,13 @@ export type AggregateAgentSourceHead = {
 export type AgentSourceHeadAvgAggregateOutputType = {
   position: number | null
   precedingEventCount: number | null
+  epoch: number | null
 }
 
 export type AgentSourceHeadSumAggregateOutputType = {
   position: number | null
   precedingEventCount: number | null
+  epoch: number | null
 }
 
 export type AgentSourceHeadMinAggregateOutputType = {
@@ -42,6 +44,7 @@ export type AgentSourceHeadMinAggregateOutputType = {
   providerEventId: string | null
   position: number | null
   precedingEventCount: number | null
+  epoch: number | null
 }
 
 export type AgentSourceHeadMaxAggregateOutputType = {
@@ -50,6 +53,7 @@ export type AgentSourceHeadMaxAggregateOutputType = {
   providerEventId: string | null
   position: number | null
   precedingEventCount: number | null
+  epoch: number | null
 }
 
 export type AgentSourceHeadCountAggregateOutputType = {
@@ -58,6 +62,7 @@ export type AgentSourceHeadCountAggregateOutputType = {
   providerEventId: number
   position: number
   precedingEventCount: number
+  epoch: number
   _all: number
 }
 
@@ -65,11 +70,13 @@ export type AgentSourceHeadCountAggregateOutputType = {
 export type AgentSourceHeadAvgAggregateInputType = {
   position?: true
   precedingEventCount?: true
+  epoch?: true
 }
 
 export type AgentSourceHeadSumAggregateInputType = {
   position?: true
   precedingEventCount?: true
+  epoch?: true
 }
 
 export type AgentSourceHeadMinAggregateInputType = {
@@ -78,6 +85,7 @@ export type AgentSourceHeadMinAggregateInputType = {
   providerEventId?: true
   position?: true
   precedingEventCount?: true
+  epoch?: true
 }
 
 export type AgentSourceHeadMaxAggregateInputType = {
@@ -86,6 +94,7 @@ export type AgentSourceHeadMaxAggregateInputType = {
   providerEventId?: true
   position?: true
   precedingEventCount?: true
+  epoch?: true
 }
 
 export type AgentSourceHeadCountAggregateInputType = {
@@ -94,6 +103,7 @@ export type AgentSourceHeadCountAggregateInputType = {
   providerEventId?: true
   position?: true
   precedingEventCount?: true
+  epoch?: true
   _all?: true
 }
 
@@ -189,6 +199,7 @@ export type AgentSourceHeadGroupByOutputType = {
   providerEventId: string
   position: number
   precedingEventCount: number
+  epoch: number
   _count: AgentSourceHeadCountAggregateOutputType | null
   _avg: AgentSourceHeadAvgAggregateOutputType | null
   _sum: AgentSourceHeadSumAggregateOutputType | null
@@ -220,6 +231,7 @@ export type AgentSourceHeadWhereInput = {
   providerEventId?: Prisma.StringFilter<"AgentSourceHead"> | string
   position?: Prisma.IntFilter<"AgentSourceHead"> | number
   precedingEventCount?: Prisma.IntFilter<"AgentSourceHead"> | number
+  epoch?: Prisma.IntFilter<"AgentSourceHead"> | number
   checkpoint?: Prisma.XOR<Prisma.AgentSourceCheckpointScalarRelationFilter, Prisma.AgentSourceCheckpointWhereInput>
 }
 
@@ -229,6 +241,7 @@ export type AgentSourceHeadOrderByWithRelationInput = {
   providerEventId?: Prisma.SortOrder
   position?: Prisma.SortOrder
   precedingEventCount?: Prisma.SortOrder
+  epoch?: Prisma.SortOrder
   checkpoint?: Prisma.AgentSourceCheckpointOrderByWithRelationInput
 }
 
@@ -243,6 +256,7 @@ export type AgentSourceHeadWhereUniqueInput = Prisma.AtLeast<{
   providerEventId?: Prisma.StringFilter<"AgentSourceHead"> | string
   position?: Prisma.IntFilter<"AgentSourceHead"> | number
   precedingEventCount?: Prisma.IntFilter<"AgentSourceHead"> | number
+  epoch?: Prisma.IntFilter<"AgentSourceHead"> | number
   checkpoint?: Prisma.XOR<Prisma.AgentSourceCheckpointScalarRelationFilter, Prisma.AgentSourceCheckpointWhereInput>
 }, "connectionId_scanId_providerEventId" | "connectionId_scanId_position">
 
@@ -252,6 +266,7 @@ export type AgentSourceHeadOrderByWithAggregationInput = {
   providerEventId?: Prisma.SortOrder
   position?: Prisma.SortOrder
   precedingEventCount?: Prisma.SortOrder
+  epoch?: Prisma.SortOrder
   _count?: Prisma.AgentSourceHeadCountOrderByAggregateInput
   _avg?: Prisma.AgentSourceHeadAvgOrderByAggregateInput
   _max?: Prisma.AgentSourceHeadMaxOrderByAggregateInput
@@ -268,12 +283,14 @@ export type AgentSourceHeadScalarWhereWithAggregatesInput = {
   providerEventId?: Prisma.StringWithAggregatesFilter<"AgentSourceHead"> | string
   position?: Prisma.IntWithAggregatesFilter<"AgentSourceHead"> | number
   precedingEventCount?: Prisma.IntWithAggregatesFilter<"AgentSourceHead"> | number
+  epoch?: Prisma.IntWithAggregatesFilter<"AgentSourceHead"> | number
 }
 
 export type AgentSourceHeadCreateInput = {
   providerEventId: string
   position: number
   precedingEventCount: number
+  epoch?: number
   checkpoint: Prisma.AgentSourceCheckpointCreateNestedOneWithoutHeadsInput
 }
 
@@ -283,12 +300,14 @@ export type AgentSourceHeadUncheckedCreateInput = {
   providerEventId: string
   position: number
   precedingEventCount: number
+  epoch?: number
 }
 
 export type AgentSourceHeadUpdateInput = {
   providerEventId?: Prisma.StringFieldUpdateOperationsInput | string
   position?: Prisma.IntFieldUpdateOperationsInput | number
   precedingEventCount?: Prisma.IntFieldUpdateOperationsInput | number
+  epoch?: Prisma.IntFieldUpdateOperationsInput | number
   checkpoint?: Prisma.AgentSourceCheckpointUpdateOneRequiredWithoutHeadsNestedInput
 }
 
@@ -298,6 +317,7 @@ export type AgentSourceHeadUncheckedUpdateInput = {
   providerEventId?: Prisma.StringFieldUpdateOperationsInput | string
   position?: Prisma.IntFieldUpdateOperationsInput | number
   precedingEventCount?: Prisma.IntFieldUpdateOperationsInput | number
+  epoch?: Prisma.IntFieldUpdateOperationsInput | number
 }
 
 export type AgentSourceHeadCreateManyInput = {
@@ -306,12 +326,14 @@ export type AgentSourceHeadCreateManyInput = {
   providerEventId: string
   position: number
   precedingEventCount: number
+  epoch?: number
 }
 
 export type AgentSourceHeadUpdateManyMutationInput = {
   providerEventId?: Prisma.StringFieldUpdateOperationsInput | string
   position?: Prisma.IntFieldUpdateOperationsInput | number
   precedingEventCount?: Prisma.IntFieldUpdateOperationsInput | number
+  epoch?: Prisma.IntFieldUpdateOperationsInput | number
 }
 
 export type AgentSourceHeadUncheckedUpdateManyInput = {
@@ -320,6 +342,7 @@ export type AgentSourceHeadUncheckedUpdateManyInput = {
   providerEventId?: Prisma.StringFieldUpdateOperationsInput | string
   position?: Prisma.IntFieldUpdateOperationsInput | number
   precedingEventCount?: Prisma.IntFieldUpdateOperationsInput | number
+  epoch?: Prisma.IntFieldUpdateOperationsInput | number
 }
 
 export type AgentSourceHeadListRelationFilter = {
@@ -350,11 +373,13 @@ export type AgentSourceHeadCountOrderByAggregateInput = {
   providerEventId?: Prisma.SortOrder
   position?: Prisma.SortOrder
   precedingEventCount?: Prisma.SortOrder
+  epoch?: Prisma.SortOrder
 }
 
 export type AgentSourceHeadAvgOrderByAggregateInput = {
   position?: Prisma.SortOrder
   precedingEventCount?: Prisma.SortOrder
+  epoch?: Prisma.SortOrder
 }
 
 export type AgentSourceHeadMaxOrderByAggregateInput = {
@@ -363,6 +388,7 @@ export type AgentSourceHeadMaxOrderByAggregateInput = {
   providerEventId?: Prisma.SortOrder
   position?: Prisma.SortOrder
   precedingEventCount?: Prisma.SortOrder
+  epoch?: Prisma.SortOrder
 }
 
 export type AgentSourceHeadMinOrderByAggregateInput = {
@@ -371,11 +397,13 @@ export type AgentSourceHeadMinOrderByAggregateInput = {
   providerEventId?: Prisma.SortOrder
   position?: Prisma.SortOrder
   precedingEventCount?: Prisma.SortOrder
+  epoch?: Prisma.SortOrder
 }
 
 export type AgentSourceHeadSumOrderByAggregateInput = {
   position?: Prisma.SortOrder
   precedingEventCount?: Prisma.SortOrder
+  epoch?: Prisma.SortOrder
 }
 
 export type AgentSourceHeadCreateNestedManyWithoutCheckpointInput = {
@@ -424,12 +452,14 @@ export type AgentSourceHeadCreateWithoutCheckpointInput = {
   providerEventId: string
   position: number
   precedingEventCount: number
+  epoch?: number
 }
 
 export type AgentSourceHeadUncheckedCreateWithoutCheckpointInput = {
   providerEventId: string
   position: number
   precedingEventCount: number
+  epoch?: number
 }
 
 export type AgentSourceHeadCreateOrConnectWithoutCheckpointInput = {
@@ -466,30 +496,35 @@ export type AgentSourceHeadScalarWhereInput = {
   providerEventId?: Prisma.StringFilter<"AgentSourceHead"> | string
   position?: Prisma.IntFilter<"AgentSourceHead"> | number
   precedingEventCount?: Prisma.IntFilter<"AgentSourceHead"> | number
+  epoch?: Prisma.IntFilter<"AgentSourceHead"> | number
 }
 
 export type AgentSourceHeadCreateManyCheckpointInput = {
   providerEventId: string
   position: number
   precedingEventCount: number
+  epoch?: number
 }
 
 export type AgentSourceHeadUpdateWithoutCheckpointInput = {
   providerEventId?: Prisma.StringFieldUpdateOperationsInput | string
   position?: Prisma.IntFieldUpdateOperationsInput | number
   precedingEventCount?: Prisma.IntFieldUpdateOperationsInput | number
+  epoch?: Prisma.IntFieldUpdateOperationsInput | number
 }
 
 export type AgentSourceHeadUncheckedUpdateWithoutCheckpointInput = {
   providerEventId?: Prisma.StringFieldUpdateOperationsInput | string
   position?: Prisma.IntFieldUpdateOperationsInput | number
   precedingEventCount?: Prisma.IntFieldUpdateOperationsInput | number
+  epoch?: Prisma.IntFieldUpdateOperationsInput | number
 }
 
 export type AgentSourceHeadUncheckedUpdateManyWithoutCheckpointInput = {
   providerEventId?: Prisma.StringFieldUpdateOperationsInput | string
   position?: Prisma.IntFieldUpdateOperationsInput | number
   precedingEventCount?: Prisma.IntFieldUpdateOperationsInput | number
+  epoch?: Prisma.IntFieldUpdateOperationsInput | number
 }
 
 
@@ -500,6 +535,7 @@ export type AgentSourceHeadSelect<ExtArgs extends runtime.Types.Extensions.Inter
   providerEventId?: boolean
   position?: boolean
   precedingEventCount?: boolean
+  epoch?: boolean
   checkpoint?: boolean | Prisma.AgentSourceCheckpointDefaultArgs<ExtArgs>
 }, ExtArgs["result"]["agentSourceHead"]>
 
@@ -509,6 +545,7 @@ export type AgentSourceHeadSelectCreateManyAndReturn<ExtArgs extends runtime.Typ
   providerEventId?: boolean
   position?: boolean
   precedingEventCount?: boolean
+  epoch?: boolean
   checkpoint?: boolean | Prisma.AgentSourceCheckpointDefaultArgs<ExtArgs>
 }, ExtArgs["result"]["agentSourceHead"]>
 
@@ -518,6 +555,7 @@ export type AgentSourceHeadSelectUpdateManyAndReturn<ExtArgs extends runtime.Typ
   providerEventId?: boolean
   position?: boolean
   precedingEventCount?: boolean
+  epoch?: boolean
   checkpoint?: boolean | Prisma.AgentSourceCheckpointDefaultArgs<ExtArgs>
 }, ExtArgs["result"]["agentSourceHead"]>
 
@@ -527,9 +565,10 @@ export type AgentSourceHeadSelectScalar = {
   providerEventId?: boolean
   position?: boolean
   precedingEventCount?: boolean
+  epoch?: boolean
 }
 
-export type AgentSourceHeadOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"connectionId" | "scanId" | "providerEventId" | "position" | "precedingEventCount", ExtArgs["result"]["agentSourceHead"]>
+export type AgentSourceHeadOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"connectionId" | "scanId" | "providerEventId" | "position" | "precedingEventCount" | "epoch", ExtArgs["result"]["agentSourceHead"]>
 export type AgentSourceHeadInclude<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
   checkpoint?: boolean | Prisma.AgentSourceCheckpointDefaultArgs<ExtArgs>
 }
@@ -551,6 +590,7 @@ export type $AgentSourceHeadPayload<ExtArgs extends runtime.Types.Extensions.Int
     providerEventId: string
     position: number
     precedingEventCount: number
+    epoch: number
   }, ExtArgs["result"]["agentSourceHead"]>
   composites: {}
 }
@@ -980,6 +1020,7 @@ export interface AgentSourceHeadFieldRefs {
   readonly providerEventId: Prisma.FieldRef<"AgentSourceHead", 'String'>
   readonly position: Prisma.FieldRef<"AgentSourceHead", 'Int'>
   readonly precedingEventCount: Prisma.FieldRef<"AgentSourceHead", 'Int'>
+  readonly epoch: Prisma.FieldRef<"AgentSourceHead", 'Int'>
 }
     
 

@@ -39,6 +39,7 @@ async function capture(tx: Tx, checkpoint: AgentSourceCheckpoint, page: AgentSou
     previous = index;
     heads.push({
       connectionId: page.connectionId,
+      epoch: checkpoint.epoch,
       scanId: page.scanId,
       providerEventId: entry.providerEventId,
       position: position++,
@@ -149,6 +150,7 @@ async function checkpointPage(
     checkpoint = await tx.agentSourceCheckpoint.create({
       data: {
         ...key,
+        epoch: page.epoch,
         ...(boundary
           ? {
               boundaryKnown: true,
@@ -189,14 +191,18 @@ async function indexPage(tx: Tx, checkpoint: AgentSourceCheckpoint, page: AgentS
   }
 }
 
-/** A single bounded transaction, serialized with capture/finalization and baseline pinning. */
+/**
+ * A single bounded transaction, serialized with capture/finalization and baseline pinning.
+ * Only the current epoch is maintained; earlier epochs' proof is retained exactly as it was.
+ */
 function maintainCheckpoints(connectionId: string, deletePages: DeletePages) {
   return ledgerTransaction(async (tx) => {
     const state = await tx.agentSourceState.findUnique({ where: { connectionId } });
     const cursor = agentGithubCursorSchema.safeParse(state?.cursor);
-    if (!cursor.success) {
+    if (!(state && cursor.success)) {
       return { indexedPages: 0, deletedPages: 0 };
     }
+    const epoch = state.epoch;
     const activeScan = cursor.data.scan?.id ?? '';
     // Markers survive compaction; NOT EXISTS avoids rescanning all historical JSON.
     const candidates = z
@@ -206,44 +212,45 @@ function maintainCheckpoints(connectionId: string, deletePages: DeletePages) {
       SELECT page."scanId", page."sourceOrder" FROM "AgentSourcePage" page
       LEFT JOIN "AgentSourceCheckpoint" checkpoint ON checkpoint."connectionId" = page."connectionId"
         AND checkpoint."scanId" = page."scanId"
-      WHERE page."connectionId" = ${connectionId} AND page."phase" = 'FINALIZED'
-        AND page."scanId" != ${activeScan}
+      WHERE page."connectionId" = ${connectionId} AND page."epoch" = ${epoch}
+        AND page."phase" = 'FINALIZED' AND page."scanId" != ${activeScan}
         AND (checkpoint."status" IS NULL OR checkpoint."status" = 'BUILDING')
       ORDER BY page."scanId" LIMIT 1
     `
       );
     const candidate = candidates[0];
     if (candidate) {
-      return await backfillPage(tx, connectionId, candidate);
+      return await backfillPage(tx, connectionId, epoch, candidate);
     }
     if (
       await tx.agentSourceCheckpoint.findFirst({
-        where: { connectionId, status: 'INVALID' },
+        where: { connectionId, epoch, status: 'INVALID' },
         select: { scanId: true },
       })
     ) {
       return { indexedPages: 0, deletedPages: 0 };
     }
     const indexed = await tx.agentSourceCheckpoint.findFirst({
-      where: { connectionId, status: 'INDEXED', scanId: { not: activeScan } },
+      where: { connectionId, epoch, status: 'INDEXED', scanId: { not: activeScan } },
     });
     if (indexed) {
       await promoteCheckpoint(tx, connectionId, indexed.scanId);
       return { indexedPages: 0, deletedPages: 0 };
     }
-    return await compactPages(tx, connectionId, activeScan, deletePages);
+    return await compactPages(tx, connectionId, epoch, activeScan, deletePages);
   });
 }
 
 async function backfillPage(
   tx: Tx,
   connectionId: string,
+  epoch: number,
   candidate: { scanId: string; sourceOrder: number | null }
 ) {
   const key = { connectionId, scanId: candidate.scanId };
   const checkpoint = await tx.agentSourceCheckpoint.upsert({
     where: { connectionId_scanId: key },
-    create: { ...key, sourceOrder: candidate.sourceOrder },
+    create: { ...key, epoch, sourceOrder: candidate.sourceOrder },
     update: {},
   });
   const page = await tx.agentSourcePage.findFirst({
@@ -253,7 +260,7 @@ async function backfillPage(
   if (!page || page.ordinal !== (checkpoint?.nextOrdinal ?? 0)) {
     await tx.agentSourceCheckpoint.upsert({
       where: { connectionId_scanId: key },
-      create: { ...key, status: 'INVALID' },
+      create: { ...key, epoch, status: 'INVALID' },
       update: { status: 'INVALID' },
     });
   } else {
@@ -265,6 +272,7 @@ async function backfillPage(
 async function compactPages(
   tx: Tx,
   connectionId: string,
+  epoch: number,
   activeScan: string,
   deletePages: DeletePages
 ) {
@@ -274,8 +282,9 @@ async function compactPages(
       SELECT page."id", page."scanId" FROM "AgentSourcePage" page
       JOIN "AgentSourceCheckpoint" checkpoint ON checkpoint."connectionId" = page."connectionId"
         AND checkpoint."scanId" = page."scanId" AND checkpoint."status" = 'COMPLETE'
-      WHERE page."connectionId" = ${connectionId} AND page."scanId" != ${activeScan}
-        AND page."phase" IN ('CAPTURE', 'VERIFY')
+        AND checkpoint."epoch" = ${epoch}
+      WHERE page."connectionId" = ${connectionId} AND page."epoch" = ${epoch}
+        AND page."scanId" != ${activeScan} AND page."phase" IN ('CAPTURE', 'VERIFY')
       ORDER BY page."scanId", page."ordinal" LIMIT 100
     `
   );

@@ -65,6 +65,16 @@ export const agentPausedReasonCodeSchema = z.enum([
   'SOURCE_RECOVERY_REQUIRED',
 ]);
 export type AgentPausedReasonCode = z.infer<typeof agentPausedReasonCodeSchema>;
+/** Reset a GitHub source behind a recovery fence; the project must use the source. */
+export const agentSourceResetInputSchema = z.strictObject({
+  projectId: agentManagementIdSchema,
+  connectionId: agentManagementIdSchema,
+});
+export const agentSourceResetResultSchema = z.strictObject({
+  connectionId: agentManagementIdSchema,
+  pausedTriggerCount: z.number().int().nonnegative(),
+  cancelledRunCount: z.number().int().nonnegative(),
+});
 export const agentCapabilitySchema = z.strictObject({
   status: z.enum(['SUPPORTED', 'UNSUPPORTED', 'UNAVAILABLE']),
   reasonCode: z.enum([
