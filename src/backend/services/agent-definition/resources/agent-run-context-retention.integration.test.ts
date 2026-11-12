@@ -363,6 +363,94 @@ async function sentTerminal() {
   });
   return { run: await read(), projectId: definition.projectId };
 }
+/**
+ * What ABANDON with `acceptUnprovenStop` writes for an ambiguous send: the
+ * delivery stays AMBIGUOUS with an UNKNOWN observed stop and no work proof.
+ */
+async function unprovenAbandoned(marker = true) {
+  const before = await terminal();
+  const delivery = await db.prisma.agentInitialDelivery.findUniqueOrThrow({
+    where: { runId: before.id },
+  });
+  const attempt = {
+    runId: before.id,
+    sessionId: before.reservedSessionId!,
+    workerGeneration: 1,
+    attemptGeneration: 1,
+    messageId: delivery.messageId,
+    sendAttemptId: delivery.sendAttemptId,
+  };
+  const source = {
+    version: 1,
+    provider: 'CLAUDE',
+    providerSessionId: 'provider-session',
+    runtimeIncarnationId: 'incarnation',
+    lifecycleGeneration: 1,
+  } as const;
+  await db.prisma.agentRun.update({
+    where: { id: before.id },
+    data: {
+      reasonCode: 'ABANDONED_UNPROVEN',
+      workerGeneration: 2,
+      launchPreparation: { version: 1, state: 'STARTUP', setupStartedAt: new Date().toISOString() },
+    },
+  });
+  await db.prisma.agentInitialDelivery.update({
+    where: { runId: before.id },
+    data: {
+      state: 'AMBIGUOUS',
+      sendingAt: before.completedAt,
+      evidence: initialDeliveryEvidenceSchema.parse({
+        version: 1,
+        attempt,
+        source,
+        stop: {
+          version: 1,
+          cause: 'SYSTEM_STOP',
+          source,
+          status: 'UNKNOWN',
+          observedAt: new Date().toISOString(),
+        },
+        ...(marker
+          ? {
+              unprovenAbandon: {
+                version: 1,
+                attempt,
+                reason: 'WORK_PROOF_UNAVAILABLE',
+                decidedAt: new Date().toISOString(),
+              },
+            }
+          : {}),
+      }),
+    },
+  });
+  return read();
+}
+it('expires the context of a run a person abandoned without a proven stop', async () => {
+  await unprovenAbandoned();
+  enable();
+  const batches = await prune();
+  expect(batches.find((batch) => batch.kind === 'runContext')).toMatchObject({ changed: 1 });
+  expect((await read()).contextExpiredAt).not.toBeNull();
+});
+it('fails closed on an unproven-abandonment reason without its evidence marker', async () => {
+  const before = await unprovenAbandoned(false);
+  enable();
+  const batches = await prune();
+  expect(await read()).toEqual(before);
+  expect(batches.find((batch) => batch.kind === 'runContext')?.retained).toEqual({
+    INVALID_STORED_DATA: 1,
+  });
+});
+it('keeps retaining an ambiguous send that was not abandoned', async () => {
+  const before = await unprovenAbandoned(false);
+  await db.prisma.agentRun.update({ where: { id: before.id }, data: { reasonCode: null } });
+  enable();
+  const batches = await prune();
+  expect(batches.find((batch) => batch.kind === 'runContext')?.retained).toEqual({
+    RECOVERY_DEPENDENCY: 1,
+  });
+});
 it('keeps history, compact outcome, delivery evidence and origins readable after sent context expires', async () => {
   const { run, projectId } = await sentTerminal();
   const delivery = await db.prisma.agentInitialDelivery.findMany();

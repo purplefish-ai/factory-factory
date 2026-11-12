@@ -2003,20 +2003,25 @@ outcome is kept), reason `ABANDONED_UNPROVEN`, `launchPhase` FINISHED, no lease
 or next attempt, and an incremented `workerGeneration`. The increment fences
 every later owner write for the old attempt: a late send, outcome, ambiguity or
 stop observation, lease renewal and settlement all conflict, so nothing is
-resent and nothing reopens or settles the run. The evidence gains
-`unprovenAbandon` (attempt, reason, decision time) and the child proof, and no
-`resolution`, `work` or invented stop: `stop` holds only what was actually
-observed, such as an UNKNOWN attempted stop. The consumer releases its local
-owner without starting a replacement observer. The delivery state stays as it
-was (for example AMBIGUOUS), so the reserved session keeps its initial-delivery
-fence against ordinary sends, as after any Abandon of an unfinished delivery.
-Children are not stopped, the workspace is neither archived nor deleted, and an
-agent that was still running keeps working in its workspace until someone stops
-it there. The freed slot lets the automation claim its next queued run, so real
-concurrent work can exceed the run limits, as with child workspaces. Run-context
-retention does not count `unprovenAbandon` as stop proof: unless the evidence
-already proves a finished, stopped turn, the run's stored context is kept rather
-than expired.
+resent and nothing reopens or settles the run. The result is
+`{ status: 'ABANDONED', unproven: true }` (a proven Abandon omits `unproven`).
+The evidence gains `unprovenAbandon` (attempt, reason, decision time) and the
+child proof. The decision adds no `resolution`, `work` proof or stop of its own;
+fields already present, such as an earlier retry's resolution, stay as they
+were, and `stop` holds only what was actually observed, such as an UNKNOWN
+attempted stop. The consumer releases its local owner without starting a
+replacement observer. The delivery state stays as it was (for example
+AMBIGUOUS), so the reserved session keeps its initial-delivery fence against
+ordinary sends, as after any Abandon of an unfinished delivery. Children are not
+stopped, the workspace is neither archived nor deleted, and an agent that was
+still running keeps working in its workspace until someone stops it there. The
+freed slot lets the automation claim its next queued run, so real concurrent
+work can exceed the run limits, as with child workspaces. Because the decision
+is final and fenced, run-context retention treats a run with reason
+`ABANDONED_UNPROVEN` as settled when its `unprovenAbandon` marker and evidence
+attempt match the stored current send (and its preparation marker parses), so
+its copied context can expire under the configured policy; a missing or
+mismatched marker is `INVALID_STORED_DATA` and is retained.
 
 The boundary uses existing socket locality, configured CIDRs, browser Origin and
 explicit proxy trust rules. Origin-less loopback and other same-user local

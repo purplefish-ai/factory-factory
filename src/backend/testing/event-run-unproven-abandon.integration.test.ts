@@ -137,7 +137,7 @@ it('abandons a run that lost live coverage in a restart only with the opt-in, an
         action: 'ABANDON',
         acceptUnprovenStop: true,
       })
-    ).toEqual({ status: 'ABANDONED' });
+    ).toEqual({ status: 'ABANDONED', unproven: true });
     const ended = await expectUnprovenEnd('WORK_PROOF_UNAVAILABLE');
     const after = await delivery();
 
@@ -175,7 +175,7 @@ it('abandons a run whose first message went ambiguous after a transport disconne
   const current = await context();
   expect(
     await consumer.resolveAmbiguousRun({ ...current, action: 'ABANDON', acceptUnprovenStop: true })
-  ).toEqual({ status: 'ABANDONED' });
+  ).toEqual({ status: 'ABANDONED', unproven: true });
   const ended = await expectUnprovenEnd('WORK_PROOF_UNAVAILABLE');
   const after = await delivery();
 
@@ -221,7 +221,7 @@ it('abandons a run whose setup cleanup is uncertain without sending its first me
   const current = await context();
   expect(
     await consumer.resolveAmbiguousRun({ ...current, action: 'ABANDON', acceptUnprovenStop: true })
-  ).toEqual({ status: 'ABANDONED' });
+  ).toEqual({ status: 'ABANDONED', unproven: true });
   await expectUnprovenEnd('PREPARATION_CLEANUP_UNCERTAIN');
   // The never-sent first message cannot be sent later.
   await expect(h.dispatch()).rejects.toThrow();
@@ -262,7 +262,7 @@ it('abandons a child-held run that is also unproven without touching the child',
   });
   expect(
     await consumer.resolveAmbiguousRun({ ...input, action: 'ABANDON', acceptUnprovenStop: true })
-  ).toEqual({ status: 'ABANDONED' });
+  ).toEqual({ status: 'ABANDONED', unproven: true });
   await expectUnprovenEnd('WORK_PROOF_UNAVAILABLE');
   expect((await h.read()).evidence?.children).toMatchObject({
     counts: { NOT_STARTED: 1 },

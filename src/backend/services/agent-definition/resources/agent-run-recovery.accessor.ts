@@ -340,7 +340,7 @@ export const agentRunRecoveryAccessor = {
         },
       });
       assertCurrent();
-      return { status: 'ABANDONED' as const };
+      return { status: 'ABANDONED' as const, unproven: true as const };
     });
   },
 };

@@ -55,7 +55,43 @@ function storedContextDependency(run: Run): RetentionReason | null {
   return null;
 }
 
+/**
+ * A person's unproven Abandon is final: the bumped worker generation fences the
+ * old attempt, so nothing can recover or reuse this run's context. Its marker
+ * must still match the stored current send.
+ */
+function unprovenAbandonDependency(run: Run): RetentionReason | null {
+  const delivery = run.initialDelivery;
+  if (!delivery || delivery.attemptGeneration !== run.attemptGeneration) {
+    return 'RECOVERY_DEPENDENCY';
+  }
+  if (
+    run.launchPreparation !== null &&
+    !eventLaunchPreparationSchema.safeParse(run.launchPreparation).success
+  ) {
+    return 'INVALID_STORED_DATA';
+  }
+  const evidence = initialDeliveryEvidenceSchema.safeParse(delivery.evidence);
+  const marker = evidence.success ? evidence.data.unprovenAbandon : undefined;
+  const current = {
+    runId: run.id,
+    sessionId: run.reservedSessionId,
+    messageId: delivery.messageId,
+    sendAttemptId: delivery.sendAttemptId,
+    workerGeneration: run.workerGeneration,
+    attemptGeneration: run.attemptGeneration,
+  };
+  const matches = (attempt: InitialDeliveryEvidence['attempt']) =>
+    isDeepStrictEqual({ ...attempt, workerGeneration: run.workerGeneration }, current);
+  return evidence.success && marker && matches(evidence.data.attempt) && matches(marker.attempt)
+    ? null
+    : 'INVALID_STORED_DATA';
+}
+
 function deliveryDependency(run: Run): RetentionReason | null {
+  if (run.reasonCode === 'ABANDONED_UNPROVEN') {
+    return unprovenAbandonDependency(run);
+  }
   const preparation =
     run.launchPreparation === null
       ? null

@@ -269,6 +269,8 @@ export function recoveryResultFixture(
   }
   return agentRecoveryResultSchema.parse({
     status: parsed.action === 'RESOLVE' ? 'RESOLVED' : 'ABANDONED',
+    // The real server answers this way for a run blocked on proof (unproven abandon tests).
+    ...(parsed.acceptUnprovenStop ? { unproven: true } : {}),
   });
 }
 

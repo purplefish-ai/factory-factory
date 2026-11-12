@@ -187,7 +187,10 @@ export function EventRunRecovery({
         invalidateRunRecoveryQueries(utils, projectId, agentId),
         "Couldn't refresh runs."
       );
-      setOutcome(action === 'ABANDON_UNPROVEN' ? 'ABANDONED_UNPROVEN' : result.status);
+      // Abandon anyway may still prove the stop; only the server's answer says it didn't.
+      setOutcome(
+        result.status === 'ABANDONED' && result.unproven ? 'ABANDONED_UNPROVEN' : result.status
+      );
       close();
     } catch (error) {
       setView({ ...view, problem: actionProblem(error) });

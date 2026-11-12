@@ -266,6 +266,22 @@ describe('EventRunRecovery', () => {
     });
   });
 
+  it('reports an ordinary abandonment when the server proved the stop after all', async () => {
+    serveRecovery('deliveryUncertain');
+    // With the opt-in, the server still takes the proven path when proof turns up.
+    respond['automation.resolveAmbiguousRun'] = () => ({ status: 'ABANDONED' });
+    render();
+    await openInspection('run-deliveryUncertain');
+    await act(async () => requireButton(inspection(), 'Abandon anyway').click());
+    await waitForCheck(() => expect(confirmation()).not.toBeNull());
+    await act(async () => requireButton(confirmation(), 'Abandon anyway').click());
+
+    const article = runArticle('run-deliveryUncertain');
+    await waitForCheck(() => expect(article.textContent).toContain('Run abandoned'));
+    expect(article.textContent).toContain('Child workspaces were not stopped');
+    expect(article.textContent).not.toContain("couldn't confirm its agent stopped");
+  });
+
   it('never sends the opt-in with an ordinary Abandon', async () => {
     serveRecovery('heldAfterTurn');
     render();

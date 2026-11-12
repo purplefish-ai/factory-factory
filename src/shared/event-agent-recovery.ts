@@ -93,7 +93,8 @@ export const agentRecoveryInspectionSchema = reference.extend({
 });
 export const agentRecoveryResultSchema = z.discriminatedUnion('status', [
   z.strictObject({ status: z.literal('RESOLVED') }),
-  z.strictObject({ status: z.literal('ABANDONED') }),
+  /** `unproven` when the run ended without a proven stop (ABANDON with `acceptUnprovenStop`). */
+  z.strictObject({ status: z.literal('ABANDONED'), unproven: z.literal(true).optional() }),
   z.strictObject({
     status: z.literal('RETRIED'),
     claim: agentClaimResultSchema.options[0],
