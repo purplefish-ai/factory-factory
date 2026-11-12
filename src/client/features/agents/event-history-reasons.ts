@@ -13,7 +13,22 @@ const REASON_PHRASES: Readonly<Record<string, string>> = {
   UNSUPPORTED_MESSAGE: 'Only ordinary messages from people can start a run.',
   UNSUPPORTED_TRIGGER: "This trigger type can't start event runs.",
   UNSUPPORTED_ACTOR_FILTER: "Filters on who acted aren't supported.",
-  SEMANTIC_FILTER_UNAVAILABLE: "Natural-language filters aren't available yet.",
+  // Natural-language filters (agent-semantic-filter.ts). Only a clear match starts a run.
+  SEMANTIC_FILTER_MATCH: 'The event matched this trigger and its natural-language filter.',
+  SEMANTIC_FILTER_SKIP: "The event doesn't meet the natural-language filter.",
+  SEMANTIC_FILTER_UNCERTAIN:
+    "The classifier couldn't tell whether the event meets the natural-language filter; uncertain events never run.",
+  SEMANTIC_FILTER_PROVIDER_UNPROVEN:
+    "The natural-language filter classifier hasn't passed evaluation for this automation's provider, so the event didn't run.",
+  SEMANTIC_FILTER_TOO_LONG:
+    "The natural-language filter is too long to check, so the event didn't run. Shorten the filter.",
+  SEMANTIC_FILTER_UNAVAILABLE:
+    "The natural-language filter couldn't be checked in this app, so the event didn't run.",
+  SEMANTIC_FILTER_MALFORMED: "The classifier returned invalid output, so the event didn't run.",
+  SEMANTIC_FILTER_TIMEOUT: 'The classifier timed out; it retries a limited number of times.',
+  SEMANTIC_FILTER_RATE_LIMITED:
+    "The classifier's provider is rate limited; it retries a limited number of times.",
+  SEMANTIC_FILTER_FAILED: "The classifier couldn't run; it retries a limited number of times.",
   SOURCE_IDENTITY_MISMATCH:
     "The event came from a repository or channel this trigger doesn't watch.",
   OWNERSHIP_MISMATCH: "The event doesn't belong to this trigger's source.",
@@ -26,7 +41,10 @@ const REASON_PHRASES: Readonly<Record<string, string>> = {
   PROJECT_ARCHIVED: 'The project is archived.',
   CONNECTION_UNAVAILABLE: 'The source connection is unavailable.',
   SOURCE_RECOVERY_REQUIRED: 'The source needs to be reset before events can run.',
-  STALE_REVISION: 'The automation or its trigger changed after this was recorded.',
+  // Queued runs cancelled by Pause, an edit or a source reset carry this code, as do decisions
+  // made against a revision an edit has replaced.
+  STALE_REVISION:
+    'The automation was paused or edited, or its source was reset, before this could run.',
   STALE_EVENT_COHORT: 'A newer decision for this event replaced this one.',
   ACTIVATION_STARTING: 'The trigger was still starting.',
   SOURCE_ORDER_PENDING: 'Waiting for the source to confirm the event order.',

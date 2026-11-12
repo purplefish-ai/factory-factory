@@ -324,8 +324,8 @@ opens the existing schedule form. Event opens a normal workspace composer with
 instructions to discover sources and propose an event configuration for review.
 Its draft is separate from the project's normal/scheduled workspace draft, and
 its launch mode stays standard. The proposal card still requires explicit
-creation of a paused definition; listening and automatic event runs remain
-unavailable. While the workspace is being created, the route shows progress; a
+creation of a paused definition, which listens only after **Enable** on the
+saved detail. While the workspace is being created, the route shows progress; a
 failed creation restores the draft for retry. Archived and unresolved selected
 definitions retain their existing creation restrictions.
 
@@ -815,11 +815,14 @@ completion or cleanup.
 
 The saved event detail/editor consumes these project-owned APIs independently of
 its authoring workspace/proposal. It displays saved instructions, execution
-settings, configured versus retained trigger records, actual runtime flags,
-capabilities and nullable source health. Editing captures managementRevision
-once; polling and CAS conflicts preserve all entered fields and the original
-token. Reloading is deliberate. Saved edits invalidate the captured owner and
-matching surviving proposal cards; proposal edits refresh the same saved owner.
+settings, configured versus retained trigger records and each trigger's state in
+words (see [Enable, Pause and Reset source](#event-activation-controls)), with
+stored codes, revisions and inspected raw JSON in collapsed **Details**
+sections; the editor keeps its editable JSON fields visible. Editing captures
+managementRevision once; polling and CAS conflicts preserve all entered fields
+and the original token. Reloading is deliberate. Saved edits invalidate the
+captured owner and matching surviving proposal cards; proposal edits refresh the
+same saved owner.
 
 A complete valid specification initializes the field/JSON editor without
 rewriting inherited execution omissions. Unknown membership, null or invalid
@@ -865,10 +868,41 @@ whenever it returns a run; an origin without a retained run removes the tab, as
 deleting a scheduled automation does. The panel shows the automation's name, the
 run that started the workspace, and a link to the event automation.
 
-The Enable/Pause control, recovery controls and deletion belong to separate
-cuts; the backend [enable and pause](#enable-and-pause) procedures exist.
-Scheduled CRUD and history retain their existing behavior. Exact-context
-operator recovery uses the separate trusted-local transport described in
+<a id="event-activation-controls"></a>
+
+The saved detail has **Enable** and **Pause**, with the Active/Paused words of
+scheduled automations: the header reads Active while any trigger listens,
+Starting while one is still starting, and Paused otherwise. Both send the loaded
+`managementRevision` to [enable and pause](#enable-and-pause). Which buttons
+show, and every displayed state, comes from the triggers rather than the
+definition flag, because an edit, an expiry or a source reset leaves the
+definition enabled with every trigger paused. Each configured trigger reads
+Listening (enabled and `ACTIVE`), Starting (`STARTING`), Paused (with
+`pausedReasonCode` in words), or Can't run (capability not `SUPPORTED`, with its
+`explanation`, as for Slack, schedule, actor filters, GitHub `opened`/`edited`,
+and natural-language filters whose provider has not passed the classifier gate).
+Source health is shown in words, including the `GITHUB_SOURCE_RESET` and
+`GITHUB_BASELINE_REQUIRED` states after a reset and Enable. Enable can take a
+few seconds while the server validates; a `PRECONDITION_FAILED` shows its
+reasons inline, and a `CONFLICT` keeps the page and offers **Reload
+automation**. The detail polls at the management cadence, so Starting moves to
+Listening or Paused after the next source poll cycle. Pause states that queued
+runs are cancelled, started runs continue, and events while paused never run.
+The rail shows "Definition enabled" (with a neutral dot) or Paused, because the
+list carries only the definition flag and no trigger state. The editor still
+says which edits pause triggers; Enable restarts them after saving.
+
+A GitHub source in `RECOVERY_REQUIRED` shows one **Reset source** callout per
+connection. Its `ConfirmDialog` says that events from the gap will not run, that
+every automation on the source is paused (including other projects) with queued
+runs cancelled, and that each automation needs Enable again; a failure stays in
+the dialog. Success reports the paused-trigger and cancelled-run counts and
+invalidates every cached automation read, list and history in every project,
+because the reset reaches other projects on the same source. Enable, Pause and
+Reset source are disabled in archived projects. Recovery controls and deletion
+belong to separate cuts. Scheduled CRUD and history retain their existing
+behavior. Exact-context operator recovery uses the separate trusted-local
+transport described in
 [agent runtime](agent-runtime.md#exact-context-operator-recovery-transport).
 Production authoring still creates paused definitions. Manually altered
 ACTIVE-looking legacy records without known membership or a current validated
@@ -900,8 +934,9 @@ renders an editable card outside the collapsed activity group. Saved chats with
 legacy tool names and the `agent_proposal` discriminator still render their
 proposal cards. Users can edit instructions, filters, event settings, and
 execution settings. **Create automation** atomically creates a paused definition
-and its paused triggers. The card explicitly says that listening and automatic
-runs are not yet available. Creation does not start legacy periodic tasks.
+and its paused triggers. The card says the automation is created paused and is
+enabled from the Automations page, and that only GitHub `labeled` and `reopened`
+issue triggers can run today. Creation does not start legacy periodic tasks.
 
 Conversational edits use optimistic revision checks and cannot silently replace
 a newer proposal. A widget that receives a newer revision refreshes its data;

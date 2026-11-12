@@ -17,9 +17,11 @@ export function EventAgentEditor(props: EventAgentEditorProps) {
   return (
     <section className="min-w-0 space-y-5" aria-label="Saved event editor">
       <h2 className="text-xl font-semibold">Edit automation</h2>
-      <p className="text-sm break-words">
-        {editor.baseline.name} · Saved management revision {editor.baseline.managementRevision}
-      </p>
+      <p className="text-sm break-words">{editor.baseline.name}</p>
+      <details className="text-xs text-muted-foreground">
+        <summary className="cursor-pointer">Details</summary>
+        <p className="mt-2">Saved management revision {editor.baseline.managementRevision}</p>
+      </details>
       {(inspectOnly || editor.replacementMode) && <EventAgentInspection agent={editor.baseline} />}
       {inspectOnly ? (
         <div className="space-y-3">
@@ -67,7 +69,7 @@ export function EventAgentEditor(props: EventAgentEditorProps) {
               Name-only edits preserve activation for known unchanged members. Task or execution
               edits pause triggers. Changed, reintroduced or unknown members pause and advance
               trigger revisions. Unclaimed queued work is cancelled; claimed snapshots continue.
-              Re-enabling is needed for paused triggers and is not available here.
+              After saving, enable the automation again from its page to restart paused triggers.
             </p>
             <div className="flex flex-wrap gap-2">
               <Button type="submit">{editor.busy === 'save' ? 'Saving…' : 'Save changes'}</Button>

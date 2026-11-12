@@ -26,8 +26,9 @@ existing names, shown in parentheses where they differ.
   working".
 - **Automation**: saved instructions and a trigger in the project's
   **Automations** section. A **scheduled automation** (`PeriodicTask`) runs on a
-  cadence; an **event-triggered automation** stores event triggers in a paused
-  definition. Event listening and automatic event runs are not yet available.
+  cadence; an **event-triggered automation** starts a run when a configured
+  event arrives. It is created paused and listens only after the user chooses
+  **Enable**; today only GitHub issue `labeled` and `reopened` triggers can run.
   Each execution is a **run**, carried out by an agent. Use **Runs** for tool
   tabs and **Run history** for history headings, regardless of trigger kind. Use
   **Scheduled** and **Event-triggered** to describe or configure triggers.

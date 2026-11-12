@@ -2,6 +2,7 @@
 import { createRoot } from 'react-dom/client';
 import { MemoryRouter } from 'react-router';
 import { expect, it } from 'vitest';
+import { StoryTrpcProvider } from '@/client/lib/storybook-trpc';
 import { actFlushSync } from '@/test-utils/react-act';
 import meta from './agents-dashboard.stories';
 import type { EventStoryState } from './event-dashboard-story';
@@ -82,11 +83,15 @@ it.each<EventStoryState>([
   const container = document.createElement('div');
   const root = createRoot(container);
   const Dashboard = meta.component;
+  // Storybook's global decorator supplies the same tRPC provider; the saved
+  // detail's Enable, Pause and Reset source controls need it.
   actFlushSync(() =>
     root.render(
-      <MemoryRouter>
-        <Dashboard state={state} />
-      </MemoryRouter>
+      <StoryTrpcProvider>
+        <MemoryRouter>
+          <Dashboard state={state} />
+        </MemoryRouter>
+      </StoryTrpcProvider>
     )
   );
   try {

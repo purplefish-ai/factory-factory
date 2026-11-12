@@ -298,9 +298,7 @@ export const EmptyCreateMenu: Story = {
     await expect(
       canvas.getByRole('heading', { name: 'Create event-triggered automation' })
     ).toBeVisible();
-    await expect(
-      canvas.getByText(/Listening and automatic event runs are not yet available/)
-    ).toBeVisible();
+    await expect(canvas.getByText(/Automations are created paused/)).toBeVisible();
   },
 };
 export const PhoneCreateMenu: Story = {

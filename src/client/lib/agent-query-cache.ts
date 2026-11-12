@@ -23,17 +23,44 @@ export function invalidateSavedAgentQueries(
   agentId: string
 ) {
   return Promise.all([
-    utils.automation.list.invalidate({ projectId }),
-    utils.automation.navigationSummary.invalidate({ projectId }),
-    utils.automation.get.invalidate({ projectId, agentId }),
+    // Saving can pause triggers and cancel queued runs, as Enable and Pause can.
+    invalidateAutomationActivationQueries(utils, projectId, agentId),
     utils.automation.getProposal.invalidate(undefined, {
       predicate: (query) => {
         const proposal = agentProposalSchema.safeParse(query.state.data);
         return proposal.success && proposal.data.agentDefinitionId === agentId;
       },
     }),
-    // Saving can pause triggers and cancel queued runs.
+  ]);
+}
+
+/** After Enable or Pause: the automation, its rail entry and its history (Pause cancels queued runs). */
+export function invalidateAutomationActivationQueries(
+  utils: ReturnType<typeof trpc.useUtils>,
+  projectId: string,
+  agentId: string
+) {
+  return Promise.all([
+    utils.automation.list.invalidate({ projectId }),
+    utils.automation.navigationSummary.invalidate({ projectId }),
+    utils.automation.get.invalidate({ projectId, agentId }),
     invalidateEventHistoryQueries(utils, projectId, agentId),
+  ]);
+}
+
+/**
+ * After a source reset: every cached event automation, in every project. The
+ * reset pauses each trigger on the source across projects and cancels its
+ * queued runs, and the client cannot tell which other projects use it.
+ */
+export function invalidateAllAutomationQueries(utils: ReturnType<typeof trpc.useUtils>) {
+  return Promise.all([
+    utils.automation.list.invalidate(),
+    utils.automation.navigationSummary.invalidate(),
+    utils.automation.get.invalidate(),
+    utils.automation.runs.invalidate(),
+    utils.automation.evaluations.invalidate(),
+    utils.automation.workspaceOrigin.invalidate(),
   ]);
 }
 

@@ -81,6 +81,17 @@ function trpcHttpStatus(error: unknown): number | undefined {
   return data.success ? data.data.httpStatus : undefined;
 }
 
+const trpcErrorCodeSchema = z.object({ code: z.string() });
+
+/** The tRPC error code the server attached to an error (`CONFLICT`, `NOT_FOUND`…), if any. */
+export function trpcErrorCode(error: unknown): string | undefined {
+  if (!(error instanceof TRPCClientError)) {
+    return undefined;
+  }
+  const data = trpcErrorCodeSchema.safeParse(error.data);
+  return data.success ? data.data.code : undefined;
+}
+
 /**
  * Default query retry policy. A 4xx answer (not found, forbidden, invalid
  * input, precondition failed) will not change on retry, so it surfaces at
