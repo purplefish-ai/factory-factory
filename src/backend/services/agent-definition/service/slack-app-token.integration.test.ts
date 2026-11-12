@@ -393,3 +393,28 @@ it('connects a bot without an app lookup when no app token is saved', async () =
   await connected();
   expect(calls('bots.info')).toHaveLength(0);
 });
+
+it('does not bring back an app token removed while a reconnect was validating', async () => {
+  const saved = await connected();
+  await service.setAppToken({ connectionId: saved.id, appToken });
+  for (const remove of [
+    () => service.disconnect(saved.id),
+    () => service.clearAppToken(saved.id),
+  ]) {
+    request.mockImplementation(async (url, init) => {
+      if (String(url).includes('bots.info')) {
+        await remove();
+      }
+      return route(String(url), init);
+    });
+    // The replacement bot's app matches the app ID read before the removal.
+    expect(await service.connect({ botToken: 'xoxb-reconnect' })).toMatchObject({
+      hasCredentials: true,
+      hasAppToken: false,
+      appId: null,
+    });
+    expect(await service.getAppCredentials(saved.id)).toBeNull();
+    request.mockImplementation((url, init) => Promise.resolve(route(String(url), init)));
+    await service.setAppToken({ connectionId: saved.id, appToken });
+  }
+});
