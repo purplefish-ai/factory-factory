@@ -139,15 +139,22 @@ not change the design below.
   export. A restored database without `encryption.key`, or a logical import,
   means rotating the secret on the hook.
 - **Signature verification.** Compute HMAC-SHA256 over the raw body with the
-  secret. Compare it with `X-Hub-Signature-256` (`sha256=` prefix) using
-  `crypto.timingSafeEqual` before parsing
+  secret. Compare it with `X-Hub-Signature-256` using `crypto.timingSafeEqual`
+  before parsing
   ([validating deliveries](https://docs.github.com/en/webhooks/using-webhooks/validating-webhook-deliveries)).
-  Ignore the legacy SHA-1 header.
+  First require the header to be `sha256=` followed by exactly 64 hex
+  characters, and answer 401 otherwise: `timingSafeEqual` throws on buffers of
+  unequal length. Ignore the legacy SHA-1 header.
 - **Replay.** The signature covers only the body. It has no timestamp, and
   headers, including `X-GitHub-Delivery`, are not signed. Anyone holding a
   captured request can replay the body under a fresh delivery ID, so delivery ID
-  deduplication alone does not stop replay. Also store a digest of the body,
-  unique per connection, and enforce the activation boundary
+  deduplication alone does not stop replay. Also store a SHA-256 digest of the
+  body, unique per connection and retained as long as the event identity (90
+  days), and treat a match as a duplicate: acknowledge it and store nothing. The
+  trade-off is that two real events with byte-identical bodies would collapse
+  into one. That needs the same action, issue state, sender and
+  second-resolution timestamps, for example a label removed and re-added within
+  one second; the note accepts that loss. Then enforce the activation boundary
   [below](#ordering-and-the-activation-boundary). With TLS terminated at the
   tunnel, the tunnel provider sees plaintext. I did not confirm where Funnel
   terminates TLS. GitHub's `GET /meta` IP list
