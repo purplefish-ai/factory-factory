@@ -15,7 +15,7 @@ context, not a new task or a substitute for current repository guidance.
 | Service boundaries and subsystem contracts         | [Architecture notes](architecture/README.md)                                                          |
 | Chat streaming, loading, and replay                | [Chat message flow](chat-message-flow.md)                                                             |
 | Workspace state and PR monitoring                  | [Workspace state](architecture/workspace-state.md) and [PR monitoring](architecture/pull-requests.md) |
-| Mixed Automations management and scheduled history | [Scheduled automations](architecture/integrations.md#scheduled-agents)                                |
+| Mixed Automations management and scheduled history | [Scheduled automations](architecture/integrations.md#scheduled-automations)                           |
 | User and project configuration                     | [Settings](admin-settings.md)                                                                         |
 | Maintain UI primitives and dependencies            | [shadcn](shadcn.md) and [Knip](knip.md)                                                               |
 | Button sizes, icon buttons and tooltips            | [Buttons and tooltips](shadcn.md#buttons-icon-buttons-and-tooltips)                                   |
@@ -43,6 +43,9 @@ resets, refs and effects follow [client state](architecture/client-state.md).
 [Design records](design/README.md) distinguish proposals from implemented
 designs. The [cloud vision](design/factory-factory-cloud-vision/README.md)
 remains a proposal; its plans do not describe the shipped local application.
+
+The [GitHub webhook intake](design/github-webhook-intake.md) note is a proposal
+for receiving GitHub events beside the shipped issue-event polling.
 
 The older top-level voice, agent-status, CORS, and notification design documents
 are point-in-time records. Check current behavior in source and architecture
