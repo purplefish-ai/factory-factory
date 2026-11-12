@@ -40,7 +40,12 @@ export type NativeSessionLaunchOptions = {
 };
 const logger = createLogger('session-launch-options-probe');
 const TIMEOUT_MS = 30_000;
+// Provider session startup can stall well past 30s on a loaded machine (for
+// example while macOS fseventsd is saturated). Discovery runs in the
+// background, so a slow answer is better than none.
+const SESSION_CREATION_TIMEOUT_MS = 120_000;
 const CLOSE_TIMEOUT_MS = 1000;
+const MAX_ADDITIONAL_MODELS = 64;
 function choices(option: SessionConfigOption | undefined): SessionConfigSelectOption[] {
   return option?.type === 'select'
     ? option.options.flatMap((entry) => ('group' in entry ? entry.options : [entry]))
@@ -97,27 +102,51 @@ type ProbeInput = {
   model?: string;
   env?: NodeJS.ProcessEnv;
   signal?: AbortSignal;
+  /**
+   * Chooses which other advertised models to capture in the same disposable
+   * session after the requested one. Their options omit thinking defaults,
+   * because a model switch may carry the previous model's level forward.
+   */
+  selectAdditionalModels?: (models: readonly string[]) => readonly string[];
 };
-/** Bounded discovery result, with a separately retained native child/pipe lifetime. */
+/**
+ * Bounded discovery result, with a separately retained native child/pipe
+ * lifetime. `result` settles as soon as the requested model is known;
+ * `additional` settles after the remaining selected models were captured.
+ */
 export function fetchSessionLaunchOptionsFromAcp(input: ProbeInput) {
   let lifetime = Promise.resolve();
-  const result = probeLaunchOptions(input, (drained) => {
-    lifetime = drained;
+  let deliver!: (options: NativeSessionLaunchOptions) => void;
+  const requested = new Promise<NativeSessionLaunchOptions>((resolve) => {
+    deliver = resolve;
   });
+  const probe = probeLaunchOptions(
+    input,
+    (drained) => {
+      lifetime = drained;
+    },
+    deliver
+  );
   return {
-    result,
-    drained: result.then(
+    result: Promise.race([requested, probe.then(() => requested)]),
+    additional: probe.catch((): NativeSessionLaunchOptions[] => []),
+    drained: probe.then(
       () => lifetime,
       () => lifetime
     ),
   };
 }
 
+function withoutThinkingDefaults(options: NativeSessionLaunchOptions): NativeSessionLaunchOptions {
+  return { ...options, reasoning: { options: options.reasoning.options } };
+}
+
 /** Disposable native configuration discovery. No prompt is submitted. */
 async function probeLaunchOptions(
   input: ProbeInput,
-  retainLifetime: (drained: Promise<void>) => void
-): Promise<NativeSessionLaunchOptions> {
+  retainLifetime: (drained: Promise<void>) => void,
+  deliver: (options: NativeSessionLaunchOptions) => void
+): Promise<NativeSessionLaunchOptions[]> {
   input.signal?.throwIfAborted();
   const command = resolveProviderAcpSpawnCommand(input.provider);
   const cwd = tmpdir();
@@ -214,20 +243,74 @@ async function probeLaunchOptions(
             }
           : {}),
       }),
-      'launch discovery session creation'
+      'launch discovery session creation',
+      SESSION_CREATION_TIMEOUT_MS
     );
     sessionId = session.sessionId;
+    const providerSessionId = sessionId;
+    const activeConnection = connection;
     const config = await run(
       applyAcpStartupModel({
         connection,
         provider: input.provider,
-        providerSessionId: sessionId,
+        providerSessionId,
         configOptions: requireSessionConfigOptions(input.provider, 'newSession', session),
         model: input.model,
       }),
       'launch discovery model selection'
     );
-    return launchOptionsFromConfig(input.provider, config);
+    const requested = launchOptionsFromConfig(input.provider, config);
+    deliver(requested);
+    const models = (
+      input.selectAdditionalModels?.(
+        choices(config.find((option) => option.category === 'model' || option.id === 'model'))
+          .map((choice) => choice.value)
+          .filter((model) => model !== requested.model)
+      ) ?? []
+    ).slice(0, MAX_ADDITIONAL_MODELS);
+    if (models.length === 0) {
+      return [];
+    }
+    return await timeLaunchDiscovery(
+      'launch discovery model sweep',
+      { provider: input.provider },
+      async () => {
+        const captured: NativeSessionLaunchOptions[] = [];
+        let current = config;
+        for (const model of models) {
+          if (input.signal?.aborted) {
+            break;
+          }
+          try {
+            current = await Promise.race([
+              withTimeout({
+                promise: applyAcpStartupModel({
+                  connection: activeConnection,
+                  provider: input.provider,
+                  providerSessionId,
+                  configOptions: current,
+                  model,
+                }),
+                timeoutMs: TIMEOUT_MS,
+                description: 'launch discovery model sweep',
+              }),
+              failed,
+            ]);
+            captured.push(
+              withoutThinkingDefaults(launchOptionsFromConfig(input.provider, current))
+            );
+          } catch {
+            // One stalled or rejected model ends the sweep; keep what was captured.
+            logger.debug('Launch discovery model sweep stopped', {
+              provider: input.provider,
+              model,
+            });
+            break;
+          }
+        }
+        return captured;
+      }
+    );
   } finally {
     try {
       if (sessionId && connection) {

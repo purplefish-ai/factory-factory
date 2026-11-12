@@ -32,7 +32,7 @@ const entrySchema = z
     }),
   })
   .refine((entry) => entry.input.provider === entry.value.provider);
-const snapshotSchema = z.object({ version: z.literal(1), entries: z.array(entrySchema).max(32) });
+const snapshotSchema = z.object({ version: z.literal(1), entries: z.array(entrySchema).max(128) });
 export type StoredLaunchOptions = z.infer<typeof entrySchema>;
 export interface LaunchOptionsPersistence {
   load(): Promise<StoredLaunchOptions[]>;

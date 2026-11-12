@@ -108,7 +108,7 @@ describe('durable launcher options', () => {
 
   it('rejects snapshots above the entry bound asynchronously', async () => {
     const { store } = await fixture();
-    const invalid = Array.from({ length: 33 }, () => entries[0]!);
+    const invalid = Array.from({ length: 129 }, () => entries[0]!);
     let writing: Promise<void> | undefined;
     expect(() => {
       writing = store.save(invalid);

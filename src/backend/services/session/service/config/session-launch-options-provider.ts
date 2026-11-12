@@ -9,7 +9,8 @@ export async function fetchAccountSessionLaunchOptions(
     model?: string;
     codexAccountId?: string;
   },
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  selectAdditionalModels?: (models: readonly string[]) => readonly string[]
 ) {
   signal?.throwIfAborted();
   const context =
@@ -27,5 +28,6 @@ export async function fetchAccountSessionLaunchOptions(
     provider: input.provider,
     model: input.model,
     ...(context ? { env: context.env } : {}),
+    ...(selectAdditionalModels ? { selectAdditionalModels } : {}),
   });
 }

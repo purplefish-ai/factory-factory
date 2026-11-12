@@ -589,10 +589,17 @@ export function createServer(application: Application, requestedPort?: number): 
         });
         await startRuntimeWork();
         startupComplete = true;
-        // Restore launcher capabilities and warm default models without delaying readiness.
+        // Restore launcher capabilities and warm the model lists and default
+        // models without delaying readiness, so the launcher opens from cache.
         void runStartupTask('Failed to warm launcher options', () =>
           services.sessionConfigService.warmLaunchOptions()
         );
+        void runStartupTask('Failed to warm model catalogs', async () => {
+          await Promise.allSettled([
+            services.claudeModelCatalogService.getModels(),
+            services.codexModelCatalogService.getModels(),
+          ]);
+        });
 
         logger.info('Server endpoints available', {
           server: `http://${ENDPOINT_HOST}:${actualPort}`,

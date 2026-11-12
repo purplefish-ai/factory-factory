@@ -480,28 +480,44 @@ composer. Thinking levels and planning availability come from a disposable ACP
 session configured with the selected provider/model; the provider-wide model
 catalog is not used as a thinking capability list. Discovery submits no prompt,
 rejects permission/tool callbacks, and closes its processes. Its endpoint
-requires the trusted-local boundary used for local execution. Successful native
-results stay fresh for five minutes per provider/model/requested Codex account
-(or Auto), then remain usable during request-triggered background refreshes,
-without a hard expiry. Failed refreshes retain the last success and retry after
-30 seconds. Cache size and concurrent discovery counts remain bounded. Cold
-discovery failures offer Retry; creation waits for available options while model
-selection remains editable.
+requires the trusted-local boundary used for local execution. After reporting
+the requested model, the same disposable session switches through every other
+advertised model that has no cached entry yet, so later model changes in the
+launcher read the cache. The sweep stops at the first failed switch, only fills
+free cache capacity, and never replaces an entry discovered directly. Swept
+entries omit the thinking default, because a model switch can carry the previous
+level forward; they start stale, so their first use returns them at once and
+refreshes them directly in the background. Provider session creation may take up
+to two minutes, since a loaded machine can stall provider startup well past 30
+seconds; other discovery steps keep 30-second bounds. Successful native results
+stay fresh for five minutes per provider/model/requested Codex account (or
+Auto), then remain usable during request-triggered background refreshes, without
+a hard expiry. Failed refreshes retain the last success and retry after 30
+seconds. Cache size (128 entries) and concurrent discovery counts remain
+bounded.
+
+The launcher never waits for thinking and planning options. While another
+model's options load, it keeps showing the previous ones. Validation and the
+creation payload use only options confirmed for the selected model. Without
+them, creation sends only explicit thinking, access and Plan choices, and the
+server applies saved defaults to the rest. Cold discovery failures show Retry in
+the thinking control without blocking creation, and model selection remains
+editable.
 
 Successful launcher options are persisted atomically to
 `BASE_DIR/cache/session-launch-options.json`. A versioned Zod schema validates
 restored metadata; missing, corrupt, or incompatible snapshots start cold.
 Saving skips an unsupported entry without discarding other valid models.
 Persistence errors do not block the launcher. Startup restores all retained
-entries and warms the saved default model for each provider without delaying
-server readiness. Restored entries refresh on their next use, including the
-startup warmup, so runtime upgrades obtain new capabilities in the background.
-Snapshots contain capability metadata, never credentials or runtime
-environments. Shutdown immediately fences new discovery and aborts disposable
-probe children. It waits up to seven seconds for native lifetimes and snapshot
-writes before account teardown. Account observations already in progress cannot
-be cancelled; a drain timeout is reported, and later observations cannot spawn
-another probe.
+entries, warms the saved default model for each provider (which sweeps the other
+models), and loads both provider model lists, without delaying server readiness.
+Restored entries refresh on their next use, including the startup warmup, so
+runtime upgrades obtain new capabilities in the background. Snapshots contain
+capability metadata, never credentials or runtime environments. Shutdown
+immediately fences new discovery and aborts disposable probe children. It waits
+up to seven seconds for native lifetimes and snapshot writes before account
+teardown. Account observations already in progress cannot be cancelled; a drain
+timeout is reported, and later observations cannot spawn another probe.
 
 Native discovery retains one of its eight admission slots until the disposable
 child emits `close`, including closure of its stdio pipes, and its ACP
@@ -515,16 +531,16 @@ without claiming containment of every SDK continuation or external descendant.
 
 Each launch draft snapshots its saved provider defaults and retains explicit
 thinking/Plan choices across provider switches and settings refreshes. A model
-change that makes an explicit level unavailable keeps that choice visible and
-blocks creation until a supported level or Default is selected. Unsupported
-inherited thinking preferences use the native default instead. An unavailable
-saved permission preset requires an explicit choice from Access before launch;
-launch never silently replaces that preset with a potentially broader native
-default. Unavailable access choices show a warning and a disabled menu entry.
-Manual launch validates explicit access against discovered provider/model modes
-before workspace persistence; startup confirms the selected mode again before
-accepting a prompt. Existing chat navigation and periodic-task creation do not
-depend on launch-option readiness.
+change whose confirmed options make an explicit level unavailable keeps that
+choice visible and blocks creation until a supported level or Default is
+selected. Unsupported inherited thinking preferences use the native default
+instead. An unavailable saved permission preset requires an explicit choice from
+Access before launch; launch never silently replaces that preset with a
+potentially broader native default. Unavailable access choices show a warning
+and a disabled menu entry. Manual launch validates explicit access against
+discovered provider/model modes before workspace persistence; startup confirms
+the selected mode again before accepting a prompt. Existing chat navigation and
+periodic-task creation do not depend on launch-option readiness.
 
 Launch requests distinguish an omitted `reasoningEffort` (saved provider
 default), explicit null (native default), and a supported value (that exact
@@ -871,10 +887,10 @@ not run on a timer.
 
 The `session-launch-options` logger records stage durations for settings,
 account resolution, options lookup and the overall request. Native probes also
-record initialization, session creation, model selection and cleanup durations,
-including failures, so slow account checks can be distinguished from adapter
-startup. Timing and background-refresh warnings omit raw provider errors and
-subprocess diagnostics.
+record initialization, session creation, model selection, model sweep and
+cleanup durations, including failures, so slow account checks can be
+distinguished from adapter startup. Timing and background-refresh warnings omit
+raw provider errors and subprocess diagnostics.
 
 Session creation persists `AgentSession.codexAccountId`. All human, child,
 periodic, reviewer and dedicated-PR creation goes through the same session-data

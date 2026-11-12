@@ -142,18 +142,18 @@ describe('selected-model launch discovery', () => {
     }
   });
 
-  it('evicts the oldest success when the 33rd distinct result is cached', async () => {
+  it('evicts the oldest success when the 129th distinct result is cached', async () => {
     const fetchOptions = vi.fn(({ provider, model }) => Promise.resolve(native(provider, model)));
     const service = new SessionLaunchOptionsService({
       fetchOptions: drainedFetch(fetchOptions),
       getSettings: vi.fn().mockResolvedValue({}),
     });
-    for (let i = 0; i < 33; i++) {
+    for (let i = 0; i < 129; i++) {
       await service.getOptions({ provider: 'CODEX', model: `model-${i}` });
     }
     await service.getOptions({ provider: 'CODEX', model: 'model-1' });
-    expect(fetchOptions).toHaveBeenCalledTimes(33);
+    expect(fetchOptions).toHaveBeenCalledTimes(129);
     await service.getOptions({ provider: 'CODEX', model: 'model-0' });
-    expect(fetchOptions).toHaveBeenCalledTimes(34);
+    expect(fetchOptions).toHaveBeenCalledTimes(130);
   });
 });

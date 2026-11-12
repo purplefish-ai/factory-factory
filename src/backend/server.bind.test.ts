@@ -115,6 +115,22 @@ describe('server bind address', () => {
     }
   });
 
+  it('warms both model catalogs without waiting for them', async () => {
+    const harness = createTestHarness();
+    const listing = deferred<never[]>();
+    harness.services.claudeModelCatalogService.getModels.mockImplementation(() => listing.promise);
+    harness.services.codexModelCatalogService.getModels.mockImplementation(() => listing.promise);
+    const server = createServer(harness.application, 0);
+    servers.push(server);
+    try {
+      await server.start();
+      expect(harness.services.claudeModelCatalogService.getModels).toHaveBeenCalledOnce();
+      expect(harness.services.codexModelCatalogService.getModels).toHaveBeenCalledOnce();
+    } finally {
+      listing.resolve([]);
+    }
+  });
+
   it('binds loopback only and advertises localhost when BACKEND_HOST is unset', async () => {
     const port = await findFreePort();
     const harness = createTestHarness({ backendHost: undefined });

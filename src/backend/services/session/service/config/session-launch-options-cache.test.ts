@@ -144,11 +144,13 @@ describe('launch discovery cache refresh', () => {
     await service.warm();
     expect(fetchOptions).toHaveBeenCalledWith(
       { provider: 'CLAUDE', model: 'sonnet' },
-      expect.any(AbortSignal)
+      expect.any(AbortSignal),
+      expect.any(Function)
     );
     expect(fetchOptions).toHaveBeenCalledWith(
       { provider: 'CODEX', model: 'codex' },
-      expect.any(AbortSignal)
+      expect.any(AbortSignal),
+      expect.any(Function)
     );
     expect((await service.getOptions({ provider: 'CLAUDE' })).model).toBe('sonnet');
     expect(fetchOptions).toHaveBeenCalledTimes(2);
@@ -216,7 +218,7 @@ describe('launch discovery cache refresh', () => {
       ),
     });
     await f.service.getOptions(input);
-    for (let i = 0; i < 32; i++) {
+    for (let i = 0; i < 128; i++) {
       await f.service.getOptions({ ...input, model: `other-${i}` });
     }
     refresh.reject(new Error('refresh failed after eviction'));
