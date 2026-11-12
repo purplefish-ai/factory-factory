@@ -63,7 +63,8 @@ function assertTrigger(proposal: AgentProposal, scenario: (typeof cases)[number]
     expect(trigger.filterInstructions).toBeTruthy();
   } else if (trigger?.type === 'GITHUB_ISSUE') {
     expect(trigger.config.repositoryIds).toEqual(['123']);
-    expect([...trigger.config.actions].sort()).toEqual(['labeled', 'opened']);
+    // GitHub records labels applied at creation as labeled events; opened cannot be enabled.
+    expect(trigger.config.actions).toEqual(['labeled']);
     expect(trigger.config.labels).toEqual(['agent']);
   }
   return trigger;
