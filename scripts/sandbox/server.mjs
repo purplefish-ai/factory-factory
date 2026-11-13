@@ -5,7 +5,7 @@ import { appendFileSync, existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { REPO_ROOT } from './paths.mjs';
 import { checkReportedPorts, parseBackendPort, parsePortFile } from './ports.mjs';
-import { stopProcessGroup } from './process-group.mjs';
+import { STOP_GRACE_MS, stopProcessGroup } from './process-group.mjs';
 
 export const STARTUP_TIMEOUT_MS = 180_000;
 
@@ -109,6 +109,54 @@ export async function stopServer(server, system, baseDir) {
       baseDir,
     });
   }
+}
+
+/**
+ * The fallback when the process table cannot be read during a stop: signals
+ * the group of the server child this launcher spawned, SIGTERM then SIGKILL
+ * after the grace period, but only while that child is unreaped. Resolves
+ * whether it signalled. Never used for a group recorded by another launcher.
+ *
+ * @param {{ pid?: number, exitCode: number | null, signalCode: string | null } | null | undefined} child
+ * @param {{ system: Pick<import('./process-group.mjs').ProcessSystem, 'now' | 'sleep'>, kill?: (target: number, signal: string) => unknown, graceMs?: number, pollMs?: number }} options
+ * @returns {Promise<boolean>}
+ */
+export async function signalOwnServerGroup(
+  child,
+  {
+    system,
+    kill = (target, signal) => process.kill(target, signal),
+    graceMs = STOP_GRACE_MS,
+    pollMs = 200,
+  }
+) {
+  // Node reaps a child and records `exitCode`/`signalCode` in one step, so both
+  // still null means the leader is unreaped: its pid, and so its group ID,
+  // cannot belong to anyone else yet. Checked in the same step as each kill.
+  const unreaped = () =>
+    Boolean(child?.pid) && child.exitCode === null && child.signalCode === null;
+  const signal = (name) => {
+    if (!unreaped()) {
+      return false;
+    }
+    try {
+      kill(-child.pid, name);
+    } catch (error) {
+      if (error?.code !== 'ESRCH') {
+        throw error;
+      }
+    }
+    return true;
+  };
+  if (!signal('SIGTERM')) {
+    return false;
+  }
+  const deadline = system.now() + graceMs;
+  while (unreaped() && system.now() < deadline) {
+    await system.sleep(pollMs);
+  }
+  signal('SIGKILL');
+  return true;
 }
 
 export function tail(file) {

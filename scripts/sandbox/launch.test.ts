@@ -150,6 +150,105 @@ describe('launcher setup and shutdown', () => {
     }
   }, 60_000);
 
+  it('signals its own unreaped server group when ps fails during a stop, and keeps the directory', async () => {
+    for (const exitsOnTerm of [true, false]) {
+      const h = harness();
+      const kills: string[] = [];
+      let spawnedServer = false;
+      // Never a real process: the injected kill only records.
+      const child = Object.assign(new EventEmitter(), {
+        pid: 424_242,
+        exitCode: null as number | null,
+        signalCode: null as string | null,
+        stdout: null,
+        stderr: null,
+      });
+      let time = 0;
+      const code = await run(
+        { scenario: 'echo', keep: false },
+        {
+          ...h.deps,
+          system: {
+            ...realSystem,
+            // From the server's spawn on, `ps` cannot run.
+            listProcesses: () => {
+              if (spawnedServer) {
+                throw new Error('spawn ps EAGAIN');
+              }
+              return realSystem.listProcesses();
+            },
+            now: () => time,
+            sleep: (ms: number) => {
+              time += ms;
+              return Promise.resolve();
+            },
+          },
+          spawnImpl: (_command: string, args: string[]) => {
+            h.spawned.push(args);
+            spawnedServer = true;
+            return child;
+          },
+          kill: (target: number, signal: string) => {
+            kills.push(`${signal} ${target}`);
+            if (exitsOnTerm) {
+              child.signalCode = signal;
+            }
+          },
+        }
+      );
+      expect(code).toBe(1);
+      expect(kills).toEqual(
+        exitsOnTerm ? ['SIGTERM -424242'] : ['SIGTERM -424242', 'SIGKILL -424242']
+      );
+      // The processes using the directory cannot be checked, so it stays.
+      const [dir] = h.sandboxDirs();
+      expect(dir).toBeDefined();
+      expect(h.logs.join('\n')).toContain(
+        `kept ${join(h.root, dir ?? '')}: run pnpm dev:sandbox --clean once ps works`
+      );
+    }
+  }, 60_000);
+
+  it('signals nothing when ps fails during a stop and its server has already exited', async () => {
+    const h = harness();
+    const kills: string[] = [];
+    let spawnedServer = false;
+    // Reaped already: Node has recorded its exit code.
+    const child = Object.assign(new EventEmitter(), {
+      pid: 424_242,
+      exitCode: 1,
+      signalCode: null,
+      stdout: null,
+      stderr: null,
+    });
+    const code = await run(
+      { scenario: 'echo', keep: false },
+      {
+        ...h.deps,
+        system: {
+          ...realSystem,
+          listProcesses: () => {
+            if (spawnedServer) {
+              throw new Error('spawn ps EAGAIN');
+            }
+            return realSystem.listProcesses();
+          },
+        },
+        spawnImpl: () => {
+          spawnedServer = true;
+          return child;
+        },
+        kill: (target: number, signal: string) => kills.push(`${signal} ${target}`),
+      }
+    );
+    expect(code).toBe(1);
+    expect(kills).toEqual([]);
+    const [dir] = h.sandboxDirs();
+    expect(h.logs.join('\n')).toContain(
+      `kept ${join(h.root, dir ?? '')}: run pnpm dev:sandbox --clean once ps works`
+    );
+  }, 60_000);
+
   it('treats one port found twice as a failed attempt and retries', async () => {
     const h = harness();
     // The first attempt's probes return the same port; the second's differ.

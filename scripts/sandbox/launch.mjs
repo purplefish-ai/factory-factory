@@ -2,7 +2,7 @@
 // recorder, runs `ff serve --dev` in its own process group, seeds it, and tears
 // everything down on a signal, server exit, owner exit or time-out.
 import { spawn } from 'node:child_process';
-import { mkdirSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { startEgressRecorder } from './egress.mjs';
 import { buildServerEnv } from './env.mjs';
@@ -12,7 +12,7 @@ import { checkScenario, createSeedRepository, prepareSandbox } from './prepare.m
 import { findProcess, ownIdentity, realSystem } from './process-group.mjs';
 import { createSandboxDirectory, readSandboxRecord, writeSandboxRecord } from './record.mjs';
 import { seed } from './seed.mjs';
-import { startServer, stopServer, tail, waitForServer } from './server.mjs';
+import { signalOwnServerGroup, startServer, stopServer, tail, waitForServer } from './server.mjs';
 import { startWatchdog } from './watchdog.mjs';
 
 const SIGNAL_EXIT_CODES = { SIGINT: 130, SIGTERM: 143, SIGHUP: 129 };
@@ -32,6 +32,7 @@ const message = (error) => (error instanceof Error ? error.message : String(erro
  * @property {(text: string) => unknown} [log]
  * @property {(text: string) => unknown} [print]
  * @property {number} [startupTimeoutMs]
+ * @property {(target: number, signal: string) => unknown} [kill]
  */
 
 /**
@@ -55,6 +56,7 @@ export async function run(
     log = (text) => process.stderr.write(`dev-sandbox: ${text}\n`),
     print = (text) => process.stdout.write(text),
     startupTimeoutMs,
+    kill = (target, signal) => process.kill(target, signal),
   } = {}
 ) {
   const state = { baseDir: null, recorder: null, server: null, stopping: null };
@@ -68,10 +70,47 @@ export async function run(
       log(`stopping (${reason})`);
       stopWatchdog();
       let code = exitCode;
+      let listingFailed = false;
+      const watched = {
+        ...system,
+        listProcesses: () => {
+          try {
+            return system.listProcesses();
+          } catch (error) {
+            listingFailed = true;
+            throw error;
+          }
+        },
+      };
+      const keptForClean = () =>
+        state.baseDir &&
+        existsSync(state.baseDir) &&
+        log(
+          `kept ${state.baseDir}: run pnpm dev:sandbox --clean ${listingFailed ? 'once ps works' : 'to remove it'}`
+        );
       try {
-        await stopServer(state.server, system, state.baseDir);
+        let signalledBlind = false;
+        try {
+          await stopServer(state.server, watched, state.baseDir);
+        } catch (error) {
+          // Without a listing nothing can be identified (I5), except this
+          // launcher's own server child while it is unreaped.
+          if (
+            !(listingFailed && (await signalOwnServerGroup(state.server?.child, { system, kill })))
+          ) {
+            throw error;
+          }
+          log(
+            `cannot read the process table (${message(error)}); signalled the server's own group`
+          );
+          signalledBlind = true;
+          code = 1;
+        }
         await state.recorder?.close();
-        if (state.baseDir && keep) {
+        if (state.baseDir && signalledBlind) {
+          // Whether anything still runs with it as BASE_DIR cannot be checked.
+          keptForClean();
+        } else if (state.baseDir && keep) {
           log(`kept ${state.baseDir}`);
         } else if (state.baseDir) {
           assertInsideTempDir(state.baseDir, tempDir);
@@ -79,6 +118,7 @@ export async function run(
         }
       } catch (error) {
         log(message(error));
+        keptForClean();
         code = 1;
       }
       resolveStopped(code);
@@ -178,7 +218,9 @@ export async function run(
       // A detached child's pid is its group ID: record it before anything else
       // (a SIGKILL from here on still leaves the group findable), then add the
       // leader's start time once read. Unreaped, the pid cannot be reused yet.
-      state.server = server.child.pid ? { pgid: server.child.pid, startedAt: null } : null;
+      state.server = server.child.pid
+        ? { pgid: server.child.pid, startedAt: null, child: server.child }
+        : null;
       record.pgid = state.server?.pgid ?? null;
       record.pgidStartedAt = null;
       save();

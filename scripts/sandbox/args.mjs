@@ -31,7 +31,10 @@ What the sandbox does not contain:
     without a credential.
 
 On Ctrl+C, SIGTERM, server exit, owner exit or time-out it stops every process
-it started and deletes the sandbox directory.
+it started and deletes the sandbox directory. If ps cannot run when it stops
+(for example after three failed readings in a row), it signals only the server
+process group it started itself, keeps the directory, says so and exits
+non-zero; run --clean once ps works.
 
   --scenario <name>    Passed to the fake Codex app-server as FF_SANDBOX_SCENARIO
                        (default: echo). The fake rejects unknown names.

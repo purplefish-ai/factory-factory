@@ -170,6 +170,32 @@ describe('--clean selection', () => {
     expect(existsSync(dir)).toBe(false);
   });
 
+  it('signals and deletes nothing when the process table cannot be read', async () => {
+    const tempDir = temporary.create('ffsb-');
+    const root = join(tempDir, 'ff-sandbox');
+    const dir = join(root, 'sb-unreadable');
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, 'sandbox.json'), recordFor(dir, { pgid: 4242, pgidStartedAt: T2 }));
+    const { system, events } = staticSystem([]);
+    const removed: string[] = [];
+    await expect(
+      cleanSandboxes({
+        root,
+        tempDir,
+        system: {
+          ...system,
+          listProcesses: () => {
+            throw new Error('spawn ps EAGAIN');
+          },
+        },
+        remove: (path: string) => removed.push(path),
+      })
+    ).rejects.toThrow('spawn ps EAGAIN');
+    expect(events).toEqual([]);
+    expect(removed).toEqual([]);
+    expect(existsSync(dir)).toBe(true);
+  });
+
   it('never deletes a directory while a live process runs with it as BASE_DIR', async () => {
     const tempDir = temporary.create('ffsb-');
     const root = join(tempDir, 'ff-sandbox');
