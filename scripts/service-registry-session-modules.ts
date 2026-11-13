@@ -1,31 +1,26 @@
 import path from 'node:path';
 import ts from 'typescript';
+import {
+  cycleMembership,
+  getBackEdgeErrors,
+  type ModuleEdge,
+  type ModuleGraph,
+  sessionModulesFile,
+} from './service-registry-session-cycles';
 
 /**
  * The module map inside the `session` capsule.
  *
  * A module is a directory directly under `service/`; files directly under
  * `service/` form the module `root`. `src/backend/services/session/modules.ts`
- * records which modules each module imports and which pairs import each other.
- * This file derives the same graph from the syntax tree of the capsule's
+ * records which modules each module imports and which imports may close a
+ * cycle (see service-registry-session-cycles.ts). This file derives the same graph from the syntax tree of the capsule's
  * production files and reports every difference with the line to change.
  */
 
 export const sessionServiceRoot = 'src/backend/services/session/service';
 export const sessionRootModule = 'root';
-const sessionModulesFile = 'src/backend/services/session/modules.ts';
 const sessionServiceAlias = '@/backend/services/session/service';
-
-/**
- * The pairs that imported each other when the map was first recorded.
- * `sessionModuleCycles` may drop pairs from this list but never add one, so
- * this list never needs editing while cycles are removed.
- */
-export const sessionModuleCycleCeiling: readonly (readonly [string, string])[] = [
-  ['chat', 'dispatch'],
-  ['composition', 'root'],
-  ['root', 'store'],
-];
 
 /** Tests and test support, which do not count as dependencies. */
 const testFilePattern =
@@ -52,12 +47,11 @@ export type SessionModuleEdge = {
 
 export type SessionModuleCheckInput = {
   modules: Readonly<Record<string, SessionModuleDeclaration>>;
-  cycles: readonly (readonly [string, string])[];
+  /** Directed imports allowed to close a cycle, as written in `sessionModuleCycles`. */
+  cycles: readonly ModuleEdge[];
   /** Module directories under `service/`, plus `root` while files sit directly in it. */
   moduleDirectories: readonly string[];
   edges: readonly SessionModuleEdge[];
-  /** The only pairs `cycles` may list; see `sessionModuleCycleCeiling`. */
-  cycleCeiling: readonly (readonly [string, string])[];
 };
 
 export function isSessionTestFile(filePath: string): boolean {
@@ -83,13 +77,18 @@ function moduleOfPath(filePath: string, moduleNames: ReadonlySet<string>): strin
 
 /**
  * The modules present among repository-relative TypeScript file paths: each
- * directory under `service/` that holds a file, tests included, and `root`
- * while a file sits directly in `service/`. An empty directory is not a module.
+ * directory under `service/` that holds a production file, and `root` while one
+ * sits directly in `service/`. A directory of tests or test support alone, such
+ * as `service/testing/`, is not a module.
  */
 export function sessionModuleDirectories(filePaths: readonly string[]): string[] {
   const modules = filePaths.flatMap((filePath) => {
     const relativePath = path.posix.relative(sessionServiceRoot, filePath);
-    if (relativePath.startsWith('..') || path.posix.isAbsolute(relativePath)) {
+    if (
+      relativePath.startsWith('..') ||
+      path.posix.isAbsolute(relativePath) ||
+      isSessionTestFile(filePath)
+    ) {
       return [];
     }
     const segments = relativePath.split('/');
@@ -195,7 +194,7 @@ function fileEdges(
   for (const reference of moduleReferences(file)) {
     const target = resolveSpecifier(file.path, reference.specifier);
     const to = target === null ? null : moduleOfPath(target, moduleNames);
-    if (to !== null && to !== from) {
+    if (to !== null && to !== from && moduleNames.has(to)) {
       typeOnlyByTarget.set(to, (typeOnlyByTarget.get(to) ?? true) && reference.typeOnly);
     }
   }
@@ -278,7 +277,8 @@ function presenceErrors(input: SessionModuleCheckInput, graph: Graph): string[] 
 function dependencyErrors(
   name: string,
   declaration: SessionModuleDeclaration,
-  graph: Graph
+  graph: Graph,
+  closesCycle: (from: string, to: string) => boolean
 ): string[] {
   const field = `sessionModules["${name}"].dependsOn in ${sessionModulesFile}`;
   const imported = graph.get(name) ?? new Map<string, SessionModuleEdge[]>();
@@ -293,8 +293,11 @@ function dependencyErrors(
   }
   for (const to of sortedUnique(imported.keys())) {
     if (!declared.has(to)) {
+      const files = describeFiles(imported.get(to) ?? []);
       errors.push(
-        `Session module "${name}" imports "${to}" in ${describeFiles(imported.get(to) ?? [])}, but ${field} does not list "${to}". Add it; the list becomes ${expected}.`
+        closesCycle(name, to)
+          ? `Session module "${name}" imports "${to}" in ${files}, which ${field} does not list. The import closes a cycle, reported below, so remove it rather than listing it.`
+          : `Session module "${name}" imports "${to}" in ${files}, but ${field} does not list "${to}". Add it (the list becomes ${expected}) or remove the import.`
       );
     }
   }
@@ -313,93 +316,47 @@ function dependencyErrors(
   return errors;
 }
 
-const pairKey = (a: string, b: string): string => [a, b].sort().join('\u0000');
-const quotePair = (pair: readonly string[]): string => quoteList(pair);
-
-function cycleListErrors(cycles: readonly (readonly [string, string])[]): string[] {
-  const field = `sessionModuleCycles in ${sessionModulesFile}`;
-  const errors = cycles
-    .filter(([a, b]) => a >= b)
-    .map(
-      ([a, b]) =>
-        `${field} lists ${quotePair([a, b])}; write each pair in sorted order, as ${quotePair([a, b].sort())}.`
-    );
-  const keys = cycles.map(([a, b]) => pairKey(a, b));
-  const duplicates = sortedUnique(keys.filter((key, index) => keys.indexOf(key) !== index));
-  errors.push(
-    ...duplicates.map(
-      (key) =>
-        `${field} lists ${quotePair(key.split('\u0000'))} more than once; remove the duplicate.`
-    )
+function moduleGraph(graph: Graph): ModuleGraph {
+  return new Map(
+    [...graph].map(([from, targets]) => [
+      from,
+      new Map([...targets].map(([to, edges]) => [to, edges.map((edge) => edge.file).sort()])),
+    ])
   );
-  if (duplicates.length === 0 && !isSortedUnique(keys)) {
-    errors.push(
-      `${field} is not sorted; order the pairs as ${sortedUnique(keys)
-        .map((key) => quotePair(key.split('\u0000')))
-        .join(', ')}.`
-    );
-  }
-  return errors;
-}
-
-function cycleErrors(input: SessionModuleCheckInput, graph: Graph): string[] {
-  const field = `sessionModuleCycles in ${sessionModulesFile}`;
-  const recorded = new Set(input.cycles.map(([a, b]) => pairKey(a, b)));
-  const errors = cycleListErrors(input.cycles);
-  const ceiling = new Set(input.cycleCeiling.map(([a, b]) => pairKey(a, b)));
-  for (const key of sortedUnique(recorded)) {
-    if (!ceiling.has(key)) {
-      errors.push(
-        `${field} lists ${quotePair(key.split('\u0000'))}, which did not import each other when the list was recorded; the list may only shrink. Remove the pair, and remove the imports in one direction.`
-      );
-    }
-  }
-
-  const edgesBetween = (from: string, to: string): SessionModuleEdge[] =>
-    graph.get(from)?.get(to) ?? [];
-  const mutualKeys = new Set(
-    [...graph].flatMap(([from, targets]) =>
-      [...targets.keys()]
-        .filter((to) => from < to && edgesBetween(to, from).length > 0)
-        .map((to) => pairKey(from, to))
-    )
-  );
-
-  for (const key of sortedUnique(mutualKeys)) {
-    const [a = '', b = ''] = key.split('\u0000');
-    if (!recorded.has(key)) {
-      errors.push(
-        `Session modules "${a}" and "${b}" import each other ("${a}" → "${b}" in ${describeFiles(edgesBetween(a, b))}; "${b}" → "${a}" in ${describeFiles(edgesBetween(b, a))}). Remove the imports in one direction; ${field} lists only the pairs that already imported each other, and may only shrink.`
-      );
-    }
-  }
-  for (const key of sortedUnique(recorded)) {
-    if (!mutualKeys.has(key)) {
-      const [a = '', b = ''] = key.split('\u0000');
-      errors.push(
-        `${field} lists ${quotePair([a, b])}, but "${a}" and "${b}" no longer import each other. Remove the line ${quotePair([a, b])}, from sessionModuleCycles.`
-      );
-    }
-  }
-  return errors;
 }
 
 /**
  * Compares the recorded module map with the edges read from source: every
  * module directory is listed and every listed module exists; each module's
- * `dependsOn` is exactly the sorted set of siblings it imports; and
- * `sessionModuleCycles` is exactly the sorted set of pairs that import each
- * other. `sealed` is accepted and not yet enforced.
+ * `dependsOn` is exactly the sorted set of siblings it imports; and the graph
+ * without the edges in `sessionModuleCycles` is acyclic, with each listed edge
+ * still present and needed. `sealed` is accepted and not yet enforced.
  */
 export function getSessionModuleErrors(input: SessionModuleCheckInput): string[] {
   const graph = buildGraph(input.edges);
   const directories = new Set(input.moduleDirectories);
+  const listed = new Set(input.cycles.map(([from, to]) => `${from}\u0000${to}`));
+  const undeclaredEdges = [...graph].flatMap(([from, targets]) => {
+    const declared = new Set(input.modules[from]?.dependsOn ?? []);
+    return [...targets.keys()]
+      .filter((to) => !declared.has(to))
+      .map((to): ModuleEdge => [from, to]);
+  });
+  const sameCycle = cycleMembership(moduleGraph(graph), input.cycles);
+  const closesCycle = (from: string, to: string): boolean =>
+    !listed.has(`${from}\u0000${to}`) && sameCycle(from, to);
+
   return [
     ...presenceErrors(input, graph),
     ...Object.entries(input.modules)
       .filter(([name]) => directories.has(name))
       .sort(([a], [b]) => (a < b ? -1 : 1))
-      .flatMap(([name, declaration]) => dependencyErrors(name, declaration, graph)),
-    ...cycleErrors(input, graph),
+      .flatMap(([name, declaration]) => dependencyErrors(name, declaration, graph, closesCycle)),
+    ...getBackEdgeErrors({
+      graph: moduleGraph(graph),
+      backEdges: input.cycles,
+      undeclaredEdges,
+      serviceRoot: sessionServiceRoot,
+    }),
   ];
 }

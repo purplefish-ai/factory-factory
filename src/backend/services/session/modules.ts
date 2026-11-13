@@ -19,7 +19,8 @@ export const sessionModules: Record<
   },
   archive: {
     dependsOn: [],
-    description: 'Writes and reads the transcript file kept for a session after it is closed.',
+    description:
+      'Archives a closed session: writes its transcript file and its ClosedSession record, and reads the transcript and provider identity back.',
   },
   chat: {
     dependsOn: ['config', 'data', 'delivery', 'dispatch', 'lifecycle', 'root', 'store', 'voice'],
@@ -44,7 +45,7 @@ export const sessionModules: Record<
       'store',
     ],
     description:
-      "Constructs the capsule's service singletons and wires them to each other: the capsule's composition root.",
+      'Constructs and cross-wires the services that need each other (config, model catalogs, permission, lifecycle coordinators, prompt, dispatch, notification delivery), registers session-scope participants and sets the tool-timeout prompt cancel; other singletons are built in their own modules.',
   },
   config: {
     dependsOn: ['acp', 'data', 'providers', 'root'],
@@ -59,7 +60,7 @@ export const sessionModules: Record<
   delivery: {
     dependsOn: ['data', 'root'],
     description:
-      'Delivers PR updates and workspace mail into sessions as background prompts, with receipts and failure reasons, and schedules PR discovery after a turn.',
+      "Delivers PR updates and workspace mail into sessions as background prompts, with receipts and failure reasons; also holds the helper that resets a workspace's PR-discovery backoff.",
   },
   dispatch: {
     dependsOn: ['acp', 'chat', 'config', 'data', 'delivery', 'event-agent', 'root', 'voice'],
@@ -74,7 +75,7 @@ export const sessionModules: Record<
   events: {
     dependsOn: ['acp', 'config', 'logging', 'root', 'store'],
     description:
-      'Applies ACP session updates to the transcript and runtime state, including tool timeouts, thought chunks, subagent updates and the queue of permission requests.',
+      "Applies ACP session updates to the transcript and runtime state (tool timeouts, thought chunks, subagent updates), and creates each session's ACP permission bridge, queues its permission requests and routes the replies.",
   },
   inference: {
     dependsOn: ['acp'],
@@ -95,7 +96,7 @@ export const sessionModules: Record<
       'store',
     ],
     description:
-      'Starts, stops, retries and tears down session runtimes: the lifecycle gate and scope, runtime exit, workflow finalization, provider identity and the lifecycle event record.',
+      'Starts, stops, retries and tears down session runtimes (lifecycle gate and scope, runtime exit, workflow finalization, provider identity, lifecycle event record) and loads the session context with its permission preset and Codex account binding; also tracks event-owned work for event automations.',
   },
   logging: {
     dependsOn: [],
@@ -109,7 +110,7 @@ export const sessionModules: Record<
   prompt: {
     dependsOn: ['acp', 'delivery', 'event-agent', 'events', 'lifecycle', 'root'],
     description:
-      "Sends a prompt turn to a session's running ACP runtime under the turn limit and records its completion; builds the child-workspace context text.",
+      "Sends and steers prompt turns on a session's running ACP runtime under the turn limit, records turn completion and schedules PR discovery after a completed turn; separately, builds the child-workspace context text.",
   },
   providers: {
     dependsOn: ['acp'],
@@ -132,9 +133,13 @@ export const sessionModules: Record<
   },
 };
 
-/** Pairs that import each other today. May only shrink. */
+/**
+ * Directed imports `[from, to]` that are allowed to close a cycle: without
+ * them the module graph is acyclic. Sorted. Entries may be removed, never added
+ * (the check compares this list with the base branch).
+ */
 export const sessionModuleCycles: readonly (readonly [string, string])[] = [
   ['chat', 'dispatch'],
-  ['composition', 'root'],
-  ['root', 'store'],
+  ['root', 'composition'],
+  ['store', 'root'],
 ];

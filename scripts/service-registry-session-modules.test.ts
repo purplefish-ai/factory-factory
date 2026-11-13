@@ -110,7 +110,7 @@ describe('collectSessionModuleEdges', () => {
 });
 
 describe('sessionModuleDirectories', () => {
-  test('lists directories that hold files, tests included, and root for top-level files', () => {
+  test('lists directories that hold a production file, and root for top-level files', () => {
     expect(
       sessionModuleDirectories([
         `${service}/beta/nested/b.ts`,
@@ -121,6 +121,18 @@ describe('sessionModuleDirectories', () => {
       ])
     ).toEqual(['alpha', 'beta', 'root']);
     expect(sessionModuleDirectories([`${service}/alpha/a.ts`])).toEqual(['alpha']);
+  });
+
+  test('does not count a directory or root that holds only tests and test support', () => {
+    expect(
+      sessionModuleDirectories([
+        `${service}/testing/fake-runtime.ts`,
+        `${service}/gamma/c.test.ts`,
+        `${service}/gamma/c.test-helpers.ts`,
+        `${service}/top.test.ts`,
+        `${service}/alpha/a.ts`,
+      ])
+    ).toEqual(['alpha']);
   });
 });
 
@@ -134,9 +146,7 @@ const edge = (from: string, to: string, file = `${service}/${from}/x.ts`): Sessi
 function check(
   modules: Record<string, readonly string[]>,
   edges: SessionModuleEdge[],
-  options: Partial<
-    Pick<SessionModuleCheckInput, 'cycles' | 'cycleCeiling' | 'moduleDirectories'>
-  > & {
+  options: Partial<Pick<SessionModuleCheckInput, 'cycles' | 'moduleDirectories'>> & {
     sealed?: readonly string[];
   } = {}
 ): string[] {
@@ -148,19 +158,18 @@ function check(
       ])
     ),
     cycles: options.cycles ?? [],
-    cycleCeiling: options.cycleCeiling ?? options.cycles ?? [],
     moduleDirectories: options.moduleDirectories ?? Object.keys(modules),
     edges,
   });
 }
 
 describe('getSessionModuleErrors', () => {
-  test('accepts a map that matches the graph, including recorded cycles and sealed modules', () => {
+  test('accepts a map that matches the graph, with a listed back edge and a sealed module', () => {
     expect(
       check(
         { a: ['b', 'root'], b: ['a'], root: [] },
         [edge('a', 'b'), edge('a', 'root'), edge('b', 'a')],
-        { cycles: [['a', 'b']], sealed: ['root'] }
+        { cycles: [['b', 'a']], sealed: ['root'] }
       )
     ).toEqual([]);
   });
@@ -191,7 +200,7 @@ describe('getSessionModuleErrors', () => {
         edge('a', 'c'),
       ])
     ).toEqual([
-      `Session module "a" imports "b" in ${service}/a/one.ts, ${service}/a/two.ts, but sessionModules["a"].dependsOn in ${modulesFile} does not list "b". Add it; the list becomes ['b', 'c'].`,
+      `Session module "a" imports "b" in ${service}/a/one.ts, ${service}/a/two.ts, but sessionModules["a"].dependsOn in ${modulesFile} does not list "b". Add it (the list becomes ['b', 'c']) or remove the import.`,
     ]);
   });
 
@@ -200,7 +209,7 @@ describe('getSessionModuleErrors', () => {
       edge('a', 'b', `${service}/a/${name}.ts`)
     );
     expect(check({ a: [], b: [] }, files)).toEqual([
-      `Session module "a" imports "b" in ${service}/a/1.ts, ${service}/a/2.ts, ${service}/a/3.ts and 2 more, but sessionModules["a"].dependsOn in ${modulesFile} does not list "b". Add it; the list becomes ['b'].`,
+      `Session module "a" imports "b" in ${service}/a/1.ts, ${service}/a/2.ts, ${service}/a/3.ts and 2 more, but sessionModules["a"].dependsOn in ${modulesFile} does not list "b". Add it (the list becomes ['b']) or remove the import.`,
     ]);
   });
 
@@ -224,58 +233,22 @@ describe('getSessionModuleErrors', () => {
     ]);
   });
 
-  test('rejects a new pair of modules that import each other', () => {
+  test('gives one consistent finding per cause when a new import also closes a cycle', () => {
     expect(
-      check({ a: ['b'], b: ['a'] }, [
+      check({ a: ['b'], b: ['c'], c: [] }, [
         edge('a', 'b', `${service}/a/one.ts`),
-        edge('b', 'a', `${service}/b/two.ts`),
+        edge('b', 'c', `${service}/b/two.ts`),
+        edge('c', 'a', `${service}/c/three.ts`),
       ])
     ).toEqual([
-      `Session modules "a" and "b" import each other ("a" → "b" in ${service}/a/one.ts; "b" → "a" in ${service}/b/two.ts). Remove the imports in one direction; sessionModuleCycles in ${modulesFile} lists only the pairs that already imported each other, and may only shrink.`,
+      `Session module "c" imports "a" in ${service}/c/three.ts, which sessionModules["c"].dependsOn in ${modulesFile} does not list. The import closes a cycle, reported below, so remove it rather than listing it.`,
+      `Session module "c" now imports "a", which closes an import cycle: "c" → "a" (c/three.ts) → "b" (a/one.ts) → "c" (b/two.ts), paths under ${service}/. Remove that import.`,
     ]);
   });
 
-  test('rejects a recorded pair that no longer imports each other', () => {
-    expect(check({ a: ['b'], b: [] }, [edge('a', 'b')], { cycles: [['a', 'b']] })).toEqual([
-      `sessionModuleCycles in ${modulesFile} lists ['a', 'b'], but "a" and "b" no longer import each other. Remove the line ['a', 'b'], from sessionModuleCycles.`,
-    ]);
-  });
-
-  test('rejects a pair added to sessionModuleCycles after the list was recorded', () => {
-    expect(
-      check({ a: ['b'], b: ['a'] }, [edge('a', 'b'), edge('b', 'a')], {
-        cycles: [['a', 'b']],
-        cycleCeiling: [['a', 'c']],
-      })
-    ).toEqual([
-      `sessionModuleCycles in ${modulesFile} lists ['a', 'b'], which did not import each other when the list was recorded; the list may only shrink. Remove the pair, and remove the imports in one direction.`,
-    ]);
-  });
-
-  test('rejects an unsorted pair, an unsorted list and a duplicated pair', () => {
-    const modules = { a: ['b', 'c'], b: ['a'], c: ['a'] };
-    const edges = [edge('a', 'b'), edge('b', 'a'), edge('a', 'c'), edge('c', 'a')];
-    expect(
-      check(modules, edges, {
-        cycles: [
-          ['a', 'c'],
-          ['b', 'a'],
-        ],
-      })
-    ).toEqual([
-      `sessionModuleCycles in ${modulesFile} lists ['b', 'a']; write each pair in sorted order, as ['a', 'b'].`,
-      `sessionModuleCycles in ${modulesFile} is not sorted; order the pairs as ['a', 'b'], ['a', 'c'].`,
-    ]);
-    expect(
-      check(modules, edges, {
-        cycles: [
-          ['a', 'b'],
-          ['a', 'b'],
-          ['a', 'c'],
-        ],
-      })
-    ).toEqual([
-      `sessionModuleCycles in ${modulesFile} lists ['a', 'b'] more than once; remove the duplicate.`,
+  test('reports a cycle through declared imports when the back edge is missing from the list', () => {
+    expect(check({ a: ['b'], b: ['a'] }, [edge('a', 'b'), edge('b', 'a')])).toEqual([
+      `Session modules import each other in a cycle: "a" → "b" (a/x.ts) → "a" (b/x.ts), paths under ${service}/. Remove one of these imports; sessionModuleCycles in ${modulesFile} lists the only imports allowed to close a cycle, and may only shrink.`,
     ]);
   });
 });

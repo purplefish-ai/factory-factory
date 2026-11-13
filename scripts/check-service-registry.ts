@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import ts from 'typescript';
@@ -11,14 +12,19 @@ import {
 } from '../src/backend/services/registry';
 import { getInfrastructureServiceClassificationErrors } from '../src/backend/services/service-registry-check.helpers';
 import { sessionModuleCycles, sessionModules } from '../src/backend/services/session/modules';
+import { resolveBaseRef } from './check-guidance';
 import { getCapsuleBarrelWildcardErrors } from './service-registry-barrels';
 import { collectBridgeEdges } from './service-registry-bridges';
 import { getDeclaredDependencyErrors } from './service-registry-dependencies';
 import {
+  getAddedBackEdgeErrors,
+  parseSessionModuleCycles,
+  sessionModulesFile,
+} from './service-registry-session-cycles';
+import {
   collectSessionModuleEdges,
   getSessionModuleErrors,
   isSessionTestFile,
-  sessionModuleCycleCeiling,
   sessionModuleDirectories,
   sessionServiceRoot,
 } from './service-registry-session-modules';
@@ -477,11 +483,41 @@ function checkSessionModules(errors: string[]): void {
     ...getSessionModuleErrors({
       modules: sessionModules,
       cycles: sessionModuleCycles,
-      cycleCeiling: sessionModuleCycleCeiling,
       moduleDirectories,
       edges: collectSessionModuleEdges(files, moduleDirectories),
     })
   );
+}
+
+function showAtRevision(revision: string): string | undefined {
+  try {
+    return execFileSync('git', ['show', revision], {
+      cwd: rootDir,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+    });
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * `sessionModuleCycles` may lose entries but never gain one: compare it with
+ * the base branch, found the way `pnpm check:guidance` finds it. Returns a
+ * notice instead when there is nothing to compare with.
+ */
+function checkSessionModuleCyclesShrink(errors: string[]): string | undefined {
+  const ref = resolveBaseRef(rootDir);
+  if (ref === undefined) {
+    return 'no base ref (merge base with origin/main or a merge parent); sessionModuleCycles was not compared with the base branch.';
+  }
+  const source = showAtRevision(`${ref}:${sessionModulesFile}`);
+  const base = source === undefined ? null : parseSessionModuleCycles(source);
+  if (base === null) {
+    return `${sessionModulesFile} has no sessionModuleCycles list at ${ref.slice(0, 12)}; sessionModuleCycles was not compared with the base branch.`;
+  }
+  errors.push(...getAddedBackEdgeErrors(base, sessionModuleCycles, ref));
+  return undefined;
 }
 
 function main(): void {
@@ -494,6 +530,10 @@ function main(): void {
   checkPrismaGeneratedImports(errors);
   checkCapsuleBarrels(errors);
   checkSessionModules(errors);
+  const notice = checkSessionModuleCyclesShrink(errors);
+  if (notice !== undefined) {
+    process.stdout.write(`Service registry check: ${notice}\n`);
+  }
 
   if (errors.length > 0) {
     const output = [
