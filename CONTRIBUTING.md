@@ -224,9 +224,9 @@ part of pull request, merge-queue, or main-push checks.
 
 1. Fork the repository if needed and create a branch from `main`.
 2. Make focused changes and follow [verification](#verification).
-3. Document new behavior in its tests, not in a note. Update the README,
-   settings reference, or command documentation when commands or user-facing
-   settings change, and the nearest guide only when ownership, an invariant, a
+3. Document new behavior in its tests, not in a note. Update user-facing
+   reference (the README, settings reference, command documentation) when what
+   it lists changes, and the nearest guide only when ownership, an invariant, a
    public surface or the map changes; record a decision when a later reader
    could not infer the reason. Inspect the final diff.
 4. Open the pull request ready for review, with what changed, why, and checks
