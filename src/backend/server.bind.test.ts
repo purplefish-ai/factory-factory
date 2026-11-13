@@ -55,23 +55,51 @@ function portOf(server: NetServer): number {
   return address.port;
 }
 
-/** Finds a port currently free on both loopback families. */
-async function findFreePort(): Promise<number> {
+async function releaseBlocker(blocker: NetServer): Promise<void> {
+  blockers.splice(blockers.indexOf(blocker), 1);
+  await new Promise((resolve) => blocker.close(resolve));
+}
+
+/**
+ * Holds the `count` ports starting at the probe's port on every loopback
+ * family, or releases them all and returns null when one is taken.
+ */
+async function holdPorts(probe: NetServer, count: number): Promise<NetServer[] | null> {
+  const port = portOf(probe);
+  const hosts = ipv6Available ? ['127.0.0.1', '::1'] : ['127.0.0.1'];
+  const held = [probe];
+  for (let offset = 0; offset < count; offset++) {
+    for (const host of hosts.filter((item) => offset > 0 || item !== '127.0.0.1')) {
+      const blocker = await listenBlocker(port + offset, host).catch(() => null);
+      if (!blocker) {
+        await Promise.all(held.map(releaseBlocker));
+        return null;
+      }
+      held.push(blocker);
+    }
+  }
+  return held;
+}
+
+/**
+ * Finds `count` consecutive ports free on both loopback families and returns
+ * the first. macOS hands out ephemeral ports in sequence, so the port after a
+ * `listen(0)` probe is the next one any process on the machine receives. While
+ * the ports are held, one more ephemeral port is allocated to move the kernel
+ * past them; otherwise a neighbour could take one before the server binds it.
+ */
+async function findFreePorts(count: number): Promise<number> {
   for (let attempt = 0; attempt < 20; attempt++) {
     const probe = await listenBlocker(0, '127.0.0.1');
     const port = portOf(probe);
-    const ipv6Probe = ipv6Available ? await listenBlocker(port, '::1').catch(() => null) : null;
-    for (const server of [probe, ipv6Probe]) {
-      if (server) {
-        blockers.splice(blockers.indexOf(server), 1);
-        await new Promise((resolve) => server.close(resolve));
-      }
-    }
-    if (!ipv6Available || ipv6Probe) {
+    const held = await holdPorts(probe, count);
+    if (held) {
+      await releaseBlocker(await listenBlocker(0, '127.0.0.1'));
+      await Promise.all(held.map(releaseBlocker));
       return port;
     }
   }
-  throw new Error('Could not find a port free on both loopback families');
+  throw new Error(`Could not find ${count} consecutive ports free on both loopback families`);
 }
 
 function getHealthStatus(host: string, port: number): Promise<number | undefined> {
@@ -87,9 +115,7 @@ function getHealthStatus(host: string, port: number): Promise<number | undefined
 
 async function isIpv6LoopbackAvailable(): Promise<boolean> {
   try {
-    const probe = await listenBlocker(0, '::1');
-    blockers.splice(blockers.indexOf(probe), 1);
-    await new Promise((resolve) => probe.close(resolve));
+    await releaseBlocker(await listenBlocker(0, '::1'));
     return true;
   } catch {
     return false;
@@ -132,7 +158,7 @@ describe('server bind address', () => {
   });
 
   it('binds loopback only and advertises localhost when BACKEND_HOST is unset', async () => {
-    const port = await findFreePort();
+    const port = await findFreePorts(1);
     const harness = createTestHarness({ backendHost: undefined });
     const server = createServer(harness.application, port);
     servers.push(server);
@@ -160,8 +186,10 @@ describe('server bind address', () => {
   it.runIf(ipv6Available)(
     'moves to the next port when only the IPv6 loopback port is taken',
     async () => {
-      const port = await findFreePort();
+      const port = await findFreePorts(2);
       await listenBlocker(port, '::1');
+      // Another process on the machine asks for an ephemeral port meanwhile.
+      await listenBlocker(0, '127.0.0.1');
       const harness = createTestHarness({ backendHost: undefined });
       const server = createServer(harness.application, port);
       servers.push(server);
@@ -175,7 +203,7 @@ describe('server bind address', () => {
   );
 
   it('binds an explicitly configured host as given', async () => {
-    const port = await findFreePort();
+    const port = await findFreePorts(1);
     const harness = createTestHarness({ backendHost: '0.0.0.0' });
     const server = createServer(harness.application, port);
     servers.push(server);
