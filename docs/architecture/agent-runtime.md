@@ -1255,24 +1255,24 @@ trailing PR content as a compact update row.
 The session capsule's `service/` directory is grouped by sub-domain. Imports
 point up this table: code imports from its own row or earlier rows, never later
 ones. The barrel `index.ts` sits below every row; the interceptor bridge is in
-`composition/`. Two older edges remain: `store/` and `voice/` publish through
-the root `session-event-bus`, and `dispatch/` reuses chat attachment helpers.
+`composition/`. One older edge remains: `dispatch/` reuses chat attachment
+helpers.
 
-| Directory                                           | Owns                                                                                                                                 |
-| --------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
-| `acp/`, `store/`, `logging/`, `metadata/`, `voice/` | ACP runtime; in-memory session store, domain service, resume fence; trace logs; workspace metadata generation; voice narration       |
-| `providers/`, `archive/`                            | Account-wide model catalogs and plan usage; closed-session transcripts                                                               |
-| root (`bridges.ts`, others)                         | Bridge interfaces, provider error messages                                                                                           |
-| `data/`                                             | `SessionRepository`, stored launch settings and startup intent, provider history loading and hydration                               |
-| `config/`                                           | `SessionConfigService`, config commit authority and mutation queue, permission presets, launch options, startup configuration        |
-| `event-agent/`                                      | `EventSessionAuthority`, event fences, event startup guards                                                                          |
-| `delivery/`                                         | Notification and PR background delivery, PR receipts and discovery                                                                   |
-| `events/`                                           | `AcpEventProcessor`, permission requests, sub-agent events, work state                                                               |
-| `lifecycle/`                                        | Gate, scope, startup, termination and runtime-exit coordinators, workflow finalizer, context, lifecycle events, the lifecycle facade |
-| `prompt/`                                           | `SessionService` prompt sends, child-workspace prompt context                                                                        |
-| `dispatch/`                                         | Queue dispatch                                                                                                                       |
-| `chat/`                                             | Chat commands, session load                                                                                                          |
-| `composition/`                                      | Composition root (`session-core-services.ts`, `session-services.ts`)                                                                 |
+| Directory                                                         | Owns                                                                                                                                              |
+| ----------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `acp/`, `event-bus/`, `store/`, `logging/`, `metadata/`, `voice/` | ACP runtime; session event bus; in-memory session store, domain service, resume fence; trace logs; workspace metadata generation; voice narration |
+| `providers/`, `archive/`                                          | Account-wide model catalogs and plan usage; closed-session transcripts                                                                            |
+| root (`bridges.ts`, others)                                       | Bridge interfaces, provider error messages                                                                                                        |
+| `data/`                                                           | `SessionRepository`, stored launch settings and startup intent, provider history loading and hydration                                            |
+| `config/`                                                         | `SessionConfigService`, config commit authority and mutation queue, permission presets, launch options, startup configuration                     |
+| `event-agent/`                                                    | `EventSessionAuthority`, event fences, event startup guards                                                                                       |
+| `delivery/`                                                       | Notification and PR background delivery, PR receipts and discovery                                                                                |
+| `events/`                                                         | `AcpEventProcessor`, permission requests, sub-agent events, work state                                                                            |
+| `lifecycle/`                                                      | Gate, scope, startup, termination and runtime-exit coordinators, workflow finalizer, context, lifecycle events, the lifecycle facade              |
+| `prompt/`                                                         | `SessionService` prompt sends, child-workspace prompt context                                                                                     |
+| `dispatch/`                                                       | Queue dispatch                                                                                                                                    |
+| `chat/`                                                           | Chat commands, session load                                                                                                                       |
+| `composition/`                                                    | Composition root (`session-core-services.ts`, `session-services.ts`)                                                                              |
 
 `SessionConfigService` is a facade over four owners. `SessionConfigWriter`
 accepts, persists and publishes native configuration writes, and every other
