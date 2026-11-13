@@ -22,15 +22,20 @@ export const sessionModules: Record<
     description:
       'Archives a closed session: writes its transcript file and its ClosedSession record, and reads the transcript and provider identity back.',
   },
+  bridges: {
+    dependsOn: [],
+    description:
+      'Types only: the interfaces orchestration injects into the capsule (workspace, lifecycle, caller guard, message queue, init policy).',
+  },
   chat: {
     dependsOn: [
+      'bridges',
       'config',
       'data',
       'delivery',
       'dispatch',
       'event-bus',
       'lifecycle',
-      'root',
       'store',
       'voice',
     ],
@@ -58,7 +63,7 @@ export const sessionModules: Record<
       'Constructs and cross-wires the services that need each other (config, model catalogs, permission, lifecycle coordinators, prompt, dispatch, notification delivery), registers session-scope participants and sets the tool-timeout prompt cancel; other singletons are built in their own modules; also exposes the session capabilities backend interceptors use (interceptor bridge).',
   },
   config: {
-    dependsOn: ['acp', 'data', 'providers', 'root', 'store'],
+    dependsOn: ['acp', 'bridges', 'data', 'providers', 'store'],
     description:
       "Owns a session's provider configuration (model, mode, reasoning, access): applies it at startup, serializes live edits, persists snapshots and serves launch options.",
   },
@@ -68,13 +73,14 @@ export const sessionModules: Record<
       'Reads and writes session records through the capsule accessors, resolves session providers and launch settings, and loads Claude and Codex history files into transcripts.',
   },
   delivery: {
-    dependsOn: ['data', 'root', 'store'],
+    dependsOn: ['bridges', 'data', 'root', 'store'],
     description:
       "Delivers PR updates and workspace mail into sessions as background prompts, with receipts and failure reasons; also holds the helper that resets a workspace's PR-discovery backoff.",
   },
   dispatch: {
     dependsOn: [
       'acp',
+      'bridges',
       'chat',
       'config',
       'data',
@@ -111,6 +117,7 @@ export const sessionModules: Record<
     dependsOn: [
       'acp',
       'archive',
+      'bridges',
       'config',
       'data',
       'delivery',
@@ -133,7 +140,16 @@ export const sessionModules: Record<
       "Generates a workspace's title, branch name and summaries from its conversation with one disposable inference call.",
   },
   prompt: {
-    dependsOn: ['acp', 'delivery', 'event-agent', 'events', 'lifecycle', 'root', 'store'],
+    dependsOn: [
+      'acp',
+      'bridges',
+      'delivery',
+      'event-agent',
+      'events',
+      'lifecycle',
+      'root',
+      'store',
+    ],
     description:
       "Sends and steers prompt turns on a session's running ACP runtime under the turn limit, records turn completion and schedules PR discovery after a completed turn; separately, builds the child-workspace context text.",
   },
@@ -144,8 +160,7 @@ export const sessionModules: Record<
   },
   root: {
     dependsOn: ['inference'],
-    description:
-      'Files not yet in a module: bridge types, error messages and the agent event classifier.',
+    description: 'Files not yet in a module: error messages and the agent event classifier.',
   },
   store: {
     dependsOn: ['event-bus', 'logging'],
