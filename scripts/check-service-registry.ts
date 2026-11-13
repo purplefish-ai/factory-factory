@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import ts from 'typescript';
@@ -10,9 +11,23 @@ import {
   serviceRegistry,
 } from '../src/backend/services/registry';
 import { getInfrastructureServiceClassificationErrors } from '../src/backend/services/service-registry-check.helpers';
+import { sessionModuleCycles, sessionModules } from '../src/backend/services/session/modules';
+import { resolveBaseRef } from './check-guidance';
 import { getCapsuleBarrelWildcardErrors } from './service-registry-barrels';
 import { collectBridgeEdges } from './service-registry-bridges';
 import { getDeclaredDependencyErrors } from './service-registry-dependencies';
+import {
+  type BaseModulesSource,
+  checkSessionModuleCyclesAgainstBase,
+  sessionModulesFile,
+} from './service-registry-session-cycles';
+import {
+  collectSessionModuleEdges,
+  getSessionModuleErrors,
+  isSessionTestFile,
+  sessionModuleDirectories,
+  sessionServiceRoot,
+} from './service-registry-session-modules';
 
 const rootDir = process.cwd();
 const backendRoot = path.join(rootDir, 'src/backend');
@@ -455,6 +470,48 @@ function checkCapsuleBarrels(errors: string[]): void {
   errors.push(...getCapsuleBarrelWildcardErrors(barrels));
 }
 
+/** The session capsule's module map must match its imports; see service-registry-session-modules.ts. */
+function checkSessionModules(errors: string[], reportUnneededBackEdges: boolean): void {
+  const filePaths = listTypeScriptFiles(path.join(rootDir, sessionServiceRoot), true).map(
+    (filePath) => ({ filePath, path: getRelativeServiceFilePath(filePath) })
+  );
+  const moduleDirectories = sessionModuleDirectories(filePaths.map((file) => file.path));
+  const files = filePaths
+    .filter((file) => !isSessionTestFile(file.path))
+    .map((file) => ({ path: file.path, source: readFileSync(file.filePath, 'utf8') }));
+  errors.push(
+    ...getSessionModuleErrors({
+      modules: sessionModules,
+      cycles: sessionModuleCycles,
+      moduleDirectories,
+      edges: collectSessionModuleEdges(files, moduleDirectories),
+      reportUnneededBackEdges,
+    })
+  );
+}
+
+function showAtRevision(revision: string): string | undefined {
+  try {
+    return execFileSync('git', ['show', revision], {
+      cwd: rootDir,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+    });
+  } catch {
+    return undefined;
+  }
+}
+
+/** The base branch's `modules.ts`, found the way `pnpm check:guidance` finds its base. */
+function readBaseModulesSource(): BaseModulesSource {
+  const ref = resolveBaseRef(rootDir);
+  if (ref === undefined) {
+    return { kind: 'no-ref' };
+  }
+  const source = showAtRevision(`${ref}:${sessionModulesFile}`);
+  return source === undefined ? { kind: 'absent', ref } : { kind: 'present', ref, source };
+}
+
 function main(): void {
   const errors: string[] = [];
 
@@ -464,6 +521,17 @@ function main(): void {
   checkDeclaredDependencies(checkCrossServiceImports(errors), errors);
   checkPrismaGeneratedImports(errors);
   checkCapsuleBarrels(errors);
+  // sessionModuleCycles may lose entries but never gain one.
+  const cyclesAgainstBase = checkSessionModuleCyclesAgainstBase({
+    currentSource: readFileSync(path.join(rootDir, sessionModulesFile), 'utf8'),
+    imported: sessionModuleCycles,
+    base: readBaseModulesSource(),
+  });
+  errors.push(...cyclesAgainstBase.errors);
+  checkSessionModules(errors, !cyclesAgainstBase.added);
+  if (cyclesAgainstBase.notice !== undefined) {
+    process.stdout.write(`Service registry check: ${cyclesAgainstBase.notice}\n`);
+  }
 
   if (errors.length > 0) {
     const output = [
