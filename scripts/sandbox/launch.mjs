@@ -71,16 +71,22 @@ export async function run(
       stopWatchdog();
       let code = exitCode;
       let listingFailed = false;
-      const watched = {
-        ...system,
-        listProcesses: () => {
+      // A failure of either reading (the process table, or the environments of
+      // its members) means nothing can be identified.
+      const recordFailure =
+        (read) =>
+        (...args) => {
           try {
-            return system.listProcesses();
+            return read(...args);
           } catch (error) {
             listingFailed = true;
             throw error;
           }
-        },
+        };
+      const watched = {
+        ...system,
+        listProcesses: recordFailure(system.listProcesses),
+        processesWithEnvironment: recordFailure(system.processesWithEnvironment),
       };
       const keptForClean = () =>
         state.baseDir &&
@@ -121,7 +127,7 @@ export async function run(
         keptForClean();
         code = 1;
         // The recorder must not outlive the launcher's run on this path either.
-        await state.recorder?.close().catch((closeError) => log(message(closeError)));
+        await state.recorder?.close();
       }
       resolveStopped(code);
       return code;

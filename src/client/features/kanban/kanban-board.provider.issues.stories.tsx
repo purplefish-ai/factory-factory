@@ -80,12 +80,17 @@ export const NoAssignedIssues: Story = {
 };
 
 export const IssuesRefreshRecovery: Story = {
-  render: () => (
+  // The same project as the meta decorator's header controls.
+  render: (_args, { id }) => (
     <IssueRefreshRecoveryFixture
-      projectId="proj-1"
+      projectId={`proj-${id}`}
       handlers={{ 'workspace.listForProject': () => ({ workspaces, reviewCount: 0 }) }}
     >
-      <KanbanProvider projectId="proj-1" projectSlug="demo" issueProvider={IssueProvider.GITHUB}>
+      <KanbanProvider
+        projectId={`proj-${id}`}
+        projectSlug="demo"
+        issueProvider={IssueProvider.GITHUB}
+      >
         <div className="h-[640px] p-4">
           <KanbanBoard />
         </div>

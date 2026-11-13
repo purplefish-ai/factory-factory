@@ -177,6 +177,18 @@ describe('targeted session-state deltas', () => {
     ]);
   });
 
+  it('keeps full snapshots for cleared queued work and injected replay messages', () => {
+    sessionDomainService.enqueue('s1', queued('q1'));
+    published = [];
+
+    sessionDomainService.clearQueuedWork('s1');
+    expect(snapshots()).toHaveLength(1);
+
+    published = [];
+    sessionDomainService.injectCommittedUserMessage('s1', 'Cached history');
+    expect(snapshots()).toHaveLength(1);
+  });
+
   it('publishes a queue change made without its own publication on request', () => {
     sessionDomainService.enqueue('s1', queued('q1'));
     const [first] = sessionDomainService.getQueueSnapshot('s1');

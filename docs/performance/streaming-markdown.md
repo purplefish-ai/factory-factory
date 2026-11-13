@@ -3,7 +3,7 @@
 The backend flushes assistant text deltas about every 25 ms. The client appends
 each delta's chunk to the accumulated message text, producing a new string.
 `useChatState` coalesces deltas into one reducer dispatch per 100 ms window; see
-[chat message flow](../chat-message-flow.md#frontend-updates). Application
+[chat feature guide](../../src/client/features/chat/AGENTS.md). Application
 Markdown uses Streamdown 2.7.1 with our existing typography, links, images and
 Mermaid renderer. The React Markdown primitive remains available as the
 comparison baseline.

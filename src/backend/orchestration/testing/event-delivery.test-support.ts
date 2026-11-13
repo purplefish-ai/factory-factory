@@ -41,6 +41,23 @@ export async function waitForEventFixture<T>(
     clearTimeout(timer);
   }
 }
+/**
+ * Await an event that a running launch produces. There is no wall-clock deadline:
+ * the launch settling first is the failure signal, and a launch slowed by host load
+ * is waited for (the test's own timeout still bounds a launch that hangs).
+ */
+export function waitForLaunchEvent<T>(
+  ready: Promise<T>,
+  label: string,
+  launch: Promise<unknown>
+): Promise<T> {
+  return Promise.race([
+    ready,
+    launch.then(() => {
+      throw new Error(`Launch settled before ${label}`);
+    }),
+  ]);
+}
 const releases = new Set<() => void>();
 const tasks = new Set<Promise<void>>();
 export function releaseEventBoundaries() {

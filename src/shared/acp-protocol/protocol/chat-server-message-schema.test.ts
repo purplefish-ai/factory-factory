@@ -124,6 +124,44 @@ describe('ChatServerMessageSchema', () => {
     expect(parseChatServerMessage({ type: 'session_delta', data: frame }).success).toBe(false);
   });
 
+  it.each([
+    ['without an event id', { eventId: '' }],
+    ['without copy', { message: '' }],
+    ['with an unparseable timestamp', { timestamp: 'yesterday' }],
+  ])('rejects a live lifecycle row %s in events and snapshots', (_label, change) => {
+    const lifecycle = {
+      eventId: 'event-1',
+      kind: 'SESSION_STOPPED',
+      reason: 'SYSTEM_STOP',
+      message: 'Session stopped by the system.',
+      timestamp: runtime.updatedAt,
+    };
+    const event = (fields: object) => ({
+      type: 'agent_message',
+      order: 1,
+      data: { type: 'session_lifecycle', lifecycle: { ...lifecycle, ...fields } },
+    });
+    const snapshot = (fields: object) => ({
+      type: 'session_snapshot',
+      messages: [
+        {
+          id: 'session-lifecycle:event-1',
+          source: 'agent',
+          timestamp: runtime.updatedAt,
+          order: 1,
+          message: event(fields).data,
+        },
+      ],
+      queuedMessages: [],
+      sessionRuntime: runtime,
+    });
+
+    expect(parseChatServerMessage(event({})).success).toBe(true);
+    expect(parseChatServerMessage(snapshot({})).success).toBe(true);
+    expect(parseChatServerMessage(event(change)).success).toBe(false);
+    expect(parseChatServerMessage(snapshot(change)).success).toBe(false);
+  });
+
   it('rejects a snapshot with any invalid transcript row', () => {
     const parsed = parseChatServerMessage({
       type: 'session_snapshot',

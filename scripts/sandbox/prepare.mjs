@@ -67,8 +67,19 @@ export function prepareSandbox(baseDir) {
       '\tdefaultBranch = main',
       '[commit]',
       '\tgpgsign = false',
-      // A second line behind GIT_ALLOW_PROTOCOL and GIT_SSH_COMMAND: ssh is the
-      // shim, and GitHub remotes point at a host that never resolves.
+      // A second line behind GIT_ALLOW_PROTOCOL and GIT_SSH_COMMAND, which take
+      // precedence while set. Everything else is refused (git:// has no rewrite
+      // below); ssh and https stay allowed so that they reach the ssh shim and
+      // the egress recorder, which are the next lines. GitHub remotes point at a
+      // host that never resolves.
+      '[protocol]',
+      '\tallow = never',
+      '[protocol "file"]',
+      '\tallow = always',
+      '[protocol "ssh"]',
+      '\tallow = always',
+      '[protocol "https"]',
+      '\tallow = always',
       '[core]',
       `\tsshCommand = ${gitConfigString(shellQuote(paths.ssh))}`,
       `[url "ssh://git@${GITHUB_STAND_IN}/"]`,

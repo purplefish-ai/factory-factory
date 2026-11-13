@@ -95,7 +95,7 @@ function afterLease() {
 // src/backend/testing/event-run-child-rest.integration.test.ts.
 it('holds a run while its child works and settles with the child PR once the child rests', async () => {
   const owner = await startedRun(81);
-  await f.providers.waitForProviders(1);
+  await f.waitForProviders(1);
   const parent = f.providers.providers[0]!;
   await parent.called;
   const run = await onlyRun();
@@ -159,7 +159,7 @@ it('holds a run while its child works and settles with the child PR once the chi
 
 it('settles a run held by a child that never starts once the 24-hour deadline passes', async () => {
   const owner = await startedRun(82);
-  await f.providers.waitForProviders(1);
+  await f.waitForProviders(1);
   await f.providers.providers[0]!.called;
   const run = await onlyRun();
   const creation = new f.workspace.WorkspaceCreationService({ logger: createLogger('flow') });
@@ -304,7 +304,7 @@ it.each(['claim committed', 'workspace created', 'session created'] as const)(
 
 it('surfaces an uncertain send as needing attention and never sends again, across a restart', async () => {
   const owner = await startedRun(85);
-  await f.providers.waitForProviders(1);
+  await f.waitForProviders(1);
   const provider = f.providers.providers[0]!;
   await provider.called;
   const run = await onlyRun();

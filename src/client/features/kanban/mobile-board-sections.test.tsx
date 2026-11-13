@@ -150,3 +150,29 @@ it('retains a clamped navigation selection until the scroll position changes', a
   });
   expect(container.querySelector('a[aria-current="location"]')?.textContent).toBe('Done 0');
 });
+
+it('keeps a clamped navigation selection when content elsewhere shrinks the board', async () => {
+  render({ done: true });
+  const scroll = container.querySelector<HTMLElement>('[data-mobile-board]')!;
+  let scrollHeight = 1000;
+  Object.defineProperties(scroll, {
+    clientHeight: { value: 600 },
+    scrollHeight: { get: () => scrollHeight },
+    scrollTo: {
+      value: () => {
+        scroll.scrollTop = 400;
+      },
+    },
+  });
+  const working = container.querySelector<HTMLElement>('section[aria-label="Working"]')!;
+  vi.spyOn(working, 'getBoundingClientRect').mockReturnValue(new DOMRect(0, 500, 390, 100));
+  await act(() => container.querySelectorAll('a')[1]!.click());
+
+  // Issues arriving in Todo leave it 4px shorter, and the browser clamps the scroll.
+  scrollHeight = 996;
+  scroll.scrollTop = 396;
+  await act(() => {
+    scroll.dispatchEvent(new Event('scroll'));
+  });
+  expect(container.querySelector('a[aria-current="location"]')?.textContent).toBe('Working 1');
+});

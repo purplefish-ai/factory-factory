@@ -519,6 +519,7 @@ export function createFakeApplicationGraph(label = 'test'): FakeApplicationGraph
       hasWork: vi.fn(() => false),
       start: vi.fn(),
       stop: vi.fn().mockResolvedValue(undefined),
+      drain: vi.fn().mockResolvedValue(undefined),
       recovery: undefined,
       // The graph has no GitHub source; activation must be exercised with a real poller.
       activation: unsafeCoerce({

@@ -15,7 +15,7 @@ context, not a new task or a substitute for current repository guidance.
 | Service boundaries and subsystem contracts         | [Architecture notes](architecture/README.md)                                                          |
 | Where a rule, fact or tool for agents belongs      | [Agent-friendly codebase principles](architecture/agent-friendly-codebase.md)                         |
 | Why a decision was made                            | [Decision records](decisions/)                                                                        |
-| Chat streaming, loading, and replay                | [Chat message flow](chat-message-flow.md)                                                             |
+| Chat streaming, loading, and replay                | [Chat feature guide][chat-agents-md]                                                                  |
 | Workspace state and PR monitoring                  | [Workspace state](architecture/workspace-state.md) and [PR monitoring guide][pull-requests-agents-md] |
 | Mixed Automations management and scheduled history | [Scheduled automations](architecture/integrations.md#scheduled-automations)                           |
 | Event automation limits and checks                 | [Event automation limits](architecture/integrations.md#current-event-automation-limits)               |
@@ -32,6 +32,7 @@ context, not a new task or a substitute for current repository guidance.
 | Verify npm release artifact identity               | [npm release security](npm-release-security.md)                                                       |
 
 [pull-requests-agents-md]: ../src/backend/orchestration/pull-requests/AGENTS.md
+[chat-agents-md]: ../src/client/features/chat/AGENTS.md
 
 For implementation work, search the relevant source area and current guides
 first, for example `rg -n 'PR monitoring' -g '*.md' docs src`. Consult
