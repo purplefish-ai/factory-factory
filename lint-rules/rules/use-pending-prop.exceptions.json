@@ -1,0 +1,4 @@
+{
+  "src/client/features/chat/usage-stats/provider-usage-control.tsx": "The usage popover trigger shows compaction status (including automatic compaction) and must stay openable, so it cannot be disabled by pending; its actions use pending.",
+  "src/client/features/voice/voice-mode-toggle.tsx": "While voice capture connects the toggle is the only way to stop it, so it must stay clickable; pending would disable it."
+}

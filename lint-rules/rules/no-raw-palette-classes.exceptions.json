@@ -1,0 +1,4 @@
+{
+  "src/client/components/subagent-icon.tsx": "Categorical identity palette: twelve distinguishable subagent hues, not statuses, so they cannot map onto status tokens.",
+  "src/client/routes/workspace-header-pwa-preview.tsx": "Mock macOS window controls reproduce the operating system's red, yellow and green traffic lights."
+}

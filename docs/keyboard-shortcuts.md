@@ -27,7 +27,7 @@ render `TabList` and `TabButton` from
 behavior. Tabs that switch panels, such as the PR detail panel and the mobile
 tool switcher, use the shadcn `Tabs` (Radix). `factory/no-raw-tab-role` rejects
 `role="tab"` and `role="tablist"` written anywhere else
-([lint guardrails](../lint-rules/README.md)).
+([rule](../lint-rules/rules/no-raw-tab-role.mjs)).
 
 Plain keys yield to text fields, typeahead widgets and modal dialogs; `?` and
 `/` remain available on ordinary buttons and links. Workspace arrows and

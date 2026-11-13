@@ -91,7 +91,8 @@ Pick the loading pattern by what the user is waiting for:
   that is expanding, a status line next to text, an inline editor that is
   saving. Pass `aria-hidden` when nearby text already says what is pending.
   Don't use a raw `SpinnerGapIcon` or `animate-spin`; `factory/no-raw-spinner`
-  rejects them outside status indicators listed in `.oxlintrc.json`.
+  rejects them outside status indicators listed in
+  [`no-raw-spinner.exceptions.json`](../../lint-rules/rules/no-raw-spinner.exceptions.json).
 - **`Loading`** (`src/client/components/loading.tsx`) for a route or panel with
   no known layout. Give it a specific message ("Loading diff…");
   `size="compact"` drops the 200px minimum height for side panels.
@@ -207,7 +208,7 @@ background refetch fails, and never gate content on `isError`, which stays true
 while cached data is on screen. The `factory/query-error-handled` lint rule
 flags a `use…Query` result that reads `isLoading`, `isPending` or
 `isInitialLoading` without `error`, `isError`, `status`, `isLoadingError` or
-`isRefetchError` ([lint guardrails](../../lint-rules/README.md)).
+`isRefetchError` ([rule](../../lint-rules/rules/query-error-handled.mjs)).
 
 `createAppQueryClient` (`src/client/lib/query-client.ts`) installs a
 `MutationCache.onError` fallback so that no mutation fails silently. The cache

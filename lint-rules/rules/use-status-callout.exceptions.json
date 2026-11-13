@@ -1,0 +1,5 @@
+{
+  "src/client/lib/status-tones.ts": "The tone map itself defines each tone's surface classes, which StatusCallout renders.",
+  "src/client/features/kanban/kanban-card.tsx": "Board cards tint and border the whole card for an error or pending request (with hover states); that is a status-carrying card, not a message callout.",
+  "src/client/components/app-sidebar.tsx": "A sidebar workspace row waiting on the user tints and borders the whole row; that is a status-carrying row, not a message callout."
+}

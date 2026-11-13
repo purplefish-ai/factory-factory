@@ -14,7 +14,12 @@
         "src/client/main.tsx!",
         "src/client/features/workspace/diff-highlight.worker.ts!"
       ],
-      "project": ["src/**/*.{ts,tsx,css,mdx}!", "electron/**/*.{ts,cts}!", "prisma/**/*.prisma!"]
+      "project": [
+        "src/**/*.{ts,tsx,css,mdx}!",
+        "electron/**/*.{ts,cts}!",
+        "prisma/**/*.prisma!",
+        "lint-rules/**/*.{mjs,ts}"
+      ]
     }
   },
   "paths": {
@@ -23,7 +28,12 @@
   },
   "ignoreDependencies": ["@prisma/client"],
   "vitest": {
-    "entry": ["src/**/*.test.{ts,tsx}", "vitest.config.ts", "vitest.storybook.config.ts"]
+    "entry": [
+      "src/**/*.test.{ts,tsx}",
+      "lint-rules/**/*.test.ts",
+      "vitest.config.ts",
+      "vitest.storybook.config.ts"
+    ]
   },
   "storybook": {
     "entry": ["src/**/*.stories.tsx", ".storybook/**/*.{ts,tsx}"]
