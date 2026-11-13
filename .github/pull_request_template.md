@@ -16,4 +16,4 @@
 
 ## Knowledge updated
 
-<!-- One of: tests / guide / decision record / none, with the path. -->
+<!-- Tests, guide or decision record, with the path for each. If none was updated, write "None" and say why. -->
