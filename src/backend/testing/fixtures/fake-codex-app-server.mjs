@@ -72,7 +72,7 @@ const scenarios = {
     await turn.reply(slowStreamChunks, slowStreamDelayMs);
   },
 };
-const scenarioName = process.env.FF_SANDBOX_SCENARIO || undefined;
+const scenarioName = process.env.FF_SANDBOX_SCENARIO;
 if (scenarioName !== undefined && !Object.hasOwn(scenarios, scenarioName)) {
   process.stderr.write(
     `Unknown FF_SANDBOX_SCENARIO "${scenarioName}". Valid scenarios: ${Object.keys(scenarios).join(', ')}\n`
@@ -84,6 +84,7 @@ const send = (value) => process.stdout.write(`${JSON.stringify(value)}\n`);
 const notify = (method, params) => send({ method, params });
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const pendingServerRequests = new Map();
+const interrupts = new Map();
 let serverRequestCount = 0;
 
 /** Plays the selected scenario as one turn, with the item shapes of the Codex app-server protocol. */
@@ -109,6 +110,15 @@ async function playScenario(request, turnId) {
     });
   const cwd = request.params.cwd ?? thread.cwd;
   let messageCount = 0;
+  // turn/interrupt stops the scenario: no further items, and an open approval is cancelled.
+  let interrupted = false;
+  interrupts.set(turnId, () => {
+    interrupted = true;
+    for (const resolve of pendingServerRequests.values()) {
+      resolve({ decision: 'cancel' });
+    }
+    pendingServerRequests.clear();
+  });
   const turn = {
     id: turnId,
     threadId,
@@ -121,17 +131,25 @@ async function playScenario(request, turnId) {
       return new Promise((resolve) => pendingServerRequests.set(id, resolve));
     },
     async reply(chunks, delayMs = 0) {
+      if (interrupted) {
+        return;
+      }
       const id = `message-${++messageCount}`;
       const message = { type: 'agentMessage', id, phase: null, memoryCitation: null };
       const fields = { ...message, delivery: null, questions: null };
       item('item/started', { ...fields, text: '' });
-      for (const [index, delta] of chunks.entries()) {
-        if (index > 0) {
+      const sent = [];
+      for (const delta of chunks) {
+        if (sent.length > 0) {
           await sleep(delayMs);
         }
+        if (interrupted) {
+          break;
+        }
+        sent.push(delta);
         notify('item/agentMessage/delta', { threadId, turnId, itemId: id, delta });
       }
-      item('item/completed', { ...fields, text: chunks.join('') });
+      item('item/completed', { ...fields, text: sent.join('') });
     },
     command(id, command, commandActions, output) {
       const base = { type: 'commandExecution', id, command, cwd, commandActions };
@@ -160,7 +178,9 @@ async function playScenario(request, turnId) {
     },
   };
   notify('turn/started', { threadId, turn: baseTurn });
-  const ending = (await scenarios[scenarioName](turn)) ?? { status: 'completed', error: null };
+  const played = (await scenarios[scenarioName](turn)) ?? { status: 'completed', error: null };
+  interrupts.delete(turnId);
+  const ending = interrupted ? { status: 'interrupted', error: null } : played;
   notify('turn/completed', {
     threadId,
     turn: { ...baseTurn, ...ending, completedAt: 0, durationMs: 0 },
@@ -229,6 +249,9 @@ createInterface({ input: process.stdin }).on('line', (line) => {
       break;
     case 'thread/goal/get':
       result = { goal: null };
+      break;
+    case 'turn/interrupt':
+      interrupts.get(request.params.turnId)?.();
       break;
     case 'mcpServerStatus/list':
       result = { data: [], nextCursor: null };

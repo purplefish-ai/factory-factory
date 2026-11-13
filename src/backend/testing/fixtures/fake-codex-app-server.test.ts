@@ -39,16 +39,25 @@ function startFake(scenario?: string) {
 
 /**
  * Sends one prompt and returns every message the fake writes until the turn completes.
- * Server requests are answered with `decision`, and stay in the returned list.
+ * Server requests are answered with `decision`, and stay in the returned list. The first
+ * message with the method `interruptOn` is followed by `turn/interrupt` instead of an answer.
  */
-async function playPrompt(child: ChildProcessWithoutNullStreams, decision = 'accept') {
+async function playPrompt(
+  child: ChildProcessWithoutNullStreams,
+  { decision = 'accept', interruptOn }: { decision?: string; interruptOn?: string } = {}
+) {
+  let interrupted = false;
   const messages: Message[] = [];
   const lines = createInterface({ input: child.stdout });
   const done = new Promise<void>((resolve) => {
     lines.on('line', (line) => {
       const message = messageSchema.parse(JSON.parse(line));
       messages.push(message);
-      if (message.method !== undefined && message.id !== undefined) {
+      if (!interrupted && message.method !== undefined && message.method === interruptOn) {
+        interrupted = true;
+        const interrupt = { id: 8, method: 'turn/interrupt', params: { threadId, turnId } };
+        child.stdin.write(`${JSON.stringify(interrupt)}\n`);
+      } else if (message.method !== undefined && message.id !== undefined) {
         child.stdin.write(`${JSON.stringify({ id: message.id, result: { decision } })}\n`);
       }
       if (message.method === 'turn/completed') {
@@ -129,35 +138,44 @@ describe('fake Codex app-server scenarios', () => {
 
   it('permission-request runs the command once it is approved', async () => {
     const commandItem = { type: 'commandExecution', id: 'approval-command', command, cwd };
-    expect(await playPrompt(startFake('permission-request'), 'accept')).toMatchObject([
-      turnStartResponse,
-      turnStarted,
-      approvalRequest,
-      {
-        method: 'item/started',
-        params: { threadId, turnId, item: { ...commandItem, status: 'inProgress' } },
-      },
-      {
-        method: 'item/commandExecution/outputDelta',
-        params: { threadId, turnId, itemId: 'approval-command', delta: 'Hello from the sandbox\n' },
-      },
-      {
-        method: 'item/completed',
-        params: {
-          threadId,
-          turnId,
-          item: { ...commandItem, status: 'completed', exitCode: 0 },
+    expect(await playPrompt(startFake('permission-request'), { decision: 'accept' })).toMatchObject(
+      [
+        turnStartResponse,
+        turnStarted,
+        approvalRequest,
+        {
+          method: 'item/started',
+          params: { threadId, turnId, item: { ...commandItem, status: 'inProgress' } },
         },
-      },
-      ...message('message-1', 'You approved the command, so I ran it.', [
-        'You approved the command, so I ran it.',
-      ]),
-      turnCompleted('completed'),
-    ]);
+        {
+          method: 'item/commandExecution/outputDelta',
+          params: {
+            threadId,
+            turnId,
+            itemId: 'approval-command',
+            delta: 'Hello from the sandbox\n',
+          },
+        },
+        {
+          method: 'item/completed',
+          params: {
+            threadId,
+            turnId,
+            item: { ...commandItem, status: 'completed', exitCode: 0 },
+          },
+        },
+        ...message('message-1', 'You approved the command, so I ran it.', [
+          'You approved the command, so I ran it.',
+        ]),
+        turnCompleted('completed'),
+      ]
+    );
   });
 
   it('permission-request skips the command once it is declined', async () => {
-    expect(await playPrompt(startFake('permission-request'), 'decline')).toMatchObject([
+    expect(
+      await playPrompt(startFake('permission-request'), { decision: 'decline' })
+    ).toMatchObject([
       turnStartResponse,
       turnStarted,
       approvalRequest,
@@ -194,16 +212,45 @@ describe('fake Codex app-server scenarios', () => {
     ]);
   }, 10_000);
 
-  it('exits with the valid scenario names for an unknown one', async () => {
-    const child = startFake('nope');
+  it('slow-stream stops streaming on turn/interrupt', async () => {
+    const [started, delta, completed] = message('message-1', 'Streaming ', ['Streaming ']);
+    expect(
+      await playPrompt(startFake('slow-stream'), { interruptOn: 'item/agentMessage/delta' })
+    ).toMatchObject([
+      turnStartResponse,
+      turnStarted,
+      started,
+      delta,
+      { id: 8, result: {} },
+      completed,
+      turnCompleted('interrupted'),
+    ]);
+  });
+
+  it('permission-request cancels its approval and ends on turn/interrupt', async () => {
+    expect(
+      await playPrompt(startFake('permission-request'), {
+        interruptOn: 'item/commandExecution/requestApproval',
+      })
+    ).toMatchObject([
+      turnStartResponse,
+      turnStarted,
+      approvalRequest,
+      { id: 8, result: {} },
+      turnCompleted('interrupted'),
+    ]);
+  });
+
+  it.each(['nope', ''])('exits with the valid scenario names for %j', async (name) => {
+    const child = startFake(name);
     let stderr = '';
     child.stderr.on('data', (chunk: Buffer) => {
       stderr += chunk.toString();
     });
-    const [code] = await once(child, 'exit');
+    const [code] = await once(child, 'close');
     expect(code).toBe(2);
     expect(stderr).toBe(
-      'Unknown FF_SANDBOX_SCENARIO "nope". Valid scenarios: echo, permission-request, error, slow-stream\n'
+      `Unknown FF_SANDBOX_SCENARIO "${name}". Valid scenarios: echo, permission-request, error, slow-stream\n`
     );
   });
 });

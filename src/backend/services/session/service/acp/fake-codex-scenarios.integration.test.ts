@@ -26,8 +26,14 @@ type ClientEvent =
   | { type: 'update'; update: SessionUpdate }
   | { type: 'permission'; params: RequestPermissionRequest };
 
-/** Starts the adapter on the fake, sends `Hello sandbox` and answers a permission request with `optionId`. */
-async function playScenario(scenario: string, optionId = 'allow_once') {
+/**
+ * Starts the adapter on the fake and sends `Hello sandbox`. A permission request is answered with
+ * `optionId`; `stopAfterFirstChunk` cancels the prompt once the first reply chunk arrives.
+ */
+async function playScenario(
+  scenario: string,
+  { optionId = 'allow_once', stopAfterFirstChunk = false } = {}
+) {
   // The session working directory arrives resolved; macOS temp dirs live under /private.
   const dir = await realpath(await mkdtemp(join(tmpdir(), 'ff-scenario-')));
   dirs.push(dir);
@@ -57,6 +63,7 @@ async function playScenario(scenario: string, optionId = 'allow_once') {
   };
   const events: ClientEvent[] = [];
   let prompting = false;
+  let stop: (() => void) | undefined;
   const bridge = new AcpPermissionBridge();
   const handle = await factory.createClient({
     sessionId: 'scenario-session',
@@ -69,6 +76,10 @@ async function playScenario(scenario: string, optionId = 'allow_once') {
         }
         if (event.type === 'acp_session_update') {
           events.push({ type: 'update', update: event.update });
+          if (event.update.sessionUpdate === 'agent_message_chunk') {
+            stop?.();
+            stop = undefined;
+          }
         } else if (event.type === 'acp_permission_request') {
           events.push({ type: 'permission', params: event.params });
           bridge.resolvePermission(event.requestId, optionId);
@@ -82,6 +93,9 @@ async function playScenario(scenario: string, optionId = 'allow_once') {
   });
   handles.push(handle);
   prompting = true;
+  if (stopAfterFirstChunk) {
+    stop = () => void handle.connection.cancel({ sessionId: handle.providerSessionId });
+  }
   const response = await handle.connection.prompt({
     sessionId: handle.providerSessionId,
     prompt: [{ type: 'text', text: 'Hello sandbox' }],
@@ -121,7 +135,7 @@ it('echo streams the prompt text back', async () => {
 const command = 'echo "Hello from the sandbox"';
 
 it('permission-request asks, then runs the command and replies once approved', async () => {
-  const played = await playScenario('permission-request', 'allow_once');
+  const played = await playScenario('permission-request', { optionId: 'allow_once' });
   expect(played.response.stopReason).toBe('end_turn');
   expect(played.sequence).toEqual([
     'permission',
@@ -157,7 +171,7 @@ it('permission-request asks, then runs the command and replies once approved', a
 }, 20_000);
 
 it('permission-request replies without running the command once declined', async () => {
-  const played = await playScenario('permission-request', 'decline');
+  const played = await playScenario('permission-request', { optionId: 'decline' });
   expect(played.response.stopReason).toBe('end_turn');
   expect(played.sequence).toEqual(['permission', 'agent_message_chunk']);
   expect(played.chunks).toEqual(['You declined the command, so I did not run it.']);
@@ -194,4 +208,10 @@ it('slow-stream delivers its reply as several ordered chunks', async () => {
     'a ',
     'time.',
   ]);
+}, 20_000);
+
+it('slow-stream stops streaming when the client cancels the prompt', async () => {
+  const played = await playScenario('slow-stream', { stopAfterFirstChunk: true });
+  expect(played.response.stopReason).toBe('cancelled');
+  expect(played.chunks).toEqual(['Streaming ']);
 }, 20_000);
