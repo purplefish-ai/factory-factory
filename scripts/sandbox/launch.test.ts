@@ -108,6 +108,48 @@ describe('launcher setup and shutdown', () => {
     expect(h.sandboxDirs()).toEqual([]);
   }, 60_000);
 
+  it('records the server group before reading the process table, then its start time', async () => {
+    const h = harness();
+    // Stands in for the server: a real process group, so stopping it is real.
+    const group = spawnSleeper();
+    try {
+      const recordsAtListing: unknown[] = [];
+      let spawnedServer = false;
+      const spawnImpl = (_command: string, args: string[]) => {
+        h.spawned.push(args);
+        spawnedServer = true;
+        const child = Object.assign(new EventEmitter(), {
+          pid: group.pid,
+          stdout: new EventEmitter(),
+          stderr: null,
+        });
+        setTimeout(() => child.emit('exit', 1, null), 50);
+        return child;
+      };
+      const listProcesses = () => {
+        if (spawnedServer && recordsAtListing.length === 0) {
+          const [dir] = h.sandboxDirs();
+          recordsAtListing.push(dir ? readSandboxRecord(join(h.root, dir, 'sandbox.json')) : null);
+        }
+        return realSystem.listProcesses();
+      };
+      const code = await run(
+        { scenario: 'echo', keep: false },
+        { ...h.deps, system: { ...realSystem, listProcesses }, spawnImpl }
+      );
+      expect(code).toBe(1);
+      // A SIGKILL at the first `ps` after spawning finds the group recorded.
+      expect(recordsAtListing).toEqual([
+        expect.objectContaining({ pgid: group.pid, pgidStartedAt: null }),
+      ]);
+      // The start time was then recorded and used: the group was stopped.
+      expect(findProcess(realSystem.listProcesses(), group.pid ?? 0)).toBeNull();
+      expect(h.sandboxDirs()).toEqual([]);
+    } finally {
+      group.kill('SIGKILL');
+    }
+  }, 60_000);
+
   it('retries with fresh ports when the server reports others, then fails naming both', async () => {
     const h = harness();
     // Each attempt's backend reports the next port up, as `ff serve` does when its port was taken.

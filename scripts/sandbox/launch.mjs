@@ -69,7 +69,7 @@ export async function run(
       stopWatchdog();
       let code = exitCode;
       try {
-        await stopServer(state.server, system);
+        await stopServer(state.server, system, state.baseDir);
         await state.recorder?.close();
         if (state.baseDir && keep) {
           log(`kept ${state.baseDir}`);
@@ -173,13 +173,19 @@ export async function run(
         },
         onError: (error) => void stop(`the server could not be started: ${message(error)}`, 1),
       });
-      const leader = server.child.pid
-        ? findProcess(system.listProcesses(), server.child.pid)
-        : null;
-      state.server = leader ? { pgid: leader.pid, startedAt: leader.startedAt } : null;
+      // A detached child's pid is its group ID: record it before anything else
+      // (a SIGKILL from here on still leaves the group findable), then add the
+      // leader's start time once read. Unreaped, the pid cannot be reused yet.
+      state.server = server.child.pid ? { pgid: server.child.pid, startedAt: null } : null;
       record.pgid = state.server?.pgid ?? null;
-      record.pgidStartedAt = state.server?.startedAt ?? null;
+      record.pgidStartedAt = null;
       save();
+      const leader = state.server ? findProcess(system.listProcesses(), state.server.pgid) : null;
+      if (state.server && leader) {
+        state.server.startedAt = leader.startedAt;
+        record.pgidStartedAt = leader.startedAt;
+        save();
+      }
       const result = await waitForServer({
         paths,
         server,
@@ -205,7 +211,7 @@ export async function run(
       lastMismatch = result.message;
       log(`attempt ${attempt}: ${result.message}; retrying with fresh ports`);
       server.retiring = true;
-      await stopServer(state.server, system);
+      await stopServer(state.server, system, state.baseDir);
       state.server = null;
       record.pgid = null;
       record.pgidStartedAt = null;

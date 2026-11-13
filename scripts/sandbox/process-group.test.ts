@@ -4,6 +4,7 @@ import {
   findProcess,
   isSameProcess,
   parseProcessTable,
+  realSystem,
   stopProcessGroup,
 } from './process-group.mjs';
 
@@ -19,7 +20,8 @@ const LATER = 'Thu Nov 13 11:30:00 2026';
  */
 function fakeSystem(
   initial: Entry[],
-  onSignal: (processes: Entry[], target: number, signal: string) => Entry[]
+  onSignal: (processes: Entry[], target: number, signal: string) => Entry[],
+  environments: Record<number, string[]> = {}
 ) {
   let processes = initial;
   let time = 0;
@@ -37,6 +39,8 @@ function fakeSystem(
         return Promise.resolve();
       },
       now: () => time,
+      processesWithEnvironment: (entry: string, pids: number[] | null) =>
+        (pids ?? processes.map((p) => p.pid)).filter((pid) => environments[pid]?.includes(entry)),
     },
   };
 }
@@ -65,6 +69,25 @@ describe('process identity', () => {
     expect(findProcess(table, 14)).toBeNull();
     expect(isSameProcess(table, { pid: 10, startedAt: T1 })).toBe(true);
     expect(isSameProcess(table, { pid: 10, startedAt: LATER })).toBe(false);
+  });
+
+  it('reads the same start time under any time zone', () => {
+    const original = process.env.TZ;
+    const startUnder = (tz: string) => {
+      process.env.TZ = tz;
+      return findProcess(realSystem.listProcesses(), process.pid)?.startedAt;
+    };
+    try {
+      const pacific = startUnder('America/Los_Angeles');
+      expect(pacific).toEqual(expect.any(String));
+      expect(startUnder('Asia/Tokyo')).toBe(pacific);
+    } finally {
+      if (original === undefined) {
+        delete process.env.TZ;
+      } else {
+        process.env.TZ = original;
+      }
+    }
   });
 
   it('collects a process group and the descendants that left it', () => {
@@ -151,5 +174,71 @@ describe('stopping a process group', () => {
       stopProcessGroup(10, { system: system.system, leaderStartedAt: T1, graceMs: 1000 })
     ).resolves.toEqual({ owned: true });
     expect(system.events).toEqual(['SIGTERM -10']);
+  });
+
+  const BASE = 'BASE_DIR=/tmp/ff-sandbox/sb-own';
+
+  it('leaves a group alone when its leader is gone and no member is this sandbox', async () => {
+    // A stranger double-forked: its group took the number 10 and its leader
+    // exited, while its members live on. None runs with this sandbox's BASE_DIR.
+    const stranger = fakeSystem(
+      [
+        { pid: 11, ppid: 1, pgid: 10, zombie: false, startedAt: LATER },
+        { pid: 13, ppid: 11, pgid: 10, zombie: false, startedAt: LATER },
+      ],
+      exitOn(['SIGTERM', 'SIGKILL']),
+      { 11: ['BASE_DIR=/tmp/ff-sandbox/sb-other'], 13: [] }
+    );
+    await expect(
+      stopProcessGroup(10, {
+        system: stranger.system,
+        leaderStartedAt: T1,
+        baseDir: '/tmp/ff-sandbox/sb-own',
+      })
+    ).resolves.toEqual({ owned: false });
+    expect(stranger.events).toEqual([]);
+  });
+
+  it('stops a group whose leader is gone when a member runs with this sandbox', async () => {
+    // The server's leader exited first; Vite (11) and the backend (12) remain.
+    const orphaned = fakeSystem(
+      [
+        { pid: 11, ppid: 1, pgid: 10, zombie: false, startedAt: T2 },
+        { pid: 12, ppid: 11, pgid: 10, zombie: false, startedAt: T2 },
+      ],
+      exitOn(['SIGTERM']),
+      { 11: ['PATH=/bin', BASE], 12: [BASE] }
+    );
+    await expect(
+      stopProcessGroup(10, {
+        system: orphaned.system,
+        leaderStartedAt: T1,
+        baseDir: '/tmp/ff-sandbox/sb-own',
+      })
+    ).resolves.toEqual({ owned: true });
+    expect(orphaned.events).toEqual(['SIGTERM -10']);
+  });
+
+  it('decides a group recorded without its start time by its members alone', async () => {
+    // The launcher recorded the pgid and died before it read the start time.
+    const ours = fakeSystem(server, exitOn(['SIGTERM']), { 10: [BASE] });
+    await expect(
+      stopProcessGroup(10, {
+        system: ours.system,
+        leaderStartedAt: null,
+        baseDir: '/tmp/ff-sandbox/sb-own',
+      })
+    ).resolves.toEqual({ owned: true });
+    expect(ours.events).toEqual(['SIGTERM -10', 'SIGTERM 12']);
+
+    const theirs = fakeSystem(server, exitOn(['SIGTERM']), {});
+    await expect(
+      stopProcessGroup(10, {
+        system: theirs.system,
+        leaderStartedAt: null,
+        baseDir: '/tmp/ff-sandbox/sb-own',
+      })
+    ).resolves.toEqual({ owned: false });
+    expect(theirs.events).toEqual([]);
   });
 });

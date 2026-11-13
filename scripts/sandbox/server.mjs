@@ -79,10 +79,17 @@ export async function waitForServer({
   throw new Error(`The server was not ready within ${timeoutMs / 1000} seconds.`);
 }
 
-/** Stops a started server's whole group, identified by its leader's start time. */
-export async function stopServer(server, system) {
-  if (server?.pgid && server.startedAt) {
-    await stopProcessGroup(server.pgid, { system, leaderStartedAt: server.startedAt });
+/**
+ * Stops a started server's whole group, identified by its leader's start time
+ * or, before that is known, by `baseDir` in a member's environment.
+ */
+export async function stopServer(server, system, baseDir) {
+  if (server?.pgid) {
+    await stopProcessGroup(server.pgid, {
+      system,
+      leaderStartedAt: server.startedAt,
+      baseDir,
+    });
   }
 }
 

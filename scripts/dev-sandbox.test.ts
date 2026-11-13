@@ -165,10 +165,13 @@ afterAll(async () => {
       await sandbox.exited;
     }
   }
-  // Only groups whose leader still has its recorded start time are signalled.
+  // Only groups that are still the sandbox's (leader start time, or BASE_DIR) are signalled.
   for (const sandbox of [shared, other]) {
     if (sandbox) {
-      await stopProcessGroup(sandbox.pgid, { leaderStartedAt: sandbox.pgidStartedAt });
+      await stopProcessGroup(sandbox.pgid, {
+        leaderStartedAt: sandbox.pgidStartedAt,
+        baseDir: sandbox.baseDir,
+      });
     }
   }
   await new Promise((resolve) => registry?.close(resolve));

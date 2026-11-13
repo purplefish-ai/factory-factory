@@ -11,7 +11,10 @@ const sandboxRecordSchema = z
     /** The launcher, identified by pid and start time. */
     pid: z.number().int().gt(1),
     pidStartedAt: z.string().min(1),
-    /** The server's process group and its leader's start time; null until it is started. */
+    /**
+     * The server's process group (its leader's pid), null until it is spawned,
+     * and the leader's start time, written in a second step once read.
+     */
     pgid: z.number().int().gt(1).nullable(),
     pgidStartedAt: z.string().min(1).nullable(),
     egressPort: z.number().int().positive().nullable(),
@@ -19,8 +22,8 @@ const sandboxRecordSchema = z
     repoPath: z.string(),
     scenario: z.string(),
   })
-  .refine((record) => (record.pgid === null) === (record.pgidStartedAt === null), {
-    message: 'pgid and pgidStartedAt are set together',
+  .refine((record) => record.pgid !== null || record.pgidStartedAt === null, {
+    message: 'pgidStartedAt needs a pgid',
   });
 
 export function readSandboxRecord(file) {

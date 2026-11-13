@@ -1,3 +1,4 @@
+import { spawn } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
@@ -31,7 +32,18 @@ function recordFor(baseDir: string, fields: Record<string, unknown> = {}) {
 }
 
 type Entry = { pid: number; ppid: number; pgid: number; zombie: boolean; startedAt: string };
-function staticSystem(processes: Entry[]) {
+/**
+ * An injected process table. `environments` gives each pid's environment
+ * entries; `exitOnSignal` makes the signalled group or pid exit.
+ */
+function staticSystem(
+  initial: Entry[],
+  {
+    environments = {},
+    exitOnSignal = false,
+  }: { environments?: Record<number, string[]>; exitOnSignal?: boolean } = {}
+) {
+  let processes = initial;
   const events: string[] = [];
   return {
     events,
@@ -39,11 +51,28 @@ function staticSystem(processes: Entry[]) {
       listProcesses: () => processes,
       signal: (target: number, signal: string) => {
         events.push(`${signal} ${target}`);
+        if (exitOnSignal) {
+          processes = processes.filter((p) => p.pid !== target && -p.pgid !== target);
+        }
       },
       sleep: () => Promise.resolve(),
       now: () => 0,
+      processesWithEnvironment: (entry: string, pids: number[] | null) =>
+        (pids ?? processes.map((p) => p.pid)).filter(
+          (pid) =>
+            processes.some((p) => p.pid === pid) && Boolean(environments[pid]?.includes(entry))
+        ),
     },
   };
+}
+
+/** A detached idle process (its own group) running with `BASE_DIR=<baseDir>`. */
+function spawnSandboxProcess(baseDir: string) {
+  return spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], {
+    detached: true,
+    stdio: 'ignore',
+    env: { PATH: process.env.PATH, BASE_DIR: baseDir },
+  });
 }
 
 describe('--clean selection', () => {
@@ -107,6 +136,56 @@ describe('--clean selection', () => {
     expect(events).toEqual([]);
     expect(existsSync(dir)).toBe(false);
   });
+
+  it('cleans a record written between spawning the server and reading its start time', async () => {
+    const tempDir = temporary.create('ffsb-');
+    const dir = join(tempDir, 'ff-sandbox', 'sb-between');
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, 'sandbox.json'), recordFor(dir, { pgid: 4242, pgidStartedAt: null }));
+    // The launcher (100) is dead; its server group lives and carries its BASE_DIR.
+    const { system, events } = staticSystem(
+      [
+        { pid: 4242, ppid: 1, pgid: 4242, zombie: false, startedAt: T2 },
+        { pid: 4243, ppid: 4242, pgid: 4242, zombie: false, startedAt: T2 },
+      ],
+      { environments: { 4242: [`BASE_DIR=${dir}`], 4243: [`BASE_DIR=${dir}`] }, exitOnSignal: true }
+    );
+    const removed = await cleanSandboxes({ root: join(tempDir, 'ff-sandbox'), tempDir, system });
+    expect(events).toEqual(['SIGTERM -4242']);
+    expect(removed).toEqual([dir]);
+    expect(existsSync(dir)).toBe(false);
+  });
+
+  it('never deletes a directory while a live process runs with it as BASE_DIR', async () => {
+    const tempDir = temporary.create('ffsb-');
+    const root = join(tempDir, 'ff-sandbox');
+    const dir = join(root, 'sb-in-use');
+    mkdirSync(dir, { recursive: true });
+    // No group recorded (the launcher died before the second write), yet pid
+    // 4300 runs with this BASE_DIR; 4301 runs with another sandbox's.
+    writeFileSync(join(dir, 'sandbox.json'), recordFor(dir, { pgid: null, pgidStartedAt: null }));
+    const { system, events } = staticSystem(
+      [
+        { pid: 4300, ppid: 1, pgid: 4300, zombie: false, startedAt: T2 },
+        { pid: 4301, ppid: 1, pgid: 4301, zombie: false, startedAt: T2 },
+      ],
+      { environments: { 4300: [`BASE_DIR=${dir}`], 4301: [`BASE_DIR=${dir}-other`] } }
+    );
+    const logs: string[] = [];
+    const removed: string[] = [];
+    await expect(
+      cleanSandboxes({
+        root,
+        tempDir,
+        system,
+        remove: (path: string) => removed.push(path),
+        log: (text: string) => logs.push(text),
+      })
+    ).rejects.toThrow(`Left 1 sandbox directory in use: ${dir}`);
+    expect(removed).toEqual([]);
+    expect(events).toEqual([]);
+    expect(logs).toContain(`Leaving ${dir}: processes 4300 still run with it as BASE_DIR`);
+  });
 });
 
 describe('--clean on real directories', () => {
@@ -168,6 +247,46 @@ describe('--clean on real directories', () => {
       unrelated.kill('SIGKILL');
     }
   }, 30_000);
+
+  it('--clean stops a server group recorded without its start time', async () => {
+    const tempDir = temporary.create('ffsb-');
+    const dir = join(tempDir, 'ff-sandbox', 'sb-between');
+    mkdirSync(dir, { recursive: true });
+    const server = spawnSandboxProcess(dir);
+    try {
+      const pid = server.pid ?? 0;
+      // A dead launcher (a live pid with another start time) that recorded only the pgid.
+      writeFileSync(
+        join(dir, 'sandbox.json'),
+        recordFor(dir, { pid, pidStartedAt: T1, pgid: pid, pgidStartedAt: null })
+      );
+      const clean = launch(['--clean'], launcherEnv(tempDir));
+      expect(await clean.exited).toBe(0);
+      expect(existsSync(dir)).toBe(false);
+      expect(findProcess(realSystem.listProcesses(), pid)).toBeNull();
+    } finally {
+      server.kill('SIGKILL');
+    }
+  }, 60_000);
+
+  it('--clean leaves a directory a live process still runs with, naming it', async () => {
+    const tempDir = temporary.create('ffsb-');
+    const dir = join(tempDir, 'ff-sandbox', 'sb-in-use');
+    mkdirSync(dir, { recursive: true });
+    const user = spawnSandboxProcess(dir);
+    try {
+      writeFileSync(join(dir, 'sandbox.json'), recordFor(dir, { pgid: null, pgidStartedAt: null }));
+      const clean = launch(['--clean'], launcherEnv(tempDir));
+      expect(await clean.exited).toBe(1);
+      expect(existsSync(dir)).toBe(true);
+      expect(clean.output()).toContain(
+        `Leaving ${dir}: processes ${user.pid} still run with it as BASE_DIR`
+      );
+      expect(findProcess(realSystem.listProcesses(), user.pid ?? 0)).not.toBeNull();
+    } finally {
+      user.kill('SIGKILL');
+    }
+  }, 60_000);
 });
 
 describe('sandbox.json', () => {
@@ -176,8 +295,11 @@ describe('sandbox.json', () => {
     const file = join(dir, 'sandbox.json');
     writeFileSync(file, recordFor(dir, { pidStartedAt: undefined }));
     expect(readSandboxRecord(file)).toBeNull();
-    writeFileSync(file, recordFor(dir, { pgid: 7, pgidStartedAt: null }));
+    // A start time needs its group; a group recorded before its start time is valid.
+    writeFileSync(file, recordFor(dir, { pgid: null, pgidStartedAt: T2 }));
     expect(readSandboxRecord(file)).toBeNull();
+    writeFileSync(file, recordFor(dir, { pgid: 7, pgidStartedAt: null }));
+    expect(readSandboxRecord(file)).toMatchObject({ pgid: 7, pgidStartedAt: null });
     writeFileSync(file, recordFor(dir));
     expect(JSON.parse(readFileSync(file, 'utf8')).pgid).toBe(4242);
     expect(readSandboxRecord(file)?.pidStartedAt).toBe(T1);
