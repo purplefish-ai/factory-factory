@@ -48,6 +48,7 @@ export function AgentErrorStrip({
       <StatusCallout
         tone="danger"
         icon={XCircleIcon}
+        align="start"
         action={
           onDismiss ? (
             <Button

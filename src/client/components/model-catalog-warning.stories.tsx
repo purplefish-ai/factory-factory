@@ -14,6 +14,9 @@ type Story = StoryObj<typeof meta>;
 export const MissingClaudeModel: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
+    const icon = canvas.getByRole('alert').querySelector('svg')!;
+    const message = canvas.getByRole('alert').querySelector('p')!;
+    await expect(icon.getBoundingClientRect().top).toBe(message.getBoundingClientRect().top);
     await expect(canvas.getByRole('alert')).toHaveTextContent('claude-fable-5[1m]');
     await expect(canvas.getByRole('link', { name: 'Review chat defaults' })).toHaveAttribute(
       'href',

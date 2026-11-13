@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from '@storybook/react';
 import { useQueryClient } from '@tanstack/react-query';
 import { ThemeProvider } from 'next-themes';
 import type { CSSProperties } from 'react';
-import { expect, userEvent, within } from 'storybook/test';
+import { expect, userEvent, waitFor, within } from 'storybook/test';
 import { STORY_TRPC_PENDING } from '@/client/lib/storybook-trpc';
 import { FileCode } from './file-code';
 import { FileViewer } from './file-viewer';
@@ -207,5 +207,64 @@ export const MarkdownPreview: Story = {
     const canvas = within(canvasElement);
     await expect(await canvas.findByRole('heading', { name: 'Factory Factory' })).toBeVisible();
     await expect(canvas.getByRole('button', { name: 'Code' })).toBeVisible();
+  },
+};
+
+const imageResult = {
+  content: '',
+  language: 'image',
+  size: 68,
+  isBinary: true,
+  truncated: false,
+  image: {
+    mimeType: 'image/png',
+    data: 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a3ioAAAAASUVORK5CYII=',
+  },
+};
+
+export const ImagePreview: Story = {
+  args: { filePath: 'photo.png' },
+  parameters: { trpc: { handlers: { 'workspace.readFile': () => imageResult } } },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const image = await canvas.findByRole('img', { name: 'photo.png' });
+    await expect(image).toBeVisible();
+    await waitFor(() => expect((image as HTMLImageElement).naturalWidth).toBeGreaterThan(0));
+    await expect(canvas.queryByText('Binary file cannot be displayed')).toBeNull();
+  },
+};
+
+export const InvalidImage: Story = {
+  args: { filePath: 'broken.png' },
+  parameters: {
+    trpc: {
+      handlers: {
+        'workspace.readFile': () => ({
+          ...imageResult,
+          image: { mimeType: 'image/png', data: 'aW52YWxpZA==' },
+        }),
+      },
+    },
+  },
+  play: async ({ canvasElement }) => {
+    await expect(await within(canvasElement).findByText(/Couldn't display image/)).toBeVisible();
+  },
+};
+
+export const OversizedImage: Story = {
+  args: { filePath: 'large.png' },
+  parameters: {
+    trpc: {
+      handlers: {
+        'workspace.readFile': () => {
+          throw new Error('Image is too large to preview (maximum 20 MB)');
+        },
+      },
+    },
+  },
+  play: async ({ canvasElement }) => {
+    await expect(
+      await within(canvasElement).findByText(/Image is too large to preview/)
+    ).toBeVisible();
   },
 };

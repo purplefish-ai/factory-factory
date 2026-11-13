@@ -1,0 +1,11 @@
+{
+  "src/backend/interceptors/branch-publication.test.ts": "Mocks workspace internals (resources/workspace.accessor); convert to the workspace barrel or a fake before they move.",
+  "src/backend/orchestration/data-backup/data-backup.service.test.ts": "Mocks settings internals (resources/backup-snapshot); convert to the settings barrel or a fake before they move.",
+  "src/backend/orchestration/data-backup/inert-runtime-backup.integration.test.ts": "Mocks run-script internals (service/run-script-process-utils); convert to the run-script barrel or a fake before they move.",
+  "src/backend/orchestration/workspace-lifecycle/workspace-archive-concurrency.test.ts": "Mocks workspace internals (resources/workspace-archived-blobs.accessor, resources/workspace.accessor); convert to the workspace barrel or a fake before they move.",
+  "src/backend/orchestration/workspace-lifecycle/workspace-runtime-cleanup-notification.test.ts": "Mocks workspace internals (resources/workspace-archived-blobs.accessor, resources/workspace.accessor); convert to the workspace barrel or a fake before they move.",
+  "src/backend/testing/event-run-bootstrap-capture.integration.test.ts": "Mocks codex-accounts internals (service/native-account, service/profile); convert to the codex-accounts barrel or a fake before they move.",
+  "src/backend/trpc/agent-management.integration.test.ts": "Mocks agent-definition internals (service/semantic-filter-gate); convert to the agent-definition barrel or a fake before they move.",
+  "src/backend/trpc/agent-recovery.integration.test.ts": "Mocks codex-accounts internals (service/native-account, service/profile); convert to the codex-accounts barrel or a fake before they move.",
+  "src/test-utils/workspace-branch-publication.integration.test.ts": "Mocks workspace internals (resources/workspace.accessor); convert to the workspace barrel or a fake before they move."
+}

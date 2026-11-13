@@ -1,6 +1,6 @@
 import { execFileSync } from 'node:child_process';
 import { closeSync, constants, openSync } from 'node:fs';
-import { mkdir, open, rm, writeFile } from 'node:fs/promises';
+import { mkdir, open, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -74,6 +74,77 @@ describe('workspace file previews', () => {
       await handle.close();
     }
     await rm(rootDir, { recursive: true, force: true });
+  });
+
+  it.each([
+    ['photo.PNG', 'image/png'],
+    ['photo.jpeg', 'image/jpeg'],
+    ['photo.jpg', 'image/jpeg'],
+    ['photo.gif', 'image/gif'],
+    ['photo.webp', 'image/webp'],
+    ['photo.avif', 'image/avif'],
+    ['photo.bmp', 'image/bmp'],
+    ['photo.ico', 'image/x-icon'],
+  ])('returns complete image bytes for %s', async (path, mimeType) => {
+    const contents = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0, 0xff]);
+    await writeFile(join(rootDir, path), contents);
+    expect(await caller.readFile({ workspaceId: 'w1', path })).toEqual({
+      content: '',
+      language: 'image',
+      size: contents.length,
+      isBinary: true,
+      truncated: false,
+      image: { mimeType, data: contents.toString('base64') },
+    });
+  });
+
+  it('retains SVG source viewing', async () => {
+    const content = '<svg xmlns="http://www.w3.org/2000/svg"><circle r="10" /></svg>';
+    await writeFile(join(rootDir, 'icon.svg'), content);
+    const result = await caller.readFile({ workspaceId: 'w1', path: 'icon.svg' });
+    expect(result).toMatchObject({ content, isBinary: false, truncated: false });
+    expect(result.image).toBeUndefined();
+  });
+
+  it('sizes small image reads to the file instead of the image limit', async () => {
+    await writeFile(join(rootDir, 'photo.png'), Buffer.from([0x89, 0x50, 0x4e, 0x47]));
+    await caller.readFile({ workspaceId: 'w1', path: 'photo.png' });
+    expect(readLengths[0]).toBe(5);
+  });
+
+  it('does not truncate images at the text preview limit', async () => {
+    const contents = Buffer.alloc(LIMIT + 10, 0x80);
+    await writeFile(join(rootDir, 'photo.png'), contents);
+    const result = await caller.readFile({ workspaceId: 'w1', path: 'photo.png' });
+    expect(result.truncated).toBe(false);
+    expect(result.image?.data).toBe(contents.toString('base64'));
+  });
+
+  it('rejects oversized images before reading their contents', async () => {
+    const handle = await open(join(rootDir, 'photo.png'), 'w');
+    await handle.truncate(21 * LIMIT);
+    await handle.close();
+    readLengths.length = 0;
+    await expect(caller.readFile({ workspaceId: 'w1', path: 'photo.png' })).rejects.toThrow(
+      'Image is too large to preview (maximum 20 MB)'
+    );
+    expect(readLengths).toEqual([]);
+    expect(handles.at(-1)?.close).toHaveBeenCalledOnce();
+  });
+
+  it('rejects image paths and symlinks outside the workspace', async () => {
+    const outsidePath = join(tmpdir(), `outside-${crypto.randomUUID()}.png`);
+    await writeFile(outsidePath, 'outside');
+    try {
+      await symlink(outsidePath, join(rootDir, 'photo.png'));
+      for (const path of ['../outside.png', 'photo.png']) {
+        await expect(caller.readFile({ workspaceId: 'w1', path })).rejects.toThrow(
+          'Invalid file path'
+        );
+      }
+    } finally {
+      await rm(outsidePath);
+    }
   });
 
   it.each([false, true])('bounds reads of a large sparse file (binary: %s)', async (binary) => {

@@ -1,11 +1,10 @@
 import { execFileSync } from 'node:child_process';
-import { existsSync, readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
-import type { z } from 'zod';
+import { z } from 'zod';
 import { countPhysicalLines } from '../check-file-length';
 import {
   type BaselineSizes,
   baselineSizes,
+  isLintRuleExceptionsFile,
   sessionModuleCycleCount,
   sessionModulesPath,
 } from './baselines';
@@ -18,6 +17,7 @@ import {
   runAttemptSchema,
   runListSchema,
 } from './ci-runs';
+import { commitFilesFormat, parseBlobBatch, parseCommitFiles, parseTreeBlobs } from './git-output';
 import {
   type MergedPullRequest,
   mergedPullRequestListSchema,
@@ -46,7 +46,16 @@ import { capsuleNames, type ViMockCounts, viMockCounts } from './vi-mocks';
 // period of CI history.
 const runsPerPullRequest = 2;
 const mostEditedCommitCount = 300;
-const maxBuffer = 64 * 1024 * 1024;
+// `git cat-file --batch` returns every measured file of the commit at once.
+const maxBuffer = 256 * 1024 * 1024;
+
+const baselinePaths = {
+  unusedCode: 'scripts/unused-code-baseline.json',
+  fileLength: 'scripts/file-length-baseline.json',
+};
+
+/** `gh repo view --json nameWithOwner`. */
+const repositorySchema = z.object({ nameWithOwner: z.string().regex(/^[\w.-]+\/[\w.-]+$/) });
 
 export type MetricsOptions = { pullRequests: number; json: boolean };
 
@@ -62,7 +71,8 @@ export type TreeMetrics = {
 };
 
 export type AgentMetrics = {
-  version: 1;
+  /** 2: `followUpFixes.share` became `shareOfMerged`. */
+  version: 2;
   github: { ci: CiMetrics; pullRequests: PullRequestMetrics };
   tree: TreeMetrics;
 };
@@ -71,33 +81,43 @@ export function run(command: string, args: readonly string[], cwd: string): stri
   return execFileSync(command, args, { cwd, encoding: 'utf8', maxBuffer });
 }
 
-function parseJson<T>(schema: z.ZodType<T>, text: string, source: string): T {
-  const parsed = schema.safeParse(JSON.parse(text));
+/**
+ * One `gh` or `git` invocation in the repository, given optional standard input
+ * and returning standard output as bytes. Tests pass fakes.
+ */
+export type Command = (args: readonly string[], input?: string) => Buffer;
+
+function commandIn(command: 'gh' | 'git', root: string): Command {
+  return (args, input) => execFileSync(command, args, { cwd: root, input, maxBuffer });
+}
+
+function parseJson<T>(schema: z.ZodType<T>, output: Buffer, source: string): T {
+  const parsed = schema.safeParse(JSON.parse(output.toString('utf8')));
   if (!parsed.success) {
     throw new Error(`Unexpected ${source} output: ${parsed.error.message}`);
   }
   return parsed.data;
 }
 
-function collectCiAttempts(root: string, runCount: number): CiRunAttempt[] {
+export function collectCiAttempts(
+  root: string,
+  runCount: number,
+  gh: Command = commandIn('gh', root)
+): CiRunAttempt[] {
   const rows = parseJson(
     runListSchema,
-    run(
-      'gh',
-      [
-        'run',
-        'list',
-        '--workflow',
-        'ci.yml',
-        '--event',
-        'pull_request',
-        '--limit',
-        String(runCount),
-        '--json',
-        'attempt,conclusion,databaseId,headBranch,headSha,startedAt,status,updatedAt',
-      ],
-      root
-    ),
+    gh([
+      'run',
+      'list',
+      '--workflow',
+      'ci.yml',
+      '--event',
+      'pull_request',
+      '--limit',
+      String(runCount),
+      '--json',
+      'attempt,conclusion,databaseId,headBranch,headSha,startedAt,status,updatedAt',
+    ]),
     'gh run list'
   );
   // `gh run list` shows only a run's latest attempt; fetch the earlier ones so
@@ -107,61 +127,94 @@ function collectCiAttempts(root: string, runCount: number): CiRunAttempt[] {
       attemptFromApi(
         parseJson(
           runAttemptSchema,
-          run(
-            'gh',
-            ['api', `repos/{owner}/{repo}/actions/runs/${row.databaseId}/attempts/${index + 1}`],
-            root
-          ),
+          gh(['api', `repos/{owner}/{repo}/actions/runs/${row.databaseId}/attempts/${index + 1}`]),
           'gh api run attempt'
-        )
+        ),
+        row.headBranch
       )
     )
   );
   return [...attemptsFromRunList(rows), ...earlier];
 }
 
-function collectMergedPullRequests(root: string, count: number): MergedPullRequest[] {
+function collectMergedPullRequests(gh: Command, count: number): MergedPullRequest[] {
   return parseJson(
     mergedPullRequestListSchema,
-    run(
-      'gh',
-      [
-        'pr',
-        'list',
-        '--state',
-        'merged',
-        '--limit',
-        String(count),
-        '--json',
-        'number,title,body,createdAt,mergedAt',
-      ],
-      root
-    ),
+    gh([
+      'pr',
+      'list',
+      '--state',
+      'merged',
+      '--limit',
+      String(count),
+      '--json',
+      'number,title,body,createdAt,mergedAt',
+    ]),
     'gh pr list'
   );
 }
 
-/** Files touched by each of the last `count` commits, newest first. */
-function collectCommitFiles(root: string, count: number): string[][] {
-  const output = run(
-    'git',
-    ['log', `-n${count}`, '--format=%x1e', '--name-only', '--no-renames', 'HEAD'],
-    root
-  );
-  return output
-    .split('\u001e')
-    .slice(1)
-    .map((block) => block.split('\n').filter((line) => line.length > 0));
+/** `owner/name` of the repository `gh` works against. */
+function collectRepository(gh: Command): string {
+  return parseJson(
+    repositorySchema,
+    gh(['repo', 'view', '--json', 'nameWithOwner']),
+    'gh repo view'
+  ).nameWithOwner;
 }
 
-function collectTree(root: string): TreeMetrics {
-  const paths = run('git', ['ls-files', '-z'], root)
-    .split('\0')
-    .filter((path) => path.length > 0 && existsSync(resolve(root, path)));
-  const read = (path: string): TreeFile => ({
-    path,
-    content: readFileSync(resolve(root, path), 'utf8'),
-  });
+/** Files touched by each of the last `count` commits up to `revision`, newest first. */
+export function collectCommitFiles(
+  root: string,
+  count: number,
+  git: Command = commandIn('git', root),
+  revision = 'HEAD'
+): string[][] {
+  return parseCommitFiles(
+    git([
+      'log',
+      '-z',
+      `-n${count}`,
+      `--format=${commitFilesFormat}`,
+      '--name-only',
+      '--no-renames',
+      revision,
+    ])
+  );
+}
+
+function isMeasured(path: string): boolean {
+  return (
+    isGuideFile(path) ||
+    isArchitectureNote(path) ||
+    isProductionSource(path) ||
+    isSourceTest(path) ||
+    path === sessionModulesPath ||
+    isLintRuleExceptionsFile(path) ||
+    Object.values(baselinePaths).includes(path)
+  );
+}
+
+/** Reads the HEAD commit (its file list and contents), never the working tree. */
+export function collectTree(root: string, git: Command = commandIn('git', root)): TreeMetrics {
+  const commit = git(['rev-parse', '--verify', 'HEAD^{commit}']).toString('utf8').trim();
+  const blobs = parseTreeBlobs(git(['ls-tree', '-r', '-z', '--full-tree', commit]));
+  const paths = blobs.map((blob) => blob.path);
+  const measured = blobs.filter((blob) => isMeasured(blob.path));
+  const contents = parseBlobBatch(
+    git(['cat-file', '--batch'], measured.map((blob) => `${blob.objectId}\n`).join(''))
+  );
+  if (contents.length !== measured.length) {
+    throw new Error(`git cat-file returned ${contents.length} of ${measured.length} files.`);
+  }
+  const files = new Map(measured.map((blob, index) => [blob.path, contents[index] ?? '']));
+  const read = (path: string): TreeFile => {
+    const content = files.get(path);
+    if (content === undefined) {
+      throw new Error(`${path} is not in commit ${commit}.`);
+    }
+    return { path, content };
+  };
   const lines = (file: TreeFile): FileLines => ({
     path: file.path,
     lines: countPhysicalLines(file.content),
@@ -170,12 +223,11 @@ function collectTree(root: string): TreeMetrics {
 
   const guides = paths.filter(isGuideFile).map(read);
   const source = paths.filter(isProductionSource).map(read).map(lines);
-  const commits = collectCommitFiles(root, mostEditedCommitCount);
+  const commits = collectCommitFiles(root, mostEditedCommitCount, git, commit);
   const large = largeFiles(source);
-  const sessionModules = resolve(root, sessionModulesPath);
 
   return {
-    commit: run('git', ['rev-parse', 'HEAD'], root).trim(),
+    commit,
     guideChains: guideChains(guides),
     guidance: guidanceSize(
       guides.map(lines),
@@ -186,23 +238,29 @@ function collectTree(root: string): TreeMetrics {
     largeProductionFiles: { threshold: largeFileLines, count: large.length, files: large },
     viMocks: viMockCounts(paths.filter(isSourceTest).map(read), capsuleNames(paths)),
     baselines: baselineSizes(
-      readJson('scripts/unused-code-baseline.json'),
-      readJson('scripts/file-length-baseline.json'),
-      readJson('.oxlintrc.json')
+      readJson(baselinePaths.unusedCode),
+      readJson(baselinePaths.fileLength),
+      paths.filter(isLintRuleExceptionsFile).map(read)
     ),
-    sessionModuleCycles: sessionModuleCycleCount(
-      existsSync(sessionModules) ? readFileSync(sessionModules, 'utf8') : null
-    ),
+    sessionModuleCycles: sessionModuleCycleCount(files.get(sessionModulesPath) ?? null),
   };
 }
 
-export function collectAgentMetrics(root: string, options: MetricsOptions): AgentMetrics {
+export function collectAgentMetrics(
+  root: string,
+  options: MetricsOptions,
+  gh: Command = commandIn('gh', root),
+  git: Command = commandIn('git', root)
+): AgentMetrics {
   return {
-    version: 1,
+    version: 2,
     github: {
-      ci: ciMetrics(collectCiAttempts(root, options.pullRequests * runsPerPullRequest)),
-      pullRequests: pullRequestMetrics(collectMergedPullRequests(root, options.pullRequests)),
+      ci: ciMetrics(collectCiAttempts(root, options.pullRequests * runsPerPullRequest, gh)),
+      pullRequests: pullRequestMetrics(
+        collectMergedPullRequests(gh, options.pullRequests),
+        collectRepository(gh)
+      ),
     },
-    tree: collectTree(root),
+    tree: collectTree(root, git),
   };
 }

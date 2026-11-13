@@ -344,8 +344,8 @@ because on macOS the `tailscale` command is a wrapper that leaves the real CLI
 each group and then closes its in-process forwarder. Groups are recorded under
 `<base dir>/port-shares/<backend pid>.json`; the next start stops groups whose
 owning backend is gone. Windows has no process groups: cleanup uses `taskkill`
-on the Serve process tree, and crash recovery is not available there. See
-[the design](../superpowers/specs/2026-11-03-tailscale-port-sharing-design.md).
+on the Serve process tree, and crash recovery is not available there. See the
+2026-11-03 Tailscale port-sharing spec at tag `docs-archive-2026-11`.
 
 Adapter entrypoints run with the host Node runtime, including Electron's bundled
 Node (see [desktop backend process](#desktop-backend-process)), and are unpacked
@@ -1085,8 +1085,8 @@ repository-specific tools and verification commands to repository guidance.
 
 Claude ACP retains its bare Claude Code preset and existing prompt snapshot
 behavior. Before introducing custom system-prompt metadata, revisit the SDK's
-custom/append snapshot semantics. See
-[the upgrade validation](../superpowers/plans/2026-09-09-remaining-dependencies.md).
+custom/append snapshot semantics. See the 2026-09-09 remaining-dependencies
+upgrade plan at tag `docs-archive-2026-11`.
 
 Scheduled Codex tasks retain their YOLO access preset and scheduled Claude tasks
 retain their configured access preset. MAIN PR updates inherit their main

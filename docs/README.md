@@ -49,22 +49,16 @@ remains a proposal; its plans do not describe the shipped local application.
 The [GitHub webhook intake](design/github-webhook-intake.md) note is a proposal
 for receiving GitHub events beside the shipped issue-event polling.
 
-The older top-level voice, agent-status, CORS, and notification design documents
-are point-in-time records. Check current behavior in source and architecture
-notes before using their examples.
-
 ## Historical work
 
-- [Workspace progression](workspaces.md#historical-progression-model): the
-  former Ratchet fixer and PR-state model; use the current workspace state and
-  PR monitoring notes above.
-
-- [Milestone planning and generated maps](../.planning/README.md): completed
-  milestone records plus codebase snapshots from earlier revisions.
-- [Superpowers specs and plans](superpowers/README.md): point-in-time design and
-  execution records; checkboxes do not establish current implementation status.
-- [Archived designs](design/archive/): superseded proposals and migration plans.
-- [Dependency analysis](../.architecture/README.md): historical metrics and the
-  script used to generate reports.
-- [Execution reports](../.superpowers/sdd/README.md): earlier review/fix
-  records.
+Plans, specs, milestone records, execution reports and superseded design
+documents were removed from `main` and are preserved at the tag
+`docs-archive-2026-11`. Read one with `git show docs-archive-2026-11:<path>`,
+and list a directory with
+`git ls-tree -r --name-only docs-archive-2026-11 -- <dir>`; the removed
+directories include `.planning`, `.architecture`, `.superpowers`, the completed
+plans and specs under `docs/superpowers` and the design archive under
+`docs/design`. Check current behavior in source and the architecture notes
+before using their examples. The
+[workspace progression](workspaces.md#historical-progression-model) section
+describes the former Ratchet fixer and PR-state model.

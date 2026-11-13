@@ -43,26 +43,31 @@ type Fixture = string | { file: string; source: string };
 /**
  * Lints each fixture as its own module with the real Oxlint binary and every
  * factory rule enabled. A rejected fixture must report exactly one error, from
- * `rule`; an accepted fixture must report nothing from any rule.
+ * `rule`; an accepted fixture must report nothing from any rule. With `files`,
+ * `rule` is enabled only for fixtures matching those globs, as an override in
+ * `.oxlintrc.json` scopes it.
  */
 export function describeRuleFixtures(
   rule: string,
-  fixtures: { options?: Record<string, unknown>; rejected: string[]; accepted: Fixture[] }
+  fixtures: {
+    options?: Record<string, unknown>;
+    files?: string[];
+    rejected: Fixture[];
+    accepted: Fixture[];
+  }
 ) {
   describe(`factory/${rule}`, () => {
     const directory = realpathSync(mkdtempSync(join(tmpdir(), `ff-oxlint-${rule}-`)));
     afterAll(() => rmSync(directory, { recursive: true, force: true }));
 
-    const rejected = fixtures.rejected.map((source, index) => ({
-      source,
-      file: join(directory, `rejected-${index}.tsx`),
-    }));
-    const accepted = fixtures.accepted.map((fixture, index) =>
+    const place = (kind: string) => (fixture: Fixture, index: number) =>
       typeof fixture === 'string'
-        ? { source: fixture, file: join(directory, `accepted-${index}.tsx`) }
-        : { source: fixture.source, file: join(directory, fixture.file) }
-    );
+        ? { source: fixture, file: join(directory, `${kind}-${index}.tsx`) }
+        : { source: fixture.source, file: join(directory, fixture.file) };
+    const rejected = fixtures.rejected.map(place('rejected'));
+    const accepted = fixtures.accepted.map(place('accepted'));
 
+    const setting = fixtures.options ? ['error', fixtures.options] : 'error';
     let report: z.infer<typeof oxlintReportSchema>;
     beforeAll(() => {
       const config = join(directory, '.oxlintrc.json');
@@ -74,8 +79,11 @@ export function describeRuleFixtures(
           jsPlugins: [{ name: 'factory', specifier: pluginSpecifier }],
           rules: {
             ...Object.fromEntries(ruleNames.map((name) => [`factory/${name}`, 'error'])),
-            [`factory/${rule}`]: fixtures.options ? ['error', fixtures.options] : 'error',
+            [`factory/${rule}`]: fixtures.files ? 'off' : setting,
           },
+          overrides: fixtures.files
+            ? [{ files: fixtures.files, rules: { [`factory/${rule}`]: setting } }]
+            : [],
         })
       );
       // Separate modules preserve every fixture's scope while sharing one real CLI startup.

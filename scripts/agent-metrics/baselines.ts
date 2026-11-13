@@ -1,27 +1,32 @@
 import ts from 'typescript';
 import { z } from 'zod';
 import { parseUnusedCodeBaseline } from '../check-unused-code';
+import type { TreeFile } from './tree';
 
 export const sessionModulesPath = 'src/backend/services/session/modules.ts';
 
-const exceptionsSchema = z.record(z.string(), z.string());
+/** Each custom lint rule's exception map: path → reason. */
+export function isLintRuleExceptionsFile(path: string): boolean {
+  return /^lint-rules\/rules\/[^/]+\.exceptions\.json$/.test(path);
+}
 
-/** Entries in every `exceptions` object of a lint configuration (`.oxlintrc.json`). */
-export function lintExceptionEntries(config: unknown): number {
-  if (Array.isArray(config)) {
-    return config.reduce<number>((total, item) => total + lintExceptionEntries(item), 0);
-  }
-  if (typeof config !== 'object' || config === null) {
-    return 0;
-  }
-  return Object.entries(config).reduce<number>(
-    (total, [key, value]) =>
-      total +
-      (key === 'exceptions'
-        ? Object.keys(exceptionsSchema.parse(value)).length
-        : lintExceptionEntries(value)),
-    0
-  );
+const lintRuleExceptionsSchema = z.record(z.string(), z.string());
+
+/** Entries across every lint rule's exceptions file; a file that is not a path-to-reason record fails. */
+function lintRuleExceptionCount(files: readonly TreeFile[]): number {
+  return files.reduce((total, file) => {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(file.content);
+    } catch (error) {
+      throw new Error(`${file.path} is not JSON: ${String(error)}`);
+    }
+    const exceptions = lintRuleExceptionsSchema.safeParse(parsed);
+    if (!exceptions.success) {
+      throw new Error(`${file.path} is not a path-to-reason record: ${exceptions.error.message}`);
+    }
+    return total + Object.keys(exceptions.data).length;
+  }, 0);
 }
 
 const fileLengthBaselineSchema = z.record(z.string(), z.number().int());
@@ -30,20 +35,21 @@ export type BaselineSizes = {
   unusedCodeProduction: number;
   unusedCodeExports: number;
   fileLength: number;
-  lintExceptions: number;
+  /** Entries across `lint-rules/rules/*.exceptions.json`. */
+  lintRuleExceptions: number;
 };
 
 export function baselineSizes(
   unusedCodeBaseline: unknown,
   fileLengthBaseline: unknown,
-  lintConfig: unknown
+  lintRuleExceptionFiles: readonly TreeFile[]
 ): BaselineSizes {
   const unusedCode = parseUnusedCodeBaseline(unusedCodeBaseline);
   return {
     unusedCodeProduction: Object.keys(unusedCode.production).length,
     unusedCodeExports: Object.keys(unusedCode.exports).length,
     fileLength: Object.keys(fileLengthBaselineSchema.parse(fileLengthBaseline)).length,
-    lintExceptions: lintExceptionEntries(lintConfig),
+    lintRuleExceptions: lintRuleExceptionCount(lintRuleExceptionFiles),
   };
 }
 
