@@ -42,6 +42,7 @@ run.
 | Typecheck / `pnpm check` / full `pnpm test`            | 12s / 36s / 82s (one machine, one run)                                                   | Total stays under 3 minutes                                        |
 | CI duration, successful runs, median / p90             | 5.5 / 7.5 min                                                                            | No regression                                                      |
 | PR branches green on their first run with a result     | 212 of 239 (88.7%)                                                                       | No regression during the program                                   |
+| Merged PRs titled with a fix verb                      | 30 of 300                                                                                | Reported                                                           |
 | PR branches with any failed run                        | 40 of 239                                                                                | Reported                                                           |
 | Commits that failed CI, then passed unchanged          | 8                                                                                        | 0 (P5)                                                             |
 | Tests known to fail without a defect                   | 1 found before the program, 6 more reported during it                                    | 0 (tasks 0.4, 0.4b, 0.4c)                                          |
@@ -218,7 +219,9 @@ file) and the story `Phone Section Navigation`, which timed out once under load.
 Also `src/backend/testing/agent-runtime-flow.integration.test.ts`, which hit its
 2-second timeout once in a full run.
 
-- [ ] Each passes when run alone, 30 consecutive times.
+- [ ] Each passes when run alone, 30 consecutive times, and in five consecutive
+      full runs of its suite (`pnpm test:storybook` or `pnpm test`) while
+      another full suite runs on the same machine.
 - [ ] The comment recording the order dependency is removed with it.
 
 ### Task 0.5: Add the pull request template
@@ -265,10 +268,11 @@ updated** (tests / guide / decision record / none).
   `<os.tmpdir()>/ff-sandbox/`; `WORKTREE_BASE_DIR` and `CODEX_HOME` are inside
   it. The database path derives from `BASE_DIR`.
 - The server runs in its own process group, recorded as `pgid`.
-- Every background feature that calls an external service is off: application
-  and provider update checks, Slack listeners, GitHub and Linear polling. Use
-  the existing configuration switch for each; where none exists, add one to
-  `configService`.
+- Application and provider update checks and Slack listeners are off by
+  configuration. `gh` and `ssh` are shimmed. `git` allows only the `file`
+  protocol. Every other outbound request, including the application's own
+  `fetch`, goes to the egress recorder, which refuses and records it. GitHub and
+  Linear polling keep running; their calls are refused the same way.
 - The server's environment carries no Anthropic or Claude credential variable,
   and its Claude configuration directory is inside `baseDir`.
 - `CODEX_PATH` points at
@@ -291,15 +295,17 @@ updated** (tests / guide / decision record / none).
 - [ ] `prints SANDBOX_READY with a readable sandbox.json`
 - [ ] `seeds one project on a fresh repository`
 - [ ] `records gh calls instead of running them`
-- [ ] `Claude cannot use the user's credentials`: the environment passed to both
-      Claude spawn paths, the session spawn and the model catalog spawn in
-      `claude-model-catalog-loader.ts`, has no credential variable and a
-      configuration directory inside `baseDir`. If either path cannot be
-      isolated, the sandbox disables the Claude provider and says to use Codex.
-- [ ] `an idle sandbox contacts no external service`: with the npm registry URL
-      pointed at a local recording server, the server receives no request
-      between startup and one update-check interval, and `gh-calls.log` is
-      empty.
+- [ ] `Claude requests never leave the machine`: the server's environment has no
+      credential variable and a configuration directory inside `baseDir`; a
+      Claude request made from the sandbox is refused locally and appears in
+      `egress-calls.log`.
+- [ ] `an idle sandbox makes no outbound request and no gh call after startup`:
+      from `SANDBOX_READY` to the end of the shared real-server cases,
+      `egress-calls.log` is empty and `gh-calls.log` holds only the one
+      `--version` probe `ff serve` makes before the server starts.
+- [ ] `a direct fetch is refused and recorded`: a Node process started with
+      exactly the server's environment calls `fetch` on an external host; the
+      request fails and appears in `egress-calls.log`.
 - [ ] `removes baseDir and every descendant process on SIGTERM`
 - [ ] `--clean after the launcher is killed stops its descendants before     removing baseDir`
 - [ ] `--clean ignores a directory without a sandbox.json naming itself` and
@@ -312,11 +318,12 @@ point outside the sandbox. The task now also requires:
 
 - [ ] An egress recorder: a loopback proxy in the launcher that refuses every
       outbound request and records its method and target in
-      `<baseDir>/egress-calls.log`. The server's proxy variables point at it.
+      `<baseDir>/egress-calls.log`. The server's proxy variables point at it,
+      and the Node runtime is made to honour them for its own `fetch` and
+      `http`/`https` clients; if the pinned Node cannot, a process-wide
+      dispatcher behind a configuration switch does the same.
 - [ ] `git` allows only the `file` protocol; `ssh` is shimmed like `gh`. Test:
       `git cannot reach a remote`.
-- [ ] Claude requests are refused locally and recorded. Test:
-      `Claude requests never leave the machine`, replacing the credentials test.
 - [ ] A configuration switch restricts project paths to a root; the launcher
       sets it to `baseDir`. Test: `refuses a project outside the sandbox`.
 - [ ] A provisional record is written right after the directory is created, so
@@ -326,14 +333,10 @@ point outside the sandbox. The task now also requires:
       retries with fresh ports, three attempts at most.
 - [ ] `--owner-pid <pid>` stops the sandbox when that process is gone;
       `--ttl-minutes <n>` (default 120, `0` disables) stops it after that long.
-- [ ] The idle test becomes
-      `an idle sandbox makes no outbound request and no gh call after startup`;
-      the one `gh --version` probe `ff serve` makes before the server starts is
-      accepted.
 - [ ] The launcher is split into modules under `scripts/sandbox/`.
 
-Per-feature switches for GitHub and Linear polling are not added; the `gh` shim
-and the egress recorder cover them.
+Per-feature switches for GitHub and Linear polling are not added. The contract
+is that nothing leaves the machine, not that nothing tries.
 
 ### Task 1.2: Scripted provider scenarios
 
@@ -656,9 +659,10 @@ lines), `src/client/features/chat/chat-transcript.stories.tsx` (673),
 
 ## Workstream 5: Tests that survive restructuring (P2, P5)
 
-Baseline `vi.mock` targets: client modules 396, npm and Node 246, capsule
-barrels 178, relative paths 153, other backend 131, infrastructure services 115,
-`session` internals 97, `workspace` internals 31, other capsule internals 11.
+Baseline `vi.mock` targets, from the metrics script: client modules 396, npm and
+Node 244, capsule barrels 177, relative paths 153, other backend 134, root
+infrastructure services 115, `session` internals 97, `workspace` internals 31,
+other capsule internals 12, other 7.
 
 ### Task 5.1: Stop mocking another module's internals by path
 
