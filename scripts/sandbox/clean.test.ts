@@ -66,13 +66,27 @@ function staticSystem(
   };
 }
 
-/** A detached idle process (its own group) running with `BASE_DIR=<baseDir>`. */
-function spawnSandboxProcess(baseDir: string) {
-  return spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], {
+/**
+ * A detached idle process (its own group) running with `BASE_DIR=<baseDir>`,
+ * returned once the process table shows it with that environment (until it
+ * has executed, it carries its parent's).
+ */
+async function spawnSandboxProcess(baseDir: string) {
+  const child = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], {
     detached: true,
     stdio: 'ignore',
     env: { PATH: process.env.PATH, BASE_DIR: baseDir },
   });
+  const pid = child.pid ?? 0;
+  const deadline = Date.now() + 30_000;
+  while (realSystem.processesWithEnvironment(`BASE_DIR=${baseDir}`, [pid]).length === 0) {
+    if (Date.now() > deadline) {
+      child.kill('SIGKILL');
+      throw new Error(`Process ${pid} never showed BASE_DIR=${baseDir}.`);
+    }
+    await realSystem.sleep(20);
+  }
+  return child;
 }
 
 describe('--clean selection', () => {
@@ -252,7 +266,7 @@ describe('--clean on real directories', () => {
     const tempDir = temporary.create('ffsb-');
     const dir = join(tempDir, 'ff-sandbox', 'sb-between');
     mkdirSync(dir, { recursive: true });
-    const server = spawnSandboxProcess(dir);
+    const server = await spawnSandboxProcess(dir);
     try {
       const pid = server.pid ?? 0;
       // A dead launcher (a live pid with another start time) that recorded only the pgid.
@@ -273,7 +287,7 @@ describe('--clean on real directories', () => {
     const tempDir = temporary.create('ffsb-');
     const dir = join(tempDir, 'ff-sandbox', 'sb-in-use');
     mkdirSync(dir, { recursive: true });
-    const user = spawnSandboxProcess(dir);
+    const user = await spawnSandboxProcess(dir);
     try {
       writeFileSync(join(dir, 'sandbox.json'), recordFor(dir, { pgid: null, pgidStartedAt: null }));
       const clean = launch(['--clean'], launcherEnv(tempDir));

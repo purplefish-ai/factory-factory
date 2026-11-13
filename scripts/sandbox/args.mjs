@@ -16,8 +16,9 @@ over HTTP(S) and the Claude runtime are refused and recorded (method, host and
 port in egress-calls.log); git over SSH and gh are refused by shims (their calls
 in ssh-calls.log and gh-calls.log); WebSocket clients and clients that bring
 their own agent are not proxied, and the sandbox relies on them having no
-credential (voice) or being switched off (Slack). git also refuses every
-transport but local paths before it tries one.
+credential (voice) or being switched off (Slack). In practice git refuses every
+transport but local paths itself, before it tries one, so neither log shows a
+git attempt; the recorder and the ssh shim are its second line.
 
 What the sandbox does not contain:
   - Clients that ignore proxy variables: WebSocket (voice narration reaches

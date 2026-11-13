@@ -27,7 +27,8 @@ function registryUrlWithoutCredentials(value) {
  * each request: the application's built-in `fetch` and `http`/`https` requests
  * (Node honours the variables only with `NODE_USE_ENV_PROXY=1`), `git` over
  * HTTP(S) and the Claude runtime, whose API base URL is the recorder itself.
- * WebSocket clients and clients that bring their own agent ignore them: the
+ * (`git` normally refuses HTTP(S) and SSH itself, below, before the recorder
+ * or the ssh shim sees anything; they are its second line.) WebSocket clients and clients that bring their own agent ignore them: the
  * sandbox relies on those having no credential (voice narration) or being
  * switched off (Slack intake, below). See USAGE for what is not contained.
  */

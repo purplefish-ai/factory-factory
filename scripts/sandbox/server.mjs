@@ -44,15 +44,14 @@ export function startServer({ paths, env, ports, onExit, onError, spawnImpl = sp
     server.exited = true;
     onExit(code, signal);
   });
-  // The pipes can deliver output after the stopped sandbox's directory is
-  // deleted; that output has nowhere to go, and throwing would crash the launcher.
+  // The output is diagnostic only. The pipes can deliver it after the stopped
+  // sandbox's directory is deleted, and a write can fail for other reasons (a
+  // full disk); throwing here would crash the launcher before it cleans up.
   const keepOutput = (chunk) => {
     try {
       appendFileSync(paths.serverOutput, chunk);
-    } catch (error) {
-      if (error?.code !== 'ENOENT') {
-        throw error;
-      }
+    } catch {
+      // Dropped: nowhere to keep it.
     }
   };
   // The backend reports its port once; keep only enough output to find that line.

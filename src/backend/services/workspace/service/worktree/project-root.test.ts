@@ -70,6 +70,16 @@ describe('project root restriction', () => {
     expect(checkProjectLocation(probe, root)).toEqual(refused(probe));
   });
 
+  it('refuses a dangling link, whose target is not known until it exists', () => {
+    symlinkSync(join(outside, 'not-yet'), join(root, 'dangling'));
+    expect(checkProjectLocation(join(root, 'dangling'), root)).toEqual(
+      refused(join(root, 'dangling'))
+    );
+    expect(checkProjectLocation(join(root, 'dangling', 'repo'), root)).toEqual(
+      refused(join(root, 'dangling', 'repo'))
+    );
+  });
+
   it('rejects a repository whose real path is outside the root, saying so', () => {
     expect(checkProjectLocation(join(outside, 'repo'), root)).toEqual(
       refused(join(outside, 'repo'))

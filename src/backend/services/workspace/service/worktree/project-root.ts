@@ -1,4 +1,4 @@
-import { realpathSync } from 'node:fs';
+import { lstatSync, realpathSync } from 'node:fs';
 import path from 'node:path';
 
 /**
@@ -6,16 +6,26 @@ import path from 'node:path';
  * existing prefix, with symbolic links resolved before any `..` that follows
  * them (`realpathSync.native`; `path.resolve` and `realpathSync` collapse `..`
  * first), joined with the part that does not exist yet (a clone destination).
- * Null when that part contains `..`, which cannot be resolved before it exists.
+ * Null when that part contains `..`, or when an entry exists but cannot be
+ * resolved (a dangling or looping link): neither can be placed until it exists.
  */
 function resolveAsSystemWould(target: string): string | null {
   const absolute = path.isAbsolute(target) ? target : `${process.cwd()}${path.sep}${target}`;
-  const segments = absolute.split(path.sep).filter((segment) => segment !== '');
+  // `/` here, a drive or UNC root on Windows.
+  const { root } = path.parse(absolute);
+  const segments = absolute
+    .slice(root.length)
+    .split(path.sep)
+    .filter((segment) => segment !== '');
   for (let length = segments.length; length >= 0; length -= 1) {
+    const prefix = root + segments.slice(0, length).join(path.sep);
     let existing: string;
     try {
-      existing = realpathSync.native(path.sep + segments.slice(0, length).join(path.sep));
+      existing = realpathSync.native(prefix);
     } catch {
+      if (lstatSync(prefix, { throwIfNoEntry: false })) {
+        return null;
+      }
       continue;
     }
     const rest = segments.slice(length);
