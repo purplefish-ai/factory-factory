@@ -12,6 +12,12 @@ export const oxlintBinary = join(repositoryRoot, 'node_modules/.bin/oxlint');
 export const pluginSpecifier = join(repositoryRoot, 'lint-rules/factory.mjs');
 export const ruleNames = Object.keys(plugin.rules);
 
+/**
+ * Rules whose result depends on files outside the fixture. Other rules'
+ * fixtures mock modules that do not exist, so these run only on their own.
+ */
+const fileSystemRules = new Set(['no-unresolved-mock-target']);
+
 export const oxlintReportSchema = z.object({
   diagnostics: z.array(
     z.object({
@@ -42,7 +48,8 @@ type Fixture = string | { file: string; source: string };
 
 /**
  * Lints each fixture as its own module with the real Oxlint binary and every
- * factory rule enabled. A rejected fixture must report exactly one error, from
+ * factory rule enabled (except `fileSystemRules`, which only their own fixtures
+ * enable). A rejected fixture must report exactly one error, from
  * `rule`; an accepted fixture must report nothing from any rule. With `files`,
  * `rule` is enabled only for fixtures matching those globs, as an override in
  * `.oxlintrc.json` scopes it.
@@ -78,7 +85,12 @@ export function describeRuleFixtures(
           plugins: [],
           jsPlugins: [{ name: 'factory', specifier: pluginSpecifier }],
           rules: {
-            ...Object.fromEntries(ruleNames.map((name) => [`factory/${name}`, 'error'])),
+            ...Object.fromEntries(
+              ruleNames.map((name) => [
+                `factory/${name}`,
+                fileSystemRules.has(name) ? 'off' : 'error',
+              ])
+            ),
             [`factory/${rule}`]: fixtures.files ? 'off' : setting,
           },
           overrides: fixtures.files

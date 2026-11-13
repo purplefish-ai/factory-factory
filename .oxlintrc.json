@@ -210,6 +210,15 @@
       }
     },
     {
+      "files": [
+        "{src,scripts,electron,lint-rules}/**/*.{test,test-helpers,test-support,test-harness}.*",
+        "{src,scripts,electron,lint-rules}/**/{testing,test-utils}/**"
+      ],
+      "rules": {
+        "factory/no-unresolved-mock-target": "error"
+      }
+    },
+    {
       "files": ["**/*.test-harness.tsx"],
       "rules": {
         "factory/tooltip-provider-root": "off"
