@@ -73,4 +73,6 @@ test('a user creates a workspace and gets the scripted agent reply', async ({ pa
   await page.getByRole('textbox', { name: 'Message' }).fill(message);
   await page.getByRole('button', { name: 'Send message' }).click();
   await expect(reply(conversation, message)).toBeVisible({ timeout: 120_000 });
+  // The user's message and the agent's echo of it: a reply that never came would leave one.
+  await expect(conversation.getByText(message, { exact: true })).toHaveCount(2);
 });
