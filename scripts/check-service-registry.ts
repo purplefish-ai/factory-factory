@@ -466,14 +466,18 @@ function checkCapsuleBarrels(errors: string[]): void {
 /** The session capsule's module map must match its imports; see service-registry-session-modules.ts. */
 function checkSessionModules(errors: string[]): void {
   const serviceRoot = path.join(rootDir, sessionServiceRoot);
-  const entries = readdirSync(serviceRoot, { withFileTypes: true });
-  const moduleDirectories = entries
-    .filter((entry) => entry.isDirectory())
-    .map((entry) => entry.name);
-  if (entries.some((entry) => entry.isFile() && /\.tsx?$/u.test(entry.name))) {
-    moduleDirectories.push(sessionRootModule);
-  }
-  const files = listTypeScriptFiles(serviceRoot)
+  const filePaths = listTypeScriptFiles(serviceRoot, true);
+  // A directory is a module while it holds TypeScript files, so an empty
+  // directory left behind by a move is not one.
+  const moduleDirectories = [
+    ...new Set(
+      filePaths.map((filePath) => {
+        const segments = path.relative(serviceRoot, filePath).split(path.sep);
+        return segments.length > 1 ? (segments[0] ?? sessionRootModule) : sessionRootModule;
+      })
+    ),
+  ];
+  const files = filePaths
     .map((filePath) => ({ filePath, path: getRelativeServiceFilePath(filePath) }))
     .filter((file) => !isSessionTestFile(file.path))
     .map((file) => ({ path: file.path, source: readFileSync(file.filePath, 'utf8') }));
