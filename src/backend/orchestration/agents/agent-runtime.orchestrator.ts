@@ -111,6 +111,8 @@ export function createAgentRuntime(
       await Promise.all([slackIntake.stop(), lifecycle.stop()]);
     },
     hasWork: () => launcher?.hasWork() ?? false,
+    /** Settles once every launch owned at the call has finished or failed; never rejects. */
+    drain: () => launcher?.drain() ?? Promise.resolve(),
     recovery: launcher
       ? {
           inspectRun: launcher.inspectRun,

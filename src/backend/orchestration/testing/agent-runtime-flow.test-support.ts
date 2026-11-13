@@ -336,9 +336,19 @@ export async function createRuntimeFlow(db: IntegrationDatabase) {
     const [part] = input?.prompt ?? [];
     return part?.type === 'text' ? part.text : null;
   };
+  /**
+   * Launches hand off in the background, so their providers appear after the job
+   * returns. Wait for them on the launches' settlement, not a wall-clock budget.
+   */
+  function waitForProviders(count: number) {
+    return providers.waitForProviders(
+      count,
+      Promise.all(runtimes.map((runtime) => runtime.drain()))
+    );
+  }
   /** Resolve a provider's first turn the way the ACP adapter reports a finished turn. */
   async function finishTurn(index: number) {
-    await providers.waitForProviders(index + 1);
+    await waitForProviders(index + 1);
     const provider = providers.providers[index];
     if (!provider) {
       throw new Error(`Provider ${index} was not created`);
@@ -386,6 +396,7 @@ export async function createRuntimeFlow(db: IntegrationDatabase) {
     delivered,
     counts,
     promptText,
+    waitForProviders,
     finishTurn,
     teardown,
   };

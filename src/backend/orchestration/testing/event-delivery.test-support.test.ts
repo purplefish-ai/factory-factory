@@ -1,7 +1,8 @@
-import { expect, it } from 'vitest';
+import { expect, it, vi } from 'vitest';
 import {
   deferred,
   waitForEventFixture,
+  waitForLaunchEvent,
   trackEventFixtureTask,
   drainEventFixtureTasks,
 } from './event-delivery.test-support';
@@ -33,6 +34,37 @@ it('bounds a missing event when no launch settlement is provided', async () => {
   await expect(waitForEventFixture(ready.promise, 'provider', { timeoutMs: 10 })).rejects.toThrow(
     'Timed out waiting for provider'
   );
+});
+
+it('waits for a launch event however long the launch runs', async () => {
+  vi.useFakeTimers();
+  try {
+    const ready = deferred<string>();
+    const launch = deferred<void>();
+    let outcome: unknown = 'pending';
+    const waiting = waitForLaunchEvent(ready.promise, 'provider', launch.promise).then(
+      (value) => {
+        outcome = value;
+      },
+      (error: unknown) => {
+        outcome = error;
+      }
+    );
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(outcome).toBe('pending');
+    ready.resolve('ready');
+    await waiting;
+    expect(outcome).toBe('ready');
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+it('fails a launch event at once when the launch settles first', async () => {
+  const ready = deferred<void>();
+  await expect(
+    waitForLaunchEvent(ready.promise, 'provider count 1', Promise.resolve())
+  ).rejects.toThrow('Launch settled before provider count 1');
 });
 
 it('keeps fixture teardown waiting for work spawned by a settling background operation', async () => {
