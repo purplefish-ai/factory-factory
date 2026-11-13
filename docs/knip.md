@@ -111,8 +111,7 @@ wins:
   TypeScript file named `*.test-helpers.*`, `*.test-support.*`,
   `*.test-harness.*`, `*.story-fixtures.*` or `*.fixture.*`.
 - **service capsule barrel re-export** (exports only, `maintained-api`): a
-  symbol that `src/backend/services/<capsule>/index.ts` or
-  `src/backend/services/<capsule>/service/index.ts` re-exports but does not
+  symbol that `src/backend/services/<capsule>/index.ts` re-exports but does not
   declare.
 - **shadcn component** (exports only, `maintained-api`): an export of a
   component file directly under `src/components/ui/`.

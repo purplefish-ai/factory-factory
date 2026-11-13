@@ -32,6 +32,9 @@ type Story = StoryObj<typeof meta>;
 export const ClaudeSignInRequired: Story = {
   play: async ({ canvasElement, args }) => {
     const canvas = within(canvasElement);
+    const message = canvas.getByRole('alert').querySelector('p')!;
+    const icon = canvas.getByRole('alert').previousElementSibling!;
+    await expect(icon.getBoundingClientRect().top).toBe(message.getBoundingClientRect().top);
     await expect(canvas.getByRole('alert')).toHaveTextContent('open the setup terminal');
     await expect(canvas.getByRole('alert')).toHaveTextContent('If ff is installed');
     await expect(canvas.queryByRole('link')).not.toBeInTheDocument();

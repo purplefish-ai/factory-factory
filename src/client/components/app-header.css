@@ -49,6 +49,17 @@
     flex-shrink: 1;
   }
 
+  /* The load light sits under the sidebar toggle so the first row keeps its
+   * room for workspace context; status moves over only while it is shown. */
+  .app-header-controls > [data-slot='header-host-load'] {
+    grid-row: 2;
+    grid-column: 1;
+  }
+
+  .app-header-controls:has(> [data-slot='header-host-load'] > *) [data-slot='header-status'] {
+    grid-column: 2 / 3;
+  }
+
   .app-header-controls > [data-slot='header-actions'] {
     grid-row: 2;
     grid-column: 3;

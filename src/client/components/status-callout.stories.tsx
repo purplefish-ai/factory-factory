@@ -1,3 +1,4 @@
+import { XIcon } from '@phosphor-icons/react/dist/csr/X';
 import type { Meta, StoryObj } from '@storybook/react';
 import { expect, fn, userEvent, within } from 'storybook/test';
 import { getStatusToneStyle, STATUS_TONES } from '@/client/lib/status-tones';
@@ -119,6 +120,95 @@ export const Phone: Story = {
       await expect(action.getBoundingClientRect().top).toBeGreaterThanOrEqual(
         message.getBoundingClientRect().bottom
       );
+    }
+  },
+};
+
+/** Exercise actual button heights: fixed negative offsets cannot align all three. */
+export const ActionAlignment: Story = {
+  render: () => (
+    <div className="space-y-3">
+      {(['card', 'strip'] as const).flatMap((variant) =>
+        (['sm', 'md'] as const).flatMap((size) =>
+          (['xs', 'compact', 'sm'] as const).map((buttonSize) => (
+            <StatusCallout
+              key={`${variant}-${size}-${buttonSize}`}
+              tone="danger"
+              variant={variant}
+              size={size}
+              action={
+                <>
+                  <Button variant="outline" size={buttonSize}>
+                    Retry
+                  </Button>
+                  <Button variant="ghost" size="icon-xs" aria-label="Dismiss">
+                    <XIcon />
+                  </Button>
+                </>
+              }
+            >
+              Init script failed: no free slot available
+            </StatusCallout>
+          ))
+        )
+      )}
+    </div>
+  ),
+  play: async ({ canvasElement }) => {
+    const center = (element: Element) => {
+      const rect = element.getBoundingClientRect();
+      return rect.top + rect.height / 2;
+    };
+    for (const callout of canvasElement.querySelectorAll('[data-slot="status-callout"]')) {
+      const [icon, message, action] = Array.from(callout.children);
+      if (!(icon && message && action)) {
+        throw new Error('Expected an icon, message and actions');
+      }
+      await expect(Math.abs(center(icon) - center(message))).toBeLessThanOrEqual(1);
+      await expect(Math.abs(center(action) - center(message))).toBeLessThanOrEqual(1);
+      for (const button of action.querySelectorAll('button')) {
+        await expect(Math.abs(center(button) - center(message))).toBeLessThanOrEqual(1);
+        await expect(button.getBoundingClientRect().top).toBeGreaterThan(
+          callout.getBoundingClientRect().top
+        );
+        await expect(button.getBoundingClientRect().bottom).toBeLessThan(
+          callout.getBoundingClientRect().bottom
+        );
+      }
+    }
+  },
+};
+
+export const ActionAlignmentDark: Story = {
+  ...ActionAlignment,
+  globals: { theme: 'dark' },
+};
+
+/** Expanded content keeps its icon and controls at the heading. */
+export const ExpandedContentAlignment: Story = {
+  render: () => (
+    <div className="space-y-3">
+      <StatusCallout
+        tone="danger"
+        title="Error details"
+        action={<Button size="sm">Collapse</Button>}
+      >
+        <pre className="h-80 overflow-auto">Long provider stack trace</pre>
+      </StatusCallout>
+      <StatusCallout tone="danger" align="start" action={<Button size="sm">Dismiss</Button>}>
+        <p>Agent error</p>
+        <pre className="h-80 overflow-auto">Long provider stack trace</pre>
+      </StatusCallout>
+    </div>
+  ),
+  play: async ({ canvasElement }) => {
+    for (const callout of canvasElement.querySelectorAll('[data-slot="status-callout"]')) {
+      const [icon, content, action] = Array.from(callout.children);
+      if (!(icon && content && action)) {
+        throw new Error('Expected an icon, content and actions');
+      }
+      await expect(action.getBoundingClientRect().top).toBe(content.getBoundingClientRect().top);
+      await expect(icon.getBoundingClientRect().top - content.getBoundingClientRect().top).toBe(2);
     }
   },
 };

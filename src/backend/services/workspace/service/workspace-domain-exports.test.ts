@@ -24,7 +24,7 @@ import {
   workspaceSnapshotStore,
   workspaceStateMachine,
   worktreeLifecycleService,
-} from './index';
+} from '@/backend/services/workspace';
 
 /**
  * Domain barrel export smoke test.

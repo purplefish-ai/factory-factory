@@ -94,3 +94,19 @@ export const LongWarningWrapsPhone: Story = {
   },
   globals: { viewport: { value: 'phone', isRotated: false } },
 };
+
+export const ExpandedTraceAlignment: Story = {
+  args: {
+    message: lifecycleMessage(
+      'PROVIDER_ERROR',
+      Array.from({ length: 40 }, (_, line) => `at runtime.ts:${line}`).join('\n')
+    ),
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(canvas.getByRole('button', { name: 'Show full error' }));
+    const heading = canvas.getByText('Error details');
+    const collapse = canvas.getByRole('button', { name: 'Collapse error' });
+    await expect(collapse.getBoundingClientRect().top).toBe(heading.getBoundingClientRect().top);
+  },
+};

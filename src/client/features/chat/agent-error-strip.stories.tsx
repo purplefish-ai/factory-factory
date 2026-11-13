@@ -53,6 +53,12 @@ export const ProviderErrorDark: Story = {
 /** Long errors scroll inside the strip so the composer keeps its space. */
 export const LongError: Story = {
   args: { message: LONG_ERROR },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const heading = canvas.getByText('Agent error');
+    const dismiss = canvas.getByRole('button', { name: 'Dismiss error' });
+    await expect(dismiss.getBoundingClientRect().top).toBe(heading.getBoundingClientRect().top);
+  },
 };
 
 export const LongErrorDark: Story = {

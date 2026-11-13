@@ -40,10 +40,10 @@ Two related pieces of infrastructure already exist and inform this design:
   caller today is the human-driven "Reviews" inbox
   (`src/backend/trpc/pr-review.trpc.ts:81`, `src/client/routes/reviews.tsx`). No
   agent session posts a review today.
-- An archived design, `docs/design/archive/pr-review-auto-fix-system.md`,
-  explored automated PR-review-driven fixing before Ratchet's current
-  architecture existed; it's about _reacting to_ reviews, not _producing_ one,
-  and is superseded by Ratchet regardless.
+- An archived design, `docs/design/archive/pr-review-auto-fix-system.md` at tag
+  `docs-archive-2026-11`, explored automated PR-review-driven fixing before
+  Ratchet's current architecture existed; it's about _reacting to_ reviews, not
+  _producing_ one, and is superseded by Ratchet regardless.
 
 The gap: nothing today runs an independent critique of a PR using a model that
 didn't write the code. Same-model review (Claude reviewing its own Claude

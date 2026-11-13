@@ -189,6 +189,18 @@ export function createTranscriptScrollController({
       }
       persist();
     },
+    jumpToMessage(key: string) {
+      if (disposed || phase === 'suspended') {
+        return;
+      }
+      interacting = false;
+      intent = 'reading';
+      restore({
+        ...port.capturePosition(intent),
+        intent,
+        anchor: { key, offset: 0 },
+      });
+    },
     jumpToLatest() {
       if (disposed || phase === 'suspended') {
         return;
