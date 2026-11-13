@@ -8,8 +8,36 @@ and this project adheres to
 
 ## [Unreleased]
 
+## [0.5.10] - 2026-11-13
+
+### Added
+
+- Add Enable, Pause, Reset source and Delete controls for event automations,
+  with GitHub issue reopen events and natural-language event filters (#3177,
+  #3180, #3181, #3183, #3184, #3187, #3190)
+- Add Slack Socket Mode event intake behind an opt-in gate, app-level token
+  storage, channel activation by test message, bounded conversation context and
+  file shares for event runs (#3178, #3185, #3188, #3191)
+- Show event automation runs, event explanations and workspace links, with
+  paginated history, run recovery and an explicit abandon action when stopping
+  cannot be confirmed (#3179, #3189, #3192, #3193)
+
+### Changed
+
+- Keep the CLI's minimum supported Node.js version separate from the development
+  version pin (#3170)
+
 ### Fixed
 
+- Review attached pull requests against their own checkout when available, with
+  a consistent PR snapshot and a diff-only fallback (#3080)
+- Allow repeated adversarial reviews without finished reviews consuming session
+  slots (#3095)
+- Preserve thinking options across restarts and refreshes, and show cached
+  launch options for every model without blocking launch (#3173, #3174)
+- Give ACP session creation a separate, longer timeout so slow provider startup
+  does not exhaust the initialization budget (#3175)
+- Settle event automation runs after their child workspaces are at rest (#3182)
 - Show the workspace name in the workspace header so renames appear immediately;
   the branch moves to the header's hover text (#3171)
 
