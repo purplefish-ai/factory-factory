@@ -7,11 +7,13 @@ import { countPhysicalLines } from './check-file-length';
 export type LegacyNoteCeilings = Readonly<Record<string, number>>;
 
 /**
- * Notes that were over the note limit when this check was introduced, each at
- * its line count then. Lower an entry when its note shrinks and remove it once
- * the note is within the limit or deleted. Never raise or add one: the check
- * compares these with the ceilings on the base branch. Keep one entry per line
- * so each migration removes only its own.
+ * Notes that were over the note limit when this check was introduced, each
+ * capped at its line count then. A note passes at or below its ceiling, so
+ * ordinary pull requests never edit this map. The pull request that migrates a
+ * note lowers or removes its entry, and must remove it when it deletes the
+ * note. Never raise or add one: the check compares these with the ceilings on
+ * the base branch. Keep one entry per line so each migration removes only its
+ * own.
  */
 export const legacyNoteCeilings: LegacyNoteCeilings = {
   'docs/architecture/agent-runtime.md': 2051,
@@ -149,30 +151,16 @@ function checkNoteSize(
         ]
       : [];
   }
-  if (lines > ceiling) {
-    return [
-      {
-        file,
-        rule: 'size',
-        problem: `${lines} lines exceeds its legacy ceiling of ${ceiling}.`,
-        fix: `bring it to ${ceiling} lines or fewer; put new guidance beside the code, not in this note.`,
-      },
-    ];
-  }
-  if (lines < ceiling) {
-    return [
-      {
-        file,
-        rule: 'size',
-        problem: `${lines} lines is below its legacy ceiling of ${ceiling}.`,
-        fix:
-          lines <= limit
-            ? `remove its entry from legacyNoteCeilings in ${ceilingsSourcePath}.`
-            : `lower its entry in legacyNoteCeilings in ${ceilingsSourcePath} to ${lines}.`,
-      },
-    ];
-  }
-  return [];
+  return lines > ceiling
+    ? [
+        {
+          file,
+          rule: 'size',
+          problem: `${lines} lines exceeds its legacy ceiling of ${ceiling}.`,
+          fix: `bring it to ${ceiling} lines or fewer; put new guidance beside the code, not in this note.`,
+        },
+      ]
+    : [];
 }
 
 /** A ceiling may be lowered or removed, never raised or added. */

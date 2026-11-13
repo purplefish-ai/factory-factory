@@ -128,7 +128,7 @@ describe('size', () => {
     ]);
   });
 
-  test('rejects a ceiling above a shrunken note or for a note that is gone', () => {
+  test('a legacy note below its ceiling passes', () => {
     const repository = repositoryWith({
       'docs/architecture/shrunk.md': lines(450),
       'docs/architecture/settled.md': lines(390),
@@ -138,21 +138,25 @@ describe('size', () => {
       checkSize(repository, {
         'docs/architecture/shrunk.md': 500,
         'docs/architecture/settled.md': 500,
-        'docs/architecture/deleted.md': 500,
-      }).map((violation) => [violation.file, violation.fix])
+      })
+    ).toEqual([]);
+  });
+
+  test('a legacy note above its ceiling fails', () => {
+    const repository = repositoryWith({ 'docs/architecture/legacy.md': lines(501) });
+
+    expect(checkSize(repository, ceilings).map(formatGuidanceViolation)).toEqual([
+      'docs/architecture/legacy.md: size: 501 lines exceeds its legacy ceiling of 500. Fix: bring it to 500 lines or fewer; put new guidance beside the code, not in this note.',
+    ]);
+  });
+
+  test('a ceiling for a note that no longer exists fails', () => {
+    const repository = repositoryWith({ 'docs/README.md': '# Docs\n' });
+
+    expect(
+      checkSize(repository, { 'docs/architecture/deleted.md': 500 }).map(formatGuidanceViolation)
     ).toEqual([
-      [
-        'docs/architecture/settled.md',
-        'remove its entry from legacyNoteCeilings in scripts/check-guidance.ts.',
-      ],
-      [
-        'docs/architecture/shrunk.md',
-        'lower its entry in legacyNoteCeilings in scripts/check-guidance.ts to 450.',
-      ],
-      [
-        'docs/architecture/deleted.md',
-        'remove its entry from legacyNoteCeilings in scripts/check-guidance.ts.',
-      ],
+      'docs/architecture/deleted.md: size: has a legacy ceiling of 500 but no longer exists. Fix: remove its entry from legacyNoteCeilings in scripts/check-guidance.ts.',
     ]);
   });
 });
