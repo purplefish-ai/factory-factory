@@ -357,6 +357,17 @@ or deleted. The postRun command is spawned only if its run script is still
 active after tunnel startup, neither exited nor being stopped, because stop and
 exit cleanup would not see a postRun spawned later.
 
+`RunScriptService` indexes current `RunScriptExecution` owners by workspace;
+each admitted execution owns its main process, postRun process, stop intent and
+exit observation. Stop intent is independent of whether the main process has
+exited: it prevents a stopped port-allocation continuation from spawning and
+prevents postRun startup while the user cleanup command is pending. An old
+execution's callbacks cannot remove a replacement's registry entry. Tunnel
+leases release only their captured resources, including when an old exit
+finishes after replacement. The persisted status machine and workspace writer
+remain separate from local process ownership; terminal status can precede
+resource cleanup. This is local ownership, not durable cross-process fencing.
+
 Each dev-logs and post-run-logs connection first receives the retained output
 buffer, when non-empty, as one `{ type: 'output', data, replay: true }` frame.
 The buffer repeats output a reconnecting client already shows, so on a reconnect

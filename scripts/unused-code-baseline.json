@@ -49,6 +49,10 @@
       "disposition": "test-support",
       "reason": "Test harness or fixture support remains explicit in this inventory; production callers are not expected."
     },
+    "src/backend/services/run-script/service/run-script-legacy.test-support.ts": {
+      "disposition": "test-support",
+      "reason": "Fresh process and execution-owner fixtures shared by the split run-script lifecycle regression suites; no runtime consumers."
+    },
     "src/backend/services/service-registry-check.helpers.ts": {
       "disposition": "build-input",
       "reason": "scripts/check-service-registry.ts consumes this verification helper outside production runtime."
