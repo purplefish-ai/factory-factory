@@ -1,7 +1,7 @@
 /**
  * Branch Naming Interceptor
  *
- * Routes manual branch renames, pre-push renames, and pre-PR renames from one
+ * Routes manual branch changes, pre-push renames, and pre-PR renames from one
  * command scan while preserving each trigger's lifecycle-specific behavior.
  */
 
@@ -14,11 +14,13 @@ import { extractMatchingCommands } from './branch-rename.utils';
 import type { InterceptorContext, ToolEvent, ToolInterceptor } from './types';
 
 const logger = createLogger('branch-naming');
-const GIT_BRANCH_RENAME_TEXT_REGEX = /\bgit\s+branch\s+-[mM]\b/;
+const GIT_BRANCH_CHANGE_TEXT_REGEX = /\bgit\s+(?:branch\s+-[mM]\b|switch\b|checkout\s+-[bB]\b)/;
 const GIT_PUSH_REGEX = /\bgit\s+push\b/;
 const GH_PR_CREATE_REGEX = /\bgh\s+pr\s+create\b/;
-const BRANCH_NAMING_TEXT_REGEX = /\b(?:git\s+branch\s+-[mM]|git\s+push|gh\s+pr\s+create)\b/;
-const GIT_BRANCH_RENAME_COMMAND_REGEX = /(?:^|&&|\|\||[;&|\n(])\s*git\s+branch\s+-[mM]\b/;
+const BRANCH_NAMING_TEXT_REGEX =
+  /\b(?:git\s+(?:branch\s+-[mM]|switch|checkout\s+-[bB]|push)|gh\s+pr\s+create)\b/;
+const GIT_BRANCH_CHANGE_COMMAND_REGEX =
+  /(?:^|&&|\|\||[;&|\n(])\s*git\s+(?:branch\s+-[mM]\b|switch\b|checkout\s+-[bB]\b)/;
 const SHELL_COMMAND_PAYLOAD_REGEX =
   /(?:^|&&|\|\||[;&|\n(])\s*(?:\/(?:usr\/)?bin\/)?(?:ba)?sh\s+-[A-Za-z]*c[A-Za-z]*\s+\uE000(\d+)\uE001/g;
 const MAX_PENDING_TOOL_CALLS = 1000;
@@ -154,15 +156,15 @@ function maskQuotedArgumentsAndComments(command: string): MaskedShellCommand {
   return { command: maskedCommand, quotedArguments };
 }
 
-function containsGitBranchRenameCommand(command: string): boolean {
+function containsGitBranchChangeCommand(command: string): boolean {
   const masked = maskQuotedArgumentsAndComments(command);
-  if (GIT_BRANCH_RENAME_COMMAND_REGEX.test(masked.command)) {
+  if (GIT_BRANCH_CHANGE_COMMAND_REGEX.test(masked.command)) {
     return true;
   }
 
   for (const match of masked.command.matchAll(SHELL_COMMAND_PAYLOAD_REGEX)) {
     const payload = masked.quotedArguments[Number(match[1])];
-    if (payload !== undefined && containsGitBranchRenameCommand(payload)) {
+    if (payload !== undefined && containsGitBranchChangeCommand(payload)) {
       return true;
     }
   }
@@ -302,7 +304,7 @@ class BranchNamingInterceptor implements ToolInterceptor {
     _pending: PendingBranchNamingCall,
     command: string
   ): Promise<void> => {
-    if (!containsGitBranchRenameCommand(command)) {
+    if (!containsGitBranchChangeCommand(command)) {
       return;
     }
 
@@ -311,14 +313,14 @@ class BranchNamingInterceptor implements ToolInterceptor {
       return;
     }
 
-    logger.info('Detected git branch rename command', {
+    logger.info('Detected git branch change command', {
       workspaceId: context.workspaceId,
       command,
     });
 
     const result = await gitCommand(['rev-parse', '--abbrev-ref', 'HEAD'], context.workingDir);
     if (result.code !== 0) {
-      logger.warn('Failed to get current branch after rename', {
+      logger.warn('Failed to get current branch after branch change', {
         workspaceId: context.workspaceId,
         stderr: result.stderr,
       });
@@ -326,8 +328,8 @@ class BranchNamingInterceptor implements ToolInterceptor {
     }
 
     const newBranchName = result.stdout.trim();
-    if (!newBranchName) {
-      logger.warn('Empty branch name returned after rename', {
+    if (!newBranchName || newBranchName === 'HEAD') {
+      logger.warn('No named branch returned after branch change', {
         workspaceId: context.workspaceId,
       });
       return;
@@ -426,7 +428,7 @@ class BranchNamingInterceptor implements ToolInterceptor {
   };
 
   private readonly routes: readonly BranchNamingRoute[] = [
-    [GIT_BRANCH_RENAME_TEXT_REGEX, this.manualRenameHandler],
+    [GIT_BRANCH_CHANGE_TEXT_REGEX, this.manualRenameHandler],
     [GH_PR_CREATE_REGEX, this.prCreateHandler],
     [GIT_PUSH_REGEX, this.pushHandler],
   ];
@@ -474,8 +476,8 @@ class BranchNamingInterceptor implements ToolInterceptor {
   }
 
   private findManualRenameCommand(event: ToolEvent): string | undefined {
-    return extractMatchingCommands(event, GIT_BRANCH_RENAME_TEXT_REGEX, logger).find(
-      containsGitBranchRenameCommand
+    return extractMatchingCommands(event, GIT_BRANCH_CHANGE_TEXT_REGEX, logger).find(
+      containsGitBranchChangeCommand
     );
   }
 
