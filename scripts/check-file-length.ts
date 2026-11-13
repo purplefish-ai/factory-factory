@@ -13,7 +13,7 @@ import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'nod
 import { pathToFileURL } from 'node:url';
 import { z } from 'zod';
 
-const candidateRoots = new Set(['src', 'electron', 'scripts']);
+const candidateRoots = new Set(['src', 'electron', 'scripts', 'lint-rules']);
 const candidateExtensions = new Set(['.js', '.jsx', '.ts', '.tsx', '.mjs', '.mts', '.cjs', '.cts']);
 
 const defaultMaxLines = 1000;

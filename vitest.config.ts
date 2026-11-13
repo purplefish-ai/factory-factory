@@ -92,6 +92,7 @@ export default defineConfig({
             'src/**/*.test.tsx',
             'electron/**/*.test.ts',
             'scripts/**/*.test.ts',
+            'lint-rules/**/*.test.ts',
           ],
           exclude: ['node_modules', 'dist', '.next', ...frontendVmTests, ...reusableSharedTests],
         },
