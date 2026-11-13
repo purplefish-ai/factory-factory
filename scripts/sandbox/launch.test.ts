@@ -209,6 +209,66 @@ describe('launcher setup and shutdown', () => {
     }
   }, 60_000);
 
+  it('signals its own unreaped server group when only the environment listing fails during a stop', async () => {
+    const h = harness();
+    const kills: string[] = [];
+    // A real group, so the process listing finds members; nothing is signalled
+    // for real, the injected kill only records.
+    const group = spawnSleeper();
+    try {
+      let spawnedServer = false;
+      let hidLeader = false;
+      const child = Object.assign(new EventEmitter(), {
+        pid: group.pid,
+        exitCode: null as number | null,
+        signalCode: null as string | null,
+        stdout: null,
+        stderr: null,
+      });
+      const code = await run(
+        { scenario: 'echo', keep: false },
+        {
+          ...h.deps,
+          system: {
+            ...realSystem,
+            // The first listing after the spawn misses the leader, so its start
+            // time is never recorded and stopping must read environments.
+            listProcesses: () => {
+              const processes = realSystem.listProcesses();
+              if (spawnedServer && !hidLeader) {
+                hidLeader = true;
+                return processes.filter((p) => p.pid !== group.pid);
+              }
+              return processes;
+            },
+            processesWithEnvironment: () => {
+              throw new Error('spawn ps EAGAIN');
+            },
+          },
+          spawnImpl: (_command: string, args: string[]) => {
+            h.spawned.push(args);
+            spawnedServer = true;
+            setTimeout(() => child.emit('exit', 1, null), 50);
+            return child;
+          },
+          kill: (target: number, signal: string) => {
+            kills.push(`${signal} ${target}`);
+            child.signalCode = signal;
+          },
+        }
+      );
+      expect(code).toBe(1);
+      expect(kills).toEqual([`SIGTERM -${group.pid}`]);
+      const [dir] = h.sandboxDirs();
+      expect(dir).toBeDefined();
+      expect(h.logs.join('\n')).toContain(
+        `kept ${join(h.root, dir ?? '')}: run pnpm dev:sandbox --clean once ps works`
+      );
+    } finally {
+      group.kill('SIGKILL');
+    }
+  }, 60_000);
+
   it('signals nothing when ps fails during a stop and its server has already exited', async () => {
     const h = harness();
     const kills: string[] = [];
