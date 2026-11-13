@@ -1,9 +1,14 @@
-import { type ChildProcessWithoutNullStreams, spawn } from 'node:child_process';
+import { type ChildProcessWithoutNullStreams, execFile, spawn } from 'node:child_process';
 import { once } from 'node:events';
+import { chmod, copyFile, mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { createInterface } from 'node:readline';
 import { fileURLToPath } from 'node:url';
+import { promisify } from 'node:util';
 import { afterEach, describe, expect, it } from 'vitest';
 import { z } from 'zod';
+import { getBundledCodexCommand } from '@/backend/lib/codex-cli-command';
 
 const fakePath = fileURLToPath(new URL('./fake-codex-app-server.mjs', import.meta.url));
 const threadId = '11111111-1111-4111-8111-111111111111';
@@ -30,12 +35,12 @@ afterEach(async () => {
 // Longer than any test here: a stop test can only time out, never see the next chunk.
 const neverMs = '60000';
 
-function startFake(scenario?: string, extraEnv: Record<string, string> = {}) {
+function startFake(scenario?: string, extraEnv: Record<string, string> = {}, args: string[] = []) {
   const env: Record<string, string> = { PATH: process.env.PATH ?? '', ...extraEnv };
   if (scenario !== undefined) {
     env.FF_SANDBOX_SCENARIO = scenario;
   }
-  const child = spawn(process.execPath, [fakePath], { env });
+  const child = spawn(process.execPath, [fakePath, ...args], { env });
   children.push(child);
   return child;
 }
@@ -331,4 +336,100 @@ describe('fake Codex app-server scenarios', () => {
       `Unknown FF_SANDBOX_SCENARIO "${name}". Valid scenarios: echo, tool-call, permission-request, error, slow-stream\n`
     );
   });
+});
+
+/** Runs the fake to exit with stdin left open, as `execFile` leaves it. */
+async function runToExit(child: ChildProcessWithoutNullStreams) {
+  let stdout = '';
+  let stderr = '';
+  child.stdout.on('data', (chunk: Buffer) => {
+    stdout += chunk.toString();
+  });
+  child.stderr.on('data', (chunk: Buffer) => {
+    stderr += chunk.toString();
+  });
+  const [code] = await once(child, 'close');
+  return { code, stdout, stderr };
+}
+
+const fakeVersion = 'codex-cli 0.0.0-fake\n';
+
+describe('fake Codex command line', () => {
+  it.each([['-V'], ['--version']])('%s prints a version line and exits', async (flag) => {
+    expect(await runToExit(startFake('echo', {}, [flag]))).toEqual({
+      code: 0,
+      stdout: fakeVersion,
+      stderr: '',
+    });
+  });
+
+  it('login status reports a logged-in state and exits', async () => {
+    expect(await runToExit(startFake('echo', {}, ['login', 'status']))).toEqual({
+      code: 0,
+      stdout: '',
+      stderr: 'Logged in using ChatGPT\n',
+    });
+  });
+
+  it.each([
+    [['login']],
+    [['exec', '--ephemeral', '-']],
+    [['--bogus']],
+    [['login', 'status', '--json']],
+    [['app-server', '--listen', 'stdio://']],
+    [['app-server', '-c']],
+  ])('refuses %j with one line on stderr instead of waiting on stdin', async (args) => {
+    expect(await runToExit(startFake('echo', {}, args))).toEqual({
+      code: 2,
+      stdout: '',
+      stderr: `fake Codex: unsupported arguments: ${args.join(' ')}\n`,
+    });
+  });
+
+  // The adapter starts sessions with `app-server`, adding `-c hooks=…` when hooks are configured.
+  it.each([[['app-server']], [['app-server', '-c', 'hooks={}']]])(
+    'plays the scenario as an app-server when started with %j',
+    async (args) => {
+      expect(await playPrompt(startFake('echo', {}, args))).toMatchObject([
+        turnStartResponse,
+        turnStarted,
+        ...message('message-1', 'Hello sandbox', ['Hello sandbox']),
+        turnCompleted('completed'),
+      ]);
+    }
+  );
+});
+
+describe('fake Codex behind the bundled adapter', () => {
+  const run = promisify(execFile);
+  let directory = '';
+  afterEach(async () => {
+    if (directory) {
+      await rm(directory, { recursive: true, force: true });
+      directory = '';
+    }
+  });
+
+  // The application's health check runs these two commands; each must answer, not hang.
+  it('answers the health check version and login commands', async () => {
+    directory = await mkdtemp(join(tmpdir(), 'ff-fake-codex-cli-'));
+    const codexPath = join(directory, 'codex');
+    await copyFile(fakePath, codexPath);
+    await chmod(codexPath, 0o755);
+    const env = {
+      PATH: process.env.PATH ?? '',
+      CODEX_PATH: codexPath,
+      FF_SANDBOX_SCENARIO: 'echo',
+    };
+    const version = getBundledCodexCommand(['--version']);
+    expect(await run(version.command, version.args, { env })).toEqual({
+      stdout: fakeVersion,
+      stderr: '',
+    });
+    const login = getBundledCodexCommand(['login', 'status']);
+    expect(await run(login.command, login.args, { env })).toEqual({
+      stdout: '',
+      stderr: 'Logged in using ChatGPT\n',
+    });
+  }, 30_000);
 });
