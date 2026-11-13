@@ -395,8 +395,10 @@ involve the nine files at the `service/` root.
 ### Task 3.1: Named exports in every capsule barrel
 
 **Files:** Modify the ten `src/backend/services/*/index.ts` files that use
-`export *`; merge each `service/index.ts` export list into them and delete that
-inner barrel; extend `scripts/check-service-registry.ts` to reject `export *` in
+`export *`, replacing every wildcard with named exports whatever it re-exports.
+Where the wildcard re-exports `./service`, merge that inner barrel's export list
+into the capsule barrel and delete the inner barrel. Extend
+`scripts/check-service-registry.ts` to reject `export *` in
 `src/backend/services/*/index.ts`.
 
 - [ ] Each capsule's public names are listed in its `index.ts` and nowhere else.
