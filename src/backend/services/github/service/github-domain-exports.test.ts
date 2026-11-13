@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { githubCLIService, prSnapshotService } from './index';
+import { githubCLIService, prSnapshotService } from '@/backend/services/github';
 
 /**
  * Domain barrel export smoke test.

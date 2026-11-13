@@ -10,6 +10,7 @@ import {
   serviceRegistry,
 } from '../src/backend/services/registry';
 import { getInfrastructureServiceClassificationErrors } from '../src/backend/services/service-registry-check.helpers';
+import { getCapsuleBarrelWildcardErrors } from './service-registry-barrels';
 import { collectBridgeEdges } from './service-registry-bridges';
 import { getDeclaredDependencyErrors } from './service-registry-dependencies';
 
@@ -438,6 +439,22 @@ function checkRegistryModelList(errors: string[]): void {
   checkModelOwnership(schemaModelNames, errors);
 }
 
+/** Capsule barrels must list their public names; see service-registry-barrels.ts. */
+function checkCapsuleBarrels(errors: string[]): void {
+  const barrels = readdirSync(servicesRoot, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory())
+    .flatMap((entry) =>
+      ['index.ts', 'index.tsx']
+        .map((fileName) => path.join(servicesRoot, entry.name, fileName))
+        .filter((filePath) => existsSync(filePath))
+    )
+    .map((filePath) => ({
+      path: getRelativeServiceFilePath(filePath),
+      source: readFileSync(filePath, 'utf8'),
+    }));
+  errors.push(...getCapsuleBarrelWildcardErrors(barrels));
+}
+
 function main(): void {
   const errors: string[] = [];
 
@@ -446,6 +463,7 @@ function main(): void {
   checkDependencyGraph(errors);
   checkDeclaredDependencies(checkCrossServiceImports(errors), errors);
   checkPrismaGeneratedImports(errors);
+  checkCapsuleBarrels(errors);
 
   if (errors.length > 0) {
     const output = [
