@@ -6,29 +6,30 @@ context, not a new task or a substitute for current repository guidance.
 
 ## Current guides
 
-| Need                                               | Start here                                                                                            |
-| -------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
-| Install and run                                    | [README](../README.md)                                                                                |
-| Product vocabulary and UI labels                   | [Workspace glossary](workspaces.md#glossary)                                                          |
-| Logo source and installation icons                 | [Brand assets](brand-assets.md)                                                                       |
-| Contribute and verify changes                      | [Verification](../CONTRIBUTING.md#verification) and [agent guide](../AGENTS.md)                       |
-| Service boundaries and subsystem contracts         | [Architecture notes](architecture/README.md)                                                          |
-| Where a rule, fact or tool for agents belongs      | [Agent-friendly codebase principles](architecture/agent-friendly-codebase.md)                         |
-| Chat streaming, loading, and replay                | [Chat message flow](chat-message-flow.md)                                                             |
-| Workspace state and PR monitoring                  | [Workspace state](architecture/workspace-state.md) and [PR monitoring](architecture/pull-requests.md) |
-| Mixed Automations management and scheduled history | [Scheduled automations](architecture/integrations.md#scheduled-automations)                           |
-| Event automation limits and checks                 | [Event automation limits](architecture/integrations.md#current-event-automation-limits)               |
-| User and project configuration                     | [Settings](admin-settings.md)                                                                         |
-| Maintain UI primitives and dependencies            | [shadcn](shadcn.md) and [Knip](knip.md)                                                               |
-| Button sizes, icon buttons and tooltips            | [Buttons and tooltips](shadcn.md#buttons-icon-buttons-and-tooltips)                                   |
-| Write and organize Storybook stories               | [Storybook](storybook.md)                                                                             |
-| Theme tokens and status colors                     | [Status colors](status-colors.md)                                                                     |
-| Terminal palette and live appearance changes       | [Terminal theme](terminal-theme.md)                                                                   |
-| Package npm runtime dependencies                   | [npm package security](npm-package-security.md)                                                       |
-| Audit vulnerabilities and dependency updates       | [Dependency security](dependency-security.md)                                                         |
-| Sign and notarize desktop releases                 | [Desktop releases](desktop-releases.md)                                                               |
-| Container image integrity                          | [Distribution security](distribution-security.md)                                                     |
-| Verify npm release artifact identity               | [npm release security](npm-release-security.md)                                                       |
+| Need                                               | Start here                                                                                                                   |
+| -------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| Install and run                                    | [README](../README.md)                                                                                                       |
+| Product vocabulary and UI labels                   | [Workspace glossary](workspaces.md#glossary)                                                                                 |
+| Logo source and installation icons                 | [Brand assets](brand-assets.md)                                                                                              |
+| Contribute and verify changes                      | [Verification](../CONTRIBUTING.md#verification) and [agent guide](../AGENTS.md)                                              |
+| Service boundaries and subsystem contracts         | [Architecture notes](architecture/README.md)                                                                                 |
+| Where a rule, fact or tool for agents belongs      | [Agent-friendly codebase principles](architecture/agent-friendly-codebase.md)                                                |
+| Why a decision was made                            | [Decision records](decisions/)                                                                                               |
+| Chat streaming, loading, and replay                | [Chat message flow](chat-message-flow.md)                                                                                    |
+| Workspace state and PR monitoring                  | [Workspace state](architecture/workspace-state.md) and [PR monitoring](../src/backend/orchestration/pull-requests/AGENTS.md) |
+| Mixed Automations management and scheduled history | [Scheduled automations](architecture/integrations.md#scheduled-automations)                                                  |
+| Event automation limits and checks                 | [Event automation limits](architecture/integrations.md#current-event-automation-limits)                                      |
+| User and project configuration                     | [Settings](admin-settings.md)                                                                                                |
+| Maintain UI primitives and dependencies            | [shadcn](shadcn.md) and [Knip](knip.md)                                                                                      |
+| Button sizes, icon buttons and tooltips            | [Buttons and tooltips](shadcn.md#buttons-icon-buttons-and-tooltips)                                                          |
+| Write and organize Storybook stories               | [Storybook](storybook.md)                                                                                                    |
+| Theme tokens and status colors                     | [Status colors](status-colors.md)                                                                                            |
+| Terminal palette and live appearance changes       | [Terminal theme](terminal-theme.md)                                                                                          |
+| Package npm runtime dependencies                   | [npm package security](npm-package-security.md)                                                                              |
+| Audit vulnerabilities and dependency updates       | [Dependency security](dependency-security.md)                                                                                |
+| Sign and notarize desktop releases                 | [Desktop releases](desktop-releases.md)                                                                                      |
+| Container image integrity                          | [Distribution security](distribution-security.md)                                                                            |
+| Verify npm release artifact identity               | [npm release security](npm-release-security.md)                                                                              |
 
 For implementation work, search the relevant source area and current guides
 first, for example `rg -n 'PR monitoring' docs/architecture`. Consult historical

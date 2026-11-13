@@ -1071,7 +1071,7 @@ messages:
 - PR updates: `src/backend/prompts/pr-event.ts` renders bounded PR facts with
   maintenance instructions only when an attached PR has actionable events.
   Delivery uses the source-aware session queue and strict provider resume; see
-  [PR updates](pull-requests.md).
+  [PR updates](../../src/backend/orchestration/pull-requests/AGENTS.md).
 - Quick actions: `prompts/quick-actions/` (see below).
 - Child workspace starts append `buildChildWorkspaceContext` through workspace
   initialization. Workspace metadata generation runs separately from working

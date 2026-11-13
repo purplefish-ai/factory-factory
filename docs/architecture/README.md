@@ -7,19 +7,19 @@ alone — the rationale, the constraints, and the mistakes already made and fixe
 files carry the "why" you need only when you are working in the subsystem. Read
 the one that matches your change before you touch it.
 
-| File                                         | Covers                                                                                     |
-| -------------------------------------------- | ------------------------------------------------------------------------------------------ |
-| [background-jobs.md](./background-jobs.md)   | `jobRunner`, every registered poll loop, cadences, shutdown semantics                      |
-| [pull-requests.md](./pull-requests.md)       | PR monitoring, observations, event delivery, GitHub coordination                           |
-| [workspace-state.md](./workspace-state.md)   | Run script, workspace lifecycle, the Kanban column projection                              |
-| [agent-runtime.md](./agent-runtime.md)       | ACP runtime, provider sub-agents, child workspaces, quick actions, desktop backend process |
-| [integrations.md](./integrations.md)         | GitHub, Linear, periodic tasks                                                             |
-| [file-previews.md](./file-previews.md)       | Bounded file reads, UTF-8 truncation, untracked diff limits                                |
-| [client-loading.md](./client-loading.md)     | Route chunks, diagram loading, startup bundle, HTTP compression, query/mutation failures   |
-| [client-state.md](./client-state.md)         | State resets by identity, latest-value refs, debounced values, following log output        |
-| [search.md](./search.md)                     | Metadata query bounds, Unicode matching, search navigation                                 |
-| [diff-rendering.md](./diff-rendering.md)     | Workers, virtual rows, scroll anchors, visual verification                                 |
-| [Chat message flow](../chat-message-flow.md) | ACP streaming, session loading, replay, client reduction                                   |
+| File                                                                          | Covers                                                                                     |
+| ----------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| [background-jobs.md](./background-jobs.md)                                    | `jobRunner`, every registered poll loop, cadences, shutdown semantics                      |
+| [Pull request guide](../../src/backend/orchestration/pull-requests/AGENTS.md) | PR monitoring, observations, event delivery, GitHub coordination (beside the code)         |
+| [workspace-state.md](./workspace-state.md)                                    | Run script, workspace lifecycle, the Kanban column projection                              |
+| [agent-runtime.md](./agent-runtime.md)                                        | ACP runtime, provider sub-agents, child workspaces, quick actions, desktop backend process |
+| [integrations.md](./integrations.md)                                          | GitHub, Linear, periodic tasks                                                             |
+| [file-previews.md](./file-previews.md)                                        | Bounded file reads, UTF-8 truncation, untracked diff limits                                |
+| [client-loading.md](./client-loading.md)                                      | Route chunks, diagram loading, startup bundle, HTTP compression, query/mutation failures   |
+| [client-state.md](./client-state.md)                                          | State resets by identity, latest-value refs, debounced values, following log output        |
+| [search.md](./search.md)                                                      | Metadata query bounds, Unicode matching, search navigation                                 |
+| [diff-rendering.md](./diff-rendering.md)                                      | Workers, virtual rows, scroll anchors, visual verification                                 |
+| [Chat message flow](../chat-message-flow.md)                                  | ACP streaming, session loading, replay, client reduction                                   |
 
 Keep these true. Change a note when ownership, an invariant, a public surface,
 the map or a reason changes. Do not add a description of new behaviour; its
