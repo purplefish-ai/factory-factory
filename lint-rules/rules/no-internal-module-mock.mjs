@@ -8,10 +8,10 @@
 // infrastructure, not capsules. Enabled for test files under src/.
 // Sealed modules inside a capsule are not modelled yet; extend `internalTarget`.
 import { existsSync, readdirSync } from 'node:fs';
-import { join, posix } from 'node:path';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { isMember } from '../lib/ast.mjs';
 import { EXCEPTIONS_SCHEMA, isExceptedFile } from '../lib/exceptions.mjs';
+import { isModuleMockCall, literalValue, resolveRepositoryPath } from '../lib/module-mock.mjs';
 import exceptions from './no-internal-module-mock.exceptions.json' with { type: 'json' };
 
 const SERVICES = 'src/backend/services';
@@ -38,33 +38,12 @@ function capsulePath(path) {
 
 /** The capsule whose internal module `specifier` names, from the test at `filename`. */
 function internalTarget(specifier, filename) {
-  let resolved;
-  if (specifier.startsWith('@/')) {
-    resolved = `/src/${specifier.slice(2)}`;
-  } else if (specifier.startsWith('/')) {
-    // Vite resolves `/src/…` from the project root; `capsulePath` reads either form.
-    resolved = specifier;
-  } else if (specifier === '.' || specifier === '..' || /^\.\.?\//.test(specifier)) {
-    resolved = posix.resolve(posix.dirname(filename), specifier);
-  } else {
-    return undefined;
-  }
-  const target = capsulePath(posix.normalize(resolved).replace(/\/$/, ''));
+  const resolved = resolveRepositoryPath(specifier, filename);
+  const target = resolved && capsulePath(resolved);
   if (!target || /^index(\.ts)?$/.test(target.inner) || /^testing(\/|$)/.test(target.inner)) {
     return undefined;
   }
   return capsulePath(filename)?.capsule === target.capsule ? undefined : target.capsule;
-}
-
-/** A string literal, or a template literal without substitutions. */
-function literalValue(node) {
-  if (node?.type === 'Literal' && typeof node.value === 'string') {
-    return node.value;
-  }
-  if (node?.type === 'TemplateLiteral' && node.expressions.length === 0) {
-    return node.quasis[0].value.cooked;
-  }
-  return undefined;
 }
 
 export default {
@@ -82,7 +61,7 @@ export default {
     const filename = context.filename.replaceAll('\\', '/');
     return {
       CallExpression(node) {
-        if (!isMember(node.callee, 'vi', 'mock') && !isMember(node.callee, 'vi', 'doMock')) {
+        if (!isModuleMockCall(node)) {
           return;
         }
         const specifier = literalValue(node.arguments[0]);
