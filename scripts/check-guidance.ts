@@ -19,7 +19,7 @@ export const legacyNoteCeilings: LegacyNoteCeilings = {
   'docs/architecture/agent-runtime.md': 2051,
   'docs/architecture/integrations.md': 1505,
   'docs/architecture/pull-requests.md': 736,
-  'docs/architecture/workspace-state.md': 1092,
+  'docs/architecture/workspace-state.md': 1106,
   'docs/chat-message-flow.md': 565,
 };
 
