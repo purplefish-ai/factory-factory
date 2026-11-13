@@ -85,10 +85,10 @@ it('refuses a whole import whose workspace worktree lies outside the project roo
   expect(await db.prisma.workspace.count()).toBe(0);
 });
 
-it('stores the real project paths it checked when a project root is set', async () => {
+it('stores the real paths it checked when a project root is set', async () => {
   const backup = await backupWith({
     repoPath: join(sandbox, 'alias'),
-    worktreePath: join(sandbox, 'worktrees', 'project', 'fix-login'),
+    worktreePath: join(sandbox, 'alias', 'fix-login'),
   });
   vi.spyOn(configService, 'getProjectRoot').mockReturnValue(sandbox);
 
@@ -97,6 +97,10 @@ it('stores the real project paths it checked when a project root is set', async 
     repoPath: join(sandbox, 'repo'),
     worktreeBasePath: join(sandbox, 'worktrees'),
   });
+  // A worktree reached through a link inside the root is stored at its target.
+  expect(await db.prisma.workspace.findUniqueOrThrow({ where: { id: 'workspace' } })).toMatchObject(
+    { worktreePath: join(sandbox, 'repo', 'fix-login') }
+  );
 });
 
 it('imports every path as given when no project root is set', async () => {

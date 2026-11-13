@@ -20,8 +20,8 @@ const SSH_SHIM = join(REPO_ROOT, 'scripts', 'sandbox', 'ssh-shim.mjs');
 export const GITHUB_STAND_IN = 'github.sandbox.invalid';
 
 /** A git configuration value in double quotes. */
-function gitConfigString(value) {
-  return `"${value.replaceAll('\\', '\\\\').replaceAll('"', '\\"')}"`;
+export function gitConfigString(value) {
+  return `"${value.replaceAll('\\', '\\\\').replaceAll('"', '\\"').replaceAll('\n', '\\n')}"`;
 }
 
 function installExecutable(source, target) {

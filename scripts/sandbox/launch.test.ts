@@ -247,6 +247,13 @@ describe('launcher setup and shutdown', () => {
     expect(h.logs.join('\n')).toContain(
       `kept ${join(h.root, dir ?? '')}: run pnpm dev:sandbox --clean once ps works`
     );
+    // The egress recorder is closed on this path too.
+    const record = readSandboxRecord(join(h.root, dir ?? '', 'sandbox.json'));
+    const response = await fetch(`http://127.0.0.1:${record?.egressPort}/`).then(
+      () => 'answered',
+      () => 'refused'
+    );
+    expect(response).toBe('refused');
   }, 60_000);
 
   it('treats one port found twice as a failed attempt and retries', async () => {

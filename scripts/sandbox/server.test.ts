@@ -73,6 +73,23 @@ describe('stopping the launcher’s own server without a process listing', () =>
       kill: (target: number, signal: string) => stubbornKills.push(`${signal} ${target}`),
     });
     expect(stubbornKills).toEqual(['SIGTERM -424242', 'SIGKILL -424242']);
+
+    // Reaped partway through the grace period: its group ID may be anyone's now.
+    const slow = childProcess();
+    const slowKills: string[] = [];
+    const slowClock = clock();
+    await signalOwnServerGroup(slow, {
+      system: {
+        now: slowClock.now,
+        sleep: async (ms: number) => {
+          await slowClock.sleep(ms);
+          slow.signalCode = 'SIGTERM';
+        },
+      },
+      graceMs: 1000,
+      kill: (target: number, signal: string) => slowKills.push(`${signal} ${target}`),
+    });
+    expect(slowKills).toEqual(['SIGTERM -424242']);
   });
 
   it('signals nothing once the child has been reaped', async () => {

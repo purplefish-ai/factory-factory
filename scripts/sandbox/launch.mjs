@@ -120,6 +120,8 @@ export async function run(
         log(message(error));
         keptForClean();
         code = 1;
+        // The recorder must not outlive the launcher's run on this path either.
+        await state.recorder?.close().catch((closeError) => log(message(closeError)));
       }
       resolveStopped(code);
       return code;
