@@ -111,6 +111,7 @@ it('imports every path as given when no project root is set', async () => {
   await dataBackupService.importData(backup);
   expect(await db.prisma.project.findUniqueOrThrow({ where: { id: 'project' } })).toMatchObject({
     repoPath: join(sandbox, 'alias'),
+    worktreeBasePath: join(sandbox, 'worktrees'),
   });
   expect(await db.prisma.workspace.findUniqueOrThrow({ where: { id: 'workspace' } })).toMatchObject(
     { worktreePath: outside }
