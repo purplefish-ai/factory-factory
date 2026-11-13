@@ -40,7 +40,7 @@ export const USAGE = `Usage: pnpm dev:sandbox [--scenario <name>] [--keep]
        pnpm dev:sandbox --clean
 
 Starts the real app (serve --dev) in a new directory under <os tmpdir>/ff-sandbox/
-with its own database, worktrees, Codex home and Claude configuration. Codex is
+with its own HOME, database, worktrees, Codex home and Claude configuration. Codex is
 the fake app-server, gh records its calls and fails, update checks and Slack
 intake are off, and no Anthropic or Claude credential reaches the server. Seeds
 one project on a fresh Git repository with Codex as the default provider, then
@@ -115,24 +115,22 @@ export function parseArgs(argv) {
 }
 
 /** Parent variables the server keeps; everything else, including credentials, is dropped. */
-const INHERITED_VARIABLES = [
-  'PATH',
-  'HOME',
-  'USER',
-  'LOGNAME',
-  'SHELL',
-  'TMPDIR',
-  'TERM',
-  'LANG',
-  'TZ',
-];
-/** Lets a caller point the release check at a local registry. */
-const PASSED_THROUGH_VARIABLES = ['FF_NPM_REGISTRY_URL'];
+const INHERITED_VARIABLES = ['PATH', 'USER', 'LOGNAME', 'SHELL', 'TMPDIR', 'TERM', 'LANG', 'TZ'];
+
+/** Lets a caller point the release check at a local registry; never one carrying credentials. */
+function registryUrlWithoutCredentials(value) {
+  if (!(value && URL.canParse(value))) {
+    return undefined;
+  }
+  const url = new URL(value);
+  return url.username || url.password ? undefined : value;
+}
 
 export function sandboxPaths(baseDir) {
   return {
     baseDir,
     binDir: join(baseDir, 'bin'),
+    home: join(baseDir, 'home'),
     worktreeBaseDir: join(baseDir, 'worktrees'),
     codexHome: join(baseDir, 'codex-home'),
     claudeConfigDir: join(baseDir, 'claude-config'),
@@ -149,24 +147,29 @@ export function sandboxPaths(baseDir) {
 /**
  * The complete server environment. Only the variables above are inherited, so
  * no API key, OAuth token or other credential in the launcher's environment
- * reaches the server, its providers or `git`.
+ * reaches the server, its providers or `git`, and `HOME` is inside the sandbox.
+ * `nodeDir` (this Node's directory) precedes the rest of `PATH`, so `node`
+ * never resolves to a version-manager shim that needs the real `HOME`.
  */
-export function buildServerEnv({ parentEnv, baseDir, scenario }) {
+export function buildServerEnv({
+  parentEnv,
+  baseDir,
+  scenario,
+  nodeDir = dirname(process.execPath),
+}) {
   const paths = sandboxPaths(baseDir);
   const env = {};
   for (const [name, value] of Object.entries(parentEnv)) {
-    if (
-      value !== undefined &&
-      (INHERITED_VARIABLES.includes(name) ||
-        name.startsWith('LC_') ||
-        PASSED_THROUGH_VARIABLES.includes(name))
-    ) {
+    if (value !== undefined && (INHERITED_VARIABLES.includes(name) || name.startsWith('LC_'))) {
       env[name] = value;
     }
   }
+  const registryUrl = registryUrlWithoutCredentials(parentEnv.FF_NPM_REGISTRY_URL);
   return {
     ...env,
-    PATH: [paths.binDir, parentEnv.PATH].filter(Boolean).join(delimiter),
+    ...(registryUrl ? { FF_NPM_REGISTRY_URL: registryUrl } : {}),
+    PATH: [paths.binDir, nodeDir, parentEnv.PATH].filter(Boolean).join(delimiter),
+    HOME: paths.home,
     BASE_DIR: baseDir,
     WORKTREE_BASE_DIR: paths.worktreeBaseDir,
     CODEX_HOME: paths.codexHome,
@@ -314,7 +317,31 @@ export const realSystem = {
   },
   sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
   now: () => Date.now(),
+  /** A live process's environment as text: NUL-separated on Linux, `ps -E` on macOS. */
+  readEnvironment: (pid) => {
+    try {
+      return process.platform === 'linux'
+        ? readFileSync(`/proc/${pid}/environ`, 'utf8').split('\0').join('\n')
+        : execFileSync('ps', ['-E', '-ww', '-o', 'command=', '-p', String(pid)], {
+            encoding: 'utf8',
+          })
+            .split(/\s+/)
+            .join('\n');
+    } catch {
+      return '';
+    }
+  },
 };
+
+/**
+ * True when a process of `pgid` (or a descendant) runs with this sandbox's
+ * `BASE_DIR`, so a process group whose ID was reused is never signalled.
+ */
+export function isSandboxProcessGroup(pgid, baseDir, system = realSystem) {
+  return [...collectGroupProcesses(system.listProcesses(), pgid)].some((pid) =>
+    system.readEnvironment(pid).split('\n').includes(`BASE_DIR=${baseDir}`)
+  );
+}
 
 export function isProcessRunning(pid, system = realSystem) {
   return system.listProcesses().some((process) => process.pid === pid && !process.zombie);
@@ -379,7 +406,11 @@ export async function cleanSandboxes({
     isProcessRunning(pid, system)
   )) {
     assertInsideTempDir(dir, tempDir);
-    await stopProcessGroup(record.pgid, { system });
+    if (isSandboxProcessGroup(record.pgid, record.baseDir, system)) {
+      await stopProcessGroup(record.pgid, { system });
+    } else if (collectGroupProcesses(system.listProcesses(), record.pgid).size > 0) {
+      log(`Process group ${record.pgid} no longer belongs to ${dir}; leaving it running`);
+    }
     remove(dir);
     log(`Removed ${dir}`);
     removed.push(dir);
@@ -400,7 +431,13 @@ function findFreePort() {
 
 function prepareSandbox(baseDir) {
   const paths = sandboxPaths(baseDir);
-  for (const dir of [paths.binDir, paths.worktreeBaseDir, paths.codexHome, paths.claudeConfigDir]) {
+  for (const dir of [
+    paths.binDir,
+    paths.home,
+    paths.worktreeBaseDir,
+    paths.codexHome,
+    paths.claudeConfigDir,
+  ]) {
     mkdirSync(dir, { recursive: true });
   }
   copyFileSync(GH_SHIM, join(paths.binDir, 'gh'));
@@ -502,15 +539,16 @@ async function run({ scenario, keep }) {
   assertInsideTempDir(baseDir);
   const env = buildServerEnv({ parentEnv: process.env, baseDir, scenario });
   let paths;
+  let frontendPort;
+  let backendPort;
   try {
     paths = prepareSandbox(baseDir);
     createSeedRepository(paths, env);
+    [frontendPort, backendPort] = [await findFreePort(), await findFreePort()];
   } catch (error) {
     rmSync(baseDir, { recursive: true, force: true });
     throw error;
   }
-
-  const [frontendPort, backendPort] = [await findFreePort(), await findFreePort()];
   const child = spawn(
     process.execPath,
     [

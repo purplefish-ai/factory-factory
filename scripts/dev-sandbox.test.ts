@@ -23,6 +23,7 @@ import {
   buildServerEnv,
   cleanSandboxes,
   collectGroupProcesses,
+  isSandboxProcessGroup,
   parseArgs,
   parseBackendPort,
   parsePortFile,
@@ -245,8 +246,9 @@ describe('a running sandbox', () => {
   });
 
   it('never opens the default database', () => {
-    const home = String(shared.env.HOME);
-    expect(existsSync(join(home, 'factory-factory'))).toBe(false);
+    // Neither the launcher's HOME nor the sandbox's own HOME gets the default directory.
+    expect(existsSync(join(String(shared.env.HOME), 'factory-factory'))).toBe(false);
+    expect(existsSync(join(shared.baseDir, 'home', 'factory-factory'))).toBe(false);
     expect(existsSync(join(shared.baseDir, 'data.db'))).toBe(true);
   });
 
@@ -282,6 +284,7 @@ describe('a running sandbox', () => {
       expect(Object.keys(env).filter((name) => CREDENTIAL_NAME.test(name))).toEqual([]);
       expect(Object.values(env).join('\n')).not.toContain(SECRET);
       expect(env.CLAUDE_CONFIG_DIR).toBe(claudeConfigDir);
+      expect(env.HOME).toBe(join(shared.baseDir, 'home'));
     };
     // Both spawn paths, run with the environment the launcher gives the server.
     // Its info logs (config reloads, the spawn attempt) are expected here.
@@ -412,6 +415,42 @@ describe('--clean', () => {
   }, 30_000);
 });
 
+describe('--clean and reused process group IDs', () => {
+  it('removes a stale sandbox without signalling a group that is no longer its own', async () => {
+    const tempDir = temporaryDirectory('ffsb-');
+    const dir = join(tempDir, 'ff-sandbox', 'sb-stale');
+    mkdirSync(dir, { recursive: true });
+    // An unrelated process group that happens to carry the recorded ID.
+    const unrelated = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], {
+      detached: true,
+      stdio: 'ignore',
+    });
+    try {
+      writeFileSync(
+        join(dir, 'sandbox.json'),
+        JSON.stringify({
+          baseDir: dir,
+          frontendUrl: null,
+          backendUrl: null,
+          pid: 999_999,
+          pgid: unrelated.pid,
+          projectId: null,
+          repoPath: join(dir, 'repo'),
+          scenario: null,
+        })
+      );
+      const clean = launch(['--clean'], launcherEnv(tempDir));
+      expect(await clean.exited).toBe(0);
+      expect(existsSync(dir)).toBe(false);
+      const live = new Set(realSystem.listProcesses().map((process) => process.pid));
+      expect(live.has(unrelated.pid ?? 0)).toBe(true);
+      expect(clean.output()).toContain('no longer belongs');
+    } finally {
+      unrelated.kill('SIGKILL');
+    }
+  }, 30_000);
+});
+
 describe('launcher logic', () => {
   it('refuses a BASE_DIR outside the OS temporary directory', async () => {
     const tempDir = temporaryDirectory('ffsb-');
@@ -445,10 +484,11 @@ describe('launcher logic', () => {
       },
       baseDir: '/tmp/ff-sandbox/sb-1',
       scenario: 'slow-turn',
+      nodeDir: '/opt/node/bin',
     });
     expect(env).toEqual({
-      PATH: '/tmp/ff-sandbox/sb-1/bin:/usr/bin',
-      HOME: '/home/me',
+      PATH: '/tmp/ff-sandbox/sb-1/bin:/opt/node/bin:/usr/bin',
+      HOME: '/tmp/ff-sandbox/sb-1/home',
       LC_ALL: 'C',
       FF_NPM_REGISTRY_URL: 'http://127.0.0.1:4873',
       BASE_DIR: '/tmp/ff-sandbox/sb-1',
@@ -466,9 +506,13 @@ describe('launcher logic', () => {
       AGENT_SLACK_INTAKE_ENABLED: 'false',
       FF_SANDBOX_SCENARIO: 'slow-turn',
     });
-    expect(
-      'FF_SANDBOX_SCENARIO' in buildServerEnv({ parentEnv: {}, baseDir: '/t', scenario: null })
-    ).toBe(false);
+    const bare = buildServerEnv({
+      parentEnv: { FF_NPM_REGISTRY_URL: 'https://user:token@registry.example' },
+      baseDir: '/t',
+      scenario: null,
+    });
+    expect('FF_SANDBOX_SCENARIO' in bare).toBe(false);
+    expect('FF_NPM_REGISTRY_URL' in bare).toBe(false);
   });
 
   it('parses arguments', () => {
@@ -560,9 +604,17 @@ describe('launcher logic', () => {
           return Promise.resolve();
         },
         now: () => time,
+        readEnvironment: (pid: number) => (pid === 12 ? 'PATH=/bin\nBASE_DIR=/tmp/sb' : ''),
       },
     };
   }
+
+  it('recognises a process group by the BASE_DIR its processes run with', () => {
+    const { system } = fakeSystem(false);
+    expect(isSandboxProcessGroup(10, '/tmp/sb', system)).toBe(true);
+    expect(isSandboxProcessGroup(10, '/tmp/s', system)).toBe(false);
+    expect(isSandboxProcessGroup(20, '/tmp/sb', system)).toBe(false);
+  });
 
   it('stops the group with SIGTERM, then SIGKILL, and waits for every process', async () => {
     const polite = fakeSystem(false);

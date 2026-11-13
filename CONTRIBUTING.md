@@ -58,11 +58,11 @@ one line when ready, `SANDBOX_READY <path to sandbox.json>`; that file records
 `baseDir`, `frontendUrl`, `backendUrl`, the launcher `pid`, the server's process
 group `pgid`, the seeded `projectId` and `repoPath`, and `scenario`.
 
-- Data, worktrees, the Codex home and the Claude configuration directory live in
-  `baseDir`. The server inherits only `PATH`, `HOME`, `USER`, `LOGNAME`,
+- `HOME`, data, worktrees, the Codex home and the Claude configuration directory
+  live in `baseDir`. The server inherits only `PATH`, `USER`, `LOGNAME`,
   `SHELL`, `TMPDIR`, `TERM`, `LANG`, `TZ` and `LC_*` from your environment (plus
-  `FF_NPM_REGISTRY_URL`), so no API key or token reaches it, and it reads an
-  empty dotenv file and its own Git configuration.
+  `FF_NPM_REGISTRY_URL` when it carries no credentials), so no API key or token
+  reaches it, and it reads an empty dotenv file and its own Git configuration.
 - Codex is the fake app-server
   (`src/backend/testing/fixtures/fake-codex-app-server.mjs`);
   `--scenario <name>` reaches it as `FF_SANDBOX_SCENARIO`. Claude runs
@@ -75,7 +75,9 @@ group `pgid`, the seeded `projectId` and `repoPath`, and `scenario`.
 
 Ctrl+C or SIGTERM stops the server's whole process group and deletes `baseDir`
 (`--keep` keeps it). `pnpm dev:sandbox --clean` stops and removes sandboxes
-whose launcher is no longer running. macOS and Linux only.
+whose launcher is no longer running; it signals a recorded process group only
+while one of its processes still runs with that sandbox's `BASE_DIR`. macOS and
+Linux only.
 
 ### Database
 

@@ -59,7 +59,9 @@ function toHttpUrl(value: unknown): string | undefined {
     return undefined;
   }
   const url = new URL(trimmed);
-  return url.protocol === 'http:' || url.protocol === 'https:'
+  // Only a bare base URL: the package path is appended, and credentials stay out.
+  const isBase = !(url.username || url.password || url.search || url.hash);
+  return isBase && (url.protocol === 'http:' || url.protocol === 'https:')
     ? url.href.replace(/\/+$/, '')
     : undefined;
 }

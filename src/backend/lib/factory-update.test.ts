@@ -32,6 +32,18 @@ it('asks the registry it is given', async () => {
   );
 });
 
+it('does not reuse a cached version from another registry', async () => {
+  const fetcher = vi
+    .fn()
+    .mockResolvedValueOnce(new Response(JSON.stringify({ version: '0.6.0' })))
+    .mockResolvedValueOnce(new Response(JSON.stringify({ version: '0.7.0' })));
+  vi.stubGlobal('fetch', fetcher);
+  const checker = new FactoryReleaseChecker();
+  expect(await checker.getLatestVersion(undefined, 'https://registry.npmjs.org')).toBe('0.6.0');
+  expect(await checker.getLatestVersion(undefined, 'http://127.0.0.1:4873')).toBe('0.7.0');
+  expect(fetcher).toHaveBeenCalledTimes(2);
+});
+
 it('coalesces requests and caches registry responses for an hour', async () => {
   let version = '0.6.0';
   const fetcher = vi.fn(() => Promise.resolve(new Response(JSON.stringify({ version }))));

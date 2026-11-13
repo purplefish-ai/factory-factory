@@ -24,6 +24,7 @@ export function isNewerRelease(current: string, latest: string): boolean {
 /** Shared across clients; checks run on demand, never on the startup path. */
 export class FactoryReleaseChecker {
   private latest: string | null = null;
+  private latestRegistryUrl: string | null = null;
   private expiresAt = 0;
   private pending: Promise<string | null> | null = null;
 
@@ -33,6 +34,12 @@ export class FactoryReleaseChecker {
   ): Promise<string | null> {
     if (this.pending !== null) {
       return this.pending;
+    }
+    if (registryUrl !== this.latestRegistryUrl) {
+      // A version cached from another registry says nothing about this one.
+      this.latest = null;
+      this.expiresAt = 0;
+      this.latestRegistryUrl = registryUrl;
     }
     if (Date.now() < this.expiresAt) {
       return Promise.resolve(this.latest);

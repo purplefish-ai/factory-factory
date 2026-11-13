@@ -137,6 +137,7 @@ export class ApplicationReleaseService {
   private readonly onError: (error: unknown) => void;
   private readonly releaseCheck: () => ReleaseCheckConfig;
   private latest: Release | undefined;
+  private latestRegistryUrl: string | undefined;
   private expiresAt = 0;
   private pending: Promise<void> | undefined;
 
@@ -158,6 +159,12 @@ export class ApplicationReleaseService {
     const { enabled, registryUrl } = this.releaseCheck();
     if (!enabled) {
       return { currentVersion: this.installed.currentVersion, notices: [] };
+    }
+    if (this.pending === undefined && registryUrl !== this.latestRegistryUrl) {
+      // A release cached from another registry says nothing about this one.
+      this.latest = undefined;
+      this.expiresAt = 0;
+      this.latestRegistryUrl = registryUrl;
     }
     if (this.pending !== undefined) {
       await this.pending;

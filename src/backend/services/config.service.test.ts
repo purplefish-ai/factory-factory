@@ -513,12 +513,16 @@ describe('release check configuration', () => {
     configService.reload();
     expect(configService.getReleaseCheckConfig().registryUrl).toBe('http://127.0.0.1:4873');
   });
-  it.each(['not a url', 'file:///etc/passwd', 'ftp://registry.example'])(
-    'keeps the public registry for %j',
-    (value) => {
-      process.env.FF_NPM_REGISTRY_URL = value;
-      configService.reload();
-      expect(configService.getReleaseCheckConfig().registryUrl).toBe('https://registry.npmjs.org');
-    }
-  );
+  it.each([
+    'not a url',
+    'file:///etc/passwd',
+    'ftp://registry.example',
+    'https://user:token@registry.example',
+    'https://registry.example/?scope=x',
+    'https://registry.example/#x',
+  ])('keeps the public registry for %j', (value) => {
+    process.env.FF_NPM_REGISTRY_URL = value;
+    configService.reload();
+    expect(configService.getReleaseCheckConfig().registryUrl).toBe('https://registry.npmjs.org');
+  });
 });
