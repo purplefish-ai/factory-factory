@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { sessionEventBus } from '@/backend/services/session/service/session-event-bus';
+import { sessionEventBus } from '@/backend/services/session/service/event-bus/session-event-bus';
 import { sessionDomainService } from '@/backend/services/session/service/store/session-domain.service';
 import { userSettingsService } from '@/backend/services/settings';
 import type { ChatMessage } from '@/shared/acp-protocol';

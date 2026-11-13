@@ -19,6 +19,7 @@ import {
   EventInitialDispatchInterrupted,
 } from '@/backend/services/session/service/dispatch/event-initial-dispatch';
 import { eventSessionAuthority } from '@/backend/services/session/service/event-agent/event-session-authority';
+import { sessionEventBus } from '@/backend/services/session/service/event-bus/session-event-bus';
 import { AcpEventProcessor } from '@/backend/services/session/service/events/acp-event-processor';
 import { SessionPermissionService } from '@/backend/services/session/service/events/session.permission.service';
 import { EventOwnedWork } from '@/backend/services/session/service/lifecycle/event-owned-work';
@@ -44,7 +45,6 @@ import { SessionService } from '@/backend/services/session/service/prompt/sessio
 import { ClaudeModelCatalogService } from '@/backend/services/session/service/providers/claude-model-catalog.service';
 import { CodexModelCatalogService } from '@/backend/services/session/service/providers/codex-model-catalog.service';
 import { ProviderUsageService } from '@/backend/services/session/service/providers/provider-usage.service';
-import { sessionEventBus } from '@/backend/services/session/service/session-event-bus';
 import { sessionDomainService } from '@/backend/services/session/service/store/session-domain.service';
 import { workspaceDataService, workspaceNotificationService } from '@/backend/services/workspace';
 

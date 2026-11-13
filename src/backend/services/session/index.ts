@@ -147,7 +147,7 @@ export {
   sessionEventBus,
   type SessionOutboundEvent,
   type SessionViewerCountProvider,
-} from './service/session-event-bus';
+} from './service/event-bus/session-event-bus';
 export { voiceNarrationService } from './service/voice/voice-narration.service';
 
 export type {

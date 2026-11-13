@@ -1,5 +1,5 @@
+import { sessionEventBus } from '@/backend/services/session/service/event-bus/session-event-bus';
 import { sessionFileLogger } from '@/backend/services/session/service/logging/session-file-logger.service';
-import { sessionEventBus } from '@/backend/services/session/service/session-event-bus';
 import type { ChatMessage, SessionDeltaEvent, WebSocketMessage } from '@/shared/acp-protocol';
 import { buildSnapshotMessages } from './session-replay-builder';
 import type { SessionStore, SnapshotReason } from './session-store.types';

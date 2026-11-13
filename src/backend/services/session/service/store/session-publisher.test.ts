@@ -6,7 +6,7 @@ vi.mock('./session-replay-builder', () => ({ buildSnapshotMessages }));
 import {
   SESSION_OUTBOUND_EVENT,
   sessionEventBus,
-} from '@/backend/services/session/service/session-event-bus';
+} from '@/backend/services/session/service/event-bus/session-event-bus';
 import { SessionPublisher } from './session-publisher';
 import { SessionStoreRegistry } from './session-store-registry';
 

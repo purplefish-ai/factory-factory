@@ -3,7 +3,7 @@ import type {
   SessionLifecycleEventRecord,
   SessionLifecycleEventStore,
 } from '@/backend/services/session/resources/session-lifecycle-event.accessor';
-import { sessionEventBus } from '@/backend/services/session/service/session-event-bus';
+import { sessionEventBus } from '@/backend/services/session/service/event-bus/session-event-bus';
 import { SessionDomainService } from '@/backend/services/session/service/store/session-domain.service';
 import { SessionLifecycleEventService } from './session-lifecycle-event.service';
 
