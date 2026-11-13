@@ -1,5 +1,5 @@
 import { acpRuntimeManager } from '@/backend/services/session/service/acp';
-import { sessionDomainService } from '@/backend/services/session/service/session-domain.service';
+import { sessionDomainService } from '@/backend/services/session/service/store/session-domain.service';
 import type {
   AgentContentItem,
   AgentMessage,

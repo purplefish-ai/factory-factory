@@ -7,7 +7,7 @@ import {
 
 let db: IntegrationDatabase;
 let other: { id: string };
-let domain: typeof import('@/backend/services/session/service/session-domain.service').sessionDomainService;
+let domain: typeof import('@/backend/services/session/service/store/session-domain.service').sessionDomainService;
 let cleanup: { db?: IntegrationDatabase; domain?: typeof domain } = {};
 beforeEach(async () => {
   cleanup = {};
@@ -39,8 +39,8 @@ beforeEach(async () => {
     },
   });
   ({ sessionDomainService: domain } = await vi.importActual<
-    typeof import('@/backend/services/session/service/session-domain.service')
-  >('@/backend/services/session/service/session-domain.service'));
+    typeof import('@/backend/services/session/service/store/session-domain.service')
+  >('@/backend/services/session/service/store/session-domain.service'));
   cleanup.domain = domain;
 });
 afterEach(async () => {

@@ -1,5 +1,5 @@
 import { afterEach, expect, it, vi } from 'vitest';
-import { sessionDomainService } from '@/backend/services/session/service/session-domain.service';
+import { sessionDomainService } from '@/backend/services/session/service/store/session-domain.service';
 import type { QueuedMessage } from '@/shared/acp-protocol';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 import { collectDispatchBatch } from './session-dispatch-batch';

@@ -3,8 +3,8 @@ import type {
   SessionLifecycleEventRecord,
   SessionLifecycleEventStore,
 } from '@/backend/services/session/resources/session-lifecycle-event.accessor';
-import { SessionDomainService } from '@/backend/services/session/service/session-domain.service';
 import { sessionEventBus } from '@/backend/services/session/service/session-event-bus';
+import { SessionDomainService } from '@/backend/services/session/service/store/session-domain.service';
 import { SessionLifecycleEventService } from './session-lifecycle-event.service';
 
 const mockError = vi.fn();

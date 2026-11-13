@@ -136,7 +136,7 @@ export { buildChildWorkspaceContext } from './service/prompt/session.prompt-buil
 export { CodexModelCatalogService } from './service/providers/codex-model-catalog.service';
 
 // Core domain service (in-memory state management)
-export { SessionDomainService, sessionDomainService } from './service/session-domain.service';
+export { SessionDomainService, sessionDomainService } from './service/store/session-domain.service';
 
 // Transport-free outbound event surface (consumed by the WebSocket adapter)
 export {

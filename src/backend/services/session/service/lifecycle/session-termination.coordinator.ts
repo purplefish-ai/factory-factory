@@ -10,7 +10,7 @@ import { withEventEvidenceDeadline } from '@/backend/services/session/service/ev
 import type { EventSessionAuthority } from '@/backend/services/session/service/event-agent/event-session-authority';
 import type { AcpEventProcessor } from '@/backend/services/session/service/events/acp-event-processor';
 import { acpTraceLogger } from '@/backend/services/session/service/logging/acp-trace-logger.service';
-import type { SessionDomainService } from '@/backend/services/session/service/session-domain.service';
+import type { SessionDomainService } from '@/backend/services/session/service/store/session-domain.service';
 import {
   SessionLifecycleEventKind,
   SessionLifecycleEventReason,

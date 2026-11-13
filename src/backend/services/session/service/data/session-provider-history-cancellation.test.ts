@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { afterEach, expect, it, vi } from 'vitest';
 import { configService } from '@/backend/services/config.service';
 import * as reader from '@/backend/services/session/service/data/session-history-jsonl-reader';
-import { SessionDomainService } from '@/backend/services/session/service/session-domain.service';
+import { SessionDomainService } from '@/backend/services/session/service/store/session-domain.service';
 import { createProviderHistoryHydrator } from './session-provider-history-hydrator';
 
 const directories: string[] = [];

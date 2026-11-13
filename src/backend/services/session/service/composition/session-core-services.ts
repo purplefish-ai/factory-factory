@@ -44,8 +44,8 @@ import { SessionService } from '@/backend/services/session/service/prompt/sessio
 import { ClaudeModelCatalogService } from '@/backend/services/session/service/providers/claude-model-catalog.service';
 import { CodexModelCatalogService } from '@/backend/services/session/service/providers/codex-model-catalog.service';
 import { ProviderUsageService } from '@/backend/services/session/service/providers/provider-usage.service';
-import { sessionDomainService } from '@/backend/services/session/service/session-domain.service';
 import { sessionEventBus } from '@/backend/services/session/service/session-event-bus';
+import { sessionDomainService } from '@/backend/services/session/service/store/session-domain.service';
 import { workspaceDataService, workspaceNotificationService } from '@/backend/services/workspace';
 
 const logger = createLogger('session');

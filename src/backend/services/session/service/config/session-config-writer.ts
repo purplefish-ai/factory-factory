@@ -4,7 +4,7 @@ import type { AcpProcessHandle, AcpRuntimeManager } from '@/backend/services/ses
 import { isReasoningConfigOption } from '@/backend/services/session/service/acp/acp-config-option-identification';
 import type { SessionCallerGuard } from '@/backend/services/session/service/bridges';
 import type { SessionRepository } from '@/backend/services/session/service/data/session.repository';
-import type { SessionDomainService } from '@/backend/services/session/service/session-domain.service';
+import type { SessionDomainService } from '@/backend/services/session/service/store/session-domain.service';
 import {
   type AcceptedConfigCommit,
   SessionConfigCommitAuthority,

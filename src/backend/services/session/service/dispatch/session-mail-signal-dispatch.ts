@@ -7,11 +7,11 @@ import type {
   MailSignalReceipt,
 } from '@/backend/services/session/service/delivery/session-notification-delivery.service';
 import { EventSessionFenceError } from '@/backend/services/session/service/event-agent/event-session-fence-error';
-import { sessionDomainService as domain } from '@/backend/services/session/service/session-domain.service';
 import {
   isTurnAlreadyInProgressError,
   toErrorMessage,
 } from '@/backend/services/session/service/session.error-message';
+import { sessionDomainService as domain } from '@/backend/services/session/service/store/session-domain.service';
 import type { QueuedMessage } from '@/shared/acp-protocol';
 import type { SessionDispatchNotificationDeliveryService } from './session-dispatch.types';
 import type { SessionQueuedSteering } from './session-queued-steering';

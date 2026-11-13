@@ -9,7 +9,7 @@ import type { CodexModelCatalogService } from '@/backend/services/session/servic
 import {
   sessionDomainService as defaultSessionDomainService,
   type SessionDomainService,
-} from '@/backend/services/session/service/session-domain.service';
+} from '@/backend/services/session/service/store/session-domain.service';
 import { userSettingsService } from '@/backend/services/settings';
 import type { QueuedMessage } from '@/shared/acp-protocol';
 import type { ChatBarCapabilities } from '@/shared/chat-capabilities';

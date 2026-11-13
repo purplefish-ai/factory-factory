@@ -6,7 +6,7 @@ import { sessionBackgroundDeliveryService } from '@/backend/services/session/ser
 import { rollbackStoppedDispatchMessage } from '@/backend/services/session/service/dispatch/session-dispatch-batch';
 import { createTestSessionDispatcher } from '@/backend/services/session/service/dispatch/session-dispatch.test-helpers';
 import { EventSessionFenceError } from '@/backend/services/session/service/event-agent/event-session-fence-error';
-import { sessionDomainService } from '@/backend/services/session/service/session-domain.service';
+import { sessionDomainService } from '@/backend/services/session/service/store/session-domain.service';
 import type { QueuedMessage } from '@/shared/acp-protocol';
 
 afterEach(() => {

@@ -14,8 +14,8 @@ import { toError } from '@/backend/lib/error-utils';
 import { createLogger } from '@/backend/services/logger.service';
 import type { SessionWorkspaceBridge } from '@/backend/services/session/service/bridges';
 import { sessionDataService } from '@/backend/services/session/service/data/session-data.service';
-import { sessionDomainService } from '@/backend/services/session/service/session-domain.service';
 import { sessionEventBus } from '@/backend/services/session/service/session-event-bus';
+import { sessionDomainService } from '@/backend/services/session/service/store/session-domain.service';
 import { voiceNarrationService } from '@/backend/services/session/service/voice/voice-narration.service';
 import type { PendingInteractiveRequest } from '@/shared/pending-request-types';
 

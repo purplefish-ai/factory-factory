@@ -18,7 +18,7 @@ vi.mock('@/backend/services/session/service/composition/session-services', () =>
   },
 }));
 
-vi.mock('@/backend/services/session/service/session-domain.service', () => ({
+vi.mock('@/backend/services/session/service/store/session-domain.service', () => ({
   sessionDomainService: {
     getTranscriptSnapshot: mocks.getTranscriptSnapshot,
   },

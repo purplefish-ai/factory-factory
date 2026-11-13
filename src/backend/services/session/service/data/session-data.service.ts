@@ -18,7 +18,7 @@ import {
   readClosedSessionTranscript,
 } from '@/backend/services/session/service/archive/closed-session-reader';
 import { createSessionLaunchMetadata } from '@/backend/services/session/service/data/session-launch-settings';
-import { sessionDomainService } from '@/backend/services/session/service/session-domain.service';
+import { sessionDomainService } from '@/backend/services/session/service/store/session-domain.service';
 import type {
   AcquirePRDedicatedSessionInput,
   PRDedicatedSessionAcquisition,

@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest';
-import { sessionDomainService } from '@/backend/services/session/service/session-domain.service';
+import { sessionDomainService } from '@/backend/services/session/service/store/session-domain.service';
 import type { PRDeliveryRequest } from '@/shared/pr-monitoring';
 import { SessionBackgroundDeliveryService } from './session-background-delivery.service';
 

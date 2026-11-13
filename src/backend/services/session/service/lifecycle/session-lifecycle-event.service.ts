@@ -3,7 +3,7 @@ import type {
   SessionLifecycleEventRecord,
   SessionLifecycleEventStore,
 } from '@/backend/services/session/resources/session-lifecycle-event.accessor';
-import type { SessionDomainService } from '@/backend/services/session/service/session-domain.service';
+import type { SessionDomainService } from '@/backend/services/session/service/store/session-domain.service';
 import {
   mergeLifecycleTranscript,
   toLifecycleChatMessage,

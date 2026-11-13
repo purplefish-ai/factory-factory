@@ -1,7 +1,7 @@
 import { afterEach, expect, it, vi } from 'vitest';
 import { sessionBackgroundDeliveryService } from '@/backend/services/session/service/delivery/session-background-delivery.service';
 import { SessionWorkflowFinalizer } from '@/backend/services/session/service/lifecycle/session-workflow-finalizer';
-import { sessionDomainService } from '@/backend/services/session/service/session-domain.service';
+import { sessionDomainService } from '@/backend/services/session/service/store/session-domain.service';
 import { sessionConfigService, sessionDispatchService } from './session-services';
 
 afterEach(() => vi.restoreAllMocks());

@@ -12,7 +12,7 @@ import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { configService } from '@/backend/services/config.service';
 import * as reader from '@/backend/services/session/service/data/session-history-jsonl-reader';
-import { SessionDomainService } from '@/backend/services/session/service/session-domain.service';
+import { SessionDomainService } from '@/backend/services/session/service/store/session-domain.service';
 import { providerHistoryTranscriptCache } from './provider-history-transcript-cache';
 import {
   createProviderHistoryHydrator,

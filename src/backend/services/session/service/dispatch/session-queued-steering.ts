@@ -4,7 +4,7 @@ import {
   AcpSteeringTimeoutError,
 } from '@/backend/services/session/service/acp/acp-steering';
 import type { MailSignalReceipt } from '@/backend/services/session/service/delivery/session-notification-delivery.service';
-import { sessionDomainService as domain } from '@/backend/services/session/service/session-domain.service';
+import { sessionDomainService as domain } from '@/backend/services/session/service/store/session-domain.service';
 import { MessageState, type QueuedMessage, type AgentContentItem } from '@/shared/acp-protocol';
 import { buildMessageContent } from './session-message-content';
 import { QueuedMessageNotFoundError } from './session-steering-errors';

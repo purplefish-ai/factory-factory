@@ -15,7 +15,7 @@ import {
   setupSuccessfulSpawn,
 } from '@/backend/services/session/service/acp/acp-client-factory.test-harness';
 import { AcpEventProcessor } from '@/backend/services/session/service/events/acp-event-processor';
-import { SessionDomainService } from '@/backend/services/session/service/session-domain.service';
+import { SessionDomainService } from '@/backend/services/session/service/store/session-domain.service';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 import type { AcpClientCallbacks } from './acp-connection';
 import type { AcpPermissionBridge } from './acp-permission-bridge';

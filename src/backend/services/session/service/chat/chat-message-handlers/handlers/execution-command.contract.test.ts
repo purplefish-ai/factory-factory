@@ -1,9 +1,9 @@
 import { expect, it, vi } from 'vitest';
-import { SessionDomainService } from '@/backend/services/session/service/session-domain.service';
 import {
   SESSION_OUTBOUND_EVENT,
   sessionEventBus,
 } from '@/backend/services/session/service/session-event-bus';
+import { SessionDomainService } from '@/backend/services/session/service/store/session-domain.service';
 import { MessageState } from '@/shared/acp-protocol';
 import { createQueueMessageHandler } from './queue-message.handler';
 import { createRemoveQueuedMessageHandler } from './remove-queued-message.handler';

@@ -8,7 +8,7 @@ import { createTestProcessHandle } from '@/backend/services/session/service/acp/
 import { SessionConfigService } from '@/backend/services/session/service/config/session.config.service';
 import { sessionDataService } from '@/backend/services/session/service/data/session-data.service';
 import { SessionDispatchService } from '@/backend/services/session/service/dispatch/session-dispatch.service';
-import { sessionDomainService } from '@/backend/services/session/service/session-domain.service';
+import { sessionDomainService } from '@/backend/services/session/service/store/session-domain.service';
 import { userSettingsService } from '@/backend/services/settings';
 import type { QueuedMessage } from '@/shared/acp-protocol';
 import type { ChatProvider } from '@/shared/chat-capabilities';

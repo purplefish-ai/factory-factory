@@ -1,7 +1,7 @@
 import type { SessionConfigOption } from '@agentclientprotocol/sdk/unstable';
 import type { SessionBackgroundDeliveryService } from '@/backend/services/session/service/delivery/session-background-delivery.service';
 import type { SessionLifecycleService } from '@/backend/services/session/service/lifecycle/session.lifecycle.service';
-import type { SessionDomainService } from '@/backend/services/session/service/session-domain.service';
+import type { SessionDomainService } from '@/backend/services/session/service/store/session-domain.service';
 import type { AgentContentItem } from '@/shared/acp-protocol';
 import type { ChatBarCapabilities } from '@/shared/chat-capabilities';
 import type { ChatMessageInput } from '@/shared/websocket';

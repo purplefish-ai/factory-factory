@@ -6,7 +6,7 @@ import type { SessionLifecycleWorkspaceBridge } from '@/backend/services/session
 import { getProviderHistorySessionId } from '@/backend/services/session/service/data/session-provider-history-hydrator';
 import type { SessionRepository } from '@/backend/services/session/service/data/session.repository';
 import { schedulePRDiscovery } from '@/backend/services/session/service/delivery/session-pr-discovery.service';
-import type { SessionDomainService } from '@/backend/services/session/service/session-domain.service';
+import type { SessionDomainService } from '@/backend/services/session/service/store/session-domain.service';
 import { isLocalTranscriptMessage } from '@/backend/services/session/service/store/session-local-transcript';
 import type { SessionLifecycleEventService } from './session-lifecycle-event.service';
 

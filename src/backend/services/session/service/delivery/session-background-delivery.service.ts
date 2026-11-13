@@ -3,11 +3,11 @@ import {
   classifyPRDeliveryFailure,
   type PRDeliveryFailure,
 } from '@/backend/services/session/service/delivery/pr-delivery-failure';
-import { sessionDomainService } from '@/backend/services/session/service/session-domain.service';
+import { sessionDomainService } from '@/backend/services/session/service/store/session-domain.service';
 import {
   SessionResumeFences,
   sessionResumeFences,
-} from '@/backend/services/session/service/session-resume-fence';
+} from '@/backend/services/session/service/store/session-resume-fence';
 import type { QueuedMessage } from '@/shared/acp-protocol';
 import {
   type ClaimedPRDelivery,

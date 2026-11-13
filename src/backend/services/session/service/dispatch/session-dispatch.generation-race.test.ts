@@ -2,7 +2,7 @@ import { afterEach, expect, it, vi } from 'vitest';
 import type { AcpProcessHandle } from '@/backend/services/session/service/acp';
 import { sessionDataService } from '@/backend/services/session/service/data/session-data.service';
 import { SessionLifecycleGate } from '@/backend/services/session/service/lifecycle/session-lifecycle-gate';
-import { sessionDomainService } from '@/backend/services/session/service/session-domain.service';
+import { sessionDomainService } from '@/backend/services/session/service/store/session-domain.service';
 import type { AgentContentItem, QueuedMessage } from '@/shared/acp-protocol';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 import { SessionDispatchService } from './session-dispatch.service';

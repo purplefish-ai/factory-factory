@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createDeferred } from '@/backend/services/session/service/acp/acp-runtime-manager.test-helpers';
-import { sessionDomainService } from '@/backend/services/session/service/session-domain.service';
+import { sessionDomainService } from '@/backend/services/session/service/store/session-domain.service';
 import type { ChatMessage } from '@/shared/acp-protocol';
 import {
   hydrateProviderHistoryIfNeeded,

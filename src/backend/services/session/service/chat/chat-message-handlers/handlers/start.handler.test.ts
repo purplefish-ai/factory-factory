@@ -5,7 +5,7 @@ const mocks = vi.hoisted(() => ({
   markError: vi.fn(),
 }));
 
-vi.mock('@/backend/services/session/service/session-domain.service', () => ({
+vi.mock('@/backend/services/session/service/store/session-domain.service', () => ({
   sessionDomainService: {
     markError: mocks.markError,
   },

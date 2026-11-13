@@ -1,7 +1,7 @@
 import { isDeepStrictEqual } from 'node:util';
 import type { AcpProcessHandle } from '@/backend/services/session/service/acp/acp-process-handle';
 import type { AcpRuntimeManager } from '@/backend/services/session/service/acp/acp-runtime-manager';
-import type { SessionDomainService } from '@/backend/services/session/service/session-domain.service';
+import type { SessionDomainService } from '@/backend/services/session/service/store/session-domain.service';
 import type {
   InitialAttempt,
   ProviderSource,

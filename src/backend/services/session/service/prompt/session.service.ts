@@ -17,12 +17,12 @@ import type { EventOwnedWork } from '@/backend/services/session/service/lifecycl
 import type { SessionLifecycleEventService } from '@/backend/services/session/service/lifecycle/session-lifecycle-event.service';
 import type { SessionLifecycleGate } from '@/backend/services/session/service/lifecycle/session-lifecycle-gate';
 import type { SessionPromptTurnCompletionService } from '@/backend/services/session/service/lifecycle/session.prompt-turn-completion.service';
-import type { SessionDomainService } from '@/backend/services/session/service/session-domain.service';
 import {
   isTurnAlreadyInProgressError,
   toErrorMessage,
   toProviderFailureChatMessage,
 } from '@/backend/services/session/service/session.error-message';
+import type { SessionDomainService } from '@/backend/services/session/service/store/session-domain.service';
 import { userSettingsService } from '@/backend/services/settings';
 import type { AgentContentItem } from '@/shared/acp-protocol';
 import { SessionLifecycleEventKind, SessionLifecycleEventReason } from '@/shared/core';

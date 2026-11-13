@@ -12,12 +12,11 @@ import { parseAcpPlanNotification } from '@/shared/acp-protocol/task-plan';
 import type { PendingInteractiveRequest } from '@/shared/pending-request-types';
 import type { SessionRuntimeState } from '@/shared/session-runtime';
 import { WORKSPACE_NOTIFICATION_MESSAGE_ID_PREFIX } from '@/shared/workspace-notifications';
-import { sessionResumeFences } from './session-resume-fence';
-import { mergeLifecycleMessage } from './store/session-lifecycle-transcript';
-import { isLocalTranscriptMessage } from './store/session-local-transcript';
-import { buildMessageFailure, recordPRUpdateOutcome } from './store/session-pr-update';
-import { handleProcessExit } from './store/session-process-exit';
-import { SessionPublisher } from './store/session-publisher';
+import { mergeLifecycleMessage } from './session-lifecycle-transcript';
+import { isLocalTranscriptMessage } from './session-local-transcript';
+import { buildMessageFailure, recordPRUpdateOutcome } from './session-pr-update';
+import { handleProcessExit } from './session-process-exit';
+import { SessionPublisher } from './session-publisher';
 import {
   clearPendingInteractiveRequest,
   clearPendingInteractiveRequestIfMatches,
@@ -28,11 +27,12 @@ import {
   removeQueuedMessage,
   requeueFront,
   setPendingInteractiveRequest,
-} from './store/session-queue';
-import { buildReplayEvents } from './store/session-replay-builder';
-import { SessionRuntimeMachine } from './store/session-runtime-machine';
-import { SessionStoreRegistry } from './store/session-store-registry';
-import type { RecentMessageRejection, SessionStore } from './store/session-store.types';
+} from './session-queue';
+import { buildReplayEvents } from './session-replay-builder';
+import { sessionResumeFences } from './session-resume-fence';
+import { SessionRuntimeMachine } from './session-runtime-machine';
+import { SessionStoreRegistry } from './session-store-registry';
+import type { RecentMessageRejection, SessionStore } from './session-store.types';
 import {
   appendClaudeEvent,
   commitSentUserMessageWithOrder,
@@ -42,7 +42,7 @@ import {
   removeTranscriptMessageById,
   setNextOrderFromTranscript,
   upsertTranscriptMessage,
-} from './store/session-transcript';
+} from './session-transcript';
 
 const logger = createLogger('session-domain-service');
 const RECENT_REJECTION_TTL_MS = 60_000;

@@ -1,7 +1,7 @@
 import type { SessionUpdate } from '@agentclientprotocol/sdk/unstable';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { SessionDomainService } from '@/backend/services/session/service/session-domain.service';
 import { sessionEventBus } from '@/backend/services/session/service/session-event-bus';
+import { SessionDomainService } from '@/backend/services/session/service/store/session-domain.service';
 import { AcpEventProcessor, type AcpEventProcessorDependencies } from './acp-event-processor';
 
 vi.mock('@/backend/services/session/service/logging/acp-trace-logger.service', () => ({
