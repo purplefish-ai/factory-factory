@@ -24,9 +24,10 @@ repository structure around them.
   instructions layer by directory. Explicitly read applicable area guides rather
   than assuming every tool discovers them identically.
 
-The project settings file `.claude/settings.json` holds only pre-approved
-read-only and verification commands, and `scripts/claude-settings.test.ts` fails
-when it gains an entry that the test does not list.
+The project settings file `.claude/settings.json` holds only exact-match
+`permissions.allow` rules for verification commands, read-only `git` and
+read-only `gh`, with no wildcards, and `scripts/claude-settings.test.ts` fails
+when it gains an entry that the test does not list or any `*`.
 
 ## Skills and validation
 

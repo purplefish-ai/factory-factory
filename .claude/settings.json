@@ -16,15 +16,13 @@
       "Bash(pnpm lint)",
       "Bash(pnpm test)",
       "Bash(pnpm typecheck)",
-      "Bash(pnpm dev:sandbox *)",
       "Bash(git diff)",
       "Bash(git log)",
       "Bash(git status)",
-      "Bash(gh pr checks *)",
-      "Bash(gh pr list *)",
-      "Bash(gh pr view *)",
-      "Bash(gh run list *)",
-      "Bash(gh run view *)"
+      "Bash(gh pr checks)",
+      "Bash(gh pr list)",
+      "Bash(gh pr view)",
+      "Bash(gh run list)"
     ]
   }
 }

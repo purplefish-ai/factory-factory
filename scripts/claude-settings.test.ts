@@ -9,13 +9,12 @@ import { z } from 'zod';
 // this list in the same pull request, where a reviewer sees it.
 //
 // Matching, from https://code.claude.com/docs/en/permissions: a rule with no
-// `*` matches one exact command; a trailing ` *` (with the space) matches the
-// command and any arguments after it, but not a longer command name. Wildcard
-// rules approve every argument, so they are used only where no argument writes
-// outside the working tree. `pnpm test`, `git diff` and `git log` are exact
-// because `pnpm test --outputFile=<path>`, `git diff --output=<file>` and
-// `git log --output=<file>` can write outside the working tree; a filtered
-// `pnpm test <path>` therefore still asks.
+// `*` matches one exact command; a `*` matches any text, so a trailing ` *`
+// approves every argument. Every rule here is exact, so none approves an
+// argument. `pnpm test --outputFile=<path>`, `git diff --output=<file>` and
+// `git log --output=<file>` can write outside the working tree, and the
+// documentation does not say how a command substitution inside an allowed
+// command is treated; with exact rules those commands ask.
 const EXPECTED_ALLOW = [
   // Verification. Exact rules: `check:fix` and the `:update` scripts rewrite
   // files and must not match.
@@ -34,18 +33,15 @@ const EXPECTED_ALLOW = [
   'Bash(pnpm lint)',
   'Bash(pnpm test)',
   'Bash(pnpm typecheck)',
-  // Throwaway sandbox under the OS temp directory; no credentials reach it.
-  'Bash(pnpm dev:sandbox *)',
   // Read-only git.
   'Bash(git diff)',
   'Bash(git log)',
   'Bash(git status)',
-  // Read-only GitHub CLI.
-  'Bash(gh pr checks *)',
-  'Bash(gh pr list *)',
-  'Bash(gh pr view *)',
-  'Bash(gh run list *)',
-  'Bash(gh run view *)',
+  // Read-only GitHub CLI, without arguments.
+  'Bash(gh pr checks)',
+  'Bash(gh pr list)',
+  'Bash(gh pr view)',
+  'Bash(gh run list)',
 ];
 
 const FORBIDDEN_WORDS = ['push', 'merge', 'publish', 'rm ', 'curl', 'api', '--force'];
@@ -74,6 +70,14 @@ describe('.claude/settings.json', () => {
   it('lists every command once', () => {
     const { allow } = readSettings().permissions;
     expect(new Set(allow).size).toBe(allow.length);
+  });
+
+  it('uses exact commands only, with no wildcard', () => {
+    const { allow } = readSettings().permissions;
+    const wildcards = allow.filter((entry) => entry.includes('*'));
+    // A wildcard approves every argument, including write-capable flags, so
+    // adding one needs the repository owner's decision.
+    expect(wildcards, 'a wildcard approves every argument; ask the owner').toEqual([]);
   });
 
   it('names no command that writes, pushes, merges, publishes or sends', () => {
