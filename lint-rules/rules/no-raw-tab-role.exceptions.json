@@ -1,0 +1,3 @@
+{
+  "src/components/ui/tab-button.tsx": "The shared tab primitive itself: TabList and TabButton are the only components that write role=\"tablist\" and role=\"tab\"."
+}

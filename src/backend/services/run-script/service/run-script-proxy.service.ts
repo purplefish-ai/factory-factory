@@ -26,6 +26,18 @@ interface ActiveTunnel {
   authenticatedUrl: string;
   cloudflaredProcess: ChildProcess;
   closeAuthProxy: () => Promise<void>;
+  leases: number;
+  disposed: boolean;
+  disposal?: Promise<void>;
+}
+
+interface PendingTunnel {
+  closeAuthProxy?: () => Promise<void>;
+}
+
+export interface RunScriptTunnelLease {
+  url: string;
+  release(): Promise<void>;
 }
 
 function writeUnauthorizedResponse(
@@ -173,6 +185,8 @@ function createTokenAuthProxy(params: {
 export class RunScriptProxyService {
   private readonly tunnels = new Map<string, ActiveTunnel>();
 
+  private readonly pendingTunnels = new Map<string, PendingTunnel>();
+
   private cloudflaredUnavailable = false;
 
   private isEnabled(): boolean {
@@ -183,11 +197,8 @@ export class RunScriptProxyService {
     return this.tunnels.get(workspaceId)?.authenticatedUrl ?? null;
   }
 
-  private watchTunnelExit(
-    workspaceId: string,
-    cloudflaredProcess: ChildProcess,
-    closeAuthProxy: () => Promise<void>
-  ): boolean {
+  private watchTunnelExit(workspaceId: string, tunnel: ActiveTunnel): boolean {
+    const { cloudflaredProcess, closeAuthProxy } = tunnel;
     let exitHandled = false;
     const handleExit = () => {
       if (exitHandled) {
@@ -196,11 +207,14 @@ export class RunScriptProxyService {
       exitHandled = true;
 
       const current = this.tunnels.get(workspaceId);
-      if (current?.cloudflaredProcess === cloudflaredProcess) {
+      if (current === tunnel) {
         this.tunnels.delete(workspaceId);
       }
 
-      void closeAuthProxy().catch(() => undefined);
+      if (!tunnel.disposed) {
+        tunnel.disposed = true;
+        tunnel.disposal = closeAuthProxy().catch(() => undefined);
+      }
     };
     cloudflaredProcess.once('exit', handleExit);
     if (cloudflaredProcess.exitCode !== null || cloudflaredProcess.signalCode !== null) {
@@ -209,33 +223,87 @@ export class RunScriptProxyService {
     return !exitHandled;
   }
 
-  async ensureTunnel(workspaceId: string, upstreamPort: number): Promise<string | null> {
+  private createLease(workspaceId: string, tunnel: ActiveTunnel): RunScriptTunnelLease {
+    tunnel.leases += 1;
+    let release: Promise<void> | undefined;
+    return {
+      url: tunnel.authenticatedUrl,
+      release: () => {
+        if (!release) {
+          tunnel.leases -= 1;
+          release =
+            tunnel.leases === 0 ? this.disposeTunnel(workspaceId, tunnel) : Promise.resolve();
+        }
+        return release;
+      },
+    };
+  }
+
+  async acquireTunnel(
+    workspaceId: string,
+    upstreamPort: number
+  ): Promise<RunScriptTunnelLease | null> {
     if (!this.isEnabled() || this.cloudflaredUnavailable) {
       return null;
     }
 
     const existing = this.tunnels.get(workspaceId);
     if (existing && existing.upstreamPort === upstreamPort) {
-      return existing.authenticatedUrl;
+      return this.createLease(workspaceId, existing);
     }
 
-    if (existing) {
-      await this.stopTunnel(workspaceId);
+    // Install ownership before awaiting predecessor cleanup or either startup step.
+    const previousPending = this.pendingTunnels.get(workspaceId);
+    const pending: PendingTunnel = {};
+    this.pendingTunnels.set(workspaceId, pending);
+    try {
+      if (previousPending?.closeAuthProxy) {
+        await previousPending.closeAuthProxy().catch(() => undefined);
+      }
+      if (existing) {
+        await this.disposeTunnel(workspaceId, existing);
+      }
+      if (this.pendingTunnels.get(workspaceId) !== pending) {
+        return null;
+      }
+      return await this.startOwnedTunnel(workspaceId, upstreamPort, pending);
+    } finally {
+      if (this.pendingTunnels.get(workspaceId) === pending) {
+        this.pendingTunnels.delete(workspaceId);
+      }
     }
+  }
 
+  private async startOwnedTunnel(
+    workspaceId: string,
+    upstreamPort: number,
+    pending: PendingTunnel
+  ): Promise<RunScriptTunnelLease | null> {
     const authToken = randomBytes(16).toString('hex');
-
     let authProxyClose: (() => Promise<void>) | null = null;
     let cloudflaredProcess: ChildProcess | null = null;
     try {
       const authProxy = await createTokenAuthProxy({ upstreamPort, authToken });
-      const closeAuthProxy = authProxy.close;
+      let closePromise: Promise<void> | undefined;
+      const closeAuthProxy = () => {
+        closePromise ??= authProxy.close();
+        return closePromise;
+      };
       const authProxyPort = authProxy.port;
       authProxyClose = closeAuthProxy;
+      pending.closeAuthProxy = closeAuthProxy;
+      if (this.pendingTunnels.get(workspaceId) !== pending) {
+        await closeAuthProxy();
+        return null;
+      }
       const tunnel = await startCloudflaredTunnel({
         targetUrl: `http://${LOCAL_HOST}:${authProxyPort}`,
       });
       cloudflaredProcess = tunnel.proc;
+      if (this.pendingTunnels.get(workspaceId) !== pending) {
+        await Promise.allSettled([killProcessWithTimeout(cloudflaredProcess), closeAuthProxy()]);
+        return null;
+      }
 
       const authenticatedUrl = `${tunnel.publicUrl}?${TOKEN_QUERY_PARAM}=${authToken}`;
       const activeTunnel: ActiveTunnel = {
@@ -244,9 +312,11 @@ export class RunScriptProxyService {
         authenticatedUrl,
         cloudflaredProcess,
         closeAuthProxy,
+        leases: 0,
+        disposed: false,
       };
       this.tunnels.set(workspaceId, activeTunnel);
-      if (!this.watchTunnelExit(workspaceId, cloudflaredProcess, closeAuthProxy)) {
+      if (!this.watchTunnelExit(workspaceId, activeTunnel)) {
         return null;
       }
 
@@ -256,7 +326,7 @@ export class RunScriptProxyService {
         publicUrl: tunnel.publicUrl,
       });
 
-      return authenticatedUrl;
+      return this.createLease(workspaceId, activeTunnel);
     } catch (error) {
       if (isCommandNotFoundError(error)) {
         this.cloudflaredUnavailable = true;
@@ -268,45 +338,60 @@ export class RunScriptProxyService {
         error: error instanceof Error ? error.message : String(error),
       });
 
-      if (cloudflaredProcess) {
-        await killProcessWithTimeout(cloudflaredProcess);
-      }
-      if (authProxyClose) {
-        await authProxyClose().catch(() => undefined);
-      }
+      await Promise.allSettled([
+        ...(cloudflaredProcess ? [killProcessWithTimeout(cloudflaredProcess)] : []),
+        ...(authProxyClose ? [authProxyClose()] : []),
+      ]);
 
       return null;
     }
   }
 
-  async stopTunnel(workspaceId: string): Promise<void> {
-    const existing = this.tunnels.get(workspaceId);
-    if (!existing) {
-      return;
+  private disposeTunnel(workspaceId: string, tunnel: ActiveTunnel): Promise<void> {
+    if (tunnel.disposed) {
+      return tunnel.disposal ?? Promise.resolve();
     }
+    tunnel.disposed = true;
 
-    this.tunnels.delete(workspaceId);
-
-    await Promise.allSettled([
-      killProcessWithTimeout(existing.cloudflaredProcess),
-      existing.closeAuthProxy(),
-    ]);
-
-    logger.info('Stopped run-script proxy tunnel', {
-      workspaceId,
-      upstreamPort: existing.upstreamPort,
-      publicUrl: existing.publicUrl,
+    if (this.tunnels.get(workspaceId) === tunnel) {
+      this.tunnels.delete(workspaceId);
+    }
+    tunnel.disposal = Promise.allSettled([
+      killProcessWithTimeout(tunnel.cloudflaredProcess),
+      tunnel.closeAuthProxy(),
+    ]).then(() => {
+      logger.info('Stopped run-script proxy tunnel', {
+        workspaceId,
+        upstreamPort: tunnel.upstreamPort,
+        publicUrl: tunnel.publicUrl,
+      });
     });
+    return tunnel.disposal;
+  }
+
+  async stopTunnel(workspaceId: string): Promise<void> {
+    const pending = this.pendingTunnels.get(workspaceId);
+    this.pendingTunnels.delete(workspaceId);
+    const existing = this.tunnels.get(workspaceId);
+    await Promise.allSettled([
+      ...(existing ? [this.disposeTunnel(workspaceId, existing)] : []),
+      ...(pending?.closeAuthProxy ? [pending.closeAuthProxy()] : []),
+    ]);
   }
 
   async cleanup(): Promise<void> {
-    const workspaceIds = Array.from(this.tunnels.keys());
-    await Promise.all(workspaceIds.map((workspaceId) => this.stopTunnel(workspaceId)));
+    const workspaceIds = new Set([...this.pendingTunnels.keys(), ...this.tunnels.keys()]);
+    await Promise.all(Array.from(workspaceIds, (workspaceId) => this.stopTunnel(workspaceId)));
   }
 
   cleanupSync(): void {
+    for (const pending of this.pendingTunnels.values()) {
+      void pending.closeAuthProxy?.().catch(() => undefined);
+    }
+    this.pendingTunnels.clear();
     for (const [workspaceId, tunnel] of this.tunnels.entries()) {
       this.tunnels.delete(workspaceId);
+      tunnel.disposed = true;
 
       try {
         if (tunnel.cloudflaredProcess.pid && tunnel.cloudflaredProcess.exitCode === null) {

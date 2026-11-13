@@ -21,8 +21,9 @@ the one that matches your change before you touch it.
 | [diff-rendering.md](./diff-rendering.md)     | Workers, virtual rows, scroll anchors, visual verification                                 |
 | [Chat message flow](../chat-message-flow.md) | ACP streaming, session loading, replay, client reduction                                   |
 
-Keep these current. When behaviour changes, update the note in the same PR — a
-stale rationale is worse than no rationale, because it is believed.
+Keep these true. Change a note when ownership, an invariant, a public surface,
+the map or a reason changes. Do not add a description of new behaviour; its
+tests hold it.
 
 The [documentation index](../README.md) distinguishes current guides from
 proposals, design records, and historical implementation plans.

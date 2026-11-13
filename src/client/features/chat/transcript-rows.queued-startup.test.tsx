@@ -2,8 +2,8 @@
 import { flushSync } from 'react-dom';
 import { createRoot } from 'react-dom/client';
 import { expect, it, vi } from 'vitest';
-import { createUserMessage } from '@/lib/claude-fixtures';
-import { TranscriptRenderingFixture } from './transcript-rendering.test-utils';
+import { createUserMessage } from '@/lib/claude.fixture';
+import { TranscriptRenderingFixture } from './transcript-rendering.test-harness';
 
 it.each([null, 'Running init script...'])(
   'keeps queued messages visible and cancellable while loading (%s)',

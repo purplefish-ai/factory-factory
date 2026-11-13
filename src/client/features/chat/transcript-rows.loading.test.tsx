@@ -4,7 +4,7 @@ import { flushSync } from 'react-dom';
 import { createRoot } from 'react-dom/client';
 import { describe, expect, it, vi } from 'vitest';
 import type { WorkspaceInitBanner } from '@/shared/workspace-init';
-import { TranscriptRenderingFixture } from './transcript-rendering.test-utils';
+import { TranscriptRenderingFixture } from './transcript-rendering.test-harness';
 
 describe('TranscriptRenderingFixture loading status', () => {
   it('identifies background processes after the prompt finishes and removes completed work', () => {

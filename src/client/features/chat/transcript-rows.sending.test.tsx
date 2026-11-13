@@ -3,9 +3,9 @@ import { flushSync } from 'react-dom';
 import { createRoot } from 'react-dom/client';
 import { expect, it } from 'vitest';
 import { MessageState } from '@/lib/chat-protocol';
-import { createUserMessage } from '@/lib/claude-fixtures';
+import { createUserMessage } from '@/lib/claude.fixture';
 import type { PendingMessageContent } from './reducer';
-import { TranscriptRenderingFixture } from './transcript-rendering.test-utils';
+import { TranscriptRenderingFixture } from './transcript-rendering.test-harness';
 import { useChatState, type UseChatStateReturn } from './use-chat-state';
 
 function SendingHarness({ chatRef }: { chatRef: { current: UseChatStateReturn | null } }) {

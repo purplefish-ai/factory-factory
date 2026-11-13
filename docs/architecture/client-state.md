@@ -2,7 +2,7 @@
 
 How client components keep state in step with props and hold the latest values
 for effects and handlers. The rules below are enforced by Oxlint where they can
-be checked ([lint guardrails](../../lint-rules/README.md)).
+be checked ([rules](../../lint-rules/rules/)).
 
 ## State that follows an identity
 

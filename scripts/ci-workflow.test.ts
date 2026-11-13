@@ -307,6 +307,7 @@ it('keeps the CI checks job to `pnpm check` plus the steps that only make sense 
     'pnpm deps:check',
     'pnpm knip',
     'pnpm check:unused-code',
+    'pnpm check:guidance',
   ]);
   expect(scripts.lint).toContain('pnpm check:lint-suppressions');
   expect(scripts.knip).toBe('knip --include files,dependencies,unlisted');

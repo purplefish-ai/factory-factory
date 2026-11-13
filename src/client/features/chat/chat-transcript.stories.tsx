@@ -6,7 +6,7 @@ import {
   createAssistantMessage,
   createThinkingMessage,
   createUserMessage,
-} from '@/lib/claude-fixtures';
+} from '@/lib/claude.fixture';
 import { ChatInput } from './chat-input/chat-input';
 import { ChatTranscript } from './chat-transcript';
 import { useGroupedChatMessages } from './use-grouped-chat-messages';
