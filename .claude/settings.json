@@ -14,7 +14,7 @@
       "Bash(pnpm check:unused-code)",
       "Bash(pnpm knip)",
       "Bash(pnpm lint)",
-      "Bash(pnpm test *)",
+      "Bash(pnpm test)",
       "Bash(pnpm typecheck)",
       "Bash(pnpm dev:sandbox *)",
       "Bash(git diff)",

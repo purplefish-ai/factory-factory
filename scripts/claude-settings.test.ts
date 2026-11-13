@@ -10,11 +10,12 @@ import { z } from 'zod';
 //
 // Matching, from https://code.claude.com/docs/en/permissions: a rule with no
 // `*` matches one exact command; a trailing ` *` (with the space) matches the
-// command and any arguments after it, but not a longer command name, so
-// `pnpm test *` does not match `pnpm test:e2e:mobile`. Wildcard rules approve
-// every argument, so they are used only where no argument writes outside the
-// working tree. `git diff` and `git log` are exact because
-// `git diff --output=<file>` and `git log --output=<file>` write a file.
+// command and any arguments after it, but not a longer command name. Wildcard
+// rules approve every argument, so they are used only where no argument writes
+// outside the working tree. `pnpm test`, `git diff` and `git log` are exact
+// because `pnpm test --outputFile=<path>`, `git diff --output=<file>` and
+// `git log --output=<file>` can write outside the working tree; a filtered
+// `pnpm test <path>` therefore still asks.
 const EXPECTED_ALLOW = [
   // Verification. Exact rules: `check:fix` and the `:update` scripts rewrite
   // files and must not match.
@@ -31,7 +32,7 @@ const EXPECTED_ALLOW = [
   'Bash(pnpm check:unused-code)',
   'Bash(pnpm knip)',
   'Bash(pnpm lint)',
-  'Bash(pnpm test *)',
+  'Bash(pnpm test)',
   'Bash(pnpm typecheck)',
   // Throwaway sandbox under the OS temp directory; no credentials reach it.
   'Bash(pnpm dev:sandbox *)',
