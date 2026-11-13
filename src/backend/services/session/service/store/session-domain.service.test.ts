@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { sessionDomainService } from '@/backend/services/session/service/session-domain.service';
 import { sessionEventBus } from '@/backend/services/session/service/session-event-bus';
+import { sessionDomainService } from '@/backend/services/session/service/store/session-domain.service';
 
 // Global test setup restores all mocks after each test, so the spy must be
 // re-created per test.

@@ -3,7 +3,7 @@ import { agentSessionAccessor } from '@/backend/services/session/resources/agent
 import {
   SessionDomainService,
   sessionDomainService,
-} from '@/backend/services/session/service/session-domain.service';
+} from '@/backend/services/session/service/store/session-domain.service';
 import { EMPTY_CHAT_BAR_CAPABILITIES } from '@/shared/chat-capabilities';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 import { createSessionLoadService } from './session-services';

@@ -1,7 +1,7 @@
 import type { RequestPermissionRequest } from '@agentclientprotocol/sdk/unstable';
 import { describe, expect, it } from 'vitest';
 import { SessionPermissionService } from '@/backend/services/session/service/events/session.permission.service';
-import { SessionDomainService } from '@/backend/services/session/service/session-domain.service';
+import { SessionDomainService } from '@/backend/services/session/service/store/session-domain.service';
 import { ADVERSARIAL_REVIEW_WORKFLOW } from '@/shared/adversarial-review';
 import { isExitPlanModeRequest } from '@/shared/pending-request-types';
 import { AcpClientHandler } from './acp-client-handler';

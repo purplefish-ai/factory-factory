@@ -1,7 +1,7 @@
 import { afterEach, expect, it, vi } from 'vitest';
+import { sessionEventBus } from '@/backend/services/session/service/session-event-bus';
 import { SessionDomainService } from './session-domain.service';
-import { sessionEventBus } from './session-event-bus';
-import { SessionStoreRegistry } from './store/session-store-registry';
+import { SessionStoreRegistry } from './session-store-registry';
 
 const domains: SessionDomainService[] = [];
 afterEach(() => {

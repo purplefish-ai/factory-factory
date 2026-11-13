@@ -58,7 +58,7 @@ vi.mock('@/backend/services/session/service/composition/session-core-services', 
   },
 }));
 
-vi.mock('@/backend/services/session/service/session-domain.service', () => ({
+vi.mock('@/backend/services/session/service/store/session-domain.service', () => ({
   sessionDomainService: {
     prepareLoad: mocks.prepareLoad,
     finishLoad: vi.fn(),

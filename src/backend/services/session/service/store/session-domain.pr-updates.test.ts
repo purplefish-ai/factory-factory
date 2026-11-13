@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { sessionEventBus } from '@/backend/services/session/service/session-event-bus';
 import type { QueuedMessage } from '@/shared/acp-protocol';
 import { SessionDomainService } from './session-domain.service';
-import { sessionEventBus } from './session-event-bus';
 
 const message: QueuedMessage = {
   id: 'pr-event-test',

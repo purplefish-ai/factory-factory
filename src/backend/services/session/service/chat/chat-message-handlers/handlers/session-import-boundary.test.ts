@@ -22,7 +22,7 @@ describe('session handler import boundary', () => {
       '@/backend/services/session/service/prompt/session.service'
     );
     expect(importSpecifiers).not.toContain(
-      '@/backend/services/session/service/session-domain.service'
+      '@/backend/services/session/service/store/session-domain.service'
     );
   });
 });

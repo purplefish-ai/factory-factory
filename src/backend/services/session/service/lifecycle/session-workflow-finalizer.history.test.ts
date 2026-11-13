@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createProviderHistoryHydrator } from '@/backend/services/session/service/data/session-provider-history-hydrator';
-import { SessionDomainService } from '@/backend/services/session/service/session-domain.service';
+import { SessionDomainService } from '@/backend/services/session/service/store/session-domain.service';
 import type { ChatMessage } from '@/shared/acp-protocol';
 import { createLifecycleTestSession } from './session-lifecycle.test-helpers';
 import { SessionWorkflowFinalizer } from './session-workflow-finalizer';

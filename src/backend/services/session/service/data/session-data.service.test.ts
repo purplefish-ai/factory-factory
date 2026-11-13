@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { agentSessionAccessor } from '@/backend/services/session/resources/agent-session.accessor';
 import { sessionBackgroundDeliveryService } from '@/backend/services/session/service/delivery/session-background-delivery.service';
 import { createLifecycleTestSession } from '@/backend/services/session/service/lifecycle/session-lifecycle.test-helpers';
-import { sessionDomainService } from '@/backend/services/session/service/session-domain.service';
+import { sessionDomainService } from '@/backend/services/session/service/store/session-domain.service';
 import { sessionDataService } from './session-data.service';
 
 vi.mock('@/backend/services/session/resources/agent-session.accessor', () => ({

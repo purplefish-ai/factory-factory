@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { sessionDomainService } from '@/backend/services/session/service/session-domain.service';
+import { sessionDomainService } from '@/backend/services/session/service/store/session-domain.service';
 import { userSettingsService } from '@/backend/services/settings';
 import { SessionStatus } from '@/shared/core';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';

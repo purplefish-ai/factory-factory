@@ -3,7 +3,7 @@ import { agentSessionAccessor } from '@/backend/services/session/resources/agent
 import { sessionDataService } from '@/backend/services/session/service/data/session-data.service';
 import { sessionRepository } from '@/backend/services/session/service/data/session.repository';
 import { createLifecycleTestSession } from '@/backend/services/session/service/lifecycle/session-lifecycle.test-helpers';
-import { sessionDomainService } from '@/backend/services/session/service/session-domain.service';
+import { sessionDomainService } from '@/backend/services/session/service/store/session-domain.service';
 import { sessionConfigService } from './session-core-services';
 
 vi.mock('@/backend/services/session/resources/agent-session.accessor', () => ({

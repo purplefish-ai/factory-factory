@@ -7,7 +7,7 @@ const mocks = vi.hoisted(() => ({
   emitDelta: vi.fn(),
 }));
 
-vi.mock('@/backend/services/session/service/session-domain.service', () => ({
+vi.mock('@/backend/services/session/service/store/session-domain.service', () => ({
   sessionDomainService: {
     removeQueuedMessage: mocks.removeQueuedMessage,
     emitDelta: mocks.emitDelta,

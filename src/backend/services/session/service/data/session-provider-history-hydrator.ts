@@ -2,7 +2,7 @@ import { createLogger } from '@/backend/services/logger.service';
 import {
   sessionDomainService,
   type SessionDomainService,
-} from '@/backend/services/session/service/session-domain.service';
+} from '@/backend/services/session/service/store/session-domain.service';
 import { mergeLifecycleMessage } from '@/backend/services/session/service/store/session-lifecycle-transcript';
 import { isLocalTranscriptMessage } from '@/backend/services/session/service/store/session-local-transcript';
 import type { ChatMessage } from '@/shared/acp-protocol';

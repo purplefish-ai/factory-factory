@@ -1,5 +1,5 @@
 import { expect, it, vi } from 'vitest';
-import { SessionDomainService } from '@/backend/services/session/service/session-domain.service';
+import { SessionDomainService } from '@/backend/services/session/service/store/session-domain.service';
 import { createQueueMessageHandler } from './queue-message.handler';
 import { createRemoveQueuedMessageHandler } from './remove-queued-message.handler';
 

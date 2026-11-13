@@ -1,7 +1,7 @@
 import { ApplicationError } from '@/backend/lib/application-error';
 import type { ResolvedSessionConfigProjection } from '@/backend/services/session/service/config/session-config-projection';
 import type { ProviderHistorySession } from '@/backend/services/session/service/data/session-provider-history-hydrator';
-import type { SessionDomainService } from '@/backend/services/session/service/session-domain.service';
+import type { SessionDomainService } from '@/backend/services/session/service/store/session-domain.service';
 import { finalizeInterruptedTranscriptToolCalls } from '@/backend/services/session/service/store/session-tool-call-recovery';
 import { selectTranscriptPage } from '@/backend/services/session/service/store/session-transcript-page';
 import {

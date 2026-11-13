@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { AcpClientHandler } from '@/backend/services/session/service/acp/acp-client-handler';
-import { SessionDomainService } from '@/backend/services/session/service/session-domain.service';
+import { SessionDomainService } from '@/backend/services/session/service/store/session-domain.service';
 import { ADVERSARIAL_REVIEW_WORKFLOW } from '@/shared/adversarial-review';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 import { SessionPermissionService } from './session.permission.service';

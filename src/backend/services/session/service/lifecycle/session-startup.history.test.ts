@@ -9,7 +9,7 @@ import {
 import { AcpRuntimeSupervisor } from '@/backend/services/session/service/acp/acp-runtime-supervisor';
 import { createProviderHistoryHydrator } from '@/backend/services/session/service/data/session-provider-history-hydrator';
 import { AcpEventProcessor } from '@/backend/services/session/service/events/acp-event-processor';
-import { SessionDomainService } from '@/backend/services/session/service/session-domain.service';
+import { SessionDomainService } from '@/backend/services/session/service/store/session-domain.service';
 import {
   mergeLifecycleMessage,
   mergeLifecycleTranscript,

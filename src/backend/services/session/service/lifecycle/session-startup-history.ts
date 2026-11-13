@@ -5,7 +5,7 @@ import {
   type ProviderHistorySession,
 } from '@/backend/services/session/service/data/session-provider-history-hydrator';
 import type { AcpEventProcessor } from '@/backend/services/session/service/events/acp-event-processor';
-import type { SessionDomainService } from '@/backend/services/session/service/session-domain.service';
+import type { SessionDomainService } from '@/backend/services/session/service/store/session-domain.service';
 import { isLocalTranscriptMessage } from '@/backend/services/session/service/store/session-local-transcript';
 import type { SessionContext } from './session-context.service';
 

@@ -10,7 +10,7 @@ const mocks = vi.hoisted(() => ({
   holdMessageForAdmission: vi.fn(() => vi.fn()),
 }));
 
-vi.mock('@/backend/services/session/service/session-domain.service', () => ({
+vi.mock('@/backend/services/session/service/store/session-domain.service', () => ({
   sessionDomainService: {
     enqueue: mocks.enqueue,
     emitDelta: mocks.emitDelta,

@@ -1,7 +1,7 @@
 import { expect, it, vi } from 'vitest';
 import { ApplicationError } from '@/backend/lib/application-error';
 import { prepareBackgroundForDispatch } from '@/backend/services/session/service/dispatch/session-dispatch-batch';
-import { sessionDomainService } from '@/backend/services/session/service/session-domain.service';
+import { sessionDomainService } from '@/backend/services/session/service/store/session-domain.service';
 import {
   SessionBackgroundDeliveryService,
   sessionBackgroundDeliveryService,

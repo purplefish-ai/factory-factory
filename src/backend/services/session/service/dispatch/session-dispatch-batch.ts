@@ -3,7 +3,7 @@ import type { SessionCallerGuard } from '@/backend/services/session/service/brid
 import { PermanentAttachmentError } from '@/backend/services/session/service/chat/chat-message-handlers/attachment-processing';
 import { createPRDeliveryBlockedError } from '@/backend/services/session/service/delivery/pr-delivery-failure';
 import type { NotificationDispatchClaim } from '@/backend/services/session/service/delivery/session-notification-delivery.service';
-import { sessionDomainService } from '@/backend/services/session/service/session-domain.service';
+import { sessionDomainService } from '@/backend/services/session/service/store/session-domain.service';
 import type { AgentContentItem, QueuedMessage } from '@/shared/acp-protocol';
 import type {
   SessionDispatchDependencies,

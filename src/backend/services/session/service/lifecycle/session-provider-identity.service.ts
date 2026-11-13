@@ -3,7 +3,7 @@ import type { AcpProviderIdentityEvent } from '@/backend/services/session/servic
 import type { closedSessionPersistenceService } from '@/backend/services/session/service/archive/closed-session-persistence.service';
 import type { SessionRepository } from '@/backend/services/session/service/data/session.repository';
 import type { AcpEventProcessor } from '@/backend/services/session/service/events/acp-event-processor';
-import type { SessionDomainService } from '@/backend/services/session/service/session-domain.service';
+import type { SessionDomainService } from '@/backend/services/session/service/store/session-domain.service';
 import type { Prisma } from '@prisma-gen/client';
 
 export class SessionProviderIdentityService {

@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { sessionEventBus } from '@/backend/services/session/service/session-event-bus';
 import type { QueuedMessage, SessionDeltaEvent, WebSocketMessage } from '@/shared/acp-protocol';
 import { sessionDomainService } from './session-domain.service';
-import { sessionEventBus } from './session-event-bus';
 
 function queued(id: string, overrides: Partial<QueuedMessage> = {}): QueuedMessage {
   return {

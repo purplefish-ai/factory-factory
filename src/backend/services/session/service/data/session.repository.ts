@@ -5,7 +5,7 @@ import {
   type ProviderIdentityExpectation,
   type ProviderIdentityRolloverInput,
 } from '@/backend/services/session/resources/agent-session.accessor';
-import { sessionDomainService } from '@/backend/services/session/service/session-domain.service';
+import { sessionDomainService } from '@/backend/services/session/service/store/session-domain.service';
 import { workspaceDataService } from '@/backend/services/workspace';
 import type { SessionLaunchSettings } from '@/shared/session-launch';
 import type { Prisma, Workspace } from '@prisma-gen/client';

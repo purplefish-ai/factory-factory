@@ -11,11 +11,11 @@ import { DEBUG_CHAT_WS } from '@/backend/services/session/service/chat/chat-mess
 import { sessionDataService } from '@/backend/services/session/service/data/session-data.service';
 import { createPRDeliveryBlockedError } from '@/backend/services/session/service/delivery/pr-delivery-failure';
 import { EventSessionFenceError } from '@/backend/services/session/service/event-agent/event-session-fence-error';
-import { sessionDomainService } from '@/backend/services/session/service/session-domain.service';
 import {
   isTurnAlreadyInProgressError,
   toErrorMessage,
 } from '@/backend/services/session/service/session.error-message';
+import { sessionDomainService } from '@/backend/services/session/service/store/session-domain.service';
 import { MessageState, type QueuedMessage, resolveSelectedModel } from '@/shared/acp-protocol';
 import {
   acknowledgeSentBatch,

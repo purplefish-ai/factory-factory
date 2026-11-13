@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AcpRuntimeManager } from '@/backend/services/session/service/acp';
 import type { SessionLifecycleWorkspaceBridge } from '@/backend/services/session/service/bridges';
-import type { SessionDomainService } from '@/backend/services/session/service/session-domain.service';
+import type { SessionDomainService } from '@/backend/services/session/service/store/session-domain.service';
 import { workspaceNotificationService } from '@/backend/services/workspace';
 import { WorkspaceStatus } from '@/shared/core';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';

@@ -4,7 +4,7 @@ import type {
   SessionLifecycleWorkspaceBridge,
 } from '@/backend/services/session/service/bridges';
 import { getAcpWorkState } from '@/backend/services/session/service/events/session-work-state';
-import type { SessionDomainService } from '@/backend/services/session/service/session-domain.service';
+import type { SessionDomainService } from '@/backend/services/session/service/store/session-domain.service';
 import type { WorkspaceStatus } from '@/shared/core';
 import {
   createInitialSessionRuntimeState,

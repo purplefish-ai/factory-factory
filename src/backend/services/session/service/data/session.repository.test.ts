@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AgentSessionRecord } from '@/backend/services/session';
 import { createDeferred } from '@/backend/services/session/service/lifecycle/session-lifecycle.test-helpers';
-import { sessionDomainService } from '@/backend/services/session/service/session-domain.service';
+import { sessionDomainService } from '@/backend/services/session/service/store/session-domain.service';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 import type { Workspace } from '@prisma-gen/client';
 import { SessionRepository } from './session.repository';
