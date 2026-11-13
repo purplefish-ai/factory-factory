@@ -10,15 +10,21 @@ import {
   checkRecords,
   checkReferences,
   checkSize,
+  classifyCodeSpan,
   compareLegacyCeilings,
   formatGuidanceViolation,
   githubHeadingSlug,
+  guideReferenceExists,
   legacyNoteCeilings,
   markdownAnchors,
   parseLegacyNoteCeilings,
+  parseTopLevelTree,
   readBaseLegacyCeilings,
+  readBaseTopLevelNames,
   readGuidanceRepository,
   runGuidanceCli,
+  topLevelNames,
+  unionTopLevelNames,
 } from './check-guidance';
 
 const temporaryDirectories: string[] = [];
@@ -57,6 +63,17 @@ function repositoryWith(files: Record<string, string>) {
 
 function lines(count: number): string {
   return 'line\n'.repeat(count);
+}
+
+const modes = { blob: '100644', tree: '040000', commit: '160000' };
+
+/** The top-level names of a base tree, as `git ls-tree -z` prints them. */
+function baseTopLevel(entries: Record<string, 'blob' | 'tree' | 'commit'>) {
+  return parseTopLevelTree(
+    Object.entries(entries)
+      .map(([name, type]) => `${modes[type]} ${type} 0123abc\t${name}\0`)
+      .join('')
+  );
 }
 
 const pairedGuide = { 'src/area/AGENTS.md': '# Area\n', 'src/area/CLAUDE.md': '@AGENTS.md\n' };
@@ -241,8 +258,6 @@ describe('references', () => {
         '[fenced](missing.md) `src/fenced/missing.ts`',
         '```',
         '',
-        '- [ ] Create `src/new/AGENTS.md` and `docs/decisions/2026-11-13-new.md`.',
-        '',
       ].join('\n'),
       'docs/superpowers/plans/plan.md': 'Uses `src/removed.ts` and [gone](gone.md).\n',
       'docs/design/old.md': 'Uses `src/removed.ts`.\n',
@@ -266,11 +281,14 @@ describe('references', () => {
       'src/area/AGENTS.md': 'Run [the recipe](../../docs/recipes/run.md).\n',
     });
 
-    expect(checkReferences(repository).map(formatGuidanceViolation)).toEqual([
-      'docs/architecture/guide.md:5: references: `src/backend/removed.service.ts` does not exist. Fix: point it at the current path or heading, or remove it.',
-      'docs/architecture/guide.md:5: references: `knip.json` does not exist. Fix: point it at the current path or heading, or remove it.',
+    // `knip.json` is deleted: the base ref has it, the working tree does not.
+    const base = baseTopLevel({ 'knip.json': 'blob' });
+
+    expect(checkReferences(repository, base).map(formatGuidanceViolation)).toEqual([
       'docs/architecture/guide.md:3: references: link `old-note.md` does not exist. Fix: point it at the current path or heading, or remove it.',
       'docs/architecture/guide.md:3: references: link `target.md#retired-heading` names a heading that does not exist in docs/architecture/target.md. Fix: point it at the current path or heading, or remove it.',
+      'docs/architecture/guide.md:5: references: `src/backend/removed.service.ts` does not exist. Fix: point it at the current path or heading, or remove it.',
+      'docs/architecture/guide.md:5: references: `knip.json` does not exist. Fix: point it at the current path or heading, or remove it.',
       'src/area/AGENTS.md:1: references: link `../../docs/recipes/run.md` does not exist. Fix: point it at the current path or heading, or remove it.',
     ]);
   });
@@ -317,6 +335,337 @@ describe('references', () => {
     expect(githubHeadingSlug('Poll `cadence` (two minutes)')).toBe('poll-cadence-two-minutes');
     expect(githubHeadingSlug('[Linked](x.md) A/B & C_d')).toBe('linked-ab--c_d');
     expect(githubHeadingSlug('<em>Install</em> when a < b')).toBe('install-when-a--b');
+  });
+});
+
+describe('file names cited in a nested guide', () => {
+  const tree = {
+    'src/area/CLAUDE.md': '@AGENTS.md\n',
+    'src/area/service.ts': 'export {};\n',
+    'src/area/service.test.ts': 'export {};\n',
+    'src/area/deep/helper.test.ts': 'export {};\n',
+    'src/area/README.md': '# Area\n',
+    'src/other/elsewhere.test.ts': 'export {};\n',
+    'src/shared.ts': 'export {};\n',
+    'package.json': '{}\n',
+  };
+  const guide = (...lines: string[]) => ({
+    ...tree,
+    'src/area/AGENTS.md': `${lines.join('\n')}\n`,
+  });
+
+  test('accepts a bare name in the directory or below, and relative paths that exist', () => {
+    const repository = repositoryWith(
+      guide(
+        'Pinned by `service.test.ts`, `helper.test.ts` (in `deep/`), `deep/helper.test.ts`,',
+        '`./service.ts`, `../shared.ts`, `../other/elsewhere.test.ts:12` and `service.ts#L3`.',
+        'The siblings are `AGENTS.md`, `CLAUDE.md` and `README.md`; `package.json` is the root.'
+      )
+    );
+
+    expect(checkReferences(repository)).toEqual([]);
+  });
+
+  test('rejects a name that is not in the directory or below, and a path that does not exist', () => {
+    const repository = repositoryWith(
+      guide(
+        'Not here: `elsewhere.test.ts`, `shared.ts`, `service.test.tsx` and',
+        '`missing/service.ts`. Not a path: `deep/service.ts`, `../missing.ts`, `./deep.ts`.',
+        'Cited as `renamed.test.ts:4`.'
+      )
+    );
+
+    expect(checkReferences(repository).map(formatGuidanceViolation)).toEqual([
+      'src/area/AGENTS.md:1: references: `elsewhere.test.ts` is not under src/area. Fix: correct the name, or write the path from the repository root.',
+      'src/area/AGENTS.md:1: references: `shared.ts` is not under src/area. Fix: correct the name, or write the path from the repository root.',
+      'src/area/AGENTS.md:1: references: `service.test.tsx` is not under src/area. Fix: correct the name, or write the path from the repository root.',
+      'src/area/AGENTS.md:2: references: `missing/service.ts` is not under src/area. Fix: correct the name, or write the path from the repository root.',
+      'src/area/AGENTS.md:2: references: `deep/service.ts` is not under src/area. Fix: correct the name, or write the path from the repository root.',
+      'src/area/AGENTS.md:2: references: `../missing.ts` is not under src/area. Fix: correct the name, or write the path from the repository root.',
+      'src/area/AGENTS.md:2: references: `./deep.ts` is not under src/area. Fix: correct the name, or write the path from the repository root.',
+      'src/area/AGENTS.md:3: references: `renamed.test.ts` is not under src/area. Fix: correct the name, or write the path from the repository root.',
+    ]);
+  });
+
+  test('ignores prose, patterns, commands, packages and root-relative paths that exist', () => {
+    const repository = repositoryWith(
+      guide(
+        'Properties such as `ref.current`, `config.service` and `Node.js`, the patterns `*.test.ts`,',
+        '`.test.ts` and `.ts`, the placeholders `<name>.ts`, `{a,b}.ts` and `deep/**/x.ts`,',
+        'the packages `@scope/pkg.json` and `node:fs`, the flag `-rf.sh`, the command',
+        '`pnpm exec vitest run missing.test.ts`, the URL `https://example.com/missing.md`,',
+        'the absolute paths `/etc/missing.sh` and `~/missing.json`, and the root path',
+        '`src/shared.ts`.'
+      )
+    );
+
+    expect(checkReferences(repository)).toEqual([]);
+  });
+
+  test('leaves the root guide and other documents to the root-relative rule', () => {
+    const repository = repositoryWith({
+      ...tree,
+      'AGENTS.md': 'Mentions `service.ts`, `missing.test.ts` and `README.md`.\n',
+      'docs/architecture/note.md': 'Mentions `service.ts` and `missing.test.ts`.\n',
+    });
+
+    expect(checkReferences(repository)).toEqual([]);
+  });
+
+  test('resolves a bare name against the directory and below, a path exactly', () => {
+    const repository = repositoryWith(tree);
+
+    expect(guideReferenceExists(repository, 'src/area', 'helper.test.ts')).toBe(true);
+    expect(guideReferenceExists(repository, 'src/area', 'deep/helper.test.ts')).toBe(true);
+    expect(guideReferenceExists(repository, 'src/area', '../shared.ts')).toBe(true);
+    expect(guideReferenceExists(repository, 'src/area', 'shared.ts')).toBe(false);
+    expect(guideReferenceExists(repository, 'src/area', '../../../x.ts')).toBe(false);
+    expect(guideReferenceExists(repository, 'src/are', 'service.ts')).toBe(false);
+  });
+});
+
+describe('top-level names come from the repository', () => {
+  const tree = {
+    'prompts/system.md': '# System\n',
+    'bin/ff': '#!/bin/sh\n',
+    'public/logo.svg': '<svg/>\n',
+    'patches/fix.patch': 'x\n',
+    '.storybook/main.ts': 'export {};\n',
+    '.husky/pre-commit': 'pnpm check\n',
+    'factory-factory.json': '{}\n',
+    'README.md': '# Root\n',
+    'docs/README.md': '# Docs\n',
+    'src/backend/thing.ts': 'export {};\n',
+    ...pairedGuide,
+  };
+
+  test('accepts paths under any top-level directory and any root file that exists', () => {
+    const repository = repositoryWith({
+      ...tree,
+      'AGENTS.md': [
+        'See `prompts/system.md`, `bin/ff`, `public/logo.svg`, `patches/fix.patch`,',
+        '`.storybook/main.ts`, `.husky/pre-commit`, `factory-factory.json`,',
+        '`src/`, `src/backend/` and `docs/README.md`.',
+        'Without a path, `prompts`, `public` and `patches` are just words.',
+        '',
+      ].join('\n'),
+    });
+
+    expect(checkReferences(repository)).toEqual([]);
+  });
+
+  test('rejects paths under a top-level directory that name nothing, and directories as files', () => {
+    const repository = repositoryWith({
+      ...tree,
+      'AGENTS.md': [
+        'See `prompts/missing.md`, `.storybook/missing.ts`, `public/gone/`,',
+        '`src/backend`, `src/backend/thing.ts/` and `docs/architecture/`.',
+        '',
+      ].join('\n'),
+    });
+
+    expect(checkReferences(repository).map(formatGuidanceViolation)).toEqual([
+      'AGENTS.md:1: references: `prompts/missing.md` does not exist. Fix: point it at the current path or heading, or remove it.',
+      'AGENTS.md:1: references: `.storybook/missing.ts` does not exist. Fix: point it at the current path or heading, or remove it.',
+      'AGENTS.md:1: references: `public/gone/` does not exist. Fix: point it at the current path or heading, or remove it.',
+      'AGENTS.md:2: references: `src/backend` is a directory. Fix: write it with a trailing slash, `src/backend/`.',
+      'AGENTS.md:2: references: `src/backend/thing.ts/` does not exist. Fix: point it at the current path or heading, or remove it.',
+      'AGENTS.md:2: references: `docs/architecture/` does not exist. Fix: point it at the current path or heading, or remove it.',
+    ]);
+  });
+
+  test('in a nested guide, AGENTS.md, CLAUDE.md and README.md name a sibling, not the root file', () => {
+    const repository = repositoryWith({
+      ...tree,
+      'src/area/AGENTS.md': 'Siblings: `AGENTS.md`, `CLAUDE.md` and `README.md`.\n',
+    });
+
+    expect(checkReferences(repository).map(formatGuidanceViolation)).toEqual([
+      'src/area/AGENTS.md:1: references: `README.md` is not under src/area. Fix: correct the name, or write the path from the repository root.',
+    ]);
+  });
+
+  test('derives the first path segments of the tracked files', () => {
+    expect(
+      topLevelNames(['.husky/pre-commit', 'README.md', 'src/a/b.ts', 'src/c.ts', 'bin/ff'])
+    ).toEqual({
+      directories: new Set(['.husky', 'src', 'bin']),
+      files: new Set(['README.md']),
+    });
+  });
+
+  test('classifies spans as root paths, guide paths or neither', () => {
+    const top = topLevelNames(['src/a.ts', 'package.json', 'AGENTS.md', 'prompts/a.md']);
+
+    expect(classifyCodeSpan('src/a.ts:12', top)).toEqual({ from: 'root', path: 'src/a.ts' });
+    expect(classifyCodeSpan('./src/a.ts', top)).toEqual({ from: 'root', path: 'src/a.ts' });
+    expect(classifyCodeSpan('prompts/', top, 'src/area')).toEqual({
+      from: 'root',
+      path: 'prompts/',
+    });
+    expect(classifyCodeSpan('package.json', top, 'src/area')).toEqual({
+      from: 'root',
+      path: 'package.json',
+    });
+    expect(classifyCodeSpan('AGENTS.md', top, 'src/area')).toEqual({
+      from: 'guide',
+      path: 'AGENTS.md',
+    });
+    expect(classifyCodeSpan('AGENTS.md', top)).toBeUndefined();
+    expect(classifyCodeSpan('../a.ts', top, 'src/area')).toEqual({
+      from: 'guide',
+      path: '../a.ts',
+    });
+    expect(classifyCodeSpan('./a.ts', top, 'src/area')).toEqual({ from: 'guide', path: './a.ts' });
+    expect(classifyCodeSpan('a.ts', top)).toBeUndefined();
+    expect(classifyCodeSpan('src', top, 'src/area')).toBeUndefined();
+    expect(classifyCodeSpan('src/../x.ts', top, 'src/area')).toBeUndefined();
+  });
+});
+
+describe('names that exist only at the base ref', () => {
+  const tree = {
+    'src/backend/thing.ts': 'export {};\n',
+    'package.json': '{}\n',
+    ...pairedGuide,
+  };
+  const base = baseTopLevel({
+    '.oxlintrc.json': 'blob',
+    'knip.json': 'blob',
+    'package.json': 'blob',
+    electron: 'tree',
+    src: 'tree',
+  });
+
+  test('flags a root file deleted since the base ref, wherever it is cited', () => {
+    const repository = repositoryWith({
+      ...tree,
+      'AGENTS.md': 'Configured in `knip.json`.\n',
+      'docs/architecture/note.md': 'Configured in `knip.json`.\n',
+      'src/area/AGENTS.md': 'Configured in `knip.json`.\n',
+    });
+
+    expect(checkReferences(repository, base).map(formatGuidanceViolation)).toEqual([
+      'AGENTS.md:1: references: `knip.json` does not exist. Fix: point it at the current path or heading, or remove it.',
+      'docs/architecture/note.md:1: references: `knip.json` does not exist. Fix: point it at the current path or heading, or remove it.',
+      'src/area/AGENTS.md:1: references: `knip.json` does not exist. Fix: point it at the current path or heading, or remove it.',
+    ]);
+  });
+
+  test('flags a top-level directory deleted since the base ref', () => {
+    const repository = repositoryWith({
+      ...tree,
+      'AGENTS.md': 'The shell lives in `electron/main.ts` and `electron/`.\n',
+    });
+
+    expect(checkReferences(repository, base).map(formatGuidanceViolation)).toEqual([
+      'AGENTS.md:1: references: `electron/main.ts` does not exist. Fix: point it at the current path or heading, or remove it.',
+      'AGENTS.md:1: references: `electron/` does not exist. Fix: point it at the current path or heading, or remove it.',
+    ]);
+  });
+
+  test('flags a deleted dotfile in a nested guide before the hidden-name exclusion applies', () => {
+    const repository = repositoryWith({
+      ...tree,
+      'src/area/AGENTS.md': 'Rules are in `.oxlintrc.json`, not `.eslintrc.json`.\n',
+    });
+
+    expect(checkReferences(repository, base).map(formatGuidanceViolation)).toEqual([
+      'src/area/AGENTS.md:1: references: `.oxlintrc.json` does not exist. Fix: point it at the current path or heading, or remove it.',
+    ]);
+  });
+
+  test('without a base ref, the same citations pass', () => {
+    const repository = repositoryWith({
+      ...tree,
+      'AGENTS.md': 'Configured in `knip.json`; the shell is `electron/main.ts`.\n',
+      'src/area/AGENTS.md': 'Rules are in `.oxlintrc.json`.\n',
+    });
+
+    expect(checkReferences(repository)).toEqual([]);
+  });
+
+  test('names present in both the base and the working tree are checked as before', () => {
+    const repository = repositoryWith({
+      ...tree,
+      'AGENTS.md': 'See `package.json`, `src/backend/thing.ts` and `src/backend/gone.ts`.\n',
+    });
+
+    expect(checkReferences(repository, base).map(formatGuidanceViolation)).toEqual([
+      'AGENTS.md:1: references: `src/backend/gone.ts` does not exist. Fix: point it at the current path or heading, or remove it.',
+    ]);
+  });
+
+  test('unions the working tree names with the base names', () => {
+    expect(
+      unionTopLevelNames(
+        topLevelNames(['src/a.ts', 'package.json']),
+        baseTopLevel({ src: 'tree', electron: 'tree', 'knip.json': 'blob', vendor: 'commit' })
+      )
+    ).toEqual({
+      directories: new Set(['src', 'electron', 'vendor']),
+      files: new Set(['package.json', 'knip.json']),
+    });
+  });
+
+  test('reads the root level of the base ref from Git', () => {
+    const repositoryRoot = createRepository({
+      'knip.json': '{}\n',
+      'electron/main.ts': 'export {};\n',
+      'docs/README.md': '# Docs\n',
+    });
+    git(repositoryRoot, 'add', '-A');
+    git(repositoryRoot, 'commit', '--quiet', '-m', 'base');
+
+    expect(readBaseTopLevelNames(repositoryRoot, 'HEAD')).toEqual({
+      directories: new Set(['electron', 'docs']),
+      files: new Set(['knip.json']),
+    });
+    expect(readBaseTopLevelNames(repositoryRoot, 'no-such-ref')).toBeUndefined();
+  });
+
+  test('the command line uses the base ref, and falls back without one', () => {
+    const repositoryRoot = createRepository({
+      'knip.json': '{}\n',
+      'docs/architecture/note.md': 'Configured in `knip.json`.\n',
+    });
+    git(repositoryRoot, 'add', '-A');
+    git(repositoryRoot, 'commit', '--quiet', '-m', 'base');
+    const baseRef = git(repositoryRoot, 'rev-parse', 'HEAD');
+    rmSync(join(repositoryRoot, 'knip.json'));
+    const run = (ref: string | undefined) => {
+      const stderr: string[] = [];
+      const exitCode = runGuidanceCli({
+        repositoryRoot,
+        ceilings: {},
+        baseCeilings: ref === undefined ? { notice: 'no base.' } : { ref, ceilings: {} },
+        stdout: () => undefined,
+        stderr: (message) => stderr.push(message),
+      });
+      return { exitCode, stderr: stderr.join('') };
+    };
+
+    expect(run(baseRef)).toEqual({
+      exitCode: 1,
+      stderr:
+        'docs/architecture/note.md:1: references: `knip.json` does not exist. Fix: point it at the current path or heading, or remove it.\n',
+    });
+    expect(run(undefined)).toEqual({ exitCode: 0, stderr: '' });
+  });
+});
+
+describe('no line is exempt', () => {
+  test('rejects a dead path on a line that begins with Create', () => {
+    const repository = repositoryWith({
+      'AGENTS.md': '- [ ] Create `src/new/AGENTS.md` and `docs/decisions/2026-11-13-new.md`.\n',
+      'src/existing.ts': 'export {};\n',
+      'docs/existing.md': '# Existing\n',
+    });
+
+    expect(checkReferences(repository).map(formatGuidanceViolation)).toEqual([
+      'AGENTS.md:1: references: `src/new/AGENTS.md` does not exist. Fix: point it at the current path or heading, or remove it.',
+      'AGENTS.md:1: references: `docs/decisions/2026-11-13-new.md` does not exist. Fix: point it at the current path or heading, or remove it.',
+    ]);
   });
 });
 
@@ -444,6 +793,7 @@ describe('command line', () => {
   test('prints one line per failure with the file, the rule and the fix', () => {
     const repositoryRoot = createRepository({
       'AGENTS.md': `${lines(121)}\`src/missing.ts\`\n`,
+      'src/existing.ts': 'export {};\n',
       'docs/architecture/legacy.md': lines(450),
     });
 

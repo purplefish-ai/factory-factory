@@ -17,8 +17,8 @@ When multiple features need the same code:
 
 - Dependency-free utility → `src/client/lib/`.
 - Shared component → `src/client/components/`. Preserve lazy split points;
-  routing `terminal-instance.tsx` through a barrel would pull the feature into
-  the lazy chunk.
+  routing `src/client/components/terminal-instance.tsx` through a barrel would
+  pull the feature into the lazy chunk.
 - A cohesive group with multiple feature consumers and no knowledge of them →
   its own feature, as with `composer`.
 
