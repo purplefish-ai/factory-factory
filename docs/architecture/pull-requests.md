@@ -24,27 +24,13 @@ checked against the code. The migration that creates the named area's guide
 checks the entry, moves what holds there and deletes the entry here. Paragraph
 numbers are the rows of the disposition table in pull request #3213.
 
-> Attachment, discovery and review-request filtering match associations
-> case-insensitively on host, owner and repository, so a URL casing variant
-> reuses the existing association instead of creating another. Duplicate
-> associations stored before this matching are not merged.
-
-Old paragraph 19. For the workspace capsule guide.
-
-> Legacy flat aliases retain their existing mixed semantics at read/transport
-> and export adapters: URL, number, review and sync timestamp describe the
-> selected association; state, CI status, and merge conflicts describe the
-> aggregate summary. Consumers must use `selectedPr` for association facts and
-> `prSummary` for collection facts rather than pairing those legacy fields.
-
-Old paragraph 28. For the workspace capsule guide.
-
 > The event collector uses one per-lifetime projection worker for PR collection
 > and monitoring invalidations. […] The worker owns retries and archive/stop
 > fences, and has no GitHub, delivery, session, or Linear runtime dependency.
 
-Old paragraph 29. For the workspace capsule guide. No dependency-cruiser rule
-enforces the last clause.
+Old paragraph 29. For the snapshots orchestration guide
+(`src/backend/orchestration/snapshots/ratchet-projection.worker.ts`). No
+dependency-cruiser rule enforces the last clause.
 
 > Successful ACP prompt turns reset the workspace's PR discovery backoff, as do
 > runtime exits. ACP processes remain alive between turns, so waiting for

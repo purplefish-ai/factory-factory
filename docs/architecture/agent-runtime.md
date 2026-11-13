@@ -1076,7 +1076,7 @@ messages:
 - Child workspace starts append `buildChildWorkspaceContext` through workspace
   initialization. Workspace metadata generation runs separately from working
   sessions; it never injects branch-renaming prompts into the conversation. See
-  [conversation names and summaries](workspace-state.md#conversation-names-and-summaries).
+  [workspace lifecycle guide](../../src/backend/orchestration/workspace-lifecycle/AGENTS.md).
 
 Legacy workflow templates and unused system-prompt construction have been
 removed. Stored workflow IDs still select session behavior and permissions. Keep

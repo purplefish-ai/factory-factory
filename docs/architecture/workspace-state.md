@@ -1,441 +1,19 @@
 # Workspace State
 
-CI and sidebar status helpers and types have one internal import surface:
-`@/shared/core`. Their dependency-free implementations live in
-`src/shared/core/`; sibling core modules may import those files directly. These
-source paths are internal application code, not supported package imports. The
-published package exposes the `ff` CLI, not a shared-status SDK.
+The sections that preceded "Kanban model" have moved. Ownership, public surface,
+invariants and file maps are in the guides beside the code:
+[workspace capsule](../../src/backend/services/workspace/AGENTS.md),
+[workspace lifecycle orchestration](../../src/backend/orchestration/workspace-lifecycle/AGENTS.md),
+[run-script capsule](../../src/backend/services/run-script/AGENTS.md) and
+[data backup](../../src/backend/orchestration/data-backup/AGENTS.md). The
+reasons are in the `2026-11-13-*` records in [decisions](../decisions/), and the
+tests those guides name describe the behaviour. The sections below have not been
+migrated yet.
 
-## Conversation names and summaries
-
-New prompt-created workspaces mark their initial name as generated. A disposable
-small-model helper can replace that title once. Manual rename clears the marker;
-metadata acceptance rechecks it in the same transaction, so manual edits win
-even while inference is pending. Explicit titles, issue names, and resumed
-branches retain their names.
-
-`WorkspaceMetadata` stores the first title/branch suggestion, the latest card
-and sidebar summaries, generation time, and source session/message cursor. Reads
-flatten the validated record into `conversationSummary` on the shared workspace
-contract. Snapshots carry it through reconciliation and reconnects; global
-search matches summary text and returns a matching snippet. Cards show two
-summary lines; sidebar rows show one focus line. Hovering exposes the full
-summary and update time. Summaries use one short sentence (at most 25 words)
-about current activity or the latest meaningful result, omitting decisions,
-plans, next-step lists, and empty status statements. Operational status and CI
-badges remain authoritative.
-
-The first committed user message queues initial metadata. Completed turns queue
-incremental updates using the original objective, previous summary, and bounded
-recent human/assistant text. Tools, reasoning, images, and repository
-instructions are excluded. A jobRunner job checks pending work every ten
-seconds, coalesces turns per workspace, and limits inference to once per two
-minutes. Pending final updates run after the cooldown without requiring another
-message. Newer user messages invalidate pending initial metadata; unfinished
-follow-ups preserve the pending completed-turn snapshot. Newer completed turns
-replace that snapshot and invalidate its in-flight results. Persisted request
-IDs reject superseded writes. Provider failures retain existing summaries and
-back off up to ten minutes. Shutdown aborts inference and drains the job.
-Pending requests are process-local; after restart, new conversation activity
-queues another update.
-
-Helpers use the conversation's provider and account: Luna with low reasoning for
-Codex, Haiku for Claude. They use short custom instructions, no working-session
-context, no tools/MCP, and no persistent provider session. Calls time out after
-45 seconds. Claude's structured-output schema uses JSON Schema Draft 7 for
-runtime compatibility. Workspace launch, chat dispatch, and publication never
-wait on them. The saved branch suggestion feeds the existing pre-push/pre-PR
-renamer while the branch is still marked auto-generated, with deterministic
-naming as fallback. A local naming collision adds a short workspace suffix.
-
-Environment controls: `WORKSPACE_METADATA_ENABLED` (default `true`),
-`WORKSPACE_METADATA_CODEX_MODEL` (default `gpt-6-luna`), and
-`WORKSPACE_METADATA_CLAUDE_MODEL` (default `haiku`). These are provider-native
-calls using existing authentication; they consume the account's usage allowance.
-
-Several workspace concerns were split out of the `Workspace` table into 1:1 side
-tables. They share a shape: one accessor is the sole writer, and reads flatten
-the row back onto the workspace under the field's original name, so the snapshot
-wire aliases and v4 export format retain compatibility. PR reads additionally
-expose the derived `selectedPrId`/`selectedPr` contract described in
-[pull requests](pull-requests.md#pr-event-delivery-destinations). The selected
-association's facts stay separate from the authoritative `prs`/`prSummary`
-collection; selection is never persisted as a primary preference.
-
-Worktree cleanup matches Git's registered paths against the real worktree base
-directory, so a symlinked base still removes Git metadata. Branch-resume
-validation also resolves the base before checking registered worktrees, so an
-already checked-out branch is rejected before creating a workspace. It resolves
-the base separately from the worktree so cleanup also works after the worktree
-is deleted. If the base symlink itself no longer resolves, cleanup logs a
-warning and matches only the exact configured path. Restore the original base
-symlink and retry to remove a canonical registration; guessing from a basename
-or pruning unrelated registrations could remove another workspace.
-
-A failed workspace that still has a worktree allows queued chat messages to be
-resumed without rerunning setup. Its single workspace-level script warning
-exposes **Dispatch queued messages** for the selected chat. Ready workspaces
-with a setup warning dispatch normally and do not show this action.
-
-While chat session history loads, workspace initialization takes priority in the
-chat loading indicator. It shows one spinner with the setup status, then falls
-back to the session loading status if history is still loading after setup.
-
-Workspace initialization finishes both factory setup and project startup scripts
-and persists READY before starting the default agent session. Provider startup
-hooks can depend on installed tools and generated files, so setup does not run
-inside the agent's startup timeout. Initial task preparation runs alongside
-provisioning, so issue lookups do not delay worktree creation or setup. The task
-is published as soon as it is ready, before READY, and remains cancellable
-during setup. Inactive disconnect cleanup retains the queue only while the
-initial task is undelivered. It resets hydrated history and runtime state while
-retaining unexpired recent rejections and terminal PR outcomes. Provisioning
-retries preserve cancellation within the running server. Non-fatal script
-failures still persist READY with a warning before the agent starts; unexpected
-provisioning failures do not start an agent or publish a late prompt.
-
-Retrying a ready workspace with a setup warning restores READY even when its
-setup and startup scripts have been removed, before queued messages dispatch. A
-ready workspace whose worktree is missing is blocked with a retry action;
-retrying moves it to PROVISIONING and reruns full initialization to recreate the
-worktree.
-
-Kanban Quick Chat keeps composer attachments in shared chat state, so sending,
-rejection recovery, and session restoration use the same attachments as the full
-workspace chat.
-
-Workspace creation and new-conversation controls share a compact provider/model
-picker. Each launch starts from saved provider-specific defaults; changing an
-active conversation does not copy its model into a new conversation. Explicit
-launch choices survive settings refreshes. The new-conversation menu nests
-models under each provider; selecting a model applies its provider and model
-together. Clicking a provider name (or pressing Enter) selects its saved default
-model, including when that provider is already selected. Hover, the row's arrow,
-or Right Arrow opens its models without changing the draft. Workspace/provider
-inheritance still applies when no explicit provider is selected.
-
-The sidebar creation form keeps provider/model and thinking settings above a
-compact action row with attachments, workspace settings, Cancel and Launch.
-Workspace settings groups account selection, access, Plan and PR updates in a
-labeled popover. Its trigger marks active options and warns about unsupported
-selections after discovery completes. Access warnings include an icon and text;
-closing settings preserves the launch draft. Escape inside settings closes the
-popover without cancelling workspace creation.
-
-Dragging image files over the Kanban board highlights a drop target. Dropping
-opens the new workspace form and appends the images to the project's creation
-draft. The navigation sidebar has its own creation drop target, including while
-viewing a workspace: dropping there opens the sidebar's new workspace form with
-the images attached. The sidebar form loads on demand. Images dropped before
-draft storage loads wait in memory, so a refresh in that brief window loses
-them; once it loads they are saved to the draft and shown when the form opens.
-Dropping over the main chat transcript or composer highlights the message
-destination and appends images to that chat's composer. Existing instructions
-and attachments are retained. Image limits and per-file errors match the
-composer; chat drops require a connected, loaded chat that supports image
-attachments. File reads finishing after a project or session switch or explicit
-draft clearing are ignored. An accepted drop survives a temporary chat
-disconnect while its files are being read.
-
-The board keeps one creation draft per project in this browser, including
-instructions, attachment contents, launch choices, PR updates, and
-periodic-agent schedules. Cancel clears the draft and restores user defaults for
-the next task. Escape and navigating away preserve the draft; **New workspace**
-at the top of the Todo column (a main-pane toolbar shortcut on phones) reopens
-it. The desktop button is hidden while the creation form is open and returns
-when the form closes. Clear instructions by selecting and deleting the text;
-remove attachments with their individual remove controls. Navigation and refresh
-restore saved inputs. Browser storage failures appear in the form while editing
-remains available; keep the tab open when a warning says changes could not be
-saved. If a saved draft is unreadable, **Reset saved draft** appears beside the
-restore warning to remove the invalid stored record and keep the editor open.
-
-Creation request errors appear beside the retained inputs. An in-flight request
-continues to own its project draft across composer remounts, preventing
-duplicate submissions. Success clears only the submitted revision; a late
-response cannot clear or close a newer draft or a composer in another project.
-Standard workspace launches collapse the composer immediately while the
-optimistic setup card shows progress in Working. If the standard workspace
-creation request fails, its optimistic card is removed and the composer returns
-with its retained draft and error.
-
-Launching from the sidebar immediately selects a local pending workspace and
-closes the form, while server validation and provisioning continue. The pending
-detail view does not query the backend with its temporary ID. Success replaces
-that route with the persisted workspace after seeding its detail cache, without
-waiting for draft cleanup. Navigating away during creation prevents a late
-response from changing the current selection. Failure shows the error and a link
-back to the retained draft; a reload of a temporary route offers the board and
-form instead of querying an invalid workspace ID. The local store retains the
-latest 100 completed launch outcomes for temporary route recovery and never
-evicts requests that are still creating a workspace.
-
-The tab bar's **New** selection configures a new conversation. The composer's
-picker shows the current conversation's provider and changes only its model;
-switching providers requires a new conversation. Model controls remain visible
-through configuration loading and partial ACP updates, with temporary disabled
-states explained instead of silently hiding the control.
-
-Git status and base/upstream file lists decode Git's C-quoted paths, including
-UTF-8 octal escapes. Renamed status entries use the destination path for
-click-to-diff, and upstream filenames retain surrounding spaces.
-
-Unified diff parsing removes the terminating stdout newline before splitting
-lines, preserving real blank context lines without fabricating a final row or
-line number in the workspace viewer or PR panel.
-
-The compact terminal tabs stay visible beside Logs. On desktop they share one
-tablist with it, so the arrow keys move between Logs and the terminals; on
-phones Logs is reached from the drawer's tool switcher instead, and the bar
-holds only the terminals. Switching to Logs keeps the terminal connection, tab
-identity and selection alive, while hiding terminal content. An empty Terminal
-tab opens Terminal 1 on click, after the server terminal list loads; closing the
-last terminal while viewing it recreates Terminal 1. Closing it from Logs leaves
-the empty Terminal tab until selected. The server always sends the initial
-terminal list, including an empty list for workspaces with no running terminals,
-so first-terminal creation can proceed.
-
-Workspace terminals never automatically take keyboard focus when created,
-restored, or selected. Click inside the terminal to type, so asynchronous
-workspace initialization leaves focus in the composer or other active control.
-The dedicated project setup terminal dialog explicitly requests focus on
-desktop.
-
-Workspace terminal reconnects replace each existing tab's output with its server
-rolling buffer by terminal ID. Tab identity and selection are preserved; output
-outside the server's bounded buffer cannot be recovered.
-
-Terminal output stays out of React state. Each tab owns a `TerminalOutputStream`
-(`src/client/lib/terminal-output-stream.ts`); PTY chunks are written straight to
-the mounted xterm instance, which keeps its own scrollback. A chunk re-renders
-neither the terminal panel nor the right panel, including while the terminal is
-hidden behind Logs, and chunks past the retained window's cap (128 Ki UTF-16
-code units, not bytes) are appended rather than repainting it. The retained
-window is replayed when a terminal mounts (on tab selection, or when the panel
-becomes visible again and refits) or switches streams. A reconnect buffer that
-extends the retained output writes only the missing suffix; any other
-replacement clears and repaints, with the clear sent through xterm's write queue
-so earlier chunks cannot land on top of it. The project setup terminal uses the
-same stream.
-
-Terminal CPU and memory usage is sampled only when the admin processes view asks
-for it, with one batched `pidusage` call; there is no background polling. If the
-batch fails (for example because a process exited), each terminal is sampled
-separately and in parallel, and terminals that cannot be read show no usage.
-
-## Interactive workspace launch
-
-`workspace.create` keeps trusted-local authorization, input validation, and its
-workspace response shape. `workspace-launch.orchestrator.ts` coordinates the
-interactive MANUAL, RESUME_BRANCH, GITHUB_ISSUE, and LINEAR_ISSUE sources
-through narrow capabilities wired by `app-context.ts`; the workspace capsule
-still owns source validation and persistence. Every creation source requires an
-active project in the atomic workspace insert; archiving a project after a
-preflight read still prevents the workspace and its side tables from being
-created. Creation reports archived-project failures as `PRECONDITION_FAILED` and
-missing projects as `NOT_FOUND`, including when the guarded insert loses a race
-after validation. Other persistence failures retain their existing handling.
-
-For each interactive source, capacity above zero enables effective-provider
-resolution and CLI preflight before persistence, followed by best-effort
-`followup` / `Chat 1` session provisioning. This gate enables provisioning; it
-does not enforce a session limit against an existing workspace. Zero capacity
-skips preflight and session provisioning. Session creation failure retains the
-workspace and logs a warning. Initialization starts in the background after
-provisioning, preserves manual/resume branch options, and logs unexpected
-failures without changing the response or deleting the workspace. The same owner
-selects separate child and periodic-task policies, described in
-[agent runtime](agent-runtime.md#child-workspaces) and
-[integrations](integrations.md#periodic-tasks).
-
-Setup failures retain the workspace and its original instructions and
-attachments until it is archived. The board shows **Setup failed** in Waiting,
-and the workspace exposes **Retry setup** even when no chat session exists.
-Retrying uses the same workspace. A creation response preserves an existing live
-summary rather than replacing a newer setup failure with a synthetic Setting up
-state.
-
-## Accepted workspace names
-
-The rename RPC keeps its input validation, not-found response, and persisted
-workspace result. Its injected application use case coordinates the existing
-persistence writer with snapshot publication. Renames for the same workspace are
-serialized within one application; other workspaces remain independent, and
-completed or rejected operations release their queue entries.
-
-The snapshot store tracks name freshness independently of unrelated workspace
-and lifecycle fields. Accepted renames publish the canonical returned name and
-DB `updatedAt`, with equal-millisecond commits ordered by that serialized
-writer. Ordinary name observations must be strictly newer. State-change and
-reconciliation producers carry canonical DB name provenance, so a delayed older
-read cannot overwrite a rename merely because it was observed later. Generic
-store callers without provenance retain observation-timestamp ordering.
-
-Name publication changes only an existing live entry and emits the existing
-snapshot change synchronously. Missing, removed, ARCHIVING, and ARCHIVED entries
-are not recreated. Name updates do not advance other field fences; their private
-freshness metadata is not added to full or changed wire payloads. Workspace
-persistence remains independent of the snapshot store, and clients retain their
-normal stream authority rather than overlaying HTTP names.
-
-## Accepted workspace branches
-
-Manual successful branch renames resolve canonical Git HEAD before writing;
-automatic renames write only after their Git rename succeeds. Both use the
-workspace data service's branch acceptance gateway. Its transaction returns the
-canonical branch, status, and DB `updatedAt` only after the branch update and PR
-discovery schedule reset commit together. Failed transactions emit no fact.
-Subscriber failures are logged after commit without failing the rename or
-interrupting remaining synchronous subscribers; reconciliation repairs missed
-cache publication. The gateway serializes persistence through synchronous
-accepted-event delivery per workspace; other workspaces remain independent and
-failures release the queue. The collector subscribes for its own start/stop
-lifetime and immediately publishes accepted branches, bypassing observation
-coalescing.
-
-The store tracks branch freshness privately, independently of workspace,
-lifecycle, and name clocks. Equal DB milliseconds are accepted only from the
-serialized branch writer. Lifecycle and reconciliation observations carry the
-row's DB timestamp and must be strictly newer; stale reads cannot undo a rename
-or produce branch drift diagnostics. Accepted branches hydrate only branchName,
-which is still required for a complete summary. An unchanged branch can advance
-freshness without emitting a new version. Missing, removed, archiving, and
-archived entries cannot be seeded by acceptance, including when the returned
-canonical row is already archiving or archived. Removal clears private branch
-freshness; provenance never enters the wire payload.
-
-Periodic reconciliation still repairs missed events and restart state. Its
-60-second interval is the delay after a completed run, not a hard maximum for
-stale UI: prior Git work, the next database read, and failed sweeps can delay
-repair. A pass removes only entries absent from its database read that have no
-observation at or after the pass's start, so a workspace created while the read
-is in flight survives until a later pass can see it.
-
-## Run script
-
-Startup output accumulates across factory setup and project startup phases. The
-first executed phase clears output from prior attempts; subsequent phases
-append.
-
-Startup provisioning follows the main shell's exit. Output pipes normally drain
-to closure, with a one-second limit after exit so background descendants that
-inherit the pipes cannot keep provisioning open. Later output is drained and
-discarded until those descendants close their pipes, so writing after
-provisioning does not interrupt them. Persistent background commands should
-redirect output if it needs to remain available after startup.
-
-Terminals and setup, run, postRun and cleanup scripts run the user's commands,
-so they omit the variables Factory Factory's launchers set for its own backend
-(`NODE_ENV`, `DATABASE_PATH`, `BACKEND_PORT`, and the rest listed in
-`src/backend/lib/user-process-env.ts`). Otherwise `NODE_ENV=production` from
-`ff serve` or the desktop app would make `npm install` skip devDependencies and
-run dev servers in production mode. Agent sessions are not covered.
-
-The workspace's dev server lives in a 1:1 `WorkspaceRunScript` row (`command`,
-`postRunCommand`, `cleanupCommand`, `pid`, `port`, `startedAt`, `status`),
-written only by `workspace-run-script.accessor.ts`; reads flatten it back under
-the old `runScript*` names.
-
-Two concerns share the row: the three commands are a cache of the worktree's
-`factory-factory.json`, the four runtime columns describe a live process. They
-share it because they share a writer.
-
-The config group is _not_ derived on read the way the kanban column and
-`RatchetState` are — its source of truth is a file, so deriving it would cost a
-filesystem call per workspace per list query; `reconcileWorkspaceCommandCache`
-repairs drift before a script starts or stops instead.
-
-The runtime group is persisted despite a restart invalidating the process,
-because `pid` is the only handle on an orphaned run script (`verifyRunning` uses
-`process.kill(pid, 0)`); only `STARTING`/`STOPPING` are cleared at startup.
-`registerInitializedWorktree` writes the worktree columns and the commands in
-one transaction, since they were one statement before the split.
-
-Run-script output subscribers, such as the dev-logs socket, persist across
-stops, exits, and restarts until they unsubscribe or the workspace is archived
-or deleted. The postRun command is spawned only if its run script is still
-active after tunnel startup, neither exited nor being stopped, because stop and
-exit cleanup would not see a postRun spawned later.
-
-`RunScriptService` indexes current `RunScriptExecution` owners by workspace;
-each execution owns its main process, postRun process, stop intent and exit
-observation. Pending identity is registered before workspace/configuration
-reads; stop revokes those continuations, and cleanup closes admission until its
-captured stop batch and tunnel cleanup finish. Stop intent is independent of
-whether the main process has exited: it prevents a stopped port-allocation
-continuation from spawning and prevents postRun startup while the user cleanup
-command is pending. An old execution's callbacks cannot remove a replacement's
-registry entry. Tunnel leases release only their captured resources, including
-when an old exit finishes after replacement. The persisted status machine and
-workspace writer remain separate from local process ownership; terminal status
-can precede resource cleanup. This is local ownership, not durable cross-process
-fencing.
-
-Each dev-logs and post-run-logs connection first receives the retained output
-buffer, when non-empty, as one `{ type: 'output', data, replay: true }` frame.
-The buffer repeats output a reconnecting client already shows, so on a reconnect
-`useLogStream` replaces its output with the replay rather than appending it;
-with no replay frame (e.g. after a backend restart) it keeps the earlier output.
-
-## Provider defaults
-
-Provider-default updates return `NOT_FOUND` when their workspace was deleted,
-including deletion racing the database update, without exposing Prisma error
-messages. Other database errors keep their existing handling.
-
-## Backup export
-
-Schema-7 exports read relational data and saved account metadata through one
-private, physically readonly SQLite transaction. The source connection
-identifies its actual main database file; missing or in-memory databases fail
-closed. Ordinary WAL writers can commit while export reads its consistent
-snapshot. The snapshot has a 120-second transaction budget and a 5-second busy
-wait. Account exports include identity metadata only, excluding credentials and
-homes.
-
-Export copies `creationMetadata` and `initOutput` as stored. Archive normally
-removes `initialAttachments` and all but a failed setup's log tail (see the
-archive flow under the Kanban model), so an ARCHIVED workspace usually exports
-without them. A row whose release failed, or that predates it and the
-`archived-workspace-blob-retention` job has not reached yet, still exports both.
-Imports still accept older backups whose archived rows carry them; the job
-releases those rows after import.
-
-Backup export and import map columns by hand.
-`src/backend/orchestration/data-backup/data-backup-columns.test.ts` lists every
-Prisma scalar column of each model the recovery manifest covers. Each column is
-either declared exported, under a key the current export schema must have
-(possibly a flattened name), or excluded with a reason. A new column fails that
-test until it is classified. Reasons starting with `Gap:` are known omissions,
-such as `WorkspaceRunScript.postRunCommand`. The test checks the format, not the
-hand-written mapping that fills it.
-
-## Backup import
-
-Backup imports require the same trusted local client boundary as project
-creation. Project slugs and worktree base paths must be nonempty; legacy backups
-with empty values are rejected before any records are imported. Valid backup
-paths are preserved rather than recomputed for the current machine.
-
-All import owners write through one private tuned SQLite transaction on the
-source connection's actual main file, with a 120-second transaction budget and
-5-second busy wait. A failed import rolls back its own rows without absorbing
-ordinary application writes into that rollback. SQLite still permits only one
-writer at a time. Contention or transaction expiry returns a CONFLICT asking the
-operator to retry the whole import; no statements or rows retry automatically.
-Validation and other database failures retain their original errors. A
-disconnect failure after commit is a cleanup error, never a retry instruction.
-
-## Retired auto-iteration
-
-Auto-iteration is removed. Workspaces, conversations, worktrees, branches, and
-commits created through that feature remain ordinary workspace data. Its loop
-runtime, configuration/progress side table, snapshot fields, permissions
-setting, and launch controls are gone. No loop is resumed or finalized on
-startup. Older backups are normalized at import by discarding the retired
-fields; normal workspace and session data remain available. Existing on-disk
-insight/logbook files are user workspace files and are not deleted by the
-application migration.
+<a id="backup-export"></a>Links here with this anchor were for backup export:
+the [data backup guide](../../src/backend/orchestration/data-backup/AGENTS.md),
+and for archived rows
+`src/backend/orchestration/data-backup/archived-workspace-blobs-backup.integration.test.ts`.
 
 ## Kanban model
 
@@ -1104,3 +682,47 @@ No past interval is inferred.
 
 Archive all in Done targets the entire column, including workspaces hidden by
 the current filter.
+
+## Held for other guides
+
+Rules, hazards and reasons from the migrated sections that belong to another
+area. Each entry quotes only the sentences it needs from the paragraph named
+after it, verbatim, with `[…]` where sentences between them are left out. The
+migration that creates the named area's guide checks the entry, moves what holds
+there and deletes the entry here. Paragraph numbers are the rows of the
+disposition table in the pull request that migrated these sections
+(`af-migrate-workspace-note-a`).
+
+> CI and sidebar status helpers and types have one internal import surface:
+> `@/shared/core`. Their dependency-free implementations live in
+> `src/shared/core/`; sibling core modules may import those files directly.
+> These source paths are internal application code, not supported package
+> imports. The published package exposes the `ff` CLI, not a shared-status SDK.
+
+Old paragraph 1. For a `src/shared/core/` guide. No rule enforces the import
+surface; `enums.ts` is imported directly from outside the directory.
+
+> Claude's structured-output schema uses JSON Schema Draft 7 for runtime
+> compatibility.
+
+Old paragraph 5. For the session capsule guide.
+
+> Agent sessions are not covered.
+
+Old paragraph 39, after "Terminals and setup, run, postRun and cleanup scripts
+run the user's commands, so they omit the variables Factory Factory's launchers
+set for its own backend". For the session capsule guide.
+
+> Images dropped before draft storage loads wait in memory, so a refresh in that
+> brief window loses them; once it loads they are saved to the draft and shown
+> when the form opens.
+
+Old paragraph 16. For the Kanban feature guide (task 2.5b).
+
+> Periodic reconciliation still repairs missed events and restart state. Its
+> 60-second interval is the delay after a completed run, not a hard maximum for
+> stale UI: prior Git work, the next database read, and failed sweeps can delay
+> repair.
+
+Old paragraph 36. For the snapshots orchestration guide
+(`src/backend/orchestration/snapshots/`).

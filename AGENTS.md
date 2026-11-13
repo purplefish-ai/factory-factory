@@ -55,7 +55,7 @@ Read the matching note before changing these areas:
   shutdown.
 - [Pull requests](src/backend/orchestration/pull-requests/AGENTS.md): PR
   monitoring, `WorkspacePR`, `gh` coordination.
-- [Workspace state](docs/architecture/workspace-state.md): run scripts, Kanban.
+- [Workspace state](docs/architecture/workspace-state.md): Kanban.
 - [Agent runtime](docs/architecture/agent-runtime.md): ACP, subagents, child
   workspaces, quick actions, the desktop backend utility process.
 - [Integrations](docs/architecture/integrations.md): GitHub, Linear, periodic

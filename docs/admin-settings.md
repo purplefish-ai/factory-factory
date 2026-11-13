@@ -148,7 +148,7 @@ Archived workspaces no longer keep their original attachments or a successful
 setup log, so their exports normally omit them. Rows not yet cleaned up still
 export both, and archived rows imported from an older backup lose them on a
 later cleanup run (see
-[workspace state](architecture/workspace-state.md#backup-export)).
+[data backup guide](../src/backend/orchestration/data-backup/AGENTS.md)).
 
 The current-session result and its exact JSON download include partial-coverage
 warnings and, for v8, the file's manifest. Four numeric primary counters and the

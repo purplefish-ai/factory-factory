@@ -43,7 +43,7 @@ internal file organization are left to the implementer.
   cached value. Freezing cleanup configuration at start would change this.
 
 Source: `src/backend/services/run-script/service/`, the workspace run-script
-service/accessor, and `docs/architecture/workspace-state.md#run-script`.
+service/accessor, and `src/backend/services/run-script/AGENTS.md`.
 
 ## Three distinct concepts
 
