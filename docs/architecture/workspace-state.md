@@ -690,8 +690,7 @@ area. Each entry quotes only the sentences it needs from the paragraph named
 after it, verbatim, with `[…]` where sentences between them are left out. The
 migration that creates the named area's guide checks the entry, moves what holds
 there and deletes the entry here. Paragraph numbers are the rows of the
-disposition table in the pull request that migrated these sections
-(`af-migrate-workspace-note-a`).
+disposition table in pull request #3229.
 
 > CI and sidebar status helpers and types have one internal import surface:
 > `@/shared/core`. Their dependency-free implementations live in
