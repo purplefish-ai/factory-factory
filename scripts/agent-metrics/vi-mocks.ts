@@ -1,3 +1,4 @@
+import ts from 'typescript';
 import type { TreeFile } from './tree';
 
 export const mockTargetClasses = [
@@ -79,7 +80,34 @@ export type ViMockCounts = {
   byTarget: Record<MockTargetClass, number>;
 };
 
-/** Counts `vi.mock(` calls; the target is the first argument when it is a string literal. */
+function isViMock(callee: ts.Expression): boolean {
+  return (
+    ts.isPropertyAccessExpression(callee) &&
+    ts.isIdentifier(callee.expression) &&
+    callee.expression.text === 'vi' &&
+    callee.name.text === 'mock'
+  );
+}
+
+/**
+ * The first argument of each `vi.mock(...)` call expression: its text when it
+ * is a string literal, otherwise `null`. Parsed without type checking.
+ */
+function viMockTargets(file: TreeFile): (string | null)[] {
+  const source = ts.createSourceFile(file.path, file.content, ts.ScriptTarget.Latest);
+  const targets: (string | null)[] = [];
+  const visit = (node: ts.Node): void => {
+    if (ts.isCallExpression(node) && isViMock(node.expression)) {
+      const [first] = node.arguments;
+      targets.push(first !== undefined && ts.isStringLiteralLike(first) ? first.text : null);
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(source);
+  return targets;
+}
+
+/** Counts `vi.mock` call expressions (not `vi.doMock`) and classifies their targets. */
 export function viMockCounts(
   testFiles: readonly TreeFile[],
   capsules: ReadonlySet<string>
@@ -99,15 +127,13 @@ export function viMockCounts(
   let calls = 0;
   let filesWithMocks = 0;
   for (const file of testFiles) {
-    const matches = [...file.content.matchAll(/\bvi\.mock\(\s*(?:(['"`])([^'"`]*)\1)?/g)];
-    if (matches.length > 0) {
+    const targets = viMockTargets(file);
+    if (targets.length > 0) {
       filesWithMocks += 1;
     }
-    for (const match of matches) {
+    for (const target of targets) {
       calls += 1;
-      const target = match[1] === undefined ? null : (match[2] ?? null);
-      const name = classifyMockTarget(target, capsules);
-      byTarget[name] += 1;
+      byTarget[classifyMockTarget(target, capsules)] += 1;
     }
   }
   return { calls, filesWithMocks, testFiles: testFiles.length, byTarget };
