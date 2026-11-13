@@ -47,29 +47,23 @@ async function listenBlocker(port: number, host: string): Promise<NetServer> {
   return blocker;
 }
 
-function portOf(server: NetServer): number {
-  const address = server.address();
-  if (!address || typeof address === 'string') {
-    throw new Error('Expected a TCP address');
-  }
-  return address.port;
-}
-
 async function releaseBlocker(blocker: NetServer): Promise<void> {
-  blockers.splice(blockers.indexOf(blocker), 1);
+  const index = blockers.indexOf(blocker);
+  if (index >= 0) {
+    blockers.splice(index, 1);
+  }
   await new Promise((resolve) => blocker.close(resolve));
 }
 
 /**
- * Holds the `count` ports starting at the probe's port on every loopback
- * family, or releases them all and returns null when one is taken.
+ * Holds the `count` ports starting at `port` on every loopback family, or
+ * releases them all and returns null when one is taken.
  */
-async function holdPorts(probe: NetServer, count: number): Promise<NetServer[] | null> {
-  const port = portOf(probe);
+async function holdPorts(port: number, count: number): Promise<NetServer[] | null> {
   const hosts = ipv6Available ? ['127.0.0.1', '::1'] : ['127.0.0.1'];
-  const held = [probe];
+  const held: NetServer[] = [];
   for (let offset = 0; offset < count; offset++) {
-    for (const host of hosts.filter((item) => offset > 0 || item !== '127.0.0.1')) {
+    for (const host of hosts) {
       const blocker = await listenBlocker(port + offset, host).catch(() => null);
       if (!blocker) {
         await Promise.all(held.map(releaseBlocker));
@@ -81,23 +75,24 @@ async function holdPorts(probe: NetServer, count: number): Promise<NetServer[] |
   return held;
 }
 
+// Below every operating system's ephemeral range (Linux from 32768, macOS and
+// Windows from 49152), so no port the kernel assigns can be one of these.
+const FIXED_PORT_FIRST = 20_000;
+const FIXED_PORT_END = 30_000;
+
 /**
  * Finds `count` consecutive ports free on both loopback families and returns
- * the first. macOS hands out ephemeral ports in sequence, so the port after a
- * `listen(0)` probe is the next one any process on the machine receives. While
- * the ports are held, one more ephemeral port is allocated to move the kernel
- * past them; otherwise a neighbour could take one before the server binds it.
- * The server must bind the ports itself, so they are released first: a process
- * that binds one of them by number can still take it, but ephemeral requests,
- * which is how neighbours took them, now land past the range.
+ * the first. Candidates come from outside the ephemeral ranges, so a
+ * neighbour's `listen(0)` or outbound connection can never be given one. The
+ * server must bind the ports itself, so they are released before it starts:
+ * only a process that binds one of them by number in that gap can take it.
  */
 async function findFreePorts(count: number): Promise<number> {
   for (let attempt = 0; attempt < 20; attempt++) {
-    const probe = await listenBlocker(0, '127.0.0.1');
-    const port = portOf(probe);
-    const held = await holdPorts(probe, count);
+    const span = FIXED_PORT_END - FIXED_PORT_FIRST - count + 1;
+    const port = FIXED_PORT_FIRST + Math.floor(Math.random() * span);
+    const held = await holdPorts(port, count);
     if (held) {
-      await releaseBlocker(await listenBlocker(0, '127.0.0.1'));
       await Promise.all(held.map(releaseBlocker));
       return port;
     }
@@ -191,9 +186,6 @@ describe('server bind address', () => {
     async () => {
       const port = await findFreePorts(2);
       await listenBlocker(port, '::1');
-      // Another process asks for an ephemeral port meanwhile. On macOS this
-      // takes port + 1 unless findFreePorts moved the kernel's counter past it.
-      await listenBlocker(0, '127.0.0.1');
       const harness = createTestHarness({ backendHost: undefined });
       const server = createServer(harness.application, port);
       servers.push(server);
