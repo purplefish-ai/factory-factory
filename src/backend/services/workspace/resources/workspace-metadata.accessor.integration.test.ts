@@ -78,7 +78,7 @@ function save(workspaceId: string, requestId: string) {
     generatedAt: new Date(),
   });
 }
-it('persists metadata, renames once, and preserves the first branch suggestion', async () => {
+it('persists metadata, renames once, preserves the first branch suggestion and replaces summaries', async () => {
   await workspace('one');
   await workspaceMetadataAccessor.reserve('one', 'r1');
   expect(await save('one', 'r1')).toMatchObject({ name: 'Fix login race' });
@@ -88,7 +88,12 @@ it('persists metadata, renames once, and preserves the first branch suggestion',
     requestId: 'r2',
     expectedName: 'Fix login race',
     rename: true,
-    result: { ...result, title: 'Different title', branch: 'different-branch' },
+    result: {
+      title: 'Different title',
+      branch: 'different-branch',
+      summary: 'Reviewing the login fix.',
+      sidebarSummary: 'Reviewing login',
+    },
     sourceSessionId: 's',
     sourceMessageId: 'm2',
     generatedAt: new Date(),
@@ -98,7 +103,13 @@ it('persists metadata, renames once, and preserves the first branch suggestion',
   });
   expect(
     await db.prisma.workspaceMetadata.findUnique({ where: { workspaceId: 'one' } })
-  ).toMatchObject({ branch: 'login-race', sourceMessageId: 'm2' });
+  ).toMatchObject({
+    title: 'Fix login race',
+    branch: 'login-race',
+    summary: 'Reviewing the login fix.',
+    sidebarSummary: 'Reviewing login',
+    sourceMessageId: 'm2',
+  });
 });
 it('keeps a manual rename made while inference is pending', async () => {
   await workspace('manual');
@@ -213,4 +224,11 @@ it('rejects superseded requests and archived workspaces', async () => {
   await db.prisma.workspace.update({ where: { id: 'stale' }, data: { status: 'ARCHIVED' } });
   expect(await save('stale', 'new')).toBeNull();
   expect(await workspaceMetadataAccessor.reserve('stale', 'later')).toBe(false);
+});
+it('rejects metadata for a workspace that is archiving', async () => {
+  await workspace('archiving');
+  await workspaceMetadataAccessor.reserve('archiving', 'r');
+  await db.prisma.workspace.update({ where: { id: 'archiving' }, data: { status: 'ARCHIVING' } });
+  expect(await save('archiving', 'r')).toBeNull();
+  expect(await workspaceMetadataAccessor.reserve('archiving', 'later')).toBe(false);
 });

@@ -12,7 +12,7 @@ one that matches your change before you touch it.
 | -------------------------------------------- | ------------------------------------------------------------------------------------------ |
 | [background-jobs.md](./background-jobs.md)   | `jobRunner`, every registered poll loop, cadences, shutdown semantics                      |
 | [Pull request guide][pr-guide]               | PR monitoring, observations, event delivery, GitHub coordination (beside the code)         |
-| [workspace-state.md](./workspace-state.md)   | Run script, workspace lifecycle, the Kanban column projection                              |
+| [workspace-state.md](./workspace-state.md)   | Kanban, needs-input status, completion notices, phone tools, families, board views         |
 | [agent-runtime.md](./agent-runtime.md)       | ACP runtime, provider sub-agents, child workspaces, quick actions, desktop backend process |
 | [integrations.md](./integrations.md)         | GitHub, Linear, periodic tasks                                                             |
 | [file-previews.md](./file-previews.md)       | Bounded file reads, UTF-8 truncation, untracked diff limits                                |

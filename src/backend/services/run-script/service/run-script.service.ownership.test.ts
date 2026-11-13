@@ -263,6 +263,33 @@ describe('run-script attempt ownership', () => {
     expect(fakes.stopTunnel).toHaveBeenCalledTimes(1);
     expect(fakes.workspace.runScriptPid).toBe(2002);
   });
+  it('keeps a replacement current after the old execution finishes its exit', async () => {
+    const committed = deferred<void>();
+    const finishWrite = deferred<void>();
+    const released = deferred<void>();
+    const run = child(1001);
+    const replacement = child(2002);
+    fakes.spawn.mockReturnValueOnce(run).mockReturnValueOnce(replacement);
+    fakes.tunnel.mockResolvedValue('https://example.test');
+    fakes.afterExitWrite.mockImplementationOnce(() => {
+      committed.resolve();
+      return finishWrite.promise;
+    });
+    fakes.stopTunnel.mockImplementationOnce(() => {
+      released.resolve();
+      return Promise.resolve();
+    });
+    const service = new RunScriptService();
+    await service.startRunScript('ws-1');
+    exit(run);
+    await committed.promise;
+    expect(await service.startRunScript('ws-1')).toMatchObject({ success: true, pid: 2002 });
+    finishWrite.resolve();
+    await released.promise;
+    // The old execution has released its slot; the replacement's exit must still be recorded.
+    exit(replacement);
+    await vi.waitFor(() => expect(fakes.workspace.runScriptStatus).toBe('COMPLETED'));
+  });
   it('keeps admission identity when stop and replacement finish before start returns', async () => {
     const committed = deferred<void>();
     const finishWrite = deferred<void>();

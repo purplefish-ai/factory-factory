@@ -662,3 +662,42 @@ it('separates selected facts from collection facts and reselects after detach or
   const firstId = [recreated.prId, 'selected-b'].sort()[0];
   expect(current).toMatchObject({ selectedPrId: firstId, selectedPr: { id: firstId } });
 });
+it('reads legacy review and sync fields from the selected PR and conflicts from the summary', async () => {
+  const row = await workspace('legacy-aliases');
+  const selectedSyncedAt = new Date('2026-01-01T00:00:00.000Z');
+  await db.prisma.workspacePR.createMany({
+    data: [
+      {
+        id: 'legacy-a',
+        workspaceId: row.id,
+        url: 'https://github.com/org/repo/pull/201',
+        number: 201,
+        state: 'APPROVED',
+        reviewState: 'APPROVED',
+        ciStatus: 'SUCCESS',
+        syncedAt: selectedSyncedAt,
+      },
+      {
+        id: 'legacy-b',
+        workspaceId: row.id,
+        url: 'https://github.com/org/repo/pull/202',
+        number: 202,
+        state: 'CHANGES_REQUESTED',
+        reviewState: 'CHANGES_REQUESTED',
+        ciStatus: 'FAILURE',
+        hasMergeConflict: true,
+        syncedAt: new Date('2026-02-01T00:00:00.000Z'),
+      },
+    ],
+  });
+  const read = await workspaceAccessor.findById(row.id);
+  expect(read).toMatchObject({
+    selectedPrId: 'legacy-a',
+    selectedPr: { hasMergeConflict: false },
+    prSummary: { hasMergeConflict: true },
+    prReviewState: 'APPROVED',
+    prUpdatedAt: selectedSyncedAt,
+    prHasMergeConflict: true,
+    prState: 'OPEN',
+  });
+});
