@@ -71,8 +71,8 @@ The barrel is `index.ts`. Callers in routes and other features must:
   `src/client/routes/projects/workspaces/workspace-detail-chat-content.render.test.tsx`,
   `src/client/routes/projects/workspaces/workspace-detail-chat-content.composer-render.test.tsx`.
 - Layout changes and scroll events without wheel, key, touch or scrollbar input
-  never change scroll intent; only that input, the jump controls, a send's
-  follow request and activation from a saved position do.
+  never change scroll intent; only that input, jump controls, a send's follow
+  request and saved-position activation do. `use-transcript-scroll.test.tsx`,
   `transcript-scroll-events.test.ts`, `transcript-scroll-controller.test.ts`.
 - A suspended or disposed scroll controller runs no pending frame and persists
   no position. `transcript-scroll-controller.test.ts`.

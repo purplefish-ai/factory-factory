@@ -184,13 +184,14 @@ Old paragraph 16. For the session capsule guide and the WebSocket router guide
 Old paragraph 18. For the WebSocket router guide
 (`src/backend/routers/websocket/`, task 2.9).
 
-> Serialization still happens before measurement, so the limit bounds outgoing
-> frames rather than the cost of constructing authoritative state.
+> This permits realistic large history/project baselines while bounding queued
+> state per viewer. Serialization still happens before measurement, so the limit
+> bounds outgoing frames rather than the cost of constructing authoritative
+> state.
 
 Old paragraph 20. For the WebSocket router guide
 (`src/backend/routers/websocket/`, task 2.9).
 
-> Neither coalesced retries nor failed writes create OUT_TO_CLIENT records.
 > These records describe successful local socket writes, not application-level
 > peer receipts.
 
