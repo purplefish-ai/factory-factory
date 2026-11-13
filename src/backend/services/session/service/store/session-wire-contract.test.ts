@@ -2,7 +2,7 @@ import { afterEach, expect, it, vi } from 'vitest';
 import {
   SESSION_OUTBOUND_EVENT,
   sessionEventBus,
-} from '@/backend/services/session/service/session-event-bus';
+} from '@/backend/services/session/service/event-bus/session-event-bus';
 import { MessageState } from '@/shared/acp-protocol';
 import { parseChatServerMessage } from '@/shared/acp-protocol/protocol/chat-server-message-schema';
 import { SessionPublisher } from './session-publisher';

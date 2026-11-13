@@ -78,8 +78,8 @@ it.each([
       typeof import('@/backend/services/session/service/store/session-store-registry')
     >('@/backend/services/session/service/store/session-store-registry');
     const { sessionEventBus } = await vi.importActual<
-      typeof import('@/backend/services/session/service/session-event-bus')
-    >('@/backend/services/session/service/session-event-bus');
+      typeof import('@/backend/services/session/service/event-bus/session-event-bus')
+    >('@/backend/services/session/service/event-bus/session-event-bus');
     const stores: Array<{
       registry: InstanceType<typeof SessionStoreRegistry>;
       store: ReturnType<InstanceType<typeof SessionStoreRegistry>['getOrCreate']>;
