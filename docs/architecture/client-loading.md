@@ -91,7 +91,8 @@ Pick the loading pattern by what the user is waiting for:
   that is expanding, a status line next to text, an inline editor that is
   saving. Pass `aria-hidden` when nearby text already says what is pending.
   Don't use a raw `SpinnerGapIcon` or `animate-spin`; `factory/no-raw-spinner`
-  rejects them outside status indicators listed in `.oxlintrc.json`.
+  rejects them outside status indicators listed in
+  [`no-raw-spinner.exceptions.json`](../../lint-rules/rules/no-raw-spinner.exceptions.json).
 - **`Loading`** (`src/client/components/loading.tsx`) for a route or panel with
   no known layout. Give it a specific message ("Loading diff…");
   `size="compact"` drops the 200px minimum height for side panels.
