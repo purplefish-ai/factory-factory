@@ -17,6 +17,19 @@ import { getWorkspaceWithWorktree, getWorkspaceWithWorktreeOrThrow } from './wor
 const loggerName = 'workspace-files-trpc';
 const getLogger = (ctx: Context) => ctx.appContext.services.createLogger(loggerName);
 
+const IMAGE_MIME_TYPES: Record<string, string> = {
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.gif': 'image/gif',
+  '.webp': 'image/webp',
+  '.avif': 'image/avif',
+  '.bmp': 'image/bmp',
+  '.ico': 'image/x-icon',
+  '.svg': 'image/svg+xml',
+};
+const MAX_IMAGE_BYTES = 20 * 1024 * 1024;
+
 const SCREENSHOT_IMAGE_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.webp']);
 
 async function validateScreenshotPath(
@@ -192,6 +205,30 @@ export const workspaceFilesRouter = router({
       }
 
       const fullPath = path.join(worktreePath, input.path);
+
+      const mimeType = IMAGE_MIME_TYPES[path.extname(input.path).toLowerCase()];
+      if (mimeType) {
+        const { buffer, size, truncated } = await readFilePrefix(fullPath, {
+          maxBytes: MAX_IMAGE_BYTES,
+          validateFile: (stats) => {
+            if (stats.size > MAX_IMAGE_BYTES) {
+              throw new Error('Image is too large to preview (maximum 20 MB)');
+            }
+            return Promise.resolve();
+          },
+        });
+        if (truncated) {
+          throw new Error('Image is too large to preview (maximum 20 MB)');
+        }
+        return {
+          content: '',
+          language: 'image',
+          truncated: false,
+          size,
+          isBinary: true,
+          image: { mimeType, data: buffer.toString('base64') },
+        };
+      }
 
       const { buffer, size: fileSize, truncated } = await readFilePrefix(fullPath);
 

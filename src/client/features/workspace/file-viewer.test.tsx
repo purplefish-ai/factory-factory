@@ -11,7 +11,13 @@ import { FileViewer } from './file-viewer';
 
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 
-const mocks = vi.hoisted(() => ({ theme: 'dark', size: 12, truncated: false }));
+const mocks = vi.hoisted(() => ({
+  theme: 'dark',
+  size: 12,
+  truncated: false,
+  isBinary: false,
+  image: undefined as { mimeType: string; data: string } | undefined,
+}));
 
 vi.mock('next-themes', () => ({ useTheme: () => ({ resolvedTheme: mocks.theme }) }));
 vi.mock('@/client/lib/trpc', () => ({
@@ -23,7 +29,8 @@ vi.mock('@/client/lib/trpc', () => ({
             content: 'const x = 1;',
             language: 'typescript',
             size: mocks.size,
-            isBinary: false,
+            isBinary: mocks.isBinary,
+            image: mocks.image,
             truncated: mocks.truncated,
           },
           isLoading: false,
@@ -41,6 +48,8 @@ afterEach(() => {
   applyAppearance(DEFAULT_APPEARANCE);
   mocks.size = 12;
   mocks.truncated = false;
+  mocks.isBinary = false;
+  mocks.image = undefined;
 });
 
 describe('FileViewer appearance', () => {
@@ -225,4 +234,46 @@ it('shows gigabytes consistently in the file header and truncation warning', () 
   expect(container.textContent).toContain('1.0 GB');
   expect(container.textContent).toContain('File truncated to 1MB. Actual size: 1.0 GB');
   expect(container.textContent).not.toContain('1024.0 MB');
+});
+
+it('renders images instead of the binary warning and handles decoding failures', async () => {
+  mocks.isBinary = true;
+  mocks.image = { mimeType: 'image/png', data: 'aGVsbG8=' };
+  const container = document.createElement('div');
+  document.body.append(container);
+  const root = createRoot(container);
+  try {
+    await act(() =>
+      root.render(
+        createElement(FileViewer, {
+          workspaceId: 'workspace-1',
+          filePath: 'photo.png',
+          tabId: 'image-1',
+        })
+      )
+    );
+    const image = container.querySelector('img');
+    expect(image?.getAttribute('src')).toBe('data:image/png;base64,aGVsbG8=');
+    expect(image?.alt).toBe('photo.png');
+    expect(container.textContent).not.toContain('Binary file cannot be displayed');
+    expect(container.querySelector('code')).toBeNull();
+    await act(() => image?.dispatchEvent(new Event('error')));
+    expect(container.textContent).toContain("Couldn't display image");
+  } finally {
+    await act(() => root.unmount());
+    container.remove();
+  }
+});
+
+it('preserves the warning for other binary files', () => {
+  mocks.isBinary = true;
+  const markup = renderToStaticMarkup(
+    createElement(FileViewer, {
+      workspaceId: 'workspace-1',
+      filePath: 'archive.zip',
+      tabId: 'binary-1',
+    })
+  );
+  expect(markup).toContain('Binary file cannot be displayed');
+  expect(markup).not.toContain('<img');
 });
