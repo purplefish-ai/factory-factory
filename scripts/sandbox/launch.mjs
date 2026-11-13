@@ -71,16 +71,22 @@ export async function run(
       stopWatchdog();
       let code = exitCode;
       let listingFailed = false;
-      const watched = {
-        ...system,
-        listProcesses: () => {
+      // A failure of either reading (the process table, or the environments of
+      // its members) means nothing can be identified.
+      const recordFailure =
+        (read) =>
+        (...args) => {
           try {
-            return system.listProcesses();
+            return read(...args);
           } catch (error) {
             listingFailed = true;
             throw error;
           }
-        },
+        };
+      const watched = {
+        ...system,
+        listProcesses: recordFailure(system.listProcesses),
+        processesWithEnvironment: recordFailure(system.processesWithEnvironment),
       };
       const keptForClean = () =>
         state.baseDir &&
