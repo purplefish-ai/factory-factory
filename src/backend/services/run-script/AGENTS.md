@@ -47,6 +47,9 @@ Callers import only `index.ts`.
   `run-script-execution.test.ts`, `run-script.service.ownership.test.ts`.
 - An old attempt's stop never reconciles or removes a replacement admitted while
   its cleanup command ran. `run-script.service.ownership.test.ts`.
+- An old attempt's exit releases only its own registry entry, so a replacement
+  admitted meanwhile stays current and its own exit is still recorded.
+  `run-script.service.ownership.test.ts`.
 - Output subscribers survive stops, exits and restarts until they unsubscribe or
   the workspace is archived or deleted. `run-script.service.output.test.ts`,
   `run-script.service.process-lifecycle.test.ts`,
