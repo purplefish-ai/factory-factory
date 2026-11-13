@@ -142,7 +142,7 @@ export const sessionModules: Record<
   metadata: {
     dependsOn: ['inference'],
     description:
-      "Generates a workspace's title, branch name and summaries from its conversation with one disposable inference call.",
+      "Runs one-shot disposable inference tasks with no session: generates a workspace's title, branch name and summaries, and classifies an incoming event against an automation's filter.",
   },
   prompt: {
     dependsOn: [
@@ -162,10 +162,6 @@ export const sessionModules: Record<
     dependsOn: ['acp'],
     description:
       'Caches provider model catalogs and plan usage behind services whose fetchers are injected.',
-  },
-  root: {
-    dependsOn: ['inference'],
-    description: 'Files not yet in a module: the agent event classifier.',
   },
   store: {
     dependsOn: ['event-bus', 'logging'],

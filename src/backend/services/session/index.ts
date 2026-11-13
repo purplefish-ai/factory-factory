@@ -14,7 +14,7 @@ export {
 export {
   AgentEventClassificationError,
   classifyAgentEvent,
-} from './service/agent-event-classifier';
+} from './service/metadata/agent-event-classifier';
 export type { ClosedSessionTranscript } from './service/archive/closed-session-persistence.service';
 export type { ArchivedProviderIdentity } from './service/archive/closed-session-reader';
 
