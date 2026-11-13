@@ -45,7 +45,7 @@ export const sessionModules: Record<
       'store',
     ],
     description:
-      'Constructs and cross-wires the services that need each other (config, model catalogs, permission, lifecycle coordinators, prompt, dispatch, notification delivery), registers session-scope participants and sets the tool-timeout prompt cancel; other singletons are built in their own modules.',
+      'Constructs and cross-wires the services that need each other (config, model catalogs, permission, lifecycle coordinators, prompt, dispatch, notification delivery), registers session-scope participants and sets the tool-timeout prompt cancel; other singletons are built in their own modules; also exposes the session capabilities backend interceptors use (interceptor bridge).',
   },
   config: {
     dependsOn: ['acp', 'data', 'providers', 'root'],
@@ -118,9 +118,9 @@ export const sessionModules: Record<
       'Caches provider model catalogs and plan usage behind services whose fetchers are injected.',
   },
   root: {
-    dependsOn: ['acp', 'composition', 'inference', 'store'],
+    dependsOn: ['inference', 'store'],
     description:
-      'Files not yet in a module: the session domain service over store, the session event bus, bridge types, the interceptor bridge, error messages and the agent event classifier.',
+      'Files not yet in a module: the session domain service over store, the session event bus, bridge types, error messages and the agent event classifier.',
   },
   store: {
     dependsOn: ['logging', 'root'],
@@ -141,6 +141,5 @@ export const sessionModules: Record<
  */
 export const sessionModuleCycles: readonly (readonly [string, string])[] = [
   ['dispatch', 'chat'],
-  ['root', 'composition'],
   ['store', 'root'],
 ];
