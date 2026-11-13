@@ -33,6 +33,7 @@ import {
   type WorkspaceForExport,
 } from '@/backend/services/settings/resources/data-backup.accessor';
 import {
+  projectManagementService,
   workspaceDataService,
   workspacePrSnapshotService,
   workspaceChildHistoryService,
@@ -580,6 +581,23 @@ function restoreSlackConnectionImport(
   return plan ? restoreSlackConnectionsRecovery(tx, plan) : undefined;
 }
 
+/**
+ * Under `FF_PROJECT_ROOT`, refuses the whole import when any project's
+ * repository or worktree base path lies outside the root; unset, checks nothing.
+ */
+function assertImportInsideProjectRoot(projects: readonly ExportedProject[]): void {
+  for (const project of projects) {
+    for (const path of [project.repoPath, project.worktreeBasePath]) {
+      const location = projectManagementService.checkProjectLocation(path);
+      if (!location.valid) {
+        throw new Error(
+          `Backup project "${project.name}" (${project.id}) cannot be imported: ${location.error}`
+        );
+      }
+    }
+  }
+}
+
 class DataBackupService {
   /**
    * Export all data for backup/migration.
@@ -780,6 +798,7 @@ class DataBackupService {
    */
   async importData(input: ExportData): Promise<ImportResults> {
     input = exportDataSchema.parse(input);
+    assertImportInsideProjectRoot(input.data.projects);
     logger.info('Starting data import', {
       schemaVersion: input.meta.schemaVersion,
       exportedAt: input.meta.exportedAt,

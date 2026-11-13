@@ -44,6 +44,9 @@ pnpm dev
 # Electron app (development)
 pnpm dev:electron
 
+# The app in an isolated sandbox; see `node scripts/dev-sandbox.mjs --help`
+pnpm dev:sandbox
+
 # Production build
 pnpm build
 pnpm start

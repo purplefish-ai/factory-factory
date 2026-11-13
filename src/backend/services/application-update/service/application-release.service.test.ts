@@ -55,6 +55,50 @@ describe('application release detection', () => {
     expect(fetcher.mock.calls[0]?.[0]).toBe('https://registry.npmjs.org/factory-factory/latest');
   });
 
+  it('asks the configured registry', async () => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(response(latest));
+    await new ApplicationReleaseService({
+      fetch: fetcher,
+      loadInstallation: () => installation,
+      releaseCheck: () => ({ enabled: true, registryUrl: 'http://127.0.0.1:4873' }),
+    }).check();
+    expect(fetcher.mock.calls[0]?.[0]).toBe('http://127.0.0.1:4873/factory-factory/latest');
+  });
+
+  it('does not reuse a cached release from another registry', async () => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(response(latest));
+    let registryUrl = 'https://registry.npmjs.org';
+    const checker = new ApplicationReleaseService({
+      fetch: fetcher,
+      now: () => 0,
+      loadInstallation: () => installation,
+      releaseCheck: () => ({ enabled: true, registryUrl }),
+    });
+    await checker.check();
+    registryUrl = 'http://127.0.0.1:4873';
+    fetcher.mockResolvedValue(response({ version: '0.5.3' }));
+    expect((await checker.check()).notices).toEqual([]);
+    expect(fetcher.mock.calls.map(([url]) => url)).toEqual([
+      'https://registry.npmjs.org/factory-factory/latest',
+      'http://127.0.0.1:4873/factory-factory/latest',
+    ]);
+  });
+
+  it('makes no registry request and reports no notices while checks are off', async () => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(response(latest));
+    let enabled = false;
+    const checker = new ApplicationReleaseService({
+      fetch: fetcher,
+      loadInstallation: () => installation,
+      releaseCheck: () => ({ enabled, registryUrl: 'https://registry.npmjs.org' }),
+    });
+    expect(await checker.check()).toEqual({ currentVersion: '0.5.3', notices: [] });
+    expect(fetcher).not.toHaveBeenCalled();
+    enabled = true;
+    expect((await checker.check()).notices).toHaveLength(3);
+    expect(fetcher).toHaveBeenCalledOnce();
+  });
+
   it.each(['0.5.3', '0.5.2', '0.4.99'])(
     'does not offer a non-newer app release %s',
     async (version) => {

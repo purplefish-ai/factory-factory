@@ -12,6 +12,7 @@ const mockProjectManagementService = vi.hoisted(() => ({
   findById: vi.fn(),
   findBySlug: vi.fn(),
   validateRepoPath: vi.fn(),
+  checkProjectLocation: vi.fn((): { valid: boolean; error?: string } => ({ valid: true })),
   create: vi.fn(),
   update: vi.fn(),
   updateIfStartupUnchanged: vi.fn(),
