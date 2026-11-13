@@ -405,8 +405,8 @@ export function classifyCodeSpan(
 /**
  * Whether a span reads as a file name or relative path: it ends in a file
  * extension after a name that is not hidden (an extension on its own, or a
- * fragment such as `.test.ts`), and is not a package, URL, flag or absolute
- * path.
+ * fragment such as `.test.ts`), and is not a package, URL, flag, absolute
+ * path or capitalised product name such as `Node.js`.
  */
 function isFileNameLike(path: string): boolean {
   const name = path.slice(path.lastIndexOf('/') + 1);
@@ -414,7 +414,8 @@ function isFileNameLike(path: string): boolean {
     !name.startsWith('.') &&
     fileReferenceExtensions.some((extension) => name.endsWith(extension)) &&
     !/^[@\-/~]/.test(path) &&
-    !/^[a-z][a-z0-9+.-]*:/i.test(path)
+    !/^[a-z][a-z0-9+.-]*:/i.test(path) &&
+    !/^[A-Z][A-Za-z0-9]*\.js$/.test(path)
   );
 }
 
@@ -497,7 +498,8 @@ function rootReferenceProblem(
 ): ReferenceProblem | undefined {
   const missing = { problem: `\`${path}\` does not exist.`, fix: pointToCurrentFix };
   if (path.endsWith('/')) {
-    return repository.exists(path.slice(0, -1)) ? undefined : missing;
+    const directory = path.slice(0, -1);
+    return repository.exists(directory) && !repository.isFile(directory) ? undefined : missing;
   }
   if (repository.isFile(path)) {
     return undefined;

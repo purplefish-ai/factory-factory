@@ -373,7 +373,7 @@ describe('file names cited in a nested guide', () => {
   test('ignores prose, patterns, commands, packages and root-relative paths that exist', () => {
     const repository = repositoryWith(
       guide(
-        'Properties such as `ref.current` and `config.service`, the patterns `*.test.ts`,',
+        'Properties such as `ref.current`, `config.service` and `Node.js`, the patterns `*.test.ts`,',
         '`.test.ts` and `.ts`, the placeholders `<name>.ts`, `{a,b}.ts` and `deep/**/x.ts`,',
         'the packages `@scope/pkg.json` and `node:fs`, the flag `-rf.sh`, the command',
         '`pnpm exec vitest run missing.test.ts`, the URL `https://example.com/missing.md`,',
@@ -442,7 +442,7 @@ describe('top-level names come from the repository', () => {
       ...tree,
       'AGENTS.md': [
         'See `prompts/missing.md`, `.storybook/missing.ts`, `public/gone/`,',
-        '`src/backend` and `docs/architecture/`.',
+        '`src/backend`, `src/backend/thing.ts/` and `docs/architecture/`.',
         '',
       ].join('\n'),
     });
@@ -452,6 +452,7 @@ describe('top-level names come from the repository', () => {
       'AGENTS.md:1: references: `.storybook/missing.ts` does not exist. Fix: point it at the current path or heading, or remove it.',
       'AGENTS.md:1: references: `public/gone/` does not exist. Fix: point it at the current path or heading, or remove it.',
       'AGENTS.md:2: references: `src/backend` is a directory. Fix: write it with a trailing slash, `src/backend/`.',
+      'AGENTS.md:2: references: `src/backend/thing.ts/` does not exist. Fix: point it at the current path or heading, or remove it.',
       'AGENTS.md:2: references: `docs/architecture/` does not exist. Fix: point it at the current path or heading, or remove it.',
     ]);
   });
