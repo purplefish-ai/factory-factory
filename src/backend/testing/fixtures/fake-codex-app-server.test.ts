@@ -27,8 +27,11 @@ afterEach(async () => {
   }
 });
 
-function startFake(scenario?: string) {
-  const env: Record<string, string> = { PATH: process.env.PATH ?? '' };
+// Longer than any test here: a stop test can only time out, never see the next chunk.
+const neverMs = '60000';
+
+function startFake(scenario?: string, extraEnv: Record<string, string> = {}) {
+  const env: Record<string, string> = { PATH: process.env.PATH ?? '', ...extraEnv };
   if (scenario !== undefined) {
     env.FF_SANDBOX_SCENARIO = scenario;
   }
@@ -237,21 +240,58 @@ describe('fake Codex app-server scenarios', () => {
     ]);
   });
 
-  it('slow-stream sends one reply in several deltas', async () => {
-    const chunks = ['Streaming ', 'this ', 'reply ', 'one ', 'chunk ', 'at ', 'a ', 'time.'];
-    expect(await playPrompt(startFake('slow-stream'))).toMatchObject([
-      turnStartResponse,
-      turnStarted,
-      ...message('message-1', chunks.join(''), chunks),
-      turnCompleted('completed'),
-    ]);
+  const chunks = ['Streaming ', 'this ', 'reply ', 'one ', 'chunk ', 'at ', 'a ', 'time.'];
+  const slowStream = [
+    turnStartResponse,
+    turnStarted,
+    ...message('message-1', chunks.join(''), chunks),
+    turnCompleted('completed'),
+  ];
+
+  it('slow-stream sends one reply in several deltas with the default delay', async () => {
+    expect(await playPrompt(startFake('slow-stream'))).toMatchObject(slowStream);
   }, 10_000);
 
-  it('slow-stream stops streaming on turn/interrupt', async () => {
+  // At the 400 ms default the 8 chunks take 2.8 s, longer than this test may run.
+  it('slow-stream uses FF_SANDBOX_CHUNK_DELAY_MS between deltas', async () => {
+    const child = startFake('slow-stream', { FF_SANDBOX_CHUNK_DELAY_MS: '5' });
+    expect(await playPrompt(child)).toMatchObject(slowStream);
+  }, 2000);
+
+  it.each(['0', '-1', 'abc', ''])('rejects FF_SANDBOX_CHUNK_DELAY_MS %j', async (value) => {
+    const child = startFake('slow-stream', { FF_SANDBOX_CHUNK_DELAY_MS: value });
+    let stderr = '';
+    child.stderr.on('data', (chunk: Buffer) => {
+      stderr += chunk.toString();
+    });
+    const [code] = await once(child, 'close');
+    expect(code).toBe(2);
+    expect(stderr).toBe(
+      `Invalid FF_SANDBOX_CHUNK_DELAY_MS "${value}": expected a positive whole number of milliseconds.\n`
+    );
+  });
+
+  it('exits once stdin closes while a long chunk delay is pending', async () => {
+    const child = startFake('slow-stream', { FF_SANDBOX_CHUNK_DELAY_MS: neverMs });
+    const lines = createInterface({ input: child.stdout });
+    const firstDelta = new Promise<void>((resolve) => {
+      lines.on('line', (line) => {
+        if (messageSchema.parse(JSON.parse(line)).method === 'item/agentMessage/delta') {
+          resolve();
+        }
+      });
+    });
+    child.stdin.write(`${JSON.stringify({ id: 7, method: 'turn/start', params: { threadId } })}\n`);
+    await firstDelta;
+    const closed = once(child, 'close');
+    child.stdin.end();
+    expect(await closed).toEqual([0, null]);
+  });
+
+  it('slow-stream stops streaming on turn/interrupt, then exits once stdin closes', async () => {
     const [started, delta, completed] = message('message-1', 'Streaming ', ['Streaming ']);
-    expect(
-      await playPrompt(startFake('slow-stream'), { interruptOn: 'item/agentMessage/delta' })
-    ).toMatchObject([
+    const child = startFake('slow-stream', { FF_SANDBOX_CHUNK_DELAY_MS: neverMs });
+    expect(await playPrompt(child, { interruptOn: 'item/agentMessage/delta' })).toMatchObject([
       turnStartResponse,
       turnStarted,
       started,
@@ -260,6 +300,9 @@ describe('fake Codex app-server scenarios', () => {
       completed,
       turnCompleted('interrupted'),
     ]);
+    const closed = once(child, 'close');
+    child.stdin.end();
+    expect(await closed).toEqual([0, null]);
   });
 
   it('permission-request cancels its approval and ends on turn/interrupt', async () => {

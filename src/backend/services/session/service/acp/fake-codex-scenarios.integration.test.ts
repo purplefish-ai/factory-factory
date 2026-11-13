@@ -29,10 +29,15 @@ type ClientEvent =
 /**
  * Starts the adapter on the fake and sends `Hello sandbox`. A permission request is answered with
  * `optionId`; `stopAfterFirstChunk` cancels the prompt once the first reply chunk arrives.
+ * `chunkDelayMs` sets the fake's FF_SANDBOX_CHUNK_DELAY_MS.
  */
 async function playScenario(
   scenario: string,
-  { optionId = 'allow_once', stopAfterFirstChunk = false } = {}
+  {
+    optionId = 'allow_once',
+    stopAfterFirstChunk = false,
+    chunkDelayMs,
+  }: { optionId?: string; stopAfterFirstChunk?: boolean; chunkDelayMs?: number } = {}
 ) {
   // The session working directory arrives resolved; macOS temp dirs live under /private.
   const dir = await realpath(await mkdtemp(join(tmpdir(), 'ff-scenario-')));
@@ -51,6 +56,7 @@ async function playScenario(
       CODEX_HOME: dir,
       CODEX_PATH: fake,
       FF_SANDBOX_SCENARIO: scenario,
+      ...(chunkDelayMs === undefined ? {} : { FF_SANDBOX_CHUNK_DELAY_MS: String(chunkDelayMs) }),
     }),
   });
   const never = {
@@ -231,7 +237,7 @@ it('error ends the turn with a session failure the client can show', async () =>
 }, 20_000);
 
 it('slow-stream delivers its reply as several ordered chunks', async () => {
-  const played = await playScenario('slow-stream');
+  const played = await playScenario('slow-stream', { chunkDelayMs: 5 });
   expect(played.response.stopReason).toBe('end_turn');
   expect(played.chunks).toEqual([
     'Streaming ',
@@ -246,7 +252,11 @@ it('slow-stream delivers its reply as several ordered chunks', async () => {
 }, 20_000);
 
 it('slow-stream stops streaming when the client cancels the prompt', async () => {
-  const played = await playScenario('slow-stream', { stopAfterFirstChunk: true });
+  // Longer than the test's timeout: only the cancel can end the stream before it times out.
+  const played = await playScenario('slow-stream', {
+    stopAfterFirstChunk: true,
+    chunkDelayMs: 60_000,
+  });
   expect(played.response.stopReason).toBe('cancelled');
   expect(played.chunks).toEqual(['Streaming ']);
 }, 20_000);

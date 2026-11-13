@@ -77,7 +77,7 @@ const scenarios = {
     return { status: 'failed', error };
   },
   'slow-stream': async (turn) => {
-    await turn.reply(slowStreamChunks, slowStreamDelayMs);
+    await turn.reply(slowStreamChunks, chunkDelayMs);
   },
 };
 const scenarioName = process.env.FF_SANDBOX_SCENARIO;
@@ -87,10 +87,22 @@ if (scenarioName !== undefined && !Object.hasOwn(scenarios, scenarioName)) {
   );
   process.exit(2);
 }
+// Tests set FF_SANDBOX_CHUNK_DELAY_MS: short to check order and count, or longer than the test
+// so that a stop is never raced by the next chunk.
+const delayOverride = process.env.FF_SANDBOX_CHUNK_DELAY_MS;
+if (
+  delayOverride !== undefined &&
+  !(/^[1-9]\d*$/.test(delayOverride) && +delayOverride < 2 ** 31)
+) {
+  process.stderr.write(
+    `Invalid FF_SANDBOX_CHUNK_DELAY_MS "${delayOverride}": expected a positive whole number of milliseconds.\n`
+  );
+  process.exit(2);
+}
+const chunkDelayMs = delayOverride === undefined ? slowStreamDelayMs : Number(delayOverride);
 
 const send = (value) => process.stdout.write(`${JSON.stringify(value)}\n`);
 const notify = (method, params) => send({ method, params });
-const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const pendingServerRequests = new Map();
 const interrupts = new Map();
 let serverRequestCount = 0;
@@ -120,8 +132,20 @@ async function playScenario(request, turnId) {
   let messageCount = 0;
   // turn/interrupt stops the scenario: no further items, and an open approval is cancelled.
   let interrupted = false;
+  let wake = () => undefined;
+  // Unref'd so a pending chunk never keeps the fake alive once stdin closes; an interrupt wakes it.
+  const sleep = (ms) =>
+    new Promise((resolve) => {
+      const timer = setTimeout(resolve, ms);
+      timer.unref();
+      wake = () => {
+        clearTimeout(timer);
+        resolve();
+      };
+    });
   interrupts.set(turnId, () => {
     interrupted = true;
+    wake();
     for (const resolve of pendingServerRequests.values()) {
       resolve({ decision: 'cancel' });
     }
