@@ -26,6 +26,12 @@ export type BackEdgeCheckInput = {
   undeclaredEdges: readonly ModuleEdge[];
   /** Shortens file paths in messages. */
   serviceRoot: string;
+  /**
+   * Whether to report listed edges no longer needed (default true). Off while
+   * the list has an entry the base branch lacks, since that entry is the
+   * finding and the rest of the list may only look unneeded because of it.
+   */
+  reportUnneeded?: boolean;
 };
 
 const field = `sessionModuleCycles in ${sessionModulesFile}`;
@@ -213,7 +219,7 @@ export function getBackEdgeErrors(input: BackEdgeCheckInput): string[] {
         : `Session modules import each other in a cycle: ${path}. Remove one of these imports; ${field} lists the only imports allowed to close a cycle, and may only shrink.`
     );
   }
-  if (components.length > 0) {
+  if (components.length > 0 || input.reportUnneeded === false) {
     return errors;
   }
 
@@ -224,7 +230,7 @@ export function getBackEdgeErrors(input: BackEdgeCheckInput): string[] {
     if (shortestPath(withoutEdges(graph, [...others, edge]), edge[1], edge[0]) === null) {
       kept = others;
       errors.push(
-        `${field} lists ${quoteEdge(edge)}, but "${edge[0]}" → "${edge[1]}" no longer closes a cycle: nothing "${edge[1]}" imports leads back to "${edge[0]}". Remove the line ${quoteEdge(edge)}, from sessionModuleCycles.`
+        `${field} lists ${quoteEdge(edge)}, but it no longer closes a cycle on its own: no import path from "${edge[1]}" back to "${edge[0]}" avoids the other listed edges. Remove the line ${quoteEdge(edge)}, from sessionModuleCycles.`
       );
     }
   }
@@ -243,20 +249,120 @@ export function cycleMembership(graph: ModuleGraph, backEdges: readonly ModuleEd
     componentOf.has(module) && componentOf.get(module) === componentOf.get(other);
 }
 
-/** Entries in `current` that the base branch's list does not have. */
-export function getAddedBackEdgeErrors(
+/** The base branch's copy of `modules.ts`, as far as it could be found. */
+export type BaseModulesSource =
+  | { kind: 'no-ref' }
+  | { kind: 'absent'; ref: string }
+  | { kind: 'present'; ref: string; source: string };
+
+export type CycleListBaseInput = {
+  /** The working tree's `modules.ts` source text. */
+  currentSource: string;
+  /** `sessionModuleCycles` as imported at run time. */
+  imported: readonly ModuleEdge[];
+  base: BaseModulesSource;
+};
+
+export type CycleListBaseResult = {
+  errors: string[];
+  /** The list has an entry the base branch lacks. */
+  added: boolean;
+  /** Set when nothing could be compared; the check passes and prints it. */
+  notice?: string;
+};
+
+const plainListForm =
+  "must stay a plain array literal of two-string tuples, such as [['a', 'b']]: the check reads it from the source text to compare it with the base branch";
+
+function sameEdges(a: readonly ModuleEdge[], b: readonly ModuleEdge[]): boolean {
+  return a.length === b.length && a.every((edge, i) => edgeKey(edge) === edgeKey(b[i] ?? ['', '']));
+}
+
+/** Errors when the working tree's list cannot be read from its text, as the base will be. */
+function currentFormErrors(currentSource: string, imported: readonly ModuleEdge[]): string[] {
+  const parsed = parseSessionModuleCycles(currentSource);
+  if (parsed === null) {
+    return [`${field} ${plainListForm}. Remove the wrapper, spread or computation around it.`];
+  }
+  return sameEdges(parsed, imported)
+    ? []
+    : [
+        `${field} reads differently from its source text than at run time; keep it a plain array literal of two-string tuples, with nothing computed, spread or imported.`,
+      ];
+}
+
+/**
+ * Entries in `current` that the base list lacks. An entry naming a module the
+ * base does not have is a rename, and is accepted while the list is no longer
+ * than the base list; `baseModules` null turns that allowance off.
+ */
+function addedEntryErrors(
   base: readonly ModuleEdge[],
   current: readonly ModuleEdge[],
-  baseRef: string
+  ref: string,
+  baseModules: ReadonlySet<string> | null
 ): string[] {
   const known = new Set(base.map(edgeKey));
-  return [...new Set(current.map(edgeKey))]
+  const currentKeys = [...new Set(current.map(edgeKey))];
+  const renameAllowed = baseModules !== null && currentKeys.length <= known.size;
+  return currentKeys
     .filter((key) => !known.has(key))
     .sort()
-    .map((key) => {
-      const edge = splitKey(key);
-      return `${field} lists ${quoteEdge(edge)}, which the base branch (${baseRef.slice(0, 12)}) does not; entries may be removed, never added. Remove the line, and remove the import from "${edge[0]}" to "${edge[1]}" if it closes a cycle.`;
-    });
+    .map(splitKey)
+    .filter(([from, to]) => !(renameAllowed && !(baseModules.has(from) && baseModules.has(to))))
+    .map(
+      (edge) =>
+        `${field} lists ${quoteEdge(edge)}, which the base branch (${ref.slice(0, 12)}) does not; entries may be removed, never added. Remove the line, and remove the import from "${edge[0]}" to "${edge[1]}" if it closes a cycle.`
+    );
+}
+
+/**
+ * `sessionModuleCycles` may lose entries but never gain one. Compares the list
+ * with the base branch's copy of `modules.ts`, read from text; the working
+ * tree's list must therefore read the same from its text as at run time.
+ */
+export function checkSessionModuleCyclesAgainstBase(
+  input: CycleListBaseInput
+): CycleListBaseResult {
+  const errors = currentFormErrors(input.currentSource, input.imported);
+  const { base } = input;
+  const notCompared = 'sessionModuleCycles was not compared with the base branch.';
+  if (base.kind === 'no-ref') {
+    return {
+      errors,
+      added: false,
+      notice: `no base ref (merge base with origin/main or a merge parent); ${notCompared}`,
+    };
+  }
+  const ref = base.ref.slice(0, 12);
+  if (base.kind === 'absent') {
+    return {
+      errors,
+      added: false,
+      notice: `${sessionModulesFile} does not exist at ${ref}; ${notCompared}`,
+    };
+  }
+  if (!base.source.includes('sessionModuleCycles')) {
+    return {
+      errors,
+      added: false,
+      notice: `${sessionModulesFile} has no sessionModuleCycles list at ${ref}; ${notCompared}`,
+    };
+  }
+  const baseList = parseSessionModuleCycles(base.source);
+  if (baseList === null) {
+    errors.push(
+      `${field} could not be read at the base branch (${ref}), so entries added to it cannot be detected. The list must stay a plain array literal of two-string tuples; restore that form on main.`
+    );
+    return { errors, added: false };
+  }
+  const added = addedEntryErrors(
+    baseList,
+    input.imported,
+    base.ref,
+    parseSessionModuleNames(base.source)
+  );
+  return { errors: [...errors, ...added], added: added.length > 0 };
 }
 
 function unwrap(expression: ts.Expression): ts.Expression {
@@ -265,6 +371,16 @@ function unwrap(expression: ts.Expression): ts.Expression {
     ts.isParenthesizedExpression(expression)
     ? unwrap(expression.expression)
     : expression;
+}
+
+/** The initializer of the top-level `const <name>`, without type wrappers. */
+function initializerOf(source: string, name: string): ts.Expression | undefined {
+  const file = ts.createSourceFile(sessionModulesFile, source, ts.ScriptTarget.Latest, false);
+  const declaration = file.statements
+    .filter(ts.isVariableStatement)
+    .flatMap((statement) => [...statement.declarationList.declarations])
+    .find((candidate) => ts.isIdentifier(candidate.name) && candidate.name.text === name);
+  return declaration?.initializer && unwrap(declaration.initializer);
 }
 
 function edgeLiteral(element: ts.Expression): ModuleEdge | null {
@@ -278,22 +394,27 @@ function edgeLiteral(element: ts.Expression): ModuleEdge | null {
     : null;
 }
 
-/** The `sessionModuleCycles` entries in a copy of `modules.ts`, or null when absent. */
+/** The `sessionModuleCycles` entries in a copy of `modules.ts`, or null when not a plain list. */
 export function parseSessionModuleCycles(source: string): ModuleEdge[] | null {
-  const file = ts.createSourceFile(sessionModulesFile, source, ts.ScriptTarget.Latest, false);
-  for (const statement of file.statements.filter(ts.isVariableStatement)) {
-    for (const declaration of statement.declarationList.declarations) {
-      const initializer = declaration.initializer && unwrap(declaration.initializer);
-      if (
-        ts.isIdentifier(declaration.name) &&
-        declaration.name.text === 'sessionModuleCycles' &&
-        initializer !== undefined &&
-        ts.isArrayLiteralExpression(initializer)
-      ) {
-        const edges = initializer.elements.map(edgeLiteral);
-        return edges.every((edge) => edge !== null) ? edges : null;
-      }
-    }
+  const initializer = initializerOf(source, 'sessionModuleCycles');
+  if (initializer === undefined || !ts.isArrayLiteralExpression(initializer)) {
+    return null;
   }
-  return null;
+  const edges = initializer.elements.map(edgeLiteral);
+  return edges.every((edge) => edge !== null) ? edges : null;
+}
+
+/** The module names keyed in `sessionModules`, or null when they cannot be read. */
+export function parseSessionModuleNames(source: string): Set<string> | null {
+  const initializer = initializerOf(source, 'sessionModules');
+  if (initializer === undefined || !ts.isObjectLiteralExpression(initializer)) {
+    return null;
+  }
+  const names = initializer.properties.map((property) =>
+    ts.isPropertyAssignment(property) &&
+    (ts.isIdentifier(property.name) || ts.isStringLiteral(property.name))
+      ? property.name.text
+      : null
+  );
+  return names.every((name) => name !== null) ? new Set(names) : null;
 }

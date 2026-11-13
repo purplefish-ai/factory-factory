@@ -52,6 +52,8 @@ export type SessionModuleCheckInput = {
   /** Module directories under `service/`, plus `root` while files sit directly in it. */
   moduleDirectories: readonly string[];
   edges: readonly SessionModuleEdge[];
+  /** Off while `cycles` has an entry the base branch lacks; see `getBackEdgeErrors`. */
+  reportUnneededBackEdges?: boolean;
 };
 
 export function isSessionTestFile(filePath: string): boolean {
@@ -357,6 +359,7 @@ export function getSessionModuleErrors(input: SessionModuleCheckInput): string[]
       backEdges: input.cycles,
       undeclaredEdges,
       serviceRoot: sessionServiceRoot,
+      reportUnneeded: input.reportUnneededBackEdges,
     }),
   ];
 }

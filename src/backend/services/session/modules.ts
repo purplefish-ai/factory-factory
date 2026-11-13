@@ -135,11 +135,12 @@ export const sessionModules: Record<
 
 /**
  * Directed imports `[from, to]` that are allowed to close a cycle: without
- * them the module graph is acyclic. Sorted. Entries may be removed, never added
- * (the check compares this list with the base branch).
+ * them the module graph is acyclic. A listed import is the one meant to be
+ * removed. Sorted. Entries may be removed, never added (the check compares
+ * this list with the base branch), and it stays a plain array literal.
  */
 export const sessionModuleCycles: readonly (readonly [string, string])[] = [
-  ['chat', 'dispatch'],
+  ['dispatch', 'chat'],
   ['root', 'composition'],
   ['store', 'root'],
 ];

@@ -17,8 +17,8 @@ import { getCapsuleBarrelWildcardErrors } from './service-registry-barrels';
 import { collectBridgeEdges } from './service-registry-bridges';
 import { getDeclaredDependencyErrors } from './service-registry-dependencies';
 import {
-  getAddedBackEdgeErrors,
-  parseSessionModuleCycles,
+  type BaseModulesSource,
+  checkSessionModuleCyclesAgainstBase,
   sessionModulesFile,
 } from './service-registry-session-cycles';
 import {
@@ -471,7 +471,7 @@ function checkCapsuleBarrels(errors: string[]): void {
 }
 
 /** The session capsule's module map must match its imports; see service-registry-session-modules.ts. */
-function checkSessionModules(errors: string[]): void {
+function checkSessionModules(errors: string[], reportUnneededBackEdges: boolean): void {
   const filePaths = listTypeScriptFiles(path.join(rootDir, sessionServiceRoot), true).map(
     (filePath) => ({ filePath, path: getRelativeServiceFilePath(filePath) })
   );
@@ -485,6 +485,7 @@ function checkSessionModules(errors: string[]): void {
       cycles: sessionModuleCycles,
       moduleDirectories,
       edges: collectSessionModuleEdges(files, moduleDirectories),
+      reportUnneededBackEdges,
     })
   );
 }
@@ -501,23 +502,14 @@ function showAtRevision(revision: string): string | undefined {
   }
 }
 
-/**
- * `sessionModuleCycles` may lose entries but never gain one: compare it with
- * the base branch, found the way `pnpm check:guidance` finds it. Returns a
- * notice instead when there is nothing to compare with.
- */
-function checkSessionModuleCyclesShrink(errors: string[]): string | undefined {
+/** The base branch's `modules.ts`, found the way `pnpm check:guidance` finds its base. */
+function readBaseModulesSource(): BaseModulesSource {
   const ref = resolveBaseRef(rootDir);
   if (ref === undefined) {
-    return 'no base ref (merge base with origin/main or a merge parent); sessionModuleCycles was not compared with the base branch.';
+    return { kind: 'no-ref' };
   }
   const source = showAtRevision(`${ref}:${sessionModulesFile}`);
-  const base = source === undefined ? null : parseSessionModuleCycles(source);
-  if (base === null) {
-    return `${sessionModulesFile} has no sessionModuleCycles list at ${ref.slice(0, 12)}; sessionModuleCycles was not compared with the base branch.`;
-  }
-  errors.push(...getAddedBackEdgeErrors(base, sessionModuleCycles, ref));
-  return undefined;
+  return source === undefined ? { kind: 'absent', ref } : { kind: 'present', ref, source };
 }
 
 function main(): void {
@@ -529,10 +521,16 @@ function main(): void {
   checkDeclaredDependencies(checkCrossServiceImports(errors), errors);
   checkPrismaGeneratedImports(errors);
   checkCapsuleBarrels(errors);
-  checkSessionModules(errors);
-  const notice = checkSessionModuleCyclesShrink(errors);
-  if (notice !== undefined) {
-    process.stdout.write(`Service registry check: ${notice}\n`);
+  // sessionModuleCycles may lose entries but never gain one.
+  const cyclesAgainstBase = checkSessionModuleCyclesAgainstBase({
+    currentSource: readFileSync(path.join(rootDir, sessionModulesFile), 'utf8'),
+    imported: sessionModuleCycles,
+    base: readBaseModulesSource(),
+  });
+  errors.push(...cyclesAgainstBase.errors);
+  checkSessionModules(errors, !cyclesAgainstBase.added);
+  if (cyclesAgainstBase.notice !== undefined) {
+    process.stdout.write(`Service registry check: ${cyclesAgainstBase.notice}\n`);
   }
 
   if (errors.length > 0) {
