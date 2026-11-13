@@ -79,13 +79,13 @@ describe('tree metrics', () => {
       'src/client/b.tsx',
       'src/backend/testing.ts',
       'src/lib/fixtures.ts',
+      'src/lib/fixtures/claude.ts',
     ];
     const excluded = [
       'src/a.test.ts',
       'src/client/b.stories.tsx',
       'src/backend/testing/setup.ts',
       'src/test-utils/deferred.ts',
-      'src/lib/fixtures/claude.ts',
       'src/shared/pr.test-helpers.ts',
       'src/backend/agent-ledger.test-support.ts',
       'src/client/form.test-harness.tsx',

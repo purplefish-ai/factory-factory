@@ -58,13 +58,14 @@ export function isArchitectureNote(path: string): boolean {
 }
 
 /**
- * Test and story support by location: a `testing/`, `test-utils/` or
- * `fixtures/` directory, or a `*.test-helpers.*`, `*.test-support.*`,
- * `*.test-harness.*`, `*.story-fixtures.*` or `*.fixture.*` file, whatever
- * follows the marker.
+ * Test and story support by location: a `testing/` or `test-utils/`
+ * directory, or a `*.test-helpers.*`, `*.test-support.*`, `*.test-harness.*`,
+ * `*.story-fixtures.*` or `*.fixture.*` file, whatever follows the marker. A
+ * `fixtures/` directory is not enough: it can hold production modules, as in
+ * `scripts/check-unused-code.ts`.
  */
 export const testSupportPatterns: readonly RegExp[] = [
-  /(?:^|\/)(?:testing|test-utils|fixtures)\//,
+  /(?:^|\/)(?:testing|test-utils)\//,
   /\.(?:test-helpers|test-support|test-harness|story-fixtures|fixture)\./,
 ];
 
