@@ -49,5 +49,9 @@ export async function main(
 }
 
 if (process.argv[1] && realpathSync(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  // A dead reader makes the next write fail with EPIPE, which would crash the launcher mid-stop.
+  for (const stream of [process.stdout, process.stderr]) {
+    stream.on('error', () => undefined);
+  }
   process.exit(await main(process.argv.slice(2)));
 }

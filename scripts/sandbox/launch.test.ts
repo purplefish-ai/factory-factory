@@ -519,4 +519,36 @@ describe('the real launcher', () => {
       sandbox.child.kill('SIGKILL');
     }
   }, 180_000);
+
+  it('stops and removes its directory when the process reading its output has died', async () => {
+    const tempDir = temporary.create('ffsb-');
+    const root = join(tempDir, 'ff-sandbox');
+    // Bounded: the owner ends itself after the helper lifetime, the launcher after its time to live.
+    const owner = spawnSleeper();
+    const sandbox = launch(
+      ['--owner-pid', String(owner.pid), '--ttl-minutes', '10'],
+      launcherEnv(tempDir)
+    );
+    try {
+      const deadline = Date.now() + 150_000;
+      while (
+        !(existsSync(root) && readdirSync(root).length > 0) &&
+        sandbox.child.exitCode === null &&
+        Date.now() < deadline
+      ) {
+        await realSystem.sleep(20);
+      }
+      expect(readdirSync(root)).toHaveLength(1);
+      // The reader dies: the launcher's next write to stdout or stderr gets EPIPE.
+      sandbox.child.stdout?.destroy();
+      sandbox.child.stderr?.destroy();
+      owner.kill('SIGKILL');
+      // Its stop writes "stopping (...)" to the dead pipe, then must still clean up.
+      expect(await sandbox.exited).toBe(0);
+      expect(readdirSync(root)).toEqual([]);
+    } finally {
+      owner.kill('SIGKILL');
+      sandbox.child.kill('SIGKILL');
+    }
+  }, 240_000);
 });
