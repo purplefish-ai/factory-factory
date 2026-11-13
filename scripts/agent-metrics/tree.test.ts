@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { guidanceSize, guideChains, largeFiles, mostEditedFiles } from './tree';
+import { guidanceSize, guideChains, isProductionSource, largeFiles, mostEditedFiles } from './tree';
 
 describe('tree metrics', () => {
   it('builds the guide chain for each directory with an AGENTS.md', () => {
@@ -71,5 +71,38 @@ describe('tree metrics', () => {
       { path: 'src/big.ts', lines: 1200 },
       { path: 'src/at.ts', lines: 900 },
     ]);
+  });
+
+  it('leaves tests, stories and test support out of production source', () => {
+    const production = [
+      'src/a.ts',
+      'src/client/b.tsx',
+      'src/backend/testing.ts',
+      'src/lib/fixtures.ts',
+    ];
+    const excluded = [
+      'src/a.test.ts',
+      'src/client/b.stories.tsx',
+      'src/backend/testing/setup.ts',
+      'src/test-utils/deferred.ts',
+      'src/lib/fixtures/claude.ts',
+      'src/shared/pr.test-helpers.ts',
+      'src/backend/agent-ledger.test-support.ts',
+      'src/client/form.test-harness.tsx',
+      'src/client/event.story-fixtures.ts',
+      'src/lib/claude.fixture.ts',
+    ];
+    expect(production.filter(isProductionSource)).toEqual(production);
+    expect(excluded.filter(isProductionSource)).toEqual([]);
+  });
+
+  it('breaks ties by plain string order, not locale order', () => {
+    expect(mostEditedFiles([['a.ts', 'B.ts']]).map((file) => file.path)).toEqual(['B.ts', 'a.ts']);
+    expect(
+      largeFiles([
+        { path: 'src/a.ts', lines: 900 },
+        { path: 'src/B.ts', lines: 900 },
+      ]).map((file) => file.path)
+    ).toEqual(['src/B.ts', 'src/a.ts']);
   });
 });

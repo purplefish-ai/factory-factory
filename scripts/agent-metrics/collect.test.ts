@@ -1,0 +1,193 @@
+import { createHash } from 'node:crypto';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { dirname, join } from 'node:path';
+import { afterEach, describe, expect, it } from 'vitest';
+import { type Command, collectCiAttempts, collectCommitFiles, collectTree } from './collect';
+
+const commit = '0123456789abcdef0123456789abcdef01234567';
+
+function runListRow(databaseId: number, attempt: number, headBranch: string) {
+  return {
+    databaseId,
+    attempt,
+    headBranch,
+    headSha: `sha-${databaseId}`,
+    status: 'completed',
+    conclusion: 'success',
+    startedAt: '2026-11-01T10:30:00Z',
+    updatedAt: '2026-11-01T10:35:00Z',
+  };
+}
+
+function runAttempt(id: number, attempt: number) {
+  return {
+    id,
+    run_attempt: attempt,
+    head_branch: null,
+    head_sha: `sha-${id}`,
+    status: 'completed',
+    conclusion: 'failure',
+    run_started_at: `2026-11-01T10:0${attempt}:00Z`,
+    updated_at: `2026-11-01T10:0${attempt}:30Z`,
+  };
+}
+
+/** Records every call and answers from `responses`, keyed by the joined arguments. */
+function fakeCommand(responses: Record<string, string | Buffer>) {
+  const calls: string[] = [];
+  const command: Command = (args) => {
+    const key = args.join(' ');
+    calls.push(key);
+    const response = responses[key];
+    if (response === undefined) {
+      throw new Error(`Unexpected command: ${key}`);
+    }
+    return Buffer.from(response);
+  };
+  return { command, calls };
+}
+
+// Commits as `git log --name-only` reports them, newest first. The second has no files.
+const loggedCommits = [['src/a b.ts', 'src/ü.ts'], [], ['README.md']];
+
+function quotePath(path: string): string {
+  if (/^[ -~]*$/.test(path)) {
+    return path;
+  }
+  const octal = [...Buffer.from(path)].map((byte) =>
+    byte < 0x80 ? String.fromCharCode(byte) : `\\${byte.toString(8)}`
+  );
+  return `"${octal.join('')}"`;
+}
+
+/** What `git log -n<count> --format=%x1e --name-only --no-renames` prints, with or without `-z`. */
+function gitLogOutput(nulTerminated: boolean): string {
+  return loggedCommits
+    .map((files) =>
+      nulTerminated
+        ? `\u001e\0${files.length > 0 ? `\n${files.map((file) => `${file}\0`).join('')}` : ''}`
+        : `\u001e\n${files.length > 0 ? `\n${files.map((file) => `${quotePath(file)}\n`).join('')}` : ''}`
+    )
+    .join('');
+}
+
+/** A `git` that answers the commands `collectTree` and `collectCommitFiles` run against `files`. */
+function fakeGit(files: Record<string, string>): Command {
+  const objectId = (content: string) => createHash('sha1').update(content).digest('hex');
+  const byObjectId = new Map(Object.values(files).map((content) => [objectId(content), content]));
+  return (args, input) => {
+    const [subcommand] = args;
+    if (subcommand === 'rev-parse') {
+      return Buffer.from(`${commit}\n`);
+    }
+    if (subcommand === 'log') {
+      return Buffer.from(gitLogOutput(args.includes('-z')));
+    }
+    if (subcommand === 'ls-files') {
+      return Buffer.from(
+        Object.keys(files)
+          .map((path) => `${path}\0`)
+          .join('')
+      );
+    }
+    if (subcommand === 'ls-tree' && args.includes(commit)) {
+      return Buffer.from(
+        Object.entries(files)
+          .map(([path, content]) => `100644 blob ${objectId(content)}\t${path}\0`)
+          .join('')
+      );
+    }
+    if (subcommand === 'cat-file' && args.includes('--batch') && input !== undefined) {
+      return Buffer.concat(
+        input
+          .split('\n')
+          .filter((line) => line.length > 0)
+          .flatMap((id) => {
+            const content = Buffer.from(byObjectId.get(id) ?? '');
+            return [Buffer.from(`${id} blob ${content.length}\n`), content, Buffer.from('\n')];
+          })
+      );
+    }
+    throw new Error(`Unexpected command: git ${args.join(' ')}`);
+  };
+}
+
+describe('collectCiAttempts', () => {
+  it('fetches every earlier attempt of a re-run, keeping the run branch', () => {
+    const gh = fakeCommand({
+      'run list --workflow ci.yml --event pull_request --limit 10 --json attempt,conclusion,databaseId,headBranch,headSha,startedAt,status,updatedAt':
+        JSON.stringify([runListRow(7, 3, 'rerun-branch'), runListRow(8, 1, 'single')]),
+      'api repos/{owner}/{repo}/actions/runs/7/attempts/1': JSON.stringify(runAttempt(7, 1)),
+      'api repos/{owner}/{repo}/actions/runs/7/attempts/2': JSON.stringify(runAttempt(7, 2)),
+    });
+    const attempts = collectCiAttempts('/repo', 10, gh.command);
+    expect(gh.calls.filter((call) => call.startsWith('api '))).toEqual([
+      'api repos/{owner}/{repo}/actions/runs/7/attempts/1',
+      'api repos/{owner}/{repo}/actions/runs/7/attempts/2',
+    ]);
+    expect(
+      attempts.map(({ runId, attempt, branch, conclusion }) => [runId, attempt, branch, conclusion])
+    ).toEqual([
+      [7, 3, 'rerun-branch', 'success'],
+      [8, 1, 'single', 'success'],
+      [7, 1, 'rerun-branch', 'failure'],
+      [7, 2, 'rerun-branch', 'failure'],
+    ]);
+  });
+});
+
+describe('collectCommitFiles', () => {
+  it('reads paths with spaces and non-ASCII characters unquoted', () => {
+    expect(collectCommitFiles('/repo', 3, fakeGit({}))).toEqual(loggedCommits);
+  });
+});
+
+describe('collectTree', () => {
+  let workingTree: string | undefined;
+
+  afterEach(() => {
+    if (workingTree) {
+      rmSync(workingTree, { recursive: true, force: true });
+    }
+  });
+
+  it('measures the commit it names, not a dirty working tree', () => {
+    const lines = (count: number) => 'const x = 1;\n'.repeat(count);
+    const committed = {
+      'AGENTS.md': 'Guide.\n',
+      'docs/architecture/note.md': 'One.\nTwo.\n',
+      'src/big.ts': lines(900),
+      'src/deleted-in-working-tree.ts': lines(950),
+      'src/a.test.ts': "vi.mock('node:fs');\n",
+      'scripts/unused-code-baseline.json': '{"version":1,"production":{},"exports":{}}',
+      'scripts/file-length-baseline.json': '{}',
+      '.oxlintrc.json': '{}',
+    };
+    workingTree = mkdtempSync(join(tmpdir(), 'agent-metrics-'));
+    const dirty = Object.entries({
+      ...committed,
+      'src/big.ts': lines(3),
+      'src/a.test.ts': "it('runs', () => {});\n",
+    }).filter(([path]) => path !== 'src/deleted-in-working-tree.ts');
+    for (const [path, content] of dirty) {
+      mkdirSync(dirname(join(workingTree, path)), { recursive: true });
+      writeFileSync(join(workingTree, path), content);
+    }
+
+    const tree = collectTree(workingTree, fakeGit(committed));
+    expect(tree).toMatchObject({
+      commit,
+      guidance: { guideLines: 1, architectureNoteLines: 2, sourceLines: 1850 },
+      largeProductionFiles: {
+        count: 2,
+        files: [
+          { path: 'src/deleted-in-working-tree.ts', lines: 950 },
+          { path: 'src/big.ts', lines: 900 },
+        ],
+      },
+      viMocks: { calls: 1, filesWithMocks: 1, testFiles: 1 },
+      sessionModuleCycles: null,
+    });
+  });
+});

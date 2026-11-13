@@ -17,11 +17,13 @@ export const runListSchema = z.array(
   })
 );
 
-/** `gh api repos/{owner}/{repo}/actions/runs/<id>/attempts/<n>`, for runs that were re-run. */
+/**
+ * `gh api repos/{owner}/{repo}/actions/runs/<id>/attempts/<n>`, for runs that
+ * were re-run. Its `head_branch` can be null, so the branch comes from the run.
+ */
 export const runAttemptSchema = z.object({
   id: z.number().int(),
   run_attempt: z.number().int().positive(),
-  head_branch: z.string().nullable(),
   head_sha: z.string().min(1),
   status: z.string().nullable(),
   conclusion: z.string().nullable(),
@@ -54,11 +56,15 @@ export function attemptsFromRunList(rows: z.infer<typeof runListSchema>): CiRunA
   }));
 }
 
-export function attemptFromApi(row: z.infer<typeof runAttemptSchema>): CiRunAttempt {
+/** An earlier attempt of a run; `branch` is the run's `headBranch` from `gh run list`. */
+export function attemptFromApi(
+  row: z.infer<typeof runAttemptSchema>,
+  branch: string
+): CiRunAttempt {
   return {
     runId: row.id,
     attempt: row.run_attempt,
-    branch: row.head_branch ?? '',
+    branch,
     sha: row.head_sha,
     status: row.status ?? '',
     conclusion: row.conclusion ?? '',
@@ -67,8 +73,9 @@ export function attemptFromApi(row: z.infer<typeof runAttemptSchema>): CiRunAtte
   };
 }
 
-// A cancelled or skipped run says nothing about the code, so it is passed over.
-const noSignalConclusions = new Set(['cancelled', 'skipped']);
+// A cancelled, skipped or approval-waiting run says nothing about the code, so
+// it is passed over.
+const noSignalConclusions = new Set(['cancelled', 'skipped', 'action_required']);
 const failingConclusions = new Set(['failure', 'timed_out', 'startup_failure']);
 
 function chronological(attempts: readonly CiRunAttempt[]): CiRunAttempt[] {

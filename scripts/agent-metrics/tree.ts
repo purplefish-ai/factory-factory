@@ -12,6 +12,14 @@ function directoryOf(path: string): string {
   return directory === '.' ? '' : directory;
 }
 
+/** Code-unit order, the same on every machine (unlike `localeCompare`). */
+function compareText(left: string, right: string): number {
+  if (left === right) {
+    return 0;
+  }
+  return left < right ? -1 : 1;
+}
+
 function isWithin(directory: string, ancestor: string): boolean {
   return ancestor === '' || directory === ancestor || directory.startsWith(`${ancestor}/`);
 }
@@ -49,13 +57,25 @@ export function isArchitectureNote(path: string): boolean {
   return path.startsWith('docs/architecture/') && path.endsWith('.md');
 }
 
-/** Non-test, non-story TypeScript under `src/`. */
+/**
+ * Test and story support by location: a `testing/`, `test-utils/` or
+ * `fixtures/` directory, or a `*.test-helpers.*`, `*.test-support.*`,
+ * `*.test-harness.*`, `*.story-fixtures.*` or `*.fixture.*` file. The same
+ * conventions as `scripts/check-unused-code.ts`.
+ */
+export const testSupportPatterns: readonly RegExp[] = [
+  /(?:^|\/)(?:testing|test-utils|fixtures)\//,
+  /\.(?:test-helpers|test-support|test-harness|story-fixtures|fixture)\.[cm]?[jt]sx?$/,
+];
+
+/** TypeScript under `src/` that is not a test, a story or test support. */
 export function isProductionSource(path: string): boolean {
   return (
     path.startsWith('src/') &&
     /\.tsx?$/.test(path) &&
     !/\.test\.tsx?$/.test(path) &&
-    !/\.stories\.tsx?$/.test(path)
+    !/\.stories\.tsx?$/.test(path) &&
+    !testSupportPatterns.some((pattern) => pattern.test(path))
   );
 }
 
@@ -110,7 +130,7 @@ export function mostEditedFiles(
   }
   return [...counts]
     .toSorted(
-      ([leftPath, left], [rightPath, right]) => right - left || leftPath.localeCompare(rightPath)
+      ([leftPath, left], [rightPath, right]) => right - left || compareText(leftPath, rightPath)
     )
     .slice(0, limit)
     .map(([path, count]) => ({ path, commits: count, share: share(count, commits.length) }));
@@ -119,5 +139,5 @@ export function mostEditedFiles(
 export function largeFiles(files: readonly FileLines[], threshold = largeFileLines): FileLines[] {
   return files
     .filter((file) => file.lines >= threshold)
-    .toSorted((left, right) => right.lines - left.lines || left.path.localeCompare(right.path));
+    .toSorted((left, right) => right.lines - left.lines || compareText(left.path, right.path));
 }

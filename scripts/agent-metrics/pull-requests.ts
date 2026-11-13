@@ -34,10 +34,21 @@ export function startsWithFixVerb(title: string): boolean {
   return fixVerbPattern.test(title.trim());
 }
 
-/** Pull request numbers a body mentions as `#123` or as a `/pull/123` link. */
-export function referencedPullRequestNumbers(body: string): number[] {
+function escapeRegExp(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/**
+ * Pull request numbers a body mentions as `#123` or as a
+ * `github.com/<repository>/pull/123` link to this repository (`owner/name`).
+ */
+export function referencedPullRequestNumbers(body: string, repository: string): number[] {
+  const pattern = new RegExp(
+    `(?:^|[^\\w&/])#(\\d+)\\b|(?<![\\w.-])github\\.com/${escapeRegExp(repository)}/pull/(\\d+)\\b`,
+    'gi'
+  );
   const numbers = new Set<number>();
-  for (const match of body.matchAll(/(?:^|[^\w&/])#(\d+)\b|\/pull\/(\d+)\b/g)) {
+  for (const match of body.matchAll(pattern)) {
     numbers.add(Number(match[1] ?? match[2]));
   }
   return [...numbers].toSorted((left, right) => left - right);
@@ -47,11 +58,15 @@ export type FollowUpFixes = {
   fixTitled: number;
   /** Fix-titled PRs whose body references a PR merged in the 7 days before it merged. */
   referencingRecentMerge: number;
-  share: number | null;
+  /** `referencingRecentMerge` over all merged PRs in the window, not over fix-titled ones. */
+  shareOfMerged: number | null;
   numbers: number[];
 };
 
-export function followUpFixes(pullRequests: readonly MergedPullRequest[]): FollowUpFixes {
+export function followUpFixes(
+  pullRequests: readonly MergedPullRequest[],
+  repository: string
+): FollowUpFixes {
   const mergedAt = new Map(
     pullRequests.map((pullRequest) => [pullRequest.number, Date.parse(pullRequest.mergedAt)])
   );
@@ -59,7 +74,7 @@ export function followUpFixes(pullRequests: readonly MergedPullRequest[]): Follo
   const numbers = fixes
     .filter((pullRequest) => {
       const merged = Date.parse(pullRequest.mergedAt);
-      return referencedPullRequestNumbers(pullRequest.body).some((number) => {
+      return referencedPullRequestNumbers(pullRequest.body, repository).some((number) => {
         const referenced = mergedAt.get(number);
         return (
           number !== pullRequest.number &&
@@ -74,7 +89,7 @@ export function followUpFixes(pullRequests: readonly MergedPullRequest[]): Follo
   return {
     fixTitled: fixes.length,
     referencingRecentMerge: numbers.length,
-    share: share(numbers.length, pullRequests.length),
+    shareOfMerged: share(numbers.length, pullRequests.length),
     numbers,
   };
 }
@@ -86,11 +101,15 @@ export type PullRequestMetrics = {
   followUpFixes: FollowUpFixes;
 };
 
-export function pullRequestMetrics(pullRequests: readonly MergedPullRequest[]): PullRequestMetrics {
+/** `repository` is `owner/name`; only `/pull/N` links into it count as references. */
+export function pullRequestMetrics(
+  pullRequests: readonly MergedPullRequest[],
+  repository: string
+): PullRequestMetrics {
   return {
     merged: pullRequests.length,
     window: timeWindow(pullRequests.map((pullRequest) => pullRequest.mergedAt)),
     openToMergeHours: openToMergeHours(pullRequests),
-    followUpFixes: followUpFixes(pullRequests),
+    followUpFixes: followUpFixes(pullRequests, repository),
   };
 }
