@@ -228,6 +228,21 @@ export function InlineWorkspaceForm({
     textarea.style.height = `${Math.min(textarea.scrollHeight + borderHeight, 240)}px`;
     textarea.scrollTop = top;
   }, [initialPrompt]);
+  // autoFocus does nothing while the saved draft restores, because the field is
+  // disabled until then (the first open after a page load). Take focus once it
+  // is editable, unless focus has moved to something outside the form's area.
+  const focusAfterRestore = useRef(recovery.isRestoring);
+  useLayoutEffect(() => {
+    const textarea = textareaRef.current;
+    if (!(focusAfterRestore.current && textarea) || recovery.isRestoring) {
+      return;
+    }
+    focusAfterRestore.current = false;
+    const active = textarea.ownerDocument.activeElement;
+    if (!active || active === textarea.ownerDocument.body || active.contains(textarea)) {
+      textarea.focus();
+    }
+  }, [recovery.isRestoring]);
   const submission = useWorkspaceCreationSubmission(draftId);
   const submitted = useRef<WorkspaceCreationSubmission | null>(null);
   // Mutation callbacks outlive the form; a failure after it closes needs a toast.

@@ -2,6 +2,7 @@
 import { execFileSync, spawnSync } from 'node:child_process';
 import { chmodSync, copyFileSync, mkdirSync, symlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { shellQuote } from './env.mjs';
 import { REPO_ROOT, sandboxPaths } from './paths.mjs';
 
 const FAKE_CODEX = join(
@@ -14,6 +15,14 @@ const FAKE_CODEX = join(
 );
 const GH_SHIM = join(REPO_ROOT, 'scripts', 'sandbox', 'gh-shim.mjs');
 const SSH_SHIM = join(REPO_ROOT, 'scripts', 'sandbox', 'ssh-shim.mjs');
+
+/** Where the sandbox's git sends GitHub remotes: `.invalid` never resolves. */
+export const GITHUB_STAND_IN = 'github.sandbox.invalid';
+
+/** A git configuration value in double quotes. */
+export function gitConfigString(value) {
+  return `"${value.replaceAll('\\', '\\\\').replaceAll('"', '\\"').replaceAll('\n', '\\n')}"`;
+}
 
 function installExecutable(source, target) {
   copyFileSync(source, target);
@@ -58,6 +67,26 @@ export function prepareSandbox(baseDir) {
       '\tdefaultBranch = main',
       '[commit]',
       '\tgpgsign = false',
+      // A second line behind GIT_ALLOW_PROTOCOL and GIT_SSH_COMMAND, which take
+      // precedence while set. Everything else is refused (git:// has no rewrite
+      // below); ssh and https stay allowed so that they reach the ssh shim and
+      // the egress recorder, which are the next lines. GitHub remotes point at a
+      // host that never resolves.
+      '[protocol]',
+      '\tallow = never',
+      '[protocol "file"]',
+      '\tallow = always',
+      '[protocol "ssh"]',
+      '\tallow = always',
+      '[protocol "https"]',
+      '\tallow = always',
+      '[core]',
+      `\tsshCommand = ${gitConfigString(shellQuote(paths.ssh))}`,
+      `[url "ssh://git@${GITHUB_STAND_IN}/"]`,
+      '\tinsteadOf = git@github.com:',
+      '\tinsteadOf = ssh://git@github.com/',
+      `[url "https://${GITHUB_STAND_IN}/"]`,
+      '\tinsteadOf = https://github.com/',
       '',
     ].join('\n')
   );

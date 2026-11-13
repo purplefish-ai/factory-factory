@@ -74,10 +74,20 @@ export function launch(args: string[], env: NodeJS.ProcessEnv): Launch {
   return { child, output: () => output, exited };
 }
 
-/** A detached process that idles until killed: an unrelated process group. */
-export function spawnSleeper(): ChildProcess {
-  return spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], {
+/** How long a helper process lives if a test never kills it (an interrupted run). */
+export const HELPER_LIFETIME_MS = 120_000;
+
+/**
+ * A detached process (its own process group) that idles until killed, or
+ * exits by itself after `lifetimeMs`. `env` replaces its environment.
+ */
+export function spawnSleeper({
+  env,
+  lifetimeMs = HELPER_LIFETIME_MS,
+}: { env?: NodeJS.ProcessEnv; lifetimeMs?: number } = {}): ChildProcess {
+  return spawn(process.execPath, ['-e', `setTimeout(() => {}, ${Math.floor(lifetimeMs)})`], {
     detached: true,
     stdio: 'ignore',
+    ...(env ? { env } : {}),
   });
 }

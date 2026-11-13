@@ -8,8 +8,8 @@ const INHERITED_VARIABLES = ['PATH', 'USER', 'LOGNAME', 'SHELL', 'TMPDIR', 'TERM
 /** Hosts that never go through the egress recorder: the sandbox's own servers. */
 const LOOPBACK_HOSTS = '127.0.0.1,localhost,::1';
 
-/** `git` runs GIT_SSH_COMMAND through a shell. */
-function shellQuote(value) {
+/** `git` runs GIT_SSH_COMMAND and `core.sshCommand` through a shell. */
+export function shellQuote(value) {
   return `'${value.replaceAll("'", "'\\''")}'`;
 }
 
@@ -28,9 +28,10 @@ function registryUrlWithoutCredentials(value) {
  * (Node honours the variables only with `NODE_USE_ENV_PROXY=1`), `git` over
  * HTTP(S) and the Claude runtime, whose API base URL is the recorder itself.
  * (`git` normally refuses HTTP(S) and SSH itself, below, before the recorder
- * or the ssh shim sees anything; they are its second line.) WebSocket clients and clients that bring their own agent ignore them: the
- * sandbox relies on those having no credential (voice narration) or being
- * switched off (Slack intake, below). See USAGE for what is not contained.
+ * or the ssh shim sees anything; they are its second line.) WebSocket clients
+ * and clients that bring their own agent ignore them: the sandbox relies on
+ * those having no credential (voice narration) or being switched off (Slack
+ * intake, below). See USAGE for what is not contained.
  */
 function egressVariables(egressPort) {
   const proxy = `http://127.0.0.1:${egressPort}`;

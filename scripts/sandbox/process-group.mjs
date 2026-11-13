@@ -146,6 +146,9 @@ export const realSystem = {
 /** The environment entry every process of the sandbox at `baseDir` carries. */
 export const sandboxEnvironmentEntry = (baseDir) => `BASE_DIR=${baseDir}`;
 
+/** How long a stop waits after SIGTERM before SIGKILL. */
+export const STOP_GRACE_MS = 15_000;
+
 /** This process's own start time, for sandbox.json. */
 export function ownIdentity(system = realSystem) {
   const self = findProcess(system.listProcesses(), process.pid);
@@ -200,7 +203,7 @@ export async function stopProcessGroup(
     system = realSystem,
     leaderStartedAt = null,
     baseDir = null,
-    graceMs = 15_000,
+    graceMs = STOP_GRACE_MS,
     killGraceMs = 5000,
     pollMs = 200,
   } = {}

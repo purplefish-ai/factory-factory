@@ -2,12 +2,26 @@ import { lstatSync, realpathSync } from 'node:fs';
 import path from 'node:path';
 
 /**
+ * True only when nothing is at `target` (ENOENT). An entry that exists, or a
+ * lookup that fails otherwise (`ENOTDIR` under a file, `EACCES` under a
+ * directory it may not search), is not "missing": the caller refuses it.
+ */
+function isMissing(target: string): boolean {
+  try {
+    return lstatSync(target, { throwIfNoEntry: false }) === undefined;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Where the operating system will find `target`: the real path of its longest
  * existing prefix, with symbolic links resolved before any `..` that follows
  * them (`realpathSync.native`; `path.resolve` and `realpathSync` collapse `..`
  * first), joined with the part that does not exist yet (a clone destination).
- * Null when that part contains `..`, or when an entry exists but cannot be
- * resolved (a dangling or looping link): neither can be placed until it exists.
+ * Null when that part contains `..`, or when a prefix cannot be resolved for a
+ * reason other than not existing (a dangling or looping link, a file in the
+ * way, a directory it may not search): none of those can be placed.
  */
 function resolveAsSystemWould(target: string): string | null {
   const absolute = path.isAbsolute(target) ? target : `${process.cwd()}${path.sep}${target}`;
@@ -23,7 +37,7 @@ function resolveAsSystemWould(target: string): string | null {
     try {
       existing = realpathSync.native(prefix);
     } catch {
-      if (lstatSync(prefix, { throwIfNoEntry: false })) {
+      if (!isMissing(prefix)) {
         return null;
       }
       continue;

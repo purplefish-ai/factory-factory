@@ -1,10 +1,10 @@
 import { execFile } from 'node:child_process';
 import { chmodSync, readFileSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { delimiter, join } from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
 import { startEgressRecorder } from './egress.mjs';
 import { buildServerEnv } from './env.mjs';
-import { prepareSandbox } from './prepare.mjs';
+import { createSeedRepository, prepareSandbox } from './prepare.mjs';
 import { PLANTED_CREDENTIALS, temporaryDirectories } from './test-support';
 
 const temporary = temporaryDirectories();
@@ -138,6 +138,88 @@ describe('git in the sandbox environment', () => {
       expect(readFileSync(paths.egressLog, 'utf8')).toMatch(
         / CONNECT remote\.sandbox-test\.invalid:443\n/
       );
+    } finally {
+      await recorder.close();
+    }
+  }, 120_000);
+
+  it('refuses git:// through its own git configuration and still allows local files', async () => {
+    const baseDir = temporary.create('ffsb-');
+    const paths = prepareSandbox(baseDir);
+    const recorder = await startEgressRecorder({ logFile: paths.egressLog });
+    try {
+      // The second line alone: the allow-list and GIT_SSH_COMMAND are gone.
+      const {
+        GIT_ALLOW_PROTOCOL: _allowed,
+        GIT_SSH_COMMAND: _sshCommand,
+        ...env
+      } = buildServerEnv({
+        parentEnv: { PATH: process.env.PATH },
+        baseDir,
+        scenario: 'echo',
+        egressPort: recorder.port,
+      });
+      // An unrefused attempt would name this .invalid host in a lookup failure.
+      const refused = await git(
+        ['ls-remote', 'git://remote.sandbox-test.invalid/octo/sandbox-test.git'],
+        env,
+        baseDir
+      );
+      expect(refused.code).not.toBe(0);
+      expect(refused.stderr).toContain("transport 'git' not allowed");
+      expect(refused.stderr).not.toContain('remote.sandbox-test.invalid');
+
+      createSeedRepository(paths, env);
+      const local = await git(['ls-remote', `file://${paths.repoPath}`], env, baseDir);
+      expect(local.code).toBe(0);
+    } finally {
+      await recorder.close();
+    }
+  }, 120_000);
+
+  it('sends GitHub remotes to an .invalid host through its own git configuration', async () => {
+    const baseDir = temporary.create('ffsb-');
+    const paths = prepareSandbox(baseDir);
+    const recorder = await startEgressRecorder({ logFile: paths.egressLog });
+    try {
+      // The second line alone: the allow-list and GIT_SSH_COMMAND are gone.
+      const {
+        GIT_ALLOW_PROTOCOL: _allowed,
+        GIT_SSH_COMMAND: _sshCommand,
+        ...env
+      } = buildServerEnv({
+        parentEnv: { PATH: process.env.PATH },
+        baseDir,
+        scenario: 'echo',
+        egressPort: recorder.port,
+      });
+      // The shim directory leads PATH, so a bare `ssh` would find it anyway. Take
+      // it off, so only the generated `core.sshCommand` can route to the shim.
+      env.PATH = env.PATH?.split(delimiter)
+        .filter((directory) => directory !== paths.binDir)
+        .join(delimiter);
+      for (const remote of [
+        'git@github.com:octo/sandbox-test.git',
+        'ssh://git@github.com/octo/sandbox-test.git',
+      ]) {
+        const result = await git(['ls-remote', remote], env, baseDir);
+        expect(result.code).not.toBe(0);
+        expect(result.stderr).toContain('sandbox: ssh is disabled');
+      }
+      const https = await git(
+        ['ls-remote', 'https://github.com/octo/sandbox-test.git'],
+        env,
+        baseDir
+      );
+      expect(https.code).not.toBe(0);
+
+      // Every attempt named the .invalid host, never github.com.
+      const sshLog = readFileSync(paths.sshLog, 'utf8');
+      expect(sshLog.match(/git@github\.sandbox\.invalid/g)).toHaveLength(2);
+      expect(sshLog).not.toContain('github.com');
+      const egressLog = readFileSync(paths.egressLog, 'utf8');
+      expect(egressLog).toMatch(/ CONNECT github\.sandbox\.invalid:443\n/);
+      expect(egressLog).not.toContain('github.com');
     } finally {
       await recorder.close();
     }

@@ -231,6 +231,20 @@ describe('ChatContent agent error strip', () => {
     }
   });
 
+  it('disables Retry while a send awaits confirmation', () => {
+    const container = document.createElement('div');
+    const root = createRoot(container);
+    try {
+      const pendingMessages = new Map([['send-1', { text: 'Run it', sessionId: 'session-1' }]]);
+      flushSync(() => root.render(<ChatContent {...errorProps({ pendingMessages })} />));
+      expect(button(container, 'Retry')?.disabled).toBe(true);
+      flushSync(() => root.render(<ChatContent {...errorProps()} />));
+      expect(button(container, 'Retry')?.disabled).toBe(false);
+    } finally {
+      flushSync(() => root.unmount());
+    }
+  });
+
   it('stays dismissed for the same error and returns after the error clears', () => {
     const props = errorProps();
     const container = document.createElement('div');

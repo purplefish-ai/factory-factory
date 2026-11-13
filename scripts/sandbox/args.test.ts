@@ -49,6 +49,9 @@ describe('command line', () => {
     const text = USAGE.replace(/\s+/g, ' ');
     expect(text).not.toContain('every other outbound');
     expect(text).toContain(
+      'If ps cannot run when it stops (for example after three failed readings in a row), it signals the server process group it started itself if that server is still running, keeps the directory, says so and exits non-zero; run --clean once ps works.'
+    );
+    expect(text).toContain(
       "the application's built-in fetch and http/https requests, git over HTTP(S) and the Claude runtime are refused and recorded"
     );
     expect(text).toContain('git over SSH and gh are refused by shims');

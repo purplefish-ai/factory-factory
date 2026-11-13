@@ -72,12 +72,14 @@ export const kanbanBoardMeta = {
   component: KanbanBoard,
   parameters: { layout: 'fullscreen', trpc: { handlers } },
   decorators: [
-    (Story) => (
+    // Each story gets its own project, so module state keyed by project (the
+    // new-workspace draft store, for one) starts cold whatever ran before it.
+    (Story, { id }) => (
       <SidebarProvider>
         <div className="flex h-dvh w-full min-w-0 flex-col overflow-hidden md:h-auto md:overflow-visible">
           <AppHeaderProvider>
             <KanbanProvider
-              projectId="proj-1"
+              projectId={`proj-${id}`}
               projectSlug="demo"
               issueProvider={IssueProvider.GITHUB}
             >
