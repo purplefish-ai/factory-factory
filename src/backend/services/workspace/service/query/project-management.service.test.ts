@@ -1,13 +1,20 @@
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { configService } from '@/backend/services/config.service';
 import { projectManagementService } from '@/backend/services/workspace/service/query/project-management.service';
 import {
   inspectProjectRepository,
   validateRepositoryPath,
 } from '@/backend/services/workspace/service/worktree/project-repository-inspector';
 
-const { create } = vi.hoisted(() => ({ create: vi.fn() }));
-vi.mock('@/backend/db', () => ({ prisma: { project: { create } } }));
+const { create, update, updateManyAndReturn } = vi.hoisted(() => ({
+  create: vi.fn(),
+  update: vi.fn(),
+  updateManyAndReturn: vi.fn(),
+}));
+vi.mock('@/backend/db', () => ({ prisma: { project: { create, update, updateManyAndReturn } } }));
 vi.mock('@/backend/services/workspace/service/worktree/project-repository-inspector', () => ({
   inspectProjectRepository: vi.fn(),
   validateRepositoryPath: vi.fn(),
@@ -15,6 +22,8 @@ vi.mock('@/backend/services/workspace/service/worktree/project-repository-inspec
 
 beforeEach(() => {
   create.mockReset().mockImplementation(async ({ data }) => ({ id: 'project', ...data }));
+  update.mockReset().mockImplementation(async ({ data }) => ({ id: 'project', ...data }));
+  updateManyAndReturn.mockReset().mockResolvedValue([]);
   vi.mocked(inspectProjectRepository)
     .mockReset()
     .mockResolvedValue({ githubOwner: null, githubRepo: null, defaultBranch: 'main' });
@@ -98,5 +107,91 @@ describe('project creation preparation', () => {
       error: 'Path does not exist',
     });
     expect(validateRepositoryPath).toHaveBeenCalledWith('/missing');
+  });
+});
+
+describe('project root restriction', () => {
+  const root = realpathSync(mkdtempSync(path.join(tmpdir(), 'ff-project-root-')));
+  mkdirSync(path.join(root, 'repo'));
+  symlinkSync(path.join(root, 'repo'), path.join(root, 'alias'));
+  afterAll(() => rmSync(root, { recursive: true, force: true }));
+
+  it('rejects a repository outside the configured root before validating it', async () => {
+    vi.spyOn(configService, 'getProjectRoot').mockReturnValue(root);
+    vi.mocked(validateRepositoryPath).mockReset().mockResolvedValue({ valid: true });
+    await expect(projectManagementService.validateRepoPath('/elsewhere/repo')).resolves.toEqual({
+      valid: false,
+      error: `Path /elsewhere/repo is outside the project root ${root}`,
+    });
+    expect(validateRepositoryPath).not.toHaveBeenCalled();
+    await expect(
+      projectManagementService.validateRepoPath(path.join(root, 'repo'))
+    ).resolves.toEqual({ valid: true });
+    expect(projectManagementService.checkProjectLocation('/elsewhere/clone')).toEqual({
+      valid: false,
+      error: `Path /elsewhere/clone is outside the project root ${root}`,
+    });
+  });
+
+  it('validates and stores the real path it checked, not the string it was given', async () => {
+    vi.spyOn(configService, 'getProjectRoot').mockReturnValue(root);
+    vi.mocked(validateRepositoryPath).mockReset().mockResolvedValue({ valid: true });
+    const alias = path.join(root, 'alias');
+    const real = path.join(root, 'repo');
+
+    await projectManagementService.validateRepoPath(alias);
+    expect(validateRepositoryPath).toHaveBeenCalledWith(real);
+
+    const project = await projectManagementService.create(
+      { repoPath: alias },
+      { worktreeBaseDir: '/worktrees' }
+    );
+    expect(project).toMatchObject({ repoPath: real, slug: 'repo' });
+    expect(inspectProjectRepository).toHaveBeenCalledWith(real);
+
+    await projectManagementService.update('project', { repoPath: alias });
+    expect(update).toHaveBeenCalledWith({ where: { id: 'project' }, data: { repoPath: real } });
+    await projectManagementService.updateIfStartupUnchanged(
+      'project',
+      { startupScriptCommand: null, startupScriptPath: null },
+      { repoPath: alias }
+    );
+    expect(updateManyAndReturn).toHaveBeenCalledWith(
+      expect.objectContaining({ data: { repoPath: real } })
+    );
+  });
+
+  it('refuses to store a path outside the root even when validation was skipped', async () => {
+    vi.spyOn(configService, 'getProjectRoot').mockReturnValue(root);
+    await expect(
+      projectManagementService.create({ repoPath: '/elsewhere/repo' }, { worktreeBaseDir: '/w' })
+    ).rejects.toThrow(
+      `Invalid repository path: Path /elsewhere/repo is outside the project root ${root}`
+    );
+    await expect(
+      projectManagementService.update('project', { repoPath: '/elsewhere/repo' })
+    ).rejects.toThrow(
+      `Invalid repository path: Path /elsewhere/repo is outside the project root ${root}`
+    );
+    expect(create).not.toHaveBeenCalled();
+    expect(update).not.toHaveBeenCalled();
+  });
+
+  it('allows and stores any path as given when no root is configured', async () => {
+    vi.spyOn(configService, 'getProjectRoot').mockReturnValue(null);
+    vi.mocked(validateRepositoryPath).mockReset().mockResolvedValue({ valid: true });
+    await expect(projectManagementService.validateRepoPath('/elsewhere/repo')).resolves.toEqual({
+      valid: true,
+    });
+    expect(projectManagementService.checkProjectLocation('/elsewhere/clone')).toEqual({
+      valid: true,
+      path: '/elsewhere/clone',
+    });
+    const alias = path.join(root, 'alias');
+    await expect(
+      projectManagementService.create({ repoPath: alias }, { worktreeBaseDir: '/worktrees' })
+    ).resolves.toMatchObject({ repoPath: alias, slug: 'alias' });
+    await projectManagementService.update('project', { repoPath: alias });
+    expect(update).toHaveBeenCalledWith({ where: { id: 'project' }, data: { repoPath: alias } });
   });
 });

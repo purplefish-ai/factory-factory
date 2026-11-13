@@ -1,9 +1,14 @@
 import path from 'node:path';
+import { configService } from '@/backend/services/config.service';
 import { projectAccessor } from '@/backend/services/workspace/resources/project.accessor';
 import {
   inspectProjectRepository,
   validateRepositoryPath,
 } from '@/backend/services/workspace/service/worktree/project-repository-inspector';
+import {
+  checkProjectLocation,
+  type ProjectLocation,
+} from '@/backend/services/workspace/service/worktree/project-root';
 import type { IssueProvider } from '@/shared/core/enums';
 import type { IssueTrackerConfig } from '@/shared/schemas/issue-tracker-config.schema';
 import type { Project } from '@prisma-gen/client';
@@ -25,8 +30,32 @@ class ProjectManagementService {
     return projectAccessor.findBySlug(slug);
   }
 
+  /**
+   * Rejects a path outside `FF_PROJECT_ROOT` when it is set, and gives its real
+   * path; checked before cloning too. Unset, every path is valid as given.
+   */
+  checkProjectLocation(repoPath: string): ProjectLocation {
+    return checkProjectLocation(repoPath, configService.getProjectRoot());
+  }
+
   validateRepoPath(repoPath: string): Promise<{ valid: boolean; error?: string }> {
-    return validateRepositoryPath(repoPath);
+    const location = this.checkProjectLocation(repoPath);
+    return location.valid ? validateRepositoryPath(location.path) : Promise.resolve(location);
+  }
+
+  /** The path to store: the checked real path under `FF_PROJECT_ROOT`, else as given. */
+  private storedRepoPath(repoPath: string): string {
+    const location = this.checkProjectLocation(repoPath);
+    if (!location.valid) {
+      throw new Error(`Invalid repository path: ${location.error}`);
+    }
+    return location.path;
+  }
+
+  private withStoredRepoPath<T extends { repoPath?: string }>(data: T): T {
+    return data.repoPath === undefined
+      ? data
+      : { ...data, repoPath: this.storedRepoPath(data.repoPath) };
   }
 
   async create(
@@ -38,7 +67,8 @@ class ProjectManagementService {
     },
     context: ProjectCreationContext
   ): Promise<Project> {
-    const basename = path.basename(data.repoPath);
+    const repoPath = this.storedRepoPath(data.repoPath);
+    const basename = path.basename(repoPath);
     const name = basename.replace(/[-_]/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
     const baseSlug = basename
       .toLowerCase()
@@ -47,14 +77,14 @@ class ProjectManagementService {
       .replace(/^-|-$/g, '');
     if (!baseSlug) {
       throw new Error(
-        `Unable to create project: repo path "${data.repoPath}" does not produce a valid slug`
+        `Unable to create project: repo path "${repoPath}" does not produce a valid slug`
       );
     }
 
-    const metadata = await inspectProjectRepository(data.repoPath);
+    const metadata = await inspectProjectRepository(repoPath);
     return projectAccessor.create(
       {
-        repoPath: data.repoPath,
+        repoPath,
         ...metadata,
         startupScriptCommand: data.startupScriptCommand ?? null,
         startupScriptPath: data.startupScriptPath ?? null,
@@ -72,7 +102,7 @@ class ProjectManagementService {
     );
   }
 
-  update(
+  async update(
     id: string,
     data: {
       name?: string;
@@ -88,15 +118,19 @@ class ProjectManagementService {
       issueTrackerConfig?: IssueTrackerConfig | null;
     }
   ): Promise<Project> {
-    return projectAccessor.update(id, data);
+    return await projectAccessor.update(id, this.withStoredRepoPath(data));
   }
 
-  updateIfStartupUnchanged(
+  async updateIfStartupUnchanged(
     id: string,
     expected: Pick<Project, 'startupScriptCommand' | 'startupScriptPath'>,
     data: Parameters<ProjectManagementService['update']>[1]
   ): Promise<Project | null> {
-    return projectAccessor.updateIfStartupUnchanged(id, expected, data);
+    return await projectAccessor.updateIfStartupUnchanged(
+      id,
+      expected,
+      this.withStoredRepoPath(data)
+    );
   }
 
   archive(id: string): Promise<Project> {
