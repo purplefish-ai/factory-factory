@@ -2,6 +2,7 @@ import { ArrowUpIcon } from '@phosphor-icons/react/dist/csr/ArrowUp';
 import type { VirtualItem } from '@tanstack/react-virtual';
 import { useCallback, useLayoutEffect, useState } from 'react';
 import { type GroupedMessageItem, isToolSequence } from '@/lib/chat-protocol';
+import { getInboxNotification } from './agent-activity/message-renderers/workspace-inbox-notification';
 
 interface Props {
   viewport: HTMLDivElement | null;
@@ -31,6 +32,7 @@ export function StickyUserMessage({
     (item) =>
       !isToolSequence(item) &&
       item.source === 'user' &&
+      !getInboxNotification(item) &&
       !queuedMessageIds?.has(item.id) &&
       !pendingMessageIds.has(item.id)
   );

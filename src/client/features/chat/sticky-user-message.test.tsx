@@ -3,6 +3,7 @@ import { flushSync } from 'react-dom';
 import { createRoot } from 'react-dom/client';
 import { describe, expect, it, vi } from 'vitest';
 import { createUserMessage } from '@/lib/claude.fixture';
+import { WORKSPACE_NOTIFICATION_MESSAGE_ID_PREFIX } from '@/shared/workspace-notifications';
 import { StickyUserMessage } from './sticky-user-message';
 
 describe('StickyUserMessage', () => {
@@ -12,6 +13,10 @@ describe('StickyUserMessage', () => {
     const root = createRoot(container);
     const first = createUserMessage('First task');
     const latest = createUserMessage('Current task\nwith more context');
+    const notification = {
+      ...createUserMessage('Workspace notification'),
+      id: `${WORKSPACE_NOTIFICATION_MESSAGE_ID_PREFIX}notice`,
+    };
     const queued = createUserMessage('Next task');
     const pending = createUserMessage('Still sending');
     const onJump = vi.fn();
@@ -23,7 +28,7 @@ describe('StickyUserMessage', () => {
           <StickyUserMessage
             viewport={viewport}
             engine={engine}
-            messages={[first, latest, queued, pending]}
+            messages={[first, latest, notification, queued, pending]}
             headerOffset={1}
             queuedMessageIds={new Set([queued.id])}
             pendingMessageIds={new Set([pending.id])}
