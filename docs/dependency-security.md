@@ -9,6 +9,15 @@ before updating the lockfile.
 
 ## Dependency intake
 
+The November 13, 2026 security update pins `hono` to 4.13.16 and
+`@hono/node-server` to 2.1.6 across the Claude Agent SDK and Claude ACP paths
+through the Model Context Protocol SDK. These patches address Dependabot alerts
+[#241–247](https://github.com/purplefish-ai/factory-factory/security/dependabot):
+five Hono middleware, validation and HTML injection advisories, plus the Node
+adapter's WebSocket connection-reset crash and backslash path handling. Both
+releases exceed the three-day intake delay and have registry provenance from
+their official `honojs` repositories; no policy exceptions are needed.
+
 Routine updates wait three days (`minimumReleaseAge: 4320` minutes), including
 transitive packages. Resolution fails when no eligible version satisfies the
 requested range or the registry cannot provide publication dates. The
