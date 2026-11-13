@@ -9,6 +9,7 @@ import { selectJobs } from '../.github/scripts/select-ci.mjs';
 
 const stepSchema = z.object({
   env: z.record(z.string(), z.string()).optional(),
+  if: z.string().optional(),
   uses: z.string().optional(),
   with: z.record(z.string(), z.unknown()).optional(),
   name: z.string().optional(),
@@ -23,6 +24,7 @@ const workflowSchema = z.object({
       if: z.string().optional(),
       needs: z.union([z.string(), z.array(z.string())]).optional(),
       steps: z.array(stepSchema).optional(),
+      outputs: z.record(z.string(), z.string()).optional(),
       container: z.object({ image: z.string() }).optional(),
       env: z.record(z.string(), z.string()).optional(),
     })
@@ -61,6 +63,7 @@ describe('conservative CI selection', () => {
     expect(selectJobs('pull_request', ['README.md', 'docs/architecture/jobs.md'])).toEqual({
       app: false,
       storybook: false,
+      sandbox: false,
     });
   });
 
@@ -68,6 +71,7 @@ describe('conservative CI selection', () => {
     expect(selectJobs('pull_request', ['src/backend/service.ts', 'docs/testing.md'])).toEqual({
       app: true,
       storybook: false,
+      sandbox: true,
     });
   });
 
@@ -93,15 +97,16 @@ describe('conservative CI selection', () => {
     expect(selectJobs('pull_request', ['docs/testing.md', file])).toEqual({
       app: true,
       storybook: true,
+      sandbox: true,
     });
   });
 
   it.each(['push', 'merge_group', 'schedule', 'workflow_dispatch'])('runs all on %s', (event) => {
-    expect(selectJobs(event, ['README.md'])).toEqual({ app: true, storybook: true });
+    expect(selectJobs(event, ['README.md'])).toEqual({ app: true, storybook: true, sandbox: true });
   });
 
   it('runs all for empty change lists', () => {
-    expect(selectJobs('pull_request', [])).toEqual({ app: true, storybook: true });
+    expect(selectJobs('pull_request', [])).toEqual({ app: true, storybook: true, sandbox: true });
   });
 
   it.each(['rename', 'documentation'])(
@@ -150,7 +155,9 @@ describe('conservative CI selection', () => {
         });
         expect(result.status, result.stderr).toBe(0);
         expect(result.stdout).toBe(
-          change === 'rename' ? 'app=true\nstorybook=true\n' : 'app=false\nstorybook=false\n'
+          change === 'rename'
+            ? 'app=true\nstorybook=true\nsandbox=true\n'
+            : 'app=false\nstorybook=false\nsandbox=false\n'
         );
         // A non-merge checkout cannot safely represent the whole integrated PR.
         git('switch', 'pr-change');
@@ -165,6 +172,49 @@ describe('conservative CI selection', () => {
       }
     }
   );
+});
+
+describe('sandbox smoke test', () => {
+  it.each([
+    'scripts/dev-sandbox.mjs',
+    'scripts/sandbox/launch.mjs',
+    'src/backend/testing/fixtures/fake-codex-app-server.mjs',
+    'e2e/sandbox-smoke.spec.ts',
+    'playwright.sandbox.config.ts',
+    'src/client/main.tsx',
+    'src/backend/service.ts',
+  ])('runs for %s', (file) => {
+    expect(selectJobs('pull_request', ['docs/testing.md', file]).sandbox).toBe(true);
+  });
+
+  it('runs beside the required jobs and never gates them', () => {
+    expect(ci.jobs.changes?.outputs?.sandbox).toBe('${{ steps.select.outputs.sandbox }}');
+    const job = ci.jobs['sandbox-smoke'];
+    expect(job?.needs).toBe('changes');
+    expect(job?.if).toBe("needs.changes.outputs.sandbox == 'true'");
+    // Promotion to required comes after 50 consecutive green runs on main.
+    for (const [name, other] of Object.entries(ci.jobs)) {
+      const needs = [other.needs ?? []].flat();
+      expect(needs, name).not.toContain('sandbox-smoke');
+    }
+  });
+
+  it('builds native modules, runs the spec and keeps its evidence on failure', () => {
+    const scripts = z
+      .object({ scripts: z.record(z.string(), z.string()) })
+      .parse(JSON.parse(readFileSync('package.json', 'utf8'))).scripts;
+    expect(scripts['test:e2e:sandbox']).toBe(
+      'node scripts/ensure-native-modules.mjs node && playwright test --config=playwright.sandbox.config.ts'
+    );
+    const steps = ci.jobs['sandbox-smoke']?.steps ?? [];
+    expect(steps.map((step) => step.run).filter(Boolean)).toContain('pnpm test:e2e:sandbox');
+    const upload = steps.find((step) => step.uses?.startsWith('actions/upload-artifact@'));
+    expect(upload?.if).toBe('failure()');
+    expect(String(upload?.with?.path).trim().split('\n')).toEqual([
+      'test-results/sandbox/',
+      'test-results/sandbox-logs/',
+    ]);
+  });
 });
 
 describe('required CI gates', () => {

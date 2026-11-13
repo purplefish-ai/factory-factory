@@ -2,17 +2,21 @@ import { execFileSync } from 'node:child_process';
 
 // Only explicit prose paths and backend TypeScript may omit browser work.
 // Unknown paths (including dependencies, shared code, styles and config) run all.
+// The sandbox smoke test drives the whole application, its launcher and the
+// scripted provider, so it runs whenever application work does.
 export function selectJobs(event, files) {
   if (event !== 'pull_request' || files.length === 0) {
-    return { app: true, storybook: true };
+    return { app: true, storybook: true, sandbox: true };
   }
   const isDocumentation = (file) =>
     /^(?:README|CHANGELOG|CONTRIBUTING|CODE_OF_CONDUCT|SECURITY)\.md$/.test(file) ||
     (/^docs\/.+\.md$/.test(file) && !/(?:^|\/)(?:AGENTS|CLAUDE)\.md$/.test(file));
   const isBackend = (file) => /^src\/backend\/.+\.(?:ts|tsx)$/.test(file);
+  const app = !files.every(isDocumentation);
   return {
-    app: !files.every(isDocumentation),
+    app,
     storybook: !files.every((file) => isDocumentation(file) || isBackend(file)),
+    sandbox: app,
   };
 }
 
