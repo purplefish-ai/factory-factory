@@ -289,7 +289,7 @@
       }
     },
     {
-      "files": ["**/*.test-utils.tsx", "**/*.test-harness.tsx"],
+      "files": ["**/*.test-harness.tsx"],
       "rules": {
         "factory/tooltip-provider-root": "off"
       }

@@ -2,7 +2,7 @@
 import { flushSync } from 'react-dom';
 import { createRoot } from 'react-dom/client';
 import { expect, it } from 'vitest';
-import { TranscriptRenderingFixture } from './transcript-rendering.test-utils';
+import { TranscriptRenderingFixture } from './transcript-rendering.test-harness';
 
 it.each(['subagents', 'processes'])(
   'remembers %s expansion across navigation and isolates sessions',

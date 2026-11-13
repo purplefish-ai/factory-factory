@@ -6,7 +6,7 @@ import {
   createPermissionRequest,
   createPlanApprovalRequest,
   SAMPLE_FILE_PATHS,
-} from '@/lib/claude-fixtures';
+} from '@/lib/claude.fixture';
 import { PermissionPrompt, PermissionPromptExpanded } from './permission-prompt';
 
 const meta = {

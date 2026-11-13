@@ -5,7 +5,7 @@ import { createRoot } from 'react-dom/client';
 import { afterEach, beforeEach, type TestContext, test, vi } from 'vitest';
 import { MarkdownRenderer } from '@/components/ui/markdown';
 import { renderStreamdownContent } from './streamdown-markdown';
-import { STREAMING_CODE, STREAMING_PROSE } from './streamdown-markdown.fixtures';
+import { STREAMING_CODE, STREAMING_PROSE } from './streamdown-markdown.fixture';
 
 const variants = [
   { name: 'React Markdown blocks', renderContent: undefined, streaming: true },

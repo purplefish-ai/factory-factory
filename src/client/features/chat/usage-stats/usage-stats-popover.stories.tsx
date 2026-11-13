@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react';
-import { createTokenStats } from '@/lib/claude-fixtures';
+import { createTokenStats } from '@/lib/claude.fixture';
 import { UsageStatsPopover } from './usage-stats-popover';
 
 const meta: Meta<typeof UsageStatsPopover> = {
