@@ -583,19 +583,35 @@ function restoreSlackConnectionImport(
 
 /**
  * Under `FF_PROJECT_ROOT`, refuses the whole import when any project's
- * repository or worktree base path lies outside the root; unset, checks nothing.
+ * repository or worktree base path, or any workspace's worktree path, lies
+ * outside the root, and returns the projects with the real paths the check
+ * resolved, as project creation stores them. Unset, every path is kept as given.
  */
-function assertImportInsideProjectRoot(projects: readonly ExportedProject[]): void {
-  for (const project of projects) {
-    for (const path of [project.repoPath, project.worktreeBasePath]) {
-      const location = projectManagementService.checkProjectLocation(path);
-      if (!location.valid) {
-        throw new Error(
-          `Backup project "${project.name}" (${project.id}) cannot be imported: ${location.error}`
-        );
-      }
+function placeImportInsideProjectRoot(
+  projects: readonly ExportedProject[],
+  workspaces: readonly { id: string; name: string; worktreePath: string | null }[]
+): ExportedProject[] {
+  const located = (owner: string, path: string) => {
+    const location = projectManagementService.checkProjectLocation(path);
+    if (!location.valid) {
+      throw new Error(`${owner} cannot be imported: ${location.error}`);
+    }
+    return location.path;
+  };
+  const placed = projects.map((project) => {
+    const owner = `Backup project "${project.name}" (${project.id})`;
+    return {
+      ...project,
+      repoPath: located(owner, project.repoPath),
+      worktreeBasePath: located(owner, project.worktreeBasePath),
+    };
+  });
+  for (const workspace of workspaces) {
+    if (workspace.worktreePath !== null) {
+      located(`Backup workspace "${workspace.name}" (${workspace.id})`, workspace.worktreePath);
     }
   }
+  return placed;
 }
 
 class DataBackupService {
@@ -798,7 +814,11 @@ class DataBackupService {
    */
   async importData(input: ExportData): Promise<ImportResults> {
     input = exportDataSchema.parse(input);
-    assertImportInsideProjectRoot(input.data.projects);
+    // Under FF_PROJECT_ROOT: refused before any write, and stored as checked.
+    const placed = {
+      ...input.data,
+      projects: placeImportInsideProjectRoot(input.data.projects, input.data.workspaces),
+    };
     logger.info('Starting data import', {
       schemaVersion: input.meta.schemaVersion,
       exportedAt: input.meta.exportedAt,
@@ -851,7 +871,7 @@ class DataBackupService {
       recoveryMetadata?.profile === 'base-json-slack-connections-1';
     // Import in dependency order within a transaction for atomicity
     const results = await dataBackupAccessor.runInTransaction(async (tx) => {
-      const admission = await planLegacyImport(tx, input.data);
+      const admission = await planLegacyImport(tx, placed);
       const { section, occupiedTaskIds, plannedTaskIds, sourceLinks } =
         await planPeriodicWorkspaceImport(tx, input.data, admission);
       const historyPlan = historySection
@@ -871,7 +891,7 @@ class DataBackupService {
       const inertTransforms = createInertImportReport();
       const createdProjectIds = new Set<string>();
       const projects = await importProjects(
-        input.data.projects,
+        placed.projects,
         tx,
         admission.createProjectIds,
         createdProjectIds
