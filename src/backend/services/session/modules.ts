@@ -48,7 +48,7 @@ export const sessionModules: Record<
       'Constructs and cross-wires the services that need each other (config, model catalogs, permission, lifecycle coordinators, prompt, dispatch, notification delivery), registers session-scope participants and sets the tool-timeout prompt cancel; other singletons are built in their own modules; also exposes the session capabilities backend interceptors use (interceptor bridge).',
   },
   config: {
-    dependsOn: ['acp', 'data', 'providers', 'root'],
+    dependsOn: ['acp', 'data', 'providers', 'root', 'store'],
     description:
       "Owns a session's provider configuration (model, mode, reasoning, access): applies it at startup, serializes live edits, persists snapshots and serves launch options.",
   },
@@ -58,12 +58,22 @@ export const sessionModules: Record<
       'Reads and writes session records through the capsule accessors, resolves session providers and launch settings, and loads Claude and Codex history files into transcripts.',
   },
   delivery: {
-    dependsOn: ['data', 'root'],
+    dependsOn: ['data', 'root', 'store'],
     description:
       "Delivers PR updates and workspace mail into sessions as background prompts, with receipts and failure reasons; also holds the helper that resets a workspace's PR-discovery backoff.",
   },
   dispatch: {
-    dependsOn: ['acp', 'chat', 'config', 'data', 'delivery', 'event-agent', 'root', 'voice'],
+    dependsOn: [
+      'acp',
+      'chat',
+      'config',
+      'data',
+      'delivery',
+      'event-agent',
+      'root',
+      'store',
+      'voice',
+    ],
     description:
       "Runs a session's message queue: claims, batches and sends queued messages with retries, queued steering and mail wakes, and the first turn of event-launched sessions.",
   },
@@ -108,7 +118,7 @@ export const sessionModules: Record<
       "Generates a workspace's title, branch name and summaries from its conversation with one disposable inference call.",
   },
   prompt: {
-    dependsOn: ['acp', 'delivery', 'event-agent', 'events', 'lifecycle', 'root'],
+    dependsOn: ['acp', 'delivery', 'event-agent', 'events', 'lifecycle', 'root', 'store'],
     description:
       "Sends and steers prompt turns on a session's running ACP runtime under the turn limit, records turn completion and schedules PR discovery after a completed turn; separately, builds the child-workspace context text.",
   },
@@ -118,14 +128,14 @@ export const sessionModules: Record<
       'Caches provider model catalogs and plan usage behind services whose fetchers are injected.',
   },
   root: {
-    dependsOn: ['inference', 'store'],
+    dependsOn: ['inference'],
     description:
-      'Files not yet in a module: the session domain service over store, the session event bus, bridge types, error messages and the agent event classifier.',
+      'Files not yet in a module: the session event bus, bridge types, error messages and the agent event classifier.',
   },
   store: {
     dependsOn: ['logging', 'root'],
     description:
-      "Holds each session's in-memory transcript, queue and runtime state and publishes snapshots and deltas; also caches slash commands read from disk.",
+      "Holds each session's in-memory transcript, queue and runtime state behind `SessionDomainService`, publishes snapshots and deltas, and keeps resume fences that outlive store eviction; also caches slash commands read from disk.",
   },
   voice: {
     dependsOn: ['root'],
@@ -139,7 +149,4 @@ export const sessionModules: Record<
  * removed. Sorted. Entries may be removed, never added (the check compares
  * this list with the base branch), and it stays a plain array literal.
  */
-export const sessionModuleCycles: readonly (readonly [string, string])[] = [
-  ['dispatch', 'chat'],
-  ['store', 'root'],
-];
+export const sessionModuleCycles: readonly (readonly [string, string])[] = [['dispatch', 'chat']];
