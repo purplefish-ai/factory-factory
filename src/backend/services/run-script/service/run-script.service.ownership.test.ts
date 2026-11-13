@@ -12,6 +12,8 @@ const fakes = vi.hoisted(() => ({
   afterExitWrite: vi.fn(),
   afterStartWrite: vi.fn(),
   beforeStartWrite: vi.fn(),
+  readWorkspace: vi.fn(),
+  readCommands: vi.fn(),
   workspace: {
     id: 'ws-1',
     worktreePath: '/tmp/ws-1',
@@ -30,7 +32,7 @@ vi.mock('node:child_process', async (original) => ({
 }));
 vi.mock('tree-kill', () => ({ default: fakes.kill }));
 vi.mock('@/backend/services/workspace', () => ({
-  workspaceDataService: { findById: async () => ({ ...fakes.workspace }) },
+  workspaceDataService: { findById: fakes.readWorkspace },
   workspaceRunScriptService: {
     findExecutionState: async () => ({ ...fakes.workspace }),
     getExecutionStateOrThrow: async () => ({ ...fakes.workspace }),
@@ -61,11 +63,7 @@ vi.mock('./port-allocation.service', () => ({
 }));
 vi.mock('./run-script-config-persistence.service', () => ({
   runScriptConfigPersistenceService: {
-    reconcileWorkspaceCommandCache: async () => ({
-      runScriptCommand: fakes.workspace.runScriptCommand,
-      runScriptPostRunCommand: fakes.workspace.runScriptPostRunCommand,
-      runScriptCleanupCommand: fakes.workspace.runScriptCleanupCommand,
-    }),
+    reconcileWorkspaceCommandCache: fakes.readCommands,
   },
 }));
 vi.mock('./run-script-proxy.service', () => ({
@@ -112,6 +110,12 @@ beforeEach(() => {
     runScriptPostRunCommand: null,
     runScriptCleanupCommand: null,
   });
+  fakes.readWorkspace.mockImplementation(async () => ({ ...fakes.workspace }));
+  fakes.readCommands.mockImplementation(async () => ({
+    runScriptCommand: fakes.workspace.runScriptCommand,
+    runScriptPostRunCommand: fakes.workspace.runScriptPostRunCommand,
+    runScriptCleanupCommand: fakes.workspace.runScriptCleanupCommand,
+  }));
   fakes.port.mockResolvedValue(4100);
   fakes.tunnel.mockResolvedValue(null);
   fakes.stopTunnel.mockResolvedValue(undefined);
@@ -293,5 +297,84 @@ describe('run-script attempt ownership', () => {
     expect((await start).success).toBe(false);
     expect(fakes.spawn.mock.calls.length).toBe(0);
     expect(fakes.workspace.runScriptStatus).toBe('IDLE');
+  });
+  it.each(['workspace', 'configuration'] as const)(
+    'revokes a start stopped during the %s read',
+    async (phase) => {
+      const entered = deferred<void>();
+      const proceed = deferred<void>();
+      const read = phase === 'workspace' ? fakes.readWorkspace : fakes.readCommands;
+      read.mockImplementationOnce(async () => {
+        entered.resolve();
+        await proceed.promise;
+        return { ...fakes.workspace };
+      });
+      fakes.spawn.mockReturnValue(child(1001));
+      const service = new RunScriptService();
+      const start = service.startRunScript('ws-1');
+      await entered.promise;
+      expect(await service.stopRunScript('ws-1')).toEqual({ success: true });
+      proceed.resolve();
+      expect((await start).success).toBe(false);
+      expect(fakes.spawn.mock.calls.length).toBe(0);
+      expect(fakes.workspace.runScriptStatus).toBe('IDLE');
+    }
+  );
+
+  it.each(['workspace', 'configuration'] as const)(
+    'revokes a start cleaned up during the %s read',
+    async (phase) => {
+      const entered = deferred<void>();
+      const proceed = deferred<void>();
+      const read = phase === 'workspace' ? fakes.readWorkspace : fakes.readCommands;
+      read.mockImplementationOnce(async () => {
+        entered.resolve();
+        await proceed.promise;
+        return { ...fakes.workspace };
+      });
+      fakes.spawn.mockReturnValue(child(1001));
+      const service = new RunScriptService();
+      const start = service.startRunScript('ws-1');
+      await entered.promise;
+      await service.cleanup();
+      proceed.resolve();
+      expect((await start).success).toBe(false);
+      expect(fakes.spawn.mock.calls.length).toBe(0);
+      expect(fakes.workspace.runScriptStatus).toBe('IDLE');
+    }
+  );
+
+  it('refuses replacement admission while cleanup is awaiting its stop batch', async () => {
+    const cleanupEntered = deferred<void>();
+    const run = child(1001);
+    const cleanup = child(1002);
+    const replacement = child(2002);
+    fakes.workspace.runScriptCleanupCommand = 'pnpm cleanup';
+    fakes.spawn
+      .mockReturnValueOnce(run)
+      .mockImplementationOnce(() => {
+        cleanupEntered.resolve();
+        return cleanup;
+      })
+      .mockReturnValueOnce(replacement);
+    const service = new RunScriptService();
+    await service.startRunScript('ws-1');
+    const allStopped = service.cleanup();
+    await cleanupEntered.promise;
+    exit(run);
+    await vi.waitFor(() => expect(fakes.workspace.runScriptStatus).toBe('IDLE'));
+    const replacementResult = await service.startRunScript('ws-1');
+    exit(cleanup);
+    await allStopped;
+    expect(replacementResult.success).toBe(false);
+    expect(fakes.spawn.mock.calls.length).toBe(2);
+    expect(fakes.workspace.runScriptStatus).toBe('IDLE');
+  });
+
+  it('admits a fresh attempt again after an explicit cleanup finishes', async () => {
+    const service = new RunScriptService();
+    await service.cleanup();
+    fakes.spawn.mockReturnValue(child(2002));
+    expect(await service.startRunScript('ws-1')).toMatchObject({ success: true, pid: 2002 });
   });
 });

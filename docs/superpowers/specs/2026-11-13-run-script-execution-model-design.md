@@ -26,7 +26,7 @@ status machine and workspace writer, and keeps workspace-lived output outside
 the execution. Stateless decisions remain functions. Exact method names and
 internal file organization are left to the implementer.
 
-## What the code actually owns today
+## Ownership before the pilot
 
 - `RunScriptService` owns current main processes, postRun processes, a weak set
   of main processes being stopped, output channels and shutdown bookkeeping.
@@ -120,9 +120,11 @@ postRun termination and tunnel release. A rejected database write must not erase
 the evidence needed to retry. An ended main process can still have unsettled
 work. The target is to represent failed obligations explicitly and retry only
 under a defined policy. Initially preserve today's retry and best-effort release
-policies, including logged process-tree errors and cleanup's final map clearing.
-Recording uncertainty must not accidentally introduce unbounded retention,
-additional retries or stricter stop results.
+policies, including logged process-tree errors and synchronous cleanup's final
+map clearing. Graceful cleanup retains cancelled pending admission identity
+until the caller can reconcile its late write; it clears only its captured
+current owners. Recording uncertainty must not accidentally introduce unbounded
+retention, additional retries or stricter stop results.
 
 These dimensions should not become a Cartesian-product enum. Use a small union
 for process evidence, explicit stop-operation ownership and explicit settlement
@@ -240,3 +242,12 @@ where practical. Workspace output tests use real child stream events.
 The pilot does not add durable attempt IDs, a retained predecessor inventory,
 stop coalescing, stronger process termination guarantees or additional cleanup
 retries. Database-status recovery and workspace writer ownership remain intact.
+
+### Review follow-up
+
+Startup checks live/current eligibility before publishing RUNNING; retained exit
+evidence is not permission to write a PID into a replacement admission. Natural
+fast exits still return successful startup without a stale transition. Forced
+synchronous cleanup treats `killed` as a signal request, not an exit: children
+without exit evidence receive SIGKILL even after SIGTERM was sent. These changes
+do not claim that a signal confirms physical termination.

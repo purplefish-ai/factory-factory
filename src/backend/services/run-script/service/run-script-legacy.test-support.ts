@@ -1,6 +1,7 @@
 import type { ChildProcess } from 'node:child_process';
 import { EventEmitter } from 'node:events';
 import { afterEach, beforeEach, vi, type Mock } from 'vitest';
+import type { RunScriptTunnelLease } from './run-script-proxy.service';
 
 export function captureShutdownHandlers(): {
   handlers: Map<string, (...args: unknown[]) => unknown>;
@@ -27,6 +28,9 @@ export const mockReset: Mock = vi.fn();
 export const mockVerifyRunning: Mock = vi.fn();
 export const mockFindFreePort: Mock = vi.fn();
 export const mockEnsureTunnel: Mock = vi.fn();
+export const mockAcquireTunnel: Mock<
+  (workspaceId: string, port: number) => Promise<RunScriptTunnelLease | null>
+> = vi.fn();
 export const mockStopTunnel: Mock = vi.fn();
 export const mockGetTunnelUrl: Mock = vi.fn();
 export const mockCleanupTunnels: Mock = vi.fn();
@@ -83,17 +87,7 @@ vi.mock('./port-allocation.service', () => ({
 
 vi.mock('./run-script-proxy.service', () => ({
   runScriptProxyService: {
-    acquireTunnel: async (workspaceId: string, port: number) => {
-      const url = await mockEnsureTunnel(workspaceId, port);
-      return url
-        ? {
-            url,
-            release: async () => {
-              await mockStopTunnel(workspaceId);
-            },
-          }
-        : null;
-    },
+    acquireTunnel: (workspaceId: string, port: number) => mockAcquireTunnel(workspaceId, port),
     stopTunnel: (...args: unknown[]) => mockStopTunnel(...args),
     getTunnelUrl: (...args: unknown[]) => mockGetTunnelUrl(...args),
     cleanup: (...args: unknown[]) => mockCleanupTunnels(...args),
@@ -128,7 +122,7 @@ export class FakeChildProcess extends EventEmitter {
   killed = false;
   stdout = new EventEmitter();
   stderr = new EventEmitter();
-  kill = vi.fn(() => {
+  kill: Mock<(signal?: NodeJS.Signals) => boolean> = vi.fn(() => {
     this.killed = true;
     return true;
   });
@@ -158,6 +152,17 @@ beforeEach(() => {
   mockCompleteStopping.mockResolvedValue(undefined);
   mockFindFreePort.mockResolvedValue(5173);
   mockEnsureTunnel.mockResolvedValue(null);
+  mockAcquireTunnel.mockImplementation(async (workspaceId, port) => {
+    const url = await mockEnsureTunnel(workspaceId, port);
+    return url
+      ? {
+          url,
+          release: async () => {
+            await mockStopTunnel(workspaceId);
+          },
+        }
+      : null;
+  });
   mockSpawn.mockImplementation(() => new FakeChildProcess(12_345));
   mockReconcileWorkspaceCommandCache.mockImplementation(({ workspace }) => ({
     runScriptCommand: workspace.runScriptCommand,

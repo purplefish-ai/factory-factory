@@ -5,6 +5,7 @@ import {
   FakeChildProcess,
   createExecutionOwner,
   mockEnsureTunnel,
+  mockAcquireTunnel,
   mockFindById,
   mockMarkRunning,
   mockSpawn,
@@ -12,25 +13,40 @@ import {
 } from './run-script-legacy.test-support';
 
 describe('RunScriptExecution.finishStartup', () => {
-  it('cleans up proxy tunnel when process exits during tunnel startup', async () => {
-    let resolveTunnel!: (value: string | null) => void;
-    mockEnsureTunnel.mockImplementation(
+  it('releases a late tunnel lease when the main process exits during tunnel startup', async () => {
+    const lease = {
+      url: 'https://example.trycloudflare.com?token=abc123',
+      release: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
+    };
+    let resolveTunnel!: (value: typeof lease) => void;
+    let tunnelStartupStarted!: () => void;
+    const enteredTunnelStartup = new Promise<void>((resolve) => {
+      tunnelStartupStarted = resolve;
+    });
+    mockAcquireTunnel.mockImplementation(
       () =>
-        new Promise<string | null>((resolve) => {
+        new Promise((resolve) => {
           resolveTunnel = resolve;
+          tunnelStartupStarted();
         })
     );
+    mockFindById.mockResolvedValue({ id: 'ws-1', runScriptStatus: 'RUNNING' });
     const owner = createExecutionOwner(new FakeChildProcess(12_345));
-    const startup = owner.execution.finishStartup(12_345, 5173, null, '/tmp/ws-1');
-    await Promise.resolve();
-    owner.discard();
-    resolveTunnel('https://example.trycloudflare.com?token=abc123');
+    const startup = owner.execution.finishStartup(12_345, 5173, 'echo postrun', '/tmp/ws-1');
+    await enteredTunnelStartup;
+
+    await owner.execution.observeExit(0, null);
+    expect(owner.execution.observation).toMatchObject({ kind: 'ended', code: 0, signal: null });
+    expect(owner.current()).toBeUndefined();
+    resolveTunnel(lease);
     const result = await startup;
+
     expect(mockMarkRunning).toHaveBeenCalledWith('ws-1', { pid: 12_345, port: 5173 });
-    expect(mockEnsureTunnel).toHaveBeenCalledWith('ws-1', 5173);
-    expect(mockStopTunnel).toHaveBeenCalledWith('ws-1');
+    expect(mockAcquireTunnel).toHaveBeenCalledWith('ws-1', 5173);
+    expect(lease.release).toHaveBeenCalledTimes(1);
     expect(result).toMatchObject({ success: true, port: 5173, pid: 12_345 });
     expect(result.proxyUrl).toBeUndefined();
+    expect(mockSpawn).not.toHaveBeenCalled();
   });
 
   it('starts postRun using reconciled command arguments', async () => {
@@ -66,9 +82,9 @@ describe('RunScriptExecution.finishStartup', () => {
     expect(mockStopTunnel).not.toHaveBeenCalled();
   });
 
-  it('handles markRunning races for completed/failed states', async () => {
+  it.each(['COMPLETED', 'FAILED'])('handles markRunning races for %s state', async (status) => {
     mockMarkRunning.mockRejectedValue(new Error('CAS failed'));
-    mockFindById.mockResolvedValue({ id: 'ws-1', runScriptStatus: 'COMPLETED' });
+    mockFindById.mockResolvedValue({ id: 'ws-1', runScriptStatus: status });
     const owner = createExecutionOwner(new FakeChildProcess(12_345));
     await expect(owner.execution.finishStartup(12_345, 5173, null, '/tmp/ws-1')).resolves.toEqual({
       success: true,

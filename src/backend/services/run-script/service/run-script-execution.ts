@@ -145,7 +145,10 @@ export class RunScriptExecution {
     cwd: string
   ): Promise<{ success: boolean; port?: number; pid?: number; proxyUrl?: string; error?: string }> {
     const child = this.process;
-    if (!child) {
+    if (this.state.kind === 'ended' && !this.stopRequested) {
+      return { success: true, port, pid };
+    }
+    if (!(child && this.canStartAuxiliary)) {
       return { success: false, error: 'Run script was stopped before it could start' };
     }
     try {
@@ -300,9 +303,10 @@ export class RunScriptExecution {
 
   cleanupSync(): void {
     this.requestStop();
-    for (const child of [this.process, this.postRunProcess]) {
+    const mainProcess = this.state.kind === 'live' ? this.state.child : undefined;
+    for (const child of [mainProcess, this.postRunProcess]) {
       try {
-        if (child && !child.killed) {
+        if (child && child.exitCode === null && child.signalCode === null) {
           child.kill('SIGKILL');
         }
       } catch {

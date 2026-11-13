@@ -62,23 +62,21 @@ export class RunScriptService {
     proxyUrl?: string;
     error?: string;
   }> {
-    let execution: RunScriptExecution | undefined;
+    if (this.isShuttingDown || this.cleanupPromise !== null) {
+      return { success: false, error: 'Run scripts are shutting down' };
+    }
+    if (this.pendingStarts.has(workspaceId)) {
+      return { success: false, error: 'Run script is already starting' };
+    }
+    const execution = this.createExecution(workspaceId, true);
+    let admissionStarted = false;
     try {
-      const workspace = await workspaceDataService.findById(workspaceId);
-      if (!workspace) {
-        throw new Error('Workspace not found');
+      const prepared = await this.prepareExecution(workspaceId, execution);
+      if (!prepared) {
+        return { success: false, error: 'Run script was stopped before it could start' };
       }
-      if (!workspace.worktreePath) {
-        throw new Error('Workspace worktree not initialized');
-      }
-      const commands = await this.reconcileWorkspaceCommands(workspace);
-      if (!commands.runScriptCommand) {
-        throw new Error('No run script configured for this workspace');
-      }
-      if (this.pendingStarts.has(workspaceId)) {
-        return { success: false, error: 'Run script is already starting' };
-      }
-      execution = this.createExecution(workspaceId, true);
+      const { cwd, commands } = prepared;
+      admissionStarted = true;
       const started = await runScriptStateMachine.start(workspaceId);
       if (!started) {
         const fresh = await workspaceDataService.findById(workspaceId);
@@ -92,9 +90,7 @@ export class RunScriptService {
       if (!execution.canSpawn) {
         // Stop may have completed during the post-CAS admission refresh. If it
         // revoked intent before the CAS, finish cancelling this admission now.
-        if (this.pendingStarts.get(workspaceId) === execution) {
-          await this.stopRunScript(workspaceId);
-        }
+        await this.cancelCommittedAdmission(workspaceId, execution);
         return { success: false, error: 'Run script was stopped before it could start' };
       }
       this.pendingStarts.delete(workspaceId);
@@ -109,19 +105,57 @@ export class RunScriptService {
         return { success: false, error: 'Run script was stopped before it could start' };
       }
       const startMessage = `\x1b[36m[Factory Factory]\x1b[0m Starting ${command}\n\n`;
-      const pid = execution.spawn(command, workspace.worktreePath);
+      const pid = execution.spawn(command, cwd);
       this.runOutput.set(workspaceId, startMessage);
       this.postRunOutput.clearBuffer(workspaceId);
-      return await execution.finishStartup(
-        pid,
-        port,
-        commands.runScriptPostRunCommand,
-        workspace.worktreePath
-      );
+      return await execution.finishStartup(pid, port, commands.runScriptPostRunCommand, cwd);
     } catch (error) {
-      return await this.handleStartError(workspaceId, toError(error), execution);
+      return await this.handleStartError(
+        workspaceId,
+        toError(error),
+        admissionStarted ? execution : undefined
+      );
     } finally {
       this.releasePendingStart(workspaceId, execution);
+    }
+  }
+
+  private async prepareExecution(
+    workspaceId: string,
+    execution: RunScriptExecution
+  ): Promise<{
+    cwd: string;
+    commands: RunScriptCommandCache & { runScriptCommand: string };
+  } | null> {
+    const workspace = await workspaceDataService.findById(workspaceId);
+    if (!execution.canSpawn) {
+      return null;
+    }
+    if (!workspace) {
+      throw new Error('Workspace not found');
+    }
+    if (!workspace.worktreePath) {
+      throw new Error('Workspace worktree not initialized');
+    }
+    const commands = await this.reconcileWorkspaceCommands(workspace);
+    if (!execution.canSpawn) {
+      return null;
+    }
+    if (!commands.runScriptCommand) {
+      throw new Error('No run script configured for this workspace');
+    }
+    return {
+      cwd: workspace.worktreePath,
+      commands: { ...commands, runScriptCommand: commands.runScriptCommand },
+    };
+  }
+
+  private async cancelCommittedAdmission(
+    workspaceId: string,
+    execution: RunScriptExecution
+  ): Promise<void> {
+    if (this.pendingStarts.get(workspaceId) === execution) {
+      await this.stopRunScript(workspaceId);
     }
   }
 
@@ -185,6 +219,7 @@ export class RunScriptService {
   }
 
   async stopRunScript(workspaceId: string): Promise<{ success: boolean; error?: string }> {
+    this.pendingStarts.get(workspaceId)?.requestStop();
     try {
       const workspace = await workspaceDataService.findById(workspaceId);
       if (!workspace) {
@@ -429,8 +464,12 @@ export class RunScriptService {
         count: this.executions.size,
       });
 
-      // Stop all running scripts using the stopRunScript method
-      // This ensures cleanup scripts are run
+      // Close admission for this cleanup lifetime, and capture owners before
+      // awaiting stop: an older cleanup may never erase a different owner.
+      const captured = new Map(this.executions);
+      for (const execution of captured.values()) {
+        execution.requestStop();
+      }
       for (const pending of this.pendingStarts.values()) {
         pending.requestStop();
       }
@@ -449,7 +488,11 @@ export class RunScriptService {
         })
       );
 
-      this.executions.clear();
+      for (const [workspaceId, execution] of captured) {
+        if (this.executions.get(workspaceId) === execution) {
+          this.executions.delete(workspaceId);
+        }
+      }
       // A cancelled admission may still be awaiting its STARTING write. Keep
       // its identity until its caller reconciles that write and exits finally.
       await runScriptProxyService.cleanup();

@@ -5,6 +5,7 @@ import {
   FakeChildProcess,
   createExecutionOwner,
   mockTreeKill,
+  mockAcquireTunnel,
   mockFindById,
   mockCompleteStopping,
   mockMarkCompleted,
@@ -12,6 +13,11 @@ import {
   mockStopTunnel,
   MockRunScriptStateMachineError,
 } from './run-script-legacy.test-support';
+
+const tunnelLease = (url: string) => ({
+  url,
+  release: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
+});
 
 describe('RunScriptExecution.observeExit', () => {
   beforeEach(() => {
@@ -58,16 +64,19 @@ describe('RunScriptExecution.observeExit', () => {
     expect(mockMarkFailed).not.toHaveBeenCalled();
   });
 
-  it('ignores stale process exits when a newer process is tracked', async () => {
-    const owner = createExecutionOwner();
-    const activeProcess = { pid: 22_222 };
+  it('releases only the old tunnel on a stale exit after replacement', async () => {
+    const oldLease = tunnelLease('https://old.example');
+    const newLease = tunnelLease('https://new.example');
+    mockAcquireTunnel.mockResolvedValueOnce(oldLease).mockResolvedValueOnce(newLease);
+    const owner = createExecutionOwner(new FakeChildProcess(11_111));
+    const staleExecution = owner.execution;
+    await staleExecution.finishStartup(11_111, 5173, null, '/tmp/ws-1');
+    const activeProcess = new FakeChildProcess(22_222);
+    const activeExecution = owner.replace(activeProcess);
+    await activeExecution.finishStartup(22_222, 5174, null, '/tmp/ws-1');
     const listener = vi.fn();
-    owner.replace(activeProcess);
     owner.runOutput.subscribe('ws-1', listener);
 
-    const staleProcess = { pid: 11_111 };
-    const staleExecution = owner.replace(staleProcess);
-    owner.replace(activeProcess);
     await staleExecution.observeExit(0, null);
     owner.runOutput.append('ws-1', 'still subscribed');
 
@@ -75,7 +84,10 @@ describe('RunScriptExecution.observeExit', () => {
     expect(listener).toHaveBeenCalledWith('still subscribed');
     expect(mockMarkCompleted).not.toHaveBeenCalled();
     expect(mockMarkFailed).not.toHaveBeenCalled();
-    expect(mockStopTunnel).not.toHaveBeenCalled();
+    expect(mockAcquireTunnel).toHaveBeenNthCalledWith(1, 'ws-1', 5173);
+    expect(mockAcquireTunnel).toHaveBeenNthCalledWith(2, 'ws-1', 5174);
+    expect(oldLease.release).toHaveBeenCalledTimes(1);
+    expect(newLease.release).not.toHaveBeenCalled();
   });
 
   it('ignores an untracked old exit while a new generation is starting', async () => {
@@ -225,17 +237,22 @@ describe('RunScriptExecution.observeExit edge cases', () => {
     expect(mockFindById).toHaveBeenCalledTimes(2);
   });
 
-  it('stops retrying persistence when a new generation takes ownership', async () => {
-    const exitingProcess = { pid: 12_345 };
-    const newerProcess = { pid: 54_321 };
-    const owner = createExecutionOwner();
-    const execution = owner.replace(exitingProcess);
+  it('stops retrying persistence and releases only its own tunnel after replacement', async () => {
+    const oldLease = tunnelLease('https://old.example');
+    const newLease = tunnelLease('https://new.example');
+    mockAcquireTunnel.mockResolvedValueOnce(oldLease).mockResolvedValueOnce(newLease);
+    const exitingProcess = new FakeChildProcess(12_345);
+    const newerProcess = new FakeChildProcess(54_321);
+    const owner = createExecutionOwner(exitingProcess);
+    const execution = owner.execution;
+    await execution.finishStartup(12_345, 5173, null, '/tmp/ws-1');
     mockFindById
       .mockResolvedValueOnce({ id: 'ws-1', runScriptStatus: 'RUNNING' })
       .mockResolvedValue({ id: 'ws-1', runScriptStatus: 'STARTING' });
-    mockMarkCompleted.mockImplementationOnce(() => {
-      owner.replace(newerProcess);
-      return Promise.reject(new Error('post-write fetch failed'));
+    mockMarkCompleted.mockImplementationOnce(async () => {
+      const replacement = owner.replace(newerProcess);
+      await replacement.finishStartup(54_321, 5174, null, '/tmp/ws-1');
+      throw new Error('post-write fetch failed');
     });
 
     await execution.observeExit(0, null);
@@ -243,7 +260,9 @@ describe('RunScriptExecution.observeExit edge cases', () => {
     expect(mockMarkCompleted).toHaveBeenCalledTimes(1);
     expect(mockFindById).toHaveBeenCalledTimes(1);
     expect(owner.current()?.process).toBe(newerProcess);
-    expect(mockStopTunnel).not.toHaveBeenCalled();
+    expect(mockAcquireTunnel).toHaveBeenCalledTimes(2);
+    expect(oldLease.release).toHaveBeenCalledTimes(1);
+    expect(newLease.release).not.toHaveBeenCalled();
   });
 
   it('accepts a state-machine race only after confirming a terminal state', async () => {
@@ -280,52 +299,78 @@ describe('RunScriptExecution.observeExit edge cases', () => {
     expect(mockFindById).toHaveBeenCalledTimes(6);
   });
 
-  it('does not clean up a newer process that starts while exit persistence is pending', async () => {
-    let resolveTransition: (() => void) | undefined;
+  it('releases only its own tunnel when replacement starts during exit persistence', async () => {
+    let resolveTransition!: () => void;
+    let persistenceStarted!: () => void;
+    const enteredPersistence = new Promise<void>((resolve) => {
+      persistenceStarted = resolve;
+    });
     mockFindById.mockResolvedValue({ id: 'ws-1', runScriptStatus: 'RUNNING' });
     mockMarkCompleted.mockImplementation(
       () =>
         new Promise<void>((resolve) => {
           resolveTransition = resolve;
+          persistenceStarted();
         })
     );
-    const exitingProcess = { pid: 12_345 };
-    const newerProcess = { pid: 54_321 };
-    const owner = createExecutionOwner();
-    const execution = owner.replace(exitingProcess);
+    const oldLease = tunnelLease('https://old.example');
+    const newLease = tunnelLease('https://new.example');
+    mockAcquireTunnel.mockResolvedValueOnce(oldLease).mockResolvedValueOnce(newLease);
+    const exitingProcess = new FakeChildProcess(12_345);
+    const newerProcess = new FakeChildProcess(54_321);
+    const owner = createExecutionOwner(exitingProcess);
+    const execution = owner.execution;
+    await execution.finishStartup(12_345, 5173, null, '/tmp/ws-1');
 
     const exitPromise = execution.observeExit(0, null);
-    await vi.waitFor(() => expect(resolveTransition).toBeDefined());
-    owner.replace(newerProcess);
-    resolveTransition?.();
+    await enteredPersistence;
+    const replacement = owner.replace(newerProcess);
+    await replacement.finishStartup(54_321, 5174, null, '/tmp/ws-1');
+    expect(oldLease.release).not.toHaveBeenCalled();
+    resolveTransition();
     await exitPromise;
 
     expect(owner.current()?.process).toBe(newerProcess);
-    expect(mockStopTunnel).not.toHaveBeenCalled();
+    expect(mockAcquireTunnel).toHaveBeenCalledTimes(2);
+    expect(oldLease.release).toHaveBeenCalledTimes(1);
+    expect(newLease.release).not.toHaveBeenCalled();
   });
 
-  it('does not stop a newer tunnel when ownership changes during postRun cleanup', async () => {
-    let completeTreeKill: ((error: Error | null) => void) | undefined;
+  it('releases only its own tunnel when replacement starts during postRun cleanup', async () => {
+    let completeTreeKill!: (error: Error | null) => void;
+    let postRunCleanupStarted!: () => void;
+    const enteredPostRunCleanup = new Promise<void>((resolve) => {
+      postRunCleanupStarted = resolve;
+    });
     mockFindById.mockResolvedValue({ id: 'ws-1', runScriptStatus: 'RUNNING' });
-    mockMarkCompleted.mockResolvedValue(undefined);
     mockTreeKill.mockImplementation(
       (_pid: number, _signal: string, callback: (error: Error | null) => void) => {
         completeTreeKill = callback;
+        postRunCleanupStarted();
       }
     );
-    const exitingProcess = { pid: 12_345 };
-    const newerProcess = { pid: 54_321 };
-    const owner = createExecutionOwner();
-    const execution = owner.replace(exitingProcess);
+    const oldLease = tunnelLease('https://old.example');
+    const newLease = tunnelLease('https://new.example');
+    mockAcquireTunnel.mockResolvedValueOnce(oldLease).mockResolvedValueOnce(newLease);
+    const exitingProcess = new FakeChildProcess(12_345);
+    const newerProcess = new FakeChildProcess(54_321);
+    const owner = createExecutionOwner(exitingProcess);
+    const execution = owner.execution;
+    await execution.finishStartup(12_345, 5173, null, '/tmp/ws-1');
     await spawnOwnedPostRun(execution, new FakeChildProcess(888));
 
     const exitPromise = execution.observeExit(0, null);
-    await vi.waitFor(() => expect(completeTreeKill).toBeDefined());
-    owner.replace(newerProcess);
-    completeTreeKill?.(null);
+    await enteredPostRunCleanup;
+    const replacement = owner.replace(newerProcess);
+    await replacement.finishStartup(54_321, 5174, null, '/tmp/ws-1');
+    expect(oldLease.release).not.toHaveBeenCalled();
+    completeTreeKill(null);
     await exitPromise;
 
     expect(owner.current()?.process).toBe(newerProcess);
-    expect(mockStopTunnel).not.toHaveBeenCalled();
+    expect(mockTreeKill).toHaveBeenCalledWith(888, 'SIGTERM', expect.any(Function));
+    expect(mockAcquireTunnel).toHaveBeenCalledTimes(2);
+    expect(oldLease.release).toHaveBeenCalledTimes(1);
+    expect(newLease.release).not.toHaveBeenCalled();
   });
 });

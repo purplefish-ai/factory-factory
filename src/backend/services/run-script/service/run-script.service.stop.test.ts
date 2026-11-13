@@ -65,6 +65,7 @@ describe('RunScriptService.stopRunScript', () => {
     expect(mockTreeKill).toHaveBeenCalledWith(12_345, 'SIGTERM', expect.any(Function));
     expect(mockCompleteStopping).toHaveBeenCalledWith('ws-1');
     expect(mockFindById).toHaveBeenNthCalledWith(2, 'ws-1');
+    expect(serviceExecutions(service).has('ws-1')).toBe(false);
   });
 
   it('keeps output listeners when controlled tree-kill completes before exit', async () => {
@@ -496,14 +497,34 @@ describe('RunScriptService.cleanupSync', () => {
     expect(mockCleanupTunnelsSync).toHaveBeenCalledTimes(1);
   });
 
-  it('skips already-killed processes', () => {
+  it.each([
+    { exitCode: 0, signalCode: null },
+    { exitCode: null, signalCode: 'SIGTERM' as const },
+  ])('skips main processes with observed exit evidence %j', (evidence) => {
     const service = new RunScriptService();
-    const mockProcess = { killed: true, kill: vi.fn(), pid: 999 };
-    installExecution(service, 'ws-1', mockProcess as never);
+    const child = new FakeChildProcess(999);
+    Object.assign(child, evidence);
+    installExecution(service, 'ws-1', child);
 
     service.cleanupSync();
 
-    expect(mockProcess.kill).not.toHaveBeenCalled();
+    expect(child.kill).not.toHaveBeenCalled();
+    expect(serviceExecutions(service).size).toBe(0);
+  });
+
+  it('force kills a main process after SIGTERM without exit evidence', () => {
+    const service = new RunScriptService();
+    const child = new FakeChildProcess(999);
+    installExecution(service, 'ws-1', child);
+    child.kill('SIGTERM');
+    expect(child.killed).toBe(true);
+    expect(child.exitCode).toBeNull();
+    expect(child.signalCode).toBeNull();
+
+    service.cleanupSync();
+
+    expect(child.kill).toHaveBeenNthCalledWith(2, 'SIGKILL');
+    expect(serviceExecutions(service).size).toBe(0);
   });
 
   it('force kills postRun processes on sync cleanup', async () => {
@@ -518,15 +539,35 @@ describe('RunScriptService.cleanupSync', () => {
     expect(serviceExecutions(service).size).toBe(0);
   });
 
-  it('skips already-killed postRun processes', async () => {
+  it.each([
+    { exitCode: 0, signalCode: null },
+    { exitCode: null, signalCode: 'SIGTERM' as const },
+  ])('skips postRun processes with observed exit evidence %j', async (evidence) => {
     const service = new RunScriptService();
-    const mockPostRun = { killed: true, kill: vi.fn(), pid: 888 };
+    const postRun = new FakeChildProcess(888);
     const execution = installExecution(service, 'ws-1', new FakeChildProcess(12_345));
-    await spawnOwnedPostRun(execution, mockPostRun);
+    await spawnOwnedPostRun(execution, postRun);
+    Object.assign(postRun, evidence);
 
     service.cleanupSync();
 
-    expect(mockPostRun.kill).not.toHaveBeenCalled();
+    expect(postRun.kill).not.toHaveBeenCalled();
+    expect(serviceExecutions(service).size).toBe(0);
+  });
+
+  it('force kills a postRun process after SIGTERM without exit evidence', async () => {
+    const service = new RunScriptService();
+    const postRun = new FakeChildProcess(888);
+    const execution = installExecution(service, 'ws-1', new FakeChildProcess(12_345));
+    await spawnOwnedPostRun(execution, postRun);
+    postRun.kill('SIGTERM');
+    expect(postRun.killed).toBe(true);
+    expect(postRun.exitCode).toBeNull();
+    expect(postRun.signalCode).toBeNull();
+
+    service.cleanupSync();
+
+    expect(postRun.kill).toHaveBeenNthCalledWith(2, 'SIGKILL');
     expect(serviceExecutions(service).size).toBe(0);
   });
 });
