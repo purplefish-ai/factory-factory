@@ -511,10 +511,13 @@ it('blocks launch only while restoring and makes storage failure visible', async
   }
 });
 
-it('takes focus once the saved draft has restored on first open', async () => {
+// Draft storage here can only time out; the board story PhoneNewWorkspaceFromDone
+// covers the same focus after a successful restore from real IndexedDB.
+it('takes focus once the draft restore ends on first open', async () => {
   vi.useFakeTimers();
   vi.stubGlobal('indexedDB', { open: () => ({}) });
-  const mounted = renderForm('restoring-focus-form');
+  // A project this module has never loaded, so the form opens while restoring.
+  const mounted = renderForm(crypto.randomUUID());
   try {
     expect(mounted.textarea.disabled).toBe(true);
     expect(document.activeElement).not.toBe(mounted.textarea);
