@@ -87,6 +87,9 @@ async function holdPorts(probe: NetServer, count: number): Promise<NetServer[] |
  * `listen(0)` probe is the next one any process on the machine receives. While
  * the ports are held, one more ephemeral port is allocated to move the kernel
  * past them; otherwise a neighbour could take one before the server binds it.
+ * The server must bind the ports itself, so they are released first: a process
+ * that binds one of them by number can still take it, but ephemeral requests,
+ * which is how neighbours took them, now land past the range.
  */
 async function findFreePorts(count: number): Promise<number> {
   for (let attempt = 0; attempt < 20; attempt++) {
@@ -188,7 +191,8 @@ describe('server bind address', () => {
     async () => {
       const port = await findFreePorts(2);
       await listenBlocker(port, '::1');
-      // Another process on the machine asks for an ephemeral port meanwhile.
+      // Another process asks for an ephemeral port meanwhile. On macOS this
+      // takes port + 1 unless findFreePorts moved the kernel's counter past it.
       await listenBlocker(0, '127.0.0.1');
       const harness = createTestHarness({ backendHost: undefined });
       const server = createServer(harness.application, port);
