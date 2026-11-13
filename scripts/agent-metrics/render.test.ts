@@ -50,7 +50,7 @@ function fixture(): AgentMetrics {
         unusedCodeProduction: 71,
         unusedCodeExports: 273,
         fileLength: 11,
-        lintExceptions: 25,
+        lintRuleExceptions: 25,
       },
       sessionModuleCycles: null,
     },
@@ -100,7 +100,7 @@ describe('renderMarkdown', () => {
       unusedCodeProduction: count,
       unusedCodeExports: count,
       fileLength: count,
-      lintExceptions: count,
+      lintRuleExceptions: count,
     };
     tree.sessionModuleCycles = count;
     const markdown = renderMarkdown(metrics);
@@ -211,7 +211,7 @@ describe('renderMarkdown', () => {
         '| `scripts/unused-code-baseline.json` production | 71 |',
         '| `scripts/unused-code-baseline.json` exports | 273 |',
         '| `scripts/file-length-baseline.json` | 11 |',
-        '| `.oxlintrc.json` rule exceptions | 25 |',
+        '| Lint rule exceptions (`lint-rules/rules/*.exceptions.json`) | 25 |',
         '| `sessionModuleCycles` | n/a (no `src/backend/services/session/modules.ts`) |',
         '',
       ].join('\n')

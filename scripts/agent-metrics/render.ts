@@ -116,7 +116,7 @@ export function renderMarkdown(metrics: AgentMetrics): string {
     `| \`scripts/unused-code-baseline.json\` production | ${formatNumber(tree.baselines.unusedCodeProduction)} |`,
     `| \`scripts/unused-code-baseline.json\` exports | ${formatNumber(tree.baselines.unusedCodeExports)} |`,
     `| \`scripts/file-length-baseline.json\` | ${formatNumber(tree.baselines.fileLength)} |`,
-    `| \`.oxlintrc.json\` rule exceptions | ${formatNumber(tree.baselines.lintExceptions)} |`,
+    `| Lint rule exceptions (\`lint-rules/rules/*.exceptions.json\`) | ${formatNumber(tree.baselines.lintRuleExceptions)} |`,
     `| \`sessionModuleCycles\` | ${tree.sessionModuleCycles === null ? `n/a (no \`${sessionModulesPath}\`)` : formatNumber(tree.sessionModuleCycles)} |`,
     '',
   ];

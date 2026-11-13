@@ -165,7 +165,6 @@ describe('collectTree', () => {
       'src/a.test.ts': "vi.mock('node:fs');\n",
       'scripts/unused-code-baseline.json': '{"version":1,"production":{},"exports":{}}',
       'scripts/file-length-baseline.json': '{}',
-      '.oxlintrc.json': '{}',
     };
     workingTree = mkdtempSync(join(tmpdir(), 'agent-metrics-'));
     const dirty = Object.entries({
@@ -192,5 +191,48 @@ describe('collectTree', () => {
       viMocks: { calls: 1, filesWithMocks: 1, testFiles: 1 },
       sessionModuleCycles: null,
     });
+  });
+});
+
+describe('lint rule exceptions', () => {
+  const baseTree = {
+    'scripts/unused-code-baseline.json': '{"version":1,"production":{},"exports":{}}',
+    'scripts/file-length-baseline.json': '{}',
+    '.oxlintrc.json': '{"rules":{"a":["error",{"exceptions":{"x.ts":"reason"}}]}}',
+  };
+  const exceptions = (count: number) =>
+    JSON.stringify(
+      Object.fromEntries(Array.from({ length: count }, (_, index) => [`src/${index}.ts`, 'Why.']))
+    );
+
+  it('counts the entries of every lint-rules/rules/*.exceptions.json in the commit', () => {
+    const tree = collectTree(
+      '/repo',
+      fakeGit({
+        ...baseTree,
+        'lint-rules/rules/no-raw-spinner.exceptions.json': exceptions(3),
+        'lint-rules/rules/a-new-rule.exceptions.json': exceptions(2),
+        'lint-rules/rules/no-raw-spinner.options.json': exceptions(4),
+        'lint-rules/rules/no-raw-spinner.mjs': 'export default {};\n',
+      })
+    );
+    expect(tree.baselines.lintRuleExceptions).toBe(5);
+  });
+
+  it('counts none when there are no exceptions files', () => {
+    expect(collectTree('/repo', fakeGit(baseTree)).baselines.lintRuleExceptions).toBe(0);
+  });
+
+  it('fails with the name of an exceptions file that is not a path-to-reason record', () => {
+    expect(() =>
+      collectTree(
+        '/repo',
+        fakeGit({
+          ...baseTree,
+          'lint-rules/rules/ok.exceptions.json': exceptions(1),
+          'lint-rules/rules/broken.exceptions.json': '{"src/a.ts":["not","a reason"]}',
+        })
+      )
+    ).toThrow('lint-rules/rules/broken.exceptions.json');
   });
 });

@@ -4,6 +4,7 @@ import { countPhysicalLines } from '../check-file-length';
 import {
   type BaselineSizes,
   baselineSizes,
+  isLintRuleExceptionsFile,
   sessionModuleCycleCount,
   sessionModulesPath,
 } from './baselines';
@@ -51,7 +52,6 @@ const maxBuffer = 256 * 1024 * 1024;
 const baselinePaths = {
   unusedCode: 'scripts/unused-code-baseline.json',
   fileLength: 'scripts/file-length-baseline.json',
-  lint: '.oxlintrc.json',
 };
 
 /** `gh repo view --json nameWithOwner`. */
@@ -190,6 +190,7 @@ function isMeasured(path: string): boolean {
     isProductionSource(path) ||
     isSourceTest(path) ||
     path === sessionModulesPath ||
+    isLintRuleExceptionsFile(path) ||
     Object.values(baselinePaths).includes(path)
   );
 }
@@ -239,7 +240,7 @@ export function collectTree(root: string, git: Command = commandIn('git', root))
     baselines: baselineSizes(
       readJson(baselinePaths.unusedCode),
       readJson(baselinePaths.fileLength),
-      readJson(baselinePaths.lint)
+      paths.filter(isLintRuleExceptionsFile).map(read)
     ),
     sessionModuleCycles: sessionModuleCycleCount(files.get(sessionModulesPath) ?? null),
   };
