@@ -533,6 +533,38 @@ it('takes focus once the draft restore ends on first open', async () => {
   }
 });
 
+it('leaves focus where the user moved it while the draft restored', async () => {
+  vi.useFakeTimers();
+  vi.stubGlobal('indexedDB', { open: () => ({}) });
+  const mounted = renderForm(crypto.randomUUID());
+  const elsewhere = document.createElement('button');
+  document.body.append(elsewhere);
+  try {
+    elsewhere.focus();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1600);
+    });
+    expect(mounted.textarea.disabled).toBe(false);
+    expect(document.activeElement).toBe(elsewhere);
+  } finally {
+    actFlushSync(() => mounted.root.unmount());
+    elsewhere.remove();
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+  }
+});
+
+it('takes focus at once when the draft has already restored', () => {
+  // The harness has already finished loading this project's draft.
+  const mounted = renderForm();
+  try {
+    expect(mounted.textarea.disabled).toBe(false);
+    expect(document.activeElement).toBe(mounted.textarea);
+  } finally {
+    actFlushSync(() => mounted.root.unmount());
+  }
+});
+
 it('restores periodic schedules and explicit ratchet settings without applying later defaults', async () => {
   await expect(
     saveWorkspaceCreationDraft(getTestProjectId(), {

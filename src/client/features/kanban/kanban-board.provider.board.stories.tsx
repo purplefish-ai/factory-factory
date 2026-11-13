@@ -95,8 +95,10 @@ export const PhoneNewWorkspaceFromDone: Story = {
     await userEvent.click(within(navigation).getByRole('link', { name: 'Done 1' }));
     await userEvent.click(canvas.getByRole('button', { name: 'New workspace' }));
     const input = await canvas.findByPlaceholderText('What should the agent work on?');
-    // The form opens while this story's draft store is still restoring.
-    await waitFor(() => expect(input).toHaveFocus());
+    // The form opens while this story's draft store is still restoring; focus
+    // must land in the same commit that enables the field.
+    await waitFor(() => expect(input).toBeEnabled());
+    await expect(input).toHaveFocus();
     await userEvent.type(input, 'Keep my task');
     await userEvent.click(within(navigation).getByRole('link', { name: 'Done 1' }));
     await expect(input).toHaveValue('Keep my task');
