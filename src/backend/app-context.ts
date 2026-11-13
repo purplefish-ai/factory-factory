@@ -160,6 +160,10 @@ export type ApplicationServices = BridgeServices & {
     ApplicationUpdateService,
     'start' | 'stop' | 'checkUpdates' | 'requestUpdate' | 'cancelUpdate'
   >;
+  /**
+   * `drain()` is for tests and diagnostics: never await it on a request path,
+   * because it waits on every in-flight launch.
+   */
   agentRuntime: ReturnType<typeof createAgentRuntime>;
   classifyAgentEvent: typeof classifyAgentEvent;
   agentAuthoring: ReturnType<typeof createAgentAuthoring>;
