@@ -37,8 +37,9 @@ Each rule has its own files in `rules/`:
   `describeRuleFixtures` (`testing/rule-fixtures.ts`), which lints each one as
   its own module with the real Oxlint binary and every factory rule enabled. A
   rejected fixture must report exactly one error, from its rule; an accepted
-  fixture must report nothing. Checks of the rule's scoping in `.oxlintrc.json`
-  sit beside them.
+  fixture must report nothing. A fixture may name its path, and `files` enables
+  the rule only for matching paths, as an override does. Checks of the rule's
+  scoping in `.oxlintrc.json` sit beside them.
 - `<rule-name>.exceptions.json`, only when files are excepted from the rule.
 
 Helpers used by several rules are plain modules in `lib/`; a helper used by one
@@ -79,8 +80,8 @@ rule or an exceptions file.
    `isExceptedFile`.
 4. Add the rule's import and its entry to `factory.mjs`, alphabetically.
 5. Enable it with one `"factory/<rule-name>": "error"` line in `.oxlintrc.json`,
-   in the override that scopes it, and add it to the test override if tests are
-   exempt.
+   in the override that scopes it (add one if none matches), and add it to the
+   test override if tests are exempt.
 
 ### Built-in rule options
 
