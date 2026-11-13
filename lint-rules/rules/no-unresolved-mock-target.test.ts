@@ -50,8 +50,11 @@ describe('unresolved mock targets', () => {
 // (a root service, a capsule barrel, the Prisma client, a stylesheet). A relative
 // specifier resolves against the fixture's own directory, so the fixtures that
 // exercise it write the module they mock beside the test.
-const MODULE = 'export {};';
-const sibling = (file: string, source = MODULE) => ({ file: `src/fixture/${file}`, source });
+// The default source names its file, so each accepted fixture has its own test title.
+const sibling = (file: string, source = `export const file = '${file}';`) => ({
+  file: `src/fixture/${file}`,
+  source,
+});
 const test = (name: string, source: string) => ({ file: `src/fixture/${name}.test.ts`, source });
 
 describeRuleFixtures('no-unresolved-mock-target', {

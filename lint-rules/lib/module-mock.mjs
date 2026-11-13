@@ -39,7 +39,7 @@ export function resolveRepositoryPath(specifier, filename) {
   } else if (specifier.startsWith('/src/')) {
     resolved = posix.join(repositoryRoot, specifier);
   } else if (specifier === '.' || specifier === '..' || /^\.\.?\//.test(specifier)) {
-    resolved = posix.resolve(posix.dirname(filename), specifier);
+    resolved = posix.join(posix.dirname(filename), specifier);
   } else {
     return undefined;
   }
