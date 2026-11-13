@@ -183,12 +183,11 @@ Invalid transitions throw `WorkspaceStateMachineError`.
 
 ## PR and Ratchet Progression
 
-The Ratchet capsule is implemented in
-`src/backend/services/ratchet/service/ratchet.service.ts`. Its monitor loop uses
-the shared `SERVICE_INTERVAL_MS.ratchetPoll` interval of two minutes. It
-evaluates `READY`, Ratchet-enabled workspaces with PRs, refreshes their Ratchet
-state from live GitHub data, and dispatches fixer sessions when the decision
-policy requires one.
+The Ratchet capsule's monitor loop uses the shared
+`SERVICE_INTERVAL_MS.ratchetPoll` interval of two minutes. It evaluates `READY`,
+Ratchet-enabled workspaces with PRs, refreshes their Ratchet state from live
+GitHub data, and dispatches fixer sessions when the decision policy requires
+one.
 
 The PR scheduler in
 `src/backend/orchestration/pull-requests/scheduler.service.ts` uses
@@ -508,8 +507,6 @@ Key tests are located at:
   `src/backend/services/workspace/service/lifecycle/state-machine.service.test.ts`;
 - query projections:
   `src/backend/services/workspace/service/query/workspace-query.service.test.ts`;
-- Ratchet behavior, dispatch retries, and disable semantics:
-  `src/backend/services/ratchet/service/ratchet.service.test.ts`;
 - Ratchet visual-state helpers:
   `src/client/features/workspace/ratchet-state.test.ts`;
 - snapshot propagation and reconciliation:
