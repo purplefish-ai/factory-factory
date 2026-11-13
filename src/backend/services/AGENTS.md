@@ -30,6 +30,9 @@ Enforced by dependency-cruiser and ownership checks:
 - Services stay transport-neutral: no routers, tRPC, `@trpc/server`, or
   orchestration imports. Throw application errors for the transport to map.
 - Cross-capsule coordination belongs in `src/backend/orchestration/`.
+- Inside `session`, `session/modules.ts` maps which `service/` directories
+  import each other; record a new import between them there. Pairs in
+  `sessionModuleCycles` may only be removed, never added.
 
 ## Operational contracts
 
