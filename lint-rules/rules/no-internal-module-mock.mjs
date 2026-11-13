@@ -41,13 +41,16 @@ function internalTarget(specifier, filename) {
   let resolved;
   if (specifier.startsWith('@/')) {
     resolved = `/src/${specifier.slice(2)}`;
+  } else if (specifier.startsWith('/')) {
+    // Vite resolves `/src/…` from the project root; `capsulePath` reads either form.
+    resolved = specifier;
   } else if (specifier === '.' || specifier === '..' || /^\.\.?\//.test(specifier)) {
     resolved = posix.resolve(posix.dirname(filename), specifier);
   } else {
     return undefined;
   }
   const target = capsulePath(posix.normalize(resolved).replace(/\/$/, ''));
-  if (!target || target.inner === 'index' || /^testing(\/|$)/.test(target.inner)) {
+  if (!target || /^index(\.ts)?$/.test(target.inner) || /^testing(\/|$)/.test(target.inner)) {
     return undefined;
   }
   return capsulePath(filename)?.capsule === target.capsule ? undefined : target.capsule;

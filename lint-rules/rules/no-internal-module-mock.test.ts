@@ -43,6 +43,11 @@ describeRuleFixtures('no-internal-module-mock', {
       file: 'src/backend/orchestration/template.test.ts',
       source: 'vi.mock(`@/backend/services/session/service/lifecycle/session.service`);',
     },
+    // A root-relative path, which Vite resolves from the project root.
+    {
+      file: 'src/backend/orchestration/root-relative.test.ts',
+      source: "vi.mock('/src/backend/services/session/service/lifecycle/session.service');",
+    },
     // A test inside one capsule mocking another capsule's internals.
     {
       file: 'src/backend/services/session/cross-capsule.test.ts',
@@ -75,7 +80,8 @@ describeRuleFixtures('no-internal-module-mock', {
     },
     {
       file: 'src/backend/orchestration/barrel-index.test.ts',
-      source: "vi.mock('@/backend/services/session/index');",
+      source:
+        "vi.mock('@/backend/services/session/index'); vi.mock('@/backend/services/session/index.ts');",
     },
     {
       file: 'src/backend/orchestration/barrel-relative.test.ts',
