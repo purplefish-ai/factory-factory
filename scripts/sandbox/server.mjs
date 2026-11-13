@@ -13,6 +13,14 @@ export const STARTUP_TIMEOUT_MS = 180_000;
  * Starts the server with `detached: true`, so its pid is its process group ID.
  * Spawn failures arrive through `onError` (an `'error'` event without a
  * listener would crash the launcher); `child.pid` is then undefined.
+ *
+ * @param {object} options
+ * @param {ReturnType<typeof import('./paths.mjs').sandboxPaths>} options.paths
+ * @param {NodeJS.ProcessEnv} options.env
+ * @param {{ frontend: number, backend: number }} options.ports
+ * @param {(code: number | null, signal: string | null) => void} options.onExit
+ * @param {(error: Error) => void} options.onError
+ * @param {(command: string, args: string[], options: object) => any} [options.spawnImpl]
  */
 export function startServer({ paths, env, ports, onExit, onError, spawnImpl = spawn }) {
   const child = spawnImpl(
@@ -36,15 +44,26 @@ export function startServer({ paths, env, ports, onExit, onError, spawnImpl = sp
     server.exited = true;
     onExit(code, signal);
   });
+  // The pipes can deliver output after the stopped sandbox's directory is
+  // deleted; that output has nowhere to go, and throwing would crash the launcher.
+  const keepOutput = (chunk) => {
+    try {
+      appendFileSync(paths.serverOutput, chunk);
+    } catch (error) {
+      if (error?.code !== 'ENOENT') {
+        throw error;
+      }
+    }
+  };
   // The backend reports its port once; keep only enough output to find that line.
   let pendingOutput = '';
   child.stdout?.on('data', (chunk) => {
     const output = pendingOutput + chunk.toString();
     server.backendPort ??= parseBackendPort(output);
     pendingOutput = output.slice(output.lastIndexOf('\n') + 1).slice(-4096);
-    appendFileSync(paths.serverOutput, chunk);
+    keepOutput(chunk);
   });
-  child.stderr?.on('data', (chunk) => appendFileSync(paths.serverOutput, chunk));
+  child.stderr?.on('data', keepOutput);
   return server;
 }
 
