@@ -12,16 +12,17 @@ in `src/shared/workspace-pr.ts`, asserted by
 `src/shared/workspace-pr-selection.test.ts` and
 `src/client/lib/workspace-selected-pr.test.ts`.
 
-This page remains while links from notes not yet migrated point here and the
-section below holds entries; delete it when both are gone.
+This page remains as long as links from notes not yet migrated point here or the
+section below still holds entries; delete it when both are gone.
 
 ## Held for other guides
 
 Rules, hazards and reasons from the old note that belong to another area. Each
-is quoted verbatim, `[…]` marking omitted sentences, and has not been checked
-against the code. The migration that creates the named area's guide checks the
-entry, moves what holds there and deletes the entry here. Paragraph numbers are
-the rows of the disposition table in pull request #3213.
+entry quotes only the sentences it needs from the paragraph named after it,
+verbatim, with `[…]` where sentences between them are left out, and has not been
+checked against the code. The migration that creates the named area's guide
+checks the entry, moves what holds there and deletes the entry here. Paragraph
+numbers are the rows of the disposition table in pull request #3213.
 
 > Attachment, discovery and review-request filtering match associations
 > case-insensitively on host, owner and repository, so a URL casing variant
