@@ -113,12 +113,7 @@ describe('WorkspaceInboxPanel', () => {
       }
       return original(path, input);
     };
-    await render();
-    await act(async () => {
-      await vi.waitFor(() =>
-        expect(container.querySelector('[data-testid="unread-count"]')?.textContent).toBe('1')
-      );
-    });
+    await renderCountBeforeList();
     expect(
       requests.filter(
         (request) => request.path === 'workspace.readMail' || request.path === 'workspace.ackMail'
@@ -152,12 +147,7 @@ describe('WorkspaceInboxPanel', () => {
       }
       return original(path, input);
     };
-    await render();
-    await act(async () => {
-      await vi.waitFor(() =>
-        expect(container.querySelector('[data-testid="unread-count"]')?.textContent).toBe('1')
-      );
-    });
+    await renderCountBeforeList();
     await click('Review ready');
     await click('Inbox');
     await act(() => complete());
@@ -169,6 +159,29 @@ describe('WorkspaceInboxPanel', () => {
     expect(requests.filter((request) => request.path === 'workspace.ackMail')).toHaveLength(0);
   });
 
+  // The unread count and the mail list are independent queries, and each
+  // result renders in its own task, so either can appear first. Hold the list
+  // until the count has rendered, then wait for the list before opening mail.
+  async function renderCountBeforeList() {
+    let releaseList: () => void = () => undefined;
+    const listReleased = new Promise<void>((resolve) => {
+      releaseList = resolve;
+    });
+    const next = respond;
+    respond = (path, input) =>
+      path === 'workspace.listMail'
+        ? listReleased.then(() => next(path, input))
+        : next(path, input);
+    await render();
+    await act(async () => {
+      await vi.waitFor(() =>
+        expect(container.querySelector('[data-testid="unread-count"]')?.textContent).toBe('1')
+      );
+    });
+    expect(container.textContent).toContain('Loading inbox');
+    releaseList();
+    await waitForText('Review ready');
+  }
   async function waitForText(text: string) {
     await act(async () => {
       await vi.waitFor(() => expect(container.textContent).toContain(text));

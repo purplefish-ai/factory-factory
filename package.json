@@ -45,6 +45,7 @@
   ],
   "scripts": {
     "dev": "node src/cli/bootstrap.mjs serve --dev",
+    "dev:sandbox": "node scripts/dev-sandbox.mjs",
     "build": "pnpm db:generate && node scripts/check-ambiguous-relative-imports.mjs && node scripts/clean-dist.mjs && tsc -p tsconfig.backend.json && tsc-alias -p tsconfig.backend.json --resolve-full-paths && node scripts/fix-prisma-imports.mjs && node scripts/copy-prompts.mjs && vite build && pnpm check:client-chunks && pnpm check:production-artifact",
     "build:storybook": "storybook build",
     "brand:generate": "node scripts/generate-brand-assets.mjs",

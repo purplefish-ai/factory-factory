@@ -291,6 +291,13 @@ it('does not acknowledge an optimistic local message', async () => {
   await recoverPRDeliveries('main', undefined, ports);
   expect(mocks.recover).toHaveBeenCalledWith('delivery', true);
 });
+it('pauses a frozen claim whose provider history is unreadable without settling it', async () => {
+  mocks.receipt.mockResolvedValue('unavailable');
+  await recoverPRDeliveries('main', undefined, ports);
+  expect(mocks.pause).toHaveBeenCalledExactlyOnceWith('w', 'RECEIPT_UNAVAILABLE', 1);
+  expect(mocks.recover).not.toHaveBeenCalled();
+  expect(mocks.cancel).not.toHaveBeenCalled();
+});
 it('rechecks the binding after the asynchronous final recipient guard', async () => {
   mocks.otherReady.mockImplementation(() => {
     config.bindingRevision++;

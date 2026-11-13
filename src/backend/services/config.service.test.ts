@@ -483,3 +483,68 @@ describe('Slack event intake gate', () => {
     expect(configService.getAgentRuntimeLimits().slackIntakeEnabled).toBe(true);
   });
 });
+
+describe('release check configuration', () => {
+  afterEach(() => {
+    process.env = { ...ORIGINAL_ENV };
+    configService.reload();
+  });
+  it('checks the public npm registry by default', () => {
+    Reflect.deleteProperty(process.env, 'FF_UPDATE_CHECKS_ENABLED');
+    Reflect.deleteProperty(process.env, 'FF_NPM_REGISTRY_URL');
+    configService.reload();
+    expect(configService.getReleaseCheckConfig()).toEqual({
+      enabled: true,
+      registryUrl: 'https://registry.npmjs.org',
+    });
+  });
+  it.each([
+    ['false', false],
+    ['true', true],
+    ['0', false],
+    ['1', true],
+    ['', true],
+    ['no', true],
+  ])('reads FF_UPDATE_CHECKS_ENABLED=%j as %s', (value, enabled) => {
+    process.env.FF_UPDATE_CHECKS_ENABLED = value;
+    configService.reload();
+    expect(configService.getReleaseCheckConfig().enabled).toBe(enabled);
+  });
+  it('reads an HTTP registry URL without its trailing slash', () => {
+    process.env.FF_NPM_REGISTRY_URL = 'http://127.0.0.1:4873/';
+    configService.reload();
+    expect(configService.getReleaseCheckConfig().registryUrl).toBe('http://127.0.0.1:4873');
+  });
+  it.each([
+    'not a url',
+    'file:///etc/passwd',
+    'ftp://registry.example',
+    'https://user:token@registry.example',
+    'https://registry.example/?scope=x',
+    'https://registry.example/#x',
+  ])('keeps the public registry for %j', (value) => {
+    process.env.FF_NPM_REGISTRY_URL = value;
+    configService.reload();
+    expect(configService.getReleaseCheckConfig().registryUrl).toBe('https://registry.npmjs.org');
+  });
+});
+
+describe('project root configuration', () => {
+  afterEach(() => {
+    process.env = { ...ORIGINAL_ENV };
+    configService.reload();
+  });
+  it('allows projects anywhere by default', () => {
+    Reflect.deleteProperty(process.env, 'FF_PROJECT_ROOT');
+    configService.reload();
+    expect(configService.getProjectRoot()).toBeNull();
+    process.env.FF_PROJECT_ROOT = '   ';
+    configService.reload();
+    expect(configService.getProjectRoot()).toBeNull();
+  });
+  it('reads the root that projects must live in', () => {
+    process.env.FF_PROJECT_ROOT = ' /tmp/ff-sandbox/sb-1 ';
+    configService.reload();
+    expect(configService.getProjectRoot()).toBe('/tmp/ff-sandbox/sb-1');
+  });
+});

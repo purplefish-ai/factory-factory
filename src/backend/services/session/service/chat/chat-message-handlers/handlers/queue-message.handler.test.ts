@@ -160,6 +160,33 @@ describe('createQueueMessageHandler', () => {
     expect(tryDispatchNextMessage).not.toHaveBeenCalled();
   });
 
+  it.each([
+    ['the PR event id namespace', { id: 'pr-event-user-controlled' }],
+    ['the backend-owned PR event source', { id: 'client-message', source: 'pr_event' }],
+  ])('rejects client messages that use %s', async (_name, message) => {
+    const tryDispatchNextMessage = vi.fn();
+    const handler = createQueueMessageHandler({
+      domain: mocks,
+      backgroundDelivery: sessionBackgroundDeliveryService,
+      tryDispatchNextMessage,
+    });
+
+    const outcome = await handler({ sessionId: 'session-1', workingDir: '/tmp/work' }, {
+      type: 'queue_message',
+      text: 'hello',
+      ...message,
+    } as never);
+
+    expect(outcome).toEqual({ replies: [] });
+    expect(mocks.rejectMessage).toHaveBeenCalledWith(
+      'session-1',
+      message.id,
+      'Reserved message id'
+    );
+    expect(mocks.enqueue).not.toHaveBeenCalled();
+    expect(tryDispatchNextMessage).not.toHaveBeenCalled();
+  });
+
   it('emits rejected state for queue messages with invalid attachments', async () => {
     const tryDispatchNextMessage = vi.fn();
     const handler = createQueueMessageHandler({

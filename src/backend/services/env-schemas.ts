@@ -37,6 +37,11 @@ function parseOneZeroBoolean(value: unknown): boolean | undefined {
   return undefined;
 }
 
+/** Accepts either convention: `true`/`false` or `1`/`0`. */
+function parseSwitch(value: unknown): boolean | undefined {
+  return parseBoolean(value) ?? parseOneZeroBoolean(value);
+}
+
 function toTrimmedString(value: unknown): string | undefined {
   if (typeof value !== 'string') {
     return undefined;
@@ -51,6 +56,19 @@ function toLowerString(value: unknown): string | undefined {
   }
   const trimmed = value.trim().toLowerCase();
   return trimmed.length > 0 ? trimmed : undefined;
+}
+
+function toHttpUrl(value: unknown): string | undefined {
+  const trimmed = toTrimmedString(value);
+  if (!(trimmed && URL.canParse(trimmed))) {
+    return undefined;
+  }
+  const url = new URL(trimmed);
+  // Only a bare base URL: the package path is appended, and credentials stay out.
+  const isBase = !(url.username || url.password || url.search || url.hash);
+  return isBase && (url.protocol === 'http:' || url.protocol === 'https:')
+    ? url.href.replace(/\/+$/, '')
+    : undefined;
 }
 
 const PositiveIntEnvSchema = z.preprocess(parseInteger, z.number().int().positive());
@@ -79,6 +97,8 @@ export const ConfigEnvSchema = z.object({
     .catch(undefined),
   FF_RUN_SCRIPT_PROXY_ENABLED: z.preprocess(parseOneZeroBoolean, z.boolean()).catch(false),
   FF_EMIT_BACKEND_PORT: z.preprocess(parseOneZeroBoolean, z.boolean()).catch(false),
+  FF_UPDATE_CHECKS_ENABLED: z.preprocess(parseSwitch, z.boolean()).catch(true),
+  FF_NPM_REGISTRY_URL: z.preprocess(toHttpUrl, z.string()).catch('https://registry.npmjs.org'),
   FF_TAILSCALE_ORIGIN: z.preprocess(toTrimmedString, z.string()).optional().catch(undefined),
   FF_TAILSCALE_HTTPS_PORT: PositiveIntEnvSchema.optional().catch(undefined),
   CODEX_HOME: z.preprocess(toTrimmedString, z.string()).optional().catch(undefined),
@@ -95,6 +115,7 @@ export const ConfigEnvSchema = z.object({
   BASE_DIR: z.preprocess(toTrimmedString, z.string()).optional().catch(undefined),
   WORKTREE_BASE_DIR: z.preprocess(toTrimmedString, z.string()).optional().catch(undefined),
   REPOS_DIR: z.preprocess(toTrimmedString, z.string()).optional().catch(undefined),
+  FF_PROJECT_ROOT: z.preprocess(toTrimmedString, z.string()).optional().catch(undefined),
   NODE_ENV: z.preprocess(toLowerString, NodeEnvSchema).catch('development'),
   WS_LOGS_PATH: z.preprocess(toTrimmedString, z.string()).optional().catch(undefined),
   FRONTEND_STATIC_PATH: z.preprocess(toTrimmedString, z.string()).optional().catch(undefined),

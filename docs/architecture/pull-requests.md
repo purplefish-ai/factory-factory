@@ -1,736 +1,79 @@
-# Pull Request Automation
+# Pull requests
 
-## Review requests
+This note has moved. Read the
+[pull request orchestration guide](../../src/backend/orchestration/pull-requests/AGENTS.md)
+for ownership, public surface, invariants and the map, and the `2026-11-13-*`
+records in [decisions](../decisions/) for the reasons. The tests the guide names
+describe the behaviour.
 
-Reviews lives at `/projects/:slug/reviews`. The navbar selects its project;
-Automations and Reviews remain in the sidebar above global Settings. The page
-and sidebar badge share a project-keyed query that polls every two minutes. The
-badge excludes approved PRs. The URL project wins over a temporarily stale saved
-selection, including archived projects absent from the active menu. Local-only
-projects show an explicit repository empty state without fetching reviews or PR
-details.
+<a id="pr-event-delivery-destinations"></a>Links here with this anchor were for
+the derived `selectedPrId`/`selectedPr` contract: `deriveWorkspacePRSelection`
+in `src/shared/workspace-pr.ts`, asserted by
+`src/shared/workspace-pr-selection.test.ts` and
+`src/client/lib/workspace-selected-pr.test.ts`.
 
-`prReview.listReviewRequests` accepts optional `{ projectId }`; the server
-resolves and validates that project's GitHub owner/repository and qualifies the
-GitHub search before pagination. Missing, unlinked, or malformed projects cannot
-fall back to a global search. Repository identity uses case-insensitive
-owner/repo matching. Undefined input retains the global review-count bridge and
-snapshot contract.
+This page remains as long as links from notes not yet migrated point here or the
+section below still holds entries; delete it when both are gone.
 
-`GitHubCLIService.listReviewRequests` caches each search for two minutes, keyed
-by lowercase repository, so every window shares one `gh api graphql` search per
-repository per interval. The review-count bridge's global search has its own
-entry and runs at most once per interval. The cache is stale-while-revalidate: a
-stale entry is returned at once while one background search refreshes it, and a
-failed refresh keeps the stale entry until a later read succeeds. The page's
-Refresh and Retry buttons send `forceRefresh`, which rechecks gh health and
-waits for a new search, then fill the shared query key. A submitted review drops
-every cached entry and stops searches already running from refilling it, so the
-next read searches again. New requests made on GitHub can therefore take up to
-about four minutes to appear without Refresh.
+## Held for other guides
 
-The `gh` health check (`--version` and `auth status`) caches a healthy result
-for five minutes and an unhealthy one for 30 seconds, so `gh auth login` is
-noticed quickly. A `gh` command failing with missing authentication or a missing
-binary discards a healthy result, so the next read waits for a new check, and
-drops cached review requests that may belong to the previous account. Health and
-settings checks that pass `forceRefresh` (the CLI health Recheck) still run
-immediately.
+Rules, hazards and reasons from the old note that belong to another area. Each
+entry quotes only the sentences it needs from the paragraph named after it,
+verbatim, with `[…]` where sentences between them are left out, and has not been
+checked against the code. The migration that creates the named area's guide
+checks the entry, moves what holds there and deletes the entry here. Paragraph
+numbers are the rows of the disposition table in pull request #3213.
 
-Legacy `/reviews` links redirect to the selected project. Explicit `repo` links
-resolve a configured owner (selected match, active match, then archived match)
-or show an ownership error. A canonical page only selects deep-linked PRs
-present in its scoped visible list. A delayed target may become selected after
-refresh, unless the user has already selected a row or navigated the list.
-Project/repository changes reset selection, details, diffs, and the mobile
-sheet; late old-view completions cannot populate the new view. Repository
-metadata changes refresh the project's cached list.
+> Attachment, discovery and review-request filtering match associations
+> case-insensitively on host, owner and repository, so a URL casing variant
+> reuses the existing association instead of creating another. Duplicate
+> associations stored before this matching are not merged.
 
-The Reviews list and review badge exclude repositories archived on GitHub at the
-search source. They also exclude PRs attached only to ARCHIVING or ARCHIVED
-workspaces. A PR attached to a live workspace remains visible, even when an
-archived workspace also references it. Requests without a local workspace remain
-visible; detached associations do not affect visibility. Filtering reads current
-workspace state on every list read, including cached ones, so restoring a
-workspace makes its requests eligible again on the next poll.
+Old paragraph 19. For the workspace capsule guide.
 
-## PR and issue link previews
+> Legacy flat aliases retain their existing mixed semantics at read/transport
+> and export adapters: URL, number, review and sync timestamp describe the
+> selected association; state, CI status, and merge conflicts describe the
+> aggregate summary. Consumers must use `selectedPr` for association facts and
+> `prSummary` for collection facts rather than pairing those legacy fields.
 
-GitHub pull request links in chat Markdown show a preview on hover or keyboard
-focus. The card includes the PR state, repository, title, author, creation age,
-and changed-line and file counts. Links retain their original destinations,
-including comment anchors and file paths. Escape dismisses the preview.
-Repository display names retain the link's casing; query keys normalize casing
-so equivalent links share cached metadata. PRs created within five seconds show
-their age as `now`.
+Old paragraph 28. For the workspace capsule guide.
 
-Preview metadata loads only when the card opens, through the local authenticated
-GitHub CLI and its shared read budget. The client shares cached results for one
-minute across matching PR links. Previews request no reviews, comments, checks,
-or diffs. Failed reads show an unavailable state while keeping the link usable.
-GitHub issue links use the same hover and focus behavior, caching, and GitHub
-CLI read budget. Issue cards show the open/closed state, repository, title,
-author, and creation age, without fetching issue bodies or comments. Comment
-anchors retain their original destinations. Other hosts and workspace file links
-retain their existing behavior.
+> The event collector uses one per-lifetime projection worker for PR collection
+> and monitoring invalidations. […] The worker owns retries and archive/stop
+> fences, and has no GitHub, delivery, session, or Linear runtime dependency.
 
-Preview URL parsing accepts HTTPS URLs on `github.com` (including the default
-HTTPS port) without credentials. Host and `pull`/`issues` path keywords match
-case-insensitively. Repository names retain their display casing and must pass
-owner/repository validation; numbers must be positive safe integers (leading
-zeros are accepted). Trailing slashes and slash-delimited subpaths, queries and
-fragments are accepted. Other hosts, nondefault ports, malformed number
-segments, and unsupported links remain plain links. Issue and PR cards share
-their frame, time formatting, tooltip and query freshness policy; their typed
-queries and PR-only statistics remain separate.
+Old paragraph 29. For the workspace capsule guide. No dependency-cruiser rule
+enforces the last clause.
 
-## PR detail diffs
+> Successful ACP prompt turns reset the workspace's PR discovery backoff, as do
+> runtime exits. ACP processes remain alive between turns, so waiting for
+> process exit alone can leave a newly opened PR undiscovered after its checks
+> fail.
 
-The PR detail panel uses `parseFileDiff` in `src/lib/diff/parse.ts` to display
-repository-relative destination filenames. It distinguishes Git's `a/` and `b/`
-prefixes from characters inside paths, decodes Git's quoted paths, and uses
-destination and rename metadata to disambiguate filenames containing spaces.
-Metadata only updates filenames before a hunk; header-like additions and
-deletions inside hunks remain diff content.
+Old paragraph 22. For the session capsule guide.
 
-## Workspace PR menu
+> Wrapped CLI failures keep the original error as `cause`. […] They never repeat
+> the command line, so repository names cannot be classified as authentication
+> or network failures and comment bodies stay out of errors.
 
-The workspace header's PR chip is one dropdown button on desktop and mobile. It
-shows the selected PR's number ("#123"), a count of any other attached PRs, and
-the one state that most needs attention: merged, closed, conflicts and failing
-CI first, then requested changes, running CI, approval or draft, then passing
-CI. An unsynced PR reads "Syncing"; unknown CI falls back to the review state,
-including "Open" (`getPrChipStatus` in
-`src/client/features/workspace/workspace-pr-status.ts`). Labels and tones match
-the sidebar and board chips; below the header's 48rem breakpoint the label
-collapses to a status dot, and the accessible name keeps the full text. The
-wrench inside the chip retains its enabled and activity states. Without a PR the
-chip reads "No PR".
+Old paragraph 47. For the GitHub capsule guide.
 
-Opening the chip shows attached PRs, review and attachment actions, and PR
-update settings, including the updates toggle; opening it does not toggle
-monitoring. Archived and archiving workspaces retain PR links but hide
-attachment, review, and monitoring controls. When the workspace has changes, the
-agent is idle, and the current branch has no open PR, **Create PR** is available
-even after an earlier PR was closed or merged. At 48rem and wider it appears
-beside the chip; below that it is in More actions. It starts a new chat with the
-`create-pr` quick action. Loading or failed action catalogs retain loading or
-retry feedback.
+> The snapshot service owns association lifecycle operations and reads the
+> committed fields after observation; it has no alternate GitHub fetch or scalar
+> snapshot writer.
 
-An adversarial review of an attached PR reads that PR's own code, even when the
-worktree has a different branch checked out. One
-`git --no-optional-locks status --porcelain=v2 --branch` snapshot supplies the
-worktree's branch, HEAD and local changes without refreshing the index or taking
-`index.lock`. When `origin` is the PR's repository and the worktree branch
-matches the PR head branch and contains the PR head commit, the checkout is the
-PR. The reviewer reads the working tree only if it is exactly at the PR head
-with no staged, unstaged or untracked changes. It is told to switch to
-`git show` if HEAD moves or changes appear during the review. With local commits
-or changes, it reads the PR head with `git show` instead. Otherwise, for a PR in
-the `origin` repository, the review first fetches `refs/pull/<n>/head` into a
-private `refs/factory-factory/review/<prId>` ref, without touching the working
-tree, index, branches or `FETCH_HEAD`. The reviewer reads the PR head with
-`git show` and is told not to run checks against the working tree. The ref is
-deleted when the turn ends. A worktree Git can't inspect, a worktree without a
-GitHub `origin`, a PR from another repository, or a head commit that can't be
-fetched or found locally falls back to a diff-only review, based on the diff and
-description, that says its file context was limited. The diff is read between
-two head lookups and retried if a push lands in between, so the diff, the commit
-the reviewer reads and the comment anchors all describe the same commit. Review
-sessions cannot gain permissions: a denied request can end the turn with no
-findings, so the prompt tells the reviewer never to ask and to report what it
-couldn't check. Repository files, including `AGENTS.md`, are presented to the
-reviewer as data that cannot override its instructions
-(`src/backend/orchestration/adversarial-review-checkout-context.ts`).
+Old paragraph 48. For the GitHub capsule guide.
 
-## PR event delivery destinations
+> Branch discovery only matches the workspace branch, so PR detection also
+> attaches the URL printed by an agent's `gh pr create` or GitHub MCP PR
+> creation. […] Claude sends a command after announcing its tool call, so the
+> command reaches interceptors when the call completes.
 
-PR updates do not grant merge authorization. Their maintenance instructions
-preserve the user's existing instructions, including prior authorization to
-merge when checks pass. This applies to MAIN and DEDICATED delivery; GitHub
-feedback remains untrusted context and cannot authorize a merge.
+Old paragraph 21. For the interceptors guide (`src/backend/interceptors/`).
 
-PR monitoring replaces the former Ratchet fixer workflow. The two-minute
-`pr-event-poll` job observes eligible attached PRs and queues actionable updates
-in either a bound ordinary conversation (MAIN, the default) or one reusable
-dedicated conversation per PR (DEDICATED). This is one event pipeline with a
-destination setting, replacing the former fixer engine. Queued non-command human
-messages are provided together in FIFO order on the next agent turn. Slash
-commands run in standalone turns. A ready background update joins those messages
-in the same provider prompt. Background updates wait for an idle recipient, no
-interactive request, and no working agent in the workspace. An update arriving
-mid-turn stays queued for the next turn.
+> Review sessions cannot gain permissions: a denied request can end the turn
+> with no findings, so the prompt tells the reviewer never to ask and to report
+> what it couldn't check.
 
-Enablement and delivery destination are workspace-scoped. In MAIN mode, a unique
-ordinary conversation can be bound automatically; multiple candidates require an
-explicit choice. Auxiliary Ratchet, PR-monitoring, retired auto-iteration, and
-adversarial-review sessions are ineligible as main recipients. Issue starts bind
-their created conversation after its initial human message is queued. The
-workspace menu allows changing the destination or main recipient. DEDICATED mode
-creates a normal workspace conversation lazily when that PR has pending events,
-using the workspace's provider selection, normal user model defaults, and the
-normal session limit. `WorkspacePRDedicatedSession`, owned by the session
-service, binds one `pr-monitoring` conversation to each PR. Later events reuse
-its saved provider identity and settings. Switching back to MAIN retains the
-selected main conversation. Binding changes use a revision compare-and-swap and
-invalidate queued requests for the old revision.
-
-An existing dedicated conversation receives its queued status row even while
-another session is working. Creating a new provider conversation waits for an
-idle workspace; session idle transitions wake pending PR delivery immediately.
-
-Every normalized observation that commits new actionable events also wakes
-delivery through the event collector, including manual and idle refreshes. The
-wake runs asynchronously after the transaction commits and does not fetch GitHub
-itself. Unchanged or rejected observations do not request this wake. Existing
-dispatch guards still queue updates until the workspace is idle; a failed wake
-leaves the durable events for the next poll or idle transition. Monitoring
-shutdown invalidates and drains in-flight observation and workspace-check wakes,
-including manual checks, before finishing.
-
-Each `WorkspacePR` association has its own ID, URL, revision, complete
-normalized observation, epoch, and transition sequence. `WorkspacePRDiscovery`
-owns branch lookup scheduling separately. An observation and its
-`WorkspacePREvent` rows are accepted in one transaction, guarded by association
-identity and revision. Attaching or merging one PR preserves sibling
-associations and events. Attachment, discovery and review-request filtering
-match associations case-insensitively on host, owner and repository, so a URL
-casing variant reuses the existing association instead of creating another.
-Duplicate associations stored before this matching are not merged.
-
-Before workspace deletion cascades these associations, the workspace owner reads
-attached and detached rows under a SQLite write lock. Orchestration composes the
-agent owner's compact result union in that same transaction before the Workspace
-delete. A failed capture aborts deletion; attachments committed before the final
-read are retained, while later attachments cannot commit against the removed
-workspace. Run results retain at most 20 validated PR links independently of
-workspace lifetime, preserving existing summaries and terminal outcomes. This
-capture does not settle agent work or archive the workspace.
-
-Branch discovery only matches the workspace branch, so PR detection also
-attaches the URL printed by an agent's `gh pr create` or GitHub MCP PR creation.
-This covers native sub-agents, which may push another branch from their own
-worktree. Their tool calls stay out of the parent transcript but are offered to
-tool interceptors that set `observesSubagents`; only PR detection does, so a
-sub-agent's pushes never rename the workspace branch. Claude sends a command
-after announcing its tool call, so the command reaches interceptors when the
-call completes. Sub-agent calls replayed while loading history are ignored.
-
-Successful ACP prompt turns reset the workspace's PR discovery backoff, as do
-runtime exits. ACP processes remain alive between turns, so waiting for process
-exit alone can leave a newly opened PR undiscovered after its checks fail. The
-reset only makes discovery eligible for the next batched scheduler pass; it does
-not perform a GitHub lookup or delay turn completion. Failed, stopping, and
-superseded turns do not reset discovery.
-
-`WorkspacePRMonitoring` owns enablement, delivery mode, main recipient
-preference, binding revision, epoch, and delivery pause. Turning monitoring off
-cancels unclaimed events while core facts continue to refresh without review
-data (see [Observations and events](#observations-and-events)). Re-enabling or
-changing destinations/recipients starts an observation epoch. Enabling
-monitoring or binding a recipient does not queue a chat message. Both MAIN and
-DEDICATED batches carry concise maintenance instructions with actionable events
-in the same bounded message. MAIN batches collect pending facts across attached
-PRs for the selected conversation; DEDICATED batches contain only their bound
-PR's facts. Legacy workspace-level enablement controls are not delivered or
-included in pending counts; they remain available for receipt recovery.
-Collection projections report MERGED only when every attached PR is merged; an
-open sibling remains visible. Poll results, collection state-change events, and
-workspace projections use `deriveWorkspacePRSummary` over the same four PR
-facts. Active associations take precedence over terminal history; failures
-outrank conflicts, running CI outranks pending review, and an attached `NONE`
-association waits for its first observation as running CI. Disabling monitoring
-projects IDLE without hiding GitHub facts. Per-association observation and
-terminal polling eligibility remain separate from this collection policy.
-
-Accepted per-PR observations from `NONE` to any open state (`OPEN`, `DRAFT`,
-`CHANGES_REQUESTED`, or `APPROVED`) notify the parent workspace once for each
-newly opened association, including attachment and discovery refreshes. Rejected
-or unchanged observations and later moves between open states (such as `DRAFT` →
-`OPEN`) do not repeat the notification.
-
-Workspace reads, HTTP summaries, and snapshots include the plain `prs`
-collection and its `prSummary`, plus derived `selectedPrId` and `selectedPr`.
-Selection uses the existing ID-ascending rule: first nonterminal association
-(including an unsynced `NONE`), otherwise the first historical association, or
-explicit nulls for an empty collection. It is not a saved primary preference.
-`selectedPr` carries that association's own state, CI, review, conflicts and
-sync time. Links, PR badges and review actions use these facts; the CI chip uses
-collection state. Review submits the persisted association ID. Scalar-only
-legacy payloads without a known association retain workspace-scoped review
-routing. Their display-only PRs carry `identitySource: 'legacy-snapshot'`;
-identity is not inferred from ID spelling, because migrated/restored persisted
-associations can also have `legacy-pr-…` IDs. Reusing a cached persisted
-association preserves its identity, and canonical collections replace adapter
-provenance. The PR menu continues to show and act on each individual
-association.
-
-Older summary/snapshot payloads may omit selection; client adapters derive it
-from the collection or adapt scalar-only legacy data. The snapshot store derives
-selection from accepted `prs`, so it has no independent timestamp, hydration
-requirement or drift policy. Full and changed payloads carry the same derived
-facts without changing `summaryVersion: 1`. No persistence migration or export
-version change is required. PR arrays are compared by identity and content, so
-database row order does not trigger drift warnings, version bumps, or snapshot
-broadcasts. Workspace and ratchet snapshot reads order PRs by ID to keep scalar
-PR selection consistent.
-
-The PR menu offers per-association refresh, review, and detachment. Detaching
-one association cancels its pending events while leaving sibling monitoring and
-the main conversation intact. Discovery preserves detached associations as
-tombstones; only an explicit attachment clears them.
-
-Legacy flat aliases retain their existing mixed semantics at read/transport and
-export adapters: URL, number, review and sync timestamp describe the selected
-association; state, CI status, and merge conflicts describe the aggregate
-summary. Consumers must use `selectedPr` for association facts and `prSummary`
-for collection facts rather than pairing those legacy fields.
-
-The event collector uses one per-lifetime projection worker for PR collection
-and monitoring invalidations. Its narrow database read publishes the complete PR
-and monitoring field set together; it does not fetch the broad workspace record.
-Invalidations during a read supersede that read and retain their reasons until a
-current projection is accepted. Every PR snapshot and attachment event carries
-its association ID; only accepted PR invalidations run PR-switch refresh and
-Linear-completion effects, and completion uses the accepted projection without
-another PR-projection read. Monitoring-only refreshes publish facts without
-invoking those effects. The worker owns retries and archive/stop fences, and has
-no GitHub, delivery, session, or Linear runtime dependency.
-
-PR-switch handling immediately recomputes monitoring and wakes delivery using
-`checkWorkspaceById`. This automatic check retains the shared 90-second
-observation cooldown and terminal- and stable-PR policies; a just-accepted
-attachment or discovery observation is reused rather than fetched again.
-Explicit refreshes and delivery preparation retain their separate
-forced-observation contract.
-
-Manual workspace PR refreshes serialize per workspace so concurrent requests
-report a committed lifecycle transition only once. Sibling refresh failures log
-their reason while preserving transitions already written by successful reads.
-
-### Frozen delivery ownership
-
-`WorkspacePREvent` owns individual facts, deduplication and supersession.
-`WorkspacePRDelivery`, also owned by the workspace capsule, owns each frozen
-external effect: the original delivery/receipt ID, complete event ID membership,
-recipient and provider identity, binding revision, message text, attempt and
-settlement timestamps. `WorkspacePREvent.batchId` records membership. New claims
-store frozen fields only on the delivery; reads flatten them for the existing
-monitoring and reducer contracts. Pending counts join the delivery state.
-
-A claim, retry, settlement or receipt recovery validates the complete frozen
-membership inside its transaction. Workspace-wide exclusion includes blocked
-batches. Retry and settlement retain the original message and receipt identity,
-and stale binding revisions or attempts cannot settle a newer claim. Proven
-absence after a detach cancels the original batch and transfers attached facts'
-canonical dedupe keys to fresh events; original membership and receipt evidence
-remain intact. Ambiguous provider history never authorizes a resend.
-
-The migration groups legacy rows only by their exact delivery ID and checks all
-repeated metadata, lifecycle state and timestamps for agreement. Valid groups
-move to one delivery and clear redundant legacy columns. Inconsistent or
-incomplete groups become `BLOCKED`; their original event evidence remains
-verbatim. Resume cannot reset that evidence or unblock the batch. Explicit
-workspace deletion still cascades both deliveries and events. A quarantined
-legacy receipt spanning multiple workspaces blocks deletion of its batch owner
-rather than cascading into another workspace's evidence.
-
-Membership that later becomes inconsistent, and old-format imports of unfinished
-receipts, are also quarantined as `BLOCKED`. A `BLOCKED` delivery holds every
-later claim for its workspace, so the workspace projection reports the derived
-pause reason `DELIVERY_BLOCKED` (a persisted pause reason takes precedence) and
-the status reads "PR update delivery needs attention". The PR menu says updates
-are stopped because an earlier update's delivery record is inconsistent, and
-offers **Discard stuck PR update…** instead of Resume. After confirmation, the
-trusted-local `workspace.discardBlockedPRDeliveries` mutation moves the
-workspace's `BLOCKED` deliveries to `DISMISSED` and wakes delivery. Nothing is
-resent or deleted: delivery rows, membership and member evidence stay verbatim,
-unsettled (pending or dispatching) members read as `CANCELLED` while members
-already recorded as delivered stay delivered history, and the cancelled facts
-are not delivered (the next PR transition emits fresh facts). Dismissed
-deliveries are never settled, retried or recovered. Export still writes
-quarantined evidence verbatim and still fails for damaged normalized membership;
-dismissal is local, so a restored backup quarantines the same evidence again.
-Delivery and event states are defined once in
-`src/shared/schemas/pr-event.schema.ts` and parsed on read; an unknown persisted
-state fails the read and holds claims instead of being treated as live. Frozen
-legacy metadata without a receipt ID (below) still blocks claims without this
-projection or action.
-
-Logical backups retain the existing flattened event format. Export validates
-complete normalized membership; old imports reconstruct batches with the same
-receipt IDs and quarantine contradictory evidence. Delivery ID collisions abort
-restore rather than attaching imported facts to another effect. A damaged
-normalized batch cannot be flattened losslessly and makes export fail
-explicitly. Legacy event columns remain for this compatibility path and
-quarantined evidence. Delivery rows are durable external-effect recovery proof
-and must be retained with their full event membership in any future recovery
-manifest.
-
-Backup admission preparation has transaction-scoped owner reads:
-`workspaceDataService.readBackupIdentities` projects repository identity and
-existing workspace/PR IDs, `findBackupEventConflicts` returns incoming workspace
-IDs with event, deduplication or raw/normalized receipt collisions, and
-`sessionDataService.findExistingBackupSessionIds` returns existing session IDs.
-Reads use the supplied transaction in chunks of at most 100 candidates and
-preserve local evidence. These passive APIs leave current import admission
-unchanged.
-
-Frozen legacy metadata without a receipt ID blocks new claims but never
-authorizes a resend. Resume, supersession and cancellation preserve its original
-evidence. Empty receipt IDs are quarantined rather than treated as new delivery
-requests.
-
-### Ledger retention
-
-The `pr-event-retention` job, registered beside `pr-event-poll`, runs every 30
-minutes after its first interval. It deletes SUPERSEDED and CANCELLED facts, and
-PENDING facts of ARCHIVED workspaces, older than 24 hours in batches of 100,
-oldest first, with at most 20 batches per run. Each batch is a separate short
-write; the delete re-checks the predicate, and the loop yields between batches
-and stops on shutdown. Superseded review facts copy the whole observation, so
-these rows hold most of the ledger's size. A `(state, createdAt)` index serves
-this cross-workspace query, so it reads only old rows in those states, never
-delivered history.
-
-Only rows that no reader uses are eligible. Rows must have no `batchId`, no
-legacy receipt or frozen metadata, and a PR target. The reducer reads only
-pending, in-flight and delivered history; pending counts and delivery read only
-live states. Delivery members are never pruned, whatever their own state, so
-frozen batches keep the complete membership that recovery and export validate.
-Delivered history stays the deduplication record that prevents re-emission.
-Eligible kinds are those whose deduplication key includes the PR's transition
-sequence: review feedback, CI failure, conflict, merge and close. That sequence
-persists with every accepted observation and only increases, so the reducer
-never regenerates a pruned key. `CI_RECOVERED` and legacy `MONITORING_ENABLED`
-rows are retained. ARCHIVED workspaces cannot return to READY, polling observes
-only READY workspaces, and claims require READY, so their unclaimed PENDING
-facts can never be delivered. Those facts, like their terminal facts, are pruned
-under the same rule. Their delivery evidence and members, DISPATCHING and
-DELIVERED rows, and retained kinds remain until workspace deletion. ARCHIVING
-workspaces keep their pending facts, because a failed archive rolls back to
-READY. Logical backups simply omit pruned facts; an import cancels unclaimed
-pending facts anyway.
-
-Deletion returns pages to SQLite's free list for reuse by later writes; it does
-not shrink the file. The app does not run `VACUUM` automatically: it rewrites
-the whole database under an exclusive lock and needs temporary space roughly
-equal to the database. Enabling incremental vacuum would also require a full
-`VACUUM` first. Compact a large database manually while the app is stopped.
-
-### Terminal PR polling
-
-Both background schedulers use the persisted per-association observation and
-`syncedAt` timestamp to pace terminal PRs. Once a normalized MERGED observation
-has committed its transition and events for the current monitoring epoch,
-background GitHub observations stop for that association. Monitoring stays
-enabled, and every poll still wakes pending deliveries, including terminal
-events, receipt recovery, and frozen retries. Open siblings continue at the
-normal cadence.
-
-CLOSED PRs become eligible again after 30 minutes so reopening remains visible
-on the next scheduled pass. Legacy terminal snapshots without a normalized
-observation are initialized before this policy applies. Enabling monitoring or
-changing its recipient/destination initializes facts for the new observation
-epoch before terminal backoff applies. A reopened PR returns to the normal
-cadence. The stale-data scheduler applies the same terminal policy, so its
-three-minute pass cannot bypass the closed-PR backoff. Explicit refreshes (the
-Kanban Sync button and PR attachment) and delivery preparation's freshness
-checks force their observation and remain unrestricted.
-
-The policy (`shouldPollPR`) reads only whether an observation is stored, not its
-contents. The watcher's monitoring list and the scheduler's stale-PR read leave
-the observation out and, in the same read transaction, ask SQLite which PRs have
-none (SQL NULL or JSON null). That query decides from the record header
-(`typeof`, `octet_length`) instead of comparing stored values, so SQLite does
-not read observation pages either. Terminal PRs still match the scheduler's SQL
-filter and are dropped in application code: the policy compares each PR's
-observation epoch with its workspace's monitoring epoch, which a Prisma filter
-cannot express.
-
-Automatic refreshes are unforced: the workspace-idle refresh, the app-load and
-project-switch sweep, and the workspace page-load sync. They reuse an
-observation accepted in the last 90 seconds, apply the same terminal and
-[stable-PR](#stable-pr-polling) policies, and defer to the scheduler's per-PR
-fetch coordinator. A merge is still observed once, because the policy reads the
-committed state, which remains open until a MERGED observation is accepted.
-`refreshWorkspace` and the `syncPRStatus` and `syncAllPRStatuses` procedures
-take an explicit `force` flag (default `false` for the procedures). An automatic
-project sweep in flight does not suppress an explicit forced sync.
-
-### Stable PR polling
-
-Automatic observations also back off an open PR whose facts have stopped
-changing. Once three consecutive observations of a PR are identical apart from
-their observation time, with CI terminal (`SUCCESS` or `FAILURE`) and, while
-monitoring is on, complete review facts, unforced observations keep the
-committed facts until 10 minutes have passed since the last GitHub read, instead
-of reading every two-minute poll. Pending or unknown CI, incomplete reviews, a
-changed observation, and a write by another observer (a revision change) keep
-the normal cadence. A forced observation (explicit refresh, attachment, or
-delivery preparation's freshness check) always reads GitHub and starts a new
-count, as does a session in the workspace starting or finishing a turn, since
-that is when an agent pushes. The state is in memory, scoped like the 90-second
-reuse window, so a restart starts every PR at the normal cadence. A change made
-on GitHub while a stable PR is backed off, such as a new human review or a merge
-through the web UI, is therefore observed up to 10 minutes later. GitHub's
-`updatedAt` is not used to skip reads, because it is not known to change when a
-review thread is resolved.
-
-### Observations and events
-
-Polling, manual refresh, and dispatch preparation share normalized observation
-fetching through `pr-observation.orchestrator.ts`. Coalescing is scoped to
-workspace/PR identity and revision/epoch; separate PRs do not share a baseline.
-GitHub owns process-wide spawn limits, in-flight read deduplication, and rate
-limit backoff. A connectivity failure pauses new GitHub reads for 30 seconds
-across PRs, including reads already queued for a process slot. Reads resume
-automatically after the cooldown; failures preserve saved PR facts and remain
-eligible for the next polling pass. Opening the shared cooldown logs one
-warning, including for lookups whose callers suppress failures. Snapshot refresh
-and monitoring report these retryable failures as warnings. Writes are neither
-paused by the network read cooldown nor automatically retried. Version and
-authentication health checks bypass the network read cooldown; their failures do
-not start that cooldown. The GitHub process boundary classifies diagnostic
-output without command arguments and marks connectivity failures, including
-local read timeouts, with a typed error; storage and observation-persistence
-errors keep their error severity. Wrapped CLI failures keep the original error
-as `cause`. Their messages and logs use gh's stderr when present; otherwise a
-failed process reports `gh command failed`, and a non-process error (such as a
-parse failure) keeps its own message. They never repeat the command line, so
-repository names cannot be classified as authentication or network failures and
-comment bodies stay out of errors. `listIssues`, `getReviewComments`,
-`getResolvedReviewCommentIds`, `getPRFullDetails`, and `getPRDiff` warn and
-preserve typed connectivity errors for callers. Watcher concurrency remains
-bounded at three workspaces, with a 90-second timeout and shutdown cancellation.
-
-PR attachment and discovery refreshes require that same normalized observer. The
-snapshot service owns association lifecycle operations and reads the committed
-fields after observation; it has no alternate GitHub fetch or scalar snapshot
-writer. Its workspace bridge supplies only collection/context reads, attachment,
-discovery attachment, and detachment. Atomic normalized acceptance owns
-revision/epoch rejection and ledger updates, and only accepted observations
-publish PR transitions for projections and parent notifications.
-
-Observation receives five explicit function ports: PR lookup, monitoring config
-lookup, normalized fetching, atomic acceptance, and typed publication of an
-accepted observation. The producer imports no runtime application dependencies
-and receives no service objects or event emitters. Composition supplies a stable
-opaque `cacheScope` shared by polling, manual refresh, and delivery wrappers for
-one application graph; distinct graphs have independent in-flight and recent
-observation caches. The scope is keyed by the application's services object; the
-PR pipeline has no process-default services, so polling, refresh, delivery,
-monitoring changes and issue-start recipient binding all receive that object
-explicitly. Delivery receives a `refreshObservation` callback from composition
-wiring and awaits it before claiming events, then rechecks the recipient
-binding. Recipient readiness belongs to delivery.
-
-`prFactPayloadSchema` validates GitHub-derived facts; the transition reducer
-accepts and emits only those facts. `prMonitoringControlPayloadSchema` validates
-legacy backend-owned enable instructions for backup and receipt compatibility.
-The ledger retains its compatible payload union, but rendering rejects mixed
-control/fact batches instead of silently omitting facts. The reducer
-deliberately reads pending, in-flight, and delivered fact history for
-deduplication and recovery semantics; it does not choose a session, destination,
-or prompt. Acceptance holds the serialized SQLite transaction, so that history
-query is limited in SQL to the current epoch's deduplication-key range and
-excludes undelivered inactive rows such as superseded review payloads. It still
-reads delivery-bound rows because their delivery state replaces the event state.
-
-Unclaimed PR event messages use the current trusted reply preference at
-delivery. Legacy controls retain their captured `replyToPrComments` in
-compatible payloads but no longer start turns. After a delivery is claimed,
-retries reuse its frozen text and identity.
-
-Trigger decisions live in the pure `src/shared/pr-trigger-policy.ts` module. Its
-draft and ledger-summary types live in `pr-trigger-policy.types.ts`, which
-imports only shared schemas. Dependency checks reject runtime dependencies and
-imports back through `pr-monitoring.ts`, including type-only imports. The
-monitoring facade retains delivery eligibility, pause rules, markers, and the
-draft compatibility export used by ledger persistence. The workspace PR accessor
-still reduces observations inside the existing revision/epoch transaction; the
-policy does not fetch GitHub data, select recipients, or dispatch messages. New
-event kinds require an explicit shared schema change.
-
-The reducer emits changed CI failures, recovery after a delivered failure,
-actionable review additions or edits, conflict transitions, and merge/close
-transitions. Check details, head SHA, and transition sequence distinguish reruns
-and recurrences. An unchanged red observation never sends another prompt merely
-because the agent left CI red. A new head re-emits undelivered review feedback
-but not feedback already delivered. Feedback in flight during a push is
-re-emitted so a cancelled claim cannot lose it; the copy is superseded once that
-delivery is received. Unfrozen obsolete facts are superseded; frozen retry
-messages keep the original text and UUID. A destination-only switch preserves
-queued facts so the new recipient can receive them.
-
-Review policy defaults to `CHANGES_REQUESTED`: changes-requested review bodies
-and unresolved inline threads. `ALL_REVIEW_FEEDBACK` also includes commented
-review summaries. Ordinary PR conversation comments do not trigger updates.
-While monitoring is on, one `gh pr view` reads the core PR, head and check facts
-together with the conversation comments (one GraphQL request). Reviews (REST,
-for its chronological order), inline review comments (REST) and resolved review
-threads (GraphQL) are separate reads; the thread lookup is skipped when a
-complete inline-comment read found none, since resolution only filters inline
-comments. An observation therefore spawns four `gh` processes, or three without
-inline comments. If the combined read fails for any reason other than an abort
-or connectivity failure, the core facts are read again on their own and reviews
-are reported incomplete. Failed identity, review settings, review or comment
-lookups mark reviews incomplete without blocking CI, conflict or terminal-state
-observations. They claim no review resolutions, and the existing
-incomplete-review acceptance retains pending feedback. Identity must be known
-before accepting review facts; failed lookups retry on the next poll without
-disabling self-review filtering. The app's own
-[adversarial-review marker](../design/adversarial-review.md) remains an explicit
-exception to that filtering under its authenticated GitHub identity.
-
-While a workspace's monitoring is off, observations read only the core facts
-(one `gh pr view`); identity, review, review-comment and thread reads are
-skipped and reviews are reported incomplete, since only the event reducer uses
-them and it creates no events then. The review decision shown in the UI is a
-core fact. Enabling renews the epoch, so a core-only observation still in flight
-is rejected, and the new epoch's first observation (the toggle's immediate check
-or the next poll) reads reviews and becomes the baseline. An observation already
-in flight when monitoring turns off may still finish its review reads; it is
-accepted without creating events.
-
-Approvals supersede earlier feedback only with reliable same-author ordering.
-Submission times and REST review ordinals provide that ordering; opaque IDs do
-not. Deleted reviewers retain their feedback under an unknown identity, and
-unknown authors' approvals cannot erase each other's feedback. Resolved threads
-are excluded. Pagination caps mark reviews incomplete, so omitted feedback is
-retained rather than inferred resolved. Unknown CI results never become green.
-
-### Delivery and recovery
-
-PR delivery resolves recipients and prepares requests before using the
-`existing_sessions` arm of `background-action-dispatch.orchestrator.ts`. That
-shared boundary attempts to enqueue every request before waking each unique
-session once. The queue can reject individual requests; the result counts only
-successful admissions. Wakes are asynchronous; failures leave delivery deferred
-for the existing poll or idle transition. A queued result describes admission,
-not a completed agent turn. Observation, claim/freeze, receipts and recovery
-retain their existing owners below.
-
-Periodic-task timer events use the dispatcher's separate `new_workspace` arm.
-Their existing execution reservation is their correlation identity; they never
-enter `WorkspacePREvent` or PR session delivery and receipt handling. The
-periodic capsule awaits launch and owns workspace linkage and completion; see
-[integrations](./integrations.md#periodic-tasks).
-
-The session queue carries a backend-owned `pr_event` source. Browser messages
-cannot supply it or reserved message IDs. MAIN preparation refreshes distinct
-PRs with pending candidate facts, with at most three refreshes in flight. Failed
-refreshes leave that PR's facts pending while healthy siblings remain eligible;
-unrelated attached PRs do not delay delivery. Dedicated preparation refreshes
-its bound PR. Frozen retries reuse their exact event set and text without
-another GitHub refresh. Preparation checks eligibility before freezing a bounded
-message (16 KiB UTF-8), event IDs, delivery UUID, recipient, binding revision,
-and attempt. When complete PR identity sections exceed that limit, the batch
-claims only the sections represented in its text and leaves the remainder
-pending for later turns. The final guard runs again for every event and PR
-target immediately before provider submission. Frozen retries preserve their
-exact text and complete event set, so later facts wait for a subsequent batch. A
-transactional workspace-wide claim permits only one PR delivery at a time,
-including across dedicated conversations. A competing claim retains its queued
-status row and retries when the active delivery settles. Review data is escaped,
-explicitly untrusted, and includes PR links and omission counts.
-
-Cold delivery requires resuming the exact stored Claude/Codex conversation.
-Failed or unsupported resume cannot fall back to a new conversation. Saved ACP
-model, mode, reasoning and permissions are restored; PR updates never apply
-separate Ratchet provider or permission defaults.
-
-Delivery checks that the recipient's worktree is available before claiming an
-update. A missing or non-directory worktree pauses delivery as `SESSION_FAILED`,
-preserving pending events. Restore a valid worktree directory at the configured
-path, then use **Resume PR updates** to retry. The ACP startup preflight also
-catches a directory removed after that check. Other filesystem lookup errors
-temporarily block delivery without persisting a pause, so a later attempt can
-retry.
-
-A completed provider prompt acknowledges delivery, meaning the facts were
-received, regardless of whether the PR was fixed. After an uncertain exit,
-provider-owned user history must contain the exact delivery marker to prove
-receipt; optimistic UI rows are insufficient. The marker must be its own line in
-a user prompt. Lookup byte-searches the provider file for the JSON-encoded
-marker and parses only matching lines, so a check never loads the whole history.
-Missing history pauses delivery as `RECEIPT_UNAVAILABLE`. Loaded history without
-the marker allows a bounded retry in the same conversation. When that session
-has a recorded provider identity rollover, proven absence permits recovery to
-re-stamp its frozen claim to the current identity. The recovery transaction
-fences the identity observed before receipt lookup and verifies the rollover
-lineage; unreadable history still pauses delivery. Frozen message text and
-delivery IDs remain unchanged. A recipient change first recovers old claims;
-only proven absence allows cancelling an old frozen delivery. It never retargets
-that frozen message into a new conversation. If a PR in a frozen MAIN batch is
-detached, proven absence allows cancelling that batch and queuing fresh facts
-for its still-attached PRs. The original delivery identity and text remain
-preserved for receipt history.
-
-Closing a conversation retains its provider session ID in archived transcript
-metadata. Receipt recovery reads that identity from the archive's header,
-without parsing its archived messages (it parses the whole archive only when the
-header cannot be isolated), and checks provider-owned history, including after
-another conversation is selected. If history is unavailable, restore the
-provider history files and archived identity, then explicitly resume the
-selected conversation. Local transcript messages cannot prove receipt.
-
-The session capsule tells the delivery port why a claimed delivery did not reach
-the provider with a typed `PRDeliveryFailureReason`. Dispatch raises
-`ApplicationError` kinds that the session's background delivery service
-classifies before calling the port, so the wording of the app's own messages
-never decides delivery state. `busy` (`SESSION_TURN_BUSY`: another turn holds
-the session or a human message arrived during preparation) defers the claim
-without spending an attempt. A provider runtime's busy-turn error is untyped, so
-the session capsule still recognizes that external payload by its reason text
-(`isTurnAlreadyInProgressError`) and reports it as `busy`. `resume_failed`
-(`SESSION_RESUME_FAILED`: the exact stored conversation could not be restored)
-pauses delivery as `RESUME_FAILED` immediately. Any other failure is a counted
-retry.
-
-Transport attempts stop after three failures. User stop and runtime failure
-persist a pause and invalidate queued requests; explicit user continuation
-clears recoverable pauses and renews the bounded retry allowance while
-preserving the original frozen delivery ID and text. The PR menu also offers
-explicit **Resume PR updates** for recoverable pauses, including when no
-dedicated conversation exists yet. Changing destinations alone preserves a
-pause; resuming uses the binding revision and retains frozen recipients. The
-chat renders PR updates as compact, noneditable rows with queued, delivered, or
-failed delivery states. Cancelled updates are hidden from the conversation,
-including after history replay, without leaving empty rows. Queued updates
-appear below current agent activity as one shared status line, regardless of how
-many updates are queued; delivered update contents can be expanded in the
-transcript. Failed and cancelled queue outcomes remain in session snapshots and
-replay; background prompt text never enters composer recovery. Snapshots expose
-enablement, delivery mode, recipient, pause reason and pending count. Queued
-updates, paused delivery, and idle red CI do not imply live agent work.
-
-### Migration and backups
-
-The cutover retains exact legacy fixer IDs and all session/transcript rows,
-retires and archives each legacy fixer, and fences delivery until retention is
-confirmed. Startup retirement visits only monitoring rows with retained (or
-corrupt) legacy IDs, a `LEGACY_FIXER` fence, or any `ratchet` session row (any
-status); other rows are no-ops and are filtered in SQL. Retained IDs are never
-cleared, so those rows are rechecked each startup. It drops old fixer dispatch
-tables and the Ratchet provider override. Existing enabled workspaces bind their
-sole ordinary conversation during migration. Ambiguous workspaces require an
-explicit recipient selection. Main conversation settings remain intact. The
-later auto-iteration removal drops its obsolete permission setting without
-changing PR recipient access.
-
-Version-6 backups preserve every PR association, normalized observation,
-monitoring binding/pause, and event including frozen delivery metadata. Versions
-4 and 5 remain accepted. Published version-5 fixer identities normalize into
-retained legacy IDs and pause delivery until cutover completes; operational
-fixer ownership is not restored. Restored process IDs are never trusted as live
-runtimes; provider identity is retained for receipt recovery. Invalid restored
-recipients are unbound and require selection.
-
-In-flight backup deliveries must include their frozen delivery ID, text,
-recipient, binding revision, provider, and provider conversation identity.
-
-The delivery-mode migration is additive: existing monitoring defaults to MAIN.
-Version 6 backups retain the destination and dedicated PR/session bindings;
-older backups default to MAIN. Binding restoration validates the workspace, PR
-and `pr-monitoring` workflow after the sessions have been restored.
+Old paragraph 13. For the adversarial review guide or records.

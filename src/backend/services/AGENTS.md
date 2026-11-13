@@ -30,6 +30,10 @@ Enforced by dependency-cruiser and ownership checks:
 - Services stay transport-neutral: no routers, tRPC, `@trpc/server`, or
   orchestration imports. Throw application errors for the transport to map.
 - Cross-capsule coordination belongs in `src/backend/orchestration/`.
+- Inside `session`, `session/modules.ts` maps which `service/` modules import
+  which; record a new import between them there. The graph minus the imports in
+  `sessionModuleCycles` must stay acyclic, and that list may lose entries
+  relative to `main` but never gain one.
 
 ## Operational contracts
 
@@ -45,4 +49,6 @@ Enforced by dependency-cruiser and ownership checks:
   durable fact ledger, `WorkspacePRDelivery` frozen delivery effects and
   membership, and `WorkspacePRDiscovery` the discovery schedule. Other side
   tables flatten their rows onto workspace reads. Read
-  [workspace state](../../../docs/architecture/workspace-state.md).
+  [workspace state](../../../docs/architecture/workspace-state.md); PR
+  monitoring that coordinates these tables is in the
+  [pull request guide](../orchestration/pull-requests/AGENTS.md).

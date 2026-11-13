@@ -24,25 +24,38 @@ export function isNewerRelease(current: string, latest: string): boolean {
 /** Shared across clients; checks run on demand, never on the startup path. */
 export class FactoryReleaseChecker {
   private latest: string | null = null;
+  private latestRegistryUrl: string | null = null;
   private expiresAt = 0;
   private pending: Promise<string | null> | null = null;
 
-  getLatestVersion(onError?: (error: unknown) => void): Promise<string | null> {
+  getLatestVersion(
+    onError?: (error: unknown) => void,
+    registryUrl = 'https://registry.npmjs.org'
+  ): Promise<string | null> {
     if (this.pending !== null) {
       return this.pending;
+    }
+    if (registryUrl !== this.latestRegistryUrl) {
+      // A version cached from another registry says nothing about this one.
+      this.latest = null;
+      this.expiresAt = 0;
+      this.latestRegistryUrl = registryUrl;
     }
     if (Date.now() < this.expiresAt) {
       return Promise.resolve(this.latest);
     }
-    this.pending = this.fetchLatest(onError).finally(() => {
+    this.pending = this.fetchLatest(registryUrl, onError).finally(() => {
       this.pending = null;
     });
     return this.pending;
   }
 
-  private async fetchLatest(onError?: (error: unknown) => void): Promise<string | null> {
+  private async fetchLatest(
+    registryUrl: string,
+    onError?: (error: unknown) => void
+  ): Promise<string | null> {
     try {
-      const response = await fetch('https://registry.npmjs.org/factory-factory/latest', {
+      const response = await fetch(`${registryUrl}/factory-factory/latest`, {
         signal: AbortSignal.timeout(3000),
         headers: { Accept: 'application/json' },
       });
