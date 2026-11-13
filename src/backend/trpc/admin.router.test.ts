@@ -113,6 +113,10 @@ function createCaller(requestTrust?: Context['requestTrust']) {
     })),
   };
 
+  const hostMetricsService = {
+    getHistory: vi.fn(async () => [{ at: 1, cpuPercent: 12, memoryPercent: 34 }]),
+  };
+
   const logger = {
     debug: vi.fn(),
     info: vi.fn(),
@@ -143,6 +147,7 @@ function createCaller(requestTrust?: Context['requestTrust']) {
         cliHealthService,
         acpRuntimeManager,
         terminalService,
+        hostMetricsService,
         ratchetService,
         sessionLifecycleService,
         dataBackupService: {
@@ -240,6 +245,14 @@ describe('adminRouter', () => {
     await expect(caller.getSystemStats()).resolves.toEqual({
       apiUsage: expect.objectContaining({ totalRequests: 200 }),
       environment: 'test',
+    });
+  });
+
+  it('returns host load history', async () => {
+    const { caller } = createCaller();
+
+    await expect(caller.getHostMetrics()).resolves.toEqual({
+      samples: [{ at: 1, cpuPercent: 12, memoryPercent: 34 }],
     });
   });
 
