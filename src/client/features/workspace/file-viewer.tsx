@@ -15,6 +15,7 @@ import { MarkdownRenderer } from '@/components/ui/markdown';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { formatBytes } from '@/lib/formatters';
 import { FileCode } from './file-code';
+import { ImageFilePreview } from './image-file-preview';
 import { usePersistentScroll } from './use-persistent-scroll';
 
 // =============================================================================
@@ -132,6 +133,7 @@ function FileViewerWarnings({ truncated, fileSizeLabel, isBinary }: FileViewerWa
 
 function FileViewerContent({
   data,
+  filePath,
   isMarkdown,
   showPreview,
   syntaxTheme,
@@ -139,12 +141,23 @@ function FileViewerContent({
   viewportRef,
 }: {
   data: FileData;
+  filePath: string;
   isMarkdown: boolean;
   showPreview: boolean;
   syntaxTheme: 'dark' | 'light';
   onScroll: (event: UIEvent<HTMLDivElement>) => void;
   viewportRef: RefObject<HTMLDivElement | null>;
 }) {
+  if (data.image) {
+    return (
+      <ImageFilePreview
+        key={data.image.data}
+        src={`data:${data.image.mimeType};base64,${data.image.data}`}
+        filePath={filePath}
+      />
+    );
+  }
+
   if (data.isBinary) {
     return (
       <ScrollArea className="flex-1" onScroll={onScroll} viewportRef={viewportRef}>
@@ -218,12 +231,13 @@ function FileViewerLoaded({ filePath, tabId, data, syntaxTheme }: FileViewerLoad
 
       <FileViewerWarnings
         truncated={data.truncated}
-        isBinary={data.isBinary}
+        isBinary={data.isBinary && !data.image}
         fileSizeLabel={fileSizeLabel}
       />
 
       <FileViewerContent
         data={data}
+        filePath={filePath}
         isMarkdown={isMarkdown}
         showPreview={showPreview}
         syntaxTheme={syntaxTheme}

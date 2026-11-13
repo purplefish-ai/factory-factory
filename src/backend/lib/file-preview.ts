@@ -28,9 +28,15 @@ export async function readFilePrefix(
     assertRegularFile(stats);
     await validateFile?.(stats);
 
-    const buffer = Buffer.allocUnsafe(maxBytes + 1);
+    let buffer = Buffer.allocUnsafe(Math.min(maxBytes, stats.size) + 1);
     let offset = 0;
-    while (offset < buffer.length) {
+    while (offset < maxBytes + 1) {
+      if (offset === buffer.length) {
+        // Files can grow after stat; expand only when bytes fill the current buffer.
+        const expanded = Buffer.allocUnsafe(Math.min(maxBytes + 1, buffer.length * 2));
+        buffer.copy(expanded);
+        buffer = expanded;
+      }
       const { bytesRead } = await handle.read(buffer, offset, buffer.length - offset, offset);
       if (bytesRead === 0) {
         break;
