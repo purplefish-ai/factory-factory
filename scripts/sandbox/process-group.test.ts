@@ -1,3 +1,4 @@
+import { spawn } from 'node:child_process';
 import { describe, expect, it } from 'vitest';
 import {
   collectGroupProcesses,
@@ -57,6 +58,25 @@ const exitOn =
       : processes;
 
 describe('process identity', () => {
+  it('reads environments of listed processes even when some have exited', async () => {
+    const entry = 'BASE_DIR=/tmp/ff-sandbox/sb-environment test';
+    const env = { PATH: process.env.PATH, BASE_DIR: '/tmp/ff-sandbox/sb-environment test' };
+    const live = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], { env });
+    const gone = spawn(process.execPath, ['-e', ''], { env });
+    try {
+      await new Promise((resolve) => gone.once('exit', resolve));
+      await new Promise((resolve) => setTimeout(resolve, 200));
+      const livePid = live.pid ?? 0;
+      const gonePid = gone.pid ?? 0;
+      expect(realSystem.processesWithEnvironment(entry, [livePid, gonePid])).toEqual([livePid]);
+      expect(realSystem.processesWithEnvironment(entry, [gonePid])).toEqual([]);
+      expect(realSystem.processesWithEnvironment(entry, null)).toEqual([livePid]);
+      expect(realSystem.processesWithEnvironment(`${entry}x`, [livePid])).toEqual([]);
+    } finally {
+      live.kill('SIGKILL');
+    }
+  }, 30_000);
+
   it('parses pid, parent, group, state and start time', () => {
     const table = parseProcessTable(
       [`   10     1    10 Ss   ${T1}`, `   14    10    10 Z    ${T2}`, 'garbage', ''].join('\n')

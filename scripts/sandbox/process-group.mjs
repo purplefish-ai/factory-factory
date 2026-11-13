@@ -94,11 +94,20 @@ function processesWithEnvironment(entry, pids) {
   // `ps -E` appends the environment to the command, space-separated, one line
   // per process (a newline in a value is printed as \012). An entry matches
   // between spaces, so a value with spaces still matches whole.
-  const output = execFileSync(
-    'ps',
-    ['-E', '-ww', '-o', 'pid=,command=', ...(pids ? ['-p', pids.join(',')] : ['-A'])],
-    { encoding: 'utf8', maxBuffer: 512 * 1024 * 1024, env: { ...process.env, LC_ALL: 'C' } }
-  );
+  let output;
+  try {
+    output = execFileSync(
+      'ps',
+      ['-E', '-ww', '-o', 'pid=,command=', ...(pids ? ['-p', pids.join(',')] : ['-A'])],
+      { encoding: 'utf8', maxBuffer: 512 * 1024 * 1024, env: { ...process.env, LC_ALL: 'C' } }
+    );
+  } catch (error) {
+    // `ps -p` exits 1 when none of the listed processes exists any longer.
+    if (error?.status !== 1 || typeof error.stdout !== 'string') {
+      throw error;
+    }
+    output = error.stdout;
+  }
   const found = [];
   for (const line of output.split('\n')) {
     const match = /^\s*(\d+) (.*)$/.exec(line);
