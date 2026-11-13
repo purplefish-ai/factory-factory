@@ -393,6 +393,38 @@ describe('configureDomainBridges', () => {
       expect(workspaceQueryService.filterReviewRequests).toHaveBeenCalledWith(prs);
     });
 
+    it('searches every repository for the workspace review count', async () => {
+      const pr = {
+        number: 1,
+        title: 'First repository PR',
+        url: 'https://github.com/org/repo/pull/1',
+        repository: { nameWithOwner: 'org/repo' },
+        author: { login: 'author' },
+        createdAt: '2026-01-01T00:00:00Z',
+        isDraft: false,
+        reviewDecision: 'REVIEW_REQUIRED' as const,
+        additions: 1,
+        deletions: 0,
+        changedFiles: 1,
+      };
+      const otherRepository = {
+        ...pr,
+        title: 'Second repository PR',
+        url: 'https://github.com/other/project/pull/1',
+        repository: { nameWithOwner: 'other/project' },
+      };
+      vi.mocked(githubCLIService.listReviewRequests).mockResolvedValueOnce([pr, otherRepository]);
+      vi.mocked(workspaceQueryService.filterReviewRequests).mockImplementationOnce(
+        async (prs) => prs
+      );
+      configureDomainBridges(createBridgeServices());
+      const bridge = getBridge(workspaceQueryService.configure);
+
+      await expect(bridge.github.listReviewRequests()).resolves.toEqual([pr, otherRepository]);
+      expect(githubCLIService.listReviewRequests).toHaveBeenCalledOnce();
+      expect(vi.mocked(githubCLIService.listReviewRequests).mock.calls[0]?.[0]).toBeUndefined();
+    });
+
     it('workspaceQueryService gets github bridge with checkHealth', async () => {
       configureDomainBridges(createBridgeServices());
       const bridge = getBridge(workspaceQueryService.configure);

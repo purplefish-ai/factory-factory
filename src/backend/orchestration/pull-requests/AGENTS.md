@@ -19,8 +19,8 @@ guards, receipt recovery and the legacy Ratchet fixer cutover. It does not own:
   discovery schedule: the workspace capsule's `WorkspacePR*` accessors in
   `src/backend/services/workspace/resources/`.
 - Which observations become events: the pure `src/shared/pr-trigger-policy.ts`.
-- The session queue, dispatch, receipt lookup and failure classification:
-  `src/backend/services/session/`.
+- The session queue, dispatch, receipt lookup, failure classification and the
+  `WorkspacePRDedicatedSession` binding: `src/backend/services/session/`.
 - Update wording: `src/backend/prompts/pr-event.ts`.
 - Snapshot projection and PR side effects (Linear completion, PR-opened
   notices): `src/backend/orchestration/snapshots/`.
@@ -59,9 +59,8 @@ There is no barrel. Production code elsewhere imports only these, by importer:
 - Delivery forces a fresh observation before freezing an update and rechecks the
   binding afterwards. `pr-event-delivery.orchestrator.test.ts`.
 - A workspace has at most one claimed PR delivery at a time, whichever
-  destination each targets.
-  `src/backend/services/workspace/resources/workspace-pr-delivery-modes.accessor.integration.test.ts`,
-  `pr-event-flow.integration.test.ts`.
+  destination each targets. `pr-event-flow.integration.test.ts`,
+  `src/backend/services/workspace/resources/workspace-pr-delivery-modes.accessor.integration.test.ts`.
 - A retry resends the frozen text and event set and never reads GitHub.
   `pr-event-delivery.batching.test.ts`.
 - After an uncertain exit, only the delivery marker in provider-owned history
@@ -80,9 +79,10 @@ There is no barrel. Production code elsewhere imports only these, by importer:
   `ratchet-observation-watcher.test.ts`.
 - A project-scoped review-request list holds only that project's repository and
   never searches globally; with `gh` healthy, a missing, unlinked or invalid
-  project returns an error. The unscoped workspace review count searches every
+  project returns an error; the unscoped workspace review count searches every
   repository. `src/backend/trpc/pr-review.router.test.ts`,
-  `review-requests.orchestrator.integration.test.ts`.
+  `review-requests.orchestrator.integration.test.ts`,
+  `src/backend/orchestration/domain-bridges.orchestrator.test.ts`.
 
 ## Map
 

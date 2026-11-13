@@ -195,7 +195,7 @@ The PR scheduler in
 new PRs every three minutes. Page-load `syncPRStatus` calls and these periodic
 syncs converge cached PR state; see
 [terminal PR polling](decisions/2026-11-13-terminal-pr-polling-backoff.md) for
-which refreshes are forced.
+how background polling paces merged and closed PRs.
 
 Enabling Ratchet through `workspace.toggleRatcheting` also starts a background
 `ratchetService.checkWorkspaceById(...)` evaluation so the workspace does not
