@@ -156,6 +156,23 @@ it('rejects start without retrying when Slack refuses the app-level token', asyn
   expect(events).toEqual([]);
 });
 
+it('opens the connection through the built-in fetch by default', async () => {
+  // The dev sandbox contains this call only because Node's own fetch honours
+  // its proxy variables; a client with its own agent would bypass them.
+  const builtIn = slackApi({ ok: false, error: 'invalid_auth' });
+  vi.stubGlobal('fetch', builtIn);
+  try {
+    const { handlers } = recorder();
+    const socket = createSlackSocket(APP_TOKEN, handlers);
+    await expect(socket.start()).rejects.toMatchObject({ data: { error: 'invalid_auth' } });
+    expect(builtIn).toHaveBeenCalledOnce();
+    expect(String(builtIn.mock.calls[0]?.[0])).toBe('https://slack.com/api/apps.connections.open');
+    expect(peers).toHaveLength(0);
+  } finally {
+    vi.unstubAllGlobals();
+  }
+});
+
 it('rejects start without retrying when Slack is unreachable', async () => {
   const { handlers } = recorder();
   const fetch = vi.fn<typeof globalThis.fetch>(() =>

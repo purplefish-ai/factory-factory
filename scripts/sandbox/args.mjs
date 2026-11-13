@@ -6,13 +6,28 @@ export const USAGE = `Usage: pnpm dev:sandbox [--scenario <name>] [--keep] [--ow
 
 Starts the real app (serve --dev) in a new directory under <os tmpdir>/ff-sandbox/
 with its own HOME, database, worktrees, Codex home and Claude configuration.
-Codex is the fake app-server. gh and ssh are stand-ins that record their calls
-and fail; git may use local paths only; every other outbound HTTP(S) request,
-including Claude's, goes to a local recorder that refuses it and logs its method,
-host and port to egress-calls.log. Update checks and Slack intake are off, no
-credential reaches the server, and projects must live inside the sandbox. Seeds
-one project on a fresh Git repository with Codex as the default provider, then
+Codex is the fake app-server. No credential reaches the server, update checks
+and Slack intake are off, and projects must live inside the sandbox. Seeds one
+project on a fresh Git repository with Codex as the default provider, then
 prints one line: SANDBOX_READY <path to sandbox.json>.
+
+Outbound traffic: the application's built-in fetch and http/https requests, git
+over HTTP(S) and the Claude runtime are refused and recorded (method, host and
+port in egress-calls.log); git over SSH and gh are refused by shims (their calls
+in ssh-calls.log and gh-calls.log); WebSocket clients and clients that bring
+their own agent are not proxied, and the sandbox relies on them having no
+credential (voice) or being switched off (Slack). git also refuses every
+transport but local paths before it tries one.
+
+What the sandbox does not contain:
+  - Clients that ignore proxy variables: WebSocket (voice narration reaches
+    Deepgram once a key is saved in the sandbox), custom agents, raw TCP,
+    docker, and scp, sftp or ssh run by absolute path.
+  - OpenSSH reads ~/.ssh from the real home directory, and the macOS keychain
+    is readable by any process: not a boundary against a hostile agent.
+  - A SIGKILLed launcher's server keeps running until --clean.
+  - A managed Codex account drops CODEX_PATH, so the real Codex binary runs,
+    without a credential.
 
 On Ctrl+C, SIGTERM, server exit, owner exit or time-out it stops every process
 it started and deletes the sandbox directory.
