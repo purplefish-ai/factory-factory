@@ -407,6 +407,11 @@ export const projectRouter = router({
         parsed.repo
       );
 
+      const location = projectManagementService.checkProjectLocation(clonePath);
+      if (!location.valid) {
+        throw new Error(`Invalid repository path: ${location.error}`);
+      }
+
       if (existingStatus === 'not_repo') {
         throw new Error(`Directory already exists at ${clonePath} but is not a git repository`);
       }

@@ -44,6 +44,9 @@ pnpm dev
 # Electron app (development)
 pnpm dev:electron
 
+# The app in an isolated sandbox; see `node scripts/dev-sandbox.mjs --help`
+pnpm dev:sandbox
+
 # Production build
 pnpm build
 pnpm start
@@ -229,8 +232,10 @@ part of pull request, merge-queue, or main-push checks.
    it lists changes, and the nearest guide only when ownership, an invariant, a
    public surface or the map changes; record a decision when a later reader
    could not infer the reason. Inspect the final diff.
-4. Open the pull request ready for review, with what changed, why, and checks
-   run. Cubic does not run on drafts. Use `--body-file` for multiline
+4. Open the pull request ready for review, with a body that follows the
+   [pull request template](.github/pull_request_template.md); GitHub fills the
+   template only when no body is given, so a body passed with `--body-file` must
+   follow it too. Cubic does not run on drafts. Use `--body-file` for multiline
    `gh pr create` and `gh issue create` bodies.
 
 ### Commit Messages

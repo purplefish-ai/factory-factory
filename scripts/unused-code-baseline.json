@@ -9,6 +9,10 @@
       "disposition": "build-input",
       "reason": "scripts/check-service-registry.ts consumes this verification helper outside production runtime."
     },
+    "src/backend/services/session/modules.ts": {
+      "disposition": "build-input",
+      "reason": "Session module map read by scripts/check-service-registry.ts and the agent metrics script; the application never imports it."
+    },
     "src/backend/services/session/service/acp/codex-plan-usage-loader.ts": {
       "disposition": "review-required",
       "reason": "Only loader tests invoke fetchCodexPlanUsage; review provider usage ownership before removal."
