@@ -62,7 +62,7 @@ export function StatusCallout({
       data-slot="status-callout"
       className={cn(
         // Actions wrap under the message once it would be narrower than 12rem.
-        'flex flex-wrap items-start gap-x-2 gap-y-1.5 border',
+        'flex flex-wrap items-center gap-x-2 gap-y-1.5 border',
         size === 'sm' ? 'px-3 py-1.5 text-xs' : 'px-3 py-2 text-sm',
         variant === 'card' ? 'rounded-md' : 'rounded-none border-x-0 border-t-0',
         getStatusToneStyle(tone).surface,
@@ -77,13 +77,7 @@ export function StatusCallout({
         ) : null}
       </div>
       {action ? (
-        // Negative margins center a small button on the first line of text.
-        <div
-          className={cn(
-            'ml-auto flex max-w-full shrink-0 flex-wrap items-center gap-1',
-            size === 'sm' ? '-my-1' : '-my-1.5'
-          )}
-        >
+        <div className="ml-auto flex max-w-full shrink-0 flex-wrap items-center gap-1">
           {action}
         </div>
       ) : null}
@@ -103,8 +97,8 @@ function CalloutIcon({
   if (icon === false) {
     return null;
   }
-  // Align the icon's center with the first line of text.
-  const position = size === 'sm' ? 'mt-px size-3.5' : 'mt-0.5 size-4';
+  // Let the row center icons, text and controls regardless of button height.
+  const position = size === 'sm' ? 'size-3.5' : 'size-4';
   if (isValidElement(icon)) {
     return <span className={cn('flex shrink-0 items-center', position)}>{icon}</span>;
   }
