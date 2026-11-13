@@ -26,7 +26,6 @@ const IMAGE_MIME_TYPES: Record<string, string> = {
   '.avif': 'image/avif',
   '.bmp': 'image/bmp',
   '.ico': 'image/x-icon',
-  '.svg': 'image/svg+xml',
 };
 const MAX_IMAGE_BYTES = 20 * 1024 * 1024;
 

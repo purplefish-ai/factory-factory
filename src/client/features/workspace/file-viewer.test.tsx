@@ -247,7 +247,7 @@ it('renders images instead of the binary warning and handles decoding failures',
       root.render(
         createElement(FileViewer, {
           workspaceId: 'workspace-1',
-          filePath: 'photo.png',
+          filePath: 'assets/photo.png',
           tabId: 'image-1',
         })
       )

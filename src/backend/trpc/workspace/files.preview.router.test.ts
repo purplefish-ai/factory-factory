@@ -79,12 +79,12 @@ describe('workspace file previews', () => {
   it.each([
     ['photo.PNG', 'image/png'],
     ['photo.jpeg', 'image/jpeg'],
+    ['photo.jpg', 'image/jpeg'],
     ['photo.gif', 'image/gif'],
     ['photo.webp', 'image/webp'],
     ['photo.avif', 'image/avif'],
     ['photo.bmp', 'image/bmp'],
     ['photo.ico', 'image/x-icon'],
-    ['photo.svg', 'image/svg+xml'],
   ])('returns complete image bytes for %s', async (path, mimeType) => {
     const contents = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0, 0xff]);
     await writeFile(join(rootDir, path), contents);
@@ -96,6 +96,20 @@ describe('workspace file previews', () => {
       truncated: false,
       image: { mimeType, data: contents.toString('base64') },
     });
+  });
+
+  it('retains SVG source viewing', async () => {
+    const content = '<svg xmlns="http://www.w3.org/2000/svg"><circle r="10" /></svg>';
+    await writeFile(join(rootDir, 'icon.svg'), content);
+    const result = await caller.readFile({ workspaceId: 'w1', path: 'icon.svg' });
+    expect(result).toMatchObject({ content, isBinary: false, truncated: false });
+    expect(result.image).toBeUndefined();
+  });
+
+  it('sizes small image reads to the file instead of the image limit', async () => {
+    await writeFile(join(rootDir, 'photo.png'), Buffer.from([0x89, 0x50, 0x4e, 0x47]));
+    await caller.readFile({ workspaceId: 'w1', path: 'photo.png' });
+    expect(readLengths[0]).toBe(5);
   });
 
   it('does not truncate images at the text preview limit', async () => {

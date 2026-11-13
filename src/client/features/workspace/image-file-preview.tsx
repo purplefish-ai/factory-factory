@@ -16,7 +16,7 @@ export function ImageFilePreview({ src, filePath }: { src: string; filePath: str
     <div className="flex min-h-0 flex-1 items-center justify-center overflow-auto p-4">
       <img
         src={src}
-        alt={filePath}
+        alt={filePath.split(/[\\/]/).pop() ?? filePath}
         className="max-h-full max-w-full object-contain"
         onError={() => setFailed(true)}
       />
