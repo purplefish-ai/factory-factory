@@ -10,9 +10,17 @@ import {
   serviceRegistry,
 } from '../src/backend/services/registry';
 import { getInfrastructureServiceClassificationErrors } from '../src/backend/services/service-registry-check.helpers';
+import { sessionModuleCycles, sessionModules } from '../src/backend/services/session/modules';
 import { getCapsuleBarrelWildcardErrors } from './service-registry-barrels';
 import { collectBridgeEdges } from './service-registry-bridges';
 import { getDeclaredDependencyErrors } from './service-registry-dependencies';
+import {
+  collectSessionModuleEdges,
+  getSessionModuleErrors,
+  isSessionTestFile,
+  sessionRootModule,
+  sessionServiceRoot,
+} from './service-registry-session-modules';
 
 const rootDir = process.cwd();
 const backendRoot = path.join(rootDir, 'src/backend');
@@ -455,6 +463,30 @@ function checkCapsuleBarrels(errors: string[]): void {
   errors.push(...getCapsuleBarrelWildcardErrors(barrels));
 }
 
+/** The session capsule's module map must match its imports; see service-registry-session-modules.ts. */
+function checkSessionModules(errors: string[]): void {
+  const serviceRoot = path.join(rootDir, sessionServiceRoot);
+  const entries = readdirSync(serviceRoot, { withFileTypes: true });
+  const moduleDirectories = entries
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => entry.name);
+  if (entries.some((entry) => entry.isFile() && /\.tsx?$/u.test(entry.name))) {
+    moduleDirectories.push(sessionRootModule);
+  }
+  const files = listTypeScriptFiles(serviceRoot)
+    .map((filePath) => ({ filePath, path: getRelativeServiceFilePath(filePath) }))
+    .filter((file) => !isSessionTestFile(file.path))
+    .map((file) => ({ path: file.path, source: readFileSync(file.filePath, 'utf8') }));
+  errors.push(
+    ...getSessionModuleErrors({
+      modules: sessionModules,
+      cycles: sessionModuleCycles,
+      moduleDirectories,
+      edges: collectSessionModuleEdges(files, moduleDirectories),
+    })
+  );
+}
+
 function main(): void {
   const errors: string[] = [];
 
@@ -464,6 +496,7 @@ function main(): void {
   checkDeclaredDependencies(checkCrossServiceImports(errors), errors);
   checkPrismaGeneratedImports(errors);
   checkCapsuleBarrels(errors);
+  checkSessionModules(errors);
 
   if (errors.length > 0) {
     const output = [
