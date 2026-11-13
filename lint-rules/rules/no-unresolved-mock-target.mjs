@@ -3,17 +3,19 @@
 // nothing (docs/architecture/agent-friendly-codebase.md, principle 3). This
 // rule asks the file system whether a repository-path target resolves, the way
 // Vite does for the project's `@/` and `@prisma-gen/` aliases: the path as a
-// file, with a source extension, or as a directory with an index file. Package
-// and Node specifiers are not checked, and neither are targets Vitest resolves
-// through `__mocks__` directories or `{ virtual: true }`, which the repository
-// does not use. Existence is cached for the life of the process, so the editor
+// file, with one of Vite's default extensions, or as a directory with an index
+// file. Package and Node specifiers are not checked, and neither are targets
+// Vitest resolves through `__mocks__` directories or `{ virtual: true }`, which
+// the repository does not use. Existence is cached for the life of the process, so the editor
 // language server needs a restart after a mocked file is created. Enabled for
 // test files and test support under src/, scripts/, electron/ and lint-rules/.
 import { statSync } from 'node:fs';
 import { isModuleMockCall, literalValue, resolveRepositoryPath } from '../lib/module-mock.mjs';
 
-const SOURCE_EXTENSIONS = ['.ts', '.tsx', '.mts', '.cts', '.js', '.jsx', '.mjs', '.cjs'];
-const FILE_EXTENSIONS = [...SOURCE_EXTENSIONS, '.json', '.css'];
+// Mirrors Vite's default `resolve.extensions`; no project configuration overrides
+// it. They are appended to a target and tried as a directory's index file. A
+// target written with its full file name resolves whatever its extension.
+const RESOLVE_EXTENSIONS = ['.mjs', '.js', '.mts', '.ts', '.jsx', '.tsx', '.json'];
 
 const kinds = new Map();
 
@@ -34,9 +36,9 @@ const isFile = (path) => kindOf(path) === 'file';
 function resolves(path) {
   return (
     isFile(path) ||
-    FILE_EXTENSIONS.some((extension) => isFile(`${path}${extension}`)) ||
+    RESOLVE_EXTENSIONS.some((extension) => isFile(`${path}${extension}`)) ||
     (kindOf(path) === 'directory' &&
-      SOURCE_EXTENSIONS.some((extension) => isFile(`${path}/index${extension}`))) ||
+      RESOLVE_EXTENSIONS.some((extension) => isFile(`${path}/index${extension}`))) ||
     // TypeScript's ESM convention: a `.js` specifier names the `.ts` source.
     (path.endsWith('.js') && ['.ts', '.tsx'].some((ext) => isFile(`${path.slice(0, -3)}${ext}`)))
   );

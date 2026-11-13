@@ -84,11 +84,18 @@ describeRuleFixtures('no-unresolved-mock-target', {
     test('wrong-alias-extension', "vi.mock('@/backend/services/config.service.png');"),
     // A directory resolves only through an index file with a source extension.
     test('directory-without-index', "vi.mock('./no-index');"),
+    // Only Vite's default `resolve.extensions` are appended: a module that exists
+    // only as `.cts`, `.cjs` or `.css` needs its extension written out.
+    test('cts-extensionless', "vi.mock('./common');"),
+    test('cjs-extensionless', "vi.mock('./legacy');"),
+    test('css-extensionless', "vi.mock('@/client/globals');"),
+    test('cts-index', "vi.mock('./cts-index');"),
+    test('cjs-index', "vi.mock('./cjs-index');"),
     // A `.js` specifier needs a `.ts` or `.tsx` file of the same name.
     test('js-without-source', "vi.mock('./no-source.js');"),
   ],
   accepted: [
-    // The path as a file, and with each source extension appended.
+    // The path as a file, and with each of Vite's default extensions appended.
     sibling('target.ts'),
     sibling('view.tsx'),
     sibling('module.mts'),
@@ -99,16 +106,18 @@ describeRuleFixtures('no-unresolved-mock-target', {
     sibling('legacy.cjs', 'module.exports = {};'),
     test(
       'extensions',
-      "vi.mock('./target'); vi.mock('./view'); vi.mock('./module'); vi.mock('./common'); vi.mock('./plain'); vi.mock('./jsx-view'); vi.mock('./esm'); vi.mock('./legacy');"
+      "vi.mock('./target'); vi.mock('./view'); vi.mock('./module'); vi.mock('./plain'); vi.mock('./jsx-view'); vi.mock('./esm');"
     ),
     test(
       'with-extension',
-      "vi.mock('./target.ts'); vi.mock('./plain.js'); vi.mock('./legacy.cjs');"
+      "vi.mock('./target.ts'); vi.mock('./plain.js'); vi.mock('./common.cts'); vi.mock('./legacy.cjs'); vi.mock('./cts-index/index.cts');"
     ),
-    // A directory with an index file in any source extension.
+    // A directory with an index file in one of those extensions.
     sibling('with-index/index.ts'),
     sibling('with-index-tsx/index.tsx'),
     sibling('no-index/other.ts'),
+    sibling('cts-index/index.cts'),
+    sibling('cjs-index/index.cjs', 'module.exports = {};'),
     test(
       'directory-index',
       "vi.mock('./with-index'); vi.mock('./with-index/'); vi.mock('./with-index/index'); vi.mock('./with-index-tsx'); vi.mock('.');"
@@ -135,7 +144,7 @@ describeRuleFixtures('no-unresolved-mock-target', {
     {
       file: 'src/backend/orchestration/assets.test.ts',
       source:
-        "vi.mock('@/client/globals'); vi.mock('@/client/globals.css'); vi.mock('@/backend/testing/fixtures/published-v6'); vi.mock('@/backend/testing/fixtures/published-v6.json');",
+        "vi.mock('@/client/globals.css'); vi.mock('@/backend/testing/fixtures/published-v6'); vi.mock('@/backend/testing/fixtures/published-v6.json');",
     },
     // Test support, not only test files, is checked; a real target passes.
     {
