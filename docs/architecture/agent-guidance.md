@@ -4,6 +4,10 @@ Reviewed 2026-09-08. These sources inform our instructions; behavioral
 improvement has not been measured in this repository. Recheck guidance when
 models change.
 
+This note covers the instruction files. The
+[agent-friendly codebase principles](agent-friendly-codebase.md) cover the
+repository structure around them.
+
 - [GPT-6 Astra](https://developers.openai.com/api/docs/guides/latest-model#prompting-best-practices):
   audit conflicting skills and approval gates; encourage completion of
   authorized work and avoid unnecessary repeated testing.

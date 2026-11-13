@@ -17,8 +17,11 @@ if clarification is needed.
 ## Verification and delivery
 
 Follow [verification](CONTRIBUTING.md#verification) and
-[pull request conventions](CONTRIBUTING.md#pull-request-process). Update docs
-when behavior changes; report checks run and any failures or limitations.
+[pull request conventions](CONTRIBUTING.md#pull-request-process). A behaviour
+change is documented by its tests. Update the nearest guide only when ownership,
+an invariant, a public surface or the map changes; record a decision when a
+later reader could not infer the reason. Report checks run and any failures or
+limitations.
 
 ## Architecture and style
 
