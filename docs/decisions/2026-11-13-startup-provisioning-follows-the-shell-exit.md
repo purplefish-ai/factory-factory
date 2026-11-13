@@ -18,5 +18,3 @@ pipes, so they are not interrupted by a closed reader.
 ## Consequences
 
 - A startup script that leaves a background process running still completes.
-- Output a background process writes after provisioning is not kept; commands
-  that should keep logging after startup must redirect their own output.

@@ -25,4 +25,3 @@ worktree.
 - A symlinked base no longer leaves registrations behind, and an already
   checked-out branch is rejected before a workspace is created.
 - If the base symlink is missing, a canonical registration survives cleanup.
-  Restoring the original symlink and retrying removes it.
