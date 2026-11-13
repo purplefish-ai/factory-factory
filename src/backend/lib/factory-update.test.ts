@@ -22,6 +22,16 @@ it.each([
   expect(isNewerRelease(current, latest)).toBe(expected);
 });
 
+it('asks the registry it is given', async () => {
+  const fetcher = vi.fn(() => Promise.resolve(new Response(JSON.stringify({ version: '0.6.0' }))));
+  vi.stubGlobal('fetch', fetcher);
+  await new FactoryReleaseChecker().getLatestVersion(undefined, 'http://127.0.0.1:4873');
+  expect(fetcher).toHaveBeenCalledWith(
+    'http://127.0.0.1:4873/factory-factory/latest',
+    expect.anything()
+  );
+});
+
 it('coalesces requests and caches registry responses for an hour', async () => {
   let version = '0.6.0';
   const fetcher = vi.fn(() => Promise.resolve(new Response(JSON.stringify({ version }))));

@@ -46,6 +46,10 @@ guard; after reconnecting, the browser reloads once when the server reports the
 target version, only if the guard can be persisted. Seeing a different running
 version also clears the old target's guard. Dismissing a row does not cancel an
 accepted update. The legacy `checkFactoryUpdate` query supports older clients.
+Both read the registry named by `FF_NPM_REGISTRY_URL` (default
+`https://registry.npmjs.org`); `FF_UPDATE_CHECKS_ENABLED=false` turns both off,
+so they report no releases without a request. The
+[dev sandbox](../../CONTRIBUTING.md#isolated-sandbox) runs with checks off.
 
 ACP admission is injected by composition to preserve dependency isolation.
 

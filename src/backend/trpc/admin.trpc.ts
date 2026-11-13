@@ -32,12 +32,16 @@ export const adminRouter = router({
   ),
   // Compatibility for clients loaded before the multi-component update prompt.
   checkFactoryUpdate: publicProcedure.query(async ({ ctx }) => {
-    const currentVersion = ctx.appContext.services.configService.getAppVersion();
-    const latestVersion = await factoryReleaseChecker.getLatestVersion((error) => {
-      getLogger(ctx).debug('Factory release check failed; backing off', {
-        error: error instanceof Error ? error.message : String(error),
-      });
-    });
+    const { configService } = ctx.appContext.services;
+    const currentVersion = configService.getAppVersion();
+    const releaseCheck = configService.getReleaseCheckConfig();
+    const latestVersion = releaseCheck.enabled
+      ? await factoryReleaseChecker.getLatestVersion((error) => {
+          getLogger(ctx).debug('Factory release check failed; backing off', {
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }, releaseCheck.registryUrl)
+      : null;
     return {
       currentVersion,
       latestVersion,

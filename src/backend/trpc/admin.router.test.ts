@@ -56,7 +56,10 @@ vi.mock('./log-file-reader', () => ({
 import { adminRouter } from './admin.trpc';
 import type { Context } from './trpc';
 
-function createCaller(requestTrust?: Context['requestTrust']) {
+function createCaller(
+  requestTrust?: Context['requestTrust'],
+  releaseCheck = { enabled: true, registryUrl: 'https://registry.npmjs.org' }
+) {
   const rateLimiter = {
     getApiUsageStats: vi.fn(() => ({
       requestsLastMinute: 2,
@@ -134,6 +137,7 @@ function createCaller(requestTrust?: Context['requestTrust']) {
             nodeEnv: 'test',
           }),
           getAppVersion: () => '0.3.6',
+          getReleaseCheckConfig: () => releaseCheck,
           getCorsConfig: () => ({ allowedOrigins: ['http://localhost:3000'] }),
         },
         serverInstanceService: {
@@ -202,6 +206,30 @@ describe('adminRouter', () => {
       });
     }
   );
+
+  it('asks the configured registry for the legacy update query', async () => {
+    const latest = vi.spyOn(factoryReleaseChecker, 'getLatestVersion').mockResolvedValue('0.3.7');
+    const { caller } = createCaller(undefined, {
+      enabled: true,
+      registryUrl: 'http://127.0.0.1:4873',
+    });
+    await caller.checkFactoryUpdate();
+    expect(latest).toHaveBeenCalledWith(expect.any(Function), 'http://127.0.0.1:4873');
+  });
+
+  it('answers the legacy update query without the registry while checks are off', async () => {
+    const latest = vi.spyOn(factoryReleaseChecker, 'getLatestVersion').mockResolvedValue('0.3.7');
+    const { caller } = createCaller(undefined, {
+      enabled: false,
+      registryUrl: 'https://registry.npmjs.org',
+    });
+    await expect(caller.checkFactoryUpdate()).resolves.toEqual({
+      currentVersion: '0.3.6',
+      latestVersion: null,
+      updateAvailable: false,
+    });
+    expect(latest).not.toHaveBeenCalled();
+  });
 
   beforeEach(() => {
     vi.clearAllMocks();

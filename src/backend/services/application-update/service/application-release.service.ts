@@ -4,6 +4,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { z } from 'zod';
 import { toError } from '@/backend/lib/error-utils';
+import { configService, type ReleaseCheckConfig } from '@/backend/services/config.service';
 import { createLogger } from '@/backend/services/logger.service';
 import { releaseVersionSchema, type UpdateNotice } from '@/shared/application-updates';
 
@@ -33,6 +34,7 @@ interface Dependencies {
   now?: () => number;
   loadInstallation?: () => InstalledApplication;
   onError?: (error: unknown) => void;
+  releaseCheck?: () => ReleaseCheckConfig;
 }
 interface ReleaseCheck {
   currentVersion: string;
@@ -133,6 +135,7 @@ export class ApplicationReleaseService {
   private readonly fetch: typeof fetch;
   private readonly now: () => number;
   private readonly onError: (error: unknown) => void;
+  private readonly releaseCheck: () => ReleaseCheckConfig;
   private latest: Release | undefined;
   private expiresAt = 0;
   private pending: Promise<void> | undefined;
@@ -144,6 +147,7 @@ export class ApplicationReleaseService {
     this.onError =
       dependencies.onError ??
       ((error) => logger.debug('Release check unavailable', { error: toError(error).message }));
+    this.releaseCheck = dependencies.releaseCheck ?? (() => configService.getReleaseCheckConfig());
   }
 
   getPackageRoot(): string {
@@ -151,10 +155,14 @@ export class ApplicationReleaseService {
   }
 
   async check(): Promise<ReleaseCheck> {
+    const { enabled, registryUrl } = this.releaseCheck();
+    if (!enabled) {
+      return { currentVersion: this.installed.currentVersion, notices: [] };
+    }
     if (this.pending !== undefined) {
       await this.pending;
     } else if (this.now() >= this.expiresAt) {
-      this.pending = this.refresh().finally(() => {
+      this.pending = this.refresh(registryUrl).finally(() => {
         this.pending = undefined;
       });
       await this.pending;
@@ -182,7 +190,7 @@ export class ApplicationReleaseService {
     return { currentVersion, notices };
   }
 
-  private async refresh(): Promise<void> {
+  private async refresh(registryUrl: string): Promise<void> {
     const controller = new AbortController();
     let timer: ReturnType<typeof setTimeout> | undefined;
     const timeout = new Promise<never>((_resolve, reject) => {
@@ -193,7 +201,7 @@ export class ApplicationReleaseService {
     });
     try {
       const request = async () => {
-        const response = await this.fetch('https://registry.npmjs.org/factory-factory/latest', {
+        const response = await this.fetch(`${registryUrl}/factory-factory/latest`, {
           signal: controller.signal,
           headers: { Accept: 'application/json' },
           redirect: 'error',

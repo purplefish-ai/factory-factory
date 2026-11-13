@@ -49,6 +49,34 @@ pnpm build
 pnpm start
 ```
 
+### Isolated sandbox
+
+`pnpm dev:sandbox` runs the same development server against a throwaway
+directory under `<os tmpdir>/ff-sandbox/`, so an agent can drive the real app
+without touching your database, credentials or any external service. It prints
+one line when ready, `SANDBOX_READY <path to sandbox.json>`; that file records
+`baseDir`, `frontendUrl`, `backendUrl`, the launcher `pid`, the server's process
+group `pgid`, the seeded `projectId` and `repoPath`, and `scenario`.
+
+- Data, worktrees, the Codex home and the Claude configuration directory live in
+  `baseDir`. The server inherits only `PATH`, `HOME`, `USER`, `LOGNAME`,
+  `SHELL`, `TMPDIR`, `TERM`, `LANG`, `TZ` and `LC_*` from your environment (plus
+  `FF_NPM_REGISTRY_URL`), so no API key or token reaches it, and it reads an
+  empty dotenv file and its own Git configuration.
+- Codex is the fake app-server
+  (`src/backend/testing/fixtures/fake-codex-app-server.mjs`);
+  `--scenario <name>` reaches it as `FF_SANDBOX_SCENARIO`. Claude runs
+  unauthenticated with its configuration in `baseDir`.
+- `gh` is a shim that appends its arguments to `<baseDir>/gh-calls.log` and
+  fails. Update checks (`FF_UPDATE_CHECKS_ENABLED=false`) and Slack intake are
+  off.
+- One project is seeded on a new Git repository through tRPC, with Codex as the
+  default provider.
+
+Ctrl+C or SIGTERM stops the server's whole process group and deletes `baseDir`
+(`--keep` keeps it). `pnpm dev:sandbox --clean` stops and removes sandboxes
+whose launcher is no longer running. macOS and Linux only.
+
 ### Database
 
 The app stores its database at `~/factory-factory/data.db` by default;

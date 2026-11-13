@@ -483,3 +483,42 @@ describe('Slack event intake gate', () => {
     expect(configService.getAgentRuntimeLimits().slackIntakeEnabled).toBe(true);
   });
 });
+
+describe('release check configuration', () => {
+  afterEach(() => {
+    process.env = { ...ORIGINAL_ENV };
+    configService.reload();
+  });
+  it('checks the public npm registry by default', () => {
+    Reflect.deleteProperty(process.env, 'FF_UPDATE_CHECKS_ENABLED');
+    Reflect.deleteProperty(process.env, 'FF_NPM_REGISTRY_URL');
+    configService.reload();
+    expect(configService.getReleaseCheckConfig()).toEqual({
+      enabled: true,
+      registryUrl: 'https://registry.npmjs.org',
+    });
+  });
+  it.each([
+    ['false', false],
+    ['true', true],
+    ['0', true],
+    ['', true],
+  ])('reads FF_UPDATE_CHECKS_ENABLED=%j as %s', (value, enabled) => {
+    process.env.FF_UPDATE_CHECKS_ENABLED = value;
+    configService.reload();
+    expect(configService.getReleaseCheckConfig().enabled).toBe(enabled);
+  });
+  it('reads an HTTP registry URL without its trailing slash', () => {
+    process.env.FF_NPM_REGISTRY_URL = 'http://127.0.0.1:4873/';
+    configService.reload();
+    expect(configService.getReleaseCheckConfig().registryUrl).toBe('http://127.0.0.1:4873');
+  });
+  it.each(['not a url', 'file:///etc/passwd', 'ftp://registry.example'])(
+    'keeps the public registry for %j',
+    (value) => {
+      process.env.FF_NPM_REGISTRY_URL = value;
+      configService.reload();
+      expect(configService.getReleaseCheckConfig().registryUrl).toBe('https://registry.npmjs.org');
+    }
+  );
+});

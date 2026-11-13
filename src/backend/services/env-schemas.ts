@@ -53,6 +53,17 @@ function toLowerString(value: unknown): string | undefined {
   return trimmed.length > 0 ? trimmed : undefined;
 }
 
+function toHttpUrl(value: unknown): string | undefined {
+  const trimmed = toTrimmedString(value);
+  if (!(trimmed && URL.canParse(trimmed))) {
+    return undefined;
+  }
+  const url = new URL(trimmed);
+  return url.protocol === 'http:' || url.protocol === 'https:'
+    ? url.href.replace(/\/+$/, '')
+    : undefined;
+}
+
 const PositiveIntEnvSchema = z.preprocess(parseInteger, z.number().int().positive());
 
 export const LoggerEnvSchema = z.object({
@@ -79,6 +90,8 @@ export const ConfigEnvSchema = z.object({
     .catch(undefined),
   FF_RUN_SCRIPT_PROXY_ENABLED: z.preprocess(parseOneZeroBoolean, z.boolean()).catch(false),
   FF_EMIT_BACKEND_PORT: z.preprocess(parseOneZeroBoolean, z.boolean()).catch(false),
+  FF_UPDATE_CHECKS_ENABLED: z.preprocess(parseBoolean, z.boolean()).catch(true),
+  FF_NPM_REGISTRY_URL: z.preprocess(toHttpUrl, z.string()).catch('https://registry.npmjs.org'),
   FF_TAILSCALE_ORIGIN: z.preprocess(toTrimmedString, z.string()).optional().catch(undefined),
   FF_TAILSCALE_HTTPS_PORT: PositiveIntEnvSchema.optional().catch(undefined),
   CODEX_HOME: z.preprocess(toTrimmedString, z.string()).optional().catch(undefined),
