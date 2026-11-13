@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import type { z } from 'zod';
 import {
   CIStatus,
@@ -114,6 +114,7 @@ vi.mock('@/backend/db', () => ({
 }));
 
 import { prisma } from '@/backend/db';
+import { configService } from '@/backend/services/config.service';
 vi.mock('@/backend/services/settings/resources/backup-snapshot', () => ({
   withBackupImport: (_source: unknown, write: (tx: typeof mockTx) => Promise<unknown>) =>
     write(mockTx),
@@ -888,6 +889,32 @@ describe('DataBackupService', () => {
       expect(result.projects.imported).toBe(0);
       expect(result.projects.skipped).toBe(1);
       expect(mockTx.project.create).not.toHaveBeenCalled();
+    });
+
+    it('stores the backup project paths unchanged when no project root is set', async () => {
+      const projectRoot = vi.spyOn(configService, 'getProjectRoot').mockReturnValue(null);
+      onTestFinished(() => projectRoot.mockRestore());
+      const exportedData = createImportData({
+        projects: createImportData().data.projects.map((project) => ({
+          ...project,
+          repoPath: '/Users/someone/Code/My Repo/../my-repo',
+          worktreeBasePath: '/Volumes/External/worktrees/my-repo/',
+        })),
+        workspaces: [],
+        agentSessions: [],
+        terminalSessions: [],
+        userSettings: null,
+      });
+
+      const result = await dataBackupService.importData(exportedData);
+
+      expect(result.projects.imported).toBe(1);
+      expect(mockTx.project.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          repoPath: '/Users/someone/Code/My Repo/../my-repo',
+          worktreeBasePath: '/Volumes/External/worktrees/my-repo/',
+        }),
+      });
     });
 
     it('skips workspaces with missing projects', async () => {
