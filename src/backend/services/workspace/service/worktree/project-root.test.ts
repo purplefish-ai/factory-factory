@@ -1,4 +1,13 @@
-import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync } from 'node:fs';
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  realpathSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
@@ -69,6 +78,28 @@ describe('project root restriction', () => {
     const probe = `${root}/missing/../sub`;
     expect(checkProjectLocation(probe, root)).toEqual(refused(probe));
   });
+
+  it('refuses, rather than throws, a path under a file', () => {
+    writeFileSync(join(root, 'file'), '');
+    expect(checkProjectLocation(join(root, 'file', 'x'), root)).toEqual(
+      refused(join(root, 'file', 'x'))
+    );
+  });
+
+  // Permissions do not bind root, so the case cannot be set up as root.
+  it.skipIf(process.getuid?.() === 0)(
+    'refuses, rather than throws, a path under a directory it may not search',
+    () => {
+      const locked = join(root, 'locked');
+      mkdirSync(locked);
+      chmodSync(locked, 0o000);
+      try {
+        expect(checkProjectLocation(join(locked, 'x'), root)).toEqual(refused(join(locked, 'x')));
+      } finally {
+        chmodSync(locked, 0o755);
+      }
+    }
+  );
 
   it('refuses a dangling link, whose target is not known until it exists', () => {
     symlinkSync(join(outside, 'not-yet'), join(root, 'dangling'));

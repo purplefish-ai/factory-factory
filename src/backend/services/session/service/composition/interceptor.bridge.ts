@@ -1,12 +1,12 @@
+import { acpRuntimeManager } from '@/backend/services/session/service/acp';
+import { sessionDomainService } from '@/backend/services/session/service/session-domain.service';
 import type {
   AgentContentItem,
   AgentMessage,
   ChatMessage,
   HistoryMessage,
 } from '@/shared/acp-protocol';
-import { acpRuntimeManager } from './acp';
-import { sessionService } from './composition/session-services';
-import { sessionDomainService } from './session-domain.service';
+import { sessionService } from './session-services';
 
 /**
  * Session capabilities exposed to backend interceptors.
