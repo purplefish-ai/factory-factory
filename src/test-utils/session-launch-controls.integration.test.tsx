@@ -301,10 +301,14 @@ async function openModels(name: string) {
     item.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, key: 'ArrowRight' }));
   });
 }
-/** Launch is enabled before discovery settles, so also wait for the controls to load. */
-async function ready() {
+/**
+ * Launch is enabled before discovery settles, so also wait for the controls to load.
+ * Discovery starts only after saved defaults render, in a later task than the one
+ * that enables launch.
+ */
+async function ready(submit = 'Submit launch') {
   await waitForReact(() => {
-    expect(button('Submit launch')?.disabled).toBe(false);
+    expect(button(submit)?.disabled).toBe(false);
     expect(document.body.querySelector('[aria-busy="true"]')).toBeNull();
   });
 }
@@ -499,12 +503,13 @@ describe('real launch controls and tRPC payloads', () => {
   it('launches a workspace with another provider and its nested model in one menu visit', async () => {
     const view = renderLaunch(true);
     await view.render();
-    await waitForReact(() => expect(button('Launch')?.disabled).toBe(false));
+    await ready('Launch');
     await open('New conversation provider and model: Codex · 6 Sol');
     await openModels('Claude');
     expect(button('New conversation provider and model: Codex · 6 Sol')).toBeDefined();
     await choose('Opus');
-    await waitForReact(() => expect(button('Launch')?.disabled).toBe(false));
+    // Until Opus options are confirmed, launch sends only explicit choices.
+    await ready('Launch');
     expect(button('New conversation provider and model: Claude · Opus')).toBeDefined();
     await act(() => button('Launch')?.click());
     await waitForReact(() =>
@@ -521,8 +526,14 @@ describe('real launch controls and tRPC payloads', () => {
   });
   it('sends the selected thinking and Plan from the actual inline workspace composer', async () => {
     const view = renderLaunch(true);
+    // Hold thinking options until launch is enabled, so that order runs every time.
+    view.deferred.add('CODEX:sol');
     await view.render();
     await waitForReact(() => expect(button('Launch')?.disabled).toBe(false));
+    expect(button('Thinking level: Loading…')).toBeDefined();
+    view.deferred.delete('CODEX:sol');
+    await act(() => view.pending.get('CODEX:sol')?.(fixture('CODEX', 'sol')));
+    await ready('Launch');
     await open('Thinking level: High');
     await choose('Ultra');
     // Let the dropdown restore focus before opening another dismissible surface.
@@ -550,11 +561,13 @@ describe('real launch controls and tRPC payloads', () => {
 it('sends a manual account through the real picker, catalog, launch options and workspace payload', async () => {
   const view = renderLaunch(true);
   await view.render();
-  await waitForReact(() => expect(button('Launch')?.disabled).toBe(false));
+  await ready('Launch');
   await act(() => button('Workspace settings')?.click());
+  // Accounts load after saved defaults choose Codex, independently of launch.
+  await waitForReact(() => expect(button('Codex account: Auto')).toBeDefined());
   await open('Codex account: Auto');
   await choose('Work account');
-  await waitForReact(() => expect(button('Launch')?.disabled).toBe(false));
+  await ready('Launch');
   expect(view.requests).toContainEqual({
     path: 'userSettings.getProviderOptions',
     input: { codexAccountId: 'work' },
