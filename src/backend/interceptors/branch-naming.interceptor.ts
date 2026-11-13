@@ -328,7 +328,13 @@ class BranchNamingInterceptor implements ToolInterceptor {
     }
 
     const newBranchName = result.stdout.trim();
-    if (!newBranchName || newBranchName === 'HEAD') {
+    if (newBranchName === 'HEAD') {
+      logger.info('Detached HEAD after branch change', {
+        workspaceId: context.workspaceId,
+      });
+      return;
+    }
+    if (!newBranchName) {
       logger.warn('No named branch returned after branch change', {
         workspaceId: context.workspaceId,
       });
