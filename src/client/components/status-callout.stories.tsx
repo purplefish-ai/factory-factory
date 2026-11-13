@@ -183,3 +183,32 @@ export const ActionAlignmentDark: Story = {
   ...ActionAlignment,
   globals: { theme: 'dark' },
 };
+
+/** Expanded content keeps its icon and controls at the heading. */
+export const ExpandedContentAlignment: Story = {
+  render: () => (
+    <div className="space-y-3">
+      <StatusCallout
+        tone="danger"
+        title="Error details"
+        action={<Button size="sm">Collapse</Button>}
+      >
+        <pre className="h-80 overflow-auto">Long provider stack trace</pre>
+      </StatusCallout>
+      <StatusCallout tone="danger" align="start" action={<Button size="sm">Dismiss</Button>}>
+        <p>Agent error</p>
+        <pre className="h-80 overflow-auto">Long provider stack trace</pre>
+      </StatusCallout>
+    </div>
+  ),
+  play: async ({ canvasElement }) => {
+    for (const callout of canvasElement.querySelectorAll('[data-slot="status-callout"]')) {
+      const [icon, content, action] = Array.from(callout.children);
+      if (!(icon && content && action)) {
+        throw new Error('Expected an icon, content and actions');
+      }
+      await expect(action.getBoundingClientRect().top).toBe(content.getBoundingClientRect().top);
+      await expect(icon.getBoundingClientRect().top - content.getBoundingClientRect().top).toBe(2);
+    }
+  },
+};

@@ -31,6 +31,8 @@ export interface StatusCalloutProps extends Omit<ComponentProps<'div'>, 'title'>
   variant?: 'card' | 'strip';
   /** `sm` uses extra-small text for dense panels; `md` uses small text. */
   size?: 'sm' | 'md';
+  /** Defaults to start for titled content, center for compact messages. */
+  align?: 'start' | 'center';
 }
 
 /**
@@ -51,10 +53,12 @@ export function StatusCallout({
   action,
   variant = 'card',
   size = 'md',
+  align,
   className,
   ...props
 }: StatusCalloutProps) {
   const hasTitle = title !== undefined && title !== null && title !== false;
+  const alignment = align ?? (hasTitle ? 'start' : 'center');
   return (
     <div
       {...props}
@@ -62,14 +66,15 @@ export function StatusCallout({
       data-slot="status-callout"
       className={cn(
         // Actions wrap under the message once it would be narrower than 12rem.
-        'flex flex-wrap items-center gap-x-2 gap-y-1.5 border',
+        'flex flex-wrap gap-x-2 gap-y-1.5 border',
+        alignment === 'start' ? 'items-start' : 'items-center',
         size === 'sm' ? 'px-3 py-1.5 text-xs' : 'px-3 py-2 text-sm',
         variant === 'card' ? 'rounded-md' : 'rounded-none border-x-0 border-t-0',
         getStatusToneStyle(tone).surface,
         className
       )}
     >
-      <CalloutIcon tone={tone} icon={icon} size={size} />
+      <CalloutIcon tone={tone} icon={icon} size={size} align={alignment} />
       <div className="min-w-0 flex-1 basis-48 break-words">
         {hasTitle ? <div className="font-medium">{title}</div> : null}
         {children !== undefined && children !== null && children !== false ? (
@@ -89,16 +94,21 @@ function CalloutIcon({
   tone,
   icon,
   size,
+  align,
 }: {
   tone: StatusTone;
   icon: NonNullable<StatusCalloutProps['icon']>;
   size: NonNullable<StatusCalloutProps['size']>;
+  align: NonNullable<StatusCalloutProps['align']>;
 }) {
   if (icon === false) {
     return null;
   }
-  // Let the row center icons, text and controls regardless of button height.
-  const position = size === 'sm' ? 'size-3.5' : 'size-4';
+  // Rich content anchors the icon to its first line; compact rows center it.
+  const position = cn(
+    size === 'sm' ? 'size-3.5' : 'size-4',
+    align === 'start' && (size === 'sm' ? 'mt-px' : 'mt-0.5')
+  );
   if (isValidElement(icon)) {
     return <span className={cn('flex shrink-0 items-center', position)}>{icon}</span>;
   }
