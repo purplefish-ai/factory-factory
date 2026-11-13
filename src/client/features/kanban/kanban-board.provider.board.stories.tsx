@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react';
-import { expect, userEvent, within } from 'storybook/test';
+import { expect, userEvent, waitFor, within } from 'storybook/test';
 import { STORY_TRPC_PENDING } from '@/client/lib/storybook-trpc';
 import type { KanbanBoard } from './kanban-board';
 import { handlers, kanbanBoardMeta } from './kanban-board.provider.story-fixtures';
@@ -86,11 +86,6 @@ export const PhoneDark: Story = {
   globals: { theme: 'dark', viewport: { value: 'phone', isRotated: false } },
 };
 
-// This story fails when run on its own (the Todo section holds focus, not the
-// textarea). It passes when `Desktop` ran before it in this file; with only
-// `Phone`, only `PhoneDark` or the other stories here before it, it fails. In
-// the full file it passes because `Desktop` runs first. This predates the split.
-// Keep it in this file after `Desktop` until it is made self-contained.
 export const PhoneNewWorkspaceFromDone: Story = {
   globals: { viewport: { value: 'phone', isRotated: false } },
   play: async ({ canvasElement }) => {
@@ -100,7 +95,8 @@ export const PhoneNewWorkspaceFromDone: Story = {
     await userEvent.click(within(navigation).getByRole('link', { name: 'Done 1' }));
     await userEvent.click(canvas.getByRole('button', { name: 'New workspace' }));
     const input = await canvas.findByPlaceholderText('What should the agent work on?');
-    await expect(input).toHaveFocus();
+    // The form opens while this story's draft store is still restoring.
+    await waitFor(() => expect(input).toHaveFocus());
     await userEvent.type(input, 'Keep my task');
     await userEvent.click(within(navigation).getByRole('link', { name: 'Done 1' }));
     await expect(input).toHaveValue('Keep my task');

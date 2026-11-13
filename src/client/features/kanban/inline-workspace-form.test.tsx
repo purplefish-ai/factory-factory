@@ -511,6 +511,25 @@ it('blocks launch only while restoring and makes storage failure visible', async
   }
 });
 
+it('takes focus once the saved draft has restored on first open', async () => {
+  vi.useFakeTimers();
+  vi.stubGlobal('indexedDB', { open: () => ({}) });
+  const mounted = renderForm('restoring-focus-form');
+  try {
+    expect(mounted.textarea.disabled).toBe(true);
+    expect(document.activeElement).not.toBe(mounted.textarea);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1600);
+    });
+    expect(mounted.textarea.disabled).toBe(false);
+    expect(document.activeElement).toBe(mounted.textarea);
+  } finally {
+    actFlushSync(() => mounted.root.unmount());
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+  }
+});
+
 it('restores periodic schedules and explicit ratchet settings without applying later defaults', async () => {
   await expect(
     saveWorkspaceCreationDraft(getTestProjectId(), {
