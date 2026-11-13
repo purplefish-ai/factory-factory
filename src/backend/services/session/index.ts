@@ -108,7 +108,7 @@ export { EventSessionFenceError } from './service/event-agent/event-session-fenc
 export {
   type SessionInterceptorBridge,
   sessionInterceptorBridge,
-} from './service/interceptor.bridge';
+} from './service/composition/interceptor.bridge';
 
 // Lifecycle
 export { SessionStartupCancelledError } from './service/lifecycle/session-lifecycle-gate';
