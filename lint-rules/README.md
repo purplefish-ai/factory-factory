@@ -31,8 +31,8 @@ tool pins and real-binary fixtures when upgrading it.
 Each rule has its own files in `rules/`:
 
 - `<rule-name>.mjs` exports the rule. Its `meta.docs.description` says what it
-  rejects, and a header comment gives the rationale and links the guide it
-  enforces.
+  rejects; where the rule has a rationale beyond that or enforces a guide, a
+  header comment gives the rationale and links the guide.
 - `<rule-name>.test.ts` lists rejected and accepted fixtures for
   `describeRuleFixtures` (`testing/rule-fixtures.ts`), which lints each one as
   its own module with the real Oxlint binary and every factory rule enabled. A
@@ -52,11 +52,12 @@ them, and Knip reports a rule file that `factory.mjs` does not import.
 ### Exceptions
 
 A rule that takes an `exceptions` option (`EXCEPTIONS_SCHEMA` in
-`lib/exceptions.mjs`) reads its default from
-`rules/<rule-name>.exceptions.json`: a map from a repository-relative path to
-the reason that file may keep the reported pattern. An `exceptions` option in an
-Oxlint configuration replaces the map; the project configuration does not set
-one. Keep the lists short and give every entry a reason.
+`lib/exceptions.mjs`) reads its default from `rules/<rule-name>.exceptions.json`
+when that file exists: a map from a repository-relative path to the reason that
+file may keep the reported pattern. A rule without the file has no default
+exceptions. An `exceptions` option in an Oxlint configuration replaces the
+default; the project configuration does not set one. Keep the lists short and
+give every entry a reason.
 
 `exceptions.test.ts` covers every rule that takes the option and every
 exceptions file. Each reason must be longer than 20 characters, each file must
@@ -69,8 +70,8 @@ rule or an exceptions file.
 ### Adding a rule
 
 1. Create `rules/<rule-name>.mjs` with `meta.docs.description`, a header comment
-   for the rationale and links, and `schema: EXCEPTIONS_SCHEMA` if files may be
-   excepted.
+   for any rationale and guide links, and `schema: EXCEPTIONS_SCHEMA` if files
+   may be excepted.
 2. Create `rules/<rule-name>.test.ts` calling `describeRuleFixtures` with
    rejected and accepted sources.
 3. If files are excepted, create `rules/<rule-name>.exceptions.json` and import

@@ -157,7 +157,7 @@ a map from each path to its reason:
 [`lint-rules/exceptions.test.ts`](../lint-rules/exceptions.test.ts) runs the
 rule through the Oxlint binary and fails when an exception no longer contains
 raw classes. Add an exception only for color that is not a status and has no
-theme token, and give its reason in that file.
+theme token, and give its reason in the exceptions file.
 
 `factory/use-status-callout` rejects a class string that pairs a tinted status
 background (`bg-warning/10`, `dark:bg-info-accent/15`) with a border of the same
