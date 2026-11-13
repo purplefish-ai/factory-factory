@@ -20,9 +20,10 @@ one that matches your change before you touch it.
 | [client-state.md](./client-state.md)         | State resets by identity, latest-value refs, debounced values, following log output        |
 | [search.md](./search.md)                     | Metadata query bounds, Unicode matching, search navigation                                 |
 | [diff-rendering.md](./diff-rendering.md)     | Workers, virtual rows, scroll anchors, visual verification                                 |
-| [Chat message flow](../chat-message-flow.md) | ACP streaming, session loading, replay, client reduction                                   |
+| [Chat feature guide][chat-feature-agents-md] | Chat client: frames, loading, reducer, transcript (beside the code)                        |
 
 [pr-guide]: ../../src/backend/orchestration/pull-requests/AGENTS.md
+[chat-feature-agents-md]: ../../src/client/features/chat/AGENTS.md
 
 Keep these true. Change a note when ownership, an invariant, a public surface,
 the map or a reason changes. Do not add a description of new behaviour; its
