@@ -192,8 +192,8 @@ Old paragraph 18. For the WebSocket router guide
 Old paragraph 20. For the WebSocket router guide
 (`src/backend/routers/websocket/`, task 2.9).
 
-> These records describe successful local socket writes, not application-level
-> peer receipts.
+> […] These [OUT_TO_CLIENT] records describe successful local socket writes, not
+> application-level peer receipts.
 
 Old paragraph 22. For the WebSocket router guide
 (`src/backend/routers/websocket/`, task 2.9).
