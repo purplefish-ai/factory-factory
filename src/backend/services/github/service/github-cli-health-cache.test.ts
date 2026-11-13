@@ -95,6 +95,18 @@ it('rechecks a healthy result after a gh read reports missing authentication', a
   expect(mockExecFile).toHaveBeenCalledTimes(5);
 });
 
+it('rechecks a healthy result after a gh read finds the binary missing', async () => {
+  mockExecFile.mockResolvedValue({ stdout: 'gh version 2.20.0', stderr: '' });
+  await githubCLIService.checkHealth();
+
+  mockExecFile
+    .mockRejectedValueOnce(Object.assign(new Error('spawn gh ENOENT'), { code: 'ENOENT' }))
+    .mockRejectedValueOnce(Object.assign(new Error('spawn gh ENOENT'), { code: 'ENOENT' }));
+  await expect(githubCLIService.getPRPreview('o/r', 1)).rejects.toThrow();
+  expect((await githubCLIService.checkHealth()).isInstalled).toBe(false);
+  expect(mockExecFile).toHaveBeenCalledTimes(4);
+});
+
 it('keeps a healthy result after unrelated gh read failures', async () => {
   mockExecFile.mockResolvedValue({ stdout: 'gh version 2.20.0', stderr: '' });
   await githubCLIService.checkHealth();

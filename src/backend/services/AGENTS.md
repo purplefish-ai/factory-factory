@@ -45,4 +45,6 @@ Enforced by dependency-cruiser and ownership checks:
   durable fact ledger, `WorkspacePRDelivery` frozen delivery effects and
   membership, and `WorkspacePRDiscovery` the discovery schedule. Other side
   tables flatten their rows onto workspace reads. Read
-  [workspace state](../../../docs/architecture/workspace-state.md).
+  [workspace state](../../../docs/architecture/workspace-state.md); PR
+  monitoring that coordinates these tables is in the
+  [pull request guide](../orchestration/pull-requests/AGENTS.md).
