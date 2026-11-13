@@ -10,6 +10,12 @@ should have a story that a reviewer can open without a backend. Run it with
   `src/components/ui/**` and `src/client/**` (see `.storybook/main.ts`).
 - Put story-only data in a sibling `name.story-fixtures.ts` when several stories
   or tests share it, as with `kanban-card.story-fixtures.ts`.
+- Split a story file that keeps growing by scenario into
+  `name.<group>.stories.tsx` files, so parallel changes touch different files.
+  Every file repeats the same literal `title` (Storybook's indexer reads it
+  statically) and spreads the shared meta from `name.story-fixtures.tsx`; story
+  ids are unchanged. Keep a story that spreads another (`...Phone`) in the same
+  file as its base. `kanban-board.provider.*.stories.tsx` is an example.
 - Frontend-only regression surfaces that compose several features live in
   `src/client/routes/*-fixture.tsx`. A fixture may have its own story and may
   also back a `/__mobile-baseline` Playwright route.
@@ -105,12 +111,12 @@ export const LoadError: Story = {
 A handler receives the procedure input and returns its output (or a promise of
 it), throws to fail the request (throw a `TRPCError` to set `error.data.code`),
 or returns `STORY_TRPC_PENDING` to stay loading. Story parameters merge with the
-meta's, so spread shared handlers when a story overrides one.
-`kanban-board.provider.stories.tsx` is a worked example. Render a component that
-needs its own client (for example to count requests with `fn()`) inside a local
-`StoryTrpcProvider` with `onRequest`. Older stories seed a local `QueryClient`
-or build their own `trpc.Provider`; move them to this helper when you touch
-them.
+meta's, so spread shared handlers when a story overrides one. The
+`kanban-board.provider.*.stories.tsx` files are a worked example. Render a
+component that needs its own client (for example to count requests with `fn()`)
+inside a local `StoryTrpcProvider` with `onRequest`. Older stories seed a local
+`QueryClient` or build their own `trpc.Provider`; move them to this helper when
+you touch them.
 
 Prefer presentational components with props where they exist. Mocks return fixed
 data and must not depend on the current time unless the story pins it. Use the

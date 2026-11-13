@@ -2,6 +2,7 @@ import { ArrowDownIcon } from '@phosphor-icons/react/dist/csr/ArrowDown';
 import { memo, type ReactNode, useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import type { PendingRequestType } from '@/shared/pending-request-types';
+import { StickyUserMessage } from './sticky-user-message';
 import { ThinkingFooter } from './thinking-footer';
 import type { TranscriptDisplayProps } from './transcript-display.types';
 import { TranscriptHistoryHeader } from './transcript-history-header';
@@ -54,12 +55,8 @@ function TranscriptInstance({
     banner
   );
   const layout = useTranscriptLayout(display, Boolean(header));
-  const { engine, totalSize, state, hasContentBelow, jumpToLatest } = useTranscriptScroll(
-    viewport,
-    layout.keys,
-    scroll,
-    Boolean(history)
-  );
+  const { engine, totalSize, state, hasContentBelow, jumpToLatest, jumpToMessage } =
+    useTranscriptScroll(viewport, layout.keys, scroll, Boolean(history));
   useEffect(() => {
     if (
       !(viewport && history) ||
@@ -100,6 +97,18 @@ function TranscriptInstance({
             contentClassName={contentClassName}
           />
         </div>
+        <StickyUserMessage
+          viewport={viewport}
+          engine={engine}
+          messages={layout.messages}
+          headerOffset={layout.headerOffset}
+          queuedMessageIds={props.queuedMessageIds}
+          pendingMessageIds={layout.pendingMessageIds}
+          enabled={
+            scroll.active && scroll.ready && !display.loadingSession && state.phase === 'ready'
+          }
+          onJump={jumpToMessage}
+        />
         {state.intent === 'reading' && scroll.ready && hasContentBelow && (
           <div className="pointer-events-none absolute inset-x-0 bottom-2 z-10 flex justify-center">
             <Button

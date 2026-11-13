@@ -130,7 +130,7 @@ export function SessionLifecycleMessageRenderer({
       data-testid="session-lifecycle-message"
       data-severity="warning"
       className={cn('my-2', className)}
-      action={<LifecycleTime timestamp={lifecycle.timestamp} className="mt-0.5" />}
+      action={<LifecycleTime timestamp={lifecycle.timestamp} />}
     >
       <p>{lifecycle.message}</p>
     </StatusCallout>

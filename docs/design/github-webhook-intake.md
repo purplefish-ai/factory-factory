@@ -22,13 +22,15 @@ so no real-world event ever has two identities.
 
 ## Why polling shipped first
 
-The
-[event-triggered agents plan](../superpowers/plans/2026-11-01-event-triggered-agents.md#scope-and-delivery-decisions)
-chose authenticated outbound polling through `GitHubCLIService` to avoid a
-public endpoint, a cloud relay and repository-admin hook installation. It reuses
-the `gh:<repository-id>` connection, which is a repository identity, not a
-GitHub App installation. The owner confirmed this choice in the
-[finish design](../superpowers/specs/2026-11-12-finish-event-automations-design.md#decided-with-martin).
+The event-triggered agents plan ("Scope and delivery decisions" in
+`docs/superpowers/plans/2026-11-01-event-triggered-agents.md` at tag
+`docs-archive-2026-11`) chose authenticated outbound polling through
+`GitHubCLIService` to avoid a public endpoint, a cloud relay and
+repository-admin hook installation. It reuses the `gh:<repository-id>`
+connection, which is a repository identity, not a GitHub App installation. The
+owner confirmed this choice in the finish design ("Decided with Martin" in
+`docs/superpowers/specs/2026-11-12-finish-event-automations-design.md` at the
+same tag).
 
 What polling captures (`agent-issue-events.ts`, `agent-runtime.ts`): it reads
 `repos/{repo}/issues/events` 100 rows per page. Only issue (not PR) `labeled`
@@ -89,12 +91,13 @@ What the repository already has:
 - **Tailscale.** `ff tailscale` and port sharing use foreground Tailscale Serve
   only, which is reachable inside the tailnet and not by GitHub. Both designs
   state "never use Funnel"
-  ([access](../superpowers/specs/2026-10-30-tailscale-design.md),
-  [port sharing](../superpowers/specs/2026-11-03-tailscale-port-sharing-design.md)).
-  `src/backend/lib/tailscale-cli.ts` reads `AllowFunnel` only to detect port
-  conflicts. Funnel support would therefore be new, would reverse a recorded
-  decision, and could not share a port with the Serve listener `ff tailscale`
-  holds (Tailscale does not allow Serve and Funnel on the same port).
+  (`docs/superpowers/specs/2026-10-30-tailscale-design.md` and
+  `docs/superpowers/specs/2026-11-03-tailscale-port-sharing-design.md` at the
+  same tag). `src/backend/lib/tailscale-cli.ts` reads `AllowFunnel` only to
+  detect port conflicts. Funnel support would therefore be new, would reverse a
+  recorded decision, and could not share a port with the Serve listener
+  `ff tailscale` holds (Tailscale does not allow Serve and Funnel on the same
+  port).
 
 ### Hosted relay
 
@@ -234,9 +237,8 @@ completed by the `agent-source-poll` job after each cycle. It makes them
 Slack's planned approach is the model for a push source. Enable shows a nonce; a
 verified human message in each channel proves delivery and supplies a provider
 `event_ts` boundary; candidates are held unevaluated while the generation is
-`STARTING`
-([event ingestion and identity](../superpowers/plans/2026-11-01-event-triggered-agents.md#event-ingestion-and-identity)).
-The GitHub equivalent:
+`STARTING` ("Event ingestion and identity" in the event-triggered agents plan at
+the same tag). The GitHub equivalent:
 
 - Enable asks GitHub to ping the hook
   (`POST /repos/{owner}/{repo}/hooks/{id}/pings`). The stored ping proves the

@@ -45,6 +45,7 @@ export function ScriptFailedBanner({
     <StatusCallout
       tone="danger"
       variant="strip"
+      align={expanded ? 'start' : 'center'}
       action={
         <>
           {hasStartupScript && initOutput && (

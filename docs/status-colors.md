@@ -106,6 +106,10 @@ Each kind of status surface has one component:
 | A progress or usage bar                  | `Progress` (`src/components/ui/progress.tsx`)            |
 | A query that failed                      | `QueryErrorState` / `QueryRefreshError` (both callouts)  |
 
+`StatusCallout` centers compact messages and controls. Titled callouts align to
+the top; use `align="start"` for rich content without a title, such as expanded
+output or a message with body actions.
+
 `StatusCallout` takes a `tone`, an optional `icon` (the tone's icon by default,
 a specific Phosphor icon, an element such as `Spinner`, or `false`), a
 medium-weight `title`, the message as children and trailing `action` controls,

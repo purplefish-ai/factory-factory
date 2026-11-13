@@ -65,6 +65,25 @@ describe('CI run metrics', () => {
     expect(outcome.greenShare).toBeNull();
   });
 
+  it('passes over a skipped first run', () => {
+    expect(
+      firstRunOutcome([
+        attempt('skipped-then-green', 'l1', 'skipped', '2026-11-01T10:00:00Z'),
+        attempt('skipped-then-green', 'l2', 'success', '2026-11-01T10:05:00Z'),
+        attempt('only-skipped', 'm1', 'skipped', '2026-11-01T10:00:00Z'),
+      ])
+    ).toMatchObject({ branches: 2, decided: 1, greenOnFirstRun: 1 });
+  });
+
+  it('passes over a run that waits for approval (action_required)', () => {
+    expect(
+      firstRunOutcome([
+        attempt('approval-then-green', 'k1', 'action_required', '2026-11-01T10:00:00Z'),
+        attempt('approval-then-green', 'k2', 'success', '2026-11-01T10:05:00Z'),
+      ])
+    ).toMatchObject({ branches: 1, decided: 1, greenOnFirstRun: 1 });
+  });
+
   it('counts a failed first attempt even when the re-run went green', () => {
     const latest = attempt('rerun', 'f1', 'success', '2026-11-01T10:20:00Z', { attempt: 2 });
     const first = {
@@ -169,9 +188,28 @@ describe('CI run metrics', () => {
           conclusion: 'failure',
           run_started_at: '2026-11-01T09:50:00Z',
           updated_at: '2026-11-01T09:55:00Z',
-        })
+        }),
+        'feature'
       )
     ).toMatchObject({ runId: 42, attempt: 1, conclusion: 'failure' });
     expect(runListSchema.safeParse([{ databaseId: 'nope' }]).success).toBe(false);
+  });
+
+  it("takes an earlier attempt's branch from its run, not the attempt's head_branch", () => {
+    const row = {
+      id: 42,
+      run_attempt: 1,
+      head_sha: 'abc',
+      status: 'completed',
+      conclusion: 'failure',
+      run_started_at: '2026-11-01T09:50:00Z',
+      updated_at: '2026-11-01T09:55:00Z',
+    };
+    expect(
+      attemptFromApi(runAttemptSchema.parse({ ...row, head_branch: null }), 'feature').branch
+    ).toBe('feature');
+    expect(
+      attemptFromApi(runAttemptSchema.parse({ ...row, head_branch: 'other' }), 'feature').branch
+    ).toBe('feature');
   });
 });

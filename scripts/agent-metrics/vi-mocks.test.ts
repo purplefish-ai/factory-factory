@@ -63,4 +63,31 @@ describe('vi.mock metrics', () => {
       'client modules': 0,
     });
   });
+
+  it('counts calls, not vi.mock text in strings, templates or comments', () => {
+    const counts = viMockCounts(
+      [
+        {
+          path: 'src/fixture.test.tsx',
+          content: [
+            'const source = "vi.mock(\'node:fs\')";',
+            "const template = `vi.mock('node:path')`;",
+            "// vi.mock('node:os')",
+            "vi.mock('@/client/lib/trpc');",
+            `vi.mock(\`./\${name}\`);`,
+            'const element = <div />;',
+          ].join('\n'),
+        },
+        { path: 'src/text-only.test.ts', content: 'const text = \'vi.mock("node:fs")\';' },
+      ],
+      new Set()
+    );
+    expect(counts).toMatchObject({ calls: 2, filesWithMocks: 1, testFiles: 2 });
+    expect(counts.byTarget).toMatchObject({
+      'client modules': 1,
+      'npm and Node': 0,
+      'relative paths': 0,
+      other: 1,
+    });
+  });
 });

@@ -204,6 +204,12 @@
       }
     },
     {
+      "files": ["src/**/*.test.ts", "src/**/*.test.tsx"],
+      "rules": {
+        "factory/no-internal-module-mock": "error"
+      }
+    },
+    {
       "files": ["**/*.test-harness.tsx"],
       "rules": {
         "factory/tooltip-provider-root": "off"

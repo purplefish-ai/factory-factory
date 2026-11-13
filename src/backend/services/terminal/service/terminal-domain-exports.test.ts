@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { terminalService, terminalSessionService } from './index';
+import { terminalService, terminalSessionService } from '@/backend/services/terminal';
 
 /**
  * Domain barrel export smoke test.
