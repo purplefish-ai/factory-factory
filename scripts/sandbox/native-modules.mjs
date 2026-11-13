@@ -12,21 +12,39 @@ const NOTHING_TO_DO = /^Native modules already built for node/m;
 /**
  * Runs `scripts/ensure-native-modules.mjs node` with the launcher's own environment, its output
  * on stderr (stdout carries only SANDBOX_READY). Resolves `{ rebuilt }`: false when the script
- * found the modules already built. Aborting `signal` ends the script.
+ * found the modules already built. Aborting `signal` ends the script and everything it started
+ * (`pnpm rebuild`, node-gyp): it runs in its own process group, which is signalled.
  *
  * @param {object} [options]
  * @param {AbortSignal} [options.signal]
  * @param {(command: string, args: string[], options: object) => any} [options.spawnImpl]
+ * @param {(target: number, signal: string) => unknown} [options.kill]
  * @param {{ write: (chunk: string | Buffer) => unknown }} [options.output]
  * @returns {Promise<{ rebuilt: boolean }>}
  */
-export function ensureNativeModules({ signal, spawnImpl = spawn, output = process.stderr } = {}) {
+export function ensureNativeModules({
+  signal,
+  spawnImpl = spawn,
+  kill = (target, killSignal) => process.kill(target, killSignal),
+  output = process.stderr,
+} = {}) {
   return new Promise((resolve, reject) => {
     const child = spawnImpl(process.execPath, [SCRIPT, 'node'], {
       cwd: REPO_ROOT,
-      signal,
+      detached: true,
       stdio: ['ignore', 'pipe', 'inherit'],
     });
+    const endGroup = () => {
+      try {
+        kill(-child.pid, 'SIGTERM');
+      } catch {
+        // Already gone.
+      }
+    };
+    if (signal?.aborted) {
+      endGroup();
+    }
+    signal?.addEventListener('abort', endGroup, { once: true });
     let text = '';
     child.stdout.on('data', (chunk) => {
       text += chunk.toString();
@@ -35,6 +53,7 @@ export function ensureNativeModules({ signal, spawnImpl = spawn, output = proces
     child.once('error', reject);
     // 'close', not 'exit': every chunk of output has been read by then.
     child.once('close', (code, exitSignal) => {
+      signal?.removeEventListener('abort', endGroup);
       if (code === 0) {
         resolve({ rebuilt: !NOTHING_TO_DO.test(text) });
       } else {

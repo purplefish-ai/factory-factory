@@ -9,6 +9,7 @@ import {
   readdirSync,
   readFileSync,
   rmSync,
+  statSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
@@ -42,17 +43,23 @@ const recordSchema = z.object({ pid: z.number() });
  * Keeps the server's output from a start that fails. The launcher deletes the sandbox directory
  * before this runner can read it, and prints only the last lines of the output, so the file is
  * copied while the launcher waits for the server. The directory is found by the launcher's pid in
- * its record. Best effort: the file and the directory can vanish at any moment.
+ * its record, and only directories changed since this starts: a stale one can carry a reused pid.
+ * Best effort: the file and the directory can vanish at any moment.
  */
 function startupEvidenceKeeper(launcher: ChildProcess) {
   const root = join(tmpdir(), 'ff-sandbox');
+  const since = Date.now() - 5000;
   let sandboxDir: string | null = null;
   const owns = (name: string) => {
     try {
       const record = recordSchema.safeParse(
         JSON.parse(readFileSync(join(root, name, 'sandbox.json'), 'utf8'))
       );
-      return record.success && record.data.pid === launcher.pid;
+      return (
+        record.success &&
+        record.data.pid === launcher.pid &&
+        statSync(join(root, name)).mtimeMs >= since
+      );
     } catch {
       // Another sandbox's record, half written or already removed.
       return false;
