@@ -1,6 +1,6 @@
 import { execFile } from 'node:child_process';
 import { chmodSync, readFileSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { delimiter, join } from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
 import { startEgressRecorder } from './egress.mjs';
 import { buildServerEnv } from './env.mjs';
@@ -159,6 +159,11 @@ describe('git in the sandbox environment', () => {
         scenario: 'echo',
         egressPort: recorder.port,
       });
+      // The shim directory leads PATH, so a bare `ssh` would find it anyway. Take
+      // it off, so only the generated `core.sshCommand` can route to the shim.
+      env.PATH = env.PATH?.split(delimiter)
+        .filter((directory) => directory !== paths.binDir)
+        .join(delimiter);
       for (const remote of [
         'git@github.com:octo/sandbox-test.git',
         'ssh://git@github.com/octo/sandbox-test.git',
