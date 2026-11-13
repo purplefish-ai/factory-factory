@@ -9,7 +9,7 @@ import type {
 import { expect, vi } from 'vitest';
 import type { AcpClientOptions, AcpProcessHandle } from '@/backend/services/session';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
-import { deferred, waitForEventFixture } from './event-delivery.test-support';
+import { deferred, waitForEventFixture, waitForLaunchEvent } from './event-delivery.test-support';
 
 /** Replaces only process creation/transport. Never owns or signals a host PID/group. */
 export function fakeEventProvider(
@@ -107,14 +107,22 @@ export function eventProviderCollection() {
       providers.push(provider);
       created.get(providers.length)?.resolve();
     },
-    async waitForProviders(count: number) {
+    /**
+     * Pass the settlement of the launch that creates the providers when the test has
+     * it: the wait then fails as soon as that launch ends without them, instead of
+     * after a 1 s wall-clock budget that host load alone can exceed.
+     */
+    async waitForProviders(count: number, launch?: Promise<unknown>) {
       if (providers.length < count) {
         let signal = created.get(count);
         if (!signal) {
           signal = deferred<void>();
           created.set(count, signal);
         }
-        await waitForEventFixture(signal.promise, `provider count ${count}`, { timeoutMs: 1000 });
+        const label = `provider count ${count}`;
+        await (launch === undefined
+          ? waitForEventFixture(signal.promise, label, { timeoutMs: 1000 })
+          : waitForLaunchEvent(signal.promise, label, launch));
       }
       expect(providers).toHaveLength(count);
     },

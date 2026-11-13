@@ -9,7 +9,10 @@ import {
   githubEvent,
   type RuntimeFlow,
 } from '@/backend/orchestration/testing/agent-runtime-flow.test-support';
-import { preloadEventFixtureModules } from '@/backend/orchestration/testing/event-delivery.test-support';
+import {
+  deferred,
+  preloadEventFixtureModules,
+} from '@/backend/orchestration/testing/event-delivery.test-support';
 import { fakeEventProvider } from '@/backend/orchestration/testing/event-provider.test-support';
 import {
   createIntegrationDatabase,
@@ -25,27 +28,30 @@ async function fakeTransport(flow: RuntimeFlow) {
   const { AcpNativeSessionTracker } = await vi.importActual<
     typeof import('@/backend/services/session/service/acp/acp-native-session-tracker')
   >('@/backend/services/session/service/acp/acp-native-session-tracker');
-  vi.spyOn(factory.AcpClientFactory.prototype, 'createClient').mockImplementation(({ options }) => {
-    const provider = fakeEventProvider(
-      flow.session.AcpProcessHandle,
-      options,
-      undefined,
-      new AcpNativeSessionTracker()
-    );
-    flow.providers.add(provider);
-    return Promise.resolve(provider.handle);
-  });
+  return vi
+    .spyOn(factory.AcpClientFactory.prototype, 'createClient')
+    .mockImplementation(({ options }) => {
+      const provider = fakeEventProvider(
+        flow.session.AcpProcessHandle,
+        options,
+        undefined,
+        new AcpNativeSessionTracker()
+      );
+      flow.providers.add(provider);
+      return Promise.resolve(provider.handle);
+    });
 }
 
 let db: IntegrationDatabase;
 let f: RuntimeFlow;
+let createClient: Awaited<ReturnType<typeof fakeTransport>>;
 beforeAll(async () => {
   await preloadEventFixtureModules();
 }, 60_000);
 beforeEach(async () => {
   db = await createIntegrationDatabase();
   f = await createRuntimeFlow(db);
-  await fakeTransport(f);
+  createClient = await fakeTransport(f);
 }, 30_000);
 afterEach(async () => {
   try {
@@ -444,7 +450,7 @@ it('refuses Delete while a run is unfinished, then deletes and keeps an ordinary
   await f.enable(owner);
   await f.arrive(githubEvent('deleted-later', { number: 71 }));
   await f.evaluate();
-  await f.providers.waitForProviders(1);
+  await f.waitForProviders(1);
   const provider = f.providers.providers[0]!;
   await provider.called;
   const before = await f.caller.get(owner);
@@ -481,4 +487,36 @@ it('refuses Delete while a run is unfinished, then deletes and keeps an ordinary
   await f.arrive(githubEvent('after-delete', { number: 72 }));
   await f.evaluate(2);
   expect(await f.counts()).toMatchObject({ runs: 0, workspaces: 1, sessions: 1 });
+});
+
+// Regression: under host load a launch's provider appeared after the wait's 1 s budget.
+it('waits for a provider whose start-up outlasts any fixed budget', async () => {
+  const owner = await f.save([f.trigger()]);
+  await f.enable(owner);
+  await f.arrive(githubEvent('slow-start', { number: 91 }));
+  const reached = deferred<void>();
+  const startup = deferred<void>();
+  const start = createClient.getMockImplementation()!;
+  createClient.mockImplementationOnce(async (input) => {
+    reached.resolve();
+    await startup.promise;
+    return await start(input);
+  });
+  await f.evaluate();
+  await reached.promise;
+  // Hold provider start-up while more time passes than any wall-clock budget allows.
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+  const waited = f.waitForProviders(1).then(
+    () => 'created',
+    (error: unknown) => error
+  );
+  try {
+    await vi.advanceTimersByTimeAsync(60_000);
+  } finally {
+    vi.useRealTimers();
+  }
+  startup.resolve();
+  expect(await waited).toBe('created');
+  await completeRun(0);
+  expect(await f.counts()).toMatchObject({ runs: 1, workspaces: 1, sessions: 1, prompts: 1 });
 });

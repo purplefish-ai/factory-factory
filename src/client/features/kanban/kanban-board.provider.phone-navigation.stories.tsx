@@ -10,8 +10,22 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
+// Issues stay loading until the Waiting link has been clicked, so they arrive
+// after a jump to a section that shares the clamped bottom with Done.
+let releaseIssues: () => void = () => undefined;
 export const PhoneSectionNavigation: Story = {
   globals: { viewport: { value: 'phone', isRotated: false } },
+  parameters: {
+    trpc: {
+      handlers: {
+        ...handlers,
+        'github.listIssuesForProject': (input: unknown) =>
+          new Promise((resolve) => {
+            releaseIssues = () => resolve(handlers['github.listIssuesForProject']!(input));
+          }),
+      },
+    },
+  },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await canvas.findByText('Update dependencies');
@@ -32,6 +46,10 @@ export const PhoneSectionNavigation: Story = {
     });
     for (const link of links) {
       await userEvent.click(link);
+      if (link.textContent?.startsWith('Waiting')) {
+        releaseIssues();
+        await canvas.findByText('Support keyboard shortcuts on the board');
+      }
       await waitFor(() => expect(link).toHaveAttribute('aria-current', 'location'));
       const section = canvasElement.ownerDocument.getElementById(
         link.getAttribute('href')!.slice(1)

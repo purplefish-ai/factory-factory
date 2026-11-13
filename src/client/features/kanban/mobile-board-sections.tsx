@@ -15,6 +15,45 @@ function isAtScrollEnd(scroll: HTMLElement): boolean {
   return scroll.scrollTop > 0 && scroll.scrollTop + scroll.clientHeight >= scroll.scrollHeight - 1;
 }
 
+/** The scroll position that puts a section just below the sticky navigation. */
+function revealScrollTop(scroll: HTMLElement, section: HTMLElement, navigationHeight: number) {
+  return (
+    scroll.scrollTop +
+    section.getBoundingClientRect().top -
+    scroll.getBoundingClientRect().top -
+    navigationHeight -
+    12
+  );
+}
+
+interface NavigationTarget {
+  columnId: string;
+  scrollTop: number;
+}
+
+/**
+ * Whether an explicit jump still holds. Content loading or shrinking elsewhere
+ * (issues arriving in Todo, say) can move the scroll without the user; the jump
+ * holds while its section sits where revealing it now would put it.
+ */
+function holdsNavigationTarget(
+  scroll: HTMLElement,
+  target: NavigationTarget,
+  section: HTMLElement | undefined,
+  navigationHeight: number
+): boolean {
+  if (section && Math.abs(scroll.scrollTop - target.scrollTop) >= 1) {
+    const destination = Math.min(
+      Math.max(0, revealScrollTop(scroll, section, navigationHeight)),
+      scroll.scrollHeight - scroll.clientHeight
+    );
+    if (Math.abs(scroll.scrollTop - destination) < 1) {
+      target.scrollTop = scroll.scrollTop;
+    }
+  }
+  return Math.abs(scroll.scrollTop - target.scrollTop) < 1;
+}
+
 export function MobileBoardSections({
   sections,
   showInlineForm,
@@ -30,7 +69,7 @@ export function MobileBoardSections({
   const scrollRef = useRef<HTMLDivElement>(null);
   const navigationRef = useRef<HTMLElement>(null);
   const sectionRefs = useRef(new Map<string, HTMLElement>());
-  const navigationTarget = useRef<{ columnId: string; scrollTop: number } | null>(null);
+  const navigationTarget = useRef<NavigationTarget | null>(null);
   const lastCreationRequest = useRef(workspaceCreationRequest);
   const lastRevealedFormRequest = useRef<number | null>(null);
   const [activeId, setActiveId] = useState('ISSUES');
@@ -48,8 +87,13 @@ export function MobileBoardSections({
     const target = navigationTarget.current;
     if (
       target &&
-      Math.abs(scroll.scrollTop - target.scrollTop) < 1 &&
-      visibleSections.some(({ column }) => column.id === target.columnId)
+      visibleSections.some(({ column }) => column.id === target.columnId) &&
+      holdsNavigationTarget(
+        scroll,
+        target,
+        sectionRefs.current.get(target.columnId),
+        navigation.offsetHeight
+      )
     ) {
       setActiveId(target.columnId);
       return;
@@ -76,12 +120,7 @@ export function MobileBoardSections({
     if (!(scroll && section)) {
       return;
     }
-    const top =
-      scroll.scrollTop +
-      section.getBoundingClientRect().top -
-      scroll.getBoundingClientRect().top -
-      (navigationRef.current?.offsetHeight ?? 0) -
-      12;
+    const top = revealScrollTop(scroll, section, navigationRef.current?.offsetHeight ?? 0);
     scroll.scrollTo?.({ top: Math.max(0, top), behavior: 'instant' });
     navigationTarget.current = { columnId, scrollTop: scroll.scrollTop };
     if (!section.contains(section.ownerDocument.activeElement)) {
