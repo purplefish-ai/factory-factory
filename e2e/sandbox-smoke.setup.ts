@@ -6,10 +6,13 @@ import {
   existsSync,
   mkdirSync,
   openSync,
+  readdirSync,
   readFileSync,
   rmSync,
 } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
+import { z } from 'zod';
 
 // Starts one sandbox (`pnpm dev:sandbox`) for the run and stops it afterwards. The spec finds
 // its sandbox.json through FF_SANDBOX_JSON.
@@ -33,11 +36,48 @@ const TTL_MINUTES = 20;
 // The launcher's exit code after a SIGTERM it handled by stopping cleanly.
 const STOPPED_BY_SIGTERM = 143;
 
+const recordSchema = z.object({ pid: z.number() });
+
+/**
+ * Keeps the server's output from a start that fails. The launcher deletes the sandbox directory
+ * before this runner can read it, and prints only the last lines of the output, so the file is
+ * copied while the launcher waits for the server. The directory is found by the launcher's pid in
+ * its record. Best effort: the file and the directory can vanish at any moment.
+ */
+function startupEvidenceKeeper(launcher: ChildProcess) {
+  const root = join(tmpdir(), 'ff-sandbox');
+  let sandboxDir: string | null = null;
+  const owns = (name: string) => {
+    try {
+      const record = recordSchema.safeParse(
+        JSON.parse(readFileSync(join(root, name, 'sandbox.json'), 'utf8'))
+      );
+      return record.success && record.data.pid === launcher.pid;
+    } catch {
+      // Another sandbox's record, half written or already removed.
+      return false;
+    }
+  };
+  return () => {
+    try {
+      sandboxDir ??= readdirSync(root).find(owns) ?? null;
+      if (sandboxDir) {
+        copyFileSync(
+          join(root, sandboxDir, 'server-output.log'),
+          join(evidenceDir, 'server-output.log')
+        );
+      }
+    } catch {
+      // Not there yet, or already gone.
+    }
+  };
+}
+
 const isRunning = (launcher: ChildProcess) =>
   launcher.exitCode === null && launcher.signalCode === null;
 
 /** Resolves with the path of sandbox.json once the launcher prints SANDBOX_READY. */
-function waitForReady(launcher: ChildProcess): Promise<string> {
+function waitForReady(launcher: ChildProcess, keepStartupEvidence: () => void): Promise<string> {
   return new Promise((resolveReady, reject) => {
     const settle = (result: { path: string } | { error: string }) => {
       clearInterval(poll);
@@ -50,6 +90,7 @@ function waitForReady(launcher: ChildProcess): Promise<string> {
       }
     };
     const poll = setInterval(() => {
+      keepStartupEvidence();
       const path = /^SANDBOX_READY (.+)$/m.exec(readFileSync(launcherLog, 'utf8'))?.[1];
       if (path) {
         settle({ path });
@@ -119,7 +160,7 @@ export default async function globalSetup() {
 
   let sandboxJson: string;
   try {
-    sandboxJson = await waitForReady(launcher);
+    sandboxJson = await waitForReady(launcher, startupEvidenceKeeper(launcher));
   } catch (error) {
     if (isRunning(launcher)) {
       await stop(launcher, null);
