@@ -14,6 +14,7 @@ import {
   formatGuidanceViolation,
   githubHeadingSlug,
   legacyNoteCeilings,
+  markdownAnchors,
   parseLegacyNoteCeilings,
   readBaseLegacyCeilings,
   readGuidanceRepository,
@@ -268,6 +269,44 @@ describe('references', () => {
       'docs/architecture/guide.md:3: references: link `target.md#retired-heading` names a heading that does not exist in docs/architecture/target.md. Fix: point it at the current path or heading, or remove it.',
       'src/area/AGENTS.md:1: references: link `../../docs/recipes/run.md` does not exist. Fix: point it at the current path or heading, or remove it.',
     ]);
+  });
+
+  test('finds setext headings and explicit anchors, and skips nested or CR-ended fences', () => {
+    const repository = repositoryWith({
+      'docs/architecture/setext.md': [
+        'Overview',
+        '========',
+        '',
+        'Intro text.',
+        '',
+        'Poll cadence',
+        '------------',
+        '',
+        '- item',
+        '---',
+        '',
+        '<a id="Mixed-Case"></a>',
+        '',
+      ].join('\n'),
+      'docs/README.md': [
+        'See [the overview](architecture/setext.md#overview),',
+        '[the cadence](architecture/setext.md#poll-cadence) and',
+        '[the explicit anchor](architecture/setext.md#Mixed-Case).',
+        '',
+        '1. Step one',
+        '',
+        '    ~~~sh',
+        '    echo "[fenced](missing.md)"',
+        '    ~~~',
+        '',
+      ].join('\n'),
+      'docs/workspaces.md': 'Text before.\r~~~\r`src/cr/missing.ts`\r~~~\r',
+    });
+
+    expect(markdownAnchors(repository.read('docs/architecture/setext.md'))).toEqual(
+      new Set(['overview', 'poll-cadence', 'Mixed-Case'])
+    );
+    expect(checkReferences(repository)).toEqual([]);
   });
 
   test('slugs headings the way GitHub does', () => {

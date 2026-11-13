@@ -269,13 +269,16 @@ export function checkRecords(repository: GuidanceRepository): GuidanceViolation[
   });
 }
 
-/** Content with fenced code blocks blanked and line numbers kept. */
+/**
+ * Content with `\n` line endings and fenced code blocks blanked, keeping line
+ * numbers. A fence may be indented any amount, as it is inside a nested list.
+ */
 function withoutFencedCode(content: string): string {
   let fence: { marker: string; length: number } | undefined;
   return content
-    .split('\n')
+    .split(/\r\n|\r|\n/)
     .map((line) => {
-      const match = /^ {0,3}(`{3,}|~{3,})/.exec(line);
+      const match = /^[ \t]*(`{3,}|~{3,})/.exec(line);
       if (fence === undefined) {
         if (match?.[1] !== undefined) {
           fence = { marker: match[1][0] ?? '`', length: match[1].length };
@@ -311,7 +314,6 @@ function lineNumberAt(text: string, index: number): number {
 export function githubHeadingSlug(heading: string): string {
   return heading
     .replace(/!?\[([^\]]*)\]\([^)]*\)/g, '$1')
-    .replace(/<[^>]+>/g, '')
     .toLowerCase()
     .replace(/[^\p{L}\p{M}\p{N}\p{Pc} -]/gu, '')
     .replaceAll(' ', '-');
@@ -320,13 +322,26 @@ export function githubHeadingSlug(heading: string): string {
 export function markdownAnchors(content: string): Set<string> {
   const anchors = new Set<string>();
   const occurrences = new Map<string, number>();
+  const addHeading = (heading: string) => {
+    const slug = githubHeadingSlug(heading);
+    const seen = occurrences.get(slug);
+    anchors.add(seen === undefined ? slug : `${slug}-${seen}`);
+    occurrences.set(slug, (seen ?? 0) + 1);
+  };
+  // Lines of the current paragraph, which a setext underline turns into a heading.
+  let paragraph: string[] = [];
   for (const line of withoutFencedCode(content).split('\n')) {
-    const heading = /^ {0,3}#{1,6}[ \t]+(.*?)(?:[ \t]+#+)?[ \t]*$/.exec(line)?.[1];
-    if (heading !== undefined) {
-      const slug = githubHeadingSlug(heading);
-      const seen = occurrences.get(slug);
-      anchors.add(seen === undefined ? slug : `${slug}-${seen}`);
-      occurrences.set(slug, (seen ?? 0) + 1);
+    const atxHeading = /^ {0,3}#{1,6}[ \t]+(.*?)(?:[ \t]+#+)?[ \t]*$/.exec(line)?.[1];
+    if (atxHeading !== undefined) {
+      addHeading(atxHeading);
+      paragraph = [];
+    } else if (paragraph.length > 0 && /^ {0,3}(?:=+|-+)[ \t]*$/.test(line)) {
+      addHeading(paragraph.join(' '));
+      paragraph = [];
+    } else if (/^ {0,3}[^\s#>|<*+\-=]/.test(line) && !/^ {0,3}\d+[.)]\s/.test(line)) {
+      paragraph.push(line.trim());
+    } else {
+      paragraph = [];
     }
     for (const match of line.matchAll(/<a\s[^>]*(?:id|name)="([^"]+)"/g)) {
       if (match[1] !== undefined) {
@@ -392,12 +407,19 @@ function checkLinkTarget(
   if (resolved !== '.' && !repository.exists(resolved)) {
     return `link \`${target}\` does not exist.`;
   }
-  if (anchor !== '' && resolved.endsWith('.md') && repository.isFile(resolved)) {
-    if (!markdownAnchors(repository.read(resolved)).has(anchor.toLowerCase())) {
-      return `link \`${target}\` names a heading that does not exist in ${resolved}.`;
-    }
+  return hasAnchor(repository, resolved, anchor)
+    ? undefined
+    : `link \`${target}\` names a heading that does not exist in ${resolved}.`;
+}
+
+/** Whether a Markdown file has the anchor; other targets are not checked. */
+function hasAnchor(repository: GuidanceRepository, file: string, anchor: string): boolean {
+  if (anchor === '' || !file.endsWith('.md') || !repository.isFile(file)) {
+    return true;
   }
-  return undefined;
+  // Heading slugs are lowercase; explicit `<a id>` anchors keep their case.
+  const anchors = markdownAnchors(repository.read(file));
+  return anchors.has(anchor) || anchors.has(anchor.toLowerCase());
 }
 
 export function findDeadReferences(
