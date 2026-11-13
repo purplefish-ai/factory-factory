@@ -19,6 +19,7 @@ import noRawTabRole from './rules/no-raw-tab-role.mjs';
 import noRenderRefWrite from './rules/no-render-ref-write.mjs';
 import noStateSyncEffect from './rules/no-state-sync-effect.mjs';
 import noToolInputCast from './rules/no-tool-input-cast.mjs';
+import noUnresolvedMockTarget from './rules/no-unresolved-mock-target.mjs';
 import noUnsafeJsonParseCast from './rules/no-unsafe-json-parse-cast.mjs';
 import noUnsafeResolverCast from './rules/no-unsafe-resolver-cast.mjs';
 import noZodAny from './rules/no-zod-any.mjs';
@@ -51,6 +52,7 @@ export default {
     'no-render-ref-write': noRenderRefWrite,
     'no-state-sync-effect': noStateSyncEffect,
     'no-tool-input-cast': noToolInputCast,
+    'no-unresolved-mock-target': noUnresolvedMockTarget,
     'no-unsafe-json-parse-cast': noUnsafeJsonParseCast,
     'no-unsafe-resolver-cast': noUnsafeResolverCast,
     'no-zod-any': noZodAny,

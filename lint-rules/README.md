@@ -39,7 +39,9 @@ Each rule has its own files in `rules/`:
   rejected fixture must report exactly one error, from its rule; an accepted
   fixture must report nothing. A fixture may name its path, and `files` enables
   the rule only for matching paths, as an override does. Checks of the rule's
-  scoping in `.oxlintrc.json` sit beside them.
+  scoping in `.oxlintrc.json` sit beside them. A rule that reads the file system
+  (`fileSystemRules` in the helper) is enabled only for its own fixtures, since
+  other rules' fixtures mock modules that do not exist.
 - `<rule-name>.exceptions.json`, only when files are excepted from the rule.
 
 Helpers used by several rules are plain modules in `lib/`; a helper used by one
