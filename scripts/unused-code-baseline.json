@@ -47,7 +47,7 @@
     },
     "src/client/routes/workspace-header-pwa-preview.tsx": {
       "disposition": "test-support",
-      "reason": "workspace-header-fixture.stories.tsx renders this Storybook preview; keep visual fixture support."
+      "reason": "workspace-header-fixture.pwa.stories.tsx renders this Storybook preview; keep visual fixture support."
     },
     "src/lib/phosphor-icon-weights.ts": {
       "disposition": "build-input",
