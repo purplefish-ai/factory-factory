@@ -3,8 +3,8 @@
 The processes that run a project's own commands for a workspace: the setup and
 startup scripts during initialization, the dev server (run script), its postRun
 and cleanup commands. The [services guide](../AGENTS.md) covers capsule layout
-and boundaries. Bare file names below are under this directory; paths that start
-with `src/` are from the repository root.
+and boundaries. Bare file names below are in `service/` (except `index.ts`);
+paths that start with `src/` are from the repository root.
 
 ## Owns, and does not own
 
@@ -64,9 +64,10 @@ Callers import only `index.ts`.
 - `run-script-process-utils.ts`: shell spawning for run, postRun and cleanup.
 - `startup-script.service.ts`: workspace setup and startup scripts;
   `event-startup-script.ts`: the event-workspace variant.
-- `run-script-config-persistence.service.ts`: writes `factory-factory.json` and
-  repairs the cached commands before a script starts or stops;
-  `factory-config.service.ts` reads and validates the file.
+- `run-script-config-persistence.service.ts`: writes `factory-factory.json`,
+  rewrites the cached commands when it is saved or refreshed, and reads the
+  file's commands before a script starts or stops; `factory-config.service.ts`
+  reads and validates the file.
 - `port-allocation.service.ts`, `run-script-proxy.service.ts`: ports and
   tunnels.
 - `bridges.ts`: the workspace capabilities orchestration injects.

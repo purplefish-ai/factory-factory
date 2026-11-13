@@ -1,7 +1,7 @@
 # Data backup orchestration
 
 Backup export and import: the hand-written mapping between the database and the
-versioned JSON format, the recovery manifest, and normalization of older
+versioned JSON format, the recovery manifest, and identity planning for older
 backups. The [services guide](../../services/AGENTS.md) covers the capsules this
 code reads and writes. Bare file names below are in this directory; paths that
 start with `src/` are from the repository root.
@@ -32,9 +32,9 @@ settings capsule's backup accessor directly.
 
 ## Invariants
 
-- Every scalar column of each model the recovery manifest covers is either
-  exported under a key the current export schema has, or excluded with a reason;
-  `Gap:` reasons mark known omissions such as
+- Every scalar column of each model the recovery manifest does not mark
+  `EXCLUDED` is either exported under a key the current export schema has, or
+  excluded with a reason; `Gap:` reasons mark known omissions such as
   `WorkspaceRunScript.postRunCommand`. `data-backup-columns.test.ts`.
 - Building the recovery manifest fails unless its coverage names exactly the
   Prisma models in `src/backend/services/registry.ts`.

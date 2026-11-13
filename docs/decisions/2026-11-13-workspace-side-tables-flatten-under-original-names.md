@@ -7,13 +7,17 @@ the PR, monitoring, discovery and metadata tables follow the same shape.
 
 Several concerns that had grown on the `Workspace` table (PR facts, PR
 monitoring, PR discovery, the run script, the conversation summary) were moved
-into 1:1 side tables, each with one writing accessor. Their old column names
-were already part of the snapshot wire, the v4 export format and the client.
+into side tables: 1:1 rows, except `WorkspacePR`, which became a collection of
+associations. After creation each table has one writing accessor. Their old
+column names were already part of the snapshot wire, the v4 export format and
+the client.
 
 ## Decision
 
-Workspace reads join each side table and flatten its row back onto the workspace
-under the field's original name (`runScript*`, `pr*`, `conversationSummary`).
+The workspace accessor's full reads join each side table and flatten its row
+(for PRs, the selected association and the collection summary) back onto the
+workspace under the field's original name (`runScript*`, `pr*`,
+`conversationSummary`); narrower purpose-built reads select only what they need.
 The relation objects never leave the accessor. Moving a concern to its own table
 therefore changes no reader.
 

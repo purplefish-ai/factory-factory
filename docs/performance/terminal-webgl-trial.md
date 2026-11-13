@@ -78,4 +78,6 @@ instead of diffing a React output string, so live output matches this harness's
 burst case: appends only, no per-chunk clear and replay. A terminal replays its
 retained output when it mounts or switches streams, and when a reconnect buffer
 replaces output without extending it. See
-`src/client/lib/terminal-output-stream.ts` and its tests for the output path.
+[terminal-output-stream.ts](../../src/client/lib/terminal-output-stream.ts) and
+its [tests](../../src/client/lib/terminal-output-stream.test.ts) for the output
+path.

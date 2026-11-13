@@ -18,7 +18,7 @@ session. It does not own:
   metadata rows: `src/backend/services/workspace/`.
 - The setup, startup and run-script processes:
   `src/backend/services/run-script/`.
-- Session creation, the queue and metadata inference
+- Session creation, the session message queue and metadata inference
   (`generateWorkspaceMetadata`): `src/backend/services/session/`.
 - The metadata prompt and its input bounds:
   `src/backend/prompts/workspace-metadata.ts`.
@@ -32,14 +32,17 @@ metadata, initialization, archive, children, follow-up, notification and retry
 modules; `src/backend/orchestration/domain-bridges.orchestrator.ts` wires
 initialization, launch, deletion capture and reconciliation;
 `src/backend/orchestration/agents/` uses initialization, and the snapshot
-collector takes a notification type from `workspace-children.orchestrator.ts`.
+collector is given `fireLifecycleNotification` (typed from
+`workspace-children.orchestrator.ts`) for PR-opened notices to a parent.
 
 ## Invariants
 
-- An interactive launch validates the provider before it persists the workspace.
-  `workspace-launch.orchestrator.test.ts`.
-- A failure to create the default session keeps the new workspace and still
-  starts its initialization. `workspace-launch.orchestrator.test.ts`.
+- An interactive launch that resolves a provider (session capacity above zero,
+  or an explicit model, account, access mode or reasoning effort) does so before
+  it persists the workspace. `workspace-launch.orchestrator.test.ts`.
+- For interactive and child launches, a failure to create the default session
+  keeps the new workspace and still starts its initialization; a periodic-task
+  launch fails instead. `workspace-launch.orchestrator.test.ts`.
 - Initialization persists READY, with or without a setup warning, before it
   starts the default agent session. `workspace-init-startup-order.test.ts`.
 - Renames of one workspace are serialized within an application, each published
@@ -55,10 +58,10 @@ collector takes a notification type from `workspace-children.orchestrator.ts`.
 
 - `workspace-launch.orchestrator.ts`: source policy for interactive, child and
   periodic-task launches.
-- `workspace-init.orchestrator.ts`: worktree, setup and startup phases
-  (`workspace-init-script-pipeline.ts`), READY, then the default agent session
-  and the initial prompt (`workspace-init-issue-prompts.ts`);
-  `workspace-init-cleanup.ts` handles failures.
+- `workspace-init.orchestrator.ts`: worktree, then setup and startup phases
+  (`workspace-init-script-pipeline.ts`) while the initial prompt is prepared
+  (`workspace-init-issue-prompts.ts`) and queued, READY, then the default agent
+  session; `workspace-init-cleanup.ts` handles failures.
 - `workspace-retry-authority.ts`: whether and how a failed or warned workspace
   may retry setup.
 - `workspace-rename.orchestrator.ts`: accepted renames and their snapshot
@@ -69,7 +72,7 @@ collector takes a notification type from `workspace-children.orchestrator.ts`.
 - `workspace-children.orchestrator.ts`,
   `workspace-notification-delivery.orchestrator.ts`,
   `workspace-notification-persistence.orchestrator.ts`: child workspaces and
-  their notifications to the parent.
+  notifications between parent and child.
 - `workspace-archive.orchestrator.ts`, `workspace-deletion.orchestrator.ts`:
   archive, stale-archive recovery and deletion capture.
 - `reconciliation.service.ts`: startup and periodic recovery of workspaces that

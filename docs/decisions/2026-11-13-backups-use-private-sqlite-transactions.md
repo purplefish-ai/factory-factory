@@ -22,9 +22,9 @@ actual main database file; a missing or in-memory database fails closed.
 - Import writes every owner through one tuned writer transaction, so a failed
   import rolls back only its own rows.
 - Both have a 120-second transaction budget and a 5-second busy wait. SQLite
-  still allows one writer at a time: contention or expiry returns a CONFLICT
-  asking the operator to retry the whole import. No statement or row retries
-  automatically.
+  still allows one writer at a time: an import's contention or expiry returns a
+  CONFLICT asking the operator to retry the whole import, while an export's
+  failure keeps its original error. No statement or row retries automatically.
 
 ## Consequences
 

@@ -33,5 +33,5 @@ process.
 ## Consequences
 
 - Stop, exit and replacement races cannot leak a postRun or kill a replacement.
-- After a backend restart, ownership starts empty; the persisted pid is the only
-  link to an orphaned process.
+- After a backend crash, ownership starts empty. Only the main process's pid is
+  persisted, so a postRun process or tunnel left behind has no recorded owner.
