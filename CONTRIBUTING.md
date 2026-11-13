@@ -63,9 +63,10 @@ group `pgid`, the seeded `projectId` and `repoPath`, and `scenario`.
   `SHELL`, `TMPDIR`, `TERM`, `LANG`, `TZ` and `LC_*` from your environment (plus
   `FF_NPM_REGISTRY_URL` when it carries no credentials), so no API key or token
   reaches it, and it reads an empty dotenv file and its own Git configuration.
-- Codex is the fake app-server
+- Codex is an executable copy of the fake app-server
   (`src/backend/testing/fixtures/fake-codex-app-server.mjs`);
-  `--scenario <name>` reaches it as `FF_SANDBOX_SCENARIO`. Claude runs
+  `--scenario <name>` reaches it as `FF_SANDBOX_SCENARIO` (default `echo`), and
+  the launcher stops with the fake's message if it rejects the name. Claude runs
   unauthenticated with its configuration in `baseDir`.
 - `gh` is a shim that appends its arguments to `<baseDir>/gh-calls.log` and
   fails. Update checks (`FF_UPDATE_CHECKS_ENABLED=false`) and Slack intake are

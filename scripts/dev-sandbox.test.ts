@@ -1,5 +1,6 @@
 import { type ChildProcess, execFileSync, type SpawnOptions, spawn } from 'node:child_process';
 import {
+  chmodSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
@@ -21,6 +22,7 @@ import { fetchClaudeModelCatalogFromAcp } from '@/backend/services/session/servi
 import {
   assertInsideTempDir,
   buildServerEnv,
+  checkScenario,
   cleanSandboxes,
   collectGroupProcesses,
   isSandboxProcessGroup,
@@ -134,7 +136,7 @@ const recordSchema = z.object({
   pgid: z.number(),
   projectId: z.string(),
   repoPath: z.string(),
-  scenario: z.string().nullable(),
+  scenario: z.string(),
 });
 type Running = { launch: Launch; tempDir: string; env: NodeJS.ProcessEnv } & z.infer<
   typeof recordSchema
@@ -224,7 +226,7 @@ describe('a running sandbox', () => {
       true
     );
     expect(shared.frontendUrl).toMatch(/^http:\/\/localhost:\d+$/);
-    expect(shared.scenario).toBeNull();
+    expect(shared.scenario).toBe('echo');
   });
 
   it('seeds one project on a fresh repository', async () => {
@@ -291,7 +293,7 @@ describe('a running sandbox', () => {
     vi.spyOn(console, 'log').mockImplementation(() => undefined);
     const saved = process.env;
     process.env = {
-      ...buildServerEnv({ parentEnv: shared.env, baseDir: shared.baseDir, scenario: null }),
+      ...buildServerEnv({ parentEnv: shared.env, baseDir: shared.baseDir, scenario: 'echo' }),
     };
     configService.reload();
     claudeSpawnEnvs.length = 0;
@@ -395,7 +397,7 @@ describe('--clean', () => {
         mkdirSync(dir, { recursive: true });
       }
       // A dead launcher, naming another directory and a live process group.
-      const record = { frontendUrl: null, backendUrl: null, projectId: null, scenario: null };
+      const record = { frontendUrl: null, backendUrl: null, projectId: null, scenario: 'echo' };
       writeFileSync(
         join(elsewhere, 'sandbox.json'),
         JSON.stringify({ ...record, baseDir: noRecord, pid: 999_999, pgid, repoPath: '' })
@@ -436,7 +438,7 @@ describe('--clean and reused process group IDs', () => {
           pgid: unrelated.pid,
           projectId: null,
           repoPath: join(dir, 'repo'),
-          scenario: null,
+          scenario: 'echo',
         })
       );
       const clean = launch(['--clean'], launcherEnv(tempDir));
@@ -509,14 +511,14 @@ describe('launcher logic', () => {
     const bare = buildServerEnv({
       parentEnv: { FF_NPM_REGISTRY_URL: 'https://user:token@registry.example' },
       baseDir: '/t',
-      scenario: null,
+      scenario: 'echo',
     });
-    expect('FF_SANDBOX_SCENARIO' in bare).toBe(false);
+    expect(bare.FF_SANDBOX_SCENARIO).toBe('echo');
     expect('FF_NPM_REGISTRY_URL' in bare).toBe(false);
   });
 
   it('parses arguments', () => {
-    expect(parseArgs([])).toEqual({ mode: 'run', scenario: null, keep: false });
+    expect(parseArgs([])).toEqual({ mode: 'run', scenario: 'echo', keep: false });
     expect(parseArgs(['--scenario', 'slow-turn', '--keep'])).toEqual({
       mode: 'run',
       scenario: 'slow-turn',
@@ -528,6 +530,27 @@ describe('launcher logic', () => {
     expect(() => parseArgs(['--scenario', '../x'])).toThrow();
     expect(() => parseArgs(['--clean', '--keep'])).toThrow();
     expect(() => parseArgs(['--port'])).toThrow();
+  });
+
+  it('stops on a scenario the fake app-server rejects, naming the valid ones', () => {
+    const dir = temporaryDirectory('ffsb-');
+    const fake = join(dir, 'codex');
+    writeFileSync(
+      fake,
+      [
+        '#!/bin/sh',
+        'case "$FF_SANDBOX_SCENARIO" in echo) exit 0 ;; esac',
+        'echo "Unknown FF_SANDBOX_SCENARIO \\"$FF_SANDBOX_SCENARIO\\". Valid scenarios: echo" >&2',
+        'exit 2',
+        '',
+      ].join('\n')
+    );
+    chmodSync(fake, 0o755);
+    const env = { PATH: process.env.PATH, FF_SANDBOX_SCENARIO: 'echo' };
+    expect(() => checkScenario(fake, env)).not.toThrow();
+    expect(() => checkScenario(fake, { ...env, FF_SANDBOX_SCENARIO: 'nope' })).toThrow(
+      'The fake Codex app-server rejected scenario "nope": Unknown FF_SANDBOX_SCENARIO "nope". Valid scenarios: echo'
+    );
   });
 
   it('reads the ports the server reports', () => {
@@ -551,7 +574,7 @@ describe('launcher logic', () => {
         pgid: 4242,
         projectId: null,
         repoPath: join(baseDir, 'repo'),
-        scenario: null,
+        scenario: 'echo',
       });
     const dirs = ['stale', 'running', 'other', 'none'].map((name) => join(root, name));
     for (const dir of dirs) {

@@ -2,7 +2,7 @@
 // Starts the real application (`serve --dev`) in complete isolation so an agent
 // can drive it without touching the developer's data, credentials or any
 // external service. See USAGE below.
-import { execFileSync, spawn } from 'node:child_process';
+import { execFileSync, spawn, spawnSync } from 'node:child_process';
 import {
   appendFileSync,
   chmodSync,
@@ -49,7 +49,8 @@ prints one line: SANDBOX_READY <path to sandbox.json>.
 On Ctrl+C, SIGTERM or server exit it stops every process it started and deletes
 the sandbox directory.
 
-  --scenario <name>  Passed to the fake Codex app-server as FF_SANDBOX_SCENARIO.
+  --scenario <name>  Passed to the fake Codex app-server as FF_SANDBOX_SCENARIO
+                     (default: echo). The fake rejects unknown names.
   --keep             Keep the sandbox directory after stopping.
   --clean            Stop and delete sandboxes whose launcher is no longer running.
 
@@ -86,8 +87,12 @@ export function assertInsideTempDir(path, tempDir = tmpdir()) {
   }
 }
 
+/** The fake app-server scenario used when `--scenario` is not given. */
+export const DEFAULT_SCENARIO = 'echo';
+
 export function parseArgs(argv) {
-  const options = { mode: 'run', scenario: null, keep: false };
+  let scenario = null;
+  const options = { mode: 'run', keep: false };
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
     if (arg === '--help' || arg === '-h') {
@@ -102,16 +107,17 @@ export function parseArgs(argv) {
       if (!(name && /^[A-Za-z0-9._-]+$/.test(name))) {
         throw new Error('--scenario needs a name made of letters, digits, ".", "_" or "-".');
       }
-      options.scenario = name;
+      scenario = name;
       index += 1;
     } else {
       throw new Error(`Unknown argument: ${arg}`);
     }
   }
-  if (options.mode === 'clean' && (options.keep || options.scenario)) {
+  if (options.mode === 'clean' && (options.keep || scenario)) {
     throw new Error('--clean takes no other options.');
   }
-  return options;
+  // Unset, the fake keeps a fixed reply; the sandbox's default echoes the prompt.
+  return { ...options, scenario: scenario ?? DEFAULT_SCENARIO };
 }
 
 /** Parent variables the server keeps; everything else, including credentials, is dropped. */
@@ -184,7 +190,7 @@ export function buildServerEnv({
     FF_EMIT_BACKEND_PORT: '1',
     FF_UPDATE_CHECKS_ENABLED: 'false',
     AGENT_SLACK_INTAKE_ENABLED: 'false',
-    ...(scenario ? { FF_SANDBOX_SCENARIO: scenario } : {}),
+    FF_SANDBOX_SCENARIO: scenario,
   };
 }
 
@@ -212,7 +218,7 @@ const sandboxRecordSchema = z.object({
   pgid: z.number().int().gt(1),
   projectId: z.string().nullable(),
   repoPath: z.string(),
-  scenario: z.string().nullable(),
+  scenario: z.string(),
 });
 
 export function readSandboxRecord(file) {
@@ -470,6 +476,25 @@ function prepareSandbox(baseDir) {
   return paths;
 }
 
+/**
+ * Runs the fake app-server once with no input. It exits at once, and with an
+ * error naming the valid scenarios when it does not know this one.
+ */
+export function checkScenario(codexPath, env) {
+  const result = spawnSync(codexPath, [], {
+    env,
+    stdio: ['ignore', 'pipe', 'pipe'],
+    encoding: 'utf8',
+    timeout: 15_000,
+  });
+  if (result.status !== 0) {
+    const detail = result.stderr?.trim() || result.error?.message || `exit ${result.status}`;
+    throw new Error(
+      `The fake Codex app-server rejected scenario "${env.FF_SANDBOX_SCENARIO}": ${detail}`
+    );
+  }
+}
+
 function createSeedRepository(paths, env) {
   mkdirSync(paths.repoPath);
   writeFileSync(join(paths.repoPath, 'README.md'), '# Sandbox project\n');
@@ -543,6 +568,7 @@ async function run({ scenario, keep }) {
   let backendPort;
   try {
     paths = prepareSandbox(baseDir);
+    checkScenario(env.CODEX_PATH, env);
     createSeedRepository(paths, env);
     [frontendPort, backendPort] = [await findFreePort(), await findFreePort()];
   } catch (error) {
