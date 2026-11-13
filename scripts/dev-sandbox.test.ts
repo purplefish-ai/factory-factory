@@ -2,7 +2,7 @@
 // case below. Sandbox A keeps its logs untouched until the idle check; sandbox
 // B takes the cases that call out (gh, git, Claude) and ends killed.
 import { execFile, execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, rmSync, symlinkSync } from 'node:fs';
 import { createServer, type IncomingMessage, type Server } from 'node:http';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -228,9 +228,20 @@ describe('a running sandbox', () => {
       ok: false,
       message: `Invalid repository path: Path ${outside} is outside the project root ${shared.baseDir}`,
     });
+    // A `..` after a link inside the sandbox (the shape of baseDir/node_modules/..):
+    // lexically inside, on disk the repository above.
+    mkdirSync(join(shared.tempDir, 'link-target'));
+    symlinkSync(join(shared.tempDir, 'link-target'), join(shared.baseDir, 'escape'));
+    const escaping = `${shared.baseDir}/escape/../outside-repo`;
+    expect(await trpcMutation(shared.backendUrl, 'project.create', { repoPath: escaping })).toEqual(
+      {
+        ok: false,
+        message: `Invalid repository path: Path ${escaping} is outside the project root ${shared.baseDir}`,
+      }
+    );
     const projects = z.array(z.unknown()).parse(await trpcQuery(shared.backendUrl, 'project.list'));
     expect(projects).toHaveLength(1);
-  });
+  }, 60_000);
 
   it('--clean leaves a sandbox whose launcher is running', async () => {
     const clean = launch(['--clean'], launcherEnv(shared.tempDir));

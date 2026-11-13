@@ -39,7 +39,10 @@ export function prepareSandbox(baseDir) {
   writeFileSync(paths.dotenv, '');
   // `ff serve` runs in the sandbox, so its port file and .env lookup stay out
   // of the checkout. bootstrap.mjs loads tsx and its path aliases from the
-  // working directory; point both at the checkout.
+  // working directory; point both at the checkout. The link is needed: without
+  // it `node --import tsx` fails with ERR_MODULE_NOT_FOUND. It leads out of the
+  // sandbox (baseDir/node_modules/.. is the checkout), which FF_PROJECT_ROOT's
+  // check resolves the way the system does, so it cannot admit a project there.
   symlinkSync(join(REPO_ROOT, 'node_modules'), join(baseDir, 'node_modules'));
   writeFileSync(
     join(baseDir, 'tsconfig.json'),
