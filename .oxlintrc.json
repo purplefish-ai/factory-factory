@@ -110,51 +110,11 @@
         "src/lib/**/*.{ts,tsx}"
       ],
       "rules": {
-        "factory/no-raw-palette-classes": [
-          "error",
-          {
-            "exceptions": {
-              "src/client/components/subagent-icon.tsx": "Categorical identity palette: twelve distinguishable subagent hues, not statuses, so they cannot map onto status tokens.",
-              "src/client/routes/workspace-header-pwa-preview.tsx": "Mock macOS window controls reproduce the operating system's red, yellow and green traffic lights."
-            }
-          }
-        ],
-        "factory/use-pending-prop": [
-          "error",
-          {
-            "exceptions": {
-              "src/client/features/chat/usage-stats/provider-usage-control.tsx": "The usage popover trigger shows compaction status (including automatic compaction) and must stay openable, so it cannot be disabled by pending; its actions use pending.",
-              "src/client/features/voice/voice-mode-toggle.tsx": "While voice capture connects the toggle is the only way to stop it, so it must stay clickable; pending would disable it."
-            }
-          }
-        ],
-        "factory/no-direct-web-storage": [
-          "error",
-          {
-            "exceptions": {
-              "src/client/lib/browser-storage.ts": "The shared Web Storage module: guards every access and keeps mounted usePersistedState consumers of a key in agreement."
-            }
-          }
-        ],
-        "factory/no-raw-spinner": [
-          "error",
-          {
-            "exceptions": {
-              "src/components/ui/spinner.tsx": "The shared Spinner itself: the one component allowed to apply animate-spin to a pending indicator.",
-              "src/client/components/session-status-icon.tsx": "Session tab status glyph: a loading, starting or stopping session spins its status-tone icon (beside the robot for agents); it is a status, not a pending control.",
-              "src/client/components/todo-item.tsx": "Todo status ring: an in-progress task spins its bordered status ring, a status rather than a pending control.",
-              "src/client/features/workspace/workspace-status-badge.tsx": "Workspace status badge: Setting up and Archiving spin their status glyph inside a labelled badge, a status rather than a pending control."
-            }
-          }
-        ],
-        "factory/no-raw-tab-role": [
-          "error",
-          {
-            "exceptions": {
-              "src/components/ui/tab-button.tsx": "The shared tab primitive itself: TabList and TabButton are the only components that write role=\"tablist\" and role=\"tab\"."
-            }
-          }
-        ],
+        "factory/no-raw-palette-classes": "error",
+        "factory/use-pending-prop": "error",
+        "factory/no-direct-web-storage": "error",
+        "factory/no-raw-spinner": "error",
+        "factory/no-raw-tab-role": "error",
         "factory/query-owner": [
           "error",
           {
@@ -188,42 +148,12 @@
         ],
         "factory/named-query-options": "error",
         "factory/query-error-handled": "error",
-        "factory/no-arbitrary-font-size": [
-          "error",
-          {
-            "exceptions": {
-              "src/components/ui/calendar.tsx": "shadcn registry source: the weekday and week-number labels keep upstream's 0.8rem so registry diffs stay clean (docs/shadcn.md)."
-            }
-          }
-        ],
-        "factory/use-status-callout": [
-          "error",
-          {
-            "exceptions": {
-              "src/client/lib/status-tones.ts": "The tone map itself defines each tone's surface classes, which StatusCallout renders.",
-              "src/client/features/kanban/kanban-card.tsx": "Board cards tint and border the whole card for an error or pending request (with hover states); that is a status-carrying card, not a message callout.",
-              "src/client/components/app-sidebar.tsx": "A sidebar workspace row waiting on the user tints and borders the whole row; that is a status-carrying row, not a message callout."
-            }
-          }
-        ],
-        "factory/button-icon-size": ["error", { "exceptions": {} }],
-        "factory/button-size-variant": ["error", { "exceptions": {} }],
-        "factory/icon-button-tooltip": ["error", { "exceptions": {} }],
-        "factory/tooltip-provider-root": [
-          "error",
-          {
-            "exceptions": {
-              "src/client/components/resizable-layout.tsx": "App root: AppLayout's provider (delayDuration 0) serves every route under Root.",
-              "src/components/ui/sidebar.tsx": "shadcn SidebarProvider root: it also renders standalone in stories and tests, with the same zero delay as the app root.",
-              "src/client/components/github-link-preview.tsx": "GitHub link previews open after a deliberate 350ms delay so hovering across chat links does not flash cards; they also render in markdown outside the app layout.",
-              "src/client/routes/mobile-baseline.tsx": "Fixture route: /__mobile-baseline mounts outside Root, so the page supplies the root provider (delay 0) for the composer and other surfaces it renders.",
-              "src/client/routes/hover-actions-fixture.tsx": "Fixture route: /__mobile-baseline mounts outside Root, so the fixture supplies its own provider.",
-              "src/client/routes/mobile-agents-fixture.tsx": "Fixture route: /__mobile-baseline mounts outside Root, so the fixture supplies its own provider.",
-              "src/client/routes/transcript-scroll-fixture.tsx": "Fixture route: /__transcript-scroll mounts outside Root, so the fixture supplies its own provider.",
-              "src/client/routes/workspace-header-fixture.tsx": "Fixture route: renders the workspace header outside Root for the mobile baseline, so it supplies its own provider."
-            }
-          }
-        ]
+        "factory/no-arbitrary-font-size": "error",
+        "factory/use-status-callout": "error",
+        "factory/button-icon-size": "error",
+        "factory/button-size-variant": "error",
+        "factory/icon-button-tooltip": "error",
+        "factory/tooltip-provider-root": "error"
       }
     },
     {
@@ -233,24 +163,9 @@
         "src/hooks/**/*.{ts,tsx}"
       ],
       "rules": {
-        "factory/no-render-ref-write": [
-          "error",
-          {
-            "exceptions": {
-              "src/client/features/chat/agent-activity/tool-renderers/tool-expansion-state.ts": "Transcript rows call the stable getExpansionState while rendering, so its ref must hold this render's expansion state, not the last commit's.",
-              "src/client/hooks/use-persisted-state.ts": "useSyncExternalStore calls getSnapshot while rendering, so the codec ref must hold this render's schema and fallback; the write is idempotent."
-            }
-          }
-        ],
-        "factory/no-state-sync-effect": [
-          "error",
-          {
-            "exceptions": {
-              "src/client/features/agents/event-dashboard-story.tsx": "Story fixture: the conflict story needs a newer server revision to land one commit after the editor opens."
-            }
-          }
-        ],
-        "factory/stable-context-value": ["error", { "exceptions": {} }]
+        "factory/no-render-ref-write": "error",
+        "factory/no-state-sync-effect": "error",
+        "factory/stable-context-value": "error"
       }
     },
     {
@@ -262,7 +177,7 @@
     {
       "files": ["src/client/**/*.{ts,tsx}"],
       "rules": {
-        "factory/focus-ring": ["error", { "exceptions": {} }]
+        "factory/focus-ring": "error"
       }
     },
     {
@@ -289,7 +204,7 @@
       }
     },
     {
-      "files": ["**/*.test-utils.tsx", "**/*.test-harness.tsx"],
+      "files": ["**/*.test-harness.tsx"],
       "rules": {
         "factory/tooltip-provider-root": "off"
       }

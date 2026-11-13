@@ -4,7 +4,7 @@ import {
   createAssistantMessage,
   createThinkingMessage,
   createUserMessage,
-} from '@/lib/claude-fixtures';
+} from '@/lib/claude.fixture';
 import { ChatTranscript } from './chat-transcript';
 import { chatTranscriptMeta } from './chat-transcript.story-fixtures';
 import { useGroupedChatMessages } from './use-grouped-chat-messages';

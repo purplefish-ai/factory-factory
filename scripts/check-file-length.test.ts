@@ -102,6 +102,7 @@ describe('isFileLengthCandidate', () => {
     'src/component.jsx',
     'electron/main.cjs',
     'scripts/check.cts',
+    'lint-rules/rules/a-rule.mjs',
   ])('includes %s', (file) => expect(isFileLengthCandidate(file)).toBe(true));
 
   test.each(['prisma/generated/a.ts', 'docs/a.ts', 'src/a.json', 'dist/a.ts'])(

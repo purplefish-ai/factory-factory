@@ -4,7 +4,7 @@ import { flushSync } from 'react-dom';
 import { createRoot } from 'react-dom/client';
 import { expect, it } from 'vitest';
 import type { ChatMessage } from '@/lib/chat-protocol';
-import { TranscriptRenderingFixture } from './transcript-rendering.test-utils';
+import { TranscriptRenderingFixture } from './transcript-rendering.test-harness';
 import { useGroupedChatMessages } from './use-grouped-chat-messages';
 
 function History({ messages, running }: { messages: ChatMessage[]; running: boolean }) {

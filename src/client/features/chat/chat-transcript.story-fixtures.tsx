@@ -1,6 +1,6 @@
 import type { Meta } from '@storybook/react';
 import type { ComponentProps } from 'react';
-import { createUserMessage } from '@/lib/claude-fixtures';
+import { createUserMessage } from '@/lib/claude.fixture';
 import { ChatTranscript } from './chat-transcript';
 
 /**

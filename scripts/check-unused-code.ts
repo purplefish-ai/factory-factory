@@ -2,6 +2,7 @@ import { spawnSync } from 'node:child_process';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import ts from 'typescript';
 import { z } from 'zod';
 
 type Mode = 'production' | 'exports';
@@ -43,9 +44,186 @@ const baselineSchema = z
   .strict();
 
 type Inventory = z.infer<typeof baselineSchema>['production'];
+type Review = z.infer<typeof reviewSchema>;
 
 export function parseUnusedCodeBaseline(value: unknown) {
   return baselineSchema.parse(value);
+}
+
+type UnusedCodeConvention = {
+  name: string;
+  sections: readonly Mode[];
+  /** Matched against the repository-relative path of the candidate's file. */
+  pattern: RegExp;
+  /** Cover only symbols the file re-exports, never ones it declares itself. */
+  reExportsOnly?: true;
+  review: Review;
+};
+
+/**
+ * Location conventions. A candidate whose file matches one needs no baseline
+ * entry and takes the convention's disposition; the first match wins. An
+ * explicit baseline entry with a different disposition overrides it. Keep this
+ * list short: add a convention only when its location alone explains every
+ * file it matches. See docs/knip.md.
+ */
+export const unusedCodeConventions: readonly UnusedCodeConvention[] = [
+  {
+    name: 'test-support directory',
+    sections: ['production'],
+    pattern: /(?:^|\/)(?:testing|test-utils)\//u,
+    review: {
+      disposition: 'test-support',
+      reason:
+        'Lives in a testing or test-utils directory; test and story support stays outside the production graph.',
+    },
+  },
+  {
+    name: 'test-support file name',
+    sections: ['production'],
+    pattern: /\.(?:test-helpers|test-support|test-harness|story-fixtures|fixture)\.[cm]?[jt]sx?$/u,
+    review: {
+      disposition: 'test-support',
+      reason:
+        'Named *.test-helpers, *.test-support, *.test-harness, *.story-fixtures or *.fixture; test and story support stays outside the production graph.',
+    },
+  },
+  {
+    name: 'service capsule barrel re-export',
+    sections: ['exports'],
+    pattern: /^src\/backend\/services\/[^/]+(?:\/service)?\/index\.tsx?$/u,
+    reExportsOnly: true,
+    review: {
+      disposition: 'maintained-api',
+      reason:
+        'Retain the architecture barrel contract; review external export visibility separately from implementation reachability.',
+    },
+  },
+  {
+    name: 'shadcn component',
+    sections: ['exports'],
+    pattern: /^src\/components\/ui\/[^/]+\.tsx?$/u,
+    review: {
+      disposition: 'maintained-api',
+      reason:
+        'Retain the maintained shadcn component surface; export visibility alone does not justify trimming its API.',
+    },
+  },
+];
+
+function hasModifier(node: ts.Node, kind: ts.SyntaxKind) {
+  return (
+    ts.canHaveModifiers(node) &&
+    (ts.getModifiers(node) ?? []).some((modifier) => modifier.kind === kind)
+  );
+}
+
+function bindingNames(name: ts.BindingName): string[] {
+  if (ts.isIdentifier(name)) {
+    return [name.text];
+  }
+  return name.elements.flatMap((element) =>
+    ts.isOmittedExpression(element) ? [] : bindingNames(element.name)
+  );
+}
+
+function declaredNames(statement: ts.Statement): string[] {
+  if (ts.isVariableStatement(statement)) {
+    return statement.declarationList.declarations.flatMap((declaration) =>
+      bindingNames(declaration.name)
+    );
+  }
+  const named =
+    ts.isFunctionDeclaration(statement) ||
+    ts.isClassDeclaration(statement) ||
+    ts.isInterfaceDeclaration(statement) ||
+    ts.isTypeAliasDeclaration(statement) ||
+    ts.isEnumDeclaration(statement) ||
+    ts.isModuleDeclaration(statement);
+  return named && statement.name && ts.isIdentifier(statement.name) ? [statement.name.text] : [];
+}
+
+function exportModifierNames(statement: ts.Statement): string[] {
+  if (ts.isExportAssignment(statement)) {
+    return ['default'];
+  }
+  if (!hasModifier(statement, ts.SyntaxKind.ExportKeyword)) {
+    return [];
+  }
+  return hasModifier(statement, ts.SyntaxKind.DefaultKeyword)
+    ? ['default']
+    : declaredNames(statement);
+}
+
+/** `export { local as exported }` clauses without a `from` module. */
+function localExportClauses(statement: ts.Statement) {
+  if (
+    !ts.isExportDeclaration(statement) ||
+    statement.moduleSpecifier ||
+    !statement.exportClause ||
+    !ts.isNamedExports(statement.exportClause)
+  ) {
+    return [];
+  }
+  return statement.exportClause.elements.map((element) => ({
+    local: (element.propertyName ?? element.name).text,
+    exported: element.name.text,
+  }));
+}
+
+/** Export names a module declares itself, as opposed to re-exporting them. */
+export function locallyDeclaredExports(file: string, source: string): Set<string> {
+  const { statements } = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, false);
+  const declared = new Set(statements.flatMap(declaredNames));
+  return new Set([
+    ...statements.flatMap(exportModifierNames),
+    ...statements
+      .flatMap(localExportClauses)
+      .filter((clause) => declared.has(clause.local))
+      .map((clause) => clause.exported),
+  ]);
+}
+
+/** Candidates the conventions explain, keyed by inventory key. */
+export function deriveConventions(
+  section: Mode,
+  keys: readonly string[],
+  readSource: (file: string) => string
+): Map<string, UnusedCodeConvention> {
+  const localExports = new Map<string, Set<string>>();
+  const declaredIn = (file: string) => {
+    const cached = localExports.get(file);
+    if (cached) {
+      return cached;
+    }
+    const names = locallyDeclaredExports(file, readSource(file));
+    localExports.set(file, names);
+    return names;
+  };
+  const derived = new Map<string, UnusedCodeConvention>();
+  for (const key of keys) {
+    const [file = key, , name = ''] = key.split('::');
+    const convention = unusedCodeConventions.find(
+      (candidate) =>
+        candidate.sections.includes(section) &&
+        candidate.pattern.test(file) &&
+        !(candidate.reExportsOnly && declaredIn(file).has(name))
+    );
+    if (convention) {
+      derived.set(key, convention);
+    }
+  }
+  return derived;
+}
+
+/** Explicit entries a convention already explains with the same disposition. */
+export function redundantEntries(
+  baseline: Inventory,
+  derived: ReadonlyMap<string, UnusedCodeConvention>
+) {
+  return Object.keys(baseline)
+    .filter((key) => derived.get(key)?.review.disposition === baseline[key]?.disposition)
+    .sort();
 }
 
 const symbolSchema = z
@@ -113,26 +291,38 @@ export function parseKnipOutput(result: AnalyzerResult, mode: Mode): string[] {
   return [...new Set(keys)].sort();
 }
 
-export function compareInventory(current: readonly string[], baseline: Inventory) {
+const noConventions: ReadonlyMap<string, UnusedCodeConvention> = new Map();
+
+export function compareInventory(
+  current: readonly string[],
+  baseline: Inventory,
+  derived = noConventions
+) {
   const keys = new Set(current);
   return {
-    added: current.filter((key) => !Object.hasOwn(baseline, key)).toSorted(),
+    added: current.filter((key) => !(Object.hasOwn(baseline, key) || derived.has(key))).toSorted(),
     stale: Object.keys(baseline)
       .filter((key) => !keys.has(key))
       .sort(),
   };
 }
 
-export function pruneInventory(current: readonly string[], baseline: Inventory): Inventory {
-  if (compareInventory(current, baseline).added.length > 0) {
+export function pruneInventory(
+  current: readonly string[],
+  baseline: Inventory,
+  derived = noConventions
+): Inventory {
+  if (compareInventory(current, baseline, derived).added.length > 0) {
     throw new Error(
       'Cannot update inventory with unreviewed candidates; review each new key first.'
     );
   }
+  const redundant = new Set(redundantEntries(baseline, derived));
   return Object.fromEntries(
     current
+      .filter((key) => !redundant.has(key))
       .map((key) => [key, baseline[key]])
-      .filter((entry): entry is [string, z.infer<typeof reviewSchema>] => entry[1] !== undefined)
+      .filter((entry): entry is [string, Review] => entry[1] !== undefined)
   );
 }
 
@@ -183,23 +373,37 @@ export function evaluateInventory(
   mode: InventoryMode,
   baseline: z.infer<typeof baselineSchema>,
   production: string[],
-  exports: string[]
+  exports: string[],
+  readSource: (file: string) => string = (file) => readFileSync(resolve(file), 'utf8')
 ): { output: string; baseline?: string } {
   inventoryModeSchema.parse(mode);
-  const drift = {
-    production: compareInventory(production, baseline.production),
-    exports: compareInventory(exports, baseline.exports),
+  const candidates = { production, exports };
+  const derived = {
+    production: deriveConventions('production', production, readSource),
+    exports: deriveConventions('exports', exports, readSource),
+  };
+  const driftFor = (section: Mode) => ({
+    ...compareInventory(candidates[section], baseline[section], derived[section]),
+    redundant: redundantEntries(baseline[section], derived[section]),
+  });
+  const drift = { production: driftFor('production'), exports: driftFor('exports') };
+  // An override hides its convention; a redundant entry still names it.
+  const reviewOf = (section: Mode, key: string) => {
+    const explicit = baseline[section][key];
+    const derivedConvention = derived[section].get(key);
+    const convention =
+      explicit && explicit.disposition !== derivedConvention?.review.disposition
+        ? undefined
+        : derivedConvention;
+    return { review: explicit ?? convention?.review ?? null, convention: convention?.name ?? null };
   };
   if (mode === '--report') {
     return {
       output: `${JSON.stringify(
         {
           version: 1,
-          production: production.map((file) => ({
-            file,
-            review: baseline.production[file] ?? null,
-          })),
-          exports: exports.map((key) => ({ key, review: baseline.exports[key] ?? null })),
+          production: production.map((file) => ({ file, ...reviewOf('production', file) })),
+          exports: exports.map((key) => ({ key, ...reviewOf('exports', key) })),
           drift,
         },
         null,
@@ -210,25 +414,33 @@ export function evaluateInventory(
   if (mode === '--update') {
     const next = {
       version: 1,
-      production: pruneInventory(production, baseline.production),
-      exports: pruneInventory(exports, baseline.exports),
+      production: pruneInventory(production, baseline.production, derived.production),
+      exports: pruneInventory(exports, baseline.exports, derived.exports),
     };
     return {
       baseline: `${JSON.stringify(next, null, 2)}\n`,
-      output: 'Pruned resolved unused-code inventory entries.\n',
+      output: 'Pruned resolved and convention-covered unused-code inventory entries.\n',
     };
   }
-  const violations = (['production', 'exports'] as const).flatMap((mode) => [
-    ...drift[mode].added.map((key) => `New ${mode} candidate: ${key}`),
-    ...drift[mode].stale.map((key) => `Stale ${mode} candidate: ${key}`),
+  const violations = (['production', 'exports'] as const).flatMap((section) => [
+    ...drift[section].added.map((key) => `New ${section} candidate: ${key}`),
+    ...drift[section].stale.map((key) => `Stale ${section} candidate: ${key}`),
+    ...drift[section].redundant.map(
+      (key) =>
+        `Redundant ${section} entry: ${key} (covered by the '${derived[section].get(key)?.name}' convention)`
+    ),
   ]);
   if (violations.length > 0) {
     throw new Error(
-      `${violations.join('\n')}\nReview new candidates; run pnpm check:unused-code:update to prune resolved entries. See docs/knip.md.`
+      `${violations.join('\n')}\nReview new candidates; run pnpm check:unused-code:update to prune resolved and convention-covered entries. See docs/knip.md.`
     );
   }
+  const byConvention = (section: Mode) =>
+    candidates[section].filter(
+      (key) => !Object.hasOwn(baseline[section], key) && derived[section].has(key)
+    ).length;
   return {
-    output: `Unused-code inventory matches: ${production.length} production files, ${exports.length} export visibility candidates.\n`,
+    output: `Unused-code inventory matches: ${production.length} production files (${byConvention('production')} by convention), ${exports.length} export visibility candidates (${byConvention('exports')} by convention).\n`,
   };
 }
 

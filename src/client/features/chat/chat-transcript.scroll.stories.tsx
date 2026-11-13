@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react';
 import { type ComponentProps, useState } from 'react';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
-import { createAssistantMessage, createUserMessage } from '@/lib/claude-fixtures';
+import { createAssistantMessage, createUserMessage } from '@/lib/claude.fixture';
 import { ChatInput } from './chat-input/chat-input';
 import { ChatTranscript } from './chat-transcript';
 import { chatTranscriptMeta } from './chat-transcript.story-fixtures';

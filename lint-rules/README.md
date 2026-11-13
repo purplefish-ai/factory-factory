@@ -24,72 +24,72 @@ preservation. To hide the import-only conversion from blame, run
 
 ## Custom rules
 
-`factory.mjs` replaces the enabled Grit rules with Oxlint's ESLint-compatible
-plugin API. That API remains alpha: keep exact tool pins and real-binary
-fixtures when upgrading it. The rules require accessible names for icon-only
-buttons (including the shared `Button` icon sizes), and reject awaited dynamic
-imports, native browser dialogs, Next.js directives, `z.any()`/`zod.any()`,
-assertions on `JSON.parse` results, casts of promise resolvers to function types
-accepting `unknown`, type assertions on agent-supplied data under
-`src/client/features/chat` (tool input such as `input.todos as …` or
-`call.input.file_path as …`, which renderers parse with `parseToolInput` and a
-Zod schema, and stream payloads such as `event.delta as …` or
-`event.content_block as …`, which the reducer path parses with Zod and skips
-when they do not match), and fixed Tailwind palette color classes (`bg-red-500`,
-`dark:text-emerald-300`) in `src/client`, `src/components` and `src/lib`, which
-must use theme tokens instead ([status colors](../docs/status-colors.md)). The
-palette rule's file exceptions are its `exceptions` option, a map from path to
-reason in `.oxlintrc.json`; a test fails if an exception no longer needs it.
-`use-pending-prop` rejects a `Spinner`, `SpinnerGapIcon` or `animate-spin`
-element inside `Button` or `DropdownMenuItem`, which take `pending` instead, and
-`no-raw-spinner` rejects a bare `SpinnerGapIcon` and `animate-spin` outside the
-shared `Spinner`
-([pending controls](../docs/architecture/client-loading.md#pending-controls)).
-`no-raw-tab-role` rejects a `role="tab"` or `role="tablist"` attribute (or
-`role` prop) outside the shared `TabList` and `TabButton` in
-`src/components/ui/tab-button.tsx`, so every tab bar shares one look and
-keyboard behavior ([keyboard shortcuts](../docs/keyboard-shortcuts.md)); tests
-are exempt. Each takes its own `exceptions` map in the same shape; their test
-lints each listed file with the rule and no exceptions and fails once a file
-stops reporting. `query-owner` keeps tRPC hooks and cache helpers for named
-procedures inside owner modules. Each entry in its `groups` option lists
-procedures, the module callers should `use`, its `owners` (that module and its
-helpers), the reason, and which helpers it covers: `cache` covers helpers that
-install options or write data (`useQuery`, `fetch`, `setData` and similar) plus
-`getQueryKey`, and `all` covers every hook, cache helper and key helper,
-including `useMutation`. `workspace.get` and `workspace.listForProject` use
-`cache`, so every read installs the snapshot reconciler
-([workspace state](../docs/architecture/workspace-state.md)). `userSettings.get`
-and `userSettings.update` use `all`: settings are read and written only through
-`useUserSettings` and `useUpdateUserSettings` in
-`src/client/lib/user-settings-queries.ts`, which own the optimistic cache
-strategy and error toast. `userSettings.getProviderOptions` uses `cache` and is
-read through `useProviderOptions` in the same module, so every reader of the
-live model catalog shares one stale time. Tests are exempt so they can seed
-caches. `named-query-options` keeps query options in one place
-([query retries and polling](../docs/architecture/client-loading.md#query-retries-and-polling)):
-it rejects a numeric `refetchInterval` literal, including inside a conditional,
-arithmetic or a callback's return value (comparison operands are ignored),
-`refetchOnWindowFocus: false`, and a boolean or numeric `retry`. It does not
-resolve identifiers, so a local numeric constant passes. `QueryClient` defaults
-(`queries` and `mutations` objects) and tests are exempt. Regression tests
-invoke the real Oxlint binary against accepted and rejected fixtures.
+`factory.mjs` is the `factory` plugin, which replaces the enabled Grit rules
+with Oxlint's ESLint-compatible plugin API. That API remains alpha: keep exact
+tool pins and real-binary fixtures when upgrading it.
 
-`no-arbitrary-font-size` rejects arbitrary font sizes such as `text-[10px]` or
-`md:text-[0.8rem]`; use the type scale's `text-2xs`, `text-xs` and up instead.
-`use-status-callout` rejects a class string pairing a tinted status background
-(`bg-destructive/5`) with a border of the same status token
-(`border-destructive/30`); render that surface with `StatusCallout` or
-`StatusChip` instead. Hover, focus and data-state tints pass
-([callouts and chips](../docs/status-colors.md#callouts-and-chips)). Both take
-an `exceptions` map with the same stale-exception test and skip tests.
+Each rule has its own files in `rules/`:
+
+- `<rule-name>.mjs` exports the rule. Its `meta.docs.description` says what it
+  rejects; where the rule has a rationale beyond that or enforces a guide, a
+  header comment gives the rationale and links the guide.
+- `<rule-name>.test.ts` lists rejected and accepted fixtures for
+  `describeRuleFixtures` (`testing/rule-fixtures.ts`), which lints each one as
+  its own module with the real Oxlint binary and every factory rule enabled. A
+  rejected fixture must report exactly one error, from its rule; an accepted
+  fixture must report nothing. Checks of the rule's scoping in `.oxlintrc.json`
+  sit beside them.
+- `<rule-name>.exceptions.json`, only when files are excepted from the rule.
+
+Helpers used by several rules are plain modules in `lib/`; a helper used by one
+rule stays in that rule's file. `factory.mjs` imports every rule statically, in
+alphabetical order, and exports the plugin object. `.oxlintrc.json` enables each
+rule, sets its severity, scopes it to directories through `overrides` and turns
+it off for tests or stories where they are exempt; `query-owner` also takes its
+procedure groups there. `pnpm test` runs the rule tests, `pnpm typecheck` checks
+them, and Knip reports a rule file that `factory.mjs` does not import.
+
+### Exceptions
+
+A rule that takes an `exceptions` option (`EXCEPTIONS_SCHEMA` in
+`lib/exceptions.mjs`) reads its default from `rules/<rule-name>.exceptions.json`
+when that file exists: a map from a repository-relative path to the reason that
+file may keep the reported pattern. A rule without the file has no default
+exceptions. An `exceptions` option in an Oxlint configuration replaces the
+default; the project configuration does not set one. Keep the lists short and
+give every entry a reason.
+
+`exceptions.test.ts` covers every rule that takes the option and every
+exceptions file. Each reason must be longer than 20 characters, each file must
+belong to a rule that takes the option, and each listed path is linted with its
+rule and `exceptions: {}`: the test fails once a path no longer reports, so a
+stale exception is removed rather than kept. The Oxc editor extension's language
+server loads the same plugin, exceptions included; restart it after editing a
+rule or an exceptions file.
+
+### Adding a rule
+
+1. Create `rules/<rule-name>.mjs` with `meta.docs.description`, a header comment
+   for any rationale and guide links, and `schema: EXCEPTIONS_SCHEMA` if files
+   may be excepted.
+2. Create `rules/<rule-name>.test.ts` calling `describeRuleFixtures` with
+   rejected and accepted sources.
+3. If files are excepted, create `rules/<rule-name>.exceptions.json` and import
+   it in the rule with `with { type: 'json' }` as the default for
+   `isExceptedFile`.
+4. Add the rule's import and its entry to `factory.mjs`, alphabetically.
+5. Enable it with one `"factory/<rule-name>": "error"` line in `.oxlintrc.json`,
+   in the override that scopes it, and add it to the test override if tests are
+   exempt.
+
+### Built-in rule options
 
 Oxlint's built-in `no-restricted-imports` keeps `CardHeader`, `CardTitle`,
 `CardDescription` and `CardAction` out of `src/client/routes/admin/`, so every
 settings card uses `SettingsSection` from `settings-section.tsx`, which also
 owns the query loading and error states. The section shell and `StatCard` are
-the only exceptions, listed in a later override; a test fails if either stops
-needing it.
+the only exceptions, listed in a later override; `no-restricted-imports.test.ts`
+fails if either stops needing it.
 
 The same rule keeps route code from calling `useChatWebSocket`, through the
 barrel or its module: a route renders the chat inside `ChatSessionProvider`, so
@@ -97,73 +97,6 @@ streamed events re-render the chat and not the layout
 ([client state](../docs/architecture/client-state.md)). Type imports stay
 allowed. The admin override repeats the entry, because an override replaces the
 rule's options rather than merging them.
-
-`query-error-handled` flags a query hook result (`useQuery`, `useInfiniteQuery`
-or a `use…Query` wrapper, but not suspense queries) whose destructuring or
-member reads take `isLoading`, `isPending` or `isInitialLoading` but none of
-`error`, `isError`, `status`, `isLoadingError` or `isRefetchError`, so a failed
-request cannot read as loading or empty
-([client loading](../docs/architecture/client-loading.md)). A result passed on
-whole, such as `<QueryState query={query}>`, or destructured with a rest element
-is left to its consumer; reads through a local alias are followed. The rule
-checks that an error field is read, not how it is rendered. It has no
-exceptions.
-
-`no-direct-web-storage` rejects `localStorage` and `sessionStorage`, read
-directly or from `window`, `globalThis` or `self` (including static computed
-keys and destructuring; a dynamic `window[key]` is not detected), in
-`src/client`, `src/components` and `src/lib`; a field of that name on other
-objects is allowed. Keep UI state in Web Storage with `usePersistedState`
-(`src/client/hooks/use-persisted-state.ts`): it reads and validates the stored
-value with Zod on the first render, writes in its stable setter, keeps every
-mounted consumer of a key in agreement, keeps working in memory when storage is
-blocked or full, and follows other tabs when asked. Module-level stores use the
-guarded helpers in `src/client/lib/browser-storage.ts`, the only file in its
-`exceptions` map; a test fails if that exception is no longer needed. Tests may
-seed storage directly.
-
-`no-forward-ref` rejects `forwardRef` outside `src/components/ui/`: React 19
-passes `ref` as a prop. `no-render-ref-write` rejects assigning or incrementing
-`ref.current` directly in a component or hook body (a function named `use…` or
-starting with a capital, including one passed to `memo` or `forwardRef`), except
-lazy initialisation (`if (ref.current === null)`, `!ref.current`, `??=`).
-`no-state-sync-effect` rejects a `useEffect` or `useLayoutEffect` with
-dependencies whose body only calls `set…` functions, possibly behind `if`s, with
-values that contain no call, `.current` read, `await` or `new`. Both apply to
-`src/client`, `src/components` and `src/hooks` outside tests, with
-`no-state-sync-effect` also off in stories; their `exceptions` maps work like
-the spinner rules' ([client state](../docs/architecture/client-state.md)).
-`stable-context-value` rejects a context `value` built in the JSX, on
-`<Foo.Provider>`, a React 19 `<FooContext>` or `createElement(Foo.Provider, …)`:
-an object, array or JSX literal, a function, `new`, or a call other than
-`useMemo`, `useCallback`, `useRef`, `useStableCallback` and `useLatestRef`
-(`useState` returns a new tuple each render), including inside a conditional or
-logical operator. Memoize the value or split state from commands
-([context values](../docs/architecture/client-state.md#context-values)). It
-applies to the same directories outside tests and takes an `exceptions` map with
-the same still-needed test.
-
-Button sizing follows the `size` variant
-([buttons and tooltips](../docs/shadcn.md#buttons-icon-buttons-and-tooltips)).
-`button-icon-size` rejects `h-*`/`w-*` classes on an icon (`*Icon`, `svg`)
-anywhere inside a `Button` or `IconButton`, through conditionals, fragments and
-wrappers; the variant sizes icons and a `size-*` class is the explicit opt-out.
-It also rejects a positive horizontal margin (`mr-2`, `md:ml-1.5`, `me-1`,
-`m-1`) on an icon that is a direct flex item of the control (through
-conditionals, fragments and an `asChild` child), because the variant's `gap`
-already spaces icon and label; negative optical offsets, `ml-auto`, vertical
-margins and icons inside a wrapper element pass. `button-size-variant` rejects a
-fixed `h-N`, `w-N` or `size-N` (with any variant prefix) in a `Button` or
-`IconButton` `className`; keywords such as `w-full` and `h-auto`, arbitrary
-values and `min-`/`max-` widths are layout and pass. `icon-button-tooltip`
-rejects an icon-size `Button` rendered by `TooltipTrigger asChild` (also through
-nested `…Trigger asChild` elements) or carrying a native `title`; use
-`IconButton`. `tooltip-provider-root` rejects `<TooltipProvider>` outside the
-root providers, and `focus-ring` (`src/client` only) rejects the hand-rolled
-`focus-visible:ring-2` and `focus-visible:outline…` styles that the `focus-ring`
-utility replaces. Each takes an `exceptions` map, checked by the same
-still-needed test as the pending rules; tests are exempt from
-`tooltip-provider-root` so they can supply their own provider.
 
 ## Remaining Biome checks
 

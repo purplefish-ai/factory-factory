@@ -1,0 +1,6 @@
+{
+  "src/components/ui/spinner.tsx": "The shared Spinner itself: the one component allowed to apply animate-spin to a pending indicator.",
+  "src/client/components/session-status-icon.tsx": "Session tab status glyph: a loading, starting or stopping session spins its status-tone icon (beside the robot for agents); it is a status, not a pending control.",
+  "src/client/components/todo-item.tsx": "Todo status ring: an in-progress task spins its bordered status ring, a status rather than a pending control.",
+  "src/client/features/workspace/workspace-status-badge.tsx": "Workspace status badge: Setting up and Archiving spin their status glyph inside a labelled badge, a status rather than a pending control."
+}

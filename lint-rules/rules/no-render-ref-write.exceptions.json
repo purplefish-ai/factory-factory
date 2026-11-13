@@ -1,0 +1,4 @@
+{
+  "src/client/features/chat/agent-activity/tool-renderers/tool-expansion-state.ts": "Transcript rows call the stable getExpansionState while rendering, so its ref must hold this render's expansion state, not the last commit's.",
+  "src/client/hooks/use-persisted-state.ts": "useSyncExternalStore calls getSnapshot while rendering, so the codec ref must hold this render's schema and fallback; the write is idempotent."
+}
