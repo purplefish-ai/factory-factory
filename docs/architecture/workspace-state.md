@@ -698,8 +698,8 @@ disposition table in pull request #3229.
 > These source paths are internal application code, not supported package
 > imports. The published package exposes the `ff` CLI, not a shared-status SDK.
 
-Old paragraph 1. For a `src/shared/core/` guide. No rule enforces the import
-surface; `enums.ts` is imported directly from outside the directory.
+Old paragraph 1. For a dependency rule for `src/shared/core/` (task 2.10). No
+rule enforces it, and 22 files outside import `enums.ts` directly today.
 
 > Claude's structured-output schema uses JSON Schema Draft 7 for runtime
 > compatibility.
@@ -724,4 +724,4 @@ Old paragraph 16. For the Kanban feature guide (task 2.5b).
 > repair.
 
 Old paragraph 36. For the snapshots orchestration guide
-(`src/backend/orchestration/snapshots/`).
+(`src/backend/orchestration/snapshots/`, task 2.5b).

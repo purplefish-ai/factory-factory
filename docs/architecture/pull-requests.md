@@ -29,8 +29,8 @@ numbers are the rows of the disposition table in pull request #3213.
 > fences, and has no GitHub, delivery, session, or Linear runtime dependency.
 
 Old paragraph 29. For the snapshots orchestration guide
-(`src/backend/orchestration/snapshots/ratchet-projection.worker.ts`). No
-dependency-cruiser rule enforces the last clause.
+(`src/backend/orchestration/snapshots/`, task 2.5b). No dependency-cruiser rule
+enforces the last clause.
 
 > Successful ACP prompt turns reset the workspace's PR discovery backoff, as do
 > runtime exits. ACP processes remain alive between turns, so waiting for
