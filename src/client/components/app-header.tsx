@@ -1,5 +1,6 @@
 import { ListIcon } from '@phosphor-icons/react/dist/csr/List';
 import { SidebarSimpleIcon } from '@phosphor-icons/react/dist/csr/SidebarSimple';
+import { HostLoadIndicator } from '@/client/features/host-metrics';
 import { GlobalSearch } from '@/client/features/search';
 import { ShortcutKeys } from '@/client/features/shortcuts';
 import { getAriaKeyShortcuts } from '@/client/lib/keyboard-shortcuts';
@@ -64,6 +65,9 @@ export function AppHeader({ showSidebarToggle = true }: { showSidebarToggle?: bo
           ref={setRightSlot}
           className="ml-auto flex shrink-0 items-center gap-1 empty:hidden"
         />
+        <div data-slot="header-host-load" className="flex shrink-0 items-center empty:hidden">
+          <HostLoadIndicator />
+        </div>
         <div data-slot="header-search" className="flex shrink-0 items-center empty:hidden">
           <GlobalSearch />
         </div>

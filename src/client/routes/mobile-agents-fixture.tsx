@@ -17,12 +17,19 @@ import {
   type AppNavigationData,
 } from '@/client/hooks/use-app-navigation-data';
 import { getProjectAgentPath } from '@/client/lib/project-navigation';
+import type { StoryTrpcHandlers } from '@/client/lib/storybook-trpc';
 import { trpc } from '@/client/lib/trpc';
 import { SidebarProvider } from '@/components/ui/sidebar';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { EventAgentWorkspaceForm } from './agents/event-agent-workspace-form';
 import { eventWorkspaceHandlers } from './agents/event-agent-workspace-form.story-fixtures';
 import { mobileEventFixtures, MobileEventAgentContent } from './mobile-event-agents-fixture';
+
+const fixtureHandlers: StoryTrpcHandlers = {
+  ...eventWorkspaceHandlers,
+  'github.listIssuesForProject': () => ({ issues: [] }),
+  'admin.getHostMetrics': () => ({ samples: [] }),
+};
 
 const project = { id: 'factory', slug: 'factory-factory', name: 'Factory Factory' };
 const projectDefaults = {
@@ -322,18 +329,10 @@ export function MobileAgentsFixture() {
         () =>
           ({ op }) =>
             observable((observer) => {
-              const handler = Object.entries(eventWorkspaceHandlers).find(
+              const handler = Object.entries(fixtureHandlers).find(
                 ([path]) => path === op.path
               )?.[1];
-              observer.next({
-                result: {
-                  data: handler
-                    ? handler(op.input)
-                    : op.path === 'github.listIssuesForProject'
-                      ? { issues: [] }
-                      : [],
-                },
-              });
+              observer.next({ result: { data: handler ? handler(op.input) : [] } });
               observer.complete();
             }),
       ],

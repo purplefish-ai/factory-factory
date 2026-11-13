@@ -239,6 +239,8 @@ export function WorkspaceHeaderFixture({
                     ];
                   case 'search.githubIssues':
                     return { results: [], errors: [] };
+                  case 'admin.getHostMetrics':
+                    return { samples: [] };
                   default:
                     return [];
                 }
