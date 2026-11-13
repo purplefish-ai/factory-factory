@@ -1,0 +1,30 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(pnpm check)",
+      "Bash(pnpm check:env)",
+      "Bash(pnpm check:file-length)",
+      "Bash(pnpm check:fk-indexes)",
+      "Bash(pnpm check:format)",
+      "Bash(pnpm check:guidance)",
+      "Bash(pnpm check:imports)",
+      "Bash(pnpm check:lint-suppressions)",
+      "Bash(pnpm check:markdown)",
+      "Bash(pnpm check:ownership)",
+      "Bash(pnpm check:unused-code)",
+      "Bash(pnpm knip)",
+      "Bash(pnpm lint)",
+      "Bash(pnpm test *)",
+      "Bash(pnpm typecheck)",
+      "Bash(pnpm dev:sandbox *)",
+      "Bash(git diff)",
+      "Bash(git log)",
+      "Bash(git status)",
+      "Bash(gh pr checks *)",
+      "Bash(gh pr list *)",
+      "Bash(gh pr view *)",
+      "Bash(gh run list *)",
+      "Bash(gh run view *)"
+    ]
+  }
+}

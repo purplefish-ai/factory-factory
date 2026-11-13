@@ -24,6 +24,10 @@ repository structure around them.
   instructions layer by directory. Explicitly read applicable area guides rather
   than assuming every tool discovers them identically.
 
+The project settings file `.claude/settings.json` holds only pre-approved
+read-only and verification commands, and `scripts/claude-settings.test.ts` fails
+when it gains an entry that the test does not list.
+
 ## Skills and validation
 
 No repository-owned `SKILL.md` files existed at this audit. Personal skills and
