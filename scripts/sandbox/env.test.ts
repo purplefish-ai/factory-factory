@@ -142,4 +142,47 @@ describe('git in the sandbox environment', () => {
       await recorder.close();
     }
   }, 120_000);
+
+  it('sends GitHub remotes to an .invalid host through its own git configuration', async () => {
+    const baseDir = temporary.create('ffsb-');
+    const paths = prepareSandbox(baseDir);
+    const recorder = await startEgressRecorder({ logFile: paths.egressLog });
+    try {
+      // The second line alone: the allow-list and GIT_SSH_COMMAND are gone.
+      const {
+        GIT_ALLOW_PROTOCOL: _allowed,
+        GIT_SSH_COMMAND: _sshCommand,
+        ...env
+      } = buildServerEnv({
+        parentEnv: { PATH: process.env.PATH },
+        baseDir,
+        scenario: 'echo',
+        egressPort: recorder.port,
+      });
+      for (const remote of [
+        'git@github.com:octo/sandbox-test.git',
+        'ssh://git@github.com/octo/sandbox-test.git',
+      ]) {
+        const result = await git(['ls-remote', remote], env, baseDir);
+        expect(result.code).not.toBe(0);
+        expect(result.stderr).toContain('sandbox: ssh is disabled');
+      }
+      const https = await git(
+        ['ls-remote', 'https://github.com/octo/sandbox-test.git'],
+        env,
+        baseDir
+      );
+      expect(https.code).not.toBe(0);
+
+      // Every attempt named the .invalid host, never github.com.
+      const sshLog = readFileSync(paths.sshLog, 'utf8');
+      expect(sshLog.match(/git@github\.sandbox\.invalid/g)).toHaveLength(2);
+      expect(sshLog).not.toContain('github.com');
+      const egressLog = readFileSync(paths.egressLog, 'utf8');
+      expect(egressLog).toMatch(/ CONNECT github\.sandbox\.invalid:443\n/);
+      expect(egressLog).not.toContain('github.com');
+    } finally {
+      await recorder.close();
+    }
+  }, 120_000);
 });
