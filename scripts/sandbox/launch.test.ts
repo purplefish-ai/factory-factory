@@ -150,6 +150,32 @@ describe('launcher setup and shutdown', () => {
     }
   }, 60_000);
 
+  it('treats one port found twice as a failed attempt and retries', async () => {
+    const h = harness();
+    // The first attempt's probes return the same port; the second's differ.
+    const ports = [42_001, 42_001, 42_002, 42_003];
+    const code = await run(
+      { scenario: 'echo', keep: false },
+      {
+        ...h.deps,
+        findPort: () => Promise.resolve(ports.shift() ?? 0),
+        spawnImpl: failingSpawn(h.spawned),
+      }
+    );
+    // The retry reached the server: one spawn, on the fresh pair.
+    expect(code).toBe(1);
+    expect(h.spawned).toHaveLength(1);
+    const args = h.spawned[0] ?? [];
+    expect([args[args.indexOf('--port') + 1], args[args.indexOf('--backend-port') + 1]]).toEqual([
+      '42002',
+      '42003',
+    ]);
+    expect(h.logs).toContain(
+      'attempt 1: port discovery returned 42001 twice; retrying with fresh ports'
+    );
+    expect(h.sandboxDirs()).toEqual([]);
+  }, 60_000);
+
   it('retries with fresh ports when the server reports others, then fails naming both', async () => {
     const h = harness();
     // Each attempt's backend reports the next port up, as `ff serve` does when its port was taken.

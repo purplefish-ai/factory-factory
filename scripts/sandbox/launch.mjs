@@ -158,7 +158,9 @@ export async function run(
         return;
       }
       if (backend === frontend) {
-        throw new Error(`Port discovery returned ${frontend} twice.`);
+        lastMismatch = `port discovery returned ${frontend} twice`;
+        log(`attempt ${attempt}: ${lastMismatch}; retrying with fresh ports`);
+        continue;
       }
       rmSync(paths.portFile, { force: true });
       const server = startServer({
@@ -218,7 +220,7 @@ export async function run(
       save();
     }
     throw new Error(
-      `The server did not use the ports it was given in ${MAX_PORT_ATTEMPTS} attempts (last: ${lastMismatch}).`
+      `The server could not start on fresh ports in ${MAX_PORT_ATTEMPTS} attempts (last: ${lastMismatch}).`
     );
   }
 }

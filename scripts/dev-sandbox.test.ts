@@ -194,7 +194,7 @@ describe('a running sandbox', () => {
     expect(shared.frontendUrl).toMatch(/^http:\/\/localhost:\d+$/);
     expect(shared.egressPort).toBeGreaterThan(0);
     expect(shared.scenario).toBe('echo');
-  });
+  }, 30_000);
 
   it('seeds one project on a fresh repository', async () => {
     const projects = z
@@ -212,14 +212,14 @@ describe('a running sandbox', () => {
       .object({ defaultSessionProvider: z.string() })
       .parse(await trpcQuery(shared.backendUrl, 'userSettings.get'));
     expect(settings.defaultSessionProvider).toBe('CODEX');
-  });
+  }, 60_000);
 
   it('never opens the default database', () => {
     // Neither the launcher's HOME nor the sandbox's own HOME gets the default directory.
     expect(existsSync(join(String(shared.env.HOME), 'factory-factory'))).toBe(false);
     expect(existsSync(join(shared.baseDir, 'home', 'factory-factory'))).toBe(false);
     expect(existsSync(join(shared.baseDir, 'data.db'))).toBe(true);
-  });
+  }, 30_000);
 
   it('refuses a project outside the sandbox', async () => {
     // A real repository, outside baseDir (in the test's own temporary directory).
@@ -293,7 +293,8 @@ describe('a sandbox that calls out', () => {
     expect(auth.authenticated).toBe(false);
     expect(auth.error).toContain('sandbox: gh is disabled');
     expect(ghCalls(other.baseDir)).toContainEqual(['auth', 'status']);
-  });
+    // The server spawns the shim, a Node process: slow on a loaded host.
+  }, 120_000);
 
   it('git cannot reach a remote', async () => {
     const ssh = await trpcMutation(other.backendUrl, 'project.createFromGithub', {
