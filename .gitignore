@@ -46,9 +46,6 @@ yarn-error.log*
 # Worktrees
 worktrees/
 
-# Prisma generated client
-prisma/generated/
-
 # SQLite databases
 *.db
 *.db-journal
