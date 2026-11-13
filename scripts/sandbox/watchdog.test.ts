@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { startWatchdog, watchdogReason } from './watchdog.mjs';
+import { MAX_FAILED_READINGS, startWatchdog, watchdogReason } from './watchdog.mjs';
 
 const T1 = 'Thu Nov 13 10:00:01 2026';
 const LATER = 'Thu Nov 13 11:30:00 2026';
@@ -55,5 +55,73 @@ describe('the sandbox watchdog', () => {
     ticks[0]?.();
     expect(reasons).toEqual(['owner process 300 exited']);
     stop();
+  });
+
+  it('treats a failed process listing as unknown, and stops cleanly after several in a row', () => {
+    let failing = true;
+    let time = 0;
+    const ticks: (() => void)[] = [];
+    const reasons: string[] = [];
+    startWatchdog({
+      owner,
+      ttlMinutes: 1,
+      startedAtMs: 0,
+      system: {
+        listProcesses: () => {
+          if (failing) {
+            throw new Error('spawn ps EAGAIN');
+          }
+          return ownerAlive;
+        },
+        now: () => time,
+      },
+      onExpire: (reason: string) => reasons.push(reason),
+      setInterval: (tick: () => void) => {
+        ticks.push(tick);
+        return 1;
+      },
+      clearInterval: () => undefined,
+    });
+    const tick = () => expect(() => ticks[0]?.()).not.toThrow();
+    // A reading that fails neither stops the sandbox nor crashes the launcher;
+    // a good reading in between starts the count again.
+    for (let i = 1; i < MAX_FAILED_READINGS; i += 1) {
+      tick();
+    }
+    failing = false;
+    tick();
+    failing = true;
+    for (let i = 1; i < MAX_FAILED_READINGS; i += 1) {
+      tick();
+    }
+    expect(reasons).toEqual([]);
+    tick();
+    expect(reasons).toEqual([
+      `cannot read the process table (${MAX_FAILED_READINGS} attempts in a row; last: spawn ps EAGAIN)`,
+    ]);
+
+    // The time to live needs no listing, so it still applies while readings fail.
+    const ttlReasons: string[] = [];
+    const ttlTicks: (() => void)[] = [];
+    startWatchdog({
+      owner,
+      ttlMinutes: 1,
+      startedAtMs: 0,
+      system: {
+        listProcesses: () => {
+          throw new Error('spawn ps EAGAIN');
+        },
+        now: () => time,
+      },
+      onExpire: (reason: string) => ttlReasons.push(reason),
+      setInterval: (tick: () => void) => {
+        ttlTicks.push(tick);
+        return 1;
+      },
+      clearInterval: () => undefined,
+    });
+    time = MINUTE;
+    ttlTicks[0]?.();
+    expect(ttlReasons).toEqual(['time to live of 1 minutes reached']);
   });
 });

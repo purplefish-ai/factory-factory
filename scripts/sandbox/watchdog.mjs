@@ -2,9 +2,15 @@
 // time to live. Agents and interrupted test runs forget sandboxes.
 import { isSameProcess } from './process-group.mjs';
 
-/** Why the sandbox should stop now, or null. `owner` is a pid with its start time. */
+/** Consecutive failed process listings after which the watchdog stops the sandbox. */
+export const MAX_FAILED_READINGS = 3;
+
+/**
+ * Why the sandbox should stop now, or null. `owner` is a pid with its start
+ * time; `processes` is null when the listing failed ("cannot tell").
+ */
 export function watchdogReason({ now, startedAtMs, ttlMinutes, owner, processes }) {
-  if (owner && !isSameProcess(processes, owner)) {
+  if (owner && processes && !isSameProcess(processes, owner)) {
     return `owner process ${owner.pid} exited`;
   }
   if (ttlMinutes > 0 && now - startedAtMs >= ttlMinutes * 60_000) {
@@ -41,17 +47,30 @@ export function startWatchdog({
     return () => undefined;
   }
   let fired = false;
+  let failedReadings = 0;
   const timer = schedule(() => {
     if (fired) {
       return;
     }
-    const reason = watchdogReason({
-      now: system.now(),
-      startedAtMs,
-      ttlMinutes,
-      owner,
-      processes: owner ? system.listProcesses() : [],
-    });
+    // `ps` can fail to fork under load: that reading tells nothing, and an
+    // exception here would crash the launcher without cleaning up.
+    let processes = [];
+    let failure = null;
+    if (owner) {
+      try {
+        processes = system.listProcesses();
+        failedReadings = 0;
+      } catch (error) {
+        processes = null;
+        failedReadings += 1;
+        failure = error instanceof Error ? error.message : String(error);
+      }
+    }
+    const reason =
+      watchdogReason({ now: system.now(), startedAtMs, ttlMinutes, owner, processes }) ??
+      (failedReadings >= MAX_FAILED_READINGS
+        ? `cannot read the process table (${failedReadings} attempts in a row; last: ${failure})`
+        : null);
     if (reason) {
       fired = true;
       onExpire(reason);
