@@ -65,7 +65,10 @@ vi.mock('./port-allocation.service', () => ({
 
 vi.mock('./run-script-proxy.service', () => ({
   runScriptProxyService: {
-    ensureTunnel: (...args: unknown[]) => mockEnsureTunnel(...args),
+    acquireTunnel: async (...args: unknown[]) => {
+      const url = await mockEnsureTunnel(...args);
+      return url ? { url, release: async () => undefined } : null;
+    },
     stopTunnel: vi.fn(() => Promise.resolve()),
     getTunnelUrl: vi.fn(),
     cleanup: vi.fn(),
