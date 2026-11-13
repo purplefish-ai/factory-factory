@@ -36,6 +36,7 @@ export const InitStatusBanner = memo(function InitStatusBanner({
     <div className="px-4 pt-4">
       <StatusCallout
         tone={INIT_BANNER_TONES[banner.kind]}
+        align="start"
         // Setup in progress shows live work; failures keep the warning sign.
         icon={banner.kind === 'info' ? <Spinner aria-hidden="true" /> : WarningIcon}
       >

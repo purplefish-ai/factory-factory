@@ -54,7 +54,7 @@ export function ModelCatalogWarningContent({ models }: { models: MissingModel[] 
       role="alert"
       className="flex shrink-0 items-start gap-2 border-b border-border bg-muted/30 px-3 py-2 text-xs sm:px-4"
     >
-      <WarningIcon aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-warning" />
+      <WarningIcon aria-hidden="true" className="size-4 shrink-0 text-warning" />
       <div className="min-w-0 space-y-1">
         {models.map(({ provider, model }) => (
           <p key={provider} className="text-warning [overflow-wrap:anywhere]">
