@@ -14,6 +14,7 @@ import {
 } from './app-header-context';
 
 vi.mock('@/client/features/search', () => ({ GlobalSearch: () => <button>Search</button> }));
+vi.mock('@/client/features/host-metrics', () => ({ HostLoadIndicator: () => null }));
 vi.mock('@/hooks/use-mobile', () => ({ useIsMobile: () => false }));
 vi.mock('@/components/ui/sidebar', () => ({ useSidebar: () => ({ toggleSidebar: vi.fn() }) }));
 vi.mock('@/components/ui/tooltip', () => ({
@@ -86,6 +87,7 @@ it('preserves context and interaction across all portal slots and restores a gen
       'header-context',
       'header-status',
       'header-actions',
+      'header-host-load',
       'header-search',
       'header-end',
     ]);

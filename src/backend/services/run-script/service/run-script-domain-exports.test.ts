@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import * as runScriptExports from './index';
+import * as runScriptExports from '@/backend/services/run-script';
 import {
   createRunScriptService,
   FactoryConfigService,
@@ -8,7 +8,7 @@ import {
   runScriptConfigPersistenceService,
   runScriptStateMachine,
   startupScriptService,
-} from './index';
+} from '@/backend/services/run-script';
 
 describe('Run script domain barrel exports', () => {
   it('exports runScriptService factory', () => {

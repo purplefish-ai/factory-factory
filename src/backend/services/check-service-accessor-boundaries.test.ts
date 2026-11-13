@@ -134,7 +134,7 @@ describe('check-service-accessor-boundaries', () => {
   it('ignores local export declarations without a module specifier', () => {
     const result = runChecker([
       {
-        path: 'src/backend/services/workspace/service/index.ts',
+        path: 'src/backend/services/workspace/index.ts',
         content: 'const workspaceService = {};\nexport { workspaceService };\n',
       },
     ]);

@@ -91,7 +91,7 @@ export const unusedCodeConventions: readonly UnusedCodeConvention[] = [
   {
     name: 'service capsule barrel re-export',
     sections: ['exports'],
-    pattern: /^src\/backend\/services\/[^/]+(?:\/service)?\/index\.tsx?$/u,
+    pattern: /^src\/backend\/services\/[^/]+\/index\.tsx?$/u,
     reExportsOnly: true,
     review: {
       disposition: 'maintained-api',

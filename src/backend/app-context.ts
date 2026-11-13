@@ -76,6 +76,7 @@ import {
   prSnapshotService,
   prObservationService,
 } from './services/github';
+import { type HostMetricsService, hostMetricsService } from './services/host-metrics';
 import { jobRunner } from './services/job-runner.service';
 import { linearClientService, linearStateSyncService } from './services/linear';
 import { cleanupOldLogFiles, createLogger, getLogFilePath } from './services/logger.service';
@@ -222,6 +223,7 @@ export type ApplicationServices = BridgeServices & {
     input: Parameters<typeof updateProjectSettings>[0]
   ) => ReturnType<typeof updateProjectSettings>;
   portShareService: PortShareService;
+  hostMetricsService: HostMetricsService;
   rateLimiter: typeof rateLimiter;
   runScriptConfigPersistenceService: typeof runScriptConfigPersistenceService;
   runScriptService: RunScriptService;
@@ -435,6 +437,7 @@ export function createDefaultApplicationDependencies(): ApplicationDependencies 
     listQuickActions,
     periodicTaskService,
     portShareService,
+    hostMetricsService,
     projectManagementService,
     updateProjectSettings: (input) =>
       updateProjectSettings(input, {

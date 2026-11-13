@@ -74,6 +74,11 @@ export const adminRouter = router({
     };
   }),
 
+  /** Recent whole-machine CPU and memory load, oldest first, for the header sparkline. */
+  getHostMetrics: publicProcedure.query(async ({ ctx }) => ({
+    samples: await ctx.appContext.services.hostMetricsService.getHistory(),
+  })),
+
   /**
    * Export decision logs to JSON
    */

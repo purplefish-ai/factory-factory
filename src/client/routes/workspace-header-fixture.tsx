@@ -6,6 +6,7 @@ import { useSearchParams } from 'react-router';
 import { AppHeader } from '@/client/components/app-header';
 import { AppHeaderProvider, useAppHeader } from '@/client/components/app-header-context';
 import { ProjectHeader } from '@/client/components/project-header';
+import { hostLoadHistory } from '@/client/features/host-metrics/host-load.story-fixtures';
 import { WorkspacePanelProvider } from '@/client/features/workspace';
 import {
   AppNavigationDataProvider,
@@ -239,6 +240,8 @@ export function WorkspaceHeaderFixture({
                     ];
                   case 'search.githubIssues':
                     return { results: [], errors: [] };
+                  case 'admin.getHostMetrics':
+                    return { samples: hostLoadHistory(24, 43) };
                   default:
                     return [];
                 }
