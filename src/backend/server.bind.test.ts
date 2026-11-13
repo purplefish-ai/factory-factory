@@ -76,14 +76,15 @@ async function holdPorts(port: number, count: number): Promise<NetServer[] | nul
 }
 
 // Below the default ephemeral ranges (Linux 32768-60999, macOS and Windows
-// 49152-65535), so no port the kernel assigns can be one of these.
+// 49152-65535), so with default settings the kernel assigns none of these.
 const FIXED_PORT_FIRST = 20_000;
 const FIXED_PORT_END = 30_000;
 
 /**
  * Finds `count` consecutive ports free on both loopback families and returns
- * the first. Candidates come from outside the default ephemeral ranges, so a
- * neighbour's `listen(0)` or outbound connection can never be given one. The
+ * the first. Candidates come from outside the default ephemeral ranges, so
+ * unless those are widened, a neighbour's `listen(0)` or outbound connection is
+ * never given one. The
  * server must bind the ports itself, so they are released before it starts:
  * only a process that binds one of them by number in that gap can take it.
  */
