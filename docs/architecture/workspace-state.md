@@ -699,7 +699,7 @@ disposition table in pull request #3229.
 > imports. The published package exposes the `ff` CLI, not a shared-status SDK.
 
 Old paragraph 1. For a dependency rule for `src/shared/core/` (task 2.10). No
-rule enforces it, and 22 files outside import `enums.ts` directly today.
+rule enforces it, and 25 files outside import `enums.ts` directly today.
 
 > Claude's structured-output schema uses JSON Schema Draft 7 for runtime
 > compatibility.
