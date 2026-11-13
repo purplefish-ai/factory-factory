@@ -19,8 +19,6 @@ set for Factory Factory and keeps the rest of the user's environment.
 ## Consequences
 
 - A project's setup and dev server behave as they do in the user's own shell.
-- Agent sessions are not covered by this filter, and neither is the project
-  setup terminal (`src/backend/routers/websocket/setup-terminal.handler.ts`),
-  which still starts from the full child-process environment.
+- Agent sessions are not covered by this filter.
 - A new launcher variable must be added to the list in `user-process-env.ts`, or
   user commands will inherit it.
