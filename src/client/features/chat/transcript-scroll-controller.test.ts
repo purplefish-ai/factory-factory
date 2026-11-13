@@ -195,3 +195,24 @@ describe('transcript restoration lifecycle', () => {
     expect(h.onPositionChange).not.toHaveBeenCalled();
   });
 });
+
+describe('transcript prompt navigation', () => {
+  it('restores an unmounted prompt by key and stays in reading mode during streaming', () => {
+    const h = harness();
+    h.ready();
+    h.controller.layoutChanged();
+    h.controller.jumpToMessage('prompt-1');
+    h.frame();
+    h.frame();
+    expect(h.port.restorePosition).toHaveBeenLastCalledWith({
+      intent: 'reading',
+      top: 100,
+      left: 0,
+      anchor: { key: 'prompt-1', offset: 0 },
+    });
+    h.controller.layoutChanged();
+    h.frame();
+    expect(h.port.scrollToEnd).not.toHaveBeenCalled();
+    expect(h.onChange).toHaveBeenLastCalledWith({ intent: 'reading', phase: 'ready' });
+  });
+});
