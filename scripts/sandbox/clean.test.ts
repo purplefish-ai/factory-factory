@@ -1,4 +1,3 @@
-import { spawn } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
@@ -67,16 +66,12 @@ function staticSystem(
 }
 
 /**
- * A detached idle process (its own group) running with `BASE_DIR=<baseDir>`,
- * returned once the process table shows it with that environment (until it
- * has executed, it carries its parent's).
+ * A detached idle process (its own group, bounded lifetime) running with
+ * `BASE_DIR=<baseDir>`, returned once the process table shows it with that
+ * environment (until it has executed, it carries its parent's).
  */
 async function spawnSandboxProcess(baseDir: string) {
-  const child = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], {
-    detached: true,
-    stdio: 'ignore',
-    env: { PATH: process.env.PATH, BASE_DIR: baseDir },
-  });
+  const child = spawnSleeper({ env: { PATH: process.env.PATH, BASE_DIR: baseDir } });
   const pid = child.pid ?? 0;
   const deadline = Date.now() + 30_000;
   while (realSystem.processesWithEnvironment(`BASE_DIR=${baseDir}`, [pid]).length === 0) {
