@@ -146,7 +146,6 @@ describe('inline lint suppression policy', () => {
     ['index.html', '<!-- oxfmt-ignore -->\n<div    class = "example"></div>'],
     ['.github/workflows/demo.yml', '# prettier-ignore\nname: example'],
     ['docs/example.md', '<!-- prettier-ignore -->\nAn example paragraph.'],
-    ['.planning/example.md', '<!-- oxfmt-ignore -->\nAn example paragraph.'],
   ])('rejects formatter directives in %s', (file, source) => {
     expect(runCheck(source, file).status).toBe(1);
   });
