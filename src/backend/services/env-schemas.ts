@@ -37,6 +37,11 @@ function parseOneZeroBoolean(value: unknown): boolean | undefined {
   return undefined;
 }
 
+/** Accepts either convention: `true`/`false` or `1`/`0`. */
+function parseSwitch(value: unknown): boolean | undefined {
+  return parseBoolean(value) ?? parseOneZeroBoolean(value);
+}
+
 function toTrimmedString(value: unknown): string | undefined {
   if (typeof value !== 'string') {
     return undefined;
@@ -92,7 +97,7 @@ export const ConfigEnvSchema = z.object({
     .catch(undefined),
   FF_RUN_SCRIPT_PROXY_ENABLED: z.preprocess(parseOneZeroBoolean, z.boolean()).catch(false),
   FF_EMIT_BACKEND_PORT: z.preprocess(parseOneZeroBoolean, z.boolean()).catch(false),
-  FF_UPDATE_CHECKS_ENABLED: z.preprocess(parseBoolean, z.boolean()).catch(true),
+  FF_UPDATE_CHECKS_ENABLED: z.preprocess(parseSwitch, z.boolean()).catch(true),
   FF_NPM_REGISTRY_URL: z.preprocess(toHttpUrl, z.string()).catch('https://registry.npmjs.org'),
   FF_TAILSCALE_ORIGIN: z.preprocess(toTrimmedString, z.string()).optional().catch(undefined),
   FF_TAILSCALE_HTTPS_PORT: PositiveIntEnvSchema.optional().catch(undefined),
@@ -110,6 +115,7 @@ export const ConfigEnvSchema = z.object({
   BASE_DIR: z.preprocess(toTrimmedString, z.string()).optional().catch(undefined),
   WORKTREE_BASE_DIR: z.preprocess(toTrimmedString, z.string()).optional().catch(undefined),
   REPOS_DIR: z.preprocess(toTrimmedString, z.string()).optional().catch(undefined),
+  FF_PROJECT_ROOT: z.preprocess(toTrimmedString, z.string()).optional().catch(undefined),
   NODE_ENV: z.preprocess(toLowerString, NodeEnvSchema).catch('development'),
   WS_LOGS_PATH: z.preprocess(toTrimmedString, z.string()).optional().catch(undefined),
   FRONTEND_STATIC_PATH: z.preprocess(toTrimmedString, z.string()).optional().catch(undefined),

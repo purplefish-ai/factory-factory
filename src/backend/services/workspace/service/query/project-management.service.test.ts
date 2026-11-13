@@ -1,5 +1,8 @@
+import { mkdtempSync, realpathSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { configService } from '@/backend/services/config.service';
 import { projectManagementService } from '@/backend/services/workspace/service/query/project-management.service';
 import {
   inspectProjectRepository,
@@ -98,5 +101,38 @@ describe('project creation preparation', () => {
       error: 'Path does not exist',
     });
     expect(validateRepositoryPath).toHaveBeenCalledWith('/missing');
+  });
+});
+
+describe('project root restriction', () => {
+  const root = realpathSync(mkdtempSync(path.join(tmpdir(), 'ff-project-root-')));
+  afterAll(() => rmSync(root, { recursive: true, force: true }));
+
+  it('rejects a repository outside the configured root before validating it', async () => {
+    vi.spyOn(configService, 'getProjectRoot').mockReturnValue(root);
+    vi.mocked(validateRepositoryPath).mockReset().mockResolvedValue({ valid: true });
+    await expect(projectManagementService.validateRepoPath('/elsewhere/repo')).resolves.toEqual({
+      valid: false,
+      error: `Path /elsewhere/repo is outside the project root ${root}`,
+    });
+    expect(validateRepositoryPath).not.toHaveBeenCalled();
+    await expect(
+      projectManagementService.validateRepoPath(path.join(root, 'repo'))
+    ).resolves.toEqual({ valid: true });
+    expect(projectManagementService.checkProjectLocation('/elsewhere/clone')).toEqual({
+      valid: false,
+      error: `Path /elsewhere/clone is outside the project root ${root}`,
+    });
+  });
+
+  it('allows any path when no root is configured', async () => {
+    vi.spyOn(configService, 'getProjectRoot').mockReturnValue(null);
+    vi.mocked(validateRepositoryPath).mockReset().mockResolvedValue({ valid: true });
+    await expect(projectManagementService.validateRepoPath('/elsewhere/repo')).resolves.toEqual({
+      valid: true,
+    });
+    expect(projectManagementService.checkProjectLocation('/elsewhere/clone')).toEqual({
+      valid: true,
+    });
   });
 });

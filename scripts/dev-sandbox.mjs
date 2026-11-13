@@ -14,32 +14,30 @@ async function main(argv) {
     options = parseArgs(argv);
   } catch (error) {
     process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n\n${USAGE}`);
-    process.exitCode = 2;
-    return;
+    return 2;
   }
   if (options.mode === 'help') {
     process.stdout.write(USAGE);
-    return;
+    return 0;
   }
   if (process.platform === 'win32') {
     process.stderr.write('dev-sandbox supports macOS and Linux only.\n');
-    process.exitCode = 1;
-    return;
+    return 1;
   }
   try {
     if (options.mode === 'clean') {
       await cleanSandboxes({ log: (message) => process.stderr.write(`dev-sandbox: ${message}\n`) });
-      return;
+      return 0;
     }
-    await run(options);
+    return await run(options);
   } catch (error) {
     process.stderr.write(
       `dev-sandbox: ${error instanceof Error ? error.message : String(error)}\n`
     );
-    process.exitCode = 1;
+    return 1;
   }
 }
 
 if (process.argv[1] && realpathSync(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  await main(process.argv.slice(2));
+  process.exit(await main(process.argv.slice(2)));
 }

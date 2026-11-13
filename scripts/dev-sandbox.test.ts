@@ -1,16 +1,22 @@
-import { type ChildProcess, execFileSync, type SpawnOptions } from 'node:child_process';
-import { existsSync, readFileSync, rmSync } from 'node:fs';
+// Real-server cases: two sandboxes start in parallel and are shared by every
+// case below. Sandbox A keeps its logs untouched until the idle check; sandbox
+// B takes the cases that call out (gh, git, Claude) and ends killed.
+import { execFile, execFileSync } from 'node:child_process';
+import { existsSync, mkdirSync, readFileSync, rmSync } from 'node:fs';
 import { createServer, type IncomingMessage, type Server } from 'node:http';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { z } from 'zod';
-import { configService } from '@/backend/services/config.service';
-import { AcpClientFactory } from '@/backend/services/session/service/acp/acp-client-factory';
-import { fetchClaudeModelCatalogFromAcp } from '@/backend/services/session/service/acp/claude-model-catalog-loader';
+import { getBundledClaudeCommand } from '@/backend/lib/claude-cli-command';
 import { cleanSandboxes } from './sandbox/clean.mjs';
 import { buildServerEnv } from './sandbox/env.mjs';
-import { collectGroupProcesses, realSystem, stopProcessGroup } from './sandbox/process-group.mjs';
+import {
+  collectGroupProcesses,
+  isSameProcess,
+  realSystem,
+  stopProcessGroup,
+} from './sandbox/process-group.mjs';
 import {
   type Launch,
   launch,
@@ -19,29 +25,10 @@ import {
   temporaryDirectories,
 } from './sandbox/test-support';
 
-// Both Claude spawn paths run through node:child_process. Record the
-// environment they pass and refuse to start the real adapter.
-const claudeSpawnEnvs = vi.hoisted((): NodeJS.ProcessEnv[] => []);
-vi.mock('node:child_process', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('node:child_process')>();
-  const recordingSpawn = (command: string, ...rest: unknown[]): ChildProcess => {
-    const [args, options] = Array.isArray(rest[0])
-      ? [rest[0] as string[], rest[1] as SpawnOptions | undefined]
-      : [[], rest[0] as SpawnOptions | undefined];
-    if ([command, ...args].some((part) => part.includes('claude-agent-acp'))) {
-      claudeSpawnEnvs.push({ ...options?.env });
-      throw new Error('Claude spawn recorded');
-    }
-    return actual.spawn(command, args, options ?? {});
-  };
-  return { ...actual, spawn: recordingSpawn };
-});
-
-const CREDENTIAL_NAME = /ANTHROPIC|OAUTH|TOKEN|API_KEY|SECRET|CREDENTIAL|SECURESTORAGE|BEDROCK/;
 const temporary = temporaryDirectories();
 
 async function waitForReady(sandbox: Launch): Promise<string> {
-  const deadline = Date.now() + 150_000;
+  const deadline = Date.now() + 240_000;
   while (Date.now() < deadline) {
     const match = /^SANDBOX_READY (.+)$/m.exec(sandbox.output());
     if (match?.[1]) {
@@ -60,7 +47,10 @@ const recordSchema = z.object({
   frontendUrl: z.string(),
   backendUrl: z.string(),
   pid: z.number(),
+  pidStartedAt: z.string(),
   pgid: z.number(),
+  pgidStartedAt: z.string(),
+  egressPort: z.number(),
   projectId: z.string(),
   repoPath: z.string(),
   scenario: z.string(),
@@ -70,35 +60,78 @@ type Running = { launch: Launch; tempDir: string; env: NodeJS.ProcessEnv } & z.i
 > & { sandboxJson: string; readyOutput: string };
 
 async function startSandbox(tempDir: string, env: NodeJS.ProcessEnv): Promise<Running> {
-  const sandbox = launch([], env);
+  // The test run owns its sandboxes: if it dies, they stop and clean up.
+  const sandbox = launch(['--owner-pid', String(process.pid)], env);
   launches.push(sandbox);
   const sandboxJson = await waitForReady(sandbox);
   const record = recordSchema.parse(JSON.parse(readFileSync(sandboxJson, 'utf8')));
   return { ...record, launch: sandbox, tempDir, env, sandboxJson, readyOutput: sandbox.output() };
 }
 
+const trpcResult = z.object({ result: z.object({ data: z.object({ json: z.unknown() }) }) });
+
 async function trpcQuery(backendUrl: string, path: string) {
   const response = await fetch(`${backendUrl}/api/trpc/${path}`);
-  const body = z
-    .object({ result: z.object({ data: z.object({ json: z.unknown() }) }) })
-    .parse(await response.json());
-  return body.result.data.json;
+  return trpcResult.parse(await response.json()).result.data.json;
 }
 
-function ghCalls(baseDir: string) {
-  return readFileSync(join(baseDir, 'gh-calls.log'), 'utf8')
+/** A mutation's outcome: its data, or the error message the server returned. */
+async function trpcMutation(backendUrl: string, path: string, input: unknown) {
+  const response = await fetch(`${backendUrl}/api/trpc/${path}`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ json: input }),
+  });
+  const body: unknown = await response.json();
+  if (response.ok) {
+    return { ok: true as const, data: trpcResult.parse(body).result.data.json };
+  }
+  const error = z.object({ error: z.object({ json: z.object({ message: z.string() }) }) });
+  return { ok: false as const, message: error.parse(body).error.json.message };
+}
+
+function jsonLines(file: string) {
+  return readFileSync(file, 'utf8')
     .split('\n')
     .filter(Boolean)
     .map((line) => z.array(z.string()).parse(JSON.parse(line)));
 }
+const ghCalls = (baseDir: string) => jsonLines(join(baseDir, 'gh-calls.log'));
+const sshCalls = (baseDir: string) => jsonLines(join(baseDir, 'ssh-calls.log'));
+/** Egress attempts without their timestamps: `METHOD host:port`. */
+function egressCalls(baseDir: string) {
+  return readFileSync(join(baseDir, 'egress-calls.log'), 'utf8')
+    .split('\n')
+    .filter(Boolean)
+    .map((line) => line.replace(/^\S+ /, ''));
+}
 
-/** Environment of a live process, as `NAME=value` entries (best effort on macOS). */
+/**
+ * Environment of a live process, as `NAME=value` entries (best effort on
+ * macOS); empty for a process that exited since it was listed.
+ */
 function processEnvironment(pid: number): string {
-  if (process.platform === 'linux') {
-    return readFileSync(`/proc/${pid}/environ`, 'utf8').split('\0').join('\n');
+  try {
+    if (process.platform === 'linux') {
+      return readFileSync(`/proc/${pid}/environ`, 'utf8').split('\0').join('\n');
+    }
+    return execFileSync('ps', ['-E', '-ww', '-o', 'command=', '-p', String(pid)], {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+    });
+  } catch {
+    return '';
   }
-  return execFileSync('ps', ['-E', '-ww', '-o', 'command=', '-p', String(pid)], {
-    encoding: 'utf8',
+}
+
+/** Runs the application's managed Claude runtime once, non-interactively. */
+function runClaude(env: NodeJS.ProcessEnv, cwd: string): Promise<string> {
+  const { command, args } = getBundledClaudeCommand(['-p', 'Reply with OK.']);
+  return new Promise((resolve) => {
+    const child = execFile(command, args, { env, cwd, timeout: 150_000 }, (_error, out, err) =>
+      resolve(`${out}${err}`)
+    );
+    child.stdin?.end();
   });
 }
 
@@ -106,7 +139,7 @@ const launches: Launch[] = [];
 let registry: Server;
 const registryRequests: string[] = [];
 let shared: Running;
-let killedLauncher: Running;
+let other: Running;
 
 beforeAll(async () => {
   registry = createServer((request: IncomingMessage, response) => {
@@ -118,12 +151,12 @@ beforeAll(async () => {
   const address = registry.address();
   const registryUrl = `http://127.0.0.1:${typeof address === 'object' && address ? address.port : 0}`;
   const sharedTemp = temporary.create('ffsb-');
-  const killedTemp = temporary.create('ffsb-');
-  [shared, killedLauncher] = await Promise.all([
+  const otherTemp = temporary.create('ffsb-');
+  [shared, other] = await Promise.all([
     startSandbox(sharedTemp, launcherEnv(sharedTemp, { FF_NPM_REGISTRY_URL: registryUrl })),
-    startSandbox(killedTemp, launcherEnv(killedTemp)),
+    startSandbox(otherTemp, launcherEnv(otherTemp)),
   ]);
-}, 180_000);
+}, 300_000);
 
 afterAll(async () => {
   for (const sandbox of launches) {
@@ -132,14 +165,15 @@ afterAll(async () => {
       await sandbox.exited;
     }
   }
-  for (const sandbox of [shared, killedLauncher]) {
+  // Only groups whose leader still has its recorded start time are signalled.
+  for (const sandbox of [shared, other]) {
     if (sandbox) {
-      await stopProcessGroup(sandbox.pgid);
+      await stopProcessGroup(sandbox.pgid, { leaderStartedAt: sandbox.pgidStartedAt });
     }
   }
   await new Promise((resolve) => registry?.close(resolve));
   temporary.cleanup();
-}, 60_000);
+}, 120_000);
 
 describe('a running sandbox', () => {
   it('prints SANDBOX_READY with a readable sandbox.json', () => {
@@ -147,10 +181,15 @@ describe('a running sandbox', () => {
     expect(shared.sandboxJson).toBe(join(shared.baseDir, 'sandbox.json'));
     expect(shared.baseDir.startsWith(`${join(shared.tempDir, 'ff-sandbox')}/`)).toBe(true);
     expect(shared.pid).toBe(shared.launch.child.pid);
-    expect(collectGroupProcesses(realSystem.listProcesses(), shared.pgid).has(shared.pgid)).toBe(
+    const processes = realSystem.listProcesses();
+    expect(isSameProcess(processes, { pid: shared.pid, startedAt: shared.pidStartedAt })).toBe(
+      true
+    );
+    expect(isSameProcess(processes, { pid: shared.pgid, startedAt: shared.pgidStartedAt })).toBe(
       true
     );
     expect(shared.frontendUrl).toMatch(/^http:\/\/localhost:\d+$/);
+    expect(shared.egressPort).toBeGreaterThan(0);
     expect(shared.scenario).toBe('echo');
   });
 
@@ -179,88 +218,18 @@ describe('a running sandbox', () => {
     expect(existsSync(join(shared.baseDir, 'data.db'))).toBe(true);
   });
 
-  it('an idle sandbox contacts no external service', async () => {
-    // The browser asks for release notices on load and every interval.
-    const updates = z
-      .object({ notices: z.array(z.unknown()) })
-      .parse(await trpcQuery(shared.backendUrl, 'admin.checkUpdates'));
-    const legacy = z
-      .object({ latestVersion: z.string().nullable() })
-      .parse(await trpcQuery(shared.backendUrl, 'admin.checkFactoryUpdate'));
-    // Let the immediately-run and five-second background jobs complete a cycle.
-    await realSystem.sleep(6000);
-    expect(updates.notices).toEqual([]);
-    expect(legacy.latestVersion).toBeNull();
-    expect(registryRequests).toEqual([]);
-    // `ff serve` probes `gh --version` once before the server starts; nothing after.
-    expect(ghCalls(shared.baseDir)).toEqual([['--version']]);
-  }, 30_000);
-
-  it('records gh calls instead of running them', async () => {
-    const auth = z
-      .object({ authenticated: z.boolean(), error: z.string().optional() })
-      .parse(await trpcQuery(shared.backendUrl, 'project.checkGithubAuth'));
-    expect(auth.authenticated).toBe(false);
-    expect(auth.error).toContain('sandbox: gh is disabled');
-    expect(ghCalls(shared.baseDir)).toContainEqual(['auth', 'status']);
-  });
-
-  it("Claude cannot use the user's credentials", async () => {
-    const claudeConfigDir = join(shared.baseDir, 'claude-config');
-    const assertIsolated = (env: NodeJS.ProcessEnv) => {
-      expect(Object.keys(env).filter((name) => CREDENTIAL_NAME.test(name))).toEqual([]);
-      expect(Object.values(env).join('\n')).not.toContain(SECRET);
-      expect(env.CLAUDE_CONFIG_DIR).toBe(claudeConfigDir);
-      expect(env.HOME).toBe(join(shared.baseDir, 'home'));
-    };
-    // Both spawn paths, run with the environment the launcher gives the server.
-    // Its info logs (config reloads, the spawn attempt) are expected here.
-    vi.spyOn(console, 'log').mockImplementation(() => undefined);
-    const saved = process.env;
-    process.env = {
-      ...buildServerEnv({ parentEnv: shared.env, baseDir: shared.baseDir, scenario: 'echo' }),
-    };
-    configService.reload();
-    claudeSpawnEnvs.length = 0;
-    try {
-      await expect(fetchClaudeModelCatalogFromAcp()).rejects.toThrow('Claude spawn recorded');
-      const factory = new AcpClientFactory();
-      // As composed in app-context.ts.
-      factory.configureEnvironment({
-        childProcessEnvProvider: () => configService.getChildProcessEnv(),
-      });
-      const never = {
-        promise: new Promise<never>(() => undefined),
-        dispose: () => undefined,
-      };
-      await expect(
-        factory.createClient({
-          sessionId: 'sandbox-session',
-          options: {
-            provider: 'CLAUDE',
-            workingDir: shared.repoPath,
-            sessionId: 'sandbox-session',
-          },
-          handlers: {},
-          metadata: { incarnationId: 'sandbox', purpose: 'active', installed: false },
-          shutdownSignal: never,
-          stopSignal: never,
-          shouldDispatchRuntimeError: () => false,
-        })
-      ).rejects.toThrow('Claude spawn recorded');
-    } finally {
-      process.env = saved;
-      configService.reload();
-    }
-    expect(claudeSpawnEnvs).toHaveLength(2);
-    claudeSpawnEnvs.forEach(assertIsolated);
-    // The running server, which both paths inherit from, has the same environment.
-    const serverProcesses = [...collectGroupProcesses(realSystem.listProcesses(), shared.pgid)];
-    const environments = serverProcesses.map(processEnvironment);
-    expect(environments.join('\n')).not.toContain(SECRET);
-    expect(environments.some((env) => env.includes(`CLAUDE_CONFIG_DIR=${claudeConfigDir}`))).toBe(
-      true
-    );
+  it('refuses a project outside the sandbox', async () => {
+    // A real repository, outside baseDir (in the test's own temporary directory).
+    const outside = join(shared.tempDir, 'outside-repo');
+    mkdirSync(outside);
+    execFileSync('git', ['init', '--quiet'], { cwd: outside });
+    const result = await trpcMutation(shared.backendUrl, 'project.create', { repoPath: outside });
+    expect(result).toEqual({
+      ok: false,
+      message: `Invalid repository path: Path ${outside} is outside the project root ${shared.baseDir}`,
+    });
+    const projects = z.array(z.unknown()).parse(await trpcQuery(shared.backendUrl, 'project.list'));
+    expect(projects).toHaveLength(1);
   });
 
   it('--clean leaves a sandbox whose launcher is running', async () => {
@@ -268,6 +237,24 @@ describe('a running sandbox', () => {
     expect(await clean.exited).toBe(0);
     expect(existsSync(shared.sandboxJson)).toBe(true);
     expect(collectGroupProcesses(realSystem.listProcesses(), shared.pgid).size).toBeGreaterThan(0);
+  }, 30_000);
+
+  it('an idle sandbox makes no outbound request and no gh call after startup', async () => {
+    // The browser asks for release notices on load and every interval.
+    const updates = z
+      .object({ notices: z.array(z.unknown()) })
+      .parse(await trpcQuery(shared.backendUrl, 'admin.checkUpdates'));
+    const legacy = z
+      .object({ latestVersion: z.string().nullable() })
+      .parse(await trpcQuery(shared.backendUrl, 'admin.checkFactoryUpdate'));
+    expect(updates.notices).toEqual([]);
+    expect(legacy.latestVersion).toBeNull();
+    expect(registryRequests).toEqual([]);
+    // From SANDBOX_READY to here, after every case above: nothing went out.
+    expect(egressCalls(shared.baseDir)).toEqual([]);
+    expect(sshCalls(shared.baseDir)).toEqual([]);
+    // `ff serve` probes `gh --version` once before the server starts; nothing after.
+    expect(ghCalls(shared.baseDir)).toEqual([['--version']]);
   }, 30_000);
 
   it('removes baseDir and every descendant process on SIGTERM', async () => {
@@ -284,17 +271,87 @@ describe('a running sandbox', () => {
   }, 60_000);
 });
 
-describe('--clean', () => {
+describe('a sandbox that calls out', () => {
+  it('records gh calls instead of running them', async () => {
+    const auth = z
+      .object({ authenticated: z.boolean(), error: z.string().optional() })
+      .parse(await trpcQuery(other.backendUrl, 'project.checkGithubAuth'));
+    expect(auth.authenticated).toBe(false);
+    expect(auth.error).toContain('sandbox: gh is disabled');
+    expect(ghCalls(other.baseDir)).toContainEqual(['auth', 'status']);
+  });
+
+  it('git cannot reach a remote', async () => {
+    const ssh = await trpcMutation(other.backendUrl, 'project.createFromGithub', {
+      githubUrl: 'git@github.com:octo/sandbox-test.git',
+    });
+    const https = await trpcMutation(other.backendUrl, 'project.createFromGithub', {
+      githubUrl: 'https://github.com/octo/sandbox-test',
+    });
+    // Refused by git itself, before any attempt reached the ssh shim or the recorder.
+    expect(ssh).toEqual({
+      ok: false,
+      message: expect.stringContaining("transport 'ssh' not allowed"),
+    });
+    expect(https).toEqual({
+      ok: false,
+      message: expect.stringContaining("transport 'https' not allowed"),
+    });
+    expect(sshCalls(other.baseDir)).toEqual([]);
+    expect(egressCalls(other.baseDir)).toEqual([]);
+  }, 60_000);
+
+  it('Claude requests never leave the machine', async () => {
+    // The server ran its own Claude paths at startup (launch discovery and the
+    // model catalog) and they made no request at all.
+    const serverOutput = readFileSync(join(other.baseDir, 'server-output.log'), 'utf8');
+    expect(serverOutput).toMatch(/Launch discovery stage completed .*"provider":"CLAUDE"/);
+    expect(egressCalls(other.baseDir)).toEqual([]);
+    // No server process carries a planted credential; Claude's API is the recorder.
+    const environments = [...collectGroupProcesses(realSystem.listProcesses(), other.pgid)].map(
+      processEnvironment
+    );
+    expect(environments.join('\n')).not.toContain(SECRET);
+    expect(
+      environments.some((env) =>
+        env.includes(`ANTHROPIC_BASE_URL=http://127.0.0.1:${other.egressPort}`)
+      )
+    ).toBe(true);
+    // The application's managed Claude runtime, with exactly the server's
+    // environment, finds no credential, so it has nothing to send ...
+    const serverEnv = buildServerEnv({
+      parentEnv: other.env,
+      baseDir: other.baseDir,
+      scenario: other.scenario,
+      egressPort: other.egressPort,
+    });
+    expect(await runClaude(serverEnv, other.repoPath)).toContain('Not logged in');
+    expect(egressCalls(other.baseDir)).toEqual([]);
+    // ... and given one (a placeholder), its request is refused locally and recorded.
+    const placeholder = 'sandbox-placeholder-not-a-key';
+    const refused = await runClaude(
+      { ...serverEnv, ANTHROPIC_API_KEY: placeholder },
+      other.repoPath
+    );
+    expect(refused).toContain('403 sandbox: outbound request refused');
+    const calls = egressCalls(other.baseDir);
+    expect(calls.length).toBeGreaterThan(0);
+    expect(new Set(calls)).toEqual(new Set([`POST 127.0.0.1:${other.egressPort}`]));
+    expect(readFileSync(join(other.baseDir, 'egress-calls.log'), 'utf8')).not.toContain(
+      placeholder
+    );
+  }, 300_000);
+
   it('--clean after the launcher is killed stops its descendants before removing baseDir', async () => {
-    const { pgid, baseDir } = killedLauncher;
-    killedLauncher.launch.child.kill('SIGKILL');
-    await killedLauncher.launch.exited;
+    const { pgid, baseDir } = other;
+    other.launch.child.kill('SIGKILL');
+    await other.launch.exited;
     const descendants = collectGroupProcesses(realSystem.listProcesses(), pgid);
     expect(descendants.size).toBeGreaterThanOrEqual(3);
     const liveAtRemoval: number[][] = [];
     const removed = await cleanSandboxes({
-      root: join(killedLauncher.tempDir, 'ff-sandbox'),
-      tempDir: killedLauncher.tempDir,
+      root: join(other.tempDir, 'ff-sandbox'),
+      tempDir: other.tempDir,
       remove: (dir: string) => {
         const live = new Set(realSystem.listProcesses().map((process) => process.pid));
         liveAtRemoval.push([...descendants].filter((pid) => live.has(pid)));

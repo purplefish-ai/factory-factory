@@ -1,16 +1,27 @@
 import { describe, expect, it } from 'vitest';
 import {
   collectGroupProcesses,
-  isSandboxProcessGroup,
+  findProcess,
+  isSameProcess,
   parseProcessTable,
   stopProcessGroup,
 } from './process-group.mjs';
 
-function fakeSystem(survivesTerm: boolean, survivesKill = false) {
-  let processes = [
-    { pid: 10, ppid: 1, pgid: 10, zombie: false },
-    { pid: 12, ppid: 10, pgid: 12, zombie: false },
-  ];
+type Entry = { pid: number; ppid: number; pgid: number; zombie: boolean; startedAt: string };
+
+const T1 = 'Thu Nov 13 10:00:01 2026';
+const T2 = 'Thu Nov 13 10:00:02 2026';
+const LATER = 'Thu Nov 13 11:30:00 2026';
+
+/**
+ * A process table that signals change. `onSignal` decides what a signal does,
+ * so a test can make a pid exit and its number be reused by another process.
+ */
+function fakeSystem(
+  initial: Entry[],
+  onSignal: (processes: Entry[], target: number, signal: string) => Entry[]
+) {
+  let processes = initial;
   let time = 0;
   const events: string[] = [];
   return {
@@ -19,49 +30,66 @@ function fakeSystem(survivesTerm: boolean, survivesKill = false) {
       listProcesses: () => processes,
       signal: (target: number, signal: string) => {
         events.push(`${signal} ${target}`);
-        if (signal === 'SIGKILL' ? !survivesKill : !survivesTerm) {
-          processes = processes.filter((p) => p.pid !== target && -p.pgid !== target);
-        }
+        processes = onSignal(processes, target, signal);
       },
       sleep: (ms: number) => {
         time += ms;
         return Promise.resolve();
       },
       now: () => time,
-      readEnvironment: (pid: number) => (pid === 12 ? 'PATH=/bin\nBASE_DIR=/tmp/sb' : ''),
     },
   };
 }
 
-describe('process groups', () => {
+const server: Entry[] = [
+  { pid: 10, ppid: 1, pgid: 10, zombie: false, startedAt: T1 },
+  { pid: 12, ppid: 10, pgid: 12, zombie: false, startedAt: T2 },
+];
+const exitOn =
+  (signals: string[]) =>
+  (processes: Entry[], target: number, signal: string): Entry[] =>
+    signals.includes(signal)
+      ? processes.filter((p) => p.pid !== target && -p.pgid !== target)
+      : processes;
+
+describe('process identity', () => {
+  it('parses pid, parent, group, state and start time', () => {
+    const table = parseProcessTable(
+      [`   10     1    10 Ss   ${T1}`, `   14    10    10 Z    ${T2}`, 'garbage', ''].join('\n')
+    );
+    expect(table).toEqual([
+      { pid: 10, ppid: 1, pgid: 10, zombie: false, startedAt: T1 },
+      { pid: 14, ppid: 10, pgid: 10, zombie: true, startedAt: T2 },
+    ]);
+    expect(findProcess(table, 10)?.startedAt).toBe(T1);
+    expect(findProcess(table, 14)).toBeNull();
+    expect(isSameProcess(table, { pid: 10, startedAt: T1 })).toBe(true);
+    expect(isSameProcess(table, { pid: 10, startedAt: LATER })).toBe(false);
+  });
+
   it('collects a process group and the descendants that left it', () => {
     const table = parseProcessTable(
       [
-        '  10     1   10 Ss',
-        '  11    10   10 S',
-        '  12    11   12 S', // provider adapter in its own group
-        '  13    12   12 S',
-        '  14    10   10 Z', // exited, not yet reaped
-        '  20     1   20 S',
+        `  10     1   10 Ss ${T1}`,
+        `  11    10   10 S  ${T1}`,
+        `  12    11   12 S  ${T1}`, // provider adapter in its own group
+        `  13    12   12 S  ${T1}`,
+        `  14    10   10 Z  ${T1}`, // exited, not yet reaped
+        `  20     1   20 S  ${T1}`,
       ].join('\n')
     );
     expect([...collectGroupProcesses(table, 10)].sort()).toEqual([10, 11, 12, 13]);
   });
+});
 
-  it('recognises a process group by the BASE_DIR its processes run with', () => {
-    const { system } = fakeSystem(false);
-    expect(isSandboxProcessGroup(10, '/tmp/sb', system)).toBe(true);
-    expect(isSandboxProcessGroup(10, '/tmp/s', system)).toBe(false);
-    expect(isSandboxProcessGroup(20, '/tmp/sb', system)).toBe(false);
-  });
-
+describe('stopping a process group', () => {
   it('stops the group with SIGTERM, then SIGKILL, and waits for every process', async () => {
-    const polite = fakeSystem(false);
-    await stopProcessGroup(10, { system: polite.system });
+    const polite = fakeSystem(server, exitOn(['SIGTERM', 'SIGKILL']));
+    await stopProcessGroup(10, { system: polite.system, leaderStartedAt: T1 });
     expect(polite.events).toEqual(['SIGTERM -10', 'SIGTERM 12']);
 
-    const stubborn = fakeSystem(true);
-    await stopProcessGroup(10, { system: stubborn.system, graceMs: 1000 });
+    const stubborn = fakeSystem(server, exitOn(['SIGKILL']));
+    await stopProcessGroup(10, { system: stubborn.system, leaderStartedAt: T1, graceMs: 1000 });
     expect(stubborn.events).toEqual([
       'SIGTERM -10',
       'SIGTERM 10',
@@ -70,9 +98,58 @@ describe('process groups', () => {
       'SIGKILL 12',
     ]);
 
-    const unkillable = fakeSystem(true, true);
+    const unkillable = fakeSystem(server, exitOn([]));
     await expect(
-      stopProcessGroup(10, { system: unkillable.system, graceMs: 1000, killGraceMs: 1000 })
+      stopProcessGroup(10, {
+        system: unkillable.system,
+        leaderStartedAt: T1,
+        graceMs: 1000,
+        killGraceMs: 1000,
+      })
     ).rejects.toThrow('Processes still running after SIGKILL: 10, 12');
+  });
+
+  it('leaves a group alone when its leader number now belongs to another process', async () => {
+    // The recorded leader started at T1; pid 10 is now a different process.
+    const reused = fakeSystem(
+      [{ pid: 10, ppid: 1, pgid: 10, zombie: false, startedAt: LATER }],
+      exitOn(['SIGTERM', 'SIGKILL'])
+    );
+    await expect(
+      stopProcessGroup(10, { system: reused.system, leaderStartedAt: T1 })
+    ).resolves.toEqual({ owned: false });
+    expect(reused.events).toEqual([]);
+  });
+
+  it('never escalates to a process that took a tracked pid after it exited', async () => {
+    // SIGTERM ends the adapter (12) but not the leader; while the leader
+    // lingers, pid 12 is reused by an unrelated process outside the group.
+    const system = fakeSystem(server, (processes, target, signal) => {
+      if (signal === 'SIGTERM' && target === 12) {
+        return [
+          ...processes.filter((p) => p.pid !== 12),
+          { pid: 12, ppid: 1, pgid: 12, zombie: false, startedAt: LATER },
+        ];
+      }
+      return signal === 'SIGKILL' ? processes.filter((p) => p.pgid !== 10) : processes;
+    });
+    await stopProcessGroup(10, { system: system.system, leaderStartedAt: T1, graceMs: 1000 });
+    expect(system.events).toEqual(['SIGTERM -10', 'SIGTERM 10', 'SIGTERM 12', 'SIGKILL -10']);
+    expect(system.system.listProcesses()).toEqual([
+      { pid: 12, ppid: 1, pgid: 12, zombie: false, startedAt: LATER },
+    ]);
+  });
+
+  it('treats a reused number as gone when waiting for exit', async () => {
+    // The whole group exits on SIGTERM and 12 is reused at once: nothing is left to wait for.
+    const system = fakeSystem(server, (processes, target, signal) =>
+      signal === 'SIGTERM' && target === -10
+        ? [{ pid: 12, ppid: 1, pgid: 99, zombie: false, startedAt: LATER }]
+        : processes
+    );
+    await expect(
+      stopProcessGroup(10, { system: system.system, leaderStartedAt: T1, graceMs: 1000 })
+    ).resolves.toEqual({ owned: true });
+    expect(system.events).toEqual(['SIGTERM -10']);
   });
 });

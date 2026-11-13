@@ -1,158 +1,218 @@
-// Starts one sandbox: prepares its directory, runs `ff serve --dev` in its own
-// process group, seeds it, and tears everything down on a signal or server exit.
+// Starts one sandbox: creates and records its directory, starts the egress
+// recorder, runs `ff serve --dev` in its own process group, seeds it, and tears
+// everything down on a signal, server exit, owner exit or time-out.
 import { spawn } from 'node:child_process';
-import {
-  appendFileSync,
-  existsSync,
-  mkdirSync,
-  mkdtempSync,
-  readFileSync,
-  realpathSync,
-  rmSync,
-} from 'node:fs';
-import { join } from 'node:path';
+import { mkdirSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { startEgressRecorder } from './egress.mjs';
 import { buildServerEnv } from './env.mjs';
-import { assertInsideTempDir, REPO_ROOT, sandboxRoot } from './paths.mjs';
-import { findFreePort, parseBackendPort, parsePortFile } from './ports.mjs';
+import { assertInsideTempDir, sandboxPaths, sandboxRoot } from './paths.mjs';
+import { findFreePort } from './ports.mjs';
 import { checkScenario, createSeedRepository, prepareSandbox } from './prepare.mjs';
-import { realSystem, stopProcessGroup } from './process-group.mjs';
-import { writeSandboxRecord } from './record.mjs';
+import { findProcess, ownIdentity, realSystem } from './process-group.mjs';
+import { createSandboxDirectory, readSandboxRecord, writeSandboxRecord } from './record.mjs';
 import { seed } from './seed.mjs';
+import { startServer, stopServer, tail, waitForServer } from './server.mjs';
+import { startWatchdog } from './watchdog.mjs';
 
-const STARTUP_TIMEOUT_MS = 180_000;
+const SIGNAL_EXIT_CODES = { SIGINT: 130, SIGTERM: 143, SIGHUP: 129 };
+export const MAX_PORT_ATTEMPTS = 3;
 
-async function waitForReady(paths, getBackendPort, hasExited) {
-  const deadline = Date.now() + STARTUP_TIMEOUT_MS;
-  while (Date.now() < deadline) {
-    if (hasExited()) {
-      throw new Error('The server exited during startup.');
-    }
-    const backendPort = getBackendPort();
-    const frontendPort = existsSync(paths.portFile)
-      ? parsePortFile(readFileSync(paths.portFile, 'utf8'))
-      : null;
-    if (backendPort && frontendPort) {
-      return { backendPort, frontendPort };
-    }
-    await realSystem.sleep(250);
-  }
-  throw new Error(`The server was not ready within ${STARTUP_TIMEOUT_MS / 1000} seconds.`);
-}
+const message = (error) => (error instanceof Error ? error.message : String(error));
 
-function tail(file) {
-  try {
-    return readFileSync(file, 'utf8').split('\n').slice(-40).join('\n');
-  } catch {
-    return '';
-  }
-}
+/**
+ * @typedef {object} LaunchDependencies
+ * @property {string} [root]
+ * @property {string} [tempDir]
+ * @property {NodeJS.ProcessEnv} [parentEnv]
+ * @property {import('./process-group.mjs').ProcessSystem} [system]
+ * @property {(command: string, args: string[], options: object) => any} [spawnImpl]
+ * @property {() => Promise<number>} [findPort]
+ * @property {(signal: string, handler: () => void) => unknown} [onSignal]
+ * @property {(text: string) => unknown} [log]
+ * @property {(text: string) => unknown} [print]
+ * @property {number} [startupTimeoutMs]
+ */
 
-export async function run({ scenario, keep }) {
-  const log = (message) => process.stderr.write(`dev-sandbox: ${message}\n`);
-  const root = sandboxRoot();
-  mkdirSync(root, { recursive: true });
-  assertInsideTempDir(root);
-  const baseDir = realpathSync(mkdtempSync(join(root, 'sb-')));
-  assertInsideTempDir(baseDir);
-  const env = buildServerEnv({ parentEnv: process.env, baseDir, scenario });
-  let paths;
-  let frontendPort;
-  let backendPort;
-  try {
-    paths = prepareSandbox(baseDir);
-    checkScenario(env.CODEX_PATH, env);
-    createSeedRepository(paths, env);
-    [frontendPort, backendPort] = [await findFreePort(), await findFreePort()];
-  } catch (error) {
-    rmSync(baseDir, { recursive: true, force: true });
-    throw error;
-  }
-  const child = spawn(
-    process.execPath,
-    [
-      join(REPO_ROOT, 'src', 'cli', 'bootstrap.mjs'),
-      'serve',
-      '--dev',
-      '--no-open',
-      '--port',
-      String(frontendPort),
-      '--backend-port',
-      String(backendPort),
-    ],
-    // cwd is the sandbox, so `ff serve` writes its port file there and loads no .env.
-    { cwd: baseDir, env, detached: true, stdio: ['ignore', 'pipe', 'pipe'] }
-  );
-  const pgid = child.pid;
-  let exited = false;
-  // The backend reports its port once; keep only enough output to find that line.
-  let pendingOutput = '';
-  let reportedBackendPort = null;
-  child.stdout.on('data', (chunk) => {
-    const output = pendingOutput + chunk.toString();
-    reportedBackendPort ??= parseBackendPort(output);
-    pendingOutput = output.slice(output.lastIndexOf('\n') + 1).slice(-4096);
-    appendFileSync(paths.serverOutput, chunk);
+/**
+ * Runs one sandbox until it stops; resolves with the launcher's exit code.
+ * Every effect on the outside world is injectable for tests.
+ *
+ * @param {{ scenario: string, keep: boolean, ownerPid?: number | null, ttlMinutes?: number }} options
+ * @param {LaunchDependencies} [dependencies]
+ * @returns {Promise<number>}
+ */
+export async function run(
+  { scenario, keep, ownerPid = null, ttlMinutes = 0 },
+  {
+    root = sandboxRoot(),
+    tempDir = tmpdir(),
+    parentEnv = process.env,
+    system = realSystem,
+    spawnImpl = spawn,
+    findPort = findFreePort,
+    onSignal = (signal, handler) => process.on(signal, handler),
+    log = (text) => process.stderr.write(`dev-sandbox: ${text}\n`),
+    print = (text) => process.stdout.write(text),
+    startupTimeoutMs,
+  } = {}
+) {
+  const state = { baseDir: null, recorder: null, server: null, stopping: null };
+  let stopWatchdog = () => undefined;
+  let resolveStopped;
+  const stopped = new Promise((resolve) => {
+    resolveStopped = resolve;
   });
-  child.stderr.on('data', (chunk) => appendFileSync(paths.serverOutput, chunk));
-
-  const record = {
-    baseDir,
-    frontendUrl: null,
-    backendUrl: null,
-    pid: process.pid,
-    pgid,
-    projectId: null,
-    repoPath: paths.repoPath,
-    scenario,
-  };
-  writeSandboxRecord(paths.sandboxJson, record);
-
-  let stopping = null;
   const stop = (reason, exitCode) => {
-    stopping ??= (async () => {
+    state.stopping ??= (async () => {
       log(`stopping (${reason})`);
+      stopWatchdog();
+      let code = exitCode;
       try {
-        await stopProcessGroup(pgid);
-        if (keep) {
-          log(`kept ${baseDir}`);
-        } else {
-          assertInsideTempDir(baseDir);
-          rmSync(baseDir, { recursive: true, force: true });
+        await stopServer(state.server, system);
+        await state.recorder?.close();
+        if (state.baseDir && keep) {
+          log(`kept ${state.baseDir}`);
+        } else if (state.baseDir) {
+          assertInsideTempDir(state.baseDir, tempDir);
+          rmSync(state.baseDir, { recursive: true, force: true });
         }
       } catch (error) {
-        log(error instanceof Error ? error.message : String(error));
-        exitCode = 1;
+        log(message(error));
+        code = 1;
       }
-      process.exit(exitCode);
+      resolveStopped(code);
+      return code;
     })();
-    return stopping;
+    return state.stopping;
   };
-  process.on('SIGINT', () => void stop('SIGINT', 130));
-  process.on('SIGTERM', () => void stop('SIGTERM', 143));
-  process.on('SIGHUP', () => void stop('SIGHUP', 129));
-  child.once('exit', (code, signal) => {
-    exited = true;
-    void stop(`server exited with ${signal ?? `code ${code}`}`, 1);
-  });
-
+  // Before any setup, so a signal at any point still cleans up.
+  for (const [signal, code] of Object.entries(SIGNAL_EXIT_CODES)) {
+    onSignal(signal, () => void stop(signal, code));
+  }
   try {
-    const ports = await waitForReady(
-      paths,
-      () => reportedBackendPort,
-      () => exited
-    );
-    record.backendUrl = `http://localhost:${ports.backendPort}`;
-    record.frontendUrl = `http://localhost:${ports.frontendPort}`;
-    record.projectId = await seed(record.backendUrl, paths.repoPath);
+    await setUp();
   } catch (error) {
-    log(`startup failed: ${error instanceof Error ? error.message : String(error)}`);
-    log(`server output:\n${tail(paths.serverOutput)}`);
-    await stop('startup failed', 1);
-    return;
+    if (state.stopping) {
+      return state.stopping;
+    }
+    if (!state.baseDir) {
+      throw error;
+    }
+    log(`startup failed: ${message(error)}`);
+    log(`server output:\n${tail(sandboxPaths(state.baseDir).serverOutput)}`);
+    return stop('startup failed', 1);
   }
-  if (stopping) {
-    return;
+  // Ready, or stopping; either way the sandbox lives until stop() finishes.
+  return stopped;
+
+  async function setUp() {
+    const processes = system.listProcesses();
+    const owner = ownerPid === null ? null : findProcess(processes, ownerPid);
+    if (ownerPid !== null && !owner) {
+      throw new Error(`Owner process ${ownerPid} is not running.`);
+    }
+    const launcher = ownIdentity(system);
+    if (state.stopping) {
+      return;
+    }
+    mkdirSync(root, { recursive: true });
+    assertInsideTempDir(root, tempDir);
+    state.baseDir = createSandboxDirectory(root, launcher, scenario);
+    assertInsideTempDir(state.baseDir, tempDir);
+    const paths = sandboxPaths(state.baseDir);
+    const record = readSandboxRecord(paths.sandboxJson);
+    const save = () => writeSandboxRecord(paths.sandboxJson, record);
+    stopWatchdog = startWatchdog({
+      owner: owner && { pid: owner.pid, startedAt: owner.startedAt },
+      ttlMinutes,
+      startedAtMs: system.now(),
+      system,
+      onExpire: (reason) => void stop(reason, 0),
+    });
+
+    prepareSandbox(state.baseDir);
+    state.recorder = await startEgressRecorder({ logFile: paths.egressLog });
+    record.egressPort = state.recorder.port;
+    save();
+    if (state.stopping) {
+      return;
+    }
+    const env = buildServerEnv({
+      parentEnv,
+      baseDir: state.baseDir,
+      scenario,
+      egressPort: state.recorder.port,
+    });
+    checkScenario(env.CODEX_PATH, env);
+    createSeedRepository(paths, env);
+
+    let lastMismatch = '';
+    for (let attempt = 1; attempt <= MAX_PORT_ATTEMPTS; attempt += 1) {
+      const frontend = await findPort();
+      if (state.stopping) {
+        return;
+      }
+      const backend = await findPort();
+      if (state.stopping) {
+        return;
+      }
+      if (backend === frontend) {
+        throw new Error(`Port discovery returned ${frontend} twice.`);
+      }
+      rmSync(paths.portFile, { force: true });
+      const server = startServer({
+        paths,
+        env,
+        ports: { frontend, backend },
+        spawnImpl,
+        onExit: (code, signal) => {
+          if (!server.retiring) {
+            void stop(`server exited with ${signal ?? `code ${code}`}`, 1);
+          }
+        },
+        onError: (error) => void stop(`the server could not be started: ${message(error)}`, 1),
+      });
+      const leader = server.child.pid
+        ? findProcess(system.listProcesses(), server.child.pid)
+        : null;
+      state.server = leader ? { pgid: leader.pid, startedAt: leader.startedAt } : null;
+      record.pgid = state.server?.pgid ?? null;
+      record.pgidStartedAt = state.server?.startedAt ?? null;
+      save();
+      const result = await waitForServer({
+        paths,
+        server,
+        requested: { frontend, backend },
+        system,
+        timeoutMs: startupTimeoutMs,
+      });
+      if (state.stopping) {
+        return;
+      }
+      if (result.status === 'ready') {
+        record.backendUrl = `http://localhost:${backend}`;
+        record.frontendUrl = `http://localhost:${frontend}`;
+        record.projectId = await seed(record.backendUrl, paths.repoPath);
+        if (state.stopping) {
+          return;
+        }
+        save();
+        print(`SANDBOX_READY ${paths.sandboxJson}\n`);
+        return;
+      }
+      // Another process took a port between probing and binding: discard this attempt.
+      lastMismatch = result.message;
+      log(`attempt ${attempt}: ${result.message}; retrying with fresh ports`);
+      server.retiring = true;
+      await stopServer(state.server, system);
+      state.server = null;
+      record.pgid = null;
+      record.pgidStartedAt = null;
+      save();
+    }
+    throw new Error(
+      `The server did not use the ports it was given in ${MAX_PORT_ATTEMPTS} attempts (last: ${lastMismatch}).`
+    );
   }
-  writeSandboxRecord(paths.sandboxJson, record);
-  process.stdout.write(`SANDBOX_READY ${paths.sandboxJson}\n`);
 }

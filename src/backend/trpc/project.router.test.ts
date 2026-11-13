@@ -12,6 +12,7 @@ const mockProjectManagementService = vi.hoisted(() => ({
   findById: vi.fn(),
   findBySlug: vi.fn(),
   validateRepoPath: vi.fn(),
+  checkProjectLocation: vi.fn((): { valid: boolean; error?: string } => ({ valid: true })),
   create: vi.fn(),
   update: vi.fn(),
   updateIfStartupUnchanged: vi.fn(),
@@ -865,6 +866,26 @@ describe('projectRouter', () => {
       },
       { worktreeBaseDir: '/tmp/worktrees' }
     );
+  });
+
+  it('refuses a clone destination outside the project root before cloning', async () => {
+    mockParseGithubUrl.mockReturnValue({ owner: 'org', repo: 'new-repo' });
+    mockGetClonePath.mockResolvedValueOnce({ path: '/repos/org/new-repo', status: 'not_exists' });
+    mockProjectManagementService.checkProjectLocation.mockReturnValueOnce({
+      valid: false,
+      error: 'Path /repos/org/new-repo is outside the project root /sandbox',
+    });
+
+    await expect(
+      createCaller().createFromGithub({ githubUrl: 'https://github.com/org/new-repo' })
+    ).rejects.toThrow(
+      'Invalid repository path: Path /repos/org/new-repo is outside the project root /sandbox'
+    );
+    expect(mockProjectManagementService.checkProjectLocation).toHaveBeenCalledWith(
+      '/repos/org/new-repo'
+    );
+    expect(mockCloneRepo).not.toHaveBeenCalled();
+    expect(mockProjectManagementService.create).not.toHaveBeenCalled();
   });
 
   it('checks GitHub auth and handles GitHub clone flow branches', async () => {

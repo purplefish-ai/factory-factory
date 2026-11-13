@@ -1,9 +1,11 @@
 import path from 'node:path';
+import { configService } from '@/backend/services/config.service';
 import { projectAccessor } from '@/backend/services/workspace/resources/project.accessor';
 import {
   inspectProjectRepository,
   validateRepositoryPath,
 } from '@/backend/services/workspace/service/worktree/project-repository-inspector';
+import { checkProjectLocation } from '@/backend/services/workspace/service/worktree/project-root';
 import type { IssueProvider } from '@/shared/core/enums';
 import type { IssueTrackerConfig } from '@/shared/schemas/issue-tracker-config.schema';
 import type { Project } from '@prisma-gen/client';
@@ -25,8 +27,14 @@ class ProjectManagementService {
     return projectAccessor.findBySlug(slug);
   }
 
+  /** Rejects a path outside `FF_PROJECT_ROOT` when it is set; checked before cloning too. */
+  checkProjectLocation(repoPath: string): { valid: boolean; error?: string } {
+    return checkProjectLocation(repoPath, configService.getProjectRoot());
+  }
+
   validateRepoPath(repoPath: string): Promise<{ valid: boolean; error?: string }> {
-    return validateRepositoryPath(repoPath);
+    const location = this.checkProjectLocation(repoPath);
+    return location.valid ? validateRepositoryPath(repoPath) : Promise.resolve(location);
   }
 
   async create(

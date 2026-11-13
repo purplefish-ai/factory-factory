@@ -108,7 +108,7 @@ export interface PRDiscoveryLimits {
  * Application and provider release checks against the npm registry
  */
 export interface ReleaseCheckConfig {
-  /** `FF_UPDATE_CHECKS_ENABLED=false` turns every registry request off. */
+  /** `FF_UPDATE_CHECKS_ENABLED=false` (or `0`) turns every registry request off. */
   enabled: boolean;
   /** `FF_NPM_REGISTRY_URL`, without a trailing slash. */
   registryUrl: string;
@@ -383,6 +383,11 @@ function loadReleaseCheckConfig(): ReleaseCheckConfig {
   return { enabled: env.FF_UPDATE_CHECKS_ENABLED, registryUrl: env.FF_NPM_REGISTRY_URL };
 }
 
+/** `FF_PROJECT_ROOT`: when set, new projects must live inside it (the dev sandbox sets it). */
+function loadProjectRoot(): string | null {
+  return ConfigEnvSchema.parse(process.env).FF_PROJECT_ROOT ?? null;
+}
+
 /** Event-agent limits are separate from the public application configuration shape. */
 function loadAgentRuntimeLimits() {
   const env = ConfigEnvSchema.parse(process.env);
@@ -427,6 +432,7 @@ class ConfigService {
   private config: SystemConfig;
   private agentRuntimeLimits = loadAgentRuntimeLimits();
   private releaseCheck = loadReleaseCheckConfig();
+  private projectRoot = loadProjectRoot();
 
   constructor() {
     this.config = loadSystemConfig();
@@ -694,6 +700,11 @@ class ConfigService {
     return { ...this.releaseCheck };
   }
 
+  /** The directory new projects must live in, or null when they may live anywhere. */
+  getProjectRoot(): string | null {
+    return this.projectRoot;
+  }
+
   /** The `ff tailscale` origin used to share loopback ports, if any. */
   getTailscaleConfig(): TailscaleConfig | null {
     return this.config.tailscale;
@@ -753,6 +764,7 @@ class ConfigService {
     this.config = loadSystemConfig();
     this.agentRuntimeLimits = loadAgentRuntimeLimits();
     this.releaseCheck = loadReleaseCheckConfig();
+    this.projectRoot = loadProjectRoot();
     this.validateConfig();
     logger.info('Configuration reloaded');
   }

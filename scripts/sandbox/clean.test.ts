@@ -1,41 +1,111 @@
-import { existsSync, mkdirSync, symlinkSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
-import { selectSandboxesToClean } from './clean.mjs';
-import { realSystem } from './process-group.mjs';
-import { readSandboxRecord } from './record.mjs';
+import { cleanSandboxes, selectSandboxesToClean } from './clean.mjs';
+import { findProcess, realSystem } from './process-group.mjs';
+import { createSandboxDirectory, readSandboxRecord } from './record.mjs';
 import { launch, launcherEnv, spawnSleeper, temporaryDirectories } from './test-support';
 
 const temporary = temporaryDirectories();
 afterAll(() => temporary.cleanup());
 
+const T1 = 'Thu Nov 13 10:00:01 2026';
+const T2 = 'Thu Nov 13 10:00:02 2026';
+const LATER = 'Thu Nov 13 11:30:00 2026';
+
+function recordFor(baseDir: string, fields: Record<string, unknown> = {}) {
+  return JSON.stringify({
+    baseDir,
+    frontendUrl: null,
+    backendUrl: null,
+    pid: 100,
+    pidStartedAt: T1,
+    pgid: 4242,
+    pgidStartedAt: T2,
+    egressPort: null,
+    projectId: null,
+    repoPath: join(baseDir, 'repo'),
+    scenario: 'echo',
+    ...fields,
+  });
+}
+
+type Entry = { pid: number; ppid: number; pgid: number; zombie: boolean; startedAt: string };
+function staticSystem(processes: Entry[]) {
+  const events: string[] = [];
+  return {
+    events,
+    system: {
+      listProcesses: () => processes,
+      signal: (target: number, signal: string) => {
+        events.push(`${signal} ${target}`);
+      },
+      sleep: () => Promise.resolve(),
+      now: () => 0,
+    },
+  };
+}
+
 describe('--clean selection', () => {
   it('selects only stale sandboxes that name their own directory', () => {
     const root = join(temporary.create('ffsb-'), 'ff-sandbox');
-    const record = (baseDir: string, pid: number) =>
-      JSON.stringify({
-        baseDir,
-        frontendUrl: null,
-        backendUrl: null,
-        pid,
-        pgid: 4242,
-        projectId: null,
-        repoPath: join(baseDir, 'repo'),
-        scenario: 'echo',
-      });
     const dirs = ['stale', 'running', 'other', 'none'].map((name) => join(root, name));
     for (const dir of dirs) {
       mkdirSync(dir, { recursive: true });
     }
     const [stale, running, other] = dirs as [string, string, string, string];
-    writeFileSync(join(stale, 'sandbox.json'), record(stale, 100));
-    writeFileSync(join(running, 'sandbox.json'), record(running, 200));
-    writeFileSync(join(other, 'sandbox.json'), record(stale, 100));
+    writeFileSync(join(stale, 'sandbox.json'), recordFor(stale, { pid: 100 }));
+    writeFileSync(join(running, 'sandbox.json'), recordFor(running, { pid: 200 }));
+    writeFileSync(join(other, 'sandbox.json'), recordFor(stale, { pid: 100 }));
     symlinkSync(stale, join(root, 'link'));
-    const selected = selectSandboxesToClean(root, (pid: number) => pid === 200);
+    const selected = selectSandboxesToClean(root, (record: { pid: number }) => record.pid === 200);
     expect(selected.map((entry: { dir: string }) => entry.dir)).toEqual([stale]);
     expect(readSandboxRecord(join(stale, 'sandbox.json'))?.pgid).toBe(4242);
     expect(selectSandboxesToClean(join(root, 'missing'), () => false)).toEqual([]);
+  });
+
+  it('treats a launcher pid now held by another process as not running', async () => {
+    const root = join(temporary.create('ffsb-'), 'ff-sandbox');
+    const reused = join(root, 'sb-reused');
+    const live = join(root, 'sb-live');
+    mkdirSync(reused, { recursive: true });
+    mkdirSync(live, { recursive: true });
+    writeFileSync(
+      join(reused, 'sandbox.json'),
+      recordFor(reused, { pid: 100, pgid: null, pgidStartedAt: null })
+    );
+    writeFileSync(
+      join(live, 'sandbox.json'),
+      recordFor(live, { pid: 101, pgid: null, pgidStartedAt: null })
+    );
+    // pid 100 is someone else now; pid 101 is the same launcher.
+    const { system } = staticSystem([
+      { pid: 100, ppid: 1, pgid: 100, zombie: false, startedAt: LATER },
+      { pid: 101, ppid: 1, pgid: 101, zombie: false, startedAt: T1 },
+    ]);
+    const removed: string[] = [];
+    await cleanSandboxes({
+      root,
+      tempDir: join(root, '..'),
+      system,
+      remove: (dir: string) => removed.push(dir),
+    });
+    expect(removed).toEqual([reused]);
+  });
+
+  it('removes a sandbox whose launcher died before it started a server', async () => {
+    const tempDir = temporary.create('ffsb-');
+    const root = join(tempDir, 'ff-sandbox');
+    mkdirSync(root);
+    // The provisional record a launcher writes straight after mkdtemp.
+    const dir = createSandboxDirectory(root, { pid: 100, startedAt: T1 }, 'echo');
+    const record = readSandboxRecord(join(dir, 'sandbox.json'));
+    expect(record).toMatchObject({ baseDir: dir, pid: 100, pgid: null, pgidStartedAt: null });
+    const { system, events } = staticSystem([]);
+    const removed = await cleanSandboxes({ root, tempDir, system });
+    expect(removed).toEqual([dir]);
+    expect(events).toEqual([]);
+    expect(existsSync(dir)).toBe(false);
   });
 });
 
@@ -46,6 +116,7 @@ describe('--clean on real directories', () => {
     const sleeper = spawnSleeper();
     try {
       const pgid = sleeper.pid ?? 0;
+      const sleeperStart = findProcess(realSystem.listProcesses(), pgid)?.startedAt;
       const noRecord = join(root, 'sb-none');
       const elsewhere = join(root, 'sb-elsewhere');
       const broken = join(root, 'sb-broken');
@@ -53,10 +124,9 @@ describe('--clean on real directories', () => {
         mkdirSync(dir, { recursive: true });
       }
       // A dead launcher, naming another directory and a live process group.
-      const record = { frontendUrl: null, backendUrl: null, projectId: null, scenario: 'echo' };
       writeFileSync(
         join(elsewhere, 'sandbox.json'),
-        JSON.stringify({ ...record, baseDir: noRecord, pid: 999_999, pgid, repoPath: '' })
+        recordFor(noRecord, { pid: pgid, pidStartedAt: T1, pgid, pgidStartedAt: sleeperStart })
       );
       writeFileSync(join(broken, 'sandbox.json'), '{');
       const clean = launch(['--clean'], launcherEnv(tempDir));
@@ -76,30 +146,40 @@ describe('--clean on real directories', () => {
     const tempDir = temporary.create('ffsb-');
     const dir = join(tempDir, 'ff-sandbox', 'sb-stale');
     mkdirSync(dir, { recursive: true });
-    // An unrelated process group that happens to carry the recorded ID.
+    // An unrelated process group that happens to carry the recorded ID; the
+    // recorded leader started at another time.
     const unrelated = spawnSleeper();
     try {
       writeFileSync(
         join(dir, 'sandbox.json'),
-        JSON.stringify({
-          baseDir: dir,
-          frontendUrl: null,
-          backendUrl: null,
-          pid: 999_999,
+        recordFor(dir, {
+          pid: unrelated.pid,
+          pidStartedAt: T1,
           pgid: unrelated.pid,
-          projectId: null,
-          repoPath: join(dir, 'repo'),
-          scenario: 'echo',
+          pgidStartedAt: T2,
         })
       );
       const clean = launch(['--clean'], launcherEnv(tempDir));
       expect(await clean.exited).toBe(0);
       expect(existsSync(dir)).toBe(false);
-      const live = new Set(realSystem.listProcesses().map((process) => process.pid));
-      expect(live.has(unrelated.pid ?? 0)).toBe(true);
+      expect(findProcess(realSystem.listProcesses(), unrelated.pid ?? 0)).not.toBeNull();
       expect(clean.output()).toContain('no longer belongs');
     } finally {
       unrelated.kill('SIGKILL');
     }
   }, 30_000);
+});
+
+describe('sandbox.json', () => {
+  it('rejects a record without the identity fields', () => {
+    const dir = temporary.create('ffsb-');
+    const file = join(dir, 'sandbox.json');
+    writeFileSync(file, recordFor(dir, { pidStartedAt: undefined }));
+    expect(readSandboxRecord(file)).toBeNull();
+    writeFileSync(file, recordFor(dir, { pgid: 7, pgidStartedAt: null }));
+    expect(readSandboxRecord(file)).toBeNull();
+    writeFileSync(file, recordFor(dir));
+    expect(JSON.parse(readFileSync(file, 'utf8')).pgid).toBe(4242);
+    expect(readSandboxRecord(file)?.pidStartedAt).toBe(T1);
+  });
 });

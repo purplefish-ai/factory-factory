@@ -13,6 +13,7 @@ const FAKE_CODEX = join(
   'fake-codex-app-server.mjs'
 );
 const GH_SHIM = join(REPO_ROOT, 'scripts', 'sandbox', 'gh-shim.mjs');
+const SSH_SHIM = join(REPO_ROOT, 'scripts', 'sandbox', 'ssh-shim.mjs');
 
 function installExecutable(source, target) {
   copyFileSync(source, target);
@@ -31,8 +32,10 @@ export function prepareSandbox(baseDir) {
     mkdirSync(dir, { recursive: true });
   }
   installExecutable(GH_SHIM, paths.gh);
+  installExecutable(SSH_SHIM, paths.ssh);
   installExecutable(FAKE_CODEX, paths.codex);
   writeFileSync(paths.ghLog, '');
+  writeFileSync(paths.sshLog, '');
   writeFileSync(paths.dotenv, '');
   // `ff serve` runs in the sandbox, so its port file and .env lookup stay out
   // of the checkout. bootstrap.mjs loads tsx and its path aliases from the

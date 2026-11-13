@@ -501,8 +501,10 @@ describe('release check configuration', () => {
   it.each([
     ['false', false],
     ['true', true],
-    ['0', true],
+    ['0', false],
+    ['1', true],
     ['', true],
+    ['no', true],
   ])('reads FF_UPDATE_CHECKS_ENABLED=%j as %s', (value, enabled) => {
     process.env.FF_UPDATE_CHECKS_ENABLED = value;
     configService.reload();
@@ -524,5 +526,25 @@ describe('release check configuration', () => {
     process.env.FF_NPM_REGISTRY_URL = value;
     configService.reload();
     expect(configService.getReleaseCheckConfig().registryUrl).toBe('https://registry.npmjs.org');
+  });
+});
+
+describe('project root configuration', () => {
+  afterEach(() => {
+    process.env = { ...ORIGINAL_ENV };
+    configService.reload();
+  });
+  it('allows projects anywhere by default', () => {
+    Reflect.deleteProperty(process.env, 'FF_PROJECT_ROOT');
+    configService.reload();
+    expect(configService.getProjectRoot()).toBeNull();
+    process.env.FF_PROJECT_ROOT = '   ';
+    configService.reload();
+    expect(configService.getProjectRoot()).toBeNull();
+  });
+  it('reads the root that projects must live in', () => {
+    process.env.FF_PROJECT_ROOT = ' /tmp/ff-sandbox/sb-1 ';
+    configService.reload();
+    expect(configService.getProjectRoot()).toBe('/tmp/ff-sandbox/sb-1');
   });
 });
