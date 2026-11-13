@@ -445,19 +445,49 @@ describe('location conventions', () => {
 
   const empty = parseUnusedCodeBaseline({ version: 1, production: {}, exports: {} });
 
-  it('accepts conventional candidates without baseline entries', () => {
-    const result = evaluateInventory(
-      undefined,
-      empty,
-      ['src/shared/pr-monitoring.test-helpers.ts', 'src/test-utils/deferred.ts'],
-      [
-        'src/backend/services/session/index.ts::exports::fromWildcard',
-        'src/components/ui/card.tsx::exports::CardAction',
-      ],
-      readSource
-    );
+  const reviewed = z.object({
+    review: z.object({ disposition: z.string(), reason: z.string() }).nullable(),
+    convention: z.string().nullable(),
+  });
+  const reportSchema = z.object({
+    production: z.array(reviewed.extend({ file: z.string() })),
+    exports: z.array(reviewed.extend({ key: z.string() })),
+  });
+  const reviewFor = (name: string) =>
+    unusedCodeConventions.find((convention) => convention.name === name)?.review;
+
+  it('accepts conventional candidates without baseline entries and reports why', () => {
+    const production = ['src/shared/pr-monitoring.test-helpers.ts', 'src/test-utils/deferred.ts'];
+    const exports = [
+      'src/backend/services/session/index.ts::exports::fromWildcard',
+      'src/components/ui/card.tsx::exports::CardAction',
+    ];
+    const result = evaluateInventory(undefined, empty, production, exports, readSource);
     expect(result.output).toContain('2 production files (2 by convention)');
     expect(result.output).toContain('2 export visibility candidates (2 by convention)');
+    const report = reportSchema.parse(
+      JSON.parse(evaluateInventory('--report', empty, production, exports, readSource).output)
+    );
+    expect(report.production).toEqual([
+      {
+        file: production[0],
+        convention: 'test-support file name',
+        review: reviewFor('test-support file name'),
+      },
+      {
+        file: production[1],
+        convention: 'test-support directory',
+        review: reviewFor('test-support directory'),
+      },
+    ]);
+    expect(report.exports).toEqual([
+      {
+        key: exports[0],
+        convention: 'module barrel re-export',
+        review: reviewFor('module barrel re-export'),
+      },
+      { key: exports[1], convention: 'shadcn component', review: reviewFor('shadcn component') },
+    ]);
   });
 
   it('still fails a genuinely unused production file outside the conventions', () => {
@@ -511,19 +541,17 @@ describe('location conventions', () => {
     expect(() => evaluateInventory(undefined, baseline, production, exports, readSource)).toThrow(
       /^Redundant production entry: src\/test-utils\/deferred\.ts \(covered by the 'test-support directory' convention\)\nReview/u
     );
-    const report = z
-      .object({
-        exports: z.array(
-          z.object({
-            key: z.string(),
-            review: z.object({ disposition: z.string(), reason: z.string() }),
-            convention: z.string().nullable(),
-          })
-        ),
-      })
-      .parse(
-        JSON.parse(evaluateInventory('--report', baseline, production, exports, readSource).output)
-      );
+    const report = reportSchema.parse(
+      JSON.parse(evaluateInventory('--report', baseline, production, exports, readSource).output)
+    );
+    // The redundant entry still names its convention; the override does not.
+    expect(report.production).toEqual([
+      {
+        file: production[0],
+        review: baseline.production[production[0] ?? ''],
+        convention: 'test-support directory',
+      },
+    ]);
     expect(report.exports).toEqual([
       { key: exports[0], review: baseline.exports[exports[0] ?? ''], convention: null },
     ]);

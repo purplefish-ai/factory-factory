@@ -106,9 +106,9 @@ wins:
 
 - **test-support directory** (both analyses, `test-support`): a file in a
   `testing/`, `test-utils/` or `fixtures/` directory.
-- **test-support file name** (both analyses, `test-support`): a file named
-  `*.test-helpers.*`, `*.test-support.*`, `*.test-harness.*`,
-  `*.story-fixtures.*` or `*.fixture.*`.
+- **test-support file name** (both analyses, `test-support`): a JavaScript or
+  TypeScript file named `*.test-helpers.*`, `*.test-support.*`,
+  `*.test-harness.*`, `*.story-fixtures.*` or `*.fixture.*`.
 - **module barrel re-export** (exports only, `maintained-api`): a symbol that an
   `index.ts` or `index.tsx` under `src/` re-exports but does not declare.
 - **shadcn component** (exports only, `maintained-api`): an export of a
@@ -132,8 +132,9 @@ convention covers and leaves implementation keys as they were.
 An explicit entry whose disposition differs from the convention's overrides it,
 for example a `review-required` barrel export. An explicit entry with the
 convention's own disposition is redundant; the check rejects it and the update
-command prunes it. Production analysis has no barrel or component convention, so
-an unused barrel or component file is still a new candidate.
+command prunes it; the report still names the convention for such an entry.
+Production analysis has no barrel or component convention, so an unused barrel
+or component file outside the test-support locations is still a new candidate.
 
 The report command exits successfully for candidate debt; analyzer failures,
 invalid JSON and unexpected report/baseline schemas still fail. The normal check

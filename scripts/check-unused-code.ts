@@ -387,9 +387,14 @@ export function evaluateInventory(
     redundant: redundantEntries(baseline[section], derived[section]),
   });
   const drift = { production: driftFor('production'), exports: driftFor('exports') };
+  // An override hides its convention; a redundant entry still names it.
   const reviewOf = (section: Mode, key: string) => {
     const explicit = baseline[section][key];
-    const convention = explicit ? undefined : derived[section].get(key);
+    const derivedConvention = derived[section].get(key);
+    const convention =
+      explicit && explicit.disposition !== derivedConvention?.review.disposition
+        ? undefined
+        : derivedConvention;
     return { review: explicit ?? convention?.review ?? null, convention: convention?.name ?? null };
   };
   if (mode === '--report') {
@@ -431,7 +436,9 @@ export function evaluateInventory(
     );
   }
   const byConvention = (section: Mode) =>
-    candidates[section].filter((key) => reviewOf(section, key).convention !== null).length;
+    candidates[section].filter(
+      (key) => !Object.hasOwn(baseline[section], key) && derived[section].has(key)
+    ).length;
   return {
     output: `Unused-code inventory matches: ${production.length} production files (${byConvention('production')} by convention), ${exports.length} export visibility candidates (${byConvention('exports')} by convention).\n`,
   };
