@@ -14,9 +14,10 @@ through Prisma and JSON parsing.
 
 `shouldPollPR` reads only the presence of an observation. Polled reads omit the
 observation column and, in the same read transaction, ask SQLite which PRs have
-none (SQL NULL or JSON null). That query decides from the record header
-(`typeof`, `octet_length`) instead of comparing stored values, so SQLite does
-not read the observation's overflow pages either.
+none (SQL NULL or JSON null). That query reads the type and length from the
+record header (`typeof`, `octet_length`) and compares a value with `'null'` only
+when it is four bytes long, so SQLite does not read a stored observation's
+overflow pages either.
 
 ## Consequences
 

@@ -1,7 +1,6 @@
 # PR updates go to the workspace's own conversations
 
-Originally decided on 2026-10-14 in #2447 (main conversation) and in the same
-pull request's delivery-modes work (dedicated conversations).
+Originally decided on 2026-10-14 in #2447.
 
 ## Context
 
@@ -15,23 +14,22 @@ that agent in the same worktree.
 
 Replace the fixer with one event pipeline. A two-minute poll observes attached
 PRs and records actionable facts in a durable ledger; delivery queues them as a
-message to an existing workspace conversation. A workspace setting chooses the
+message to a conversation in the workspace. A workspace setting chooses the
 destination: `MAIN` (the default) delivers to one bound ordinary conversation,
 so the agent that wrote the code keeps its context and decides how to respond;
-`DEDICATED` creates and reuses one ordinary conversation per PR. Observation,
+`DEDICATED` lazily creates one conversation per PR and reuses it. Observation,
 reduction, deduplication, receipts, retries and busy guards are shared by both
-destinations. There is no legacy mode selector.
+destinations. The fixer is replaced outright, with no option to keep it.
 
 Updates never interrupt a turn: they wait for an idle recipient, no pending
 interactive request and no other working agent in the workspace. Enabling
-monitoring or binding a recipient queues no message.
+monitoring or binding a recipient queues no message of its own.
 
 ## Consequences
 
-- Recipient choice is explicit: one ordinary conversation is bound
-  automatically, several require a choice, and auxiliary sessions (Ratchet,
-  auto-iteration, adversarial review, dedicated PR conversations) never become
-  the main recipient.
+- A sole ordinary conversation is bound automatically; several require an
+  explicit choice, and auxiliary sessions (Ratchet, auto-iteration, adversarial
+  review, dedicated PR conversations) never become the main recipient.
 - Dedicated conversations use the workspace's provider, normal model defaults
   and the normal session limit; there are no separate Ratchet provider or
   permission settings.

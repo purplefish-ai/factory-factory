@@ -22,10 +22,12 @@ may be claimed at a time.
 A completed provider prompt acknowledges receipt. After an uncertain exit,
 receipt is proven only by the delivery marker on its own line of a user prompt
 in provider-owned history; optimistic local rows do not count. Proven absence
-allows a bounded retry in the same conversation, or cancellation of the old
-batch with fresh copies of its still-attached facts. Unreadable history pauses
-delivery. Ambiguous evidence never authorizes a resend, and a frozen message is
-never retargeted into another conversation.
+allows a bounded retry in the same conversation. If the conversation is no
+longer the recipient, it cancels the old batch instead; if a PR in a frozen
+`MAIN` batch was detached, it cancels the batch and queues fresh copies of the
+facts of the PRs still attached. Unreadable history pauses delivery. Ambiguous
+evidence never authorizes a resend, and a frozen message is never retargeted
+into another conversation.
 
 ## Consequences
 

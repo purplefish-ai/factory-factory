@@ -19,7 +19,7 @@ provider or permission defaults.
 
 ## Consequences
 
-- A conversation whose provider history is gone cannot receive PR updates until
-  the user resumes or rebinds it.
+- A conversation that cannot be resumed receives no PR updates: delivery stays
+  paused rather than reaching an agent without the task's context.
 - Dedicated conversations reuse their saved provider identity and settings even
   when workspace defaults have changed since they were created.

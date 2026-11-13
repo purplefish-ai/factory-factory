@@ -58,9 +58,9 @@ tables. They share a shape: one accessor is the sole writer, and reads flatten
 the row back onto the workspace under the field's original name, so the snapshot
 wire aliases and v4 export format retain compatibility. PR reads additionally
 expose the derived `selectedPrId`/`selectedPr` contract described in
-[pull requests](../../src/shared/workspace-pr.ts). The selected association's
-facts stay separate from the authoritative `prs`/`prSummary` collection;
-selection is never persisted as a primary preference.
+[pull requests](pull-requests.md#pr-event-delivery-destinations). The selected
+association's facts stay separate from the authoritative `prs`/`prSummary`
+collection; selection is never persisted as a primary preference.
 
 Worktree cleanup matches Git's registered paths against the real worktree base
 directory, so a symlinked base still removes Git metadata. Branch-resume
@@ -953,7 +953,7 @@ recipient, pause and pending-event count come from `WorkspacePRMonitoring` and
 `WorkspacePREvent`; live agent work comes from session runtime state. Idle
 failed CI, a queued update or a paused delivery does not create a working agent
 signal. An attached open PR keeps the workspace actionable when a sibling
-merges. See [PR guide](../../src/backend/orchestration/pull-requests/AGENTS.md).
+merges. See [PR update delivery and recovery](pull-requests.md).
 
 ## Workspace tools on phones and foldables
 

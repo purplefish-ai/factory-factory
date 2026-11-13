@@ -38,8 +38,8 @@ that exit zero for invalid tokens. Both output streams are checked.
 All `gh` spawns go through `GitHubCLIService`, which owns the process-wide
 concurrency limit, the fast-fail on rate limiting, and singleflight dedup of
 identical in-flight reads. Do not spawn `gh` directly from a service. See
-[pull request guide](../../src/backend/orchestration/pull-requests/AGENTS.md)
-for how the ratchet and the PR sync poll share that budget.
+[pull-requests.md](./pull-requests.md) for how the ratchet and the PR sync poll
+share that budget.
 
 Full PR metadata reads use a 10 MiB stdout buffer, like bulk diff and review
 comment reads, to accommodate paginated reviews, comments, and status checks.
