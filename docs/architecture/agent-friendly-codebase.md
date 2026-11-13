@@ -32,8 +32,8 @@ splitting, not trimming.
 
 ## 3. Rules are checks
 
-A rule that matters is a type, a lint rule or a script whose failure message
-names the fix. Prose carries only what a check cannot: the reason.
+A rule that matters is a type, a lint rule, a test or a script whose failure
+message names the fix. Prose carries only what a check cannot: the reason.
 
 Exceptions live in configuration with a reason, and a test fails once an
 exception is no longer needed. When a prose rule is broken twice, write the
@@ -73,7 +73,8 @@ application shows it does what was asked.
 One fact lives in one small file next to what it describes, and registries are
 composed from those files. A file that most pull requests must edit is a design
 fault whatever it contains: a note, a baseline, a registry or a configuration
-file.
+file. Dependency manifests and lockfiles are the exception; they change with
+dependencies, not with features.
 
 ## 8. Recipes live in the repository
 

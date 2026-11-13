@@ -136,13 +136,11 @@ and no script runs it.
 
 - [ ] Delete the files; `pnpm check` passes.
 
-### Task 0.3: Clear the Knip configuration hints
+### Task 0.3: Dropped
 
-**Files:** Modify `knip.json` (remove the three entries Knip reports as
-redundant: `src/backend/index.ts!`, `src/cli/index.ts!`,
-`src/client/main.tsx!`).
-
-- [ ] `pnpm knip` prints no configuration hints and no new findings.
+The three `knip.json` entries Knip reports as redundant are production roots
+that `pnpm check:unused-code`, its test and `docs/knip.md` rely on. The hint
+applies only to Knip's default mode. They stay.
 
 ### Task 0.4: Fix the dependency-intake test that fails under load
 
@@ -187,15 +185,26 @@ updated** (tests / guide / decision record / none).
   `node src/cli/bootstrap.mjs serve --dev --no-open` on free ports and prints
   one line when ready: `SANDBOX_READY <absolute path to sandbox.json>`.
 - `sandbox.json`:
-  `{ baseDir, frontendUrl, backendUrl, pid, projectId, repoPath, scenario }`.
-- `pnpm dev:sandbox --clean` removes every `ff-sandbox-*` directory under the OS
-  temporary directory whose recorded `pid` is not running.
+  `{ baseDir, frontendUrl, backendUrl, pid, pgid, projectId, repoPath, scenario }`.
+- `--scenario <name>` reaches the fake provider as `FF_SANDBOX_SCENARIO`.
+- `pnpm dev:sandbox --clean` removes sandboxes left by a launcher that is no
+  longer running. It considers only directories under
+  `<os.tmpdir()>/ff-sandbox/` that hold a `sandbox.json` naming that same
+  directory as `baseDir`; it stops every process in the recorded process group
+  and waits for them to exit before deleting anything.
 
 **Behaviour:**
 
-- `BASE_DIR` is a new `ff-sandbox-*` directory from `mkdtemp` under
-  `os.tmpdir()`; `WORKTREE_BASE_DIR` and `CODEX_HOME` are inside it. The
-  database path derives from `BASE_DIR`.
+- `BASE_DIR` is a new directory from `mkdtemp` under
+  `<os.tmpdir()>/ff-sandbox/`; `WORKTREE_BASE_DIR` and `CODEX_HOME` are inside
+  it. The database path derives from `BASE_DIR`.
+- The server runs in its own process group, recorded as `pgid`.
+- Every background feature that calls an external service is off: application
+  and provider update checks, Slack listeners, GitHub and Linear polling. Use
+  the existing configuration switch for each; where none exists, add one to
+  `configService`.
+- The server's environment carries no Anthropic or Claude credential variable,
+  and its Claude configuration directory is inside `baseDir`.
 - `CODEX_PATH` points at
   `src/backend/testing/fixtures/fake-codex-app-server.mjs`, the way
   `upstream-codex.integration.test.ts` already does.
@@ -204,8 +213,8 @@ updated** (tests / guide / decision record / none).
   `sandbox: gh is disabled`.
 - Seeding uses public tRPC procedures after startup, never Prisma: one project
   on a new Git repository with one commit, default provider Codex.
-- On `SIGINT`, `SIGTERM` or child exit it stops the server and deletes `baseDir`
-  unless `--keep` was given.
+- On `SIGINT`, `SIGTERM` or child exit it stops the whole process group, waits
+  for it to exit, then deletes `baseDir` unless `--keep` was given.
 
 **Acceptance tests** (`scripts/dev-sandbox.test.ts`):
 
@@ -216,20 +225,27 @@ updated** (tests / guide / decision record / none).
 - [ ] `prints SANDBOX_READY with a readable sandbox.json`
 - [ ] `seeds one project on a fresh repository`
 - [ ] `records gh calls instead of running them`
-- [ ] `a Claude session cannot use the user's credentials`: with the sandbox
-      environment, the resolved Claude configuration directory is inside
-      `baseDir`. Try `CLAUDE_CONFIG_DIR` first; if the ACP adapter ignores it,
-      the sandbox rejects Claude sessions with a message naming Codex.
-- [ ] `removes baseDir and child processes on SIGTERM`
-- [ ] `--clean removes only sandboxes whose pid is dead`
+- [ ] `Claude cannot use the user's credentials`: the environment passed to both
+      Claude spawn paths, the session spawn and the model catalog spawn in
+      `claude-model-catalog-loader.ts`, has no credential variable and a
+      configuration directory inside `baseDir`. If either path cannot be
+      isolated, the sandbox disables the Claude provider and says to use Codex.
+- [ ] `an idle sandbox contacts no external service`: with the npm registry URL
+      pointed at a local recording server, the server receives no request
+      between startup and one update-check interval, and `gh-calls.log` is
+      empty.
+- [ ] `removes baseDir and every descendant process on SIGTERM`
+- [ ] `--clean after the launcher is killed stops its descendants before     removing baseDir`
+- [ ] `--clean ignores a directory without a sandbox.json naming itself` and
+      `--clean leaves a sandbox whose launcher is running`
 
 ### Task 1.2: Scripted provider scenarios
 
 **Files:** Modify `src/backend/testing/fixtures/fake-codex-app-server.mjs`;
 create `src/backend/testing/fixtures/fake-codex-app-server.test.ts`.
 
-**Produces:** the fake reads the scenario name passed by the launcher and plays
-one of `echo` (default: replies with the prompt text), `tool-call`,
+**Produces:** the fake reads the scenario name from `FF_SANDBOX_SCENARIO` and
+plays one of `echo` (default: replies with the prompt text), `tool-call`,
 `permission-request`, `error` and `slow-stream`. Unknown names exit with the
 list of valid ones.
 
@@ -379,8 +395,8 @@ involve the nine files at the `service/` root.
 ### Task 3.1: Named exports in every capsule barrel
 
 **Files:** Modify the ten `src/backend/services/*/index.ts` files that use
-`export *`; merge each `service/index.ts` export list into them; modify
-`.dependency-cruiser.cjs` or `lint-rules/` to reject `export *` in
+`export *`; merge each `service/index.ts` export list into them and delete that
+inner barrel; extend `scripts/check-service-registry.ts` to reject `export *` in
 `src/backend/services/*/index.ts`.
 
 - [ ] Each capsule's public names are listed in its `index.ts` and nowhere else.
@@ -399,7 +415,7 @@ and its test.
 ```ts
 export const sessionModules: Record<
   string,
-  { dependsOn: readonly string[]; description: string }
+  { dependsOn: readonly string[]; description: string; sealed?: boolean }
 >;
 /** Pairs that import each other today. May only shrink. */
 export const sessionModuleCycles: readonly (readonly [string, string])[];
@@ -416,9 +432,10 @@ does.
 
 ### Task 3.3: Empty the `service/` root (needs a step plan)
 
-**Files:** Move the nine non-test files at
-`src/backend/services/session/service/*.ts` into the module each belongs to,
-starting with `session-domain.service.ts` (876 lines).
+**Files:** Move the eight non-test files left at
+`src/backend/services/session/service/*.ts` after task 3.1 removed
+`service/index.ts` into the module each belongs to, starting with
+`session-domain.service.ts` (876 lines).
 
 - [ ] One pull request per file or cohesive pair; each removes at least one
       entry from `sessionModuleCycles` or one `root` dependency.
@@ -652,6 +669,9 @@ network.
 - [ ] A weekly scheduled workflow runs `pnpm metrics:agents`, writes the
       Markdown to the job summary and uploads the JSON as an artifact. Nothing
       is committed (P7).
+- [ ] `pnpm metrics:agents` gains one metric once the template from task 0.5
+      exists: the share of merged PRs whose body has a non-empty "Driven in the
+      sandbox" section.
 - [ ] `agent-guidance.md` replaces "behavioral improvement has not been
       measured" with the rule: a guidance or structure change states which
       metric it expects to move and is checked against the next report.
