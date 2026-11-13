@@ -56,6 +56,8 @@ describe('merged pull request metrics', () => {
           'https://github.com/other/factory-factory/pull/36',
           'https://github.com/purplefish-ai/factory-factory-docs/pull/37',
           'https://github.com/vitest-dev/vitest/pull/38',
+          'https://example.com/github.com/purplefish-ai/factory-factory/pull/39',
+          'see github.com/purplefish-ai/factory-factory/pull/40',
         ].join('\n'),
         'purplefish-ai/factory-factory'
       )

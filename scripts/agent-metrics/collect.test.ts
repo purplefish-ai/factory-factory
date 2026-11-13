@@ -61,14 +61,17 @@ function quotePath(path: string): string {
   return `"${octal.join('')}"`;
 }
 
-/** What `git log -n<count> --format=%x1e --name-only --no-renames` prints, with or without `-z`. */
-function gitLogOutput(nulTerminated: boolean): string {
+/** What `git log --format=<format> --name-only --no-renames` prints, with or without `-z`. */
+function gitLogOutput(args: readonly string[]): string {
+  const nulTerminated = args.includes('-z');
+  const format = args.find((arg) => arg.startsWith('--format='))?.slice('--format='.length) ?? '';
   return loggedCommits
-    .map((files) =>
-      nulTerminated
-        ? `\u001e\0${files.length > 0 ? `\n${files.map((file) => `${file}\0`).join('')}` : ''}`
-        : `\u001e\n${files.length > 0 ? `\n${files.map((file) => `${quotePath(file)}\n`).join('')}` : ''}`
-    )
+    .map((files, index) => {
+      const header = format.replaceAll('%x1e', '\u001e').replaceAll('%H', String(index).repeat(40));
+      return nulTerminated
+        ? `${header}\0${files.length > 0 ? `\n${files.map((file) => `${file}\0`).join('')}` : ''}`
+        : `${header}\n${files.length > 0 ? `\n${files.map((file) => `${quotePath(file)}\n`).join('')}` : ''}`;
+    })
     .join('');
 }
 
@@ -82,7 +85,7 @@ function fakeGit(files: Record<string, string>): Command {
       return Buffer.from(`${commit}\n`);
     }
     if (subcommand === 'log') {
-      return Buffer.from(gitLogOutput(args.includes('-z')));
+      return Buffer.from(gitLogOutput(args));
     }
     if (subcommand === 'ls-files') {
       return Buffer.from(

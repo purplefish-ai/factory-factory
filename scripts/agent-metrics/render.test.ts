@@ -125,6 +125,17 @@ describe('renderMarkdown', () => {
     expect(markdown).toContain('- ``src/a|`b`.ts``: 950');
   });
 
+  it('keeps line breaks and backslashed pipes in paths from breaking a table row', () => {
+    const metrics = fixture();
+    metrics.tree.mostEditedFiles.files = [
+      { path: 'docs/new\nline\r.md', commits: 1, share: 1 },
+      { path: 'src/a\\|b.ts', commits: 1, share: 1 },
+    ];
+    const markdown = renderMarkdown(metrics);
+    expect(markdown).toContain('| `docs/new\\nline\\r.md` | 1 | 100.0% |');
+    expect(markdown).toContain('| `src/a\\\\\\|b.ts` | 1 | 100.0% |');
+  });
+
   it("states each window's limits", () => {
     const markdown = renderMarkdown(fixture());
     expect(markdown).toContain(

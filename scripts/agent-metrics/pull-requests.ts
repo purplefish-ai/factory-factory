@@ -40,11 +40,12 @@ function escapeRegExp(text: string): string {
 
 /**
  * Pull request numbers a body mentions as `#123` or as a
- * `github.com/<repository>/pull/123` link to this repository (`owner/name`).
+ * `https://github.com/<repository>/pull/123` link to this repository
+ * (`owner/name`).
  */
 export function referencedPullRequestNumbers(body: string, repository: string): number[] {
   const pattern = new RegExp(
-    `(?:^|[^\\w&/])#(\\d+)\\b|(?<![\\w.-])github\\.com/${escapeRegExp(repository)}/pull/(\\d+)\\b`,
+    `(?:^|[^\\w&/])#(\\d+)\\b|\\bhttps?://(?:www\\.)?github\\.com/${escapeRegExp(repository)}/pull/(\\d+)\\b`,
     'gi'
   );
   const numbers = new Set<number>();

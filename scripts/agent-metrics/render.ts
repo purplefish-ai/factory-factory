@@ -20,17 +20,27 @@ function formatWindow(window: TimeWindow): string {
   return `${window.from ?? 'n/a'} to ${window.to ?? 'n/a'}`;
 }
 
-/** A code span that survives backticks in `text`: the fence is longer than any run inside it. */
-function code(text: string): string {
+/**
+ * A code span that survives backticks in `text` (the fence is longer than any
+ * run inside it) and line breaks (shown as `\n` and `\r`).
+ */
+function code(raw: string): string {
+  const text = raw.replaceAll('\r', '\\r').replaceAll('\n', '\\n');
   const longestRun = Math.max(0, ...(text.match(/`+/g) ?? []).map((run) => run.length));
   const fence = '`'.repeat(longestRun + 1);
   const padding = /^[`\s]|[`\s]$/.test(text) ? ' ' : '';
   return `${fence}${padding}${text}${padding}${fence}`;
 }
 
-/** A code span inside a table cell, where `|` would otherwise end the cell. */
+/**
+ * A code span inside a table cell, where `|` would otherwise end the cell.
+ * Backslashes before a `|` are doubled so they cannot escape its escape.
+ */
 function tableCode(text: string): string {
-  return code(text).replaceAll('|', '\\|');
+  return code(text).replace(
+    /(\\*)\|/g,
+    (_match, backslashes: string) => `${backslashes}${backslashes}\\|`
+  );
 }
 
 function formatFollowUpFixes(fixes: FollowUpFixes, merged: number): string {

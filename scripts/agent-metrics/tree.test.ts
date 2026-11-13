@@ -91,6 +91,8 @@ describe('tree metrics', () => {
       'src/client/form.test-harness.tsx',
       'src/client/event.story-fixtures.ts',
       'src/lib/claude.fixture.ts',
+      'src/backend/event-delivery.test-support.integration.ts',
+      'src/lib/claude.fixture.d.ts',
     ];
     expect(production.filter(isProductionSource)).toEqual(production);
     expect(excluded.filter(isProductionSource)).toEqual([]);

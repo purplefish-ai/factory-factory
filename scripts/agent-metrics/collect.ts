@@ -16,7 +16,7 @@ import {
   runAttemptSchema,
   runListSchema,
 } from './ci-runs';
-import { parseBlobBatch, parseCommitFiles, parseTreeBlobs } from './git-output';
+import { commitFilesFormat, parseBlobBatch, parseCommitFiles, parseTreeBlobs } from './git-output';
 import {
   type MergedPullRequest,
   mergedPullRequestListSchema,
@@ -175,11 +175,11 @@ export function collectCommitFiles(
       'log',
       '-z',
       `-n${count}`,
-      '--format=%x1e',
+      `--format=${commitFilesFormat}`,
       '--name-only',
       '--no-renames',
       revision,
-    ]).toString('utf8')
+    ])
   );
 }
 
@@ -197,9 +197,7 @@ function isMeasured(path: string): boolean {
 /** Reads the HEAD commit (its file list and contents), never the working tree. */
 export function collectTree(root: string, git: Command = commandIn('git', root)): TreeMetrics {
   const commit = git(['rev-parse', '--verify', 'HEAD^{commit}']).toString('utf8').trim();
-  const blobs = parseTreeBlobs(
-    git(['ls-tree', '-r', '-z', '--full-tree', commit]).toString('utf8')
-  );
+  const blobs = parseTreeBlobs(git(['ls-tree', '-r', '-z', '--full-tree', commit]));
   const paths = blobs.map((blob) => blob.path);
   const measured = blobs.filter((blob) => isMeasured(blob.path));
   const contents = parseBlobBatch(
