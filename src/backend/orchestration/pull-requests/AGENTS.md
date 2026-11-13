@@ -28,7 +28,7 @@ guards, receipt recovery and the legacy Ratchet fixer cutover. It does not own:
 
 ## Public surface
 
-There is no barrel. Production code elsewhere imports only these:
+There is no barrel. Production code elsewhere imports only these, by importer:
 
 - Composition in `src/backend/app-context.ts`: `createRatchetService`
   (`ratchet-dependencies.ts`), `schedulerService`, `bindIssueMonitoringSession`
@@ -38,7 +38,7 @@ There is no barrel. Production code elsewhere imports only these:
   `wakePRDelivery`, `observeMonitoredPR`, `resetStablePRBackoff` and
   `listVisibleReviewRequests`.
 - `src/backend/orchestration/snapshots/`: the `RATCHET_*` events and the
-  `RatchetService` type (`ratchet.service.ts`).
+  `RatchetService` type, both defined in `ratchet.service.ts` here.
 
 ## Invariants
 
@@ -73,15 +73,15 @@ There is no barrel. Production code elsewhere imports only these:
 - Only ordinary conversations become the main recipient, and binding one adds no
   message of its own. `pr-monitoring.orchestrator.test.ts`,
   `src/backend/services/workspace/resources/workspace-pr-delivery-modes.accessor.integration.test.ts`.
-- Stopping the service invalidates its in-flight workspace checks, so none goes
-  on to deliver or publish, and drains every delivery wake it started.
-  `ratchet-observation-watcher.test.ts`.
+- Stopping the service invalidates its in-flight workspace checks, so none
+  starts a delivery wake or emits a state change afterwards, and drains every
+  delivery wake it started. `ratchet-observation-watcher.test.ts`.
 - The poll checks at most three workspaces at once.
   `ratchet-observation-watcher.test.ts`.
 - A project-scoped review-request list holds only that project's repository and
-  fails, rather than searching globally, when the project is missing, unlinked
-  or invalid; the unscoped workspace review count searches every repository.
-  `src/backend/trpc/pr-review.router.test.ts`,
+  never searches globally; with `gh` healthy, a missing, unlinked or invalid
+  project returns an error. The unscoped workspace review count searches every
+  repository. `src/backend/trpc/pr-review.router.test.ts`,
   `review-requests.orchestrator.integration.test.ts`.
 
 ## Map
