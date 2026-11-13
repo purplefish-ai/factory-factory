@@ -1,1 +1,1 @@
-export * from './service';
+export { decisionLogService } from './service/decision-log.service';

@@ -328,7 +328,6 @@ describe('location conventions', () => {
   const barrel = "export * from './service';\nexport { named } from './named';";
   const sources: Record<string, string> = {
     'src/backend/services/session/index.ts': barrel,
-    'src/backend/services/session/service/index.ts': barrel,
     'src/client/features/chat/index.ts': barrel,
     'src/backend/services/periodic-task/index.ts': `import { local } from './local';
       export { local as aliased };
@@ -394,7 +393,7 @@ describe('location conventions', () => {
     [
       'service capsule barrel re-export',
       'exports',
-      'src/backend/services/session/service/index.ts::types::named',
+      'src/backend/services/session/index.ts::types::named',
       'src/client/features/chat/index.ts::types::named',
     ],
     [
@@ -437,6 +436,7 @@ describe('location conventions', () => {
 
   it('covers only service capsule barrels, not deeper or non-service index files', () => {
     for (const key of [
+      'src/backend/services/session/service/index.ts::exports::fromWildcard',
       'src/backend/services/session/service/acp/index.ts::exports::fromWildcard',
       'src/backend/schemas/websocket/index.ts::exports::fromWildcard',
       'src/client/features/chat/agent-activity/tool-renderers/index.ts::exports::fromWildcard',

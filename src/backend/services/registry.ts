@@ -105,6 +105,7 @@ export const serviceNames = [
   'linear',
   'run-script',
   'port-share',
+  'host-metrics',
   'settings',
   'decision-log',
   'periodic-task',
@@ -220,6 +221,10 @@ export const serviceRegistry = {
     ownsModels: [],
   },
   'port-share': {
+    dependsOn: [],
+    ownsModels: [],
+  },
+  'host-metrics': {
     dependsOn: [],
     ownsModels: [],
   },
