@@ -120,7 +120,8 @@ function fixture(provider: ChatProvider, model: string): SessionLaunchOptions {
 interface ProbeFixtures {
   failed: Set<string>;
   deferred: Set<string>;
-  pending: Map<string, (value: SessionLaunchOptions) => void>;
+  /** Held probes take the options to send; held paths send their usual response. */
+  pending: Map<string, (value?: SessionLaunchOptions) => void>;
   settings: {
     defaultCodexReasoningEffort: string | null;
     defaultClaudeReasoningEffort: string | null;
@@ -159,7 +160,7 @@ function renderLaunch(inline = false) {
   });
   clients.push(queryClient);
   const requests: Array<{ path: string; input: unknown }> = [];
-  const pending = new Map<string, (value: SessionLaunchOptions) => void>();
+  const pending = new Map<string, (value?: SessionLaunchOptions) => void>();
   const deferred = new Set<string>();
   const failed = new Set<string>();
   const settings = {
@@ -232,6 +233,10 @@ function renderLaunch(inline = false) {
                 ratchetEnabled: false,
               },
             };
+            if (deferred.has(op.path)) {
+              pending.set(op.path, () => respond(responses[op.path]));
+              return;
+            }
             respond(responses[op.path] ?? {});
           }),
     ],
@@ -502,12 +507,18 @@ describe('real launch controls and tRPC payloads', () => {
   });
   it('launches a workspace with another provider and its nested model in one menu visit', async () => {
     const view = renderLaunch(true);
+    // Hold Opus options until launch is enabled, so that order runs every time.
+    view.deferred.add('CLAUDE:opus');
     await view.render();
     await ready('Launch');
     await open('New conversation provider and model: Codex · 6 Sol');
     await openModels('Claude');
     expect(button('New conversation provider and model: Codex · 6 Sol')).toBeDefined();
     await choose('Opus');
+    await waitForReact(() => expect(button('Launch')?.disabled).toBe(false));
+    expect(button('Thinking level: Default')?.getAttribute('aria-busy')).toBe('true');
+    view.deferred.delete('CLAUDE:opus');
+    await act(() => view.pending.get('CLAUDE:opus')?.(fixture('CLAUDE', 'opus')));
     // Until Opus options are confirmed, launch sends only explicit choices.
     await ready('Launch');
     expect(button('New conversation provider and model: Claude · Opus')).toBeDefined();
@@ -560,9 +571,14 @@ describe('real launch controls and tRPC payloads', () => {
 
 it('sends a manual account through the real picker, catalog, launch options and workspace payload', async () => {
   const view = renderLaunch(true);
+  // Hold the account list until launch is ready, so that order runs every time.
+  view.deferred.add('codexAccounts.list');
   await view.render();
   await ready('Launch');
   await act(() => button('Workspace settings')?.click());
+  expect(button('Codex account: Auto')).toBeUndefined();
+  view.deferred.delete('codexAccounts.list');
+  await act(() => view.pending.get('codexAccounts.list')?.());
   // Accounts load after saved defaults choose Codex, independently of launch.
   await waitForReact(() => expect(button('Codex account: Auto')).toBeDefined());
   await open('Codex account: Auto');
