@@ -101,6 +101,45 @@ if (
 }
 const chunkDelayMs = delayOverride === undefined ? slowStreamDelayMs : Number(delayOverride);
 
+/**
+ * The command line, answered the way the real `codex` binary answers it. The application runs
+ * `-V` for its version check (it keeps the first stdout line), `login status` (it reads only the
+ * exit code) and `app-server` for sessions, accounts and plan usage; the adapter adds
+ * `-c hooks=…` when hooks are configured. No arguments also starts the app-server: tests and
+ * the sandbox's scenario check run it that way. Any other form (interactive `login`, `exec` for
+ * disposable inference) fails at once; it never waits on stdin. Returns null for the app-server.
+ */
+function answerCommandLine(args) {
+  if (args.length === 1 && (args[0] === '-V' || args[0] === '--version')) {
+    return { stream: process.stdout, text: 'codex-cli 0.0.0-fake\n', code: 0 };
+  }
+  if (args.length === 2 && args[0] === 'login' && args[1] === 'status') {
+    // A scripted stand-in with no account reports a logged-in state only so that the
+    // application's health check lets a session start. It holds and reads no credential.
+    return { stream: process.stderr, text: 'Logged in using ChatGPT\n', code: 0 };
+  }
+  const appServerOptions = args.slice(1);
+  const isAppServer =
+    args.length === 0 ||
+    (args[0] === 'app-server' &&
+      appServerOptions.length % 2 === 0 &&
+      appServerOptions.every((arg, index) => (index % 2 === 0 ? arg === '-c' : arg !== '')));
+  if (isAppServer) {
+    return null;
+  }
+  return {
+    stream: process.stderr,
+    text: `fake Codex: unsupported arguments: ${args.join(' ')}\n`,
+    code: 2,
+  };
+}
+const commandLineAnswer = answerCommandLine(process.argv.slice(2));
+if (commandLineAnswer) {
+  // exitCode, not exit(): a pipe write may still be pending on macOS.
+  commandLineAnswer.stream.write(commandLineAnswer.text);
+  process.exitCode = commandLineAnswer.code;
+}
+
 const send = (value) => process.stdout.write(`${JSON.stringify(value)}\n`);
 const notify = (method, params) => send({ method, params });
 const pendingServerRequests = new Map();
@@ -219,7 +258,8 @@ async function playScenario(request, turnId) {
   });
 }
 
-createInterface({ input: process.stdin }).on('line', (line) => {
+const appServerInput = commandLineAnswer ? null : createInterface({ input: process.stdin });
+appServerInput?.on('line', (line) => {
   const request = JSON.parse(line);
   if (process.env.FF_ACP_PROBE_LOG) {
     appendFileSync(process.env.FF_ACP_PROBE_LOG, `${line}\n`);
