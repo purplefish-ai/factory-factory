@@ -30,7 +30,7 @@ afterEach(() => {
 });
 
 async function fixture(
-  options: { fresh?: boolean; missingTime?: boolean; downgrade?: boolean } = {}
+  options: { fresh?: boolean; missingTime?: boolean; downgrade?: boolean; port?: number } = {}
 ) {
   const directory = mkdtempSync(join(tmpdir(), 'ff-intake-'));
   directories.push(directory);
@@ -68,7 +68,7 @@ async function fixture(
       })
     );
   });
-  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+  await new Promise<void>((resolve) => server.listen(options.port ?? 0, '127.0.0.1', resolve));
   const address = server.address();
   if (!address || typeof address === 'string') {
     throw new Error('Expected an HTTP fixture port');
@@ -83,10 +83,13 @@ async function fixture(
     })
   );
   writeFileSync(join(directory, '.npmrc'), `registry=${registry}\n`);
+  // pnpm keys its user-wide metadata cache by registry host and port, and can
+  // answer from a cached mature version without asking the registry. Ephemeral
+  // ports recur across runs, so each fixture gets a cache of its own.
   const configure = (extra: Record<string, unknown> = {}) =>
     writeFileSync(
       join(directory, 'pnpm-workspace.yaml'),
-      stringify({ pmOnFail: 'ignore', ...policy, ...extra })
+      stringify({ pmOnFail: 'ignore', cacheDir: join(directory, 'cache'), ...policy, ...extra })
     );
   configure();
   copyFileSync('.pnpmfile.mjs', join(directory, '.pnpmfile.mjs'));
@@ -111,6 +114,7 @@ async function fixture(
     }
   };
   return {
+    port: address.port,
     configure,
     run,
     close: () => new Promise<void>((resolve) => server.close(() => resolve())),
@@ -141,6 +145,24 @@ describe('dependency intake against the pinned pnpm CLI', () => {
       expect(allowed.success, allowed.output).toBe(true);
     } finally {
       await registry.close();
+    }
+  }, 60_000);
+
+  it('ignores metadata cached from an earlier registry on the same port', async () => {
+    const mature = await fixture();
+    try {
+      const result = await mature.run();
+      expect(result.success, result.output).toBe(true);
+    } finally {
+      await mature.close();
+    }
+    const fresh = await fixture({ fresh: true, port: mature.port });
+    try {
+      const result = await fresh.run();
+      expect(result.success, result.output).toBe(false);
+      expect(result.output).toContain('ERR_PNPM_NO_MATURE_MATCHING_VERSION');
+    } finally {
+      await fresh.close();
     }
   }, 60_000);
 
