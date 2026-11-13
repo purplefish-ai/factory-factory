@@ -368,6 +368,30 @@ export function topLevelNames(files: readonly string[]): TopLevelNames {
 }
 
 /**
+ * The top-level names of a Git tree, from `git ls-tree -z <ref>` (root level
+ * only). A tree or a submodule is a directory; anything else is a file.
+ */
+export function parseTopLevelTree(output: string): TopLevelNames {
+  const directories = new Set<string>();
+  const files = new Set<string>();
+  for (const entry of output.split('\0')) {
+    const match = /^\d+ (blob|tree|commit) [0-9a-f]+\t(.+)$/s.exec(entry);
+    if (match?.[2] !== undefined) {
+      (match[1] === 'blob' ? files : directories).add(match[2]);
+    }
+  }
+  return { directories, files };
+}
+
+/** Names at either the working tree or the base ref, so a deletion is seen. */
+export function unionTopLevelNames(current: TopLevelNames, base: TopLevelNames): TopLevelNames {
+  return {
+    directories: new Set([...current.directories, ...base.directories]),
+    files: new Set([...current.files, ...base.files]),
+  };
+}
+
+/**
  * Where a code span's path is resolved from: the repository root, or, in a
  * nested guide, the guide's own directory.
  */
@@ -580,8 +604,16 @@ export function findDeadReferences(
     .map(({ violation }) => violation);
 }
 
-export function checkReferences(repository: GuidanceRepository): GuidanceViolation[] {
-  const topLevel = topLevelNames(repository.files);
+/**
+ * `baseTopLevel` holds the top-level names at the base ref. A name there but
+ * not in the working tree was deleted, and a guide that still cites it fails.
+ */
+export function checkReferences(
+  repository: GuidanceRepository,
+  baseTopLevel?: TopLevelNames
+): GuidanceViolation[] {
+  const current = topLevelNames(repository.files);
+  const topLevel = baseTopLevel === undefined ? current : unionTopLevelNames(current, baseTopLevel);
   return repository.files
     .filter(isReferenceScope)
     .flatMap((file) => findDeadReferences(repository, file, topLevel));
@@ -590,13 +622,14 @@ export function checkReferences(repository: GuidanceRepository): GuidanceViolati
 export function checkGuidance(
   repository: GuidanceRepository,
   ceilings: LegacyNoteCeilings,
-  baseCeilings?: LegacyNoteCeilings
+  baseCeilings?: LegacyNoteCeilings,
+  baseTopLevel?: TopLevelNames
 ): GuidanceViolation[] {
   return [
     ...checkSize(repository, ceilings),
     ...(baseCeilings === undefined ? [] : compareLegacyCeilings(baseCeilings, ceilings)),
     ...checkPairing(repository),
-    ...checkReferences(repository),
+    ...checkReferences(repository, baseTopLevel),
     ...checkRecords(repository),
   ];
 }
@@ -684,12 +717,22 @@ export function readBaseLegacyCeilings(repositoryRoot: string): BaseLegacyCeilin
   return { ref, ceilings: parseLegacyNoteCeilings(source) };
 }
 
+/** The top-level names at `ref`, or undefined when Git cannot list it. */
+export function readBaseTopLevelNames(
+  repositoryRoot: string,
+  ref: string
+): TopLevelNames | undefined {
+  const output = git(repositoryRoot, ['ls-tree', '-z', ref]);
+  return output === undefined ? undefined : parseTopLevelTree(output);
+}
+
 type GuidanceOutput = (message: string) => void;
 
 export type GuidanceCliOptions = {
   repositoryRoot?: string;
   ceilings?: LegacyNoteCeilings;
   baseCeilings?: BaseLegacyCeilings;
+  baseTopLevel?: TopLevelNames;
   stdout?: GuidanceOutput;
   stderr?: GuidanceOutput;
 };
@@ -703,10 +746,13 @@ export function runGuidanceCli(options: GuidanceCliOptions = {}): number {
     stdout(`Guidance check: ${base.notice}\n`);
   }
 
+  const baseRef = 'ceilings' in base ? base.ref : resolveBaseRef(repositoryRoot);
   const violations = checkGuidance(
     readGuidanceRepository(repositoryRoot),
     options.ceilings ?? legacyNoteCeilings,
-    'ceilings' in base ? base.ceilings : undefined
+    'ceilings' in base ? base.ceilings : undefined,
+    options.baseTopLevel ??
+      (baseRef === undefined ? undefined : readBaseTopLevelNames(repositoryRoot, baseRef))
   );
   if (violations.length > 0) {
     stderr(`${violations.map(formatGuidanceViolation).join('\n')}\n`);

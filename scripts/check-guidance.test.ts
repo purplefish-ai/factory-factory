@@ -18,10 +18,13 @@ import {
   legacyNoteCeilings,
   markdownAnchors,
   parseLegacyNoteCeilings,
+  parseTopLevelTree,
   readBaseLegacyCeilings,
+  readBaseTopLevelNames,
   readGuidanceRepository,
   runGuidanceCli,
   topLevelNames,
+  unionTopLevelNames,
 } from './check-guidance';
 
 const temporaryDirectories: string[] = [];
@@ -60,6 +63,17 @@ function repositoryWith(files: Record<string, string>) {
 
 function lines(count: number): string {
   return 'line\n'.repeat(count);
+}
+
+const modes = { blob: '100644', tree: '040000', commit: '160000' };
+
+/** The top-level names of a base tree, as `git ls-tree -z` prints them. */
+function baseTopLevel(entries: Record<string, 'blob' | 'tree' | 'commit'>) {
+  return parseTopLevelTree(
+    Object.entries(entries)
+      .map(([name, type]) => `${modes[type]} ${type} 0123abc\t${name}\0`)
+      .join('')
+  );
 }
 
 const pairedGuide = { 'src/area/AGENTS.md': '# Area\n', 'src/area/CLAUDE.md': '@AGENTS.md\n' };
@@ -261,17 +275,20 @@ describe('references', () => {
         '',
         'Read [the old note](old-note.md) and [a heading](target.md#retired-heading).',
         'The service lived in',
-        '`src/backend/removed.service.ts`, configured in `docs/removed.md`.',
+        '`src/backend/removed.service.ts`, configured in `knip.json`.',
         '',
       ].join('\n'),
       'src/area/AGENTS.md': 'Run [the recipe](../../docs/recipes/run.md).\n',
     });
 
-    expect(checkReferences(repository).map(formatGuidanceViolation)).toEqual([
+    // `knip.json` is deleted: the base ref has it, the working tree does not.
+    const base = baseTopLevel({ 'knip.json': 'blob' });
+
+    expect(checkReferences(repository, base).map(formatGuidanceViolation)).toEqual([
       'docs/architecture/guide.md:3: references: link `old-note.md` does not exist. Fix: point it at the current path or heading, or remove it.',
       'docs/architecture/guide.md:3: references: link `target.md#retired-heading` names a heading that does not exist in docs/architecture/target.md. Fix: point it at the current path or heading, or remove it.',
       'docs/architecture/guide.md:5: references: `src/backend/removed.service.ts` does not exist. Fix: point it at the current path or heading, or remove it.',
-      'docs/architecture/guide.md:5: references: `docs/removed.md` does not exist. Fix: point it at the current path or heading, or remove it.',
+      'docs/architecture/guide.md:5: references: `knip.json` does not exist. Fix: point it at the current path or heading, or remove it.',
       'src/area/AGENTS.md:1: references: link `../../docs/recipes/run.md` does not exist. Fix: point it at the current path or heading, or remove it.',
     ]);
   });
@@ -503,6 +520,137 @@ describe('top-level names come from the repository', () => {
     expect(classifyCodeSpan('a.ts', top)).toBeUndefined();
     expect(classifyCodeSpan('src', top, 'src/area')).toBeUndefined();
     expect(classifyCodeSpan('src/../x.ts', top, 'src/area')).toBeUndefined();
+  });
+});
+
+describe('names that exist only at the base ref', () => {
+  const tree = {
+    'src/backend/thing.ts': 'export {};\n',
+    'package.json': '{}\n',
+    ...pairedGuide,
+  };
+  const base = baseTopLevel({
+    '.oxlintrc.json': 'blob',
+    'knip.json': 'blob',
+    'package.json': 'blob',
+    electron: 'tree',
+    src: 'tree',
+  });
+
+  test('flags a root file deleted since the base ref, wherever it is cited', () => {
+    const repository = repositoryWith({
+      ...tree,
+      'AGENTS.md': 'Configured in `knip.json`.\n',
+      'docs/architecture/note.md': 'Configured in `knip.json`.\n',
+      'src/area/AGENTS.md': 'Configured in `knip.json`.\n',
+    });
+
+    expect(checkReferences(repository, base).map(formatGuidanceViolation)).toEqual([
+      'AGENTS.md:1: references: `knip.json` does not exist. Fix: point it at the current path or heading, or remove it.',
+      'docs/architecture/note.md:1: references: `knip.json` does not exist. Fix: point it at the current path or heading, or remove it.',
+      'src/area/AGENTS.md:1: references: `knip.json` does not exist. Fix: point it at the current path or heading, or remove it.',
+    ]);
+  });
+
+  test('flags a top-level directory deleted since the base ref', () => {
+    const repository = repositoryWith({
+      ...tree,
+      'AGENTS.md': 'The shell lives in `electron/main.ts` and `electron/`.\n',
+    });
+
+    expect(checkReferences(repository, base).map(formatGuidanceViolation)).toEqual([
+      'AGENTS.md:1: references: `electron/main.ts` does not exist. Fix: point it at the current path or heading, or remove it.',
+      'AGENTS.md:1: references: `electron/` does not exist. Fix: point it at the current path or heading, or remove it.',
+    ]);
+  });
+
+  test('flags a deleted dotfile in a nested guide before the hidden-name exclusion applies', () => {
+    const repository = repositoryWith({
+      ...tree,
+      'src/area/AGENTS.md': 'Rules are in `.oxlintrc.json`, not `.eslintrc.json`.\n',
+    });
+
+    expect(checkReferences(repository, base).map(formatGuidanceViolation)).toEqual([
+      'src/area/AGENTS.md:1: references: `.oxlintrc.json` does not exist. Fix: point it at the current path or heading, or remove it.',
+    ]);
+  });
+
+  test('without a base ref, the same citations pass', () => {
+    const repository = repositoryWith({
+      ...tree,
+      'AGENTS.md': 'Configured in `knip.json`; the shell is `electron/main.ts`.\n',
+      'src/area/AGENTS.md': 'Rules are in `.oxlintrc.json`.\n',
+    });
+
+    expect(checkReferences(repository)).toEqual([]);
+  });
+
+  test('names present in both the base and the working tree are checked as before', () => {
+    const repository = repositoryWith({
+      ...tree,
+      'AGENTS.md': 'See `package.json`, `src/backend/thing.ts` and `src/backend/gone.ts`.\n',
+    });
+
+    expect(checkReferences(repository, base).map(formatGuidanceViolation)).toEqual([
+      'AGENTS.md:1: references: `src/backend/gone.ts` does not exist. Fix: point it at the current path or heading, or remove it.',
+    ]);
+  });
+
+  test('unions the working tree names with the base names', () => {
+    expect(
+      unionTopLevelNames(
+        topLevelNames(['src/a.ts', 'package.json']),
+        baseTopLevel({ src: 'tree', electron: 'tree', 'knip.json': 'blob', vendor: 'commit' })
+      )
+    ).toEqual({
+      directories: new Set(['src', 'electron', 'vendor']),
+      files: new Set(['package.json', 'knip.json']),
+    });
+  });
+
+  test('reads the root level of the base ref from Git', () => {
+    const repositoryRoot = createRepository({
+      'knip.json': '{}\n',
+      'electron/main.ts': 'export {};\n',
+      'docs/README.md': '# Docs\n',
+    });
+    git(repositoryRoot, 'add', '-A');
+    git(repositoryRoot, 'commit', '--quiet', '-m', 'base');
+
+    expect(readBaseTopLevelNames(repositoryRoot, 'HEAD')).toEqual({
+      directories: new Set(['electron', 'docs']),
+      files: new Set(['knip.json']),
+    });
+    expect(readBaseTopLevelNames(repositoryRoot, 'no-such-ref')).toBeUndefined();
+  });
+
+  test('the command line uses the base ref, and falls back without one', () => {
+    const repositoryRoot = createRepository({
+      'knip.json': '{}\n',
+      'docs/architecture/note.md': 'Configured in `knip.json`.\n',
+    });
+    git(repositoryRoot, 'add', '-A');
+    git(repositoryRoot, 'commit', '--quiet', '-m', 'base');
+    const baseRef = git(repositoryRoot, 'rev-parse', 'HEAD');
+    rmSync(join(repositoryRoot, 'knip.json'));
+    const run = (ref: string | undefined) => {
+      const stderr: string[] = [];
+      const exitCode = runGuidanceCli({
+        repositoryRoot,
+        ceilings: {},
+        baseCeilings: ref === undefined ? { notice: 'no base.' } : { ref, ceilings: {} },
+        stdout: () => undefined,
+        stderr: (message) => stderr.push(message),
+      });
+      return { exitCode, stderr: stderr.join('') };
+    };
+
+    expect(run(baseRef)).toEqual({
+      exitCode: 1,
+      stderr:
+        'docs/architecture/note.md:1: references: `knip.json` does not exist. Fix: point it at the current path or heading, or remove it.\n',
+    });
+    expect(run(undefined)).toEqual({ exitCode: 0, stderr: '' });
   });
 });
 
