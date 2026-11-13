@@ -1,9 +1,11 @@
-import { describe, expect, it, vi } from 'vitest';
+import os from 'node:os';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   type CpuTimes,
   cpuPercentBetween,
   HostMetricsService,
   parseMemoryStatusLevel,
+  readMemoryPercent,
 } from './host-metrics.service';
 
 function createHarness() {
@@ -57,6 +59,43 @@ describe('parseMemoryStatusLevel', () => {
 
   it.each(['', 'abc', '-1', '101'])('rejects %j', (stdout) => {
     expect(parseMemoryStatusLevel(stdout)).toBeNull();
+  });
+});
+
+describe('readMemoryPercent', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  function mockFreeMemory(free: number, total: number) {
+    vi.spyOn(os, 'freemem').mockReturnValue(free);
+    vi.spyOn(os, 'totalmem').mockReturnValue(total);
+  }
+
+  it.each(['linux', 'win32'] as const)(
+    'uses available memory on %s without sysctl',
+    async (platform) => {
+      mockFreeMemory(25, 100);
+      const readStatusLevel = vi.fn(async () => '90');
+
+      await expect(readMemoryPercent(platform, readStatusLevel)).resolves.toBe(75);
+      expect(readStatusLevel).not.toHaveBeenCalled();
+    }
+  );
+
+  it('uses the memory-pressure level on macOS', async () => {
+    mockFreeMemory(5, 100);
+
+    await expect(readMemoryPercent('darwin', async () => '72\n')).resolves.toBe(28);
+  });
+
+  it('falls back to free memory on macOS when sysctl fails or is unreadable', async () => {
+    mockFreeMemory(40, 100);
+
+    await expect(
+      readMemoryPercent('darwin', () => Promise.reject(new Error('sysctl missing')))
+    ).resolves.toBe(60);
+    await expect(readMemoryPercent('darwin', async () => 'n/a')).resolves.toBe(60);
   });
 });
 
@@ -131,9 +170,11 @@ describe('HostMetricsService', () => {
     await harness.service.getHistory();
 
     harness.advance(60_000);
+    // Busy while nobody watched; the fresh history must not average this in.
+    harness.burnCpu(100, 1000);
     const samples = await harness.service.getHistory();
 
-    expect(samples).toHaveLength(1);
+    expect(samples).toEqual([expect.objectContaining({ cpuPercent: 0 })]);
     expect(harness.sleep).toHaveBeenCalledTimes(2);
   });
 });

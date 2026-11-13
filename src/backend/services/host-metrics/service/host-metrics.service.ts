@@ -74,21 +74,28 @@ function freeMemoryPercent(): number {
   return clampPercent((1 - os.freemem() / os.totalmem()) * 100);
 }
 
+async function readMemoryStatusLevel(): Promise<string> {
+  const { stdout } = await execFileAsync('sysctl', ['-n', 'kern.memorystatus_level'], {
+    encoding: 'utf8',
+    timeout: 1000,
+  });
+  return stdout;
+}
+
 /**
  * Linux and Windows report reclaimable memory as free. macOS counts only
  * untouched pages, so a healthy Mac with a large file cache looks nearly full;
  * ask the kernel's memory-pressure level instead.
  */
-export async function readMemoryPercent(): Promise<number> {
-  if (process.platform !== 'darwin') {
+export async function readMemoryPercent(
+  platform: NodeJS.Platform = process.platform,
+  readStatusLevel: () => Promise<string> = readMemoryStatusLevel
+): Promise<number> {
+  if (platform !== 'darwin') {
     return freeMemoryPercent();
   }
   try {
-    const { stdout } = await execFileAsync('sysctl', ['-n', 'kern.memorystatus_level'], {
-      encoding: 'utf8',
-      timeout: 1000,
-    });
-    return parseMemoryStatusLevel(stdout) ?? freeMemoryPercent();
+    return parseMemoryStatusLevel(await readStatusLevel()) ?? freeMemoryPercent();
   } catch {
     return freeMemoryPercent();
   }
@@ -111,7 +118,7 @@ export class HostMetricsService {
 
   constructor(options: HostMetricsServiceOptions = {}) {
     this.readCpuTimes = options.readCpuTimes ?? readCpuTimes;
-    this.readMemoryPercent = options.readMemoryPercent ?? readMemoryPercent;
+    this.readMemoryPercent = options.readMemoryPercent ?? (() => readMemoryPercent());
     this.now = options.now ?? Date.now;
     this.sleep = options.sleep ?? defaultSleep;
   }

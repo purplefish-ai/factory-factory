@@ -12,6 +12,7 @@ import { AgentsDashboardShell } from '@/client/features/agents/agents-dashboard-
 import { EventAgentCreate } from '@/client/features/agents/event-agent-create';
 import { eventSummaryFixture } from '@/client/features/agents/event-agent.test-support';
 import type { Agent, AgentRun } from '@/client/features/agents/types';
+import { hostLoadHistory } from '@/client/features/host-metrics/host-load.story-fixtures';
 import {
   AppNavigationDataProvider,
   type AppNavigationData,
@@ -28,7 +29,7 @@ import { mobileEventFixtures, MobileEventAgentContent } from './mobile-event-age
 const fixtureHandlers: StoryTrpcHandlers = {
   ...eventWorkspaceHandlers,
   'github.listIssuesForProject': () => ({ issues: [] }),
-  'admin.getHostMetrics': () => ({ samples: [] }),
+  'admin.getHostMetrics': () => ({ samples: hostLoadHistory(24, 43) }),
 };
 
 const project = { id: 'factory', slug: 'factory-factory', name: 'Factory Factory' };

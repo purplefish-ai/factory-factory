@@ -9,7 +9,7 @@ export type HostLoadTone = Extract<StatusTone, 'neutral' | 'warning' | 'danger'>
 
 const WARNING_PERCENT = 80;
 const DANGER_PERCENT = 95;
-/** Fifteen seconds at the header's poll rate: long enough to ignore one busy tick. */
+/** About fifteen seconds at one tab's poll rate: long enough to ignore one busy tick. */
 const RECENT_SAMPLES = 3;
 
 function recentAverage(samples: readonly HostLoadSample[], key: keyof HostLoadSample): number {

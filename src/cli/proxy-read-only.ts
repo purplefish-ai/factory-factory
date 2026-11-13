@@ -24,7 +24,7 @@ const READ_ONLY_MESSAGE =
  * Queries a public tunnel still refuses. Each one either starts a process
  * (agent runtimes, provider CLIs) or reads beyond this instance's own data:
  * any repository the host's `gh` token can see, arbitrary filesystem paths,
- * server logs, or a full database export.
+ * the host's overall load, server logs, or a full database export.
  */
 export const PUBLIC_BLOCKED_PROCEDURES: ReadonlySet<string> = new Set([
   // Start an agent runtime or provider CLI processes.
@@ -41,6 +41,8 @@ export const PUBLIC_BLOCKED_PROCEDURES: ReadonlySet<string> = new Set([
   // Probe or read arbitrary host paths.
   'project.validateRepoPath',
   'project.checkFactoryConfig',
+  // Whole-machine load, which reflects activity outside this instance.
+  'admin.getHostMetrics',
   // Logs and a full database export.
   'admin.getLogs',
   'admin.downloadLogFile',
