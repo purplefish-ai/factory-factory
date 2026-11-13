@@ -173,6 +173,10 @@
       "disposition": "test-support",
       "reason": "Schema-validated run recovery targets, inspections and results copied from the backend recovery integration tests, shared by the recovery stories and component tests; no production caller is expected."
     },
+    "src/client/features/chat/chat-transcript.story-fixtures.tsx": {
+      "disposition": "test-support",
+      "reason": "Shared meta, startup message and preview wrapper for the Chat/Transcript/ChatTranscript story files; no production caller is expected."
+    },
     "src/client/features/chat/transcript-rendering.test-utils.tsx": {
       "disposition": "test-support",
       "reason": "Test harness or fixture support remains explicit in this inventory; production callers are not expected."
@@ -188,6 +192,10 @@
     "src/client/features/kanban/inline-workspace-form.test-harness.tsx": {
       "disposition": "test-support",
       "reason": "Test harness or fixture support remains explicit in this inventory; production callers are not expected."
+    },
+    "src/client/features/kanban/kanban-board.provider.story-fixtures.tsx": {
+      "disposition": "test-support",
+      "reason": "Shared meta, header decorators, workspaces and tRPC handlers for the Board/KanbanBoardWithData story files; no production caller is expected."
     },
     "src/client/features/workspace/automation-origin-panel.story-fixtures.ts": {
       "disposition": "test-support",
@@ -217,9 +225,13 @@
       "disposition": "test-support",
       "reason": "Stateful settings tRPC handlers and request spy shared by the settings section Storybook scenarios; no production caller is expected."
     },
+    "src/client/routes/workspace-header-fixture.story-fixtures.tsx": {
+      "disposition": "test-support",
+      "reason": "Shared meta for the Navigation/AppHeader story files; no production caller is expected."
+    },
     "src/client/routes/workspace-header-pwa-preview.tsx": {
       "disposition": "test-support",
-      "reason": "workspace-header-fixture.stories.tsx renders this Storybook preview; keep visual fixture support."
+      "reason": "workspace-header-fixture.pwa.stories.tsx renders this Storybook preview; keep visual fixture support."
     },
     "src/lib/claude-fixtures.ts": {
       "disposition": "test-support",
