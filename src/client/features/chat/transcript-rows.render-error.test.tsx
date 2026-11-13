@@ -3,8 +3,8 @@ import { flushSync } from 'react-dom';
 import { createRoot } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import type { ToolSequence } from '@/lib/chat-protocol';
-import { createUserMessage } from '@/lib/claude-fixtures';
-import { TranscriptRenderingFixture } from './transcript-rendering.test-utils';
+import { createUserMessage } from '@/lib/claude.fixture';
+import { TranscriptRenderingFixture } from './transcript-rendering.test-harness';
 
 vi.mock('./agent-activity/tool-renderers', async (importOriginal) => {
   const actual = await importOriginal<typeof import('./agent-activity/tool-renderers')>();

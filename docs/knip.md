@@ -2,9 +2,10 @@
 
 `pnpm knip` continues to enforce unused files, dependencies and unlisted imports
 across application code, tests, stories, CSS, MDX and Prisma. The separate
-`pnpm check:unused-code` check compares two analyses against the reviewed
-inventory in `scripts/unused-code-baseline.json`. It runs in `pnpm check`, CI
-and the pre-commit hook.
+`pnpm check:unused-code` check compares two analyses against the location
+conventions in `scripts/check-unused-code.ts` and the reviewed inventory in
+`scripts/unused-code-baseline.json`. It runs in `pnpm check`, CI and the
+pre-commit hook.
 
 ## Two different signals
 
@@ -23,8 +24,10 @@ and the pre-commit hook.
 
 The entry exports themselves use Knip's default treatment: runtime roots are
 entrypoints rather than APIs to trim. Feature, service and shared/core barrels
-remain visible to the export audit. Maintained shadcn APIs remain visible too;
-there are no blanket directory or export exclusions.
+remain visible to the export audit, and so do maintained shadcn APIs;
+`knip.json` has no directory or export exclusions. The check, not Knip, decides
+which reported candidates the [location conventions](#location-conventions)
+explain.
 
 ## Runtime roots and Knip 6 semantics
 
@@ -51,8 +54,8 @@ roots: removing the last runtime reference should make them candidates. The Web
 Worker is an explicit root because it is launched through `new URL()`; backend
 orchestration workers remain ordinary imports from the backend graph. Tests and
 stories stay development entrypoints through the Vitest and Storybook plugins.
-Test-support files remain individually inventoried rather than hidden with
-directory ignores.
+Test-support files are not hidden with directory ignores; Knip still reports
+them, and the check explains them by location.
 
 `scripts/check-unused-code.test.ts` runs the installed Knip binary against
 isolated fixtures using the real entry/project configuration. It proves
@@ -63,13 +66,17 @@ GitHub previews, Markdown renderer, lazy file/diff viewers and critical runtime
 modules are absent from the production candidate report. Test-only module and
 fixture-support cases share one fixture and one scan per analysis mode. The CLI
 report and failure smoke tests still invoke the real analyzer, including the
-normal enforcement and update-refusal paths. Additional inventory decisions
-exercise the same evaluator directly without repeating analyzer scans.
+normal enforcement and update-refusal paths, and one fixture proves a
+conventional test helper and barrel re-export pass with an empty inventory while
+an unexplained export still fails. Additional inventory decisions exercise the
+same evaluator directly without repeating analyzer scans; each convention has an
+accepted and a rejected path.
 
 ## Staged review policy
 
 The inventory is a reviewed **signal inventory**, not a list of confirmed dead
-implementations. Each stable key has a disposition and rationale:
+implementations. Each candidate has a disposition and rationale, taken from a
+location convention or from an explicit inventory entry:
 
 - `maintained-api`: intentional component or architecture boundary surface.
 - `test-support`: fixtures, harnesses or visual scenarios kept for verification.
@@ -87,9 +94,46 @@ intentionally excluded, so unrelated edits do not invalidate review.
 ```sh
 pnpm check:unused-code          # enforce only inventory drift
 pnpm check:unused-code:report   # nonblocking JSON findings, reasons and drift
-pnpm check:unused-code:update   # prune resolved entries; refuses new keys
+pnpm check:unused-code:update   # prune resolved or covered keys; refuse new
 pnpm test scripts/check-unused-code.test.ts --maxWorkers=2
 ```
+
+### Location conventions
+
+`unusedCodeConventions` in `scripts/check-unused-code.ts` is the one list of
+locations that explain a candidate without an inventory entry. The first match
+wins:
+
+- **test-support directory** (both analyses, `test-support`): a file in a
+  `testing/`, `test-utils/` or `fixtures/` directory.
+- **test-support file name** (both analyses, `test-support`): a file named
+  `*.test-helpers.*`, `*.test-support.*`, `*.test-harness.*`,
+  `*.story-fixtures.*` or `*.fixture.*`.
+- **module barrel re-export** (exports only, `maintained-api`): a symbol that an
+  `index.ts` or `index.tsx` under `src/` re-exports but does not declare.
+- **shadcn component** (exports only, `maintained-api`): an export of a
+  component file directly under `src/components/ui/`.
+
+Name a new test helper, harness or story fixture to match one of these, and it
+needs no inventory edit. A file that is not test support by nature, such as a
+Storybook-only preview or a palette reader, keeps an explicit entry rather than
+a stretched convention.
+
+The barrel convention keys on the file's location and on whether the file
+declares the symbol itself; `export *` and named `export { … } from` re-exports
+qualify alike. A value or type declared in an `index.ts` is implementation, not
+barrel contract, so its unused export stays a new candidate. The convention does
+not hide the implementation either: when nothing but an unused re-export
+consumes a symbol, Knip also reports it on the implementation file, which needs
+its own entry. Behind `export *`, Knip reports only the implementation key, so
+narrowing a wildcard barrel to named re-exports adds barrel keys that the
+convention covers and leaves implementation keys as they were.
+
+An explicit entry whose disposition differs from the convention's overrides it,
+for example a `review-required` barrel export. An explicit entry with the
+convention's own disposition is redundant; the check rejects it and the update
+command prunes it. Production analysis has no barrel or component convention, so
+an unused barrel or component file is still a new candidate.
 
 The report command exits successfully for candidate debt; analyzer failures,
 invalid JSON and unexpected report/baseline schemas still fail. The normal check
@@ -99,12 +143,13 @@ remove source files.
 
 When a new candidate appears, inspect runtime imports, dynamic launch paths,
 barrels and schema/type contracts. Fix a missing real root or remove confirmed
-unneeded code where appropriate. If the API or candidate must remain, add its
-exact key with a specific disposition and reason in the same reviewed PR. There
-is no automatic command to accept new debt. After a cleanup or rebase, run the
-update command to prune resolved entries, inspect its diff, then rerun the
-check. The initial inventory was refreshed against merged audit cleanups; its
-`review-required` entries remain follow-up work, not deletion instructions.
+unneeded code where appropriate. If the API or candidate must remain and no
+convention explains it, add its exact key with a specific disposition and reason
+in the same reviewed PR. There is no automatic command to accept new debt. After
+a cleanup or rebase, run the update command to prune resolved entries, inspect
+its diff, then rerun the check. The initial inventory was refreshed against
+merged audit cleanups; its `review-required` entries remain follow-up work, not
+deletion instructions.
 
 ## Dependency and component maintenance
 

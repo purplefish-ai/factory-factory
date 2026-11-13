@@ -8,7 +8,7 @@ import {
   STREAMING_LINKS,
   STREAMING_PROSE,
   STREAMING_STRUCTURES,
-} from './streamdown-markdown.fixtures';
+} from './streamdown-markdown.fixture';
 
 const STEADY_CHUNKS = [12];
 const BURSTY_CHUNKS = [0, 0, 0, 8, 0, 0, 160, 0, 0, 0, 48];

@@ -6,7 +6,7 @@ import {
   SAMPLE_BASH_OUTPUTS,
   SAMPLE_FILE_CONTENTS,
   SAMPLE_FILE_PATHS,
-} from '@/lib/claude-fixtures';
+} from '@/lib/claude.fixture';
 import { ToolInfoRenderer, ToolSequenceGroup } from './tool-renderers';
 
 // =============================================================================

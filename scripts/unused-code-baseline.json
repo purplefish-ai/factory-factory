@@ -1,73 +1,13 @@
 {
   "version": 1,
   "production": {
-    "electron/main/lifecycle.test-support.ts": {
-      "disposition": "test-support",
-      "reason": "Electron window and lifecycle fakes extracted to keep lifecycle regressions below the file length limit; only tests import this harness."
-    },
     "src/backend/lib/file-lock-mutex.ts": {
       "disposition": "review-required",
       "reason": "Only mutex tests currently import this implementation; investigate lock ownership before removal."
     },
-    "src/backend/orchestration/data-backup/data-backup.settings.test-support.ts": {
-      "disposition": "test-support",
-      "reason": "User settings fixture for backup export/import and ticket prompt round-trip tests; no runtime consumers are expected."
-    },
-    "src/backend/orchestration/pull-requests/pr-event-flow.test-helpers.ts": {
-      "disposition": "test-support",
-      "reason": "Test harness or fixture support remains explicit in this inventory; production callers are not expected."
-    },
-    "src/backend/orchestration/snapshots/snapshot-reconciliation.test-helpers.ts": {
-      "disposition": "test-support",
-      "reason": "Test harness or fixture support remains explicit in this inventory; production callers are not expected."
-    },
-    "src/backend/orchestration/testing/agent-runtime-flow.test-support.ts": {
-      "disposition": "test-support",
-      "reason": "Test harness or fixture support remains explicit in this inventory; production callers are not expected."
-    },
-    "src/backend/orchestration/testing/event-delivery.test-support.ts": {
-      "disposition": "test-support",
-      "reason": "Test harness or fixture support remains explicit in this inventory; production callers are not expected."
-    },
-    "src/backend/orchestration/testing/event-provider.test-support.ts": {
-      "disposition": "test-support",
-      "reason": "Test harness or fixture support remains explicit in this inventory; production callers are not expected."
-    },
-    "src/backend/orchestration/testing/pr-monitoring-services.test-support.ts": {
-      "disposition": "test-support",
-      "reason": "Test harness or fixture support remains explicit in this inventory; production callers are not expected."
-    },
-    "src/backend/orchestration/workspace-lifecycle/workspace-init.test-harness.ts": {
-      "disposition": "test-support",
-      "reason": "Test harness or fixture support remains explicit in this inventory; production callers are not expected."
-    },
-    "src/backend/routers/websocket/chat-message-router.test-helpers.ts": {
-      "disposition": "test-support",
-      "reason": "Test harness or fixture support remains explicit in this inventory; production callers are not expected."
-    },
-    "src/backend/server.test-helpers.ts": {
-      "disposition": "test-support",
-      "reason": "Test harness or fixture support remains explicit in this inventory; production callers are not expected."
-    },
-    "src/backend/services/agent-definition/resources/testing/agent-ledger.test-support.ts": {
-      "disposition": "test-support",
-      "reason": "Test harness or fixture support remains explicit in this inventory; production callers are not expected."
-    },
     "src/backend/services/service-registry-check.helpers.ts": {
       "disposition": "build-input",
       "reason": "scripts/check-service-registry.ts consumes this verification helper outside production runtime."
-    },
-    "src/backend/services/session/service/acp/acp-client-factory.test-harness.ts": {
-      "disposition": "test-support",
-      "reason": "Test harness or fixture support remains explicit in this inventory; production callers are not expected."
-    },
-    "src/backend/services/session/service/acp/acp-runtime-manager.test-harness.ts": {
-      "disposition": "test-support",
-      "reason": "Test harness or fixture support remains explicit in this inventory; production callers are not expected."
-    },
-    "src/backend/services/session/service/acp/acp-runtime-manager.test-helpers.ts": {
-      "disposition": "test-support",
-      "reason": "Test harness or fixture support remains explicit in this inventory; production callers are not expected."
     },
     "src/backend/services/session/service/acp/codex-plan-usage-loader.ts": {
       "disposition": "review-required",
@@ -81,97 +21,9 @@
       "disposition": "review-required",
       "reason": "Consumed by the test-only plan usage loader and cleanup tests; assess process cleanup contracts first."
     },
-    "src/backend/services/session/service/chat/chat-message-handlers/handlers/load-session.test-helpers.ts": {
-      "disposition": "test-support",
-      "reason": "Test harness or fixture support remains explicit in this inventory; production callers are not expected."
-    },
-    "src/backend/services/session/service/config/session-config-authority.test-helpers.ts": {
-      "disposition": "test-support",
-      "reason": "Test harness or fixture support remains explicit in this inventory; production callers are not expected."
-    },
-    "src/backend/services/session/service/dispatch/session-dispatch-visibility.test-helpers.ts": {
-      "disposition": "test-support",
-      "reason": "Test harness or fixture support remains explicit in this inventory; production callers are not expected."
-    },
-    "src/backend/services/session/service/dispatch/session-dispatch.test-helpers.ts": {
-      "disposition": "test-support",
-      "reason": "Test harness or fixture support remains explicit in this inventory; production callers are not expected."
-    },
-    "src/backend/services/session/service/lifecycle/session-lifecycle.test-helpers.ts": {
-      "disposition": "test-support",
-      "reason": "Test harness or fixture support remains explicit in this inventory; production callers are not expected."
-    },
-    "src/backend/services/session/service/lifecycle/session-pending-config.test-helpers.ts": {
-      "disposition": "test-support",
-      "reason": "Test harness or fixture support remains explicit in this inventory; production callers are not expected."
-    },
-    "src/backend/services/session/service/lifecycle/session-startup-config.test-helpers.ts": {
-      "disposition": "test-support",
-      "reason": "Test harness or fixture support remains explicit in this inventory; production callers are not expected."
-    },
-    "src/backend/services/settings/resources/backup-writer.test-support.ts": {
-      "disposition": "test-support",
-      "reason": "Test harness or fixture support remains explicit in this inventory; production callers are not expected."
-    },
-    "src/backend/testing/dependency-cruiser.ts": {
-      "disposition": "test-support",
-      "reason": "Test harness or fixture support remains explicit in this inventory; production callers are not expected."
-    },
-    "src/backend/testing/integration-db.global-setup.ts": {
-      "disposition": "test-support",
-      "reason": "Vitest global setup migrates a temporary SQLite template for isolated integration database copies; no production runtime consumer is expected."
-    },
-    "src/backend/testing/integration-db.ts": {
-      "disposition": "test-support",
-      "reason": "Test harness or fixture support remains explicit in this inventory; production callers are not expected."
-    },
-    "src/backend/testing/legacy-backup.fixture.ts": {
-      "disposition": "test-support",
-      "reason": "Test harness or fixture support remains explicit in this inventory; production callers are not expected."
-    },
-    "src/backend/testing/pr-projection-fixture.ts": {
-      "disposition": "test-support",
-      "reason": "Test harness or fixture support remains explicit in this inventory; production callers are not expected."
-    },
-    "src/backend/testing/setup.ts": {
-      "disposition": "test-support",
-      "reason": "Test harness or fixture support remains explicit in this inventory; production callers are not expected."
-    },
-    "src/backend/testing/typescript-import-test-utils.ts": {
-      "disposition": "test-support",
-      "reason": "Test harness or fixture support remains explicit in this inventory; production callers are not expected."
-    },
-    "src/backend/testing/websocket-test-utils.ts": {
-      "disposition": "test-support",
-      "reason": "Test harness or fixture support remains explicit in this inventory; production callers are not expected."
-    },
-    "src/client/components/project-issues-recovery.story-fixtures.tsx": {
-      "disposition": "test-support",
-      "reason": "Shared Board and sidebar Storybook transport fixture verifies cached issue retention, failure notice and pending retry recovery; no production caller is expected."
-    },
-    "src/client/components/streamdown-markdown.fixtures.ts": {
-      "disposition": "test-support",
-      "reason": "Streaming Markdown samples consumed only by streamdown-markdown.stories.tsx and streamdown-markdown.bench.tsx."
-    },
-    "src/client/features/agents/agent-menu.test-support.ts": {
-      "disposition": "test-support",
-      "reason": "Shared Agents creation-menu interactions and injected cancel control used only by regression tests."
-    },
     "src/client/features/agents/event-dashboard-story.tsx": {
       "disposition": "test-support",
       "reason": "Storybook event-dashboard fixtures consume this shared scenario implementation."
-    },
-    "src/client/features/agents/event-history.story-fixtures.ts": {
-      "disposition": "test-support",
-      "reason": "Schema-validated event run and evaluation pages shared by the Runs and Events stories and their component tests; no production caller is expected."
-    },
-    "src/client/features/agents/event-run-recovery.story-fixtures.ts": {
-      "disposition": "test-support",
-      "reason": "Schema-validated run recovery targets, inspections and results copied from the backend recovery integration tests, shared by the recovery stories and component tests; no production caller is expected."
-    },
-    "src/client/features/chat/transcript-rendering.test-utils.tsx": {
-      "disposition": "test-support",
-      "reason": "Test harness or fixture support remains explicit in this inventory; production callers are not expected."
     },
     "src/client/features/chat/usage-stats/context-window-indicator.tsx": {
       "disposition": "review-required",
@@ -180,14 +32,6 @@
     "src/client/features/chat/usage-stats/usage-stats-popover.tsx": {
       "disposition": "review-required",
       "reason": "Used by context-window indicator and Storybook; assess retained usage display before removal."
-    },
-    "src/client/features/kanban/inline-workspace-form.test-harness.tsx": {
-      "disposition": "test-support",
-      "reason": "Test harness or fixture support remains explicit in this inventory; production callers are not expected."
-    },
-    "src/client/features/workspace/automation-origin-panel.story-fixtures.ts": {
-      "disposition": "test-support",
-      "reason": "Schema-validated workspace origin, run and automation shared by the event-run origin panel and RightPanel stories and tests; no production caller is expected."
     },
     "src/client/foundations/rendered-colors.ts": {
       "disposition": "test-support",
@@ -201,89 +45,13 @@
       "disposition": "test-support",
       "reason": "Parses the theme CSS for the status palette contrast test; not browser runtime code."
     },
-    "src/client/lib/user-settings-queries.test-harness.tsx": {
-      "disposition": "test-support",
-      "reason": "Fake user-settings backend and Radix helpers shared by the settings hook and admin section tests; production callers are not expected."
-    },
-    "src/client/routes/admin/settings-page-layout.story-fixtures.tsx": {
-      "disposition": "test-support",
-      "reason": "Shared navigation providers and header portal for settings and server-logs Storybook scenarios; no production caller is expected."
-    },
-    "src/client/routes/admin/settings-sections.story-fixtures.tsx": {
-      "disposition": "test-support",
-      "reason": "Stateful settings tRPC handlers and request spy shared by the settings section Storybook scenarios; no production caller is expected."
-    },
     "src/client/routes/workspace-header-pwa-preview.tsx": {
       "disposition": "test-support",
       "reason": "workspace-header-fixture.stories.tsx renders this Storybook preview; keep visual fixture support."
     },
-    "src/lib/claude-fixtures.ts": {
-      "disposition": "test-support",
-      "reason": "Claude protocol fixtures are consumed by tests, not application runtime."
-    },
     "src/lib/phosphor-icon-weights.ts": {
       "disposition": "build-input",
       "reason": "Vite config imports this icon-weight build policy; it is not browser runtime code."
-    },
-    "src/shared/pr-monitoring.test-helpers.ts": {
-      "disposition": "test-support",
-      "reason": "Test harness or fixture support remains explicit in this inventory; production callers are not expected."
-    },
-    "src/shared/testing/recovery-envelope.fixture.ts": {
-      "disposition": "test-support",
-      "reason": "Test harness or fixture support remains explicit in this inventory; production callers are not expected."
-    },
-    "src/shared/testing/recovery-json-storage.fixture.ts": {
-      "disposition": "test-support",
-      "reason": "Malformed JSON-storage cases shared by recovery-json-storage.schema.test.ts and base-json-backup.integration.test.ts; no runtime consumers."
-    },
-    "src/test-utils/agent-authoring-eval-fixture.ts": {
-      "disposition": "test-support",
-      "reason": "Test harness or fixture support remains explicit in this inventory; production callers are not expected."
-    },
-    "src/test-utils/agent-event-classifier-gate.ts": {
-      "disposition": "test-support",
-      "reason": "Test harness or fixture support remains explicit in this inventory; production callers are not expected."
-    },
-    "src/test-utils/application-graph.ts": {
-      "disposition": "test-support",
-      "reason": "Test harness or fixture support remains explicit in this inventory; production callers are not expected."
-    },
-    "src/test-utils/auto-stub.ts": {
-      "disposition": "test-support",
-      "reason": "Auto-stubbing doubles for the fake application graph and its module mocks; only tests import this helper."
-    },
-    "src/test-utils/commit-probe.ts": {
-      "disposition": "test-support",
-      "reason": "Test harness or fixture support remains explicit in this inventory; production callers are not expected."
-    },
-    "src/test-utils/deferred.ts": {
-      "disposition": "test-support",
-      "reason": "Test harness or fixture support remains explicit in this inventory; production callers are not expected."
-    },
-    "src/test-utils/event-generic-retry.test-support.ts": {
-      "disposition": "test-support",
-      "reason": "Test harness or fixture support remains explicit in this inventory; production callers are not expected."
-    },
-    "src/test-utils/react-act.ts": {
-      "disposition": "test-support",
-      "reason": "Test harness or fixture support remains explicit in this inventory; production callers are not expected."
-    },
-    "src/test-utils/subagent-tabs.ts": {
-      "disposition": "test-support",
-      "reason": "Test harness or fixture support remains explicit in this inventory; production callers are not expected."
-    },
-    "src/test-utils/unsafe-coerce.ts": {
-      "disposition": "test-support",
-      "reason": "Test harness or fixture support remains explicit in this inventory; production callers are not expected."
-    },
-    "src/test-utils/workspace-snapshot-contract.ts": {
-      "disposition": "test-support",
-      "reason": "Test harness or fixture support remains explicit in this inventory; production callers are not expected."
-    },
-    "src/test-utils/workspace-snapshot.ts": {
-      "disposition": "test-support",
-      "reason": "Test harness or fixture support remains explicit in this inventory; production callers are not expected."
     }
   },
   "exports": {
@@ -294,22 +62,6 @@
     "src/backend/db.ts::exports::getCurrentDatabasePath": {
       "disposition": "review-required",
       "reason": "Visibility candidate in a reachable module; trace callers and schema/type contracts before narrowing this export."
-    },
-    "src/backend/interceptors/index.ts::exports::interceptorRegistry": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
-    "src/backend/interceptors/index.ts::types::InterceptorContext": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
-    "src/backend/interceptors/index.ts::types::ToolEvent": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
-    "src/backend/interceptors/index.ts::types::ToolInterceptor": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
     },
     "src/backend/lib/constants.ts::exports::FACTORY_SIGNATURE": {
       "disposition": "review-required",
@@ -339,18 +91,6 @@
       "disposition": "review-required",
       "reason": "Visibility candidate in a reachable module; trace callers and schema/type contracts before narrowing this export."
     },
-    "src/backend/routers/websocket/index.ts::exports::devLogsConnections": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
-    "src/backend/routers/websocket/index.ts::exports::postRunLogsConnections": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
-    "src/backend/routers/websocket/index.ts::exports::terminalConnections": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
     "src/backend/routers/websocket/log-stream.handler.ts::exports::devLogsConnections": {
       "disposition": "review-required",
       "reason": "Visibility candidate in a reachable module; trace callers and schema/type contracts before narrowing this export."
@@ -379,126 +119,6 @@
       "disposition": "review-required",
       "reason": "Visibility candidate in a reachable module; trace callers and schema/type contracts before narrowing this export."
     },
-    "src/backend/schemas/websocket/index.ts::types::ChatMessageInput": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
-    "src/backend/schemas/websocket/index.ts::types::LoadSessionMessage": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
-    "src/backend/schemas/websocket/index.ts::types::PermissionResponseMessage": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
-    "src/backend/schemas/websocket/index.ts::types::QueueMessageInput": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
-    "src/backend/schemas/websocket/index.ts::types::RemoveQueuedMessageInput": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
-    "src/backend/schemas/websocket/index.ts::types::ResumeQueuedMessagesInput": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
-    "src/backend/schemas/websocket/index.ts::types::SetConfigOptionMessage": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
-    "src/backend/schemas/websocket/index.ts::types::SetModelMessage": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
-    "src/backend/schemas/websocket/index.ts::types::SetThinkingBudgetMessage": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
-    "src/backend/schemas/websocket/index.ts::types::StartMessageInput": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
-    "src/backend/schemas/websocket/index.ts::types::StopMessage": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
-    "src/backend/schemas/websocket/index.ts::types::UserInputMessage": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
-    "src/backend/services/agent-definition/index.ts::exports::admitRun": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
-    "src/backend/services/agent-definition/index.ts::exports::agentActivationGenerationSchema": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
-    "src/backend/services/agent-definition/index.ts::exports::agentConnectionInputSchema": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
-    "src/backend/services/agent-definition/index.ts::exports::agentConnectionProviderSchema": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
-    "src/backend/services/agent-definition/index.ts::exports::agentDefinitionInputSchema": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
-    "src/backend/services/agent-definition/index.ts::exports::agentDefinitionRevisionSchema": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
-    "src/backend/services/agent-definition/index.ts::exports::agentExecutionConfigSchema": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
-    "src/backend/services/agent-definition/index.ts::exports::agentRunInputSchema": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
-    "src/backend/services/agent-definition/index.ts::exports::agentRunStatusSchema": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
-    "src/backend/services/agent-definition/index.ts::exports::agentTriggerInputSchema": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
-    "src/backend/services/agent-definition/index.ts::exports::agentTriggerRevisionSchema": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
-    "src/backend/services/agent-definition/index.ts::exports::agentTriggerTypeSchema": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
-    "src/backend/services/agent-definition/index.ts::exports::finalizeEventOrder": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
-    "src/backend/services/agent-definition/index.ts::exports::recordEvaluation": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
-    "src/backend/services/agent-definition/index.ts::types::AgentConnectionInput": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
-    "src/backend/services/agent-definition/index.ts::types::AgentDefinitionInput": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
-    "src/backend/services/agent-definition/index.ts::types::AgentRunInput": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
-    "src/backend/services/agent-definition/index.ts::types::FreezeEventExecutionInput": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
     "src/backend/services/agent-definition/service/agent-runtime.service.ts::exports::admitRun": {
       "disposition": "review-required",
       "reason": "Visibility candidate in a reachable module; trace callers and schema/type contracts before narrowing this export."
@@ -510,10 +130,6 @@
     "src/backend/services/agent-definition/service/agent-runtime.service.ts::exports::recordEvaluation": {
       "disposition": "review-required",
       "reason": "Visibility candidate in a reachable module; trace callers and schema/type contracts before narrowing this export."
-    },
-    "src/backend/services/codex-accounts/index.ts::exports::CodexAccountService": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
     },
     "src/backend/services/env-schemas.ts::types::LogLevel": {
       "disposition": "review-required",
@@ -535,102 +151,6 @@
       "disposition": "review-required",
       "reason": "Visibility candidate in a reachable module; trace callers and schema/type contracts before narrowing this export."
     },
-    "src/backend/services/github/service/index.ts::exports::buildReviewSummariesForPrompt": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
-    "src/backend/services/github/service/index.ts::exports::computeLatestReviewActivityAtMs": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
-    "src/backend/services/github/service/index.ts::exports::isIgnoredReviewAuthor": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
-    "src/backend/services/github/service/index.ts::types::AgentIssueEventPage": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
-    "src/backend/services/github/service/index.ts::types::AgentIssueEventRequest": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
-    "src/backend/services/github/service/index.ts::types::AttachAndRefreshResult": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
-    "src/backend/services/github/service/index.ts::types::AuthCheckResult": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
-    "src/backend/services/github/service/index.ts::types::CodeReviewComment": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
-    "src/backend/services/github/service/index.ts::types::CodeReviewCommentSide": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
-    "src/backend/services/github/service/index.ts::types::CoordinatedFetch": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
-    "src/backend/services/github/service/index.ts::types::GitHubCLIErrorType": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
-    "src/backend/services/github/service/index.ts::types::GitHubIssue": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
-    "src/backend/services/github/service/index.ts::types::OpenPullRequest": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
-    "src/backend/services/github/service/index.ts::types::PRInfo": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
-    "src/backend/services/github/service/index.ts::types::PRSnapshotRefreshResult": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
-    "src/backend/services/github/service/index.ts::types::SubmitCodeReviewInput": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
-    "src/backend/services/linear/service/index.ts::types::LinearIssue": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
-    "src/backend/services/linear/service/index.ts::types::LinearTeam": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
-    "src/backend/services/linear/service/index.ts::types::LinearValidationResult": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
-    "src/backend/services/linear/service/index.ts::types::LinearWorkflowState": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
-    "src/backend/services/periodic-task/index.ts::types::PeriodicTaskTimerDispatchBridge": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
-    "src/backend/services/periodic-task/index.ts::types::PeriodicTaskWorkspaceStatusBridge": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
-    "src/backend/services/periodic-task/service/index.ts::types::PeriodicTaskTimerDispatchBridge": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
-    "src/backend/services/periodic-task/service/index.ts::types::PeriodicTaskWorkspaceStatusBridge": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
     "src/backend/services/registry.ts::types::InfrastructureServiceName": {
       "disposition": "review-required",
       "reason": "Visibility candidate in a reachable module; trace callers and schema/type contracts before narrowing this export."
@@ -646,10 +166,6 @@
     "src/backend/services/session/service/acp/acp-event-translator.ts::types::TranslatableSessionUpdate": {
       "disposition": "review-required",
       "reason": "Visibility candidate in a reachable module; trace callers and schema/type contracts before narrowing this export."
-    },
-    "src/backend/services/session/service/acp/acp-runtime-manager.test-harness.ts::exports::mockNdJsonStream": {
-      "disposition": "test-support",
-      "reason": "Test-support export visibility candidate; inspect fixture consumers before narrowing this helper API."
     },
     "src/backend/services/session/service/acp/acp-task-status-protocol.ts::types::TaskStatusChangedParams": {
       "disposition": "review-required",
@@ -667,154 +183,6 @@
       "disposition": "review-required",
       "reason": "Visibility candidate in a reachable module; trace callers and schema/type contracts before narrowing this export."
     },
-    "src/backend/services/session/service/index.ts::exports::SessionLifecycleService": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
-    "src/backend/services/session/service/index.ts::exports::acpEventProcessor": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
-    "src/backend/services/session/service/index.ts::exports::sessionRetryService": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
-    "src/backend/services/session/service/index.ts::types::AcpRuntimeEventHandlers": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
-    "src/backend/services/session/service/index.ts::types::AcpSessionState": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
-    "src/backend/services/session/service/index.ts::types::AcpSubagentsChangedEvent": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
-    "src/backend/services/session/service/index.ts::types::AcquirePRDedicatedSessionInput": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
-    "src/backend/services/session/service/index.ts::types::ArchivedProviderIdentity": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
-    "src/backend/services/session/service/index.ts::types::ClaudeModelCatalogEntry": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
-    "src/backend/services/session/service/index.ts::types::ClosedSessionTranscript": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
-    "src/backend/services/session/service/index.ts::types::DispatchOptions": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
-    "src/backend/services/session/service/index.ts::types::EventAgentExecution": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
-    "src/backend/services/session/service/index.ts::types::EventForwarderContext": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
-    "src/backend/services/session/service/index.ts::types::EventSessionCreation": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
-    "src/backend/services/session/service/index.ts::types::GetOrCreateSessionClientOptions": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
-    "src/backend/services/session/service/index.ts::types::LifecycleBridges": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
-    "src/backend/services/session/service/index.ts::types::PRDedicatedSessionAcquisition": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
-    "src/backend/services/session/service/index.ts::types::SessionCommandReply": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
-    "src/backend/services/session/service/index.ts::types::SessionDataDependencies": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
-    "src/backend/services/session/service/index.ts::types::SessionDataService": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
-    "src/backend/services/session/service/index.ts::types::SessionInitPolicyBridge": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
-    "src/backend/services/session/service/index.ts::types::SessionInterceptorBridge": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
-    "src/backend/services/session/service/index.ts::types::SessionPromptService": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
-    "src/backend/services/session/service/index.ts::types::SessionProviderResolverDependencies": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
-    "src/backend/services/session/service/index.ts::types::SessionViewerCountProvider": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
-    "src/backend/services/session/service/index.ts::types::SessionWorkspaceBridge": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
-    "src/backend/services/session/service/index.ts::types::StartSessionOptions": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
-    "src/backend/services/session/service/index.ts::types::StopSessionOptions": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
-    "src/backend/services/session/service/index.ts::types::WorkspaceMetadataGenerationInput": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
-    "src/backend/services/session/service/lifecycle/session-lifecycle.test-helpers.ts::exports::createPendingWorkspaceNotification": {
-      "disposition": "test-support",
-      "reason": "Test-support export visibility candidate; inspect fixture consumers before narrowing this helper API."
-    },
-    "src/backend/services/settings/service/index.ts::types::UpdateUserSettingsInput": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
-    "src/backend/services/terminal/service/index.ts::exports::TerminalService": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
-    "src/backend/services/terminal/service/index.ts::types::CreateTerminalOptions": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
-    "src/backend/services/terminal/service/index.ts::types::CreateTerminalResult": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
-    "src/backend/services/terminal/service/index.ts::types::TerminalOutput": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
-    "src/backend/services/terminal/service/index.ts::types::TerminalResourceUsage": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
-    "src/backend/services/terminal/service/index.ts::types::TerminalSession": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
     "src/backend/services/terminal/service/terminal-session.service.ts::types::TerminalSession": {
       "disposition": "review-required",
       "reason": "Visibility candidate in a reachable module; trace callers and schema/type contracts before narrowing this export."
@@ -826,34 +194,6 @@
     "src/backend/services/workspace/resources/workspace-ratchet.accessor.ts::exports::WORKSPACE_RATCHET_DEFAULTS": {
       "disposition": "review-required",
       "reason": "Visibility candidate in a reachable module; trace callers and schema/type contracts before narrowing this export."
-    },
-    "src/backend/services/workspace/service/index.ts::exports::parseGithubUrl": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
-    "src/backend/services/workspace/service/index.ts::types::EventWorkspaceSource": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
-    "src/backend/services/workspace/service/index.ts::types::OrphanedWorktree": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
-    "src/backend/services/workspace/service/index.ts::types::OrphanedWorktreeCleanupResult": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
-    "src/backend/services/workspace/service/index.ts::types::WorkspaceGitHubBridge": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
-    "src/backend/services/workspace/service/index.ts::types::WorkspacePRSnapshotBridge": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
-    "src/backend/services/workspace/service/index.ts::types::WorkspaceSessionBridge": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
     },
     "src/backend/services/workspace/service/state/flow-state.ts::types::WorkspaceCiObservation": {
       "disposition": "review-required",
@@ -875,145 +215,9 @@
       "disposition": "review-required",
       "reason": "Visibility candidate in a reachable module; trace callers and schema/type contracts before narrowing this export."
     },
-    "src/backend/trpc/index.ts::exports::publicProcedure": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
-    "src/client/features/agents/index.ts::types::AgentScheduleFieldsProps": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
-    "src/client/features/chat/agent-activity/message-renderers/index.ts::exports::ErrorRenderer": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
-    "src/client/features/chat/agent-activity/message-renderers/index.ts::exports::ResultRenderer": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
-    "src/client/features/chat/agent-activity/message-renderers/index.ts::exports::StreamDeltaRenderer": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
-    "src/client/features/chat/agent-activity/message-renderers/index.ts::exports::StreamEventRenderer": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
-    "src/client/features/chat/agent-activity/message-renderers/index.ts::exports::SystemMessageRenderer": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
-    "src/client/features/chat/agent-activity/message-renderers/index.ts::exports::ToolCallRenderer": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
-    "src/client/features/chat/agent-activity/message-renderers/index.ts::exports::useIsThinkingInProgress": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
-    "src/client/features/chat/agent-activity/tool-renderers/index.ts::exports::FilePathDisplay": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
-    "src/client/features/chat/agent-activity/tool-renderers/index.ts::exports::ToolInputRenderer": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
-    "src/client/features/chat/agent-activity/tool-renderers/index.ts::exports::ToolResultContentRenderer": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
-    "src/client/features/chat/agent-activity/tool-renderers/index.ts::types::ToolInfoRendererProps": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
-    "src/client/features/chat/agent-activity/tool-renderers/index.ts::types::ToolInputRendererProps": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
-    "src/client/features/chat/agent-activity/tool-renderers/index.ts::types::ToolResultContentRendererProps": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
-    "src/client/features/chat/agent-activity/tool-renderers/index.ts::types::ToolSequenceGroupProps": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
-    "src/client/features/chat/index.ts::exports::CompactingIndicator": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
-    "src/client/features/chat/index.ts::exports::PermissionPromptExpanded": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
-    "src/client/features/chat/index.ts::exports::QueuedMessages": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
-    "src/client/features/chat/index.ts::exports::TodoPanel": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
-    "src/client/features/chat/index.ts::exports::useTodoTracker": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
-    "src/client/features/chat/index.ts::types::ChatInputProps": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
-    "src/client/features/chat/index.ts::types::ChatMessage": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
-    "src/client/features/chat/index.ts::types::TaskNotification": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
-    "src/client/features/chat/index.ts::types::Todo": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
-    "src/client/features/chat/index.ts::types::TodoState": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
-    "src/client/features/chat/index.ts::types::UseChatWebSocketOptions": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
     "src/client/features/chat/reducer/helpers.ts::exports::trimMessagesForRenderer": {
       "disposition": "review-required",
       "reason": "Visibility candidate in a reachable module; trace callers and schema/type contracts before narrowing this export."
-    },
-    "src/client/features/chat/reducer/index.ts::types::AcpConfigOptionGroup": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
-    "src/client/features/chat/reducer/index.ts::types::AcpConfigOptionValue": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
-    "src/client/features/chat/reducer/index.ts::types::AcpPlanEntry": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
-    "src/client/features/chat/reducer/index.ts::types::AcpToolLocation": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
-    "src/client/features/chat/reducer/index.ts::types::ProcessStatus": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
-    "src/client/features/chat/reducer/index.ts::types::RejectedMessageInfo": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
-    "src/client/features/chat/reducer/index.ts::types::TaskNotification": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
     },
     "src/client/features/chat/reducer/types.ts::types::AcpConfigOptionGroup": {
       "disposition": "review-required",
@@ -1023,62 +227,6 @@
       "disposition": "review-required",
       "reason": "Visibility candidate in a reachable module; trace callers and schema/type contracts before narrowing this export."
     },
-    "src/client/features/composer/index.ts::exports::AttachmentViewerDialog": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
-    "src/client/features/composer/index.ts::exports::usePaletteKeyboardNavigation": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
-    "src/client/features/composer/index.ts::types::FileMentionPaletteProps": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
-    "src/client/features/composer/index.ts::types::PaletteKeyResult": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
-    "src/client/features/composer/index.ts::types::PaletteKeyboardHandle": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
-    "src/client/features/composer/index.ts::types::SlashCommandPaletteProps": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
-    "src/client/features/kanban/index.ts::exports::KanbanColumn": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
-    "src/client/features/kanban/index.ts::exports::getKanbanColumns": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
-    "src/client/features/kanban/index.ts::types::WorkspaceWithKanban": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
-    "src/client/features/session-selection/index.ts::types::ProviderModelPickerProps": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
-    "src/client/features/session-selection/index.ts::types::SessionLaunchSelection": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
-    "src/client/features/session-selection/index.ts::types::SessionLaunchSelectionSnapshot": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
-    "src/client/features/voice/index.ts::exports::useMicCapture": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
-    "src/client/features/voice/index.ts::exports::useVoicePlayback": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
     "src/client/features/workspace/change-panel-shared.tsx::exports::ScrollableChangeSections": {
       "disposition": "review-required",
       "reason": "Visibility candidate in a reachable module; trace callers and schema/type contracts before narrowing this export."
@@ -1087,205 +235,9 @@
       "disposition": "review-required",
       "reason": "Visibility candidate in a reachable module; trace callers and schema/type contracts before narrowing this export."
     },
-    "src/client/features/workspace/index.ts::exports::PRRecipientPicker": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
-    "src/client/features/workspace/index.ts::types::PRRecipientChoice": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
     "src/client/features/workspace/workspace-status-badge.tsx::types::WorkspaceStatus": {
       "disposition": "review-required",
       "reason": "Visibility candidate in a reachable module; trace callers and schema/type contracts before narrowing this export."
-    },
-    "src/client/routes/admin/index.ts::exports::ProjectIssueTrackingCard": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
-    "src/client/routes/admin/index.ts::exports::StatCard": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
-    "src/client/routes/admin/index.ts::types::ApiUsageData": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
-    "src/client/routes/admin/index.ts::types::ApiUsageSectionProps": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
-    "src/client/routes/admin/index.ts::types::ProcessesData": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
-    "src/client/routes/admin/index.ts::types::ProcessesSectionProps": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
-    "src/client/routes/admin/index.ts::types::StatCardProps": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
-    "src/client/routes/projects/workspaces/workspace-detail-header/index.ts::exports::AdversarialReviewButton": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
-    "src/client/routes/projects/workspaces/workspace-detail-header/index.ts::exports::OpenDevAppAction": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
-    "src/components/ui/alert-dialog.tsx::exports::AlertDialogMedia": {
-      "disposition": "maintained-api",
-      "reason": "Retain the maintained shadcn component surface; export visibility alone does not justify trimming its API."
-    },
-    "src/components/ui/alert-dialog.tsx::exports::AlertDialogTrigger": {
-      "disposition": "maintained-api",
-      "reason": "Retain the maintained shadcn component surface; export visibility alone does not justify trimming its API."
-    },
-    "src/components/ui/card.tsx::exports::CardFooter": {
-      "disposition": "maintained-api",
-      "reason": "Retain the maintained shadcn component surface; export visibility alone does not justify trimming its API."
-    },
-    "src/components/ui/command.tsx::exports::CommandSeparator": {
-      "disposition": "maintained-api",
-      "reason": "Retain the maintained shadcn component surface; export visibility alone does not justify trimming its API."
-    },
-    "src/components/ui/command.tsx::exports::CommandShortcut": {
-      "disposition": "maintained-api",
-      "reason": "Retain the maintained shadcn component surface; export visibility alone does not justify trimming its API."
-    },
-    "src/components/ui/context-menu.tsx::exports::ContextMenuCheckboxItem": {
-      "disposition": "maintained-api",
-      "reason": "Retain the maintained shadcn component surface; export visibility alone does not justify trimming its API."
-    },
-    "src/components/ui/context-menu.tsx::exports::ContextMenuGroup": {
-      "disposition": "maintained-api",
-      "reason": "Retain the maintained shadcn component surface; export visibility alone does not justify trimming its API."
-    },
-    "src/components/ui/context-menu.tsx::exports::ContextMenuPortal": {
-      "disposition": "maintained-api",
-      "reason": "Retain the maintained shadcn component surface; export visibility alone does not justify trimming its API."
-    },
-    "src/components/ui/context-menu.tsx::exports::ContextMenuRadioGroup": {
-      "disposition": "maintained-api",
-      "reason": "Retain the maintained shadcn component surface; export visibility alone does not justify trimming its API."
-    },
-    "src/components/ui/context-menu.tsx::exports::ContextMenuRadioItem": {
-      "disposition": "maintained-api",
-      "reason": "Retain the maintained shadcn component surface; export visibility alone does not justify trimming its API."
-    },
-    "src/components/ui/context-menu.tsx::exports::ContextMenuSeparator": {
-      "disposition": "maintained-api",
-      "reason": "Retain the maintained shadcn component surface; export visibility alone does not justify trimming its API."
-    },
-    "src/components/ui/context-menu.tsx::exports::ContextMenuShortcut": {
-      "disposition": "maintained-api",
-      "reason": "Retain the maintained shadcn component surface; export visibility alone does not justify trimming its API."
-    },
-    "src/components/ui/context-menu.tsx::exports::ContextMenuSubContent": {
-      "disposition": "maintained-api",
-      "reason": "Retain the maintained shadcn component surface; export visibility alone does not justify trimming its API."
-    },
-    "src/components/ui/dropdown-menu.tsx::exports::DropdownMenuCheckboxItem": {
-      "disposition": "maintained-api",
-      "reason": "Retain the maintained shadcn component surface; export visibility alone does not justify trimming its API."
-    },
-    "src/components/ui/dropdown-menu.tsx::exports::DropdownMenuGroup": {
-      "disposition": "maintained-api",
-      "reason": "Retain the maintained shadcn component surface; export visibility alone does not justify trimming its API."
-    },
-    "src/components/ui/dropdown-menu.tsx::exports::DropdownMenuShortcut": {
-      "disposition": "maintained-api",
-      "reason": "Retain the maintained shadcn component surface; export visibility alone does not justify trimming its API."
-    },
-    "src/components/ui/input-group.tsx::exports::InputGroupText": {
-      "disposition": "maintained-api",
-      "reason": "Retain the maintained shadcn component surface; export visibility alone does not justify trimming its API."
-    },
-    "src/components/ui/select.tsx::exports::SelectSeparator": {
-      "disposition": "maintained-api",
-      "reason": "Retain the maintained shadcn component surface; export visibility alone does not justify trimming its API."
-    },
-    "src/components/ui/sheet.tsx::exports::SheetClose": {
-      "disposition": "maintained-api",
-      "reason": "Retain the maintained shadcn component surface; export visibility alone does not justify trimming its API."
-    },
-    "src/components/ui/table.tsx::exports::TableCaption": {
-      "disposition": "maintained-api",
-      "reason": "Retain the maintained shadcn component surface; export visibility alone does not justify trimming its API."
-    },
-    "src/components/ui/table.tsx::exports::TableFooter": {
-      "disposition": "maintained-api",
-      "reason": "Retain the maintained shadcn component surface; export visibility alone does not justify trimming its API."
-    },
-    "src/lib/diff/index.ts::exports::calculateLineNumberWidth": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
-    "src/lib/diff/index.ts::exports::getDiffLineBackground": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
-    "src/lib/diff/index.ts::exports::getDiffLinePrefix": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
-    "src/lib/diff/index.ts::exports::getDiffLineTextColor": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
-    "src/lib/diff/index.ts::exports::parseDetailedDiff": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
-    "src/lib/diff/index.ts::exports::tokenizeDiffLines": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
-    "src/lib/diff/index.ts::types::DiffFile": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
-    "src/lib/diff/index.ts::types::DiffHunk": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
-    "src/lib/diff/index.ts::types::DiffLine": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
-    "src/lib/diff/index.ts::types::DiffLineType": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
-    "src/lib/diff/index.ts::types::LineNumber": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
-    "src/lib/diff/index.ts::types::LineTokenMap": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
-    "src/lib/diff/index.ts::types::PrismStylesheet": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
-    "src/lib/diff/index.ts::types::SimpleDiffLineType": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
-    "src/lib/diff/index.ts::types::SyntaxToken": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
-    "src/shared/acp-protocol/index.ts::types::AgentChatMessage": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
-    "src/shared/acp-protocol/index.ts::types::AgentSessionDeltaEvent": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
     },
     "src/shared/acp-protocol/protocol/closed-session-transcript-schema.ts::types::ClosedSessionReadTranscript": {
       "disposition": "review-required",
@@ -1314,14 +266,6 @@
     "src/shared/agent-runtime.ts::exports::agentInitialDeliverySchema": {
       "disposition": "review-required",
       "reason": "Visibility candidate in a reachable module; trace callers and schema/type contracts before narrowing this export."
-    },
-    "src/shared/core/index.ts::exports::CodexAccountKind": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
-    },
-    "src/shared/core/index.ts::types::WorkspaceSidebarActivityState": {
-      "disposition": "maintained-api",
-      "reason": "Retain the architecture barrel contract; review external export visibility separately from implementation reachability."
     },
     "src/shared/github-types.ts::types::SubmitReviewParams": {
       "disposition": "review-required",

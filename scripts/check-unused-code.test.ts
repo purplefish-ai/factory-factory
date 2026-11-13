@@ -6,10 +6,13 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import {
   compareInventory,
+  deriveConventions,
   evaluateInventory,
+  locallyDeclaredExports,
   parseKnipOutput,
   parseUnusedCodeBaseline,
   pruneInventory,
+  unusedCodeConventions,
 } from './check-unused-code';
 
 const roots: string[] = [];
@@ -320,6 +323,260 @@ it('renders matching inventories and prunes resolved entries in both modes', () 
     ).output
   ).toContain('inventory matches');
 });
+
+describe('location conventions', () => {
+  const barrel = "export * from './service';\nexport { named } from './named';";
+  const sources: Record<string, string> = {
+    'src/backend/services/session/index.ts': barrel,
+    'src/client/features/chat/reducer/index.ts': `import { local } from './local';
+      export { local as aliased };
+      export * from './types';
+      export function chatReducer() {}
+      const helper = 1;
+      export { helper as exposedHelper };`,
+  };
+  const readSource = (file: string) => {
+    const source = sources[file];
+    if (source === undefined) {
+      throw new Error(`Unexpected source read: ${file}`);
+    }
+    return source;
+  };
+  const conventionOf = (section: 'production' | 'exports', key: string) =>
+    deriveConventions(section, [key], readSource).get(key)?.name ?? null;
+
+  it.each([
+    [
+      'test-support directory',
+      'production',
+      'src/backend/testing/setup.ts',
+      'src/backend/testing.ts',
+    ],
+    ['test-support directory', 'production', 'src/test-utils/deferred.ts', 'src/lib/test-utils.ts'],
+    ['test-support directory', 'production', 'src/lib/fixtures/claude.ts', 'src/lib/fixtures.ts'],
+    [
+      'test-support file name',
+      'production',
+      'src/shared/pr-monitoring.test-helpers.ts',
+      'src/shared/pr-monitoring-test-helpers.ts',
+    ],
+    [
+      'test-support file name',
+      'production',
+      'electron/main/lifecycle.test-support.ts',
+      'src/backend/test-support.ts',
+    ],
+    [
+      'test-support file name',
+      'production',
+      'src/client/features/kanban/inline-workspace-form.test-harness.tsx',
+      'src/client/features/kanban/inline-workspace-form.harness.tsx',
+    ],
+    [
+      'test-support file name',
+      'production',
+      'src/client/features/agents/event-history.story-fixtures.ts',
+      'src/client/features/agents/event-dashboard-story.tsx',
+    ],
+    [
+      'test-support file name',
+      'production',
+      'src/lib/claude.fixture.ts',
+      'src/client/components/streamdown-markdown.fixtures.ts',
+    ],
+    [
+      'test-support file name',
+      'exports',
+      'src/backend/services/session/service/lifecycle/session-lifecycle.test-helpers.ts::exports::helper',
+      'src/backend/services/session/service/lifecycle/session-lifecycle.ts::exports::helper',
+    ],
+    [
+      'module barrel re-export',
+      'exports',
+      'src/backend/services/session/index.ts::exports::fromWildcard',
+      'src/backend/services/session/service/session.service.ts::exports::fromWildcard',
+    ],
+    [
+      'module barrel re-export',
+      'exports',
+      'src/backend/services/session/index.ts::types::named',
+      'src/client/features/chat/reducer/index.ts::exports::chatReducer',
+    ],
+    [
+      'module barrel re-export',
+      'exports',
+      'src/client/features/chat/reducer/index.ts::exports::aliased',
+      'src/client/features/chat/reducer/index.ts::exports::exposedHelper',
+    ],
+    [
+      'shadcn component',
+      'exports',
+      'src/components/ui/card.tsx::exports::CardAction',
+      'src/client/components/card.tsx::exports::CardAction',
+    ],
+  ] as const)('%s (%s) accepts %s and rejects %s', (name, section, accepted, rejected) => {
+    expect(unusedCodeConventions.map((convention) => convention.name)).toContain(name);
+    expect(conventionOf(section, accepted)).toBe(name);
+    expect(conventionOf(section, rejected)).toBeNull();
+  });
+
+  it('never explains an unused barrel or component file in the production analysis', () => {
+    expect(conventionOf('production', 'src/components/ui/card.tsx')).toBeNull();
+    expect(conventionOf('production', 'src/backend/services/session/index.ts')).toBeNull();
+  });
+
+  it('distinguishes declared exports from re-exports in either syntax', () => {
+    expect(
+      locallyDeclaredExports(
+        'src/a/index.ts',
+        `import { imported } from './b';
+        export { imported };
+        export * from './c';
+        export { renamed as alias } from './d';
+        export const [first, { second }] = pair;
+        export type Local = string;
+        export interface Shape {}
+        enum Hidden { A }
+        export { Hidden as Visible };
+        export default function main() {}`
+      )
+    ).toEqual(new Set(['first', 'second', 'Local', 'Shape', 'Visible', 'default']));
+  });
+
+  const empty = parseUnusedCodeBaseline({ version: 1, production: {}, exports: {} });
+
+  it('accepts conventional candidates without baseline entries', () => {
+    const result = evaluateInventory(
+      undefined,
+      empty,
+      ['src/shared/pr-monitoring.test-helpers.ts', 'src/test-utils/deferred.ts'],
+      [
+        'src/backend/services/session/index.ts::exports::fromWildcard',
+        'src/components/ui/card.tsx::exports::CardAction',
+      ],
+      readSource
+    );
+    expect(result.output).toContain('2 production files (2 by convention)');
+    expect(result.output).toContain('2 export visibility candidates (2 by convention)');
+  });
+
+  it('still fails a genuinely unused production file outside the conventions', () => {
+    expect(() =>
+      evaluateInventory(
+        undefined,
+        empty,
+        ['src/backend/lib/abandoned.ts', 'src/test-utils/deferred.ts'],
+        [],
+        readSource
+      )
+    ).toThrow(/^New production candidate: src\/backend\/lib\/abandoned\.ts\nReview/u);
+  });
+
+  it('still fails a new unexplained export, including one declared in a barrel', () => {
+    expect(() =>
+      evaluateInventory(
+        undefined,
+        empty,
+        [],
+        [
+          'src/backend/lib/shell.ts::exports::newHelper',
+          'src/client/features/chat/reducer/index.ts::exports::chatReducer',
+          'src/client/features/chat/reducer/index.ts::types::FromTypes',
+        ],
+        readSource
+      )
+    ).toThrow(
+      /^New exports candidate: src\/backend\/lib\/shell\.ts::exports::newHelper\nNew exports candidate: src\/client\/features\/chat\/reducer\/index\.ts::exports::chatReducer\nReview/u
+    );
+  });
+
+  it('flags explicit entries a convention covers, keeps overrides, and update prunes them', () => {
+    const baseline = parseUnusedCodeBaseline({
+      version: 1,
+      production: {
+        'src/test-utils/deferred.ts': {
+          disposition: 'test-support',
+          reason: 'Duplicates the directory convention.',
+        },
+      },
+      exports: {
+        'src/components/ui/card.tsx::exports::CardAction': {
+          disposition: 'review-required',
+          reason: 'Confirm no story still renders this before trimming.',
+        },
+      },
+    });
+    const production = ['src/test-utils/deferred.ts'];
+    const exports = ['src/components/ui/card.tsx::exports::CardAction'];
+    expect(() => evaluateInventory(undefined, baseline, production, exports, readSource)).toThrow(
+      /^Redundant production entry: src\/test-utils\/deferred\.ts \(covered by the 'test-support directory' convention\)\nReview/u
+    );
+    const report = z
+      .object({
+        exports: z.array(
+          z.object({
+            key: z.string(),
+            review: z.object({ disposition: z.string(), reason: z.string() }),
+            convention: z.string().nullable(),
+          })
+        ),
+      })
+      .parse(
+        JSON.parse(evaluateInventory('--report', baseline, production, exports, readSource).output)
+      );
+    expect(report.exports).toEqual([
+      { key: exports[0], review: baseline.exports[exports[0] ?? ''], convention: null },
+    ]);
+    const updated = parseUnusedCodeBaseline(
+      JSON.parse(
+        evaluateInventory('--update', baseline, production, exports, readSource).baseline ?? 'null'
+      )
+    );
+    expect(updated).toEqual({ version: 1, production: {}, exports: baseline.exports });
+    expect(evaluateInventory(undefined, updated, production, exports, readSource).output).toContain(
+      'inventory matches'
+    );
+  });
+});
+
+it('lets a conventional test helper and barrel re-export pass without a baseline entry', () => {
+  const { root, write } = fixture();
+  symlinkSync(resolve('node_modules'), join(root, 'node_modules'), 'dir');
+  write(
+    'scripts/unused-code-baseline.json',
+    JSON.stringify({ version: 1, production: {}, exports: {} })
+  );
+  write('src/client/main.tsx', "import { used } from './feature'; console.log(used);");
+  // The test keeps `spare` used inside the feature, so only the barrel's
+  // re-export of it is a candidate.
+  write('src/client/feature/index.ts', "export { used, spare } from './implementation';");
+  write('src/client/feature/implementation.ts', 'export const used = 1; export const spare = 2;');
+  write('src/client/feature/feature.test-helpers.ts', 'export const helper = 1;');
+  write(
+    'src/client/feature/feature.test.ts',
+    "import { helper } from './feature.test-helpers'; import { spare } from './implementation'; console.log(helper, spare);"
+  );
+  const run = () =>
+    spawnSync(process.execPath, ['--import', 'tsx', resolve('scripts/check-unused-code.ts')], {
+      cwd: root,
+      encoding: 'utf8',
+      timeout: 30_000,
+    });
+  const accepted = run();
+  expect(accepted.stderr).toBe('');
+  expect(accepted.stdout).toContain('1 production files (1 by convention)');
+  expect(accepted.stdout).toContain('1 export visibility candidates (1 by convention)');
+  write(
+    'src/client/feature/index.ts',
+    "export { used, spare } from './implementation'; import './local';"
+  );
+  write('src/client/feature/local.ts', 'export const unexplained = 1;');
+  const rejected = run();
+  expect(rejected.status).toBe(1);
+  expect(rejected.stderr).toContain(
+    'New exports candidate: src/client/feature/local.ts::exports::unexplained'
+  );
+}, 60_000);
 
 it('rejects unsupported evaluator modes at the runtime boundary', () => {
   const baseline = parseUnusedCodeBaseline({ version: 1, production: {}, exports: {} });

@@ -8,7 +8,7 @@ import {
   createTokenStats,
   createUserMessage,
   createUserQuestion,
-} from '@/lib/claude-fixtures';
+} from '@/lib/claude.fixture';
 import { EMPTY_CHAT_BAR_CAPABILITIES } from '@/shared/chat-capabilities';
 import { createInitialSessionRuntimeState, type SessionWorkState } from '@/shared/session-runtime';
 import { WorkspaceChatImageDropZone } from './workspace-chat-image-drop-zone';
