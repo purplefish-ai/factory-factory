@@ -8,12 +8,13 @@ from the repository root.
 
 ## Owns, and does not own
 
-This directory owns replay reassembly and frame validation on the client, load
-requests and their retries, the chat reducer and its stream-delta coalescing,
-pending sends, transcript grouping and windowing, the `ChatTranscript` surface
-(viewport, virtualizer, scroll intent, keyed positions, jump control, thinking
-footer), the composer (`chat-input/`) and the message and tool renderers
-(`agent-activity/`). It does not own:
+This directory wires and resets replay reassembly (the assembler is
+`src/shared/acp-protocol/protocol/replay-framing.ts`), owns client frame
+validation, load requests and their retries, the chat reducer and its
+stream-delta coalescing, pending sends, transcript grouping and windowing, the
+`ChatTranscript` surface (viewport, virtualizer, scroll intent, keyed positions,
+jump control, thinking footer), the composer (`chat-input/`) and the message and
+tool renderers (`agent-activity/`). It does not own:
 
 - What the server sends, replays and publishes: `src/backend/services/session/`,
   and socket delivery in `src/backend/routers/websocket/`.
@@ -61,15 +62,18 @@ The barrel is `index.ts`. Callers in routes and other features must:
 - A local send stays in the transcript as Sending through snapshots and replay
   until the server reports its ID. `reducer/pending-sends.test.ts`,
   `transcript-rows.sending.test.tsx`.
-- A thinking delta whose order does not pass the session's thinking watermark
-  changes neither the preview nor the transcript. `reducer/thinking.test.ts`.
+- A thinking delta changes neither the preview nor the transcript when its order
+  is below the latest thinking order or not above the last accepted delta's, so
+  only a block's first delta may share the block's start order.
+  `reducer/thinking.test.ts`.
 - Typing in the composer does not re-render `ChatTranscript`, and streaming does
   not re-render `ChatInput`.
   `src/client/routes/projects/workspaces/workspace-detail-chat-content.render.test.tsx`,
   `src/client/routes/projects/workspaces/workspace-detail-chat-content.composer-render.test.tsx`.
-- Only wheel, key, touch or scrollbar movement changes scroll intent; layout
-  changes and programmatic scrolls never do. `transcript-scroll-events.test.ts`,
-  `transcript-scroll-controller.test.ts`.
+- Layout changes and scroll events without wheel, key, touch or scrollbar input
+  never change scroll intent; only that input, the jump controls, a send's
+  follow request and activation from a saved position do.
+  `transcript-scroll-events.test.ts`, `transcript-scroll-controller.test.ts`.
 - A suspended or disposed scroll controller runs no pending frame and persists
   no position. `transcript-scroll-controller.test.ts`.
 - The thinking footer stays mounted outside the transcript viewport as work

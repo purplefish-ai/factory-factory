@@ -49,8 +49,8 @@ chat feature guide.
 > boundary from explicit application capabilities. Commands accept plain data
 > and return typed outcomes; they receive no sockets.
 
-Old paragraph 5. For a WebSocket router guide
-(`src/backend/routers/websocket/`).
+Old paragraph 5. For the WebSocket router guide
+(`src/backend/routers/websocket/`, task 2.9).
 
 > Session composition configures one `SessionDispatchService`. The dispatcher
 > owns queue execution, concurrent-dispatch tokens, busy-turn retry timers and
@@ -90,7 +90,8 @@ Old paragraph 7. For the session capsule guide.
 > reach a client. The registry also supplies viewer counts to the domain through
 > the bus.
 
-Old paragraph 8. For the session capsule guide and a WebSocket router guide.
+Old paragraph 8. For the session capsule guide and the WebSocket router guide
+(`src/backend/routers/websocket/`, task 2.9).
 
 > `ChatEventForwarderService` handles workspace completion notifications and
 > pending-request access. Agent stream translation belongs to the ACP processor;
@@ -110,8 +111,8 @@ Old paragraph 10. For the session capsule guide.
 > copy. It silently ignores `message_not_queued` outcomes so repeated removal
 > clicks or queue dispatch races do not add errors to the transcript.
 
-Old paragraph 11. For a WebSocket router guide
-(`src/backend/routers/websocket/`).
+Old paragraph 11. For the WebSocket router guide
+(`src/backend/routers/websocket/`, task 2.9).
 
 > The session configuration service serializes each configuration write through
 > provider completion, persistence and state publication. When a live configured
@@ -136,12 +137,8 @@ Old paragraph 11. For the session capsule guide.
 
 Old paragraph 12. For the session capsule guide.
 
-> Direct `user_input` still sends without waiting for a provider turn or
-> background resume persistence. Start and queue acceptance also trigger
-> background resume without awaiting it. Explicit queue resume awaits
-> persistence and rechecks its captured generation before enabling manual
-> dispatch. Stop awaits termination, clears pending interaction, resets dispatch
-> state, and then retries the queue. The lifecycle and background-delivery
+> Explicit queue resume awaits persistence and rechecks its captured generation
+> before enabling manual dispatch. […] The lifecycle and background-delivery
 > owners retain generation and PR pause policy; commands coordinate those
 > capabilities without taking ownership.
 
@@ -151,13 +148,13 @@ Old paragraph 13. For the session capsule guide.
 > completion through `SessionLoadService`. Its preparation and replay are plain
 > data. The transport adapter owns replay framing and requester error delivery.
 
-Old paragraph 14. For the session capsule guide and a WebSocket router guide.
+Old paragraph 14. For the session capsule guide and the WebSocket router guide
+(`src/backend/routers/websocket/`, task 2.9).
 
-> Registering a chat WebSocket does not hydrate history. The client explicitly
-> sends `load_session`, whose transport adapter runs these application stages:
+> Registering a chat WebSocket does not hydrate history.
 
-Old paragraph 15. For a WebSocket router guide
-(`src/backend/routers/websocket/`).
+Old paragraph 15. For the WebSocket router guide
+(`src/backend/routers/websocket/`, task 2.9).
 
 > 1. `prepareLoad` reads the `AgentSession`, hydrates provider history, and
 >    merges durable lifecycle events. History fences, transcript writes,
@@ -176,114 +173,32 @@ Old paragraph 15. For a WebSocket router guide
 >    dispatches any stored initial message through that application's dispatcher
 >    only after commands.
 
-Old paragraph 16. For the session capsule guide and a WebSocket router guide.
-
-> The configuration owner performs at most one catalog lookup per completion,
-> including failed discovery, and rechecks stored selection after discovery.
-> Successful catalog reads still share their existing cache. A live handle owns
-> capabilities; for compatibility, an empty live handle still permits stored
-> fallback options. Passive reads never persist a catalog selection. If a
-> prepared live handle retires before publication, another read supplies the
-> durable fallback. Every retry is finalized again synchronously and reuses the
-> same catalog attempt. Repeated runtime retirement fails before configuration
-> publication or initial activation.
-
-Old paragraph 17. For the session capsule guide.
+Old paragraph 16. For the session capsule guide and the WebSocket router guide
+(`src/backend/routers/websocket/`, task 2.9).
 
 > Socket subscriptions, serialization, safe delivery, and disconnected-viewer
 > cleanup remain owned by the transport. A closed or throwing requester does not
 > skip application completion or another viewer's load updates. Concurrent loads
 > retain their own request IDs and consume stored initial text once.
 
-Old paragraph 18. For a WebSocket router guide
-(`src/backend/routers/websocket/`).
+Old paragraph 18. For the WebSocket router guide
+(`src/backend/routers/websocket/`, task 2.9).
 
-> Chat and snapshot delivery use a stateful send policy. A viewer that exceeds 1
-> MiB of accumulated outgoing backlog is retired with close code 1013, then
-> terminated after five seconds if its close handshake has not completed. No
-> further state is sent on that connection, even if the buffer later drains.
-> Synchronous and asynchronous write failures also retire that viewer. Other
-> viewers and application work continue; reconnect runs the existing correlated
-> load/replay or current full-snapshot path.
+> Serialization still happens before measurement, so the limit bounds outgoing
+> frames rather than the cost of constructing authoritative state.
 
-Old paragraph 19. For a WebSocket router guide
-(`src/backend/routers/websocket/`).
+Old paragraph 20. For the WebSocket router guide
+(`src/backend/routers/websocket/`, task 2.9).
 
-> A full snapshot, session snapshot, or legacy replay batch can exceed the
-> ordinary backlog budget on an empty connection. `WEBSOCKET_MAX_FRAME_BYTES`,
-> read through `configService`, sets its absolute UTF-8 frame ceiling: **32 MiB
-> by default** (33554432 bytes). Valid overrides are integer byte counts from 1
-> MiB through 256 MiB, inclusive; missing or invalid values use the default.
-> This permits realistic large history/project baselines while bounding queued
-> state per viewer. Serialization still happens before measurement, so the limit
-> bounds outgoing frames rather than the cost of constructing authoritative
-> state.
+> Neither coalesced retries nor failed writes create OUT_TO_CLIENT records.
+> These records describe successful local socket writes, not application-level
+> peer receipts.
 
-Old paragraph 20. For a WebSocket router guide
-(`src/backend/routers/websocket/`).
+Old paragraph 22. For the WebSocket router guide
+(`src/backend/routers/websocket/`, task 2.9).
 
-> Load correlation IDs are bounded to 128 UTF-16 code units at admission so even
-> escaped identifiers fit the small error envelope without losing correlation.
-> Existing persisted/imported project IDs remain valid; snapshot errors omit an
-> overlong project ID and use the current connection scope for HTTP fallback. An
-> excessive replay returns a small `error` with code 413 and the requesting
-> `loadRequestId`; the client ends loading, cancels automatic load retries and
-> keeps unhydrated controls disabled. Other already-hydrated viewers keep their
-> live updates. An excessive project baseline returns `snapshot_error` with
-> `FRAME_TOO_LARGE`; the client shows its explanation and refreshes via the
-> existing HTTP fallback. Both keep the socket open and suppress subsequent
-> baseline-dependent updates to the viewer missing its baseline. Independent
-> command replies and workspace notifications remain available. Only a baseline
-> accepted by that viewer can release the guard. They do not reconnect to the
-> same rejected state. […] A successfully accepted baseline releases that guard.
-
-Old paragraph 21. For a WebSocket router guide
-(`src/backend/routers/websocket/`).
-
-> Replay retains the responsive history loading and 128 KiB wire chunks. Framing
-> serializes each replay event once, assembles event-frame JSON from those
-> strings and publishes each frame with its JSON; the transport sends that JSON
-> instead of serializing the frame again. Framing and publication remain one
-> synchronous pass. Chunk envelopes carry the bounded load correlation ID,
-> including the byte-fragment fallback for unusually large replay metadata. The
-> configured budget also bounds the logical replay; the existing 128 MiB replay
-> assembly ceiling remains an absolute upper bound. A viewer queues one bounded
-> replay sequence, writes one chunk at a time as local write callbacks finish,
-> and holds at most 1 MiB of dependent updates until the complete baseline is
-> written. Serialized replay storage is bounded by twice its declared source
-> size plus 1 KiB per bounded chunk for base64/envelope overhead. Independent
-> command replies and notifications remain available. A retry of the same
-> pending load reuses its sequence; a newer distinct request explicitly
-> supersedes and settles the older request with a correlated 409 error. Neither
-> coalesced retries nor failed writes create OUT_TO_CLIENT records. These
-> records describe successful local socket writes, not application-level peer
-> receipts.
-
-Old paragraph 22. For a WebSocket router guide
-(`src/backend/routers/websocket/`).
-
-> A large full frame's write callback releases its allowance. Completion
-> metadata and subsequent deltas share an additional 1 MiB budget. Close,
-> successful flush, and retirement clean up listeners, pending queues and
-> termination timers. Snapshot deltas still wait for the full baseline to be
-> admitted, and replay keeps its existing request IDs, message identities and
-> ordering.
-
-Old paragraph 23. For a WebSocket router guide
-(`src/backend/routers/websocket/`).
-
-> Passive loading does not initialize an ACP runtime. A stored initial message
-> may subsequently be enqueued and dispatched through the normal message path.
-
-Old paragraph 24. For the session capsule guide.
-
-> Replay reconstructs the renderer's transcript window, queued messages,
-> runtime, pending interactive request, and retained recent rejections.
 > `SessionPublisher` also supports `session_snapshot`; loading is not split into
 > an initial snapshot protocol and a separate reconnect protocol.
-> `loadRequestId` associates responses with the client's load request. Snapshots
-> for a session nobody is viewing are not built, since a viewer that arrives
-> later hydrates through `load_session`; load replies are always sent.
 
 Old paragraph 25. For the session capsule guide.
 
@@ -305,19 +220,11 @@ Old paragraph 26. For the session capsule guide.
 
 Old paragraph 27. For the session capsule guide.
 
-> Full snapshots remain for explicit `emitSessionSnapshot` calls, process exit,
-> clearing queued work, provider-history reset, transcript removal, injected
-> replay messages, and PR-delivery queue changes that also rewrite the
-> transcript (enqueueing over a previous outcome or cancelling a queued update).
-> Snapshots for a session nobody is viewing are still skipped.
-
-Old paragraph 31. For the session capsule guide.
-
 > Backend senders are typed against `WebSocketMessage`; direct requester replies
 > go through `serializeChatFrame`.
 
-Old paragraph 32. For a WebSocket router guide
-(`src/backend/routers/websocket/`).
+Old paragraph 32. For the WebSocket router guide
+(`src/backend/routers/websocket/`, task 2.9).
 
 > Questions and permissions are stored in
 > `SessionStore.pendingInteractiveRequest` and included in replay. The
@@ -327,6 +234,11 @@ Old paragraph 32. For a WebSocket router guide
 > unresolved responses leave pending state unchanged.
 
 Old paragraph 38. For the session capsule guide.
+
+> Restart uses the session restart action, which resumes the provider
+> conversation without sending anything.
+
+Old paragraph 44. For the session capsule guide.
 
 > Task creation also uses native content sizing, capped at 240 pixels. Browsers
 > without native content sizing use one resize after the draft commits and
@@ -352,4 +264,4 @@ Old paragraph 56. For the session capsule guide (closed-session archive).
 > | Persisted provider identity and lifecycle history     | `AgentSession` and `SessionLifecycleEvent` in [Prisma schema](../prisma/schema.prisma)                                                                                                                        |
 
 Old paragraph 59, every row but the client's. For the session capsule guide and
-a WebSocket router guide.
+the WebSocket router guide (`src/backend/routers/websocket/`, task 2.9).

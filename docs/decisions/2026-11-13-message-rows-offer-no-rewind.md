@@ -18,5 +18,3 @@ Message rows offer no rewind action, and the client keeps no rewind state.
 
 - The client sends no rewind request; the chat message schema rejects the
   retired `rewind_files` type.
-- User and assistant message rows have no copy buttons; copying them uses native
-  text selection. Error lifecycle rows keep their own copy action.

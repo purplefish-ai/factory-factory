@@ -86,6 +86,7 @@ function TranscriptInstance({
           role="log"
           aria-label={label}
           className="h-full overflow-y-auto min-w-0"
+          // TanStack performs above-viewport compensation, so CSS anchoring is off.
           style={{ overflowAnchor: 'none' }}
         >
           <TranscriptRows

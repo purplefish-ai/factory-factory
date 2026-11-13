@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import type { ReactNode } from 'react';
+import { createRef, type ReactNode } from 'react';
 import { flushSync } from 'react-dom';
 import { createRoot } from 'react-dom/client';
 import { expect, it, vi } from 'vitest';
@@ -31,13 +31,16 @@ it.each([
   'readies the transcript only for stored positions and the selected session: %j',
   ({ positionReady, runtimeSessionId, ready }) => {
     session.runtimeSessionId = runtimeSessionId;
-    const props = {
+    const props: WorkspaceChatProps = {
       workspaceId: 'workspace-1',
       sessionId: 'session-1',
+      inputRef: createRef(),
+      initBanner: null,
+      isScriptFailed: false,
       issueAutoStart: false,
       active: true,
       position: { ready: positionReady, initialPosition: null, onPositionChange: () => undefined },
-    } as unknown as WorkspaceChatProps;
+    };
     const root = createRoot(document.createElement('div'));
     try {
       flushSync(() => root.render(<WorkspaceChat {...props} />));
