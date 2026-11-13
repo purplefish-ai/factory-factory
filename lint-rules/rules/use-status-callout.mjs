@@ -1,6 +1,7 @@
 // Status surfaces render with StatusCallout or StatusChip
 // (docs/status-colors.md#callouts-and-chips). Tests are exempt.
 import { EXCEPTIONS_SCHEMA, isExceptedFile } from '../lib/exceptions.mjs';
+import exceptions from './use-status-callout.exceptions.json' with { type: 'json' };
 
 const STATUS_TOKENS = '(destructive|warning|success|info|running|merged)(?:-accent)?';
 const STATUS_BACKGROUND_TINT = new RegExp(`^bg-${STATUS_TOKENS}/\\d+$`);
@@ -45,7 +46,7 @@ export default {
     schema: EXCEPTIONS_SCHEMA,
   },
   create(context) {
-    if (isExceptedFile(context)) {
+    if (isExceptedFile(context, exceptions)) {
       return {};
     }
     const report = (node, text) => {

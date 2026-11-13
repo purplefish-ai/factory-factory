@@ -1,6 +1,7 @@
 // Fixed Tailwind palette colors must use theme tokens instead
 // (docs/status-colors.md). Enabled for src/client, src/components and src/lib.
 import { EXCEPTIONS_SCHEMA, isExceptedFile } from '../lib/exceptions.mjs';
+import exceptions from './no-raw-palette-classes.exceptions.json' with { type: 'json' };
 
 // Tailwind utilities that take a color, followed by a fixed palette hue and
 // shade (e.g. `bg-red-500`, `dark:text-emerald-300`, `hover:border-sky-500/40`).
@@ -31,7 +32,7 @@ export default {
   },
   create(context) {
     // Fixed palette exceptions are explained in docs/status-colors.md.
-    if (isExceptedFile(context)) {
+    if (isExceptedFile(context, exceptions)) {
       return {};
     }
     return {

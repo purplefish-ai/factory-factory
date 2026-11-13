@@ -3,6 +3,7 @@
 import { EXCEPTIONS_SCHEMA, isExceptedFile } from '../lib/exceptions.mjs';
 import { jsxTagName } from '../lib/jsx.mjs';
 import { hasSpinClass } from '../lib/spin-class.mjs';
+import exceptions from './no-raw-spinner.exceptions.json' with { type: 'json' };
 
 export default {
   meta: {
@@ -13,7 +14,7 @@ export default {
     schema: EXCEPTIONS_SCHEMA,
   },
   create(context) {
-    if (isExceptedFile(context)) {
+    if (isExceptedFile(context, exceptions)) {
       return {};
     }
     const message =

@@ -3,6 +3,7 @@
 // (docs/keyboard-shortcuts.md). Tests are exempt.
 import { staticKeyName } from '../lib/ast.mjs';
 import { EXCEPTIONS_SCHEMA, isExceptedFile } from '../lib/exceptions.mjs';
+import exceptions from './no-raw-tab-role.exceptions.json' with { type: 'json' };
 
 const TAB_ROLES = new Set(['tab', 'tablist']);
 
@@ -39,7 +40,7 @@ export default {
     schema: EXCEPTIONS_SCHEMA,
   },
   create(context) {
-    if (isExceptedFile(context)) {
+    if (isExceptedFile(context, exceptions)) {
       return {};
     }
     const report = (node, value) => {

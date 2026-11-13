@@ -3,6 +3,7 @@
 import { EXCEPTIONS_SCHEMA, isExceptedFile } from '../lib/exceptions.mjs';
 import { jsxTagName } from '../lib/jsx.mjs';
 import { hasSpinClass } from '../lib/spin-class.mjs';
+import exceptions from './use-pending-prop.exceptions.json' with { type: 'json' };
 
 const SPINNER_ELEMENTS = new Set(['Spinner', 'SpinnerGapIcon']);
 const PENDING_CONTROLS = new Set(['Button', 'DropdownMenuItem']);
@@ -64,7 +65,7 @@ export default {
     schema: EXCEPTIONS_SCHEMA,
   },
   create(context) {
-    if (isExceptedFile(context)) {
+    if (isExceptedFile(context, exceptions)) {
       return {};
     }
     return {

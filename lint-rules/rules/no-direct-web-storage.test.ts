@@ -1,5 +1,7 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { describeRuleFixtures, readProjectConfig } from '../testing/rule-fixtures';
+import { describeRuleFixtures, readProjectConfig, repositoryRoot } from '../testing/rule-fixtures';
 
 describeRuleFixtures('no-direct-web-storage', {
   rejected: [
@@ -31,16 +33,17 @@ describe('web storage access', () => {
     expect(scopes).toEqual([
       [
         ['src/client/**/*.{ts,tsx}', 'src/components/**/*.{ts,tsx}', 'src/lib/**/*.{ts,tsx}'],
-        [
-          'error',
-          {
-            exceptions: {
-              'src/client/lib/browser-storage.ts': expect.any(String),
-            },
-          },
-        ],
+        'error',
       ],
       [['**/*.test.ts', '**/*.test.tsx'], 'off'],
     ]);
+    expect(
+      JSON.parse(
+        readFileSync(
+          join(repositoryRoot, 'lint-rules/rules/no-direct-web-storage.exceptions.json'),
+          'utf8'
+        )
+      )
+    ).toEqual({ 'src/client/lib/browser-storage.ts': expect.any(String) });
   });
 });

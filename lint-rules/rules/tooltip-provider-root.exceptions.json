@@ -1,0 +1,10 @@
+{
+  "src/client/components/resizable-layout.tsx": "App root: AppLayout's provider (delayDuration 0) serves every route under Root.",
+  "src/components/ui/sidebar.tsx": "shadcn SidebarProvider root: it also renders standalone in stories and tests, with the same zero delay as the app root.",
+  "src/client/components/github-link-preview.tsx": "GitHub link previews open after a deliberate 350ms delay so hovering across chat links does not flash cards; they also render in markdown outside the app layout.",
+  "src/client/routes/mobile-baseline.tsx": "Fixture route: /__mobile-baseline mounts outside Root, so the page supplies the root provider (delay 0) for the composer and other surfaces it renders.",
+  "src/client/routes/hover-actions-fixture.tsx": "Fixture route: /__mobile-baseline mounts outside Root, so the fixture supplies its own provider.",
+  "src/client/routes/mobile-agents-fixture.tsx": "Fixture route: /__mobile-baseline mounts outside Root, so the fixture supplies its own provider.",
+  "src/client/routes/transcript-scroll-fixture.tsx": "Fixture route: /__transcript-scroll mounts outside Root, so the fixture supplies its own provider.",
+  "src/client/routes/workspace-header-fixture.tsx": "Fixture route: renders the workspace header outside Root for the mobile baseline, so it supplies its own provider."
+}

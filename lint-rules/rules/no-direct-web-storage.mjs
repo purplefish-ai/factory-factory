@@ -7,6 +7,7 @@
 // src/client, src/components and src/lib; tests may seed storage directly.
 import { staticKeyName } from '../lib/ast.mjs';
 import { EXCEPTIONS_SCHEMA, isListedFile } from '../lib/exceptions.mjs';
+import exceptions from './no-direct-web-storage.exceptions.json' with { type: 'json' };
 
 const WEB_STORAGE_NAMES = new Set(['localStorage', 'sessionStorage']);
 
@@ -26,7 +27,7 @@ export default {
   create(context) {
     // `exceptions` maps repository-relative paths to the reason each file
     // may touch Web Storage directly (src/client/lib/browser-storage.ts).
-    if (isListedFile(context, Object.keys(context.options[0]?.exceptions ?? {}))) {
+    if (isListedFile(context, Object.keys(context.options[0]?.exceptions ?? exceptions))) {
       return {};
     }
     const reported = new Set();

@@ -3,6 +3,7 @@
 // and src/hooks outside tests.
 import { isFunction, isIdentifier, memberName } from '../lib/ast.mjs';
 import { EXCEPTIONS_SCHEMA, isExceptedFile } from '../lib/exceptions.mjs';
+import exceptions from './no-render-ref-write.exceptions.json' with { type: 'json' };
 
 // Components and hooks by name: `function Panel()`, `const useThing = () => {}`,
 // and the render function passed to `memo()` or `forwardRef()`.
@@ -119,7 +120,7 @@ export default {
     schema: EXCEPTIONS_SCHEMA,
   },
   create(context) {
-    if (isExceptedFile(context)) {
+    if (isExceptedFile(context, exceptions)) {
       return {};
     }
     const check = (node, target) => {

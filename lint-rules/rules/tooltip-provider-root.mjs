@@ -3,6 +3,7 @@
 // can supply their own provider.
 import { EXCEPTIONS_SCHEMA, isExceptedFile } from '../lib/exceptions.mjs';
 import { jsxTagName } from '../lib/jsx.mjs';
+import exceptions from './tooltip-provider-root.exceptions.json' with { type: 'json' };
 
 export default {
   meta: {
@@ -12,7 +13,7 @@ export default {
     schema: EXCEPTIONS_SCHEMA,
   },
   create(context) {
-    if (isExceptedFile(context)) {
+    if (isExceptedFile(context, exceptions)) {
       return {};
     }
     return {

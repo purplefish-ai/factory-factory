@@ -3,6 +3,7 @@
 // for src/client, src/components and src/hooks outside tests and stories.
 import { isFunction, memberName } from '../lib/ast.mjs';
 import { EXCEPTIONS_SCHEMA, isExceptedFile } from '../lib/exceptions.mjs';
+import exceptions from './no-state-sync-effect.exceptions.json' with { type: 'json' };
 
 const EFFECT_HOOKS = new Set(['useEffect', 'useLayoutEffect']);
 // `setX(...)` state setters, but not the timer globals.
@@ -80,7 +81,7 @@ export default {
     schema: EXCEPTIONS_SCHEMA,
   },
   create(context) {
-    if (isExceptedFile(context)) {
+    if (isExceptedFile(context, exceptions)) {
       return {};
     }
     return {

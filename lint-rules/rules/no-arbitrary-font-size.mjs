@@ -1,6 +1,7 @@
 // Font sizes come from the type scale (docs/status-colors.md#small-text).
 // Tests are exempt.
 import { EXCEPTIONS_SCHEMA, isExceptedFile } from '../lib/exceptions.mjs';
+import exceptions from './no-arbitrary-font-size.exceptions.json' with { type: 'json' };
 
 // An arbitrary font size such as `text-[10px]`, `md:text-[0.8rem]` or
 // `text-[1.5em]`; the type scale (`text-2xs`, `text-xs`, …) replaces them.
@@ -15,7 +16,7 @@ export default {
     schema: EXCEPTIONS_SCHEMA,
   },
   create(context) {
-    if (isExceptedFile(context)) {
+    if (isExceptedFile(context, exceptions)) {
       return {};
     }
     const report = (node, text) => {

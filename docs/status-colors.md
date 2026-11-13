@@ -138,25 +138,26 @@ pass `asChild` to style a heading or `SelectLabel`. The `Foundations/Typography`
 ## Lint guard
 
 `factory/no-raw-palette-classes` (in
-[`lint-rules/factory.mjs`](../lint-rules/factory.mjs)) rejects Tailwind color
-utilities with a fixed palette hue and shade, such as `bg-red-500`,
-`dark:text-emerald-300` or `hover:border-sky-500/40`, in string and template
-literals under `src/client`, `src/components` and `src/lib`. Theme tokens,
-`white` and `black` pass. Tests are exempt so they can assert that raw classes
-are absent.
+[`no-raw-palette-classes.mjs`](../lint-rules/rules/no-raw-palette-classes.mjs))
+rejects Tailwind color utilities with a fixed palette hue and shade, such as
+`bg-red-500`, `dark:text-emerald-300` or `hover:border-sky-500/40`, in string
+and template literals under `src/client`, `src/components` and `src/lib`. Theme
+tokens, `white` and `black` pass. Tests are exempt so they can assert that raw
+classes are absent.
 
-The remaining exceptions are the rule's `exceptions` option in
-[`.oxlintrc.json`](../.oxlintrc.json), a map from each path to its reason:
+The remaining exceptions are listed in
+[`no-raw-palette-classes.exceptions.json`](../lint-rules/rules/no-raw-palette-classes.exceptions.json),
+a map from each path to its reason:
 
 - `subagent-icon.tsx`: twelve categorical identity hues that tell subagents
   apart. They are not statuses, so they cannot map onto status tokens.
 - `workspace-header-pwa-preview.tsx`: mock macOS window controls reproduce the
   operating system's red, yellow and green.
 
-`src/backend/testing/oxlint-factory-rules.test.ts` runs the rule through the
-Oxlint binary and fails when an exception no longer contains raw classes. Add an
-exception only for color that is not a status and has no theme token, and give
-its reason in the option.
+[`lint-rules/exceptions.test.ts`](../lint-rules/exceptions.test.ts) runs the
+rule through the Oxlint binary and fails when an exception no longer contains
+raw classes. Add an exception only for color that is not a status and has no
+theme token, and give its reason in that file.
 
 `factory/use-status-callout` rejects a class string that pairs a tinted status
 background (`bg-warning/10`, `dark:bg-info-accent/15`) with a border of the same

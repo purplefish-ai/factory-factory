@@ -1,0 +1,3 @@
+{
+  "src/components/ui/calendar.tsx": "shadcn registry source: the weekday and week-number labels keep upstream's 0.8rem so registry diffs stay clean (docs/shadcn.md)."
+}

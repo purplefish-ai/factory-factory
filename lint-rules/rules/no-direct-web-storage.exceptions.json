@@ -1,0 +1,3 @@
+{
+  "src/client/lib/browser-storage.ts": "The shared Web Storage module: guards every access and keeps mounted usePersistedState consumers of a key in agreement."
+}
