@@ -21,7 +21,7 @@ function confirmed(id: string): ChatMessage {
   return { id, source: 'user', text: `text ${id}`, timestamp, order: 0 };
 }
 
-it('keeps unconfirmed sends through snapshots and replay, dropping each once the server has it', () => {
+it('keeps unconfirmed sends through snapshots and replay, dropping one a snapshot includes', () => {
   const sending = send(send(createInitialChatState(), 'first'), 'second');
 
   const refreshed = chatReducer(sending, {

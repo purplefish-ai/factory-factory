@@ -52,16 +52,17 @@ The barrel is `index.ts`. Callers in routes and other features must:
   and any other action, a disconnect or unmount first forwards buffered deltas.
   `stream-delta-coalescer.test.ts`,
   `use-chat-state.stream-coalescing.integration.test.tsx`.
-- No delta waits longer than one 100 ms window in a foreground tab, and a batch
-  reaches the state that dispatching each delta would.
-  `stream-delta-coalescer.test.ts`.
+- No delta waits longer than one 100 ms window in a foreground tab (hidden tabs
+  drain at their throttled timer rate), and a batch reaches the state that
+  dispatching each delta would. `stream-delta-coalescer.test.ts`.
 - A targeted delta replaces the queue, committed entry or pending request it
-  carries, matching what a snapshot would show. `session-state-delta.test.ts`.
+  carries, matching what a snapshot would show.
+  `reducer/session-state-delta.test.ts`.
 - A local send stays in the transcript as Sending through snapshots and replay
-  until the server reports its ID. `pending-sends.test.ts`,
+  until the server reports its ID. `reducer/pending-sends.test.ts`,
   `transcript-rows.sending.test.tsx`.
 - A thinking delta whose order does not pass the session's thinking watermark
-  changes neither the preview nor the transcript. `thinking.test.ts`.
+  changes neither the preview nor the transcript. `reducer/thinking.test.ts`.
 - Typing in the composer does not re-render `ChatTranscript`, and streaming does
   not re-render `ChatInput`.
   `src/client/routes/projects/workspaces/workspace-detail-chat-content.render.test.tsx`,

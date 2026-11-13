@@ -17,12 +17,16 @@ check. Parsing a replay of 1,000 agent messages (about 1 MB of JSON) took about
 about 1.6 ms.
 
 Snapshots, deltas and live events are all-or-nothing. A replay batch is the one
-exception: each invalid replay event is dropped and reported on its own, so one
-malformed historical event cannot make a session unloadable.
+exception: each replay event that fails the schema is dropped and reported on
+its own, so one malformed historical event cannot make a session unloadable.
 
 ## Consequences
 
 - An invalid frame is logged with its Zod issues and shown as one error toast;
   it never reaches the reducer.
 - A replay can hydrate with some historical events missing; the console names
-  them.
+  them and the same error toast appears.
+- A replay containing an invalid event is parsed about three times: whole, event
+  by event, then whole again without the dropped events.
+- Replay reassembly is not covered by the exception: a chunked replay whose
+  fragments do not decode, or that arrives incomplete, is dropped whole.
