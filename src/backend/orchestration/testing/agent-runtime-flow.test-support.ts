@@ -339,12 +339,10 @@ export async function createRuntimeFlow(db: IntegrationDatabase) {
   /**
    * Launches hand off in the background, so their providers appear after the job
    * returns. Wait for them on the launches' settlement, not a wall-clock budget.
+   * Only the newest runtime launches: an earlier one is a process that has died.
    */
   function waitForProviders(count: number) {
-    return providers.waitForProviders(
-      count,
-      Promise.all(runtimes.map((runtime) => runtime.drain()))
-    );
+    return providers.waitForProviders(count, composed.agentRuntime.drain());
   }
   /** Resolve a provider's first turn the way the ACP adapter reports a finished turn. */
   async function finishTurn(index: number) {
