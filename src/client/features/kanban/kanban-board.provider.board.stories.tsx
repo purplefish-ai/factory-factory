@@ -87,8 +87,9 @@ export const PhoneDark: Story = {
 };
 
 // This story fails when run on its own (the Todo section holds focus, not the
-// textarea). Run after `Desktop` in this file it passes; run after `Phone`,
-// `PhoneDark` or the other stories here it still fails. This predates the split.
+// textarea). It passes when `Desktop` ran before it in this file; with only
+// `Phone`, only `PhoneDark` or the other stories here before it, it fails. In
+// the full file it passes because `Desktop` runs first. This predates the split.
 // Keep it in this file after `Desktop` until it is made self-contained.
 export const PhoneNewWorkspaceFromDone: Story = {
   globals: { viewport: { value: 'phone', isRotated: false } },
