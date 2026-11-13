@@ -121,6 +121,41 @@ describe('fake Codex app-server scenarios', () => {
     ]);
   });
 
+  it('tool-call runs one command with fixed output, then replies', async () => {
+    const readme = 'Scripted README.md contents from the fake provider.\n';
+    const commandItem = {
+      type: 'commandExecution',
+      id: 'tool-call-command',
+      command: 'cat README.md',
+      cwd,
+      commandActions: [{ type: 'unknown', command: 'cat README.md' }],
+    };
+    expect(await playPrompt(startFake('tool-call'))).toMatchObject([
+      turnStartResponse,
+      turnStarted,
+      {
+        method: 'item/started',
+        params: { threadId, turnId, item: { ...commandItem, status: 'inProgress' } },
+      },
+      {
+        method: 'item/commandExecution/outputDelta',
+        params: { threadId, turnId, itemId: 'tool-call-command', delta: readme },
+      },
+      {
+        method: 'item/completed',
+        params: {
+          threadId,
+          turnId,
+          item: { ...commandItem, status: 'completed', aggregatedOutput: readme, exitCode: 0 },
+        },
+      },
+      ...message('message-1', 'I ran cat README.md; it printed one line of scripted text.', [
+        'I ran cat README.md; it printed one line of scripted text.',
+      ]),
+      turnCompleted('completed'),
+    ]);
+  });
+
   const command = 'echo "Hello from the sandbox"';
   const approvalRequest = {
     id: 'fake-server-request-1',
@@ -250,7 +285,7 @@ describe('fake Codex app-server scenarios', () => {
     const [code] = await once(child, 'close');
     expect(code).toBe(2);
     expect(stderr).toBe(
-      `Unknown FF_SANDBOX_SCENARIO "${name}". Valid scenarios: echo, permission-request, error, slow-stream\n`
+      `Unknown FF_SANDBOX_SCENARIO "${name}". Valid scenarios: echo, tool-call, permission-request, error, slow-stream\n`
     );
   });
 });

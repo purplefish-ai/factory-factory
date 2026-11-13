@@ -36,6 +36,14 @@ const scenarios = {
     const text = turn.input.flatMap((input) => (input.type === 'text' ? [input.text] : []));
     await turn.reply([text.join('\n') || '(The prompt had no text.)']);
   },
+  // An unparsed shell command, not a `read` action: the adapter drops a read's output for this
+  // app's client identity (AIR), so a read would reach the transcript without its result.
+  'tool-call': async (turn) => {
+    const command = 'cat README.md';
+    const output = 'Scripted README.md contents from the fake provider.\n';
+    turn.command('tool-call-command', command, [{ type: 'unknown', command }], output);
+    await turn.reply(['I ran cat README.md; it printed one line of scripted text.']);
+  },
   'permission-request': async (turn) => {
     const command = 'echo "Hello from the sandbox"';
     const actions = [{ type: 'unknown', command }];

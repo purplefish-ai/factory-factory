@@ -132,6 +132,41 @@ it('echo streams the prompt text back', async () => {
   expect(played.chunks).toEqual(['Hello sandbox']);
 }, 20_000);
 
+it('tool-call shows one command with its output, then the reply', async () => {
+  const played = await playScenario('tool-call');
+  expect(played.response.stopReason).toBe('end_turn');
+  expect(played.sequence).toEqual([
+    'tool_call',
+    'tool_call_update',
+    'tool_call_update',
+    'agent_message_chunk',
+  ]);
+  expect(played.toolUpdates).toMatchObject([
+    {
+      sessionUpdate: 'tool_call',
+      toolCallId: 'tool-call-command',
+      title: 'cat README.md',
+      kind: 'execute',
+      status: 'in_progress',
+      rawInput: { command: 'cat README.md', cwd: played.dir },
+    },
+    {
+      sessionUpdate: 'tool_call_update',
+      toolCallId: 'tool-call-command',
+      _meta: {
+        terminal_output_delta: { data: 'Scripted README.md contents from the fake provider.\n' },
+      },
+    },
+    {
+      sessionUpdate: 'tool_call_update',
+      toolCallId: 'tool-call-command',
+      status: 'completed',
+      _meta: { terminal_exit: { exit_code: 0 } },
+    },
+  ]);
+  expect(played.chunks).toEqual(['I ran cat README.md; it printed one line of scripted text.']);
+}, 20_000);
+
 const command = 'echo "Hello from the sandbox"';
 
 it('permission-request asks, then runs the command and replies once approved', async () => {
