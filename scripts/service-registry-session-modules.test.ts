@@ -2,6 +2,7 @@ import { describe, expect, test } from 'vitest';
 import {
   collectSessionModuleEdges,
   getSessionModuleErrors,
+  sessionModuleDirectories,
   type SessionModuleCheckInput,
   type SessionModuleDeclaration,
   type SessionModuleEdge,
@@ -66,6 +67,7 @@ describe('collectSessionModuleEdges', () => {
             "type Loader = typeof import('../beta/b');",
             "const load = () => import('../gamma/c');",
           ].join('\n'),
+          'alpha/spaced.ts': "const load = () => import /* lazy */ ('../root-file');",
         },
         directories
       )
@@ -77,6 +79,7 @@ describe('collectSessionModuleEdges', () => {
       'alpha/mixed.ts gamma',
       'alpha/inline.ts beta type',
       'alpha/inline.ts gamma',
+      'alpha/spaced.ts root',
     ]);
   });
 
@@ -106,6 +109,21 @@ describe('collectSessionModuleEdges', () => {
   });
 });
 
+describe('sessionModuleDirectories', () => {
+  test('lists directories that hold files, tests included, and root for top-level files', () => {
+    expect(
+      sessionModuleDirectories([
+        `${service}/beta/nested/b.ts`,
+        `${service}/alpha/a.test.ts`,
+        `${service}/alpha/a.ts`,
+        `${service}/top.ts`,
+        'src/backend/services/session/resources/x.accessor.ts',
+      ])
+    ).toEqual(['alpha', 'beta', 'root']);
+    expect(sessionModuleDirectories([`${service}/alpha/a.ts`])).toEqual(['alpha']);
+  });
+});
+
 const edge = (from: string, to: string, file = `${service}/${from}/x.ts`): SessionModuleEdge => ({
   from,
   to,
@@ -116,7 +134,9 @@ const edge = (from: string, to: string, file = `${service}/${from}/x.ts`): Sessi
 function check(
   modules: Record<string, readonly string[]>,
   edges: SessionModuleEdge[],
-  options: Partial<Pick<SessionModuleCheckInput, 'cycles' | 'moduleDirectories'>> & {
+  options: Partial<
+    Pick<SessionModuleCheckInput, 'cycles' | 'cycleCeiling' | 'moduleDirectories'>
+  > & {
     sealed?: readonly string[];
   } = {}
 ): string[] {
@@ -128,6 +148,7 @@ function check(
       ])
     ),
     cycles: options.cycles ?? [],
+    cycleCeiling: options.cycleCeiling ?? options.cycles ?? [],
     moduleDirectories: options.moduleDirectories ?? Object.keys(modules),
     edges,
   });
@@ -217,6 +238,17 @@ describe('getSessionModuleErrors', () => {
   test('rejects a recorded pair that no longer imports each other', () => {
     expect(check({ a: ['b'], b: [] }, [edge('a', 'b')], { cycles: [['a', 'b']] })).toEqual([
       `sessionModuleCycles in ${modulesFile} lists ['a', 'b'], but "a" and "b" no longer import each other. Remove the line ['a', 'b'], from sessionModuleCycles.`,
+    ]);
+  });
+
+  test('rejects a pair added to sessionModuleCycles after the list was recorded', () => {
+    expect(
+      check({ a: ['b'], b: ['a'] }, [edge('a', 'b'), edge('b', 'a')], {
+        cycles: [['a', 'b']],
+        cycleCeiling: [['a', 'c']],
+      })
+    ).toEqual([
+      `sessionModuleCycles in ${modulesFile} lists ['a', 'b'], which did not import each other when the list was recorded; the list may only shrink. Remove the pair, and remove the imports in one direction.`,
     ]);
   });
 

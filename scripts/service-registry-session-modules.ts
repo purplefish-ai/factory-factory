@@ -16,6 +16,17 @@ export const sessionRootModule = 'root';
 const sessionModulesFile = 'src/backend/services/session/modules.ts';
 const sessionServiceAlias = '@/backend/services/session/service';
 
+/**
+ * The pairs that imported each other when the map was first recorded.
+ * `sessionModuleCycles` may drop pairs from this list but never add one, so
+ * this list never needs editing while cycles are removed.
+ */
+export const sessionModuleCycleCeiling: readonly (readonly [string, string])[] = [
+  ['chat', 'dispatch'],
+  ['composition', 'root'],
+  ['root', 'store'],
+];
+
 /** Tests and test support, which do not count as dependencies. */
 const testFilePattern =
   /(?:^|\/)(?:testing|test-utils)\/|\.test\.tsx?$|\.test-[a-z-]+\.tsx?$|\.fixture\.[^/]+$/u;
@@ -45,6 +56,8 @@ export type SessionModuleCheckInput = {
   /** Module directories under `service/`, plus `root` while files sit directly in it. */
   moduleDirectories: readonly string[];
   edges: readonly SessionModuleEdge[];
+  /** The only pairs `cycles` may list; see `sessionModuleCycleCeiling`. */
+  cycleCeiling: readonly (readonly [string, string])[];
 };
 
 export function isSessionTestFile(filePath: string): boolean {
@@ -66,6 +79,23 @@ function moduleOfPath(filePath: string, moduleNames: ReadonlySet<string>): strin
     return first;
   }
   return sessionRootModule;
+}
+
+/**
+ * The modules present among repository-relative TypeScript file paths: each
+ * directory under `service/` that holds a file, tests included, and `root`
+ * while a file sits directly in `service/`. An empty directory is not a module.
+ */
+export function sessionModuleDirectories(filePaths: readonly string[]): string[] {
+  const modules = filePaths.flatMap((filePath) => {
+    const relativePath = path.posix.relative(sessionServiceRoot, filePath);
+    if (relativePath.startsWith('..') || path.posix.isAbsolute(relativePath)) {
+      return [];
+    }
+    const segments = relativePath.split('/');
+    return [segments.length > 1 ? (segments[0] ?? sessionRootModule) : sessionRootModule];
+  });
+  return [...new Set(modules)].sort();
 }
 
 function resolveSpecifier(importingFile: string, specifier: string): string | null {
@@ -153,9 +183,7 @@ function moduleReferences(file: SessionSourceFile): ModuleReference[] {
     const reference = statementReference(statement);
     return reference === null ? [] : [reference];
   });
-  return file.source.includes('import(')
-    ? [...references, ...inlineReferences(sourceFile)]
-    : references;
+  return [...references, ...inlineReferences(sourceFile)];
 }
 
 function fileEdges(
@@ -318,6 +346,14 @@ function cycleErrors(input: SessionModuleCheckInput, graph: Graph): string[] {
   const field = `sessionModuleCycles in ${sessionModulesFile}`;
   const recorded = new Set(input.cycles.map(([a, b]) => pairKey(a, b)));
   const errors = cycleListErrors(input.cycles);
+  const ceiling = new Set(input.cycleCeiling.map(([a, b]) => pairKey(a, b)));
+  for (const key of sortedUnique(recorded)) {
+    if (!ceiling.has(key)) {
+      errors.push(
+        `${field} lists ${quotePair(key.split('\u0000'))}, which did not import each other when the list was recorded; the list may only shrink. Remove the pair, and remove the imports in one direction.`
+      );
+    }
+  }
 
   const edgesBetween = (from: string, to: string): SessionModuleEdge[] =>
     graph.get(from)?.get(to) ?? [];
