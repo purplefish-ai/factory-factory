@@ -46,6 +46,10 @@ yarn-error.log*
 # Worktrees
 worktrees/
 
+# Claude Code personal settings and agent worktrees; .claude/settings.json is shared
+.claude/settings.local.json
+.claude/worktrees/
+
 # SQLite databases
 *.db
 *.db-journal

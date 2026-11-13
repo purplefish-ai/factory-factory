@@ -30,25 +30,66 @@ starts one writes its step-level plan from the code as it is then.
 
 ## Baseline (2026-11-13, commit `a571ce9fe`)
 
-Measured by one-off commands; task 7.1 makes them reproducible.
+Tree figures come from `pnpm metrics:agents` run against that commit. GitHub
+figures come from the same script over the 600 CI runs and 300 merged pull
+requests ending 2026-11-13; they cannot be pinned to a commit. The first version
+of this table used one-off commands, and three figures changed when the script
+replaced them: CI duration, fix-titled pull requests and branches with a failed
+run.
 
-| Measure                                                | Baseline                           | Target                               |
-| ------------------------------------------------------ | ---------------------------------- | ------------------------------------ |
-| Typecheck / `pnpm check` / full `pnpm test`            | 12s / 36s / 82s                    | Total stays under 3 minutes          |
-| CI duration, median                                    | 7.1 min                            | No regression                        |
-| PR branches green on first CI run (239 branches)       | 88%                                | No regression during the program     |
-| Full local suite failures on clean `main`              | 1 in 1 run (passes alone)          | 0 in 5 consecutive runs              |
-| Tokens of notes to read before an agent-runtime change | about 35,500                       | 4,000 or less for any one file (P1)  |
-| `docs/architecture` growth over 300 commits            | +58% (source: +17%)                | Every note within its budget         |
-| Most-edited file, share of last 300 commits            | 18% (`agent-runtime.md`, 55)       | 5% or less, manifests excepted (P7)  |
-| Merged PRs with evidence from a running app            | Not recorded; none in two programs | Every PR with a user-visible change  |
-| `session` capsule                                      | 500 files, 105,111 lines           | Modules with enforced surfaces (P2)  |
-| `session` subdirectory pairs that import each other    | 11                                 | 0                                    |
-| Capsule barrels using `export *`                       | 10 of 14                           | 0                                    |
-| `vi.mock` calls / of capsule internals by path         | 1,367 / 139                        | Internals mocked across modules: 0   |
-| Production files of 900 lines or more                  | 16                                 | Reported; no target (see task 3.6)   |
-| Historical records in the tree                         | about 118,000 lines                | 0 on `main` (decision D1)            |
-| Repository-owned skills, recipes, agent settings       | None                               | Five recipes, one settings file (P8) |
+| Measure                                                | Baseline                                                                                 | Target                                                             |
+| ------------------------------------------------------ | ---------------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
+| Typecheck / `pnpm check` / full `pnpm test`            | 12s / 36s / 82s (one machine, one run)                                                   | Total stays under 3 minutes                                        |
+| CI duration, successful runs, median / p90             | 5.5 / 7.5 min                                                                            | No regression                                                      |
+| PR branches green on their first run with a result     | 212 of 239 (88.7%)                                                                       | No regression during the program                                   |
+| Merged PRs titled with a fix verb                      | 30 of 300                                                                                | Reported                                                           |
+| PR branches with any failed run                        | 40 of 239                                                                                | Reported                                                           |
+| Commits that failed CI, then passed unchanged          | 8                                                                                        | 0 (P5)                                                             |
+| Tests known to fail without a defect                   | 1 found before the program, 6 more reported during it                                    | 0 (tasks 0.4, 0.4b, 0.4c)                                          |
+| Tokens of notes to read before an agent-runtime change | about 35,500                                                                             | 4,000 or less for any one file (P1)                                |
+| Guidance lines per 1,000 production source lines       | 32.5 (6,606 against 203,526)                                                             | Falls as notes migrate                                             |
+| `docs/architecture` growth over 300 commits            | +58% (source: +17%), one-off measure                                                     | Every note within its budget                                       |
+| Most-edited file, share of last 300 commits            | 18.3% (`agent-runtime.md`, 55)                                                           | 5% or less, manifests excepted (P7)                                |
+| Merged PRs with evidence from a running app            | Not recorded; none in two programs                                                       | Every PR with a user-visible change                                |
+| `session` capsule                                      | 500 files, 105,111 lines                                                                 | Modules with enforced surfaces (P2)                                |
+| `session` subdirectory pairs that import each other    | 11                                                                                       | 0                                                                  |
+| Capsule barrels using `export *`                       | 10 of 14                                                                                 | 0                                                                  |
+| `vi.mock` calls                                        | 1,366 in 528 of 1,378 test files                                                         | Reported                                                           |
+| Mocks of a capsule's internals                         | 140 (97 `session`, 31 `workspace`, 12 other); 13 of them from outside the owning capsule | From outside: 0. No mock of a path that does not exist (task 5.1b) |
+| Production files of 900 lines or more                  | 15                                                                                       | Reported; no target (see task 3.6)                                 |
+| Unused-code baseline entries                           | 344 (71 production, 273 exports)                                                         | Only entries no convention explains (179 after task 4.1)           |
+| Lint rule exception entries                            | 25                                                                                       | Shrinks; never grows without a reason                              |
+| Historical records in the tree                         | about 118,000 lines                                                                      | 0 on `main`, active plans and their specs excepted (D1)            |
+| Repository-owned skills, recipes, agent settings       | None                                                                                     | Five recipes, one settings file (P8)                               |
+
+## Changes since approval
+
+Rulings made while executing, each recorded with its reason in the execution
+ledger. The task text below is updated to match.
+
+- **0.3 dropped.** The Knip entries are production roots.
+- **0.4** was port reuse in a per-user pnpm cache, not load. **0.4b** and
+  **0.4c** added for six more tests that fail without a defect.
+- **1.1** gains an egress recorder, `git` and `ssh` containment, a project-root
+  switch, an owner watchdog and a lifetime, after review found the isolation
+  guarantee did not hold.
+- **1.2:** `tool-call` is a shell command, because the adapter drops a file
+  read's output for this client; an inter-chunk delay override makes the Stop
+  tests deterministic.
+- **2.2:** note ceilings are upper bounds, so ordinary pull requests never edit
+  the check.
+- **2.8** keeps the run-script pilot plan and spec, added the same day by
+  another workstream, until the owner decides.
+- **4.1:** the 100-entry target is replaced by the honest count. Widening the
+  barrel rule to reach 100 would have stopped the check catching unused
+  re-exports in feature barrels.
+- **4.2:** a new rule takes two lines in `lint-rules/factory.mjs`, not one.
+- **5.1** is capsule-level only and found no mock of `session` internals from
+  outside `session`. **5.1b** added: reject a mock whose target does not exist,
+  which is the failure a file move causes. **5.2** retargeted to the capsules
+  that have violations.
+- **7.1b** added: miscounts in the metrics script found in review, including
+  lint exceptions after 4.2 moved them.
 
 ## Global Constraints
 
@@ -102,12 +143,12 @@ Review gates that wait for Martin:
 
 ## Order
 
-| Wave | Tasks                                            | Why this order                                                   |
-| ---- | ------------------------------------------------ | ---------------------------------------------------------------- |
-| 0    | 0.1–0.5, 2.1, 7.1                                | Stop note growth and measure before changing anything            |
-| 1    | 1.1–1.3, 2.2, 2.3, 3.1, 4.1, 4.2, 2.8 (after D1) | Disjoint files; run in parallel                                  |
-| 2    | 2.4–2.7 in parallel; 5.1, then 3.2–3.5 in series | Notes are disjoint; session moves share files                    |
-| 3    | 1.4, 6.1, 6.2, 4.3, 4.4, 5.2, 5.3, 7.2, 3.6      | Depend on the sandbox, the lint layout and the module boundaries |
+| Wave | Tasks                                                  | Why this order                                                   |
+| ---- | ------------------------------------------------------ | ---------------------------------------------------------------- |
+| 0    | 0.1–0.5, 2.1, 7.1                                      | Stop note growth and measure before changing anything            |
+| 1    | 1.1–1.3, 2.2, 2.3, 3.1, 4.1, 4.2, 2.8 (after D1)       | Disjoint files; run in parallel                                  |
+| 2    | 2.4–2.7 in parallel; 5.1, 5.1b, then 3.2–3.5 in series | Notes are disjoint; session moves share files                    |
+| 3    | 1.4, 6.1, 6.2, 4.3, 4.4, 5.2, 5.3, 7.2, 3.6            | Depend on the sandbox, the lint layout and the module boundaries |
 
 ---
 
@@ -142,7 +183,7 @@ The three `knip.json` entries Knip reports as redundant are production roots
 that `pnpm check:unused-code`, its test and `docs/knip.md` rely on. The hint
 applies only to Knip's default mode. They stay.
 
-### Task 0.4: Fix the dependency-intake test that fails under load
+### Task 0.4: Fix the dependency-intake test that fails intermittently
 
 **Files:** Modify `scripts/dependency-intake.test.ts` and whatever it exercises.
 
@@ -154,6 +195,34 @@ the file passes alone in 1.5s.
       find the shared state or timing dependency.
 - [ ] Fix the cause, not the assertion. Five consecutive full `pnpm test` runs
       pass.
+
+Cause found: pnpm keeps one metadata cache per user, keyed by registry host and
+port, and the fixture's random port was sometimes one an earlier run had used.
+
+### Task 0.4b: Fix three more tests that fail without a defect
+
+**Files:** `src/client/features/inbox/workspace-inbox-panel.test.tsx` (failed
+required CI on two unrelated pull requests), `src/backend/server.bind.test.ts`,
+`src/test-utils/session-launch-controls.integration.test.tsx`, and whatever each
+exercises.
+
+- [ ] For each: find the cause, force the failure on demand, fix the cause. No
+      retries, sleeps, longer timeouts or loosened assertions.
+- [ ] Each fixed test passes 30 consecutive runs alone under the forcing
+      condition, and five consecutive full `pnpm test` runs pass.
+
+### Task 0.4c: Make two Storybook stories independent of order and load
+
+**Files:** `src/client/features/kanban/kanban-board.provider.board.stories.tsx`
+(`PhoneNewWorkspaceFromDone` passes only after `Desktop` has run in the same
+file) and the story `Phone Section Navigation`, which timed out once under load.
+Also `src/backend/testing/agent-runtime-flow.integration.test.ts`, which hit its
+2-second timeout once in a full run.
+
+- [ ] Each passes when run alone, 30 consecutive times, and in five consecutive
+      full runs of its suite (`pnpm test:storybook` or `pnpm test`) while
+      another full suite runs on the same machine.
+- [ ] The comment recording the order dependency is removed with it.
 
 ### Task 0.5: Add the pull request template
 
@@ -199,10 +268,11 @@ updated** (tests / guide / decision record / none).
   `<os.tmpdir()>/ff-sandbox/`; `WORKTREE_BASE_DIR` and `CODEX_HOME` are inside
   it. The database path derives from `BASE_DIR`.
 - The server runs in its own process group, recorded as `pgid`.
-- Every background feature that calls an external service is off: application
-  and provider update checks, Slack listeners, GitHub and Linear polling. Use
-  the existing configuration switch for each; where none exists, add one to
-  `configService`.
+- Application and provider update checks and Slack listeners are off by
+  configuration. `gh` and `ssh` are shimmed. `git` allows only the `file`
+  protocol. Every other outbound request, including the application's own
+  `fetch`, goes to the egress recorder, which refuses and records it. GitHub and
+  Linear polling keep running; their calls are refused the same way.
 - The server's environment carries no Anthropic or Claude credential variable,
   and its Claude configuration directory is inside `baseDir`.
 - `CODEX_PATH` points at
@@ -225,19 +295,48 @@ updated** (tests / guide / decision record / none).
 - [ ] `prints SANDBOX_READY with a readable sandbox.json`
 - [ ] `seeds one project on a fresh repository`
 - [ ] `records gh calls instead of running them`
-- [ ] `Claude cannot use the user's credentials`: the environment passed to both
-      Claude spawn paths, the session spawn and the model catalog spawn in
-      `claude-model-catalog-loader.ts`, has no credential variable and a
-      configuration directory inside `baseDir`. If either path cannot be
-      isolated, the sandbox disables the Claude provider and says to use Codex.
-- [ ] `an idle sandbox contacts no external service`: with the npm registry URL
-      pointed at a local recording server, the server receives no request
-      between startup and one update-check interval, and `gh-calls.log` is
-      empty.
+- [ ] `Claude requests never leave the machine`: the server's environment has no
+      credential variable and a configuration directory inside `baseDir`; a
+      Claude request made from the sandbox is refused locally and appears in
+      `egress-calls.log`.
+- [ ] `an idle sandbox makes no outbound request and no gh call after startup`:
+      from `SANDBOX_READY` to the end of the shared real-server cases,
+      `egress-calls.log` is empty and `gh-calls.log` holds only the one
+      `--version` probe `ff serve` makes before the server starts.
+- [ ] `a direct fetch is refused and recorded`: a Node process started with
+      exactly the server's environment calls `fetch` on an external host; the
+      request fails and appears in `egress-calls.log`.
 - [ ] `removes baseDir and every descendant process on SIGTERM`
 - [ ] `--clean after the launcher is killed stops its descendants before     removing baseDir`
 - [ ] `--clean ignores a directory without a sandbox.json naming itself` and
       `--clean leaves a sandbox whose launcher is running`
+
+**Amended after review.** The first implementation stopped external contact
+feature by feature, and review found paths it missed: `git` over SSH and HTTPS
+reaches GitHub with the developer's key, Claude stays enabled, and a project can
+point outside the sandbox. The task now also requires:
+
+- [ ] An egress recorder: a loopback proxy in the launcher that refuses every
+      outbound request and records its method and target in
+      `<baseDir>/egress-calls.log`. The server's proxy variables point at it,
+      and the Node runtime is made to honour them for its own `fetch` and
+      `http`/`https` clients; if the pinned Node cannot, a process-wide
+      dispatcher behind a configuration switch does the same.
+- [ ] `git` allows only the `file` protocol; `ssh` is shimmed like `gh`. Test:
+      `git cannot reach a remote`.
+- [ ] A configuration switch restricts project paths to a root; the launcher
+      sets it to `baseDir`. Test: `refuses a project outside the sandbox`.
+- [ ] A provisional record is written right after the directory is created, so
+      `--clean` finds a sandbox whose launcher died during setup.
+- [ ] Processes are identified by pid and start time before any signal.
+- [ ] A backend that falls back to another port stops the attempt; the launcher
+      retries with fresh ports, three attempts at most.
+- [ ] `--owner-pid <pid>` stops the sandbox when that process is gone;
+      `--ttl-minutes <n>` (default 120, `0` disables) stops it after that long.
+- [ ] The launcher is split into modules under `scripts/sandbox/`.
+
+Per-feature switches for GitHub and Linear polling are not added. The contract
+is that nothing leaves the machine, not that nothing tries.
 
 ### Task 1.2: Scripted provider scenarios
 
@@ -245,12 +344,19 @@ updated** (tests / guide / decision record / none).
 create `src/backend/testing/fixtures/fake-codex-app-server.test.ts`.
 
 **Produces:** the fake reads the scenario name from `FF_SANDBOX_SCENARIO` and
-plays one of `echo` (default: replies with the prompt text), `tool-call`,
-`permission-request`, `error` and `slow-stream`. Unknown names exit with the
-list of valid ones.
+plays one of `echo` (replies with the prompt text), `tool-call` (a shell command
+with fixed output, because the adapter drops a file read's output for this
+client), `permission-request`, `error` and `slow-stream`. Unknown and empty
+names exit with the list of valid ones. With the variable unset the fake behaves
+as before. `FF_SANDBOX_CHUNK_DELAY_MS` overrides the delay between chunks
+(default 400).
 
 - [ ] One test per scenario asserts the app-server messages emitted for a single
       prompt.
+- [ ] Each scenario is also proven through the pinned adapter, asserting what
+      the ACP client receives.
+- [ ] Stop interrupts a running scenario; the Stop tests set a chunk delay
+      longer than their own timeout, so they cannot be decided by a race.
 - [ ] `upstream-codex.integration.test.ts` passes unchanged.
 
 ### Task 1.3: Full-stack smoke test
@@ -369,7 +475,7 @@ Same method and acceptance as task 2.3, one pull request per note, in parallel.
 
 ### Task 2.8: Remove historical records from `main` (after D1)
 
-**Files:** Delete `docs/superpowers/specs/`, completed files in
+**Files:** Delete completed files in `docs/superpowers/specs/` and
 `docs/superpowers/plans/`, `docs/design/archive/`, `.planning/`,
 `.superpowers/`, `.architecture/`, and the point-in-time `docs/design-*.md` and
 `docs/workspace-notification-design*.md`; modify `docs/README.md`,
@@ -448,7 +554,8 @@ does.
 **Files:** For each module, create `service/<module>/index.ts` with named
 exports and route sibling imports through it; extend the check from task 3.2 to
 reject a sibling import that bypasses a module's `index.ts` once that module is
-marked `sealed: true` in `sessionModules`.
+marked `sealed: true` in `sessionModules`. Extend `no-internal-module-mock`
+(task 5.1) so a test outside a sealed module cannot mock its internals.
 
 Order, by how many siblings each depends on today: `acp`, `archive`, `logging`,
 then `inference`, `metadata`, `providers`, `voice`, then `delivery`,
@@ -503,8 +610,11 @@ reason and 43 another.
       entry; rename the seven outliers to match or keep their entries.
 - [ ] Where an export's disposition follows from its location (a capsule barrel,
       `src/components/ui/`), derive it; keep entries only for `review-required`.
-- [ ] The baseline has 100 entries or fewer, and adding a test helper under a
+- [ ] The baseline holds only entries no convention explains (179 after this
+      task: 13 production, 166 exports), and adding a test helper under a
       conventional name needs no baseline edit.
+- [ ] The barrel convention covers service capsule barrels only. A re-export in
+      any other index file with no entry still fails.
 
 ### Task 4.2: One lint rule per file
 
@@ -521,7 +631,8 @@ runs the stale-exception check over every `*.exceptions.json`.
 
 - [ ] Rule names, messages and findings are unchanged: `pnpm lint` reports the
       same result before and after.
-- [ ] Adding a rule touches its own three files, one index line and one
+- [ ] Adding a rule touches its own three files, two lines in
+      `lint-rules/factory.mjs` (the import and the plugin entry) and one
       `.oxlintrc.json` line.
 
 ### Task 4.3: Compose the application from subsystem slices (needs a step plan)
@@ -548,9 +659,10 @@ lines), `src/client/features/chat/chat-transcript.stories.tsx` (673),
 
 ## Workstream 5: Tests that survive restructuring (P2, P5)
 
-Baseline `vi.mock` targets: client modules 396, npm and Node 246, capsule
-barrels 178, relative paths 153, other backend 131, infrastructure services 115,
-`session` internals 97, `workspace` internals 31, other capsule internals 11.
+Baseline `vi.mock` targets, from the metrics script: client modules 396, npm and
+Node 244, capsule barrels 177, relative paths 153, other backend 134, root
+infrastructure services 115, `session` internals 97, `workspace` internals 31,
+other capsule internals 12, other 7.
 
 ### Task 5.1: Stop mocking another module's internals by path
 
@@ -559,26 +671,41 @@ and exceptions file (after task 4.2; otherwise add it to `factory.mjs`).
 
 **Produces:** a rule rejecting `vi.mock('<path>')` and `vi.doMock` when the
 target is inside `src/backend/services/<capsule>/` and the test file is outside
-that capsule, or, for a sealed session module, outside that module. Barrels are
-allowed. Message: "Mock the `<capsule>` barrel or pass a fake from
-`<capsule>/testing`; internal paths move."
+that capsule. Barrels and a capsule's `testing/` directory are allowed. Message:
+"Mock the `<capsule>` barrel or pass a fake from `<capsule>/testing`; internal
+paths move." Task 3.4 extends it to sealed session modules.
 
-- [ ] The exceptions file starts as today's violations; the stale-exception test
-      shrinks it.
-- [ ] Before each task 3.3 and 3.4 move, the moved files' entries are removed by
-      converting those tests.
+- [ ] The exceptions file starts as today's violations (13 calls in 9 files,
+      none in `session`); the stale-exception test shrinks it.
+
+### Task 5.1b: Reject a mock whose target does not exist
+
+**Files:** Create `lint-rules/rules/no-unresolved-mock-target.mjs` and its test.
+
+All 97 mocks of `session` internals are in `session`'s own tests, which task 5.1
+allows. When a file moves, `vi.mock('<old path>')` keeps running and mocks
+nothing. This rule lands before task 3.3.
+
+- [ ] A `vi.mock` or `vi.doMock` whose literal target is a repository path that
+      resolves to no module fails, with a message saying the mock replaces
+      nothing.
+- [ ] Every unresolved target in the repository today is fixed or deleted, not
+      excepted.
 
 ### Task 5.2: Capsule-owned fakes
 
-**Files:** Create `src/backend/services/<capsule>/testing/index.ts` for
-`session`, `workspace` and `github`, following the existing
-`src/backend/services/agent-definition/testing/`.
+**Files:** Create `src/backend/services/<capsule>/testing/index.ts`, starting
+with the capsules whose internals are mocked from outside (`workspace`, then
+`codex-accounts`, `settings`, `run-script`, `agent-definition`), then the
+barrels mocked most often.
 
 **Produces:** `createFake<Capsule>Services(overrides?)`, typed against the
 capsule barrel so a change to the public surface is a type error in the fake.
 
-- [ ] Tests that mock those three barrels with hand-written objects use the
-      fakes; the count of `vi.mock` calls on capsule barrels falls from 178.
+- [ ] Each exception in `no-internal-module-mock.exceptions.json` is removed by
+      converting that test to the capsule's fake.
+- [ ] Tests that mock those barrels with hand-written objects use the fakes; the
+      count of `vi.mock` calls on capsule barrels falls from 177.
 
 ### Task 5.3: No new module-level service singletons
 
@@ -662,6 +789,23 @@ network.
       first run was cancelled and a PR with one push.
 - [ ] Its output for commit `a571ce9fe` matches the baseline table above; where
       it differs, correct the table.
+
+### Task 7.1b: Metrics correctness
+
+**Files:** Modules under `scripts/agent-metrics/` and their tests.
+
+Review of task 7.1 found miscounts and untested collection code. Fixed before
+the baseline table above was rewritten from the script.
+
+- [ ] Earlier attempts of a re-run keep their run's branch; `action_required`
+      carries no signal.
+- [ ] Production source excludes test-support files, by the same naming
+      conventions as `scripts/check-unused-code.ts`.
+- [ ] `vi.mock` is counted from the syntax tree; the tree is read from the
+      measured commit, not the working tree.
+- [ ] Lint rule exceptions are counted from
+      `lint-rules/rules/*.exceptions.json`.
+- [ ] Collection code is tested with injected `gh` and `git`.
 
 ### Task 7.2: Weekly report and the guidance experiment rule
 
