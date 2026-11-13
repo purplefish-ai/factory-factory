@@ -4,13 +4,14 @@ Deep context for subsystems whose current shape is hard to infer from the code
 alone — the rationale, the constraints, and the mistakes already made and fixed.
 
 `AGENTS.md` at the repo root carries the rules you need in every session. These
-files carry the "why" you need only when you are working in the subsystem. Read
-the one that matches your change before you touch it.
+files carry what you need only when you are working in the subsystem; a guide
+beside the code leaves the "why" to [decision records](../decisions/). Read the
+one that matches your change before you touch it.
 
 | File                                         | Covers                                                                                     |
 | -------------------------------------------- | ------------------------------------------------------------------------------------------ |
 | [background-jobs.md](./background-jobs.md)   | `jobRunner`, every registered poll loop, cadences, shutdown semantics                      |
-| [pull-requests.md](./pull-requests.md)       | PR monitoring, observations, event delivery, GitHub coordination                           |
+| [Pull request guide][pr-guide]               | PR monitoring, observations, event delivery, GitHub coordination (beside the code)         |
 | [workspace-state.md](./workspace-state.md)   | Run script, workspace lifecycle, the Kanban column projection                              |
 | [agent-runtime.md](./agent-runtime.md)       | ACP runtime, provider sub-agents, child workspaces, quick actions, desktop backend process |
 | [integrations.md](./integrations.md)         | GitHub, Linear, periodic tasks                                                             |
@@ -20,6 +21,8 @@ the one that matches your change before you touch it.
 | [search.md](./search.md)                     | Metadata query bounds, Unicode matching, search navigation                                 |
 | [diff-rendering.md](./diff-rendering.md)     | Workers, virtual rows, scroll anchors, visual verification                                 |
 | [Chat message flow](../chat-message-flow.md) | ACP streaming, session loading, replay, client reduction                                   |
+
+[pr-guide]: ../../src/backend/orchestration/pull-requests/AGENTS.md
 
 Keep these true. Change a note when ownership, an invariant, a public surface,
 the map or a reason changes. Do not add a description of new behaviour; its

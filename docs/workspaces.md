@@ -97,9 +97,9 @@ retain independent list and editor scrolling.
 > **Historical workspace progression model.** The Ratchet fixer workflow and
 > related PR state described here have been replaced by PR monitoring. Use
 > [workspace state](architecture/workspace-state.md) and
-> [PR monitoring](architecture/pull-requests.md) for current behavior. The
-> sections below describe earlier behavior and may refer to renamed or removed
-> APIs and tests.
+> [PR monitoring](../src/backend/orchestration/pull-requests/AGENTS.md) for
+> current behavior. The sections below describe earlier behavior and may refer
+> to renamed or removed APIs and tests.
 
 This document defines the workspace lifecycle, Kanban ownership, and PR Ratchet
 model.
@@ -194,8 +194,8 @@ The PR scheduler in
 `SERVICE_INTERVAL_MS.schedulerPrSync` to sync stale PR snapshots and discover
 new PRs every three minutes. Page-load `syncPRStatus` calls and these periodic
 syncs converge cached PR state; see
-[terminal PR polling](architecture/pull-requests.md#terminal-pr-polling) for
-which refreshes are forced.
+[terminal PR polling](decisions/2026-11-13-terminal-pr-polling-backoff.md) for
+how background polling paces merged and closed PRs.
 
 Enabling Ratchet through `workspace.toggleRatcheting` also starts a background
 `ratchetService.checkWorkspaceById(...)` evaluation so the workspace does not

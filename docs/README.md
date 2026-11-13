@@ -14,8 +14,9 @@ context, not a new task or a substitute for current repository guidance.
 | Contribute and verify changes                      | [Verification](../CONTRIBUTING.md#verification) and [agent guide](../AGENTS.md)                       |
 | Service boundaries and subsystem contracts         | [Architecture notes](architecture/README.md)                                                          |
 | Where a rule, fact or tool for agents belongs      | [Agent-friendly codebase principles](architecture/agent-friendly-codebase.md)                         |
+| Why a decision was made                            | [Decision records](decisions/)                                                                        |
 | Chat streaming, loading, and replay                | [Chat message flow](chat-message-flow.md)                                                             |
-| Workspace state and PR monitoring                  | [Workspace state](architecture/workspace-state.md) and [PR monitoring](architecture/pull-requests.md) |
+| Workspace state and PR monitoring                  | [Workspace state](architecture/workspace-state.md) and [PR monitoring guide][pull-requests-agents-md] |
 | Mixed Automations management and scheduled history | [Scheduled automations](architecture/integrations.md#scheduled-automations)                           |
 | Event automation limits and checks                 | [Event automation limits](architecture/integrations.md#current-event-automation-limits)               |
 | User and project configuration                     | [Settings](admin-settings.md)                                                                         |
@@ -30,9 +31,11 @@ context, not a new task or a substitute for current repository guidance.
 | Container image integrity                          | [Distribution security](distribution-security.md)                                                     |
 | Verify npm release artifact identity               | [npm release security](npm-release-security.md)                                                       |
 
+[pull-requests-agents-md]: ../src/backend/orchestration/pull-requests/AGENTS.md
+
 For implementation work, search the relevant source area and current guides
-first, for example `rg -n 'PR monitoring' docs/architecture`. Consult historical
-records when the task needs an earlier decision or migration.
+first, for example `rg -n 'PR monitoring' -g '*.md' docs src`. Consult
+historical records when the task needs an earlier decision or migration.
 
 Keyboard behavior is documented in [Keyboard shortcuts](keyboard-shortcuts.md).
 
@@ -57,8 +60,8 @@ documents were removed from `main` and are preserved at the tag
 and list a directory with
 `git ls-tree -r --name-only docs-archive-2026-11 -- <dir>`; the removed
 directories include `.planning`, `.architecture`, `.superpowers`, the completed
-plans and specs under `docs/superpowers` and the design archive under
-`docs/design`. Check current behavior in source and the architecture notes
+plans and specs under `docs/superpowers/` and the design archive under
+`docs/design/`. Check current behavior in source and the architecture notes
 before using their examples. The
 [workspace progression](workspaces.md#historical-progression-model) section
 describes the former Ratchet fixer and PR-state model.

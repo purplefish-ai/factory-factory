@@ -53,8 +53,8 @@ Read the matching note before changing these areas:
 
 - [Background jobs](docs/architecture/background-jobs.md): `jobRunner`, polling,
   shutdown.
-- [Pull requests](docs/architecture/pull-requests.md): PR monitoring,
-  `WorkspacePR`, `gh` coordination.
+- [Pull requests](src/backend/orchestration/pull-requests/AGENTS.md): PR
+  monitoring, `WorkspacePR`, `gh` coordination.
 - [Workspace state](docs/architecture/workspace-state.md): run scripts, Kanban.
 - [Agent runtime](docs/architecture/agent-runtime.md): ACP, subagents, child
   workspaces, quick actions, the desktop backend utility process.

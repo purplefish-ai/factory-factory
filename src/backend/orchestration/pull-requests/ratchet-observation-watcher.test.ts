@@ -134,6 +134,40 @@ it('observes every association and wakes the main queue once without creating fi
   expect(wake).toHaveBeenCalledExactlyOnceWith('w', expect.any(Function));
 });
 
+it('checks at most three workspaces at once', async () => {
+  mocks.listEnabled.mockResolvedValue(
+    ['a', 'b', 'c', 'd', 'e'].map((workspaceId) => ({
+      workspaceId,
+      enabled: true,
+      workspace: {
+        prs: [
+          {
+            id: `${workspaceId}-pr`,
+            state: 'OPEN',
+            ciStatus: 'FAILURE',
+            hasMergeConflict: false,
+            reviewState: null,
+          },
+        ],
+      },
+    }))
+  );
+  const observed = deferred<boolean>();
+  const observe = vi.fn(() => observed.promise);
+  const service = new RatchetService({
+    observe,
+    wake: vi.fn().mockResolvedValue(undefined),
+    setMonitoring: vi.fn(),
+  });
+  const checking = service.checkAllWorkspaces();
+  await vi.waitFor(() => expect(observe).toHaveBeenCalledTimes(3));
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  expect(observe).toHaveBeenCalledTimes(3);
+  observed.resolve(true);
+  expect((await checking).checked).toBe(5);
+  expect(observe).toHaveBeenCalledTimes(5);
+});
+
 it('registers bounded PR event retention as its own job', async () => {
   mocks.register.mockClear();
   new RatchetService({ observe: vi.fn(), wake: vi.fn(), setMonitoring: vi.fn() });

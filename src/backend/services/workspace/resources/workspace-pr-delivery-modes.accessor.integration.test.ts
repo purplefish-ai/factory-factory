@@ -374,6 +374,57 @@ it('serializes dedicated PR claims across the workspace and releases the next ba
   expect(await claim(waiting)).toMatchObject({ sessionId: waiting.sessionId, attempt: 1 });
 });
 
+it('holds a main claim while a dedicated delivery from before the mode switch is in flight', async () => {
+  await switchDedicated();
+  const dedicatedId = await fact();
+  expect(
+    await workspacePrEventAccessor.claimDelivery(
+      { workspaceId: 'w', prId: 'p', bindingRevision: 1, deliveryMode: 'DEDICATED' },
+      { deliveryId: 'dedicated-batch', sessionId: 'dedicated', eventIds: [dedicatedId], text: 'a' }
+    )
+  ).not.toBeNull();
+  expect(
+    await workspacePrMonitoringAccessor.setBinding({
+      workspaceId: 'w',
+      enabled: true,
+      deliveryMode: 'MAIN',
+      recipientSessionId: 'main',
+      expectedBindingRevision: 1,
+    })
+  ).toEqual({ applied: true, bindingRevision: 2 });
+  const [mainId] = await db.prisma.$transaction((tx) =>
+    workspacePrEventAccessor.insert(tx, 'w', 'p2', [
+      {
+        kind: 'CI_FAILED',
+        deduplicationKey: 'main-failure',
+        payload: {
+          kind: 'CI_FAILED',
+          target: { workspaceId: 'w', prId: 'p2' },
+          observation: { ...redObservation, url: 'https://github.com/org/repo/pull/2', number: 2 },
+        },
+      },
+    ])
+  );
+  if (!mainId) {
+    throw new Error('Missing main event');
+  }
+  const claimMain = () =>
+    workspacePrEventAccessor.claimDelivery(
+      { workspaceId: 'w', prId: null, bindingRevision: 2 },
+      { deliveryId: 'main-batch', sessionId: 'main', eventIds: [mainId], text: 'b' }
+    );
+
+  expect(await claimMain()).toBeNull();
+  expect(await readEvent(mainId)).toMatchObject({ state: 'PENDING', deliveryId: null });
+  await workspacePrEventAccessor.settleDelivery({
+    deliveryId: 'dedicated-batch',
+    sessionId: 'dedicated',
+    bindingRevision: 1,
+    result: 'delivered',
+  });
+  expect(await claimMain()).toMatchObject({ sessionId: 'main', attempt: 1 });
+});
+
 it('explicitly resumes a paused main destination after switching to dedicated without a binding', async () => {
   await workspacePrMonitoringAccessor.pause('main', 'USER_STOPPED');
   await db.prisma.workspacePRDedicatedSession.deleteMany();

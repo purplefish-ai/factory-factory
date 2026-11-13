@@ -11,8 +11,8 @@ rejects `export *` there.
 Enforced by dependency-cruiser and ownership checks:
 
 - External callers use capsule barrels, except
-  `orchestration/data-backup/data-backup.service.ts` may import
-  `settings/resources/data-backup.accessor.ts` directly.
+  `src/backend/orchestration/data-backup/data-backup.service.ts` may import
+  `src/backend/services/settings/resources/data-backup.accessor.ts` directly.
 - Capsules declare each dependency once in `registry.ts`, by how they reach it:
   `dependsOn` for barrel imports (acyclic, each must be imported by non-test
   code); `bridgedDependsOn` for capabilities that orchestration passes in
@@ -49,4 +49,6 @@ Enforced by dependency-cruiser and ownership checks:
   durable fact ledger, `WorkspacePRDelivery` frozen delivery effects and
   membership, and `WorkspacePRDiscovery` the discovery schedule. Other side
   tables flatten their rows onto workspace reads. Read
-  [workspace state](../../../docs/architecture/workspace-state.md).
+  [workspace state](../../../docs/architecture/workspace-state.md); PR
+  monitoring that coordinates these tables is in the
+  [pull request guide](../orchestration/pull-requests/AGENTS.md).
