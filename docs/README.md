@@ -57,8 +57,8 @@ documents were removed from `main` and are preserved at the tag
 and list a directory with
 `git ls-tree -r --name-only docs-archive-2026-11 -- <dir>`; the removed
 directories include `.planning`, `.architecture`, `.superpowers`, the completed
-plans and specs under `docs/superpowers` and the design archive under
-`docs/design`. Check current behavior in source and the architecture notes
+plans and specs under `docs/superpowers/` and the design archive under
+`docs/design/`. Check current behavior in source and the architecture notes
 before using their examples. The
 [workspace progression](workspaces.md#historical-progression-model) section
 describes the former Ratchet fixer and PR-state model.

@@ -102,7 +102,7 @@ report failed or unavailable checks, and never weaken assertions or guardrails
 to pass. Repeat successful checks only after edits or new evidence.
 
 Vitest keeps application, UI, native and integration tests isolated. Tests under
-`src/client` and `src/components` use `vmForks`: each file gets a fresh VM
+`src/client/` and `src/components/` use `vmForks`: each file gets a fresh VM
 context, module graph, and (jsdom suites) window while workers reuse dependency
 imports. This includes frontend utility tests running in the Node environment.
 Workers recycle after reaching 512 MB. Backend, native and process suites retain

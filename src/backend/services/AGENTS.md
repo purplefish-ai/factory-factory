@@ -11,8 +11,8 @@ rejects `export *` there.
 Enforced by dependency-cruiser and ownership checks:
 
 - External callers use capsule barrels, except
-  `orchestration/data-backup/data-backup.service.ts` may import
-  `settings/resources/data-backup.accessor.ts` directly.
+  `src/backend/orchestration/data-backup/data-backup.service.ts` may import
+  `src/backend/services/settings/resources/data-backup.accessor.ts` directly.
 - Capsules declare each dependency once in `registry.ts`, by how they reach it:
   `dependsOn` for barrel imports (acyclic, each must be imported by non-test
   code); `bridgedDependsOn` for capabilities that orchestration passes in

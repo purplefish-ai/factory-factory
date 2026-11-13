@@ -45,32 +45,25 @@ export type GuidanceRepository = {
 export type BaseLegacyCeilings = { ref: string; ceilings: LegacyNoteCeilings } | { notice: string };
 
 const ceilingsSourcePath = 'scripts/check-guidance.ts';
-const referenceDirectories = [
-  'src/',
-  'scripts/',
-  'docs/',
-  'electron/',
-  'prisma/',
-  'e2e/',
-  'lint-rules/',
-  '.github/',
+// Bare names that, in a nested guide, mean a sibling of the guide, not the
+// repository root's file of that name.
+const siblingGuideNames = new Set(['AGENTS.md', 'CLAUDE.md', 'README.md']);
+const fileReferenceExtensions = [
+  '.ts',
+  '.tsx',
+  '.mts',
+  '.cts',
+  '.js',
+  '.mjs',
+  '.cjs',
+  '.json',
+  '.md',
+  '.prisma',
+  '.yml',
+  '.yaml',
+  '.css',
+  '.sh',
 ];
-// Root files whose bare name can only mean this repository's file. `AGENTS.md`
-// and `README.md` are left out: in a nested guide they name a sibling.
-const rootFileReferences = new Set([
-  '.node-version',
-  '.oxfmtrc.json',
-  '.oxlintrc.json',
-  'CHANGELOG.md',
-  'CONTRIBUTING.md',
-  'knip.json',
-  'package.json',
-  'pnpm-lock.yaml',
-  'pnpm-workspace.yaml',
-  'tsconfig.json',
-  'vite.config.ts',
-  'vitest.config.ts',
-]);
 const decisionNamePattern = /^\d{4}-\d{2}-\d{2}-[a-z0-9]+(?:-[a-z0-9]+)*\.md$/;
 
 function isAgentsGuide(path: string): boolean {
@@ -357,27 +350,90 @@ export function markdownAnchors(content: string): Set<string> {
   return anchors;
 }
 
-/** The repository path a code span names, or undefined when it names none. */
-export function codeSpanRepositoryPath(code: string): string | undefined {
+/** The first path segments of the repository's files, split by what they name. */
+export type TopLevelNames = { directories: ReadonlySet<string>; files: ReadonlySet<string> };
+
+export function topLevelNames(files: readonly string[]): TopLevelNames {
+  const directories = new Set<string>();
+  const rootFiles = new Set<string>();
+  for (const file of files) {
+    const slash = file.indexOf('/');
+    if (slash === -1) {
+      rootFiles.add(file);
+    } else {
+      directories.add(file.slice(0, slash));
+    }
+  }
+  return { directories, files: rootFiles };
+}
+
+/**
+ * Where a code span's path is resolved from: the repository root, or, in a
+ * nested guide, the guide's own directory.
+ */
+export type CodeSpanReference = { from: 'root' | 'guide'; path: string };
+
+/**
+ * The path a code span names, or undefined when it names none. A span names a
+ * root path when it starts with a top-level directory (and has a `/`) or is a
+ * root file. In a nested guide (`guideDirectory` is set) any other span that
+ * ends in a file extension is a file name or path relative to the guide.
+ */
+export function classifyCodeSpan(
+  code: string,
+  topLevel: TopLevelNames,
+  guideDirectory?: string
+): CodeSpanReference | undefined {
   const text = code.trim();
   if (/\s/.test(text) || /[<>*{}$?[\]]/.test(text) || text.includes('...')) {
     return undefined;
   }
-  const path = text
-    .replace(/^\.\//, '')
-    .replace(/#L\d.*$/, '')
-    .replace(/:\d+(?:[-:]\d+)*$/, '');
-  if (path.split('/').includes('..')) {
-    return undefined;
+  const withoutLine = text.replace(/#L\d.*$/, '').replace(/:\d+(?:[-:]\d+)*$/, '');
+  const nested = guideDirectory !== undefined;
+  // `./name` is explicitly relative; in a nested guide it is the guide's.
+  const path = nested ? withoutLine : withoutLine.replace(/^\.\//, '');
+  const [first = ''] = path.split('/');
+  const fromRoot = path.includes('/')
+    ? topLevel.directories.has(first)
+    : topLevel.files.has(path) && !siblingGuideNames.has(path);
+  if (fromRoot) {
+    return path.split('/').includes('..') ? undefined : { from: 'root', path };
   }
-  return referenceDirectories.some((directory) => path.startsWith(directory)) ||
-    rootFileReferences.has(path)
-    ? path
-    : undefined;
+  return nested && isFileNameLike(path) ? { from: 'guide', path } : undefined;
 }
 
-function isCreateLine(line: string): boolean {
-  return /^(?:[-*+]|\d+\.)?\s*(?:\[[ x]\]\s*)?(?:\*\*[^*]+\*\*:?\s*)?Create\b/.test(line.trim());
+/**
+ * Whether a span reads as a file name or relative path: it ends in a file
+ * extension after a name that is not hidden (an extension on its own, or a
+ * fragment such as `.test.ts`), and is not a package, URL, flag or absolute
+ * path.
+ */
+function isFileNameLike(path: string): boolean {
+  const name = path.slice(path.lastIndexOf('/') + 1);
+  return (
+    !name.startsWith('.') &&
+    fileReferenceExtensions.some((extension) => name.endsWith(extension)) &&
+    !/^[@\-/~]/.test(path) &&
+    !/^[a-z][a-z0-9+.-]*:/i.test(path)
+  );
+}
+
+/**
+ * Whether a file name or relative path cited in a nested guide exists. A bare
+ * name matches a file of that name in the guide's directory or any directory
+ * below it; a path (with `/`, or starting `../`) must exist exactly as written
+ * relative to the guide's directory.
+ */
+export function guideReferenceExists(
+  repository: Pick<GuidanceRepository, 'files' | 'isFile'>,
+  guideDirectory: string,
+  path: string
+): boolean {
+  if (path.includes('/')) {
+    return repository.isFile(posix.normalize(posix.join(guideDirectory, path)));
+  }
+  const prefix = `${guideDirectory}/`;
+  return repository.files.some((file) => file.startsWith(prefix) && posix.basename(file) === path);
 }
 
 function decode(value: string): string {
@@ -427,26 +483,79 @@ function hasAnchor(repository: GuidanceRepository, file: string, anchor: string)
   return anchors.has(anchor) || anchors.has(anchor.toLowerCase());
 }
 
+type ReferenceProblem = { problem: string; fix: string };
+
+const pointToCurrentFix = 'point it at the current path or heading, or remove it.';
+
+/**
+ * What is wrong with a path written from the repository root. A path ending in
+ * `/` names a directory; any other path names a file.
+ */
+function rootReferenceProblem(
+  repository: GuidanceRepository,
+  path: string
+): ReferenceProblem | undefined {
+  const missing = { problem: `\`${path}\` does not exist.`, fix: pointToCurrentFix };
+  if (path.endsWith('/')) {
+    return repository.exists(path.slice(0, -1)) ? undefined : missing;
+  }
+  if (repository.isFile(path)) {
+    return undefined;
+  }
+  return repository.exists(path)
+    ? {
+        problem: `\`${path}\` is a directory.`,
+        fix: `write it with a trailing slash, \`${path}/\`.`,
+      }
+    : missing;
+}
+
+function codeSpanProblem(
+  repository: GuidanceRepository,
+  reference: CodeSpanReference,
+  guideDirectory: string | undefined
+): ReferenceProblem | undefined {
+  if (reference.from === 'root' || guideDirectory === undefined) {
+    return rootReferenceProblem(repository, reference.path);
+  }
+  return guideReferenceExists(repository, guideDirectory, reference.path)
+    ? undefined
+    : {
+        problem: `\`${reference.path}\` is not under ${guideDirectory}.`,
+        fix: 'correct the name, or write the path from the repository root.',
+      };
+}
+
+/** The directory of a guide that is not at the repository root, else undefined. */
+function nestedGuideDirectory(file: string): string | undefined {
+  const directory = posix.dirname(file);
+  return isAgentsGuide(file) && directory !== '.' ? directory : undefined;
+}
+
 export function findDeadReferences(
   repository: GuidanceRepository,
-  file: string
+  file: string,
+  topLevel: TopLevelNames = topLevelNames(repository.files)
 ): GuidanceViolation[] {
   const prose = withoutFencedCode(repository.read(file));
-  const lines = prose.split('\n');
-  const violations: GuidanceViolation[] = [];
-  const report = (index: number, problem: string) =>
-    violations.push({
-      file: `${file}:${lineNumberAt(prose, index)}`,
-      rule: 'references',
-      problem,
-      fix: 'point it at the current path or heading, or remove it.',
+  const guideDirectory = nestedGuideDirectory(file);
+  const found: { index: number; violation: GuidanceViolation }[] = [];
+  const report = (index: number, problem: string, fix = pointToCurrentFix) =>
+    found.push({
+      index,
+      violation: {
+        file: `${file}:${lineNumberAt(prose, index)}`,
+        rule: 'references',
+        problem,
+        fix,
+      },
     });
 
   for (const match of prose.matchAll(codeSpanPattern)) {
-    const path = codeSpanRepositoryPath(match[1] ?? '');
-    const line = lines[lineNumberAt(prose, match.index) - 1] ?? '';
-    if (path !== undefined && !isCreateLine(line) && !repository.exists(path.replace(/\/$/, ''))) {
-      report(match.index, `\`${path}\` does not exist.`);
+    const reference = classifyCodeSpan(match[1] ?? '', topLevel, guideDirectory);
+    const problem = reference && codeSpanProblem(repository, reference, guideDirectory);
+    if (problem !== undefined) {
+      report(match.index, problem.problem, problem.fix);
     }
   }
 
@@ -464,13 +573,16 @@ export function findDeadReferences(
       }
     }
   }
-  return violations;
+  return found
+    .toSorted((left, right) => left.index - right.index)
+    .map(({ violation }) => violation);
 }
 
 export function checkReferences(repository: GuidanceRepository): GuidanceViolation[] {
+  const topLevel = topLevelNames(repository.files);
   return repository.files
     .filter(isReferenceScope)
-    .flatMap((file) => findDeadReferences(repository, file));
+    .flatMap((file) => findDeadReferences(repository, file, topLevel));
 }
 
 export function checkGuidance(
