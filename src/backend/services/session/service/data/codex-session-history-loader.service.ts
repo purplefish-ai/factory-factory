@@ -7,7 +7,7 @@ import { z } from 'zod';
 import { codexAccountService, type CodexRuntimeContext } from '@/backend/services/codex-accounts';
 import { createLogger, getCurrentProcessEnv } from '@/backend/services/logger.service';
 import { normalizeCodexSessionId as normalizeProviderSessionId } from '@/backend/services/session/service/acp/acp-session-identity';
-import { summarizeZodIssues } from '@/backend/services/session/service/zod-issue-summary';
+import { summarizeZodIssues } from '@/backend/services/session/service/errors/zod-issue-summary';
 import type { HistoryMessage, MessageAttachment } from '@/shared/acp-protocol';
 import { normalizeCodexFunctionOutput } from './codex-tool-result';
 import { buildHistoryImageAttachments, parseImageDataUrl } from './history-image-attachment';

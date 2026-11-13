@@ -68,12 +68,12 @@ export const sessionModules: Record<
       "Owns a session's provider configuration (model, mode, reasoning, access): applies it at startup, serializes live edits, persists snapshots and serves launch options.",
   },
   data: {
-    dependsOn: ['acp', 'archive', 'root', 'store'],
+    dependsOn: ['acp', 'archive', 'errors', 'store'],
     description:
       'Reads and writes session records through the capsule accessors, resolves session providers and launch settings, and loads Claude and Codex history files into transcripts.',
   },
   delivery: {
-    dependsOn: ['bridges', 'data', 'root', 'store'],
+    dependsOn: ['bridges', 'data', 'errors', 'store'],
     description:
       "Delivers PR updates and workspace mail into sessions as background prompts, with receipts and failure reasons; also holds the helper that resets a workspace's PR-discovery backoff.",
   },
@@ -85,13 +85,18 @@ export const sessionModules: Record<
       'config',
       'data',
       'delivery',
+      'errors',
       'event-agent',
-      'root',
       'store',
       'voice',
     ],
     description:
       "Runs a session's message queue: claims, batches and sends queued messages with retries, queued steering and mail wakes, and the first turn of event-launched sessions.",
+  },
+  errors: {
+    dependsOn: [],
+    description:
+      'Turns provider and runtime errors into log, public and chat-visible messages, and Zod issues into short summaries.',
   },
   'event-agent': {
     dependsOn: ['acp', 'data'],
@@ -104,7 +109,7 @@ export const sessionModules: Record<
       "Carries the capsule's outbound session and chat-broadcast events to the transport and voice, and answers viewer counts.",
   },
   events: {
-    dependsOn: ['acp', 'config', 'logging', 'root', 'store'],
+    dependsOn: ['acp', 'config', 'errors', 'logging', 'store'],
     description:
       "Applies ACP session updates to the transcript and runtime state (tool timeouts, thought chunks, subagent updates), and creates each session's ACP permission bridge, queues its permission requests and routes the replies.",
   },
@@ -121,10 +126,10 @@ export const sessionModules: Record<
       'config',
       'data',
       'delivery',
+      'errors',
       'event-agent',
       'events',
       'logging',
-      'root',
       'store',
     ],
     description:
@@ -144,10 +149,10 @@ export const sessionModules: Record<
       'acp',
       'bridges',
       'delivery',
+      'errors',
       'event-agent',
       'events',
       'lifecycle',
-      'root',
       'store',
     ],
     description:
@@ -160,7 +165,7 @@ export const sessionModules: Record<
   },
   root: {
     dependsOn: ['inference'],
-    description: 'Files not yet in a module: error messages and the agent event classifier.',
+    description: 'Files not yet in a module: the agent event classifier.',
   },
   store: {
     dependsOn: ['event-bus', 'logging'],
