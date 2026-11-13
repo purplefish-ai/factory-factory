@@ -70,17 +70,17 @@ type UnusedCodeConvention = {
 export const unusedCodeConventions: readonly UnusedCodeConvention[] = [
   {
     name: 'test-support directory',
-    sections: ['production', 'exports'],
-    pattern: /(?:^|\/)(?:testing|test-utils|fixtures)\//u,
+    sections: ['production'],
+    pattern: /(?:^|\/)(?:testing|test-utils)\//u,
     review: {
       disposition: 'test-support',
       reason:
-        'Lives in a testing, test-utils or fixtures directory; test and story support stays outside the production graph.',
+        'Lives in a testing or test-utils directory; test and story support stays outside the production graph.',
     },
   },
   {
     name: 'test-support file name',
-    sections: ['production', 'exports'],
+    sections: ['production'],
     pattern: /\.(?:test-helpers|test-support|test-harness|story-fixtures|fixture)\.[cm]?[jt]sx?$/u,
     review: {
       disposition: 'test-support',
@@ -89,9 +89,9 @@ export const unusedCodeConventions: readonly UnusedCodeConvention[] = [
     },
   },
   {
-    name: 'module barrel re-export',
+    name: 'service capsule barrel re-export',
     sections: ['exports'],
-    pattern: /^src\/(?:.+\/)?index\.tsx?$/u,
+    pattern: /^src\/backend\/services\/[^/]+(?:\/service)?\/index\.tsx?$/u,
     reExportsOnly: true,
     review: {
       disposition: 'maintained-api',

@@ -328,7 +328,9 @@ describe('location conventions', () => {
   const barrel = "export * from './service';\nexport { named } from './named';";
   const sources: Record<string, string> = {
     'src/backend/services/session/index.ts': barrel,
-    'src/client/features/chat/reducer/index.ts': `import { local } from './local';
+    'src/backend/services/session/service/index.ts': barrel,
+    'src/client/features/chat/index.ts': barrel,
+    'src/backend/services/periodic-task/index.ts': `import { local } from './local';
       export { local as aliased };
       export * from './types';
       export function chatReducer() {}
@@ -353,7 +355,6 @@ describe('location conventions', () => {
       'src/backend/testing.ts',
     ],
     ['test-support directory', 'production', 'src/test-utils/deferred.ts', 'src/lib/test-utils.ts'],
-    ['test-support directory', 'production', 'src/lib/fixtures/claude.ts', 'src/lib/fixtures.ts'],
     [
       'test-support file name',
       'production',
@@ -385,28 +386,28 @@ describe('location conventions', () => {
       'src/client/components/streamdown-markdown.fixtures.ts',
     ],
     [
-      'test-support file name',
-      'exports',
-      'src/backend/services/session/service/lifecycle/session-lifecycle.test-helpers.ts::exports::helper',
-      'src/backend/services/session/service/lifecycle/session-lifecycle.ts::exports::helper',
-    ],
-    [
-      'module barrel re-export',
+      'service capsule barrel re-export',
       'exports',
       'src/backend/services/session/index.ts::exports::fromWildcard',
       'src/backend/services/session/service/session.service.ts::exports::fromWildcard',
     ],
     [
-      'module barrel re-export',
+      'service capsule barrel re-export',
       'exports',
-      'src/backend/services/session/index.ts::types::named',
-      'src/client/features/chat/reducer/index.ts::exports::chatReducer',
+      'src/backend/services/session/service/index.ts::types::named',
+      'src/client/features/chat/index.ts::types::named',
     ],
     [
-      'module barrel re-export',
+      'service capsule barrel re-export',
       'exports',
-      'src/client/features/chat/reducer/index.ts::exports::aliased',
-      'src/client/features/chat/reducer/index.ts::exports::exposedHelper',
+      'src/backend/services/periodic-task/index.ts::exports::aliased',
+      'src/backend/services/periodic-task/index.ts::exports::chatReducer',
+    ],
+    [
+      'service capsule barrel re-export',
+      'exports',
+      'src/backend/services/periodic-task/index.ts::exports::fromTypes',
+      'src/backend/services/periodic-task/index.ts::exports::exposedHelper',
     ],
     [
       'shadcn component',
@@ -423,6 +424,28 @@ describe('location conventions', () => {
   it('never explains an unused barrel or component file in the production analysis', () => {
     expect(conventionOf('production', 'src/components/ui/card.tsx')).toBeNull();
     expect(conventionOf('production', 'src/backend/services/session/index.ts')).toBeNull();
+  });
+
+  it('explains test-support files but never their unused exports', () => {
+    const helper =
+      'src/backend/services/session/service/lifecycle/session-lifecycle.test-helpers.ts';
+    expect(conventionOf('production', helper)).toBe('test-support file name');
+    expect(conventionOf('exports', `${helper}::exports::helper`)).toBeNull();
+    expect(conventionOf('production', 'src/test-utils/deferred.ts')).toBe('test-support directory');
+    expect(conventionOf('exports', 'src/test-utils/deferred.ts::exports::deferred')).toBeNull();
+  });
+
+  it('covers only service capsule barrels, not deeper or non-service index files', () => {
+    for (const key of [
+      'src/backend/services/session/service/acp/index.ts::exports::fromWildcard',
+      'src/backend/schemas/websocket/index.ts::exports::fromWildcard',
+      'src/client/features/chat/agent-activity/tool-renderers/index.ts::exports::fromWildcard',
+      'src/client/routes/admin/index.ts::exports::fromWildcard',
+      'src/lib/diff/index.ts::exports::fromWildcard',
+      'src/shared/core/index.ts::exports::fromWildcard',
+    ]) {
+      expect(conventionOf('exports', key)).toBeNull();
+    }
   });
 
   it('distinguishes declared exports from re-exports in either syntax', () => {
@@ -483,8 +506,8 @@ describe('location conventions', () => {
     expect(report.exports).toEqual([
       {
         key: exports[0],
-        convention: 'module barrel re-export',
-        review: reviewFor('module barrel re-export'),
+        convention: 'service capsule barrel re-export',
+        review: reviewFor('service capsule barrel re-export'),
       },
       { key: exports[1], convention: 'shadcn component', review: reviewFor('shadcn component') },
     ]);
@@ -495,14 +518,20 @@ describe('location conventions', () => {
       evaluateInventory(
         undefined,
         empty,
-        ['src/backend/lib/abandoned.ts', 'src/test-utils/deferred.ts'],
+        [
+          'src/backend/lib/abandoned.ts',
+          'src/lib/fixtures/claude.ts',
+          'src/test-utils/deferred.ts',
+        ],
         [],
         readSource
       )
-    ).toThrow(/^New production candidate: src\/backend\/lib\/abandoned\.ts\nReview/u);
+    ).toThrow(
+      /^New production candidate: src\/backend\/lib\/abandoned\.ts\nNew production candidate: src\/lib\/fixtures\/claude\.ts\nReview/u
+    );
   });
 
-  it('still fails a new unexplained export, including one declared in a barrel', () => {
+  it('still fails a new unexplained export outside the service barrels and components', () => {
     expect(() =>
       evaluateInventory(
         undefined,
@@ -510,13 +539,25 @@ describe('location conventions', () => {
         [],
         [
           'src/backend/lib/shell.ts::exports::newHelper',
-          'src/client/features/chat/reducer/index.ts::exports::chatReducer',
-          'src/client/features/chat/reducer/index.ts::types::FromTypes',
+          'src/backend/services/periodic-task/index.ts::exports::chatReducer',
+          'src/backend/services/periodic-task/index.ts::types::FromTypes',
+          'src/backend/services/session/service/lifecycle/session-lifecycle.test-helpers.ts::exports::unusedHelper',
+          'src/client/features/chat/index.ts::exports::fromWildcard',
         ],
         readSource
       )
     ).toThrow(
-      /^New exports candidate: src\/backend\/lib\/shell\.ts::exports::newHelper\nNew exports candidate: src\/client\/features\/chat\/reducer\/index\.ts::exports::chatReducer\nReview/u
+      new RegExp(
+        `^${[
+          'src/backend/lib/shell.ts::exports::newHelper',
+          'src/backend/services/periodic-task/index.ts::exports::chatReducer',
+          'src/backend/services/session/service/lifecycle/session-lifecycle.test-helpers.ts::exports::unusedHelper',
+          'src/client/features/chat/index.ts::exports::fromWildcard',
+        ]
+          .map((key) => `New exports candidate: ${key.replaceAll('.', '\\.')}\n`)
+          .join('')}Review`,
+        'u'
+      )
     );
   });
 
@@ -567,22 +608,32 @@ describe('location conventions', () => {
   });
 });
 
-it('lets a conventional test helper and barrel re-export pass without a baseline entry', () => {
+it('lets a conventional test helper and service barrel re-export pass, and nothing else', () => {
   const { root, write } = fixture();
   symlinkSync(resolve('node_modules'), join(root, 'node_modules'), 'dir');
   write(
     'scripts/unused-code-baseline.json',
     JSON.stringify({ version: 1, production: {}, exports: {} })
   );
-  write('src/client/main.tsx', "import { used } from './feature'; console.log(used);");
-  // The test keeps `spare` used inside the feature, so only the barrel's
+  // Each test keeps `spare` used inside its module, so only a barrel's
   // re-export of it is a candidate.
-  write('src/client/feature/index.ts', "export { used, spare } from './implementation';");
-  write('src/client/feature/implementation.ts', 'export const used = 1; export const spare = 2;');
+  const barrelModule = (dir: string) => {
+    write(`${dir}/index.ts`, "export { used, spare } from './implementation';");
+    write(`${dir}/implementation.ts`, 'export const used = 1; export const spare = 2;');
+    write(
+      `${dir}/implementation.test.ts`,
+      "import { spare } from './implementation'; console.log(spare);"
+    );
+  };
+  barrelModule('src/backend/services/feature');
+  write(
+    'src/client/main.tsx',
+    "import { used } from '../backend/services/feature'; console.log(used);"
+  );
   write('src/client/feature/feature.test-helpers.ts', 'export const helper = 1;');
   write(
     'src/client/feature/feature.test.ts',
-    "import { helper } from './feature.test-helpers'; import { spare } from './implementation'; console.log(helper, spare);"
+    "import { helper } from './feature.test-helpers'; console.log(helper);"
   );
   const run = () =>
     spawnSync(process.execPath, ['--import', 'tsx', resolve('scripts/check-unused-code.ts')], {
@@ -594,16 +645,34 @@ it('lets a conventional test helper and barrel re-export pass without a baseline
   expect(accepted.stderr).toBe('');
   expect(accepted.stdout).toContain('1 production files (1 by convention)');
   expect(accepted.stdout).toContain('1 export visibility candidates (1 by convention)');
+
+  barrelModule('src/client/feature');
   write(
-    'src/client/feature/index.ts',
-    "export { used, spare } from './implementation'; import './local';"
+    'src/client/main.tsx',
+    "import { used } from '../backend/services/feature'; import { used as alsoUsed } from './feature'; import './local'; console.log(used, alsoUsed);"
   );
-  write('src/client/feature/local.ts', 'export const unexplained = 1;');
+  write('src/client/local.ts', 'export const unexplained = 1;');
+  write(
+    'src/client/feature/feature.test-helpers.ts',
+    'export const helper = 1; export const unusedHelper = 2;'
+  );
+  write('src/lib/fixtures/sample.ts', 'export const sample = 1;');
+  write(
+    'src/lib/sample.test.ts',
+    "import { sample } from './fixtures/sample'; console.log(sample);"
+  );
   const rejected = run();
   expect(rejected.status).toBe(1);
-  expect(rejected.stderr).toContain(
-    'New exports candidate: src/client/feature/local.ts::exports::unexplained'
-  );
+  for (const violation of [
+    'New production candidate: src/lib/fixtures/sample.ts',
+    'New exports candidate: src/client/feature/index.ts::exports::spare',
+    'New exports candidate: src/client/feature/feature.test-helpers.ts::exports::unusedHelper',
+    'New exports candidate: src/client/local.ts::exports::unexplained',
+  ]) {
+    expect(rejected.stderr).toContain(violation);
+  }
+  expect(rejected.stderr).not.toContain('src/backend/services/feature/index.ts');
+  expect(rejected.stderr).not.toContain('New production candidate: src/client/feature');
 }, 60_000);
 
 it('rejects unsupported evaluator modes at the runtime boundary', () => {

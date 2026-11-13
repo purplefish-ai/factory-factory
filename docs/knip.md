@@ -67,10 +67,11 @@ modules are absent from the production candidate report. Test-only module and
 fixture-support cases share one fixture and one scan per analysis mode. The CLI
 report and failure smoke tests still invoke the real analyzer, including the
 normal enforcement and update-refusal paths, and one fixture proves a
-conventional test helper and barrel re-export pass with an empty inventory while
-an unexplained export still fails. Additional inventory decisions exercise the
-same evaluator directly without repeating analyzer scans; each convention has an
-accepted and a rejected path.
+conventional test helper and a service barrel re-export pass with an empty
+inventory while a feature barrel re-export, an unused test-helper export, a file
+in a non-testing `fixtures/` directory and an unexplained export still fail.
+Additional inventory decisions exercise the same evaluator directly without
+repeating analyzer scans; each convention has an accepted and a rejected path.
 
 ## Staged review policy
 
@@ -104,30 +105,37 @@ pnpm test scripts/check-unused-code.test.ts --maxWorkers=2
 locations that explain a candidate without an inventory entry. The first match
 wins:
 
-- **test-support directory** (both analyses, `test-support`): a file in a
-  `testing/`, `test-utils/` or `fixtures/` directory.
-- **test-support file name** (both analyses, `test-support`): a JavaScript or
+- **test-support directory** (production only, `test-support`): a file in a
+  `testing/` or `test-utils/` directory.
+- **test-support file name** (production only, `test-support`): a JavaScript or
   TypeScript file named `*.test-helpers.*`, `*.test-support.*`,
   `*.test-harness.*`, `*.story-fixtures.*` or `*.fixture.*`.
-- **module barrel re-export** (exports only, `maintained-api`): a symbol that an
-  `index.ts` or `index.tsx` under `src/` re-exports but does not declare.
+- **service capsule barrel re-export** (exports only, `maintained-api`): a
+  symbol that `src/backend/services/<capsule>/index.ts` or
+  `src/backend/services/<capsule>/service/index.ts` re-exports but does not
+  declare.
 - **shadcn component** (exports only, `maintained-api`): an export of a
   component file directly under `src/components/ui/`.
 
 Name a new test helper, harness or story fixture to match one of these, and it
 needs no inventory edit. A file that is not test support by nature, such as a
 Storybook-only preview or a palette reader, keeps an explicit entry rather than
-a stretched convention.
+a stretched convention. Test-support location explains why a file is outside the
+production graph, not why nothing uses one of its exports: an unused export in a
+test-support file is dead test code and needs review or an explicit entry.
 
-The barrel convention keys on the file's location and on whether the file
-declares the symbol itself; `export *` and named `export { … } from` re-exports
-qualify alike. A value or type declared in an `index.ts` is implementation, not
-barrel contract, so its unused export stays a new candidate. The convention does
-not hide the implementation either: when nothing but an unused re-export
-consumes a symbol, Knip also reports it on the implementation file, which needs
-its own entry. Behind `export *`, Knip reports only the implementation key, so
-narrowing a wildcard barrel to named re-exports adds barrel keys that the
-convention covers and leaves implementation keys as they were.
+Only service capsule barrels are covered. Feature, route, shared, library and
+nested barrels keep explicit entries, so widening any of them remains an
+intentional, reviewed public capability. The barrel convention keys on the
+file's location and on whether the file declares the symbol itself; `export *`
+and named `export { … } from` re-exports qualify alike. A value or type declared
+in an `index.ts` is implementation, not barrel contract, so its unused export
+stays a new candidate. The convention does not hide the implementation either:
+when nothing but an unused re-export consumes a symbol, Knip also reports it on
+the implementation file, which needs its own entry. Behind `export *`, Knip
+reports only the implementation key, so narrowing a wildcard barrel to named
+re-exports adds barrel keys that the convention covers and leaves implementation
+keys as they were.
 
 An explicit entry whose disposition differs from the convention's overrides it,
 for example a `review-required` barrel export. An explicit entry with the
