@@ -312,6 +312,7 @@ describe('references', () => {
   test('slugs headings the way GitHub does', () => {
     expect(githubHeadingSlug('Poll `cadence` (two minutes)')).toBe('poll-cadence-two-minutes');
     expect(githubHeadingSlug('[Linked](x.md) A/B & C_d')).toBe('linked-ab--c_d');
+    expect(githubHeadingSlug('<em>Install</em> when a < b')).toBe('install-when-a--b');
   });
 });
 

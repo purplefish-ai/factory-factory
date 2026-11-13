@@ -311,8 +311,25 @@ function lineNumberAt(text: string, index: number): number {
   return line;
 }
 
+/** Heading text without inline HTML tags, which GitHub renders, not slugs. */
+function withoutHtmlTags(text: string): string {
+  let result = '';
+  let inTag = false;
+  for (let index = 0; index < text.length; index += 1) {
+    const character = text[index] ?? '';
+    if (inTag) {
+      inTag = character !== '>';
+    } else if (character === '<' && /[a-z/!]/i.test(text[index + 1] ?? '')) {
+      inTag = true;
+    } else {
+      result += character;
+    }
+  }
+  return result;
+}
+
 export function githubHeadingSlug(heading: string): string {
-  return heading
+  return withoutHtmlTags(heading)
     .replace(/!?\[([^\]]*)\]\([^)]*\)/g, '$1')
     .toLowerCase()
     .replace(/[^\p{L}\p{M}\p{N}\p{Pc} -]/gu, '')
