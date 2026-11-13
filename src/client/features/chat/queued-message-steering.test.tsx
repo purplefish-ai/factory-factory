@@ -3,9 +3,9 @@ import { useReducer, useRef } from 'react';
 import { flushSync } from 'react-dom';
 import { createRoot } from 'react-dom/client';
 import { expect, it, vi } from 'vitest';
-import { createUserMessage } from '@/lib/claude-fixtures';
+import { createUserMessage } from '@/lib/claude.fixture';
 import { chatReducer, createInitialChatState } from './reducer';
-import { TranscriptRenderingFixture } from './transcript-rendering.test-utils';
+import { TranscriptRenderingFixture } from './transcript-rendering.test-harness';
 import { useChatActions, type UseChatActionsOptions } from './use-chat-actions';
 
 const queued = createUserMessage('Focus on the failing tests', 1);

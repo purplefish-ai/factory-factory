@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from '@storybook/react';
 import { useState } from 'react';
 import { expect, fn, userEvent, within } from 'storybook/test';
 import { Textarea } from '@/components/ui/textarea';
-import { createUserQuestion } from '@/lib/claude-fixtures';
+import { createUserQuestion } from '@/lib/claude.fixture';
 import { QuestionPrompt } from './question-prompt';
 
 const meta = {

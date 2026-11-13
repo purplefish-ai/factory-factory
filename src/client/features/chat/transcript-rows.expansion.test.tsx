@@ -4,7 +4,7 @@ import { createRoot } from 'react-dom/client';
 import { expect, it, vi } from 'vitest';
 import type { GroupedMessageItemRendererProps } from './agent-activity/agent-activity';
 import { createToolSequenceExpansionKey } from './agent-activity/tool-renderers/tool-expansion-state';
-import { TranscriptRenderingFixture } from './transcript-rendering.test-utils';
+import { TranscriptRenderingFixture } from './transcript-rendering.test-harness';
 
 const render = vi.hoisted(() => vi.fn());
 vi.mock('./agent-activity', () => ({

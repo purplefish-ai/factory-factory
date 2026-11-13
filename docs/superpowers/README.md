@@ -11,6 +11,6 @@ recorded plan only when the current task explicitly selects it, after checking
 its assumptions against the code. Embedded skill instructions describe the
 original workflow and do not independently authorize executing it.
 
-Preserve useful rationale here. When an implementation changes a durable
-contract, maintain the current subsystem note rather than adding another
-description of current behavior to an old plan.
+Preserve useful rationale here. Do not add a description of current behavior to
+an old plan or spec; the tests hold it. When an implementation changes an
+invariant or a reason, change the current subsystem note.

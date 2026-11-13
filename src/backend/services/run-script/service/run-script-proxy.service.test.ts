@@ -5,7 +5,9 @@ import { configService } from '@/backend/services/config.service';
 import { authenticateRequest } from '@/shared/proxy-utils';
 
 const mockStartCloudflaredTunnel = vi.hoisted(() => vi.fn());
-const mockKillProcessWithTimeout = vi.hoisted(() => vi.fn(async () => undefined));
+const mockKillProcessWithTimeout = vi.hoisted(() =>
+  vi.fn<(process: ChildProcess) => Promise<void>>(async () => undefined)
+);
 
 vi.mock('@/shared/proxy-utils', () => ({
   authenticateRequest: vi.fn(() => ({
@@ -33,6 +35,14 @@ vi.mock('@/backend/services/logger.service', () => ({
 
 import { RunScriptProxyService } from './run-script-proxy.service';
 
+async function ensureTunnel(
+  service: RunScriptProxyService,
+  workspaceId: string,
+  upstreamPort: number
+): Promise<string | null> {
+  return (await service.acquireTunnel(workspaceId, upstreamPort))?.url ?? null;
+}
+
 type ProxyServiceInternals = {
   cleanupSync: () => void;
   tunnels: Map<
@@ -56,6 +66,19 @@ function createChildProcess(pid = 1234, exitCode: number | null = null): ChildPr
     kill: { value: vi.fn() },
   });
   return childProcess;
+}
+
+function deferTunnelStart() {
+  const started = Promise.withResolvers<number>();
+  const result = Promise.withResolvers<{ publicUrl: string; proc: ChildProcess }>();
+  return {
+    started: started.promise,
+    resolve: result.resolve,
+    start: ({ targetUrl }: { targetUrl: string }) => {
+      started.resolve(Number(new URL(targetUrl).port));
+      return result.promise;
+    },
+  };
 }
 
 function sendRawHttpRequest(params: { port: number; rawRequest: string }): Promise<string> {
@@ -151,18 +174,18 @@ describe('RunScriptProxyService', () => {
     configService.reload();
     const service = new RunScriptProxyService();
 
-    await expect(service.ensureTunnel('w1', 3000)).resolves.toBeNull();
+    await expect(ensureTunnel(service, 'w1', 3000)).resolves.toBeNull();
     expect(mockStartCloudflaredTunnel).not.toHaveBeenCalled();
   });
 
   it('creates and reuses authenticated tunnels per workspace/port', async () => {
     const service = new RunScriptProxyService();
 
-    const url = await service.ensureTunnel('w1', 3000);
+    const url = await ensureTunnel(service, 'w1', 3000);
     expect(url).toMatch(/^https:\/\/abc\.trycloudflare\.com\?token=/);
     expect(service.getTunnelUrl('w1')).toBe(url);
 
-    const reused = await service.ensureTunnel('w1', 3000);
+    const reused = await ensureTunnel(service, 'w1', 3000);
     expect(reused).toBe(url);
     expect(mockStartCloudflaredTunnel).toHaveBeenCalledTimes(1);
 
@@ -173,12 +196,149 @@ describe('RunScriptProxyService', () => {
 
   it('replaces existing tunnel when upstream port changes', async () => {
     const service = new RunScriptProxyService();
-    const first = await service.ensureTunnel('w1', 3000);
+    const first = await ensureTunnel(service, 'w1', 3000);
     expect(first).toBeTruthy();
 
-    const second = await service.ensureTunnel('w1', 4173);
+    const second = await ensureTunnel(service, 'w1', 4173);
     expect(second).toMatch(/^https:\/\/abc\.trycloudflare\.com\?token=/);
     expect(mockKillProcessWithTimeout).toHaveBeenCalledTimes(1);
+    expect(mockStartCloudflaredTunnel).toHaveBeenCalledTimes(2);
+  });
+
+  it('discards a pending tunnel that finishes after stop', async () => {
+    const service = new RunScriptProxyService();
+    const deferred = deferTunnelStart();
+    const stoppedProcess = createChildProcess(1240);
+    mockStartCloudflaredTunnel.mockImplementationOnce(deferred.start);
+
+    const pending = ensureTunnel(service, 'w1', 3000);
+    const authProxyPort = await deferred.started;
+    await service.stopTunnel('w1');
+    deferred.resolve({ publicUrl: 'https://stopped.trycloudflare.com', proc: stoppedProcess });
+    const result = await pending;
+    const currentUrl = service.getTunnelUrl('w1');
+    const proxyClosed = await waitForPortToClose(authProxyPort);
+    const stoppedProcesses = mockKillProcessWithTimeout.mock.calls.map(([proc]) => proc);
+    await service.cleanup();
+
+    expect(result).toBeNull();
+    expect(currentUrl).toBeNull();
+    expect(stoppedProcesses).toContain(stoppedProcess);
+    expect(proxyClosed).toBe(true);
+  });
+
+  it('does not publish a late pending tunnel over its replacement', async () => {
+    const service = new RunScriptProxyService();
+    const deferred = deferTunnelStart();
+    const staleProcess = createChildProcess(1241);
+    const replacementProcess = createChildProcess(1242);
+    mockStartCloudflaredTunnel.mockImplementationOnce(deferred.start).mockResolvedValueOnce({
+      publicUrl: 'https://replacement.trycloudflare.com',
+      proc: replacementProcess,
+    });
+
+    const pending = ensureTunnel(service, 'w1', 3000);
+    const staleProxyPort = await deferred.started;
+    const replacementUrl = await ensureTunnel(service, 'w1', 4173);
+    deferred.resolve({ publicUrl: 'https://stale.trycloudflare.com', proc: staleProcess });
+    const staleResult = await pending;
+    const currentUrl = service.getTunnelUrl('w1');
+    const staleProxyClosed = await waitForPortToClose(staleProxyPort);
+    const stoppedProcesses = mockKillProcessWithTimeout.mock.calls.map(([proc]) => proc);
+    await service.cleanup();
+
+    expect(staleResult).toBeNull();
+    expect(currentUrl).toBe(replacementUrl);
+    expect(stoppedProcesses).toContain(staleProcess);
+    expect(stoppedProcesses).not.toContain(replacementProcess);
+    expect(staleProxyClosed).toBe(true);
+  });
+
+  it.each(['cleanup', 'cleanupSync'] as const)(
+    '%s invalidates pending tunnel creation',
+    async (cleanupMethod) => {
+      const service = new RunScriptProxyService();
+      const deferred = deferTunnelStart();
+      const stoppedProcess = createChildProcess(1243);
+      mockStartCloudflaredTunnel.mockImplementationOnce(deferred.start);
+
+      const pending = ensureTunnel(service, 'w1', 3000);
+      const authProxyPort = await deferred.started;
+      await service[cleanupMethod]();
+      deferred.resolve({ publicUrl: 'https://stopped.trycloudflare.com', proc: stoppedProcess });
+      const result = await pending;
+      const currentUrl = service.getTunnelUrl('w1');
+      const proxyClosed = await waitForPortToClose(authProxyPort);
+      const stoppedProcesses = mockKillProcessWithTimeout.mock.calls.map(([proc]) => proc);
+      await service.cleanup();
+
+      expect(result).toBeNull();
+      expect(currentUrl).toBeNull();
+      expect(stoppedProcesses).toContain(stoppedProcess);
+      expect(proxyClosed).toBe(true);
+    }
+  );
+
+  it('releases captured tunnel resources without stopping a replacement', async () => {
+    const service = new RunScriptProxyService();
+    const firstProcess = createChildProcess(1244);
+    const replacementProcess = createChildProcess(1245);
+    mockStartCloudflaredTunnel
+      .mockResolvedValueOnce({ publicUrl: 'https://first.trycloudflare.com', proc: firstProcess })
+      .mockResolvedValueOnce({
+        publicUrl: 'https://replacement.trycloudflare.com',
+        proc: replacementProcess,
+      });
+
+    const first = await service.acquireTunnel('w1', 3000);
+    const replacement = await service.acquireTunnel('w1', 4173);
+    expect(first).not.toBeNull();
+    expect(replacement).not.toBeNull();
+    await first?.release();
+    await first?.release();
+
+    expect(service.getTunnelUrl('w1')).toBe(replacement?.url);
+    expect(mockKillProcessWithTimeout).not.toHaveBeenCalledWith(replacementProcess);
+
+    await replacement?.release();
+    expect(service.getTunnelUrl('w1')).toBeNull();
+    expect(mockKillProcessWithTimeout).toHaveBeenCalledTimes(2);
+  });
+
+  it('keeps a reused tunnel alive until all acquired leases release it', async () => {
+    const service = new RunScriptProxyService();
+    const first = await service.acquireTunnel('w1', 3000);
+    const replacement = await service.acquireTunnel('w1', 3000);
+    expect(first).not.toBeNull();
+    expect(replacement).not.toBeNull();
+    expect(first?.url).toBe(replacement?.url);
+
+    await first?.release();
+    await first?.release();
+    expect(service.getTunnelUrl('w1')).toBe(replacement?.url);
+    expect(mockKillProcessWithTimeout).not.toHaveBeenCalled();
+
+    await replacement?.release();
+    await replacement?.release();
+    expect(service.getTunnelUrl('w1')).toBeNull();
+    expect(mockKillProcessWithTimeout).toHaveBeenCalledTimes(1);
+  });
+
+  it('fences replacement startup before awaiting disposal of its predecessor', async () => {
+    const service = new RunScriptProxyService();
+    const disposal = Promise.withResolvers<void>();
+    await ensureTunnel(service, 'w1', 3000);
+    mockKillProcessWithTimeout.mockImplementationOnce(() => disposal.promise);
+
+    const pending = ensureTunnel(service, 'w1', 4173);
+    const replacement = await ensureTunnel(service, 'w1', 5000);
+    disposal.resolve();
+    const superseded = await pending;
+    const current = service.getTunnelUrl('w1');
+    await service.cleanup();
+
+    expect(superseded).toBeNull();
+    expect(current).toBe(replacement);
     expect(mockStartCloudflaredTunnel).toHaveBeenCalledTimes(2);
   });
 
@@ -190,7 +350,7 @@ describe('RunScriptProxyService', () => {
       proc: process,
     });
 
-    await service.ensureTunnel('w1', 3000);
+    await ensureTunnel(service, 'w1', 3000);
     process.emit('exit', 1, null);
 
     expect(service.getTunnelUrl('w1')).toBeNull();
@@ -210,8 +370,8 @@ describe('RunScriptProxyService', () => {
         proc: secondProcess,
       });
 
-    await service.ensureTunnel('w1', 3000);
-    const replacementUrl = await service.ensureTunnel('w1', 4173);
+    await ensureTunnel(service, 'w1', 3000);
+    const replacementUrl = await ensureTunnel(service, 'w1', 4173);
     firstProcess.emit('exit', 1, null);
 
     expect(service.getTunnelUrl('w1')).toBe(replacementUrl);
@@ -229,7 +389,7 @@ describe('RunScriptProxyService', () => {
       };
     });
 
-    const ensureResult = await service.ensureTunnel('w1', 3000);
+    const ensureResult = await ensureTunnel(service, 'w1', 3000);
     const tunnelUrlAfterStart = service.getTunnelUrl('w1');
     const authProxyClosed = await waitForPortToClose(authProxyPort);
     await service.cleanup();
@@ -268,9 +428,9 @@ describe('RunScriptProxyService', () => {
           })
       );
 
-    const firstTunnelPromise = service.ensureTunnel('w1', 3000);
+    const firstTunnelPromise = ensureTunnel(service, 'w1', 3000);
     await vi.waitFor(() => expect(mockStartCloudflaredTunnel).toHaveBeenCalledTimes(1));
-    const replacementTunnelPromise = service.ensureTunnel('w1', 4173);
+    const replacementTunnelPromise = ensureTunnel(service, 'w1', 4173);
     await vi.waitFor(() => expect(mockStartCloudflaredTunnel).toHaveBeenCalledTimes(2));
 
     resolveFirstTunnel?.({
@@ -300,13 +460,13 @@ describe('RunScriptProxyService', () => {
     mockStartCloudflaredTunnel.mockRejectedValueOnce(new Error('ENOENT: command not found'));
 
     await expect(
-      (service as unknown as RunScriptProxyService).ensureTunnel('w1', 3000)
+      ensureTunnel(service as unknown as RunScriptProxyService, 'w1', 3000)
     ).resolves.toBeNull();
     expect(service.cloudflaredUnavailable).toBe(true);
 
     mockStartCloudflaredTunnel.mockClear();
     await expect(
-      (service as unknown as RunScriptProxyService).ensureTunnel('w2', 3001)
+      ensureTunnel(service as unknown as RunScriptProxyService, 'w2', 3001)
     ).resolves.toBeNull();
     expect(mockStartCloudflaredTunnel).not.toHaveBeenCalled();
   });
@@ -339,7 +499,7 @@ describe('RunScriptProxyService', () => {
       }
     );
 
-    await expect(service.ensureTunnel('ws-malformed-http', 3000)).resolves.toMatch(
+    await expect(ensureTunnel(service, 'ws-malformed-http', 3000)).resolves.toMatch(
       /^https:\/\/abc\.trycloudflare\.com\?token=/
     );
     expect(statusCode).toBe(400);
@@ -378,7 +538,7 @@ describe('RunScriptProxyService', () => {
       }
     );
 
-    await expect(service.ensureTunnel('ws-malformed-upgrade', 3000)).resolves.toMatch(
+    await expect(ensureTunnel(service, 'ws-malformed-upgrade', 3000)).resolves.toMatch(
       /^https:\/\/abc\.trycloudflare\.com\?token=/
     );
     expect(statusCode).toBe(400);
@@ -388,8 +548,8 @@ describe('RunScriptProxyService', () => {
 
   it('cleanup stops all active tunnels', async () => {
     const service = new RunScriptProxyService();
-    await service.ensureTunnel('w1', 3000);
-    await service.ensureTunnel('w2', 3001);
+    await ensureTunnel(service, 'w1', 3000);
+    await ensureTunnel(service, 'w2', 3001);
 
     await service.cleanup();
 

@@ -106,7 +106,8 @@
     "check:unused-code": "node --import tsx scripts/check-unused-code.ts",
     "check:unused-code:report": "node --import tsx scripts/check-unused-code.ts --report",
     "check:unused-code:update": "node --import tsx scripts/check-unused-code.ts --update",
-    "check:production-artifact": "node scripts/check-production-artifact.mjs"
+    "check:production-artifact": "node scripts/check-production-artifact.mjs",
+    "metrics:agents": "node --import tsx scripts/agent-metrics.ts"
   },
   "dependencies": {
     "@agentclientprotocol/claude-agent-acp": "^0.99.1",

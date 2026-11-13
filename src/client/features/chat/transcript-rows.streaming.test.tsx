@@ -3,8 +3,8 @@ import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { type ChatMessage } from '@/lib/chat-protocol';
-import { createAssistantMessage, createUserMessage } from '@/lib/claude-fixtures';
-import { TranscriptRenderingFixture } from './transcript-rendering.test-utils';
+import { createAssistantMessage, createUserMessage } from '@/lib/claude.fixture';
+import { TranscriptRenderingFixture } from './transcript-rendering.test-harness';
 
 let container: HTMLDivElement;
 let root: Root;
