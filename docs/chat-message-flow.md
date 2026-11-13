@@ -22,7 +22,7 @@ entry quotes only the sentences it needs from the paragraph named after it,
 verbatim, with `[…]` where sentences between them are left out, and has not been
 checked against the code. The migration that creates the named area's guide
 checks the entry, moves what holds there and deletes the entry here. Paragraph
-numbers are the rows of the disposition table in pull request #NNNN.
+numbers are the rows of the disposition table in pull request #3226.
 
 ```mermaid
 flowchart TD
