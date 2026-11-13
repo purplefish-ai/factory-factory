@@ -25,10 +25,6 @@ Prisma model. It does not own:
 - The environment filter itself: `src/backend/lib/user-process-env.ts`.
 - Terminals: `src/backend/services/terminal/`.
 
-## Public surface
-
-Callers import only `index.ts`.
-
 ## Invariants
 
 - Setup, startup, run, postRun and cleanup processes start with

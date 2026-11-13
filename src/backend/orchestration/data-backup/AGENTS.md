@@ -31,8 +31,7 @@ the inert import report for restored processes and workflows. It does not own:
 ## Public surface
 
 `data-backup.service.ts` exports `dataBackupService`, composed in
-`src/backend/app-context.ts`. It is the one module allowed to import the
-settings capsule's backup accessor directly.
+`src/backend/app-context.ts`.
 
 ## Invariants
 

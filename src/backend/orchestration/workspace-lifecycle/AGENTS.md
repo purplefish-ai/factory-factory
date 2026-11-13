@@ -42,7 +42,8 @@ collector is given `fireLifecycleNotification` (typed from
   it persists the workspace. `workspace-launch.orchestrator.test.ts`.
 - For interactive and child launches, a failure to create the default session
   keeps the new workspace and still starts its initialization; a periodic-task
-  launch fails instead. `workspace-launch.orchestrator.test.ts`.
+  launch keeps the workspace but fails without initializing it.
+  `workspace-launch.orchestrator.test.ts`.
 - Initialization persists READY, with or without a setup warning, before it
   starts the default agent session. `workspace-init-startup-order.test.ts`.
 - Renames of one workspace are serialized within an application, each published

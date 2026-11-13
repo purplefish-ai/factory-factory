@@ -698,6 +698,6 @@ it('reads legacy review and sync fields from the selected PR and conflicts from 
     prReviewState: 'APPROVED',
     prUpdatedAt: selectedSyncedAt,
     prHasMergeConflict: true,
+    prState: 'OPEN',
   });
-  expect(read?.prState).toBe(read?.prSummary.state);
 });

@@ -28,9 +28,8 @@ not own:
 
 ## Public surface
 
-Callers outside the capsule import only `index.ts` (and types from `types.ts`
-through it). Orchestration wires the session, GitHub and PR-snapshot
-capabilities declared in `bridges.ts`.
+Orchestration wires the session, GitHub and PR-snapshot capabilities declared in
+`bridges.ts`.
 
 ## Invariants
 
@@ -38,10 +37,12 @@ capabilities declared in `bridges.ts`.
   marker still equals its current name, checked in the acceptance transaction,
   so a manual rename made during inference wins.
   `workspace-metadata.accessor.integration.test.ts`.
-- Only the first accepted metadata sets the branch suggestion; later results
-  replace only the summaries. `workspace-metadata.accessor.integration.test.ts`.
+- Only the first accepted metadata sets the title and branch suggestions; later
+  results replace only the summaries.
+  `workspace-metadata.accessor.integration.test.ts`.
 - A metadata write is rejected when another request has since been reserved or
-  the workspace is archived. `workspace-metadata.accessor.integration.test.ts`.
+  the workspace is archiving or archived.
+  `workspace-metadata.accessor.integration.test.ts`.
 - Every creation source inserts the workspace and its side-table rows only into
   an active project, in one guarded insert.
   `workspace-archived-project.integration.test.ts`.
@@ -55,8 +56,10 @@ capabilities declared in `bridges.ts`.
   `workspace-pr-collection.accessor.integration.test.ts`.
 - The flat `prUrl`, `prNumber`, `prReviewState` and `prUpdatedAt` describe
   `selectedPr` while `prState`, `prCiStatus` and `prHasMergeConflict` describe
-  `prSummary`, so consumers read those two objects instead of pairing flat
-  fields. `workspace-pr-collection.accessor.integration.test.ts`.
+  `prSummary`, in workspace reads and in the backup export's copies of them (one
+  projection), so consumers read those two objects instead of pairing flat
+  fields. `workspace-pr-collection.accessor.integration.test.ts`,
+  `src/backend/orchestration/data-backup/data-backup.service.test.ts`.
 - Attachment, discovery and review-request lookups match a PR URL
   case-insensitively on host, owner and repository, so a casing variant reuses
   the existing association.
@@ -75,8 +78,9 @@ capabilities declared in `bridges.ts`.
   live entry; missing, removed, archiving and archived entries are never
   recreated. `workspace-snapshot-store.branches.test.ts`,
   `src/backend/orchestration/workspace-lifecycle/workspace-rename.orchestrator.test.ts`.
-- An observation replaces an accepted name or branch only when its database
-  timestamp is strictly newer; only the serialized accepted writer may tie.
+- An observation replaces an accepted name or branch only when its timestamp
+  (from the database, or the observation time when it carries none) is strictly
+  newer; only the serialized accepted writer may tie.
   `workspace-snapshot-store.names.test.ts`,
   `workspace-snapshot-store.branches.test.ts`.
 - Worktree removal deletes a Git registration only when it matches the canonical
