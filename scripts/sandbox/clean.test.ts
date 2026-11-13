@@ -1,4 +1,3 @@
-import { spawn } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
@@ -67,16 +66,12 @@ function staticSystem(
 }
 
 /**
- * A detached idle process (its own group) running with `BASE_DIR=<baseDir>`,
- * returned once the process table shows it with that environment (until it
- * has executed, it carries its parent's).
+ * A detached idle process (its own group, bounded lifetime) running with
+ * `BASE_DIR=<baseDir>`, returned once the process table shows it with that
+ * environment (until it has executed, it carries its parent's).
  */
 async function spawnSandboxProcess(baseDir: string) {
-  const child = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], {
-    detached: true,
-    stdio: 'ignore',
-    env: { PATH: process.env.PATH, BASE_DIR: baseDir },
-  });
+  const child = spawnSleeper({ env: { PATH: process.env.PATH, BASE_DIR: baseDir } });
   const pid = child.pid ?? 0;
   const deadline = Date.now() + 30_000;
   while (realSystem.processesWithEnvironment(`BASE_DIR=${baseDir}`, [pid]).length === 0) {
@@ -168,6 +163,32 @@ describe('--clean selection', () => {
     expect(events).toEqual(['SIGTERM -4242']);
     expect(removed).toEqual([dir]);
     expect(existsSync(dir)).toBe(false);
+  });
+
+  it('signals and deletes nothing when the process table cannot be read', async () => {
+    const tempDir = temporary.create('ffsb-');
+    const root = join(tempDir, 'ff-sandbox');
+    const dir = join(root, 'sb-unreadable');
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, 'sandbox.json'), recordFor(dir, { pgid: 4242, pgidStartedAt: T2 }));
+    const { system, events } = staticSystem([]);
+    const removed: string[] = [];
+    await expect(
+      cleanSandboxes({
+        root,
+        tempDir,
+        system: {
+          ...system,
+          listProcesses: () => {
+            throw new Error('spawn ps EAGAIN');
+          },
+        },
+        remove: (path: string) => removed.push(path),
+      })
+    ).rejects.toThrow('spawn ps EAGAIN');
+    expect(events).toEqual([]);
+    expect(removed).toEqual([]);
+    expect(existsSync(dir)).toBe(true);
   });
 
   it('never deletes a directory while a live process runs with it as BASE_DIR', async () => {

@@ -8,6 +8,7 @@ import {
   realSystem,
   stopProcessGroup,
 } from './process-group.mjs';
+import { HELPER_LIFETIME_MS } from './test-support';
 
 type Entry = { pid: number; ppid: number; pgid: number; zombie: boolean; startedAt: string };
 
@@ -61,7 +62,10 @@ describe('process identity', () => {
   it('reads environments of listed processes even when some have exited', async () => {
     const entry = 'BASE_DIR=/tmp/ff-sandbox/sb-environment test';
     const env = { PATH: process.env.PATH, BASE_DIR: '/tmp/ff-sandbox/sb-environment test' };
-    const live = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], { env });
+    // Bounded, like every helper process (an interrupted run leaves none behind).
+    const live = spawn(process.execPath, ['-e', `setTimeout(() => {}, ${HELPER_LIFETIME_MS})`], {
+      env,
+    });
     const gone = spawn(process.execPath, ['-e', ''], { env });
     try {
       await new Promise((resolve) => gone.once('exit', resolve));
