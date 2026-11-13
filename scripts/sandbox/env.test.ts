@@ -109,8 +109,9 @@ describe('git in the sandbox environment', () => {
         scenario: 'echo',
         egressPort: recorder.port,
       });
-      const ssh = 'git@github.com:octo/sandbox-test.git';
-      const https = 'https://github.com/octo/sandbox-test.git';
+      // Hosts under .invalid never resolve, so no regression can reach a real one.
+      const ssh = 'git@remote.sandbox-test.invalid:octo/sandbox-test.git';
+      const https = 'https://remote.sandbox-test.invalid/octo/sandbox-test.git';
       const viaBypass = ['-c', `core.sshCommand=${bypass}`, 'ls-remote'];
 
       // Layer 1: git refuses every transport but local files, before any attempt.
@@ -128,13 +129,15 @@ describe('git in the sandbox environment', () => {
       const sshShimmed = await git([...viaBypass, ssh], withoutAllowList, baseDir);
       expect(sshShimmed.code).not.toBe(0);
       expect(sshShimmed.stderr).toContain('sandbox: ssh is disabled');
-      expect(readFileSync(paths.sshLog, 'utf8')).toContain('git@github.com');
+      expect(readFileSync(paths.sshLog, 'utf8')).toContain('git@remote.sandbox-test.invalid');
       expect(readFileSync(bypassLog, 'utf8')).toBe('');
 
       // Layer 3: and HTTPS goes to the egress recorder, which refuses and records it.
       const httpsRecorded = await git(['ls-remote', https], withoutAllowList, baseDir);
       expect(httpsRecorded.code).not.toBe(0);
-      expect(readFileSync(paths.egressLog, 'utf8')).toMatch(/ CONNECT github\.com:443\n/);
+      expect(readFileSync(paths.egressLog, 'utf8')).toMatch(
+        / CONNECT remote\.sandbox-test\.invalid:443\n/
+      );
     } finally {
       await recorder.close();
     }
