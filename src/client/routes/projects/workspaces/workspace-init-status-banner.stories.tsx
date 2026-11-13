@@ -29,7 +29,14 @@ const meta = {
 } satisfies Meta<typeof InitStatusBanner>;
 export default meta;
 type Story = StoryObj<typeof meta>;
-export const BeforeFirstSession: Story = {};
+export const BeforeFirstSession: Story = {
+  play: async ({ canvasElement }) => {
+    const callout = canvasElement.querySelector('[data-slot="status-callout"]')!;
+    const icon = callout.querySelector('svg')!;
+    const message = callout.querySelector('p')!;
+    await expect(icon.getBoundingClientRect().top - message.getBoundingClientRect().top).toBe(2);
+  },
+};
 export const RetryingSetup: Story = {
   args: { retryPending: true },
   play: async ({ canvasElement }) => {

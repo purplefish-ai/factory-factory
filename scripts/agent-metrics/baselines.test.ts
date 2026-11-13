@@ -1,20 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { baselineSizes, lintExceptionEntries, sessionModuleCycleCount } from './baselines';
+import { baselineSizes, isLintRuleExceptionsFile, sessionModuleCycleCount } from './baselines';
 
 describe('baseline and exception-list metrics', () => {
-  it('counts lint exception entries and baseline sizes', () => {
-    const lintConfig = {
-      rules: { a: ['error', { exceptions: { 'x.ts': 'reason', 'y.ts': 'reason' } }] },
-      overrides: [
-        {
-          rules: {
-            b: ['error', { exceptions: {} }],
-            c: ['error', { exceptions: { 'z.ts': 'r' } }],
-          },
-        },
-      ],
-    };
-    expect(lintExceptionEntries(lintConfig)).toBe(3);
+  it('counts lint rule exception entries and baseline sizes', () => {
     expect(
       baselineSizes(
         {
@@ -31,10 +19,25 @@ describe('baseline and exception-list metrics', () => {
           },
         },
         { 'src/c.ts': 1200 },
-        lintConfig
+        [
+          { path: 'lint-rules/rules/a.exceptions.json', content: '{"x.ts":"r","y.ts":"r"}' },
+          { path: 'lint-rules/rules/b.exceptions.json', content: '{}' },
+          { path: 'lint-rules/rules/c.exceptions.json', content: '{"z.ts":"r"}' },
+        ]
       )
-    ).toEqual({ unusedCodeProduction: 1, unusedCodeExports: 2, fileLength: 1, lintExceptions: 3 });
-    expect(() => lintExceptionEntries({ exceptions: ['x.ts'] })).toThrow();
+    ).toEqual({
+      unusedCodeProduction: 1,
+      unusedCodeExports: 2,
+      fileLength: 1,
+      lintRuleExceptions: 3,
+    });
+  });
+
+  it('recognizes lint rule exceptions files by name', () => {
+    expect(isLintRuleExceptionsFile('lint-rules/rules/no-raw-spinner.exceptions.json')).toBe(true);
+    expect(isLintRuleExceptionsFile('lint-rules/rules/no-raw-spinner.mjs')).toBe(false);
+    expect(isLintRuleExceptionsFile('lint-rules/rules/nested/x.exceptions.json')).toBe(false);
+    expect(isLintRuleExceptionsFile('lint-rules/x.exceptions.json')).toBe(false);
   });
 
   it('reads the sessionModuleCycles length, or null while the file is absent', () => {

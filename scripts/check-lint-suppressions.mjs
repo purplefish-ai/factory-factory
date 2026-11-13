@@ -14,7 +14,6 @@ const SCAN_ROOTS = [
   'prisma',
   'docs',
   'public',
-  '.planning',
   '.github',
   '.storybook',
   '.vscode',

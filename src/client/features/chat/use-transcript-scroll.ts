@@ -291,5 +291,6 @@ export function useTranscriptScroll(
     state,
     hasContentBelow,
     jumpToLatest: () => controller.current?.jumpToLatest(),
+    jumpToMessage: (key: string) => controller.current?.jumpToMessage(key),
   };
 }

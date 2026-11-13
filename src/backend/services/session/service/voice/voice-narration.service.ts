@@ -8,12 +8,13 @@
  * delivered to the chat WebSocket changes.
  *
  * Two invariants keep this additive rather than a shared-fate risk with the
- * chat delivery path documented in docs/design-voice-mode.md §7.1:
+ * chat delivery path (§7.1 of docs/design-voice-mode.md at tag
+ * docs-archive-2026-11, since deleted from main):
  * 1. The event handler never throws past its own boundary (fail closed).
  * 2. Sessions with no registered voice connection are an O(1) no-op, checked
  *    before any other work.
  *
- * Selective narration (docs/design-voice-mode.md §2.3): reasoning
+ * Selective narration (§2.3 of the same design record): reasoning
  * (`thinking_delta`) is spoken clause-by-clause, but only when nothing is
  * already being spoken for that session — a clause arriving mid-utterance is
  * dropped rather than queued, so the narration never falls behind into a
