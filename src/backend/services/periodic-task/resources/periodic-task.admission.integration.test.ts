@@ -82,6 +82,19 @@ it('rejects an edited future schedule without consuming it', async () => {
   );
 });
 
+it('does not admit a due task while its previous run is still running', async () => {
+  const task = await createTask();
+  await db.prisma.periodicTaskExecution.create({
+    data: { periodicTaskId: task.id, status: 'RUNNING' },
+  });
+  expect(await reserve(task)).toBeNull();
+  expect(await db.prisma.periodicTaskExecution.count()).toBe(1);
+  expect(await db.prisma.periodicTask.findUniqueOrThrow({ where: { id: task.id } })).toMatchObject({
+    nextRunAt: task.nextRunAt,
+    lastRunAt: null,
+  });
+});
+
 it('admits only one of two concurrent reservations', async () => {
   const task = await createTask();
   const results = await Promise.all([reserve(task), reserve(task)]);

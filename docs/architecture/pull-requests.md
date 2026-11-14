@@ -39,18 +39,6 @@ enforces the last clause.
 
 Old paragraph 22. For the session capsule guide.
 
-> Wrapped CLI failures keep the original error as `cause`. […] They never repeat
-> the command line, so repository names cannot be classified as authentication
-> or network failures and comment bodies stay out of errors.
-
-Old paragraph 47. For the GitHub capsule guide.
-
-> The snapshot service owns association lifecycle operations and reads the
-> committed fields after observation; it has no alternate GitHub fetch or scalar
-> snapshot writer.
-
-Old paragraph 48. For the GitHub capsule guide.
-
 > Branch discovery only matches the workspace branch, so PR detection also
 > attaches the URL printed by an agent's `gh pr create` or GitHub MCP PR
 > creation. […] Claude sends a command after announcing its tool call, so the
