@@ -70,6 +70,16 @@ describe('groupHostProcesses', () => {
     ]);
   });
 
+  it('names a process started by a relative path by its executable, not an app', () => {
+    const [group] = groupHostProcesses(
+      [proc(10, 1, 5, 'build/Tool.app/Contents/MacOS/tool')],
+      new Map(),
+      1
+    );
+
+    expect(group).toMatchObject({ label: 'tool', kind: 'process' });
+  });
+
   it('reports CPU as a share of the whole machine', () => {
     const [group] = groupHostProcesses([proc(10, 1, 200, '/usr/bin/yes')], new Map(), 8);
 

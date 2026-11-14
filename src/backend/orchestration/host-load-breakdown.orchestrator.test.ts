@@ -10,17 +10,23 @@ describe('getHostLoadBreakdown', () => {
 
     await getHostLoadBreakdown({
       listAgentProcesses: () => [
-        { sessionId: 's1', pid: 200 },
-        { sessionId: 's2', pid: undefined },
+        { sessionId: 's1', pid: 200, isRunning: true },
+        { sessionId: 's2', pid: undefined, isRunning: true },
+        { sessionId: 's3', pid: 400, isRunning: false },
       ],
-      findSessions: () =>
-        Promise.resolve([
-          { id: 's1', workspaceId: 'w1', providerProcessPid: 201 },
-          { id: 's2', workspaceId: 'w2', providerProcessPid: null },
-        ]),
+      findSessions: (ids) =>
+        Promise.resolve(
+          [
+            { id: 's1', workspaceId: 'w1', providerProcessPid: 201 },
+            { id: 's2', workspaceId: 'w2', providerProcessPid: null },
+            { id: 's3', workspaceId: 'w3', providerProcessPid: 401 },
+          ].filter((session) => ids.includes(session.id))
+        ),
       listTerminals: () => [{ pid: 300, workspaceId: 'w1' }],
-      findWorkspaces: () =>
-        Promise.resolve([{ id: 'w1', name: 'Fix login', project: { slug: 'repo' } }]),
+      findWorkspaces: (ids) => {
+        expect(ids).toEqual(['w1']);
+        return Promise.resolve([{ id: 'w1', name: 'Fix login', project: { slug: 'repo' } }]);
+      },
       serverPid: 100,
       getTopProcesses,
     });
@@ -35,6 +41,9 @@ describe('getHostLoadBreakdown', () => {
         workspace: { id: 'w1', projectSlug: 'repo' },
       });
     }
+    // s3's adapter has stopped, so neither of its pids is attributed.
+    expect(owners?.has(400)).toBe(false);
+    expect(owners?.has(401)).toBe(false);
     expect(owners?.size).toBe(4);
   });
 });

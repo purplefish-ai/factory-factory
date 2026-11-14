@@ -1,5 +1,6 @@
 import type { inferRouterOutputs } from '@trpc/server';
 import { Link } from 'react-router';
+import { getProjectSectionPath } from '@/client/lib/project-navigation';
 import type { AppRouter } from '@/client/lib/trpc';
 import { formatBytes } from '@/lib/formatters';
 
@@ -12,7 +13,7 @@ function GroupName({ group }: { group: ProcessGroup }) {
   if (group.workspace) {
     return (
       <Link
-        to={`/projects/${group.workspace.projectSlug}/workspaces/${group.workspace.id}`}
+        to={`${getProjectSectionPath(group.workspace.projectSlug, 'workspaces')}/${encodeURIComponent(group.workspace.id)}`}
         title={`Workspace · ${processes}`}
         className="min-w-0 truncate underline-offset-2 hover:underline"
       >
@@ -58,9 +59,20 @@ function GroupList({
  * Answers "why is it slow?": what is using the CPU and memory right now.
  * CPU is a share of the whole machine, so it adds up toward the header figure.
  */
-export function HostLoadBreakdownView({ breakdown }: { breakdown: HostLoadBreakdown | undefined }) {
+export function HostLoadBreakdownView({
+  breakdown,
+  failed,
+}: {
+  breakdown: HostLoadBreakdown | undefined;
+  /** The last read failed. A previous reading, if any, is still shown. */
+  failed: boolean;
+}) {
   if (!breakdown) {
-    return <p className="text-muted-foreground">Reading processes…</p>;
+    return (
+      <p className="text-muted-foreground">
+        {failed ? 'Could not read the process list. Trying again…' : 'Reading processes…'}
+      </p>
+    );
   }
   return (
     <>

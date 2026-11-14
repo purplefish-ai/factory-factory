@@ -64,8 +64,15 @@ export function parsePsOutput(stdout: string): HostProcess[] {
   return processes;
 }
 
-/** The outermost `.app` bundle in a macOS path, so Chrome's helpers count as Chrome. */
+/**
+ * The outermost `.app` bundle in a macOS path, so Chrome's helpers count as
+ * Chrome. Only absolute paths name a bundle; a relative one is however the
+ * process was started.
+ */
 function appBundleName(command: string): string | null {
+  if (!command.startsWith('/')) {
+    return null;
+  }
   const match = /\/([^/]+)\.app(?:\/|$)/.exec(command);
   return match?.[1] ?? null;
 }
@@ -147,7 +154,8 @@ export function groupHostProcesses(
  * lifetime average, so a long-lived process that just went busy reads low.
  */
 export async function readHostProcesses(): Promise<HostProcess[]> {
-  const { stdout } = await execFileAsync('ps', ['-A', '-o', 'pid=,ppid=,pcpu=,rss=,comm='], {
+  // -ww: no width limit, so long app bundle paths are not cut short.
+  const { stdout } = await execFileAsync('ps', ['-A', '-ww', '-o', 'pid=,ppid=,pcpu=,rss=,comm='], {
     encoding: 'utf8',
     timeout: 3000,
     maxBuffer: 8 * 1024 * 1024,

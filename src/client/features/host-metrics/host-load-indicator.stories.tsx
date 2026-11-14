@@ -35,8 +35,8 @@ export const Gallery: Story = {
       {GALLERY_STATES.map(([name, samples]) => (
         <div key={name} className="contents">
           <span className="text-muted-foreground">{name}</span>
-          <HostLoadIndicatorView samples={samples} compact={false} />
-          <HostLoadIndicatorView samples={samples} compact />
+          <HostLoadIndicatorView samples={samples} compact={false} breakdown={hostLoadBreakdown} />
+          <HostLoadIndicatorView samples={samples} compact breakdown={hostLoadBreakdown} />
         </div>
       ))}
     </div>

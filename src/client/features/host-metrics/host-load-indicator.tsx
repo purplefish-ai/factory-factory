@@ -144,6 +144,7 @@ export interface HostLoadIndicatorViewProps {
   compact: boolean;
   /** What is using the machine; `undefined` while it loads. */
   breakdown?: HostLoadBreakdown;
+  breakdownFailed?: boolean;
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
 }
@@ -157,6 +158,7 @@ export function HostLoadIndicatorView({
   samples,
   compact,
   breakdown,
+  breakdownFailed = false,
   open,
   onOpenChange,
 }: HostLoadIndicatorViewProps) {
@@ -190,7 +192,7 @@ export function HostLoadIndicatorView({
           <MetricRow metric="cpu" label="CPU" values={cpuValues} {...summary.cpu} />
           <MetricRow metric="memory" label="Memory" values={memoryValues} {...summary.memory} />
         </div>
-        <HostLoadBreakdownView breakdown={breakdown} />
+        <HostLoadBreakdownView breakdown={breakdown} failed={breakdownFailed} />
       </PopoverContent>
     </Popover>
   );
@@ -218,6 +220,8 @@ export function HostLoadIndicator() {
       samples={data.samples}
       compact={isMobile}
       breakdown={breakdown.data}
+      // The poll keeps retrying while open, so a failure shows as a message, not forever loading.
+      breakdownFailed={breakdown.isError}
       open={open}
       onOpenChange={setOpen}
     />

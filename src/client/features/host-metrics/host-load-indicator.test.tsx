@@ -14,6 +14,8 @@ const queryMocks = vi.hoisted(() => ({
     | { samples: { at: number; cpuPercent: number; memoryPercent: number }[] }
     | undefined,
   isMobile: false,
+  breakdown: undefined as unknown,
+  breakdownError: false,
 }));
 vi.mock('@/client/lib/trpc', () => ({
   trpc: {
@@ -27,7 +29,7 @@ vi.mock('@/client/lib/trpc', () => ({
       getHostLoadBreakdown: {
         useQuery: (...args: unknown[]) => {
           queryMocks.useBreakdownQuery(...args);
-          return { data: undefined };
+          return { data: queryMocks.breakdown, isError: queryMocks.breakdownError };
         },
       },
     },
@@ -41,6 +43,8 @@ afterEach(() => {
   document.body.innerHTML = '';
   queryMocks.data = undefined;
   queryMocks.isMobile = false;
+  queryMocks.breakdown = undefined;
+  queryMocks.breakdownError = false;
 });
 
 function render(element: ReturnType<typeof createElement>) {
@@ -79,6 +83,39 @@ describe('HostLoadIndicator', () => {
       enabled: true,
       refetchInterval: 5000,
     });
+  });
+
+  it('shows the breakdown the query returns once opened', () => {
+    queryMocks.data = { samples: busy };
+    queryMocks.breakdown = {
+      byCpu: [
+        {
+          key: 'app:Google Chrome',
+          label: 'Google Chrome',
+          kind: 'app',
+          workspace: null,
+          cpuPercent: 41,
+          memoryBytes: 1024,
+          processCount: 30,
+        },
+      ],
+      byMemory: [],
+    };
+    const container = render(createElement(MemoryRouter, null, createElement(HostLoadIndicator)));
+
+    flushSync(() => container.querySelector('button')?.click());
+
+    expect(document.body.textContent).toContain('Google Chrome41%');
+  });
+
+  it('says so when the process list cannot be read, instead of loading forever', () => {
+    queryMocks.data = { samples: busy };
+    queryMocks.breakdownError = true;
+    const container = render(createElement(HostLoadIndicator));
+
+    flushSync(() => container.querySelector('button')?.click());
+
+    expect(document.body.textContent).toContain('Could not read the process list');
   });
 
   it('renders nothing until the first sample arrives', () => {

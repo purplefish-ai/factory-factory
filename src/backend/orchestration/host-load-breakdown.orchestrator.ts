@@ -5,8 +5,8 @@ import type {
 } from '@/backend/services/host-metrics';
 
 interface HostLoadBreakdownPorts {
-  /** Live agent adapters; their providers and tools run beneath them. */
-  listAgentProcesses: () => { sessionId: string; pid: number | undefined }[];
+  /** Agent adapters; their providers and tools run beneath them. */
+  listAgentProcesses: () => { sessionId: string; pid: number | undefined; isRunning: boolean }[];
   findSessions: (
     ids: string[]
   ) => Promise<{ id: string; workspaceId: string; providerProcessPid: number | null }[]>;
@@ -26,7 +26,8 @@ interface HostLoadBreakdownPorts {
 export async function getHostLoadBreakdown(
   ports: HostLoadBreakdownPorts
 ): Promise<HostProcessBreakdown> {
-  const agents = ports.listAgentProcesses();
+  // A stopped adapter's pid may already belong to an unrelated process.
+  const agents = ports.listAgentProcesses().filter((agent) => agent.isRunning);
   const sessions = await ports.findSessions(agents.map((agent) => agent.sessionId));
   const terminals = ports.listTerminals();
 
