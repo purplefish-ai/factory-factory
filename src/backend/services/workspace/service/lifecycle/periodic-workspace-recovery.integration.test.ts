@@ -130,6 +130,7 @@ afterAll(async () => {
   await destroyIntegrationDatabase(target);
 });
 
+// 30 s: Prisma imports a full linked backup on the real database.
 it('roundtrips real public owner-created same/cross-project links and null after deletion with exact updatedAt', async () => {
   vi.useFakeTimers({ toFake: ['Date'] });
   vi.setSystemTime(new Date('2025-01-01T00:00:00.000Z'));
@@ -352,6 +353,7 @@ it('rolls back parents, tasks and workspaces after successful actual link writes
   }
 });
 
+// 30 s: Prisma imports a full linked backup on the real database.
 it('finishes all task occupancy and linked root/child admission before the first insert, independent of source order', async () => {
   const file = structuredClone(fixed);
   const [root, child, healthy] = file.data.workspaces;
@@ -774,6 +776,7 @@ it.each([
   });
 });
 
+// 30 s: Prisma imports a full backup of over 1000 history rows on the real database.
 it('imports mixed history against more than 1000 occupied identities with exclusive reasons and preserves local bytes', async () => {
   const file = structuredClone(history);
   const row = file.data.recovery.periodicHistory.executions[0]!;
@@ -838,11 +841,7 @@ it('imports mixed history against more than 1000 occupied identities with exclus
     sourceRunning: 1005,
     restoredHistoricalFailed: 1002,
     restoredSettled: 0,
-    reasons: {
-      EXISTING_IDENTITY: 1,
-      CONFLICTING_IDENTITY_OR_PARENT: 1,
-      INCOMPLETE_DEPENDENCY: 1,
-    },
+    reasons: { EXISTING_IDENTITY: 1, CONFLICTING_IDENTITY_OR_PARENT: 1, INCOMPLETE_DEPENDENCY: 1 },
   });
   expect(
     await target.prisma.periodicTaskExecution.findMany({

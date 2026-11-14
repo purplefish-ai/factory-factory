@@ -520,6 +520,7 @@ describe('child workspace MCP tRPC errors', () => {
   });
 });
 
+// 30 s: each case starts its own server (Node with tsx, loading the MCP server).
 it.each([
   { parentWorkspaceId: null, enabled: true, settingsFailure: null },
   { parentWorkspaceId: 'parent-workspace', enabled: true, settingsFailure: null },
@@ -844,6 +845,7 @@ it.each(['send_message_to_child', 'send_message_to_parent'] as const)(
   }
 );
 
+// 30 s: the replacement client starts another server (Node with tsx, loading the MCP server).
 it('bounds an unanswered real HTTP call, closes its process, and replaces the client', async () => {
   const client = getClient(null);
   await expect(
