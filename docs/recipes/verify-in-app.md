@@ -4,7 +4,7 @@
 
 Your change is visible to a user (a page, a component, a flow) and tests alone
 do not show it does what was asked. If no user-visible behaviour changed, skip
-this and say so in the pull request's "Driven in the sandbox" section.
+this and begin the "Driven in the sandbox" section with `Does not apply:`.
 
 ## Steps
 
@@ -65,8 +65,9 @@ this and say so in the pull request's "Driven in the sandbox" section.
    ```
 
 7. Put what you drove and saw under "Driven in the sandbox" in the pull request
-   body, and describe the screenshot: `.context/` is not part of the pull
-   request. `gh pr view --json body --jq .body` shows the section.
+   body, beginning `Driven:` (or `Does not apply:` and the reason), and describe
+   the screenshot: `.context/` is not part of the pull request.
+   `gh pr view --json body --jq .body` shows the section.
 
 ## Mistakes this prevents
 
