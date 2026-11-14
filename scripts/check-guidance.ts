@@ -19,9 +19,15 @@ export const legacyNoteCeilings: LegacyNoteCeilings = {
   'docs/architecture/agent-runtime.md': 1147,
 };
 
-export const guidanceLimits = { agentsGuide: 120, note: 400, decision: 80 } as const;
+export const guidanceLimits = {
+  agentsGuide: 120,
+  note: 400,
+  decision: 80,
+  recipe: 80,
+  recipeReadme: 40,
+} as const;
 
-export type GuidanceRule = 'size' | 'pairing' | 'references' | 'records';
+export type GuidanceRule = 'size' | 'pairing' | 'references' | 'records' | 'recipes';
 
 export type GuidanceViolation = {
   file: string;
@@ -74,6 +80,23 @@ function isDecisionRecord(path: string): boolean {
   return path.startsWith('docs/decisions/');
 }
 
+const recipeReadmePath = 'docs/recipes/README.md';
+// The parts of a recipe, in order; docs/recipes/README.md defines the format.
+const recipeSections = ['Use when', 'Steps', 'Mistakes this prevents'] as const;
+
+/** A top-level lower-case `.md` file in docs/recipes/, or its README. */
+function isRecipeFile(path: string): boolean {
+  return path === recipeReadmePath || /^docs\/recipes\/[^/A-Z]+\.md$/.test(path);
+}
+
+function isRecipe(path: string): boolean {
+  return isRecipeFile(path) && path !== recipeReadmePath;
+}
+
+function isSkillFile(path: string): boolean {
+  return /^\.claude\/skills\/[^/]+\/SKILL\.md$/.test(path);
+}
+
 function isReferenceScope(path: string): boolean {
   return (
     isAgentsGuide(path) ||
@@ -108,6 +131,9 @@ export function checkSize(
     if (isNote(file)) {
       violations.push(...checkNoteSize(file, lineCount(repository, file), ceilings[file]));
     }
+    if (isRecipeFile(file)) {
+      violations.push(...checkRecipeSize(file, lineCount(repository, file)));
+    }
   }
   for (const [file, ceiling] of Object.entries(ceilings)) {
     if (!repository.isFile(file)) {
@@ -120,6 +146,31 @@ export function checkSize(
     }
   }
   return violations;
+}
+
+function checkRecipeSize(file: string, lines: number): GuidanceViolation[] {
+  if (file === recipeReadmePath) {
+    return lines > guidanceLimits.recipeReadme
+      ? [
+          {
+            file,
+            rule: 'size',
+            problem: `${lines} lines exceeds the ${guidanceLimits.recipeReadme}-line limit for the recipe README.`,
+            fix: 'keep the format and the table of recipes only; put anything else in the recipe it concerns.',
+          },
+        ]
+      : [];
+  }
+  return lines > guidanceLimits.recipe
+    ? [
+        {
+          file,
+          rule: 'size',
+          problem: `${lines} lines exceeds the ${guidanceLimits.recipe}-line limit for a recipe.`,
+          fix: 'cut it to the steps and link the rules instead of restating them, or split it into two recipes.',
+        },
+      ]
+    : [];
 }
 
 function checkNoteSize(
@@ -243,6 +294,185 @@ export function checkRecords(repository: GuidanceRepository): GuidanceViolation[
           },
         ]
       : [];
+  });
+}
+
+function quoteList(names: readonly string[]): string {
+  return names
+    .map((name) => `"${name}"`)
+    .join(', ')
+    .replace(/, ([^,]*)$/, ' and $1');
+}
+
+const recipeFormatFix = `use the format in ${recipeReadmePath}: a "# " title, then ${quoteList(
+  recipeSections.map((section) => `## ${section}`)
+)}, in that order.`;
+
+/** Whether a recipe has one level-1 heading, on its first line, and its level-2 headings. */
+function recipeOutline(content: string): { title: boolean; sections: string[] } {
+  const lines = withoutFencedCode(content).split('\n');
+  const headings = lines.flatMap((line) => {
+    const match = /^ {0,3}(#{1,6})[ \t]+(.*?)(?:[ \t]+#+)?[ \t]*$/.exec(line);
+    return match?.[1] === undefined ? [] : [{ level: match[1].length, text: match[2] ?? '' }];
+  });
+  return {
+    title:
+      headings.filter((heading) => heading.level === 1).length === 1 &&
+      /^#[ \t]/.test(lines.find((line) => line.trim() !== '') ?? ''),
+    sections: headings.filter((heading) => heading.level === 2).map((heading) => heading.text),
+  };
+}
+
+function checkRecipeShape(repository: GuidanceRepository, file: string): GuidanceViolation[] {
+  const { title, sections } = recipeOutline(repository.read(file));
+  const problem = title
+    ? sections.join('\n') !== recipeSections.join('\n') &&
+      `has the sections ${quoteList(sections)}, not ${quoteList(recipeSections)}.`
+    : 'does not have exactly one "# " title, as its first line.';
+  return problem ? [{ file, rule: 'recipes', problem, fix: recipeFormatFix }] : [];
+}
+
+/** The recipe a skill file names, as written: `docs/recipes/<name>.md`. */
+function skillTarget(content: string): string | undefined {
+  return /docs\/recipes\/[A-Za-z0-9._-]+\.md/.exec(skillBody(content))?.[0];
+}
+
+/** A skill's text after its front matter. */
+function skillBody(content: string): string {
+  return content.replace(/^---\r?\n[\s\S]*?\r?\n---[ \t]*(?:\r?\n|$)/, '');
+}
+
+/** What is wrong with a skill's front matter, which needs a name and a description. */
+function frontMatterProblem(content: string, name: string): string | undefined {
+  const frontMatter = /^---\r?\n([\s\S]*?)\r?\n---[ \t]*(?:\r?\n|$)/.exec(content)?.[1] ?? '';
+  const declared = /^name:[ \t]*["']?([^"'\s]+)["']?[ \t]*$/m.exec(frontMatter)?.[1];
+  if (declared === undefined || !/^description:[ \t]*\S/m.test(frontMatter)) {
+    return 'has no front matter with a name and a description.';
+  }
+  return declared === name ? undefined : `names itself "${declared}", not "${name}".`;
+}
+
+/** What is wrong with the recipe a skill points at: it must be the one of its name. */
+function skillTargetProblem(
+  repository: GuidanceRepository,
+  content: string,
+  name: string
+): string | undefined {
+  const target = skillTarget(content);
+  const expected = `docs/recipes/${name}.md`;
+  if (target === undefined) {
+    return 'does not point at a recipe under docs/recipes/.';
+  }
+  if (target !== expected) {
+    return `points at ${target}, not ${expected}.`;
+  }
+  return isRecipe(target) && repository.isFile(target)
+    ? undefined
+    : `points at ${target}, which is not a recipe.`;
+}
+
+/** A skill holds its front matter and one pointer line; procedure belongs in the recipe. */
+function skillBodyProblem(content: string): string | undefined {
+  const count = skillBody(content)
+    .split(/\r?\n/)
+    .filter((line) => line.trim() !== '').length;
+  return count > 1
+    ? `has ${count} lines after its front matter; a skill holds one pointer line.`
+    : undefined;
+}
+
+function checkSkill(repository: GuidanceRepository, file: string): GuidanceViolation[] {
+  const content = repository.read(file);
+  const name = posix.basename(posix.dirname(file));
+  const frontMatter = frontMatterProblem(content, name);
+  const target = skillTargetProblem(repository, content, name);
+  const body = skillBodyProblem(content);
+  return [
+    ...(frontMatter === undefined
+      ? []
+      : [
+          {
+            file,
+            rule: 'recipes' as const,
+            problem: frontMatter,
+            fix: 'start it with --- front matter holding name (the directory name) and description (when to use it).',
+          },
+        ]),
+    ...(target === undefined
+      ? []
+      : [
+          {
+            file,
+            rule: 'recipes' as const,
+            problem: target,
+            fix: 'point it at the recipe it serves, or delete the skill.',
+          },
+        ]),
+    ...(body === undefined
+      ? []
+      : [
+          {
+            file,
+            rule: 'recipes' as const,
+            problem: body,
+            fix: 'move the procedure into the recipe it points at and leave only the pointer line.',
+          },
+        ]),
+  ];
+}
+
+/** A file the recipe rules would never read: they would pass it unchecked. */
+function misplacedFile(file: string): GuidanceViolation[] {
+  if (file.startsWith('docs/recipes/') && !isRecipeFile(file)) {
+    return [
+      {
+        file,
+        rule: 'recipes',
+        problem: 'is not a top-level lower-case .md file, so no recipe rule applies to it.',
+        fix: 'put it at docs/recipes/<lower-case-name>.md as a recipe, or outside docs/recipes/.',
+      },
+    ];
+  }
+  if (
+    file.startsWith('.claude/skills/') &&
+    posix.basename(file).toLowerCase() === 'skill.md' &&
+    !isSkillFile(file)
+  ) {
+    return [
+      {
+        file,
+        rule: 'recipes',
+        problem: 'is not .claude/skills/<name>/SKILL.md, so it is no skill and is not checked.',
+        fix: 'move it to .claude/skills/<recipe-name>/SKILL.md.',
+      },
+    ];
+  }
+  return [];
+}
+
+/** A recipe has its parts in order and a skill file; a skill points at a recipe. */
+export function checkRecipes(repository: GuidanceRepository): GuidanceViolation[] {
+  return repository.files.flatMap((file): GuidanceViolation[] => {
+    if (isSkillFile(file)) {
+      return checkSkill(repository, file);
+    }
+    if (!isRecipe(file)) {
+      return misplacedFile(file);
+    }
+    const skill = `.claude/skills/${posix.basename(file, '.md')}/SKILL.md`;
+    return [
+      ...checkRecipeShape(repository, file),
+      ...(repository.isFile(skill)
+        ? []
+        : [
+            {
+              file,
+              rule: 'recipes' as const,
+              problem: `has no skill file at ${skill}.`,
+              fix: `create it with front matter (name, description) and one line pointing at ${file}.`,
+            },
+          ]),
+    ];
   });
 }
 
@@ -627,6 +857,7 @@ export function checkGuidance(
     ...checkPairing(repository),
     ...checkReferences(repository, baseTopLevel),
     ...checkRecords(repository),
+    ...checkRecipes(repository),
   ];
 }
 
