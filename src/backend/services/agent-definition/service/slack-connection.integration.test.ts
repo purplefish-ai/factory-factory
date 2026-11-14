@@ -147,12 +147,23 @@ it('does not persist tokens Slack rejects and never echoes untrusted errors', as
 });
 
 it('rejects non-bot responses and malformed Slack data', async () => {
-  request.mockResolvedValue(
-    new Response(JSON.stringify({ ok: true, team_id: 'T-company', team: 'Company' }))
-  );
-  await expect(service.connect({ botToken: token })).rejects.toThrow(
-    'Slack returned an invalid bot identity'
-  );
+  const bot = {
+    ok: true,
+    team_id: 'T-company',
+    team: 'Company',
+    user_id: 'U-bot',
+    bot_id: 'B-bot',
+  };
+  for (const body of [
+    { ok: true, team_id: 'T-company', team: 'Company' },
+    { ...bot, bot_id: undefined },
+    { ...bot, team_id: undefined },
+  ]) {
+    request.mockResolvedValue(new Response(JSON.stringify(body)));
+    await expect(service.connect({ botToken: token })).rejects.toThrow(
+      'Slack returned an invalid bot identity'
+    );
+  }
   expect(await db.prisma.agentConnection.count()).toBe(0);
 });
 

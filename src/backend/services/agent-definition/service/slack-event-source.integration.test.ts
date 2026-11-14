@@ -7,8 +7,28 @@ import {
 import { agentSourceCursorSchema, agentSourceHealthSchema } from '@/shared/agent-runtime';
 import type { SlackSocketHandlers } from './slack-event-source';
 
+const logs = vi.hoisted(() => [] as unknown[][]);
+vi.mock('@/backend/services/logger.service', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/backend/services/logger.service')>();
+  const record = (...args: unknown[]) => {
+    logs.push(args);
+  };
+  return {
+    ...actual,
+    createLogger: (component: string) =>
+      Object.assign(actual.createLogger(component), {
+        debug: record,
+        info: record,
+        warn: record,
+        error: record,
+        fatal: record,
+      }),
+  };
+});
+
 let db: IntegrationDatabase;
 let runtime: typeof import('../index');
+let sourceAccessor: typeof import('../resources/agent-source.accessor').agentSourceAccessor;
 let connectionId: string;
 let definitionId: string;
 let sockets: FakeSocket[];
@@ -132,6 +152,9 @@ async function connected() {
 beforeAll(async () => {
   db = await createIntegrationDatabase();
   runtime = await vi.importActual<typeof import('../index')>('../index');
+  ({ agentSourceAccessor: sourceAccessor } = await vi.importActual<
+    typeof import('../resources/agent-source.accessor')
+  >('../resources/agent-source.accessor'));
 }, 30_000);
 afterAll(async () => {
   await destroyIntegrationDatabase(db);
@@ -171,6 +194,7 @@ beforeEach(async () => {
     },
   });
   sockets = [];
+  logs.length = 0;
   autoHello = 'A1';
   enabled = true;
   credentials = { appToken: 'xapp-1-A1-1-secret', appId: 'A1', workspaceId: 'T1' };
@@ -180,6 +204,11 @@ beforeEach(async () => {
 });
 afterEach(async () => {
   await source.stop();
+  vi.restoreAllMocks();
+  // Nothing the listener logs may carry a message body or a token.
+  const output = JSON.stringify(logs);
+  expect(output).not.toContain('Please investigate the outage');
+  expect(output).not.toContain('xapp-');
 });
 
 it('stores a human root message and a thread reply before acknowledging them', async () => {
@@ -424,6 +453,32 @@ it('treats a socket that closes before hello as a failed attempt and backs off',
   expect(sockets).toHaveLength(1);
 });
 
+it('backs off failed attempts from five seconds, doubling, to at most five minutes', async () => {
+  autoHello = null;
+  let now = Date.now();
+  vi.useFakeTimers({ toFake: ['Date'] });
+  try {
+    for (const delay of [5000, 10_000, 20_000, 40_000, 80_000, 160_000, 300_000, 300_000]) {
+      vi.setSystemTime(now);
+      const attempts = sockets.length;
+      const pending = source.reconcileConnections(signal);
+      // vi.waitFor would advance the faked clock; wait for the attempt without moving it.
+      while (sockets.length === attempts) {
+        await new Promise((resolve) => setImmediate(resolve));
+      }
+      sockets.at(-1)?.fail(new Error('socket closed'));
+      await pending;
+      now += delay - 1;
+      vi.setSystemTime(now);
+      await source.reconcileConnections(signal);
+      expect(sockets).toHaveLength(attempts + 1);
+      now += 1;
+    }
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
 it('reconnects exactly once when the app-level token is rotated', async () => {
   const first = await connected();
   credentials = { appToken: 'xapp-1-A1-2-rotated', appId: 'A1', workspaceId: 'T1' };
@@ -535,6 +590,19 @@ it('connects only for connections with an app token and a listening trigger', as
   expect((await sourceState()).health.reasonCode).toBe('SLACK_NOT_LISTENING');
 });
 
+it.each([
+  ['its trigger is off', () => db.prisma.agentTrigger.updateMany({ data: { isEnabled: false } })],
+  [
+    'its automation is off',
+    () => db.prisma.agentDefinition.updateMany({ data: { isEnabled: false } }),
+  ],
+  ['its project is archived', () => db.prisma.project.updateMany({ data: { isArchived: true } })],
+])('does not listen for an active trigger when %s', async (_name, change) => {
+  await change();
+  await source.reconcileConnections(signal);
+  expect(sockets).toHaveLength(0);
+});
+
 it('refuses to listen when two connections share one Slack app', async () => {
   const other = await db.prisma.agentConnection.create({
     data: { provider: 'SLACK', externalId: 'T2', name: 'Other', credentialsEncrypted: 'x' },
@@ -589,4 +657,87 @@ it('records a gap when stopped and after an unclean exit of a previous process',
   expect((await sourceState()).cursor.gaps).toEqual([
     { from: lastSeen.toISOString(), to: expect.any(String) },
   ]);
+});
+
+it('refreshes when the listener was last seen connected about once a minute', async () => {
+  await connected();
+  const lastSeen = async () =>
+    (await db.prisma.agentSourceState.findUniqueOrThrow({ where: { connectionId } }))
+      .lastObservedAt;
+  const first = await lastSeen();
+  const start = Date.now();
+  vi.useFakeTimers({ toFake: ['Date'] });
+  try {
+    vi.setSystemTime(start + 59_000);
+    await source.reconcileConnections(signal);
+    expect(await lastSeen()).toEqual(first);
+    vi.setSystemTime(start + 61_000);
+    await source.reconcileConnections(signal);
+    expect(await lastSeen()).toEqual(new Date(start + 61_000));
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+it('waits for an envelope in flight on any connection before it records the stop', async () => {
+  const other = await db.prisma.agentConnection.create({
+    data: { provider: 'SLACK', externalId: 'T2', name: 'Other', credentialsEncrypted: 'x' },
+  });
+  await db.prisma.agentTrigger.create({
+    data: {
+      agentDefinitionId: definitionId,
+      connectionId: other.id,
+      type: 'SLACK_MESSAGE',
+      description: 'Other workspace',
+      config: { version: 1, channelIds: ['C1'] },
+      isEnabled: true,
+      isConfigured: true,
+      activationState: 'ACTIVE',
+    },
+  });
+  await source.stop();
+  source = new runtime.SlackEventSource({
+    createSocket: (appToken, handlers) => {
+      const socket = new FakeSocket(appToken, handlers, appToken === 'xapp-other' ? 'A2' : 'A1');
+      sockets.push(socket);
+      return socket;
+    },
+    getAppCredentials: (id) =>
+      Promise.resolve(
+        id === other.id
+          ? { connectionId: id, appToken: 'xapp-other', appId: 'A2', workspaceId: 'T2' }
+          : { connectionId: id, appToken: 'xapp-first', appId: 'A1', workspaceId: 'T1' }
+      ),
+    isEnabled: () => true,
+    ingestEvent: (input) => ingest(input),
+  });
+  source.start();
+  await source.reconcileConnections(signal);
+  expect(sockets).toHaveLength(2);
+  const held = Promise.withResolvers<void>();
+  const reached = Promise.withResolvers<void>();
+  ingest = async (input) => {
+    reached.resolve();
+    await held.promise;
+    return await runtime.ingestEvent(input);
+  };
+  const otherSocket = sockets.find((socket) => socket.token === 'xapp-other') as FakeSocket;
+  const delivering = otherSocket.deliver(message({}, { team_id: 'T2', api_app_id: 'A2' }));
+  await reached.promise;
+  const writes = vi.spyOn(sourceAccessor, 'writeSlackSources');
+  const stopping = source.stop();
+  await vi.waitFor(() => expect(sockets.map((socket) => socket.disconnects)).toEqual([1, 1]));
+  // Let every pending callback run: the stop must still be waiting for the held envelope.
+  await new Promise((resolve) => setImmediate(resolve));
+  expect(writes).not.toHaveBeenCalled();
+  held.resolve();
+  await Promise.all([stopping, delivering]);
+  expect(otherSocket.acks).toHaveLength(1);
+  expect(await db.prisma.agentEvent.count()).toBe(1);
+  expect(writes).toHaveBeenCalledTimes(2);
+  for (const id of [connectionId, other.id]) {
+    expect(
+      await db.prisma.agentSourceState.findUniqueOrThrow({ where: { connectionId: id } })
+    ).toMatchObject({ health: { state: 'DISCONNECTED', reasonCode: 'SLACK_LISTENER_STOPPED' } });
+  }
 });

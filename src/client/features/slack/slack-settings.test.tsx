@@ -83,6 +83,7 @@ it('masks a new token and clears it after saving', async () => {
   mount();
   enterToken();
   expect(tokenInput().type).toBe('password');
+  expect(tokenInput().autocomplete).toBe('off');
   await submit();
   expect(tokenInput().value).toBe('');
   expect(document.body.textContent).toContain('Connected to Purplefish');
