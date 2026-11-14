@@ -21,9 +21,10 @@ guides beside the code:
 
 The reasons are in the `2026-11-13-*` and `2026-11-14-*` records in
 [decisions](../decisions/), and the tests those guides name describe the
-behaviour. Slack app setup, turning a Slack automation on and the current limits
-are in [Settings](../admin-settings.md#slack-automations); the end-to-end checks
-are a [recipe](../recipes/verify-event-automations.md).
+behaviour. Slack app setup and turning a Slack automation on are in
+[Settings](../admin-settings.md#slack-automations), the current limits in
+[Settings](../admin-settings.md#current-event-automation-limits); the end-to-end
+checks are a [recipe](../recipes/verify-event-automations.md).
 
 This page remains as long as the section below holds entries; delete it when it
 is empty.

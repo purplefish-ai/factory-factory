@@ -157,6 +157,7 @@ it('rejects non-bot responses and malformed Slack data', async () => {
   for (const body of [
     { ok: true, team_id: 'T-company', team: 'Company' },
     { ...bot, bot_id: undefined },
+    { ...bot, user_id: undefined },
     { ...bot, team_id: undefined },
   ]) {
     request.mockResolvedValue(new Response(JSON.stringify(body)));
