@@ -27,7 +27,5 @@ channel scope but never widen it.
 - Validation and Enable check the provider resolved at that moment, and
   evaluation checks again for each event, because an inherited provider can
   change after Enable.
-- An automation that inherits its provider can use filters only when every
-  provider passed.
 - Classifier calls use the default account, because no run account exists before
   admission.
