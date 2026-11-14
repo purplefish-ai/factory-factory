@@ -48,8 +48,9 @@ review-activity helpers and `classifyGitHubCLIError`.
   share one process, while writes and signal-bound reads always spawn their own.
   `github-cli.service.test.ts`, `github-cli-pr-details.test.ts`.
 - After a rate-limit failure `githubCLIService` reads fail without spawning
-  `gh`, and after a connectivity failure its network reads fail for 30 seconds
-  while its authentication checks and writes still run.
+  `gh`, including reads already queued for a process slot; after a connectivity
+  failure its network reads fail for 30 seconds, queued ones too, while its
+  authentication checks and writes still run.
   `github-cli-status-details.test.ts`, `github-cli-network-backoff.test.ts`.
 - A wrapped `gh` failure keeps the original error as `cause`, never repeats the
   command line, and is classified by `gh`'s diagnostic rather than by its
