@@ -217,6 +217,24 @@ describe('ChatContent agent error strip', () => {
     }
   });
 
+  it('compacts by queueing /compact while keeping the draft and its attachments', () => {
+    const props = errorProps();
+    const container = document.createElement('div');
+    const root = createRoot(container);
+    try {
+      flushSync(() => root.render(<ChatContent {...props} />));
+      const onCompact = (input.mock.lastCall?.[0] as { onCompact?: () => void } | undefined)
+        ?.onCompact;
+      expect(onCompact).toBeTypeOf('function');
+      flushSync(() => onCompact?.());
+      expect(props.sendMessage).toHaveBeenCalledExactlyOnceWith('/compact', {
+        preserveInput: true,
+      });
+    } finally {
+      flushSync(() => root.unmount());
+    }
+  });
+
   it('hides Retry when there is no sent message and disables it while offline', () => {
     const container = document.createElement('div');
     const root = createRoot(container);

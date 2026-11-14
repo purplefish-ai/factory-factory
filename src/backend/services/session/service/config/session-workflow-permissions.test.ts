@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { PR_DEDICATED_WORKFLOW } from '@/shared/pr-monitoring';
 import { getWorkflowPermissionPreset, isUnattendedWorkflow } from './session-workflow-permissions';
 
 describe('workflow permissions', () => {
@@ -7,6 +8,7 @@ describe('workflow permissions', () => {
     expect(isUnattendedWorkflow('event-agent')).toBe(true);
     expect(isUnattendedWorkflow('auto-iteration')).toBe(false);
     expect(isUnattendedWorkflow('implement')).toBe(false);
+    expect(isUnattendedWorkflow(PR_DEDICATED_WORKFLOW)).toBe(false);
   });
 
   for (const workflow of ['periodic-task', 'event-agent']) {
@@ -34,7 +36,7 @@ describe('workflow permissions', () => {
   it.each(['STRICT', 'RELAXED', 'YOLO'] as const)(
     'preserves workspace permissions %s for ordinary and legacy sessions',
     (defaultWorkspacePermissions) => {
-      for (const workflow of ['implement', 'auto-iteration']) {
+      for (const workflow of ['implement', 'auto-iteration', PR_DEDICATED_WORKFLOW]) {
         expect(
           getWorkflowPermissionPreset(workflow, 'CODEX', {
             defaultWorkspacePermissions,

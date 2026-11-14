@@ -5,9 +5,9 @@ transcript and runtime state, permission requests to the queue of requests shown
 to the user, and subagent changes to viewer notifications. The
 [capsule guide](../../AGENTS.md) covers the capsule, and `../../modules.ts`
 describes this module in one line. This guide so far covers permission requests,
-subagent notifications, thought chunks and a failed turn's error. Bare file
-names below are in this directory; paths that start with `src/` are from the
-repository root.
+subagent notifications, thought chunks, a failed turn's error and what replay
+suppression lets through. Bare file names below are in this directory; paths
+that start with `src/` are from the repository root.
 
 ## Owns, and does not own
 
@@ -51,6 +51,10 @@ The capsule barrel exports the singletons `acpEventProcessor` and
 - A session's thought chunks are merged for at most 25 ms and written before its
   next written update, runtime event, replayed user message or turn end, so
   transcript order is unchanged. `acp-event-processor.text-streaming.test.ts`.
+- While history replay is suppressed, usage, plan and session info updates still
+  reach the session, so one attached after a backend restart shows its context
+  occupancy and can compact. `acp-event-processor.replay-suppression.test.ts`,
+  `acp-event-processor.notices.test.ts`.
 
 ## Map
 
@@ -61,3 +65,9 @@ The capsule barrel exports the singletons `acpEventProcessor` and
 - `subagent-change-coalescer.ts`: subagent notifications;
   `subagent-tool-events.ts` collects a subagent's tool calls for interceptors.
 - `session-work-state.ts`: the runtime's work state.
+
+## Checks
+
+`../acp/acp-compaction.manual.integration.test.ts` compacts a disposable session
+of each real provider, then checks its usage, progress, boundary and recall; it
+runs only with `RUN_REAL_PROVIDER_COMPACTION_TESTS=1`.

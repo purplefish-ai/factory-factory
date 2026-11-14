@@ -48,6 +48,8 @@ beforeEach(() => {
 it('passes the exact profile environment and always cleans up the owned native process', async () => {
   expect(await withNativeRpc(context, (rpc) => rpc.request('account/read'))).toEqual({ ok: true });
   expect(mocks.spawn.mock.calls[0]?.[2].env.CODEX_HOME).toBe('/one');
+  // Outside Windows the probe leads its own process group, so cleanup reaches descendants.
+  expect(mocks.spawn.mock.calls[0]?.[2].detached).toBe(process.platform !== 'win32');
   expect(mocks.cleanup).toHaveBeenCalledWith(child, { timeoutMs: expect.any(Number) });
   expect(child.stdout.destroyed).toBe(true);
 });

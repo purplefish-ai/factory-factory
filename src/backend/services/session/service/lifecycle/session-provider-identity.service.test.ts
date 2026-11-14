@@ -116,6 +116,7 @@ describe('provider identity lifecycle reconciliation', () => {
           incarnationId: 'runtime-1',
           reason: 'load_failed',
           transcriptPolicy: 'archive_then_clear',
+          archivedMessageCount: 1,
         },
       ],
     });
@@ -123,6 +124,17 @@ describe('provider identity lifecycle reconciliation', () => {
     expect(h.domain.isHistoryHydrated(h.event.sessionId)).toBe(false);
     expect(h.domain.canAttemptHistoryHydration(h.event.sessionId)).toBe(true);
     expect(h.domain.acceptProviderHistoryIdentity(h.event.sessionId, 'old')).toBe(false);
+  });
+
+  it('creates no archive when no transcript was observed', async () => {
+    const h = harness();
+    h.domain.replaceTranscript(h.event.sessionId, [], { historySource: 'jsonl' });
+    await h.service.reconcile(h.event);
+    expect(h.archive.persistClosedSession).not.toHaveBeenCalled();
+    expect(h.session().providerSessionId).toBe('new');
+    expect(h.session().providerMetadata).toMatchObject({
+      providerIdentityRollovers: [{ archivedMessageCount: 0 }],
+    });
   });
 
   it.each(['archive', 'identity'] as const)(
