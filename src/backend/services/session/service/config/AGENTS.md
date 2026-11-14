@@ -9,11 +9,11 @@ in this directory; paths that start with `src/` are from the repository root.
 
 The module owns which native values a session's settings become, configuring a
 new runtime until its readiness opens, applying edits to a running or stopped
-session, the accepted snapshot, its persistence and publication, what an
-inactive session shows, and the launch options cache. It does not own:
+session, the accepted snapshot, its persistence and publication, and what an
+inactive session shows. It does not own:
 
 - The adapter connection, applying the startup model before a runtime is
-  returned, the readiness barrier and the launch options probe: `../acp/`.
+  returned and the readiness barrier: `../acp/`.
 - The model catalogs: `../providers/`.
 - Stopping a runtime whose startup configuration failed, and the write that
   compares launch intent: `../lifecycle/session-startup-config-failure.ts`,
@@ -89,17 +89,10 @@ shutdown.
   unavailable mode fails the start, as does applied launch intent without one;
   only a session with no snapshot falls back to the configured preset. An
   adversarial-review session instead reapplies read-only access and ignores the
-  snapshot's saved modes. `session.config.service.saved-access.test.ts`,
+  snapshot's saved modes; its thinking level follows the rules above.
+  `session.config.service.saved-access.test.ts`,
   `session-startup-launch.test.ts`,
   `../lifecycle/adversarial-review-startup.test.ts`.
-- Launch options are cached per provider, model and the requested Codex account
-  (or Auto), 128 at most, by at most eight discoveries, each holding its slot
-  until its child drains (`stopLaunchOptions()` waits seven seconds at most); a
-  result over five minutes old is returned at once and refreshed in the
-  background if it has no discovery running and a slot is free; a failed refresh
-  keeps it, and the next waits 30 s. `session-launch-options.service.test.ts`,
-  `session-launch-options-cache.test.ts`,
-  `session-launch-options-drain.test.ts`.
 
 ## Map
 
@@ -110,5 +103,6 @@ shutdown.
 - `session-permission-policy.ts`, `session-saved-native-modes.ts`,
   `session-startup-access.ts`: required and reviewer access, saved access and
   launch access; `session-startup-configuration-finalizer.ts` opens readiness.
-- `session-launch-options.service.ts`: the launch options cache, saved by
-  `session-launch-options-store.ts`.
+- `session-config-mutation-queue.ts`: the per-session edit queue;
+  `session-queued-settings.ts`: edits applied to queued messages.
+- [`launch-options/`](launch-options/AGENTS.md): the launch options cache.

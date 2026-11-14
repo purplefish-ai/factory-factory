@@ -79,7 +79,7 @@ here directly.
   closes, whatever happened to the caller.
   `claude-model-catalog-loader.test.ts`, `codex-model-catalog-loader.test.ts`,
   `session-launch-options-probe.test.ts`,
-  `../config/session-launch-options-drain.test.ts`.
+  `../config/launch-options/session-launch-options-drain.test.ts`.
 
 ## Map
 

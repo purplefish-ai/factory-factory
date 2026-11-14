@@ -2,6 +2,7 @@ import type { SessionConfigOption } from '@agentclientprotocol/sdk/unstable';
 import { createLogger } from '@/backend/services/logger.service';
 import type { AgentSessionRecord } from '@/backend/services/session/resources/agent-session.accessor';
 import type { AcpProcessHandle, AcpRuntimeManager } from '@/backend/services/session/service/acp';
+import type { SessionLaunchOptionsService } from '@/backend/services/session/service/config/launch-options/session-launch-options.service';
 import type { SessionRepository } from '@/backend/services/session/service/data/session.repository';
 import type { CodexModelCatalogService } from '@/backend/services/session/service/providers/codex-model-catalog.service';
 import { type ChatBarCapabilities, EMPTY_CHAT_BAR_CAPABILITIES } from '@/shared/chat-capabilities';
@@ -14,7 +15,6 @@ import {
   type CodexModelCatalogEntry,
   type SessionProvider,
 } from './session-config-option-helpers';
-import type { SessionLaunchOptionsService } from './session-launch-options.service';
 
 const logger = createLogger('session');
 const MAX_CONFIG_READ_RETIREMENTS = 3;
