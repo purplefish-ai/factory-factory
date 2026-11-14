@@ -1,11 +1,12 @@
-# Agent-definition services: event evaluation
+# Agent-definition services: event evaluation and history reads
 
 This guide so far covers how one event is evaluated against one trigger,
-natural-language filters included; the migration of the Slack sections of the
-integrations note adds the Slack services here, extending Owns, Invariants and
-Map in place. The [capsule guide](../AGENTS.md) covers the models, the public
-surface and saved management. Bare file names below are in this directory; paths
-that start with `src/` are from the repository root.
+natural-language filters included, and what history reads may return; the
+migration of the Slack sections of the integrations note adds the Slack services
+here, extending Owns, Invariants and Map in place. The
+[capsule guide](../AGENTS.md) covers the models, the public surface and saved
+management. Bare file names below are in this directory; paths that start with
+`src/` are from the repository root.
 
 ## Owns, and does not own
 
@@ -52,6 +53,12 @@ the filter; and how a classifier outcome becomes a decision. It does not own:
 - `PROVEN_CLASSIFIER_PROVIDERS` lists exactly the providers that passed in the
   gate record, and a configured classifier model or prompt version that differs
   from the record fails the gate test. `semantic-filter-gate.test.ts`.
+- History returns no snapshot, input, error message or provider evidence, reads
+  a stored reason that is not a code as `INVALID_STORED_DATA`, and returns an
+  `explanation` only when it is a fixed sentence in
+  `src/backend/services/agent-definition/resources/agent-evaluation-explanations.ts`.
+  `agent-management-owner.integration.test.ts`,
+  `agent-evaluation-history.integration.test.ts`.
 
 The gate test does not notice changed prompt text under the same version: the
 comment on the version in `src/backend/prompts/agent-event-classification.ts` is
@@ -63,6 +70,7 @@ the only guard.
   order of checks; `agent-event-matcher.ts`: the deterministic match.
 - `agent-semantic-filter.ts`: classifier outcomes as decisions;
   `semantic-filter-gate.ts`: which providers passed.
+- `agent-history-projection.ts`: what history may return.
 - `src/backend/services/agent-definition/testing/classifier-fixtures.json` and
   `src/backend/services/agent-definition/testing/classifier-gate.json`: the
   replay fixtures and the gate record.

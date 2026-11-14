@@ -78,6 +78,9 @@ provider conversations and evaluation snapshots have their own lifetimes.
 - `agent-run.accessor.ts` (admission), `agent-run-claim.accessor.ts` (claim) and
   `agent-runtime-guards.ts` (eligibility for both).
 - `agent-trigger-pause.ts`: `pauseTriggers` and `cancelQueuedRuns`.
+- `agent-management.accessor.ts`, `agent-revision.accessor.ts`,
+  `agent-proposal.accessor.ts`: saved and proposal writes; their invariants are
+  in the capsule guide.
 
 ## Decisions
 
