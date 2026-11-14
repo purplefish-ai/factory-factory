@@ -303,9 +303,8 @@ The workspace cache reconciler depends on React Query internals that
 `src/client/lib/query-core-commit-contract.test.ts` pins. These are when a
 function `structuralSharing` runs, a revert when it throws `CancelledError`, and
 option ownership by the latest fetch or observer. If an upgrade fails that test,
-adapt the reconciler and the
-[workspace state note](architecture/workspace-state.md) rather than the
-assertions.
+adapt the reconciler and the [client library guide](../src/client/lib/AGENTS.md)
+rather than the assertions.
 
 The October 30, 2026 dependency refresh updates direct dependencies to their
 latest stable registry tags, including Linear SDK 100, ACP SDK 2.1, Claude ACP

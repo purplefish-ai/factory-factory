@@ -34,10 +34,12 @@ const mocks = vi.hoisted(() => ({
   archiveWorkspace: vi.fn(async (_workspaceId: string) => undefined),
   toggleWorkspaceRatcheting: vi.fn(),
   renameWorkspace: vi.fn(async (_workspaceId: string, _name: string) => undefined),
+  bulkArchiveColumn: vi.fn(async (_kanbanColumn: string) => undefined),
   columnProps: [] as Array<{
     column: { id: string };
     workspaces: WorkspaceWithKanban[];
     onArchive: (workspaceId: string) => void;
+    onBulkArchive: () => void;
     onToggleRatcheting: (workspaceId: string, enabled: boolean) => void;
     onRename: (workspaceId: string, name: string) => Promise<void>;
   }>,
@@ -125,7 +127,7 @@ vi.mock('./kanban-context', () => ({
     renameWorkspace: mocks.renameWorkspace,
     // The real context keeps each command for its lifetime (kanban-context.test.tsx).
     archiveWorkspace: mocks.archiveWorkspace,
-    bulkArchiveColumn: vi.fn(),
+    bulkArchiveColumn: mocks.bulkArchiveColumn,
     archiveGitLockWorkspaceIds: ['workspace-1'],
     dismissArchiveGitLock: mocks.dismissArchiveGitLock,
     retryGitLockedArchives: mocks.retryGitLockedArchives,
@@ -198,6 +200,7 @@ describe('KanbanBoard', () => {
     mocks.inlineFormRequest = 0;
     mocks.workspacesError = null;
     mocks.refetch.mockClear();
+    mocks.bulkArchiveColumn.mockClear();
     mocks.workspaces = [
       {
         ...createOptimisticWorkspaceSummary({
@@ -246,6 +249,51 @@ describe('KanbanBoard', () => {
     void act(() => button!.click());
     void act(() => root.render(createElement(BoardWithHeader)));
   }
+
+  function filterInput() {
+    return container.querySelector<HTMLInputElement>('input[aria-label="Filter board"]')!;
+  }
+
+  function typeFilter(value: string) {
+    const input = filterInput();
+    act(() => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(input, value);
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+  }
+
+  it('clears the filter only when creation succeeds', () => {
+    act(() => root.render(createElement(BoardWithHeader)));
+    typeFilter('Existing');
+    click('New workspace');
+    click('Cancel creation');
+    expect(filterInput().value).toBe('Existing');
+    click('New workspace');
+    click('Complete creation');
+    expect(filterInput().value).toBe('');
+  });
+
+  it('archives the whole column, including cards the filter hides', async () => {
+    mocks.isMobile = false;
+    mocks.workspaces = ['Visible done', 'Hidden done'].map((name, index) => ({
+      ...createOptimisticWorkspaceSummary({
+        id: `done-${index}`,
+        projectId: 'project-1',
+        name,
+        ratchetEnabled: true,
+      }),
+      kanbanColumn: 'DONE' as const,
+    }));
+    act(() => root.render(createElement(BoardWithHeader)));
+    typeFilter('Visible');
+    const done = mocks.columnProps.findLast((props) => props.column.id === 'DONE')!;
+    expect(done.workspaces.map((workspace) => workspace.name)).toEqual(['Visible done']);
+    act(() => done.onBulkArchive());
+    expect(document.body.textContent).toContain('archive all 2 workspaces in this column');
+    const confirm = findButton(document.body, 'Archive');
+    await act(async () => confirm!.click());
+    expect(mocks.bulkArchiveColumn).toHaveBeenCalledExactlyOnceWith('DONE');
+  });
 
   it.each([true, false])(
     'offers a saved draft without reopening an explicitly closed composer (mobile=%s)',

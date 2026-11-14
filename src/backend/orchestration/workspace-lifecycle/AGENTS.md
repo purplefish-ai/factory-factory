@@ -54,6 +54,22 @@ collector is given `fireLifecycleNotification` (typed from
 - Metadata inference runs at most once per workspace per two minutes, and a
   result superseded by newer conversation activity is never accepted.
   `workspace-metadata.orchestrator.test.ts`.
+- Archive requests for one workspace in one process share the in-flight
+  archive's result, so cleanup runs once.
+  `workspace-archive-concurrency.test.ts`.
+- An archiving workspace with no failed local archive is acknowledged without
+  taking over its cleanup. `workspace-archive-concurrency.test.ts`.
+- Archive and delete stop sessions, the run script and terminals first and abort
+  if any fails; only then does the leftover process sweep run, and its failure
+  never blocks them. `workspace-archive.orchestrator.test.ts`.
+- Startup marks stale PROVISIONING workspaces FAILED unless their init script is
+  still running, and initializes leftover NEW workspaces one at a time, holding
+  periodic reconciliation until that pass settles.
+  `reconciliation.service.test.ts`.
+- A setup retry of an event workspace is refused before any session, script or
+  run linkage unless its initial delivery finished and no initial work is
+  active, and also when its owner facts are missing.
+  `workspace-retry-authority.integration.test.ts`.
 
 ## Map
 
@@ -75,7 +91,8 @@ collector is given `fireLifecycleNotification` (typed from
   `workspace-notification-persistence.orchestrator.ts`: child workspaces and
   notifications between parent and child.
 - `workspace-archive.orchestrator.ts`, `workspace-deletion.orchestrator.ts`:
-  archive, stale-archive recovery and deletion capture.
+  archive, stale-archive recovery and deletion capture; the sweep itself is
+  `src/backend/lib/worktree-process-sweep.ts`.
 - `reconciliation.service.ts`: startup and periodic recovery of workspaces that
   still need a worktree and of orphaned terminal sessions, and the archived-blob
   retention job.
@@ -83,3 +100,5 @@ collector is given `fireLifecycleNotification` (typed from
 ## Decisions
 
 - [Setup finishes before the agent starts](../../../../docs/decisions/2026-11-13-setup-finishes-before-the-agent-starts.md)
+- [Slow startup recovery runs after readiness](../../../../docs/decisions/2026-11-13-slow-startup-recovery-runs-after-readiness.md)
+- [The leftover process sweep matches location only](../../../../docs/decisions/2026-11-13-leftover-process-sweep-matches-location-only.md)
