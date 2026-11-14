@@ -289,6 +289,23 @@ it('does not activate a definition whose validated intent is no longer current',
   expect(await trigger()).toMatchObject({ activationState: 'PAUSED', activationBoundary: null });
 });
 
+it("does not let an older generation's resolved baseline activate a newer STARTING generation", async () => {
+  await pausedAutomation();
+  feed = [label('N'), ...feed];
+  await begin();
+  const older = (await trigger()).pendingActivation;
+  expect(older).toMatchObject({ activationGeneration: 1, baselineId: expect.any(String) });
+  await begin();
+  expect(await trigger()).toMatchObject({ activationState: 'STARTING', activationGeneration: 2 });
+  // The newer generation is left holding the older generation's pending baseline.
+  await db.prisma.agentTrigger.update({
+    where: { id: fixture.triggerId },
+    data: { pendingActivation: older ?? Prisma.DbNull },
+  });
+  await cycle();
+  expect(await trigger()).toMatchObject({ activationState: 'PAUSED', activationBoundary: null });
+});
+
 it('pauses every trigger, cancels queued runs and lets claimed runs finish', async () => {
   await fixture.secondTrigger();
   const claimed = await fixture.admit(await fixture.event('event-1'));

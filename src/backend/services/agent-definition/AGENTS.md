@@ -54,7 +54,8 @@ functions for definitions and Slack connections.
 - A GitHub trigger becomes `ACTIVE` only when its own STARTING generation's
   baseline resolves, at that boundary.
   `src/backend/testing/agent-runtime-flow.integration.test.ts`,
-  `src/backend/trpc/agent-activation.integration.test.ts`.
+  `src/backend/trpc/agent-activation.integration.test.ts`,
+  `service/agent-activation.integration.test.ts`.
 - Activation and admission require a `validatedIntent` for the current
   `definitionRevision`; admission also requires `isConfigured = true`.
   `service/agent-activation.integration.test.ts`.
