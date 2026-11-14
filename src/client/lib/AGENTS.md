@@ -28,7 +28,8 @@ the projection of a snapshot entry into a list row or a detail. They do not own:
 
 ## Public surface
 
-Everything goes through `workspace-queries.ts`:
+Everything goes through `workspace-queries.ts`, directly or through the two hook
+readers in `src/client/hooks/` that wrap its options:
 
 - Readers: `useProjectWorkspaceQuery`
   (`src/client/hooks/use-project-workspace-query.ts`, observer-only

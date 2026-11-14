@@ -137,7 +137,7 @@ The `archived-workspace-blob-retention` job is registered beside
 `reconciliation-cleanup` and starts and stops with it, so the shutdown plan's
 reconciliation step drains both. It waits ten minutes, then releases ARCHIVED
 workspaces that still carry `initialAttachments` or more setup log than they
-keep (see [workspace state](workspace-state.md)). A run handles at most 50
+keep (see [the retention service][blob-retention]). A run handles at most 50
 batches of 10 rows, in id order. Each batch is a short id SELECT followed by a
 short UPDATE of those ids that re-checks ARCHIVED; the run yields between
 batches and stops before the next one on abort. A backlog of about 1,400 rows
@@ -145,6 +145,9 @@ drains in three runs, about half an hour after startup. Once nothing is left, a
 run is one read-only query over the archived rows that selects nothing. Archive
 releases new workspaces itself, so the job only finds rows archived before that
 existed, missed releases, and imported backups.
+
+[blob-retention]:
+  ../../src/backend/services/workspace/service/lifecycle/archived-workspace-blob-retention.service.ts
 
 ## Timer dispatch ownership
 
