@@ -1783,3 +1783,14 @@ task 2.4b).
 
 Old paragraph 16. For the WebSocket router guide
 (`src/backend/routers/websocket/`, task 2.9).
+
+> The MCP server that child workspace tools run in:
+> `src/backend/mcp/workspace-mcp-server.ts`. The capsule only builds its spawn
+> configuration (`child-workspace-mcp-server.ts`).
+
+Written for the session capsule guide in task 2.4a2; the note's "Child
+workspaces" section, not yet migrated, lists the same files. For the `acp`
+module guide (`src/backend/services/session/service/acp/`, task 2.4b), which
+also takes the link to
+`docs/decisions/2026-11-13-acp-session-creation-has-its-own-deadline.md` that
+the capsule guide's "Decisions" section held.

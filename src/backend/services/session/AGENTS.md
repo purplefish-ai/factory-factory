@@ -12,8 +12,8 @@ layout, boundaries and the module-map rule. `index.ts`, `modules.ts` and
 
 The capsule owns the Prisma models `AgentSession`, `AgentSessionLaunchOrigin`,
 `ClosedSession`, `SessionLifecycleEvent` and `WorkspacePRDedicatedSession`,
-written through the accessors in `resources/`, and the session logic in
-`service/`. It does not own:
+written through the accessors in `resources/` (and `AgentSession` by backup
+import), and the session logic in `service/`. It does not own:
 
 - Socket subscriptions, replay framing and delivery to viewers:
   `src/backend/routers/websocket/`, which the capsule publishes to through
@@ -30,40 +30,37 @@ written through the accessors in `resources/`, and the session logic in
   `src/backend/services/application-update-admission.service.ts`.
 - The procedures over sessions and archives: `src/backend/trpc/session.trpc.ts`
   and `src/backend/trpc/closed-sessions.trpc.ts`.
-- The MCP server that child workspace tools run in:
-  `src/backend/mcp/workspace-mcp-server.ts`. The capsule only builds its spawn
-  configuration (`child-workspace-mcp-server.ts`).
 
 ## Public surface
 
-`index.ts` lists every public name: the ACP runtime (`acpRuntimeManager`), chat
-commands and session loading, the composed singletons from
-`service/composition/`, session data, PR and background delivery, dispatch,
-event-owned sessions, lifecycle, logging, one-shot metadata inference,
-`sessionDomainService` and the outbound `sessionEventBus`. Orchestration passes
-capabilities in through the interfaces in `service/bridges/`.
+`index.ts` names every public export, in groups: the ACP runtime, chat,
+composition singletons, configuration, session data, delivery, dispatch,
+event-owned sessions and the interceptor bridge, lifecycle, logging, metadata,
+prompts, providers, the store, `sessionEventBus` and voice narration.
+Orchestration passes capabilities in through `service/bridges/`.
 
 ## Invariants
 
 - Permanent deletion of a session, directly or by its workspace's cascade, runs
   the `forget` of every participant registered with `sessionScope`.
   `service/lifecycle/session-scope.test.ts`, `session-scope-forget.test.ts`,
-  `session-services.composition.test.ts`,
+  `session-services.composition.test.ts`, `session-data.service.test.ts`,
+  `session-config-deletion.test.ts`, `session-workflow-finalizer.test.ts`,
   `src/backend/trpc/workspace.router.test.ts`.
 
 ## Map
 
-`modules.ts` describes each module under `service/` in one line and records
-which modules import which. Modules with their own guide:
+Modules are the directories under `service/`. `modules.ts` describes each in one
+line, and a module directory may hold its own guide, as
+[`service/data/`](service/data/AGENTS.md) and
+[`service/archive/`](service/archive/AGENTS.md) do.
 
-- [`service/data/`](service/data/AGENTS.md): provider history reads, their
-  sharing and projection cache.
-- [`service/archive/`](service/archive/AGENTS.md): closed-session archives and
-  when a session may be closed.
+`pnpm check:service-registry` holds `modules.ts` to the code. A production file
+sits in a module directory, never directly in `service/`. A new module directory
+needs an entry with a description. A module's `dependsOn` is the sorted list of
+the sibling modules its production files import, and no import may close a
+cycle. Outside the capsule only `index.ts` is imported (`pnpm deps:check`; see
+the services guide).
 
 `sessionScope` participants are registered in `service/composition/` and in
 `registerSessionRuntimeParticipants` (`service/lifecycle/session-scope.ts`).
-
-## Decisions
-
-- [ACP session creation has its own deadline](../../../../docs/decisions/2026-11-13-acp-session-creation-has-its-own-deadline.md)
