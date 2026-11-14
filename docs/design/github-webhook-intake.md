@@ -54,7 +54,7 @@ What polling cannot do:
 - **Latency.** The `agent-source-poll` job waits 60 seconds after each cycle and
   reads at most ten pages per repository per cycle, so a backlog takes several
   cycles
-  ([background jobs](../architecture/background-jobs.md#timer-dispatch-ownership)).
+  ([event orchestration guide](../../src/backend/orchestration/agents/AGENTS.md)).
   Evaluation then runs on its own five-second cadence.
 - **Cost.** Each cycle reads the repository identity for each configured project
   path and at least one events page. That is two or more requests per repository

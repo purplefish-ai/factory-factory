@@ -5,9 +5,9 @@
  * lifecycle is owned. Before this existed, each poll loop hand-rolled the same
  * machinery -- a shutdown flag, an in-flight promise, a guard against
  * overlapping ticks, and (in two cases) a cancellable sleep -- and the copies
- * had drifted apart in their details. The registered jobs and their owners are
- * listed in docs/architecture/background-jobs.md; do not restate how many
- * jobs exist here, because that number changes.
+ * had drifted apart in their details. Each job is registered by the code that
+ * owns its work (see "Job runner" in src/backend/services/AGENTS.md); do not
+ * restate how many jobs exist here, because that number changes.
  *
  * Jobs are paced *sequentially*: the delay is measured from the end of one run
  * to the start of the next. That is what the ratchet and periodic-task loops

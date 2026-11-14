@@ -41,7 +41,7 @@ Enforced by dependency-cruiser and ownership checks:
   database connectivity belongs to settings and needs no orchestration wrapper.
 
 - Recurring work registers with `jobRunner`, not `setInterval`; read
-  [background jobs](../../../docs/architecture/background-jobs.md).
+  [Job runner](#job-runner) below.
 - Application `gh` calls go through the [GitHub capsule](github/AGENTS.md) for
   the shared process budget.
 - Side-table accessors own Prisma writes. `WorkspacePR` exposes a collection;
@@ -52,3 +52,27 @@ Enforced by dependency-cruiser and ownership checks:
   [workspace capsule guide](workspace/AGENTS.md); PR monitoring that coordinates
   these tables is in the
   [pull request guide](../orchestration/pull-requests/AGENTS.md).
+
+## Job runner
+
+`job-runner.service.ts` paces every recurring job. The service or orchestrator
+that owns the work registers its job, exposes `start()` and `stop()` for
+composition, and adds the stop to `src/backend/application-shutdown.ts`.
+Intervals live in `SERVICE_INTERVAL_MS` in `constants.ts`;
+`rg -n "register\(\{" src/backend` lists the jobs.
+
+- A job never overlaps itself: its next run starts `intervalMs`, or what
+  `computeDelay` returns after each run, after the previous run ends.
+  `job-runner.service.test.ts`.
+- A `runImmediately` job runs at `start()`; any other waits out its first
+  interval. `job-runner.service.test.ts`.
+- Each run receives a signal that aborts on `stop()`, and a restarted job gets a
+  fresh one. `job-runner.service.test.ts`.
+- `stop()` waits without a bound for the run in flight, and concurrent stops
+  share that wait. `job-runner.service.test.ts`.
+- `waitForCurrentRun` settles with the run in flight and resolves at once
+  between runs; it never waits for a later run. `job-runner.service.test.ts`.
+
+Why:
+[one sequential job runner](../../../docs/decisions/2026-11-13-recurring-work-runs-on-one-sequential-job-runner.md).
+Shutdown order is in the [backend process guide](../AGENTS.md).

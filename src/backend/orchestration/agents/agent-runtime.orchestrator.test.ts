@@ -208,7 +208,12 @@ it('hands a committed claim to its consumer and drains it during shutdown', asyn
   runtime.start();
   await vi.advanceTimersByTimeAsync(0);
   expect(received).toBe(true);
-  const stopping = runtime.stop();
+  let stopped = false;
+  const stopping = runtime.stop().then(() => {
+    stopped = true;
+  });
+  await vi.advanceTimersByTimeAsync(0);
+  expect(stopped).toBe(false);
   expect(finished).toBe(false);
   release();
   await stopping;
