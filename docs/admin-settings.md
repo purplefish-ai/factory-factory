@@ -298,7 +298,7 @@ then removes its worktree. On macOS and Linux it first makes a best-effort
 attempt to stop leftover processes running inside the worktree, such as a dev
 server an agent started in the background. Processes attached to a terminal are
 left alone, and a failed attempt does not block the archive
-([details](architecture/workspace-state.md)). Worktrees can still be left behind
+([details][leftover-process-sweep-record]). Worktrees can still be left behind
 by a failed cleanup or an older version. **Worktree Cleanup** in **System**
 lists `workspace-*` folders under each project's worktree directory that no
 non-archived workspace owns. Cleanup also protects configured project
@@ -358,3 +358,6 @@ trigger another request. Custom date ranges keep their selected day boundaries.
 Voice, speed, sensitivity, and API-key changes save independently. Only the
 **Enable voice mode** switch changes whether voice mode is enabled, so another
 open tab can tune settings without overwriting that switch.
+
+[leftover-process-sweep-record]:
+  decisions/2026-11-13-leftover-process-sweep-matches-location-only.md
