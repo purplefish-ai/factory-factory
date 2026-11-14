@@ -37,4 +37,6 @@ Rejected:
 
 - Ordinals never go backwards, and `(connectionId, sourceOrder)` stays unique.
 - Events from the gap never run.
+- `getBaseline` still answers IDs issued in earlier epochs; only ordinal
+  authority is per epoch.
 - Each automation on the connection needs Enable again after a reset.

@@ -18,7 +18,7 @@ context, not a new task or a substitute for current repository guidance.
 | Chat streaming, loading, and replay                | [Chat feature guide][chat-agents-md]                                                                  |
 | Workspace state and PR monitoring                  | [Workspace state](architecture/workspace-state.md) and [PR monitoring guide][pull-requests-agents-md] |
 | Scheduled automations: schedules, runs and backups | [Scheduled automations guide][periodic-task-agents-md]                                                |
-| Event automations: data model, Enable and Delete   | [Event automations guide][agent-definition-agents-md]                                                 |
+| Event automations: Enable, Pause, reset, Delete    | [Event automations guide][agent-definition-agents-md]                                                 |
 | Event automation limits and checks                 | [Event automation limits](architecture/integrations.md#current-event-automation-limits)               |
 | User and project configuration                     | [Settings](admin-settings.md)                                                                         |
 | Maintain UI primitives and dependencies            | [shadcn](shadcn.md) and [Knip](knip.md)                                                               |

@@ -75,8 +75,8 @@ backup functions for definitions and Slack connections.
 - Only the current epoch's proof is authority, a reset's epoch starts at the
   retained high water, and an event captured before a reset never gets an
   ordinal. `service/agent-source-reset.integration.test.ts`.
-- Pause, edits and source reset pause through `pauseTriggers`, which advances
-  the generation and cancels only `QUEUED` runs.
+- Pause, execution and trigger edits, and source reset pause through
+  `pauseTriggers`, which advances the generation and cancels only `QUEUED` runs.
   `service/agent-activation.integration.test.ts`,
   `resources/agent-revisions.integration.test.ts`,
   `service/agent-source-reset.integration.test.ts`.
@@ -87,8 +87,8 @@ backup functions for definitions and Slack connections.
 - Activation and admission require a `validatedIntent` for the current
   `definitionRevision`; admission also requires `isConfigured = true`.
   `service/agent-activation.integration.test.ts`.
-- Delete refuses, rolling back its pause, while any run is `QUEUED` or
-  `RUNNING`. `service/agent-delete.integration.test.ts`.
+- Delete refuses, rolling back its pause, while any run is `RUNNING`.
+  `service/agent-delete.integration.test.ts`.
 - Enable, Pause, Delete and source reset are trusted-local only, and the MCP
   authoring catalog has none of them.
   `src/backend/trpc/agent-delete.integration.test.ts`,

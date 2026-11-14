@@ -32,5 +32,6 @@ Rejected:
   and event pruning.
 - The proof tables grow with the feed; they hold identities and ordinals, not
   source text.
-- A source with rejected proof cannot prepare a baseline until a reset
+- A source with rejected proof cannot prepare a baseline; the failure fences it
+  with `RECOVERY_REQUIRED` until a reset
   ([Source reset opens a new epoch](2026-11-13-source-reset-opens-a-new-epoch.md)).

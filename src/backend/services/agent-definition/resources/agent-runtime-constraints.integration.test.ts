@@ -169,15 +169,14 @@ it('enforces unique canonical source order and connection-owned finalization', a
 it('returns the stored ordinals when a wholly finalized chunk is finalized again', async () => {
   const first = await fixture.event('first');
   const second = await fixture.event('second');
-  expect(
-    await runtime.finalizeEventOrder({
-      connectionId: fixture.connectionId,
-      eventIds: [first, second],
-    })
-  ).toEqual([
+  const chunk = { connectionId: fixture.connectionId, eventIds: [first, second] };
+  const stored = [
     { eventId: first, sourceOrder: 1 },
     { eventId: second, sourceOrder: 2 },
-  ]);
+  ];
+  // fixture.event finalized each event; finalizing the chunk twice repeats it.
+  expect(await runtime.finalizeEventOrder(chunk)).toEqual(stored);
+  expect(await runtime.finalizeEventOrder(chunk)).toEqual(stored);
   expect(
     await db.prisma.agentSourceState.findUniqueOrThrow({
       where: { connectionId: fixture.connectionId },
