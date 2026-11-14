@@ -4,6 +4,7 @@
 import { spawn } from 'node:child_process';
 import { join } from 'node:path';
 import { REPO_ROOT } from './paths.mjs';
+import { STOP_GRACE_MS } from './process-group.mjs';
 
 const SCRIPT = join(REPO_ROOT, 'scripts', 'ensure-native-modules.mjs');
 // What the script prints when it has nothing to do.
@@ -13,12 +14,18 @@ const NOTHING_TO_DO = /^Native modules already built for node/m;
  * Runs `scripts/ensure-native-modules.mjs node` with the launcher's own environment, its output
  * on stderr (stdout carries only SANDBOX_READY). Resolves `{ rebuilt }`: false when the script
  * found the modules already built. Aborting `signal` ends the script and everything it started
- * (`pnpm rebuild`, node-gyp): it runs in its own process group, which is signalled.
+ * (`pnpm rebuild`, node-gyp): it runs in its own process group, which gets SIGTERM and, if the
+ * script is still running after the grace period, SIGKILL. The group is signalled only while the
+ * script's process is unreaped, checked in the same step as each signal: once Node has reaped it,
+ * its pid, and so the group ID, may belong to someone else.
  *
  * @param {object} [options]
  * @param {AbortSignal} [options.signal]
  * @param {(command: string, args: string[], options: object) => any} [options.spawnImpl]
  * @param {(target: number, signal: string) => unknown} [options.kill]
+ * @param {(run: () => void, ms: number) => any} [options.schedule]
+ * @param {(timer: any) => void} [options.cancel]
+ * @param {number} [options.graceMs]
  * @param {{ write: (chunk: string | Buffer) => unknown }} [options.output]
  * @returns {Promise<{ rebuilt: boolean }>}
  */
@@ -26,6 +33,9 @@ export function ensureNativeModules({
   signal,
   spawnImpl = spawn,
   kill = (target, killSignal) => process.kill(target, killSignal),
+  schedule = setTimeout,
+  cancel = clearTimeout,
+  graceMs = STOP_GRACE_MS,
   output = process.stderr,
 } = {}) {
   return new Promise((resolve, reject) => {
@@ -34,11 +44,26 @@ export function ensureNativeModules({
       detached: true,
       stdio: ['ignore', 'pipe', 'inherit'],
     });
-    const endGroup = () => {
+    const unreaped = () =>
+      Boolean(child.pid) && child.exitCode === null && child.signalCode === null;
+    // True when the group was signalled (or had already ended).
+    const signalGroup = (name) => {
+      if (!unreaped()) {
+        return false;
+      }
       try {
-        kill(-child.pid, 'SIGTERM');
-      } catch {
-        // Already gone.
+        kill(-child.pid, name);
+      } catch (error) {
+        if (error?.code !== 'ESRCH') {
+          reject(error);
+        }
+      }
+      return true;
+    };
+    let killTimer = null;
+    const endGroup = () => {
+      if (signalGroup('SIGTERM')) {
+        killTimer = schedule(() => signalGroup('SIGKILL'), graceMs);
       }
     };
     if (signal?.aborted) {
@@ -54,6 +79,9 @@ export function ensureNativeModules({
     // 'close', not 'exit': every chunk of output has been read by then.
     child.once('close', (code, exitSignal) => {
       signal?.removeEventListener('abort', endGroup);
+      if (killTimer !== null) {
+        cancel(killTimer);
+      }
       if (code === 0) {
         resolve({ rebuilt: !NOTHING_TO_DO.test(text) });
       } else {
