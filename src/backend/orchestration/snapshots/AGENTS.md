@@ -33,8 +33,8 @@ its first full snapshot.
 
 ## Invariants
 
-- Reconciliation seeds every workspace's database and runtime fields and
-  releases the seed barrier before any Git work starts.
+- Reconciliation seeds the database and runtime fields of every workspace it can
+  project and releases the seed barrier before any Git work starts.
   `snapshot-reconciliation.streaming.test.ts`.
 - A failed Git read keeps a workspace's cached stats, and a workspace without a
   worktree is cleared to null. `snapshot-reconciliation.streaming.test.ts`.

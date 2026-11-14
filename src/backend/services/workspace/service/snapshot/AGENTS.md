@@ -38,7 +38,10 @@ before the first upsert.
 
 - A field group accepts an update only when its timestamp is strictly newer than
   the group's last accepted one, so an equal or older observation changes
-  nothing. `workspace-snapshot-store.service.test.ts`.
+  nothing; PR and ratchet facts with a newer PR revision are ordered by that
+  revision instead, and names and branches have their own fences (capsule
+  guide). `workspace-snapshot-store.service.test.ts`,
+  `workspace-snapshot-store.prs.test.ts`.
 - An update no newer than a workspace's removal is ignored, so a read that began
   before an archive cannot bring the entry back.
   `workspace-snapshot-store.service.test.ts`.

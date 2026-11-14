@@ -32,9 +32,9 @@ per-project drafts and dropped images, and Quick Chat. It does not own:
 `index.ts` exports the board, controls, card, columns, `KanbanProvider` and its
 actions, the issue launch sheet and the board's image drop zone. The sidebar
 (`src/client/components/app-sidebar.tsx`) imports the creation form, the issue
-launch sheet and its drop zone by path to keep its lazy split points, and
-`src/client/routes/agents/event-agent-workspace-form.tsx` reuses the creation
-form and its draft hooks.
+launch sheet and `workspace-creation-image-drop-zone.tsx` by path to keep its
+lazy split points, and `src/client/routes/agents/event-agent-workspace-form.tsx`
+reuses the creation form and its draft hooks.
 
 Mount `KanbanProvider` keyed by project ID, as
 `src/client/routes/projects/workspaces/components/workspaces-board-view.tsx`
