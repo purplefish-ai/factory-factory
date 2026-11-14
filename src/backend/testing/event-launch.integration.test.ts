@@ -116,8 +116,8 @@ it.each([false, true])(
   async (shell) => {
     expect(await db.prisma.workspace.count()).toBe(0);
     const launch = await vi.importActual<
-      typeof import('@/backend/orchestration/agents/event-run-launch.orchestrator')
-    >('@/backend/orchestration/agents/event-run-launch.orchestrator');
+      typeof import('@/backend/orchestration/agents/event-run/event-run-launch.orchestrator')
+    >('@/backend/orchestration/agents/event-run/event-run-launch.orchestrator');
     const task = launch.launchEventRun(h.claim, new AbortController().signal);
     tasks.push(task);
     void task.catch(() => undefined);
@@ -148,8 +148,8 @@ it.each([false, true])(
     expect(await db.prisma.agentSession.count()).toBe(1);
     const outcome = (await h.read()).evidence?.outcome;
     const { observeEventRun } = await vi.importActual<
-      typeof import('@/backend/orchestration/agents/event-run-monitor.orchestrator')
-    >('@/backend/orchestration/agents/event-run-monitor.orchestrator');
+      typeof import('@/backend/orchestration/agents/event-run/event-run-monitor.orchestrator')
+    >('@/backend/orchestration/agents/event-run/event-run-monitor.orchestrator');
     expect(await observeEventRun(h.claim)).toBe('SETTLED');
     expect(await db.prisma.agentRun.findUnique({ where: { id: h.claim.runId } })).toMatchObject({
       status: 'COMPLETED',
@@ -164,8 +164,8 @@ it.each([false, true])(
 
 it('hands four independent committed claims off without waiting for turns and defers the fifth', async () => {
   const { createEventRunConsumer } = await vi.importActual<
-    typeof import('@/backend/orchestration/agents/event-run-consumer.orchestrator')
-  >('@/backend/orchestration/agents/event-run-consumer.orchestrator');
+    typeof import('@/backend/orchestration/agents/event-run/event-run-consumer.orchestrator')
+  >('@/backend/orchestration/agents/event-run/event-run-consumer.orchestrator');
   const consumer = createEventRunConsumer();
   const claims = [h.claim];
   for (let i = 0; i < 3; i++) {
@@ -190,8 +190,8 @@ it('hands four independent committed claims off without waiting for turns and de
 
 it('retains an already-aborted committed claim as safely resumable without creating resources', async () => {
   const { createEventRunConsumer } = await vi.importActual<
-    typeof import('@/backend/orchestration/agents/event-run-consumer.orchestrator')
-  >('@/backend/orchestration/agents/event-run-consumer.orchestrator');
+    typeof import('@/backend/orchestration/agents/event-run/event-run-consumer.orchestrator')
+  >('@/backend/orchestration/agents/event-run/event-run-consumer.orchestrator');
   const consumer = createEventRunConsumer();
   await consumer.consumeClaim(h.claim, AbortSignal.abort());
   await consumer.drain();
@@ -207,8 +207,8 @@ it.each(['workspace', 'session', 'link'] as const)(
   'resumes after committed %s handoff interruption without duplicate resources',
   async (boundary) => {
     const { launchEventRun } = await vi.importActual<
-      typeof import('@/backend/orchestration/agents/event-run-launch.orchestrator')
-    >('@/backend/orchestration/agents/event-run-launch.orchestrator');
+      typeof import('@/backend/orchestration/agents/event-run/event-run-launch.orchestrator')
+    >('@/backend/orchestration/agents/event-run/event-run-launch.orchestrator');
     const cancellation = new AbortController();
     const creation = h.workspace.WorkspaceCreationService.prototype.createEventWorkspaceOnce;
     const session = h.session.sessionDataService.createEventSessionOnce.bind(
@@ -261,8 +261,8 @@ it.each(['workspace', 'session', 'link'] as const)(
 
 it('holds preparation capacity when an owned Git cleanup loses its canonical base despite successful removal return', async () => {
   const { launchEventRun } = await vi.importActual<
-    typeof import('@/backend/orchestration/agents/event-run-launch.orchestrator')
-  >('@/backend/orchestration/agents/event-run-launch.orchestrator');
+    typeof import('@/backend/orchestration/agents/event-run/event-run-launch.orchestrator')
+  >('@/backend/orchestration/agents/event-run/event-run-launch.orchestrator');
   const git = (...args: string[]) => execFileAsync('git', args, { cwd: db.tempDir });
   await git('init');
   await git(
@@ -316,8 +316,8 @@ it('does not reset the original setup deadline on a safe retry', async () => {
     },
   });
   const { launchEventRun } = await vi.importActual<
-    typeof import('@/backend/orchestration/agents/event-run-launch.orchestrator')
-  >('@/backend/orchestration/agents/event-run-launch.orchestrator');
+    typeof import('@/backend/orchestration/agents/event-run/event-run-launch.orchestrator')
+  >('@/backend/orchestration/agents/event-run/event-run-launch.orchestrator');
   const task = launchEventRun(h.claim, new AbortController().signal);
   tasks.push(task);
   // Resolve a wrong implementation's prompt so this regression fails without hanging teardown.
@@ -369,8 +369,8 @@ it('holds the selected Codex reservation through freeze and session creation and
     .spyOn(accounts.codexAccountService, 'withAccountReservation')
     .mockImplementation(reserve);
   const { launchEventRun } = await vi.importActual<
-    typeof import('@/backend/orchestration/agents/event-run-launch.orchestrator')
-  >('@/backend/orchestration/agents/event-run-launch.orchestrator');
+    typeof import('@/backend/orchestration/agents/event-run/event-run-launch.orchestrator')
+  >('@/backend/orchestration/agents/event-run/event-run-launch.orchestrator');
   await launchEventRun(codex.claim, cancellation.signal);
   const recovered = (await codex.owner.eventRunLaunch.recover([h.claim.runId], 4))[0]!;
   const task = launchEventRun(recovered.claim, new AbortController().signal);
@@ -398,8 +398,8 @@ it('uses the current authorized attempt message while retaining original run pro
     data: { attemptGeneration: 2, messageId: 'current-message', sendAttemptId: 'current-send' },
   });
   const { launchEventRun } = await vi.importActual<
-    typeof import('@/backend/orchestration/agents/event-run-launch.orchestrator')
-  >('@/backend/orchestration/agents/event-run-launch.orchestrator');
+    typeof import('@/backend/orchestration/agents/event-run/event-run-launch.orchestrator')
+  >('@/backend/orchestration/agents/event-run/event-run-launch.orchestrator');
   const task = launchEventRun(claim, new AbortController().signal);
   tasks.push(task);
   await vi.waitFor(() => expect(providers.size).toBe(1));
@@ -424,8 +424,8 @@ it('fences invocation when lease renewal fails during the committed SENDING obse
     await gate.wait();
   });
   const { createEventRunConsumer } = await vi.importActual<
-    typeof import('@/backend/orchestration/agents/event-run-consumer.orchestrator')
-  >('@/backend/orchestration/agents/event-run-consumer.orchestrator');
+    typeof import('@/backend/orchestration/agents/event-run/event-run-consumer.orchestrator')
+  >('@/backend/orchestration/agents/event-run/event-run-consumer.orchestrator');
   const consumer = createEventRunConsumer();
   await consumer.consumeClaim(h.claim, new AbortController().signal);
   await gate.entered;
@@ -478,8 +478,8 @@ it('preserves composed PID and output at the UNKNOWN cleanup boundary without re
       return originalPidWrite(...args);
     });
   const { launchEventRun } = await vi.importActual<
-    typeof import('@/backend/orchestration/agents/event-run-launch.orchestrator')
-  >('@/backend/orchestration/agents/event-run-launch.orchestrator');
+    typeof import('@/backend/orchestration/agents/event-run/event-run-launch.orchestrator')
+  >('@/backend/orchestration/agents/event-run/event-run-launch.orchestrator');
   const cancellation = new AbortController();
   const task = launchEventRun(h.claim, cancellation.signal);
   tasks.push(task);
@@ -546,8 +546,8 @@ it.each([
         Object.assign(new Error('Persistence transport failed'), { code, retryAfterMs: 90_000 })
       );
     const { launchEventRun } = await vi.importActual<
-      typeof import('@/backend/orchestration/agents/event-run-launch.orchestrator')
-    >('@/backend/orchestration/agents/event-run-launch.orchestrator');
+      typeof import('@/backend/orchestration/agents/event-run/event-run-launch.orchestrator')
+    >('@/backend/orchestration/agents/event-run/event-run-launch.orchestrator');
     const before = Date.now();
     const task = launchEventRun(h.claim, new AbortController().signal);
     tasks.push(task);
@@ -591,8 +591,8 @@ it('retains existing setup PID and output when cleanup is unknown and recovery d
       throw new scripts.EventSetupError('FAILED', 'UNKNOWN', 'Cleanup uncertain');
     });
   const { launchEventRun } = await vi.importActual<
-    typeof import('@/backend/orchestration/agents/event-run-launch.orchestrator')
-  >('@/backend/orchestration/agents/event-run-launch.orchestrator');
+    typeof import('@/backend/orchestration/agents/event-run/event-run-launch.orchestrator')
+  >('@/backend/orchestration/agents/event-run/event-run-launch.orchestrator');
   await launchEventRun(h.claim, new AbortController().signal);
   expect(
     await db.prisma.workspace.findUnique({ where: { id: h.claim.reservedWorkspaceId } })
@@ -617,8 +617,8 @@ it('honors typed transient Retry-After from setup without resetting identity or 
     })
   );
   const { launchEventRun } = await vi.importActual<
-    typeof import('@/backend/orchestration/agents/event-run-launch.orchestrator')
-  >('@/backend/orchestration/agents/event-run-launch.orchestrator');
+    typeof import('@/backend/orchestration/agents/event-run/event-run-launch.orchestrator')
+  >('@/backend/orchestration/agents/event-run/event-run-launch.orchestrator');
   const before = Date.now();
   await launchEventRun(h.claim, new AbortController().signal);
   const run = await db.prisma.agentRun.findUniqueOrThrow({ where: { id: h.claim.runId } });
@@ -661,8 +661,8 @@ it.each(['stall', 'reject'] as const)(
         return dispose(...args);
       });
     const { createEventRunConsumer } = await vi.importActual<
-      typeof import('@/backend/orchestration/agents/event-run-consumer.orchestrator')
-    >('@/backend/orchestration/agents/event-run-consumer.orchestrator');
+      typeof import('@/backend/orchestration/agents/event-run/event-run-consumer.orchestrator')
+    >('@/backend/orchestration/agents/event-run/event-run-consumer.orchestrator');
     const consumer = createEventRunConsumer();
     await consumer.consumeClaim(h.claim, new AbortController().signal);
     await consumer.consumeClaim(other.claim, new AbortController().signal);
@@ -724,8 +724,8 @@ it('bounds runtime shutdown after maintenance has entered a failed disposition a
     return dispose(...args);
   });
   const { createEventRunConsumer } = await vi.importActual<
-    typeof import('@/backend/orchestration/agents/event-run-consumer.orchestrator')
-  >('@/backend/orchestration/agents/event-run-consumer.orchestrator');
+    typeof import('@/backend/orchestration/agents/event-run/event-run-consumer.orchestrator')
+  >('@/backend/orchestration/agents/event-run/event-run-consumer.orchestrator');
   const { createAgentRuntimeLifecycle } = await vi.importActual<
     typeof import('@/backend/orchestration/agents/agent-runtime.orchestrator')
   >('@/backend/orchestration/agents/agent-runtime.orchestrator');
@@ -774,8 +774,8 @@ it('bounds shutdown behind a stalled durable handoff read and fences all later w
     return result;
   });
   const { createEventRunConsumer } = await vi.importActual<
-    typeof import('@/backend/orchestration/agents/event-run-consumer.orchestrator')
-  >('@/backend/orchestration/agents/event-run-consumer.orchestrator');
+    typeof import('@/backend/orchestration/agents/event-run/event-run-consumer.orchestrator')
+  >('@/backend/orchestration/agents/event-run/event-run-consumer.orchestrator');
   const consumer = createEventRunConsumer();
   await consumer.consumeClaim(h.claim, new AbortController().signal);
   await gate.entered;
@@ -807,8 +807,8 @@ it('directly joins pending Git before allowing shutdown to finish', async () => 
     return { worktreePath, branchName: 'owned' };
   });
   const { createEventRunConsumer } = await vi.importActual<
-    typeof import('@/backend/orchestration/agents/event-run-consumer.orchestrator')
-  >('@/backend/orchestration/agents/event-run-consumer.orchestrator');
+    typeof import('@/backend/orchestration/agents/event-run/event-run-consumer.orchestrator')
+  >('@/backend/orchestration/agents/event-run/event-run-consumer.orchestrator');
   const consumer = createEventRunConsumer();
   await consumer.consumeClaim(h.claim, new AbortController().signal);
   await gate.entered;
@@ -844,8 +844,8 @@ it.each(['before Git', 'after Git'] as const)(
       return result;
     });
     const { createEventRunConsumer } = await vi.importActual<
-      typeof import('@/backend/orchestration/agents/event-run-consumer.orchestrator')
-    >('@/backend/orchestration/agents/event-run-consumer.orchestrator');
+      typeof import('@/backend/orchestration/agents/event-run/event-run-consumer.orchestrator')
+    >('@/backend/orchestration/agents/event-run/event-run-consumer.orchestrator');
     const consumer = createEventRunConsumer();
     await consumer.consumeClaim(h.claim, new AbortController().signal);
     await gate.entered;
@@ -881,8 +881,8 @@ it.each(['before Git', 'after Git'] as const)(
 
 it('interrupts a stalled prompt as SHUTDOWN with uncertainty and no ordinary lifecycle finalization', async () => {
   const { createEventRunConsumer } = await vi.importActual<
-    typeof import('@/backend/orchestration/agents/event-run-consumer.orchestrator')
-  >('@/backend/orchestration/agents/event-run-consumer.orchestrator');
+    typeof import('@/backend/orchestration/agents/event-run/event-run-consumer.orchestrator')
+  >('@/backend/orchestration/agents/event-run/event-run-consumer.orchestrator');
   const consumer = createEventRunConsumer();
   await consumer.consumeClaim(h.claim, new AbortController().signal);
   await vi.waitFor(() => expect(providers.size).toBe(1));

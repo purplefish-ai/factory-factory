@@ -21,7 +21,7 @@ let db: IntegrationDatabase;
 let h: Awaited<ReturnType<typeof createEventDeliveryFixture>>;
 let provider: ReturnType<typeof fakeEventProvider>;
 let launch: Promise<unknown>;
-let observe: typeof import('@/backend/orchestration/agents/event-run-monitor.orchestrator').observeEventRun;
+let observe: typeof import('@/backend/orchestration/agents/event-run/event-run-monitor.orchestrator').observeEventRun;
 beforeEach(async () => {
   db = await createIntegrationDatabase();
   h = await createEventDeliveryFixture(db, 'CLAUDE', false, true);
@@ -64,11 +64,11 @@ beforeEach(async () => {
   );
   vi.spyOn(github.githubCLIService, 'getAuthenticatedUsername').mockResolvedValue('fixture');
   const launcher = await vi.importActual<
-    typeof import('@/backend/orchestration/agents/event-run-launch.orchestrator')
-  >('@/backend/orchestration/agents/event-run-launch.orchestrator');
+    typeof import('@/backend/orchestration/agents/event-run/event-run-launch.orchestrator')
+  >('@/backend/orchestration/agents/event-run/event-run-launch.orchestrator');
   ({ observeEventRun: observe } = await vi.importActual<
-    typeof import('@/backend/orchestration/agents/event-run-monitor.orchestrator')
-  >('@/backend/orchestration/agents/event-run-monitor.orchestrator'));
+    typeof import('@/backend/orchestration/agents/event-run/event-run-monitor.orchestrator')
+  >('@/backend/orchestration/agents/event-run/event-run-monitor.orchestrator'));
   launch = launcher.launchEventRun(h.claim, new AbortController().signal);
   await waitForEventFixture(
     providerCreated.promise.then(() => provider.called),

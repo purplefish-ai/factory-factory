@@ -5,12 +5,12 @@ jobs and its Slack listener, the launch consumer that turns a claimed run into a
 workspace and session, run monitoring and recovery, and the authoring and
 management flows that need other capsules. This guide so far covers the event
 runtime's jobs, how the runtime stops, and saved management and authoring; the
-consumer, monitoring and recovery flows are added by the migration of the
-agent-runtime note, which extends Owns, Invariants and Map in place. The
-[services guide](../../services/AGENTS.md) covers capsule boundaries; the job
-runner is in "Recurring work" in the [backend process guide](../../AGENTS.md).
-Bare file names below are in this directory; paths that start with `src/` are
-from the repository root.
+consumer, monitoring and recovery flows are described in the
+[`event-run/` guide](event-run/AGENTS.md), whose rules the migration of the
+agent-runtime note will add. The [services guide](../../services/AGENTS.md)
+covers capsule boundaries; the job runner is in "Recurring work" in the
+[backend process guide](../../AGENTS.md). Bare file names below are in this
+directory; paths that start with `src/` are from the repository root.
 
 ## Owns, and does not own
 
@@ -98,11 +98,7 @@ There is no separate activation or retention job.
 - `slack-intake.orchestrator.ts`, `slack-socket.ts`: the Slack job and the
   Socket Mode client behind the capsule's adapter.
 - `agent-event-classifier.orchestrator.ts`: the classifier port.
-- `event-run-consumer.orchestrator.ts`: committed claims, local capacity,
-  maintenance and shutdown of owned launches; it uses
-  `event-run-launch.orchestrator.ts`, `event-run-resources.orchestrator.ts`,
-  `event-workspace-init.orchestrator.ts`, `event-run-monitor.orchestrator.ts`,
-  `event-child-rest.orchestrator.ts` and `event-run-recovery.orchestrator.ts`.
+- `event-run/`: the launch consumer; see [its guide](event-run/AGENTS.md).
 - `agent-management.orchestrator.ts`, `agent-authoring.orchestrator.ts`,
   `agent-sources.orchestrator.ts`, `agent-native-validation.ts`: saved
   automations, proposals, source discovery and native model checks.

@@ -20,7 +20,7 @@ let db: IntegrationDatabase;
 let h: Awaited<ReturnType<typeof createEventDeliveryFixture>>;
 let provider: ReturnType<typeof fakeEventProvider>;
 let launch: Promise<unknown>;
-let observe: typeof import('@/backend/orchestration/agents/event-run-monitor.orchestrator').observeEventRun;
+let observe: typeof import('@/backend/orchestration/agents/event-run/event-run-monitor.orchestrator').observeEventRun;
 beforeEach(async (context) => {
   db = await createIntegrationDatabase();
   h = await createEventDeliveryFixture(db, 'CLAUDE', false, true);
@@ -70,11 +70,11 @@ beforeEach(async (context) => {
   );
   vi.spyOn(github.githubCLIService, 'getAuthenticatedUsername').mockResolvedValue('fixture');
   const launcher = await vi.importActual<
-    typeof import('@/backend/orchestration/agents/event-run-launch.orchestrator')
-  >('@/backend/orchestration/agents/event-run-launch.orchestrator');
+    typeof import('@/backend/orchestration/agents/event-run/event-run-launch.orchestrator')
+  >('@/backend/orchestration/agents/event-run/event-run-launch.orchestrator');
   ({ observeEventRun: observe } = await vi.importActual<
-    typeof import('@/backend/orchestration/agents/event-run-monitor.orchestrator')
-  >('@/backend/orchestration/agents/event-run-monitor.orchestrator'));
+    typeof import('@/backend/orchestration/agents/event-run/event-run-monitor.orchestrator')
+  >('@/backend/orchestration/agents/event-run/event-run-monitor.orchestrator'));
   launch = launcher.launchEventRun(h.claim, new AbortController().signal);
   await waitForEventFixture(
     providerCreated.promise.then(() => provider.called),
@@ -362,8 +362,8 @@ it('keeps a Codex event turn running past four hours without advertising a deadl
     async (_options, create) => create('event-test-account')
   );
   const launcher = await vi.importActual<
-    typeof import('@/backend/orchestration/agents/event-run-launch.orchestrator')
-  >('@/backend/orchestration/agents/event-run-launch.orchestrator');
+    typeof import('@/backend/orchestration/agents/event-run/event-run-launch.orchestrator')
+  >('@/backend/orchestration/agents/event-run/event-run-launch.orchestrator');
   launch = launcher.launchEventRun(h.claim, new AbortController().signal);
   await vi.waitFor(() => expect(provider.handle.provider).toBe('CODEX'));
   await provider.called;
@@ -487,8 +487,8 @@ it.each([false, true])(
       data: { leaseExpiresAt: new Date(0) },
     });
     const { createEventRunConsumer } = await vi.importActual<
-      typeof import('@/backend/orchestration/agents/event-run-consumer.orchestrator')
-    >('@/backend/orchestration/agents/event-run-consumer.orchestrator');
+      typeof import('@/backend/orchestration/agents/event-run/event-run-consumer.orchestrator')
+    >('@/backend/orchestration/agents/event-run/event-run-consumer.orchestrator');
     const consumer = createEventRunConsumer();
     await consumer.maintain(new AbortController().signal);
     await consumer.drain();

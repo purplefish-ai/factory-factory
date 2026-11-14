@@ -22,7 +22,7 @@ import {
   resolveNativeExecution,
   type AgentNativeValidationServices,
 } from './agent-native-validation';
-import { createEventRunConsumer } from './event-run-consumer.orchestrator';
+import { createEventRunConsumer } from './event-run/event-run-consumer.orchestrator';
 import { createSlackIntake } from './slack-intake.orchestrator';
 
 const logger = createLogger('agent-runtime');
