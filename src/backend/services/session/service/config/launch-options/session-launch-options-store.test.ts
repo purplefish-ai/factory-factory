@@ -13,7 +13,7 @@ vi.mock('node:fs/promises', async (importOriginal) => {
     rename: vi.fn(actual.rename),
   };
 });
-import { LaunchOptionsStore } from './session-launch-options-store';
+import { LaunchOptionsStore } from '@/backend/services/session/service/config/launch-options/session-launch-options-store';
 
 const roots: string[] = [];
 afterEach(async () => {

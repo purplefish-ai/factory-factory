@@ -3,10 +3,10 @@ import { z } from 'zod';
 import { validateAgentExecution } from '@/backend/orchestration/agents/agent-native-validation';
 import * as acpModelSelection from '@/backend/services/session/service/acp/acp-model-selection';
 import { createMockChildProcess } from '@/backend/services/session/service/acp/acp-runtime-manager.test-helpers';
+import { fetchAccountSessionLaunchOptions } from '@/backend/services/session/service/config/launch-options/session-launch-options-provider';
+import { SessionLaunchOptionsService } from '@/backend/services/session/service/config/launch-options/session-launch-options.service';
+import { SessionConfigService } from '@/backend/services/session/service/config/session.config.service';
 import { createSessionProviderResolverService } from '@/backend/services/session/service/data/session-provider-resolver.service';
-import { fetchAccountSessionLaunchOptions } from './session-launch-options-provider';
-import { SessionLaunchOptionsService } from './session-launch-options.service';
-import { SessionConfigService } from './session.config.service';
 
 const mocks = vi.hoisted(() => ({ spawn: vi.fn(), preview: vi.fn() }));
 vi.mock('node:child_process', async (importOriginal) => ({
