@@ -1150,8 +1150,7 @@ area. Each entry quotes only the sentences it needs from the paragraph named
 after it, verbatim, with `[…]` where sentences between them are left out. The
 migration that creates the named area's guide checks the entry, moves what holds
 there and deletes the entry here. Paragraph numbers are the rows of the
-disposition table in the pull request that moved the sections before
-"Event-triggered automation data model".
+disposition table in pull request #3238.
 
 > Default sessions use the `periodic-task` workflow, so non-interactive Codex
 > startup selects unattended execution mode and tool approval prompts cannot
