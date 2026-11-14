@@ -3,11 +3,13 @@
 import { createElement } from 'react';
 import { flushSync } from 'react-dom';
 import { createRoot, type Root } from 'react-dom/client';
+import { MemoryRouter } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { HostLoadIndicator, HostLoadIndicatorView } from './host-load-indicator';
 
 const queryMocks = vi.hoisted(() => ({
   useQuery: vi.fn(),
+  useBreakdownQuery: vi.fn(),
   data: undefined as
     | { samples: { at: number; cpuPercent: number; memoryPercent: number }[] }
     | undefined,
@@ -20,6 +22,12 @@ vi.mock('@/client/lib/trpc', () => ({
         useQuery: (...args: unknown[]) => {
           queryMocks.useQuery(...args);
           return { data: queryMocks.data };
+        },
+      },
+      getHostLoadBreakdown: {
+        useQuery: (...args: unknown[]) => {
+          queryMocks.useBreakdownQuery(...args);
+          return { data: undefined };
         },
       },
     },
@@ -56,6 +64,23 @@ describe('HostLoadIndicator', () => {
     expect(queryMocks.useQuery).toHaveBeenCalledWith(undefined, { refetchInterval: 5000 });
   });
 
+  it('reads the process breakdown only while the details are open', () => {
+    queryMocks.data = { samples: busy };
+    const container = render(createElement(HostLoadIndicator));
+
+    expect(queryMocks.useBreakdownQuery).toHaveBeenLastCalledWith(undefined, {
+      enabled: false,
+      refetchInterval: 5000,
+    });
+
+    flushSync(() => container.querySelector('button')?.click());
+
+    expect(queryMocks.useBreakdownQuery).toHaveBeenLastCalledWith(undefined, {
+      enabled: true,
+      refetchInterval: 5000,
+    });
+  });
+
   it('renders nothing until the first sample arrives', () => {
     queryMocks.data = { samples: [] };
 
@@ -68,19 +93,32 @@ describe('HostLoadIndicator', () => {
     const button = render(createElement(HostLoadIndicator)).querySelector('button');
 
     expect(button?.getAttribute('aria-label')).toBe('Computer load: CPU 99%, memory 42%');
-    expect(button?.querySelectorAll('svg')).toHaveLength(2);
   });
 
-  it('collapses to a single status light on phones', () => {
-    queryMocks.data = { samples: busy };
-    queryMocks.isMobile = true;
+  it('shows both readings on one line with a level bar each, on desktop and on phones', () => {
+    for (const isMobile of [false, true]) {
+      queryMocks.data = { samples: busy };
+      queryMocks.isMobile = isMobile;
 
-    const button = render(createElement(HostLoadIndicator)).querySelector('button');
+      const button = render(createElement(HostLoadIndicator)).querySelector('button');
 
-    expect(button?.querySelector('svg')).toBeNull();
-    expect(button?.querySelector('[data-status-tone]')?.getAttribute('data-status-tone')).toBe(
-      'danger'
-    );
+      const readings = [...(button?.querySelectorAll('[data-slot="host-load-value"]') ?? [])].map(
+        (value) => value.textContent
+      );
+      expect(readings).toEqual(['99%', '42%']);
+      expect(button?.querySelectorAll('[data-slot="host-load-level"]')).toHaveLength(2);
+      flushSync(() => root?.unmount());
+    }
+  });
+
+  it('keeps each reading in its own hue until it is overloaded', () => {
+    const button = render(
+      createElement(HostLoadIndicatorView, { samples: busy, compact: false })
+    ).querySelector('button');
+
+    expect(button?.getAttribute('data-status-tone')).toBe('danger');
+    expect(button?.querySelector('[data-metric="cpu"]')?.className).toContain('text-destructive');
+    expect(button?.querySelector('[data-metric="memory"]')?.className).toContain('text-success');
   });
 
   it('shows the numbers when opened', () => {
@@ -93,5 +131,43 @@ describe('HostLoadIndicator', () => {
     expect(document.body.textContent).toContain('CPU');
     expect(document.body.textContent).toContain('99%');
     expect(document.body.textContent).toContain('42%');
+  });
+
+  it('names what is using the machine, linking workspaces', () => {
+    const group = {
+      kind: 'app' as const,
+      workspace: null,
+      cpuPercent: 41,
+      memoryBytes: 2 * 1024 ** 3,
+      processCount: 30,
+    };
+    const workspace = {
+      ...group,
+      key: 'workspace:w1',
+      label: 'Fix login',
+      kind: 'workspace' as const,
+      workspace: { id: 'w1', projectSlug: 'repo' },
+    };
+    render(
+      createElement(
+        MemoryRouter,
+        null,
+        createElement(HostLoadIndicatorView, {
+          samples: busy,
+          compact: false,
+          open: true,
+          breakdown: {
+            byCpu: [{ ...group, key: 'app:Google Chrome', label: 'Google Chrome' }, workspace],
+            byMemory: [workspace],
+          },
+        })
+      )
+    );
+
+    expect(document.body.textContent).toContain('Google Chrome41%');
+    expect(document.body.textContent).toContain('2.0 GB');
+    expect(document.body.querySelector('a[href="/projects/repo/workspaces/w1"]')?.textContent).toBe(
+      'Fix login'
+    );
   });
 });

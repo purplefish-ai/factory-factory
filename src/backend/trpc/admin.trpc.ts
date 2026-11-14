@@ -83,6 +83,11 @@ export const adminRouter = router({
     samples: await ctx.appContext.services.hostMetricsService.getHistory(),
   })),
 
+  /** What is using the machine: the heaviest workspaces, apps and processes. */
+  getHostLoadBreakdown: publicProcedure.query(({ ctx }) =>
+    ctx.appContext.services.getHostLoadBreakdown()
+  ),
+
   /**
    * Export decision logs to JSON
    */
