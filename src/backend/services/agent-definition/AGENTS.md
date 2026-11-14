@@ -19,17 +19,17 @@ Slack workspace or a GitHub repository, `gh:<repository-id>`) and
 reservation, not a started agent. `AgentSourceState`, `AgentSourcePage`,
 `AgentSourceCheckpoint`, `AgentSourceHead` and `AgentSourceBaseline` hold the
 GitHub feed's state and proof; proof rows carry the `epoch` that wrote them. It
-also owns Enable, Pause, source reset, Delete, retention and the Slack listener.
-It does not own:
+also owns saved edits, proposals, history reads, Enable, Pause, source reset,
+Delete, retention and the Slack listener. It does not own:
 
 - Scheduled automations: `src/backend/services/periodic-task/`.
-- The runtime jobs, their GitHub and Slack wiring, native execution validation
-  and Enable's draft validation: `src/backend/orchestration/agents/`.
+- The runtime jobs, their GitHub and Slack wiring, native execution validation,
+  source discovery and draft validation: `src/backend/orchestration/agents/`.
 - GitHub reads and the issue-event parser: `src/backend/services/github/`.
 - The `automation` tRPC namespace, `src/backend/trpc/agent.trpc.ts`, and the
   agent tools in `src/backend/mcp/automation-authoring-tools.ts`.
-- Workspaces and their launch origins, sessions, the backup file and the
-  Automations page: the workspace and session capsules,
+- Workspaces and their launch origins, sessions and the classifier call, the
+  backup file and the Automations page: the workspace and session capsules,
   `src/backend/orchestration/data-backup/` and `src/client/features/agents/`.
 - Limits and the retention policy: `configService.getAgentRuntimeLimits()`.
 - Shared schemas: `src/shared/schemas/agent-definition.schema.ts`,
@@ -65,10 +65,37 @@ functions for definitions and Slack connections.
   authoring catalog has none of them.
   `src/backend/trpc/agent-delete.integration.test.ts`,
   `src/backend/mcp/automation-authoring-tools.test.ts`.
+- Management reads and writes are scoped to the owning project: another
+  project's IDs read as `NOT_FOUND`.
+  `src/backend/trpc/agent-management.integration.test.ts`.
+- `managementRevision` is the one save token for saved and accepted-proposal
+  edits: each write increments it once, a rename included, and a stale token on
+  either path is a `CONFLICT`.
+  `service/agent-management-owner.integration.test.ts`.
+- While any trigger's `isConfigured` is null, `get` returns no specification,
+  and a saved replacement that includes that trigger pauses it as changed.
+  `service/agent-management-owner.integration.test.ts`.
+- A proposal creates its automation paused and once; a repeated acceptance
+  returns it only for the same revision and specification.
+  `service/agent-proposal.integration.test.ts`.
+- History returns no snapshot, input, error message or provider evidence, reads
+  a stored reason that is not a code as `INVALID_STORED_DATA`, and returns an
+  `explanation` only when it is a fixed sentence in
+  `resources/agent-evaluation-explanations.ts`.
+  `service/agent-management-owner.integration.test.ts`,
+  `service/agent-evaluation-history.integration.test.ts`.
+
+Trusted-local checks the socket address, Origin and forwarding headers, so any
+local process passes it, an agent included.
 
 ## Map
 
 - `service/agent-management.service.ts`: saved definitions, edits, Delete and
   reset; `service/agent-activation.service.ts`: Enable and Pause.
+- `resources/agent-management.accessor.ts`,
+  `resources/agent-revision.accessor.ts`,
+  `resources/agent-proposal.accessor.ts`: saved and proposal writes;
+  `service/agent-history-projection.ts`: what history may return.
+- [Service guide](service/AGENTS.md): evaluation and natural-language filters.
 - [Resources guide](resources/AGENTS.md): the run ledger and GitHub source
   proof, with their invariants, map and decision records.

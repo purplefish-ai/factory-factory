@@ -44,3 +44,32 @@ it('returns the stored explanation only when the system wrote it', async () => {
     }
   );
 });
+
+it('reads a stored reason that is not a reason code as INVALID_STORED_DATA', async () => {
+  const fixture = await createLedgerFixture(db, runtime);
+  const owner = await db.prisma.agentDefinition.findUniqueOrThrow({
+    where: { id: fixture.definitionId },
+  });
+  const freeText = 'Provider said: secret token abc';
+  await fixture.evaluation(await fixture.event('event-free-text'));
+  await db.prisma.agentEvaluation.updateMany({
+    where: { agentDefinitionId: owner.id },
+    data: { reasonCode: freeText },
+  });
+  await db.prisma.agentRun.create({
+    data: {
+      agentDefinitionId: owner.id,
+      idempotencyKey: crypto.randomUUID(),
+      reasonCode: freeText,
+      definitionSnapshot: {},
+      input: {},
+    },
+  });
+  const input = { projectId: owner.projectId, agentId: owner.id };
+  const management = new runtime.AgentManagementService();
+  const evaluations = await management.evaluations(input);
+  const runs = await management.runs(input);
+  expect(evaluations.items.map((item) => item.reasonCode)).toEqual(['INVALID_STORED_DATA']);
+  expect(runs.items.map((item) => item.reasonCode)).toEqual(['INVALID_STORED_DATA']);
+  expect(JSON.stringify([evaluations, runs])).not.toContain('secret token');
+});

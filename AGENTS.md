@@ -58,7 +58,7 @@ Read the matching note before changing these areas:
 - [Workspace state](docs/architecture/workspace-state.md): Kanban.
 - [Agent runtime](docs/architecture/agent-runtime.md): ACP, subagents, child
   workspaces, quick actions, the desktop backend utility process.
-- [Integrations](docs/architecture/integrations.md): event automations, Slack,
+- [Integrations](docs/architecture/integrations.md): Slack, automation limits,
   client query transport. GitHub, Linear and both kinds of automation have
   guides in their capsules under `src/backend/services/`.
 

@@ -1987,10 +1987,10 @@ and the existing sources/propose/getProposal authoring allowlist. They expose no
 recovery target, inspection, action or activation tools.
 
 The only client is the automation's Runs view
-([run recovery](integrations.md#event-run-recovery)). It reads the target and
-inspection only when a person opens **Inspect**, sends the inspected context
-unchanged with the chosen action, and on `CONFLICT` keeps its dialog open with
-**Reload** instead of reading a fresh context and resending.
+([agents feature guide](../../src/client/features/agents/AGENTS.md)). It reads
+the target and inspection only when a person opens **Inspect**, sends the
+inspected context unchanged with the chosen action, and on `CONFLICT` keeps its
+dialog open with **Reload** instead of reading a fresh context and resending.
 
 A fresh application-construction integration test exercises real production
 bridge registration and public workspace deletion without preinstalling capture.

@@ -146,6 +146,27 @@ it('retries a timeout on the shared budget and carries used attempts into the ru
   expect(await db.prisma.agentRun.findFirstOrThrow()).toMatchObject({ attemptCount: 1 });
 });
 
+it.each(['returned', 'thrown'] as const)(
+  'retries a %s provider failure on the shared budget',
+  async (failure) => {
+    await fixture.event();
+    const now = new Date();
+    const classify = vi.fn<ClassifyEvent>(() =>
+      failure === 'thrown'
+        ? Promise.reject(new Error('provider exited'))
+        : Promise.resolve({ status: 'FAILED', failure: 'FAILED' })
+    );
+    await evaluator(classify, { now: () => now }).evaluatePendingEvents(signal());
+    expect(await db.prisma.agentEvaluation.findFirstOrThrow()).toMatchObject({
+      status: 'ERROR',
+      reasonCode: 'SEMANTIC_FILTER_FAILED',
+      attemptCount: 1,
+      nextAttemptAt: new Date(now.getTime() + 30_000),
+    });
+    expect(await db.prisma.agentRun.count()).toBe(0);
+  }
+);
+
 it('extends a rate-limit retry to the provider reset time and stops after the budget', async () => {
   await fixture.event();
   let now = new Date();

@@ -43,23 +43,3 @@ Old paragraph 17. For the agent-definition capsule guide
 `SlackEventSource.stop()`. No test fails when it stops waiting for envelopes in
 flight; the sockets disconnecting and the stop being recorded are pinned by
 `slack-intake.orchestrator.integration.test.ts`.
-
-> […] an unresolved decision left by a removed trigger is still settled.
-
-Old paragraph 18. For the agent-definition capsule guide
-(`src/backend/services/agent-definition/`, task 2.6c: the evaluation and filter
-sections of `docs/architecture/integrations.md`).
-
-> Expiry and retry gates use time captured after acquiring the ledger write
-> lock.
-
-Old paragraph 19. For the agent-definition capsule guide
-(`src/backend/services/agent-definition/`, task 2.6c): the retry gates belong
-with the evaluation and filter sections.
-
-> Non-dispatching decisions retain an explicitly marked configuration snapshot
-> that admission cannot use.
-
-Old paragraph 20. For the agent-definition capsule guide
-(`src/backend/services/agent-definition/`, task 2.6c): non-dispatching decisions
-are the classifier's skip and uncertain outcomes.
