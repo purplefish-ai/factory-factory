@@ -7,7 +7,6 @@ import { AcpSteeringNotSentError } from '@/backend/services/session/service/acp/
 import { PermanentAttachmentError } from '@/backend/services/session/service/attachments/attachment-processing';
 import type { SessionInitPolicyBridge } from '@/backend/services/session/service/bridges';
 import type { SessionCallerGuard } from '@/backend/services/session/service/bridges';
-import { DEBUG_CHAT_WS } from '@/backend/services/session/service/chat/chat-message-handlers/constants';
 import { sessionDataService } from '@/backend/services/session/service/data/session-data.service';
 import { createPRDeliveryBlockedError } from '@/backend/services/session/service/delivery/pr-delivery-failure';
 import {
@@ -15,6 +14,7 @@ import {
   toErrorMessage,
 } from '@/backend/services/session/service/errors/session.error-message';
 import { EventSessionFenceError } from '@/backend/services/session/service/event-agent/event-session-fence-error';
+import { DEBUG_CHAT_WS } from '@/backend/services/session/service/logging/chat-websocket-debug';
 import { sessionDomainService } from '@/backend/services/session/service/store/session-domain.service';
 import { MessageState, type QueuedMessage, resolveSelectedModel } from '@/shared/acp-protocol';
 import {

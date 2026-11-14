@@ -43,6 +43,7 @@ export const sessionModules: Record<
       'dispatch',
       'event-bus',
       'lifecycle',
+      'logging',
       'store',
       'voice',
     ],
@@ -89,12 +90,12 @@ export const sessionModules: Record<
       'acp',
       'attachments',
       'bridges',
-      'chat',
       'config',
       'data',
       'delivery',
       'errors',
       'event-agent',
+      'logging',
       'store',
       'voice',
     ],
@@ -145,7 +146,8 @@ export const sessionModules: Record<
   },
   logging: {
     dependsOn: [],
-    description: 'Writes per-session debug logs of WebSocket events and ACP traces to files.',
+    description:
+      'Writes per-session debug logs of WebSocket events and ACP traces to files, and holds the chat WebSocket debug flag.',
   },
   metadata: {
     dependsOn: ['inference'],
@@ -188,4 +190,4 @@ export const sessionModules: Record<
  * removed. Sorted. Entries may be removed, never added (the check compares
  * this list with the base branch), and it stays a plain array literal.
  */
-export const sessionModuleCycles: readonly (readonly [string, string])[] = [['dispatch', 'chat']];
+export const sessionModuleCycles: readonly (readonly [string, string])[] = [];

@@ -1255,8 +1255,7 @@ trailing PR content as a compact update row.
 The session capsule's `service/` directory is grouped by sub-domain. Imports
 point up this table: code imports from its own row or earlier rows, never later
 ones. The barrel `index.ts` sits below every row; the interceptor bridge is in
-`composition/`. One older edge remains: `dispatch/` reuses chat attachment
-helpers.
+`composition/`.
 
 | Directory                                                                       | Owns                                                                                                                                                                                                     |
 | ------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
