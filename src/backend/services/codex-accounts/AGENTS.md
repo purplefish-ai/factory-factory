@@ -1,12 +1,12 @@
 # Codex accounts capsule
 
 The ChatGPT accounts Codex sessions run under: the Native default (the user's
-own Codex home) and managed profiles that Factory Factory creates, their
-identity, sign-in, plan usage, Auto selection, and the account metadata in a
-data backup. The [services guide](../AGENTS.md) covers capsule layout and
-boundaries. `index.ts` and paths that start with `service/` or `resources/` are
-relative to this directory, other bare file names are under `service/`, and
-paths that start with `src/` are from the repository root.
+own Codex home) and managed profiles Factory Factory creates, with their
+identity, sign-in, plan usage, Auto selection and backup metadata. The
+[services guide](../AGENTS.md) covers capsule layout and boundaries. `index.ts`
+and paths that start with `service/` or `resources/` are relative to this
+directory, other bare file names are under `service/`, and paths that start with
+`src/` are from the repository root.
 
 ## Owns, and does not own
 
@@ -26,7 +26,7 @@ credentials itself, in the profile. It does not own:
 - Export and import of whole backups: `src/backend/orchestration/data-backup/`.
 - The settings page, pickers and sign-in dialog:
   `src/client/features/codex-accounts/`.
-- Bundled Codex health and the recovery guidance it shows:
+- Bundled Codex health and its recovery guidance:
   `src/backend/orchestration/cli-health.service.ts`,
   `src/backend/lib/codex-provider-errors.ts`.
 
@@ -56,16 +56,17 @@ credentials itself, in the profile. It does not own:
   identity fails instead of rebinding, except that a Native default or a staged
   managed login may upgrade an email fallback to the verified scope of the same
   email. `codex-account.service.test.ts`, `review-regressions.test.ts`.
-- No two accounts share an identity, the Native default included; a missing
-  saved account never falls back to the Native default.
-  `codex-account.service.test.ts`.
-- One browser sign-in runs at a time; cancelling it frees the callback port.
-  `codex-account.service.test.ts`.
+- No two accounts share an identity, the Native default included, since the same
+  login adds no quota; a missing saved account never falls back to the Native
+  default. `codex-account.service.test.ts`.
+- One browser sign-in runs at a time, since Codex's callback uses a fixed local
+  port; cancelling it frees the port. `codex-account.service.test.ts`.
 - A managed profile uses file credentials (a keyring setting is rejected) and
   drops inherited `OPENAI_`, `CODEX_` and other provider or authentication
   overrides from its environment. `codex-account.service.test.ts`,
   `review-regressions.test.ts`.
-- Preparing a managed profile for use copies only the project trust levels it
+- Preparing a managed profile for use, so linked worktrees load repository
+  configuration under every account, copies only the project trust levels it
   lacks from the Native default's `config.toml`, keeps its own entries, and
   never writes the native file; creating an account does not read it, so a bad
   native file cannot fail a persisted account's creation.
@@ -86,9 +87,8 @@ and logout staying within one profile.
 
 ## Map
 
-- `codex-account.service.ts`: `CodexAccountService`, identity pinning, Auto
-  candidates and reservations; `account-selection.ts`: quota pressure and the
-  choice.
+- `codex-account.service.ts`: identity pinning, Auto candidates and
+  reservations; `account-selection.ts`: quota pressure and the choice.
 - `profile.ts`: profile directories and their environment; `profile-trust.ts`:
   project trust inheritance; `identity.ts`: Native default email fallback keys.
 - `native-account.ts`, `native-rpc.ts`, `native-slots.ts`: probes and sign-in
