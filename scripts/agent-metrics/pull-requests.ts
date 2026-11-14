@@ -104,16 +104,20 @@ export type PullRequestMetrics = {
   sandboxSection: SandboxSectionMetrics;
 };
 
-/** `repository` is `owner/name`; only `/pull/N` links into it count as references. */
+/**
+ * `repository` is `owner/name`; only `/pull/N` links into it count as references.
+ * `keywordInstructionAt` is when the template began to ask for a keyword.
+ */
 export function pullRequestMetrics(
   pullRequests: readonly MergedPullRequest[],
-  repository: string
+  repository: string,
+  keywordInstructionAt: string
 ): PullRequestMetrics {
   return {
     merged: pullRequests.length,
     window: timeWindow(pullRequests.map((pullRequest) => pullRequest.mergedAt)),
     openToMergeHours: openToMergeHours(pullRequests),
     followUpFixes: followUpFixes(pullRequests, repository),
-    sandboxSection: sandboxSectionMetrics(pullRequests),
+    sandboxSection: sandboxSectionMetrics(pullRequests, keywordInstructionAt),
   };
 }

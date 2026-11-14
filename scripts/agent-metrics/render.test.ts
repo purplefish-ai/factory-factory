@@ -2,13 +2,13 @@ import { describe, expect, it } from 'vitest';
 import { ciMetrics } from './ci-runs';
 import type { AgentMetrics } from './collect';
 import { pullRequestMetrics } from './pull-requests';
-import { renderMarkdown } from './render';
+import { renderMarkdown, renderReports } from './render';
 import { guidanceSize } from './tree';
 import { viMockCounts } from './vi-mocks';
 
 function fixture(): AgentMetrics {
   return {
-    version: 2,
+    version: 3,
     github: {
       ci: ciMetrics([
         {
@@ -32,7 +32,8 @@ function fixture(): AgentMetrics {
             mergedAt: '2026-11-01T10:30:00Z',
           },
         ],
-        'o/r'
+        'o/r',
+        '2026-11-14T12:00:00Z'
       ),
     },
     tree: {
@@ -72,20 +73,79 @@ describe('renderMarkdown', () => {
     );
   });
 
-  it('names the window and the exclusion of the sandbox section share', () => {
+  it('names the counts, the cut-offs and the share of the sandbox section keywords', () => {
     const metrics = fixture();
     metrics.github.pullRequests.sandboxSection = {
       templateMergedAt: '2026-11-13T22:01:22Z',
+      keywordInstructionAt: '2026-11-14T12:00:00Z',
       beforeTemplate: 270,
-      sinceTemplate: 30,
-      filled: 27,
-      empty: 2,
-      missing: 1,
-      shareFilled: 0.9,
-      unfilledNumbers: [3, 9, 12],
+      byContent: { opened: 20, filled: 18, empty: 1, missing: 1, shareFilled: 0.9 },
+      byKeyword: {
+        judged: 10,
+        driven: 3,
+        notApplicable: 4,
+        unlabelled: 1,
+        empty: 1,
+        missing: 1,
+        shareDriven: 0.5,
+        unclassifiedNumbers: [3, 9, 12],
+      },
     };
-    expect(renderMarkdown(metrics)).toContain(
-      '| Merged PRs with a non-empty "Driven in the sandbox" section | 27 of 30 (90.0%) opened since the template merged at 2026-11-13T22:01:22Z; opened earlier and not judged: 270; unfilled: #3, #9, #12 |'
+    const markdown = renderMarkdown(metrics);
+    expect(markdown).toContain(
+      '| PRs opened since the "Driven in the sandbox" keyword instruction merged at 2026-11-14T12:00:00Z | driven 3, not applicable 4, unlabelled 1, empty 1, missing 1 of 10; driven among those not marked "does not apply": 3 of 6 (50.0%); unclassified: #3, #9, #12 |'
+    );
+    expect(markdown).toContain(
+      '| PRs opened before the keyword instruction: "Driven in the sandbox" section | since the template merged at 2026-11-13T22:01:22Z, judged only by text: filled 18, empty 1, missing 1 of 20 (90.0% filled); opened before the template and not judged: 270 |'
+    );
+  });
+
+  it('writes the JSON to the file while printing the Markdown, from one collection', () => {
+    const metrics = fixture();
+    const reports = renderReports(metrics, { json: false, jsonFile: 'agent-metrics.json' });
+    expect(reports.stdout).toBe(renderMarkdown(metrics));
+    expect(JSON.parse(reports.file ?? '')).toEqual(JSON.parse(JSON.stringify(metrics)));
+    expect(reports.file).toMatch(/\n$/);
+  });
+
+  it('prints the JSON with --json, and writes no file without --json-file', () => {
+    const metrics = fixture();
+    const printed = renderReports(metrics, { json: true, jsonFile: null });
+    expect(JSON.parse(printed.stdout)).toEqual(JSON.parse(JSON.stringify(metrics)));
+    expect(printed.file).toBeNull();
+    expect(renderReports(metrics, { json: false, jsonFile: null })).toEqual({
+      stdout: renderMarkdown(metrics),
+      file: null,
+    });
+    expect(renderReports(metrics, { json: true, jsonFile: 'x.json' }).file).toBe(printed.stdout);
+  });
+
+  it('carries the sandbox section numbers in the JSON under stable keys', () => {
+    const metrics = fixture();
+    expect(JSON.parse(renderReports(metrics, { json: true, jsonFile: null }).stdout)).toMatchObject(
+      {
+        version: 3,
+        github: {
+          pullRequests: {
+            sandboxSection: {
+              templateMergedAt: '2026-11-13T22:01:22Z',
+              keywordInstructionAt: '2026-11-14T12:00:00Z',
+              beforeTemplate: 1,
+              byContent: { opened: 0, filled: 0, empty: 0, missing: 0, shareFilled: null },
+              byKeyword: {
+                judged: 0,
+                driven: 0,
+                notApplicable: 0,
+                unlabelled: 0,
+                empty: 0,
+                missing: 0,
+                shareDriven: null,
+                unclassifiedNumbers: [],
+              },
+            },
+          },
+        },
+      }
     );
   });
 
@@ -185,7 +245,8 @@ describe('renderMarkdown', () => {
         '| Open to merge | median 0.5 h, p90 0.5 h (n=1) |',
         '| Merged PRs titled with a fix verb | 0 of 1 |',
         '| Fix PRs referencing a PR merged in the previous 7 days | 0 (0.0% of 1 merged PRs) |',
-        '| Merged PRs with a non-empty "Driven in the sandbox" section | 0 of 0 (n/a) opened since the template merged at 2026-11-13T22:01:22Z; opened earlier and not judged: 1; unfilled: none |',
+        '| PRs opened since the "Driven in the sandbox" keyword instruction merged at 2026-11-14T12:00:00Z | driven 0, not applicable 0, unlabelled 0, empty 0, missing 0 of 0; driven among those not marked "does not apply": 0 of 0 (n/a); unclassified: none |',
+        '| PRs opened before the keyword instruction: "Driven in the sandbox" section | since the template merged at 2026-11-13T22:01:22Z, judged only by text: filled 0, empty 0, missing 0 of 0 (n/a filled); opened before the template and not judged: 1 |',
         '',
         '## Guidance',
         '',

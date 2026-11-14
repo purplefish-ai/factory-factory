@@ -39,17 +39,14 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      # One run collects once: the Markdown goes to the job summary and the JSON
+      # to the file the next step uploads, so the two describe the same snapshot.
       # Pull request bodies are read by the script through `gh` as data; no
       # step interpolates them.
-      - name: Report in the job summary
+      - name: Report in the job summary and write the JSON report
         env:
           GH_TOKEN: ${{ github.token }}
-        run: pnpm metrics:agents >> "$GITHUB_STEP_SUMMARY"
-
-      - name: Write the JSON report
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: pnpm metrics:agents --json > agent-metrics.json
+        run: pnpm metrics:agents --json-file agent-metrics.json >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload the JSON report
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
