@@ -3,6 +3,7 @@ import {
   collectSessionModuleEdges,
   getSessionModuleErrors,
   sessionModuleDirectories,
+  sessionRootFiles,
   type SessionModuleCheckInput,
   type SessionModuleDeclaration,
   type SessionModuleEdge,
@@ -21,7 +22,7 @@ function edgesOf(files: Record<string, string>, directories: string[]): string[]
 }
 
 describe('collectSessionModuleEdges', () => {
-  const directories = ['alpha', 'beta', 'gamma', 'root'];
+  const directories = ['alpha', 'beta', 'gamma'];
 
   test('reads relative, alias and directory specifiers, once per file and module', () => {
     expect(
@@ -31,22 +32,15 @@ describe('collectSessionModuleEdges', () => {
             "import { b } from '../beta/b';",
             "import { c } from '../beta/nested/c';",
             "import { g } from '@/backend/services/session/service/gamma';",
-            "export { r } from '../root-file';",
+            "export { r } from '../loose-file';",
             "import { own } from './own';",
           ].join('\n'),
           'beta/nested/c.ts': "import { a } from '../../alpha/a';\nimport { x } from '../x';",
-          'root-file.ts': "import { a } from './alpha';\nimport './gamma/side-effect';",
+          'loose-file.ts': "import { a } from './alpha';\nimport './gamma/side-effect';",
         },
         directories
       )
-    ).toEqual([
-      'alpha/a.ts beta',
-      'alpha/a.ts gamma',
-      'alpha/a.ts root',
-      'beta/nested/c.ts alpha',
-      'root-file.ts alpha',
-      'root-file.ts gamma',
-    ]);
+    ).toEqual(['alpha/a.ts beta', 'alpha/a.ts gamma', 'beta/nested/c.ts alpha']);
   });
 
   test('marks a file-module edge type-only only when every import into the module is', () => {
@@ -56,7 +50,7 @@ describe('collectSessionModuleEdges', () => {
           'alpha/types.ts': [
             "import type { B } from '../beta/b';",
             "import { type C, type D } from '../gamma/c';",
-            "export type { R } from '../root-file';",
+            "export type { R } from '../loose-file';",
           ].join('\n'),
           'alpha/mixed.ts': [
             "import type { B } from '../beta/b';",
@@ -67,19 +61,18 @@ describe('collectSessionModuleEdges', () => {
             "type Loader = typeof import('../beta/b');",
             "const load = () => import('../gamma/c');",
           ].join('\n'),
-          'alpha/spaced.ts': "const load = () => import /* lazy */ ('../root-file');",
+          'alpha/spaced.ts': "const load = () => import /* lazy */ ('../beta/lazy');",
         },
         directories
       )
     ).toEqual([
       'alpha/types.ts beta type',
       'alpha/types.ts gamma type',
-      'alpha/types.ts root type',
       'alpha/mixed.ts beta',
       'alpha/mixed.ts gamma',
       'alpha/inline.ts beta type',
       'alpha/inline.ts gamma',
-      'alpha/spaced.ts root',
+      'alpha/spaced.ts beta',
     ]);
   });
 
@@ -110,7 +103,7 @@ describe('collectSessionModuleEdges', () => {
 });
 
 describe('sessionModuleDirectories', () => {
-  test('lists directories that hold a production file, and root for top-level files', () => {
+  test('lists directories that hold a production file and ignores top-level files', () => {
     expect(
       sessionModuleDirectories([
         `${service}/beta/nested/b.ts`,
@@ -119,11 +112,11 @@ describe('sessionModuleDirectories', () => {
         `${service}/top.ts`,
         'src/backend/services/session/resources/x.accessor.ts',
       ])
-    ).toEqual(['alpha', 'beta', 'root']);
+    ).toEqual(['alpha', 'beta']);
     expect(sessionModuleDirectories([`${service}/alpha/a.ts`])).toEqual(['alpha']);
   });
 
-  test('does not count a directory or root that holds only tests and test support', () => {
+  test('does not count a directory that holds only tests and test support', () => {
     expect(
       sessionModuleDirectories([
         `${service}/testing/fake-runtime.ts`,
@@ -133,6 +126,27 @@ describe('sessionModuleDirectories', () => {
         `${service}/alpha/a.ts`,
       ])
     ).toEqual(['alpha']);
+  });
+});
+
+describe('sessionRootFiles', () => {
+  test('lists production files directly under service/, sorted', () => {
+    expect(
+      sessionRootFiles([
+        `${service}/zeta.ts`,
+        `${service}/alpha/a.ts`,
+        `${service}/beta.ts`,
+        `${service}/top.test.ts`,
+        `${service}/top.test-helpers.ts`,
+        `${service}/top.fixture.ts`,
+        `${service}/testing/fake.ts`,
+        'src/backend/services/session/resources/x.accessor.ts',
+      ])
+    ).toEqual([`${service}/beta.ts`, `${service}/zeta.ts`]);
+  });
+
+  test('finds none in a tree with only module directories', () => {
+    expect(sessionRootFiles([`${service}/alpha/a.ts`, `${service}/beta/b.test.ts`])).toEqual([]);
   });
 });
 
@@ -146,7 +160,7 @@ const edge = (from: string, to: string, file = `${service}/${from}/x.ts`): Sessi
 function check(
   modules: Record<string, readonly string[]>,
   edges: SessionModuleEdge[],
-  options: Partial<Pick<SessionModuleCheckInput, 'cycles' | 'moduleDirectories'>> & {
+  options: Partial<Pick<SessionModuleCheckInput, 'cycles' | 'moduleDirectories' | 'rootFiles'>> & {
     sealed?: readonly string[];
   } = {}
 ): string[] {
@@ -159,6 +173,7 @@ function check(
     ),
     cycles: options.cycles ?? [],
     moduleDirectories: options.moduleDirectories ?? Object.keys(modules),
+    rootFiles: options.rootFiles ?? [],
     edges,
   });
 }
@@ -166,29 +181,50 @@ function check(
 describe('getSessionModuleErrors', () => {
   test('accepts a map that matches the graph, with a listed back edge and a sealed module', () => {
     expect(
-      check(
-        { a: ['b', 'root'], b: ['a'], root: [] },
-        [edge('a', 'b'), edge('a', 'root'), edge('b', 'a')],
-        { cycles: [['b', 'a']], sealed: ['root'] }
-      )
+      check({ a: ['b', 'c'], b: ['a'], c: [] }, [edge('a', 'b'), edge('a', 'c'), edge('b', 'a')], {
+        cycles: [['b', 'a']],
+        sealed: ['c'],
+      })
     ).toEqual([]);
   });
 
+  test('accepts a tree with no file under service/ and no root entry', () => {
+    expect(check({ a: ['b'], b: [] }, [edge('a', 'b')], { rootFiles: [] })).toEqual([]);
+  });
+
   test('rejects a module directory that sessionModules does not list', () => {
-    expect(
-      check({ a: [] }, [edge('b', 'a'), edge('root', 'a', `${service}/r.ts`)], {
-        moduleDirectories: ['a', 'b', 'root'],
-      })
-    ).toEqual([
+    expect(check({ a: [] }, [edge('b', 'a')], { moduleDirectories: ['a', 'b'] })).toEqual([
       `Session module "b" (${service}/b/) is not listed in sessionModules in ${modulesFile}. Add "b": { dependsOn: ['a'], description: '<what it owns>' }.`,
-      `Session module "root" (the files directly under ${service}/) is not listed in sessionModules in ${modulesFile}. Add "root": { dependsOn: ['a'], description: '<what it owns>' }.`,
     ]);
   });
 
-  test('rejects a listed module with no directory, and root once no files remain', () => {
-    expect(check({ a: [], gone: ['a'], root: [] }, [], { moduleDirectories: ['a'] })).toEqual([
+  test('rejects a stray production file directly under service/, naming the file', () => {
+    expect(check({ a: [] }, [], { rootFiles: [`${service}/stray.ts`] })).toEqual([
+      `${service}/stray.ts is directly under ${service}/, but the session capsule has no root module. Move it into the module directory it belongs to, or into a new module directory with its own entry in sessionModules in ${modulesFile}.`,
+    ]);
+  });
+
+  test('names every stray file, in sorted order, in one finding', () => {
+    expect(
+      check({ a: [] }, [], { rootFiles: [`${service}/zeta.ts`, `${service}/alpha.ts`] })
+    ).toEqual([
+      `${service}/alpha.ts, ${service}/zeta.ts are directly under ${service}/, but the session capsule has no root module. Move each into the module directory it belongs to, or into a new module directory with its own entry in sessionModules in ${modulesFile}.`,
+    ]);
+  });
+
+  test('rejects a root entry in sessionModules', () => {
+    expect(check({ a: [], root: [] }, [], { moduleDirectories: ['a'] })).toEqual([
+      `sessionModules in ${modulesFile} lists "root", but the session capsule has no root module: every production file lives in a directory under ${service}/. Remove the "root" entry.`,
+    ]);
+  });
+
+  test('accepts a module directory that happens to be named root', () => {
+    expect(check({ root: [] }, [])).toEqual([]);
+  });
+
+  test('rejects a listed module with no directory', () => {
+    expect(check({ a: [], gone: ['a'] }, [], { moduleDirectories: ['a'] })).toEqual([
       `sessionModules in ${modulesFile} lists "gone", but ${service}/gone/ does not exist. Remove the "gone" entry.`,
-      `sessionModules in ${modulesFile} lists "root", but no files are left directly under ${service}/. Remove the "root" entry.`,
     ]);
   });
 
@@ -214,9 +250,9 @@ describe('getSessionModuleErrors', () => {
   });
 
   test('rejects a dependsOn entry with no import behind it, and a module listing itself', () => {
-    expect(check({ a: ['a', 'b', 'root'], b: [], root: [] }, [edge('a', 'b')])).toEqual([
+    expect(check({ a: ['a', 'b', 'c'], b: [], c: [] }, [edge('a', 'b')])).toEqual([
       `sessionModules["a"].dependsOn in ${modulesFile} lists "a", but a module cannot depend on itself. Remove "a"; the list becomes ['b'].`,
-      `sessionModules["a"].dependsOn in ${modulesFile} lists "root", but no production file in ${service}/a/ imports the files directly under ${service}/. Remove "root"; the list becomes ['b'].`,
+      `sessionModules["a"].dependsOn in ${modulesFile} lists "c", but no production file in ${service}/a/ imports ${service}/c/. Remove "c"; the list becomes ['b'].`,
     ]);
   });
 
