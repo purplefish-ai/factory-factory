@@ -19,8 +19,11 @@ does not own:
   given.
 - The model catalog caches and when they refresh: `../providers/`.
 - When a runtime starts or stops: `../lifecycle/`.
-- The update gate that admits ACP work: the application graph passes
-  `applicationUpdateAdmission` to `configureAdmission` before startup
+- The update gate that admits ACP work,
+  `src/backend/services/application-update-admission.service.ts`. The module
+  imports no application code beyond a short allowlist
+  (`acp-no-external-imports`, `pnpm deps:check`), so the application graph
+  passes `applicationUpdateAdmission` to `configureAdmission` before startup
   (`src/backend/app-context.ts`); until then all work is admitted.
 - Which permission requests are answered automatically, and the queue of
   requests shown to the user: `../events/session.permission.service.ts`.
@@ -42,16 +45,16 @@ here directly.
 
 ## Invariants
 
-- An adapter is spawned only after its working directory is confirmed to exist
-  and to be a directory. `acp-runtime-manager.working-dir.test.ts`,
-  `acp-working-directory.test.ts`.
+- A session runtime's adapter is spawned only after its working directory is
+  confirmed to exist and to be a directory.
+  `acp-runtime-manager.working-dir.test.ts`, `acp-working-directory.test.ts`.
 - A runtime started with a model is returned only once the provider confirms
-  that model through its advertised model option; an unadvertised or unconfirmed
-  model fails the start instead of keeping another model (Codex's `default`
-  means its current native model, and a Claude family alias resolves only to a
-  single advertised identity), and a browse-only runtime changes no
-  configuration. `acp-model-selection.test.ts`,
-  `acp-runtime-manager.model-selection.test.ts`.
+  that model through its advertised model option; a model that is neither
+  advertised nor already current, or that is unconfirmed, fails the start
+  instead of keeping another model (Codex's `default` means its current native
+  model, and a Claude family alias resolves only to a single advertised
+  identity), and a browse-only runtime changes no configuration.
+  `acp-model-selection.test.ts`, `acp-runtime-manager.model-selection.test.ts`.
 - The startup model configuration runs under the session creation deadline
   (`ACP_SESSION_CREATION_TIMEOUT_MS`), not the handshake's.
   `acp-client-factory.startup-deadlines.test.ts`,
