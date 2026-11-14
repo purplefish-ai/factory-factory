@@ -32,7 +32,8 @@ worktree or setup script.
 
 - HTTP, WebSocket and the CLI startup signal are available while affected
   workspaces still show ARCHIVING or NEW.
-- Shutdown can take as long as one in-flight initialization, up to the desktop
-  app's 25-second stop timeout, after which the backend is killed.
+- Shutdown waits for archive recovery, before it closes the session, run-script,
+  cache and database dependencies, and for one in-flight initialization, up to
+  the desktop app's 25-second stop timeout, after which the backend is killed.
 - If shutdown begins during essential reconciliation, startup aborts before it
   launches these passes or starts background services.
