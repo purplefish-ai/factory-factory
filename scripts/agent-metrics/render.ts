@@ -1,5 +1,5 @@
 import { sessionModulesPath } from './baselines';
-import type { AgentMetrics } from './collect';
+import type { AgentMetrics, MetricsOptions } from './collect';
 import type { FollowUpFixes } from './pull-requests';
 import type { SandboxSectionMetrics } from './sandbox-section';
 import type { Distribution, TimeWindow } from './statistics';
@@ -50,12 +50,35 @@ function formatFollowUpFixes(fixes: FollowUpFixes, merged: number): string {
   return `${formatNumber(fixes.referencingRecentMerge)} (${formatShare(fixes.shareOfMerged)} of ${formatNumber(merged)} merged PRs)${numbers}`;
 }
 
-function formatSandboxSection(section: SandboxSectionMetrics): string {
-  const unfilled =
-    section.unfilledNumbers.length > 0
-      ? `: ${section.unfilledNumbers.map((number) => `#${number}`).join(', ')}`
-      : '';
-  return `${formatNumber(section.filled)} of ${formatNumber(section.sinceTemplate)} (${formatShare(section.shareFilled)}) opened since the template merged at ${section.templateMergedAt}; opened earlier and not judged: ${formatNumber(section.beforeTemplate)}; unfilled${unfilled || ': none'}`;
+/** Two table rows: the pull requests judged by keyword, and the earlier ones. */
+function sandboxSectionRows(section: SandboxSectionMetrics): string[] {
+  const { byKeyword, byContent } = section;
+  const unclassified =
+    byKeyword.unclassifiedNumbers.length > 0
+      ? byKeyword.unclassifiedNumbers.map((number) => `#${number}`).join(', ')
+      : 'none';
+  const counts = `driven ${formatNumber(byKeyword.driven)}, not applicable ${formatNumber(byKeyword.notApplicable)}, unlabelled ${formatNumber(byKeyword.unlabelled)}, empty ${formatNumber(byKeyword.empty)}, missing ${formatNumber(byKeyword.missing)} of ${formatNumber(byKeyword.judged)}`;
+  const driven = `driven among those not marked "does not apply": ${formatNumber(byKeyword.driven)} of ${formatNumber(byKeyword.judged - byKeyword.notApplicable)} (${formatShare(byKeyword.shareDriven)})`;
+  const earlier = `since the template merged at ${section.templateMergedAt}, judged only by text: filled ${formatNumber(byContent.filled)}, empty ${formatNumber(byContent.empty)}, missing ${formatNumber(byContent.missing)} of ${formatNumber(byContent.opened)} (${formatShare(byContent.shareFilled)} filled); opened before the template and not judged: ${formatNumber(section.beforeTemplate)}`;
+  return [
+    `| PRs opened since the "Driven in the sandbox" keyword instruction merged at ${section.keywordInstructionAt} | ${counts}; ${driven}; unclassified: ${unclassified} |`,
+    `| PRs opened before the keyword instruction: "Driven in the sandbox" section | ${earlier} |`,
+  ];
+}
+
+/**
+ * What goes to standard output and, with `--json-file`, to the file. One
+ * collection feeds both, so the Markdown and the JSON describe the same snapshot.
+ */
+export function renderReports(
+  metrics: AgentMetrics,
+  options: Pick<MetricsOptions, 'json' | 'jsonFile'>
+): { stdout: string; file: string | null } {
+  const json = `${JSON.stringify(metrics, null, 2)}\n`;
+  return {
+    stdout: options.json ? json : renderMarkdown(metrics),
+    file: options.jsonFile === null ? null : json,
+  };
 }
 
 export function renderMarkdown(metrics: AgentMetrics): string {
@@ -81,7 +104,7 @@ export function renderMarkdown(metrics: AgentMetrics): string {
     `| Open to merge | ${formatDistribution(pullRequests.openToMergeHours, ' h')} |`,
     `| Merged PRs titled with a fix verb | ${formatNumber(pullRequests.followUpFixes.fixTitled)} of ${formatNumber(pullRequests.merged)} |`,
     `| Fix PRs referencing a PR merged in the previous 7 days | ${formatFollowUpFixes(pullRequests.followUpFixes, pullRequests.merged)} |`,
-    `| Merged PRs with a non-empty "Driven in the sandbox" section | ${formatSandboxSection(pullRequests.sandboxSection)} |`,
+    ...sandboxSectionRows(pullRequests.sandboxSection),
     '',
     '## Guidance',
     '',
