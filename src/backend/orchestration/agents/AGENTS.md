@@ -20,8 +20,8 @@ capsule's ports (GitHub reads, the event classifier, Slack context and sockets),
 source discovery and verification, draft validation and history's workspace
 provenance. It does not own:
 
-- Sources, events, evaluations, the run queue, claims, activation, retention and
-  the Slack adapter `SlackEventSource`:
+- Sources, events, evaluations, the run queue, claims, activation, retention,
+  `SlackEventSource` and Slack intake rules (its `service/` guide):
   `src/backend/services/agent-definition/`.
 - GitHub reads and their shared process budget: `src/backend/services/github/`.
 - The disposable classifier call: `classifyAgentEvent` in

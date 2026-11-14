@@ -64,3 +64,7 @@ only `index.ts` (`pnpm deps:check`; see the services guide).
 
 `sessionScope` participants are registered in `service/composition/` and in
 `registerSessionRuntimeParticipants` (`service/lifecycle/session-scope.ts`).
+
+`service/acp/agent-authoring.manual.integration.test.ts` is a manual evaluation
+of conversational automation authoring against live Codex; it is skipped unless
+`RUN_AGENT_AUTHORING_EVAL=1`.

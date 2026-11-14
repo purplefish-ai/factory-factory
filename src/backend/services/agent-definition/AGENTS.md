@@ -76,8 +76,8 @@ functions for definitions and Slack connections.
 - While any trigger's `isConfigured` is null, `get` returns no specification,
   and a saved replacement that includes that trigger pauses it as changed.
   `service/agent-management-owner.integration.test.ts`.
-- A proposal creates its automation paused and once; a repeated acceptance
-  returns it only for the same revision and specification.
+- A proposal creates its automation paused; a repeated acceptance returns it
+  only for the same revision and specification.
   `service/agent-proposal.integration.test.ts`.
 
 Trusted-local checks the socket address, Origin and forwarding headers, so any

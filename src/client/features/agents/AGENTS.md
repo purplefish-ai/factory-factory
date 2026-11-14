@@ -31,7 +31,8 @@ fields, and `EventRunItem`.
 
 - A saved edit sends the `managementRevision` captured when editing began;
   polling and a `CONFLICT` keep it and every entered field, and only **Discard
-  edits and reload** adopts a newer one. `event-agents-page.test.tsx`.
+  edits and reload saved configuration** adopts a newer one.
+  `event-agents-page.test.tsx`.
 - Draft validation and source discovery run only when the user asks, and a
   result that returns after the draft or the selection changed is dropped.
   `event-agents-page.test.tsx`, `event-agent-continuation.test.tsx`.
