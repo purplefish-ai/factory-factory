@@ -257,11 +257,26 @@ describe('fake Codex app-server scenarios', () => {
     expect(await playPrompt(startFake('slow-stream'))).toMatchObject(slowStream);
   }, 10_000);
 
-  // At the 400 ms default the 8 chunks take 2.8 s, longer than this test may run.
+  // At the 400 ms default the 8 chunks take at least 2.8 s; at 5 ms they took
+  // under 0.7 s at load 500. Time the stream alone: starting the process has no
+  // fixed duration (up to 2 s at load 500), so the test budget only covers it.
   it('slow-stream uses FF_SANDBOX_CHUNK_DELAY_MS between deltas', async () => {
     const child = startFake('slow-stream', { FF_SANDBOX_CHUNK_DELAY_MS: '5' });
+    const lines = createInterface({ input: child.stdout });
+    let firstDelta: number | undefined;
+    lines.on('line', (line) => {
+      if (
+        firstDelta === undefined &&
+        messageSchema.parse(JSON.parse(line)).method === 'item/agentMessage/delta'
+      ) {
+        firstDelta = performance.now();
+      }
+    });
     expect(await playPrompt(child)).toMatchObject(slowStream);
-  }, 2000);
+    const streamed = performance.now() - (firstDelta ?? Number.NaN);
+    lines.close();
+    expect(streamed).toBeLessThan(2000);
+  }, 30_000);
 
   it.each(['0', '-1', 'abc', ''])('rejects FF_SANDBOX_CHUNK_DELAY_MS %j', async (value) => {
     const child = startFake('slow-stream', { FF_SANDBOX_CHUNK_DELAY_MS: value });
