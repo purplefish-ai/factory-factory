@@ -42,8 +42,8 @@ Enforced by dependency-cruiser and ownership checks:
 
 - Recurring work registers with `jobRunner`, not `setInterval`; read
   [background jobs](../../../docs/architecture/background-jobs.md).
-- Application `gh` calls go through `GitHubCLIService` for the shared rate
-  budget.
+- Application `gh` calls go through the [GitHub capsule](github/AGENTS.md) for
+  the shared process budget.
 - Reads on hot and polled paths leave out `initOutput`, `creationMetadata`,
   session `providerMetadata` and the PR `observation`; narrow any new one with
   `select` or `omit`, since the Prisma client sets no default. Pinned by

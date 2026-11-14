@@ -5,9 +5,9 @@ import {
   SessionStartupTargetError,
 } from '@/backend/services/session/service/config/session-permission-policy';
 import { SessionStartupPersistenceError } from '@/backend/services/session/service/config/session-startup-configuration-finalizer';
+import { toErrorMessage } from '@/backend/services/session/service/errors/session.error-message';
 import { requestsStartupCleanup } from '@/backend/services/session/service/event-agent/event-session-startup';
 import type { AcpEventProcessor } from '@/backend/services/session/service/events/acp-event-processor';
-import { toErrorMessage } from '@/backend/services/session/service/session.error-message';
 import type { SessionDomainService } from '@/backend/services/session/service/store/session-domain.service';
 import type { SessionLifecycleGate } from './session-lifecycle-gate';
 import type { StartSessionOptions } from './session-startup-options';

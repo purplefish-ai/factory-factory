@@ -17,7 +17,7 @@ export type LegacyNoteCeilings = Readonly<Record<string, number>>;
  */
 export const legacyNoteCeilings: LegacyNoteCeilings = {
   'docs/architecture/agent-runtime.md': 2051,
-  'docs/architecture/integrations.md': 1505,
+  'docs/architecture/integrations.md': 1180,
 };
 
 export const guidanceLimits = { agentsGuide: 120, note: 400, decision: 80 } as const;

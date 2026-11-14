@@ -1,7 +1,7 @@
 import { afterEach, expect, it } from 'vitest';
 import { WorkspaceInitFenceError } from '@/backend/lib/workspace-init-fence-error';
 import { AcpSteeringNotSentError } from '@/backend/services/session/service/acp/acp-steering';
-import { PermanentAttachmentError } from '@/backend/services/session/service/chat/chat-message-handlers/attachment-processing';
+import { PermanentAttachmentError } from '@/backend/services/session/service/attachments/attachment-processing';
 import { sessionBackgroundDeliveryService } from '@/backend/services/session/service/delivery/session-background-delivery.service';
 import { rollbackStoppedDispatchMessage } from '@/backend/services/session/service/dispatch/session-dispatch-batch';
 import { createTestSessionDispatcher } from '@/backend/services/session/service/dispatch/session-dispatch.test-helpers';

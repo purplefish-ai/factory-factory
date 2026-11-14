@@ -3,10 +3,11 @@
  * compares it with the imports in `service/`, and `pnpm metrics:agents` counts
  * `sessionModuleCycles`. The application does not read it.
  *
- * A module is a directory directly under `service/`; the files directly under
- * `service/` form the module `root`. `dependsOn` lists, sorted, every sibling
- * module that a production file in the module imports, re-exports or imports
- * types from. Tests and test support do not count.
+ * A module is a directory directly under `service/`. Every production file
+ * lives in one; the check rejects a file placed directly under `service/`.
+ * `dependsOn` lists, sorted, every sibling module that a production file in the
+ * module imports, re-exports or imports types from. Tests and test support do
+ * not count.
  */
 export const sessionModules: Record<
   string,
@@ -22,20 +23,32 @@ export const sessionModules: Record<
     description:
       'Archives a closed session: writes its transcript file and its ClosedSession record, and reads the transcript and provider identity back.',
   },
+  attachments: {
+    dependsOn: [],
+    description:
+      'Validates message attachments (data present, base64, size limit, image format read from the bytes) and turns message text and attachments into provider prompt content.',
+  },
+  bridges: {
+    dependsOn: [],
+    description:
+      'Types only: the interfaces orchestration injects into the capsule (workspace, lifecycle, caller guard, message queue, init policy).',
+  },
   chat: {
     dependsOn: [
+      'attachments',
+      'bridges',
       'config',
       'data',
       'delivery',
       'dispatch',
       'event-bus',
       'lifecycle',
-      'root',
+      'logging',
       'store',
       'voice',
     ],
     description:
-      'Handles chat commands from clients (queue, steer, stop, model and config changes, permission replies), validates and converts attachments, prepares session loads and forwards pending requests and workspace notifications.',
+      'Handles chat commands from clients (queue, steer, stop, model and config changes, permission replies), prepares session loads and forwards pending requests and workspace notifications.',
   },
   composition: {
     dependsOn: [
@@ -58,34 +71,41 @@ export const sessionModules: Record<
       'Constructs and cross-wires the services that need each other (config, model catalogs, permission, lifecycle coordinators, prompt, dispatch, notification delivery), registers session-scope participants and sets the tool-timeout prompt cancel; other singletons are built in their own modules; also exposes the session capabilities backend interceptors use (interceptor bridge).',
   },
   config: {
-    dependsOn: ['acp', 'data', 'providers', 'root', 'store'],
+    dependsOn: ['acp', 'bridges', 'data', 'providers', 'store'],
     description:
       "Owns a session's provider configuration (model, mode, reasoning, access): applies it at startup, serializes live edits, persists snapshots and serves launch options.",
   },
   data: {
-    dependsOn: ['acp', 'archive', 'root', 'store'],
+    dependsOn: ['acp', 'archive', 'errors', 'store'],
     description:
       'Reads and writes session records through the capsule accessors, resolves session providers and launch settings, and loads Claude and Codex history files into transcripts.',
   },
   delivery: {
-    dependsOn: ['data', 'root', 'store'],
+    dependsOn: ['bridges', 'data', 'errors', 'store'],
     description:
       "Delivers PR updates and workspace mail into sessions as background prompts, with receipts and failure reasons; also holds the helper that resets a workspace's PR-discovery backoff.",
   },
   dispatch: {
     dependsOn: [
       'acp',
-      'chat',
+      'attachments',
+      'bridges',
       'config',
       'data',
       'delivery',
+      'errors',
       'event-agent',
-      'root',
+      'logging',
       'store',
       'voice',
     ],
     description:
       "Runs a session's message queue: claims, batches and sends queued messages with retries, queued steering and mail wakes, and the first turn of event-launched sessions.",
+  },
+  errors: {
+    dependsOn: [],
+    description:
+      'Turns provider and runtime errors into log, public and chat-visible messages, and Zod issues into short summaries.',
   },
   'event-agent': {
     dependsOn: ['acp', 'data'],
@@ -98,7 +118,7 @@ export const sessionModules: Record<
       "Carries the capsule's outbound session and chat-broadcast events to the transport and voice, and answers viewer counts.",
   },
   events: {
-    dependsOn: ['acp', 'config', 'logging', 'root', 'store'],
+    dependsOn: ['acp', 'config', 'errors', 'logging', 'store'],
     description:
       "Applies ACP session updates to the transcript and runtime state (tool timeouts, thought chunks, subagent updates), and creates each session's ACP permission bridge, queues its permission requests and routes the replies.",
   },
@@ -111,13 +131,14 @@ export const sessionModules: Record<
     dependsOn: [
       'acp',
       'archive',
+      'bridges',
       'config',
       'data',
       'delivery',
+      'errors',
       'event-agent',
       'events',
       'logging',
-      'root',
       'store',
     ],
     description:
@@ -125,15 +146,25 @@ export const sessionModules: Record<
   },
   logging: {
     dependsOn: [],
-    description: 'Writes per-session debug logs of WebSocket events and ACP traces to files.',
+    description:
+      'Writes per-session debug logs of WebSocket events and ACP traces to files, and holds the chat WebSocket debug flag.',
   },
   metadata: {
     dependsOn: ['inference'],
     description:
-      "Generates a workspace's title, branch name and summaries from its conversation with one disposable inference call.",
+      "Runs one-shot disposable inference tasks with no session: generates a workspace's title, branch name and summaries, and classifies an incoming event against an automation's filter.",
   },
   prompt: {
-    dependsOn: ['acp', 'delivery', 'event-agent', 'events', 'lifecycle', 'root', 'store'],
+    dependsOn: [
+      'acp',
+      'bridges',
+      'delivery',
+      'errors',
+      'event-agent',
+      'events',
+      'lifecycle',
+      'store',
+    ],
     description:
       "Sends and steers prompt turns on a session's running ACP runtime under the turn limit, records turn completion and schedules PR discovery after a completed turn; separately, builds the child-workspace context text.",
   },
@@ -141,11 +172,6 @@ export const sessionModules: Record<
     dependsOn: ['acp'],
     description:
       'Caches provider model catalogs and plan usage behind services whose fetchers are injected.',
-  },
-  root: {
-    dependsOn: ['inference'],
-    description:
-      'Files not yet in a module: bridge types, error messages and the agent event classifier.',
   },
   store: {
     dependsOn: ['event-bus', 'logging'],
@@ -164,4 +190,4 @@ export const sessionModules: Record<
  * removed. Sorted. Entries may be removed, never added (the check compares
  * this list with the base branch), and it stays a plain array literal.
  */
-export const sessionModuleCycles: readonly (readonly [string, string])[] = [['dispatch', 'chat']];
+export const sessionModuleCycles: readonly (readonly [string, string])[] = [];

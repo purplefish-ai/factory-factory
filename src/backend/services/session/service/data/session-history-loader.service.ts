@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { z } from 'zod';
 import { configService } from '@/backend/services/config.service';
 import { createLogger } from '@/backend/services/logger.service';
-import { summarizeZodIssues } from '@/backend/services/session/service/zod-issue-summary';
+import { summarizeZodIssues } from '@/backend/services/session/service/errors/zod-issue-summary';
 import type { HistoryMessage, ToolResultContentValue } from '@/shared/acp-protocol';
 import { buildHistoryImageAttachments, HistoryImageSourceSchema } from './history-image-attachment';
 import {

@@ -29,8 +29,8 @@ describe.skipIf(!enabled)('live event classifier replay gate', () => {
     const db = await createIntegrationDatabase();
     try {
       const { classifyAgentEvent } = await vi.importActual<
-        typeof import('../agent-event-classifier')
-      >('../agent-event-classifier');
+        typeof import('@/backend/services/session/service/metadata/agent-event-classifier')
+      >('@/backend/services/session/service/metadata/agent-event-classifier');
       const fixtures = loadClassifierFixtures();
       const cases = fixtures.cases.filter((item) => item.split === split);
       const classifyCase = async (item: ClassifierFixtureCase) => {

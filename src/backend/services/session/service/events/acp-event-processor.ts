@@ -11,9 +11,9 @@ import {
   type AcpRuntimeManager,
 } from '@/backend/services/session/service/acp';
 import type { SessionConfigService } from '@/backend/services/session/service/config/session.config.service';
+import { toPublicProviderErrorMessage } from '@/backend/services/session/service/errors/session.error-message';
 import { acpTraceLogger } from '@/backend/services/session/service/logging/acp-trace-logger.service';
 import { sessionFileLogger } from '@/backend/services/session/service/logging/session-file-logger.service';
-import { toPublicProviderErrorMessage } from '@/backend/services/session/service/session.error-message';
 import type { SessionDomainService } from '@/backend/services/session/service/store/session-domain.service';
 import { slashCommandCacheService } from '@/backend/services/session/service/store/slash-command-cache.service';
 import { isWorkspaceScopedCommandName } from '@/backend/services/session/service/store/slash-command-disk-scanner';

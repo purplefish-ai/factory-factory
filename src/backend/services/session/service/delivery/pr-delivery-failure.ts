@@ -1,5 +1,5 @@
 import { ApplicationError } from '@/backend/lib/application-error';
-import { isTurnAlreadyInProgressError } from '@/backend/services/session/service/session.error-message';
+import { isTurnAlreadyInProgressError } from '@/backend/services/session/service/errors/session.error-message';
 
 /**
  * Why a claimed background (PR) delivery did not reach the provider.

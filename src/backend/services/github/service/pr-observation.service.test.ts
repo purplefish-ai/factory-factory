@@ -290,6 +290,13 @@ it('propagates an AbortError even when no supplied signal has been aborted', asy
   await expect(prObservationService.fetch(target)).rejects.toBe(error);
 });
 
+it('propagates an AbortError of the combined read without a core-only retry', async () => {
+  const error = new DOMException('aborted', 'AbortError');
+  vi.mocked(githubCLIService.getPRObservationDetails).mockRejectedValue(error);
+  await expect(prObservationService.fetch(target)).rejects.toBe(error);
+  expect(githubCLIService.getPRStatusDetails).not.toHaveBeenCalled();
+});
+
 it('rejects core failures and never fabricates a successful CI observation', async () => {
   const error = new Error('core GitHub fetch failed');
   vi.mocked(githubCLIService.getPRObservationDetails).mockRejectedValue(

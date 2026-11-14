@@ -310,7 +310,7 @@ jobs:
       - name: Install Playwright Chromium
         run: pnpm exec playwright install --with-deps --only-shell chromium
 
-      # Builds native modules first, then starts the sandbox, runs the spec and stops it.
+      # Starts the sandbox (which builds the native modules first), runs the spec and stops it.
       - name: Run sandbox smoke test
         run: pnpm test:e2e:sandbox
 

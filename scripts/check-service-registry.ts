@@ -26,6 +26,7 @@ import {
   getSessionModuleErrors,
   isSessionTestFile,
   sessionModuleDirectories,
+  sessionRootFiles,
   sessionServiceRoot,
 } from './service-registry-session-modules';
 
@@ -484,6 +485,7 @@ function checkSessionModules(errors: string[], reportUnneededBackEdges: boolean)
       modules: sessionModules,
       cycles: sessionModuleCycles,
       moduleDirectories,
+      rootFiles: sessionRootFiles(filePaths.map((file) => file.path)),
       edges: collectSessionModuleEdges(files, moduleDirectories),
       reportUnneededBackEdges,
     })
