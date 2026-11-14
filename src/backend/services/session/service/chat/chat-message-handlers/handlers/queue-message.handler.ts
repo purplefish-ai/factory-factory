@@ -1,5 +1,5 @@
 import { createLogger } from '@/backend/services/logger.service';
-import { validateAttachment } from '@/backend/services/session/service/chat/chat-message-handlers/attachment-processing';
+import { validateAttachment } from '@/backend/services/session/service/attachments/attachment-processing';
 import {
   buildAcceptedMessageStateChange,
   buildQueuedMessage,

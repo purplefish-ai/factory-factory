@@ -1255,13 +1255,12 @@ trailing PR content as a compact update row.
 The session capsule's `service/` directory is grouped by sub-domain. Imports
 point up this table: code imports from its own row or earlier rows, never later
 ones. The barrel `index.ts` sits below every row; the interceptor bridge is in
-`composition/`. One older edge remains: `dispatch/` reuses chat attachment
-helpers.
+`composition/`.
 
 | Directory                                                                       | Owns                                                                                                                                                                                                     |
 | ------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `acp/`, `inference/`, `event-bus/`, `store/`, `logging/`, `metadata/`, `voice/` | ACP runtimes; one-shot structured inference in a disposable process; event bus; in-memory session store, domain service, resume fence; trace logs; workspace metadata, event classifier; voice narration |
-| `providers/`, `archive/`, `bridges/`, `errors/`                                 | Account-wide model catalogs and plan usage; closed-session transcripts; bridge interfaces (types only); provider error messages                                                                          |
+| `providers/`, `archive/`, `bridges/`, `errors/`, `attachments/`                 | Account-wide model catalogs and plan usage; closed-session transcripts; bridge interfaces (types only); provider error messages; attachment validation and prompt content                                |
 | `data/`                                                                         | `SessionRepository`, stored launch settings and startup intent, provider history loading and hydration                                                                                                   |
 | `config/`                                                                       | `SessionConfigService`, config commit authority and mutation queue, permission presets, launch options, startup configuration                                                                            |
 | `event-agent/`                                                                  | `EventSessionAuthority`, event fences, event startup guards                                                                                                                                              |

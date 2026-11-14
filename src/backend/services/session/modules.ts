@@ -23,6 +23,11 @@ export const sessionModules: Record<
     description:
       'Archives a closed session: writes its transcript file and its ClosedSession record, and reads the transcript and provider identity back.',
   },
+  attachments: {
+    dependsOn: [],
+    description:
+      'Validates message attachments (data present, base64, size limit, image format read from the bytes) and turns message text and attachments into provider prompt content.',
+  },
   bridges: {
     dependsOn: [],
     description:
@@ -30,6 +35,7 @@ export const sessionModules: Record<
   },
   chat: {
     dependsOn: [
+      'attachments',
       'bridges',
       'config',
       'data',
@@ -37,11 +43,12 @@ export const sessionModules: Record<
       'dispatch',
       'event-bus',
       'lifecycle',
+      'logging',
       'store',
       'voice',
     ],
     description:
-      'Handles chat commands from clients (queue, steer, stop, model and config changes, permission replies), validates and converts attachments, prepares session loads and forwards pending requests and workspace notifications.',
+      'Handles chat commands from clients (queue, steer, stop, model and config changes, permission replies), prepares session loads and forwards pending requests and workspace notifications.',
   },
   composition: {
     dependsOn: [
@@ -81,13 +88,14 @@ export const sessionModules: Record<
   dispatch: {
     dependsOn: [
       'acp',
+      'attachments',
       'bridges',
-      'chat',
       'config',
       'data',
       'delivery',
       'errors',
       'event-agent',
+      'logging',
       'store',
       'voice',
     ],
@@ -138,7 +146,8 @@ export const sessionModules: Record<
   },
   logging: {
     dependsOn: [],
-    description: 'Writes per-session debug logs of WebSocket events and ACP traces to files.',
+    description:
+      'Writes per-session debug logs of WebSocket events and ACP traces to files, and holds the chat WebSocket debug flag.',
   },
   metadata: {
     dependsOn: ['inference'],
@@ -181,4 +190,4 @@ export const sessionModules: Record<
  * removed. Sorted. Entries may be removed, never added (the check compares
  * this list with the base branch), and it stays a plain array literal.
  */
-export const sessionModuleCycles: readonly (readonly [string, string])[] = [['dispatch', 'chat']];
+export const sessionModuleCycles: readonly (readonly [string, string])[] = [];

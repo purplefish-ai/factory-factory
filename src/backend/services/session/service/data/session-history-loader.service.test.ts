@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { configService } from '@/backend/services/config.service';
-import { processAttachmentsAndBuildContent } from '@/backend/services/session/service/chat/chat-message-handlers/attachment-processing';
+import { processAttachmentsAndBuildContent } from '@/backend/services/session/service/attachments/attachment-processing';
 import { combineBatchContents } from '@/backend/services/session/service/dispatch/session-dispatch-batch';
 import { buildTranscriptFromHistory } from '@/backend/services/session/service/store/session-transcript';
 import type { QueuedMessage } from '@/shared/acp-protocol';
