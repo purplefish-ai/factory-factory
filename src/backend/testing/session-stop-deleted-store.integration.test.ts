@@ -1,14 +1,60 @@
-import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, expect, it, vi } from 'vitest';
 import {
   createIntegrationDatabase,
   destroyIntegrationDatabase,
   type IntegrationDatabase,
 } from './integration-db';
 
+async function importSessionModules() {
+  const { sessionDomainService } = await vi.importActual<
+    typeof import('@/backend/services/session/service/store/session-domain.service')
+  >('@/backend/services/session/service/store/session-domain.service');
+  const { SessionRepository } = await vi.importActual<
+    typeof import('@/backend/services/session/service/data/session.repository')
+  >('@/backend/services/session/service/data/session.repository');
+  const { SessionWorkflowFinalizer } = await vi.importActual<
+    typeof import('@/backend/services/session/service/lifecycle/session-workflow-finalizer')
+  >('@/backend/services/session/service/lifecycle/session-workflow-finalizer');
+  const { SessionTerminationCoordinator } = await vi.importActual<
+    typeof import('@/backend/services/session/service/lifecycle/session-termination.coordinator')
+  >('@/backend/services/session/service/lifecycle/session-termination.coordinator');
+  const { createTerminationHarness } = await vi.importActual<
+    typeof import('@/backend/services/session/service/lifecycle/session-lifecycle.test-helpers')
+  >('@/backend/services/session/service/lifecycle/session-lifecycle.test-helpers');
+  const { SessionStoreRegistry } = await vi.importActual<
+    typeof import('@/backend/services/session/service/store/session-store-registry')
+  >('@/backend/services/session/service/store/session-store-registry');
+  const { sessionEventBus } = await vi.importActual<
+    typeof import('@/backend/services/session/service/event-bus/session-event-bus')
+  >('@/backend/services/session/service/event-bus/session-event-bus');
+  return {
+    sessionDomainService,
+    SessionRepository,
+    SessionWorkflowFinalizer,
+    SessionTerminationCoordinator,
+    createTerminationHarness,
+    SessionStoreRegistry,
+    sessionEventBus,
+  };
+}
+
 let db: IntegrationDatabase;
 let other: { id: string };
 let domain: typeof import('@/backend/services/session/service/store/session-domain.service').sessionDomainService;
+let modules: Awaited<ReturnType<typeof importSessionModules>>;
 let cleanup: { db?: IntegrationDatabase; domain?: typeof domain } = {};
+// A worker's first load of the session lifecycle graph fetches every module
+// from the Vitest server: 2.5 s alone and over 4.5 s at load 300, inside the
+// first test's budget. Reloads after vi.resetModules() take tens of
+// milliseconds, so pay the first load once here, against a throwaway database.
+beforeAll(async () => {
+  const preload = await createIntegrationDatabase();
+  try {
+    await importSessionModules();
+  } finally {
+    await destroyIntegrationDatabase(preload);
+  }
+}, 60_000);
 beforeEach(async () => {
   cleanup = {};
   db = await createIntegrationDatabase();
@@ -38,9 +84,8 @@ beforeEach(async () => {
       status: 'IDLE',
     },
   });
-  ({ sessionDomainService: domain } = await vi.importActual<
-    typeof import('@/backend/services/session/service/store/session-domain.service')
-  >('@/backend/services/session/service/store/session-domain.service'));
+  modules = await importSessionModules();
+  domain = modules.sessionDomainService;
   cleanup.domain = domain;
 });
 afterEach(async () => {
@@ -62,24 +107,14 @@ it.each([
 ] as const)(
   'stop cleanup keeps transient store lifetime after %s with %s viewers',
   async (outcome, viewers) => {
-    const { SessionRepository } = await vi.importActual<
-      typeof import('@/backend/services/session/service/data/session.repository')
-    >('@/backend/services/session/service/data/session.repository');
-    const { SessionWorkflowFinalizer } = await vi.importActual<
-      typeof import('@/backend/services/session/service/lifecycle/session-workflow-finalizer')
-    >('@/backend/services/session/service/lifecycle/session-workflow-finalizer');
-    const { SessionTerminationCoordinator } = await vi.importActual<
-      typeof import('@/backend/services/session/service/lifecycle/session-termination.coordinator')
-    >('@/backend/services/session/service/lifecycle/session-termination.coordinator');
-    const { createTerminationHarness } = await vi.importActual<
-      typeof import('@/backend/services/session/service/lifecycle/session-lifecycle.test-helpers')
-    >('@/backend/services/session/service/lifecycle/session-lifecycle.test-helpers');
-    const { SessionStoreRegistry } = await vi.importActual<
-      typeof import('@/backend/services/session/service/store/session-store-registry')
-    >('@/backend/services/session/service/store/session-store-registry');
-    const { sessionEventBus } = await vi.importActual<
-      typeof import('@/backend/services/session/service/event-bus/session-event-bus')
-    >('@/backend/services/session/service/event-bus/session-event-bus');
+    const {
+      SessionRepository,
+      SessionWorkflowFinalizer,
+      SessionTerminationCoordinator,
+      createTerminationHarness,
+      SessionStoreRegistry,
+      sessionEventBus,
+    } = modules;
     const stores: Array<{
       registry: InstanceType<typeof SessionStoreRegistry>;
       store: ReturnType<InstanceType<typeof SessionStoreRegistry>['getOrCreate']>;
