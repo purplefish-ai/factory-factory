@@ -103,21 +103,20 @@ async function pausedAutomation() {
   });
   feed = [{ providerEventId: 'B', payload: null }];
 }
-async function begin(overrides: Record<string, unknown> = {}) {
+async function enableInput() {
   const current = await definition();
-  await activation().begin(
-    {
-      projectId,
-      agentId: fixture.definitionId,
-      expectedManagementRevision: current.managementRevision,
-      definitionRevision: current.definitionRevision,
-      projectSource: { githubOwner: 'org', githubRepo: 'repo' },
-      execution: validatedIntent(current.definitionRevision).execution,
-      triggerIds: [fixture.triggerId],
-      ...overrides,
-    },
-    signal()
-  );
+  return {
+    projectId,
+    agentId: fixture.definitionId,
+    expectedManagementRevision: current.managementRevision,
+    definitionRevision: current.definitionRevision,
+    projectSource: { githubOwner: 'org', githubRepo: 'repo' },
+    execution: validatedIntent(current.definitionRevision).execution,
+    triggerIds: [fixture.triggerId],
+  };
+}
+async function begin(overrides: Record<string, unknown> = {}) {
+  await activation().begin({ ...(await enableInput()), ...overrides }, signal());
 }
 
 it('persists validated intent, waits STARTING for its baseline, then activates at that boundary', async () => {
@@ -304,6 +303,64 @@ it("does not let an older generation's resolved baseline activate a newer STARTI
   });
   await cycle();
   expect(await trigger()).toMatchObject({ activationState: 'PAUSED', activationBoundary: null });
+});
+
+it('ignores a baseline that an older generation records after a newer Enable started', async () => {
+  await pausedAutomation();
+  feed = [label('N1'), ...feed];
+  const prepared: string[] = [];
+  let reached!: () => void;
+  const newerPreparing = new Promise<void>((resolve) => {
+    reached = resolve;
+  });
+  let release!: () => void;
+  const released = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  let newer: Promise<void> | undefined;
+  // The newer Enable stops inside its own preparation until the older one has finished.
+  const newerActivation = new runtime.AgentActivationService(
+    {
+      prepareBaseline: async (connectionId, abort) => {
+        reached();
+        await released;
+        const baseline = await poller().prepareBaseline(connectionId, abort);
+        prepared.push(baseline.id);
+        return baseline;
+      },
+    },
+    () => clock
+  );
+  // The older Enable prepares its baseline at N1, then a newer Enable starts before it records it.
+  const olderActivation = new runtime.AgentActivationService(
+    {
+      prepareBaseline: async (connectionId, abort) => {
+        const baseline = await poller().prepareBaseline(connectionId, abort);
+        prepared.push(baseline.id);
+        feed = [label('N2'), ...feed];
+        newer = newerActivation.begin(await enableInput(), signal());
+        await newerPreparing;
+        return baseline;
+      },
+    },
+    () => clock
+  );
+  await olderActivation.begin(await enableInput(), signal());
+  release();
+  await newer;
+  const [olderBaseline, newerBaseline] = prepared;
+  expect(olderBaseline).not.toBe(newerBaseline);
+  expect(await trigger()).toMatchObject({
+    activationState: 'STARTING',
+    activationGeneration: 2,
+    pendingActivation: { activationGeneration: 2, baselineId: newerBaseline },
+  });
+  await cycle();
+  expect(await trigger()).toMatchObject({
+    activationState: 'ACTIVE',
+    activationGeneration: 2,
+    activationBoundary: { provider: 'GITHUB', headEventId: 'N2' },
+  });
 });
 
 it('pauses every trigger, cancels queued runs and lets claimed runs finish', async () => {
