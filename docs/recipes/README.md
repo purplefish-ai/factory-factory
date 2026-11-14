@@ -25,3 +25,4 @@ not point at its own recipe, and a file in either place that no rule would read.
 | [verify-event-automations](verify-event-automations.md) | You changed the event automation runtime, jobs or GitHub source |
 | [add-lint-rule](add-lint-rule.md)                       | You add a custom `factory/` Oxlint rule                         |
 | [add-background-job](add-background-job.md)             | You add recurring backend work run by `jobRunner`               |
+| [add-service-capsule](add-service-capsule.md)           | You add a backend domain under `src/backend/services/`          |
