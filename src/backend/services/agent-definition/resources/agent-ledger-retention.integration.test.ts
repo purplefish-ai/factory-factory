@@ -399,9 +399,7 @@ it.each([
 ] as const)('conservatively retains %s dependency proof', async (corruption) => {
   const { event, eventId } = await terminal();
   if (corruption === 'starting') {
-    await db.prisma.agentTrigger.updateMany({
-      data: { activationState: 'STARTING', pendingActivation: { expired: true } },
-    });
+    await db.prisma.agentTrigger.updateMany({ data: { activationState: 'STARTING' } });
   }
   if (corruption === 'boundary') {
     await db.prisma.agentTrigger.updateMany({ data: { activationBoundary: { invalid: true } } });

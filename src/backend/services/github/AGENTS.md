@@ -28,8 +28,8 @@ does not own:
   `src/backend/services/workspace/service/worktree/git-clone.service.ts`.
 - The aggregate CLI health cache across Claude, Codex and GitHub:
   `src/backend/orchestration/cli-health.service.ts`.
-- GitHub sources for event automations, beyond the reads here:
-  `src/backend/orchestration/agents/`.
+- Event-automation GitHub polling, capture and proof:
+  `src/backend/services/agent-definition/`.
 
 ## Public surface
 
