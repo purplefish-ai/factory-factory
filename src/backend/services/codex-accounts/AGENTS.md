@@ -12,11 +12,11 @@ paths that start with `src/` are from the repository root.
 
 The capsule owns the Prisma model `CodexAccount` (through
 `resources/codex-account.accessor.ts` and, for backups,
-`resources/codex-account-backup.accessor.ts`), each account's private profile
-directory under the application data directory, the pinned identity, browser
-sign-in, the native probes that read identity, models and quota, and the choice
-of account for Auto. Codex stores the credentials itself, in the profile. It
-does not own:
+`resources/codex-account-backup.accessor.ts`), each managed account's private
+profile directory under the application data directory (the Native default uses
+the user's own Codex home), the pinned identity, browser sign-in, the native
+probes that read identity, models and quota, and the choice of account for Auto.
+Codex stores the credentials itself, in the profile. It does not own:
 
 - Which account a session uses once created, and resolving it at startup and for
   history: the session capsule (`src/backend/services/session/`, its `data/` and
@@ -45,10 +45,11 @@ functions `exportCodexAccountMetadata`, `restoreCodexAccountMetadata` and
 
 ## Invariants
 
-- Auto picks only an enabled, signed-in account that supports the requested
-  model and reasoning effort and whose quota is not known to be exhausted, and
-  prefers known remaining quota to unknown; an explicit choice may use a
-  disabled account. `codex-account.service.test.ts`.
+- An Auto reservation picks only an enabled, signed-in account that supports the
+  requested model and reasoning effort and whose quota is not known to be
+  exhausted, and prefers known remaining quota to unknown; an explicit choice
+  may use a disabled account, and the launch options preview may use an
+  exhausted one. `codex-account.service.test.ts`, `review-regressions.test.ts`.
 - When Auto has no candidate, an identity failure is reported as such, and
   otherwise a failed probe reports the retry message, not exhausted quota.
   `codex-account.service.test.ts`, `review-regressions.test.ts`.

@@ -37,11 +37,11 @@ directly.
   idle or error transition drops the cached work unless fresh work is supplied.
   `session-runtime-machine.test.ts`.
 - A runtime transition that changes nothing but the timestamp stores it without
-  publishing a delta. `session-runtime-machine.test.ts`.
-- A message taken from the queue is published together with its committed
-  transcript entry, in one `transcript_message_committed` delta that carries the
-  remaining queue, so no viewer sees it in neither place.
-  `session-domain.state-deltas.test.ts`,
+  publishing a runtime delta. `session-runtime-machine.test.ts`.
+- A message leaving the queue is never published as absent from both the queue
+  and the transcript: the delta that removes it also carries its transcript
+  entry, as a `transcript_message_committed` delta with the remaining queue or a
+  dispatched state with the user message. `session-domain.state-deltas.test.ts`,
   `../dispatch/session-dispatch.service.test.ts`.
 
 ## Map

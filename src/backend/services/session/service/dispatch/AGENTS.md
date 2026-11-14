@@ -37,8 +37,8 @@ and `forgetSession` on deletion.
 
 ## Invariants
 
-- A queued message stays in the queue, visible to viewers, until it is sent;
-  startup and configuration awaited first do not take it out.
+- A queued message stays in the queue, visible to viewers, until it is sent or
+  rejected for good; startup and configuration awaited first do not take it out.
   `session-dispatch.service.test.ts`.
 - A message is sent only when no prompt holds the session's prompt slot, checked
   again after any auto-start; background shells, subagents and goals never hold
@@ -56,10 +56,10 @@ and `forgetSession` on deletion.
 - With no running turn, a steer dispatches the queue only when its message is
   the head; a stale steer of a later message is rejected.
   `session-dispatch.service.test.ts`.
-- A steer that fails, or that the provider answers with `promptRequired`, leaves
-  the message queued for ordinary dispatch; an accepted steer takes it out of
-  the queue even if a stop advanced the generation, so resume never replays it.
-  `session-dispatch.service.test.ts`.
+- A steer that fails before its deadline, or that the provider answers with
+  `promptRequired`, leaves the message queued for ordinary dispatch; an accepted
+  steer takes it out of the queue even if a stop advanced the generation, so
+  resume never replays it. `session-dispatch.service.test.ts`.
 - A steer of a human message unacknowledged after 10 seconds stops that runtime
   before releasing the queue and leaves the message queued with no automatic
   resend, since the provider may already have consumed it.
