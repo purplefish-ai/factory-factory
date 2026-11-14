@@ -5,8 +5,10 @@ import { dirname, join } from 'node:path';
 import { afterEach, describe, expect, test } from 'vitest';
 import { parse } from 'yaml';
 import { z } from 'zod';
+import { countPhysicalLines } from './check-file-length';
 import {
   checkPairing,
+  checkRecipes,
   checkRecords,
   checkReferences,
   checkSize,
@@ -669,6 +671,129 @@ describe('no line is exempt', () => {
   });
 });
 
+describe('recipes', () => {
+  const recipe = (extraLines = 0) =>
+    [
+      '# Add a thing',
+      '',
+      '## Use when',
+      '',
+      'You add a thing.',
+      '',
+      '## Steps',
+      '',
+      '1. Run `pnpm check`; it passes.',
+      '',
+      '```sh',
+      '# a comment in a fence is not a heading',
+      '```',
+      '',
+      '## Mistakes this prevents',
+      '',
+      '- A mistake.',
+      lines(extraLines),
+    ].join('\n');
+  const recipeOfLength = (count: number) => recipe(count - countPhysicalLines(recipe()));
+  const skill = (name: string, pointer = `docs/recipes/${name}.md`) =>
+    `---\nname: ${name}\ndescription: Use when you ${name}.\n---\n\nFollow \`${pointer}\`.\n`;
+  const complete = {
+    'docs/recipes/README.md': '# Recipes\n',
+    'docs/recipes/add-thing.md': recipe(),
+    '.claude/skills/add-thing/SKILL.md': skill('add-thing'),
+  };
+
+  test('accepts a recipe of 80 lines, a README of 40, and a recipe with its skill', () => {
+    const repository = repositoryWith({
+      ...complete,
+      'docs/recipes/README.md': lines(40),
+      'docs/recipes/add-long.md': recipeOfLength(80),
+      '.claude/skills/add-long/SKILL.md': skill('add-long'),
+    });
+
+    expect(checkSize(repository, {})).toEqual([]);
+    expect(checkRecipes(repository)).toEqual([]);
+  });
+
+  test('rejects a recipe of 81 lines and a README of 41', () => {
+    const repository = repositoryWith({
+      'docs/recipes/README.md': lines(41),
+      'docs/recipes/add-long.md': recipeOfLength(81),
+    });
+
+    expect(checkSize(repository, {}).map(formatGuidanceViolation)).toEqual([
+      'docs/recipes/add-long.md: size: 81 lines exceeds the 80-line limit for a recipe. Fix: cut it to the steps and link the rules instead of restating them, or split it into two recipes.',
+      'docs/recipes/README.md: size: 41 lines exceeds the 40-line limit for the recipe README. Fix: keep the format and the table of recipes only; put anything else in the recipe it concerns.',
+    ]);
+  });
+
+  test('rejects a recipe that lacks a part, has them out of order or has no title', () => {
+    const repository = repositoryWith({
+      ...complete,
+      'docs/recipes/no-mistakes.md': recipe().replace('## Mistakes this prevents', '## Pitfalls'),
+      'docs/recipes/no-title.md': recipe().replace('# Add a thing\n', ''),
+      'docs/recipes/out-of-order.md': recipe()
+        .replace('## Steps', '## Temp')
+        .replace('## Use when', '## Steps')
+        .replace('## Temp', '## Use when'),
+      '.claude/skills/no-mistakes/SKILL.md': skill('no-mistakes'),
+      '.claude/skills/no-title/SKILL.md': skill('no-title'),
+      '.claude/skills/out-of-order/SKILL.md': skill('out-of-order'),
+    });
+    const fix =
+      'use the format in docs/recipes/README.md: a "# " title, then "## Use when", "## Steps" and "## Mistakes this prevents", in that order.';
+
+    expect(checkRecipes(repository).map(formatGuidanceViolation)).toEqual([
+      `docs/recipes/no-mistakes.md: recipes: has the sections "Use when", "Steps" and "Pitfalls", not "Use when", "Steps" and "Mistakes this prevents". Fix: ${fix}`,
+      `docs/recipes/no-title.md: recipes: does not start with a "# " title. Fix: ${fix}`,
+      `docs/recipes/out-of-order.md: recipes: has the sections "Steps", "Use when" and "Mistakes this prevents", not "Use when", "Steps" and "Mistakes this prevents". Fix: ${fix}`,
+    ]);
+  });
+
+  test('rejects a recipe without its skill file', () => {
+    const repository = repositoryWith({
+      'docs/recipes/README.md': '# Recipes\n',
+      'docs/recipes/add-thing.md': recipe(),
+    });
+
+    expect(checkRecipes(repository).map(formatGuidanceViolation)).toEqual([
+      'docs/recipes/add-thing.md: recipes: has no skill file at .claude/skills/add-thing/SKILL.md. Fix: create it with front matter (name, description) and one line pointing at docs/recipes/add-thing.md.',
+    ]);
+  });
+
+  test('rejects a skill that points at a missing recipe, at the README or at nothing', () => {
+    const repository = repositoryWith({
+      ...complete,
+      '.claude/skills/gone/SKILL.md': skill('gone'),
+      '.claude/skills/readme/SKILL.md': skill('readme', 'docs/recipes/README.md'),
+      '.claude/skills/nothing/SKILL.md': '---\nname: nothing\ndescription: Use never.\n---\n',
+    });
+    const fix = 'point it at the recipe it serves, or delete the skill.';
+
+    expect(checkRecipes(repository).map(formatGuidanceViolation)).toEqual([
+      `.claude/skills/gone/SKILL.md: recipes: points at docs/recipes/gone.md, which is not a recipe. Fix: ${fix}`,
+      `.claude/skills/nothing/SKILL.md: recipes: does not point at a recipe under docs/recipes/. Fix: ${fix}`,
+      `.claude/skills/readme/SKILL.md: recipes: points at docs/recipes/README.md, which is not a recipe. Fix: ${fix}`,
+    ]);
+  });
+
+  test('checks the links and paths a recipe cites', () => {
+    const repository = repositoryWith({
+      ...complete,
+      'src/backend/thing.ts': 'export {};\n',
+      'docs/recipes/add-thing.md': `${recipe()}\nSee [the rules](../../src/area/AGENTS.md) and \`src/backend/gone.ts\`.\n`,
+    });
+
+    expect(checkReferences(repository).map(formatGuidanceViolation)).toEqual([
+      expect.stringContaining(
+        'docs/recipes/add-thing.md:19: references: link `../../src/area/AGENTS.md` does not exist.'
+      ),
+      expect.stringContaining(
+        'docs/recipes/add-thing.md:19: references: `src/backend/gone.ts` does not exist.'
+      ),
+    ]);
+  });
+});
+
 describe('records', () => {
   test('accepts dated records within the limit, and no records directory at all', () => {
     expect(
@@ -810,5 +935,19 @@ describe('command line', () => {
       'AGENTS.md: pairing: has no sibling CLAUDE.md. Fix: create CLAUDE.md containing exactly @AGENTS.md.',
       'AGENTS.md:122: references: `src/missing.ts` does not exist. Fix: point it at the current path or heading, or remove it.',
     ]);
+  });
+
+  test('fails a recipe that has no skill file', () => {
+    const repositoryRoot = createRepository({
+      'docs/recipes/add-thing.md':
+        '# Add a thing\n\n## Use when\n\n## Steps\n\n## Mistakes this prevents\n',
+    });
+
+    const result = run(repositoryRoot, { baseCeilings: { notice: 'no base.' } });
+
+    expect(result.exitCode).toBe(1);
+    expect(result.stderr).toContain(
+      'docs/recipes/add-thing.md: recipes: has no skill file at .claude/skills/add-thing/SKILL.md.'
+    );
   });
 });

@@ -14,6 +14,7 @@ context, not a new task or a substitute for current repository guidance.
 | Contribute and verify changes                      | [Verification](../CONTRIBUTING.md#verification) and [agent guide](../AGENTS.md)                       |
 | Service boundaries and subsystem contracts         | [Architecture notes](architecture/README.md)                                                          |
 | Where a rule, fact or tool for agents belongs      | [Agent-friendly codebase principles](architecture/agent-friendly-codebase.md)                         |
+| Repeat a procedure, such as verifying in the app   | [Recipes](recipes/README.md)                                                                          |
 | Why a decision was made                            | [Decision records](decisions/)                                                                        |
 | Chat streaming, loading, and replay                | [Chat feature guide][chat-agents-md]                                                                  |
 | Workspace state and PR monitoring                  | [Workspace state](architecture/workspace-state.md) and [PR monitoring guide][pull-requests-agents-md] |
