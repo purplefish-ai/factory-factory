@@ -99,6 +99,17 @@ describe('agent triggers', () => {
     ).toBe(true);
   });
 
+  it('rejects a schedule trigger that names a connection', () => {
+    expect(
+      agentTriggerInputSchema.safeParse({
+        type: 'SCHEDULE',
+        connectionId: 'slack-connection',
+        description: 'Every weekday',
+        config: { version: 1, cadence: 'DAILY' },
+      }).success
+    ).toBe(false);
+  });
+
   it.each([
     { version: 1, cadence: 'DAILY', scheduledTime: '09:00' },
     { version: 1, cadence: 'DAILY', scheduledTime: '25:00', timezone: 'UTC' },

@@ -232,7 +232,7 @@ completed by the `agent-source-poll` job after each cycle. It makes them
 `ACTIVE` once the baseline resolves, or returns them to `PAUSED` with
 `SOURCE_ERROR`, `SOURCE_RECOVERY_REQUIRED` or, after 30 minutes,
 `ACTIVATION_EXPIRED`
-([enable and pause](../architecture/integrations.md#enable-and-pause)).
+([agent-definition guide](../../src/backend/services/agent-definition/AGENTS.md)).
 
 Slack's planned approach is the model for a push source. Enable shows a nonce; a
 verified human message in each channel proves delivery and supplies a provider
@@ -308,18 +308,18 @@ that catch-up cannot close.
 
 For polling, `automation.resetSource({ projectId, connectionId })` acts only
 behind a `RECOVERY_REQUIRED` fence
-([source reset](../architecture/integrations.md#source-reset)). Repeating it
-before a fresh head is captured is an idempotent no-op that returns zero counts;
-any other source health is refused. In one ledger transaction it pauses every
-trigger on the connection through the shared `pauseTriggers` helper and cancels
-their queued runs. It then advances `AgentSourceState.epoch` and clears the
-cursor, so the next Enable takes a fresh baseline and events from the gap never
-run. Retained proof is never deleted. A push source has no ordinal proof to
-fence, so reset becomes: accept the recorded gap, pause that intake's triggers,
-cancel their queued runs, optionally rotate the secret or re-register the hook,
-and require Enable again, which takes a fresh ping boundary. Stored but
-unevaluated deliveries stay ineligible because their generation is stale. Today
-`automation.resetSource` pauses every trigger on the connection. With two
+([agent-definition guide](../../src/backend/services/agent-definition/AGENTS.md)).
+Repeating it before a fresh head is captured is an idempotent no-op that returns
+zero counts; any other source health is refused. In one ledger transaction it
+pauses every trigger on the connection through the shared `pauseTriggers` helper
+and cancels their queued runs. It then advances `AgentSourceState.epoch` and
+clears the cursor, so the next Enable takes a fresh baseline and events from the
+gap never run. Retained proof is never deleted. A push source has no ordinal
+proof to fence, so reset becomes: accept the recorded gap, pause that intake's
+triggers, cancel their queued runs, optionally rotate the secret or re-register
+the hook, and require Enable again, which takes a fresh ping boundary. Stored
+but unevaluated deliveries stay ineligible because their generation is stale.
+Today `automation.resetSource` pauses every trigger on the connection. With two
 intakes it should probably act per intake; see the
 [open questions](#open-questions).
 

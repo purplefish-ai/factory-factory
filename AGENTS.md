@@ -59,8 +59,8 @@ Read the matching note before changing these areas:
 - [Agent runtime](docs/architecture/agent-runtime.md): ACP, subagents, child
   workspaces, quick actions, the desktop backend utility process.
 - [Integrations](docs/architecture/integrations.md): event automations, Slack,
-  client query transport. GitHub, Linear and scheduled automations have guides
-  in their capsules under `src/backend/services/`.
+  client query transport. GitHub, Linear and both kinds of automation have
+  guides in their capsules under `src/backend/services/`.
 
 ## Security and guidance
 

@@ -170,6 +170,7 @@ it('uses occurredAt expiry despite delayed observation', async () => {
   const { eventId } = await runtime.ingestEvent(input);
   await fixture.finalize({ connectionId: fixture.connectionId, eventIds: [eventId] });
   expect((await row(eventId)).identityExpiresAt.getTime()).toBe(occurredAt.getTime() + 90 * DAY);
+  expect((await row(eventId)).payloadExpiresAt.getTime()).toBe(occurredAt.getTime() + 30 * DAY);
   await prune();
   expect(await db.prisma.agentEvent.count()).toBe(0);
 });

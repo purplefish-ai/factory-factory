@@ -166,6 +166,25 @@ it('enforces unique canonical source order and connection-owned finalization', a
   ).toMatchObject({ lastSourceOrder: 2 });
 });
 
+it('returns the stored ordinals when a wholly finalized chunk is finalized again', async () => {
+  const first = await fixture.event('first');
+  const second = await fixture.event('second');
+  expect(
+    await runtime.finalizeEventOrder({
+      connectionId: fixture.connectionId,
+      eventIds: [first, second],
+    })
+  ).toEqual([
+    { eventId: first, sourceOrder: 1 },
+    { eventId: second, sourceOrder: 2 },
+  ]);
+  expect(
+    await db.prisma.agentSourceState.findUniqueOrThrow({
+      where: { connectionId: fixture.connectionId },
+    })
+  ).toMatchObject({ lastSourceOrder: 2 });
+});
+
 it('rejects caller-provided eligibility booleans and malformed resolved execution settings', async () => {
   const id = await fixture.event();
   const decision = await fixture.evaluation(id);

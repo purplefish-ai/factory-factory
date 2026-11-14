@@ -177,6 +177,20 @@ it('activates immediately when the first baseline initializes the source', async
   });
 });
 
+it('keeps a listening supported trigger listening and pauses a trigger it cannot start', async () => {
+  await fixture.secondTrigger();
+  const listening = await trigger();
+  expect(listening).toMatchObject({ activationState: 'ACTIVE', isEnabled: true });
+  await begin();
+  expect(await trigger()).toEqual(listening);
+  expect(await trigger('trigger-b')).toMatchObject({
+    activationState: 'PAUSED',
+    isEnabled: false,
+    activationGeneration: 2,
+    activationBoundary: null,
+  });
+});
+
 it('refuses stale management or definition revisions without changing state', async () => {
   await pausedAutomation();
   await expect(begin({ expectedManagementRevision: 7 })).rejects.toMatchObject({

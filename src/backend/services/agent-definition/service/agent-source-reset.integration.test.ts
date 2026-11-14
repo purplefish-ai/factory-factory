@@ -514,5 +514,9 @@ it('requires a configured trigger of the calling project on the connection', asy
     where: { id: fixture.triggerId },
     data: { isConfigured: true },
   });
+  await db.prisma.project.update({ where: { id: projectId }, data: { isArchived: true } });
+  await expect(reset()).rejects.toMatchObject({ code: 'PRECONDITION_FAILED' });
+  expect(await state()).toEqual(before);
+  await db.prisma.project.update({ where: { id: projectId }, data: { isArchived: false } });
   await expect(reset()).resolves.toMatchObject({ connectionId: fixture.connectionId });
 });
