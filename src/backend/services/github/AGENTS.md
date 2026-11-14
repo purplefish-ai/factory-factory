@@ -59,9 +59,10 @@ review-activity helpers and `classifyGitHubCLIError`.
   `service/github-cli/auth-check.test.ts`.
 - A forced health check waits for older refreshes, so a result started before a
   login cannot replace it. `github-cli-health-cache.test.ts`.
-- An observation reads core facts and conversation comments in one `gh pr view`;
-  if that read fails for any reason but an abort or a connectivity failure, it
-  falls back to the core read and reports reviews incomplete.
+- With reviews requested an observation reads core facts and conversation
+  comments in one `gh pr view` (with `includeReviews: false`, core facts only),
+  and if that read fails for any reason but an abort or a connectivity failure,
+  it falls back to the core read and reports reviews incomplete.
   `pr-observation.service.test.ts`.
 - Full PR detail reads accept up to 10 MiB of output and fail beyond it rather
   than return truncated metadata. `github-cli-full-details-buffer.test.ts`.
