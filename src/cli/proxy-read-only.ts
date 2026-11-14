@@ -41,8 +41,10 @@ export const PUBLIC_BLOCKED_PROCEDURES: ReadonlySet<string> = new Set([
   // Probe or read arbitrary host paths.
   'project.validateRepoPath',
   'project.checkFactoryConfig',
-  // Whole-machine load, which reflects activity outside this instance.
+  // Whole-machine load and the processes behind it, which reflect activity
+  // outside this instance.
   'admin.getHostMetrics',
+  'admin.getHostLoadBreakdown',
   // Logs and a full database export.
   'admin.getLogs',
   'admin.downloadLogFile',

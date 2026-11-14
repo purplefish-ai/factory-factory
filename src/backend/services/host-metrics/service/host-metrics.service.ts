@@ -1,6 +1,13 @@
 import { execFile } from 'node:child_process';
 import os from 'node:os';
 import { promisify } from 'node:util';
+import {
+  groupHostProcesses,
+  type HostProcess,
+  type HostProcessGroup,
+  type ProcessOwner,
+  readHostProcesses,
+} from './host-processes';
 
 const execFileAsync = promisify(execFile);
 
@@ -22,7 +29,17 @@ export interface HostMetricsServiceOptions {
   readMemoryPercent?: () => Promise<number>;
   now?: () => number;
   sleep?: (ms: number) => Promise<void>;
+  readProcesses?: () => Promise<HostProcess[]>;
+  cpuCount?: () => number;
 }
+
+/** The heaviest process groups on the machine, for the load popover. */
+export interface HostProcessBreakdown {
+  byCpu: HostProcessGroup[];
+  byMemory: HostProcessGroup[];
+}
+
+const TOP_PROCESS_GROUPS = 5;
 
 /**
  * Sampling is driven by reads, not a timer: the header polls every 5 seconds
@@ -115,12 +132,31 @@ export class HostMetricsService {
   private samples: HostMetricsSample[] = [];
   private cpuBaseline: CpuTimes | null = null;
   private inFlight: Promise<HostMetricsSample[]> | null = null;
+  private readonly readProcesses: () => Promise<HostProcess[]>;
+  private readonly cpuCount: () => number;
 
   constructor(options: HostMetricsServiceOptions = {}) {
     this.readCpuTimes = options.readCpuTimes ?? readCpuTimes;
     this.readMemoryPercent = options.readMemoryPercent ?? (() => readMemoryPercent());
     this.now = options.now ?? Date.now;
     this.sleep = options.sleep ?? defaultSleep;
+    this.readProcesses = options.readProcesses ?? readHostProcesses;
+    this.cpuCount = options.cpuCount ?? (() => os.cpus().length);
+  }
+
+  /**
+   * What is using the machine right now, read on demand (one `ps`) because
+   * only an open popover asks. `owners` maps root pids to the workspace or
+   * Factory Factory process that started them.
+   */
+  async getTopProcesses(owners: ReadonlyMap<number, ProcessOwner>): Promise<HostProcessBreakdown> {
+    const groups = groupHostProcesses(await this.readProcesses(), owners, this.cpuCount());
+    return {
+      byCpu: groups.slice(0, TOP_PROCESS_GROUPS),
+      byMemory: [...groups]
+        .sort((a, b) => b.memoryBytes - a.memoryBytes)
+        .slice(0, TOP_PROCESS_GROUPS),
+    };
   }
 
   /** Recent samples, oldest first, taking a new one if the last is due. */

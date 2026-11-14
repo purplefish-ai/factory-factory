@@ -58,6 +58,7 @@ import {
   configureDomainBridges,
 } from './orchestration/domain-bridges.orchestrator';
 import { searchGitHubIssues } from './orchestration/github-issue-search.orchestrator';
+import { getHostLoadBreakdown } from './orchestration/host-load-breakdown.orchestrator';
 import { getWorkspaceLinearContext } from './orchestration/linear-config.helper';
 import { updateProjectSettings } from './orchestration/project-settings.orchestrator';
 import { getQuickAction, listQuickActions } from './prompts/quick-actions';
@@ -202,6 +203,7 @@ export type ApplicationServices = BridgeServices & {
   searchGitHubIssues: (
     input: Parameters<typeof searchGitHubIssues>[0]
   ) => ReturnType<typeof searchGitHubIssues>;
+  getHostLoadBreakdown: () => ReturnType<typeof getHostLoadBreakdown>;
   executeStartupScriptPipeline: typeof executeStartupScriptPipeline;
   claudeModelCatalogService: Pick<typeof claudeModelCatalogService, 'getModels' | 'stop'>;
   codexModelCatalogService: Pick<typeof codexModelCatalogService, 'getModels' | 'stop'>;
@@ -415,6 +417,15 @@ export function createDefaultApplicationDependencies(): ApplicationDependencies 
         listProjects: (filters) => services.projectManagementService.list(filters),
         searchIssues: (owner, repo, query, limit) =>
           services.githubCLIService.searchIssues(owner, repo, query, limit),
+      }),
+    getHostLoadBreakdown: () =>
+      getHostLoadBreakdown({
+        listAgentProcesses: () => services.acpRuntimeManager.getAllActiveProcesses(),
+        findSessions: (ids) => services.sessionDataService.findAgentSessionsByIds(ids),
+        listTerminals: () => services.terminalService.getAllTerminals(),
+        findWorkspaces: (ids) => services.workspaceDataService.findByIdsWithProject(ids),
+        serverPid: process.pid,
+        getTopProcesses: (owners) => services.hostMetricsService.getTopProcesses(owners),
       }),
     executeStartupScriptPipeline,
     claudeModelCatalogService,

@@ -222,6 +222,7 @@ describe('public read-only tunnel proxy', () => {
     '/api/trpc/admin%2EexportData',
     '/api/./trpc/admin.exportData',
     `/api/trpc/readFile,session.listSubagents?batch=1`,
+    '/api/trpc/admin.getHostLoadBreakdown',
   ])('refuses blocked queries however the path is spelled: %s', async (path) => {
     const response = await client.get(path).set(TUNNEL_HEADERS);
     expect(response.status).toBe(403);

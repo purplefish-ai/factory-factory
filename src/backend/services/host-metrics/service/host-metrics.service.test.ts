@@ -178,3 +178,25 @@ describe('HostMetricsService', () => {
     expect(harness.sleep).toHaveBeenCalledTimes(2);
   });
 });
+
+describe('HostMetricsService.getTopProcesses', () => {
+  it('lists the five heaviest groups by CPU and, separately, by memory', async () => {
+    const processes = Array.from({ length: 7 }, (_, index) => ({
+      pid: 10 + index,
+      ppid: 1,
+      cpuPercent: index * 10,
+      // Memory runs the other way, so the two lists differ.
+      memoryBytes: (7 - index) * 1024,
+      command: `/bin/p${index}`,
+    }));
+    const service = new HostMetricsService({
+      readProcesses: () => Promise.resolve(processes),
+      cpuCount: () => 1,
+    });
+
+    const breakdown = await service.getTopProcesses(new Map());
+
+    expect(breakdown.byCpu.map((group) => group.label)).toEqual(['p6', 'p5', 'p4', 'p3', 'p2']);
+    expect(breakdown.byMemory.map((group) => group.label)).toEqual(['p0', 'p1', 'p2', 'p3', 'p4']);
+  });
+});
