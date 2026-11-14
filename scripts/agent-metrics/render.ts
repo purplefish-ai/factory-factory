@@ -58,7 +58,7 @@ function formatSandboxSection(section: SandboxSectionMetrics): string {
       : 'none';
   const counts = `driven ${formatNumber(byKeyword.driven)}, not applicable ${formatNumber(byKeyword.notApplicable)}, unlabelled ${formatNumber(byKeyword.unlabelled)}, empty ${formatNumber(byKeyword.empty)}, missing ${formatNumber(byKeyword.missing)} of ${formatNumber(byKeyword.judged)} opened since the keyword instruction merged at ${section.keywordInstructionAt}`;
   const driven = `driven among those not marked "does not apply": ${formatNumber(byKeyword.driven)} of ${formatNumber(byKeyword.judged - byKeyword.notApplicable)} (${formatShare(byKeyword.shareDriven)})`;
-  const earlier = `opened since the template merged at ${section.templateMergedAt} and before the keyword instruction, judged only by text: ${formatNumber(byContent.filled)} of ${formatNumber(byContent.opened)} filled (${formatShare(byContent.shareFilled)}); opened before the template and not judged: ${formatNumber(section.beforeTemplate)}`;
+  const earlier = `opened since the template merged at ${section.templateMergedAt} and before the keyword instruction, judged only by text: filled ${formatNumber(byContent.filled)}, empty ${formatNumber(byContent.empty)}, missing ${formatNumber(byContent.missing)} of ${formatNumber(byContent.opened)} (${formatShare(byContent.shareFilled)} filled); opened before the template and not judged: ${formatNumber(section.beforeTemplate)}`;
   return `${counts}; ${driven}; unclassified: ${unclassified}; ${earlier}`;
 }
 

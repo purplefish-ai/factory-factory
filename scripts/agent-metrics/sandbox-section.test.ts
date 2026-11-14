@@ -141,6 +141,11 @@ describe('sandboxSectionState', () => {
   });
 });
 
+// Written as code points: a source file should not carry invisible characters.
+const zeroWidth = String.fromCodePoint(0x20_0b);
+const zeroWidthCharacters = [0x20_0b, 0x20_0c, 0x20_0d, 0x20_60, 0xfe_ff]
+  .map((codePoint) => String.fromCodePoint(codePoint))
+  .join('');
 const attribution = '🤖 Generated with [Claude Code](https://claude.com/claude-code)';
 const reviewerBlock = [
   '<!-- This is an auto-generated description by cubic. -->',
@@ -185,8 +190,17 @@ describe('sandboxSectionState with trailing content', () => {
     for (const fence of ['```\n```', '```text\n\n  \n```', '~~~\n~~~', '```\n']) {
       expect(sandboxSectionState(last(`${fence}\n`)), fence).toBe('empty');
     }
-    expect(sandboxSectionState(last('​‌‍⁠﻿\n'))).toBe('empty');
-    expect(sandboxSectionState(last('​ ---\n\n```\n​\n```\n'))).toBe('empty');
+    expect(sandboxSectionState(last(`${zeroWidthCharacters}\n`))).toBe('empty');
+    expect(sandboxSectionState(last(`${zeroWidth} ---\n\n\`\`\`\n${zeroWidth}\n\`\`\`\n`))).toBe(
+      'empty'
+    );
+  });
+
+  it('finds the section when a zero-width character is in its heading', () => {
+    expect(sandboxSectionState(`## Driven${zeroWidth} in the sandbox\n\nRan it.\n`)).toBe('filled');
+    expect(sandboxSectionLabel(`## Driven in the sand${zeroWidth}box\n\nDriven: ran it.\n`)).toBe(
+      'driven'
+    );
   });
 
   it('keeps a code fence with content and text beside a rule', () => {
@@ -202,7 +216,7 @@ describe('sandboxSectionState with trailing content', () => {
       `## Driven in the sandbox\n${'- '.repeat(100_000)}`,
       `## Driven in the sandbox\n${'```\n'.repeat(50_000)}`,
       `## Driven in the sandbox\n\`\`\`\n${'x\n'.repeat(100_000)}`,
-      `## Driven in the sandbox\n${'​'.repeat(200_000)}`,
+      `## Driven in the sandbox\n${zeroWidth.repeat(200_000)}`,
       `## Driven in the sandbox\n${'🤖 Generated with '.repeat(11_000)}`,
       `## Driven in the sandbox\n${'Driven:'.repeat(30_000)}`,
       '## Driven in the sandbox\n'.repeat(8000),
@@ -225,7 +239,7 @@ describe('sandboxSectionLabel', () => {
       'DRIVEN: ran it.',
       '  \n<!-- note -->\n\n  Driven: ran it.',
       '---\nDriven: ran it.',
-      '​Driven:​ ran it.',
+      `${zeroWidth}Driven:${zeroWidth} ran it.`,
       'Driven:\nran it on the next line.',
     ]) {
       expect(sandboxSectionLabel(section(text)), text).toBe('driven');
@@ -306,6 +320,12 @@ describe('sandboxSectionLabel', () => {
 
 describe('the pull request template', () => {
   const template = readFileSync(templatePath, 'utf8');
+
+  it('dates the keyword instruction by the keyword the parser reads', () => {
+    expect(
+      sandboxSectionLabel(`## Driven in the sandbox\n\n${keywordInstructionMarker} docs only.\n`)
+    ).toBe('not-applicable');
+  });
 
   it('asks for both keywords, in the section comment', () => {
     const instruction = template.replaceAll(/\s+/g, ' ');

@@ -12,15 +12,16 @@ export const templateMergedAt = '2026-11-13T22:01:22Z';
 export const templatePath = '.github/pull_request_template.md';
 
 /**
- * Text the template's instruction contains and no earlier version of the
+ * A keyword the template's instruction contains and no earlier version of the
  * template did. The commit that first added it to the template is when authors
  * began to see the keyword instruction; a test fails when the template stops
- * containing it.
+ * containing it. It is also the keyword the parser reads, so changing it
+ * changes what the metric measures, not only when it starts.
  */
 export const keywordInstructionMarker = 'Does not apply:';
 
 const drivenKeyword = 'driven:';
-const notApplicableKeyword = 'does not apply:';
+const notApplicableKeyword = keywordInstructionMarker.toLowerCase();
 
 /**
  * The template's own instruction under the heading, whitespace collapsed. A
@@ -232,20 +233,28 @@ function fenceExtent(
   return { end, blank };
 }
 
-const zeroWidthCharacters = /[​-‍⁠﻿]/g;
+// Zero width space, non-joiner, joiner, word joiner and byte order mark. Written
+// as code points: a source file should not carry invisible characters.
+const zeroWidthCharacters = [0x20_0b, 0x20_0c, 0x20_0d, 0x20_60, 0xfe_ff].map((codePoint) =>
+  String.fromCodePoint(codePoint)
+);
+
+function withoutZeroWidthCharacters(text: string): string {
+  return zeroWidthCharacters.reduce((kept, character) => kept.replaceAll(character, ''), text);
+}
 
 /**
  * The section's text, whitespace collapsed, without what is not the author's:
- * comments, zero-width characters, the template's placeholder, rules, empty
- * code fences, the attribution line and the reviewer's block. `null` when the
- * body has no such section.
+ * comments, zero-width characters (also in the heading), the template's
+ * placeholder, rules, empty code fences, the attribution line and the
+ * reviewer's block. `null` when the body has no such section.
  */
 function sectionContent(body: string): string | null {
-  const text = sectionText(withoutReviewerBlocks(body));
+  const text = sectionText(withoutZeroWidthCharacters(withoutReviewerBlocks(body)));
   if (text === null) {
     return null;
   }
-  const lines = meaningfulLines(text.replaceAll(zeroWidthCharacters, '').split('\n'));
+  const lines = meaningfulLines(text.split('\n'));
   return placeholders.reduce(
     (content, placeholder) => content.replaceAll(placeholder, ''),
     collapseWhitespace(lines.join('\n'))
