@@ -1152,6 +1152,12 @@ migration that creates the named area's guide checks the entry, moves what holds
 there and deletes the entry here. Paragraph numbers are the rows of the
 disposition table in pull request #3238.
 
+> Coordination is in-process and uses lexically resolved paths; filesystem
+> aliases such as symlinks to the same directory are not coordinated.
+
+Old paragraph 5. For the workspace capsule (`src/backend/services/workspace/`):
+the guide of the directory that owns cloning.
+
 > Default sessions use the `periodic-task` workflow, so non-interactive Codex
 > startup selects unattended execution mode and tool approval prompts cannot
 > stall scheduled runs.
@@ -1172,9 +1178,3 @@ Old paragraph 32. For the agent-definition capsule guide
 Old paragraph 34. For the agent-definition capsule guide
 (`src/backend/services/agent-definition/`, task 2.6b). The periodic half is an
 invariant of the periodic-task capsule guide.
-
-> The proposal card still requires explicit creation of a paused definition,
-> which listens only after **Enable** on the saved detail.
-
-Old paragraph 36. For the agent-definition capsule guide
-(`src/backend/services/agent-definition/`, task 2.6b).
