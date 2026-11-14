@@ -37,12 +37,14 @@ first: it says what each rule file holds and how exceptions work.
    match its scope (add one if none does). Turn it `"off"` in the `**/*.test.ts`
    override if tests are exempt.
 7. Prove the repository enables it: write the pattern into a scratch file in the
-   rule's scope (the command uses one under `src/lib/`; move it if the rule is
-   scoped elsewhere), lint it and see `error factory(<rule-name>)`, then delete
-   the file.
+   rule's scope (the commands use one under `src/lib/`; change the directory if
+   the rule is scoped elsewhere, and the extension to `.ts` if its scope
+   excludes `.tsx`). The first command must print the rule's error; the second
+   deletes the file either way.
 
    ```sh
-   pnpm exec oxlint --deny-warnings src/lib/rule-scratch.ts; rm src/lib/rule-scratch.ts
+   pnpm exec oxlint --deny-warnings src/lib/rule-scratch.tsx | grep -F 'factory(<rule-name>)'
+   rm src/lib/rule-scratch.tsx
    ```
 
 8. Run `pnpm check:fix` (it also sorts the import from step 3), `pnpm typecheck`
@@ -55,8 +57,9 @@ first: it says what each rule file holds and how exceptions work.
 - A rule left out of `factory.mjs`: `pnpm check` fails in Knip with the rule
   under "Unused files", and its fixture test fails with a `SyntaxError`, because
   Oxlint printed `Rule '<rule-name>' not found in plugin 'factory'`, not JSON.
-- A rule enabled in `.oxlintrc.json` under a name `factory.mjs` does not have:
-  every lint run fails with that same message.
+- A `factory/<rule-name>` in `.oxlintrc.json` that matches no key of `rules` in
+  `factory.mjs` (a typo, or a rule not registered): every lint run fails with
+  that same message.
 - A rule registered but never enabled: every check passes and the rule reports
   nothing; step 7 catches it.
 - Enabling a rule before the code complies: `pnpm lint` fails on each file that

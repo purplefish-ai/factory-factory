@@ -23,7 +23,8 @@ the capsule boundary rules these steps follow.
    `serviceNames`, and `'<capsule>': { dependsOn: [], ownsModels: [] },` to
    `serviceRegistry`. List in `dependsOn` each capsule whose barrel this one
    imports outside tests; when another capsule imports this one, add
-   `'<capsule>'` to that capsule's `dependsOn`.
+   `'<capsule>'` to that capsule's `dependsOn`. List in `ownsModels` each Prisma
+   model the capsule writes, removing it from its previous owner.
 4. Use it from its caller through the barrel, `@/backend/services/<capsule>`: an
    orchestration module, a router, or `src/backend/app-context.ts` (which lists
    it in `ApplicationServices` and in the `services` object, as it does
