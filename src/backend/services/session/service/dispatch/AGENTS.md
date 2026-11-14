@@ -37,8 +37,8 @@ and `forgetSession` on deletion.
 
 ## Invariants
 
-- A queued message stays in the queue, visible to viewers, until it is sent or
-  rejected for good; startup and configuration awaited first do not take it out.
+- Starting a stopped session for the queue does not take the queued message out
+  of the queue: it stays visible until the batch holding it is taken to be sent.
   `session-dispatch.service.test.ts`.
 - A message is sent only when no prompt holds the session's prompt slot, checked
   again after any auto-start; background shells, subagents and goals never hold
@@ -48,7 +48,7 @@ and `forgetSession` on deletion.
   `session-dispatch.service.test.ts`, `session-dispatch.lifecycle.test.ts`.
 - `steerQueuedMessage` steers only an ordinary queued human message, never a
   slash command, PR update or workspace notification.
-  `session-dispatch.service.test.ts`.
+  `session-dispatch.service.test.ts`, `session-mail-signal-dispatch.test.ts`.
 - A session runs one steer at a time: a request for the same message joins it,
   one for another message fails as busy, and queue dispatch waits until it
   settles. `session-dispatch.service.test.ts`,
@@ -56,10 +56,12 @@ and `forgetSession` on deletion.
 - With no running turn, a steer dispatches the queue only when its message is
   the head; a stale steer of a later message is rejected.
   `session-dispatch.service.test.ts`.
-- A steer that fails before its deadline, or that the provider answers with
-  `promptRequired`, leaves the message queued for ordinary dispatch; an accepted
-  steer takes it out of the queue even if a stop advanced the generation, so
-  resume never replays it. `session-dispatch.service.test.ts`.
+- A steer of an ordinary message that fails before its deadline, or that the
+  provider answers with `promptRequired`, leaves it queued for ordinary
+  dispatch; a mail-signal steer that fails with the outcome unknown is
+  quarantined, not replayed. An accepted steer takes the message out of the
+  queue even if a stop advanced the generation, so resume never replays it.
+  `session-dispatch.service.test.ts`, `session-mail-signal-dispatch.test.ts`.
 - A steer of a human message unacknowledged after 10 seconds stops that runtime
   before releasing the queue and leaves the message queued with no automatic
   resend, since the provider may already have consumed it.
@@ -72,9 +74,10 @@ and `forgetSession` on deletion.
   auto-start, the prompt slot check and dispatch errors.
 - `session-dispatch-batch.ts`: collects waiting messages into one turn and puts
   them back; `session-message-content.ts` builds each message's content.
-- `session-dispatch-retry.ts`: busy retries; `session-dispatch-claim.ts`: queue
-  progress requested while a receipt owns dispatch; `session-dispatch-gate.ts`:
-  the reasons that reject a message for good.
+- `session-dispatch-retry.ts`: busy retries; `session-dispatch-claim.ts`: the
+  per-session claim every dispatch run takes, which reruns a request made while
+  it is held; `session-dispatch-gate.ts`: the reasons that reject a message for
+  good.
 - `session-queued-steering.ts`: explicit steering; `session-steering-errors.ts`.
 - `session-mail-signal-dispatch.ts`: workspace mail wakes.
 - `event-initial-dispatch.ts`: the first turn of an event-launched session.

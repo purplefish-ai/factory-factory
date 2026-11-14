@@ -4,10 +4,10 @@ The Agent Client Protocol side of a session: the Claude Code and Codex adapter
 processes, the protocol connection to them, starting, prompting and stopping a
 runtime, and the disposable provider processes that discover model catalogs,
 launch options and plan usage. The [capsule guide](../../AGENTS.md) covers the
-capsule, and `../../modules.ts` describes this module in one line. This guide
-does not yet state the rules of a prompt turn once sent, steering, targeted
-stops or subagents. Bare file names below are in this directory; paths that
-start with `src/` are from the repository root.
+capsule, and `../../modules.ts` describes this module in one line. It does not
+yet state the rules of a prompt turn once sent, targeted stops or subagents;
+steering rules are in `../dispatch/AGENTS.md`. Bare file names below are in this
+directory; paths that start with `src/` are from the repository root.
 
 ## Owns, and does not own
 

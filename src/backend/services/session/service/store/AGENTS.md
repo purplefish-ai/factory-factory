@@ -38,9 +38,9 @@ directly.
   `session-runtime-machine.test.ts`.
 - A runtime transition that changes nothing but the timestamp stores it without
   publishing a runtime delta. `session-runtime-machine.test.ts`.
-- A message leaving the queue is never published as absent from both the queue
-  and the transcript: the delta that removes it also carries its transcript
-  entry, as a `transcript_message_committed` delta with the remaining queue or a
+- A message moving from the queue into the transcript is never published as
+  absent from both: the delta that removes it also carries its transcript entry,
+  as a `transcript_message_committed` delta with the remaining queue or a
   dispatched state with the user message. `session-domain.state-deltas.test.ts`,
   `../dispatch/session-dispatch.service.test.ts`.
 
