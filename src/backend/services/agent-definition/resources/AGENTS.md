@@ -1,26 +1,22 @@
 # Agent-definition resources: run ledger, GitHub proof and Slack state
 
-This guide covers the accessors here that hold the event ledger (events,
-evaluations, admission, claim and retention), the GitHub feed's capture,
-verification, finalization and proof, which the source poll service drives, and
-what Slack stores: tokens, listener health and test-message activation. The
-[capsule guide](../AGENTS.md) covers the models, the public surface and the
-other accessors here. Bare file names below are in this directory; paths that
-start with `src/` are from the repository root.
+This guide covers the ledger writer lock, the run ledger's admission, claim and
+retention, `pauseTriggers`, the GitHub source's capture, verification,
+finalization and proof, which the source poll service drives, and what Slack
+stores: tokens, listener health and test-message activation. Bare file names are
+in this directory; paths that start with `src/` are from the repository root.
 
 ## Owns, and does not own
 
-This guide covers the ledger writer lock, the run ledger's admission, claim and
-retention, `pauseTriggers`, the GitHub source's pages, checkpoints, heads,
-baselines and epochs, and Slack's stored state. It does not own:
+This guide does not own:
 
 - When sources are polled: the poll service,
   `src/backend/services/agent-definition/service/agent-source-poll.service.ts`,
   and the runtime jobs in `src/backend/orchestration/agents/`.
-- Slack token checks and the listener: the
-  [service guide](../service/AGENTS.md).
-- The other accessors here (definitions, proposals, GitHub activation, launch),
-  and Enable, Delete and the `ACTIVE` transition: the capsule guide.
+- Slack token checks and the listener: [service guide](../service/AGENTS.md).
+- The models, the public surface, the other accessors here (definitions,
+  proposals, GitHub activation, launch), and Enable, Delete and the `ACTIVE`
+  transition: the [capsule guide](../AGENTS.md).
 
 ## Invariants
 
@@ -69,9 +65,10 @@ baselines and epochs, and Slack's stored state. It does not own:
   against is still the saved one.
   `src/backend/services/agent-definition/service/slack-app-token.integration.test.ts`.
 - An interrupted listener opens one delivery gap that its next verified
-  connection closes, a deliberate stop closes any gap without opening one, the
-  cursor keeps the latest 100, and `RECOVERY_REQUIRED` is never overwritten.
-  `slack-source-health.test.ts`,
+  connection closes, ceasing to listen on purpose (gate off, no listening
+  trigger, no app-level token) closes any gap without opening one, stopping the
+  listener at shutdown opens one, the cursor keeps the latest 100, and
+  `RECOVERY_REQUIRED` is never overwritten. `slack-source-health.test.ts`,
   `src/backend/services/agent-definition/service/slack-event-source.integration.test.ts`.
 - A channel's test message counts only as a person's root message with no
   subtype, from the expected app, in a pending channel, observed by the expiry,
@@ -109,7 +106,8 @@ connection is open, and nothing recovers them.
   in the capsule guide.
 - Slack: `slack-connection.accessor.ts` (tokens), `slack-source-health.ts`
   (health and gaps), `slack-activation.accessor.ts` and `slack-verification.ts`
-  (test messages).
+  (test messages), `slack-connection-recovery.ts` (export and restore of
+  connections).
 
 ## Decisions
 

@@ -21,8 +21,3 @@ its message, or returns to Paused when the window ends first.
 - The code proves delivery, not identity: it is safe to post and grants nothing.
 - Re-enabling issues a new code, so an earlier test message cannot activate the
   trigger, and messages from the paused period stay before the new boundaries.
-- A message in the test-message form never starts a run for any Slack trigger,
-  so posting one in a channel another automation listens to costs nothing.
-- Enable restarts an active Slack trigger whose boundary names a different
-  workspace or app than the one just validated, since events from the new app
-  would fail its identity check.

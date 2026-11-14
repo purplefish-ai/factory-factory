@@ -577,6 +577,7 @@ it('connects only for connections with an app token and a listening trigger', as
   await source.reconcileConnections(signal);
   expect(sockets).toHaveLength(0);
   expect((await sourceState()).health.reasonCode).toBe('SLACK_APP_TOKEN_MISSING');
+  expect((await sourceState()).cursor.gaps).toEqual([]);
   credentials = { appToken: 'xapp-1-A1-1-secret', appId: 'A1', workspaceId: 'T1' };
   await db.prisma.agentTrigger.updateMany({ data: { activationState: 'PAUSED' } });
   await source.reconcileConnections(signal);
@@ -588,6 +589,7 @@ it('connects only for connections with an app token and a listening trigger', as
   await source.reconcileConnections(signal);
   expect(sockets[0]?.disconnects).toBe(1);
   expect((await sourceState()).health.reasonCode).toBe('SLACK_NOT_LISTENING');
+  expect((await sourceState()).cursor.gaps).toEqual([]);
 });
 
 it.each([

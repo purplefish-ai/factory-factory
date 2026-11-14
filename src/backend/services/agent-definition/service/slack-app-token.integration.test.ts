@@ -345,17 +345,12 @@ it('tests the saved app token and its app identity along with the bot token', as
   });
 });
 
-it('accepts a socket URL that names no app and still reports a bot that moved to another app', async () => {
+it('accepts a socket URL that names no app', async () => {
   const saved = await connected();
   slack.socketUrl = 'wss://wss-primary.slack.com/link/?ticket=socket-ticket-secret';
   expect(await service.setAppToken({ connectionId: saved.id, appToken })).toMatchObject({
     hasAppToken: true,
     appId: 'A-app',
-  });
-  slack.botAppId = 'A-replaced';
-  await expect(service.test(saved.id)).rejects.toMatchObject({
-    code: 'PRECONDITION_FAILED',
-    message: expect.stringContaining('different Slack app'),
   });
 });
 

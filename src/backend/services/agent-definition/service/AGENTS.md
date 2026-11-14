@@ -3,8 +3,8 @@
 How one event is evaluated against one trigger, natural-language filters
 included, what history reads may return, and the Slack services. The
 [capsule guide](../AGENTS.md) covers the models, the public surface and saved
-management. Bare file names below are in this directory; paths that start with
-`src/` are from the repository root.
+management. Bare file names are in this directory; paths starting with `src/`
+are from the repository root.
 
 ## Owns, and does not own
 
@@ -73,9 +73,9 @@ socket, what an envelope stores and what context a run reads. Neither owns:
   whose listening trigger, on an active project, selects a channel, and refuses
   connections that share an app (`SLACK_APP_SHARED`).
   `slack-event-source.integration.test.ts`.
-- A `hello` or envelope naming another app or workspace stores nothing, is not
-  acknowledged and stops listening until the stored credentials change.
-  `slack-event-source.integration.test.ts`.
+- A `hello` naming another app, or an envelope naming another app or workspace,
+  stores nothing, is not acknowledged and stops listening until the credentials
+  change or the process restarts. `slack-event-source.integration.test.ts`.
 - A stored message is acknowledged only after its insert commits.
   `slack-event-source.integration.test.ts`.
 - Stopping the listener disconnects every socket, then waits for envelopes in
@@ -96,12 +96,12 @@ for commercially distributed non-Marketplace apps would rate-limit them.
 - `agent-semantic-filter.ts`: classifier outcomes as decisions;
   `semantic-filter-gate.ts`: which providers passed.
 - `agent-history-projection.ts`: what history may return.
-- Slack: `slack-connection.service.ts` and `slack-app-identity.ts` (tokens),
-  `slack-api.ts`, `slack-sources.ts` (channels), `slack-event-source.ts` (the
-  listener), `slack-event-message.ts`, `slack-event-context.ts` (run context).
-- `src/backend/services/agent-definition/testing/classifier-fixtures.json` and
-  `src/backend/services/agent-definition/testing/classifier-gate.json`: the
-  replay fixtures and the gate record.
+- Slack: `slack-connection.service.ts`, `slack-app-identity.ts` (tokens),
+  `slack-api.ts`, `slack-sources.ts` (channels), `slack-event-source.ts`
+  (listener), `slack-event-message.ts`, `slack-event-context.ts` (run context),
+  `slack-connection-recovery.ts` (recovery).
+- `../testing/classifier-fixtures.json` and `../testing/classifier-gate.json`:
+  the replay fixtures and the gate record.
   `src/backend/services/session/service/acp/agent-event-classifier.manual.integration.test.ts`
   runs the live gate; its header has the command.
 

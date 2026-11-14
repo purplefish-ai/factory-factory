@@ -375,6 +375,9 @@ via nginx, Caddy, or another reverse proxy:
 - Keep the server on loopback so only your proxy can reach it: leave
   `BACKEND_HOST` unset (the backend then binds `127.0.0.1` and, where IPv6 is
   available, `::1`), or set it to `localhost` or `127.0.0.1`.
+- Disable response buffering for `/api/trpc`. The app streams query results as
+  each one finishes, and a buffering proxy delays them until the whole batch is
+  done.
 
 By default the server rejects privileged HTTP requests and WebSocket upgrades
 that carry client-address headers (`x-forwarded-for`, `cf-connecting-ip`, etc.),
