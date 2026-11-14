@@ -1,9 +1,8 @@
 import type { Meta, StoryObj } from '@storybook/react';
-import mermaid from 'mermaid';
 import { useEffect, useState } from 'react';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
 import { contrastRatio, type Rgb } from '@/client/lib/color-contrast';
-import { mermaidThemeConfig } from '@/client/lib/mermaid-renderer';
+import { mermaidThemeConfig, renderThemedMermaid } from '@/client/lib/mermaid-renderer';
 import { Button } from '@/components/ui/button';
 import MermaidDiagram from './mermaid-diagram';
 
@@ -17,14 +16,17 @@ const charts = [
   'sequenceDiagram\nUser->>Agent: Build feature\nNote over Agent: Working\nAgent-->>User: Ready',
 ];
 
-// Mermaid fetches each diagram type's code the first time it meets one, so the
-// file's first story paid for all seven inside its 5 s wait. In a full story
-// run the shared Vite server serves that code late, and Factory Light, the
-// first story, failed every loaded run. Fetch it once, before any story renders.
+// Mermaid fetches code the first time it needs it: each diagram type's
+// definition, and at render time its layout engine (dagre for the flowchart,
+// class and state charts; cose-bilkent for the mindmap). The file's first
+// story paid for all of it inside its 5 s wait. In a full story run the shared
+// Vite server serves that code late, and Factory Light, the first story,
+// failed every loaded run. Render each chart once through the app's own render
+// path (which selects the layouts) before any story renders.
 let diagramTypesLoaded: Promise<void> | undefined;
 async function loadDiagramTypes() {
   for (const chart of charts) {
-    await mermaid.parse(chart);
+    await renderThemedMermaid(chart, document.body, () => false);
   }
 }
 
