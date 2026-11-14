@@ -106,11 +106,14 @@ async function requestUpdate(holdExit = false) {
     type: 'update-status',
     status: { phase: 'waiting', targetVersion: '0.5.4' },
   });
+  // Let any installation started by the request reach the installer.
+  await new Promise<void>((resolve) => setImmediate(resolve));
   expect(mocks.prepare).not.toHaveBeenCalled();
   if (holdExit) {
     vi.mocked(original.child.kill).mockReturnValue(true);
   }
   original.child.emit('message', { type: 'update-ready' });
+  await vi.waitFor(() => expect(mocks.prepare).toHaveBeenCalledOnce());
   return original;
 }
 
@@ -373,6 +376,7 @@ it('disables automatic installation while another app server is running', async 
   running.child.emit('message', { type: 'update-request', version: '0.5.4' });
   running.child.emit('message', { type: 'update-ready' });
   expect(mocks.prepare).not.toHaveBeenCalled();
+  expect(mocks.persist).not.toHaveBeenCalled();
   expect(running.messages).toContainEqual({
     type: 'update-status',
     status: expect.objectContaining({ phase: 'failed', error: expect.stringMatching(/manual/i) }),

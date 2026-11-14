@@ -1,3 +1,5 @@
+// The rules for this job and the admission gate are in
+// src/backend/services/application-update/AGENTS.md.
 import { ApplicationError } from '@/backend/lib/application-error';
 import { type ApplicationUpdateAdmission } from '@/backend/services/application-update-admission.service';
 import { SERVICE_INTERVAL_MS } from '@/backend/services/constants';

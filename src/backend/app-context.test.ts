@@ -3,10 +3,15 @@ const runtimeWiring = vi.hoisted(() => ({ create: vi.fn<(getServices: () => unkn
 vi.mock('@/backend/orchestration/agents/agent-runtime.orchestrator', () => ({
   createAgentRuntime: (getServices: () => unknown) => {
     runtimeWiring.create(getServices);
-    return { start: vi.fn(), stop: vi.fn().mockResolvedValue(undefined) };
+    return {
+      start: vi.fn(),
+      stop: vi.fn().mockResolvedValue(undefined),
+      hasWork: () => false,
+    };
   },
 }));
 import type { RenamedWorkspace } from '@/backend/orchestration/workspace-lifecycle/workspace-rename.orchestrator';
+import type { AcpProcessHandle } from '@/backend/services/session';
 import { createFakeApplicationGraph } from '@/test-utils/application-graph';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 import {
@@ -29,6 +34,33 @@ describe('createApplication', () => {
     expect(configureAdmission.mock.invocationCallOrder[0]).toBeLessThan(
       vi.mocked(graph.lifecycle.wireDomainBridges).mock.invocationCallOrder[0] ?? 0
     );
+  });
+  it('holds an application update for an active ACP turn but not for an idle client', () => {
+    const { services } = createDefaultApplicationDependencies();
+    const { hasWork } = unsafeCoerce<{ dependencies: { hasWork(): boolean } }>(
+      services.applicationUpdateService
+    ).dependencies;
+    // The session capsule is a stub in this graph; give the update work check
+    // one idle and one working client to read.
+    let workingSession: string | null = null;
+    const manager = services.acpRuntimeManager;
+    const domain = services.sessionDomainService;
+    manager.getAllClients = () =>
+      new Map([
+        ['idle', unsafeCoerce<AcpProcessHandle>({})],
+        ['busy', unsafeCoerce<AcpProcessHandle>({})],
+      ]).entries();
+    manager.isSessionWorking = (sessionId) => sessionId === workingSession;
+    domain.hasPendingUpdateWork = () => false;
+    try {
+      expect(hasWork()).toBe(false);
+      workingSession = 'busy';
+      expect(hasWork()).toBe(true);
+    } finally {
+      Reflect.deleteProperty(manager, 'getAllClients');
+      Reflect.deleteProperty(manager, 'isSessionWorking');
+      Reflect.deleteProperty(domain, 'hasPendingUpdateWork');
+    }
   });
   it('binds agent intake to its own application service graph', () => {
     const { services } = createDefaultApplicationDependencies();

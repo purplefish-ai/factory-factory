@@ -1,8 +1,10 @@
 # CLI
 
 The `ff` command, and the supervisor that a production `ff serve` runs around
-the backend process. Bare file names below are in this directory; paths that
-start with `src/` are from the repository root.
+the backend process. The invariants and map below cover only the production
+update path; the other commands and helpers here have no guide yet. Bare file
+names below are in this directory; paths that start with `src/` are from the
+repository root.
 
 ## Owns, and does not own
 
@@ -28,7 +30,7 @@ not own:
 - Automatic installation is offered only for a production `ff serve` of the
   npm-global installation on macOS or Linux, when its package directory is not a
   symlink, its parent is writable and no other live server uses it; otherwise
-  the backend receives manual guidance and no update file is written.
+  the backend receives manual guidance and no update journal is written.
   `application-update-installer.test.ts`, `supervised-serve-session.test.ts`.
 - Preparation installs the requested version into a stage beside the package and
   checks its version, entrypoints and native modules without changing the
@@ -72,12 +74,11 @@ not own:
   rollback of the package. `hasOtherApplicationServers` reads the
   `.factory-factory-running-<pid>` markers beside the package, which `serve`
   writes for itself (`application-server-marker.ts`) and the supervised session
-  writes for its backend.
+  writes for the CLI and for its backend.
 - `application-update-recovery.ts`: the journal
   (`.factory-factory-update-state.json` beside the package) and startup
   recovery.
 - `application-update-shutdown.ts`: stops the backend with SIGTERM and escalates
   to SIGKILL after two minutes.
-- `proxy.ts` and `proxy-mode.ts`, `tailscale.ts`, `studio.ts`,
-  `build-command.ts`, and `provider-command.ts` with `claude.ts` and `codex.ts`:
-  the other commands.
+- `proxy-mode.ts`, `tailscale.ts`, `studio.ts`, `build-command.ts`, `claude.ts`
+  and `codex.ts` register the other commands.

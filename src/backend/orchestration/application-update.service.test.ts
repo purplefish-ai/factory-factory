@@ -174,13 +174,14 @@ it('keeps readiness fenced during backend shutdown and stops polling', async () 
   expect(jobs.isRunning('application-update-idle')).toBe(false);
 });
 
-it('keeps admission closed while the supervisor prepares and restarts', async () => {
+it('keeps admission closed while the supervisor waits, prepares and restarts', async () => {
   const { service, supported, emit, gate } = setup();
   supported();
   await service.requestUpdate('1.1.0');
   emit({ type: 'update-status', status: { phase: 'waiting', targetVersion: '1.1.0' } });
   service.pollIdle();
-  for (const phase of ['preparing', 'restarting'] as const) {
+  expect(gate.isClosed()).toBe(true);
+  for (const phase of ['waiting', 'preparing', 'restarting'] as const) {
     emit({ type: 'update-status', status: { phase, targetVersion: '1.1.0' } });
     expect(gate.isClosed()).toBe(true);
   }
