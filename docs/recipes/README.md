@@ -16,7 +16,8 @@ to it) and has these parts, in this order:
 `.claude/skills/<recipe-name>/SKILL.md`: front matter with `name` and a
 `description` saying when to use it, and one line pointing at the recipe. The
 skill holds no procedure; the check fails a recipe without its skill, a skill
-without that front matter, and a skill that does not point at its own recipe.
+without that front matter or with more than the pointer line, a skill that does
+not point at its own recipe, and a file in either place that no rule would read.
 
 | Recipe                                                  | Use when                                                        |
 | ------------------------------------------------------- | --------------------------------------------------------------- |

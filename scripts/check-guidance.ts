@@ -84,8 +84,9 @@ const recipeReadmePath = 'docs/recipes/README.md';
 // The parts of a recipe, in order; docs/recipes/README.md defines the format.
 const recipeSections = ['Use when', 'Steps', 'Mistakes this prevents'] as const;
 
+/** A top-level lower-case `.md` file in docs/recipes/, or its README. */
 function isRecipeFile(path: string): boolean {
-  return /^docs\/recipes\/[^/]+\.md$/.test(path);
+  return path === recipeReadmePath || /^docs\/recipes\/[^/A-Z]+\.md$/.test(path);
 }
 
 function isRecipe(path: string): boolean {
@@ -365,11 +366,21 @@ function skillTargetProblem(
     : `points at ${target}, which is not a recipe.`;
 }
 
+/** A skill holds its front matter and one pointer line; procedure belongs in the recipe. */
+function skillBodyProblem(content: string): string | undefined {
+  const body = content.replace(/^---\r?\n[\s\S]*?\r?\n---[ \t]*(?:\r?\n|$)/, '');
+  const count = body.split(/\r?\n/).filter((line) => line.trim() !== '').length;
+  return count > 1
+    ? `has ${count} lines after its front matter; a skill holds one pointer line.`
+    : undefined;
+}
+
 function checkSkill(repository: GuidanceRepository, file: string): GuidanceViolation[] {
   const content = repository.read(file);
   const name = posix.basename(posix.dirname(file));
   const frontMatter = frontMatterProblem(content, name);
   const target = skillTargetProblem(repository, content, name);
+  const body = skillBodyProblem(content);
   return [
     ...(frontMatter === undefined
       ? []
@@ -391,7 +402,46 @@ function checkSkill(repository: GuidanceRepository, file: string): GuidanceViola
             fix: 'point it at the recipe it serves, or delete the skill.',
           },
         ]),
+    ...(body === undefined
+      ? []
+      : [
+          {
+            file,
+            rule: 'recipes' as const,
+            problem: body,
+            fix: 'move the procedure into the recipe it points at and leave only the pointer line.',
+          },
+        ]),
   ];
+}
+
+/** A file the recipe rules would never read: they would pass it unchecked. */
+function misplacedFile(file: string): GuidanceViolation[] {
+  if (file.startsWith('docs/recipes/') && !isRecipeFile(file)) {
+    return [
+      {
+        file,
+        rule: 'recipes',
+        problem: 'is not a top-level lower-case .md file, so no recipe rule applies to it.',
+        fix: 'put it at docs/recipes/<lower-case-name>.md as a recipe, or outside docs/recipes/.',
+      },
+    ];
+  }
+  if (
+    file.startsWith('.claude/skills/') &&
+    posix.basename(file).toLowerCase() === 'skill.md' &&
+    !isSkillFile(file)
+  ) {
+    return [
+      {
+        file,
+        rule: 'recipes',
+        problem: 'is not .claude/skills/<name>/SKILL.md, so it is no skill and is not checked.',
+        fix: 'move it to .claude/skills/<recipe-name>/SKILL.md.',
+      },
+    ];
+  }
+  return [];
 }
 
 /** A recipe has its parts in order and a skill file; a skill points at a recipe. */
@@ -401,7 +451,7 @@ export function checkRecipes(repository: GuidanceRepository): GuidanceViolation[
       return checkSkill(repository, file);
     }
     if (!isRecipe(file)) {
-      return [];
+      return misplacedFile(file);
     }
     const skill = `.claude/skills/${posix.basename(file, '.md')}/SKILL.md`;
     return [
