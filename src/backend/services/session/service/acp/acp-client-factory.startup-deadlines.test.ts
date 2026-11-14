@@ -94,6 +94,37 @@ describe('AcpClientFactory startup deadlines', () => {
     }
   });
 
+  it('waits for the local history barrier without a provider deadline', async () => {
+    vi.useFakeTimers();
+    try {
+      setupSuccessfulSpawn(createMockChildProcess({ exitAfterSigterm: true }));
+      const history = createDeferred<void>();
+      const creation = new AcpClientFactory({
+        acpStartupTimeoutMs: 10,
+        acpSessionCreationTimeoutMs: 10,
+      }).createClient(
+        createParams({
+          options: defaultOptions({ beforeSessionCreation: () => history.promise }),
+        })
+      );
+      const result = creation.then(
+        (handle) => ({ handle }),
+        (error: unknown) => ({ error })
+      );
+
+      await vi.advanceTimersByTimeAsync(100);
+      expect(mocks.newSession).not.toHaveBeenCalled();
+      history.resolve();
+      await vi.advanceTimersByTimeAsync(0);
+
+      await expect(result).resolves.toMatchObject({
+        handle: { providerSessionId: 'provider-session-new' },
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('keeps the creation timeout snapshot when configuration changes during initialize', async () => {
     vi.useFakeTimers();
     try {

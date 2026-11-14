@@ -214,6 +214,15 @@ describe('validateAttachment', () => {
     expect(() => validateAttachment(attachment)).toThrow(PermanentAttachmentError);
   });
 
+  it('should reject a JPEG whose scan data ends before its end-of-image marker', () => {
+    const bytes = Buffer.from(VALID_JPEG_BASE64, 'base64');
+    const data = bytes.subarray(0, bytes.length - 2).toString('base64');
+
+    expect(() => validateAttachment(createImageAttachment({ type: 'image/jpeg', data }))).toThrow(
+      PermanentAttachmentError
+    );
+  });
+
   it.each([
     { format: 'PNG', data: 'iVBORw0KGgo=' },
     { format: 'JPEG', data: '/9j/' },

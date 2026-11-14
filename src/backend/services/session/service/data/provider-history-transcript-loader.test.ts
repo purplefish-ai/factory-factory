@@ -185,6 +185,22 @@ describe.each(['CLAUDE', 'CODEX'] as const)('%s provider history transcripts', (
     expect(texts(startupDomain)).toEqual(['one', 'two']);
   });
 
+  it('does not share a read across worktrees or Codex accounts', async () => {
+    const { session, read } = fixture(provider, ['one']);
+    // Isolate read sharing from the projection cache.
+    vi.spyOn(providerHistoryTranscriptCache, 'get').mockReturnValue(undefined);
+    await Promise.all(
+      [
+        session,
+        { ...session, workspace: { worktreePath: '/elsewhere' } },
+        { ...session, codexAccountId: 'other-account' },
+      ].map((variant) =>
+        createProviderHistoryHydrator(new SessionDomainService())('session', variant)
+      )
+    );
+    expect(read).toHaveBeenCalledTimes(3);
+  });
+
   it('finishes a shared read for a current caller after another caller goes stale', async () => {
     const { session, read, onLine } = fixture(provider, ['one', 'two']);
     const staleDomain = new SessionDomainService();
