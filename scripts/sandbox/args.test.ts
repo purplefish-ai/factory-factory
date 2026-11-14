@@ -71,6 +71,8 @@ describe('command line', () => {
       'not a boundary against a hostile agent',
       'SIGKILLed launcher',
       'CODEX_PATH',
+      'checks the native modules',
+      'if needed, builds them',
       'scripts/ensure-native-modules.mjs node',
       'your normal environment',
       'npm registry',

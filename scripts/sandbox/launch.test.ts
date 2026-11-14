@@ -483,6 +483,27 @@ describe('building the native modules', () => {
   }, 60_000);
 });
 
+/**
+ * Kills the server group a test's launcher started, if anything of it is left. While any member
+ * lives its group ID cannot be reused, so members with no leader are ours; a leader that started
+ * at another time is someone else's process that took the pid.
+ */
+function killServerGroup(server: { pgid: number; pgidStartedAt: string } | null) {
+  if (!server) {
+    return;
+  }
+  const processes = realSystem.listProcesses();
+  const leader = findProcess(processes, server.pgid);
+  const members = processes.filter((p) => p.pgid === server.pgid && !p.zombie);
+  if (leader ? leader.startedAt === server.pgidStartedAt : members.length > 0) {
+    try {
+      process.kill(-server.pgid, 'SIGKILL');
+    } catch {
+      // Gone between the check and the signal.
+    }
+  }
+}
+
 describe('the real launcher', () => {
   it('removes its directory when signalled during setup', async () => {
     const tempDir = temporary.create('ffsb-');
@@ -586,15 +607,7 @@ describe('the real launcher', () => {
     } finally {
       owner.kill('SIGKILL');
       sandbox.child.kill('SIGKILL');
-      // Only the group this test's launcher started, and only if it is still that process.
-      const leader = server && findProcess(realSystem.listProcesses(), server.pgid);
-      if (server && leader?.startedAt === server.pgidStartedAt) {
-        try {
-          process.kill(-server.pgid, 'SIGKILL');
-        } catch {
-          // Gone between the check and the signal.
-        }
-      }
+      killServerGroup(server);
     }
   }, 360_000);
 });
