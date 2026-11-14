@@ -176,3 +176,71 @@ it('keeps a clamped navigation selection when content elsewhere shrinks the boar
   });
   expect(container.querySelector('a[aria-current="location"]')?.textContent).toBe('Working 1');
 });
+
+/**
+ * A board whose Working section sits at `layout.working` below the top of the
+ * scroll content, with Done two pixels after it, and whose scroll position the
+ * test moves the way a browser does.
+ */
+function renderPositionedBoard(layout: { working: number }) {
+  render({ done: true });
+  const scroll = container.querySelector<HTMLElement>('[data-mobile-board]')!;
+  Object.defineProperties(scroll, {
+    clientHeight: { value: 600 },
+    scrollHeight: { value: 2000 },
+    scrollTo: {
+      value: ({ top }: { top: number }) => {
+        scroll.scrollTop = top;
+      },
+    },
+  });
+  Object.defineProperty(container.querySelector('nav')!, 'offsetHeight', { value: 40 });
+  vi.spyOn(scroll, 'getBoundingClientRect').mockReturnValue(new DOMRect(0, 100, 390, 600));
+  for (const [label, gap] of [
+    ['Working', 0],
+    ['Done', 2],
+  ] as const) {
+    const section = container.querySelector<HTMLElement>(`section[aria-label="${label}"]`)!;
+    vi.spyOn(section, 'getBoundingClientRect').mockImplementation(
+      () => new DOMRect(0, 100 + layout.working + gap - scroll.scrollTop, 390, 100)
+    );
+  }
+  const scrolled = () =>
+    act(() => {
+      scroll.dispatchEvent(new Event('scroll'));
+    });
+  const active = () => container.querySelector('a[aria-current="location"]')?.textContent;
+  return { scroll, scrolled, active };
+}
+
+it('keeps an unclamped navigation selection when content above it changes height', async () => {
+  const layout = { working: 500 };
+  const { scroll, scrolled, active } = renderPositionedBoard(layout);
+  await act(() => container.querySelectorAll('a')[1]!.click());
+  expect(scroll.scrollTop).toBe(448);
+
+  // Cards arriving above Working push it down 50px, and the browser's scroll
+  // anchoring moves the scroll with it, so Working stays where the jump put it.
+  layout.working = 550;
+  scroll.scrollTop = 498;
+  await scrolled();
+  expect(active()).toBe('Working 1');
+});
+
+it('drops an unclamped navigation selection once the board scrolls elsewhere', async () => {
+  const layout = { working: 500 };
+  const { scroll, scrolled, active } = renderPositionedBoard(layout);
+  await act(() => container.querySelectorAll('a')[1]!.click());
+  layout.working = 550;
+  scroll.scrollTop = 498;
+  await scrolled();
+  expect(active()).toBe('Working 1');
+
+  scroll.scrollTop = 300;
+  await scrolled();
+  expect(active()).toBe('Todo 0');
+  // Back at the re-recorded position, the jump no longer holds the selection.
+  scroll.scrollTop = 498;
+  await scrolled();
+  expect(active()).toBe('Done 0');
+});

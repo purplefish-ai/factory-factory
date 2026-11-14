@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
  * Pins the React Query behaviour that ProjectWorkspaceCacheReconciler and the
  * detail reconciler depend on (workspace-cache-reconciler.ts). If an upgrade
  * changes it, reconciliation can silently stop running; update the reconciler
- * and docs/architecture/workspace-state.md before adjusting these assertions.
+ * and src/client/lib/AGENTS.md before adjusting these assertions.
  */
 const clients: QueryClient[] = [];
 const cleanup: Array<() => void> = [];
