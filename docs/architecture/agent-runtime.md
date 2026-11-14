@@ -3,10 +3,11 @@
 The paragraphs that opened this note, the section "Chat tool previews", and the
 opening of "ACP runtime" with its "Provider and model selection", "Launch
 permissions, thinking, and Plan", "Permission and configuration readiness",
-"Activity and prompt dispatch", "Codex accounts" and "Usage and compaction" have
-been migrated; the tool preview rules are asserted by the tests in
-`src/client/features/chat/agent-activity/tool-renderers/`. Ownership, public
-surface, invariants and file maps are in the guides beside the code:
+"Activity and prompt dispatch", "Codex accounts", "Usage and compaction" and
+"Failed provider resume" have been migrated; the tool preview rules are asserted
+by the tests in `src/client/features/chat/agent-activity/tool-renderers/`.
+Ownership, public surface, invariants and file maps are in the guides beside the
+code:
 [application update capsule](../../src/backend/services/application-update/AGENTS.md),
 [Codex accounts capsule](../../src/backend/services/codex-accounts/AGENTS.md),
 [CLI](../../src/cli/AGENTS.md),
@@ -19,6 +20,7 @@ surface, invariants and file maps are in the guides beside the code:
 [config](../../src/backend/services/session/service/config/AGENTS.md),
 [dispatch](../../src/backend/services/session/service/dispatch/AGENTS.md),
 [events](../../src/backend/services/session/service/events/AGENTS.md),
+[lifecycle](../../src/backend/services/session/service/lifecycle/AGENTS.md),
 [store](../../src/backend/services/session/service/store/AGENTS.md) and
 [providers](../../src/backend/services/session/service/providers/AGENTS.md)
 module guides. The reasons are in the `2026-11-13-*` records in
@@ -26,70 +28,6 @@ module guides. The reasons are in the `2026-11-13-*` records in
 behaviour. The sections below have not been migrated yet.
 
 ## ACP runtime
-
-### Failed provider resume
-
-An active session whose provider cannot load its stored identity explicitly
-reports `resume_fallback` (load failed or load unsupported). Browsing continues
-to fail without creating a replacement. Startup keeps the replacement runtime
-unavailable until the lifecycle owner reconciles it.
-
-A Codex `thread_active_writer` load failure preserves the stored conversation
-and reports that its other client must release it before retrying; it never
-creates a replacement. Development backends running alongside the main backend
-must use separate `BASE_DIR`/`DATABASE_PATH` values to avoid sharing session
-ownership. After a legitimate fallback commits, startup accepts the replacement
-identity's durable native access and reasoning snapshot.
-
-The lifecycle owner archives the currently observed transcript through the
-existing closed-session history before clearing provider messages from the
-active chat. Durable stop evidence stays with the AgentSession; provider-owned
-history files are never modified or deleted. With no observed messages, no
-archive is created. The replacement starts a fresh provider conversation, and
-does not have the old conversation as model context.
-
-A dedicated compare-and-set operation changes the existing AgentSession's
-provider identity, matching ACP config snapshot, and `providerIdentityRollovers`
-audit together. It matches the old identity, metadata, and update timestamp;
-ordinary identity writes still enforce immutability. The audit records the
-runtime incarnation, reason, old/new identities, and archived message count. An
-archive or reconciliation failure aborts startup and terminates the candidate,
-preserving the old active transcript and identity. A stop racing a successful
-commit leaves the new durable identity available for the next restart. An
-archive created before a cancelled or failed commit remains available as a
-retained copy.
-
-Pending configuration notifications carry an internal source capability to the
-configuration owner while public runtime lookup still hides their candidate. The
-source remains valid after creation clears. Its existing stop-generation fence
-rejects observations during a stop attempt, and exit or replacement invalidates
-it, including through the guarded snapshot write. If stopping fails and retains
-the same live runtime, observations may resume once that stop attempt clears.
-
-Runtime incarnation/stop fences reject stale repair callbacks. A process that
-has exited by code or signal fails the liveness fence, including when an
-external signal kills a candidate during identity reconciliation. Failed-load
-replay is discarded before `newSession`; replacement updates stay buffered until
-repair succeeds. History hydration ignores reads started under an older
-identity, even when they finish after rollover, and retry cooldowns reset for
-the new identity. After backend restart, the reconciled column is the
-authoritative history ID.
-
-Startup buffers at most 10,000 ACP events while provider creation and identity
-persistence are pending. During provider history load, transcript events already
-covered by hydrated history are suppressed before entering this buffer. Raw
-logging and native work tracking still receive the replay, while configuration,
-commands, usage, plans, notices and subagent state continue through startup.
-Suppressed transcript updates still maintain translator bookkeeping, including
-compaction identities. The tracker's replay-end marker ends early filtering
-before the load response when supported; otherwise load completion ends it.
-Native child replay retains all transcript updates within its existing limits
-but emits only creation/completion invalidations until replay finishes, avoiding
-one buffered invalidation per child output chunk. Live invalidations continue
-normally afterward. Suppression ends before a failed load starts a replacement
-conversation. Overflow cancels startup and terminates its candidate; it never
-installs a runtime with a silently truncated transcript. Rollover fencing
-rejects further reconciliation after overflow, and a later startup can retry.
 
 ### Session prompts
 

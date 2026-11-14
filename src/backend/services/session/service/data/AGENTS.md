@@ -3,9 +3,9 @@
 Session records, provider and launch resolution, and provider history: reading
 Claude Code and Codex history files and projecting them into transcripts. The
 [capsule guide](../../AGENTS.md) covers the capsule, and `../../modules.ts`
-describes this module in one line. This guide so far covers provider history.
-Bare file names below are in this directory; paths that start with `src/` are
-from the repository root.
+describes this module in one line. This guide so far covers provider history and
+the provider identity. Bare file names below are in this directory; paths that
+start with `src/` are from the repository root.
 
 ## Owns, and does not own
 
@@ -52,6 +52,11 @@ reading only lines that contain its marker.
 - Codex tool backfill never replaces the transcript while the runtime is
   starting, running or stopping, including a phase entered during the read.
   `session-provider-history-hydrator.test.ts`.
+- An ordinary session write can set a provider identity but never change or
+  clear one; only `rolloverProviderIdentity`, a compare-and-set that the
+  lifecycle module's reconciliation uses, replaces it.
+  `session.repository.test.ts`,
+  `../../resources/provider-identity-rollover.integration.test.ts`.
 
 ## Map
 
