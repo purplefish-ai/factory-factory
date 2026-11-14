@@ -148,6 +148,19 @@ it('spreads concurrent reservations and releases failed reservations', async () 
   ).rejects.toThrow('creation failed');
   expect(await service.withAccountReservation({}, async (id) => id)).toBe('codex-native-default');
   expect(await service.withAccountReservation({}, async (id) => id)).toBe(managed.id);
+  // Released reservations, failed or not, leave no bias against an account.
+  await service.withAccountReservation({ accountId: managed.id }, async () => undefined);
+  await expect(
+    service.withAccountReservation({ accountId: managed.id }, () => {
+      return Promise.reject(new Error('creation failed'));
+    })
+  ).rejects.toThrow('creation failed');
+  await service.withAccountReservation(
+    { accountId: 'codex-native-default' },
+    async () => undefined
+  );
+  expect(await service.withAccountReservation({}, async (id) => id)).toBe(managed.id);
+  expect(await service.withAccountReservation({}, async (id) => id)).toBe('codex-native-default');
 });
 it('does not silently rebind a profile after native identity changes', async () => {
   const { service, observations, observation } = await fixture();
@@ -159,10 +172,14 @@ it('does not silently rebind a profile after native identity changes', async () 
   await expect(service.getRuntimeContext(account.id)).rejects.toThrow('identity');
 });
 it('keeps single native installations usable and honors manual disabled accounts', async () => {
-  const { service } = await fixture();
+  const { service, observations, observation } = await fixture();
   expect(await service.withAccountReservation({}, async (id) => id)).toBe('codex-native-default');
   const account = await service.createAccount('Disabled');
   await service.updateAccount(account.id, { enabled: false });
+  observations.set('codex-native-default', observation(90));
+  observations.set(account.id, observation(10));
+  service.invalidate();
+  expect(await service.withAccountReservation({}, async (id) => id)).toBe('codex-native-default');
   expect(await service.withAccountReservation({ accountId: account.id }, async (id) => id)).toBe(
     account.id
   );
@@ -241,7 +258,7 @@ it('refuses duplicate identities including the native default', async () => {
   await expect(service.getRuntimeContext(account.id)).rejects.toThrow('already connected');
 });
 it('serializes browser logins and cancellation frees the native callback port', async () => {
-  const { service, login } = await fixture();
+  const { service, login, observations, observation } = await fixture();
   const one = await service.createAccount('One');
   const two = await service.createAccount('Two');
   login.mockImplementation((_context, signal, onUrl) => {
@@ -253,6 +270,10 @@ it('serializes browser logins and cancellation frees the native callback port', 
     );
   });
   expect((await service.startLogin(one.id)).status).toBe('pending');
+  observations.set(one.id, observation(10));
+  observations.set('codex-native-default', observation(90));
+  service.invalidate();
+  expect(await service.withAccountReservation({}, async (id) => id)).toBe('codex-native-default');
   await expect(service.startLogin(two.id)).rejects.toThrow('in progress');
   expect((await service.cancelLogin(one.id)).status).toBe('cancelled');
   expect((await service.startLogin(two.id)).status).toBe('pending');
@@ -292,6 +313,12 @@ it('filters unavailable models and applies the requested model quota', async () 
   await expect(
     service.withAccountReservation({ model: 'unavailable-model' }, async (id) => id)
   ).rejects.toThrow('remaining capacity');
+  // An account that reports no model list is not filtered by model.
+  observations.set(second.id, { ...observation(50), models: [] });
+  service.invalidate();
+  expect(
+    await service.withAccountReservation({ model: 'unavailable-model' }, async (id) => id)
+  ).toBe(second.id);
 });
 it('does not fall back from a missing persisted account to the native default', async () => {
   const { service } = await fixture();

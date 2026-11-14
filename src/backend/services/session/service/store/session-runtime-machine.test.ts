@@ -139,6 +139,37 @@ describe('SessionRuntimeMachine', () => {
     expect(store.runtime.work).toBeUndefined();
   });
 
+  it('clears cached work when a live runtime goes idle without fresh work', () => {
+    const machine = new SessionRuntimeMachine(
+      () => undefined,
+      () => '2026-02-09T00:00:00.000Z'
+    );
+    const store = createStore();
+    machine.markRuntime(store, {
+      phase: 'running',
+      processState: 'alive',
+      activity: 'WORKING',
+      work,
+    });
+    machine.markRuntime(store, { phase: 'idle', processState: 'alive', activity: 'IDLE' });
+    expect(store.runtime.work).toBeUndefined();
+  });
+
+  it('drops supplied work when the process is not alive', () => {
+    const machine = new SessionRuntimeMachine(
+      () => undefined,
+      () => '2026-02-09T00:00:00.000Z'
+    );
+    const store = createStore();
+    machine.markRuntime(store, {
+      phase: 'running',
+      processState: 'stopped',
+      activity: 'WORKING',
+      work,
+    });
+    expect(store.runtime.work).toBeUndefined();
+  });
+
   it('replaces runtime snapshot and emits delta by default', () => {
     const emitRuntimeDelta = vi.fn();
     const machine = new SessionRuntimeMachine(emitRuntimeDelta, () => '2026-02-09T00:00:00.000Z');

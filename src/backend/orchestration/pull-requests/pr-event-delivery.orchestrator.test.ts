@@ -494,6 +494,14 @@ it('keeps automated PR work queued for an unanswered interaction without an acti
   expect(mocks.claim).not.toHaveBeenCalled();
 });
 
+it('keeps automated PR work queued while delivery is paused', async () => {
+  const request = { workspaceId: 'w', prId: 'p', bindingRevision: 1 };
+  expect(await guardPRDelivery('main', request, ports)).toBe('ready');
+  config.deliveryPauseReason = 'USER_STOPPED';
+  expect(await guardPRDelivery('main', request, ports)).toBe('blocked');
+  expect(mocks.claim).not.toHaveBeenCalled();
+});
+
 it('does not reset a claim if a provider turn starts during receipt lookup', async () => {
   mocks.receipt.mockImplementation(() => {
     mocks.busy.mockReturnValue(true);

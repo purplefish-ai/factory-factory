@@ -36,11 +36,10 @@ async function fixture() {
 
 it('inherits native project trust for new managed homes without copying other settings', async () => {
   const h = await fixture();
-  await writeFile(
-    join(h.native, 'config.toml'),
-    `model = "native-model"\n[projects."/repos/iron-fillet"]\ntrust_level = "trusted"\n[projects."/repos/blocked"]\ntrust_level = "untrusted"\n`
-  );
+  const nativeConfig = `model = "native-model"\n[projects."/repos/iron-fillet"]\ntrust_level = "trusted"\n[projects."/repos/blocked"]\ntrust_level = "untrusted"\n`;
+  await writeFile(join(h.native, 'config.toml'), nativeConfig);
   await resolveAccountContext(h.row, h.config);
+  expect(await readFile(join(h.native, 'config.toml'), 'utf8')).toBe(nativeConfig);
   const text = await readFile(h.managed, 'utf8');
   expect(text).toContain('[projects."/repos/iron-fillet"]');
   expect(text).toContain('trust_level = "trusted"');

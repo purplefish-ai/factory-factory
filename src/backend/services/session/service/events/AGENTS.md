@@ -5,8 +5,9 @@ transcript and runtime state, permission requests to the queue of requests shown
 to the user, and subagent changes to viewer notifications. The
 [capsule guide](../../AGENTS.md) covers the capsule, and `../../modules.ts`
 describes this module in one line. This guide so far covers permission requests,
-subagent notifications and a failed turn's error. Bare file names below are in
-this directory; paths that start with `src/` are from the repository root.
+subagent notifications, thought chunks and a failed turn's error. Bare file
+names below are in this directory; paths that start with `src/` are from the
+repository root.
 
 ## Owns, and does not own
 
@@ -47,6 +48,9 @@ The capsule barrel exports the singletons `acpEventProcessor` and
   `created` and `completed` at once, and clearing the session's state sends the
   pending ones. `subagent-change-coalescer.test.ts`,
   `acp-event-processor.subagents.test.ts`.
+- A session's thought chunks are merged for at most 25 ms and written before its
+  next written update, runtime event, replayed user message or turn end, so
+  transcript order is unchanged. `acp-event-processor.text-streaming.test.ts`.
 
 ## Map
 

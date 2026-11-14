@@ -33,12 +33,22 @@ when it gains an entry that the test does not list or any `*`.
 
 ## Skills and validation
 
-No repository-owned `SKILL.md` files existed at this audit. Personal skills and
-plugin caches are outside this PR. For future skills, follow
+The repository's skills are `.claude/skills/<recipe-name>/SKILL.md`, one per
+[recipe](../recipes/README.md), which defines the format. Each holds only a
+`name`, a `description` saying when to use it and a line pointing at its recipe,
+so the procedure lives in one place; `pnpm check:guidance` fails a recipe
+without its skill and a skill without its recipe. Personal skills and plugin
+caches are not repository guidance. For other skills, follow
 [OpenAI's guidance](https://learn.chatgpt.com/docs/build-skills): one
 capability, clear `name`/`description`, a short entrypoint, and references
-loaded as needed. Keep exact sequences for fragile operations; remove redundant
-rules and obsolete workarounds. Skills do not authorize unrelated actions.
+loaded as needed. That page says Codex scans `.agents/skills` in every directory
+from the working directory up to the repository root and follows symlinked skill
+folders; it does not mention `.claude/skills/`. The
+[instruction discovery page](https://learn.chatgpt.com/docs/agent-configuration/agents-md)
+does not mention skills. These skills are therefore discovered by Claude Code;
+other tools reach a recipe through the [recipe index](../recipes/README.md).
+Keep exact sequences for fragile operations; remove redundant rules and obsolete
+workarounds. Skills do not authorize unrelated actions.
 
 Review edits for conflicting approvals, scope expansion, lost handoff context,
 and weakened repository checks. Verify links, commands, and `CLAUDE.md` imports.

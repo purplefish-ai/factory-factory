@@ -407,6 +407,31 @@ describe('AcpEventProcessor assistant text streaming', () => {
     });
   });
 
+  it('writes a pending thought after 25 ms, or before a runtime event that comes sooner', () => {
+    const deps = makeDeps();
+    const markRunning = vi.fn();
+    Object.assign(deps.sessionDomainService, {
+      markRunning,
+      getRuntimeSnapshot: vi.fn().mockReturnValue({ phase: 'running' }),
+    });
+    const processor = new AcpEventProcessor(deps);
+    const { onAcpEvent } = processor.createRuntimeEventHandler('sid');
+    const emitDelta = vi.mocked(deps.sessionDomainService.emitDelta);
+
+    processor.handleAcpDelta('sid', thoughtDelta('first'));
+    vi.advanceTimersByTime(24);
+    expect(emitDelta).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(1);
+    expect(emitDelta).toHaveBeenCalledOnce();
+
+    processor.handleAcpDelta('sid', thoughtDelta('second'));
+    onAcpEvent?.('sid', { type: 'acp_task_status_changed', active: true });
+    expect(emitDelta).toHaveBeenCalledTimes(2);
+    expect(emitDelta.mock.invocationCallOrder[1]).toBeLessThan(
+      markRunning.mock.invocationCallOrder[0] ?? 0
+    );
+  });
+
   it('flushes a pending thought when the prompt turn finishes', () => {
     const deps = makeDeps();
     const processor = new AcpEventProcessor(deps);
