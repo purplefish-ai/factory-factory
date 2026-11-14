@@ -37,8 +37,9 @@ There is no barrel. `src/backend/app-context.ts` composes `createAgentRuntime`
 `createSlackIntake`. Each runs at start, then waits its interval after a run
 ends:
 
-- `agent-source-poll`, 60 seconds: GitHub capture for each target, then
-  completion of pending GitHub activations.
+- `agent-source-poll`, 60 seconds: GitHub capture for each target, up to
+  `githubPagesPerCycle` (ten, in `src/backend/services/config.service.ts`) pages
+  per repository, then completion of pending GitHub activations.
 - `agent-event-evaluation`, 5 seconds: queue maintenance, ledger retention,
   pending Slack activations, evaluation, then a claim handed to the consumer.
 - `agent-launch-maintenance`, 5 seconds: lease renewal for owned launches,
@@ -54,8 +55,9 @@ There is no separate activation or retention job.
 - An evaluation run maintains the queue, then prunes the ledger, before it
   evaluates; it completes Slack activations before it evaluates, and claims only
   after it evaluates. `agent-runtime.orchestrator.test.ts`.
-- A failed ledger retention is logged and the pass still evaluates and claims,
-  unless the run's signal has aborted. `agent-runtime.orchestrator.test.ts`.
+- A failed ledger retention is logged, and the pass goes on to evaluation and
+  its claim step unless the run's signal has aborted.
+  `agent-runtime.orchestrator.test.ts`.
 - Launch maintenance keeps renewing while an evaluation run is stalled.
   `agent-runtime.orchestrator.test.ts`.
 - Stopping the runtime closes launch admission before it drains owned launches,

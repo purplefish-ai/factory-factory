@@ -18,17 +18,19 @@ called `jobRunner.stopAll()` before the database disconnected.
 teardown list. Server shutdown and `disposeApplication` both run it; the server
 adds only its transport and timer work, through two hooks at fixed points.
 
-The plan signals every background job as soon as shutdown begins, so none starts
-new work during teardown, and lets their in-flight runs drain concurrently with
-each other and with the ordered steps. A step waits only for the drains it
-depends on, and every drain settles before the database disconnects.
+The plan signals the jobs in its `jobs` list as soon as shutdown begins, so none
+of them starts new work during teardown, and lets their in-flight runs drain
+concurrently with each other and with the ordered steps. A step waits only for
+the drains it depends on, and every drain settles before the database
+disconnects.
 
-The waits that remain encode dependencies: the event collector keeps projecting
-until the PR poll has settled; snapshot reconciliation's Git pass settles before
-the Git state service drops its watchers and cache; launcher-option and Codex
+Among the waits that remain, the event collector keeps projecting until the PR
+poll has settled; snapshot reconciliation's Git pass settles before the Git
+state service drops its watchers and cache; launcher-option and Codex
 model-catalog discovery still read account context, so Codex account teardown
-waits for them. `jobRunner.stopAll()` is a backstop for a registered job that
-has no entry in the plan.
+waits for them. Jobs that a step stops instead, such as the agent runtime's or
+workspace metadata's, run until that step; `jobRunner.stopAll()` is a backstop
+for a registered job the plan does not name.
 
 Rejected:
 
@@ -37,7 +39,8 @@ Rejected:
 
 ## Consequences
 
-- Shutdown takes about as long as its slowest drain.
+- The job drains together cost about as much time as the slowest of them; the
+  ordered steps add their own time.
 - Startup checks for shutdown after each await before it starts more jobs: a job
   started after its stop would keep running with nothing left to stop it before
   the database disconnects.

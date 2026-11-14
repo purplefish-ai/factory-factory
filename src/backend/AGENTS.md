@@ -20,7 +20,8 @@ fatal-error handling. It does not own:
   `src/backend/services/logger.service.ts`.
 - Startup recovery of workspaces and its drain:
   `src/backend/orchestration/workspace-lifecycle/`.
-- The desktop app's stop and kill budget for this process: `electron/main/`.
+- The desktop app's stop and kill budget for this process: `electron/main/`
+  (from the repository root).
 
 ## Public surface
 
@@ -40,10 +41,11 @@ have two callers: `server.ts` and `disposeApplication`.
   `server.shutdown.test.ts`.
 - Every job in the plan is named in the `after` of a step before the database
   step, which is last. `application-shutdown.test.ts`.
-- The agent runtime stops first, workspace metadata before transports close,
-  transports before sessions, session dispatch right after sessions, and Codex
-  accounts after sessions and after the launcher-option and Codex model-catalog
-  drains. `application-shutdown.test.ts`, `server.shutdown.test.ts`.
+- The agent-runtime step runs first; workspace metadata stops before transports
+  close, transports before sessions, session dispatch right after sessions, and
+  Codex accounts after sessions and after the launcher-option and Codex
+  model-catalog drains. `application-shutdown.test.ts`,
+  `server.shutdown.test.ts`.
 - The event collector stops only after the PR poll drains, and the Git state
   service only after snapshot reconciliation drains. `server.shutdown.test.ts`.
 - `jobRunner.stopAll()` runs after every other step but the database, so a job

@@ -40,8 +40,8 @@ the rows of the disposition table in the pull request that moved this note.
 > the stop as a delivery gap before the database closes.
 
 Old paragraph 17. For the agent-definition capsule guide
-(`src/backend/services/agent-definition/`), from the Slack slice of
-`docs/architecture/integrations.md` (task 2.6d). No test fails when
+(`src/backend/services/agent-definition/`), which the Slack slice of
+`docs/architecture/integrations.md` (task 2.6d) extends. No test fails when
 `SlackEventSource.stop()` stops waiting for envelopes in flight.
 
 > Expiry and retry gates use time captured after acquiring the ledger write
