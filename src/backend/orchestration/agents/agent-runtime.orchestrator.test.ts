@@ -5,7 +5,20 @@ import {
   resolveAgentExecutionConfig,
 } from './agent-runtime.orchestrator';
 
+const mockLogger = vi.hoisted(() => ({
+  debug: vi.fn(),
+  info: vi.fn(),
+  warn: vi.fn(),
+  error: vi.fn(),
+}));
+
+vi.mock('@/backend/services/logger.service', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/backend/services/logger.service')>()),
+  createLogger: () => mockLogger,
+}));
+
 afterEach(async () => {
+  mockLogger.warn.mockClear();
   await jobRunner.stopAll();
   jobRunner.reset();
   vi.useRealTimers();
@@ -307,6 +320,18 @@ it.each([false, true])(
     }
     expect(retainedSignal?.aborted).toBe(true);
     expect(calls).toEqual(aborted ? ['retention'] : ['retention', 'evaluation', 'claim']);
+    // The failure is logged by reason only, never with the provider's message,
+    // and not at all once the run's signal has aborted.
+    expect(mockLogger.warn.mock.calls).toEqual(
+      aborted
+        ? []
+        : [
+            [
+              'Agent ledger retention failed; evaluation will continue.',
+              { reason: 'RETENTION_FAILED' },
+            ],
+          ]
+    );
   }
 );
 
