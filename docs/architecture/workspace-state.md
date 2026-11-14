@@ -29,8 +29,7 @@ entry quotes only the sentences it needs from the paragraph named after it,
 verbatim, with `[…]` where sentences between them are left out. The migration
 that creates the named area's guide checks the entry, moves what holds there and
 deletes the entry here. Paragraph numbers are the rows of the disposition tables
-in pull requests #3229 (first half) and the second-half migration that followed
-it.
+in pull requests #3229 (first half) and #3239 (second half).
 
 > CI and sidebar status helpers and types have one internal import surface:
 > `@/shared/core`. Their dependency-free implementations live in
@@ -57,6 +56,6 @@ launchers set for its own backend". For the session capsule guide.
 > not replayed: an older removal must not override a workspace restored in the
 > full snapshot.
 
-Old paragraph 35 (second half), after "Each snapshot WebSocket starts from a
-full read of current store state". For the WebSocket router guide
+Old paragraph 35 (#3239), after "Each snapshot WebSocket starts from a full read
+of current store state". For the WebSocket router guide
 (`src/backend/routers/websocket/`, task 2.9).
