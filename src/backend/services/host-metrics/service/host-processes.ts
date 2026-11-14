@@ -66,8 +66,8 @@ export function parsePsOutput(stdout: string): HostProcess[] {
 
 /**
  * The outermost `.app` bundle in a macOS path, so Chrome's helpers count as
- * Chrome. Only absolute paths name a bundle; a relative one is however the
- * process was started.
+ * Chrome. Only an absolute path names a bundle; a relative one only shows
+ * how the process was started.
  */
 function appBundleName(command: string): string | null {
   if (!command.startsWith('/')) {
