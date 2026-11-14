@@ -41,6 +41,9 @@ revisions. It does not own:
 - `agent-proposal-result.ts`: finding a proposal reference in a tool result.
 - `agent-proposal-card.tsx`, `agent-trigger-editor.tsx`: the card and its event
   editor; `agent-proposal-draft.ts`: drafts and reconciliation.
+- `src/backend/services/session/service/acp/agent-authoring.manual.integration.test.ts`
+  evaluates the server authoring flow against live Codex and runs only with
+  `RUN_AGENT_AUTHORING_EVAL=1`.
 
 ## Decisions
 
