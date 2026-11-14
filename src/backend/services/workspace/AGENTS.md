@@ -99,8 +99,8 @@ Orchestration wires the session, GitHub and PR-snapshot capabilities declared in
   narrow writes; accepted branches go through `accepted-branch.ts`),
   `workspace-run-script.service.ts`,
   `archived-workspace-blob-retention.service.ts`.
-- `service/snapshot/`: `workspace-snapshot-store.service.ts`, with
-  `branch-freshness.ts` and `pr-projection-freshness.ts`.
+- [`service/snapshot/`](service/snapshot/AGENTS.md): the snapshot store, with
+  branch and PR projection freshness.
 - `service/state/`: pure derivations (flow state, init policy, pending request
   type).
 - `service/query/`: list, summary, Git and notification queries;

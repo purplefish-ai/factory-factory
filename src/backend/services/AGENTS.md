@@ -44,6 +44,13 @@ Enforced by dependency-cruiser and ownership checks:
   [background jobs](../../../docs/architecture/background-jobs.md).
 - Application `gh` calls go through `GitHubCLIService` for the shared rate
   budget.
+- Reads on hot and polled paths leave out `initOutput`, `creationMetadata`,
+  session `providerMetadata` and the PR `observation`; narrow any new one with
+  `select` or `omit`, since the Prisma client sets no default
+  ([why](../../../docs/decisions/2026-11-13-hot-reads-leave-out-blob-columns.md)).
+  `src/backend/services/workspace/resources/workspace-hot-reads.accessor.integration.test.ts`,
+  `src/backend/services/workspace/resources/workspace-polled-reads.accessor.integration.test.ts`,
+  `src/backend/services/session/resources/session-blob-reads.integration.test.ts`.
 - Side-table accessors own Prisma writes. `WorkspacePR` exposes a collection;
   `WorkspacePRMonitoring` owns the recipient binding, `WorkspacePREvent` the
   durable fact ledger, `WorkspacePRDelivery` frozen delivery effects and

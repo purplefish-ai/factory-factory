@@ -80,8 +80,8 @@ URL**. Both sources remain available.
 Every page uses two header rows on phones: the sidebar menu and path or page
 title first, then status and action controls. Workspace headers put project and
 family navigation beside the workspace name in the first row, keeping the
-content height stable between pages. See the
-[shared header layout](architecture/workspace-state.md) for the layout contract.
+content height stable between pages. `e2e/workspace-header.spec.ts` checks the
+layout.
 
 On the Kanban board, Search and **New workspace** live in a toolbar in the main
 pane, with visible labels and room for touch targets. In narrow message

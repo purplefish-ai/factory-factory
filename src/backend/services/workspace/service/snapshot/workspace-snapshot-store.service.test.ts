@@ -596,10 +596,14 @@ describe('WorkspaceSnapshotStore', () => {
     it('same-timestamp updates are not accepted (strictly newer required)', () => {
       store.upsert('ws-1', makeUpdate({ name: 'original' }), 'test', 100);
       store.upsert('ws-1', { name: 'attempted-overwrite' }, 'test', 100);
+      expect(
+        store.upsert('ws-1', { status: 'FAILED', runScriptStatus: 'RUNNING' }, 'test', 100)
+      ).toEqual({ accepted: false, changed: false, emitted: false });
 
       const entry = store.getByWorkspaceId('ws-1');
       // Same timestamp is not newer, so original values preserved
       expect(entry!.name).toBe('original');
+      expect(entry).toMatchObject({ status: 'READY', runScriptStatus: 'IDLE' });
     });
 
     it('stale projectId updates do not overwrite newer project index state', () => {

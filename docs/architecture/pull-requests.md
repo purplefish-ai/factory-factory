@@ -24,14 +24,6 @@ checked against the code. The migration that creates the named area's guide
 checks the entry, moves what holds there and deletes the entry here. Paragraph
 numbers are the rows of the disposition table in pull request #3213.
 
-> The event collector uses one per-lifetime projection worker for PR collection
-> and monitoring invalidations. […] The worker owns retries and archive/stop
-> fences, and has no GitHub, delivery, session, or Linear runtime dependency.
-
-Old paragraph 29. For the snapshots orchestration guide
-(`src/backend/orchestration/snapshots/`, task 2.5b). No dependency-cruiser rule
-enforces the last clause.
-
 > Successful ACP prompt turns reset the workspace's PR discovery backoff, as do
 > runtime exits. ACP processes remain alive between turns, so waiting for
 > process exit alone can leave a newly opened PR undiscovered after its checks
