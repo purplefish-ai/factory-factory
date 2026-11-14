@@ -160,6 +160,7 @@ it('spreads concurrent reservations and releases failed reservations', async () 
     async () => undefined
   );
   expect(await service.withAccountReservation({}, async (id) => id)).toBe(managed.id);
+  expect(await service.withAccountReservation({}, async (id) => id)).toBe('codex-native-default');
 });
 it('does not silently rebind a profile after native identity changes', async () => {
   const { service, observations, observation } = await fixture();

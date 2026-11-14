@@ -11,10 +11,11 @@ directory, other bare file names are under `service/`, and paths that start with
 ## Owns, and does not own
 
 The capsule owns the Prisma model `CodexAccount` (through
-`resources/codex-account.accessor.ts`), each managed account's private profile
-directory, the pinned identity, browser sign-in, the native probes that read
-identity, models and quota, and the choice of account for Auto. Codex stores the
-credentials itself, in the profile. It does not own:
+`resources/codex-account.accessor.ts` and, for backups,
+`resources/codex-account-backup.accessor.ts`), each managed account's private
+profile directory, the pinned identity, browser sign-in, the native probes that
+read identity, models and quota, and the choice of account for Auto. Codex
+stores the credentials itself, in the profile. It does not own:
 
 - Which account a session uses once created, and resolving it at startup and for
   history: the session capsule (`src/backend/services/session/`, its `data/` and
@@ -32,7 +33,7 @@ credentials itself, in the profile. It does not own:
 
 ## Public surface
 
-`index.ts` exports the singleton `codexAccountService`, the type
+`index.ts` exports `codexAccountService`, its class `CodexAccountService`,
 `CodexRuntimeContext`, `NATIVE_DEFAULT_CODEX_ACCOUNT_ID`,
 `getMetadataCredentialsStore` and the backup functions.
 
@@ -93,8 +94,7 @@ and logout staying within one profile.
   project trust inheritance; `identity.ts`: Native default email fallback keys.
 - `native-account.ts`, `native-rpc.ts`, `native-slots.ts`: probes and sign-in
   through the bundled Codex app server; `login-coordinator.ts`: the one browser
-  sign-in.
-- `metadata-credentials-store.ts`: the credential store a disposable inference
-  process inherits.
+  sign-in; `metadata-credentials-store.ts`: the credential store a disposable
+  inference process inherits.
 - `codex-account-backup.ts`, `resources/codex-account-backup.accessor.ts`:
   backup metadata.
