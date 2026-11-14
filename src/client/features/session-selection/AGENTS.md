@@ -17,8 +17,8 @@ provider switches, settings refetches and restoration. It does not own:
 - Checking explicit access again before the workspace is saved:
   `src/backend/orchestration/workspace-lifecycle/workspace-launch.orchestrator.ts`.
 - The creation form and its stored drafts: `../kanban/`.
-- New conversations in an existing workspace, which have no launch pickers:
-  `../chat/use-session-collection-commands.ts`.
+- Starting another conversation in an existing workspace, which offers no launch
+  choices: `../chat/use-session-collection-commands.ts`.
 - Mapping a saved permission preset to a native access mode:
   `src/shared/session-launch.ts`.
 

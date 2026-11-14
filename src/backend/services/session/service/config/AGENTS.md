@@ -94,9 +94,9 @@ and `stopLaunchOptions()` at shutdown.
 - Launch options are cached per provider, model and Codex account, 128 at most,
   by at most eight discoveries, each holding its slot until its child drains
   (`stopLaunchOptions()` waits seven seconds at most); a result over five
-  minutes old is returned at once with one background refresh, and a failed
-  refresh keeps it and is not retried for 30 s.
-  `session-launch-options.service.test.ts`,
+  minutes old is returned at once and refreshed in the background if it has no
+  discovery running and a slot is free; a failed refresh keeps it, and the next
+  waits 30 s. `session-launch-options.service.test.ts`,
   `session-launch-options-cache.test.ts`,
   `session-launch-options-drain.test.ts`.
 
