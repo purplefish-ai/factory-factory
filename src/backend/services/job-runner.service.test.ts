@@ -287,7 +287,8 @@ describe('jobRunner', () => {
       const stopping = jobRunner.stop('busy').then(() => {
         stopped = true;
       });
-      await vi.advanceTimersByTimeAsync(0);
+      // The wait has no bound: a long stretch of fake time does not release it.
+      await vi.advanceTimersByTimeAsync(10 * 60 * 1000);
       expect(stopped).toBe(false);
 
       job.finish();
