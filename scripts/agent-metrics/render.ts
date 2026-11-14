@@ -50,16 +50,20 @@ function formatFollowUpFixes(fixes: FollowUpFixes, merged: number): string {
   return `${formatNumber(fixes.referencingRecentMerge)} (${formatShare(fixes.shareOfMerged)} of ${formatNumber(merged)} merged PRs)${numbers}`;
 }
 
-function formatSandboxSection(section: SandboxSectionMetrics): string {
+/** Two table rows: the pull requests judged by keyword, and the earlier ones. */
+function sandboxSectionRows(section: SandboxSectionMetrics): string[] {
   const { byKeyword, byContent } = section;
   const unclassified =
     byKeyword.unclassifiedNumbers.length > 0
       ? byKeyword.unclassifiedNumbers.map((number) => `#${number}`).join(', ')
       : 'none';
-  const counts = `driven ${formatNumber(byKeyword.driven)}, not applicable ${formatNumber(byKeyword.notApplicable)}, unlabelled ${formatNumber(byKeyword.unlabelled)}, empty ${formatNumber(byKeyword.empty)}, missing ${formatNumber(byKeyword.missing)} of ${formatNumber(byKeyword.judged)} opened since the keyword instruction merged at ${section.keywordInstructionAt}`;
+  const counts = `driven ${formatNumber(byKeyword.driven)}, not applicable ${formatNumber(byKeyword.notApplicable)}, unlabelled ${formatNumber(byKeyword.unlabelled)}, empty ${formatNumber(byKeyword.empty)}, missing ${formatNumber(byKeyword.missing)} of ${formatNumber(byKeyword.judged)}`;
   const driven = `driven among those not marked "does not apply": ${formatNumber(byKeyword.driven)} of ${formatNumber(byKeyword.judged - byKeyword.notApplicable)} (${formatShare(byKeyword.shareDriven)})`;
-  const earlier = `opened since the template merged at ${section.templateMergedAt} and before the keyword instruction, judged only by text: filled ${formatNumber(byContent.filled)}, empty ${formatNumber(byContent.empty)}, missing ${formatNumber(byContent.missing)} of ${formatNumber(byContent.opened)} (${formatShare(byContent.shareFilled)} filled); opened before the template and not judged: ${formatNumber(section.beforeTemplate)}`;
-  return `${counts}; ${driven}; unclassified: ${unclassified}; ${earlier}`;
+  const earlier = `since the template merged at ${section.templateMergedAt}, judged only by text: filled ${formatNumber(byContent.filled)}, empty ${formatNumber(byContent.empty)}, missing ${formatNumber(byContent.missing)} of ${formatNumber(byContent.opened)} (${formatShare(byContent.shareFilled)} filled); opened before the template and not judged: ${formatNumber(section.beforeTemplate)}`;
+  return [
+    `| PRs opened since the "Driven in the sandbox" keyword instruction merged at ${section.keywordInstructionAt} | ${counts}; ${driven}; unclassified: ${unclassified} |`,
+    `| PRs opened before the keyword instruction: "Driven in the sandbox" section | ${earlier} |`,
+  ];
 }
 
 /**
@@ -100,7 +104,7 @@ export function renderMarkdown(metrics: AgentMetrics): string {
     `| Open to merge | ${formatDistribution(pullRequests.openToMergeHours, ' h')} |`,
     `| Merged PRs titled with a fix verb | ${formatNumber(pullRequests.followUpFixes.fixTitled)} of ${formatNumber(pullRequests.merged)} |`,
     `| Fix PRs referencing a PR merged in the previous 7 days | ${formatFollowUpFixes(pullRequests.followUpFixes, pullRequests.merged)} |`,
-    `| Merged PRs by their "Driven in the sandbox" keyword | ${formatSandboxSection(pullRequests.sandboxSection)} |`,
+    ...sandboxSectionRows(pullRequests.sandboxSection),
     '',
     '## Guidance',
     '',

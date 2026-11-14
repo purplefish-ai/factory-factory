@@ -274,16 +274,42 @@ export function sandboxSectionState(body: string): SandboxSectionState {
   return content.trim().length > 0 ? 'filled' : 'empty';
 }
 
-/** The text after `keyword` when `content` begins with it, in any case. */
-function afterKeyword(content: string, keyword: string): string | null {
-  return content.slice(0, keyword.length).toLowerCase() === keyword
-    ? content.slice(keyword.length).trim()
-    : null;
+const emphasisCharacters = '*_`';
+
+/** The first position at or after `from` whose character is not one of `skipped`. */
+function skipCharacters(text: string, from: number, skipped: string): number {
+  let position = from;
+  while (position < text.length && skipped.includes(text.charAt(position))) {
+    position += 1;
+  }
+  return position;
 }
 
 /**
- * The section by the keyword it begins with: `Driven:` or `Does not apply:`,
- * followed by text. A keyword with nothing after it is `empty`, since it
+ * The text after `keyword` (a word and its colon) when `content` begins with
+ * it, in any case. One list marker (`- ` or `* `) and emphasis characters
+ * (`*`, `_`, backtick) before the word, between it and its colon and after the
+ * colon are skipped, so `**Driven:** x` and `- Driven: x` read by their keyword.
+ * One scan from the start: the cost does not depend on what follows.
+ */
+function afterKeyword(content: string, keyword: string): string | null {
+  const word = keyword.slice(0, -1);
+  const marker = content.startsWith('- ') || content.startsWith('* ') ? 2 : 0;
+  const start = skipCharacters(content, marker, emphasisCharacters);
+  if (content.slice(start, start + word.length).toLowerCase() !== word) {
+    return null;
+  }
+  const colon = skipCharacters(content, start + word.length, emphasisCharacters);
+  if (content.charAt(colon) !== ':') {
+    return null;
+  }
+  return content.slice(skipCharacters(content, colon + 1, `${emphasisCharacters} `)).trim();
+}
+
+/**
+ * The section by the keyword it begins with: `Driven:` or `Does not apply:`
+ * (also as a list item or in bold, italics or code), followed by text. A
+ * keyword with nothing after it is `empty`, since it
  * records neither what was done nor why not.
  */
 export function sandboxSectionLabel(body: string): SandboxSectionLabel {

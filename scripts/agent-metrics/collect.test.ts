@@ -154,22 +154,36 @@ describe('collectCommitFiles', () => {
 });
 
 describe('collectKeywordInstructionAt', () => {
+  const shallowCheck = 'rev-parse --is-shallow-repository';
+  const search = `log --reverse --format=%cI -SDoes not apply: ${commit} -- .github/pull_request_template.md`;
+
   it('asks git for the oldest commit that added the instruction to the template', () => {
     const git = fakeCommand({
-      [`log --reverse --format=%cI -SDoes not apply: ${commit} -- .github/pull_request_template.md`]:
-        '2026-11-14T08:30:00-05:00\n2026-11-16T09:00:00+01:00\n',
+      [shallowCheck]: 'false\n',
+      [search]: '2026-11-14T08:30:00-05:00\n2026-11-16T09:00:00+01:00\n',
     });
     expect(collectKeywordInstructionAt(git.command, commit)).toBe('2026-11-14T13:30:00Z');
-    expect(git.calls).toHaveLength(1);
+    expect(git.calls).toEqual([shallowCheck, search]);
+  });
+
+  it('refuses a shallow clone, where the oldest commit adds everything, before searching', () => {
+    const git = fakeCommand({
+      [shallowCheck]: 'true\n',
+      [search]: '2026-11-16T09:00:00+01:00\n',
+    });
+    expect(() => collectKeywordInstructionAt(git.command, commit)).toThrow(
+      'needs the full history; run `git fetch --unshallow`'
+    );
+    expect(git.calls).toEqual([shallowCheck]);
   });
 
   it('fails, rather than judge every pull request, when no commit added the instruction', () => {
-    const git = fakeCommand({
-      [`log --reverse --format=%cI -SDoes not apply: ${commit} -- .github/pull_request_template.md`]:
-        '\n',
-    });
+    const git = fakeCommand({ [shallowCheck]: 'false\n', [search]: '\n' });
     expect(() => collectKeywordInstructionAt(git.command, commit)).toThrow(
-      'has no commit adding "Does not apply:"'
+      'No commit adds "Does not apply:" to .github/pull_request_template.md'
+    );
+    expect(() => collectKeywordInstructionAt(git.command, commit)).toThrow(
+      'renamed or the keyword instruction was removed'
     );
   });
 
@@ -182,41 +196,73 @@ describe('collectKeywordInstructionAt', () => {
       }
     });
 
-    function commitTemplate(git: Command, directory: string, content: string, date: string) {
+    // Hermetic: no global or system configuration (hooks, signing, templates) and an explicit identity.
+    const hermeticEnvironment = {
+      ...process.env,
+      GIT_CONFIG_GLOBAL: '/dev/null',
+      GIT_CONFIG_NOSYSTEM: '1',
+      GIT_AUTHOR_NAME: 'Test',
+      GIT_AUTHOR_EMAIL: 'test@example.invalid',
+      GIT_COMMITTER_NAME: 'Test',
+      GIT_COMMITTER_EMAIL: 'test@example.invalid',
+    };
+    const gitIn =
+      (directory: string, environment: Record<string, string | undefined> = {}): Command =>
+      (args) =>
+        execFileSync('git', args, {
+          cwd: directory,
+          env: { ...hermeticEnvironment, ...environment },
+        });
+
+    function commitTemplate(directory: string, content: string, date: string) {
       writeFileSync(join(directory, '.github/pull_request_template.md'), content);
-      git(['add', '.']);
+      gitIn(directory)(['add', '.']);
       // The commit date, which the script reads, is the committer date.
-      execFileSync('git', ['commit', '-q', '-m', 'template', '--date', date], {
-        cwd: directory,
-        env: { ...process.env, GIT_COMMITTER_DATE: date },
-      });
+      gitIn(directory, { GIT_COMMITTER_DATE: date })([
+        'commit',
+        '-q',
+        '--no-gpg-sign',
+        '-m',
+        'template',
+        '--date',
+        date,
+      ]);
     }
 
-    it('finds the first commit that added the instruction, not a later edit or removal', () => {
+    function templateRepository(): string {
       repository = mkdtempSync(join(tmpdir(), 'agent-metrics-git-'));
       const directory = repository;
-      const git: Command = (args) => execFileSync('git', args, { cwd: directory });
-      git(['init', '-q']);
-      git(['config', 'user.name', 'Test']);
-      git(['config', 'user.email', 'test@example.invalid']);
-      git(['config', 'commit.gpgsign', 'false']);
+      gitIn(directory)(['init', '-q']);
       mkdirSync(join(directory, '.github'));
-      commitTemplate(git, directory, '## Why\n', '2026-11-10T10:00:00+00:00');
-      commitTemplate(git, directory, '## Why\n\n<!-- Evidence. -->\n', '2026-11-12T10:00:00+00:00');
+      commitTemplate(directory, '## Why\n', '2026-11-10T10:00:00+00:00');
+      commitTemplate(directory, '## Why\n\n<!-- Evidence. -->\n', '2026-11-12T10:00:00+00:00');
       commitTemplate(
-        git,
         directory,
         '## Why\n\n<!-- Begin with "Driven:" or "Does not apply:" -->\n',
         '2026-11-14T10:00:00+02:00'
       );
-      commitTemplate(git, directory, '## Why\n\n<!-- Reworded. -->\n', '2026-11-15T10:00:00+00:00');
+      commitTemplate(directory, '## Why\n\n<!-- Reworded. -->\n', '2026-11-15T10:00:00+00:00');
       commitTemplate(
-        git,
         directory,
         '## Why\n\n<!-- Does not apply: again. -->\n',
         '2026-11-16T10:00:00+00:00'
       );
-      expect(collectKeywordInstructionAt(git, 'HEAD')).toBe('2026-11-14T08:00:00Z');
+      return directory;
+    }
+
+    it('finds the first commit that added the instruction, not a later edit or removal', () => {
+      expect(collectKeywordInstructionAt(gitIn(templateRepository()), 'HEAD')).toBe(
+        '2026-11-14T08:00:00Z'
+      );
+    });
+
+    it('refuses a shallow clone of it, which would date the instruction by its newest commit', () => {
+      const directory = templateRepository();
+      const clone = join(directory, 'shallow');
+      gitIn(directory)(['clone', '-q', '--depth=1', `file://${directory}`, clone]);
+      expect(() => collectKeywordInstructionAt(gitIn(clone), 'HEAD')).toThrow(
+        'needs the full history'
+      );
     });
   });
 });

@@ -212,6 +212,13 @@ function isMeasured(path: string): boolean {
  * squash-merged commit is its merge time.
  */
 export function collectKeywordInstructionAt(git: Command, revision: string): string {
+  // In a shallow clone the oldest commit "adds" every file, so the search would
+  // answer with the tip's date instead of failing.
+  if (git(['rev-parse', '--is-shallow-repository']).toString('utf8').trim() === 'true') {
+    throw new Error(
+      'The keyword cut-off needs the full history; run `git fetch --unshallow` (or check out with `fetch-depth: 0`).'
+    );
+  }
   const first = git([
     'log',
     '--reverse',
@@ -228,7 +235,7 @@ export function collectKeywordInstructionAt(git: Command, revision: string): str
   const parsed = commitDateSchema.safeParse(first);
   if (!parsed.success) {
     throw new Error(
-      `${templatePath} has no commit adding "${keywordInstructionMarker}" up to ${revision}; is the history shallow?`
+      `No commit adds "${keywordInstructionMarker}" to ${templatePath} up to ${revision}: the template may have been renamed or the keyword instruction was removed.`
     );
   }
   return new Date(parsed.data).toISOString().replace('.000Z', 'Z');

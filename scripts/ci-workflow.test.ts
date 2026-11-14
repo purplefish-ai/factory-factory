@@ -373,10 +373,12 @@ describe('weekly agent metrics workflow', () => {
     .object({
       on: z.record(z.string(), z.unknown()),
       permissions: z.record(z.string(), z.string()).optional(),
+      env: z.record(z.string(), z.string()).optional(),
       jobs: z.record(
         z.string(),
         z.object({
           permissions: z.record(z.string(), z.string()).optional(),
+          env: z.record(z.string(), z.string()).optional(),
           steps: z.array(stepSchema),
         })
       ),
@@ -405,6 +407,10 @@ describe('weekly agent metrics workflow', () => {
     expect(metricsSource).not.toMatch(/:\s*write\b|write-all/);
     expect(metricsSource).not.toContain('secrets.');
     expect(metricsSource).not.toContain('pull_request_target');
+    // Neither the workflow nor the job defines an environment, so a token cannot reach a step
+    // that does not name it.
+    expect(metrics.env).toBeUndefined();
+    expect(Object.values(metrics.jobs).map((job) => job.env)).toEqual([undefined]);
     // The token is on the one step that runs the script, and on no other.
     const withToken = steps.filter((step) => step.env !== undefined);
     expect(withToken.map((step) => step.env)).toEqual([{ GH_TOKEN: '${{ github.token }}' }]);

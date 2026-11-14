@@ -263,9 +263,68 @@ describe('sandboxSectionLabel', () => {
       'Does not apply, docs only.',
       'Driven yes.',
       'Drivenx: yes',
-      '**Driven:** ran it.',
+      'Driven - ran it.',
+      'Driven : ran it.',
+      'Not driven: ran it.',
+      'Not applicable: docs only.',
+      'N/A',
+      'Does not apply. Docs only.',
+      'Does not apply - docs only.',
+      '> Driven: ran it.',
+      '-- Driven: ran it.',
+      '-Driven: ran it.',
+      '1. Driven: ran it.',
     ]) {
       expect(sandboxSectionLabel(section(text)), text).toBe('unlabelled');
+    }
+  });
+
+  it('reads a keyword that is bold, italic, code or a list item', () => {
+    for (const text of [
+      '**Driven:** ran it.',
+      '**Driven**: ran it.',
+      '__Driven:__ ran it.',
+      '_Driven:_ ran it.',
+      '*Driven:* ran it.',
+      '`Driven:` ran it.',
+      '***Driven:*** ran it.',
+      '- Driven: ran it.',
+      '* Driven: ran it.',
+      '- **Driven:** ran it.',
+      'Driven:**ran it.',
+      '**DRIVEN**:** ran it.',
+    ]) {
+      expect(sandboxSectionLabel(section(text)), text).toBe('driven');
+    }
+    for (const text of [
+      '**Does not apply:** docs only.',
+      '**Does not apply**: docs only.',
+      '`Does not apply:` docs only.',
+      '_does not apply:_ docs only.',
+      '- Does not apply: docs only.',
+      '* **Does not apply:** docs only.',
+    ]) {
+      expect(sandboxSectionLabel(section(text)), text).toBe('not-applicable');
+    }
+  });
+
+  it('labels an emphasised keyword with nothing after it as empty', () => {
+    for (const text of [
+      '**Driven:**',
+      '**Driven**:',
+      '- Driven:',
+      '`Does not apply:`',
+      '_Driven:_ **',
+    ]) {
+      expect(sandboxSectionLabel(section(text)), text).toBe('empty');
+    }
+  });
+
+  it('returns on 200,000 characters of emphasis marks and list markers', () => {
+    for (const text of ['*', '- ', '* ', '_', '`', '**Driven', `${'- '.repeat(1)}*`]) {
+      const body = `## Driven in the sandbox\n${text.repeat(Math.ceil(200_000 / text.length))}\n`;
+      expect(body.length).toBeGreaterThanOrEqual(200_000);
+      expect(sandboxSectionLabel(body)).toMatch(/^(empty|unlabelled)$/);
     }
   });
 

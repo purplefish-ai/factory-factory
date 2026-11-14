@@ -91,8 +91,12 @@ describe('renderMarkdown', () => {
         unclassifiedNumbers: [3, 9, 12],
       },
     };
-    expect(renderMarkdown(metrics)).toContain(
-      '| Merged PRs by their "Driven in the sandbox" keyword | driven 3, not applicable 4, unlabelled 1, empty 1, missing 1 of 10 opened since the keyword instruction merged at 2026-11-14T12:00:00Z; driven among those not marked "does not apply": 3 of 6 (50.0%); unclassified: #3, #9, #12; opened since the template merged at 2026-11-13T22:01:22Z and before the keyword instruction, judged only by text: filled 18, empty 1, missing 1 of 20 (90.0% filled); opened before the template and not judged: 270 |'
+    const markdown = renderMarkdown(metrics);
+    expect(markdown).toContain(
+      '| PRs opened since the "Driven in the sandbox" keyword instruction merged at 2026-11-14T12:00:00Z | driven 3, not applicable 4, unlabelled 1, empty 1, missing 1 of 10; driven among those not marked "does not apply": 3 of 6 (50.0%); unclassified: #3, #9, #12 |'
+    );
+    expect(markdown).toContain(
+      '| PRs opened before the keyword instruction: "Driven in the sandbox" section | since the template merged at 2026-11-13T22:01:22Z, judged only by text: filled 18, empty 1, missing 1 of 20 (90.0% filled); opened before the template and not judged: 270 |'
     );
   });
 
@@ -241,7 +245,8 @@ describe('renderMarkdown', () => {
         '| Open to merge | median 0.5 h, p90 0.5 h (n=1) |',
         '| Merged PRs titled with a fix verb | 0 of 1 |',
         '| Fix PRs referencing a PR merged in the previous 7 days | 0 (0.0% of 1 merged PRs) |',
-        '| Merged PRs by their "Driven in the sandbox" keyword | driven 0, not applicable 0, unlabelled 0, empty 0, missing 0 of 0 opened since the keyword instruction merged at 2026-11-14T12:00:00Z; driven among those not marked "does not apply": 0 of 0 (n/a); unclassified: none; opened since the template merged at 2026-11-13T22:01:22Z and before the keyword instruction, judged only by text: filled 0, empty 0, missing 0 of 0 (n/a filled); opened before the template and not judged: 1 |',
+        '| PRs opened since the "Driven in the sandbox" keyword instruction merged at 2026-11-14T12:00:00Z | driven 0, not applicable 0, unlabelled 0, empty 0, missing 0 of 0; driven among those not marked "does not apply": 0 of 0 (n/a); unclassified: none |',
+        '| PRs opened before the keyword instruction: "Driven in the sandbox" section | since the template merged at 2026-11-13T22:01:22Z, judged only by text: filled 0, empty 0, missing 0 of 0 (n/a filled); opened before the template and not judged: 1 |',
         '',
         '## Guidance',
         '',
