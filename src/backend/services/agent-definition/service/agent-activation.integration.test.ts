@@ -103,21 +103,20 @@ async function pausedAutomation() {
   });
   feed = [{ providerEventId: 'B', payload: null }];
 }
-async function begin(overrides: Record<string, unknown> = {}) {
+async function enableInput() {
   const current = await definition();
-  await activation().begin(
-    {
-      projectId,
-      agentId: fixture.definitionId,
-      expectedManagementRevision: current.managementRevision,
-      definitionRevision: current.definitionRevision,
-      projectSource: { githubOwner: 'org', githubRepo: 'repo' },
-      execution: validatedIntent(current.definitionRevision).execution,
-      triggerIds: [fixture.triggerId],
-      ...overrides,
-    },
-    signal()
-  );
+  return {
+    projectId,
+    agentId: fixture.definitionId,
+    expectedManagementRevision: current.managementRevision,
+    definitionRevision: current.definitionRevision,
+    projectSource: { githubOwner: 'org', githubRepo: 'repo' },
+    execution: validatedIntent(current.definitionRevision).execution,
+    triggerIds: [fixture.triggerId],
+  };
+}
+async function begin(overrides: Record<string, unknown> = {}) {
+  await activation().begin({ ...(await enableInput()), ...overrides }, signal());
 }
 
 it('persists validated intent, waits STARTING for its baseline, then activates at that boundary', async () => {
@@ -174,6 +173,20 @@ it('activates immediately when the first baseline initializes the source', async
   expect(await trigger()).toMatchObject({
     activationState: 'ACTIVE',
     activationBoundary: { provider: 'GITHUB', headEventId: 'H', sourceOrder: 0 },
+  });
+});
+
+it('keeps a listening supported trigger listening and pauses a trigger it cannot start', async () => {
+  await fixture.secondTrigger();
+  const listening = await trigger();
+  expect(listening).toMatchObject({ activationState: 'ACTIVE', isEnabled: true });
+  await begin();
+  expect(await trigger()).toEqual(listening);
+  expect(await trigger('trigger-b')).toMatchObject({
+    activationState: 'PAUSED',
+    isEnabled: false,
+    activationGeneration: 2,
+    activationBoundary: null,
   });
 });
 
@@ -273,6 +286,81 @@ it('does not activate a definition whose validated intent is no longer current',
   });
   await cycle();
   expect(await trigger()).toMatchObject({ activationState: 'PAUSED', activationBoundary: null });
+});
+
+it("does not let an older generation's resolved baseline activate a newer STARTING generation", async () => {
+  await pausedAutomation();
+  feed = [label('N'), ...feed];
+  await begin();
+  const older = (await trigger()).pendingActivation;
+  expect(older).toMatchObject({ activationGeneration: 1, baselineId: expect.any(String) });
+  await begin();
+  expect(await trigger()).toMatchObject({ activationState: 'STARTING', activationGeneration: 2 });
+  // The newer generation is left holding the older generation's pending baseline.
+  await db.prisma.agentTrigger.update({
+    where: { id: fixture.triggerId },
+    data: { pendingActivation: older ?? Prisma.DbNull },
+  });
+  await cycle();
+  expect(await trigger()).toMatchObject({ activationState: 'PAUSED', activationBoundary: null });
+});
+
+it('ignores a baseline that an older generation records after a newer Enable started', async () => {
+  await pausedAutomation();
+  feed = [label('N1'), ...feed];
+  const prepared: string[] = [];
+  let reached!: () => void;
+  const newerPreparing = new Promise<void>((resolve) => {
+    reached = resolve;
+  });
+  let release!: () => void;
+  const released = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  let newer: Promise<void> | undefined;
+  // The newer Enable stops inside its own preparation until the older one has finished.
+  const newerActivation = new runtime.AgentActivationService(
+    {
+      prepareBaseline: async (connectionId, abort) => {
+        reached();
+        await released;
+        const baseline = await poller().prepareBaseline(connectionId, abort);
+        prepared.push(baseline.id);
+        return baseline;
+      },
+    },
+    () => clock
+  );
+  // The older Enable prepares its baseline at N1, then a newer Enable starts before it records it.
+  const olderActivation = new runtime.AgentActivationService(
+    {
+      prepareBaseline: async (connectionId, abort) => {
+        const baseline = await poller().prepareBaseline(connectionId, abort);
+        prepared.push(baseline.id);
+        feed = [label('N2'), ...feed];
+        newer = newerActivation.begin(await enableInput(), signal());
+        await newerPreparing;
+        return baseline;
+      },
+    },
+    () => clock
+  );
+  await olderActivation.begin(await enableInput(), signal());
+  release();
+  await newer;
+  const [olderBaseline, newerBaseline] = prepared;
+  expect(olderBaseline).not.toBe(newerBaseline);
+  expect(await trigger()).toMatchObject({
+    activationState: 'STARTING',
+    activationGeneration: 2,
+    pendingActivation: { activationGeneration: 2, baselineId: newerBaseline },
+  });
+  await cycle();
+  expect(await trigger()).toMatchObject({
+    activationState: 'ACTIVE',
+    activationGeneration: 2,
+    activationBoundary: { provider: 'GITHUB', headEventId: 'N2' },
+  });
 });
 
 it('pauses every trigger, cancels queued runs and lets claimed runs finish', async () => {

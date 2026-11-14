@@ -349,3 +349,31 @@ it('reaches the real HTTP guard before deleting', async () => {
   expect(response.status).toBe(403);
   expect(await db.prisma.agentDefinition.count()).toBe(1);
 });
+
+it.each(['delete', 'enable', 'pause', 'resetSource'] as const)(
+  'refuses a forwarded remote client before %s',
+  async (procedure) => {
+    const { owner } = await save();
+    const app = express();
+    app.use(
+      '/api/trpc',
+      createExpressMiddleware({
+        router: agentRouter,
+        createContext: createContext({ services: appServices() } as never),
+      })
+    );
+    const input =
+      procedure === 'resetSource'
+        ? { projectId, connectionId }
+        : { ...owner, expectedManagementRevision: 1 };
+    const response = await request(app)
+      .post(`/api/trpc/${procedure}`)
+      .set({ 'x-forwarded-for': '203.0.113.1' })
+      .send({ json: input });
+    expect(response.status).toBe(403);
+    expect(await db.prisma.agentDefinition.findFirstOrThrow()).toMatchObject({
+      isEnabled: false,
+      managementRevision: 1,
+    });
+  }
+);

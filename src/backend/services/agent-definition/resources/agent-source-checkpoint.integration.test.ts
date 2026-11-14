@@ -246,6 +246,56 @@ it('rejects a backfill ordinal that conflicts with an already issued baseline', 
   expect(await db.prisma.agentSourcePage.findMany()).toEqual(pages);
 });
 
+it('answers a historical head from legacy proof, never from an unvalidated checkpoint', async () => {
+  await interval();
+  await db.prisma.agentSourceCheckpoint.deleteMany();
+  await db.prisma.agentSourceCheckpoint.create({
+    data: {
+      connectionId: fixture.connectionId,
+      scanId: 'unvalidated',
+      status: 'INDEXED',
+      sourceOrder: 7,
+      heads: {
+        create: { providerEventId: 'unsupported-old', position: 0, precedingEventCount: 0 },
+      },
+    },
+  });
+  expect((await source.prepareBaseline(fixture.connectionId, 'unsupported-old')).boundary).toEqual({
+    provider: 'GITHUB',
+    headEventId: 'unsupported-old',
+    sourceOrder: 0,
+  });
+});
+
+it('fences the source when a baseline and legacy proof disagree on a head ordinal', async () => {
+  await interval();
+  await db.prisma.agentSourceCheckpoint.deleteMany();
+  // Legacy proof orders this head at 0; an issued baseline says 1.
+  await db.prisma.agentSourceBaseline.create({
+    data: { connectionId: fixture.connectionId, headEventId: 'unsupported-old', sourceOrder: 1 },
+  });
+  const runtime = await vi.importActual<typeof import('../index')>('../index');
+  const poll = new runtime.AgentSourcePollService(
+    {
+      getRepositoryIdentity: () => Promise.resolve({ id: 'repo-1', name: 'org/repo' }),
+      listIssueEvents: () =>
+        Promise.resolve({
+          events: [{ providerEventId: 'unsupported-old', payload: null }],
+          nextPage: null,
+        }),
+      classifyError: () => 'unknown',
+    },
+    () => 10
+  );
+  await expect(
+    poll.prepareBaseline(fixture.connectionId, new AbortController().signal)
+  ).rejects.toMatchObject({ code: 'PRECONDITION_FAILED' });
+  expect(await source.getState(fixture.connectionId)).toMatchObject({
+    isReady: false,
+    health: { state: 'RECOVERY_REQUIRED', reasonCode: 'GITHUB_CONTINUITY_LOST' },
+  });
+});
+
 it('bounds compaction to100 pages', async () => {
   const ids = Array.from({ length: 100 }, (_, i) => `control-${i}`);
   await db.prisma.agentSourcePage.createMany({

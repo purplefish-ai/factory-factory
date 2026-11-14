@@ -1106,7 +1106,7 @@ permissions. These APIs neither initialize a provider nor dispatch a prompt; the
 consumer composes strict setup/restart and observed initial dispatch around
 them. Enabling a saved agent validates native capability on the server and
 persists that intent; admission applies the same native effort normalization
-(see [integrations](integrations.md#enable-and-pause)).
+(see [its guide](../../src/backend/services/agent-definition/AGENTS.md)).
 
 The strict event workspace initializer shares the ordinary initializer's
 per-workspace queue and worktree preparation. It validates the reserved session

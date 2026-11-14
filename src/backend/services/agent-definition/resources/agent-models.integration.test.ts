@@ -138,6 +138,32 @@ it('keeps run snapshots after edits and prevents deleting a trigger with run his
   expect(saved.triggerSnapshot).toMatchObject({ description: 'Investigate feedback' });
 });
 
+it('rejects a second connection with the same provider and external ID', async () => {
+  const data = { provider: 'GITHUB' as const, externalId: 'gh:1001', name: 'acme/app' };
+  await db.prisma.agentConnection.create({ data });
+  await expect(db.prisma.agentConnection.create({ data })).rejects.toMatchObject({
+    code: 'P2002',
+  });
+  await db.prisma.agentConnection.create({ data: { ...data, provider: 'SLACK' } });
+  expect(await db.prisma.agentConnection.count()).toBe(2);
+});
+
+it('links one workspace to at most one run', async () => {
+  const agent = await createAgent();
+  const workspace = await db.prisma.workspace.create({
+    data: { projectId: agent.projectId, name: 'Investigation' },
+  });
+  const data = { agentDefinitionId: agent.id, definitionSnapshot: snapshot, input };
+  await db.prisma.agentRun.create({
+    data: { ...data, idempotencyKey: 'event-1', workspaceId: workspace.id },
+  });
+  await expect(
+    db.prisma.agentRun.create({
+      data: { ...data, idempotencyKey: 'event-2', workspaceId: workspace.id },
+    })
+  ).rejects.toMatchObject({ code: 'P2002' });
+});
+
 it('prevents deleting a connection that is still referenced by a trigger', async () => {
   const agent = await createAgent();
   const trigger = await createSlackTrigger(agent.id);

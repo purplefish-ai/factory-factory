@@ -14,6 +14,7 @@ let fixture: Awaited<ReturnType<typeof createLedgerFixture>>;
 let userSettingsService: typeof import('@/backend/services/settings').userSettingsService;
 let createSessionProviderResolverService: typeof import('@/backend/services/session').createSessionProviderResolverService;
 let resolveAgentExecutionConfig: typeof import('@/backend/orchestration/agents/agent-runtime.orchestrator').resolveAgentExecutionConfig;
+let ApplicationError: typeof import('@/backend/lib/application-error').ApplicationError;
 // The session barrel and agent runtime orchestrator pull in the session and
 // workspace graph: seconds of one-off module loading, far more under CPU load.
 // Load it once here rather than in a test's 5s budget.
@@ -29,6 +30,9 @@ beforeAll(async () => {
   ({ resolveAgentExecutionConfig } = await vi.importActual<
     typeof import('@/backend/orchestration/agents/agent-runtime.orchestrator')
   >('@/backend/orchestration/agents/agent-runtime.orchestrator'));
+  ({ ApplicationError } = await vi.importActual<typeof import('@/backend/lib/application-error')>(
+    '@/backend/lib/application-error'
+  ));
 }, 30_000);
 afterAll(async () => {
   await destroyIntegrationDatabase(db);
@@ -221,6 +225,24 @@ it('does not admit stale settings when the definition changes while resolving de
   expect(await db.prisma.agentRun.count()).toBe(0);
   expect(await db.prisma.agentEvaluation.count()).toBe(0);
 });
+it('records an execution the native catalog rejects as a permanent error without a run', async () => {
+  await fixture.event();
+  await evaluator(() =>
+    Promise.reject(
+      new ApplicationError(
+        'PRECONDITION_FAILED',
+        'The selected native model does not support this reasoning effort.'
+      )
+    )
+  ).evaluatePendingEvents(signal());
+  expect(await db.prisma.agentEvaluation.findFirstOrThrow()).toMatchObject({
+    status: 'ERROR',
+    reasonCode: 'INVALID_EXECUTION_CONFIG',
+    nextAttemptAt: null,
+  });
+  expect(await db.prisma.agentRun.count()).toBe(0);
+});
+
 it('stores permanent malformed configuration errors without retry and excludes SCHEDULE', async () => {
   await fixture.event();
   await db.prisma.agentDefinition.update({
