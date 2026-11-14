@@ -30,12 +30,12 @@ export const StickyLatestUserMessage: Story = {
   },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    const pinned = await canvas.findByRole('button', { name: /Back to your latest message:/ });
+    const pinned = await canvas.findByRole('button', { name: /Back to your message:/ });
     await expect(pinned).toBeVisible();
     await expect(pinned.querySelector('.truncate')).toHaveStyle({ whiteSpace: 'nowrap' });
     await userEvent.click(pinned);
     await waitFor(() =>
-      expect(canvas.queryByRole('button', { name: /Back to your latest message:/ })).toBeNull()
+      expect(canvas.queryByRole('button', { name: /Back to your message:/ })).toBeNull()
     );
     await expect(
       await canvas.findByText(/Click the pinned preview to return to this full request/)
@@ -53,7 +53,114 @@ export const LatestUserMessageInView: Story = {
   args: { loadingSession: false, messages: [prompt] },
   play: async ({ canvasElement }) => {
     await expect(
-      within(canvasElement).queryByRole('button', { name: /Back to your latest message:/ })
+      within(canvasElement).queryByRole('button', { name: /Back to your message:/ })
     ).toBeNull();
   },
+};
+
+const earlierPrompt = createUserMessage('Explain the earlier layout changes.');
+const laterPrompt = createUserMessage('Now check the current scroll behavior.');
+const conversation = [
+  earlierPrompt,
+  ...Array.from({ length: 16 }, (_, i) =>
+    createAssistantMessage(
+      `Earlier response ${i + 1}: ${'The layout keeps the conversation readable. '.repeat(4)}`
+    )
+  ),
+  laterPrompt,
+  ...Array.from({ length: 16 }, (_, i) =>
+    createAssistantMessage(
+      `Current response ${i + 1}: ${'Checking the scroll position and context. '.repeat(4)}`
+    )
+  ),
+];
+
+export const ReadingEarlierRequest: Story = {
+  args: { loadingSession: false, messages: conversation },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const viewport = canvas.getByTestId('transcript-viewport');
+    await expect(
+      await canvas.findByRole('button', {
+        name: `Back to your message: ${laterPrompt.text}`,
+      })
+    ).toBeVisible();
+    viewport.dispatchEvent(new WheelEvent('wheel', { deltaY: -500 }));
+    viewport.scrollTop = 0;
+    viewport.dispatchEvent(new Event('scroll'));
+    await waitFor(() =>
+      expect(canvas.queryByRole('button', { name: /Back to your message:/ })).toBeNull()
+    );
+    await canvas.findByText(earlierPrompt.text ?? '');
+    const row = viewport.querySelector(`[data-transcript-key="${earlierPrompt.id}"]`);
+    if (!row) {
+      throw new Error('The earlier request must be mounted at the start of the conversation');
+    }
+    const end =
+      row.getBoundingClientRect().bottom -
+      viewport.getBoundingClientRect().top +
+      viewport.scrollTop;
+    viewport.scrollTop = end + 8;
+    viewport.dispatchEvent(new Event('scroll'));
+    await expect(canvas.queryByRole('button', { name: /Back to your message:/ })).toBeNull();
+    viewport.scrollTop = end + 56;
+    viewport.dispatchEvent(new Event('scroll'));
+    const pinned = await canvas.findByRole('button', {
+      name: `Back to your message: ${earlierPrompt.text}`,
+    });
+    await expect(pinned).toBeVisible();
+    await userEvent.click(pinned);
+    await waitFor(() =>
+      expect(canvas.queryByRole('button', { name: /Back to your message:/ })).toBeNull()
+    );
+    await expect(canvas.getByText(earlierPrompt.text ?? '')).toBeVisible();
+  },
+};
+
+export const ReadingEarlierRequestPhone: Story = {
+  ...ReadingEarlierRequest,
+  globals: { viewport: { value: 'phone', isRotated: false } },
+};
+
+export const ApproachingNextRequest: Story = {
+  args: { loadingSession: false, messages: conversation },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const viewport = canvas.getByTestId('transcript-viewport');
+    await userEvent.click(
+      await canvas.findByRole('button', {
+        name: `Back to your message: ${laterPrompt.text}`,
+      })
+    );
+    await waitFor(() =>
+      expect(canvas.queryByRole('button', { name: /Back to your message:/ })).toBeNull()
+    );
+    await canvas.findByText(laterPrompt.text ?? '');
+    const row = viewport.querySelector(`[data-transcript-key="${laterPrompt.id}"]`);
+    if (!row) {
+      throw new Error('Jumping to the next request must mount its row');
+    }
+    const start =
+      row.getBoundingClientRect().top - viewport.getBoundingClientRect().top + viewport.scrollTop;
+    viewport.dispatchEvent(new WheelEvent('wheel', { deltaY: -60 }));
+    viewport.scrollTop = start - 60;
+    viewport.dispatchEvent(new Event('scroll'));
+    const pinned = await canvas.findByRole('button', {
+      name: `Back to your message: ${earlierPrompt.text}`,
+    });
+    await expect(pinned.getBoundingClientRect().bottom).toBeLessThan(
+      row.getBoundingClientRect().top
+    );
+    viewport.scrollTop = start - 20;
+    viewport.dispatchEvent(new Event('scroll'));
+    await waitFor(() =>
+      expect(canvas.queryByRole('button', { name: /Back to your message:/ })).toBeNull()
+    );
+    await expect(canvas.getByText(laterPrompt.text ?? '')).toBeVisible();
+  },
+};
+
+export const ApproachingNextRequestPhone: Story = {
+  ...ApproachingNextRequest,
+  globals: { viewport: { value: 'phone', isRotated: false } },
 };
