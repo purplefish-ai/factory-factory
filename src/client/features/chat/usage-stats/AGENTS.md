@@ -18,7 +18,8 @@ offered. It does not own:
   service in `src/backend/services/codex-accounts/`.
 - What Compact sends: `/compact` through the session queue with the composer's
   draft and attachments kept, from `handleCompact` in
-  `src/client/routes/projects/workspaces/workspace-detail-chat-content.tsx`.
+  `src/client/routes/projects/workspaces/workspace-detail-chat-content.tsx`
+  (pinned by its test and `../use-chat-state.integration.test.tsx`).
 - Compaction progress and the context boundary:
   `src/shared/acp-protocol/session-update-translator.ts` and the chat reducer.
 
@@ -42,10 +43,6 @@ queued messages, and as disabled while the composer is.
 - A plan reading that is unavailable or failed shows its message or a retry
   text, never a percentage, and Refresh stays offered.
   `provider-usage-control.test.tsx`.
-- Compact sends `/compact` through the queue and keeps the composer's draft and
-  attachments.
-  `src/client/routes/projects/workspaces/workspace-detail-chat-content.test.tsx`,
-  `../use-chat-state.integration.test.tsx`.
 
 ## Map
 
