@@ -10,7 +10,7 @@ one that matches your change before you touch it.
 
 | File                                         | Covers                                                                                     |
 | -------------------------------------------- | ------------------------------------------------------------------------------------------ |
-| [background-jobs.md](./background-jobs.md)   | `jobRunner`, every registered poll loop, cadences, shutdown semantics                      |
+| [Backend process guide][backend-guide]       | Recurring work, `jobRunner`, shutdown order and fatal errors (beside the code)             |
 | [Pull request guide][pr-guide]               | PR monitoring, observations, event delivery, GitHub coordination (beside the code)         |
 | [workspace-state.md](./workspace-state.md)   | Pointer: workspace, lifecycle, snapshot, Kanban, client cache, run-script, backup guides   |
 | [agent-runtime.md](./agent-runtime.md)       | ACP runtime, provider sub-agents, child workspaces, quick actions, desktop backend process |
@@ -22,6 +22,7 @@ one that matches your change before you touch it.
 | [diff-rendering.md](./diff-rendering.md)     | Workers, virtual rows, scroll anchors, visual verification                                 |
 | [Chat feature guide][chat-feature-agents-md] | Chat client: frames, loading, reducer, transcript (beside the code)                        |
 
+[backend-guide]: ../../src/backend/AGENTS.md
 [pr-guide]: ../../src/backend/orchestration/pull-requests/AGENTS.md
 [chat-feature-agents-md]: ../../src/client/features/chat/AGENTS.md
 

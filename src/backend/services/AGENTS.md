@@ -42,8 +42,10 @@ Enforced by dependency-cruiser and ownership checks:
 
 - `application-update-admission.service.ts` is the update gate; its rules are in
   the [application update guide](application-update/AGENTS.md).
-- Recurring work registers with `jobRunner`, not `setInterval`; read
-  [background jobs](../../../docs/architecture/background-jobs.md).
+- Recurring work registers with `jobRunner`: read "Recurring work" in the
+  [backend process guide](../AGENTS.md), then the header comment and tests of
+  `job-runner.service.ts`
+  ([why](../../../docs/decisions/2026-11-13-recurring-work-runs-on-one-sequential-job-runner.md)).
 - Application `gh` calls go through the [GitHub capsule](github/AGENTS.md) for
   the shared process budget.
 - Reads on hot and polled paths leave out `initOutput`, `creationMetadata`,

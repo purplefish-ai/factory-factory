@@ -63,6 +63,17 @@ describe('fatal log fallback', () => {
     }
   );
 
+  it('writes the record to stderr in a test process that has no log file', () => {
+    vi.stubEnv('BASE_DIR', undefined);
+    const stderr = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+
+    createLogger('fatal-fallback').fatal('terminal failure', new Error('original cause'));
+
+    expect(appendFileSync).not.toHaveBeenCalled();
+    expect(writeSync).toHaveBeenCalledExactlyOnceWith(2, expect.any(Buffer), 0, expect.any(Number));
+    expect(stderr).not.toHaveBeenCalled();
+  });
+
   it('contains a broken stderr fallback without retrying or logging recursively', () => {
     vi.mocked(appendFileSync).mockImplementation(() => {
       throw new Error('filesystem unavailable');
