@@ -41,6 +41,10 @@ shutdown.
 - An adversarial-review session stays read-only: an edit to another access or
   collaboration value is rejected. `session-permission-policy.test.ts`,
   `../lifecycle/adversarial-review-startup.test.ts`.
+- Only scheduled and event automation sessions take the automation permission
+  setting (RELAXED when unset); every other session, PR update conversations
+  included, takes the default workspace permissions.
+  `session-workflow-permissions.test.ts`.
 - An access mode, Claude's planning included, is changed with
   `session/set_mode`; models and other options, Codex collaboration included,
   with `session/set_config_option`. `session.config.service.test.ts`,

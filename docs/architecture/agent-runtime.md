@@ -1,16 +1,13 @@
 # Agent Runtime
 
-The paragraphs that opened this note, the section "Chat tool previews", and the
-opening of "ACP runtime" with its "Provider and model selection", "Launch
-permissions, thinking, and Plan", "Permission and configuration readiness",
-"Activity and prompt dispatch", "Codex accounts", "Usage and compaction" and
-"Failed provider resume" have been migrated; the tool preview rules are asserted
-by the tests in `src/client/features/chat/agent-activity/tool-renderers/`.
-Ownership, public surface, invariants and file maps are in the guides beside the
-code:
+The paragraphs that opened this note and the sections "Chat tool previews" and
+"ACP runtime" have been migrated; the tool preview rules are asserted by the
+tests in `src/client/features/chat/agent-activity/tool-renderers/`. Ownership,
+public surface, invariants and file maps are in the guides beside the code:
 [application update capsule](../../src/backend/services/application-update/AGENTS.md),
 [Codex accounts capsule](../../src/backend/services/codex-accounts/AGENTS.md),
 [CLI](../../src/cli/AGENTS.md),
+[backend prompts](../../src/backend/prompts/AGENTS.md),
 [session selection](../../src/client/features/session-selection/AGENTS.md),
 [chat usage control](../../src/client/features/chat/usage-stats/AGENTS.md),
 [session capsule](../../src/backend/services/session/AGENTS.md) and its
@@ -26,64 +23,6 @@ code:
 module guides. The reasons are in the `2026-11-13-*` records in
 [decisions](../decisions/), and the tests those guides name describe the
 behaviour. The sections below have not been migrated yet.
-
-## ACP runtime
-
-### Session prompts
-
-ACP init/load uses the provider's built-in instructions; Factory Factory does
-not supply a custom system prompt. Task prompts are sent as ordinary session
-messages:
-
-- Issue starts: `src/shared/issue-start-prompt.ts`, shared with the editable UI
-  preview. It asks the agent to fetch and address the linked GitHub or Linear
-  issue, then create a PR with a closing reference. The concise handoff quotes
-  the URL and marks fetched content as untrusted; issue bodies and detailed
-  workflow instructions are not embedded. Repository guidance defines
-  implementation and verification. Backend fallback prompts use the stored issue
-  URL (or derive a GitHub URL from repository metadata), without fetching issue
-  content. The read-only `get_linear_issue` workspace MCP tool fetches the
-  linked Linear issue on demand through `workspace.get` and `linear.getIssue`,
-  using backend-held project credentials. It accepts no workspace/project/issue
-  overrides and returns only issue fields, treating provider text as untrusted
-  data.
-- PR updates: `src/backend/prompts/pr-event.ts` renders bounded PR facts with
-  maintenance instructions only when an attached PR has actionable events.
-  Delivery uses the source-aware session queue and strict provider resume; see
-  [PR updates](pull-requests.md).
-- Quick actions: `prompts/quick-actions/` (see below).
-- Child workspace starts append `buildChildWorkspaceContext` through workspace
-  initialization. Workspace metadata generation runs separately from working
-  sessions; it never injects branch-renaming prompts into the conversation. See
-  [workspace lifecycle guide](../../src/backend/orchestration/workspace-lifecycle/AGENTS.md).
-
-Legacy workflow templates and unused system-prompt construction have been
-removed. Stored workflow IDs still select session behavior and permissions. Keep
-prompts focused on outcomes and actual automation contracts, and defer
-repository-specific tools and verification commands to repository guidance.
-
-Claude ACP retains its bare Claude Code preset and existing prompt snapshot
-behavior. Before introducing custom system-prompt metadata, revisit the SDK's
-custom/append snapshot semantics. See the 2026-09-09 remaining-dependencies
-upgrade plan at tag `docs-archive-2026-11`.
-
-Scheduled Codex tasks retain their YOLO access preset and scheduled Claude tasks
-retain their configured access preset. MAIN PR updates inherit their main
-conversation’s configuration. DEDICATED updates use the workspace’s provider
-selection and normal user model defaults; later updates reuse that dedicated
-conversation’s saved configuration. PR updates do not use a workflow-specific
-permission preset.
-
-Chat command composition belongs to `routers/websocket/chat-message-router.ts`;
-application commands receive plain contexts and typed outcomes. Loading prepares
-history asynchronously, captures current runtime/recovery/replay synchronously,
-then publishes replay at the transport boundary without yielding. Application
-completion owns runtime updates, capabilities, options, slash commands, and
-initial-message activation in that order. Capabilities and options share one
-configuration resolution per completion and publish consecutively after a
-synchronous live-handle recheck. Load activation uses the supplied application
-graph's dispatcher. See [chat message flow](../chat-message-flow.md) for
-reconnect, recipient, and failure contracts.
 
 ## Event creation ownership
 
@@ -1040,4 +979,11 @@ the rows of the disposition table in pull request #3242.
 > transcript retention still apply.
 
 Old paragraph 16. For the WebSocket router guide
+(`src/backend/routers/websocket/`, task 2.9).
+
+> Chat command composition belongs to
+> `routers/websocket/chat-message-router.ts`; application commands receive plain
+> contexts and typed outcomes.
+
+Old paragraph 18 of the "ACP runtime" slices. For the WebSocket router guide
 (`src/backend/routers/websocket/`, task 2.9).

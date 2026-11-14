@@ -38,8 +38,8 @@ and `forgetSession` on deletion.
 ## Invariants
 
 - Starting a stopped session for the queue does not take the queued message out
-  of the queue: it stays visible until the batch holding it is taken to be sent.
-  `session-dispatch.service.test.ts`.
+  of the queue: it stays in the queue until the batch holding it is taken to be
+  sent. `session-dispatch.service.test.ts`.
 - A message is sent only when no prompt holds the session's prompt slot, checked
   again after any auto-start; background shells, subagents and goals never hold
   it. `session-dispatch.service.test.ts`.
