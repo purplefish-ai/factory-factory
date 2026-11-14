@@ -12,7 +12,8 @@ management. Bare file names below are in this directory; paths that start with
 
 Evaluation owns the order of checks for a trigger and an event: stored data,
 eligibility, the deterministic match, execution settings, Slack context, then
-the filter; and how a classifier outcome becomes a decision. It does not own:
+the filter; how a classifier outcome becomes a decision; and what history reads
+may return. It does not own:
 
 - Recording decisions, retry times and admission: the
   [resources guide](../resources/AGENTS.md).
