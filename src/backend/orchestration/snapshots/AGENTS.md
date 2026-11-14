@@ -29,7 +29,7 @@ reconciliation pass with its seed barrier and drift log. It does not own:
 There is no barrel. `src/backend/app-context.ts` composes the collector
 (`event-collector.orchestrator.ts`) and `SnapshotReconciliationService` with
 every runtime dependency; the snapshot socket waits on `waitForSeed()` before
-its first full snapshot.
+its first full snapshot only when the store has no entries for the project.
 
 ## Invariants
 
@@ -51,7 +51,9 @@ its first full snapshot.
   or Linear dependency. `ratchet-projection.worker.boundary.test.ts`.
 - Stopping the collector detaches every listener it registered, and a restart
   registers each once. `event-collector.orchestrator.test.ts`,
-  `event-collector-lifecycle.integration.test.ts`.
+  `event-collector-lifecycle.integration.test.ts`,
+  `src/test-utils/workspace-branch-publication.integration.test.ts` (the
+  accepted-branch subscription).
 
 ## Map
 

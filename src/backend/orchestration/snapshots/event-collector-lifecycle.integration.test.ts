@@ -5,7 +5,12 @@ import {
   RATCHET_STATE_CHANGED,
   RATCHET_TOGGLED,
 } from '@/backend/orchestration/pull-requests/ratchet.service';
-import { PR_SNAPSHOT_UPDATED, PR_URL_ATTACHED, prSnapshotService } from '@/backend/services/github';
+import {
+  PR_DETACHED,
+  PR_SNAPSHOT_UPDATED,
+  PR_URL_ATTACHED,
+  prSnapshotService,
+} from '@/backend/services/github';
 import { RUN_SCRIPT_STATUS_CHANGED, runScriptStateMachine } from '@/backend/services/run-script';
 import { sessionDomainService } from '@/backend/services/session';
 import {
@@ -24,6 +29,7 @@ describe('event collector listener lifecycle', () => {
       [workspaceStateMachine, WORKSPACE_STATE_CHANGED],
       [prSnapshotService, PR_SNAPSHOT_UPDATED],
       [prSnapshotService, PR_URL_ATTACHED],
+      [prSnapshotService, PR_DETACHED],
       [ratchetService, RATCHET_STATE_CHANGED],
       [ratchetService, RATCHET_TOGGLED],
       [ratchetService, RATCHET_DISPATCH_CHANGED],
@@ -33,6 +39,7 @@ describe('event collector listener lifecycle', () => {
       [workspaceActivityService, 'session_activity_changed'],
       [sessionDomainService, 'pending_request_changed'],
       [sessionDomainService, 'runtime_changed'],
+      [sessionDomainService, 'user_message_committed'],
     ] as const;
     const baseline = sources.map(([emitter, event]) => emitter.listenerCount(event));
     const collector = lifecycle.eventCollector;
