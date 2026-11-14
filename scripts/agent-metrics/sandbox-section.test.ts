@@ -2,9 +2,12 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import type { MergedPullRequest } from './pull-requests';
 import {
+  keywordInstructionMarker,
+  sandboxSectionLabel,
   sandboxSectionMetrics,
   sandboxSectionState,
   templateMergedAt,
+  templatePath,
   templatePlaceholder,
 } from './sandbox-section';
 
@@ -43,7 +46,7 @@ describe('sandboxSectionState', () => {
   });
 
   it('treats the pull request template as empty', () => {
-    const template = readFileSync('.github/pull_request_template.md', 'utf8');
+    const template = readFileSync(templatePath, 'utf8');
     expect(sandboxSectionState(template)).toBe('empty');
     expect(template.replaceAll(/\s+/g, ' ')).toContain(templatePlaceholder);
   });
@@ -138,41 +141,271 @@ describe('sandboxSectionState', () => {
   });
 });
 
+const attribution = '🤖 Generated with [Claude Code](https://claude.com/claude-code)';
+const reviewerBlock = [
+  '<!-- This is an auto-generated description by cubic. -->',
+  '<a href="https://cubic.dev/pr/o/r/pull/1?utm_source=github" target="_blank"><picture><source media="(prefers-color-scheme: dark)" srcset="https://www.cubic.dev/buttons/review-in-cubic-dark.svg"><img alt="View guided diff" src="https://www.cubic.dev/buttons/review-in-cubic-light.svg"></picture></a>',
+  '<!-- End of auto-generated description by cubic. -->',
+].join('\n');
+
+describe('sandboxSectionState with trailing content', () => {
+  const last = (section: string) => `## Why\n\nB.\n\n## Driven in the sandbox\n\n${section}`;
+
+  it('ignores a trailing attribution line', () => {
+    expect(sandboxSectionState(last(`${attribution}\n`))).toBe('empty');
+    expect(sandboxSectionState(last(`<!-- Evidence. -->\n\n${attribution}`))).toBe('empty');
+    expect(sandboxSectionState(last(`Ran it.\n\n${attribution}\n`))).toBe('filled');
+  });
+
+  it('ignores the block the automated reviewer appends', () => {
+    expect(sandboxSectionState(last(`${reviewerBlock}\n`))).toBe('empty');
+    expect(sandboxSectionState(last(`${attribution}\n\n\n${reviewerBlock}\n\n`))).toBe('empty');
+    expect(sandboxSectionState(last(`Ran it.\n\n${attribution}\n\n${reviewerBlock}\n`))).toBe(
+      'filled'
+    );
+  });
+
+  it('ignores a reviewer block whose closing comment is missing, up to the end of the body', () => {
+    expect(sandboxSectionState(last(`${reviewerBlock.split('\n').slice(0, 2).join('\n')}\n`))).toBe(
+      'empty'
+    );
+  });
+
+  it('keeps text after the reviewer block and the text of a section it does not end', () => {
+    expect(sandboxSectionState(last(`${reviewerBlock}\nRan it.\n`))).toBe('filled');
+    expect(
+      sandboxSectionState(`## Driven in the sandbox\n\n${reviewerBlock}\n\n## Knowledge updated\n`)
+    ).toBe('empty');
+  });
+
+  it('treats a horizontal rule, an empty code fence and zero-width characters as empty', () => {
+    for (const rule of ['---', '***', '___', '- - -', '  ----------  ', '* * *']) {
+      expect(sandboxSectionState(last(`${rule}\n`)), rule).toBe('empty');
+    }
+    for (const fence of ['```\n```', '```text\n\n  \n```', '~~~\n~~~', '```\n']) {
+      expect(sandboxSectionState(last(`${fence}\n`)), fence).toBe('empty');
+    }
+    expect(sandboxSectionState(last('​‌‍⁠﻿\n'))).toBe('empty');
+    expect(sandboxSectionState(last('​ ---\n\n```\n​\n```\n'))).toBe('empty');
+  });
+
+  it('keeps a code fence with content and text beside a rule', () => {
+    expect(sandboxSectionState(last('```\noutput\n```\n'))).toBe('filled');
+    expect(sandboxSectionState(last('---\nRan it.\n'))).toBe('filled');
+    expect(sandboxSectionState(last('--\n'))).toBe('filled');
+  });
+
+  it('returns on a 200,000-character adversarial body', () => {
+    const bodies = [
+      `## Driven in the sandbox\n${'<!-- This is an auto-generated description by cubic'.repeat(4000)}`,
+      `## Driven in the sandbox\n${`${reviewerBlock}\n`.repeat(500)}`,
+      `## Driven in the sandbox\n${'- '.repeat(100_000)}`,
+      `## Driven in the sandbox\n${'```\n'.repeat(50_000)}`,
+      `## Driven in the sandbox\n\`\`\`\n${'x\n'.repeat(100_000)}`,
+      `## Driven in the sandbox\n${'​'.repeat(200_000)}`,
+      `## Driven in the sandbox\n${'🤖 Generated with '.repeat(11_000)}`,
+      `## Driven in the sandbox\n${'Driven:'.repeat(30_000)}`,
+      '## Driven in the sandbox\n'.repeat(8000),
+    ];
+    for (const body of bodies) {
+      expect(body.length).toBeGreaterThanOrEqual(190_000);
+      expect(sandboxSectionState(body)).toMatch(/^(empty|filled)$/);
+    }
+  });
+});
+
+describe('sandboxSectionLabel', () => {
+  const section = (text: string) =>
+    `## Why\n\nB.\n\n## Driven in the sandbox\n\n${text}\n\n## Next\n`;
+
+  it('reads the keyword in any case, after comments, whitespace and rules', () => {
+    for (const text of [
+      'Driven: ran it.',
+      'driven: ran it.',
+      'DRIVEN: ran it.',
+      '  \n<!-- note -->\n\n  Driven: ran it.',
+      '---\nDriven: ran it.',
+      '​Driven:​ ran it.',
+      'Driven:\nran it on the next line.',
+    ]) {
+      expect(sandboxSectionLabel(section(text)), text).toBe('driven');
+    }
+    for (const text of [
+      'Does not apply: no user-visible behaviour changed.',
+      'does NOT apply: docs only.',
+      '<!-- x -->Does not apply: docs only.',
+      'Does  not\napply: docs only.',
+    ]) {
+      expect(sandboxSectionLabel(section(text)), text).toBe('not-applicable');
+    }
+  });
+
+  it('labels text without the keyword at its start as unlabelled', () => {
+    for (const text of [
+      'Not driven in `pnpm dev:sandbox`.',
+      'Ran `pnpm test:e2e:sandbox`.',
+      'Not applicable. Docs only.',
+      'See below. Driven: yes.',
+      'Does not apply, docs only.',
+      'Driven yes.',
+      'Drivenx: yes',
+      '**Driven:** ran it.',
+    ]) {
+      expect(sandboxSectionLabel(section(text)), text).toBe('unlabelled');
+    }
+  });
+
+  it('labels a keyword with nothing after it, and a section with nothing, as empty', () => {
+    for (const text of [
+      '',
+      '<!-- Driven: -->',
+      'Driven:',
+      'Does not apply:  \n',
+      '---',
+      '```\n```',
+    ]) {
+      expect(sandboxSectionLabel(section(text)), text).toBe('empty');
+    }
+    expect(sandboxSectionLabel(`## Driven in the sandbox\n\n${attribution}`)).toBe('empty');
+    expect(sandboxSectionLabel(`## Driven in the sandbox\n\n${reviewerBlock}`)).toBe('empty');
+  });
+
+  it('labels a body without the section as missing', () => {
+    expect(sandboxSectionLabel('## Why\n\nDriven: yes.\n')).toBe('missing');
+    expect(sandboxSectionLabel('')).toBe('missing');
+  });
+
+  it('labels the template and its earlier instruction as empty', () => {
+    expect(sandboxSectionLabel(readFileSync(templatePath, 'utf8'))).toBe('empty');
+    expect(sandboxSectionLabel(`## Driven in the sandbox\n\n${templatePlaceholder}\n`)).toBe(
+      'empty'
+    );
+    const firstInstruction =
+      'Evidence the change was driven in `pnpm dev:sandbox`: what you did and what you saw, with screenshots or output where they help. Or the reason it does not apply, for example: no user-visible behaviour changed.';
+    expect(sandboxSectionLabel(`## Driven in the sandbox\n\n<!-- ${firstInstruction} -->\n`)).toBe(
+      'empty'
+    );
+    expect(sandboxSectionLabel(`## Driven in the sandbox\n\n${firstInstruction}\n`)).toBe('empty');
+  });
+
+  it('reads the keyword before a trailing attribution line and reviewer block', () => {
+    const body = `## Driven in the sandbox\n\nDriven: ran it.\n\n${attribution}\n\n${reviewerBlock}\n`;
+    expect(sandboxSectionLabel(body)).toBe('driven');
+    expect(sandboxSectionLabel(body.replace('Driven: ran it.', 'Ran it.'))).toBe('unlabelled');
+  });
+
+  it('treats a body as text only', () => {
+    expect(sandboxSectionLabel('## Driven in the sandbox\n$(rm -rf /) `id` && exit 1')).toBe(
+      'unlabelled'
+    );
+    expect(sandboxSectionLabel('## Driven in the sandbox\nDriven: $(rm -rf /) `id`')).toBe(
+      'driven'
+    );
+  });
+});
+
+describe('the pull request template', () => {
+  const template = readFileSync(templatePath, 'utf8');
+
+  it('asks for both keywords, in the section comment', () => {
+    const instruction = template.replaceAll(/\s+/g, ' ');
+    expect(instruction).toContain(`<!-- ${templatePlaceholder} -->`);
+    expect(templatePlaceholder).toContain('"Driven:"');
+    expect(templatePlaceholder).toContain('"Does not apply:"');
+    expect(templatePlaceholder).toContain(keywordInstructionMarker);
+  });
+});
+
 describe('sandboxSectionMetrics', () => {
-  it('counts only pull requests opened since the template and reports earlier ones apart', () => {
-    const metrics = sandboxSectionMetrics([
-      pullRequest(1, '## Driven in the sandbox\n\nRan it.', after),
-      pullRequest(2, '## Driven in the sandbox\n\n<!-- placeholder -->\n', after),
-      pullRequest(3, 'No sections.', after),
-      pullRequest(4, '## Driven in the sandbox\n\nRan it.', after),
-      pullRequest(5, 'Old body.', before),
-      pullRequest(6, '## Driven in the sandbox\n\nRan it.', before),
-    ]);
+  const keywordAt = '2026-11-14T12:00:00Z';
+  const between = '2026-11-14T10:00:00Z';
+  const since = '2026-11-14T13:00:00Z';
+
+  it('judges by content from the template to the keyword instruction, then by keyword', () => {
+    const metrics = sandboxSectionMetrics(
+      [
+        // Before the template: not judged.
+        pullRequest(1, 'Old body.', before),
+        pullRequest(2, '## Driven in the sandbox\n\nDriven: ran it.', before),
+        // From the template to the keyword instruction: filled or empty.
+        pullRequest(3, '## Driven in the sandbox\n\nRan it.', between),
+        pullRequest(4, '## Driven in the sandbox\n\n<!-- placeholder -->\n', between),
+        pullRequest(5, 'No sections.', between),
+        pullRequest(6, '## Driven in the sandbox\n\nDoes not apply: docs.', after),
+        // Since the keyword instruction.
+        pullRequest(7, '## Driven in the sandbox\n\nDriven: ran it.', since),
+        pullRequest(8, '## Driven in the sandbox\n\nDRIVEN: ran it.', since),
+        pullRequest(9, '## Driven in the sandbox\n\nDoes not apply: docs.', since),
+        pullRequest(10, '## Driven in the sandbox\n\nRan it.', since),
+        pullRequest(11, '## Driven in the sandbox\n\n<!-- placeholder -->\n', since),
+        pullRequest(12, 'No sections.', since),
+        pullRequest(13, '## Driven in the sandbox\n\nDoes not apply: docs.', since),
+      ],
+      keywordAt
+    );
     expect(metrics).toEqual({
       templateMergedAt,
+      keywordInstructionAt: keywordAt,
       beforeTemplate: 2,
-      sinceTemplate: 4,
-      filled: 2,
-      empty: 1,
-      missing: 1,
-      shareFilled: 0.5,
-      unfilledNumbers: [2, 3],
+      byContent: { opened: 4, filled: 2, empty: 1, missing: 1, shareFilled: 0.5 },
+      byKeyword: {
+        judged: 7,
+        driven: 2,
+        notApplicable: 2,
+        unlabelled: 1,
+        empty: 1,
+        missing: 1,
+        // Two driven of the five not marked "does not apply".
+        shareDriven: 0.4,
+        unclassifiedNumbers: [10, 11, 12],
+      },
     });
   });
 
-  it('counts a pull request opened exactly when the template merged', () => {
-    expect(sandboxSectionMetrics([pullRequest(1, 'x', templateMergedAt)])).toMatchObject({
+  it('puts the boundaries on the later group', () => {
+    const metrics = sandboxSectionMetrics(
+      [pullRequest(1, 'x', templateMergedAt), pullRequest(2, 'Driven: x', keywordAt)],
+      keywordAt
+    );
+    expect(metrics).toMatchObject({
       beforeTemplate: 0,
-      sinceTemplate: 1,
+      byContent: { opened: 1 },
+      byKeyword: { judged: 1 },
     });
   });
 
-  it('has no share when no pull request is eligible', () => {
-    expect(sandboxSectionMetrics([pullRequest(1, 'x', before)])).toMatchObject({
-      sinceTemplate: 0,
-      shareFilled: null,
-      unfilledNumbers: [],
+  it('does not count a pull request without the keyword as unlabelled before the instruction', () => {
+    const metrics = sandboxSectionMetrics(
+      [pullRequest(1, '## Driven in the sandbox\n\nNot driven.', between)],
+      keywordAt
+    );
+    expect(metrics.byKeyword).toMatchObject({ judged: 0, unlabelled: 0, unclassifiedNumbers: [] });
+    expect(metrics.byContent).toMatchObject({ opened: 1, filled: 1, shareFilled: 1 });
+  });
+
+  it('has no share when nothing is judged or every judged section is not applicable', () => {
+    expect(sandboxSectionMetrics([pullRequest(1, 'x', before)], keywordAt)).toMatchObject({
+      byContent: { opened: 0, shareFilled: null },
+      byKeyword: { judged: 0, shareDriven: null, unclassifiedNumbers: [] },
     });
-    expect(sandboxSectionMetrics([])).toMatchObject({ beforeTemplate: 0, shareFilled: null });
+    expect(sandboxSectionMetrics([], keywordAt)).toMatchObject({
+      beforeTemplate: 0,
+      byKeyword: { shareDriven: null },
+    });
+    expect(
+      sandboxSectionMetrics(
+        [pullRequest(1, '## Driven in the sandbox\n\nDoes not apply: docs.', since)],
+        keywordAt
+      ).byKeyword
+    ).toMatchObject({ judged: 1, notApplicable: 1, shareDriven: null });
+  });
+
+  it('counts a driven section as the whole share when nothing else is judged', () => {
+    expect(
+      sandboxSectionMetrics(
+        [pullRequest(1, '## Driven in the sandbox\n\nDriven: ran it.', since)],
+        keywordAt
+      ).byKeyword
+    ).toMatchObject({ driven: 1, shareDriven: 1 });
   });
 });

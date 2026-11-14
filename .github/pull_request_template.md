@@ -12,7 +12,7 @@
 
 ## Driven in the sandbox
 
-<!-- Evidence the change was driven in `pnpm dev:sandbox`: what you did and what you saw, with screenshots or output where they help. Or the reason it does not apply, for example: no user-visible behaviour changed. -->
+<!-- Begin with "Driven:" and what you did and saw in `pnpm dev:sandbox`, with screenshots or output where they help. Or begin with "Does not apply:" and the reason, for example: no user-visible behaviour changed. -->
 
 ## Knowledge updated
 

@@ -1,9 +1,16 @@
+import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { type Command, collectCiAttempts, collectCommitFiles, collectTree } from './collect';
+import {
+  type Command,
+  collectCiAttempts,
+  collectCommitFiles,
+  collectKeywordInstructionAt,
+  collectTree,
+} from './collect';
 
 const commit = '0123456789abcdef0123456789abcdef01234567';
 
@@ -143,6 +150,74 @@ describe('collectCiAttempts', () => {
 describe('collectCommitFiles', () => {
   it('reads paths with spaces and non-ASCII characters unquoted', () => {
     expect(collectCommitFiles('/repo', 3, fakeGit({}))).toEqual(loggedCommits);
+  });
+});
+
+describe('collectKeywordInstructionAt', () => {
+  it('asks git for the oldest commit that added the instruction to the template', () => {
+    const git = fakeCommand({
+      [`log --reverse --format=%cI -SDoes not apply: ${commit} -- .github/pull_request_template.md`]:
+        '2026-11-14T08:30:00-05:00\n2026-11-16T09:00:00+01:00\n',
+    });
+    expect(collectKeywordInstructionAt(git.command, commit)).toBe('2026-11-14T13:30:00Z');
+    expect(git.calls).toHaveLength(1);
+  });
+
+  it('fails, rather than judge every pull request, when no commit added the instruction', () => {
+    const git = fakeCommand({
+      [`log --reverse --format=%cI -SDoes not apply: ${commit} -- .github/pull_request_template.md`]:
+        '\n',
+    });
+    expect(() => collectKeywordInstructionAt(git.command, commit)).toThrow(
+      'has no commit adding "Does not apply:"'
+    );
+  });
+
+  describe('against a real repository', () => {
+    let repository: string | undefined;
+
+    afterEach(() => {
+      if (repository) {
+        rmSync(repository, { recursive: true, force: true });
+      }
+    });
+
+    function commitTemplate(git: Command, directory: string, content: string, date: string) {
+      writeFileSync(join(directory, '.github/pull_request_template.md'), content);
+      git(['add', '.']);
+      // The commit date, which the script reads, is the committer date.
+      execFileSync('git', ['commit', '-q', '-m', 'template', '--date', date], {
+        cwd: directory,
+        env: { ...process.env, GIT_COMMITTER_DATE: date },
+      });
+    }
+
+    it('finds the first commit that added the instruction, not a later edit or removal', () => {
+      repository = mkdtempSync(join(tmpdir(), 'agent-metrics-git-'));
+      const directory = repository;
+      const git: Command = (args) => execFileSync('git', args, { cwd: directory });
+      git(['init', '-q']);
+      git(['config', 'user.name', 'Test']);
+      git(['config', 'user.email', 'test@example.invalid']);
+      git(['config', 'commit.gpgsign', 'false']);
+      mkdirSync(join(directory, '.github'));
+      commitTemplate(git, directory, '## Why\n', '2026-11-10T10:00:00+00:00');
+      commitTemplate(git, directory, '## Why\n\n<!-- Evidence. -->\n', '2026-11-12T10:00:00+00:00');
+      commitTemplate(
+        git,
+        directory,
+        '## Why\n\n<!-- Begin with "Driven:" or "Does not apply:" -->\n',
+        '2026-11-14T10:00:00+02:00'
+      );
+      commitTemplate(git, directory, '## Why\n\n<!-- Reworded. -->\n', '2026-11-15T10:00:00+00:00');
+      commitTemplate(
+        git,
+        directory,
+        '## Why\n\n<!-- Does not apply: again. -->\n',
+        '2026-11-16T10:00:00+00:00'
+      );
+      expect(collectKeywordInstructionAt(git, 'HEAD')).toBe('2026-11-14T08:00:00Z');
+    });
   });
 });
 

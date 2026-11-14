@@ -405,9 +405,11 @@ describe('weekly agent metrics workflow', () => {
     expect(metricsSource).not.toMatch(/:\s*write\b|write-all/);
     expect(metricsSource).not.toContain('secrets.');
     expect(metricsSource).not.toContain('pull_request_target');
-    expect(steps.flatMap((step) => Object.entries(step.env ?? {}))).toEqual([
-      ['GH_TOKEN', '${{ github.token }}'],
-      ['GH_TOKEN', '${{ github.token }}'],
+    // The token is on the one step that runs the script, and on no other.
+    const withToken = steps.filter((step) => step.env !== undefined);
+    expect(withToken.map((step) => step.env)).toEqual([{ GH_TOKEN: '${{ github.token }}' }]);
+    expect(withToken.map((step) => step.run)).toEqual([
+      'pnpm metrics:agents --json-file agent-metrics.json >> "$GITHUB_STEP_SUMMARY"',
     ]);
     expect(findAction(steps, 'actions/checkout')?.with).toMatchObject({
       'persist-credentials': false,
@@ -455,8 +457,11 @@ describe('weekly agent metrics workflow', () => {
 
   it('writes the Markdown to the job summary and uploads the JSON as an artifact', () => {
     expect(commands).toContain('pnpm install --frozen-lockfile');
-    expect(commands).toContain('pnpm metrics:agents >> "$GITHUB_STEP_SUMMARY"');
-    expect(commands).toContain('pnpm metrics:agents --json > agent-metrics.json');
+    expect(commands).toContain(
+      'pnpm metrics:agents --json-file agent-metrics.json >> "$GITHUB_STEP_SUMMARY"'
+    );
+    // One run, so one collection: a second would repeat the `gh` calls and could differ.
+    expect(commands.filter((command) => command.includes('metrics:agents'))).toHaveLength(1);
     expect(findAction(steps, 'actions/upload-artifact')?.with).toMatchObject({
       name: 'agent-metrics',
       path: 'agent-metrics.json',

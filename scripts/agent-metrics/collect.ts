@@ -24,6 +24,7 @@ import {
   type PullRequestMetrics,
   pullRequestMetrics,
 } from './pull-requests';
+import { keywordInstructionMarker, templatePath } from './sandbox-section';
 import {
   type EditedFile,
   type FileLines,
@@ -57,7 +58,16 @@ const baselinePaths = {
 /** `gh repo view --json nameWithOwner`. */
 const repositorySchema = z.object({ nameWithOwner: z.string().regex(/^[\w.-]+\/[\w.-]+$/) });
 
-export type MetricsOptions = { pullRequests: number; json: boolean };
+/** `git log --format=%cI`: strict ISO 8601 with the committer's offset. */
+const commitDateSchema = z.iso.datetime({ offset: true });
+
+export type MetricsOptions = {
+  pullRequests: number;
+  /** Print the JSON instead of the Markdown. */
+  json: boolean;
+  /** Also write the JSON to this file. */
+  jsonFile: string | null;
+};
 
 export type TreeMetrics = {
   commit: string;
@@ -71,8 +81,8 @@ export type TreeMetrics = {
 };
 
 export type AgentMetrics = {
-  /** 2: `followUpFixes.share` became `shareOfMerged`. */
-  version: 2;
+  /** 2: `followUpFixes.share` became `shareOfMerged`. 3: `sandboxSection` split by cut-off. */
+  version: 3;
   github: { ci: CiMetrics; pullRequests: PullRequestMetrics };
   tree: TreeMetrics;
 };
@@ -195,6 +205,35 @@ function isMeasured(path: string): boolean {
   );
 }
 
+/**
+ * When the template first asked for a keyword: the commit date of the oldest
+ * commit up to `revision` that added or removed the keyword instruction. A
+ * pull request opened since could see the instruction; the commit date of a
+ * squash-merged commit is its merge time.
+ */
+export function collectKeywordInstructionAt(git: Command, revision: string): string {
+  const first = git([
+    'log',
+    '--reverse',
+    '--format=%cI',
+    `-S${keywordInstructionMarker}`,
+    revision,
+    '--',
+    templatePath,
+  ])
+    .toString('utf8')
+    .split('\n')
+    .map((line) => line.trim())
+    .find((line) => line.length > 0);
+  const parsed = commitDateSchema.safeParse(first);
+  if (!parsed.success) {
+    throw new Error(
+      `${templatePath} has no commit adding "${keywordInstructionMarker}" up to ${revision}; is the history shallow?`
+    );
+  }
+  return new Date(parsed.data).toISOString().replace('.000Z', 'Z');
+}
+
 /** Reads the HEAD commit (its file list and contents), never the working tree. */
 export function collectTree(root: string, git: Command = commandIn('git', root)): TreeMetrics {
   const commit = git(['rev-parse', '--verify', 'HEAD^{commit}']).toString('utf8').trim();
@@ -252,15 +291,17 @@ export function collectAgentMetrics(
   gh: Command = commandIn('gh', root),
   git: Command = commandIn('git', root)
 ): AgentMetrics {
+  const tree = collectTree(root, git);
   return {
-    version: 2,
+    version: 3,
     github: {
       ci: ciMetrics(collectCiAttempts(root, options.pullRequests * runsPerPullRequest, gh)),
       pullRequests: pullRequestMetrics(
         collectMergedPullRequests(gh, options.pullRequests),
-        collectRepository(gh)
+        collectRepository(gh),
+        collectKeywordInstructionAt(git, tree.commit)
       ),
     },
-    tree: collectTree(root, git),
+    tree,
   };
 }

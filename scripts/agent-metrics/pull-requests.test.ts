@@ -87,7 +87,7 @@ describe('merged pull request metrics', () => {
       shareOfMerged: 0.125,
       numbers: [20],
     });
-    expect(pullRequestMetrics(pullRequests, 'o/r')).toMatchObject({
+    expect(pullRequestMetrics(pullRequests, 'o/r', '2026-11-14T12:00:00Z')).toMatchObject({
       merged: 8,
       window: { from: '2026-10-01T10:00:00Z', to: '2026-11-04T10:00:00Z' },
     });
