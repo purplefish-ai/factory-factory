@@ -985,5 +985,5 @@ Old paragraph 16. For the WebSocket router guide
 > `routers/websocket/chat-message-router.ts`; application commands receive plain
 > contexts and typed outcomes.
 
-Old paragraph 18 of the "ACP runtime" slices. For the WebSocket router guide
-(`src/backend/routers/websocket/`, task 2.9).
+Old paragraph 18 in the pull request that migrated "Session prompts". For the
+WebSocket router guide (`src/backend/routers/websocket/`, task 2.9).
