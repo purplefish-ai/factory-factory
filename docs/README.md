@@ -19,6 +19,7 @@ context, not a new task or a substitute for current repository guidance.
 | Workspace state and PR monitoring                  | [Workspace state](architecture/workspace-state.md) and [PR monitoring guide][pull-requests-agents-md] |
 | Scheduled automations: schedules, runs and backups | [Scheduled automations guide][periodic-task-agents-md]                                                |
 | Event automations: Enable, Pause, reset, Delete    | [Event automations guide][agent-definition-agents-md]                                                 |
+| Application updates, installation and recovery     | [Application update guide][application-update-agents-md] and [CLI guide](../src/cli/AGENTS.md)        |
 | Event automation limits and checks                 | [Event automation limits](architecture/integrations.md#current-event-automation-limits)               |
 | User and project configuration                     | [Settings](admin-settings.md)                                                                         |
 | Maintain UI primitives and dependencies            | [shadcn](shadcn.md) and [Knip](knip.md)                                                               |
@@ -36,6 +37,8 @@ context, not a new task or a substitute for current repository guidance.
 [chat-agents-md]: ../src/client/features/chat/AGENTS.md
 [periodic-task-agents-md]: ../src/backend/services/periodic-task/AGENTS.md
 [agent-definition-agents-md]: ../src/backend/services/agent-definition/AGENTS.md
+[application-update-agents-md]:
+  ../src/backend/services/application-update/AGENTS.md
 
 For implementation work, search the relevant source area and current guides
 first, for example `rg -n 'PR monitoring' -g '*.md' docs src`. Consult

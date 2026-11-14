@@ -56,6 +56,8 @@ vi.mock('@/backend/orchestration/application-update.service', () =>
     ApplicationUpdateService: class {
       start = vi.fn();
       stop = vi.fn(async () => undefined);
+      // Kept so a test can read what composition passes in, such as `hasWork`.
+      constructor(readonly dependencies: unknown) {}
     },
     createProcessUpdateSupervisor: vi.fn(),
   })
