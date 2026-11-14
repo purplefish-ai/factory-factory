@@ -51,8 +51,8 @@ areas.
 
 Read the matching note before changing these areas:
 
-- [Job runner](src/backend/services/AGENTS.md#job-runner) and
-  [shutdown](src/backend/AGENTS.md): recurring jobs, drain order.
+- [Backend process](src/backend/AGENTS.md): recurring jobs, `jobRunner`, drain
+  order.
 - [Pull requests](src/backend/orchestration/pull-requests/AGENTS.md): PR
   monitoring, `WorkspacePR`, `gh` coordination.
 - [Workspace state](docs/architecture/workspace-state.md): Kanban.

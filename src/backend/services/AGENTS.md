@@ -40,8 +40,10 @@ Enforced by dependency-cruiser and ownership checks:
 - Health routes receive `settingsHealthService` through `AppContext.services`;
   database connectivity belongs to settings and needs no orchestration wrapper.
 
-- Recurring work registers with `jobRunner`, not `setInterval`; read
-  [Job runner](#job-runner) below.
+- Recurring work registers with `jobRunner`: read "Recurring work" in the
+  [backend process guide](../AGENTS.md), then the header comment and tests of
+  `job-runner.service.ts`
+  ([why](../../../docs/decisions/2026-11-13-recurring-work-runs-on-one-sequential-job-runner.md)).
 - Application `gh` calls go through the [GitHub capsule](github/AGENTS.md) for
   the shared process budget.
 - Reads on hot and polled paths leave out `initOutput`, `creationMetadata`,
@@ -60,27 +62,3 @@ Enforced by dependency-cruiser and ownership checks:
   [workspace capsule guide](workspace/AGENTS.md); PR monitoring that coordinates
   these tables is in the
   [pull request guide](../orchestration/pull-requests/AGENTS.md).
-
-## Job runner
-
-`job-runner.service.ts` paces every recurring job. The service or orchestrator
-that owns the work registers its job, exposes `start()` and `stop()` for
-composition, and adds the stop to `src/backend/application-shutdown.ts`.
-Intervals live in `SERVICE_INTERVAL_MS` in `constants.ts`;
-`rg -n "register\(\{" src/backend` lists the jobs.
-
-- A job never overlaps itself: its next run starts `intervalMs`, or what
-  `computeDelay` returns after each run, after the previous run ends.
-  `job-runner.service.test.ts`.
-- A `runImmediately` job runs at `start()`; any other waits out its first
-  interval. `job-runner.service.test.ts`.
-- Each run receives a signal that aborts on `stop()`, and a restarted job gets a
-  fresh one. `job-runner.service.test.ts`.
-- `stop()` waits without a bound for the run in flight, and concurrent stops
-  share that wait. `job-runner.service.test.ts`.
-- `waitForCurrentRun` settles with the run in flight and resolves at once
-  between runs; it never waits for a later run. `job-runner.service.test.ts`.
-
-Why:
-[one sequential job runner](../../../docs/decisions/2026-11-13-recurring-work-runs-on-one-sequential-job-runner.md).
-Shutdown order is in the [backend process guide](../AGENTS.md).

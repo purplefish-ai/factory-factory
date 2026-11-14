@@ -2,10 +2,10 @@
 
 This note has moved. Read:
 
-- The [services guide](../../src/backend/services/AGENTS.md#job-runner) for
-  `jobRunner`: pacing, abort, drain, and where cadences live.
-- The [backend process guide](../../src/backend/AGENTS.md) for the shutdown
-  plan, its drain order, startup interrupted by shutdown, and fatal errors.
+- The [backend process guide](../../src/backend/AGENTS.md) for the "Recurring
+  work" rules for `jobRunner` (its pacing, abort and drain are in the header
+  comment and tests of `src/backend/services/job-runner.service.ts`), the
+  shutdown plan, its drain order and fatal errors.
 - The
   [event automation orchestration guide](../../src/backend/orchestration/agents/AGENTS.md)
   for the event runtime's jobs and how they stop.
@@ -35,23 +35,39 @@ against the code. The migration that creates the named area's guide checks the
 entry, moves what holds there and deletes the entry here. Paragraph numbers are
 the rows of the disposition table in the pull request that moved this note.
 
-> The agent runtime's shutdown step stops the job and the adapter together: it
-> disconnects every socket, waits for envelopes in flight to settle, and records
-> the stop as a delivery gap before the database closes.
+> It performs no registry or installation work; the cached release service owns
+> registry checks and the CLI supervisor owns installation.
+
+Old paragraph 1. For the application-update capsule guide
+(`src/backend/services/application-update/`), which pull request #3242 (task
+2.4a) adds; if it is on `main` when the entry is read, check the ownership line
+against the code and move it there.
+
+> […] waits for envelopes in flight to settle […]
 
 Old paragraph 17. For the agent-definition capsule guide
-(`src/backend/services/agent-definition/`), which the Slack slice of
-`docs/architecture/integrations.md` (task 2.6d) extends. No test fails when
-`SlackEventSource.stop()` stops waiting for envelopes in flight.
+(`src/backend/services/agent-definition/`), which task 2.6d (the Slack part of
+`docs/architecture/integrations.md`) extends: it is about
+`SlackEventSource.stop()`. No test fails when it stops waiting for envelopes in
+flight; the sockets disconnecting and the stop being recorded are pinned by
+`slack-intake.orchestrator.integration.test.ts`.
+
+> […] an unresolved decision left by a removed trigger is still settled.
+
+Old paragraph 18. For the agent-definition capsule guide
+(`src/backend/services/agent-definition/`, task 2.6c: the evaluation and filter
+sections of `docs/architecture/integrations.md`).
 
 > Expiry and retry gates use time captured after acquiring the ledger write
 > lock.
 
 Old paragraph 19. For the agent-definition capsule guide
-(`src/backend/services/agent-definition/`, task 2.6b).
+(`src/backend/services/agent-definition/`, task 2.6c): the retry gates belong
+with the evaluation and filter sections.
 
 > Non-dispatching decisions retain an explicitly marked configuration snapshot
 > that admission cannot use.
 
 Old paragraph 20. For the agent-definition capsule guide
-(`src/backend/services/agent-definition/`, task 2.6b).
+(`src/backend/services/agent-definition/`, task 2.6c): non-dispatching decisions
+are the classifier's skip and uncertain outcomes.

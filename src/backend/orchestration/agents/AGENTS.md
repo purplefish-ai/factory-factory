@@ -3,10 +3,14 @@
 Composition around the agent-definition capsule: the event runtime's recurring
 jobs and its Slack listener, the launch consumer that turns a claimed run into a
 workspace and session, run monitoring and recovery, and the authoring and
-management flows that need other capsules. The
-[services guide](../../services/AGENTS.md) covers capsule boundaries and the job
-runner. Bare file names below are in this directory; paths that start with
-`src/` are from the repository root.
+management flows that need other capsules. This guide so far covers the event
+runtime's jobs and how the runtime stops; the consumer, monitoring, recovery and
+authoring flows are added by the migrations of the integrations and
+agent-runtime notes, which extend Owns, Invariants and Map in place. The
+[services guide](../../services/AGENTS.md) covers capsule boundaries; the job
+runner is in "Recurring work" in the [backend process guide](../../AGENTS.md).
+Bare file names below are in this directory; paths that start with `src/` are
+from the repository root.
 
 ## Owns, and does not own
 
@@ -55,9 +59,9 @@ There is no separate activation or retention job.
 - An evaluation run maintains the queue, then prunes the ledger, before it
   evaluates; it completes Slack activations before it evaluates, and claims only
   after it evaluates. `agent-runtime.orchestrator.test.ts`.
-- A failed ledger retention is logged, and the pass goes on to evaluation and
-  its claim step unless the run's signal has aborted.
-  `agent-runtime.orchestrator.test.ts`.
+- A failed ledger retention is logged by reason unless the run's signal has
+  aborted, and the pass goes on to evaluation and its claim step unless the
+  signal has aborted. `agent-runtime.orchestrator.test.ts`.
 - Launch maintenance keeps renewing while an evaluation run is stalled.
   `agent-runtime.orchestrator.test.ts`.
 - Stopping the runtime closes launch admission before it drains owned launches,
