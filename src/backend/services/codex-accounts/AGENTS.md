@@ -22,7 +22,7 @@ does not own:
   history: the session capsule (`src/backend/services/session/`, its `data/` and
   `lifecycle/` modules).
 - Per-account model catalogs and launch options: the session capsule's
-  `providers/` and `config/` modules.
+  `providers/` module and `config/launch-options/`.
 - The account procedures and their trusted-local-client check:
   `src/backend/trpc/codex-accounts.trpc.ts`.
 - Export and import of whole backups: `src/backend/orchestration/data-backup/`.
