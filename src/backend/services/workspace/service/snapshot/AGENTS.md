@@ -42,9 +42,9 @@ before the first upsert.
   revision instead, and names and branches have their own fences (capsule
   guide). `workspace-snapshot-store.service.test.ts`,
   `workspace-snapshot-store.prs.test.ts`.
-- An update no newer than a workspace's removal is ignored, so a read that began
-  before an archive cannot bring the entry back.
-  `workspace-snapshot-store.service.test.ts`.
+- An update no newer than a workspace's removal is ignored while its tombstone
+  lasts (10 minutes), so a read that began before an archive cannot bring the
+  entry back. `workspace-snapshot-store.service.test.ts`.
 - A creation seed never replaces an existing entry, passes a removal tombstone
   or seeds an archiving or archived workspace.
   `src/test-utils/workspace-creation-publication.integration.test.ts`.

@@ -362,6 +362,18 @@ describe('WorkspaceSnapshotStore', () => {
       expect(handler).not.toHaveBeenCalled();
     });
 
+    it('ignores upserts whose timestamp equals the removal', () => {
+      store.upsert('ws-1', makeUpdate(), 'test', 100);
+      store.remove('ws-1', 200);
+
+      const handler = vi.fn();
+      store.on(SNAPSHOT_CHANGED, handler);
+      store.upsert('ws-1', makeUpdate(), 'reconciliation', 200);
+
+      expect(store.getByWorkspaceId('ws-1')).toBeUndefined();
+      expect(handler).not.toHaveBeenCalled();
+    });
+
     it('accepts upserts newer than the removal and clears the tombstone', () => {
       store.upsert('ws-1', makeUpdate(), 'test', 100);
       store.remove('ws-1', 200);
