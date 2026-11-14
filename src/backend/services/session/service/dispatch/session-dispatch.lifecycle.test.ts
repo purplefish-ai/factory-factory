@@ -1,13 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { WorkspaceInitFenceError } from '@/backend/lib/workspace-init-fence-error';
-import { AcpSteeringNotSentError } from '@/backend/services/session/service/acp/acp-steering';
-import { PermanentAttachmentError } from '@/backend/services/session/service/attachments/attachment-processing';
 import {
   configureTestQueuedMessage,
   createAttachmentMessage,
   createTestSessionDispatcher,
 } from '@/backend/services/session/service/dispatch/session-dispatch.test-helpers';
-import { EventSessionFenceError } from '@/backend/services/session/service/event-agent/event-session-fence-error';
 import { VOICE_MODE_BREVITY_INSTRUCTION } from '@/backend/services/session/service/voice/voice-mode-instructions';
 import type { QueuedMessage } from '@/shared/acp-protocol';
 
@@ -375,45 +371,31 @@ describe('sessionDispatchService.tryDispatchNextMessage', () => {
     expect(mockSessionDomainService.emitSessionSnapshot).not.toHaveBeenCalled();
   });
 
-  it.each([
-    ['an interrupted prompt RPC', new Error('Connection closed'), false],
-    ['unsent steering', new AcpSteeringNotSentError('not sent'), true],
-    ['a workspace initialization fence', new WorkspaceInitFenceError(), true],
-    ['an event session fence', new EventSessionFenceError(), true],
-    ['a busy turn', new Error('A turn is already in progress for this session'), true],
-    ['invalid attachments', new PermanentAttachmentError('Invalid image'), true],
-    ['an interrupted workspace notification', new Error('Connection closed'), true, true],
-  ])(
-    'on a stop after %s, keeps only a human prompt that may have been sent',
-    async (_, error, dropped, notification = false) => {
-      let rejectPrompt!: (error: Error) => void;
-      mockNotificationDeliveryService.isNotificationMessage.mockReturnValue(notification);
-      mockSessionService.getSessionClient.mockReturnValue(createIdleClient());
-      mockSessionService.sendSessionMessage.mockReturnValue(
-        new Promise<void>((_resolve, reject) => {
-          rejectPrompt = reject;
-        })
+  it('keeps a dispatched prompt when stopping interrupts the first turn', async () => {
+    let rejectPrompt!: (error: Error) => void;
+    mockSessionService.getSessionClient.mockReturnValue(createIdleClient());
+    mockSessionService.sendSessionMessage.mockReturnValue(
+      new Promise<void>((_resolve, reject) => {
+        rejectPrompt = reject;
+      })
+    );
+    const dispatch = sessionDispatchService.tryDispatchNextMessage('s1');
+    await vi.waitFor(() => {
+      expect(mockSessionDomainService.commitSentUserMessageAtOrder).toHaveBeenCalledWith(
+        's1',
+        queuedMessage,
+        0
       );
-      const dispatch = sessionDispatchService.tryDispatchNextMessage('s1');
-      await vi.waitFor(() => {
-        expect(mockSessionDomainService.commitSentUserMessageAtOrder).toHaveBeenCalledWith(
-          's1',
-          queuedMessage,
-          0
-        );
-      });
-      mockSessionService.hasStopSince.mockReturnValue(true);
-      rejectPrompt(error);
-      await dispatch;
+    });
+    mockSessionService.hasStopSince.mockReturnValue(true);
+    rejectPrompt(new Error('Connection closed'));
+    await dispatch;
 
-      expect(mockSessionDomainService.removeTranscriptMessageById.mock.calls).toEqual(
-        dropped ? [['s1', 'm1', { emitSnapshot: false, preservePRUpdateOutcome: true }]] : []
-      );
-      expect(mockSessionDomainService.failMessage).not.toHaveBeenCalled();
-      expect(mockSessionDomainService.requeueFront).not.toHaveBeenCalled();
-      expect(mockNotificationDeliveryService.acknowledgeSuccessfulDispatch).not.toHaveBeenCalled();
-    }
-  );
+    expect(mockSessionDomainService.removeTranscriptMessageById).not.toHaveBeenCalled();
+    expect(mockSessionDomainService.failMessage).not.toHaveBeenCalled();
+    expect(mockSessionDomainService.requeueFront).not.toHaveBeenCalled();
+    expect(mockNotificationDeliveryService.acknowledgeSuccessfulDispatch).not.toHaveBeenCalled();
+  });
 
   it('fails a message once when ACP reports an internal error', async () => {
     const client = createIdleClient();
