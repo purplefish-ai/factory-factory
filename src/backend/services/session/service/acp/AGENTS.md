@@ -62,6 +62,9 @@ here directly.
 - A runtime sends no prompt until its configuration readiness opens, however
   long setup takes, and a failed setup rejects its prompts for good.
   `acp-runtime-manager.readiness.test.ts`.
+- A prompt or a background task other than a shell keeps a session working, but
+  only the prompt holds its prompt slot; a browse-only runtime is never working.
+  `acp-runtime-supervisor.status.test.ts`.
 - A form or URL elicitation (`acp-elicitation.ts`) is accepted only when the
   user picks its accept option, a form only with answers its schema accepts (an
   unsupported pattern fails closed), and stopping the session cancels it.

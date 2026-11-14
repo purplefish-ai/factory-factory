@@ -815,14 +815,14 @@ describe('explicit queued-message steering', () => {
     h.runtimeManager.isSessionPromptInFlight.mockReturnValue(true);
     const command = enqueue('/compact');
     const background = enqueue('pr-event-hidden');
-    await expect(h.dispatcher.steerQueuedMessage('session', command.id)).rejects.toThrow(
-      'Only ordinary queued human messages can be steered'
-    );
-    await expect(h.dispatcher.steerQueuedMessage('session', background.id)).rejects.toThrow(
-      'Only ordinary queued human messages can be steered'
-    );
+    const notification = enqueue('workspace-notification-hidden');
+    for (const message of [command, background, notification]) {
+      await expect(h.dispatcher.steerQueuedMessage('session', message.id)).rejects.toThrow(
+        'Only ordinary queued human messages can be steered'
+      );
+    }
     expect(h.steerSessionMessage).not.toHaveBeenCalled();
-    expect(sessionDomainService.getQueueLength('session')).toBe(2);
+    expect(sessionDomainService.getQueueLength('session')).toBe(3);
   });
 });
 

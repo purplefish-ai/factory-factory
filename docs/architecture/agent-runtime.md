@@ -2,8 +2,9 @@
 
 The paragraphs that opened this note, the section "Chat tool previews", and the
 opening of "ACP runtime" with its "Provider and model selection", "Launch
-permissions, thinking, and Plan" and "Permission and configuration readiness"
-have been migrated; the tool preview rules are asserted by the tests in
+permissions, thinking, and Plan", "Permission and configuration readiness" and
+"Activity and prompt dispatch" have been migrated; the tool preview rules are
+asserted by the tests in
 `src/client/features/chat/agent-activity/tool-renderers/`. Ownership, public
 surface, invariants and file maps are in the guides beside the code:
 [application update capsule](../../src/backend/services/application-update/AGENTS.md),
@@ -14,124 +15,15 @@ surface, invariants and file maps are in the guides beside the code:
 [archive](../../src/backend/services/session/service/archive/AGENTS.md),
 [acp](../../src/backend/services/session/service/acp/AGENTS.md),
 [config](../../src/backend/services/session/service/config/AGENTS.md),
-[events](../../src/backend/services/session/service/events/AGENTS.md) and
+[dispatch](../../src/backend/services/session/service/dispatch/AGENTS.md),
+[events](../../src/backend/services/session/service/events/AGENTS.md),
+[store](../../src/backend/services/session/service/store/AGENTS.md) and
 [providers](../../src/backend/services/session/service/providers/AGENTS.md)
 module guides. The reasons are in the `2026-11-13-*` records in
 [decisions](../decisions/), and the tests those guides name describe the
 behaviour. The sections below have not been migrated yet.
 
 ## ACP runtime
-
-### Activity and prompt dispatch
-
-Workspace/session activity and ownership of a conversation's prompt slot are
-separate signals. `isSessionWorking` includes in-flight prompts, background
-agent turns and tasks, native subagents and active goals. Background shell
-commands (including persistent preview servers) remain visible but do not keep
-the session or workspace working after the prompt completes. The work signal
-drives runtime activity, the yellow work indicator and the workspace column.
-`isSessionPromptInFlight` answers only whether the current active runtime has an
-unresolved prompt RPC. Browse-only runtimes do not own an active prompt slot.
-
-Runtime snapshots also carry prompt ownership and named background tasks, with
-counts for running subagents and active goals. A transition that changes only
-the runtime timestamp refreshes the stored state without publishing a delta, so
-repeated task notifications do not trigger workspace summary refreshes. The
-event collector remembers each session's workspace (sharing one lookup while it
-is first resolved). The session-summary refresh (which also publishes the
-workspace pending-request type) runs at most one query per workspace at a time
-plus one trailing rerun, so a burst of one kind of event costs two queries
-instead of one per event. Thought chunks are merged per 25 ms window like
-assistant text. They are flushed before the next translated update, replayed
-user message, runtime event, turn boundary or provider identity rollover, so
-transcript order is unchanged. Permission prompts, which show outside the
-transcript, do not wait for them. Chat shows background processes separately
-from the active-turn spinner, with a process-count header that expands to show
-their commands. The command list starts collapsed. Live status announcements
-contain the process count separately from the control and commands. A completed
-turn with a persistent preview server shows the remaining process instead of
-stale reasoning or “Agent is working”. Task-detail changes publish even while
-another task keeps the session busy, and reconnects restore current work from
-the live runtime. Idle and error transitions discard cached work unless fresh
-details are explicitly supplied; stopped transitions always clear work. A failed
-turn retains fresh background details from the live runtime, and chat keeps
-those processes visible alongside the error state.
-
-Ordinary chat messages may be composed and queued during any turn. Dispatch
-waits for the preceding prompt to complete, including time spent executing tools
-or awaiting that turn's approval, question or elicitation. A background shell,
-independently running child or active goal does not block the next parent prompt
-once that RPC completes. The provider remains authoritative: if it reports an
-active turn that the client cannot observe, the existing bounded busy retry
-preserves the queued message, and the running turn keeps its tool-call tracking
-for interceptors such as PR detection.
-
-Queued human messages also offer an explicit **Steer** action during an active
-prompt. Normal sends still queue. Steer submits only that message through the
-adapter's advertised `_session/steering` extension, preserving attachments and
-the active turn's configuration. Slash commands and automatic notifications
-remain queued. Concurrent steering of a different message reports a busy error;
-repeated clicks on the same pending message coalesce. If there is no active
-turn, a stale click on a later message is rejected instead of dispatching an
-earlier queue entry. Failed steering leaves the message queued. The client
-immediately disables steering controls and shows “Steering…” for the selected
-message. A requester-only `steer_settled` acknowledgment or correlated error
-releases this pending state; disconnection and session changes also clear it. A
-steering acknowledgment has a 10-second deadline. On timeout, the client
-terminates that runtime before releasing queue ownership and withholds immediate
-automatic resend. Input may have been consumed before the missing
-acknowledgment, so a later explicit retry may repeat prior effects. The host
-requests `idleBehavior: "promptRequired"`, so a completion race falls back to
-ordinary prompt dispatch instead of creating an untracked adapter-owned turn.
-Accepted input is removed from the queue even if stopping advances the
-generation while the request settles, preventing a delivered steer from being
-replayed on resume. Queue-to-transcript handoffs publish the consumed input
-together with its committed transcript entries: each
-`transcript_message_committed` delta carries the entry and the remaining queue,
-so steering and batched sends never expose a partial state between removal and
-commit. The chat keeps each message row mounted and briefly collapses its queued
-controls when dispatched, respecting reduced-motion preferences.
-
-Codex uses native `turn/steer` without cancelling the current turn. Claude's
-native steering may pre-empt generation or background a foreground tool; neither
-provider promises delivery at a specific tool boundary. The action tooltip
-explains that active work may be redirected.
-
-The workspace and quick-chat composers use prompt ownership for their queue
-placeholder and send-button label; background activity keeps the stop control
-available for active agent work without implying that the next message must
-wait.
-
-Startup and required configuration must complete before submission. Workspace
-initialization/manual-resume policy, per-session dispatch serialization and
-stop/generation fences still apply. The prompt slot is rechecked after
-auto-start; another caller may have acquired it while startup was awaited. A
-stopped runtime can auto-resume through the existing launch policy; being
-stopped is not permission to bypass setup or a failed exact resume.
-
-Automatic PR updates additionally wait for pending interactive requests, an
-in-flight prompt in another conversation in the same workspace, valid recipient
-and binding checks, and an unpaused delivery policy. Background activity alone
-does not block delivery in either the recipient or another conversation. Receipt
-recovery waits for the actual prompt or the specific delivery attempt, not
-unrelated background work. Other conversations' prompts do not prevent a human
-from sending to their selected conversation.
-
-Factory Factory supplies workspace MCP servers through session-scoped adapter
-configuration. It never writes the user's native Codex configuration. Requested
-workspace MCP configuration takes precedence over stale entries left by older
-Factory Factory versions; native configuration for other servers is retained.
-
-Session stop history is durable: `SessionLifecycleEvent` rows are append-only,
-deduplicated by session/attempt key, and rendered as structured chat rows after
-reconnect or restart. Provider history keeps its transcript order; each card
-follows the last provider message timestamped at or before it. Claude and Codex
-turns use the configurable Turn limit, defaulting to unlimited. Startup/stop
-incarnation fences protect runtime replacement and shutdown.
-
-Provider protocol schemas are maintained by upstream adapters. Keep focused ACP
-client contract tests when upgrading either dependency, including saved-session
-resume, plan approval, questions, native subagents, and reviewer permissions.
 
 ### Codex accounts
 
