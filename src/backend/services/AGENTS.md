@@ -42,8 +42,8 @@ Enforced by dependency-cruiser and ownership checks:
 
 - Recurring work registers with `jobRunner`, not `setInterval`; read
   [background jobs](../../../docs/architecture/background-jobs.md).
-- Application `gh` calls go through `GitHubCLIService` for the shared rate
-  budget.
+- Application `gh` calls go through the [GitHub capsule](github/AGENTS.md) for
+  the shared process budget.
 - Side-table accessors own Prisma writes. `WorkspacePR` exposes a collection;
   `WorkspacePRMonitoring` owns the recipient binding, `WorkspacePREvent` the
   durable fact ledger, `WorkspacePRDelivery` frozen delivery effects and

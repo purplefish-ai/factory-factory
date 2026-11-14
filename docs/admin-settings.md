@@ -40,12 +40,11 @@ the interaction. Color pickers save when focus leaves the picker, so click or
 tab to another control after choosing a color. Linear credentials and their
 validated team are submitted together with Save.
 
-Scheduled automations are managed from **Automations** in the sidebar or the
-Automations link in Settings. The management page replaces the former Periodic
-Tasks settings editor. See
-[scheduled automations](architecture/integrations.md#scheduled-agents) for
-schedule and run behavior. Event automations created from chat are listed there
-too, start paused, and run only after you select Enable; see
+Scheduled automations are managed from **Automations** in the sidebar. The
+management page replaces the former Periodic Tasks settings editor. See the
+[periodic-task capsule guide](../src/backend/services/periodic-task/AGENTS.md)
+for schedule and run behavior. Event automations created from chat are listed
+there too, start paused, and run only after you select Enable; see
 [current limits](architecture/integrations.md#current-event-automation-limits).
 
 ## Appearance

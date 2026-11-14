@@ -1,378 +1,17 @@
 # Integrations
 
-## GitHub
+The sections that preceded "Event-triggered automation data model" have moved.
+Ownership, public surface, invariants and file maps are in the guides beside the
+code: [GitHub capsule](../../src/backend/services/github/AGENTS.md),
+[Linear capsule](../../src/backend/services/linear/AGENTS.md) and
+[periodic-task capsule](../../src/backend/services/periodic-task/AGENTS.md). The
+reasons are in the `2026-11-13-*` records in [decisions](../decisions/), and the
+tests those guides name describe the behaviour. The sections below have not been
+migrated yet.
 
-GitHub URL imports use the shared `parseGithubUrl` validator for both the New
-Project form and backend input validation. Invalid owner/repository segments
-show an inline error and cannot be submitted; supported HTTP, HTTPS, and SSH
-URLs keep the existing `.git` suffix and trailing-slash behavior.
-
-Uses the local `gh` CLI's auth — there is no stored GitHub token. Issue fetch
-supports Kanban intake (`listIssuesForProject`, assigned to `@me`). Starting
-from an issue creates a linked workspace (`githubIssueNumber`,
-`githubIssueUrl`).
-
-Global search also supports GitHub issue lookup and launching; see
-[Search](./search.md) for matching and request behavior.
-
-GitHub project imports reuse existing clone directories when owner or repository
-casing differs, preserving the existing path and local changes. New clones use
-lowercase owner/repository paths, matching GitHub's case-insensitive names. URL
-validation and the existing non-repository directory guard still apply.
-
-Concurrent imports targeting the same normalized clone path share one in-flight
-clone result. Clone-path inspection waits for that clone to finish before
-classifying the directory, including clones started during directory scans. A
-new clone waits for any active inspection of its destination to finish. Failed
-clones can be retried, and cleanup never removes a completed repository.
-Coordination is in-process and uses lexically resolved paths; filesystem aliases
-such as symlinks to the same directory are not coordinated. Equivalent GitHub
-HTTPS and SSH URLs share a clone, while a different source targeting an
-in-flight destination returns an error without disturbing the active clone.
-
-The New Project authentication badge requires a successful login line and a zero
-exit status from `gh auth status`. Explicit login failures take precedence over
-success lines, including mixed valid/invalid accounts and older CLI versions
-that exit zero for invalid tokens. Both output streams are checked.
-
-All `gh` spawns go through `GitHubCLIService`, which owns the process-wide
-concurrency limit, the fast-fail on rate limiting, and singleflight dedup of
-identical in-flight reads. Do not spawn `gh` directly from a service. See
-[pull-requests.md](./pull-requests.md) for how the ratchet and the PR sync poll
-share that budget.
-
-Full PR metadata reads use a 10 MiB stdout buffer, like bulk diff and review
-comment reads, to accommodate paginated reviews, comments, and status checks.
-Responses above that limit still fail rather than returning truncated metadata.
-
-Monitoring's `getPRStatusDetails` reads only PR/head/check metadata; with
-monitoring on, `getPRObservationDetails` reads the same metadata plus
-conversation comments in one `gh pr view`. Optional `getPRReviews`, review
-comments and resolved threads share the existing CLI budget but cannot block
-core observations when enrichment fails: a combined read that fails for any
-reason other than an abort or connectivity failure falls back to
-`getPRStatusDetails`. Review facts then remain explicitly incomplete, preserving
-earlier feedback until a complete read or confirmed resolved IDs supersede it.
-Abort and core-fetch failures still fail the observation. `getPRFullDetails`
-retains its full detail-view contract. No extra polling loop is introduced.
-
-Check-run conclusions preserve `STARTUP_FAILURE` through PR-detail mapping, so
-both PR sync and Ratchet classify startup failures as failing CI, including when
-other checks are still running. Sidebar and Kanban projections therefore agree
-on the cached CI status.
-
-Legacy status contexts retain their context names and target URLs through PR
-snapshot parsing and use the same normalization as Ratchet. Contexts pointing at
-GitHub Actions runs therefore use the latest run attempt in both paths, keeping
-the cached CI status consistent after reruns.
-
-CLI authentication checks normally use cached health. Closing the setup terminal
-in admin settings or project onboarding, or choosing Recheck, forces a fresh
-check through both the aggregate CLI cache and GitHub's own cache. Forced checks
-wait for older refreshes before rechecking so pre-login results cannot overwrite
-the new status displayed in the UI.
-
-## Ticket dispatch prompt
-
-Settings > General settings > Ticket dispatch prompt configures the instructions
-used when starting GitHub and Linear tickets. The default retains the existing
-instructions to fetch and address the issue, follow repository instructions, and
-create a PR with a closing reference. The quoted ticket URL is appended after
-the instructions; no template variables are substituted. Reset to default
-restores these instructions. The launch sheet still allows edits for one launch.
-
-## Issue provider settings
-
-The admin provider selector rolls back failed saves to the latest project query
-value. Successful saves update the cached provider so a failed refresh retains
-the last confirmed value. After all overlapping provider writes settle, it
-refetches projects and releases the optimistic selection. Older completions and
-refetches cannot replace a newer pending choice. Idle selectors follow project
-query updates without a remount.
-
-## Linear
-
-A per-project issue provider can be set to Linear with an encrypted API key plus
-team selection. Kanban intake uses Linear issues assigned to the configured
-viewer. Team selection loads every page of accessible Linear teams. Starting
-from an issue creates a linked workspace (`linearIssueId`,
-`linearIssueIdentifier`, `linearIssueUrl`), and workspace lifecycle events
-best-effort sync issue state back to Linear. PR merge completion suppresses
-concurrent attempts and successful repeats for the same PR during a collector
-lifetime, including before startup reconciliation seeds the snapshot store. An
-omitted PR URL does not change its identity; known URLs still distinguish PRs
-with the same number in different repositories. Failed or incomplete transitions
-retry on later polls, and a seeded merged snapshot is attempted after startup.
-The adjacent `linear-merge-completion.orchestrator.ts` owns this attempt
-protocol, with one owner per running collector lifetime. The collector retains
-subscriptions and admits completion effects only for accepted PR invalidations.
-Removing a workspace or stopping the collector clears completion tracking;
-already admitted Linear work may still complete after cleanup.
-
-Project settings updates enter through trusted-local tRPC input validation, then
-`updateProjectSettings` coordinates repository validation, the final startup
-command/path exclusivity check, and credential encryption before persistence.
-Application composition injects only its project and encryption capabilities.
-Omitted fields retain their stored values; explicit null clears nullable
-settings. Omitting issue tracker configuration leaves the existing encrypted key
-intact. Startup command/path changes use a conditional database write matching
-both observed nullable fields, then reread and revalidate on contention. At most
-five writes are attempted before returning a conflict for retry; deletion and
-invalid final pairs retain their existing errors. Encryption runs once after
-validation and the encrypted patch is reused, with no transaction held across
-validation or encryption.
-
-Project list, ID/slug reads, local and GitHub creations, updates and archives
-share `toPublicProject`: the encrypted key is omitted and replaced with
-`hasApiKey`, preserving other public fields. Internal project service reads
-remain raw so trusted Linear and runtime consumers can decrypt stored
-credentials. Public projection never mutates the stored record.
-
-API key validation in admin settings clears earlier team choices before each
-request. Editing the key requires fresh validation and team selection before
-saving. Responses to superseded validations cannot restore earlier team choices.
-Failed Linear settings saves retain the validated key and selected team for
-retry. Successful saves clear the submitted form only if no key edits, team
-changes, or newer validation have superseded the submission.
-
-<a id="scheduled-agents"></a>
-
-## Scheduled automations
-
-Settings > General settings > Chat defaults > Automation permissions controls
-scheduled and event automation runs independently of workspace permissions. It
-defaults to Auto review for existing and new installations. Standard and Full
-access remain explicit options. Changes apply to future runs; frozen event
-launches retain their recorded access mode.
-
-Schema-8 backups with the `base-json-periodic-config-1` profile include complete
-periodic task scalar configuration and timestamps. Import preserves due slots,
-clock/timezone values and monthly anchors, but restores every accepted task
-**disabled**. Only tasks under newly imported projects are accepted; existing
-identities and children of skipped projects remain untouched and are reported as
-skips. Import results distinguish enabled tasks across the entire source section
-from rows actually restored disabled. Periodic execution history is excluded.
-Import and startup do not reserve or dispatch these tasks; enabling one later
-uses the ordinary periodic task scheduling policy.
-
-Current schema-8 `base-json-periodic-history-1` backups additionally retain all
-execution scalar fields and canonical launch snapshots. Section-local markers
-preserve SQL NULL versus stored JSON null for `launchSnapshot`. Restore accepts
-only file-owned tasks and workspaces newly created by that import; conflicting
-execution IDs, occupied workspace slots and unavailable dependencies are counted
-separately. Historical workspace links can differ from current task
-associations. RUNNING source rows become FAILED with an explicit historical-only
-explanation and unknown provider outcome; completion timestamps are never
-invented. Imported history grants no resume, retry, monitoring or scheduling
-authority. Terminal rows remain unchanged; later explicit enable uses ordinary
-scheduling to create new executions. Five earlier schema-8 profiles retain their
-original contracts.
-
-<a id="periodic-tasks"></a>
-
-Scheduled automations are recurring instructions that create a fresh workspace
-on a configured cadence (daily, weekly, monthly, or testing cadences every
-minute / five minutes). Daily/weekly/monthly tasks can optionally run at a
-specific time of day in the user's browser timezone (`scheduledTime` HH:MM +
-IANA `timezone` fields). Daily and weekly periodic tasks with a scheduled time
-advance calendar dates in the task timezone, preserving the scheduled day across
-daylight saving changes.
-
-Creating, editing and enabling a task schedules workspace launches, so those
-`periodicTask` mutations require a trusted local client, like
-`workspace.create`. Listing, reading and deleting tasks stay available to remote
-clients.
-
-Each execution runs the configured prompt, monitors the workspace until the
-agent finishes, and advances the schedule. Concurrent runs are skipped. The
-schedule advances from the slot that was due, so a run picked up late (for
-example just past local midnight) keeps the following slot. A task that missed
-more than a full period runs once instead of replaying the missed slots, then
-resumes at the first slot still ahead: a daily 09:00 task caught up at 08:00
-also runs at 09:00 that day, and weekly and monthly tasks keep their weekday and
-day of month. Archived projects are excluded from due-task polling. Their task
-definitions retain their enabled state and schedule, so overdue tasks become
-eligible again when the project is unarchived. The atomic dispatch reservation
-rechecks the project state: archiving between the due-task read and reservation
-creates no execution and does not advance the schedule. The workspace insert
-also checks project archive state atomically if archiving races an already
-admitted run.
-
-A run's outcome depends on its PR, workspace setup and Claude/Codex session:
-
-- **PR created** when the workspace has an active PR.
-- **Completed** when the agent goes idle without a PR or session failure, for
-  example after finding nothing to do. Monitoring waits five minutes after
-  workspace setup before deciding, so a queued prompt or late PR discovery is
-  not missed.
-- **Failed** when a session records a provider error, the Claude 4-hour turn
-  timeout, or an unexpected process exit. Codex turns have no elapsed-time
-  deadline. The run uses that session message as its error and does not wait for
-  the five-minute window. Deliberate stops are not failures. A run also fails
-  when workspace setup or launch fails, or when no agent session ever started
-  its provider, because the agent never ran.
-
-Runs never archive or clean up their workspace; a human reviews and archives it.
-Archiving it before the run finishes records Completed unless a session failure
-was recorded.
-
-Default sessions are named **Agent**. Existing sessions named exactly **Periodic
-task** display as **Agent** for the `periodic-task` workflow; custom names and
-stored records are preserved. Default sessions use the `periodic-task` workflow,
-so non-interactive Codex startup selects unattended execution mode and tool
-approval prompts cannot stall scheduled runs.
-
-The periodic capsule atomically reserves a `PeriodicTaskExecution` and advances
-its schedule before emitting a typed `timer_due` event. The event carries that
-execution ID as its correlation identity. The due-task poll supplies only a task
-ID to reservation. Inside the transaction, reservation reads the current enabled
-and due definition, rechecks active project and overlap exclusion, and derives
-the calendar advance from that same row and admission time. Legacy monthly
-anchors resolve from that row's creation date without a separate database read.
-Prompt-only edits before admission therefore use the latest instructions;
-calendar edits use their current pending slot or defer admission if it is still
-ahead.
-
-New executions persist a versioned `launchSnapshot` containing the actual
-workspace name, project, instructions, cadence, timezone/time, monthly anchor
-and due slot. Dispatch uses only this frozen snapshot, so later definition edits
-cannot change an admitted launch. Legacy execution snapshots remain null:
-historical instructions cannot be reconstructed safely from today's definition.
-This additive execution field is historical evidence, owned by the periodic
-capsule; it does not enable replay or move scheduled automations into
-`AgentRun`. Composition wires its narrow timer dispatch port to the
-`new_workspace` arm of `background-action-dispatch.orchestrator.ts`, shared with
-PR delivery's `existing_sessions` arm. Timer dispatch awaits the injected
-workspace launcher and returns the workspace ID; the periodic capsule owns
-linkage, failures and completion monitoring.
-
-The PERIODIC_TASK launch policy persists a fresh workspace and requires a
-`periodic-task` / `Agent` session, without explicit provider resolution, CLI
-preflight, or a capacity gate. Committed workspace creation publishes NEW to the
-snapshot stream before waiting for that required session; the sidebar can show
-it in Working immediately. Session failure propagates with the workspace
-retained and published, no initialization scheduled, and the reserved execution
-failed without a workspace link. Successful provisioning starts initialization
-once in the background. A launched result means workspace and session creation
-returned; worktree initialization continues in the background. It does not mean
-the prompt or periodic execution completed.
-
-Launch failures mark the reserved execution failed and retain its advanced
-schedule. This includes archiving after admission but before the guarded
-workspace insert: no workspace is created, and unarchiving does not replay the
-already admitted run. A failed workspace-ID write leaves it running without a
-workspace link until the existing 15-minute timeout marks it failed. Restart
-does not re-emit reserved runs. The launch/link crash gap remains; there is no
-replay or exactly-once guarantee. Timer events use no second run store, PR
-ledger entry, session queue delivery or receipt protocol.
-
-The UI calls saved instructions and triggers **automations**, each execution a
-**run**, and the AI carrying out the work an **agent**. Existing `/agents` URLs
-and stored identifiers retain their names for compatibility. Event automation
-procedures use the `automation` tRPC namespace. The naming convention is
-**Runs** for tool tabs and **Run history** for history headings, independent of
-trigger kind; both kinds expose these views (see
-[Runs and Events](#event-runs-and-events) for event-triggered automations).
-**Scheduled** and **Event-triggered** describe the trigger or the creation
-choice.
-
-The mixed Automations page at `/projects/:slug/agents` groups definitions under
-**Scheduled** and **Event-triggered** headings. Event pagination stays in its
-group. Scheduled details use `/projects/:slug/agents/:id`; saved events use
-`/projects/:slug/agents/:id?kind=event`. Both path segments are encoded. Missing
-kind selects scheduled; invalid or duplicate explicit kinds show a bounded link
-error. Owner-less legacy links remain scheduled-only; event links require a
-project. The navbar project selector is the shared project context; Automations
-has no separate project filter. Automations and project-wide Reviews remain in
-the sidebar footer above global Settings. Settings links to Automations without
-a duplicate editor. Project switches preserve the current section and clear the
-selected definition. An explicit event kind selects only event definitions,
-including when the destination has no event-triggered automations. Legacy
-`/agents` and `/agents/:id` links resolve the definition's owner before trusting
-a stored project selection, including archived owners. A definition belonging to
-another project or an invalid ID shows project-local not found instead of
-selecting another automation.
-
-The Automations footer badge combines authoritative scheduled and event
-summaries for the URL owner's project, including paused definitions and archived
-project owners. Both queries must succeed before a count is known; partial sums
-stay hidden. If either refresh fails, the prior successful combined value for
-that same project remains visible. Unresolved owners and different projects
-never borrow another project's value. It warns when any automation's latest
-completed outcome is FAILED. RUNNING and SKIPPED retries retain that warning
-until the same automation completes a run or creates a PR. The scheduled summary
-query selects its latest terminal outcome by start time, then ID; the event
-owner uses terminal timestamp and ID. Each summary is independent of history
-limits. Both lookups walk an index newest-first instead of sorting history: the
-`PeriodicTaskExecution(periodicTaskId, startedAt, id)` index and the raw-SQL
-partial expression index `AgentRun_latest_terminal_idx`. Prisma cannot see the
-latter, so keep the query's predicate and ordering identical to the index and
-recreate it after any `AgentRun` table redefinition; plan tests guard both.
-PR_CREATED clears an earlier event-run failure; source health errors do not
-count as failed runs. It refreshes with management's 10-second cadence and after
-definition changes. Unknown/loading projects hide the badge; loaded empty
-projects show zero. A failed refresh retains the last successful count for that
-project.
-
-Automations stacks its rail and editor below 48rem of available content width,
-including when the workspace sidebar is expanded. Schedule fields share a row
-only above 26rem of their own available width. Resizing preserves form drafts.
-
-**Create automation** opens the same explicit **Scheduled automation** /
-**Event-triggered automation** menu in the header and empty state. Scheduled
-opens the existing schedule form. Event opens a normal workspace composer with
-instructions to discover sources and propose an event configuration for review.
-Its draft is separate from the project's normal/scheduled workspace draft, and
-its launch mode stays standard. The proposal card still requires explicit
-creation of a paused definition, which listens only after **Enable** on the
-saved detail. While the workspace is being created, the route shows progress; a
-failed creation restores the draft for retry. Archived and unresolved selected
-definitions retain their existing creation restrictions.
-
-Scheduled create/edit use Name, Instructions and Schedule. Creation makes the
-first run due immediately; the existing periodic-task poll admits it, then
-follows the configured schedule. No new timer or admission policy is introduced.
-An unchanged clock time keeps an edited automation's timezone; changing the time
-uses the browser timezone. Clearing the time or switching to a minute cadence
-clears both schedule fields. Kanban's **Create automation** launch mode keeps
-its instructions composer and uses the same schedule controls. It remains
-available while chat provider defaults load. No provider or unattended-execution
-policy changes accompany this UI.
-
-Pause affects future runs; an already running workspace continues. Saving an
-edit with an unchanged schedule keeps the pending run. Changing the schedule
-starts at the first slot still ahead, which can be later the same day or month;
-a weekly automation keeps its weekday. Resuming keeps a pending run that is
-still ahead; an overdue one moves to the next slot on the same weekday, day of
-month, and time rather than running at once. Deleting an automation requires
-confirmation and removes its definition and execution history, while existing
-workspaces and conversations remain available. Failed requests show an error and
-preserve form drafts. The management page polls task/history data without
-replacing unsaved edits.
-
-Both the management page and the workspace's **Runs** origin panel use the
-shared run history query, showing up to 50 recent runs with status, start time,
-workspace/PR links and errors. Workspace links use the automation owner's slug
-and remain available for non-null IDs, including archived workspaces. A running
-run without a workspace ID says no workspace yet; a terminal run without one
-says workspace unavailable. The origin panel links back to automation
-management.
-
-The workspace's provider subagent/child-workspace tab is **Subagents**. Stored
-panel keys remain `agents` for Subagents and `periodic-task` for Runs, for both
-scheduled and event-run workspaces. Once workspace data loads, an unavailable
-origin tab falls back to Changes, as does a retired auto-iteration preference.
-Deleting a definition therefore cannot leave that panel blank.
-
-Service capsule: `src/backend/services/periodic-task/`.
-
-Backups using `base-json-periodic-links-1` preserve current workspace task links
-only when the workspace and disabled task are newly created by the same import.
-File-owned cross-project links remain valid. Null links stay null, including
-workspaces whose task was deleted; no execution history or launch authority is
-inferred. Earlier profiles retain their original field coverage. Link result
-counts cover nonnull source links and overlap the primary workspace counts;
-unavailable dependencies are skipped atomically with their workspace group.
+<a id="scheduled-automations"></a>Links here with this anchor were for scheduled
+automations: the
+[periodic-task capsule guide](../../src/backend/services/periodic-task/AGENTS.md).
 
 ## Event-triggered automation data model
 
@@ -1503,3 +1142,40 @@ through. An external proxy configured to buffer responses can still delay
 results until the batch finishes; disable response buffering for `/api/trpc`
 when configuring such a proxy. Procedure errors remain independent within a
 batch.
+
+## Held for other guides
+
+Rules, hazards and reasons from the migrated sections that belong to another
+area. Each entry quotes only the sentences it needs from the paragraph named
+after it, verbatim, with `[…]` where sentences between them are left out. The
+migration that creates the named area's guide checks the entry, moves what holds
+there and deletes the entry here. Paragraph numbers are the rows of the
+disposition table in the pull request that moved the sections before
+"Event-triggered automation data model".
+
+> Default sessions use the `periodic-task` workflow, so non-interactive Codex
+> startup selects unattended execution mode and tool approval prompts cannot
+> stall scheduled runs.
+
+Old paragraph 27. For the session capsule guide.
+
+> Event automation procedures use the `automation` tRPC namespace.
+
+Old paragraph 32. For the agent-definition capsule guide
+(`src/backend/services/agent-definition/`, task 2.6b).
+
+> Both lookups walk an index newest-first instead of sorting history: the
+> `PeriodicTaskExecution(periodicTaskId, startedAt, id)` index and the raw-SQL
+> partial expression index `AgentRun_latest_terminal_idx`. Prisma cannot see the
+> latter, so keep the query's predicate and ordering identical to the index and
+> recreate it after any `AgentRun` table redefinition; plan tests guard both.
+
+Old paragraph 34. For the agent-definition capsule guide
+(`src/backend/services/agent-definition/`, task 2.6b). The periodic half is an
+invariant of the periodic-task capsule guide.
+
+> The proposal card still requires explicit creation of a paused definition,
+> which listens only after **Enable** on the saved detail.
+
+Old paragraph 36. For the agent-definition capsule guide
+(`src/backend/services/agent-definition/`, task 2.6b).
