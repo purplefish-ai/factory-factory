@@ -159,10 +159,14 @@ it('does not silently rebind a profile after native identity changes', async () 
   await expect(service.getRuntimeContext(account.id)).rejects.toThrow('identity');
 });
 it('keeps single native installations usable and honors manual disabled accounts', async () => {
-  const { service } = await fixture();
+  const { service, observations, observation } = await fixture();
   expect(await service.withAccountReservation({}, async (id) => id)).toBe('codex-native-default');
   const account = await service.createAccount('Disabled');
   await service.updateAccount(account.id, { enabled: false });
+  observations.set('codex-native-default', observation(90));
+  observations.set(account.id, observation(10));
+  service.invalidate();
+  expect(await service.withAccountReservation({}, async (id) => id)).toBe('codex-native-default');
   expect(await service.withAccountReservation({ accountId: account.id }, async (id) => id)).toBe(
     account.id
   );

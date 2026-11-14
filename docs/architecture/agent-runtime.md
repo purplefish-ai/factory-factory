@@ -2,12 +2,13 @@
 
 The paragraphs that opened this note, the section "Chat tool previews", and the
 opening of "ACP runtime" with its "Provider and model selection", "Launch
-permissions, thinking, and Plan", "Permission and configuration readiness" and
-"Activity and prompt dispatch" have been migrated; the tool preview rules are
-asserted by the tests in
+permissions, thinking, and Plan", "Permission and configuration readiness",
+"Activity and prompt dispatch" and "Codex accounts" have been migrated; the tool
+preview rules are asserted by the tests in
 `src/client/features/chat/agent-activity/tool-renderers/`. Ownership, public
 surface, invariants and file maps are in the guides beside the code:
 [application update capsule](../../src/backend/services/application-update/AGENTS.md),
+[Codex accounts capsule](../../src/backend/services/codex-accounts/AGENTS.md),
 [CLI](../../src/cli/AGENTS.md),
 [session selection](../../src/client/features/session-selection/AGENTS.md),
 [session capsule](../../src/backend/services/session/AGENTS.md) and its
@@ -24,118 +25,6 @@ module guides. The reasons are in the `2026-11-13-*` records in
 behaviour. The sections below have not been migrated yet.
 
 ## ACP runtime
-
-### Codex accounts
-
-Failed Codex runtime and account probes show retry/restart guidance rather than
-raw command paths or quota-exhaustion advice. Runtime resolution failures retain
-update/reinstall guidance. Auto selection still uses healthy candidates when
-another probe fails; if no candidate remains and any probe failed, capacity is
-unknown and the error asks the user to retry. Identity-binding failures retain
-sign-in or duplicate-account cleanup guidance; caller cancellation remains
-distinct from provider unavailability. Excluded overlapping native readings do
-not affect the remaining accounts' error. Provider warnings and onboarding show
-the server's recovery guidance. Confirmed exhausted accounts retain the capacity
-error. These messages do not change probe deadlines or add retries.
-
-The composer previews only the model name; provider groups remain in the
-selection menu. Account labels are omitted from composer controls.
-
-Settings → Codex accounts supports one or many native ChatGPT accounts. The
-Native default entry preserves the existing Codex home and inherited
-configuration. Add Codex account creates a separate private profile under FF's
-application data directory; its credentials are stored by Codex itself, outside
-repositories. Settings, plugins, skills and memory are separate for each added
-account, while repository configuration still applies.
-
-Managed profiles inherit missing project trust decisions from the Native default
-Codex home's `config.toml` whenever prepared for use, including after a stop and
-resume. Explicit managed-profile project entries take precedence. Only project
-trust levels are inherited; credentials and other account settings stay
-isolated. This lets linked worktrees load repository-local Codex configuration
-without requiring the same repository to be trusted again for every ChatGPT
-account. Initial account creation only prepares private storage; trust
-inheritance is deferred until use so an inheritance failure does not report a
-persisted account as a failed creation.
-
-Account management and plan usage are restricted to trusted local clients.
-Sign-in uses Codex's native browser OAuth flow. Only one browser login runs at a
-time because the native callback uses a fixed localhost port. The dialog
-provides the native authorization link, pending/result states and cancellation.
-Device-code sign-in requires an additional account setting and is not the
-default flow.
-
-New Codex conversations offer Auto or a named account. Auto filters signed-out,
-identity-mismatched, disabled and incompatible model/effort profiles, excludes
-known exhausted quota windows, and compares relevant usage pressure. Unknown
-quota is not treated as unused quota. Concurrent creation reserves candidates
-and uses recent assignment to spread similar accounts. Reservations are
-scheduling hints, not exact token budgets. Disabling Use for Auto does not stop
-existing sessions or prevent an explicit manual selection.
-
-Auto model discovery combines catalogs from enabled, authenticated accounts so
-models exclusive to one account remain selectable. A failed named-account
-catalog read advertises no fallback models from other accounts.
-
-Launcher thinking, planning and access options come from a disposable ACP
-session. The durable capability cache described above keeps successful
-observations available while refreshing in the background. Keys distinguish
-provider, requested model, and explicit Codex account or Auto preview. Fresh
-saved effort defaults are applied to cloned results. Cached reads do not probe
-Codex accounts; account selection and validation run only for cold discovery or
-background refresh. Auto retains the last successful preview rather than
-tracking every usage-based account change. Actual session startup still selects
-and validates its account and applies native model/configuration checks. Cold
-entries await discovery when admission is available, or return a busy error when
-saturated. Process admission remains charged until both the native child and
-protocol pipes close. Cache refreshes respect the same admission limit and do
-not run on a timer.
-
-The `session-launch-options` logger records stage durations for settings,
-account resolution, options lookup and the overall request. Native probes also
-record initialization, session creation, model selection, model sweep and
-cleanup durations, including failures, so slow account checks can be
-distinguished from adapter startup. Timing and background-refresh warnings omit
-raw provider errors and subprocess diagnostics.
-
-Session creation persists `AgentSession.codexAccountId`. All human, child,
-periodic, reviewer and dedicated-PR creation goes through the same session-data
-binding policy. Existing sessions retain their original account for runtime,
-browsing, native history, model/launch discovery and usage. Legacy rows are
-backfilled to Native default; null legacy bindings resolve only to that profile.
-An existing Codex conversation requires exact resume; missing history or a
-changed account identity never silently starts a conversation on a different
-account.
-
-Native default pins the provider scope when native file credential metadata is
-available. Keyring-backed setups instead pin an unverified email fallback; that
-fallback does not verify the provider/workspace scope. When the same email later
-reports verified file-credential scope, the pin upgrades to that scope. Ending a
-browser login refreshes only that account's cached status, so in-flight reads of
-other accounts still complete. If a later native CLI sign-in changes the pinned
-identity, run `ff codex login` with the original account to restore those
-conversations; add a managed profile for a different account. Stopping a
-provider process clears its session commands on connected clients as well as in
-the server's replay cache.
-
-The Add dialog verifies distinct account identity; adding the same login twice
-does not create extra quota. Managed authentication ignores inherited
-provider/API key overrides. Native default keeps existing API-key and
-environment behavior. Global CLI authentication status cannot block a usable
-managed profile.
-
-Data export/import preserves saved account IDs but does not export credentials
-or profile directories. Import reuses a verified matching local account or
-creates an unavailable managed profile that requires sign-in. Imported sessions
-never silently adopt this machine's Native default login. Cross-machine
-credential/profile transfer is outside this MVP.
-
-Claude accounts, automatic mid-conversation account migration, automatic failed
-prompt replay and generated context handoffs are deferred. The live macOS spike
-verified separate Codex accounts, quota reads, concurrent ACP prompts,
-profile-local history and exact provider-process resume. Native keyring, forced
-token-refresh and logout isolation still need separate live checks; managed
-profiles use native file credential storage.
 
 ### Usage and compaction
 
