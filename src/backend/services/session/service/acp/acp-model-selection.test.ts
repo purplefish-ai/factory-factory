@@ -65,6 +65,11 @@ describe('provider model identities', () => {
     expect(() => resolveAcpModelSelection('CLAUDE', options, 'claude-sonnet-4-5')).toThrow(
       'Unsupported model'
     );
+    // Not advertised, but already the provider's current value.
+    expect(resolveAcpModelSelection('CLAUDE', options, 'opus')).toEqual({
+      configId: 'model',
+      value: 'opus',
+    });
   });
 
   it('does not guess a Claude version when multiple canonical models are advertised', () => {
