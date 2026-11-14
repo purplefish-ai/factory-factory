@@ -4,7 +4,8 @@ Domain code belongs in `services/{name}/`: `index.ts` is the public API,
 `service/` owns logic and co-located tests, and `resources/` owns Prisma access.
 Root `services/*.ts` is infrastructure only, as declared in `registry.ts`.
 `index.ts` lists every public name explicitly; `pnpm check:service-registry`
-rejects `export *` there.
+rejects `export *` there. To add a capsule, follow
+[add-service-capsule](../../../docs/recipes/add-service-capsule.md).
 
 ## Capsule boundaries
 

@@ -31,6 +31,7 @@ two callers: `server.ts` and `disposeApplication`.
   overlaps itself. `job-runner.service.test.ts`.
 - A new job adds a `ShutdownJob` entry, or a step, in `application-shutdown.ts`,
   and is named in the `after` of each step that tears down what it uses.
+- The steps: [add-background-job](../../docs/recipes/add-background-job.md).
 
 ## Invariants
 
