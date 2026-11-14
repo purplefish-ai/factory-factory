@@ -6,6 +6,11 @@ import { type AcpRuntimeManager, PromptTimeoutError } from '@/backend/services/s
 import type { SessionLifecycleWorkspaceBridge } from '@/backend/services/session/service/bridges';
 import type { SessionCallerGuard } from '@/backend/services/session/service/bridges';
 import { schedulePRDiscovery } from '@/backend/services/session/service/delivery/session-pr-discovery.service';
+import {
+  isTurnAlreadyInProgressError,
+  toErrorMessage,
+  toProviderFailureChatMessage,
+} from '@/backend/services/session/service/errors/session.error-message';
 import { withEventEvidenceDeadline } from '@/backend/services/session/service/event-agent/event-evidence-deadline';
 import type {
   EventSessionAuthority,
@@ -17,11 +22,6 @@ import type { EventOwnedWork } from '@/backend/services/session/service/lifecycl
 import type { SessionLifecycleEventService } from '@/backend/services/session/service/lifecycle/session-lifecycle-event.service';
 import type { SessionLifecycleGate } from '@/backend/services/session/service/lifecycle/session-lifecycle-gate';
 import type { SessionPromptTurnCompletionService } from '@/backend/services/session/service/lifecycle/session.prompt-turn-completion.service';
-import {
-  isTurnAlreadyInProgressError,
-  toErrorMessage,
-  toProviderFailureChatMessage,
-} from '@/backend/services/session/service/session.error-message';
 import type { SessionDomainService } from '@/backend/services/session/service/store/session-domain.service';
 import { userSettingsService } from '@/backend/services/settings';
 import type { AgentContentItem } from '@/shared/acp-protocol';

@@ -29,6 +29,7 @@ import type {
 import type { SessionRepository } from '@/backend/services/session/service/data/session.repository';
 import { createResumeFailedError } from '@/backend/services/session/service/delivery/pr-delivery-failure';
 import type { SessionNotificationDeliveryService } from '@/backend/services/session/service/delivery/session-notification-delivery.service';
+import { toErrorMessage } from '@/backend/services/session/service/errors/session.error-message';
 import type {
   EventSessionAuthority,
   EventInitialPermit,
@@ -40,7 +41,6 @@ import {
 } from '@/backend/services/session/service/event-agent/event-session-startup';
 import type { AcpEventProcessor } from '@/backend/services/session/service/events/acp-event-processor';
 import { getAcpWorkState } from '@/backend/services/session/service/events/session-work-state';
-import { toErrorMessage } from '@/backend/services/session/service/session.error-message';
 import type { SessionDomainService } from '@/backend/services/session/service/store/session-domain.service';
 import { ADVERSARIAL_REVIEW_WORKFLOW } from '@/shared/adversarial-review';
 import { SessionStatus } from '@/shared/core';
