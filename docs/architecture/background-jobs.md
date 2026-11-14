@@ -35,14 +35,6 @@ against the code. The migration that creates the named area's guide checks the
 entry, moves what holds there and deletes the entry here. Paragraph numbers are
 the rows of the disposition table in the pull request that moved this note.
 
-> It performs no registry or installation work; the cached release service owns
-> registry checks and the CLI supervisor owns installation.
-
-Old paragraph 1. For the application-update capsule guide
-(`src/backend/services/application-update/`), which pull request #3242 (task
-2.4a) adds; if it is on `main` when the entry is read, check the ownership line
-against the code and move it there.
-
 > […] waits for envelopes in flight to settle […]
 
 Old paragraph 17. For the agent-definition capsule guide

@@ -40,6 +40,8 @@ Enforced by dependency-cruiser and ownership checks:
 - Health routes receive `settingsHealthService` through `AppContext.services`;
   database connectivity belongs to settings and needs no orchestration wrapper.
 
+- `application-update-admission.service.ts` is the update gate; its rules are in
+  the [application update guide](application-update/AGENTS.md).
 - Recurring work registers with `jobRunner`: read "Recurring work" in the
   [backend process guide](../AGENTS.md), then the header comment and tests of
   `job-runner.service.ts`
