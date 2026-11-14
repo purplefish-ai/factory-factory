@@ -14,7 +14,7 @@ one that matches your change before you touch it.
 | [Pull request guide][pr-guide]               | PR monitoring, observations, event delivery, GitHub coordination (beside the code)         |
 | [workspace-state.md](./workspace-state.md)   | Pointer: workspace, lifecycle, snapshot, Kanban, client cache, run-script, backup guides   |
 | [agent-runtime.md](./agent-runtime.md)       | ACP runtime, provider sub-agents, child workspaces, quick actions, desktop backend process |
-| [integrations.md](./integrations.md)         | Slack, event automation limits, client query transport                                     |
+| [integrations.md](./integrations.md)         | Pointer: GitHub, Linear, event automation, Slack and client transport guides               |
 | [file-previews.md](./file-previews.md)       | Bounded file reads, UTF-8 truncation, untracked diff limits                                |
 | [client-loading.md](./client-loading.md)     | Route chunks, diagram loading, startup bundle, HTTP compression, query/mutation failures   |
 | [client-state.md](./client-state.md)         | State resets by identity, latest-value refs, debounced values, following log output        |

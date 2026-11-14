@@ -13,7 +13,7 @@ bookmark it and use the browser's Back button:
   and the bot needs the `users:read` scope so the app can be confirmed. Saved
   tokens are never shown or prefilled. Slack automations also need the server
   started with `AGENT_SLACK_INTAKE_ENABLED=true`; it is off by default. See
-  [Slack credentials](architecture/integrations.md#slack-credentials).
+  [Slack automations](#slack-automations).
 - **Appearance** (`/admin/appearance`): color scheme, text size, and fonts.
 - **Voice** (`/admin/voice`): voice mode and Deepgram credentials.
 - **System** (`/admin/system`): API usage, processes, app information, backups,
@@ -45,8 +45,56 @@ management page replaces the former Periodic Tasks settings editor. See the
 [periodic-task capsule guide](../src/backend/services/periodic-task/AGENTS.md)
 for schedule and run behavior. Event automations created from chat are listed on
 the Automations page too, start paused, and run only after you select Enable;
-see
-[current limits](architecture/integrations.md#current-event-automation-limits).
+see [current limits](#current-event-automation-limits).
+
+## Slack automations
+
+A Slack automation needs a Slack app of its own, connected under
+**Integrations**:
+
+- Socket Mode on, and an app-level token with `connections:write` saved for the
+  workspace.
+- Event Subscriptions on, with the bot events `message.channels` (public
+  channels, bot scope `channels:history`) and `message.groups` (private
+  channels, bot scope `groups:history`). Request URLs are not used.
+- Bot scopes `users:read` and `channels:read`/`groups:read`, and the bot invited
+  to every channel the automation selects.
+- No other listener on the same app: Slack spreads an app's events across all
+  its open connections, so another listener would receive some of them. Two
+  workspaces connected here with the same app are both refused.
+
+Rotating `xoxe.` bot and app-level tokens are accepted but are not refreshed
+automatically; save a new one when it expires.
+
+To turn a Slack automation on, select **Enable** while intake is switched on.
+Its Slack trigger reads Starting, first "Connecting…", then "Connected; waiting
+for test message" once the listener is connected, usually within 15 seconds.
+Copy the message the trigger shows, for example
+`Factory Factory check 7kq2-m9xh-c4tr`, and post it as an ordinary message (not
+a thread reply, not with a file) in each listed channel within ten minutes. Each
+channel shows Received at the next refresh, and the trigger reads Listening once
+every channel has it. If the ten minutes pass first, the trigger returns to
+Paused; select **Enable** again for a new message.
+
+## Current event automation limits
+
+- GitHub triggers run on `labeled` and `reopened` issue events, read by polling
+  about once a minute. `opened` and `edited` can be saved but not enabled; pull
+  request, comment, review and CI events are not triggers. See the
+  [webhook intake proposal](design/github-webhook-intake.md).
+- Creator and sender filters cannot be enabled.
+- A schedule trigger cannot be enabled in an event automation; schedules belong
+  to scheduled automations.
+- A natural-language filter judges only the triggering event's own text (issue
+  title and body, or the Slack message), not thread or channel context.
+- Logical export and import restore automation bodies paused and Slack
+  connections without tokens, but omit GitHub connections, event configuration,
+  activation and run and event history. The complete backup is the database file
+  together with the server's `encryption.key`, which saved tokens need.
+- Slack intake is off unless the server starts with
+  `AGENT_SLACK_INTAKE_ENABLED=true`, and stays off by default until a live check
+  against a dedicated Slack app passes.
+- Runs never reply on the source issue or Slack thread.
 
 ## Appearance
 
