@@ -380,6 +380,35 @@ it('activates on an empty feed after a reset at the retained high water, not zer
   expect(await runsFor('A1')).toBe(0);
 });
 
+it.each(['unindexed', 'indexed'] as const)(
+  "never indexes, compacts or changes an earlier epoch's %s proof in the new epoch's maintenance",
+  async (kind) => {
+    feed = [label('A1'), ...feed];
+    await cycle();
+    if (kind === 'unindexed') {
+      // Proof written before head checkpoints existed: pages and a FINALIZED marker, no checkpoint.
+      await db.prisma.agentSourceCheckpoint.deleteMany();
+    }
+    const before = await proof();
+    const earlierScans = [...new Set(before.pages.map((page) => page.scanId))];
+    expect(before.pages.some((page) => page.phase !== 'FINALIZED')).toBe(true);
+    expect(before.checkpoints.map((checkpoint) => checkpoint.status)).toEqual(
+      kind === 'indexed' ? ['COMPLETE'] : []
+    );
+    await fence();
+    await reset();
+    await enable();
+    for (let i = 0; i < 3; i++) {
+      await cycle();
+    }
+    // Every earlier row survives as it was, and no earlier scan gains a checkpoint.
+    expect(retained(before, await proof())).toEqual(before);
+    expect(
+      await db.prisma.agentSourceCheckpoint.count({ where: { scanId: { in: earlierScans } } })
+    ).toBe(before.checkpoints.length);
+  }
+);
+
 it('lets a new epoch prepare baselines beside rejected historical proof', async () => {
   feed = [label('A1'), ...feed];
   await cycle();
@@ -514,5 +543,9 @@ it('requires a configured trigger of the calling project on the connection', asy
     where: { id: fixture.triggerId },
     data: { isConfigured: true },
   });
+  await db.prisma.project.update({ where: { id: projectId }, data: { isArchived: true } });
+  await expect(reset()).rejects.toMatchObject({ code: 'PRECONDITION_FAILED' });
+  expect(await state()).toEqual(before);
+  await db.prisma.project.update({ where: { id: projectId }, data: { isArchived: false } });
   await expect(reset()).resolves.toMatchObject({ connectionId: fixture.connectionId });
 });

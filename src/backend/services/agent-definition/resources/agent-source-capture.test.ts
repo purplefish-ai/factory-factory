@@ -60,6 +60,16 @@ describe('resumed capture', () => {
     expect(() => capturePage(scan, captured, page(['boundary'], null))).toThrow('continuity');
   });
 
+  it.each([
+    ['B', 'A'],
+    ['H', 'B'],
+  ])('rejects captured identities repeated out of their captured run %j', (...ids) => {
+    const scan = newScan('H', 'boundary');
+    const captured = entries(['H', 'A', 'B']);
+    capturePage(scan, [], page(['H', 'A', 'B'], 2));
+    expect(() => capturePage(scan, captured, page(ids, 3))).toThrow('continuity');
+  });
+
   it('retains its window when an unarmed page only repeats captured identities', () => {
     const scan = newScan('H', 'boundary');
     const captured = entries(['H', 'A', 'B']);

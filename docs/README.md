@@ -18,6 +18,7 @@ context, not a new task or a substitute for current repository guidance.
 | Chat streaming, loading, and replay                | [Chat feature guide][chat-agents-md]                                                                  |
 | Workspace state and PR monitoring                  | [Workspace state](architecture/workspace-state.md) and [PR monitoring guide][pull-requests-agents-md] |
 | Scheduled automations: schedules, runs and backups | [Scheduled automations guide][periodic-task-agents-md]                                                |
+| Event automations: Enable, Pause, reset, Delete    | [Event automations guide][agent-definition-agents-md]                                                 |
 | Application updates, installation and recovery     | [Application update guide][application-update-agents-md] and [CLI guide](../src/cli/AGENTS.md)        |
 | Agent sessions: provider history and archives      | [Session capsule guide][session-agents-md]                                                            |
 | Event automation limits and checks                 | [Event automation limits](architecture/integrations.md#current-event-automation-limits)               |
@@ -37,6 +38,7 @@ context, not a new task or a substitute for current repository guidance.
 [chat-agents-md]: ../src/client/features/chat/AGENTS.md
 [periodic-task-agents-md]: ../src/backend/services/periodic-task/AGENTS.md
 [session-agents-md]: ../src/backend/services/session/AGENTS.md
+[agent-definition-agents-md]: ../src/backend/services/agent-definition/AGENTS.md
 [application-update-agents-md]:
   ../src/backend/services/application-update/AGENTS.md
 

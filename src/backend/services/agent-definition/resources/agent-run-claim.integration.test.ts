@@ -95,7 +95,12 @@ it.each(['paused', 'revision'] as const)(
 );
 
 it('expires queued work after 24 hours with an explicit durable reason', async () => {
+  const day = 24 * 60 * 60 * 1000;
+  const admittedFrom = Date.now();
   await admit(await event());
+  const expiresAt = (await db.prisma.agentRun.findFirstOrThrow()).expiresAt?.getTime() ?? 0;
+  expect(expiresAt).toBeGreaterThanOrEqual(admittedFrom + day);
+  expect(expiresAt).toBeLessThanOrEqual(Date.now() + day);
   expect(runtime.claimNextRun).toBeTypeOf('function');
   await db.prisma.agentRun.updateMany({ data: { expiresAt: new Date(Date.now() - 1) } });
   expect(await runtime.claimNextRun()).toEqual({ status: 'DEFERRED', reason: 'EMPTY' });

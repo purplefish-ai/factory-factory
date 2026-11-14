@@ -216,9 +216,15 @@ it('keeps the committed boundary on missing anchor, auth failure, or archived pr
   });
   expect(JSON.stringify(await state())).not.toContain('secret diagnostic');
   await db.prisma.project.updateMany({ data: { isArchived: true } });
+  const before = await state();
+  const identityReads = vi.fn(port.getRepositoryIdentity);
+  port.getRepositoryIdentity = identityReads;
   calls = [];
   await cycle();
+  // An archived project's source is not a target: the cycle makes no GitHub read at all.
+  expect(identityReads).not.toHaveBeenCalled();
   expect(calls).toEqual([]);
+  expect(await state()).toEqual(before);
 });
 
 it('rejects finalization without durable verified page evidence', async () => {
