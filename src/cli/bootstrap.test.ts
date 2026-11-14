@@ -191,7 +191,9 @@ it.skipIf(process.platform === 'win32').each([
         /* Already stopped. */
       }
     }
-  }
+  },
+  // Starts two or three Node processes, like the SIGTERM test above.
+  10_000
 );
 
 it('cancels startup on Ctrl+C at the confirmation prompt', () => {
