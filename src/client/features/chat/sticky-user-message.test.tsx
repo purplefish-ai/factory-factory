@@ -68,14 +68,21 @@ describe('StickyUserMessage', () => {
     ]);
     view.scroll(280);
     expect(view.button()?.textContent).toContain('First task with more context');
+    expect(view.button()?.getAttribute('aria-label')).toBe(
+      'Back to your message: First task with more context'
+    );
     flushSync(() => view.button()?.click());
     expect(view.onJump).toHaveBeenLastCalledWith(first.id);
     view.scroll(680);
     expect(view.button()?.textContent).toContain('Current task');
+    expect(view.button()?.getAttribute('aria-label')).toBe('Back to your message: Current task');
     flushSync(() => view.button()?.click());
     expect(view.onJump).toHaveBeenLastCalledWith(latest.id);
     view.scroll(280);
     expect(view.button()?.textContent).toContain('First task with more context');
+    expect(view.button()?.getAttribute('aria-label')).toBe(
+      'Back to your message: First task with more context'
+    );
     view.scroll(0);
     expect(view.button()).toBeNull();
   });
