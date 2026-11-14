@@ -127,6 +127,28 @@ it('can retry after a transient persistence failure without stopping the backend
   await supervisor.ready();
   expect(supervisor.status.phase).toBe('restarting');
 });
+it.each([
+  ['restarting status', 1, 'stopBackend'],
+  ['snapshot location', 2, 'activate'],
+] as const)(
+  'does not continue past a failed %s journal write',
+  async (_write, failingWrite, notReached) => {
+    const { options, prepared } = fixture();
+    let restartingWrites = 0;
+    const supervisor = new ApplicationUpdateSupervisor({
+      ...options,
+      persist: (status) =>
+        status.phase === 'restarting' && ++restartingWrites === failingWrite
+          ? Promise.reject(new Error('disk unavailable'))
+          : Promise.resolve(),
+    });
+    supervisor.request('0.5.4');
+    await supervisor.ready();
+    expect(supervisor.status.phase).toBe('failed');
+    const steps = { stopBackend: options.stopBackend, activate: prepared.activate };
+    expect(steps[notReached]).not.toHaveBeenCalled();
+  }
+);
 it('requests recovery restart when graceful shutdown exits unsuccessfully', async () => {
   const { options, prepared } = fixture();
   options.stopBackend.mockRejectedValue(new Error('Backend shutdown failed (1)'));

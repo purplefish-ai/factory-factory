@@ -1,6 +1,6 @@
-import { mkdtemp, mkdir, writeFile, readFile, rm, rename } from 'node:fs/promises';
+import { chmod, mkdtemp, mkdir, writeFile, readFile, rm, rename, symlink } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { afterEach, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import {
@@ -60,6 +60,38 @@ it('only allows updating the actual npm-global installation', async () => {
   run.mockResolvedValueOnce('/some/other/node_modules');
   expect(await installer.isSupported()).toBe(false);
 });
+it('refuses a symlinked package root', async () => {
+  const { prefix, root, run } = await fixture();
+  const linked = join(prefix, 'linked-factory-factory');
+  await symlink(root, linked);
+  const linkedInstaller = new ApplicationUpdateInstaller({
+    packageRoot: linked,
+    env: {},
+    run,
+    platform: 'darwin',
+  });
+  expect(await linkedInstaller.isSupported()).toBe(false);
+});
+// Root ignores directory permissions, so the read-only case needs an ordinary user.
+it.skipIf(process.getuid?.() === 0)(
+  'refuses an installation directory it cannot write',
+  async () => {
+    const { root, run } = await fixture();
+    const parent = dirname(root);
+    await chmod(parent, 0o555);
+    try {
+      const readOnly = new ApplicationUpdateInstaller({
+        packageRoot: root,
+        env: {},
+        run,
+        platform: 'darwin',
+      });
+      expect(await readOnly.isSupported()).toBe(false);
+    } finally {
+      await chmod(parent, 0o755);
+    }
+  }
+);
 it('stages a pinned release without changing the running installation', async () => {
   const { installer, root, run } = await fixture();
   const prepared = await installer.prepare('0.5.4', new AbortController().signal);
@@ -107,6 +139,31 @@ it('refuses unsupported platforms and a different package root', async () => {
     }).isSupported()
   ).toBe(false);
 });
+it.each([
+  ['missing client entrypoint', /ENOENT.*dist\/client\/index\.html/],
+  ['failing native module probe', /Cannot find module better-sqlite3/],
+] as const)(
+  'rejects a candidate with a %s and keeps the running package',
+  async (fault, expectedError) => {
+    const { installer, root, run } = await fixture();
+    const install = run.getMockImplementation()!;
+    run.mockImplementation(async (command, args) => {
+      if (fault === 'failing native module probe' && args[0] === '-e') {
+        throw new Error('Cannot find module better-sqlite3');
+      }
+      const output = await install(command, args);
+      if (fault === 'missing client entrypoint' && args.includes('install')) {
+        const stage = args[args.indexOf('--prefix') + 1]!;
+        await rm(join(stage, 'lib/node_modules/factory-factory/dist/client/index.html'));
+      }
+      return output;
+    });
+    await expect(installer.prepare('0.5.4', new AbortController().signal)).rejects.toThrow(
+      expectedError
+    );
+    expect(JSON.parse(await readFile(join(root, 'package.json'), 'utf8')).version).toBe('0.5.3');
+  }
+);
 it('rejects a second preparation while the installation lock is held', async () => {
   const { installer } = await fixture();
   const prepared = await installer.prepare('0.5.4', new AbortController().signal);

@@ -310,6 +310,25 @@ describe('application update notices', () => {
     }
   });
 
+  it('keeps an accepted update when its release row is dismissed', () => {
+    mocks.data = { ...updates, status: { phase: 'waiting', targetVersion: '0.5.4' } };
+    const container = document.createElement('div');
+    const root = createRoot(container);
+    try {
+      flushSync(() => root.render(<FactoryUpdateBanner />));
+      flushSync(() =>
+        container
+          .querySelector<HTMLButtonElement>('[aria-label="Dismiss Factory Factory update"]')
+          ?.click()
+      );
+      expect(container.querySelector('[aria-label="Dismiss Factory Factory update"]')).toBeNull();
+      expect(mocks.cancel).not.toHaveBeenCalled();
+      expect(container.textContent).toContain('Waiting for active agent work');
+    } finally {
+      flushSync(() => root.unmount());
+    }
+  });
+
   it('shows accepted waiting progress before the next poll', () => {
     const container = document.createElement('div');
     const root = createRoot(container);
