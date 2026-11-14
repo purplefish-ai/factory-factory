@@ -58,6 +58,28 @@ it('holds a direct prompt until the installed candidate finishes configuration',
   expect(mockPrompt).toHaveBeenCalledOnce();
 });
 
+it('keeps a prompt waiting however long configuration takes', async () => {
+  const { manager } = createManagerTestHarness();
+  setupSuccessfulSpawn();
+  mockPrompt.mockResolvedValue({ stopReason: 'end_turn' });
+  vi.useFakeTimers();
+  try {
+    const handle = await manager.getOrCreateClient(
+      'session-1',
+      { ...defaultOptions(), deferPromptReadiness: true },
+      defaultHandlers(),
+      defaultContext()
+    );
+    const prompt = manager.sendPrompt('session-1', [{ type: 'text', text: 'Wait' }]);
+    await vi.advanceTimersByTimeAsync(24 * 60 * 60_000);
+    expect(mockPrompt).not.toHaveBeenCalled();
+    handle.completeConfiguration();
+    await expect(prompt).resolves.toEqual({ stopReason: 'end_turn' });
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
 it.each(['stop', 'exit', 'setup failure'] as const)(
   'rejects waiting prompts on %s without running the provider',
   async (kind) => {

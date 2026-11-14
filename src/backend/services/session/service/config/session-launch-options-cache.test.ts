@@ -66,7 +66,11 @@ describe('launch discovery cache refresh', () => {
     expect(await f.service.getOptions(input)).toEqual(value);
     expect(f.fetchOptions).toHaveBeenCalledTimes(2);
     expect(logs.warn).toHaveBeenCalledWith('Launch options background refresh failed', input);
-    await vi.advanceTimersByTimeAsync(30_000);
+    await vi.advanceTimersByTimeAsync(29_999);
+    expect(await f.service.getOptions(input)).toEqual(value);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(f.fetchOptions).toHaveBeenCalledTimes(2);
+    await vi.advanceTimersByTimeAsync(1);
     expect(await f.service.getOptions(input)).toEqual(value);
     await vi.advanceTimersByTimeAsync(0);
     expect(f.fetchOptions).toHaveBeenCalledTimes(3);
@@ -125,6 +129,26 @@ describe('launch discovery cache refresh', () => {
         value: expect.objectContaining({ planMode: { supported: false, selected: false } }),
       }),
     ]);
+  });
+
+  it('keeps serving options and stops cleanly when saving the snapshot fails', async () => {
+    const save = vi.fn(() => Promise.reject(new Error('disk full')));
+    const fetchOptions = vi.fn(async () => ({
+      result: Promise.resolve(structuredClone(value)),
+      drained: Promise.resolve(),
+    }));
+    const service = new SessionLaunchOptionsService({
+      fetchOptions,
+      getSettings: async () => ({}),
+      store: { load: async () => [], save },
+    });
+    expect(await service.getOptions(input)).toEqual(value);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(save).toHaveBeenCalledOnce();
+    expect(logs.warn).toHaveBeenCalledWith('Launch options cache save failed');
+    expect(await service.getOptions(input)).toEqual(value);
+    expect(fetchOptions).toHaveBeenCalledOnce();
+    await expect(service.stop()).resolves.toBeUndefined();
   });
 
   it('warms saved default models while isolating a failed provider', async () => {
@@ -203,6 +227,32 @@ describe('launch discovery cache refresh', () => {
     drained.resolve();
     await stopping;
     expect(stopped).toBe(true);
+  });
+
+  it('stops waiting for an undrained child after seven seconds', async () => {
+    const fetchOptions = vi.fn(async () => ({
+      result: Promise.resolve(structuredClone(value)),
+      drained: new Promise<void>(() => undefined),
+    }));
+    const service = new SessionLaunchOptionsService({
+      fetchOptions,
+      getSettings: async () => ({}),
+    });
+    await service.getOptions(input);
+    let outcome: unknown;
+    const stopping = service.stop().then(
+      () => {
+        outcome = 'drained';
+      },
+      (error: unknown) => {
+        outcome = error;
+      }
+    );
+    await vi.advanceTimersByTimeAsync(6999);
+    expect(outcome).toBeUndefined();
+    await vi.advanceTimersByTimeAsync(1);
+    expect(outcome).toMatchObject({ message: expect.stringContaining('timed out') });
+    await stopping;
   });
 
   it('restores an evicted last success after refresh failure within the cache bound', async () => {

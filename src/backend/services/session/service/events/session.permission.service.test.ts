@@ -524,6 +524,17 @@ describe('permission response pending state', () => {
     });
   });
 
+  it('shows the newest request still awaiting a response after the shown one is answered', async () => {
+    const { domain, service, request } = setup();
+    const responses = [request('req-1'), request('req-2'), request('req-3')];
+    expect(service.respondToPermission('session-1', 'req-3', 'allow_once')).toBe(true);
+    expect(domain.getPendingInteractiveRequest('session-1')?.requestId).toBe('req-2');
+    expect(service.respondToPermission('session-1', 'req-2', 'allow_once')).toBe(true);
+    expect(domain.getPendingInteractiveRequest('session-1')?.requestId).toBe('req-1');
+    expect(service.respondToPermission('session-1', 'req-1', 'allow_once')).toBe(true);
+    await expect(Promise.all(responses)).resolves.toHaveLength(3);
+  });
+
   it('does not restore concurrent requests cancelled together', async () => {
     const { domain, bridge, request } = setup();
     const emitDelta = vi.spyOn(domain, 'emitDelta');

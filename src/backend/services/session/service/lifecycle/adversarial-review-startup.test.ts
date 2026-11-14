@@ -1,5 +1,6 @@
 import type { SessionConfigOption } from '@agentclientprotocol/sdk/unstable';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { AgentSessionRecord } from '@/backend/services/session/resources/agent-session.accessor';
 import { assertReadOnlyReviewConfigOption } from '@/backend/services/session/service/config/session-permission-policy';
 import { SessionConfigService } from '@/backend/services/session/service/config/session.config.service';
 import { sessionBackgroundDeliveryService } from '@/backend/services/session/service/delivery/session-background-delivery.service';
@@ -25,11 +26,15 @@ vi.mock('@/backend/services/workspace', () => ({
   },
 }));
 
-function createHarness(provider: 'CLAUDE' | 'CODEX', workflow = ADVERSARIAL_REVIEW_WORKFLOW) {
+function createHarness(
+  provider: 'CLAUDE' | 'CODEX',
+  workflow = ADVERSARIAL_REVIEW_WORKFLOW,
+  providerMetadata?: AgentSessionRecord['providerMetadata']
+) {
   const harness = createLifecycleHarness({
     provider,
     providerSessionId: 'existing-provider-session',
-    session: { workflow },
+    session: { workflow, ...(providerMetadata ? { providerMetadata } : {}) },
     getPermissionPreset: () => Promise.reject(new Error('settings unavailable')),
   });
   harness.runtimeManager.getOrCreateClient.mockImplementation((_id, _options, handlers) => {
@@ -309,6 +314,43 @@ describe('adversarial review startup permissions', () => {
       expect(
         harness.handle.configOptions.find((option) => option.id === 'mode')?.currentValue
       ).toBe('read-only');
+    }
+  );
+
+  it.each(['invalid', 'unavailable mode'] as const)(
+    'starts a review session read-only and ignores a saved snapshot that is %s',
+    async (kind) => {
+      const saved: SessionConfigOption = {
+        id: 'mode',
+        name: 'Access',
+        category: 'mode',
+        type: 'select',
+        currentValue: 'agent-full-access',
+        options: ['agent-full-access'].map((value) => ({ value, name: value })),
+      };
+      const snapshot =
+        kind === 'invalid'
+          ? { provider: 'CODEX' }
+          : {
+              provider: 'CODEX',
+              providerSessionId: 'existing-provider-session',
+              capturedAt: new Date(0).toISOString(),
+              configOptions: [{ ...saved, currentValue: 'unlisted', options: [] }],
+            };
+      const harness = createHarness(
+        'CODEX',
+        ADVERSARIAL_REVIEW_WORKFLOW,
+        unsafeCoerce({ acpConfigSnapshot: snapshot })
+      );
+      await start(harness, 'start');
+      expect(
+        harness.handle.configOptions.find((option) => option.id === 'mode')?.currentValue
+      ).toBe('read-only');
+      expect(
+        harness.handle.configOptions.find((option) => option.id === 'collaboration_mode')
+          ?.currentValue
+      ).toBe('plan');
+      expect(harness.runtimeManager.stopClient).not.toHaveBeenCalled();
     }
   );
 

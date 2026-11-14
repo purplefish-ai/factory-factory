@@ -121,6 +121,7 @@ describe('PermissionPrompt', () => {
     document.body.appendChild(container);
     const root = createRoot(container);
     const onApprove = vi.fn();
+    const openWindow = vi.spyOn(window, 'open').mockImplementation(() => null);
     const permission: PermissionRequest = {
       elicitation: 'url',
       requestId: 'url-1',
@@ -142,8 +143,12 @@ describe('PermissionPrompt', () => {
     expect(link?.getAttribute('href')).toBe('https://example.com/auth');
     expect(link?.getAttribute('rel')).toContain('noopener');
     expect(onApprove).not.toHaveBeenCalled();
+    // The URL is only shown: the prompt opens nothing, before or after consent.
+    expect(openWindow).not.toHaveBeenCalled();
     findButtonByText(container, 'Authorize')!.click();
     expect(onApprove).toHaveBeenCalledWith('url-1', true, 'accept');
+    expect(openWindow).not.toHaveBeenCalled();
+    openWindow.mockRestore();
     root.unmount();
   });
 

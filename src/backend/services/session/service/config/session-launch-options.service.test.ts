@@ -156,4 +156,30 @@ describe('selected-model launch discovery', () => {
     await service.getOptions({ provider: 'CODEX', model: 'model-0' });
     expect(fetchOptions).toHaveBeenCalledTimes(130);
   });
+
+  it('reports busy for an evicted success whose child has not drained', async () => {
+    const undrained = createDeferred<void>();
+    const fetchOptions = vi.fn(({ provider, model }) =>
+      Promise.resolve({
+        result: Promise.resolve(native(provider, model)),
+        drained: model === 'model-0' ? undrained.promise : Promise.resolve(),
+      })
+    );
+    const service = new SessionLaunchOptionsService({
+      fetchOptions,
+      getSettings: vi.fn().mockResolvedValue({}),
+    });
+    for (let i = 0; i < 129; i++) {
+      await service.getOptions({ provider: 'CODEX', model: `model-${i}` });
+    }
+    await expect(service.getOptions({ provider: 'CODEX', model: 'model-0' })).rejects.toThrow(
+      'busy'
+    );
+    expect(fetchOptions).toHaveBeenCalledTimes(129);
+    undrained.resolve();
+    await vi.waitFor(async () => {
+      await service.getOptions({ provider: 'CODEX', model: 'model-0' });
+    });
+    expect(fetchOptions).toHaveBeenCalledTimes(130);
+  });
 });

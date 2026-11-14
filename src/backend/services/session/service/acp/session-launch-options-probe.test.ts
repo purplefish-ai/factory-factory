@@ -32,6 +32,7 @@ const mocks = vi.hoisted(() => ({
   ext: vi.fn(),
   close: vi.fn(),
   prompt: vi.fn(),
+  closed: Promise.resolve(),
   callbacks: undefined as AcpClientCallbacks | undefined,
 }));
 vi.mock('node:child_process', () => ({ spawn: mocks.spawn }));
@@ -48,7 +49,7 @@ vi.mock('./acp-connection', () => ({
       setSessionConfigOption: mocks.set,
       extMethod: mocks.ext,
       close: mocks.close,
-      closed: Promise.resolve(),
+      closed: mocks.closed,
       prompt: mocks.prompt,
     };
   },
@@ -88,6 +89,7 @@ function config(model = 'sonnet'): SessionConfigOption[] {
 describe('native launch capability discovery', () => {
   beforeEach(() => {
     vi.resetAllMocks();
+    mocks.closed = Promise.resolve();
     mocks.initialize.mockResolvedValue({});
     mocks.newSession.mockResolvedValue({ sessionId: 'probe', configOptions: config() });
     mocks.set.mockResolvedValue({ configOptions: config('opus') });
@@ -199,6 +201,26 @@ describe('native launch capability discovery', () => {
     expect(mocks.ext).toHaveBeenCalledWith('session/close', { sessionId: 'probe' });
     expect(child.kill).toHaveBeenCalledWith('SIGTERM');
   });
+  it('reports its child drained only once the ACP connection has also closed', async () => {
+    const child = createMockChildProcess();
+    exitChildAfterSigterm(child);
+    mocks.spawn.mockReturnValue(child);
+    const childClosed = new Promise((resolve) => child.once('close', resolve));
+    const connectionClosed = deferred<void>();
+    mocks.closed = connectionClosed.promise;
+    const probe = startProbe({ provider: 'CLAUDE', model: 'opus' });
+    let drained = false;
+    const draining = probe.drained.then(() => {
+      drained = true;
+    });
+    await probe.result;
+    await childClosed;
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(drained).toBe(false);
+    connectionClosed.resolve();
+    await draining;
+    expect(drained).toBe(true);
+  });
   it('captures no other models without a selector', async () => {
     const child = createMockChildProcess();
     exitChildAfterSigterm(child);
@@ -207,6 +229,30 @@ describe('native launch capability discovery', () => {
     await probe.result;
     expect(await probe.additional).toEqual([]);
     expect(mocks.set).toHaveBeenCalledOnce();
+  });
+  it('sweeps at most 64 other models', async () => {
+    const child = createMockChildProcess();
+    exitChildAfterSigterm(child);
+    mocks.spawn.mockReturnValue(child);
+    const many = Array.from({ length: 70 }, (_, i) => `m${i}`);
+    const advertised = (model = 'm0') =>
+      config(model).map((option) =>
+        option.id === 'model' && option.type === 'select'
+          ? { ...option, options: many.map((value) => ({ value, name: value })) }
+          : option
+      );
+    mocks.newSession.mockResolvedValue({ sessionId: 'probe', configOptions: advertised() });
+    mocks.set.mockImplementation(({ value }: { value: string }) =>
+      Promise.resolve({ configOptions: advertised(value) })
+    );
+    const probe = startProbe({
+      provider: 'CLAUDE',
+      model: 'm0',
+      selectAdditionalModels: (models) => models,
+    });
+    await probe.result;
+    expect((await probe.additional).map((options) => options.model)).toEqual(many.slice(1, 65));
+    await probe.drained;
   });
   it('reports the requested model before a stalled sweep and keeps what the sweep captured', async () => {
     vi.useFakeTimers();

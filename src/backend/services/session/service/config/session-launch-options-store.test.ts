@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rename, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -46,6 +46,13 @@ describe('durable launcher options', () => {
     expect(await store.load()).toEqual([]);
     await store.save(entries);
     expect(await new LaunchOptionsStore(path).load()).toEqual(entries);
+  });
+  it('drops input fields outside the stored schema, such as an environment, when saving', async () => {
+    const { store, path } = await fixture();
+    const input = { provider: 'CLAUDE' as const, model: 'opus', env: { CODEX_HOME: '/secret' } };
+    await store.save(entries.map((entry) => ({ ...entry, input })));
+    expect(await readFile(path, 'utf8')).not.toContain('secret');
+    expect(await store.load()).toEqual(entries);
   });
   it('rejects corrupt data and unsupported versions', async () => {
     const { store, path } = await fixture();

@@ -204,26 +204,11 @@ Old paragraph 22. For the WebSocket router guide
 
 Old paragraph 25. For the session capsule guide.
 
-> In-memory pending requests can survive a viewer reconnect while the session
-> exists; they are not a durable permission request that can be resumed after a
-> server restart.
-
-Old paragraph 27. For the session capsule guide.
-
 > Backend senders are typed against `WebSocketMessage`; direct requester replies
 > go through `serializeChatFrame`.
 
 Old paragraph 32. For the WebSocket router guide
 (`src/backend/routers/websocket/`, task 2.9).
-
-> Questions and permissions are stored in
-> `SessionStore.pendingInteractiveRequest` and included in replay. The
-> permission service resolves responses and clears the matching pending request
-> only after successful resolution, including for callers outside WebSocket
-> handlers. Request IDs ensure an older response cannot clear a newer request;
-> unresolved responses leave pending state unchanged.
-
-Old paragraph 38. For the session capsule guide.
 
 > Restart uses the session restart action, which resumes the provider
 > conversation without sending anything.

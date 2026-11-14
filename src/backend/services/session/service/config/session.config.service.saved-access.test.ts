@@ -202,6 +202,31 @@ describe('saved native session access', () => {
     }
   );
 
+  it('fails the start when a session with no snapshot has a configured preset the provider lacks', async () => {
+    const h = setup();
+    const session = { ...h.session, providerMetadata: null };
+    h.handle.configOptions = [
+      {
+        id: 'mode',
+        name: 'Access',
+        category: 'mode',
+        type: 'select',
+        currentValue: 'read-only',
+        options: [{ value: 'read-only', name: 'read-only' }],
+      },
+    ];
+    await expect(
+      h.service.applyConfiguredPermissionPreset(
+        'session',
+        unsafeCoerce(session),
+        h.handle,
+        'STRICT'
+      )
+    ).rejects.toThrow('Configured STRICT access mode is unavailable for CODEX');
+    expect(h.runtime.setConfigOption).not.toHaveBeenCalled();
+    expect(h.runtime.setSessionMode).not.toHaveBeenCalled();
+  });
+
   it.each(['malformed', 'provider', 'identity', 'unavailable', 'missing-access'] as const)(
     'fails closed on present %s saved access',
     async (kind) => {
