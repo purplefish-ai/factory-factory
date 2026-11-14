@@ -43,8 +43,9 @@ validated team are submitted together with Save.
 Scheduled automations are managed from **Automations** in the sidebar. The
 management page replaces the former Periodic Tasks settings editor. See the
 [periodic-task capsule guide](../src/backend/services/periodic-task/AGENTS.md)
-for schedule and run behavior. Event automations created from chat are listed
-there too, start paused, and run only after you select Enable; see
+for schedule and run behavior. Event automations created from chat are listed on
+the Automations page too, start paused, and run only after you select Enable;
+see
 [current limits](architecture/integrations.md#current-event-automation-limits).
 
 ## Appearance

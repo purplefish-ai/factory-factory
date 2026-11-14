@@ -15,7 +15,7 @@ import {
   githubCLIService,
   submitCodeReview,
 } from '@/backend/services/github';
-import { GH_CONCURRENCY } from './github-cli/constants';
+import { GH_CONCURRENCY, ghExecLimit } from './github-cli/constants';
 
 type Finish = () => void;
 const pending: Finish[] = [];
@@ -64,7 +64,7 @@ it('shares one limit of five gh processes across the CLI service, the auth check
     comments: [],
   });
   // Review submission writes its payload to a temporary file before it queues.
-  await new Promise((resolve) => setTimeout(resolve, 100));
+  await vi.waitFor(() => expect(ghExecLimit.pendingCount).toBe(3));
   expect(started()).toBe(GH_CONCURRENCY);
   expect(execCommand).not.toHaveBeenCalled();
 

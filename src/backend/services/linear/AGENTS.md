@@ -40,14 +40,14 @@ pass a decrypted key. It does not own:
 - The team list reads every page and fails rather than return a partial list.
   `linear-client.service.test.ts`.
 - A transition reports success only when Linear accepts the update, and the
-  state sync service never throws: a failed transition is logged and reported as
-  not completed. `linear-client.service.test.ts`,
-  `linear-state-sync.service.test.ts`.
+  state sync service never throws: a thrown failure is logged, and
+  `markIssueCompleted` reports any failure as `false`.
+  `linear-client.service.test.ts`, `linear-state-sync.service.test.ts`.
 
 ## Map
 
-- `linear-client.service.ts`: one SDK client per call; validation, teams, the
-  viewer's unstarted issues in a team, issue lookup and transitions to the
-  team's first workflow state of a type.
+- `linear-client.service.ts`: validation, teams, the viewer's unstarted issues
+  in a team, issue lookup and transitions to the team's first workflow state of
+  a type.
 - `linear-state-sync.service.ts`: best-effort `started` and `completed`
   transitions for workspace lifecycle events.

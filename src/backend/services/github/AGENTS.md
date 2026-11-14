@@ -3,8 +3,9 @@
 Every GitHub read and write the backend makes, through the local `gh` CLI, and
 the PR facts built from them: normalized observations, check facts, review facts
 and PR association refreshes. The [services guide](../AGENTS.md) covers capsule
-layout and boundaries. Bare file names below are under `service/`; paths that
-start with `src/` are from the repository root.
+layout and boundaries. `index.ts` and paths that start with `service/` are
+relative to this directory, other bare file names are under `service/`, and
+paths that start with `src/` are from the repository root.
 
 ## Owns, and does not own
 
@@ -35,21 +36,21 @@ does not own:
 `index.ts`: `githubCLIService`, `checkGithubAuth`, `prObservationService`,
 `prSnapshotService` with its `PR_*` events, `prFetchCoordinator`, the
 adversarial-review posting functions (`submitCodeReview`, `createReviewComment`,
-`getPRDescription`, `getPRHeadCommitSha`), the review-activity helpers and
-`classifyGitHubCLIError`.
+`getPRDescription`, `getPRHeadCommitSha`) and their `ReviewSubmissionError`, the
+review-activity helpers and `classifyGitHubCLIError`.
 
 ## Invariants
 
 - The CLI service, `checkGithubAuth`, `submitCodeReview` and `getPRDescription`
   share one limit of five concurrent `gh` processes (`ghExecLimit`).
   `github-cli-process-limit.test.ts`.
-- Identical concurrent reads without an abort signal share one process, while
-  writes and signal-bound reads always spawn their own.
+- In `githubCLIService`, identical concurrent reads without an abort signal
+  share one process, while writes and signal-bound reads always spawn their own.
   `github-cli.service.test.ts`, `github-cli-pr-details.test.ts`.
-- After a rate-limit failure reads fail without spawning `gh`, and after a
-  connectivity failure network reads fail for 30 seconds while authentication
-  checks and writes still run. `github-cli-status-details.test.ts`,
-  `github-cli-network-backoff.test.ts`.
+- After a rate-limit failure `githubCLIService` reads fail without spawning
+  `gh`, and after a connectivity failure its network reads fail for 30 seconds
+  while its authentication checks and writes still run.
+  `github-cli-status-details.test.ts`, `github-cli-network-backoff.test.ts`.
 - A wrapped `gh` failure keeps the original error as `cause`, never repeats the
   command line, and is classified by `gh`'s diagnostic rather than by its
   arguments. `service/github-cli/errors.test.ts`.
@@ -70,8 +71,10 @@ adversarial-review posting functions (`submitCodeReview`, `createReviewComment`,
 
 ## Map
 
-- `github-cli.service.ts`: `githubCLIService`, the facade for every `gh` read
-  and write, its health cache and its issue and review-request caches.
+- `github-cli.service.ts`: `githubCLIService`, the facade for issue, pull
+  request, review, comment and repository reads and writes, its health cache and
+  its issue and review-request caches. `checkGithubAuth` and the
+  adversarial-review functions spawn `gh` from their own modules.
 - `service/github-cli/executor.ts`: process budget, singleflight and fast-fail;
   `service/github-cli/constants.ts`: the limit, timeouts and output buffers.
 - `service/github-cli/errors.ts`: classification and wrapping of `gh` failures.
