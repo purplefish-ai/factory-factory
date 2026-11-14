@@ -18,7 +18,7 @@ vi.mock('@/backend/services/session/service/data/session-data.service', () => ({
   sessionDataService: mockSessionDataService,
 }));
 
-vi.mock('@/backend/services/session/service/session-event-bus', () => ({
+vi.mock('@/backend/services/session/service/event-bus/session-event-bus', () => ({
   sessionEventBus: mockSessionEventBus,
 }));
 

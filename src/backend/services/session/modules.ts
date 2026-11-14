@@ -23,7 +23,17 @@ export const sessionModules: Record<
       'Archives a closed session: writes its transcript file and its ClosedSession record, and reads the transcript and provider identity back.',
   },
   chat: {
-    dependsOn: ['config', 'data', 'delivery', 'dispatch', 'lifecycle', 'root', 'store', 'voice'],
+    dependsOn: [
+      'config',
+      'data',
+      'delivery',
+      'dispatch',
+      'event-bus',
+      'lifecycle',
+      'root',
+      'store',
+      'voice',
+    ],
     description:
       'Handles chat commands from clients (queue, steer, stop, model and config changes, permission replies), validates and converts attachments, prepares session loads and forwards pending requests and workspace notifications.',
   },
@@ -37,11 +47,11 @@ export const sessionModules: Record<
       'delivery',
       'dispatch',
       'event-agent',
+      'event-bus',
       'events',
       'lifecycle',
       'prompt',
       'providers',
-      'root',
       'store',
     ],
     description:
@@ -81,6 +91,11 @@ export const sessionModules: Record<
     dependsOn: ['acp', 'data'],
     description:
       'Holds the durable authority over sessions launched by event automations: initial-delivery permits, startup guards and evidence deadlines.',
+  },
+  'event-bus': {
+    dependsOn: [],
+    description:
+      "Carries the capsule's outbound session and chat-broadcast events to the transport and voice, and answers viewer counts.",
   },
   events: {
     dependsOn: ['acp', 'config', 'logging', 'root', 'store'],
@@ -130,15 +145,15 @@ export const sessionModules: Record<
   root: {
     dependsOn: ['inference'],
     description:
-      'Files not yet in a module: the session event bus, bridge types, error messages and the agent event classifier.',
+      'Files not yet in a module: bridge types, error messages and the agent event classifier.',
   },
   store: {
-    dependsOn: ['logging', 'root'],
+    dependsOn: ['event-bus', 'logging'],
     description:
       "Holds each session's in-memory transcript, queue and runtime state behind `SessionDomainService`, publishes snapshots and deltas, and keeps resume fences that outlive store eviction; also caches slash commands read from disk.",
   },
   voice: {
-    dependsOn: ['root'],
+    dependsOn: ['event-bus'],
     description: 'Narrates session output aloud in voice mode through Deepgram text-to-speech.',
   },
 };

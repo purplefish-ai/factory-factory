@@ -82,7 +82,7 @@ vi.mock('ws', () => ({ default: FakeDeepgramSocket }));
 import {
   SESSION_OUTBOUND_EVENT,
   sessionEventBus,
-} from '@/backend/services/session/service/session-event-bus';
+} from '@/backend/services/session/service/event-bus/session-event-bus';
 import { voiceNarrationService } from './voice-narration.service';
 
 function createFakeClientWs(bufferedAmount = 0) {

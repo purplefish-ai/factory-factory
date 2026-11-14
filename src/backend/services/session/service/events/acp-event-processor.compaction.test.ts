@@ -1,6 +1,6 @@
 import type { SessionUpdate } from '@agentclientprotocol/sdk/unstable';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { sessionEventBus } from '@/backend/services/session/service/session-event-bus';
+import { sessionEventBus } from '@/backend/services/session/service/event-bus/session-event-bus';
 import { SessionDomainService } from '@/backend/services/session/service/store/session-domain.service';
 import { AcpEventProcessor, type AcpEventProcessorDependencies } from './acp-event-processor';
 
