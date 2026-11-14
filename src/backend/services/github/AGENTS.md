@@ -82,14 +82,15 @@ review-activity helpers and `classifyGitHubCLIError`.
 - `service/github-cli/errors.ts`: classification and wrapping of `gh` failures.
 - `service/github-cli/auth-check.ts`: the New Project authentication badge's
   check.
-- `service/github-cli/pr-details.ts`, `reviews.ts`,
-  `resolved-review-comments.ts`, `mappers.ts`, `schemas.ts`: PR reads and their
-  validation.
-- `service/github-cli/review-requests.ts`, `review-request-cache.ts`:
-  review-request search.
-- `service/github-cli/issue-search.ts`, `agent-sources.ts`,
-  `agent-issue-events.ts`: issue search and the repository and issue reads event
-  automations use.
+- `service/github-cli/pr-details.ts`, `service/github-cli/reviews.ts`,
+  `service/github-cli/resolved-review-comments.ts`,
+  `service/github-cli/mappers.ts`, `service/github-cli/schemas.ts`: PR reads and
+  their validation.
+- `service/github-cli/review-requests.ts`,
+  `service/github-cli/review-request-cache.ts`: review-request search.
+- `service/github-cli/issue-search.ts`, `service/github-cli/agent-sources.ts`,
+  `service/github-cli/agent-issue-events.ts`: issue search and the repository
+  and issue reads event automations use.
 - `service/github-cli/code-review.ts`: posting adversarial-review findings.
 - `pr-observation.service.ts`: one normalized observation of an attached PR;
   `github-check-facts.ts` and `pr-review-facts.ts` build its check and review
