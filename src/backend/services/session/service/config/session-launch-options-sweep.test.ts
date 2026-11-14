@@ -94,12 +94,16 @@ describe('launch discovery model sweep', () => {
 
   it('never replaces a model discovered directly while the sweep was running', async () => {
     const sweepResult = createDeferred<SessionLaunchOptions[]>();
-    const f = fixture((input, select) =>
-      input.model === 'opus'
-        ? sweepResult.promise.then(() => select(['sonnet']).map(swept))
-        : Promise.resolve([])
-    );
+    const f = fixture((input, select) => {
+      if (input.model !== 'opus') {
+        return Promise.resolve([]);
+      }
+      // Sonnet is chosen before its direct discovery and captured after it.
+      const chosen = select(['sonnet']);
+      return sweepResult.promise.then(() => chosen.map(swept));
+    });
     await f.service.getOptions({ provider: 'CLAUDE', model: 'opus' });
+    expect(f.selections).toEqual([['sonnet']]);
     await f.service.getOptions({ provider: 'CLAUDE', model: 'sonnet' });
     sweepResult.resolve([]);
     await vi.advanceTimersByTimeAsync(0);

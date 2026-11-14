@@ -5,9 +5,10 @@ processes, the protocol connection to them, starting, prompting and stopping a
 runtime, and the disposable provider processes that discover model catalogs,
 launch options and plan usage. The [capsule guide](../../AGENTS.md) covers the
 capsule, and `../../modules.ts` describes this module in one line. This guide so
-far covers spawning an adapter, the connection, the startup model and the
-catalog loaders. Bare file names below are in this directory; paths that start
-with `src/` are from the repository root.
+far covers spawning an adapter, the connection, the startup model, configuration
+readiness, elicitation, the catalog loaders and the launch options probe. Bare
+file names below are in this directory; paths that start with `src/` are from
+the repository root.
 
 ## Owns, and does not own
 
@@ -59,12 +60,24 @@ here directly.
   (`ACP_SESSION_CREATION_TIMEOUT_MS`), not the handshake's.
   `acp-client-factory.startup-deadlines.test.ts`,
   `acp-runtime-manager.model-selection.test.ts`.
-- The model catalog loaders never start a turn: Claude's opens a session with no
-  tools and closes it, Codex's only lists models from the app server.
-  `claude-model-catalog-loader.test.ts`, `codex-model-catalog-loader.test.ts`.
-- A catalog loader reports its child drained only on the child's `close` (its
-  pipes closed), whatever happened to the caller.
-  `claude-model-catalog-loader.test.ts`, `codex-model-catalog-loader.test.ts`.
+- A runtime sends no prompt until its configuration readiness opens, however
+  long setup takes, and a failed setup rejects its prompts for good.
+  `acp-runtime-manager.readiness.test.ts`.
+- A form or URL elicitation (`acp-elicitation.ts`) is accepted only when the
+  user picks its accept option, a form only with answers its schema accepts (an
+  unsupported pattern fails closed), and stopping the session cancels it.
+  `acp-elicitation.test.ts`.
+- The model catalog loaders and the launch options probe never start a turn:
+  Claude's loader opens a session with no tools and closes it, Codex's only
+  lists models from the app server, and the probe rejects permission and
+  elicitation requests. `claude-model-catalog-loader.test.ts`,
+  `codex-model-catalog-loader.test.ts`, `session-launch-options-probe.test.ts`.
+- A catalog loader or the probe reports its child drained only on the child's
+  `close` (its pipes closed), the probe also only after its ACP connection
+  closes, whatever happened to the caller.
+  `claude-model-catalog-loader.test.ts`, `codex-model-catalog-loader.test.ts`,
+  `session-launch-options-probe.test.ts`,
+  `../config/session-launch-options-drain.test.ts`.
 
 ## Map
 
@@ -77,7 +90,8 @@ here directly.
 - `acp-client-factory.ts`: spawn, handshake, session creation, load or resume,
   and the startup model (`acp-model-selection.ts`).
 - `acp-runtime-manager.ts`, `acp-runtime-supervisor.ts`: the runtime per
-  session, its creation, prompts and stops.
+  session, its creation, prompts and stops; `acp-prompt-readiness.ts`, its
+  configuration readiness.
 - `acp-session-config-options.ts`: normalizes the provider's configuration
   options, deriving them from the older model and mode fields when absent.
 - `acp-runtime-errors.ts`: runtime errors, including the resume error that keeps

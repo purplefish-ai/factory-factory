@@ -246,7 +246,7 @@ describe('AcpEventProcessor sub-agent invalidations', () => {
     vi.useFakeTimers();
     try {
       const deps = makeDeps();
-      const processor = new AcpEventProcessor({ ...deps, subagentUpdateIntervalMs: 250 });
+      const processor = new AcpEventProcessor(deps);
       const { onAcpEvent } = processor.createRuntimeEventHandler('db-session-1');
       if (!onAcpEvent) {
         throw new Error('Expected an ACP runtime event handler');
@@ -261,7 +261,9 @@ describe('AcpEventProcessor sub-agent invalidations', () => {
         onAcpEvent('db-session-1', update);
       }
       expect(deps.sessionDomainService.emitDelta).not.toHaveBeenCalled();
-      vi.advanceTimersByTime(250);
+      vi.advanceTimersByTime(249);
+      expect(deps.sessionDomainService.emitDelta).not.toHaveBeenCalled();
+      vi.advanceTimersByTime(1);
       expect(deps.sessionDomainService.emitDelta).toHaveBeenCalledOnce();
 
       onAcpEvent('db-session-1', update);

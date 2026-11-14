@@ -241,7 +241,7 @@ describe('public native config readiness', () => {
     const h = setup();
     h.handle.deferPromptReadiness();
     const setting = h.service.setSessionConfigOption('session', 'mode', 'read-only');
-    await Promise.resolve();
+    await new Promise((resolve) => setTimeout(resolve, 0));
     expect(h.runtime.setSessionMode).not.toHaveBeenCalled();
     h.handle.completeConfiguration();
     await setting;
