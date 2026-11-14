@@ -22,7 +22,7 @@ import {
 let db: IntegrationDatabase;
 let h: Awaited<ReturnType<typeof createEventDeliveryFixture>>;
 let consumer: ReturnType<
-  typeof import('@/backend/orchestration/agents/event-run-consumer.orchestrator').createEventRunConsumer
+  typeof import('@/backend/orchestration/agents/event-run/event-run-consumer.orchestrator').createEventRunConsumer
 >;
 let providers: ReturnType<typeof fakeEventProvider>[];
 let waitForProviders: ReturnType<typeof eventProviderCollection>['waitForProviders'];
@@ -66,8 +66,8 @@ beforeEach(async () => {
     return Promise.resolve(provider.handle);
   });
   const { createEventRunConsumer } = await vi.importActual<
-    typeof import('@/backend/orchestration/agents/event-run-consumer.orchestrator')
-  >('@/backend/orchestration/agents/event-run-consumer.orchestrator');
+    typeof import('@/backend/orchestration/agents/event-run/event-run-consumer.orchestrator')
+  >('@/backend/orchestration/agents/event-run/event-run-consumer.orchestrator');
   consumer = createEventRunConsumer();
 }, 30_000);
 afterEach(async () => {
@@ -617,8 +617,8 @@ it('fences in-flight maintenance without aborting into a second untargeted stop'
 
 it('fences failure cleanup after its captured handoff read while recovery starts a replacement', async () => {
   const launcher = await vi.importActual<
-    typeof import('@/backend/orchestration/agents/event-run-launch.orchestrator')
-  >('@/backend/orchestration/agents/event-run-launch.orchestrator');
+    typeof import('@/backend/orchestration/agents/event-run/event-run-launch.orchestrator')
+  >('@/backend/orchestration/agents/event-run/event-run-launch.orchestrator');
   const launchRun = launcher.launchEventRun;
   let oldLaunch: ReturnType<typeof launchRun> | undefined;
   vi.spyOn(launcher, 'launchEventRun').mockImplementationOnce((...args) => {

@@ -21,7 +21,7 @@ import {
 export let db: IntegrationDatabase;
 export let h: Awaited<ReturnType<typeof createEventDeliveryFixture>>;
 export let consumer: ReturnType<
-  typeof import('@/backend/orchestration/agents/event-run-consumer.orchestrator').createEventRunConsumer
+  typeof import('@/backend/orchestration/agents/event-run/event-run-consumer.orchestrator').createEventRunConsumer
 >;
 export let providers: ReturnType<typeof fakeEventProvider>[];
 const exitTasks = new Set<Promise<void>>();
@@ -90,8 +90,8 @@ beforeEach(async () => {
     trackEventFixtureTask(wake(...args))
   );
   const { createEventRunConsumer } = await vi.importActual<
-    typeof import('@/backend/orchestration/agents/event-run-consumer.orchestrator')
-  >('@/backend/orchestration/agents/event-run-consumer.orchestrator');
+    typeof import('@/backend/orchestration/agents/event-run/event-run-consumer.orchestrator')
+  >('@/backend/orchestration/agents/event-run/event-run-consumer.orchestrator');
   consumer = createEventRunConsumer();
 }, 30_000);
 afterEach(async () => {

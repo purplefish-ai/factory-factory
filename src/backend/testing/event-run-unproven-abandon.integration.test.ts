@@ -18,8 +18,8 @@ const delivery = () =>
 
 async function freshConsumer() {
   const { createEventRunConsumer } = await vi.importActual<
-    typeof import('@/backend/orchestration/agents/event-run-consumer.orchestrator')
-  >('@/backend/orchestration/agents/event-run-consumer.orchestrator');
+    typeof import('@/backend/orchestration/agents/event-run/event-run-consumer.orchestrator')
+  >('@/backend/orchestration/agents/event-run/event-run-consumer.orchestrator');
   return createEventRunConsumer();
 }
 
