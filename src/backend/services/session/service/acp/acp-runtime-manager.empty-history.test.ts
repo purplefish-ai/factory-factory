@@ -61,6 +61,9 @@ describe('observed empty provider conversations', () => {
       defaultHandlers(),
       defaultContext()
     );
+    expect(
+      manager.hasObservedEmptyProviderSession('session-1', 'CLAUDE', handle.providerSessionId)
+    ).toBe(true);
     await manager.stopAllClients();
     expect(
       manager.hasObservedEmptyProviderSession('session-1', 'CLAUDE', handle.providerSessionId)

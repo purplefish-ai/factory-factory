@@ -21,4 +21,5 @@ refetch keeps its reserved keys.
 
 - Archived rows reach the view with every field the file holds.
 - The client validates the transcript once more after decoding the text.
-- Callers of `getTranscript` still cannot receive rows with reserved keys.
+- Calls to `getTranscript` over the tRPC transport still cannot receive rows
+  with reserved keys.

@@ -48,7 +48,8 @@ capabilities in through the interfaces in `service/bridges/`.
 - Permanent deletion of a session, directly or by its workspace's cascade, runs
   the `forget` of every participant registered with `sessionScope`.
   `service/lifecycle/session-scope.test.ts`, `session-scope-forget.test.ts`,
-  `session-services.composition.test.ts`.
+  `session-services.composition.test.ts`,
+  `src/backend/trpc/workspace.router.test.ts`.
 
 ## Map
 
