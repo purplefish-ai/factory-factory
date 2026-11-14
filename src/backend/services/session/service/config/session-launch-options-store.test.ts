@@ -47,7 +47,7 @@ describe('durable launcher options', () => {
     await store.save(entries);
     expect(await new LaunchOptionsStore(path).load()).toEqual(entries);
   });
-  it('writes capability metadata only, never a runtime environment', async () => {
+  it('drops input fields outside the stored schema, such as an environment, when saving', async () => {
     const { store, path } = await fixture();
     const input = { provider: 'CLAUDE' as const, model: 'opus', env: { CODEX_HOME: '/secret' } };
     await store.save(entries.map((entry) => ({ ...entry, input })));

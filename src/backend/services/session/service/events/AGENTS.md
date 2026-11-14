@@ -10,12 +10,12 @@ this directory; paths that start with `src/` are from the repository root.
 
 ## Owns, and does not own
 
-The module owns each session's permission bridge, which requests are answered
-automatically, which pending request the user is shown, the throttling of
-subagent notifications, and keeping a failed turn's error through background
+The module owns which permission bridge each session uses, which requests are
+answered automatically, which pending request the user is shown, the throttling
+of subagent notifications, and keeping a failed turn's error through background
 activity. It does not own:
 
-- The permission bridge itself, elicitation forms and the runtime's handlers:
+- The bridge's implementation, elicitation forms and the runtime's handlers:
   `../acp/acp-permission-bridge.ts`, `../acp/acp-elicitation.ts`.
 - The pending request kept for replay: `../store/`. It lives in memory, so it
   survives a viewer reconnect while the session exists but not a server restart.
@@ -37,6 +37,9 @@ The capsule barrel exports the singletons `acpEventProcessor` and
 - When permission requests overlap, the newest is shown, and answering it shows
   the newest one still waiting; an answer to an older or unknown request never
   clears the one shown. `session.permission.service.test.ts`.
+- An adversarial-review session's permission requests are never shown or
+  answerable: each is rejected with its reject option, or cancelled if it has
+  none. `session.permission.service.test.ts`.
 - A turn that ended with a provider error keeps the session in its error state
   while background tasks start and stop.
   `acp-event-processor.subagents.test.ts`.

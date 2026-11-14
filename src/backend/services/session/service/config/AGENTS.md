@@ -18,8 +18,6 @@ inactive session shows, and the launch options cache. It does not own:
 - Stopping a runtime whose startup configuration failed, and the write that
   compares launch intent: `../lifecycle/session-startup-config-failure.ts`,
   `../data/session.repository.ts`.
-- The automatic rejection of a reviewer's permission requests:
-  `../events/session.permission.service.ts`.
 - The mapping from a saved permission preset to a native access mode:
   `src/shared/session-launch.ts`.
 - The chat controls and their pending selections: `src/client/features/chat/`.
@@ -28,20 +26,21 @@ inactive session shows, and the launch options cache. It does not own:
 ## Public surface
 
 The capsule barrel exports `sessionConfigService` (built in
-`../composition/session-core-services.ts`) and its class. Its parts are named by
-role: `writer` accepts, persists and publishes native configuration, `reader`
-projects live or stored configuration, `startup` configures a new runtime, and
-`mutations` applies live and stopped edits. `getLaunchOptions` serves the
-launcher and launch validation; `warmLaunchOptions()` runs after server startup
-and `stopLaunchOptions()` at shutdown.
+`../composition/session-core-services.ts`) and its class, in
+`session.config.service.ts`. Its four parts: `writer`
+(`session-config-writer.ts`) accepts, persists and publishes native
+configuration, `reader` (`session-config-projection.ts`) projects live or stored
+configuration, `startup` (`session-startup-configuration.ts`) configures a new
+runtime, and `mutations` (`session-config-mutations.ts`) applies live and
+stopped edits. `getLaunchOptions` serves the launcher and launch validation;
+`warmLaunchOptions()` runs after server startup and `stopLaunchOptions()` at
+shutdown.
 
 ## Invariants
 
 - An adversarial-review session stays read-only: an edit to another access or
-  collaboration value is rejected, and its permission requests are rejected
-  without prompting. `session-permission-policy.test.ts`,
-  `../lifecycle/adversarial-review-startup.test.ts`,
-  `../events/session.permission.service.test.ts`.
+  collaboration value is rejected. `session-permission-policy.test.ts`,
+  `../lifecycle/adversarial-review-startup.test.ts`.
 - An access mode, Claude's planning included, is changed with
   `session/set_mode`; models and other options, Codex collaboration included,
   with `session/set_config_option`. `session.config.service.test.ts`,
@@ -88,33 +87,28 @@ and `stopLaunchOptions()` at shutdown.
   `../lifecycle/session-startup.launch-authority.test.ts`.
 - A saved snapshot that is invalid, belongs to another conversation or names an
   unavailable mode fails the start, as does applied launch intent without one;
-  only a session with no snapshot falls back to the configured preset.
-  `session.config.service.saved-access.test.ts`,
-  `session-startup-launch.test.ts`.
-- Launch options are cached per provider, model and Codex account, 128 at most,
-  by at most eight discoveries, each holding its slot until its child drains
-  (`stopLaunchOptions()` waits seven seconds at most); a result over five
-  minutes old is returned at once and refreshed in the background if it has no
-  discovery running and a slot is free; a failed refresh keeps it, and the next
-  waits 30 s. `session-launch-options.service.test.ts`,
+  only a session with no snapshot falls back to the configured preset. An
+  adversarial-review session instead reapplies read-only access and ignores the
+  snapshot's saved modes. `session.config.service.saved-access.test.ts`,
+  `session-startup-launch.test.ts`,
+  `../lifecycle/adversarial-review-startup.test.ts`.
+- Launch options are cached per provider, model and the requested Codex account
+  (or Auto), 128 at most, by at most eight discoveries, each holding its slot
+  until its child drains (`stopLaunchOptions()` waits seven seconds at most); a
+  result over five minutes old is returned at once and refreshed in the
+  background if it has no discovery running and a slot is free; a failed refresh
+  keeps it, and the next waits 30 s. `session-launch-options.service.test.ts`,
   `session-launch-options-cache.test.ts`,
   `session-launch-options-drain.test.ts`.
 
 ## Map
 
-- `session.config.service.ts`: the service and its four parts
-  (`session-config-writer.ts`, `session-config-projection.ts`,
-  `session-startup-configuration.ts`, `session-config-mutations.ts`).
-- `session-config-mutation-queue.ts`: the per-session edit queue.
-- `session-config-commit-authority.ts`: the accepted-snapshot token that fences
-  persistence and publication; `session-config-snapshot-persistence.ts` writes
-  through it with compare-and-set retries.
-- `session-queued-settings.ts`: explicit edits applied to queued messages.
+- `session-config-snapshot-persistence.ts`: writes snapshots through the commit
+  authority with compare-and-set retries; `acp-config-snapshot.ts` is their
+  schema.
 - `session-inactive-config-options.ts`: edits to a stopped session.
-- `session-permission-policy.ts`: required access at startup and the reviewer's
-  read-only rules.
-- `acp-config-snapshot.ts`: the persisted snapshot's schema.
-- `session-saved-native-modes.ts`, `session-startup-access.ts`: saved and launch
-  access; `session-startup-configuration-finalizer.ts` opens readiness.
+- `session-permission-policy.ts`, `session-saved-native-modes.ts`,
+  `session-startup-access.ts`: required and reviewer access, saved access and
+  launch access; `session-startup-configuration-finalizer.ts` opens readiness.
 - `session-launch-options.service.ts`: the launch options cache, saved by
   `session-launch-options-store.ts`.
