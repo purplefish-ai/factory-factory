@@ -49,7 +49,7 @@ export async function main(
 }
 
 if (process.argv[1] && realpathSync(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  // A dead reader makes the next write fail with EPIPE, which would crash the launcher mid-stop.
+  // Any error on these streams (a dead reader gives EPIPE) would crash the launcher mid-stop.
   for (const stream of [process.stdout, process.stderr]) {
     stream.on('error', () => undefined);
   }

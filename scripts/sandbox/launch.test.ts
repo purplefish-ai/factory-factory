@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
 import { main } from '../dev-sandbox.mjs';
 import { MAX_PORT_ATTEMPTS, run } from './launch.mjs';
-import { findProcess, realSystem } from './process-group.mjs';
+import { collectGroupProcesses, findProcess, realSystem } from './process-group.mjs';
 import { readSandboxRecord } from './record.mjs';
 import { launch, launcherEnv, spawnSleeper, temporaryDirectories } from './test-support';
 
@@ -551,4 +551,50 @@ describe('the real launcher', () => {
       sandbox.child.kill('SIGKILL');
     }
   }, 240_000);
+
+  it('stops its running server and removes its directory when the output reader has died', async () => {
+    const tempDir = temporary.create('ffsb-');
+    const root = join(tempDir, 'ff-sandbox');
+    // Bounded: the owner ends itself after the helper lifetime, the launcher after its time to live.
+    const owner = spawnSleeper();
+    const sandbox = launch(
+      ['--owner-pid', String(owner.pid), '--ttl-minutes', '10'],
+      launcherEnv(tempDir)
+    );
+    let server: { pgid: number; pgidStartedAt: string } | null = null;
+    try {
+      const deadline = Date.now() + 240_000;
+      while (!/^SANDBOX_READY /m.test(sandbox.output())) {
+        expect(sandbox.child.exitCode, sandbox.output()).toBeNull();
+        expect(Date.now(), sandbox.output()).toBeLessThan(deadline);
+        await realSystem.sleep(100);
+      }
+      const [dir] = readdirSync(root);
+      const record = readSandboxRecord(join(root, dir ?? '', 'sandbox.json'));
+      server =
+        record?.pgid && record.pgidStartedAt
+          ? { pgid: record.pgid, pgidStartedAt: record.pgidStartedAt }
+          : null;
+      expect(server).not.toBeNull();
+      // The reader dies after the server is up: the stop's first writes get EPIPE.
+      sandbox.child.stdout?.destroy();
+      sandbox.child.stderr?.destroy();
+      owner.kill('SIGKILL');
+      expect(await sandbox.exited).toBe(0);
+      expect(collectGroupProcesses(realSystem.listProcesses(), server?.pgid ?? 0).size).toBe(0);
+      expect(readdirSync(root)).toEqual([]);
+    } finally {
+      owner.kill('SIGKILL');
+      sandbox.child.kill('SIGKILL');
+      // Only the group this test's launcher started, and only if it is still that process.
+      const leader = server && findProcess(realSystem.listProcesses(), server.pgid);
+      if (server && leader?.startedAt === server.pgidStartedAt) {
+        try {
+          process.kill(-server.pgid, 'SIGKILL');
+        } catch {
+          // Gone between the check and the signal.
+        }
+      }
+    }
+  }, 360_000);
 });
