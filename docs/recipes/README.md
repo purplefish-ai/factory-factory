@@ -23,3 +23,4 @@ not point at its own recipe, and a file in either place that no rule would read.
 | ------------------------------------------------------- | --------------------------------------------------------------- |
 | [verify-in-app](verify-in-app.md)                       | A change is visible to a user and must be driven                |
 | [verify-event-automations](verify-event-automations.md) | You changed the event automation runtime, jobs or GitHub source |
+| [add-lint-rule](add-lint-rule.md)                       | You add a custom `factory/` Oxlint rule                         |
