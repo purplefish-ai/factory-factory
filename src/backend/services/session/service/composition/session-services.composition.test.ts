@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
+  acpRuntimeManager,
   sessionDomainService,
   sessionLifecycleService as publicSessionLifecycleService,
   sessionDispatchService as publicSessionDispatchService,
@@ -130,6 +131,14 @@ describe('session services composition', () => {
     expect(forget).not.toHaveBeenCalled();
     sessionDomainService.clearSession('cached-session', { permanentlyDeleted: true });
     expect(forget).toHaveBeenCalledExactlyOnceWith('cached-session');
+  });
+
+  it('revokes observed empty-conversation proof on permanent deletion', () => {
+    const forget = vi.spyOn(acpRuntimeManager, 'forgetObservedEmptyProviderSession');
+    sessionDomainService.clearSession('deleted-session', { preserveRejections: true });
+    expect(forget).not.toHaveBeenCalled();
+    sessionDomainService.clearSession('deleted-session', { permanentlyDeleted: true });
+    expect(forget).toHaveBeenCalledExactlyOnceWith('deleted-session');
   });
 });
 

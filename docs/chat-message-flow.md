@@ -7,10 +7,11 @@ ownership, invariants and map, and the records it links in
 behaviour.
 
 The server side (what the session capsule sends, replays and publishes, and how
-the WebSocket transport delivers it) has no guide yet. Its rules, hazards and
-ownership statements are held below until those areas are migrated; their
-behaviour is in the tests beside `src/backend/services/session/` and
-`src/backend/routers/websocket/`.
+the WebSocket transport delivers it) is partly migrated: start with the
+[session capsule guide](../src/backend/services/session/AGENTS.md). Its other
+rules, hazards and ownership statements are held below until those areas are
+migrated; their behaviour is in the tests beside `src/backend/services/session/`
+and `src/backend/routers/websocket/`.
 
 This page remains while the section below holds entries; delete it when they are
 gone.
@@ -203,18 +204,6 @@ Old paragraph 22. For the WebSocket router guide
 
 Old paragraph 25. For the session capsule guide.
 
-> Provider history comes from the Claude or Codex history loader selected by the
-> session's provider and identity. Concurrent loads, retries and an overlapping
-> startup share one read, and reopening an idle session can reuse its cached
-> projection while the history file is unchanged and the entry is retained; see
-> [agent runtime](architecture/agent-runtime.md). Codex tool-history backfill
-> defers transcript renumbering while a session is starting, running, or
-> stopping, including turns that begin during the history read. This preserves
-> the message orders used by live text deltas. A later idle load can recover the
-> missing tools.
-
-Old paragraph 26. For the session capsule guide.
-
 > In-memory pending requests can survive a viewer reconnect while the session
 > exists; they are not a durable permission request that can be resumed after a
 > server restart.
@@ -247,13 +236,6 @@ Old paragraph 44. For the session capsule guide.
 > cause jumps once that cap is reached.
 
 Old paragraph 48. For the Kanban feature guide (`src/client/features/kanban/`).
-
-> The compatible archive reader is `ClosedSessionReadTranscriptSchema`
-> (`closed-session-transcript-schema.ts`), built on `ArchivedJsonRecordSchema`;
-> […] Preserving opaque legacy rows is the reader DTO's job; rendering their
-> fallback happens in `closed-session-transcript-items.ts`.
-
-Old paragraph 56. For the session capsule guide (closed-session archive).
 
 > | Concern                                               | Source                                                                                                                                                                                                        |
 > | ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

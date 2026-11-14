@@ -60,6 +60,17 @@ it('shows feedback for a slow request and hides it as soon as the request finish
   expect(host.textContent).toBe('');
 });
 
+it('disables Retry while the connection is unavailable', () => {
+  flushSync(() =>
+    root.render(
+      <TranscriptHistoryHeader history={{ status: 'error', enabled: false, loadOlder }} />
+    )
+  );
+  const retry = host.querySelector('button');
+  expect(retry?.textContent).toBe('Retry');
+  expect(retry?.disabled).toBe(true);
+});
+
 it('shows errors immediately and delays the indicator again on retry', () => {
   render('loading');
   render('error');
