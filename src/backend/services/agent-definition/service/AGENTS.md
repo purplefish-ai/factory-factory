@@ -34,6 +34,9 @@ the filter; and how a classifier outcome becomes a decision. It does not own:
 - Evaluation checks the gate for the provider resolved for each event and, when
   it has not passed, records `SEMANTIC_FILTER_PROVIDER_UNPROVEN` without a
   classifier call. `agent-event-semantic-filter.integration.test.ts`.
+- An ordinary read, which does not resolve the provider, shows a filter on an
+  inherited provider as supported only when every provider passed.
+  `semantic-filter-gate.test.ts`.
 - A filter longer than 4,000 characters is never sent to a provider and records
   a terminal `SEMANTIC_FILTER_TOO_LONG` error.
   `agent-event-semantic-filter.integration.test.ts`.
