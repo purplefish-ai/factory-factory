@@ -44,12 +44,13 @@ this and say so in the pull request's "Driven in the sandbox" section.
    ```
 
 5. Stop only your sandbox: signal the launcher recorded in your copy of
-   `sandbox.json`, and wait for it to exit. Do not match processes by name;
-   other agents' sandboxes run the same command. The log ends with
-   `dev-sandbox: stopping (SIGTERM)`, and `pnpm` reports exit code 143.
+   `sandbox.json`, if that pid is still a launcher, and wait for it to exit. Do
+   not match processes by name; other agents' sandboxes run the same command.
+   The log ends with `dev-sandbox: stopping (SIGTERM)`, and `pnpm` reports exit
+   code 143. If nothing is signalled, the launcher had already stopped.
 
    ```sh
-   pid=$(node -p 'require("./.context/verify/sandbox.json").pid'); kill "$pid"; while kill -0 "$pid" 2>/dev/null; do sleep 1; done
+   pid=$(node -p 'require("./.context/verify/sandbox.json").pid'); ps -p "$pid" -o command= | grep -q dev-sandbox.mjs && kill "$pid" && while kill -0 "$pid" 2>/dev/null; do sleep 1; done
    ```
 
 6. Confirm nothing of yours is left: `baseDir` is gone, and no process has your
