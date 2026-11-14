@@ -345,6 +345,15 @@ it('tests the saved app token and its app identity along with the bot token', as
   });
 });
 
+it('accepts a socket URL that names no app', async () => {
+  const saved = await connected();
+  slack.socketUrl = 'wss://wss-primary.slack.com/link/?ticket=socket-ticket-secret';
+  expect(await service.setAppToken({ connectionId: saved.id, appToken })).toMatchObject({
+    hasAppToken: true,
+    appId: 'A-app',
+  });
+});
+
 it('keeps a saved app token when a replacement bot belongs to the same app', async () => {
   const saved = await connected();
   await service.setAppToken({ connectionId: saved.id, appToken });

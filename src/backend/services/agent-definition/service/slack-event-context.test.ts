@@ -359,6 +359,19 @@ describe('resolveSlackEventContext', () => {
     expect(thread.endsWith('Factory Factory reads at most 1000 thread replies.]')).toBe(true);
   });
 
+  it('stops paging channel history after five pages and says fewer messages were found', async () => {
+    const pages = Array.from({ length: 6 }, (_, index) =>
+      page([human(`1700000${String(400 - index)}.000100`, `neighbour ${index}`)], 'more')
+    );
+    const { request, calls } = slack({ 'conversations.history': pages });
+    const text =
+      resolved(await resolve(root, config({ nearbyMessageCount: 10 }), request))[0]?.text ?? '';
+    expect(calls).toHaveLength(5);
+    expect(text).toContain('> neighbour 4');
+    expect(text).not.toContain('> neighbour 5');
+    expect(text).toContain('Factory Factory reads at most 5 pages of channel history.]');
+  });
+
   it('caps context at 100,000 characters and shortens oversized messages visibly', async () => {
     const long = 'x'.repeat(30_000);
     const { request } = slack({
@@ -375,6 +388,9 @@ describe('resolveSlackEventContext', () => {
     expect(total).toBeLessThanOrEqual(100_000);
     const text = context[0]?.text ?? '';
     expect(text).toContain('[message shortened]');
+    const longest = Math.max(...text.split('\n\n').map((block) => block.split('x').length - 1));
+    expect(longest).toBeGreaterThan(9900);
+    expect(longest).toBeLessThanOrEqual(10_000);
     expect(text).toMatch(/\[\d+ earlier messages omitted: Slack context is capped/);
     expect(agentRunInputSchema.safeParse({ version: 1, context }).success).toBe(true);
   });
@@ -531,9 +547,11 @@ describe('resolveSlackEventContext', () => {
 
   it('passes the evaluation abort signal to Slack requests', async () => {
     const controller = new AbortController();
+    let aborted: boolean | undefined;
     const request = vi.fn<typeof fetch>((_input, init) => {
       controller.abort();
-      expect(init?.signal?.aborted).toBe(true);
+      // Read here and asserted below: the request's own failure handling would swallow an assertion.
+      aborted = init?.signal?.aborted;
       return Promise.reject(new DOMException('aborted', 'AbortError'));
     });
     const outcome = await resolveSlackEventContext(
@@ -542,6 +560,7 @@ describe('resolveSlackEventContext', () => {
       controller.signal
     );
     expect(request).toHaveBeenCalledTimes(1);
+    expect(aborted).toBe(true);
     expect(outcome).toMatchObject({ status: 'FAILED', retryable: true });
   });
 });

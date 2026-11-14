@@ -2,10 +2,10 @@
 
 Most files here are dependency-free utilities that several features share; the
 [features guide](../features/AGENTS.md) says what belongs here. This guide
-covers the workspace query cache: the `workspace.listForProject` and
-`workspace.get` React Query caches and their reconciliation with the
-`/snapshots` stream. Bare file names below are in this directory; paths that
-start with `src/` are from the repository root.
+covers the tRPC client's transport and the workspace query cache: the
+`workspace.listForProject` and `workspace.get` React Query caches and their
+reconciliation with the `/snapshots` stream. Bare file names below are in this
+directory; paths that start with `src/` are from the repository root.
 
 ## Owns, and does not own
 
@@ -49,6 +49,10 @@ for `useQuery`; never pass it to a raw QueryClient fetch or write.
 
 ## Invariants
 
+- `createTrpcClient` streams query results within a batch, so a completed query
+  never waits for a slow sibling, and keeps mutations on ordinary batching for
+  response headers and cookies, directly and through the authenticated proxy.
+  `trpc.integration.test.ts`.
 - Only `workspace-queries.ts` and `workspace-cache-reconciler.ts` use tRPC's
   option, fetch and write helpers or `getQueryKey` for either procedure;
   `factory/query-owner` in `.oxlintrc.json` rejects any other use outside tests.
@@ -72,8 +76,12 @@ for `useQuery`; never pass it to a raw QueryClient fetch or write.
   `workspace-detail-snapshot-transitions.test.ts`,
   `src/client/hooks/workspace-detail-removal.integration.test.ts`.
 
+An external proxy that buffers responses still holds streamed query results
+until the whole batch finishes.
+
 ## Map
 
+- `trpc.ts`: the tRPC client and its transport.
 - `workspace-queries.ts`: the only entry point (its header says why).
 - `workspace-cache-reconciler.ts`: one reconciler per QueryClient and project,
   scoped to a connection; the `structuralSharing` commit hook for list and

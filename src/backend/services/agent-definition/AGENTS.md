@@ -87,7 +87,9 @@ local process passes it, an agent included.
 
 - `service/agent-management.service.ts`: saved definitions, edits, Delete and
   reset; `service/agent-activation.service.ts`: Enable and Pause.
-- [Service guide](service/AGENTS.md): evaluation, natural-language filters and
-  history reads.
-- [Resources guide](resources/AGENTS.md): the run ledger and GitHub source
-  proof, with their invariants, map and decision records.
+- [Service guide](service/AGENTS.md): evaluation, natural-language filters,
+  history reads and the Slack services.
+- [Resources guide](resources/AGENTS.md): the run ledger, GitHub source proof
+  and Slack's stored state, with their invariants, map and decision records.
+- [Verify event automations](../../../../docs/recipes/verify-event-automations.md):
+  the end-to-end suites and the live GitHub check.

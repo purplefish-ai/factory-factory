@@ -21,7 +21,7 @@ context, not a new task or a substitute for current repository guidance.
 | Event automations: edits, Enable, history, filters | [Event automations guide][agent-definition-agents-md]                                                 |
 | Application updates, installation and recovery     | [Application update guide][application-update-agents-md] and [CLI guide](../src/cli/AGENTS.md)        |
 | Agent sessions: runtimes, configuration, archives  | [Session capsule guide][session-agents-md]                                                            |
-| Event automation limits and checks                 | [Event automation limits](architecture/integrations.md#current-event-automation-limits)               |
+| Event automation limits                            | [Event automation limits](admin-settings.md#current-event-automation-limits)                          |
 | User and project configuration                     | [Settings](admin-settings.md)                                                                         |
 | Maintain UI primitives and dependencies            | [shadcn](shadcn.md) and [Knip](knip.md)                                                               |
 | Button sizes, icon buttons and tooltips            | [Buttons and tooltips](shadcn.md#buttons-icon-buttons-and-tooltips)                                   |

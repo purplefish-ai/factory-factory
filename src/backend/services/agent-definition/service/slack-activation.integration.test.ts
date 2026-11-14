@@ -556,6 +556,27 @@ it('asks for a fresh test message when Enable finds an active trigger on another
   expect(await trigger()).toMatchObject({ activationState: 'ACTIVE', activationGeneration: 2 });
 });
 
+it.each([
+  ['moves to another app', { appId: 'A2' }],
+  ['is disabled', { isEnabled: false }],
+])(
+  'returns a starting trigger to Paused with SOURCE_ERROR when its connection %s',
+  async (_name, change) => {
+    await begin();
+    const text = await message();
+    await post('C1', 10, text);
+    await post('C2', 11, text);
+    await db.prisma.agentConnection.update({ where: { id: connectionId }, data: change });
+    await complete();
+    expect(await trigger()).toMatchObject({
+      activationState: 'PAUSED',
+      pausedReasonCode: 'SOURCE_ERROR',
+      isEnabled: false,
+      activationBoundary: null,
+    });
+  }
+);
+
 it('never runs a test message for another automation listening in the same channel', async () => {
   const other = await db.prisma.agentDefinition.create({
     data: {
