@@ -1,8 +1,10 @@
 # Agent Runtime
 
 The application update paragraphs that opened this note and the section "Chat
-tool previews" have moved. Ownership, public surface, invariants and file maps
-are in the guides beside the code:
+tool previews" have been migrated; the tool preview rules are asserted by the
+tests beside `src/client/features/chat/agent-activity/tool-renderers/`.
+Ownership, public surface, invariants and file maps are in the guides beside the
+code:
 [application update capsule](../../src/backend/services/application-update/AGENTS.md)
 and [CLI](../../src/cli/AGENTS.md). The reasons are in the `2026-11-13-*`
 records in [decisions](../decisions/), and the tests those guides name describe

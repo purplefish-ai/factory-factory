@@ -60,7 +60,7 @@ it('only allows updating the actual npm-global installation', async () => {
   run.mockResolvedValueOnce('/some/other/node_modules');
   expect(await installer.isSupported()).toBe(false);
 });
-it('refuses a symlinked package root and an installation directory it cannot write', async () => {
+it('refuses a symlinked package root', async () => {
   const { prefix, root, run } = await fixture();
   const linked = join(prefix, 'linked-factory-factory');
   await symlink(root, linked);
@@ -71,20 +71,27 @@ it('refuses a symlinked package root and an installation directory it cannot wri
     platform: 'darwin',
   });
   expect(await linkedInstaller.isSupported()).toBe(false);
-  const parent = dirname(root);
-  await chmod(parent, 0o555);
-  try {
-    const readOnly = new ApplicationUpdateInstaller({
-      packageRoot: root,
-      env: {},
-      run,
-      platform: 'darwin',
-    });
-    expect(await readOnly.isSupported()).toBe(false);
-  } finally {
-    await chmod(parent, 0o755);
-  }
 });
+// Root ignores directory permissions, so the read-only case needs an ordinary user.
+it.skipIf(process.getuid?.() === 0)(
+  'refuses an installation directory it cannot write',
+  async () => {
+    const { root, run } = await fixture();
+    const parent = dirname(root);
+    await chmod(parent, 0o555);
+    try {
+      const readOnly = new ApplicationUpdateInstaller({
+        packageRoot: root,
+        env: {},
+        run,
+        platform: 'darwin',
+      });
+      expect(await readOnly.isSupported()).toBe(false);
+    } finally {
+      await chmod(parent, 0o755);
+    }
+  }
+);
 it('stages a pinned release without changing the running installation', async () => {
   const { installer, root, run } = await fixture();
   const prepared = await installer.prepare('0.5.4', new AbortController().signal);
@@ -132,9 +139,12 @@ it('refuses unsupported platforms and a different package root', async () => {
     }).isSupported()
   ).toBe(false);
 });
-it.each(['missing client entrypoint', 'failing native module probe'] as const)(
+it.each([
+  ['missing client entrypoint', /ENOENT.*dist\/client\/index\.html/],
+  ['failing native module probe', /Cannot find module better-sqlite3/],
+] as const)(
   'rejects a candidate with a %s and keeps the running package',
-  async (fault) => {
+  async (fault, expectedError) => {
     const { installer, root, run } = await fixture();
     const install = run.getMockImplementation()!;
     run.mockImplementation(async (command, args) => {
@@ -148,7 +158,9 @@ it.each(['missing client entrypoint', 'failing native module probe'] as const)(
       }
       return output;
     });
-    await expect(installer.prepare('0.5.4', new AbortController().signal)).rejects.toThrow();
+    await expect(installer.prepare('0.5.4', new AbortController().signal)).rejects.toThrow(
+      expectedError
+    );
     expect(JSON.parse(await readFile(join(root, 'package.json'), 'utf8')).version).toBe('0.5.3');
   }
 );

@@ -14,8 +14,9 @@ can cancel in that window.
 
 After `update-ready` has been sent, cancelling forwards `update-cancel` to the
 supervisor but does not reopen admission. Only an `idle` or `failed` status from
-the supervisor reopens it, because preparation may already have started. Before
-`update-ready`, cancelling returns the job to `idle` directly.
+the supervisor, or a failed send to it, reopens it, because preparation may
+already have started. Before `update-ready`, cancelling returns the job to
+`idle` directly.
 
 Rejected: reopening admission as soon as the backend cancels, which would admit
 new agent work while preparation may already be under way.

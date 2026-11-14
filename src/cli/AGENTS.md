@@ -18,7 +18,7 @@ not own:
   [application update guide](../backend/services/application-update/AGENTS.md).
 - Which release is advertised: `src/backend/services/application-update/`.
 - Running migrations, and the bounded `db-backups/` copy taken before pending
-  migrations, at launch and by `ff db:migrate`:
+  migrations by `serve`, `db:migrate`, `proxy` and `tailscale`:
   `src/backend/migrate-with-backup.ts`.
 - The IPC messages and update status schema:
   `src/shared/application-updates.ts`.
