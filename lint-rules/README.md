@@ -72,6 +72,9 @@ rule or an exceptions file.
 
 ### Adding a rule
 
+The [add-lint-rule recipe](../docs/recipes/add-lint-rule.md) adds the commands
+and proofs for each step.
+
 1. Create `rules/<rule-name>.mjs` with `meta.docs.description`, a header comment
    for any rationale and guide links, and `schema: EXCEPTIONS_SCHEMA` if files
    may be excepted.
