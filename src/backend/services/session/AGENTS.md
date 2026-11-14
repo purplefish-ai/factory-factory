@@ -58,9 +58,9 @@ line, and a module directory may hold its own guide, as
 `pnpm check:service-registry` holds `modules.ts` to the code. A production file
 sits in a module directory, never directly in `service/`. A new module directory
 needs an entry with a description. A module's `dependsOn` is the sorted list of
-the sibling modules its production files import, and no import may close a
-cycle. Outside the capsule only `index.ts` is imported (`pnpm deps:check`; see
-the services guide).
+the sibling modules its production files import, re-export or import types from,
+and no import may close a cycle. Production code outside the capsule imports
+only `index.ts` (`pnpm deps:check`; see the services guide).
 
 `sessionScope` participants are registered in `service/composition/` and in
 `registerSessionRuntimeParticipants` (`service/lifecycle/session-scope.ts`).
