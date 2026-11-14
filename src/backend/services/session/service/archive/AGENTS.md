@@ -36,9 +36,9 @@ The capsule barrel exports the types `ClosedSessionTranscript` and
 
 - Closing a provider-backed session archives it only with retained provider
   messages, a confirmed history file load (even an empty one), or this runtime's
-  proof that it created the provider conversation and sent it no prompt;
-  otherwise the close throws and archives nothing.
-  `../lifecycle/session-workflow-finalizer.history.test.ts`.
+  proof that it created the provider conversation and sent it no prompt; when
+  provider history is unavailable and none of these holds, the close throws and
+  archives nothing. `../lifecycle/session-workflow-finalizer.history.test.ts`.
 - That proof is scoped to the exact provider identity and is revoked before any
   prompt is attempted, on conversation activity, a new runtime, a failed
   startup, shutdown and permanent deletion.

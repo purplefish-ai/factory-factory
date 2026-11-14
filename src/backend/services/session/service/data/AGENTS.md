@@ -42,11 +42,11 @@ reading only lines that contain its marker.
   never cached. `provider-history-transcript-loader.test.ts`.
 - A cached projection is served only for the exact file identity (path, size,
   modification time, inode) seen both before and after its read, and each store
-  receives its own copy of every entry.
+  receives its own top-level copy of every entry.
   `provider-history-transcript-cache.test.ts`, `session-history-file.test.ts`,
   `provider-history-transcript-loader.test.ts`.
 - A cached projection does not expire while a store holds it; clearing the store
-  starts its TTL and permanent deletion drops it.
+  starts its TTL, reopening holds it again, and permanent deletion drops it.
   `provider-history-transcript-cache.test.ts`,
   `../composition/session-services.composition.test.ts`.
 - Codex tool backfill never replaces the transcript while the runtime is
