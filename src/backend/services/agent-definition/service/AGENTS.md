@@ -73,9 +73,9 @@ socket, what an envelope stores and what context a run reads. Neither owns:
   whose listening trigger, on an active project, selects a channel, and refuses
   connections that share an app (`SLACK_APP_SHARED`).
   `slack-event-source.integration.test.ts`.
-- A `hello` naming another app, or an envelope naming another app or workspace,
-  stores nothing, is not acknowledged and stops listening until the credentials
-  change or the process restarts. `slack-event-source.integration.test.ts`.
+- A `hello` naming another app, or an `events_api` envelope naming another app
+  or workspace, stores nothing, is not acknowledged and stops listening until
+  the credentials change or a restart. `slack-event-source.integration.test.ts`.
 - A stored message is acknowledged only after its insert commits.
   `slack-event-source.integration.test.ts`.
 - Stopping the listener disconnects every socket, then waits for envelopes in
