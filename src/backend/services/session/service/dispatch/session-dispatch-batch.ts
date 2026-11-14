@@ -1,6 +1,6 @@
 import { createLogger } from '@/backend/services/logger.service';
+import { PermanentAttachmentError } from '@/backend/services/session/service/attachments/attachment-processing';
 import type { SessionCallerGuard } from '@/backend/services/session/service/bridges';
-import { PermanentAttachmentError } from '@/backend/services/session/service/chat/chat-message-handlers/attachment-processing';
 import { createPRDeliveryBlockedError } from '@/backend/services/session/service/delivery/pr-delivery-failure';
 import type { NotificationDispatchClaim } from '@/backend/services/session/service/delivery/session-notification-delivery.service';
 import { sessionDomainService } from '@/backend/services/session/service/store/session-domain.service';

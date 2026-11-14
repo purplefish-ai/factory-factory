@@ -1,4 +1,4 @@
-import { processAttachmentsAndBuildContent } from '@/backend/services/session/service/chat/chat-message-handlers/attachment-processing';
+import { processAttachmentsAndBuildContent } from '@/backend/services/session/service/attachments/attachment-processing';
 import { VOICE_MODE_BREVITY_INSTRUCTION } from '@/backend/services/session/service/voice/voice-mode-instructions';
 import type { AgentContentItem, QueuedMessage } from '@/shared/acp-protocol';
 
