@@ -71,6 +71,11 @@ describe('command line', () => {
       'not a boundary against a hostile agent',
       'SIGKILLed launcher',
       'CODEX_PATH',
+      'scripts/ensure-native-modules.mjs node',
+      'your normal environment',
+      'npm registry',
+      'nodejs.org',
+      'leaves that build running',
     ]) {
       expect(section.replace(/\s+/g, ' ')).toContain(residual);
     }
