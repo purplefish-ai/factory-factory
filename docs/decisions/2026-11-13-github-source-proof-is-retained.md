@@ -20,7 +20,8 @@ and VERIFY pages that a complete, validated checkpoint makes redundant are
 compacted. No age or current-reference rule deletes the permanent proof, because
 no such rule can know that a read in flight will not ask for it. Contradictory
 evidence blocks new baseline preparation instead of rewriting an answer already
-issued.
+issued. A rejected interval also stops page compaction in its epoch, since later
+pages may hold conflicting heads that no check has examined yet.
 
 Rejected:
 
