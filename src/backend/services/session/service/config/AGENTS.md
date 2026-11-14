@@ -103,9 +103,9 @@ shutdown.
 
 ## Map
 
-- `session-config-snapshot-persistence.ts`: writes snapshots through the commit
-  authority with compare-and-set retries; `acp-config-snapshot.ts` is their
-  schema.
+- `session-config-snapshot-persistence.ts`: writes snapshots through
+  `session-config-commit-authority.ts` with compare-and-set retries;
+  `acp-config-snapshot.ts` is their schema.
 - `session-inactive-config-options.ts`: edits to a stopped session.
 - `session-permission-policy.ts`, `session-saved-native-modes.ts`,
   `session-startup-access.ts`: required and reviewer access, saved access and
