@@ -5,12 +5,12 @@ jobs and its Slack listener, the launch consumer that turns a claimed run into a
 workspace and session, run monitoring and recovery, and the authoring and
 management flows that need other capsules. This guide so far covers the event
 runtime's jobs, how the runtime stops, and saved management and authoring; the
-consumer, monitoring and recovery rules are in, and will be added to, the
-[`event-run/` guide](event-run/AGENTS.md). The
-[services guide](../../services/AGENTS.md) covers capsule boundaries; the job
-runner is in "Recurring work" in the [backend process guide](../../AGENTS.md).
-Bare file names below are in this directory; paths that start with `src/` are
-from the repository root.
+consumer, monitoring and recovery flows are described in the
+[`event-run/` guide](event-run/AGENTS.md), whose rules the migration of the
+agent-runtime note will add. The [services guide](../../services/AGENTS.md)
+covers capsule boundaries; the job runner is in "Recurring work" in the
+[backend process guide](../../AGENTS.md). Bare file names below are in this
+directory; paths that start with `src/` are from the repository root.
 
 ## Owns, and does not own
 

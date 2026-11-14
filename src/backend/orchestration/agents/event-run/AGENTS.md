@@ -5,15 +5,15 @@ with launch, resources, workspace initialisation, monitoring, child rest and
 recovery. `src/backend/orchestration/agents/agent-runtime.orchestrator.ts`
 creates it; the [parent guide](../AGENTS.md) covers its jobs. The migration of
 the agent-runtime note adds this guide's rules, extending Owns and Map in place
-and adding Invariants. Bare file names below are in this directory; paths that
-start with `src/` are from the repository root.
+and adding Invariants.
 
 ## Owns, and does not own
 
 This directory owns the order of one run's launch (resources, link,
-initialisation, initial prompt), the in-process tasks that hold committed claims
-(capacity, lease renewal, observation, shutdown), the rule for when a child
-workspace is at rest, and the stop-and-prove step of recovery. It does not own:
+initialisation unless a manual retry skips it, initial prompt), the in-process
+tasks that hold committed claims (capacity, lease renewal, observation,
+shutdown), the rule for when a child workspace is at rest, and the
+stop-and-prove step of recovery. It does not own:
 
 - The run queue, claims, leases, the delivery ledger and recovery records:
   `src/backend/services/agent-definition/`.
