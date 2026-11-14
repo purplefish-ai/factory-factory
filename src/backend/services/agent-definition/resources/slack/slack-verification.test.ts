@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
+import { compareSlackTimestamps } from '@/backend/services/agent-definition/resources/agent-runtime-guards';
 import { agentSlackVerificationCodeSchema } from '@/shared/agent-runtime';
-import { compareSlackTimestamps } from './agent-runtime-guards';
 import {
   createSlackVerificationCode,
   isSlackVerificationFor,

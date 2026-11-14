@@ -113,7 +113,7 @@ const ACCESSOR_POLICIES = {
   },
   slackActivationAccessor: {
     owner: 'agent-definition',
-    module: 'src/backend/services/agent-definition/resources/slack-activation.accessor',
+    module: 'src/backend/services/agent-definition/resources/slack/slack-activation.accessor',
   },
   agentProposalAccessor: {
     owner: 'agent-definition',
@@ -121,7 +121,7 @@ const ACCESSOR_POLICIES = {
   },
   slackConnectionAccessor: {
     owner: 'agent-definition',
-    module: 'src/backend/services/agent-definition/resources/slack-connection.accessor',
+    module: 'src/backend/services/agent-definition/resources/slack/slack-connection.accessor',
   },
   codexAccountBackupAccessor: {
     owner: 'codex-accounts',
@@ -299,7 +299,7 @@ function isCapsuleBarrel(filePath) {
 }
 
 function isAccessorModule(modulePath) {
-  return /\/resources\/[^/]+\.accessor$/.test(modulePath);
+  return /\/resources\/(?:[^/]+\/)*[^/]+\.accessor$/.test(modulePath);
 }
 
 function importedNames(importDeclaration) {

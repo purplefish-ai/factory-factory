@@ -43,7 +43,7 @@ import {
   type SlackContextEvent,
   type SlackContextOutcome,
   slackMessageItems,
-} from './slack-event-context';
+} from './slack/slack-event-context';
 
 export interface AgentEvaluationPorts {
   resolveExecution(config: AgentExecutionConfig): Promise<AgentResolvedExecutionConfig>;

@@ -7,7 +7,7 @@ import {
   slackReady,
   slackUncleanExit,
   slackUnavailable,
-} from '@/backend/services/agent-definition/resources/slack-source-health';
+} from '@/backend/services/agent-definition/resources/slack/slack-source-health';
 import { createLogger } from '@/backend/services/logger.service';
 import type { AgentEventInput } from '@/shared/agent-runtime';
 import { classifySlackEnvelope } from './slack-event-message';

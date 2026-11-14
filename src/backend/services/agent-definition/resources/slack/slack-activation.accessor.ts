@@ -1,6 +1,18 @@
 import { z } from 'zod';
 import { prisma } from '@/backend/db';
 import { ApplicationError } from '@/backend/lib/application-error';
+import {
+  activationSourceHealth,
+  failStartingInTransaction,
+  permitsPending,
+  type StartingTrigger,
+} from '@/backend/services/agent-definition/resources/agent-activation-fences';
+import { ledgerTransaction } from '@/backend/services/agent-definition/resources/agent-ledger-transaction';
+import {
+  compareSlackTimestamps,
+  runtimeTriggerInclude,
+  type RuntimeTrigger,
+} from '@/backend/services/agent-definition/resources/agent-runtime-guards';
 import type { AgentPausedReasonCode } from '@/shared/agent-management';
 import {
   agentActivationBoundarySchema,
@@ -10,18 +22,6 @@ import {
 } from '@/shared/agent-runtime';
 import { agentTriggerInputSchema } from '@/shared/schemas/agent-definition.schema';
 import { Prisma, type AgentEvent, type AgentTrigger } from '@prisma-gen/client';
-import {
-  activationSourceHealth,
-  failStartingInTransaction,
-  permitsPending,
-  type StartingTrigger,
-} from './agent-activation-fences';
-import { ledgerTransaction } from './agent-ledger-transaction';
-import {
-  compareSlackTimestamps,
-  runtimeTriggerInclude,
-  type RuntimeTrigger,
-} from './agent-runtime-guards';
 import { createSlackVerificationCode, isSlackVerificationFor } from './slack-verification';
 
 type Tx = Prisma.TransactionClient;

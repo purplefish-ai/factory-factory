@@ -133,8 +133,8 @@ it('reconnects one workspace without creating duplicate connection rows', async 
 it('exposes no ciphertext from the list accessor', async () => {
   const saved = await service.connect({ botToken: token });
   const { slackConnectionAccessor } = await vi.importActual<
-    typeof import('@/backend/services/agent-definition/resources/slack-connection.accessor')
-  >('@/backend/services/agent-definition/resources/slack-connection.accessor');
+    typeof import('@/backend/services/agent-definition/resources/slack/slack-connection.accessor')
+  >('@/backend/services/agent-definition/resources/slack/slack-connection.accessor');
   expect(await slackConnectionAccessor.list()).toEqual([saved]);
 });
 

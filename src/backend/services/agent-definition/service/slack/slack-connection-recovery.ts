@@ -1,4 +1,4 @@
-import * as recovery from '@/backend/services/agent-definition/resources/slack-connection-recovery';
+import * as recovery from '@/backend/services/agent-definition/resources/slack/slack-connection-recovery';
 import type { SlackConnectionsRecovery } from '@/shared/schemas/slack-connections-recovery.schema';
 import type { Prisma } from '@prisma-gen/client';
 

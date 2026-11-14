@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { ApplicationError } from '@/backend/lib/application-error';
-import { slackConnectionAccessor } from '@/backend/services/agent-definition/resources/slack-connection.accessor';
+import { slackConnectionAccessor } from '@/backend/services/agent-definition/resources/slack/slack-connection.accessor';
 
 const channelSchema = z.object({
   id: z.string().min(1),
