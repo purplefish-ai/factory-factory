@@ -59,9 +59,10 @@ There is no separate activation or retention job.
 - An evaluation run maintains the queue, then prunes the ledger, before it
   evaluates; it completes Slack activations before it evaluates, and claims only
   after it evaluates. `agent-runtime.orchestrator.test.ts`.
-- A failed ledger retention logs only the fixed `RETENTION_FAILED` reason unless
-  the run's signal has aborted, and the pass goes on to evaluation and its claim
-  step unless the signal has aborted. `agent-runtime.orchestrator.test.ts`.
+- A failed ledger retention logs a warning with only the fixed
+  `RETENTION_FAILED` reason, and nothing once the run's signal has aborted; the
+  pass goes on to evaluation and its claim step unless the signal has aborted.
+  `agent-runtime.orchestrator.test.ts`.
 - Launch maintenance keeps renewing while an evaluation run is stalled.
   `agent-runtime.orchestrator.test.ts`.
 - Stopping the runtime closes launch admission before it drains owned launches,

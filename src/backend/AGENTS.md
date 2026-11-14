@@ -26,8 +26,8 @@ two callers: `server.ts` and `disposeApplication`.
 - Register a loop that reads the database, sessions or the network with
   `jobRunner` (`src/backend/services/job-runner.service.ts`), not `setInterval`;
   `rg -n --glob '!*.test.ts' "register\(\{" src/backend` lists the jobs.
-- The owner exposes a `start` and a `stop`; `run` honours its abort signal,
-  because `stop()` waits for the run in flight without a bound; a job never
+- The owner exposes a `start` and a `stop`. `run` honours its abort signal,
+  because `stop()` waits for the run in flight without a bound, and a job never
   overlaps itself. `job-runner.service.test.ts`.
 - A new job adds a `ShutdownJob` entry, or a step, in `application-shutdown.ts`,
   and is named in the `after` of each step that tears down what it uses.
