@@ -1,8 +1,8 @@
 # Agent-definition resources: run ledger and GitHub source proof
 
-The accessors here that hold the event ledger (events, evaluations, admission,
-claim and retention) and the GitHub feed's capture, verification, finalization
-and proof, which the source poll service drives. The
+This guide covers the accessors here that hold the event ledger (events,
+evaluations, admission, claim and retention) and the GitHub feed's capture,
+verification, finalization and proof, which the source poll service drives. The
 [capsule guide](../AGENTS.md) covers the models, the public surface and the
 other accessors here. Bare file names below are in this directory; paths that
 start with `src/` are from the repository root.
