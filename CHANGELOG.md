@@ -8,6 +8,43 @@ and this project adheres to
 
 ## [Unreleased]
 
+## [0.5.11] - 2026-11-14
+
+### Added
+
+- Show host CPU and memory percentages in the header, with recent history and a
+  breakdown of the workspaces, apps and processes using the machine (#3218,
+  #3260)
+- Keep the latest user request visible while scrolling through chat (#3216)
+- Add an isolated application sandbox with scripted Codex scenarios and a
+  browser smoke test for verifying changes (#3207, #3208, #3228, #3232, #3233,
+  #3236)
+- Add agent workflow metrics and weekly reports, guidance checks and recipes for
+  common development tasks (#3200, #3204, #3206, #3224, #3255, #3256, #3257,
+  #3259)
+
+### Changed
+
+- Align warning banner icons, messages and controls across the UI (#3214)
+- Clarify service capsule APIs and module boundaries, and move subsystem
+  guidance closer to the code it describes (#3212, #3222, #3231, #3234, #3235,
+  #3237, #3241, #3251, #3252, #3253)
+
+### Fixed
+
+- Fence stale run-script work and keep execution ownership through cleanup and
+  stop (#3202)
+- Restore image previews in the workspace file viewer (#3215)
+- Rediscover pull requests after switching a workspace's branch (#3223)
+- Focus new workspace prompts after their drafts load and preserve mobile board
+  section navigation (#3227)
+- Stop the CLI's child process when a signal arrives during startup (#3246)
+
+### Security
+
+- Update Hono and its Node.js server adapter to address Dependabot
+  vulnerabilities (#3196)
+
 ## [0.5.10] - 2026-11-13
 
 ### Added
