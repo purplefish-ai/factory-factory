@@ -51,8 +51,8 @@ Orchestration passes capabilities in through `service/bridges/`.
 ## Map
 
 Modules are the directories under `service/`. `modules.ts` describes each in one
-line, and a module directory may hold its own `AGENTS.md`, loaded when you edit
-there.
+line, and a module directory may hold its own `AGENTS.md`; read it before
+editing there.
 
 `pnpm check:service-registry` holds `modules.ts` to the code. A production file
 sits in a module directory, never directly in `service/`. A new module directory
