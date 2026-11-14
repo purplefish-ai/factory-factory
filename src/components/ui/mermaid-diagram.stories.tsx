@@ -44,7 +44,11 @@ const meta = {
   parameters: { layout: 'padded' },
   loaders: [
     async () => {
-      diagramTypesLoaded ??= loadDiagramTypes();
+      // A failed load must not stay cached: the next story retries it.
+      diagramTypesLoaded ??= loadDiagramTypes().catch((error: unknown) => {
+        diagramTypesLoaded = undefined;
+        throw error;
+      });
       await diagramTypesLoaded;
       return {};
     },
