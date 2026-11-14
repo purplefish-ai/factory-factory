@@ -344,6 +344,7 @@ it('pages retained run identity and safe results independently of pruned events 
   }
   const page = await management.runs({ ...saved.input, limit: 50 });
   expect(page.items).toHaveLength(50);
+  expect((await management.runs(saved.input)).items).toHaveLength(50);
   expect(page.items[0]).toMatchObject({
     id: 'history-051',
     startedAt: null,

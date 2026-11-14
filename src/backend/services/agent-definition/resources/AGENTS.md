@@ -27,9 +27,19 @@ baselines and epochs. It does not own:
 - One definition and event admit at most one run, owned by the first matching
   trigger in ID order; an earlier pending or errored evaluation defers the rest.
   `agent-ledger.integration.test.ts`.
+- A decision other than `MATCHED` keeps a `NON_DISPATCHING` snapshot, which
+  admission rejects. `agent-ledger.integration.test.ts`.
+- An unresolved decision of a trigger removed since is still offered to
+  evaluation and settled there, never evaluated again.
+  `src/backend/services/agent-definition/service/agent-event-evaluation.integration.test.ts`.
 - A claim counts every `RUNNING` run against the per-definition and global
   limits and advances the worker generation that fences older workers.
   `agent-queue-bounds.integration.test.ts`, `agent-prompt.integration.test.ts`.
+- A claim and queue maintenance given no time, and each evaluation, payload and
+  identity retention batch, read the clock for expiry after the ledger
+  transaction holds the write lock; a time passed in is honored.
+  `agent-queue-clock.integration.test.ts`,
+  `agent-ledger-retention.integration.test.ts`.
 - A GitHub event gets its `sourceOrder` only when its verified interval is
   finalized, in API order above the retained high water, never by arrival or
   provider ID. `agent-ledger.integration.test.ts`,
@@ -63,9 +73,14 @@ provider conversations and evaluation snapshots have their own lifetimes.
 - `agent-source.accessor.ts`, `agent-source-checkpoint.accessor.ts`: GitHub
   capture, verification, finalization and proof maintenance, driven by the poll
   service.
+- `agent-evaluation-candidates.accessor.ts` (pending decisions),
+  `agent-evaluation.accessor.ts` (recording them and their snapshots).
 - `agent-run.accessor.ts` (admission), `agent-run-claim.accessor.ts` (claim) and
   `agent-runtime-guards.ts` (eligibility for both).
 - `agent-trigger-pause.ts`: `pauseTriggers` and `cancelQueuedRuns`.
+- `agent-management.accessor.ts`, `agent-revision.accessor.ts`,
+  `agent-proposal.accessor.ts`: saved and proposal writes; their invariants are
+  in the capsule guide.
 
 ## Decisions
 

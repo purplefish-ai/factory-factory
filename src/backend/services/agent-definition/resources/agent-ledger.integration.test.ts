@@ -327,6 +327,31 @@ it('rejects corrupted stored snapshots before allocating capacity', async () => 
   expect(await db.prisma.agentRun.count()).toBe(0);
 });
 
+it('never admits from the snapshot a non-dispatching decision keeps', async () => {
+  const id = await event();
+  const decision = await evaluation(id, { status: 'SKIPPED', reasonCode: 'FILTER_SKIPPED' });
+  if (!('evaluationId' in decision)) {
+    throw new Error(JSON.stringify(decision));
+  }
+  expect(
+    await db.prisma.agentEvaluation.findUniqueOrThrow({ where: { id: decision.evaluationId } })
+  ).toMatchObject({ configurationSnapshot: { kind: 'NON_DISPATCHING' } });
+  // Only the stored status changes; the snapshot stays the one the skip recorded.
+  await db.prisma.agentEvaluation.update({
+    where: { id: decision.evaluationId },
+    data: { status: 'MATCHED' },
+  });
+  expect(
+    await runtime.admitRun({
+      evaluationId: decision.evaluationId,
+      definitionRevision: 1,
+      triggerRevision: 1,
+      activationGeneration: 1,
+    })
+  ).toEqual({ status: 'REJECTED', reason: 'INVALID_STORED_DATA' });
+  expect(await db.prisma.agentRun.count()).toBe(0);
+});
+
 it('does not revive skipped or error cohorts after revision or activation changes', async () => {
   const id = await event();
   await evaluation(id, { status: 'SKIPPED', reasonCode: 'FILTER_SKIPPED' });
