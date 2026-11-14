@@ -26,8 +26,9 @@ offered. It does not own:
 ## Public surface
 
 `ProviderUsageControl`, which `../chat-input/chat-input.tsx` renders for Claude
-and Codex sessions, passing it as busy while the session runs, stops or has
-queued messages, and as disabled while the composer is.
+and Codex sessions whose `usageStats` capability is enabled, passing it as busy
+while the session runs, stops or has queued messages, and as disabled while the
+composer is disabled.
 
 ## Invariants
 

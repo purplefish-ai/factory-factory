@@ -12,10 +12,10 @@ For a failed resume, the module owns reconciling the replacement conversation:
 archiving the transcript seen so far, writing the new provider identity with its
 audit, and resetting provider history. It does not own:
 
-- Loading the stored conversation, deciding whether a new one may replace it,
-  buffering startup events and keeping the candidate runtime hidden:
-  `../acp/acp-client-factory.ts` and `../acp/acp-runtime-supervisor.ts`, which
-  call back through `onProviderIdentityRollover`.
+- Loading the stored conversation and deciding whether a new one may replace it:
+  `../acp/acp-client-factory.ts`. Buffering startup events, keeping the
+  candidate runtime hidden and calling back through
+  `onProviderIdentityRollover`: `../acp/acp-runtime-supervisor.ts`.
 - The compare-and-set write itself: `rolloverProviderIdentity` in
   `../data/session.repository.ts`, over
   `../../resources/agent-session.accessor.ts`.
@@ -32,9 +32,11 @@ audit, and resetting provider history. It does not own:
   `../acp/acp-client-factory.test.ts`,
   `../acp/acp-runtime-manager.browsing.test.ts`.
 - A replacement runtime stays hidden from runtime lookup until its identity is
-  reconciled, and a failed archive or identity write, a stop, a shutdown or an
-  external kill during reconciliation terminates it and keeps the old transcript
-  and identity. `../acp/acp-runtime-supervisor.creation.test.ts`,
+  reconciled; a failed archive or identity write, a stop, a shutdown or an
+  external kill during reconciliation terminates it, keeping the old transcript
+  and identity unless the identity write had already committed, in which case
+  the new identity stays for the next start.
+  `../acp/acp-runtime-supervisor.creation.test.ts`,
   `session-provider-identity.service.test.ts`.
 - Reconciliation archives the transcript seen so far as a closed session (none
   when it is empty) before clearing it, then writes the new identity, its

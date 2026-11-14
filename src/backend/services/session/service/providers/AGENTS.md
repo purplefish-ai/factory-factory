@@ -57,9 +57,9 @@ for good.
 - Codex catalogs are cached per account; Auto merges the catalogs of the enabled
   accounts and fails only when none is available.
   `codex-model-catalog.service.test.ts`.
-- Claude plan usage is read at most once per 30 seconds and concurrent callers
-  share the read; a failed read returns an error reading, is not cached and
-  hides the error. Codex usage is read from the account service per account.
+- A successful Claude plan usage reading is reused for 30 seconds and concurrent
+  callers share one read; a failed read returns an error reading, is not reused
+  and hides the error. Codex usage is read from the account service per account.
   `provider-usage.service.test.ts`.
 - The Claude plan usage reader starts no turn and saves no session: it asks the
   SDK's usage control with behaviour scanning off, and rejects a response it

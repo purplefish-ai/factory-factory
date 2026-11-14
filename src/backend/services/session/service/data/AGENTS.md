@@ -52,7 +52,7 @@ reading only lines that contain its marker.
 - Codex tool backfill never replaces the transcript while the runtime is
   starting, running or stopping, including a phase entered during the read.
   `session-provider-history-hydrator.test.ts`.
-- An ordinary session write can set a provider identity but never change or
+- A `SessionRepository` update can set a provider identity but never change or
   clear one; only `rolloverProviderIdentity`, a compare-and-set that the
   lifecycle module's reconciliation uses, replaces it.
   `session.repository.test.ts`,
