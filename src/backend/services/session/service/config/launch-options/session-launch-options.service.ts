@@ -2,8 +2,11 @@ import { resolveSessionModelForProvider } from '@/backend/lib/session-model';
 import { createLogger } from '@/backend/services/logger.service';
 import { withTimeout } from '@/backend/services/session/service/acp/acp-runtime-spawn';
 import { timeLaunchDiscovery } from '@/backend/services/session/service/acp/launch-discovery-timing';
+import type {
+  LaunchOptionsPersistence,
+  StoredLaunchOptions,
+} from '@/backend/services/session/service/config/launch-options/session-launch-options-store';
 import type { SessionLaunchOptions } from '@/shared/session-launch';
-import type { LaunchOptionsPersistence, StoredLaunchOptions } from './session-launch-options-store';
 type Input = { provider: 'CLAUDE' | 'CODEX'; model?: string; codexAccountId?: string };
 type Defaults = {
   defaultClaudeModel?: string;

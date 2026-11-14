@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createDeferred } from '@/backend/services/session/service/acp/acp-runtime-manager.test-helpers';
+import { SessionLaunchOptionsService } from '@/backend/services/session/service/config/launch-options/session-launch-options.service';
 import type { SessionLaunchOptions } from '@/shared/session-launch';
-import { SessionLaunchOptionsService } from './session-launch-options.service';
 
 const logs = vi.hoisted(() => ({ info: vi.fn(), warn: vi.fn(), debug: vi.fn() }));
 vi.mock('@/backend/services/logger.service', () => ({ createLogger: () => logs }));

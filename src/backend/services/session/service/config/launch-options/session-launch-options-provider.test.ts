@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { fetchAccountSessionLaunchOptions } from '@/backend/services/session/service/config/launch-options/session-launch-options-provider';
 import { deferred } from '@/test-utils/deferred';
-import { fetchAccountSessionLaunchOptions } from './session-launch-options-provider';
 const mocks = vi.hoisted(() => ({ preview: vi.fn(), probe: vi.fn() }));
 vi.mock('@/backend/services/codex-accounts', () => ({
   codexAccountService: { getPreviewRuntimeContext: mocks.preview },

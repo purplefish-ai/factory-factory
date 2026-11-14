@@ -4,6 +4,9 @@ import { configService } from '@/backend/services/config.service';
 import type { AgentSessionRecord } from '@/backend/services/session/resources/agent-session.accessor';
 import type { AcpProcessHandle, AcpRuntimeManager } from '@/backend/services/session/service/acp';
 import type { SessionCallerGuard } from '@/backend/services/session/service/bridges';
+import { fetchAccountSessionLaunchOptions } from '@/backend/services/session/service/config/launch-options/session-launch-options-provider';
+import { LaunchOptionsStore } from '@/backend/services/session/service/config/launch-options/session-launch-options-store';
+import { SessionLaunchOptionsService } from '@/backend/services/session/service/config/launch-options/session-launch-options.service';
 import type { SessionRepository } from '@/backend/services/session/service/data/session.repository';
 import type { CodexModelCatalogService } from '@/backend/services/session/service/providers/codex-model-catalog.service';
 import {
@@ -24,9 +27,6 @@ import {
 import type { PersistAcpConfigSnapshotParams } from './session-config-snapshot-persistence';
 import { SessionConfigWriter } from './session-config-writer';
 import { SessionInactiveConfigOptions } from './session-inactive-config-options';
-import { fetchAccountSessionLaunchOptions } from './session-launch-options-provider';
-import { LaunchOptionsStore } from './session-launch-options-store';
-import { SessionLaunchOptionsService } from './session-launch-options.service';
 import { SessionStartupConfiguration } from './session-startup-configuration';
 import type { CompleteStartupConfigurationParams } from './session-startup-configuration-finalizer';
 

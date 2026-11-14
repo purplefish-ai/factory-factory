@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createDeferred } from '@/backend/services/session/service/acp/acp-runtime-manager.test-helpers';
+import { SessionLaunchOptionsService } from '@/backend/services/session/service/config/launch-options/session-launch-options.service';
 import type { SessionLaunchOptions } from '@/shared/session-launch';
-import { SessionLaunchOptionsService } from './session-launch-options.service';
 function native(provider: 'CLAUDE' | 'CODEX', model: string): SessionLaunchOptions {
   return {
     provider,
