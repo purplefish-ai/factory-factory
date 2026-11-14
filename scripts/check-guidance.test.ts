@@ -1,7 +1,5 @@
-import { execFileSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { dirname, join } from 'node:path';
+import { readFileSync, rmSync } from 'node:fs';
+import { join } from 'node:path';
 import { afterEach, describe, expect, test } from 'vitest';
 import { parse } from 'yaml';
 import { z } from 'zod';
@@ -21,49 +19,20 @@ import {
   parseTopLevelTree,
   readBaseLegacyCeilings,
   readBaseTopLevelNames,
-  readGuidanceRepository,
   runGuidanceCli,
   topLevelNames,
   unionTopLevelNames,
 } from './check-guidance';
+import {
+  createRepository,
+  git,
+  lines,
+  removeTemporaryRepositories,
+  repositoryWith,
+  writeFiles,
+} from './check-guidance.test-support';
 
-const temporaryDirectories: string[] = [];
-
-afterEach(() => {
-  for (const directory of temporaryDirectories.splice(0)) {
-    rmSync(directory, { recursive: true, force: true });
-  }
-});
-
-function git(repositoryRoot: string, ...args: string[]): string {
-  return execFileSync('git', args, { cwd: repositoryRoot, encoding: 'utf8' }).trim();
-}
-
-function writeFiles(repositoryRoot: string, files: Record<string, string>): void {
-  for (const [path, content] of Object.entries(files)) {
-    mkdirSync(dirname(join(repositoryRoot, path)), { recursive: true });
-    writeFileSync(join(repositoryRoot, path), content);
-  }
-}
-
-function createRepository(files: Record<string, string>): string {
-  const repositoryRoot = mkdtempSync(join(tmpdir(), 'guidance-check-'));
-  temporaryDirectories.push(repositoryRoot);
-  git(repositoryRoot, 'init', '--quiet', '--initial-branch=main');
-  git(repositoryRoot, 'config', 'user.email', 'test@example.com');
-  git(repositoryRoot, 'config', 'user.name', 'Guidance Check Test');
-  git(repositoryRoot, 'config', 'commit.gpgsign', 'false');
-  writeFiles(repositoryRoot, files);
-  return repositoryRoot;
-}
-
-function repositoryWith(files: Record<string, string>) {
-  return readGuidanceRepository(createRepository(files));
-}
-
-function lines(count: number): string {
-  return 'line\n'.repeat(count);
-}
+afterEach(removeTemporaryRepositories);
 
 const modes = { blob: '100644', tree: '040000', commit: '160000' };
 
@@ -810,5 +779,19 @@ describe('command line', () => {
       'AGENTS.md: pairing: has no sibling CLAUDE.md. Fix: create CLAUDE.md containing exactly @AGENTS.md.',
       'AGENTS.md:122: references: `src/missing.ts` does not exist. Fix: point it at the current path or heading, or remove it.',
     ]);
+  });
+
+  test('fails a recipe that has no skill file', () => {
+    const repositoryRoot = createRepository({
+      'docs/recipes/add-thing.md':
+        '# Add a thing\n\n## Use when\n\n## Steps\n\n## Mistakes this prevents\n',
+    });
+
+    const result = run(repositoryRoot, { baseCeilings: { notice: 'no base.' } });
+
+    expect(result.exitCode).toBe(1);
+    expect(result.stderr).toContain(
+      'docs/recipes/add-thing.md: recipes: has no skill file at .claude/skills/add-thing/SKILL.md.'
+    );
   });
 });
