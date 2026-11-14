@@ -49,9 +49,8 @@ The capsule barrel exports the singletons `acpEventProcessor` and
   pending ones. `subagent-change-coalescer.test.ts`,
   `acp-event-processor.subagents.test.ts`.
 - A session's thought chunks are merged for at most 25 ms and written before its
-  next update that is written, runtime event, replayed user message or turn end,
-  so transcript order is unchanged.
-  `acp-event-processor.text-streaming.test.ts`.
+  next written update, runtime event, replayed user message or turn end, so
+  transcript order is unchanged. `acp-event-processor.text-streaming.test.ts`.
 
 ## Map
 
