@@ -91,6 +91,13 @@ describe('ProviderHistoryTranscriptCache', () => {
     expect(cache.get('a', file('/a'), 's')).toBeDefined();
     await vi.advanceTimersByTimeAsync(5000);
     expect(cache.size).toBe(1);
+
+    // The reopened entry is released again and starts its time to live again.
+    cache.release('s');
+    await vi.advanceTimersByTimeAsync(999);
+    expect(cache.size).toBe(1);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(cache.size).toBe(0);
   });
 
   it('forgets every entry of a permanently deleted session', () => {

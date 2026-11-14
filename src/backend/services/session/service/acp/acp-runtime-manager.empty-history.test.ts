@@ -52,6 +52,24 @@ describe('observed empty provider conversations', () => {
     ).toBe(false);
   });
 
+  it('revokes empty proof on shutdown', async () => {
+    const { manager } = createManagerTestHarness();
+    exitChildAfterSigterm(setupSuccessfulSpawn());
+    const handle = await manager.getOrCreateClient(
+      'session-1',
+      defaultOptions(),
+      defaultHandlers(),
+      defaultContext()
+    );
+    expect(
+      manager.hasObservedEmptyProviderSession('session-1', 'CLAUDE', handle.providerSessionId)
+    ).toBe(true);
+    await manager.stopAllClients();
+    expect(
+      manager.hasObservedEmptyProviderSession('session-1', 'CLAUDE', handle.providerSessionId)
+    ).toBe(false);
+  });
+
   it('revokes empty proof before even a failed first prompt reaches the provider', async () => {
     const { manager } = createManagerTestHarness();
     const child = setupSuccessfulSpawn();

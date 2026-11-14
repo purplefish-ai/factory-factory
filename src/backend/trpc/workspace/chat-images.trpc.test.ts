@@ -110,7 +110,8 @@ describe('chat image loading', () => {
       } else if (name === 'vector.svg') {
         await writeFile(target, '<svg/>');
       } else if (name === 'huge.png') {
-        await writeFile(target, Buffer.alloc(10 * 1024 * 1024 + 1));
+        // A valid PNG signature, so only the size limit can reject it.
+        await writeFile(target, Buffer.concat([png, Buffer.alloc(10 * 1024 * 1024 + 1)]));
       }
       await expect(caller.readChatImage({ workspaceId: 'w1', path: name })).rejects.toThrow();
     }

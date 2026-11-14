@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { QueuedMessage } from '@/shared/acp-protocol';
+import type { ChatMessage, QueuedMessage } from '@/shared/acp-protocol';
 import { SessionNotificationDeliveryService } from './session-notification-delivery.service';
 
 const wake = { workspaceId: 'workspace-1', revision: 12, claimId: 'claim-1' };
@@ -22,7 +22,7 @@ function harness() {
     removeQueuedMessage: vi.fn(() => true),
   };
   const transcriptPort = {
-    getTranscriptSnapshot: vi.fn(() => []),
+    getTranscriptSnapshot: vi.fn((_sessionId: string): ChatMessage[] => []),
     getHistoryHydrationSource: vi.fn(() => 'none' as const),
     appendClaudeEvent: vi.fn(() => 1),
   };
@@ -86,6 +86,24 @@ describe('durable workspace mail wakes', () => {
     });
     expect(h.queuePort.enqueue).not.toHaveBeenCalled();
     expect(h.notificationPort.releaseWake).toHaveBeenCalledWith(wake);
+  });
+  it('does not count a provisional transcript entry as delivered while its send is unsettled', async () => {
+    const h = harness();
+    await h.recover();
+    const messageId = 'workspace-mail-wake-workspace-1:12';
+    const claim = h.service.claimForDispatch('session-1', messageId);
+    expect(claim.status).toBe('claimed');
+    h.service.resetSession('session-1');
+    h.transcriptPort.getTranscriptSnapshot.mockReturnValue([
+      { id: messageId, source: 'user', text: 'mail', timestamp: '2026-11-13T00:00:00Z', order: 0 },
+    ]);
+    const retry = h.service.claimForDispatch('session-1', messageId);
+    expect(retry.status).not.toBe('duplicate');
+    for (const held of [claim, retry]) {
+      if (held.status === 'claimed') {
+        held.release();
+      }
+    }
   });
   it('keeps in-flight provider input unsettled across session reset', async () => {
     const h = harness();

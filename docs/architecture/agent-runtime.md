@@ -1,252 +1,17 @@
 # Agent Runtime
 
-The application update paragraphs that opened this note and the section "Chat
-tool previews" have been migrated; the tool preview rules are asserted by the
-tests in `src/client/features/chat/agent-activity/tool-renderers/`. Ownership,
-public surface, invariants and file maps are in the guides beside the code:
-[application update capsule](../../src/backend/services/application-update/AGENTS.md)
-and [CLI](../../src/cli/AGENTS.md). The reasons are in the `2026-11-13-*`
-records in [decisions](../decisions/), and the tests those guides name describe
-the behaviour. The paragraphs below have not been migrated yet.
-
-Rejected or failed messages restore their text and attachments only when the
-current session composer is empty. A newer draft or attachment selection is
-preserved, and clearing it later does not replay the earlier recovery.
-
-Chat drafts restored before the composer mounts are visible on its first render
-and retained when typing begins after a reload. Selecting another session shows
-that session's draft and attachments from its first render; the previous
-session's are never shown in its place.
-
-Claude session history restores inline image blocks as attachments on the
-original user prompt, including image-only prompts. Harness metadata, sidechain
-entries, `/compact` summaries, and image-reference companions are omitted from
-chat replay; their temporary file paths are not read. Background task-stop
-notifications marked by Claude's origin metadata are also omitted, while
-delivered prompts carrying an origin subkind remain visible. Codex history
-likewise restores user `input_image` data URLs, and images on legacy
-`user_message` events, onto the prompt; non-user images and `local_images` paths
-are skipped. Restoration rejects malformed base64 and images above the shared 10
-MiB decoded size limit used for uploads.
-
-Chat Markdown and structured tool-result images share an inline preview with a
-full-size dialog. Local Markdown paths load through `workspace.readChatImage`,
-which requires an existing workspace and restricts reads to that worktree or
-absolute OS temporary-file paths (including `/tmp` on macOS). Relative paths
-cannot escape the worktree; resolved symlinks must stay within the selected
-root. Only PNG, JPEG, GIF and WebP files with matching image signatures are
-returned, with bounded reads and a 10 MiB limit. Missing, unsupported or failed
-images show a selectable source path or URI. Temporary previews require the
-original file to remain available after reload. Codex image-bearing tool outputs
-retain structured image items on replay rather than serializing their base64 as
-text.
-
-Provider history hydration retains the yielding 1 MiB JSONL reader. Dense blocks
-and transcript projection use a 16 ms cooperative target. Projection uses the
-same per-entry builder as synchronous callers and yields between small batches,
-preserving complete content, deterministic IDs, ordering, and timestamps.
-Provider identity checks stop superseded reads and discard unfinished projection
-before publication. A single JSON.parse or projection entry remains atomic;
-particularly large tool results, garbage collection, or host scheduling can
-still exceed the target. This budget improves responsiveness; passive loads
-still await the complete history and can trade throughput for yielding.
-Cancelling one startup consumer leaves a shared, still-current hydration
-available to other consumers. Stopping the session invalidates its shared
-hydration generation before publication; a later startup starts fresh hydration
-instead of joining the superseded preparation.
-
-Passive loads, startup and workflow finalization share one provider history read
-and projection per session, provider identity, worktree and Codex account
-(`data/provider-history-transcript-loader.ts`). Each caller applies the result
-through its own domain and fences. The read stops only when every caller is
-stale and is never cached then; a caller that is still current starts afresh. A
-caller never joins a read with a stale caller, since a stop, reset or rollover
-after the read began may have changed the file.
-
-Completed projections stay in `ProviderHistoryTranscriptCache`
-(`data/provider-history-transcript-cache.ts`), so reopening an idle session
-whose store was cleared can skip the read. Entries are keyed by session,
-provider, provider session ID and file path, and serve only the exact file
-identity (path, size, modification time and inode) observed before and after the
-read; a changed file is reread and replaces its entry. The cache holds only file
-projections, never store state, so clearing a store keeps its preservation rules
-and later loads merge retained local entries as before. Each store receives its
-own copies of the transcript entries, since stores may reassign an entry's
-fields in place. It keeps at most 16 entries and 128 MiB estimated from file
-sizes, evicting the least recently used first. An entry used by a live store
-does not expire; `session_cleared` starts a five-minute TTL and permanent
-deletion drops the session's entries through `SessionScope`.
-
-Cold resumes overlap history hydration with adapter spawning and ACP
-initialization. Provider session loading/creation waits for the history barrier,
-which restores timestamps and establishes replay suppression before provider
-history events can arrive. Stop, shutdown, and initialization failure still
-terminate or fence the candidate before session RPCs. Provider deadlines apply
-to initialization and session creation; the local history barrier retains its
-previous independent wait. Passive chat loads continue to await complete history
-hydration.
-
-The initialize handshake uses `ACP_STARTUP_TIMEOUT_MS` (default 30 seconds).
-Provider session new/load/resume and the startup model configuration that
-follows use `ACP_SESSION_CREATION_TIMEOUT_MS` (default 120 seconds): providers
-do filesystem and project setup there, which can block for tens of seconds on a
-loaded machine (for example a degraded macOS `fseventsd`), while initialize
-stays fast. Each start snapshots both values. Disposable launch-option probes
-and model-catalog loaders keep their own deadlines.
-
-Replay batches up to 128 KiB retain their existing envelope. Larger batches use
-normal JSON event frames, with base64 fragments for an oversized event. When
-batch metadata itself cannot fit in a JSON event frame, the entire batch uses
-base64 fragments instead. The client rejects direct replay batches above 128
-KiB; every complete wire envelope stays within that bound, including large tool
-results and images. The server serializes each event once and sends frames built
-from that JSON; the client measures each received event once for both the frame
-bound and the declared replay length. The client reconstructs the exact batch
-atomically before applying the existing load-request guard; incomplete,
-malformed, or out-of-order chunks cannot publish a partial transcript. Assembly
-expires after 30 seconds and resets on disconnect, session change, or unmount.
-The transport rejects batches above 128 MiB explicitly. Framing bounds each
-message, rather than reducing total replay bytes or adding pagination; the
-existing renderer transcript window and full backend transcript retention still
-apply.
-
-Main and quick-chat transcripts initially load the newest 1,000 entries. Near
-the top of the loaded transcript, the client automatically requests older pages
-of up to 500 entries from `session.readTranscriptPage`, using the first loaded
-persisted message ID as an exclusive cursor. A page starts at a render-safe
-boundary; preceding fragments remain available on the next request. The read
-uses the already loaded backend transcript without provider hydration, startup,
-configuration, or queue dispatch. An evicted or replaced cursor fails explicitly
-and requires reloading the chat.
-
-Requested history stays in renderer memory until a hydration snapshot, replay,
-clear, or session switch. Nonempty live snapshots replace only their recent
-window and preserve the loaded prefix; explicit removals filter the listed
-message IDs from retained history and in-flight page responses. An empty live
-snapshot authoritatively clears the transcript and resets paging, fencing
-responses from requests started before the clear. The existing virtualizer
-bounds mounted rows. History merges by ID with current live entries taking
-precedence, without replaying old runtime, usage, thinking, or task effects.
-Request identities fence stale completions. Loading failures and connection
-interruptions retain visible messages and offer Retry. Failed requests restore
-the previous renderer limit and page boundaries; unavailable connections disable
-Retry. Idle and completed history show no header text or load button, including
-during workspace initialization. The loading header appears only after a request
-has been pending for 250 ms, so fast history checks do not briefly insert a row
-above the messages. Errors and Retry appear immediately. Prepending preserves
-the content anchor, including when the loading header is visible at the very
-top. Content anchors skip zero-height rows such as hidden thinking blocks. The
-stable history row shares the normal leading padding. At the top, header growth
-leaves loading feedback visible; header collapse compensates to preserve the
-content anchor. Reaching the oldest entry stops paging without a beginning
-marker. Tool groups stay split at loaded page boundaries so prepending adjacent
-tools preserves existing row keys and expansion state; late results still pair
-across those boundaries.
-
-Both managed providers accept image and text attachments. Connected conversation
-composers accept image drops, uploads, and the upload shortcut while an agent is
-working, so follow-up messages can be queued with attachments.
-
-Upload validation checks the complete JPEG codestream through its end-of-image
-marker and permits trailing metadata, including Samsung screenshot capture
-information. Truncated image segments and scans remain invalid.
-
-The new-workspace slash-command palette prefers project command descriptions
-over same-named global commands, matching the workspace-first precedence used
-when loading a Claude session. Commands found only in the global directory
-remain available. Claude provider caches exclude `project:` and `workspace:`
-commands, including nested names, regardless of disk-scan availability. Passive
-loads also reject scoped entries left in an older global cache.
-
-Stopping a session retains dispatched user prompts in the live transcript when
-termination rejects the in-flight prompt RPC, unless the rejection proves the
-prompt was never sent (steering, authority fences, a busy turn, or invalid
-attachments). Unsent queued messages are still cleared. Background notification
-and PR delivery entries retain their rollback rules so provisional transcript
-content does not establish delivery.
-
-Workspace notification recovery ignores provisional user transcript entries
-while their provider dispatch is unsettled, including across session stop/reset.
-Only settled transcript evidence can acknowledge delivery; a failed send leaves
-its durable notification pending for a later startup to recover.
-
-Child workspaces are enabled by default. Settings → General → Child Workspaces
-can disable their controls, MCP tools, and creation through the UI or MCP.
-Existing children and notifications are preserved. MCP checks the current
-setting when listing or calling child workspace tools; disabled tools are
-rejected even in running sessions. Start a new conversation after re-enabling if
-its provider has cached the disabled tool catalog. Agent-authoring tools remain
-available.
-
-Child workspace creation offers active projects only and rejects archived target
-projects at the orchestration boundary, including requests from MCP clients or
-stale browser selections. Child inserts also connect only to active projects
-inside their nested-write transaction, so concurrent archival cannot bypass the
-preflight check. Existing children of archived projects remain visible.
-
-Closing a provider-backed session requires retained provider messages or a
-confirmed JSONL history load, including a confirmed empty history. Unavailable
-history and hydration cooldowns abort archival and preserve the live session for
-retry; local lifecycle and failed PR status cards do not prove the conversation
-was recovered. A runtime observed creating a new provider conversation may
-archive it before its first prompt even if no JSONL file exists. This proof is
-scoped to the exact provider identity, survives a normal stop, and is revoked
-before any prompt attempt, on conversation activity, identity replacement,
-failed startup, permanent deletion, or shutdown. It is not inferred after a
-backend restart; an unprompted session without a file then remains protected
-until provider history can be confirmed. Empty ACP fallbacks remain eligible for
-a JSONL read.
-
-Archived PR receipt lookup reads provider identity through the session owner's
-`readClosedSessionProviderIdentity` API. The actual Workspace FK supplies the
-worktree root; relative legacy paths such as `transcripts/` remain readable,
-while absolute paths, lexical escapes and existing-file symlink escapes are
-rejected. Session/provider identity and workspace identity, when present, must
-match the archive row. The bounded header probe can recover identity from a
-pretty-printed archive with a truncated message body; complete compact or
-reordered archives retain their full-file fallback.
-
-Headers only select native provider history. Delivery still requires a user
-marker from that scoped Claude/Codex history, using the original worktree path.
-Closed-session rows have no account column: an absent header account is unknown,
-distinct from an explicit default account (`null`). When a live Codex account is
-known, archived identity must match it; an explicitly selected account never
-falls back to another account or default history on failure. Legacy archives
-without an account retain default-history lookup only when no live binding is
-available; their headers do not independently prove account ownership.
-
-The full `getTranscript` route delegates to the session owner's compatible body
-reader, sharing the header reader's FK-root lexical and realpath containment. It
-requires a JSON object with a messages array, retaining legacy role/content
-rows, opaque metadata/version/summary and unknown fields, including own reserved
-keys at every JSON depth. Malformed full bodies fail with safe application
-errors even when the bounded header probe can still recover identity. Archive
-storage performance and durability acceptance remain blocked; this reader change
-clears neither gate.
-
-The archive view reads `getTranscriptJson`, which returns the validated owner
-DTO as JSON text through SuperJSON, then decodes it through the same compatible
-schema. This preserves own `__proto__`, `constructor` and `prototype` fields
-that SuperJSON rejects when traversing object output. The existing object
-`getTranscript` endpoint remains compatible for ordinary data and retains that
-serializer limitation. Structural sharing is disabled for this archive query so
-changed selected objects retain reserved keys on refetch. A failed read with
-validated data for the same query retains the history, including empty history,
-with a persistent notice that the latest read failed and previously loaded
-history is shown. Invalid new input never renders. Without prior validated data,
-failures show a generic error; explicit missing archives hide cached history and
-retain the not-found state. Valid recovery clears the notice.
-
-The archive view uses `projectClosedSessionTranscriptRows` to validate each JSON
-row with the current-message codec before read-only rich rendering. Opaque and
-invalid rows appear as labeled, escaped JSON text. Projection preserves array
-order and opaque barriers, using observations from the existing grouping owner
-to identify exact consumed result blocks. A row with any unconsumed result
-retains one entire raw fallback, even if part is already represented richly;
-same-index rich content precedes that inspection row. Successful current rows
-with undeclared extras remain rich-only, while the original API JSON stays
-intact. Full bodies are presentation data; headers still only select native
-provider history and never establish delivery proof.
+The paragraphs that opened this note and the section "Chat tool previews" have
+been migrated; the tool preview rules are asserted by the tests in
+`src/client/features/chat/agent-activity/tool-renderers/`. Ownership, public
+surface, invariants and file maps are in the guides beside the code:
+[application update capsule](../../src/backend/services/application-update/AGENTS.md),
+[CLI](../../src/cli/AGENTS.md),
+[session capsule](../../src/backend/services/session/AGENTS.md) and its
+[data](../../src/backend/services/session/service/data/AGENTS.md) and
+[archive](../../src/backend/services/session/service/archive/AGENTS.md) module
+guides. The reasons are in the `2026-11-13-*` records in
+[decisions](../decisions/), and the tests those guides name describe the
+behaviour. The sections below have not been migrated yet.
 
 ## ACP runtime
 
@@ -2011,3 +1776,21 @@ the rows of the disposition table in pull request #3242.
 
 Old paragraph 6. For the session capsule guide (`src/backend/services/session/`,
 task 2.4b).
+
+> Framing bounds each message, rather than reducing total replay bytes or adding
+> pagination; the existing renderer transcript window and full backend
+> transcript retention still apply.
+
+Old paragraph 16. For the WebSocket router guide
+(`src/backend/routers/websocket/`, task 2.9).
+
+> The MCP server that child workspace tools run in:
+> `src/backend/mcp/workspace-mcp-server.ts`. The capsule only builds its spawn
+> configuration (`child-workspace-mcp-server.ts`).
+
+Written for the session capsule guide in task 2.4a2; the note's "Child
+workspaces" section, not yet migrated, lists the same files. For the `acp`
+module guide (`src/backend/services/session/service/acp/`, task 2.4b), which
+also takes the link to
+`docs/decisions/2026-11-13-acp-session-creation-has-its-own-deadline.md` that
+the capsule guide's "Decisions" section held.

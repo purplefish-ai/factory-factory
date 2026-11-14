@@ -14,6 +14,7 @@ import { configService } from '@/backend/services/config.service';
 import * as reader from '@/backend/services/session/service/data/session-history-jsonl-reader';
 import { SessionDomainService } from '@/backend/services/session/service/store/session-domain.service';
 import { providerHistoryTranscriptCache } from './provider-history-transcript-cache';
+import { loadProviderHistoryTranscript } from './provider-history-transcript-loader';
 import {
   createProviderHistoryHydrator,
   type ProviderHistorySession,
@@ -86,7 +87,7 @@ function fixture(provider: Provider, texts: string[]) {
   );
   const append = (text: string, index: number) =>
     appendFileSync(filePath, `${historyLine(provider, text, index)}\n`);
-  return { filePath, session, read, onLine, append };
+  return { directory, filePath, session, read, onLine, append };
 }
 
 const texts = (domain: SessionDomainService) =>
@@ -183,6 +184,47 @@ describe.each(['CLAUDE', 'CODEX'] as const)('%s provider history transcripts', (
     expect(read).toHaveBeenCalledOnce();
     expect(texts(loadDomain)).toEqual(['one', 'two']);
     expect(texts(startupDomain)).toEqual(['one', 'two']);
+  });
+
+  it('does not share a read across worktrees or Codex accounts', async () => {
+    const { session, read } = fixture(provider, ['one']);
+    // Isolate read sharing from the projection cache.
+    vi.spyOn(providerHistoryTranscriptCache, 'get').mockReturnValue(undefined);
+    await Promise.all(
+      [
+        session,
+        { ...session, workspace: { worktreePath: '/elsewhere' } },
+        { ...session, codexAccountId: 'other-account' },
+      ].map((variant) =>
+        createProviderHistoryHydrator(new SessionDomainService())('session', variant)
+      )
+    );
+    expect(read).toHaveBeenCalledTimes(3);
+  });
+
+  it('does not share a read across sessions, provider session IDs or providers', async () => {
+    const { directory, session, read } = fixture(provider, ['one']);
+    // Keep the other provider's lookup inside the fixture's temporary root.
+    vi.spyOn(configService, 'getClaudeConfigDir').mockReturnValue(directory);
+    const otherProvider = provider === 'CLAUDE' ? 'CODEX' : 'CLAUDE';
+    const results = await Promise.all([
+      loadProviderHistoryTranscript('session', session, 'provider', () => true),
+      loadProviderHistoryTranscript('other-session', session, 'provider', () => true),
+      loadProviderHistoryTranscript('session', session, 'unrelated', () => true),
+      loadProviderHistoryTranscript(
+        'session',
+        { ...session, provider: otherProvider },
+        'provider',
+        () => true
+      ),
+    ]);
+    expect(results.map((result) => result.status)).toEqual([
+      'loaded',
+      'loaded',
+      'not_found',
+      'not_found',
+    ]);
+    expect(read).toHaveBeenCalledTimes(2);
   });
 
   it('finishes a shared read for a current caller after another caller goes stale', async () => {
