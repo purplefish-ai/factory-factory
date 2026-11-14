@@ -6,7 +6,7 @@
 // covers every hook, cache helper and key helper, including `useMutation`.
 //
 // `workspace.get` and `workspace.listForProject` use `cache`, so every read
-// installs the snapshot reconciler (docs/architecture/workspace-state.md).
+// installs the snapshot reconciler (src/client/lib/AGENTS.md).
 // `userSettings.get` and `userSettings.update` use `all`: settings are read and
 // written only through `useUserSettings` and `useUpdateUserSettings` in
 // src/client/lib/user-settings-queries.ts, which own the optimistic cache
@@ -97,7 +97,7 @@ export default {
   create(context) {
     // Each group names procedures whose reads and writes must go through
     // one owner module, e.g. so every workspace read installs the snapshot
-    // reconciler (docs/architecture/workspace-state.md).
+    // reconciler (src/client/lib/AGENTS.md).
     const groups = (context.options[0]?.groups ?? []).filter(
       (group) => !isListedFile(context, group.owners)
     );

@@ -19,12 +19,6 @@ and
 [shutdown is one plan](../decisions/2026-11-13-shutdown-is-one-plan-with-concurrent-job-drains.md).
 The tests the guides name describe the behaviour.
 
-<a id="archived-workspace-data"></a>Links here with this anchor were for the
-`archived-workspace-blob-retention` job: it is registered in
-`src/backend/orchestration/workspace-lifecycle/reconciliation.service.ts` and
-asserted by
-`src/backend/services/workspace/service/lifecycle/archived-workspace-blob-retention.service.integration.test.ts`.
-
 <a id="timer-dispatch-ownership"></a>Links here with this anchor were for the
 event runtime's jobs: the
 [event automation orchestration guide](../../src/backend/orchestration/agents/AGENTS.md).

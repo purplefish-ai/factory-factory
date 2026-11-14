@@ -42,3 +42,5 @@ Rejected:
   started after its stop would keep running with nothing left to stop it before
   the database disconnects.
 - A failed drain or step is reported but does not stop the rest of the plan.
+- Why startup recovery's drain is awaited only after sessions stop is in
+  [Slow startup recovery runs after readiness](2026-11-13-slow-startup-recovery-runs-after-readiness.md).

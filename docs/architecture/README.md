@@ -12,7 +12,7 @@ one that matches your change before you touch it.
 | -------------------------------------------- | ------------------------------------------------------------------------------------------ |
 | [Job runner guide][job-runner-guide]         | `jobRunner`, cadences; shutdown order in the [backend guide][backend-guide]                |
 | [Pull request guide][pr-guide]               | PR monitoring, observations, event delivery, GitHub coordination (beside the code)         |
-| [workspace-state.md](./workspace-state.md)   | Kanban, needs-input status, completion notices, phone tools, families, board views         |
+| [workspace-state.md](./workspace-state.md)   | Pointer: workspace, lifecycle, snapshot, Kanban, client cache, run-script, backup guides   |
 | [agent-runtime.md](./agent-runtime.md)       | ACP runtime, provider sub-agents, child workspaces, quick actions, desktop backend process |
 | [integrations.md](./integrations.md)         | Event automations, Slack, client query transport                                           |
 | [file-previews.md](./file-previews.md)       | Bounded file reads, UTF-8 truncation, untracked diff limits                                |

@@ -24,7 +24,7 @@ import type { WorkspaceSnapshotEntry } from '@/shared/workspace-snapshot';
  * `setData` on one of these keys would therefore commit HTTP data without the
  * reconciler and leave it uninstalled for later refetches. Every reader here
  * installs the reconciler; `factory/query-owner` keeps callers on
- * this module (see docs/architecture/workspace-state.md).
+ * this module (see src/client/lib/AGENTS.md).
  */
 
 /** The parts of the vanilla tRPC client (`trpc.useUtils().client`) these reads use. */
