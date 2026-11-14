@@ -24,8 +24,9 @@ Prisma model. It does not own:
   launches go through it.
 - The update job, its IPC with the CLI supervisor and the status it reports:
   `src/backend/orchestration/application-update.service.ts`, composed in
-  `src/backend/app-context.ts`, which also defines the work that holds an update
-  back.
+  `src/backend/app-context.ts`, which also composes `hasWork`, the work that
+  holds an update back: pending initial and queued session messages, working ACP
+  turns, and the agent runtime's own work.
 - Installing, recovering and restarting: the
   [CLI guide](../../../cli/AGENTS.md).
 - The IPC messages and update status schema:
@@ -53,8 +54,8 @@ Prisma model. It does not own:
 - The update job closes the gate, and sends `update-ready` once, only when the
   supervisor reports `waiting`, no admitted operation is running and `hasWork`
   is false. `src/backend/orchestration/application-update.service.test.ts`.
-- The `hasWork` that `src/backend/app-context.ts` composes counts a working ACP
-  turn and not an idle ACP client. `src/backend/app-context.test.ts`.
+- Of the ACP clients, the composed `hasWork` counts a working turn and not an
+  idle client. `src/backend/app-context.test.ts`.
 - Once `update-ready` is sent, only an `idle` or `failed` status (from the
   supervisor, or a failed send to it) reopens the gate; cancelling and backend
   shutdown leave it closed.
