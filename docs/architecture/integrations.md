@@ -935,9 +935,9 @@ The SDK's own reconnection and HTTP retries are turned off: its reconnect path
 can reject outside any caller, which is fatal in this backend, and its retries
 outlive `disconnect()`. Reconnection is instead the `agent-slack-intake`
 reconciliation described in
-[background jobs](background-jobs.md#timer-dispatch-ownership), with backoff
-from 5 seconds to 5 minutes after failed attempts. A socket that finishes
-connecting after the listener closed it is closed again and its events are not
+[its guide](../../src/backend/orchestration/agents/AGENTS.md), with backoff from
+5 seconds to 5 minutes after failed attempts. A socket that finishes connecting
+after the listener closed it is closed again and its events are not
 acknowledged. The SDK's logger is replaced with one that drops debug and info
 output and reduces warnings and errors to fixed category codes, so tokens,
 ticketed socket URLs and message bodies are never logged.

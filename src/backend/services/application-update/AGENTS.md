@@ -77,9 +77,11 @@ Prisma model. It does not own:
   comparison, and `ApplicationReleaseService` with its one-hour cache per
   registry URL and five-second request bound.
 - `src/backend/orchestration/application-update.service.ts`:
-  `ApplicationUpdateService` (the `application-update-idle` job) and
-  `createProcessUpdateSupervisor`, the IPC port to the CLI parent, which reports
-  a disconnect as a failed status with automatic updates off.
+  `ApplicationUpdateService` (the `application-update-idle` job, which does no
+  registry or installation work: the cached release service owns registry checks
+  and the CLI supervisor owns installation) and `createProcessUpdateSupervisor`,
+  the IPC port to the CLI parent, which reports a disconnect as a failed status
+  with automatic updates off.
 
 ## Decisions
 
