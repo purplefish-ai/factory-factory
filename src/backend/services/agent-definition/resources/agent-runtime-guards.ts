@@ -12,7 +12,7 @@ import {
   type AgentTriggerInput,
 } from '@/shared/schemas/agent-definition.schema';
 import type { AgentEvent, Prisma } from '@prisma-gen/client';
-import { isSlackVerificationText } from './slack-verification';
+import { isSlackVerificationText } from './slack/slack-verification';
 
 export const runtimeTriggerInclude = {
   agentDefinition: { include: { project: true } },

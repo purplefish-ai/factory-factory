@@ -9,9 +9,9 @@ import { Prisma } from '@prisma-gen/client';
 import type { SlackSocketHandlers } from './slack-event-source';
 
 let db: IntegrationDatabase;
-let runtime: typeof import('../index');
+let runtime: typeof import('../../index');
 let configService: typeof import('@/backend/services/config.service').configService;
-let listSlackTargets: typeof import('../resources/agent-source-queries').listSlackTargets;
+let listSlackTargets: typeof import('../../resources/agent-source-queries').listSlackTargets;
 let projectId: string;
 let definitionId: string;
 let connectionId: string;
@@ -25,13 +25,13 @@ const signal = () => new AbortController().signal;
 
 beforeAll(async () => {
   db = await createIntegrationDatabase();
-  runtime = await vi.importActual<typeof import('../index')>('../index');
+  runtime = await vi.importActual<typeof import('../../index')>('../../index');
   ({ configService } = await vi.importActual<typeof import('@/backend/services/config.service')>(
     '@/backend/services/config.service'
   ));
-  ({ listSlackTargets } = await vi.importActual<typeof import('../resources/agent-source-queries')>(
-    '../resources/agent-source-queries'
-  ));
+  ({ listSlackTargets } = await vi.importActual<
+    typeof import('../../resources/agent-source-queries')
+  >('../../resources/agent-source-queries'));
 }, 30_000);
 afterAll(async () => {
   await destroyIntegrationDatabase(db);

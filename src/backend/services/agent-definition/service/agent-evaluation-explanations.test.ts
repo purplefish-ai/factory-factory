@@ -12,7 +12,7 @@ import {
   unavailableDecision,
   unprovenProviderDecision,
 } from './agent-semantic-filter';
-import { resolveSlackEventContext } from './slack-event-context';
+import { resolveSlackEventContext } from './slack/slack-event-context';
 
 const github: Extract<AgentEventPayload, { provider: 'GITHUB' }> = {
   version: 1,

@@ -4,7 +4,7 @@ import {
   managementCursorSchema,
   type ManagementCursor,
 } from '@/backend/services/agent-definition/resources/agent-management.accessor';
-import { slackVerificationMessage } from '@/backend/services/agent-definition/resources/slack-verification';
+import { slackVerificationMessage } from '@/backend/services/agent-definition/resources/slack/slack-verification';
 import { configService } from '@/backend/services/config.service';
 import {
   agentCapabilitySchema,

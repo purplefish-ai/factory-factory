@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as runtime from '@/backend/services/agent-definition';
-import * as recovery from '@/backend/services/agent-definition/resources/slack-connection-recovery';
+import * as recovery from '@/backend/services/agent-definition/resources/slack/slack-connection-recovery';
 import { createLedgerFixture } from '@/backend/services/agent-definition/resources/testing/agent-ledger.test-support';
 import {
   createIntegrationDatabase,

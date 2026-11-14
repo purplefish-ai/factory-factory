@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { ApplicationError } from '@/backend/lib/application-error';
-import { slackConnectionAccessor } from '@/backend/services/agent-definition/resources/slack-connection.accessor';
+import { slackConnectionAccessor } from '@/backend/services/agent-definition/resources/slack/slack-connection.accessor';
 import { slackConnectInputSchema, slackSetAppTokenInputSchema } from '@/shared/slack-connection';
 import { callSlackApi, slackFailureSchema } from './slack-api';
 import { resolveSlackBotAppId, verifySlackAppToken } from './slack-app-identity';

@@ -1,7 +1,7 @@
 import { evaluationExplanations } from '@/backend/services/agent-definition/resources/agent-evaluation-explanations';
 import { type AgentEventPayload, isAgentGithubExecutableAction } from '@/shared/agent-runtime';
 import type { AgentTriggerInput } from '@/shared/schemas/agent-definition.schema';
-import { slackHumanSubtypes } from './slack-event-message';
+import { slackHumanSubtypes } from './slack/slack-event-message';
 
 export type MatchResult = {
   status: 'MATCHED' | 'SKIPPED';

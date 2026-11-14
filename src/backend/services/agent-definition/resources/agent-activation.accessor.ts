@@ -21,7 +21,10 @@ import { ledgerTransaction } from './agent-ledger-transaction';
 import { ownedAgent } from './agent-management.accessor';
 import { runtimeTriggerInclude, type RuntimeTrigger } from './agent-runtime-guards';
 import { pauseTriggers } from './agent-trigger-pause';
-import { type SlackActivationSource, slackActivationAccessor } from './slack-activation.accessor';
+import {
+  type SlackActivationSource,
+  slackActivationAccessor,
+} from './slack/slack-activation.accessor';
 
 type Tx = Prisma.TransactionClient;
 export type { StartingTrigger } from './agent-activation-fences';

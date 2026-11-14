@@ -414,6 +414,27 @@ describe('check-service-accessor-boundaries', () => {
     expect(result.output).toContain('workspaceAccessor');
   });
 
+  it('treats an accessor in a resources subdirectory as an accessor', () => {
+    const crossOwner = runChecker([
+      {
+        path: 'src/backend/services/session/service/session.service.ts',
+        content:
+          "import { slackConnectionAccessor } from '@/backend/services/agent-definition/resources/slack/slack-connection.accessor';\n",
+      },
+    ]);
+    const unlisted = runChecker([
+      {
+        path: 'src/backend/services/agent-definition/resources/slack/slack-unlisted.accessor.ts',
+        content: 'export const slackUnlistedAccessor = {};\n',
+      },
+    ]);
+
+    expect(crossOwner.status).toBe(1);
+    expect(crossOwner.output).toContain('cross-owner raw persistence accessor');
+    expect(unlisted.status).toBe(1);
+    expect(unlisted.output).toContain('raw persistence accessor module has no ownership policy');
+  });
+
   it('rejects cross-owner accessor references in import types', () => {
     const result = runChecker([
       {

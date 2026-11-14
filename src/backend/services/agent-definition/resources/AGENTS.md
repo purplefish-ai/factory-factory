@@ -1,10 +1,10 @@
-# Agent-definition resources: run ledger, GitHub proof and Slack state
+# Agent-definition resources: run ledger and GitHub proof
 
 This guide covers the ledger writer lock, the run ledger's admission, claim and
-retention, `pauseTriggers`, the GitHub source's capture, verification,
-finalization and proof, which the source poll service drives, and what Slack
-stores: tokens, listener health and test-message activation. Bare file names are
-in this directory; paths that start with `src/` are from the repository root.
+retention, `pauseTriggers`, and the GitHub source's capture, verification,
+finalization and proof, which the source poll service drives. What Slack stores
+is in the [Slack guide](slack/AGENTS.md). Bare file names are in this directory;
+paths that start with `src/` are from the repository root.
 
 ## Owns, and does not own
 
@@ -13,7 +13,6 @@ This guide does not own:
 - When sources are polled: the poll service,
   `src/backend/services/agent-definition/service/agent-source-poll.service.ts`,
   and the runtime jobs in `src/backend/orchestration/agents/`.
-- Slack token checks and the listener: [service guide](../service/AGENTS.md).
 - The models, the public surface, the other accessors here (definitions,
   proposals, GitHub activation, launch), and Enable, Delete and the `ACTIVE`
   transition: the [capsule guide](../AGENTS.md).
@@ -61,34 +60,15 @@ This guide does not own:
 - The navigation summary reads the raw-SQL index `AgentRun_latest_terminal_idx`,
   which Prisma cannot see; its query must match the index.
   `agent-management-history.navigation-summary.integration.test.ts`.
-- An app-level token is written only while the bot credential it was checked
-  against is still the saved one.
-  `src/backend/services/agent-definition/service/slack-app-token.integration.test.ts`.
-- An interrupted listener opens one delivery gap that its next verified
-  connection closes, ceasing to listen on purpose (gate off, no listening
-  trigger, no app-level token) closes any gap without opening one, stopping the
-  listener at shutdown opens one, the cursor keeps the latest 100, and
-  `RECOVERY_REQUIRED` is never overwritten. `slack-source-health.test.ts`,
-  `src/backend/services/agent-definition/service/slack-event-source.integration.test.ts`.
-- A channel's test message counts only as a person's root message with no
-  subtype, from the expected app, in a pending channel, observed by the expiry,
-  whose whole text is this generation's message; the earliest is the boundary.
-  `slack-verification.test.ts`,
-  `src/backend/services/agent-definition/service/slack-activation.integration.test.ts`.
-- A starting Slack trigger whose connection changed app or was disabled returns
-  to `PAUSED` with `SOURCE_ERROR`, and one unverified at its expiry with
-  `ACTIVATION_EXPIRED`.
-  `src/backend/services/agent-definition/service/slack-activation.integration.test.ts`.
 - Slack eligibility compares `ts` strings as exact decimals and never runs a
   message in the test-message form (`VERIFICATION_MESSAGE`).
-  `agent-runtime-constraints.integration.test.ts`, `slack-verification.test.ts`,
-  `src/backend/services/agent-definition/service/slack-activation.integration.test.ts`.
+  `agent-runtime-constraints.integration.test.ts`,
+  `src/backend/services/agent-definition/resources/slack/slack-verification.test.ts`,
+  `src/backend/services/agent-definition/service/slack/slack-activation.integration.test.ts`.
 
 GitHub's offset pages are not a snapshot: these checks detect observed
 discontinuity, not every deletion or reordering. Pruning is not erasure;
-provider conversations and evaluation snapshots have their own lifetimes. A
-Slack gap means events may have been missed: Slack can lose events while no
-connection is open, and nothing recovers them.
+provider conversations and evaluation snapshots have their own lifetimes.
 
 ## Map
 
@@ -104,13 +84,10 @@ connection is open, and nothing recovers them.
 - `agent-management.accessor.ts`, `agent-revision.accessor.ts`,
   `agent-proposal.accessor.ts`: saved and proposal writes; their invariants are
   in the capsule guide.
-- Slack: `slack-connection.accessor.ts` (tokens), `slack-source-health.ts`
-  (health and gaps), `slack-activation.accessor.ts` and `slack-verification.ts`
-  (test messages), `slack-connection-recovery.ts` (export and restore of
-  connections).
+- [Slack guide](slack/AGENTS.md): tokens, listener health, test-message
+  activation and the export and restore of connections.
 
 ## Decisions
 
 - [GitHub source proof is retained](../../../../../docs/decisions/2026-11-13-github-source-proof-is-retained.md)
 - [Source reset opens a new epoch](../../../../../docs/decisions/2026-11-13-source-reset-opens-a-new-epoch.md)
-- [Slack triggers activate on a posted test message](../../../../../docs/decisions/2026-11-14-slack-triggers-activate-on-a-posted-test-message.md)

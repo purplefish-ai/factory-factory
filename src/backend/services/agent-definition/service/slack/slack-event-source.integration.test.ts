@@ -27,14 +27,14 @@ vi.mock('@/backend/services/logger.service', async (importOriginal) => {
 });
 
 let db: IntegrationDatabase;
-let runtime: typeof import('../index');
-let sourceAccessor: typeof import('../resources/agent-source.accessor').agentSourceAccessor;
+let runtime: typeof import('../../index');
+let sourceAccessor: typeof import('../../resources/agent-source.accessor').agentSourceAccessor;
 let connectionId: string;
 let definitionId: string;
 let sockets: FakeSocket[];
 let credentials: { appToken: string; appId: string; workspaceId: string } | null;
 let enabled: boolean;
-let ingest: typeof import('../index').ingestEvent;
+let ingest: typeof import('../../index').ingestEvent;
 let source: import('./slack-event-source').SlackEventSource;
 const signal = new AbortController().signal;
 
@@ -151,10 +151,10 @@ async function connected() {
 
 beforeAll(async () => {
   db = await createIntegrationDatabase();
-  runtime = await vi.importActual<typeof import('../index')>('../index');
+  runtime = await vi.importActual<typeof import('../../index')>('../../index');
   ({ agentSourceAccessor: sourceAccessor } = await vi.importActual<
-    typeof import('../resources/agent-source.accessor')
-  >('../resources/agent-source.accessor'));
+    typeof import('../../resources/agent-source.accessor')
+  >('../../resources/agent-source.accessor'));
 }, 30_000);
 afterAll(async () => {
   await destroyIntegrationDatabase(db);

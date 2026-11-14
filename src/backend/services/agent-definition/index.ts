@@ -1,7 +1,7 @@
 import { cryptoService } from '@/backend/services/crypto.service';
 import { AgentManagementService } from './service/agent-management.service';
 import { AgentProposalService } from './service/agent-proposal.service';
-import { SlackConnectionService } from './service/slack-connection.service';
+import { SlackConnectionService } from './service/slack/slack-connection.service';
 
 export { AgentProposalService } from './service/agent-proposal.service';
 export { AgentSourcePollService } from './service/agent-source-poll.service';
@@ -10,10 +10,10 @@ export {
   SlackEventSource,
   type SlackSocket,
   type SlackSocketHandlers,
-} from './service/slack-event-source';
+} from './service/slack/slack-event-source';
 export const agentProposalService = new AgentProposalService();
 
-export { SlackConnectionService } from './service/slack-connection.service';
+export { SlackConnectionService } from './service/slack/slack-connection.service';
 export const slackConnectionService = new SlackConnectionService(cryptoService);
 
 // Durable primitives and injectable source intake; no activation or execution worker starts here.
@@ -127,4 +127,4 @@ export {
   exportSlackConnectionsRecovery,
   planSlackConnectionsRecovery,
   restoreSlackConnectionsRecovery,
-} from './service/slack-connection-recovery';
+} from './service/slack/slack-connection-recovery';

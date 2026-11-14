@@ -28,7 +28,7 @@ import {
 } from './agent-source-queries';
 import { capturePage, discontinuity, newScan, resumeScan, verifyPage } from './agent-source-scan';
 import { pauseTriggers } from './agent-trigger-pause';
-import type { SlackSourceWrite } from './slack-source-health';
+import type { SlackSourceWrite } from './slack/slack-source-health';
 type Tx = Prisma.TransactionClient;
 function requiresRecovery(state: { health: unknown } | null) {
   return (

@@ -4,7 +4,7 @@ import {
   agentActivationAccessor,
   type StartingTrigger,
 } from '@/backend/services/agent-definition/resources/agent-activation.accessor';
-import { slackActivationAccessor } from '@/backend/services/agent-definition/resources/slack-activation.accessor';
+import { slackActivationAccessor } from '@/backend/services/agent-definition/resources/slack/slack-activation.accessor';
 import { configService } from '@/backend/services/config.service';
 import {
   agentActivationInputSchema,

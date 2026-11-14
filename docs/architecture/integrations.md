@@ -9,8 +9,11 @@ guides beside the code:
   GitHub reads, Linear and scheduled automations.
 - [Agent-definition capsule](../../src/backend/services/agent-definition/AGENTS.md)
   and its
-  [service](../../src/backend/services/agent-definition/service/AGENTS.md) and
+  [service](../../src/backend/services/agent-definition/service/AGENTS.md),
+  [Slack services](../../src/backend/services/agent-definition/service/slack/AGENTS.md),
   [resources](../../src/backend/services/agent-definition/resources/AGENTS.md)
+  and
+  [Slack state](../../src/backend/services/agent-definition/resources/slack/AGENTS.md)
   guides: event automations, the run ledger, Slack tokens, the Slack listener,
   message context and activation.
 - [Event automation orchestration](../../src/backend/orchestration/agents/AGENTS.md):

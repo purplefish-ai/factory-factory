@@ -49,8 +49,8 @@ functions for definitions and Slack connections.
 
 - Credentials are stored only encrypted on `AgentConnection`, and public
   connection reads return metadata and credential presence only.
-  `service/slack-connection.integration.test.ts`,
-  `service/slack-app-token.integration.test.ts`.
+  `service/slack/slack-connection.integration.test.ts`,
+  `service/slack/slack-app-token.integration.test.ts`.
 - A GitHub trigger becomes `ACTIVE` only when its own STARTING generation's
   baseline resolves, at that boundary.
   `src/backend/testing/agent-runtime-flow.integration.test.ts`,
@@ -87,9 +87,12 @@ local process passes it, an agent included.
 
 - `service/agent-management.service.ts`: saved definitions, edits, Delete and
   reset; `service/agent-activation.service.ts`: Enable and Pause.
-- [Service guide](service/AGENTS.md): evaluation, natural-language filters,
-  history reads and the Slack services.
-- [Resources guide](resources/AGENTS.md): the run ledger, GitHub source proof
-  and Slack's stored state, with their invariants, map and decision records.
+- [Service guide](service/AGENTS.md): evaluation, natural-language filters and
+  history reads; [Slack services](service/slack/AGENTS.md): tokens, the listener
+  and run context.
+- [Resources guide](resources/AGENTS.md): the run ledger and GitHub source
+  proof, with their invariants, map and decision records;
+  [Slack state](resources/slack/AGENTS.md): tokens, listener health and test
+  messages.
 - [Verify event automations](../../../../docs/recipes/verify-event-automations.md):
   the end-to-end suites and the live GitHub check.
