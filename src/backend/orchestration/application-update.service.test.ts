@@ -174,6 +174,18 @@ it('keeps readiness fenced during backend shutdown and stops polling', async () 
   expect(jobs.isRunning('application-update-idle')).toBe(false);
 });
 
+it('keeps admission closed while the supervisor prepares and restarts', async () => {
+  const { service, supported, emit, gate } = setup();
+  supported();
+  await service.requestUpdate('1.1.0');
+  emit({ type: 'update-status', status: { phase: 'waiting', targetVersion: '1.1.0' } });
+  service.pollIdle();
+  for (const phase of ['preparing', 'restarting'] as const) {
+    emit({ type: 'update-status', status: { phase, targetVersion: '1.1.0' } });
+    expect(gate.isClosed()).toBe(true);
+  }
+});
+
 it('retries a previously validated failed target when release metadata is unavailable after restart', async () => {
   const { service, supported, emit, release, sent } = setup();
   supported();
@@ -182,6 +194,7 @@ it('retries a previously validated failed target when release metadata is unavai
     status: { phase: 'failed', targetVersion: '1.1.0', error: 'Registry unavailable' },
   });
   release.check.mockResolvedValue({ currentVersion: '1.0.0', notices: [] });
+  await expect(service.requestUpdate('1.2.0')).rejects.toThrow('advertised');
   await expect(service.requestUpdate('1.1.0')).resolves.toMatchObject({
     phase: 'waiting',
     targetVersion: '1.1.0',

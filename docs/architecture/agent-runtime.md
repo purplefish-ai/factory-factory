@@ -1,53 +1,12 @@
 # Agent Runtime
 
-Application updates use a process-wide admission gate shared by session input,
-dispatch, runtime creation, workspace provisioning and background agent
-launches. The update job waits for active operations, pending initial/queued
-messages and active agent turns, then closes admission synchronously before
-notifying the CLI supervisor. Idle ACP processes do not hold the update. A
-rejected input remains available to retry after reconnecting. Failed preparation
-reopens admission. Cancellation before readiness also reopens it. After
-`update-ready` has been sent, cancellation keeps the gate closed until the CLI
-supervisor acknowledges an idle status, because preparation may already have
-started. Shutdown keeps admission closed until the process exits.
-
-The production CLI owns installation, recovery state and backend restart. It
-stages a pinned npm release before stopping the backend, backs up the database
-before migrations, and keeps the previous package until the replacement reports
-full startup readiness over IPC. Interrupted recovery runs before migrations and
-relaunches the restored CLI. The supervisor retains durable update status
-outside the replaced package, including errors after the backend has stopped.
-Its restorable snapshot is separate from the bounded `db-backups/` copy every
-launch and `ff db:migrate` take before pending migrations (see the README's
-database upgrades section); both use one SQLite online-backup helper,
-`src/backend/lib/sqlite-snapshot.ts`.
-
-Automatic installation supports writable global npm installations on macOS and
-Linux launched through supervised `ff serve`. Eligibility is fixed at startup;
-if another server already uses the installation, close those servers and restart
-this server to reevaluate eligibility. Unsupported modes show manual guidance.
-Update and cancellation mutations require a trusted local client and validated
-IPC. The supervisor serializes installation of a pinned advertised release.
-
-Provider update notices compare adapter-resolved runtime package versions,
-published as `factoryFactoryRuntimeVersions` by the `prepack` script. Version
-discovery resolves exported runtime entrypoints when package manifests are
-hidden by exports; dependency ranges alone do not establish installed versions.
-Claude and Codex share the Factory Factory update action rather than updating an
-unrelated global provider CLI.
-
-The nonblocking banner shows independent release rows with one shared update
-state. Dismissals persist per provider and available version; the previous
-Factory Factory dismissal key remains a fallback for older clients. Registry
-failures preserve confirmed data without blocking normal use. Recovery errors
-remain visible even without release rows, and retries retain the failed target
-when registry metadata is unavailable. A new request clears that target's reload
-guard; after reconnecting, the browser reloads once when the server reports the
-target version, only if the guard can be persisted. Seeing a different running
-version also clears the old target's guard. Dismissing a row does not cancel an
-accepted update. The legacy `checkFactoryUpdate` query supports older clients.
-
-ACP admission is injected by composition to preserve dependency isolation.
+The application update paragraphs that opened this note and the section "Chat
+tool previews" have moved. Ownership, public surface, invariants and file maps
+are in the guides beside the code:
+[application update capsule](../../src/backend/services/application-update/AGENTS.md)
+and [CLI](../../src/cli/AGENTS.md). The reasons are in the `2026-11-13-*`
+records in [decisions](../decisions/), and the tests those guides name describe
+the behaviour. The paragraphs below have not been migrated yet.
 
 Rejected or failed messages restore their text and attachments only when the
 current session composer is empty. A newer draft or attachment selection is
@@ -287,15 +246,6 @@ same-index rich content precedes that inspection row. Successful current rows
 with undeclared extras remain rich-only, while the original API JSON stays
 intact. Full bodies are presentation data; headers still only select native
 provider history and never establish delivery proof.
-
-## Chat tool previews
-
-Chat tool previews format recognized MCP identifiers from both providers as a
-readable action and service (for example, `Fetch PR comments · GitHub`). Unknown
-tools use the same word formatting without requiring a tool catalog. Collapsed
-activity groups count MCP calls by service; the full identifier and input remain
-available in expanded details. File-list previews omit the target directory and
-show `List files`.
 
 ## ACP runtime
 
@@ -2047,3 +1997,17 @@ Unseen attached and retained detached PR links survive the cascade as compact
 run results; capture or cascade failures roll back the transaction. This
 provider-free witness proves construction/deletion wiring, not provider work
 resolution or capacity release.
+
+## Held for other guides
+
+Rules, hazards and reasons from the migrated paragraphs that belong to another
+area. Each entry quotes only the sentences it needs from the paragraph named
+after it, verbatim. The migration that creates the named area's guide checks the
+entry, moves what holds there and deletes the entry here. Paragraph numbers are
+the rows of the disposition table in the pull request that migrated the
+application update paragraphs.
+
+> ACP admission is injected by composition to preserve dependency isolation.
+
+Old paragraph 6. For the session capsule guide (`src/backend/services/session/`,
+task 2.4b).
