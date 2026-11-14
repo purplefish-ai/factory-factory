@@ -26,11 +26,8 @@ need the checks that cover them.
    AGENT_LIVE_GITHUB_REPO=owner/name pnpm test:integration src/backend/services/github/service/github-cli-agent-issue-events.manual.integration.test.ts
    ```
 
-3. Slack is checked only against the fake socket and web client in the
-   agent-definition capsule's tests; there is no live Slack check here.
-
 ## Mistakes this prevents
 
 - Running the live GitHub check in CI, or against a repository you care about.
-- Looking for a live Slack check: there is none, so a Slack change is covered by
-  the capsule's tests alone.
+- Looking for a live Slack check: there is none. Slack is checked only against
+  the fake socket and web client in the agent-definition capsule's tests.

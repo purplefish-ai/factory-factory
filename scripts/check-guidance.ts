@@ -307,16 +307,17 @@ const recipeFormatFix = `use the format in ${recipeReadmePath}: a "# " title, th
   recipeSections.map((section) => `## ${section}`)
 )}, in that order.`;
 
-/** Whether a recipe starts with a level-1 heading, and its level-2 headings. */
+/** Whether a recipe has one level-1 heading, on its first line, and its level-2 headings. */
 function recipeOutline(content: string): { title: boolean; sections: string[] } {
-  const headings = withoutFencedCode(content)
-    .split('\n')
-    .flatMap((line) => {
-      const match = /^ {0,3}(#{1,6})[ \t]+(.*?)(?:[ \t]+#+)?[ \t]*$/.exec(line);
-      return match?.[1] === undefined ? [] : [{ level: match[1].length, text: match[2] ?? '' }];
-    });
+  const lines = withoutFencedCode(content).split('\n');
+  const headings = lines.flatMap((line) => {
+    const match = /^ {0,3}(#{1,6})[ \t]+(.*?)(?:[ \t]+#+)?[ \t]*$/.exec(line);
+    return match?.[1] === undefined ? [] : [{ level: match[1].length, text: match[2] ?? '' }];
+  });
   return {
-    title: headings[0]?.level === 1,
+    title:
+      headings.filter((heading) => heading.level === 1).length === 1 &&
+      /^#[ \t]/.test(lines.find((line) => line.trim() !== '') ?? ''),
     sections: headings.filter((heading) => heading.level === 2).map((heading) => heading.text),
   };
 }
@@ -326,7 +327,7 @@ function checkRecipeShape(repository: GuidanceRepository, file: string): Guidanc
   const problem = title
     ? sections.join('\n') !== recipeSections.join('\n') &&
       `has the sections ${quoteList(sections)}, not ${quoteList(recipeSections)}.`
-    : 'does not start with a "# " title.';
+    : 'does not have exactly one "# " title, as its first line.';
   return problem ? [{ file, rule: 'recipes', problem, fix: recipeFormatFix }] : [];
 }
 
@@ -335,23 +336,62 @@ function skillTarget(content: string): string | undefined {
   return /docs\/recipes\/[A-Za-z0-9._-]+\.md/.exec(content)?.[0];
 }
 
+/** What is wrong with a skill's front matter, which needs a name and a description. */
+function frontMatterProblem(content: string, name: string): string | undefined {
+  const frontMatter = /^---\r?\n([\s\S]*?)\r?\n---[ \t]*(?:\r?\n|$)/.exec(content)?.[1] ?? '';
+  const declared = /^name:[ \t]*["']?([^"'\s]+)["']?[ \t]*$/m.exec(frontMatter)?.[1];
+  if (declared === undefined || !/^description:[ \t]*\S/m.test(frontMatter)) {
+    return 'has no front matter with a name and a description.';
+  }
+  return declared === name ? undefined : `names itself "${declared}", not "${name}".`;
+}
+
+/** What is wrong with the recipe a skill points at: it must be the one of its name. */
+function skillTargetProblem(
+  repository: GuidanceRepository,
+  content: string,
+  name: string
+): string | undefined {
+  const target = skillTarget(content);
+  const expected = `docs/recipes/${name}.md`;
+  if (target === undefined) {
+    return 'does not point at a recipe under docs/recipes/.';
+  }
+  if (target !== expected) {
+    return `points at ${target}, not ${expected}.`;
+  }
+  return isRecipe(target) && repository.isFile(target)
+    ? undefined
+    : `points at ${target}, which is not a recipe.`;
+}
+
 function checkSkill(repository: GuidanceRepository, file: string): GuidanceViolation[] {
-  const target = skillTarget(repository.read(file));
-  const problem =
-    target === undefined
-      ? 'does not point at a recipe under docs/recipes/.'
-      : !(isRecipe(target) && repository.isFile(target)) &&
-        `points at ${target}, which is not a recipe.`;
-  return problem
-    ? [
-        {
-          file,
-          rule: 'recipes',
-          problem,
-          fix: 'point it at the recipe it serves, or delete the skill.',
-        },
-      ]
-    : [];
+  const content = repository.read(file);
+  const name = posix.basename(posix.dirname(file));
+  const frontMatter = frontMatterProblem(content, name);
+  const target = skillTargetProblem(repository, content, name);
+  return [
+    ...(frontMatter === undefined
+      ? []
+      : [
+          {
+            file,
+            rule: 'recipes' as const,
+            problem: frontMatter,
+            fix: 'start it with --- front matter holding name (the directory name) and description (when to use it).',
+          },
+        ]),
+    ...(target === undefined
+      ? []
+      : [
+          {
+            file,
+            rule: 'recipes' as const,
+            problem: target,
+            fix: 'point it at the recipe it serves, or delete the skill.',
+          },
+        ]),
+  ];
 }
 
 /** A recipe has its parts in order and a skill file; a skill points at a recipe. */

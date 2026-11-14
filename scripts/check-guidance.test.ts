@@ -731,12 +731,16 @@ describe('recipes', () => {
       ...complete,
       'docs/recipes/no-mistakes.md': recipe().replace('## Mistakes this prevents', '## Pitfalls'),
       'docs/recipes/no-title.md': recipe().replace('# Add a thing\n', ''),
+      'docs/recipes/prose-first.md': `Read this first.\n\n${recipe()}`,
+      'docs/recipes/two-titles.md': `${recipe()}\n# Another title\n`,
       'docs/recipes/out-of-order.md': recipe()
         .replace('## Steps', '## Temp')
         .replace('## Use when', '## Steps')
         .replace('## Temp', '## Use when'),
       '.claude/skills/no-mistakes/SKILL.md': skill('no-mistakes'),
       '.claude/skills/no-title/SKILL.md': skill('no-title'),
+      '.claude/skills/prose-first/SKILL.md': skill('prose-first'),
+      '.claude/skills/two-titles/SKILL.md': skill('two-titles'),
       '.claude/skills/out-of-order/SKILL.md': skill('out-of-order'),
     });
     const fix =
@@ -744,8 +748,10 @@ describe('recipes', () => {
 
     expect(checkRecipes(repository).map(formatGuidanceViolation)).toEqual([
       `docs/recipes/no-mistakes.md: recipes: has the sections "Use when", "Steps" and "Pitfalls", not "Use when", "Steps" and "Mistakes this prevents". Fix: ${fix}`,
-      `docs/recipes/no-title.md: recipes: does not start with a "# " title. Fix: ${fix}`,
+      `docs/recipes/no-title.md: recipes: does not have exactly one "# " title, as its first line. Fix: ${fix}`,
       `docs/recipes/out-of-order.md: recipes: has the sections "Steps", "Use when" and "Mistakes this prevents", not "Use when", "Steps" and "Mistakes this prevents". Fix: ${fix}`,
+      `docs/recipes/prose-first.md: recipes: does not have exactly one "# " title, as its first line. Fix: ${fix}`,
+      `docs/recipes/two-titles.md: recipes: does not have exactly one "# " title, as its first line. Fix: ${fix}`,
     ]);
   });
 
@@ -764,7 +770,7 @@ describe('recipes', () => {
     const repository = repositoryWith({
       ...complete,
       '.claude/skills/gone/SKILL.md': skill('gone'),
-      '.claude/skills/readme/SKILL.md': skill('readme', 'docs/recipes/README.md'),
+      '.claude/skills/README/SKILL.md': skill('README', 'docs/recipes/README.md'),
       '.claude/skills/nothing/SKILL.md': '---\nname: nothing\ndescription: Use never.\n---\n',
     });
     const fix = 'point it at the recipe it serves, or delete the skill.';
@@ -772,7 +778,41 @@ describe('recipes', () => {
     expect(checkRecipes(repository).map(formatGuidanceViolation)).toEqual([
       `.claude/skills/gone/SKILL.md: recipes: points at docs/recipes/gone.md, which is not a recipe. Fix: ${fix}`,
       `.claude/skills/nothing/SKILL.md: recipes: does not point at a recipe under docs/recipes/. Fix: ${fix}`,
-      `.claude/skills/readme/SKILL.md: recipes: points at docs/recipes/README.md, which is not a recipe. Fix: ${fix}`,
+      `.claude/skills/README/SKILL.md: recipes: points at docs/recipes/README.md, which is not a recipe. Fix: ${fix}`,
+    ]);
+  });
+
+  test('rejects a skill that points at another recipe than the one of its name', () => {
+    const repository = repositoryWith({
+      ...complete,
+      'docs/recipes/add-other.md': recipe(),
+      '.claude/skills/add-other/SKILL.md': skill('add-other', 'docs/recipes/add-thing.md'),
+    });
+
+    expect(checkRecipes(repository).map(formatGuidanceViolation)).toEqual([
+      '.claude/skills/add-other/SKILL.md: recipes: points at docs/recipes/add-thing.md, not docs/recipes/add-other.md. Fix: point it at the recipe it serves, or delete the skill.',
+    ]);
+  });
+
+  test('rejects a skill without front matter, a description or its directory name', () => {
+    const repository = repositoryWith({
+      ...complete,
+      'docs/recipes/add-bare.md': recipe(),
+      'docs/recipes/add-nameless.md': recipe(),
+      'docs/recipes/add-other.md': recipe(),
+      '.claude/skills/add-bare/SKILL.md': 'Follow `docs/recipes/add-bare.md`.\n',
+      '.claude/skills/add-nameless/SKILL.md':
+        '---\nname: add-nameless\n---\n\nFollow `docs/recipes/add-nameless.md`.\n',
+      '.claude/skills/add-other/SKILL.md':
+        '---\nname: add-thing\ndescription: Use it.\n---\n\nFollow `docs/recipes/add-other.md`.\n',
+    });
+    const fix =
+      'start it with --- front matter holding name (the directory name) and description (when to use it).';
+
+    expect(checkRecipes(repository).map(formatGuidanceViolation)).toEqual([
+      `.claude/skills/add-bare/SKILL.md: recipes: has no front matter with a name and a description. Fix: ${fix}`,
+      `.claude/skills/add-nameless/SKILL.md: recipes: has no front matter with a name and a description. Fix: ${fix}`,
+      `.claude/skills/add-other/SKILL.md: recipes: names itself "add-thing", not "add-other". Fix: ${fix}`,
     ]);
   });
 
