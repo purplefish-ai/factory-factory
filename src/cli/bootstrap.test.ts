@@ -27,9 +27,29 @@ function fixture(minimum: string) {
   );
   return root;
 }
-afterEach(() =>
-  directories.splice(0).forEach((root) => rmSync(root, { recursive: true, force: true }))
-);
+// Processes a test started. They are killed after the test, not in its
+// `finally`: a test that times out while awaiting a hung process never reaches
+// its `finally`, and would leave that process running.
+const startedProcesses: Array<() => number | undefined> = [];
+function killAfterTest(pid: () => number | undefined) {
+  startedProcesses.push(pid);
+}
+afterEach(() => {
+  for (const pid of startedProcesses.splice(0)) {
+    try {
+      const target = pid();
+      // Never signal pid 0: it names the test's own process group.
+      if (target) {
+        process.kill(target, 'SIGKILL');
+      }
+    } catch {
+      /* Not started, or already stopped. */
+    }
+  }
+  for (const root of directories.splice(0)) {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
 it('reports unsupported Node without importing the application or prompting on piped input', () => {
   const root = fixture('999.0.0');
   writeFileSync(join(root, 'index.js'), 'throw new Error("APP WAS LOADED");');
@@ -101,41 +121,43 @@ it.skipIf(process.platform === 'win32').each([false, true])(
     );
     const closed = new Promise((resolve) => child.once('exit', resolve));
     let workerPid: number | undefined;
-    try {
-      await vi.waitFor(
-        () => {
-          workerPid = Number(readFileSync(pidFile, 'utf8'));
-        },
-        { timeout: 5000 }
-      );
+    killAfterTest(() => child.pid);
+    killAfterTest(() => workerPid);
+    await vi.waitFor(
+      () => {
+        workerPid = Number(readFileSync(pidFile, 'utf8'));
+      },
+      { timeout: 5000 }
+    );
+    child.kill('SIGTERM');
+    if (stubborn) {
+      await new Promise((resolve) => setTimeout(resolve, 100));
       child.kill('SIGTERM');
-      if (stubborn) {
-        await new Promise((resolve) => setTimeout(resolve, 100));
-        child.kill('SIGTERM');
-      }
-      await closed;
-      await vi.waitFor(() => expect(() => process.kill(workerPid!, 0)).toThrow(), {
-        timeout: 5000,
-      });
-    } finally {
-      child.kill('SIGKILL');
-      if (workerPid) {
-        try {
-          process.kill(workerPid, 'SIGKILL');
-        } catch {
-          /* Already stopped. */
-        }
-      }
     }
+    await closed;
+    await vi.waitFor(() => expect(() => process.kill(workerPid!, 0)).toThrow(), {
+      timeout: 5000,
+    });
   },
   10_000
 );
 
+// The spawned child: it reports that it is ready, and records that SIGTERM
+// reached it (a child killed by setup's 5 s SIGKILL fallback leaves no record).
+const EXIT_ON_SIGTERM = `import { writeFileSync } from 'node:fs';
+process.on('SIGTERM', () => {
+  writeFileSync(new URL('./terminated', import.meta.url), 'SIGTERM');
+  process.exit(143);
+});
+writeFileSync(new URL('./child.ready', import.meta.url), '');
+setInterval(() => {}, 1000);`;
+
 // Send SIGTERM to this process the instant its first spawn returns, before the
 // caller's next statement: the window where a parent that registers its signal
-// listener only after spawning dies and orphans the child.
+// listener only after spawning dies and orphans the child. First wait, inside
+// the same call, until the child has installed its SIGTERM handler.
 const SIGTERM_AFTER_FIRST_SPAWN = `import childProcess from 'node:child_process';
-import { renameSync, writeFileSync } from 'node:fs';
+import { existsSync, renameSync, writeFileSync } from 'node:fs';
 import { syncBuiltinESMExports } from 'node:module';
 const spawn = childProcess.spawn;
 childProcess.spawn = (...args) => {
@@ -144,6 +166,8 @@ childProcess.spawn = (...args) => {
   const child = spawn(...args);
   writeFileSync(new URL('./spawned.pid.tmp', import.meta.url), String(child.pid));
   renameSync(new URL('./spawned.pid.tmp', import.meta.url), new URL('./spawned.pid', import.meta.url));
+  const idle = new Int32Array(new SharedArrayBuffer(4));
+  while (!existsSync(new URL('./child.ready', import.meta.url))) Atomics.wait(idle, 0, 0, 5);
   process.kill(process.pid, 'SIGTERM');
   return child;
 };
@@ -158,11 +182,11 @@ it.skipIf(process.platform === 'win32').each([
     const root = fixture('1.0.0');
     const hook = join(root, 'sigterm-after-spawn.mjs');
     writeFileSync(hook, SIGTERM_AFTER_FIRST_SPAWN);
-    writeFileSync(join(root, 'worker.mjs'), 'setInterval(() => {}, 1000);');
+    writeFileSync(join(root, 'worker.mjs'), EXIT_ON_SIGTERM);
     writeFileSync(
       join(root, 'index.js'),
       parent === 'launcher'
-        ? 'setInterval(() => {}, 1000);'
+        ? EXIT_ON_SIGTERM
         : `import './sigterm-after-spawn.mjs';
            import { fileURLToPath } from 'node:url';
            import { createSetupIO, confirmFix } from './setup-prerequisites.mjs';
@@ -176,21 +200,17 @@ it.skipIf(process.platform === 'win32').each([
       [...(parent === 'launcher' ? ['--import', hook] : []), join(root, 'bootstrap.mjs'), 'serve'],
       { stdio: 'ignore' }
     );
+    killAfterTest(() => child.pid);
+    killAfterTest(() => Number(readFileSync(join(root, 'spawned.pid'), 'utf8')));
     const exit = await new Promise((resolve) =>
       child.once('exit', (code, signal) => resolve({ code, signal }))
     );
     const spawned = Number(readFileSync(join(root, 'spawned.pid'), 'utf8'));
-    try {
-      expect(exit).toEqual({ code: 143, signal: null });
-      // The parent waits for its child to exit before it exits itself.
-      expect(() => process.kill(spawned, 0)).toThrow();
-    } finally {
-      try {
-        process.kill(spawned, 'SIGKILL');
-      } catch {
-        /* Already stopped. */
-      }
-    }
+    expect(exit).toEqual({ code: 143, signal: null });
+    // The parent waits for its child to exit before it exits itself.
+    expect(() => process.kill(spawned, 0)).toThrow();
+    // The forwarded SIGTERM stopped the child, not the 5 s SIGKILL fallback.
+    expect(readFileSync(join(root, 'terminated'), 'utf8')).toBe('SIGTERM');
   },
   // Starts two or three Node processes, like the SIGTERM test above.
   10_000
@@ -257,25 +277,16 @@ it.skipIf(process.platform === 'win32')(
     });
     const closed = new Promise((resolve) => child.once('exit', resolve));
     let workerPid: number | undefined;
-    try {
-      await vi.waitFor(
-        () => {
-          workerPid = Number(readFileSync(pidFile, 'utf8'));
-        },
-        { timeout: 5000 }
-      );
-      process.kill(-child.pid!, 'SIGINT');
-      await closed;
-      expect(readFileSync(gracefulFile, 'utf8')).toBe('done');
-    } finally {
-      child.kill('SIGKILL');
-      if (workerPid) {
-        try {
-          process.kill(workerPid, 'SIGKILL');
-        } catch {
-          /* Already stopped. */
-        }
-      }
-    }
+    killAfterTest(() => child.pid);
+    killAfterTest(() => workerPid);
+    await vi.waitFor(
+      () => {
+        workerPid = Number(readFileSync(pidFile, 'utf8'));
+      },
+      { timeout: 5000 }
+    );
+    process.kill(-child.pid!, 'SIGINT');
+    await closed;
+    expect(readFileSync(gracefulFile, 'utf8')).toBe('done');
   }
 );
