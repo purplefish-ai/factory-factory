@@ -1,6 +1,7 @@
 import { sessionModulesPath } from './baselines';
 import type { AgentMetrics } from './collect';
 import type { FollowUpFixes } from './pull-requests';
+import type { SandboxSectionMetrics } from './sandbox-section';
 import type { Distribution, TimeWindow } from './statistics';
 import { mockTargetClasses } from './vi-mocks';
 
@@ -49,6 +50,14 @@ function formatFollowUpFixes(fixes: FollowUpFixes, merged: number): string {
   return `${formatNumber(fixes.referencingRecentMerge)} (${formatShare(fixes.shareOfMerged)} of ${formatNumber(merged)} merged PRs)${numbers}`;
 }
 
+function formatSandboxSection(section: SandboxSectionMetrics): string {
+  const unfilled =
+    section.unfilledNumbers.length > 0
+      ? `: ${section.unfilledNumbers.map((number) => `#${number}`).join(', ')}`
+      : '';
+  return `${formatNumber(section.filled)} of ${formatNumber(section.sinceTemplate)} (${formatShare(section.shareFilled)}) opened since the template merged at ${section.templateMergedAt}; opened earlier and not judged: ${formatNumber(section.beforeTemplate)}; unfilled${unfilled || ': none'}`;
+}
+
 export function renderMarkdown(metrics: AgentMetrics): string {
   const { ci, pullRequests } = metrics.github;
   const { tree } = metrics;
@@ -72,6 +81,7 @@ export function renderMarkdown(metrics: AgentMetrics): string {
     `| Open to merge | ${formatDistribution(pullRequests.openToMergeHours, ' h')} |`,
     `| Merged PRs titled with a fix verb | ${formatNumber(pullRequests.followUpFixes.fixTitled)} of ${formatNumber(pullRequests.merged)} |`,
     `| Fix PRs referencing a PR merged in the previous 7 days | ${formatFollowUpFixes(pullRequests.followUpFixes, pullRequests.merged)} |`,
+    `| Merged PRs with a non-empty "Driven in the sandbox" section | ${formatSandboxSection(pullRequests.sandboxSection)} |`,
     '',
     '## Guidance',
     '',

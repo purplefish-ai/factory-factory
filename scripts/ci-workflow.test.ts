@@ -366,3 +366,102 @@ it('keeps the CI checks job to `pnpm check` plus the steps that only make sense 
     'prisma migrate diff --from-schema prisma/schema.prisma --to-migrations prisma/migrations --exit-code'
   );
 });
+
+describe('weekly agent metrics workflow', () => {
+  const metricsSource = readFileSync('.github/workflows/agent-metrics.yml', 'utf8');
+  const metrics = z
+    .object({
+      on: z.record(z.string(), z.unknown()),
+      permissions: z.record(z.string(), z.string()).optional(),
+      jobs: z.record(
+        z.string(),
+        z.object({
+          permissions: z.record(z.string(), z.string()).optional(),
+          steps: z.array(stepSchema),
+        })
+      ),
+    })
+    .parse(parse(metricsSource));
+  const steps = Object.values(metrics.jobs).flatMap((job) => job.steps);
+  const commands = steps.flatMap((step) => (step.run ? [step.run] : []));
+  const actionName = (uses: string | undefined) => uses?.split('@')[0];
+  const findAction = (workflowSteps: typeof steps, name: string) =>
+    workflowSteps.find((step) => actionName(step.uses) === name);
+
+  it('runs weekly and on demand, and on no other trigger', () => {
+    expect(Object.keys(metrics.on).toSorted()).toEqual(['schedule', 'workflow_dispatch']);
+    const schedule = z.array(z.object({ cron: z.string() })).parse(metrics.on.schedule);
+    expect(schedule).toHaveLength(1);
+    // Mondays at 06:17 UTC.
+    expect(schedule[0]?.cron).toBe('17 6 * * 1');
+  });
+
+  it('can only read, and uses no secret but the workflow token', () => {
+    // `gh` reads CI runs (actions) and pull requests; the checkout reads contents.
+    expect(Object.values(metrics.jobs).map((job) => job.permissions)).toEqual([
+      { contents: 'read', actions: 'read', 'pull-requests': 'read' },
+    ]);
+    expect(Object.values(metrics.permissions ?? {}).every((level) => level === 'read')).toBe(true);
+    expect(metricsSource).not.toMatch(/:\s*write\b|write-all/);
+    expect(metricsSource).not.toContain('secrets.');
+    expect(metricsSource).not.toContain('pull_request_target');
+    expect(steps.flatMap((step) => Object.entries(step.env ?? {}))).toEqual([
+      ['GH_TOKEN', '${{ github.token }}'],
+      ['GH_TOKEN', '${{ github.token }}'],
+    ]);
+    expect(findAction(steps, 'actions/checkout')?.with).toMatchObject({
+      'persist-credentials': false,
+    });
+  });
+
+  it('commits, pushes and comments on nothing, and interpolates nothing into a shell', () => {
+    expect(commands.join('\n')).not.toMatch(
+      /\bgit\s+(commit|push|tag|add)\b|\bgh\s+(pr|issue|release|workflow|api)\b|--method|-X\s*(POST|PUT|PATCH|DELETE)/
+    );
+    for (const command of commands) {
+      expect(command).not.toContain('${{');
+    }
+    expect(steps.map((step) => actionName(step.uses)).filter(Boolean)).toEqual([
+      'actions/checkout',
+      'pnpm/action-setup',
+      'actions/setup-node',
+      'actions/upload-artifact',
+    ]);
+  });
+
+  it('pins every action to the commit and version that ci.yml pins', () => {
+    // The version comment after the commit is part of the pin, and YAML drops it.
+    const pins = (source: string) =>
+      [...source.matchAll(/\buses: (\S+@[0-9a-f]{40} # v\d.*)$/gm)].map((match) => match[1] ?? '');
+    const ciPins = pins(readFileSync('.github/workflows/ci.yml', 'utf8'));
+    const metricsPins = pins(metricsSource);
+    expect(metricsPins).toHaveLength(steps.filter((step) => step.uses).length);
+    for (const pin of metricsPins) {
+      expect(ciPins, pin).toContain(pin);
+    }
+  });
+
+  it('sets up Node and pnpm the way ci.yml does, with the history the script reads', () => {
+    const ciChecks = ci.jobs.checks?.steps ?? [];
+    for (const name of ['actions/setup-node', 'pnpm/action-setup']) {
+      expect(findAction(steps, name)?.with, name).toEqual(findAction(ciChecks, name)?.with);
+    }
+    expect(findAction(steps, 'actions/setup-node')?.with).toMatchObject({
+      'node-version-file': '.node-version',
+    });
+    // The script reads the last 300 commits; a shallow clone would shorten that silently.
+    expect(findAction(steps, 'actions/checkout')?.with).toMatchObject({ 'fetch-depth': 0 });
+  });
+
+  it('writes the Markdown to the job summary and uploads the JSON as an artifact', () => {
+    expect(commands).toContain('pnpm install --frozen-lockfile');
+    expect(commands).toContain('pnpm metrics:agents >> "$GITHUB_STEP_SUMMARY"');
+    expect(commands).toContain('pnpm metrics:agents --json > agent-metrics.json');
+    expect(findAction(steps, 'actions/upload-artifact')?.with).toMatchObject({
+      name: 'agent-metrics',
+      path: 'agent-metrics.json',
+      'if-no-files-found': 'error',
+      'retention-days': 90,
+    });
+  });
+});

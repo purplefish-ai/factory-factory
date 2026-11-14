@@ -1,8 +1,10 @@
 # Maintaining agent guidance
 
-Reviewed 2026-09-08. These sources inform our instructions; behavioral
-improvement has not been measured in this repository. Recheck guidance when
-models change.
+Reviewed 2026-09-08. These sources inform our instructions. A change to guidance
+or structure states which metric from `pnpm metrics:agents` it expects to move,
+and is checked against the next weekly report, which
+`.github/workflows/agent-metrics.yml` publishes as a job summary. Recheck
+guidance when models change.
 
 This note covers the instruction files. The
 [agent-friendly codebase principles](agent-friendly-codebase.md) cover the

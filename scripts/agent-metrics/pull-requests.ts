@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { type SandboxSectionMetrics, sandboxSectionMetrics } from './sandbox-section';
 import { type Distribution, distribution, share, type TimeWindow, timeWindow } from './statistics';
 
 const followUpWindowMs = 7 * 24 * 60 * 60 * 1000;
@@ -100,6 +101,7 @@ export type PullRequestMetrics = {
   window: TimeWindow;
   openToMergeHours: Distribution;
   followUpFixes: FollowUpFixes;
+  sandboxSection: SandboxSectionMetrics;
 };
 
 /** `repository` is `owner/name`; only `/pull/N` links into it count as references. */
@@ -112,5 +114,6 @@ export function pullRequestMetrics(
     window: timeWindow(pullRequests.map((pullRequest) => pullRequest.mergedAt)),
     openToMergeHours: openToMergeHours(pullRequests),
     followUpFixes: followUpFixes(pullRequests, repository),
+    sandboxSection: sandboxSectionMetrics(pullRequests),
   };
 }

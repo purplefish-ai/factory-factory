@@ -1,0 +1,60 @@
+name: Agent metrics
+
+# A weekly read-only report of how agent-driven development is going. It writes
+# the Markdown to the job summary and keeps the JSON as an artifact; it commits,
+# pushes and comments on nothing.
+on:
+  schedule:
+    - cron: '17 6 * * 1'
+  workflow_dispatch:
+
+jobs:
+  report:
+    name: Weekly agent metrics
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    # `gh run list` and the run-attempt API need `actions`; `gh pr list` needs
+    # `pull-requests`. Everything is read-only.
+    permissions:
+      contents: read
+      actions: read
+      pull-requests: read
+    steps:
+      # The script reads the last 300 commits for its most-edited files, so it
+      # needs history, not a shallow clone.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0: native pnpm 12 support
+
+      - name: Setup Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: '.node-version'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Pull request bodies are read by the script through `gh` as data; no
+      # step interpolates them.
+      - name: Report in the job summary
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: pnpm metrics:agents >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Write the JSON report
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: pnpm metrics:agents --json > agent-metrics.json
+
+      - name: Upload the JSON report
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: agent-metrics
+          path: agent-metrics.json
+          if-no-files-found: error
+          retention-days: 90

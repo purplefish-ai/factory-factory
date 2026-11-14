@@ -72,6 +72,23 @@ describe('renderMarkdown', () => {
     );
   });
 
+  it('names the window and the exclusion of the sandbox section share', () => {
+    const metrics = fixture();
+    metrics.github.pullRequests.sandboxSection = {
+      templateMergedAt: '2026-11-13T22:01:22Z',
+      beforeTemplate: 270,
+      sinceTemplate: 30,
+      filled: 27,
+      empty: 2,
+      missing: 1,
+      shareFilled: 0.9,
+      unfilledNumbers: [3, 9, 12],
+    };
+    expect(renderMarkdown(metrics)).toContain(
+      '| Merged PRs with a non-empty "Driven in the sandbox" section | 27 of 30 (90.0%) opened since the template merged at 2026-11-13T22:01:22Z; opened earlier and not judged: 270; unfilled: #3, #9, #12 |'
+    );
+  });
+
   it('formats every count', () => {
     const metrics = fixture();
     const { ci, pullRequests } = metrics.github;
@@ -168,6 +185,7 @@ describe('renderMarkdown', () => {
         '| Open to merge | median 0.5 h, p90 0.5 h (n=1) |',
         '| Merged PRs titled with a fix verb | 0 of 1 |',
         '| Fix PRs referencing a PR merged in the previous 7 days | 0 (0.0% of 1 merged PRs) |',
+        '| Merged PRs with a non-empty "Driven in the sandbox" section | 0 of 0 (n/a) opened since the template merged at 2026-11-13T22:01:22Z; opened earlier and not judged: 1; unfilled: none |',
         '',
         '## Guidance',
         '',
