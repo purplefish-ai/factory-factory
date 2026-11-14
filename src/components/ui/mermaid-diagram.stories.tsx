@@ -1,4 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react';
+import mermaid from 'mermaid';
 import { useEffect, useState } from 'react';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
 import { contrastRatio, type Rgb } from '@/client/lib/color-contrast';
@@ -16,6 +17,17 @@ const charts = [
   'sequenceDiagram\nUser->>Agent: Build feature\nNote over Agent: Working\nAgent-->>User: Ready',
 ];
 
+// Mermaid fetches each diagram type's code the first time it meets one, so the
+// file's first story paid for all seven inside its 5 s wait. In a full story
+// run the shared Vite server serves that code late, and Factory Light, the
+// first story, failed every loaded run. Fetch it once, before any story renders.
+let diagramTypesLoaded: Promise<void> | undefined;
+async function loadDiagramTypes() {
+  for (const chart of charts) {
+    await mermaid.parse(chart);
+  }
+}
+
 function Gallery() {
   return (
     <div className="max-w-3xl bg-background text-foreground p-6">
@@ -30,6 +42,13 @@ const meta = {
   title: 'Chat/Transcript/MermaidDiagram',
   component: Gallery,
   parameters: { layout: 'padded' },
+  loaders: [
+    async () => {
+      diagramTypesLoaded ??= loadDiagramTypes();
+      await diagramTypesLoaded;
+      return {};
+    },
+  ],
   play: async ({ canvasElement }) => {
     await waitFor(() => expect(canvasElement.querySelectorAll('svg')).toHaveLength(charts.length));
     const config = mermaidThemeConfig(canvasElement);
