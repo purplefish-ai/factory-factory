@@ -15,6 +15,11 @@ import {
   unusedCodeConventions,
 } from './check-unused-code';
 
+// Knip analyses spawn a Node process that builds a module graph (0.6 s for a
+// fixture, 4 s for the repository alone; six times that at load 300). Each
+// spawning test below gets 120 s and each process this limit.
+const ANALYZER_PROCESS_TIMEOUT = 60_000;
+
 const roots: string[] = [];
 afterEach(() => {
   for (const root of roots.splice(0)) {
@@ -72,7 +77,7 @@ function analyze(root: string, mode: 'production' | 'exports' | 'full-files') {
       'json',
       ...(mode === 'production' ? ['--production'] : []),
     ],
-    { cwd: root, encoding: 'utf8', timeout: 30_000 }
+    { cwd: root, encoding: 'utf8', timeout: ANALYZER_PROCESS_TIMEOUT }
   );
   return parseKnipOutput(result, mode === 'exports' ? 'exports' : 'production');
 }
@@ -99,7 +104,7 @@ it('detects all test-only production candidates, including fixture support', () 
     expect(production).not.toContain(`src/test-only-${index}.test.ts`);
     expect(exports).not.toContain(`${file}::exports::abandoned`);
   }
-}, 30_000);
+}, 120_000);
 
 it('keeps each configured runtime and a lazy frontend dependency reachable', () => {
   const { root, write } = fixture();
@@ -128,7 +133,7 @@ it('keeps each configured runtime and a lazy frontend dependency reachable', () 
   );
   write('src/client/lazy-view.ts', 'console.log("lazy");');
   expect(analyze(root, 'production')).toEqual([]);
-});
+}, 120_000);
 
 it('reports export visibility separately, retains barrels and ignores same-file use', () => {
   const { root, write } = fixture();
@@ -157,7 +162,7 @@ it('reports export visibility separately, retains barrels and ignores same-file 
   expect(exports).not.toContain('src/client/feature/implementation.ts::exports::used');
   expect(exports).not.toContain('src/client/local.ts::exports::sameFile');
   expect(analyze(root, 'production')).toEqual([]);
-});
+}, 120_000);
 
 it('keeps known live previews, lazy viewers and critical runtime modules out of the repository report', () => {
   const candidates = analyze(resolve('.'), 'production');
@@ -178,7 +183,7 @@ it('keeps known live previews, lazy viewers and critical runtime modules out of 
     expect(readFileSync(resolve(file), 'utf8').length).toBeGreaterThan(0);
     expect(candidates).not.toContain(file);
   }
-}, 30_000);
+}, 120_000);
 
 describe('validated analyzer and inventory boundaries', () => {
   it.each([
@@ -268,7 +273,7 @@ it('reports new candidates without accepting them, and update cannot add debt', 
     spawnSync(
       process.execPath,
       ['--import', 'tsx', resolve('scripts/check-unused-code.ts'), ...args],
-      { cwd: root, encoding: 'utf8', timeout: 30_000 }
+      { cwd: root, encoding: 'utf8', timeout: ANALYZER_PROCESS_TIMEOUT }
     );
   const report = run(['--report']);
   expect(report.status).toBe(0);
@@ -292,7 +297,7 @@ it('reports new candidates without accepting them, and update cannot add debt', 
     inventory
   );
   expect(run(['--unknown']).status).toBe(1);
-}, 30_000);
+}, 120_000);
 
 it('renders matching inventories and prunes resolved entries in both modes', () => {
   const review = {
@@ -639,7 +644,7 @@ it('lets a conventional test helper and service barrel re-export pass, and nothi
     spawnSync(process.execPath, ['--import', 'tsx', resolve('scripts/check-unused-code.ts')], {
       cwd: root,
       encoding: 'utf8',
-      timeout: 30_000,
+      timeout: ANALYZER_PROCESS_TIMEOUT,
     });
   const accepted = run();
   expect(accepted.stderr).toBe('');
@@ -673,7 +678,7 @@ it('lets a conventional test helper and service barrel re-export pass, and nothi
   }
   expect(rejected.stderr).not.toContain('src/backend/services/feature/index.ts');
   expect(rejected.stderr).not.toContain('New production candidate: src/client/feature');
-}, 60_000);
+}, 120_000);
 
 it('rejects unsupported evaluator modes at the runtime boundary', () => {
   const baseline = parseUnusedCodeBaseline({ version: 1, production: {}, exports: {} });
