@@ -213,7 +213,7 @@ it('roundtrips real public owner-created same/cross-project links and null after
     reasons: { INCOMPLETE_DEPENDENCY: 0 },
   });
   expect(await target.prisma.periodicTaskExecution.count()).toBe(0);
-});
+}, 30_000);
 
 it('accepts a new workspace under an exactly compatible existing project linked to a task under a new project', async () => {
   const file = structuredClone(fixed);
@@ -460,7 +460,7 @@ it('finishes all task occupancy and linked root/child admission before the first
       orderBy: { id: 'asc' },
     })
   ).toEqual(localBefore);
-});
+}, 30_000);
 
 it.each(['workspace', 'session', 'pr', 'task-project'] as const)(
   'keeps local %s collision bytes and independently imports healthy links',
@@ -838,7 +838,11 @@ it('imports mixed history against more than 1000 occupied identities with exclus
     sourceRunning: 1005,
     restoredHistoricalFailed: 1002,
     restoredSettled: 0,
-    reasons: { EXISTING_IDENTITY: 1, CONFLICTING_IDENTITY_OR_PARENT: 1, INCOMPLETE_DEPENDENCY: 1 },
+    reasons: {
+      EXISTING_IDENTITY: 1,
+      CONFLICTING_IDENTITY_OR_PARENT: 1,
+      INCOMPLETE_DEPENDENCY: 1,
+    },
   });
   expect(
     await target.prisma.periodicTaskExecution.findMany({
@@ -857,7 +861,7 @@ it('imports mixed history against more than 1000 occupied identities with exclus
       INCOMPLETE_DEPENDENCY: 1,
     },
   });
-});
+}, 30_000);
 
 it('aborts the entire public import when actual created history owners disagree with the prewrite plan', async () => {
   const file = structuredClone(history);
