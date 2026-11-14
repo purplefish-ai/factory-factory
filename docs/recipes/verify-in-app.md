@@ -19,9 +19,8 @@ this and begin the "Driven in the sandbox" section with `Does not apply:`.
 
 2. Wait up to five minutes for the line `SANDBOX_READY <path>`, then copy that
    `sandbox.json` and read `frontendUrl`, `backendUrl`, `repoPath`, `pid` (the
-   launcher) and `pgid`. The launcher chose free ports; never assume one. If the
-   copy fails, the launcher did not start: `.context/verify/sandbox.log` says
-   why.
+   launcher) and `pgid`. It chose free ports; never assume one. If the copy
+   fails, the launcher did not start: `.context/verify/sandbox.log` says why.
 
    ```sh
    for i in $(seq 300); do grep -q SANDBOX_READY .context/verify/sandbox.log && break; sleep 1; done; cp "$(sed -n 's/^SANDBOX_READY //p' .context/verify/sandbox.log)" .context/verify/sandbox.json && cat .context/verify/sandbox.json
