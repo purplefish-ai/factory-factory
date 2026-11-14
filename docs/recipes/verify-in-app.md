@@ -32,11 +32,11 @@ this and say so in the pull request's "Driven in the sandbox" section.
    expected. To create a workspace: "New workspace", type a prompt, keep the
    Codex provider, "Launch". `generateWorkspaceNameFromPrompt`
    (`src/shared/workspace-words.ts`) names the card: the prompt's first six
-   words, lower-cased and hyphenated, minus words like "the" and "from" ("Hello
-   from the recipe trial" becomes `hello-recipe-trial`). So find the card by its
-   `/workspaces/<id>` link, in Working while the agent starts and in Waiting
-   after its reply, not by your prompt's text. The scripted agent (scenario
-   `echo`) repeats every message back. More selectors:
+   words that are not filler like "the" and "from", lower-cased and hyphenated
+   ("Hello from the recipe trial" becomes `hello-recipe-trial`). Find the card
+   by its `/workspaces/<id>` link, in Working while the agent starts and in
+   Waiting after its reply, not by your prompt's text. The scripted agent
+   (scenario `echo`) repeats every message back. More selectors:
    `e2e/sandbox-smoke.spec.ts`. With no browser tool, use a Playwright script.
 
 4. Screenshot the page that shows your change (the board, a workspace, a

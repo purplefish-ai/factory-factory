@@ -334,7 +334,12 @@ function checkRecipeShape(repository: GuidanceRepository, file: string): Guidanc
 
 /** The recipe a skill file names, as written: `docs/recipes/<name>.md`. */
 function skillTarget(content: string): string | undefined {
-  return /docs\/recipes\/[A-Za-z0-9._-]+\.md/.exec(content)?.[0];
+  return /docs\/recipes\/[A-Za-z0-9._-]+\.md/.exec(skillBody(content))?.[0];
+}
+
+/** A skill's text after its front matter. */
+function skillBody(content: string): string {
+  return content.replace(/^---\r?\n[\s\S]*?\r?\n---[ \t]*(?:\r?\n|$)/, '');
 }
 
 /** What is wrong with a skill's front matter, which needs a name and a description. */
@@ -368,8 +373,9 @@ function skillTargetProblem(
 
 /** A skill holds its front matter and one pointer line; procedure belongs in the recipe. */
 function skillBodyProblem(content: string): string | undefined {
-  const body = content.replace(/^---\r?\n[\s\S]*?\r?\n---[ \t]*(?:\r?\n|$)/, '');
-  const count = body.split(/\r?\n/).filter((line) => line.trim() !== '').length;
+  const count = skillBody(content)
+    .split(/\r?\n/)
+    .filter((line) => line.trim() !== '').length;
   return count > 1
     ? `has ${count} lines after its front matter; a skill holds one pointer line.`
     : undefined;

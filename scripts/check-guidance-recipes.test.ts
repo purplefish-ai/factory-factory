@@ -167,6 +167,19 @@ describe('recipes', () => {
     ]);
   });
 
+  test('a pointer in the front matter does not count as the pointer line', () => {
+    const repository = repositoryWith({
+      ...complete,
+      'docs/recipes/add-front.md': recipe(),
+      '.claude/skills/add-front/SKILL.md':
+        '---\nname: add-front\ndescription: Use docs/recipes/add-front.md.\n---\n\nRun `pnpm check`.\n',
+    });
+
+    expect(checkRecipes(repository).map(formatGuidanceViolation)).toEqual([
+      '.claude/skills/add-front/SKILL.md: recipes: does not point at a recipe under docs/recipes/. Fix: point it at the recipe it serves, or delete the skill.',
+    ]);
+  });
+
   test('rejects files under docs/recipes/ that no recipe rule would read', () => {
     const repository = repositoryWith({
       ...complete,
