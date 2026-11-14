@@ -48,8 +48,20 @@ vi.mock('./components/input-controls', async (importOriginal) => ({
 }));
 
 vi.mock('@/client/features/chat/usage-stats/provider-usage-control', () => ({
-  ProviderUsageControl: ({ onCompact }: { onCompact?: () => void }) =>
-    createElement('button', { onClick: onCompact, disabled: !onCompact }, 'Compact'),
+  ProviderUsageControl: ({
+    onCompact,
+    busy,
+    disabled,
+  }: {
+    onCompact?: () => void;
+    busy?: boolean;
+    disabled?: boolean;
+  }) =>
+    createElement(
+      'button',
+      { onClick: onCompact, disabled: !onCompact || busy || disabled },
+      'Compact'
+    ),
 }));
 
 describe('ChatInput file controls', () => {
@@ -185,6 +197,38 @@ it.each([true, false])(
       expect(textarea.value).toBe('Keep my draft');
       expect(onChange).not.toHaveBeenCalled();
       expect(onAttachmentsChange).not.toHaveBeenCalled();
+    } finally {
+      flushSync(() => root.unmount());
+    }
+  }
+);
+
+it.each([{ running: true }, { stopping: true }, { pendingMessageCount: 1 }, { disabled: true }])(
+  'passes running, stopping, queued and offline states to Compact: %j',
+  (state) => {
+    const container = document.createElement('div');
+    const root = createRoot(container);
+    try {
+      flushSync(() =>
+        root.render(
+          <TooltipProvider>
+            <ChatInput
+              onSend={vi.fn()}
+              onCompact={vi.fn()}
+              capabilities={{
+                ...EMPTY_CHAT_BAR_CAPABILITIES,
+                provider: 'CLAUDE',
+                usageStats: { enabled: true, contextWindow: true },
+              }}
+              {...state}
+            />
+          </TooltipProvider>
+        )
+      );
+      const compact = [...container.querySelectorAll('button')].find(
+        (element) => element.textContent === 'Compact'
+      );
+      expect(compact?.disabled).toBe(true);
     } finally {
       flushSync(() => root.unmount());
     }

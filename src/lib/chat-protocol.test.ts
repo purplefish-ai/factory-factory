@@ -532,6 +532,12 @@ describe('ACP context occupancy', () => {
     expect(after.contextWindow).toBe(100_000);
     expect(after.inputTokens).toBe(90_000);
     expect(after.outputTokens).toBe(20_000);
+    // Native compaction can raise occupancy in a short conversation; a higher reading still replaces.
+    const higher = updateTokenStatsFromResult(after, {
+      type: 'result',
+      result: { sessionUpdate: 'usage_update', used: 95_000, size: 100_000 },
+    });
+    expect(higher.contextUsedTokens).toBe(95_000);
   });
 
   it.each([

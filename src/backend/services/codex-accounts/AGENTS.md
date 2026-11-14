@@ -76,6 +76,9 @@ stores the credentials itself, in the profile. It does not own:
 - A native probe that outlives its deadline, or waits too long for a process
   slot, reports the retry message instead of native error text, and at most four
   native processes run at once. `native-rpc.test.ts`, `native-slots.test.ts`.
+- A native probe runs the bundled Codex executable directly on Windows and leads
+  its own process group elsewhere, so its cleanup reaches every descendant.
+  `native-rpc.test.ts`, `src/backend/lib/owned-codex-command.test.ts`.
 - Restoring a backup reuses a local account only for a verified matching
   identity and otherwise adds a managed profile that needs sign-in, never
   mapping an imported Native default onto this machine's login.

@@ -129,6 +129,14 @@ describe('Combined usage control', () => {
     click(button('Refresh usage'));
     expect(props.onRefresh).toHaveBeenCalledOnce();
   });
+  it('shows a failed plan read as a retry, never as a quota percentage', () => {
+    const props = render({ error: true });
+    click(button('Usage: 20% context, plan limit nearly reached'));
+    expect(document.body.textContent).toContain("Couldn't refresh plan limits. Try again.");
+    expect(document.body.textContent).not.toContain('94%');
+    click(button('Refresh usage'));
+    expect(props.onRefresh).toHaveBeenCalledOnce();
+  });
 });
 
 it('polls account limits only while the popover is open and refreshes after work ends', () => {
