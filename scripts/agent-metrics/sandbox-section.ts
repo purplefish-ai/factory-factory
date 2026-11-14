@@ -78,7 +78,12 @@ function stripComments(line: string, startsInComment: boolean): { text: string; 
   }
 }
 
-type ScannedLine = { heading: Heading | null; text: string };
+type ScannedLine = {
+  heading: Heading | null;
+  text: string;
+  /** The line begins inside a comment, so the line break before it was part of the comment. */
+  continuesComment: boolean;
+};
 
 /**
  * Each line's visible text (without comments outside code fences) and its
@@ -90,16 +95,15 @@ function scanLines(lines: readonly string[]): ScannedLine[] {
   return lines.map((line) => {
     if (fence !== null) {
       fence = closesFence(line, fence) ? null : fence;
-      return { heading: null, text: line };
+      return { heading: null, text: line, continuesComment: false };
     }
-    const startedInComment = inComment;
+    const continuesComment = inComment;
     const { text, open } = stripComments(line, inComment);
-    inComment = open;
-    if (startedInComment) {
-      return { heading: null, text };
-    }
-    fence = fenceOf(line);
-    return { heading: fence === null ? headingOf(text) : null, text };
+    // A fence opener's info string is not markup, so a `<!--` there opens no comment.
+    fence = continuesComment ? null : fenceOf(line);
+    inComment = fence === null ? open : false;
+    const heading = continuesComment || fence !== null ? null : headingOf(text);
+    return { heading, text, continuesComment };
   });
 }
 
@@ -116,8 +120,8 @@ function sectionText(body: string): string | null {
   );
   return scanned
     .slice(start + 1, next === -1 ? undefined : next)
-    .map(({ text }) => text)
-    .join('\n');
+    .map(({ text, continuesComment }) => (continuesComment ? text : `\n${text}`))
+    .join('');
 }
 
 function collapseWhitespace(text: string): string {

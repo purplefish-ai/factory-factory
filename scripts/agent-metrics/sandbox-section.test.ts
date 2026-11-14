@@ -104,6 +104,17 @@ describe('sandboxSectionState', () => {
     expect(sandboxSectionState('## Driven in the sandbox <!-- note -->\nRan it.')).toBe('filled');
   });
 
+  it('removes a comment that spans lines without leaving a line break behind', () => {
+    const split = templatePlaceholder.replace('user-visible', 'user-vis<!--\nnote\n-->ible');
+    expect(sandboxSectionState(`## Driven in the sandbox\n${split}\n`)).toBe('empty');
+  });
+
+  it('does not let a comment marker in a fence opener hide later headings', () => {
+    expect(
+      sandboxSectionState('```html <!--\ncode\n```\n\n## Driven in the sandbox\n\nRan it.\n')
+    ).toBe('filled');
+  });
+
   it('keeps comment markers inside a code fence as text', () => {
     expect(
       sandboxSectionState('## Driven in the sandbox\n\n```html\n<!-- shown\n```\n\n## Next\n')
