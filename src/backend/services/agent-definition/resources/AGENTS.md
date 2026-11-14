@@ -35,6 +35,11 @@ baselines and epochs. It does not own:
 - A claim counts every `RUNNING` run against the per-definition and global
   limits and advances the worker generation that fences older workers.
   `agent-queue-bounds.integration.test.ts`, `agent-prompt.integration.test.ts`.
+- Waiting-run expiry in a claim and in queue maintenance, and the cutoffs of the
+  evaluation, payload and identity retention batches, use a time read after the
+  ledger transaction holds the write lock.
+  `agent-queue-clock.integration.test.ts`,
+  `agent-ledger-retention.integration.test.ts`.
 - A GitHub event gets its `sourceOrder` only when its verified interval is
   finalized, in API order above the retained high water, never by arrival or
   provider ID. `agent-ledger.integration.test.ts`,
