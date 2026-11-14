@@ -108,6 +108,9 @@ it('keeps ordinary list calls compatible and rejects unrelated input fields', as
   ]);
   const input = { projectId, unexpected: true };
   await expect(caller.list(input)).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+  await expect(caller.list({ projectId, limit: 101 })).rejects.toMatchObject({
+    code: 'BAD_REQUEST',
+  });
 });
 
 it('summarizes each automation by its configured triggers states as the backend writes them', async () => {

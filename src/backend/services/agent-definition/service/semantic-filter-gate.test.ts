@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { AGENT_EVENT_CLASSIFICATION_PROMPT_VERSION } from '@/backend/prompts/agent-event-classification';
 import { configService } from '@/backend/services/config.service';
+import type { SessionProvider } from '@/shared/core/enums';
+import type { AgentTriggerInput } from '@/shared/schemas/agent-definition.schema';
 import {
   type ClassifierGateOutcome,
   fixturePayload,
@@ -9,6 +11,7 @@ import {
   loadClassifierGateRecord,
   scoreClassifierGate,
 } from '@/test-utils/agent-event-classifier-gate';
+import { triggerCapability } from './agent-management-projection';
 import {
   isClassifierProven,
   PROVEN_CLASSIFIER_PROVIDERS,
@@ -136,5 +139,30 @@ describe('checked-in classifier gate record', () => {
     for (const provider of ['CLAUDE', 'CODEX'] as const) {
       expect(semanticFilterSupported(provider)).toBe(isClassifierProven(provider));
     }
+  });
+
+  it('shows a filter on an inherited provider as supported only when every provider passed', () => {
+    const trigger: AgentTriggerInput = {
+      type: 'GITHUB_ISSUE',
+      description: 'Agent labels',
+      isEnabled: false,
+      filterInstructions: 'Only billing bugs',
+      connectionId: 'connection',
+      config: { version: 1, repositoryIds: ['repo'], actions: ['labeled'] },
+    };
+    const providers: SessionProvider[] = [...PROVEN_CLASSIFIER_PROVIDERS];
+    const proven = PROVEN_CLASSIFIER_PROVIDERS as SessionProvider[];
+    expect(triggerCapability(trigger, true).status).toBe('SUPPORTED');
+    proven.splice(proven.indexOf('CODEX'), 1);
+    try {
+      expect(triggerCapability(trigger, true)).toMatchObject({
+        status: 'UNSUPPORTED',
+        reasonCode: 'UNSUPPORTED_SEMANTIC_FILTER',
+      });
+      expect(triggerCapability(trigger, true, 'CLAUDE').status).toBe('SUPPORTED');
+    } finally {
+      proven.splice(0, proven.length, ...providers);
+    }
+    expect(triggerCapability(trigger, true).status).toBe('SUPPORTED');
   });
 });

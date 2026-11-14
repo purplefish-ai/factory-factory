@@ -105,6 +105,16 @@ it('creates the exact user-edited definition and triggers once across repeated a
   ]);
   expect(results[0].agentDefinitionId).toBe(results[1].agentDefinitionId);
   expect(await db.prisma.agentDefinition.count()).toBe(1);
+  // A retry returns the created automation only for the accepted specification.
+  await expect(
+    service.create({
+      workspaceId,
+      proposalId: proposal.id,
+      revision: 1,
+      specification: proposal.specification,
+    })
+  ).rejects.toMatchObject({ code: 'CONFLICT' });
+  expect(await db.prisma.agentDefinition.count()).toBe(1);
   const saved = await db.prisma.agentDefinition.findUniqueOrThrow({
     where: { id: results[0].agentDefinitionId ?? '' },
     include: { triggers: true },

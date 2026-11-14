@@ -475,6 +475,8 @@ describe('EventRunRecovery', () => {
   });
 
   it('reads the run again each time Inspect opens', async () => {
+    // As in the app, a read stays fresh for a while; reopening must not reuse it.
+    queryClient.setDefaultOptions({ queries: { retry: false, staleTime: 60_000 } });
     serveRecovery('heldAfterTurn');
     render();
     await openInspection('run-heldAfterTurn');
@@ -484,6 +486,24 @@ describe('EventRunRecovery', () => {
     await openInspection('run-heldAfterTurn');
     expect(count('automation.recoveryTarget')).toBe(2);
     expect(count('automation.inspectRun')).toBe(2);
+  });
+
+  it('does not read the run again while the dialog stays open', async () => {
+    // Timers created from here on, including any refetch interval, are fake.
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      serveRecovery('heldAfterTurn');
+      render();
+      await openInspection('run-heldAfterTurn');
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(10 * 60_000);
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+    expect(inspection()).not.toBeNull();
+    expect(count('automation.recoveryTarget')).toBe(1);
+    expect(count('automation.inspectRun')).toBe(1);
   });
 
   it('says when a run has already finished', async () => {

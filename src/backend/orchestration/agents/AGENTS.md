@@ -4,9 +4,9 @@ Composition around the agent-definition capsule: the event runtime's recurring
 jobs and its Slack listener, the launch consumer that turns a claimed run into a
 workspace and session, run monitoring and recovery, and the authoring and
 management flows that need other capsules. This guide so far covers the event
-runtime's jobs and how the runtime stops; the consumer, monitoring, recovery and
-authoring flows are added by the migrations of the integrations and
-agent-runtime notes, which extend Owns, Invariants and Map in place. The
+runtime's jobs, how the runtime stops, and saved management and authoring; the
+consumer, monitoring and recovery flows are added by the migration of the
+agent-runtime note, which extends Owns, Invariants and Map in place. The
 [services guide](../../services/AGENTS.md) covers capsule boundaries; the job
 runner is in "Recurring work" in the [backend process guide](../../AGENTS.md).
 Bare file names below are in this directory; paths that start with `src/` are
@@ -16,11 +16,12 @@ from the repository root.
 
 This directory owns which event runtime jobs exist, what one pass of each does
 and in which order, how the runtime stops, and the provider wiring behind the
-capsule's ports (GitHub reads, the event classifier, Slack context and sockets).
-It does not own:
+capsule's ports (GitHub reads, the event classifier, Slack context and sockets),
+source discovery and verification, draft validation and history's workspace
+provenance. It does not own:
 
-- Sources, events, evaluations, the run queue, claims, activation, retention and
-  the Slack adapter `SlackEventSource`:
+- Sources, events, evaluations, the run queue, claims, activation, retention,
+  `SlackEventSource` and Slack intake rules (its `service/` guide):
   `src/backend/services/agent-definition/`.
 - GitHub reads and their shared process budget: `src/backend/services/github/`.
 - The disposable classifier call: `classifyAgentEvent` in
@@ -71,6 +72,24 @@ There is no separate activation or retention job.
 - Stopping the Slack intake disconnects every socket and records the stop before
   it returns, and the intake opens no socket while its gate is off.
   `slack-intake.orchestrator.integration.test.ts`.
+- `updateSaved`, `projectSources` and `validateDraft` refuse an archived
+  project; `get` does not.
+  `src/backend/trpc/agent-management.integration.test.ts`.
+- Proposals accept only the project's repository, labels it has and Slack
+  channels the bot can read, and a saved edit fails when the project's
+  repository changed meanwhile. `src/backend/trpc/agent.integration.test.ts`,
+  `src/backend/trpc/agent-management.integration.test.ts`.
+- Source discovery drops a Slack connection that was disconnected or changed
+  identity while it ran, and fails when it was the selected one.
+  `src/backend/trpc/agent-management.integration.test.ts`.
+- Ordinary reads never call native discovery; `validateDraft`, a POST mutation,
+  judges filters for the provider resolved then, an inherited one included.
+  `src/backend/trpc/agent-management.integration.test.ts`.
+- History shows `LIVE` or `DELETED` only from the workspace's retained origin,
+  and a run whose workspace link disagrees with it reads as `NOT_FOUND`.
+  `src/backend/trpc/agent-management.integration.test.ts`.
+- The classifier port calls with the default account and drops the reason text.
+  `agent-event-classifier.orchestrator.test.ts`.
 
 ## Map
 
@@ -87,3 +106,7 @@ There is no separate activation or retention job.
 - `agent-management.orchestrator.ts`, `agent-authoring.orchestrator.ts`,
   `agent-sources.orchestrator.ts`, `agent-native-validation.ts`: saved
   automations, proposals, source discovery and native model checks.
+
+## Decisions
+
+- [Draft validation is a POST mutation](../../../../docs/decisions/2026-11-14-draft-validation-is-a-post-mutation.md)

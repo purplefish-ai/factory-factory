@@ -179,6 +179,9 @@ it.each(['runs', 'evaluations'] as const)(
     expect((await caller[procedure](owner)).items).toHaveLength(2);
     const unexpected = { ...owner, unexpected: true };
     await expect(caller[procedure](unexpected)).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+    await expect(caller[procedure]({ ...owner, limit: 101 })).rejects.toMatchObject({
+      code: 'BAD_REQUEST',
+    });
     // Only forward pages exist; the input type already refuses any other direction.
     const backward = { ...owner, direction: 'backward' } as never;
     await expect(caller[procedure](backward)).rejects.toMatchObject({ code: 'BAD_REQUEST' });

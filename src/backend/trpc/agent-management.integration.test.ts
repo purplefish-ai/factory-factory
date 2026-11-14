@@ -268,10 +268,18 @@ it('keeps unsupported settings saveable while rejecting foreign and archived own
     (await caller.validateDraft({ projectId, specification: unsupported })).triggers[0]?.capability
       .reasonCode
   ).toBe('UNSUPPORTED_GITHUB_ACTION');
-  await expect(caller.get({ ...owner, projectId: 'foreign' })).rejects.toMatchObject({
-    code: 'NOT_FOUND',
-  });
+  const foreign = { ...owner, projectId: 'foreign' };
+  await expect(caller.get(foreign)).rejects.toMatchObject({ code: 'NOT_FOUND' });
+  await expect(caller.runs(foreign)).rejects.toMatchObject({ code: 'NOT_FOUND' });
+  await expect(caller.evaluations(foreign)).rejects.toMatchObject({ code: 'NOT_FOUND' });
+  await expect(
+    caller.updateSaved({ ...foreign, expectedManagementRevision: 2, specification: unsupported })
+  ).rejects.toMatchObject({ code: 'NOT_FOUND' });
   await db.prisma.project.update({ where: { id: projectId }, data: { isArchived: true } });
+  expect(await caller.get(owner)).toMatchObject({ managementRevision: 2 });
+  await expect(
+    caller.updateSaved({ ...owner, expectedManagementRevision: 2, specification: unsupported })
+  ).rejects.toMatchObject({ code: 'PRECONDITION_FAILED' });
   expect(await caller.get(owner)).toMatchObject({ managementRevision: 2 });
   await expect(caller.projectSources({ projectId })).rejects.toMatchObject({
     code: 'PRECONDITION_FAILED',
@@ -304,6 +312,31 @@ it.each([{ origin: 'https://evil.invalid' }, { 'x-forwarded-for': '203.0.113.1' 
     expect(response.status).toBe(403);
     expect(repository).not.toHaveBeenCalled();
     expect(native).not.toHaveBeenCalled();
+  }
+);
+
+it.each(['list', 'get', 'runs', 'evaluations', 'navigationSummary'] as const)(
+  'refuses a forwarded remote %s read at the real HTTP guard',
+  async (procedure) => {
+    const owner = await save();
+    const app = express();
+    app.use(
+      '/api/trpc',
+      createExpressMiddleware({
+        router: agentRouter,
+        createContext: createContext({
+          services: { ...services, agentManagement: createAgentManagement(() => services) },
+        } as never),
+      })
+    );
+    const input = procedure === 'list' || procedure === 'navigationSummary' ? { projectId } : owner;
+    const read = (headers: Record<string, string>) =>
+      request(app)
+        .get(`/api/trpc/${procedure}`)
+        .query({ input: JSON.stringify({ json: input }) })
+        .set(headers);
+    expect((await read({})).status).toBe(200);
+    expect((await read({ 'x-forwarded-for': '203.0.113.1' })).status).toBe(403);
   }
 );
 

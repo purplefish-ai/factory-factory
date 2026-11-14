@@ -307,7 +307,7 @@ it('honors Retry-After and does not store provider error text', async () => {
   expect(evaluation.nextAttemptAt).toEqual(new Date(now.getTime() + 90_000));
   expect(JSON.stringify(evaluation)).not.toContain('secret credential');
 });
-it.each(['pause', 'revision'] as const)(
+it.each(['pause', 'revision', 'removal'] as const)(
   'settles pending unadmitted matches after %s without reevaluation',
   async (change) => {
     const eventId = await fixture.event();
@@ -317,7 +317,16 @@ it.each(['pause', 'revision'] as const)(
       data:
         change === 'pause'
           ? { isEnabled: false, activationState: 'PAUSED' }
-          : { triggerRevision: 2, activationGeneration: 2 },
+          : change === 'revision'
+            ? { triggerRevision: 2, activationGeneration: 2 }
+            : // A saved edit that removes the trigger leaves it unconfigured, paused and revised.
+              {
+                isConfigured: false,
+                isEnabled: false,
+                activationState: 'PAUSED',
+                triggerRevision: 2,
+                activationGeneration: 2,
+              },
     });
     await evaluator(() =>
       Promise.reject(new Error('Must not resolve historical settings'))
