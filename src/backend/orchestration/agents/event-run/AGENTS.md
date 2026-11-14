@@ -4,9 +4,9 @@ The launch consumer that turns a claimed event run into a workspace and session,
 with launch, resources, workspace initialisation, monitoring, child rest and
 recovery. `src/backend/orchestration/agents/agent-runtime.orchestrator.ts`
 creates it; the [parent guide](../AGENTS.md) covers its jobs. The migration of
-the agent-runtime note (tasks 2.4d and 2.4e) adds this guide's rules, extending
-Owns, Invariants and Map in place. Bare file names below are in this directory;
-paths that start with `src/` are from the repository root.
+the agent-runtime note adds this guide's rules, extending Owns and Map in place
+and adding Invariants. Bare file names below are in this directory; paths that
+start with `src/` are from the repository root.
 
 ## Owns, and does not own
 
