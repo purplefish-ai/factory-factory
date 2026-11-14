@@ -2004,8 +2004,7 @@ Rules, hazards and reasons from the migrated paragraphs that belong to another
 area. Each entry quotes only the sentences it needs from the paragraph named
 after it, verbatim. The migration that creates the named area's guide checks the
 entry, moves what holds there and deletes the entry here. Paragraph numbers are
-the rows of the disposition table in the pull request that migrated the
-application update paragraphs.
+the rows of the disposition table in pull request #3242.
 
 > ACP admission is injected by composition to preserve dependency isolation.
 
