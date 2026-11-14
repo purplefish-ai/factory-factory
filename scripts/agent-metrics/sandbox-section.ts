@@ -35,13 +35,13 @@ function headingOf(line: string): Heading | null {
   return { level: match[1]?.length ?? 1, title: (closing ? title.slice(0, end) : title).trim() };
 }
 
-function fenceOf(line: string): { character: string; length: number } | null {
+type Fence = { character: string; length: number };
+
+function fenceOf(line: string): Fence | null {
   const match = /^ {0,3}(`{3,}|~{3,})/.exec(line);
   const run = match?.[1];
   return run ? { character: run.charAt(0), length: run.length } : null;
 }
-
-type Fence = { character: string; length: number };
 
 function closesFence(line: string, fence: Fence): boolean {
   const opening = fenceOf(line);
@@ -52,50 +52,72 @@ function closesFence(line: string, fence: Fence): boolean {
   );
 }
 
-/** Each line's heading, or null for other lines and for everything inside a code fence. */
-function headingsOutsideFences(lines: readonly string[]): (Heading | null)[] {
+/** `line` without its HTML comments, and whether a comment is still open at its end. */
+function stripComments(line: string, startsInComment: boolean): { text: string; open: boolean } {
+  let text = '';
+  let position = 0;
+  let open = startsInComment;
+  for (;;) {
+    if (open) {
+      const end = line.indexOf('-->', position);
+      if (end === -1) {
+        // An unclosed comment runs on, as in HTML.
+        return { text, open };
+      }
+      position = end + 3;
+      open = false;
+    } else {
+      const start = line.indexOf('<!--', position);
+      if (start === -1) {
+        return { text: text + line.slice(position), open };
+      }
+      text += line.slice(position, start);
+      position = start + 4;
+      open = true;
+    }
+  }
+}
+
+type ScannedLine = { heading: Heading | null; text: string };
+
+/**
+ * Each line's visible text (without comments outside code fences) and its
+ * heading. A line inside a code fence or a comment is never a heading.
+ */
+function scanLines(lines: readonly string[]): ScannedLine[] {
   let fence: Fence | null = null;
+  let inComment = false;
   return lines.map((line) => {
     if (fence !== null) {
       fence = closesFence(line, fence) ? null : fence;
-      return null;
+      return { heading: null, text: line };
+    }
+    const startedInComment = inComment;
+    const { text, open } = stripComments(line, inComment);
+    inComment = open;
+    if (startedInComment) {
+      return { heading: null, text };
     }
     fence = fenceOf(line);
-    return fence === null ? headingOf(line) : null;
+    return { heading: fence === null ? headingOf(text) : null, text };
   });
 }
 
-/** The lines under the first matching heading, up to the next heading of the same or a higher level. */
-function sectionLines(body: string): string[] | null {
-  const lines = body.split(/\r?\n/);
-  const headings = headingsOutsideFences(lines);
-  const start = headings.findIndex((heading) => heading?.title.toLowerCase() === sectionTitle);
-  const level = headings[start]?.level;
+/** The text under the first matching heading, up to the next heading of the same or a higher level. */
+function sectionText(body: string): string | null {
+  const scanned = scanLines(body.split(/\r\n|\r|\n/));
+  const start = scanned.findIndex(({ heading }) => heading?.title.toLowerCase() === sectionTitle);
+  const level = scanned[start]?.heading?.level;
   if (level === undefined) {
     return null;
   }
-  const next = headings.findIndex(
-    (heading, index) => index > start && (heading?.level ?? 7) <= level
+  const next = scanned.findIndex(
+    ({ heading }, index) => index > start && heading !== null && heading.level <= level
   );
-  return lines.slice(start + 1, next === -1 ? undefined : next);
-}
-
-function withoutComments(text: string): string {
-  let result = '';
-  let position = 0;
-  for (;;) {
-    const start = text.indexOf('<!--', position);
-    if (start === -1) {
-      return result + text.slice(position);
-    }
-    result += text.slice(position, start);
-    const end = text.indexOf('-->', start + 4);
-    if (end === -1) {
-      // An unclosed comment runs to the end, as in HTML.
-      return result;
-    }
-    position = end + 3;
-  }
+  return scanned
+    .slice(start + 1, next === -1 ? undefined : next)
+    .map(({ text }) => text)
+    .join('\n');
 }
 
 function collapseWhitespace(text: string): string {
@@ -107,12 +129,13 @@ function collapseWhitespace(text: string): string {
  * text other than whitespace, HTML comments and the template's placeholder.
  */
 export function sandboxSectionState(body: string): SandboxSectionState {
-  const lines = sectionLines(body);
-  if (lines === null) {
+  const text = sectionText(body);
+  if (text === null) {
     return 'missing';
   }
-  const text = collapseWhitespace(withoutComments(lines.join('\n')));
-  return text.replaceAll(templatePlaceholder, '').trim().length > 0 ? 'filled' : 'empty';
+  return collapseWhitespace(text).replaceAll(templatePlaceholder, '').trim().length > 0
+    ? 'filled'
+    : 'empty';
 }
 
 export type SandboxSectionMetrics = {

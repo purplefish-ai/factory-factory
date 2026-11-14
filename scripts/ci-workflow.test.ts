@@ -392,8 +392,8 @@ describe('weekly agent metrics workflow', () => {
     expect(Object.keys(metrics.on).toSorted()).toEqual(['schedule', 'workflow_dispatch']);
     const schedule = z.array(z.object({ cron: z.string() })).parse(metrics.on.schedule);
     expect(schedule).toHaveLength(1);
-    // Minute, hour, any day of the month, any month, one weekday: once a week.
-    expect(schedule[0]?.cron).toMatch(/^\d+ \d+ \* \* [0-6]$/);
+    // Mondays at 06:17 UTC.
+    expect(schedule[0]?.cron).toBe('17 6 * * 1');
   });
 
   it('can only read, and uses no secret but the workflow token', () => {
@@ -461,6 +461,7 @@ describe('weekly agent metrics workflow', () => {
       name: 'agent-metrics',
       path: 'agent-metrics.json',
       'if-no-files-found': 'error',
+      'retention-days': 90,
     });
   });
 });

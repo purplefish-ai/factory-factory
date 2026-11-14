@@ -85,6 +85,31 @@ describe('sandboxSectionState', () => {
     ).toBe('filled');
   });
 
+  it('reads every line ending', () => {
+    expect(sandboxSectionState('## Why\rB.\r## Driven in the sandbox\rRan it.\r## Next\rC.')).toBe(
+      'filled'
+    );
+    expect(sandboxSectionState('## Driven in the sandbox\r\r## Next\rC.')).toBe('empty');
+  });
+
+  it('ignores headings inside comments', () => {
+    expect(sandboxSectionState('<!-- ## Driven in the sandbox -->\nText.\n')).toBe('missing');
+    expect(sandboxSectionState('<!--\n## Driven in the sandbox\n-->\n\n## Why\n\nText.\n')).toBe(
+      'missing'
+    );
+    // A heading in a comment does not end the section either.
+    expect(
+      sandboxSectionState('## Driven in the sandbox\n<!--\n## Next\n-->\nRan it.\n## Why\n')
+    ).toBe('filled');
+    expect(sandboxSectionState('## Driven in the sandbox <!-- note -->\nRan it.')).toBe('filled');
+  });
+
+  it('keeps comment markers inside a code fence as text', () => {
+    expect(
+      sandboxSectionState('## Driven in the sandbox\n\n```html\n<!-- shown\n```\n\n## Next\n')
+    ).toBe('filled');
+  });
+
   it('accepts heading variants and treats the body only as text', () => {
     expect(sandboxSectionState('# driven in the SANDBOX #\nRan.\n')).toBe('filled');
     expect(sandboxSectionState('## Driven in the sandbox\n$(rm -rf /) `id` && exit 1')).toBe(
