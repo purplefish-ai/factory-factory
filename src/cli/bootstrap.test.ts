@@ -131,6 +131,69 @@ it.skipIf(process.platform === 'win32').each([false, true])(
   10_000
 );
 
+// Send SIGTERM to this process the instant its first spawn returns, before the
+// caller's next statement: the window where a parent that registers its signal
+// listener only after spawning dies and orphans the child.
+const SIGTERM_AFTER_FIRST_SPAWN = `import childProcess from 'node:child_process';
+import { renameSync, writeFileSync } from 'node:fs';
+import { syncBuiltinESMExports } from 'node:module';
+const spawn = childProcess.spawn;
+childProcess.spawn = (...args) => {
+  childProcess.spawn = spawn;
+  syncBuiltinESMExports();
+  const child = spawn(...args);
+  writeFileSync(new URL('./spawned.pid.tmp', import.meta.url), String(child.pid));
+  renameSync(new URL('./spawned.pid.tmp', import.meta.url), new URL('./spawned.pid', import.meta.url));
+  process.kill(process.pid, 'SIGTERM');
+  return child;
+};
+syncBuiltinESMExports();`;
+
+it.skipIf(process.platform === 'win32').each([
+  { parent: 'launcher', child: 'application' },
+  { parent: 'setup', child: 'installer' },
+] as const)(
+  'stops the $child when SIGTERM reaches the $parent as it spawns it',
+  async ({ parent }) => {
+    const root = fixture('1.0.0');
+    const hook = join(root, 'sigterm-after-spawn.mjs');
+    writeFileSync(hook, SIGTERM_AFTER_FIRST_SPAWN);
+    writeFileSync(join(root, 'worker.mjs'), 'setInterval(() => {}, 1000);');
+    writeFileSync(
+      join(root, 'index.js'),
+      parent === 'launcher'
+        ? 'setInterval(() => {}, 1000);'
+        : `import './sigterm-after-spawn.mjs';
+           import { fileURLToPath } from 'node:url';
+           import { createSetupIO, confirmFix } from './setup-prerequisites.mjs';
+           const io = createSetupIO();
+           io.interactive = true;
+           io.ask = async () => 'y';
+           await confirmFix([process.execPath, fileURLToPath(new URL('./worker.mjs', import.meta.url))], io);`
+    );
+    const child = spawn(
+      process.execPath,
+      [...(parent === 'launcher' ? ['--import', hook] : []), join(root, 'bootstrap.mjs'), 'serve'],
+      { stdio: 'ignore' }
+    );
+    const exit = await new Promise((resolve) =>
+      child.once('exit', (code, signal) => resolve({ code, signal }))
+    );
+    const spawned = Number(readFileSync(join(root, 'spawned.pid'), 'utf8'));
+    try {
+      expect(exit).toEqual({ code: 143, signal: null });
+      // The parent waits for its child to exit before it exits itself.
+      expect(() => process.kill(spawned, 0)).toThrow();
+    } finally {
+      try {
+        process.kill(spawned, 'SIGKILL');
+      } catch {
+        /* Already stopped. */
+      }
+    }
+  }
+);
+
 it('cancels startup on Ctrl+C at the confirmation prompt', () => {
   const root = fixture('1.0.0');
   writeFileSync(

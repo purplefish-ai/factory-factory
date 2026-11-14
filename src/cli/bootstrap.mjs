@@ -43,7 +43,15 @@ async function main() {
       return;
     }
   }
-  const child = spawn(
+  // Listen before spawning: a signal that lands after the child starts but
+  // before the listener exists would kill this process and orphan the child.
+  // Listeners run on the event loop, so none runs before `child` is assigned.
+  let child;
+  const onInterrupt = () => child?.kill('SIGINT');
+  const onTerminate = () => child?.kill('SIGTERM');
+  process.on('SIGINT', onInterrupt);
+  process.on('SIGTERM', onTerminate);
+  child = spawn(
     process.execPath,
     [
       ...(source
@@ -53,10 +61,6 @@ async function main() {
     ],
     { stdio: 'inherit' }
   );
-  const onInterrupt = () => child.kill('SIGINT');
-  const onTerminate = () => child.kill('SIGTERM');
-  process.on('SIGINT', onInterrupt);
-  process.on('SIGTERM', onTerminate);
   const cleanup = () => {
     process.off('SIGINT', onInterrupt);
     process.off('SIGTERM', onTerminate);

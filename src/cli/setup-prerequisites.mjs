@@ -29,15 +29,11 @@ export function supportsNode(version, minimum) {
 function execute(command, args, visible) {
   return new Promise((resolve) => {
     const grouped = visible && process.platform !== 'win32';
-    const child = spawn(command, args, {
-      stdio: visible ? 'inherit' : 'ignore',
-      detached: grouped,
-      ...(visible ? {} : { timeout: 5000 }),
-    });
+    let child;
     let cancelled = 0;
     let forceStop;
     const terminate = (signal) => {
-      if (!child.pid) {
+      if (!child?.pid) {
         return;
       }
       try {
@@ -63,9 +59,24 @@ function execute(command, args, visible) {
     };
     const onInterrupt = () => stop('SIGINT', 130);
     const onTerminate = () => stop('SIGTERM', 143);
+    // Listen before spawning: a signal that lands after the installer starts
+    // but before the listener exists would kill setup and orphan the
+    // installer's process group. Listeners run on the event loop, after
+    // `child` is assigned.
     if (visible) {
       process.on('SIGINT', onInterrupt);
       process.on('SIGTERM', onTerminate);
+    }
+    try {
+      child = spawn(command, args, {
+        stdio: visible ? 'inherit' : 'ignore',
+        detached: grouped,
+        ...(visible ? {} : { timeout: 5000 }),
+      });
+    } catch (error) {
+      process.off('SIGINT', onInterrupt);
+      process.off('SIGTERM', onTerminate);
+      throw error;
     }
     const finish = (success) => {
       clearTimeout(forceStop);
