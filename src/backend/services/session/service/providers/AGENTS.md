@@ -35,18 +35,18 @@ for good.
 
 - A cache runs one discovery at a time and shares it with every concurrent
   caller, including its failure; the next request after a failure starts a new
-  discovery. `claude-model-catalog.service.test.ts`,
-  `codex-model-catalog.service.test.ts`,
+  discovery unless the failed one's child is still draining (below).
+  `claude-model-catalog.service.test.ts`, `codex-model-catalog.service.test.ts`,
   `../config/session-config-projection.test.ts`.
 - Once a catalog is five minutes old, a read returns it at once and starts one
-  background refresh; a failed refresh keeps it, logs one warning without the
-  error, and is not retried for 30 seconds. `model-catalog-cache.test.ts`,
-  `codex-model-catalog.service.test.ts`.
+  background refresh unless a child is still draining; a failed refresh keeps
+  it, logs one warning without the error, and is not retried for 30 seconds.
+  `model-catalog-cache.test.ts`, `codex-model-catalog.service.test.ts`.
 - Every read returns its own copy of the catalog.
   `codex-model-catalog.service.test.ts`.
-- While a discovery's child has not drained, the cache starts no other
-  discovery: reads without a catalog fail as busy.
-  `model-catalog-cache.test.ts`.
+- After a discovery settles, the cache starts no other discovery until its child
+  has drained: reads without a catalog fail as busy, and a stale catalog is
+  served without a refresh. `model-catalog-cache.test.ts`.
 - `stop()` aborts the running discovery and refuses every later one, then waits
   at most seven seconds for children to drain. `model-catalog-cache.test.ts`,
   `codex-model-catalog.service.test.ts`.

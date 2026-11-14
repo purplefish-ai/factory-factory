@@ -47,8 +47,10 @@ here directly.
   `acp-working-directory.test.ts`.
 - A runtime started with a model is returned only once the provider confirms
   that model through its advertised model option; an unadvertised or unconfirmed
-  model fails the start instead of keeping another model, and a browse-only
-  runtime changes no configuration. `acp-model-selection.test.ts`,
+  model fails the start instead of keeping another model (Codex's `default`
+  means its current native model, and a Claude family alias resolves only to a
+  single advertised identity), and a browse-only runtime changes no
+  configuration. `acp-model-selection.test.ts`,
   `acp-runtime-manager.model-selection.test.ts`.
 - The startup model configuration runs under the session creation deadline
   (`ACP_SESSION_CREATION_TIMEOUT_MS`), not the handshake's.
@@ -78,7 +80,8 @@ here directly.
 - `acp-runtime-errors.ts`: runtime errors, including the resume error that keeps
   the provider's message, code, details and cause.
 - `claude-model-catalog-loader.ts`, `codex-model-catalog-loader.ts`,
-  `session-launch-options-probe.ts`: disposable discovery processes.
+  `session-launch-options-probe.ts`, `claude-plan-usage-loader.ts`,
+  `codex-plan-usage-loader.ts`: disposable discovery processes.
 
 ## Decisions
 
