@@ -2,8 +2,9 @@ import { EventEmitter } from 'node:events';
 import { existsSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
+import { main } from '../dev-sandbox.mjs';
 import { MAX_PORT_ATTEMPTS, run } from './launch.mjs';
-import { findProcess, realSystem } from './process-group.mjs';
+import { collectGroupProcesses, findProcess, realSystem } from './process-group.mjs';
 import { readSandboxRecord } from './record.mjs';
 import { launch, launcherEnv, spawnSleeper, temporaryDirectories } from './test-support';
 
@@ -34,6 +35,8 @@ function harness() {
       onSignal: (signal: string, handler: Handler) => handlers.set(signal, handler),
       log: (text: string) => logs.push(text),
       print: () => undefined,
+      // The real step builds in the checkout; the cases that care replace it.
+      ensureNativeModules: () => Promise.resolve({ rebuilt: false }),
       findPort: () => {
         nextPort += 1;
         return Promise.resolve(nextPort);
@@ -366,6 +369,141 @@ describe('launcher setup and shutdown', () => {
   }, 60_000);
 });
 
+describe('building the native modules', () => {
+  it('builds them once, before the server is spawned and outside its startup timer', async () => {
+    const h = harness();
+    const events: string[] = [];
+    const code = await run(
+      { scenario: 'echo', keep: false },
+      {
+        ...h.deps,
+        // Longer than the startup timer: the timer must not include the step.
+        startupTimeoutMs: 50,
+        ensureNativeModules: async () => {
+          events.push('native modules');
+          await realSystem.sleep(200);
+          events.push('native modules done');
+          return { rebuilt: true };
+        },
+        spawnImpl: (...args: [string, string[]]) => {
+          events.push('server spawned');
+          return failingSpawn(h.spawned)(...args);
+        },
+      }
+    );
+    expect(events).toEqual(['native modules', 'native modules done', 'server spawned']);
+    // The server failed on its own, not by the timer started before the step.
+    expect(code).toBe(1);
+    expect(h.logs.join('\n')).toContain('the server could not be started: spawn node ENOENT');
+    expect(h.logs.filter((line) => /native modules/i.test(line))).toEqual([
+      expect.stringMatching(/^built the native modules for Node in \d+\.\d s$/),
+    ]);
+  }, 60_000);
+
+  it('logs one line, without a time, when there was nothing to build', async () => {
+    const h = harness();
+    await run(
+      { scenario: 'echo', keep: false },
+      {
+        ...h.deps,
+        ensureNativeModules: () => Promise.resolve({ rebuilt: false }),
+        spawnImpl: failingSpawn(h.spawned),
+      }
+    );
+    expect(h.logs.filter((line) => /native modules/i.test(line))).toEqual([
+      'the native modules are already built for Node',
+    ]);
+  }, 60_000);
+
+  it('spawns nothing and removes the directory when the step fails', async () => {
+    const h = harness();
+    const code = await run(
+      { scenario: 'echo', keep: false },
+      {
+        ...h.deps,
+        ensureNativeModules: () => Promise.reject(new Error('pnpm rebuild exited with code 1')),
+        spawnImpl: failingSpawn(h.spawned),
+      }
+    );
+    expect(code).toBe(1);
+    expect(h.spawned).toEqual([]);
+    expect(h.logs.join('\n')).toContain('startup failed: pnpm rebuild exited with code 1');
+    expect(h.sandboxDirs()).toEqual([]);
+  }, 60_000);
+
+  it('abandons the step when a signal arrives, and cleans up', async () => {
+    const h = harness();
+    const code = await run(
+      { scenario: 'echo', keep: false },
+      {
+        ...h.deps,
+        ensureNativeModules: ({ signal }: { signal: AbortSignal }) =>
+          new Promise((_resolve, reject) => {
+            signal.addEventListener('abort', () => reject(new Error('aborted')));
+            h.handlers.get('SIGTERM')?.();
+          }),
+        spawnImpl: failingSpawn(h.spawned),
+      }
+    );
+    expect(code).toBe(143);
+    expect(h.spawned).toEqual([]);
+    expect(h.sandboxDirs()).toEqual([]);
+  }, 60_000);
+
+  it('is not run by --help, --clean or an argument error', async () => {
+    const calls: string[] = [];
+    const written: string[] = [];
+    const h = harness();
+    const dependencies = {
+      stdout: { write: (text: string) => written.push(text) },
+      stderr: { write: (text: string) => written.push(text) },
+      clean: () => {
+        calls.push('clean');
+        return Promise.resolve();
+      },
+      runSandbox: (options: Parameters<typeof run>[0]) =>
+        run(options, {
+          ...h.deps,
+          ensureNativeModules: () => {
+            calls.push('native modules');
+            return Promise.resolve({ rebuilt: false });
+          },
+          spawnImpl: failingSpawn(h.spawned),
+        }),
+    };
+    expect(await main(['--help'], dependencies)).toBe(0);
+    expect(await main(['--clean'], dependencies)).toBe(0);
+    expect(await main(['--no-such-flag'], dependencies)).toBe(2);
+    expect(await main(['--ttl-minutes', 'soon'], dependencies)).toBe(2);
+    expect(calls).toEqual(['clean']);
+    expect(h.sandboxDirs()).toEqual([]);
+    // Control: starting a sandbox does run it, so the three above are not vacuous.
+    expect(await main([], dependencies)).toBe(1);
+    expect(calls).toEqual(['clean', 'native modules']);
+  }, 60_000);
+});
+
+/**
+ * Kills the server group a test's launcher started, if anything of it is left. While any member
+ * lives its group ID cannot be reused, so members with no leader are ours; a leader that started
+ * at another time is someone else's process that took the pid.
+ */
+function killServerGroup(server: { pgid: number; pgidStartedAt: string } | null) {
+  if (!server) {
+    return;
+  }
+  const processes = realSystem.listProcesses();
+  const leader = findProcess(processes, server.pgid);
+  const members = processes.filter((p) => p.pgid === server.pgid && !p.zombie);
+  if (leader ? leader.startedAt === server.pgidStartedAt : members.length > 0) {
+    try {
+      process.kill(-server.pgid, 'SIGKILL');
+    } catch {
+      // Gone between the check and the signal.
+    }
+  }
+}
+
 describe('the real launcher', () => {
   it('removes its directory when signalled during setup', async () => {
     const tempDir = temporary.create('ffsb-');
@@ -402,4 +540,74 @@ describe('the real launcher', () => {
       sandbox.child.kill('SIGKILL');
     }
   }, 180_000);
+
+  it('stops and removes its directory when the process reading its output has died', async () => {
+    const tempDir = temporary.create('ffsb-');
+    const root = join(tempDir, 'ff-sandbox');
+    // Bounded: the owner ends itself after the helper lifetime, the launcher after its time to live.
+    const owner = spawnSleeper();
+    const sandbox = launch(
+      ['--owner-pid', String(owner.pid), '--ttl-minutes', '10'],
+      launcherEnv(tempDir)
+    );
+    try {
+      const deadline = Date.now() + 150_000;
+      while (
+        !(existsSync(root) && readdirSync(root).length > 0) &&
+        sandbox.child.exitCode === null &&
+        Date.now() < deadline
+      ) {
+        await realSystem.sleep(20);
+      }
+      expect(readdirSync(root)).toHaveLength(1);
+      // The reader dies: the launcher's next write to stdout or stderr gets EPIPE.
+      sandbox.child.stdout?.destroy();
+      sandbox.child.stderr?.destroy();
+      owner.kill('SIGKILL');
+      // Its stop writes "stopping (...)" to the dead pipe, then must still clean up.
+      expect(await sandbox.exited).toBe(0);
+      expect(readdirSync(root)).toEqual([]);
+    } finally {
+      owner.kill('SIGKILL');
+      sandbox.child.kill('SIGKILL');
+    }
+  }, 240_000);
+
+  it('stops its running server and removes its directory when the output reader has died', async () => {
+    const tempDir = temporary.create('ffsb-');
+    const root = join(tempDir, 'ff-sandbox');
+    // Bounded: the owner ends itself after the helper lifetime, the launcher after its time to live.
+    const owner = spawnSleeper();
+    const sandbox = launch(
+      ['--owner-pid', String(owner.pid), '--ttl-minutes', '10'],
+      launcherEnv(tempDir)
+    );
+    let server: { pgid: number; pgidStartedAt: string } | null = null;
+    try {
+      const deadline = Date.now() + 240_000;
+      while (!/^SANDBOX_READY /m.test(sandbox.output())) {
+        expect(sandbox.child.exitCode, sandbox.output()).toBeNull();
+        expect(Date.now(), sandbox.output()).toBeLessThan(deadline);
+        await realSystem.sleep(100);
+      }
+      const [dir] = readdirSync(root);
+      const record = readSandboxRecord(join(root, dir ?? '', 'sandbox.json'));
+      server =
+        record?.pgid && record.pgidStartedAt
+          ? { pgid: record.pgid, pgidStartedAt: record.pgidStartedAt }
+          : null;
+      expect(server).not.toBeNull();
+      // The reader dies after the server is up: the stop's first writes get EPIPE.
+      sandbox.child.stdout?.destroy();
+      sandbox.child.stderr?.destroy();
+      owner.kill('SIGKILL');
+      expect(await sandbox.exited).toBe(0);
+      expect(collectGroupProcesses(realSystem.listProcesses(), server?.pgid ?? 0).size).toBe(0);
+      expect(readdirSync(root)).toEqual([]);
+    } finally {
+      owner.kill('SIGKILL');
+      sandbox.child.kill('SIGKILL');
+      killServerGroup(server);
+    }
+  }, 360_000);
 });

@@ -13,6 +13,10 @@ export default defineConfig({
   // Sized for a machine at load 100 or more; each wait in the spec has its own timeout.
   timeout: 600_000,
   use: {
+    // A click or fill that cannot find its target fails with a locator error after this long, not
+    // at the test timeout. Generous (the page can take many seconds to respond at load 100 or
+    // more), yet a tenth of the test timeout.
+    actionTimeout: 60_000,
     browserName: 'chromium',
     screenshot: 'only-on-failure',
     trace: 'retain-on-failure',

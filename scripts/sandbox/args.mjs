@@ -29,6 +29,10 @@ What the sandbox does not contain:
   - A SIGKILLed launcher's server keeps running until --clean.
   - A managed Codex account drops CODEX_PATH, so the real Codex binary runs,
     without a credential.
+  - Before the server starts, the launcher checks the native modules and, if
+    needed, builds them (scripts/ensure-native-modules.mjs node) outside the
+    sandbox with your normal environment: that may reach the npm registry and,
+    on Linux, nodejs.org. A SIGKILLed launcher leaves that build running.
 
 On Ctrl+C, SIGTERM, server exit, owner exit or time-out it stops every process
 it started and deletes the sandbox directory. If ps cannot run when it stops

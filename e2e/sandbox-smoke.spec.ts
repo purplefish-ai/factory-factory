@@ -57,8 +57,8 @@ test('a user creates a workspace and gets the scripted agent reply', async ({ pa
   await page.getByRole('button', { name: 'Launch', exact: true }).click();
 
   // The board shows a placeholder card at once and, for a moment, beside the real one, which
-  // appears once the server has added the Git worktree and started the provider. Only the real
-  // card's link leads to a workspace id rather than `optimistic-…`.
+  // appears while the server is still setting the workspace up (adding the Git worktree, starting
+  // the provider). Only the real card's link leads to a workspace id rather than `optimistic-…`.
   const workspace = main
     .getByRole('link', { name: /sandbox-smoke-launch-prompt/ })
     .and(main.locator('a:not([href*="/workspaces/optimistic-"])'));
@@ -73,4 +73,6 @@ test('a user creates a workspace and gets the scripted agent reply', async ({ pa
   await page.getByRole('textbox', { name: 'Message' }).fill(message);
   await page.getByRole('button', { name: 'Send message' }).click();
   await expect(reply(conversation, message)).toBeVisible({ timeout: 120_000 });
+  // The user's message and the agent's echo of it: a reply that never came would leave one.
+  await expect(conversation.getByText(message, { exact: true })).toHaveCount(2);
 });
