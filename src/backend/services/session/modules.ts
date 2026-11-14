@@ -3,10 +3,11 @@
  * compares it with the imports in `service/`, and `pnpm metrics:agents` counts
  * `sessionModuleCycles`. The application does not read it.
  *
- * A module is a directory directly under `service/`; the files directly under
- * `service/` form the module `root`. `dependsOn` lists, sorted, every sibling
- * module that a production file in the module imports, re-exports or imports
- * types from. Tests and test support do not count.
+ * A module is a directory directly under `service/`. Every production file
+ * lives in one; the check rejects a file placed directly under `service/`.
+ * `dependsOn` lists, sorted, every sibling module that a production file in the
+ * module imports, re-exports or imports types from. Tests and test support do
+ * not count.
  */
 export const sessionModules: Record<
   string,

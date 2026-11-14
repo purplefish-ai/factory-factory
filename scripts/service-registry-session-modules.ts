@@ -11,15 +11,18 @@ import {
 /**
  * The module map inside the `session` capsule.
  *
- * A module is a directory directly under `service/`; files directly under
- * `service/` form the module `root`. `src/backend/services/session/modules.ts`
- * records which modules each module imports and which imports may close a
- * cycle (see service-registry-session-cycles.ts). This file derives the same graph from the syntax tree of the capsule's
- * production files and reports every difference with the line to change.
+ * A module is a directory directly under `service/`; the capsule has no root
+ * module, so a production file directly under `service/` is an error.
+ * `src/backend/services/session/modules.ts` records which modules each module
+ * imports and which imports may close a cycle (see
+ * service-registry-session-cycles.ts). This file derives the same graph from
+ * the syntax tree of the capsule's production files and reports every
+ * difference with the line to change.
  */
 
 export const sessionServiceRoot = 'src/backend/services/session/service';
-export const sessionRootModule = 'root';
+/** The name the module map once gave to the files directly under `service/`. */
+const retiredRootModule = 'root';
 const sessionServiceAlias = '@/backend/services/session/service';
 
 /** Tests and test support, which do not count as dependencies. */
@@ -49,8 +52,10 @@ export type SessionModuleCheckInput = {
   modules: Readonly<Record<string, SessionModuleDeclaration>>;
   /** Directed imports allowed to close a cycle, as written in `sessionModuleCycles`. */
   cycles: readonly ModuleEdge[];
-  /** Module directories under `service/`, plus `root` while files sit directly in it. */
+  /** Module directories under `service/`. */
   moduleDirectories: readonly string[];
+  /** Production files directly under `service/`; each is an error. */
+  rootFiles: readonly string[];
   edges: readonly SessionModuleEdge[];
   /** Off while `cycles` has an entry the base branch lacks; see `getBackEdgeErrors`. */
   reportUnneededBackEdges?: boolean;
@@ -60,7 +65,7 @@ export function isSessionTestFile(filePath: string): boolean {
   return testFilePattern.test(filePath);
 }
 
-/** The module a path under `service/` belongs to, or null outside `service/`. */
+/** The module a path under `service/` belongs to, or null outside `service/` or directly in it. */
 function moduleOfPath(filePath: string, moduleNames: ReadonlySet<string>): string | null {
   const relativePath = path.posix.relative(sessionServiceRoot, filePath);
   if (relativePath.startsWith('..') || path.posix.isAbsolute(relativePath)) {
@@ -69,34 +74,42 @@ function moduleOfPath(filePath: string, moduleNames: ReadonlySet<string>): strin
   const segments = relativePath.split('/');
   const [first] = segments;
   if (first === undefined || first === '') {
-    return sessionRootModule;
+    return null;
   }
-  if (segments.length > 1 || moduleNames.has(first)) {
-    return first;
-  }
-  return sessionRootModule;
+  return segments.length > 1 || moduleNames.has(first) ? first : null;
 }
 
 /**
  * The modules present among repository-relative TypeScript file paths: each
- * directory under `service/` that holds a production file, and `root` while one
- * sits directly in `service/`. A directory of tests or test support alone, such
- * as `service/testing/`, is not a module.
+ * directory under `service/` that holds a production file. A directory of
+ * tests or test support alone, such as `service/testing/`, is not a module.
  */
 export function sessionModuleDirectories(filePaths: readonly string[]): string[] {
-  const modules = filePaths.flatMap((filePath) => {
-    const relativePath = path.posix.relative(sessionServiceRoot, filePath);
-    if (
-      relativePath.startsWith('..') ||
-      path.posix.isAbsolute(relativePath) ||
-      isSessionTestFile(filePath)
-    ) {
-      return [];
-    }
-    const segments = relativePath.split('/');
-    return [segments.length > 1 ? (segments[0] ?? sessionRootModule) : sessionRootModule];
+  const modules = productionPathsUnderService(filePaths).flatMap((relativePath) => {
+    const [first, ...rest] = relativePath.split('/');
+    return first !== undefined && rest.length > 0 ? [first] : [];
   });
   return [...new Set(modules)].sort();
+}
+
+/** Production files directly under `service/`, which belong to no module. */
+export function sessionRootFiles(filePaths: readonly string[]): string[] {
+  return productionPathsUnderService(filePaths)
+    .filter((relativePath) => !relativePath.includes('/'))
+    .map((relativePath) => `${sessionServiceRoot}/${relativePath}`)
+    .sort();
+}
+
+/** Paths under `service/`, relative to it, without tests and test support. */
+function productionPathsUnderService(filePaths: readonly string[]): string[] {
+  return filePaths.flatMap((filePath) => {
+    const relativePath = path.posix.relative(sessionServiceRoot, filePath);
+    return relativePath.startsWith('..') ||
+      path.posix.isAbsolute(relativePath) ||
+      isSessionTestFile(filePath)
+      ? []
+      : [relativePath];
+  });
 }
 
 function resolveSpecifier(importingFile: string, specifier: string): string | null {
@@ -225,9 +238,7 @@ function quoteList(names: readonly string[]): string {
 }
 
 function location(moduleName: string): string {
-  return moduleName === sessionRootModule
-    ? `the files directly under ${sessionServiceRoot}/`
-    : `${sessionServiceRoot}/${moduleName}/`;
+  return `${sessionServiceRoot}/${moduleName}/`;
 }
 
 function describeFiles(edges: readonly SessionModuleEdge[]): string {
@@ -256,6 +267,18 @@ function buildGraph(edges: readonly SessionModuleEdge[]): Graph {
   return graph;
 }
 
+function rootFileErrors(rootFiles: readonly string[]): string[] {
+  if (rootFiles.length === 0) {
+    return [];
+  }
+  const files = [...rootFiles].sort();
+  const subject = files.length === 1 ? `${files[0]} is` : `${files.join(', ')} are`;
+  const target = files.length === 1 ? 'it' : 'each';
+  return [
+    `${subject} directly under ${sessionServiceRoot}/, but the session capsule has no root module. Move ${target} into the module directory it belongs to, or into a new module directory with its own entry in sessionModules in ${sessionModulesFile}.`,
+  ];
+}
+
 function presenceErrors(input: SessionModuleCheckInput, graph: Graph): string[] {
   const directories = new Set(input.moduleDirectories);
   const unlisted = [...directories]
@@ -269,11 +292,11 @@ function presenceErrors(input: SessionModuleCheckInput, graph: Graph): string[] 
     .filter((name) => !directories.has(name))
     .sort()
     .map((name) =>
-      name === sessionRootModule
-        ? `sessionModules in ${sessionModulesFile} lists "${sessionRootModule}", but no files are left directly under ${sessionServiceRoot}/. Remove the "${sessionRootModule}" entry.`
+      name === retiredRootModule
+        ? `sessionModules in ${sessionModulesFile} lists "${retiredRootModule}", but the session capsule has no root module: every production file lives in a directory under ${sessionServiceRoot}/. Remove the "${retiredRootModule}" entry.`
         : `sessionModules in ${sessionModulesFile} lists "${name}", but ${sessionServiceRoot}/${name}/ does not exist. Remove the "${name}" entry.`
     );
-  return [...unlisted, ...missing];
+  return [...rootFileErrors(input.rootFiles), ...unlisted, ...missing];
 }
 
 function dependencyErrors(
@@ -328,11 +351,12 @@ function moduleGraph(graph: Graph): ModuleGraph {
 }
 
 /**
- * Compares the recorded module map with the edges read from source: every
- * module directory is listed and every listed module exists; each module's
- * `dependsOn` is exactly the sorted set of siblings it imports; and the graph
- * without the edges in `sessionModuleCycles` is acyclic, with each listed edge
- * still present and needed. `sealed` is accepted and not yet enforced.
+ * Compares the recorded module map with the edges read from source: no
+ * production file sits directly under `service/`; every module directory is
+ * listed and every listed module exists; each module's `dependsOn` is exactly
+ * the sorted set of siblings it imports; and the graph without the edges in
+ * `sessionModuleCycles` is acyclic, with each listed edge still present and
+ * needed. `sealed` is accepted and not yet enforced.
  */
 export function getSessionModuleErrors(input: SessionModuleCheckInput): string[] {
   const graph = buildGraph(input.edges);
