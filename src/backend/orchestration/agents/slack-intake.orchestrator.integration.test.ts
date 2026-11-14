@@ -18,7 +18,12 @@ function intake() {
     () => ({
       slackConnectionService: {
         getAppCredentials: (id) =>
-          Promise.resolve({ connectionId: id, workspaceId: 'T1', appId: 'A1', appToken: 'xapp-1' }),
+          Promise.resolve({
+            connectionId: id,
+            workspaceId: 'T1',
+            appId: `A-${id}`,
+            appToken: `xapp-${id}`,
+          }),
       },
       configService: { getAgentRuntimeLimits: () => ({ slackIntakeEnabled: enabled }) },
     }),
@@ -27,7 +32,10 @@ function intake() {
       sockets.push(socket);
       return {
         start: () => {
-          handlers.onHello({ type: 'hello', connection_info: { app_id: 'A1' } });
+          handlers.onHello({
+            type: 'hello',
+            connection_info: { app_id: `A-${token.slice('xapp-'.length)}` },
+          });
           return Promise.resolve();
         },
         disconnect: () => {
@@ -86,21 +94,46 @@ afterEach(async () => {
 
 it('listens from start and records the stop before returning from shutdown', async () => {
   enabled = true;
+  const second = await db.prisma.agentConnection.create({
+    data: { provider: 'SLACK', externalId: 'T2', name: 'Other', credentialsEncrypted: 'x' },
+  });
+  const definition = await db.prisma.agentDefinition.findFirstOrThrow();
+  await db.prisma.agentTrigger.create({
+    data: {
+      agentDefinitionId: definition.id,
+      connectionId: second.id,
+      type: 'SLACK_MESSAGE',
+      description: 'Sales',
+      config: { version: 1, channelIds: ['C2'] },
+      isEnabled: true,
+      isConfigured: true,
+      activationState: 'ACTIVE',
+    },
+  });
   const runtime = intake();
   runtime.start();
   await jobRunner.waitForCurrentRun('agent-slack-intake');
-  expect(sockets.map((socket) => socket.token)).toEqual(['xapp-1']);
-  expect(
-    await db.prisma.agentSourceState.findUniqueOrThrow({ where: { connectionId } })
-  ).toMatchObject({ isReady: true, health: { state: 'READY' } });
+  expect(sockets.map((socket) => socket.token).sort()).toEqual(
+    [`xapp-${connectionId}`, `xapp-${second.id}`].sort()
+  );
+  for (const id of [connectionId, second.id]) {
+    expect(
+      await db.prisma.agentSourceState.findUniqueOrThrow({ where: { connectionId: id } })
+    ).toMatchObject({
+      isReady: true,
+      health: { state: 'READY' },
+    });
+  }
   await runtime.stop();
-  expect(sockets[0]?.disconnects).toBe(1);
-  expect(
-    await db.prisma.agentSourceState.findUniqueOrThrow({ where: { connectionId } })
-  ).toMatchObject({
-    isReady: false,
-    health: { state: 'DISCONNECTED', reasonCode: 'SLACK_LISTENER_STOPPED' },
-  });
+  expect(sockets.map((socket) => socket.disconnects)).toEqual([1, 1]);
+  for (const id of [connectionId, second.id]) {
+    expect(
+      await db.prisma.agentSourceState.findUniqueOrThrow({ where: { connectionId: id } })
+    ).toMatchObject({
+      isReady: false,
+      health: { state: 'DISCONNECTED', reasonCode: 'SLACK_LISTENER_STOPPED' },
+    });
+  }
 });
 
 it('opens no Slack connection while the intake gate is off', async () => {
