@@ -267,6 +267,8 @@ it('finishes the fixed interval after more than a page of head insertions, then 
 it('recovers a committed finalization chunk without interleaving a newer interval', async () => {
   // Keep the real 100-event provider pages and 1,000-event commit boundary:
   // 1,001 executable events require both multiple scan cycles and two commits.
+  // Capturing, finalizing and pruning them in SQLite takes 3 s alone and 27 s
+  // at load 300, hence the budget below.
   expect(fixturePageSize).toBe(100);
   feed = [{ providerEventId: 'B', payload: null }];
   await baseline();
@@ -329,7 +331,7 @@ it('recovers a committed finalization chunk without interleaving a newer interva
   }
   expect(await db.prisma.agentEvent.count()).toBe(0);
   expect(await state()).toMatchObject({ lastSourceOrder: 1001, health: { state: 'READY' } });
-}, 30_000);
+}, 120_000);
 
 it('rolls back both the page and executable inserts if a later item fails ownership', async () => {
   await baseline();

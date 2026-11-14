@@ -187,16 +187,26 @@ it('bounds refresh concurrency while allowing independent candidates to start to
   });
   let active = 0;
   let maximum = 0;
+  let thirdStarted!: () => void;
+  const threeRunning = new Promise<void>((resolve) => {
+    thirdStarted = resolve;
+  });
   mocks.observe.mockImplementation(async () => {
     active++;
     maximum = Math.max(maximum, active);
+    if (active === 3) {
+      thirdStarted();
+    }
     await blocked;
     active--;
     return true;
   });
   const preparation = preparePRDelivery({ sessionId: 'main', request }, ports);
   try {
-    await vi.waitFor(() => expect(mocks.observe).toHaveBeenCalledTimes(3), { timeout: 100 });
+    // Wait for the refreshes themselves, not a deadline: preparation stats the
+    // real worktree first, and that file system call has no fixed duration.
+    await threeRunning;
+    expect(mocks.observe).toHaveBeenCalledTimes(3);
   } finally {
     release();
     await preparation;

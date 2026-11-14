@@ -130,6 +130,7 @@ afterAll(async () => {
   await destroyIntegrationDatabase(target);
 });
 
+// 30 s: Prisma imports a full linked backup on the real database.
 it('roundtrips real public owner-created same/cross-project links and null after deletion with exact updatedAt', async () => {
   vi.useFakeTimers({ toFake: ['Date'] });
   vi.setSystemTime(new Date('2025-01-01T00:00:00.000Z'));
@@ -213,7 +214,7 @@ it('roundtrips real public owner-created same/cross-project links and null after
     reasons: { INCOMPLETE_DEPENDENCY: 0 },
   });
   expect(await target.prisma.periodicTaskExecution.count()).toBe(0);
-});
+}, 30_000);
 
 it('accepts a new workspace under an exactly compatible existing project linked to a task under a new project', async () => {
   const file = structuredClone(fixed);
@@ -352,6 +353,7 @@ it('rolls back parents, tasks and workspaces after successful actual link writes
   }
 });
 
+// 30 s: Prisma imports a full linked backup on the real database.
 it('finishes all task occupancy and linked root/child admission before the first insert, independent of source order', async () => {
   const file = structuredClone(fixed);
   const [root, child, healthy] = file.data.workspaces;
@@ -460,7 +462,7 @@ it('finishes all task occupancy and linked root/child admission before the first
       orderBy: { id: 'asc' },
     })
   ).toEqual(localBefore);
-});
+}, 30_000);
 
 it.each(['workspace', 'session', 'pr', 'task-project'] as const)(
   'keeps local %s collision bytes and independently imports healthy links',
@@ -774,6 +776,7 @@ it.each([
   });
 });
 
+// 30 s: Prisma imports a full backup of over 1000 history rows on the real database.
 it('imports mixed history against more than 1000 occupied identities with exclusive reasons and preserves local bytes', async () => {
   const file = structuredClone(history);
   const row = file.data.recovery.periodicHistory.executions[0]!;
@@ -857,7 +860,7 @@ it('imports mixed history against more than 1000 occupied identities with exclus
       INCOMPLETE_DEPENDENCY: 1,
     },
   });
-});
+}, 30_000);
 
 it('aborts the entire public import when actual created history owners disagree with the prewrite plan', async () => {
   const file = structuredClone(history);

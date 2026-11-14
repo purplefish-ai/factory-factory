@@ -257,11 +257,25 @@ describe('fake Codex app-server scenarios', () => {
     expect(await playPrompt(startFake('slow-stream'))).toMatchObject(slowStream);
   }, 10_000);
 
-  // At the 400 ms default the 8 chunks take 2.8 s, longer than this test may run.
+  // At the 400 ms default every gap between deltas is at least 400 ms. Load
+  // only lengthens gaps, so the shortest of the seven stays far below that at
+  // 5 ms. The test budget covers starting the process, which has no fixed
+  // duration (up to 2 s at load 500).
   it('slow-stream uses FF_SANDBOX_CHUNK_DELAY_MS between deltas', async () => {
     const child = startFake('slow-stream', { FF_SANDBOX_CHUNK_DELAY_MS: '5' });
+    const lines = createInterface({ input: child.stdout });
+    const deltas: number[] = [];
+    lines.on('line', (line) => {
+      if (messageSchema.parse(JSON.parse(line)).method === 'item/agentMessage/delta') {
+        deltas.push(performance.now());
+      }
+    });
     expect(await playPrompt(child)).toMatchObject(slowStream);
-  }, 2000);
+    lines.close();
+    const gaps = deltas.slice(1).map((time, index) => time - (deltas[index] ?? time));
+    expect(gaps).toHaveLength(chunks.length - 1);
+    expect(Math.min(...gaps)).toBeLessThan(200);
+  }, 30_000);
 
   it.each(['0', '-1', 'abc', ''])('rejects FF_SANDBOX_CHUNK_DELAY_MS %j', async (value) => {
     const child = startFake('slow-stream', { FF_SANDBOX_CHUNK_DELAY_MS: value });

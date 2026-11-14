@@ -66,6 +66,7 @@ async function callToolWithHttpResponse(
   try {
     const current = getClient(options.parentWorkspaceId ?? null);
     client = current;
+    await current.ready;
     const id = nextRequestId++;
     const reply = Promise.race([
       once(client.lines, 'line', { signal: responseAbort.signal }),
@@ -185,7 +186,24 @@ function createClient(parentWorkspaceId: string | null) {
   });
   const lines = createInterface({ input: child.stdout });
   const closed = once(child, 'close');
-  return { child, lines, closed, stderr: () => stderr };
+  // Starting Node with tsx and loading the server is the slow part of a call
+  // (0.2 s alone, over 2 s at load 300). Complete the MCP handshake first, so
+  // call deadlines measure only the call.
+  const id = nextRequestId++;
+  const ready = Promise.race([
+    once(lines, 'line').then(([line]) => {
+      z.object({ id: z.literal(id), result: z.object({ serverInfo: z.object({}) }) }).parse(
+        JSON.parse(String(line))
+      );
+    }),
+    closed.then(([code]) => {
+      throw new Error(`MCP process exited before initializing: ${code}; ${stderr}`);
+    }),
+  ]);
+  // Callers await this; a client discarded before then must not leave a rejection unhandled.
+  ready.catch(() => undefined);
+  child.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', id, method: 'initialize' })}\n`);
+  return { child, lines, closed, ready, stderr: () => stderr };
 }
 
 function getClient(parentWorkspaceId: string | null) {
@@ -201,7 +219,11 @@ function getClient(parentWorkspaceId: string | null) {
 beforeAll(async () => {
   toolServer.listen(0, '127.0.0.1');
   await once(toolServer, 'listening');
-});
+  // Start every launch context's server here, outside the tests' budgets.
+  await Promise.all(
+    [null, 'parent-workspace', 'root-workspace'].map((context) => getClient(context).ready)
+  );
+}, 60_000);
 
 async function withFixtureDeadline<T>(
   task: Promise<T>,
@@ -498,6 +520,7 @@ describe('child workspace MCP tRPC errors', () => {
   });
 });
 
+// 30 s: each case starts its own server (Node with tsx, loading the MCP server).
 it.each([
   { parentWorkspaceId: null, enabled: true, settingsFailure: null },
   { parentWorkspaceId: 'parent-workspace', enabled: true, settingsFailure: null },
@@ -675,7 +698,8 @@ it.each([
       server.close();
       await once(server, 'close');
     }
-  }
+  },
+  30_000
 );
 
 it.each([null, 'root-workspace'])(
@@ -821,6 +845,7 @@ it.each(['send_message_to_child', 'send_message_to_parent'] as const)(
   }
 );
 
+// 30 s: the replacement client starts another server (Node with tsx, loading the MCP server).
 it('bounds an unanswered real HTTP call, closes its process, and replaces the client', async () => {
   const client = getClient(null);
   await expect(
@@ -840,7 +865,7 @@ it('bounds an unanswered real HTTP call, closes its process, and replaces the cl
   });
   expect(response.result.isError).not.toBe(true);
   expect(getClient(null)).not.toBe(client);
-});
+}, 30_000);
 
 it('bounds graceful shutdown when a real backend call remains pending', async () => {
   const client = getClient(null);

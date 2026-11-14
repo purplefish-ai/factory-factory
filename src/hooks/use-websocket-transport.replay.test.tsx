@@ -63,6 +63,21 @@ class MockWebSocket {
 }
 
 let createdSockets: MockWebSocket[] = [];
+// React's Scheduler keeps the real performance object; fake timers replace
+// the global one.
+const schedulerPerformance = performance;
+const readRealClock = performance.now.bind(performance);
+
+// A loaded host makes React's Scheduler yield before a render it queued for a
+// later macrotask. Advance its real clock 6 ms per read so it always does, to
+// force the ordering a test must wait out. Restore the spy after the wait.
+function skewSchedulerClock() {
+  let skew = 0;
+  return vi.spyOn(schedulerPerformance, 'now').mockImplementation(() => {
+    skew += 6;
+    return readRealClock() + skew;
+  });
+}
 
 function getLastSocket(): MockWebSocket {
   const socket = createdSockets.at(-1);
@@ -488,16 +503,18 @@ describe('useWebSocketTransport replay queue', () => {
 
     // Dropping the URL means no connection is desired, so there is nothing
     // to have given up on; a later reconnect starts a fresh attempt budget.
+    // The reset is a render the Scheduler runs in a later macrotask: skew its
+    // clock, and wait for the render instead of a fixed number of ticks.
+    const schedulerClock = skewSchedulerClock();
     harness.rerenderUrl(null);
-    await vi.advanceTimersByTimeAsync(0);
-    await flushEffects();
-    expect(harness.transportRef.current?.gaveUp).toBe(false);
+    await vi.waitFor(() => expect(harness.transportRef.current?.gaveUp).toBe(false));
+    schedulerClock.mockRestore();
 
     // Restoring the URL must grant a fresh attempt budget: the first failure
     // schedules a retry instead of immediately giving up again.
+    const socketBeforeRestore = getLastSocket();
     harness.rerenderUrl('ws://localhost:3000/chat');
-    await vi.advanceTimersByTimeAsync(0);
-    await flushEffects();
+    await vi.waitFor(() => expect(getLastSocket()).not.toBe(socketBeforeRestore));
     flushSync(() => {
       getLastSocket().close();
     });
@@ -531,10 +548,13 @@ describe('useWebSocketTransport replay queue', () => {
     });
     expect(harness.transportRef.current?.gaveUp).toBe(true);
 
+    // The switch's effect resets gaveUp through a render that React's
+    // Scheduler runs in a later macrotask: skew its clock, and wait for the
+    // render instead of a fixed number of ticks.
+    const schedulerClock = skewSchedulerClock();
     harness.rerenderUrl('ws://localhost:3000/chat?sessionId=two');
-    await vi.advanceTimersByTimeAsync(0);
-    await flushEffects();
-    expect(harness.transportRef.current?.gaveUp).toBe(false);
+    await vi.waitFor(() => expect(harness.transportRef.current?.gaveUp).toBe(false));
+    schedulerClock.mockRestore();
 
     // The replacement session's first failure must schedule a retry instead
     // of inheriting the previous session's exhausted attempt budget.
