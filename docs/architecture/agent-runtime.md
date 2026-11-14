@@ -2,11 +2,13 @@
 
 The paragraphs that opened this note, the section "Chat tool previews", and the
 opening of "ACP runtime" with its "Provider and model selection", "Launch
-permissions, thinking, and Plan" and "Permission and configuration readiness"
-have been migrated; the tool preview rules are asserted by the tests in
+permissions, thinking, and Plan", "Permission and configuration readiness",
+"Activity and prompt dispatch" and "Codex accounts" have been migrated; the tool
+preview rules are asserted by the tests in
 `src/client/features/chat/agent-activity/tool-renderers/`. Ownership, public
 surface, invariants and file maps are in the guides beside the code:
 [application update capsule](../../src/backend/services/application-update/AGENTS.md),
+[Codex accounts capsule](../../src/backend/services/codex-accounts/AGENTS.md),
 [CLI](../../src/cli/AGENTS.md),
 [session selection](../../src/client/features/session-selection/AGENTS.md),
 [session capsule](../../src/backend/services/session/AGENTS.md) and its
@@ -14,236 +16,15 @@ surface, invariants and file maps are in the guides beside the code:
 [archive](../../src/backend/services/session/service/archive/AGENTS.md),
 [acp](../../src/backend/services/session/service/acp/AGENTS.md),
 [config](../../src/backend/services/session/service/config/AGENTS.md),
-[events](../../src/backend/services/session/service/events/AGENTS.md) and
+[dispatch](../../src/backend/services/session/service/dispatch/AGENTS.md),
+[events](../../src/backend/services/session/service/events/AGENTS.md),
+[store](../../src/backend/services/session/service/store/AGENTS.md) and
 [providers](../../src/backend/services/session/service/providers/AGENTS.md)
 module guides. The reasons are in the `2026-11-13-*` records in
 [decisions](../decisions/), and the tests those guides name describe the
 behaviour. The sections below have not been migrated yet.
 
 ## ACP runtime
-
-### Activity and prompt dispatch
-
-Workspace/session activity and ownership of a conversation's prompt slot are
-separate signals. `isSessionWorking` includes in-flight prompts, background
-agent turns and tasks, native subagents and active goals. Background shell
-commands (including persistent preview servers) remain visible but do not keep
-the session or workspace working after the prompt completes. The work signal
-drives runtime activity, the yellow work indicator and the workspace column.
-`isSessionPromptInFlight` answers only whether the current active runtime has an
-unresolved prompt RPC. Browse-only runtimes do not own an active prompt slot.
-
-Runtime snapshots also carry prompt ownership and named background tasks, with
-counts for running subagents and active goals. A transition that changes only
-the runtime timestamp refreshes the stored state without publishing a delta, so
-repeated task notifications do not trigger workspace summary refreshes. The
-event collector remembers each session's workspace (sharing one lookup while it
-is first resolved). The session-summary refresh (which also publishes the
-workspace pending-request type) runs at most one query per workspace at a time
-plus one trailing rerun, so a burst of one kind of event costs two queries
-instead of one per event. Thought chunks are merged per 25 ms window like
-assistant text. They are flushed before the next translated update, replayed
-user message, runtime event, turn boundary or provider identity rollover, so
-transcript order is unchanged. Permission prompts, which show outside the
-transcript, do not wait for them. Chat shows background processes separately
-from the active-turn spinner, with a process-count header that expands to show
-their commands. The command list starts collapsed. Live status announcements
-contain the process count separately from the control and commands. A completed
-turn with a persistent preview server shows the remaining process instead of
-stale reasoning or “Agent is working”. Task-detail changes publish even while
-another task keeps the session busy, and reconnects restore current work from
-the live runtime. Idle and error transitions discard cached work unless fresh
-details are explicitly supplied; stopped transitions always clear work. A failed
-turn retains fresh background details from the live runtime, and chat keeps
-those processes visible alongside the error state.
-
-Ordinary chat messages may be composed and queued during any turn. Dispatch
-waits for the preceding prompt to complete, including time spent executing tools
-or awaiting that turn's approval, question or elicitation. A background shell,
-independently running child or active goal does not block the next parent prompt
-once that RPC completes. The provider remains authoritative: if it reports an
-active turn that the client cannot observe, the existing bounded busy retry
-preserves the queued message, and the running turn keeps its tool-call tracking
-for interceptors such as PR detection.
-
-Queued human messages also offer an explicit **Steer** action during an active
-prompt. Normal sends still queue. Steer submits only that message through the
-adapter's advertised `_session/steering` extension, preserving attachments and
-the active turn's configuration. Slash commands and automatic notifications
-remain queued. Concurrent steering of a different message reports a busy error;
-repeated clicks on the same pending message coalesce. If there is no active
-turn, a stale click on a later message is rejected instead of dispatching an
-earlier queue entry. Failed steering leaves the message queued. The client
-immediately disables steering controls and shows “Steering…” for the selected
-message. A requester-only `steer_settled` acknowledgment or correlated error
-releases this pending state; disconnection and session changes also clear it. A
-steering acknowledgment has a 10-second deadline. On timeout, the client
-terminates that runtime before releasing queue ownership and withholds immediate
-automatic resend. Input may have been consumed before the missing
-acknowledgment, so a later explicit retry may repeat prior effects. The host
-requests `idleBehavior: "promptRequired"`, so a completion race falls back to
-ordinary prompt dispatch instead of creating an untracked adapter-owned turn.
-Accepted input is removed from the queue even if stopping advances the
-generation while the request settles, preventing a delivered steer from being
-replayed on resume. Queue-to-transcript handoffs publish the consumed input
-together with its committed transcript entries: each
-`transcript_message_committed` delta carries the entry and the remaining queue,
-so steering and batched sends never expose a partial state between removal and
-commit. The chat keeps each message row mounted and briefly collapses its queued
-controls when dispatched, respecting reduced-motion preferences.
-
-Codex uses native `turn/steer` without cancelling the current turn. Claude's
-native steering may pre-empt generation or background a foreground tool; neither
-provider promises delivery at a specific tool boundary. The action tooltip
-explains that active work may be redirected.
-
-The workspace and quick-chat composers use prompt ownership for their queue
-placeholder and send-button label; background activity keeps the stop control
-available for active agent work without implying that the next message must
-wait.
-
-Startup and required configuration must complete before submission. Workspace
-initialization/manual-resume policy, per-session dispatch serialization and
-stop/generation fences still apply. The prompt slot is rechecked after
-auto-start; another caller may have acquired it while startup was awaited. A
-stopped runtime can auto-resume through the existing launch policy; being
-stopped is not permission to bypass setup or a failed exact resume.
-
-Automatic PR updates additionally wait for pending interactive requests, an
-in-flight prompt in another conversation in the same workspace, valid recipient
-and binding checks, and an unpaused delivery policy. Background activity alone
-does not block delivery in either the recipient or another conversation. Receipt
-recovery waits for the actual prompt or the specific delivery attempt, not
-unrelated background work. Other conversations' prompts do not prevent a human
-from sending to their selected conversation.
-
-Factory Factory supplies workspace MCP servers through session-scoped adapter
-configuration. It never writes the user's native Codex configuration. Requested
-workspace MCP configuration takes precedence over stale entries left by older
-Factory Factory versions; native configuration for other servers is retained.
-
-Session stop history is durable: `SessionLifecycleEvent` rows are append-only,
-deduplicated by session/attempt key, and rendered as structured chat rows after
-reconnect or restart. Provider history keeps its transcript order; each card
-follows the last provider message timestamped at or before it. Claude and Codex
-turns use the configurable Turn limit, defaulting to unlimited. Startup/stop
-incarnation fences protect runtime replacement and shutdown.
-
-Provider protocol schemas are maintained by upstream adapters. Keep focused ACP
-client contract tests when upgrading either dependency, including saved-session
-resume, plan approval, questions, native subagents, and reviewer permissions.
-
-### Codex accounts
-
-Failed Codex runtime and account probes show retry/restart guidance rather than
-raw command paths or quota-exhaustion advice. Runtime resolution failures retain
-update/reinstall guidance. Auto selection still uses healthy candidates when
-another probe fails; if no candidate remains and any probe failed, capacity is
-unknown and the error asks the user to retry. Identity-binding failures retain
-sign-in or duplicate-account cleanup guidance; caller cancellation remains
-distinct from provider unavailability. Excluded overlapping native readings do
-not affect the remaining accounts' error. Provider warnings and onboarding show
-the server's recovery guidance. Confirmed exhausted accounts retain the capacity
-error. These messages do not change probe deadlines or add retries.
-
-The composer previews only the model name; provider groups remain in the
-selection menu. Account labels are omitted from composer controls.
-
-Settings → Codex accounts supports one or many native ChatGPT accounts. The
-Native default entry preserves the existing Codex home and inherited
-configuration. Add Codex account creates a separate private profile under FF's
-application data directory; its credentials are stored by Codex itself, outside
-repositories. Settings, plugins, skills and memory are separate for each added
-account, while repository configuration still applies.
-
-Managed profiles inherit missing project trust decisions from the Native default
-Codex home's `config.toml` whenever prepared for use, including after a stop and
-resume. Explicit managed-profile project entries take precedence. Only project
-trust levels are inherited; credentials and other account settings stay
-isolated. This lets linked worktrees load repository-local Codex configuration
-without requiring the same repository to be trusted again for every ChatGPT
-account. Initial account creation only prepares private storage; trust
-inheritance is deferred until use so an inheritance failure does not report a
-persisted account as a failed creation.
-
-Account management and plan usage are restricted to trusted local clients.
-Sign-in uses Codex's native browser OAuth flow. Only one browser login runs at a
-time because the native callback uses a fixed localhost port. The dialog
-provides the native authorization link, pending/result states and cancellation.
-Device-code sign-in requires an additional account setting and is not the
-default flow.
-
-New Codex conversations offer Auto or a named account. Auto filters signed-out,
-identity-mismatched, disabled and incompatible model/effort profiles, excludes
-known exhausted quota windows, and compares relevant usage pressure. Unknown
-quota is not treated as unused quota. Concurrent creation reserves candidates
-and uses recent assignment to spread similar accounts. Reservations are
-scheduling hints, not exact token budgets. Disabling Use for Auto does not stop
-existing sessions or prevent an explicit manual selection.
-
-Auto model discovery combines catalogs from enabled, authenticated accounts so
-models exclusive to one account remain selectable. A failed named-account
-catalog read advertises no fallback models from other accounts.
-
-Launcher thinking, planning and access options come from a disposable ACP
-session. The durable capability cache described above keeps successful
-observations available while refreshing in the background. Keys distinguish
-provider, requested model, and explicit Codex account or Auto preview. Fresh
-saved effort defaults are applied to cloned results. Cached reads do not probe
-Codex accounts; account selection and validation run only for cold discovery or
-background refresh. Auto retains the last successful preview rather than
-tracking every usage-based account change. Actual session startup still selects
-and validates its account and applies native model/configuration checks. Cold
-entries await discovery when admission is available, or return a busy error when
-saturated. Process admission remains charged until both the native child and
-protocol pipes close. Cache refreshes respect the same admission limit and do
-not run on a timer.
-
-The `session-launch-options` logger records stage durations for settings,
-account resolution, options lookup and the overall request. Native probes also
-record initialization, session creation, model selection, model sweep and
-cleanup durations, including failures, so slow account checks can be
-distinguished from adapter startup. Timing and background-refresh warnings omit
-raw provider errors and subprocess diagnostics.
-
-Session creation persists `AgentSession.codexAccountId`. All human, child,
-periodic, reviewer and dedicated-PR creation goes through the same session-data
-binding policy. Existing sessions retain their original account for runtime,
-browsing, native history, model/launch discovery and usage. Legacy rows are
-backfilled to Native default; null legacy bindings resolve only to that profile.
-An existing Codex conversation requires exact resume; missing history or a
-changed account identity never silently starts a conversation on a different
-account.
-
-Native default pins the provider scope when native file credential metadata is
-available. Keyring-backed setups instead pin an unverified email fallback; that
-fallback does not verify the provider/workspace scope. When the same email later
-reports verified file-credential scope, the pin upgrades to that scope. Ending a
-browser login refreshes only that account's cached status, so in-flight reads of
-other accounts still complete. If a later native CLI sign-in changes the pinned
-identity, run `ff codex login` with the original account to restore those
-conversations; add a managed profile for a different account. Stopping a
-provider process clears its session commands on connected clients as well as in
-the server's replay cache.
-
-The Add dialog verifies distinct account identity; adding the same login twice
-does not create extra quota. Managed authentication ignores inherited
-provider/API key overrides. Native default keeps existing API-key and
-environment behavior. Global CLI authentication status cannot block a usable
-managed profile.
-
-Data export/import preserves saved account IDs but does not export credentials
-or profile directories. Import reuses a verified matching local account or
-creates an unavailable managed profile that requires sign-in. Imported sessions
-never silently adopt this machine's Native default login. Cross-machine
-credential/profile transfer is outside this MVP.
-
-Claude accounts, automatic mid-conversation account migration, automatic failed
-prompt replay and generated context handoffs are deferred. The live macOS spike
-verified separate Codex accounts, quota reads, concurrent ACP prompts,
-profile-local history and exact provider-process resume. Native keyring, forced
-token-refresh and logout isolation still need separate live checks; managed
-profiles use native file credential storage.
 
 ### Usage and compaction
 

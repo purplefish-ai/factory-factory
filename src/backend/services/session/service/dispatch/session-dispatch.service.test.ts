@@ -128,20 +128,24 @@ afterEach(() => {
 });
 
 describe('session dispatcher queue and lifecycle coordination', () => {
-  it('keeps every batch message visible after each published delta during the queue-to-transcript handoff', async () => {
-    const h = harness();
-    enqueue('first');
-    enqueue('second');
-    const publish = vi.spyOn(sessionEventBus, 'publishToSession');
-    await h.dispatcher.tryDispatchNextMessage('session');
-    const payloads = publish.mock.calls.map(([, payload]) => payload);
-    const states = visibleIdsAfterEachEvent(payloads, ['first', 'second']);
-    expect(states.length).toBeGreaterThan(0);
-    for (const { visible } of states) {
-      expect([...visible].sort()).toEqual(['first', 'second']);
+  it.each([[['only']], [['first', 'second']]])(
+    'keeps every batch message visible after each published delta during the queue-to-transcript handoff: %j',
+    async (ids) => {
+      const h = harness();
+      for (const id of ids) {
+        enqueue(id);
+      }
+      const publish = vi.spyOn(sessionEventBus, 'publishToSession');
+      await h.dispatcher.tryDispatchNextMessage('session');
+      const payloads = publish.mock.calls.map(([, payload]) => payload);
+      const states = visibleIdsAfterEachEvent(payloads, ids);
+      expect(states.length).toBeGreaterThan(0);
+      for (const { visible } of states) {
+        expect([...visible].sort()).toEqual([...ids].sort());
+      }
+      expect(states.at(-1)).toMatchObject({ queued: [], committed: ids });
     }
-    expect(states.at(-1)).toMatchObject({ queued: [], committed: ['first', 'second'] });
-  });
+  );
 
   it('sends all waiting human messages in one turn and retains their individual transcript entries', async () => {
     const { dispatcher, sendSessionMessage, configureQueuedMessage } = harness();
@@ -815,14 +819,14 @@ describe('explicit queued-message steering', () => {
     h.runtimeManager.isSessionPromptInFlight.mockReturnValue(true);
     const command = enqueue('/compact');
     const background = enqueue('pr-event-hidden');
-    await expect(h.dispatcher.steerQueuedMessage('session', command.id)).rejects.toThrow(
-      'Only ordinary queued human messages can be steered'
-    );
-    await expect(h.dispatcher.steerQueuedMessage('session', background.id)).rejects.toThrow(
-      'Only ordinary queued human messages can be steered'
-    );
+    const notification = enqueue('workspace-notification-hidden');
+    for (const message of [command, background, notification]) {
+      await expect(h.dispatcher.steerQueuedMessage('session', message.id)).rejects.toThrow(
+        'Only ordinary queued human messages can be steered'
+      );
+    }
     expect(h.steerSessionMessage).not.toHaveBeenCalled();
-    expect(sessionDomainService.getQueueLength('session')).toBe(2);
+    expect(sessionDomainService.getQueueLength('session')).toBe(3);
   });
 });
 

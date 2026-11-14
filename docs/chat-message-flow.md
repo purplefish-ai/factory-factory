@@ -53,16 +53,6 @@ chat feature guide.
 Old paragraph 5. For the WebSocket router guide
 (`src/backend/routers/websocket/`, task 2.9).
 
-> Session composition configures one `SessionDispatchService`. The dispatcher
-> owns queue execution, concurrent-dispatch tokens, busy-turn retry timers and
-> attempts, and manual resume. `SessionLifecycleGate` owns lifecycle
-> generations; the dispatcher applies its generation checks when validating
-> dispatch eligibility and starting the runtime through injected capabilities.
-> The queued message stays visible until dispatch is ready, so refreshing during
-> startup does not remove it from the queue.
-
-Old paragraph 5. For the session capsule guide.
-
 > The dispatcher uses notification and background-delivery capabilities for
 > claims, preparation, validation, and completion. Those services retain claim
 > and delivery authority; GitHub trigger interpretation remains outside queue
