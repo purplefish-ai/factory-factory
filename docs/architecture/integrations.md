@@ -18,7 +18,7 @@ automations: the
 The data model, "Enable and pause", "Source reset" and "Delete" have moved to
 the
 [agent-definition capsule guide](../../src/backend/services/agent-definition/AGENTS.md)
-and the records it links; the tests it names describe the behaviour.
+and the guide and records it links; the tests they name describe the behaviour.
 
 <a id="enable-and-pause"></a><a id="source-reset"></a><a id="delete"></a>Links
 here with these anchors were for Enable and Pause, source reset and Delete: the
