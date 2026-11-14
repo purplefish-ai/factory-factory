@@ -17,8 +17,7 @@ import {
 
 // Knip analyses spawn a Node process that builds a module graph (0.6 s for a
 // fixture, 4 s for the repository alone; six times that at load 300). Each
-// spawning test below gets 120 s and each process this limit.
-const ANALYZER_PROCESS_TIMEOUT = 60_000;
+// spawning test below gets 120 s: up to four processes at their 30 s limit.
 
 const roots: string[] = [];
 afterEach(() => {
@@ -77,7 +76,7 @@ function analyze(root: string, mode: 'production' | 'exports' | 'full-files') {
       'json',
       ...(mode === 'production' ? ['--production'] : []),
     ],
-    { cwd: root, encoding: 'utf8', timeout: ANALYZER_PROCESS_TIMEOUT }
+    { cwd: root, encoding: 'utf8', timeout: 30_000 }
   );
   return parseKnipOutput(result, mode === 'exports' ? 'exports' : 'production');
 }
@@ -273,7 +272,7 @@ it('reports new candidates without accepting them, and update cannot add debt', 
     spawnSync(
       process.execPath,
       ['--import', 'tsx', resolve('scripts/check-unused-code.ts'), ...args],
-      { cwd: root, encoding: 'utf8', timeout: ANALYZER_PROCESS_TIMEOUT }
+      { cwd: root, encoding: 'utf8', timeout: 30_000 }
     );
   const report = run(['--report']);
   expect(report.status).toBe(0);
@@ -644,7 +643,7 @@ it('lets a conventional test helper and service barrel re-export pass, and nothi
     spawnSync(process.execPath, ['--import', 'tsx', resolve('scripts/check-unused-code.ts')], {
       cwd: root,
       encoding: 'utf8',
-      timeout: ANALYZER_PROCESS_TIMEOUT,
+      timeout: 30_000,
     });
   const accepted = run();
   expect(accepted.stderr).toBe('');
