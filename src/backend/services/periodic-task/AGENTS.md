@@ -45,11 +45,11 @@ leaves its workspace for a human.
 ## Public surface
 
 `index.ts`: `periodicTaskService` (definitions, history, navigation summary,
-`start`/`stop` and `configure`), the bridge types, `PeriodicTaskTimerEvent`, and
-the backup functions `exportPeriodicConfigRecovery`,
-`readPeriodicConfigRecoveryIds`, `restorePeriodicConfigRecovery`,
-`exportPeriodicHistoryRecovery`, `planPeriodicHistoryRecovery` and
-`restorePeriodicHistoryRecovery`.
+`start`/`stop` and `configure`), its `PeriodicTaskService` class, the bridge
+types, `PeriodicTaskTimerEvent`, and the backup functions
+`exportPeriodicConfigRecovery`, `readPeriodicConfigRecoveryIds`,
+`restorePeriodicConfigRecovery`, `exportPeriodicHistoryRecovery`,
+`planPeriodicHistoryRecovery` and `restorePeriodicHistoryRecovery`.
 
 ## Invariants
 
@@ -70,7 +70,7 @@ the backup functions `exportPeriodicConfigRecovery`,
   reservation timeout. `service/periodic-task.service.test.ts`,
   `src/backend/orchestration/periodic-task-flow.integration.test.ts`.
 - An edit that leaves the schedule unchanged keeps the pending slot, and
-  enabling a task never runs an overdue slot at once.
+  enabling a task through `toggleEnabled` never runs an overdue slot at once.
   `resources/periodic-task.accessor.test.ts`.
 - Backup import restores every task disabled and every `RUNNING` run as
   `FAILED`, and neither is reserved or dispatched afterwards.
