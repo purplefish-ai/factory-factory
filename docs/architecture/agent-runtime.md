@@ -1,190 +1,23 @@
 # Agent Runtime
 
-The paragraphs that opened this note and the section "Chat tool previews" have
-been migrated; the tool preview rules are asserted by the tests in
+The paragraphs that opened this note, the section "Chat tool previews", and the
+opening of "ACP runtime" with its "Provider and model selection" have been
+migrated; the tool preview rules are asserted by the tests in
 `src/client/features/chat/agent-activity/tool-renderers/`. Ownership, public
 surface, invariants and file maps are in the guides beside the code:
 [application update capsule](../../src/backend/services/application-update/AGENTS.md),
 [CLI](../../src/cli/AGENTS.md),
 [session capsule](../../src/backend/services/session/AGENTS.md) and its
-[data](../../src/backend/services/session/service/data/AGENTS.md) and
-[archive](../../src/backend/services/session/service/archive/AGENTS.md) module
-guides. The reasons are in the `2026-11-13-*` records in
+[data](../../src/backend/services/session/service/data/AGENTS.md),
+[archive](../../src/backend/services/session/service/archive/AGENTS.md),
+[acp](../../src/backend/services/session/service/acp/AGENTS.md),
+[config](../../src/backend/services/session/service/config/AGENTS.md) and
+[providers](../../src/backend/services/session/service/providers/AGENTS.md)
+module guides. The reasons are in the `2026-11-13-*` records in
 [decisions](../decisions/), and the tests those guides name describe the
 behaviour. The sections below have not been migrated yet.
 
 ## ACP runtime
-
-All agent sessions use Agent Client Protocol over stdio JSON-RPC through
-`@agentclientprotocol/sdk` 2.1.0 through its v1 `/unstable` entrypoint. Typed
-client app handlers preserve elicitation and native subagent features;
-`acp-connection.ts` owns SDK registration and peer-context calls. Claude uses
-`claude-agent-acp` 0.99.1 and Codex uses the released
-`@agentclientprotocol/codex-acp` 2.5.0. Factory Factory does not implement a
-Codex harness adapter. Codex's compatible runtime is packaged with its adapter;
-`ff codex login` authenticates that same runtime. Claude also ships its native
-runtime through the adapter's matched Agent SDK. `ff claude` delegates to the
-adapter's `--cli` passthrough, and `ff claude auth login` authenticates it.
-Health checks inspect these managed runtimes, never global provider CLIs. Setup
-terminal sign-in actions launch these commands directly in a PTY; they do not
-require `ff` or Node on PATH. Replacing the shell with a login process ignores
-output/exit events from the replaced PTY and tags login exits with their
-provider so an earlier shell exit cannot finish a pending login. It restores a
-shell when login exits. Login actions stay disabled while authentication is
-active, and server errors are shown in terminal output; ordinary shell exits
-stay stopped. Both runtimes update with Factory Factory releases; legacy
-global-upgrade requests are rejected. `CLAUDE_CODE_EXECUTABLE` remains an
-explicit upstream override and is inherited by both Claude sessions and managed
-CLI operations.
-
-On Unix, the `ff claude` and `ff codex` passthroughs forward terminal resizes.
-Both passthroughs bound process-tree shutdown after interrupts or abnormal
-provider CLI exits. Cleanup failures are logged without replacing the provider's
-exit status. Successful commands retain the native CLI's background-job
-behavior. Desktop sign-in guidance uses the setup terminal buttons; typed `ff`
-commands require the CLI to be installed.
-
-`ff serve` observes each child immediately after spawning, including while
-waiting for readiness or opening the browser. Any unexpected child exit
-(including exit code zero) or spawn error fails the session and stops its
-siblings. Interrupts cancel startup and join cleanup without starting additional
-services. Serve and Tailscale share CLI process-tree termination: SIGTERM with a
-five-second grace period, followed by SIGKILL for an unresponsive child.
-Electron utility-process supervision remains separate.
-
-Under `ff tailscale`, the backend owns loopback port shares (`port-share`
-capsule, `/proxy/<port>` route). Each share runs foreground
-`tailscale serve --https=<port>`. On Unix it runs as a detached process group,
-because on macOS the `tailscale` command is a wrapper that leaves the real CLI
-(and the share) running if only the wrapper is signalled. Backend cleanup stops
-each group and then closes its in-process forwarder. Groups are recorded under
-`<base dir>/port-shares/<backend pid>.json`; the next start stops groups whose
-owning backend is gone. Windows has no process groups: cleanup uses `taskkill`
-on the Serve process tree, and crash recovery is not available there. See the
-2026-11-03 Tailscale port-sharing spec at tag `docs-archive-2026-11`.
-
-Adapter entrypoints run with the host Node runtime, including Electron's bundled
-Node (see [desktop backend process](#desktop-backend-process)), and are unpacked
-in desktop packages along with their complete production dependency trees. The
-desktop release smoke check runs bundled Claude and its actual ACP catalog
-loader with an empty PATH; CI may require authentication before returning model
-choices. Authentication-only validation requires the explicit
-`--allow-unauthenticated` smoke flag and reports that the catalog was not
-verified when that fallback is used. Model discovery uses the same bundled Codex
-runtime, without starting an inference turn. Claude model discovery uses an
-ephemeral ACP session with tools disabled. Both catalog services coalesce
-requests and keep successful results fresh for five minutes. Later reads return
-the last success immediately while one background refresh runs; refresh failures
-retain those results and retry after a 30-second cooldown. Catalog refresh
-failures emit a sanitized warning once per attempt. Shutdown fences both catalog
-services, aborts their disposable children, and waits up to seven seconds for
-active work and physical child/pipe closure before account teardown. Caller
-timeouts remain independent of physical drain; undrained processes retain their
-cache's discovery admission rather than spawning retries.
-
-Session startup validates that the workspace working directory exists and is a
-directory before spawning an adapter. Missing worktrees report the affected path
-and require restoring the worktree before retrying. Node otherwise reports a
-misleading `spawn <node> ENOENT` when the working directory is missing, even if
-the Node executable exists.
-
-Failed exact-conversation resumes retain the provider's diagnostic details and
-original error so missing Codex rollout history is actionable instead of
-appearing only as `Internal error`.
-
-Provider-native configuration controls own access permissions. Codex `mode`
-selects access and `collaboration_mode` selects planning independently. Claude
-`mode` owns its native access/planning modes. Saved STRICT/RELAXED/YOLO defaults
-remain backward-compatible preset inputs, mapped to advertised native values
-that match the adapters' standard, auto-review, and full-access mode kinds.
-RELAXED selects Codex `agent` and Claude `auto`. Claude uses `acceptEdits` when
-Auto mode is unavailable: the adapter applies it for models without Auto, and
-startup selects it when `auto` is not advertised. Startup and saved-mode
-restoration accept this fallback. The ACP client never automatically grants a
-permission because of a preset. Read-only review sessions use the provider's
-read-only/plan mode and reject all permission escalation. Access modes,
-including Claude planning, use `session/set_mode`. Models and other settings,
-including Codex collaboration, use `session/set_config_option`; legacy
-model/mode response fallbacks remain supported. Boolean options remain in
-backend snapshots while current chat controls render select options.
-
-The conversation composer keeps the model visible and shows reasoning effort
-when supported by native configuration or resolved capabilities. Access,
-planning, Fast mode, and Ultracode use compact icons with the current value in a
-tooltip and accessible label. Planning and provider settings advertising On/Off
-choices toggle directly without opening a menu, with their state exposed through
-`aria-pressed`. ACP supplies their current values and choices; descriptions are
-shown when provider-supplied. Ultracode uses a sparkle icon. Active toggles are
-highlighted; unrestricted access uses an orange warning icon. Native effort
-options replace the legacy thinking/reasoning controls, and a native mode menu
-offering Plan replaces the legacy planning toggle. Mod+Shift+P updates that
-native option in both directions, choosing only an advertised `default` when
-leaving planning. Without that choice the exit shortcut does nothing; it never
-guesses a permission mode or queues a hidden legacy planning setting. Menus show
-provider-supplied descriptions for settings and choices. On mobile, the options
-sheet retains text labels.
-
-### Provider and model selection
-
-Each default application graph constructs its own session creation resolver and
-data facade. Their forwarding callbacks use the graph's current workspace,
-resolver, and `userSettingsQueryService` capabilities for persisted provider and
-model defaults. The separate `userSettingsService` alias still serves PR/bridge
-policy; substituting settings for both policies requires binding both aliases.
-The session capsule also exports factories for explicit construction and retains
-process-default singleton exports for legacy callers. Persistence accessors,
-acquisition queues, and other runtime settings reads retain their existing
-scope; this creation boundary does not isolate an entire application runtime or
-make separate settings reads atomic.
-
-Model selection uses the explicit launch choice, then the user's saved default
-for that provider. Existing conversations retain their stored model. New and
-resumed runtimes apply that model through the advertised ACP model option before
-publishing ready configuration or accepting prompts. Unsupported choices fail
-explicitly; they never silently select the first model. Codex's saved `default`
-means its native default, and supported Claude family aliases resolve to the
-advertised identity. Browse-only restoration does not change configuration.
-Startup model configuration shares the bounded startup deadline and cancellation
-signals. Passive catalog reads enrich available options without persisting a
-guessed selection or overwriting a newer runtime/edit. Catalog-only chat
-projections do not select a reasoning effort. Before native configuration is
-available, the chat bar withholds the effort control rather than briefly
-displaying the catalog default or first supported level.
-
-Client settings remain intact while capabilities are unknown. Initial confirmed
-configuration supersedes bootstrap model values; explicit edits and restored
-reasoning/planning settings survive hydration. Configuration from a previous
-session visit cannot update the newly selected conversation. A message submitted
-before configuration arrives relies on the server's stored selection instead of
-sending a hardcoded client model. Pending model choices stay visible until
-confirmed. Rejected or unsent changes restore the confirmed model; request
-correlation prevents an older rejection from discarding a newer choice. Each
-conversation restores its own draft and attachments, including switches before
-draft autosave completes. Chat configuration controls remain editable during a
-turn. Edits retain a visible pending selection and apply after that prompt
-settles, before the next prompt can start; background activity alone does not
-delay them. Newer explicit edits supersede the corresponding settings in
-messages already queued for that session, including across runtime restarts;
-newer queued intent remains intact. Request acknowledgments and correlated
-failures settle only the matching pending choice, so an older response cannot
-discard a newer edit. Stopping or replacing the runtime rejects its deferred
-edits. Disconnecting clears unacknowledged selections so reconnect snapshots
-regain authority. Model/configuration writes serialize per session through
-persistence and state publication, including failure corrections; different
-sessions remain independent. Accepted native observations, successful RPC
-results, and startup snapshots share a configuration authority fence through
-metadata reads, CAS retries, and publication. Failed requests leave the last
-accepted state valid; superseded background writes stop without publishing a
-stale result. Public snapshot persistence exhaustion propagates an error and
-configuration correction; native asynchronous observations own their background
-rejection and logging. The
-[startup finalizer](#permission-and-configuration-readiness) owns startup
-durability, permission checks, readiness, and failure cleanup. Later genuine
-server changes remain authoritative after pending edits settle. Model-only
-changes preserve a supported explicit reasoning effort; an unsupported effort
-normalizes to the new model's confirmed default. Each session load has a
-10-second UI loading safety timer, including creation from an empty Quick Chat.
-This UI timer does not release backend configuration readiness.
 
 ### Launch permissions, thinking, and Plan
 
@@ -1772,25 +1605,9 @@ after it, verbatim. The migration that creates the named area's guide checks the
 entry, moves what holds there and deletes the entry here. Paragraph numbers are
 the rows of the disposition table in pull request #3242.
 
-> ACP admission is injected by composition to preserve dependency isolation.
-
-Old paragraph 6. For the session capsule guide (`src/backend/services/session/`,
-task 2.4b).
-
 > Framing bounds each message, rather than reducing total replay bytes or adding
 > pagination; the existing renderer transcript window and full backend
 > transcript retention still apply.
 
 Old paragraph 16. For the WebSocket router guide
 (`src/backend/routers/websocket/`, task 2.9).
-
-> The MCP server that child workspace tools run in:
-> `src/backend/mcp/workspace-mcp-server.ts`. The capsule only builds its spawn
-> configuration (`child-workspace-mcp-server.ts`).
-
-Written for the session capsule guide in task 2.4a2; the note's "Child
-workspaces" section, not yet migrated, lists the same files. For the `acp`
-module guide (`src/backend/services/session/service/acp/`, task 2.4b), which
-also takes the link to
-`docs/decisions/2026-11-13-acp-session-creation-has-its-own-deadline.md` that
-the capsule guide's "Decisions" section held.

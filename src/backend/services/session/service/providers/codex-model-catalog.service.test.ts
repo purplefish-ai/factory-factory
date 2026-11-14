@@ -198,7 +198,11 @@ describe('CodexModelCatalogService', () => {
     await expect(service.getModels()).resolves.toEqual(catalog());
     expect(fetchModels).toHaveBeenCalledTimes(2);
     fetchModels.mockResolvedValue([{ ...catalog()[0]!, id: 'new-model' }]);
-    await vi.advanceTimersByTimeAsync(30_000);
+    await vi.advanceTimersByTimeAsync(29_999);
+    await expect(service.getModels()).resolves.toEqual(catalog());
+    await vi.advanceTimersByTimeAsync(0);
+    expect(fetchModels).toHaveBeenCalledTimes(2);
+    await vi.advanceTimersByTimeAsync(1);
     await expect(service.getModels()).resolves.toEqual(catalog());
     await vi.advanceTimersByTimeAsync(0);
     await expect(service.getModels()).resolves.toMatchObject([{ id: 'new-model' }]);

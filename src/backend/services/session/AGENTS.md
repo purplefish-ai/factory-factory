@@ -52,8 +52,11 @@ Orchestration passes capabilities in through `service/bridges/`.
 
 Modules are the directories under `service/`. `modules.ts` describes each in one
 line, and a module directory may hold its own guide, as
+[`service/acp/`](service/acp/AGENTS.md),
+[`service/archive/`](service/archive/AGENTS.md),
+[`service/config/`](service/config/AGENTS.md),
 [`service/data/`](service/data/AGENTS.md) and
-[`service/archive/`](service/archive/AGENTS.md) do.
+[`service/providers/`](service/providers/AGENTS.md) do.
 
 `pnpm check:service-registry` holds `modules.ts` to the code. A production file
 sits in a module directory, never directly in `service/`. A new module directory

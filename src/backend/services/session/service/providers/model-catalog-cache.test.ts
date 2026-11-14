@@ -80,6 +80,25 @@ describe('catalog background refresh lifetime', () => {
     expect(stopped).toBe(true);
   });
 
+  it('stops waiting for an undrained child after seven seconds', async () => {
+    vi.useFakeTimers();
+    const fetchModels = vi.fn((_signal, retainLifetime) => {
+      retainLifetime(new Promise<void>(() => undefined));
+      return Promise.reject(new Error('catalog timed out'));
+    });
+    const cache = new ModelCatalogCache({ fetchModels });
+    await expect(cache.getModels()).rejects.toThrow('catalog timed out');
+    let outcome: unknown;
+    const stopping = cache.stop().catch((error: unknown) => {
+      outcome = error;
+    });
+    await vi.advanceTimersByTimeAsync(6999);
+    expect(outcome).toBeUndefined();
+    await vi.advanceTimersByTimeAsync(1);
+    expect(outcome).toEqual(new Error('ACP model catalog shutdown timed out after 7000ms'));
+    await stopping;
+  });
+
   it('logs one sanitized warning per failed refresh, while retaining the last success', async () => {
     vi.useFakeTimers();
     const failed = createDeferred<string[]>();
