@@ -68,9 +68,9 @@ functions for definitions and Slack connections.
 - Management reads and writes are scoped to the owning project: another
   project's IDs read as `NOT_FOUND`.
   `src/backend/trpc/agent-management.integration.test.ts`.
-- `managementRevision` is the one save token for saved and accepted-proposal
-  edits: each write increments it once, a rename included, and a stale token on
-  either path is a `CONFLICT`.
+- A saved edit and an accepted-proposal edit each increment both
+  `managementRevision` and the proposal's `revision` once, a rename included, so
+  a stale editor on either path gets a `CONFLICT`.
   `service/agent-management-owner.integration.test.ts`.
 - While any trigger's `isConfigured` is null, `get` returns no specification,
   and a saved replacement that includes that trigger pauses it as changed.

@@ -35,13 +35,13 @@ fields, and `EventRunItem`.
 - Draft validation and source discovery run only when the user asks, and a
   result that returns after the draft or the selection changed is dropped.
   `event-agents-page.test.tsx`, `event-agent-continuation.test.tsx`.
-- Every displayed state of an automation and its triggers comes from the
+- Every displayed state of an event automation and its triggers comes from its
   configured triggers, never the definition's `isEnabled`; a trigger listens
   only when it is enabled and `ACTIVE`. `event-trigger-status.test.tsx`,
   `event-agent-activation.test.tsx`.
 - Run recovery reads `recoveryTarget` and then `inspectRun` only when Inspect
-  opens, afresh on every opening, and never again while the dialog stays open.
-  `event-run-recovery.test.tsx`.
+  opens, afresh on every opening, and never again on its own while the dialog
+  stays open. `event-run-recovery.test.tsx`.
 - A recovery action sends the inspected context unchanged; after a `CONFLICT` or
   `BLOCKED` result nothing is sent again until **Reload** reads the target
   afresh. `event-run-recovery.test.tsx`.

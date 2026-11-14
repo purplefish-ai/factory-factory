@@ -150,13 +150,17 @@ it.each(['returned', 'thrown'] as const)(
   'retries a %s provider failure on the shared budget',
   async (failure) => {
     await fixture.event();
-    const now = new Date();
-    const classify = vi.fn<ClassifyEvent>(() =>
-      failure === 'thrown'
-        ? Promise.reject(new Error('provider exited'))
-        : Promise.resolve({ status: 'FAILED', failure: 'FAILED' })
-    );
-    await evaluator(classify, { now: () => now }).evaluatePendingEvents(signal());
+    let now = new Date();
+    const classify = vi
+      .fn<ClassifyEvent>()
+      .mockImplementationOnce(() =>
+        failure === 'thrown'
+          ? Promise.reject(new Error('provider exited'))
+          : Promise.resolve({ status: 'FAILED', failure: 'FAILED' })
+      )
+      .mockResolvedValueOnce({ status: 'DECIDED', decision: 'match', classifier: identity });
+    const service = evaluator(classify, { now: () => now });
+    await service.evaluatePendingEvents(signal());
     expect(await db.prisma.agentEvaluation.findFirstOrThrow()).toMatchObject({
       status: 'ERROR',
       reasonCode: 'SEMANTIC_FILTER_FAILED',
@@ -164,6 +168,14 @@ it.each(['returned', 'thrown'] as const)(
       nextAttemptAt: new Date(now.getTime() + 30_000),
     });
     expect(await db.prisma.agentRun.count()).toBe(0);
+    now = new Date(now.getTime() + 30_000);
+    await service.evaluatePendingEvents(signal());
+    expect(classify).toHaveBeenCalledTimes(2);
+    expect(await db.prisma.agentEvaluation.findFirstOrThrow()).toMatchObject({
+      status: 'MATCHED',
+      attemptCount: 2,
+    });
+    expect(await db.prisma.agentRun.findFirstOrThrow()).toMatchObject({ attemptCount: 1 });
   }
 );
 

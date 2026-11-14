@@ -21,4 +21,5 @@ attach a filter written for one source to a different source.
 ## Consequences
 
 - The user sees a message and decides; nothing is merged silently.
-- Conversational changes to fields the user did not touch still load.
+- When the events do not conflict, conversational changes to fields the user did
+  not touch still load.

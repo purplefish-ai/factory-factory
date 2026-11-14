@@ -27,9 +27,9 @@ the filter; and how a classifier outcome becomes a decision. It does not own:
 - Only a deterministic match on a trigger with `filterInstructions` reaches the
   classifier, so a filter narrows a trigger's scope and never widens it.
   `agent-event-semantic-filter.integration.test.ts`.
-- Only a classifier `match` admits a run: `skip`, `uncertain`, a missing
-  classifier port and an unproven provider never do.
-  `agent-event-semantic-filter.integration.test.ts`,
+- On a trigger with `filterInstructions`, only a classifier `match` admits a
+  run: `skip`, `uncertain`, a missing classifier port and an unproven provider
+  never do. `agent-event-semantic-filter.integration.test.ts`,
   `src/backend/testing/agent-runtime-flow.integration.test.ts`.
 - Evaluation checks the gate for the provider resolved for each event and, when
   it has not passed, records `SEMANTIC_FILTER_PROVIDER_UNPROVEN` without a

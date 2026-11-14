@@ -6,9 +6,9 @@ Originally decided on 2026-11-02 in #2794.
 
 The saved event editor can preview a draft before it is saved: per-trigger
 capability and the native model, effort and provider the automation would run
-with. The preview needs the whole draft, and a draft's instructions have no
-length limit. tRPC sends a query as a GET request with its input in the URL, so
-a long draft would not fit.
+with. The preview needs the whole draft, and a draft's instructions can run to
+50,000 characters. tRPC sends a query as a GET request with its input in the
+URL, which is too short for such a draft.
 
 ## Decision
 
