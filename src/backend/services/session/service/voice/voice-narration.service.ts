@@ -40,7 +40,7 @@ import {
   SESSION_OUTBOUND_EVENT,
   type SessionOutboundEvent,
   sessionEventBus,
-} from '@/backend/services/session/service/session-event-bus';
+} from '@/backend/services/session/service/event-bus/session-event-bus';
 import { userSettingsService } from '@/backend/services/settings';
 import { normalizeDeepgramTtsSpeed } from '@/shared/deepgram-voices';
 import type { VoiceServerMessage } from '@/shared/websocket/voice-message.schema';

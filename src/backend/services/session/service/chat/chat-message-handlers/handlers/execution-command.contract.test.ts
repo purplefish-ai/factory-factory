@@ -2,7 +2,7 @@ import { expect, it, vi } from 'vitest';
 import {
   SESSION_OUTBOUND_EVENT,
   sessionEventBus,
-} from '@/backend/services/session/service/session-event-bus';
+} from '@/backend/services/session/service/event-bus/session-event-bus';
 import { SessionDomainService } from '@/backend/services/session/service/store/session-domain.service';
 import { MessageState } from '@/shared/acp-protocol';
 import { createQueueMessageHandler } from './queue-message.handler';

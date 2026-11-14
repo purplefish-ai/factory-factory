@@ -1,5 +1,5 @@
 import { afterEach, expect, it, vi } from 'vitest';
-import { sessionEventBus } from '@/backend/services/session/service/session-event-bus';
+import { sessionEventBus } from '@/backend/services/session/service/event-bus/session-event-bus';
 import { SessionDomainService } from './session-domain.service';
 import { SessionStoreRegistry } from './session-store-registry';
 
