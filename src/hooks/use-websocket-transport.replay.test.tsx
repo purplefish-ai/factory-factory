@@ -63,6 +63,10 @@ class MockWebSocket {
 }
 
 let createdSockets: MockWebSocket[] = [];
+// React's Scheduler keeps the real performance object; fake timers replace
+// the global one.
+const schedulerPerformance = performance;
+const readRealClock = performance.now.bind(performance);
 
 function getLastSocket(): MockWebSocket {
   const socket = createdSockets.at(-1);
@@ -531,10 +535,18 @@ describe('useWebSocketTransport replay queue', () => {
     });
     expect(harness.transportRef.current?.gaveUp).toBe(true);
 
+    // The switch's effect resets gaveUp through a render that React's
+    // Scheduler runs in a later macrotask. A loaded host makes the Scheduler
+    // yield before it; advance its real clock 6 ms per read so it always does,
+    // and wait for the render instead of a fixed number of ticks.
+    let skew = 0;
+    const schedulerClock = vi.spyOn(schedulerPerformance, 'now').mockImplementation(() => {
+      skew += 6;
+      return readRealClock() + skew;
+    });
     harness.rerenderUrl('ws://localhost:3000/chat?sessionId=two');
-    await vi.advanceTimersByTimeAsync(0);
-    await flushEffects();
-    expect(harness.transportRef.current?.gaveUp).toBe(false);
+    await vi.waitFor(() => expect(harness.transportRef.current?.gaveUp).toBe(false));
+    schedulerClock.mockRestore();
 
     // The replacement session's first failure must schedule a retry instead
     // of inheriting the previous session's exhausted attempt budget.
