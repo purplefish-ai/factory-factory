@@ -8,6 +8,21 @@ and this project adheres to
 
 ## [Unreleased]
 
+## [0.5.12] - 2026-11-17
+
+### Changed
+
+- Update agent SDKs, UI virtualization, Storybook and development tooling
+  dependencies (#3265, #3266, #3267, #3268, #3269, #3270)
+- Update pnpm setup and Docker login actions (#3263, #3264)
+
+### Fixed
+
+- Show GPT-6.2 Sol and Astra in the model picker by updating the bundled Codex
+  runtime (#3270)
+- Keep pinned chat context tied to the request above the current reading
+  position when scrolling through conversation history (#3262)
+
 ## [0.5.11] - 2026-11-14
 
 ### Added
